@@ -496,8 +496,13 @@ public:
     // `pixelData`, which is the name Wave 18 proved wrong; the real class uses
     // the proved one.
     void*       _sourceName;   // +0x48  System::String (refcount at ptr-4)
-    uint64_t    _field50;      // +0x50  copied by the copy ctor; no export reads it
-    uint64_t    _field58;      // +0x58  copied by the copy ctor; no export reads it
+    // +0x50 / +0x58 are the links of the `_firstSurface` circular list that
+    // PlatformConstruct (0x1800f2f40) splices `this` into and the device-lost
+    // sweeps walk (+0x50 is written with the head, +0x58 with the head's old
+    // tail). B.4 (R-VIDEO), H4: typed as the ImageBuffer pointers they hold; the
+    // guess names stay (tests/unit/video_imagebuffer_abi_test.cpp pins them).
+    ImageBuffer* _field50;     // +0x50  list link (next)
+    ImageBuffer* _field58;     // +0x58  list link (prev; the one the sweeps step)
     // The `Video::ImageBufferData*` the Device factory hands back (`DeviceData`
     // slot 10, +0x50 — `Dx11_CreateImageBufferData`). THIS is the field
     // `dx11/src/dx11_backend_access.h`'s deleted `ImageBufferOwner` view pinned
@@ -537,3 +542,9 @@ RT_VIDEO_IMAGEBUFFER_PIN(_data,       platformData, 0x60);
 #undef RT_VIDEO_IMAGEBUFFER_PIN
 
 }  // namespace Video
+
+// runtime/src/video/closure_batch2b.cpp — 0x180054080, the shared
+// `Array<Array<uint8>>` blob serializer (unexported; three retail callers, one
+// of them ImageBuffer::PlatformSerialize). B.4 (R-VIDEO): typed.
+void RtVideo_SerializeBlobArray(IO::Serializer& ser, int count,
+                                Collection::Array<uint8_t>* data);

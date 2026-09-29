@@ -106,18 +106,11 @@ struct RenderStateDoorAccess {
 
 namespace {
 
-// `?_singleton@Device@Video@@0PEAV12@EA` -> `Device+0x100` -> the live
-// `Video::DeviceData*`. B35_RULES section 9: the static row stays an
-// `RT_DATA_SLOT` read for the whole of step 5 and is OWED a `MintStorageCell()`
-// redirect at the class-static conversion (RULE B4b-4), not here.
+// `Video::Device::_singleton->deviceData` (+0x100), the live `Video::DeviceData*`.
 Video::DeviceData* ActiveDeviceData() {
-    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    void* device = slot ? *slot : nullptr;
+    Video::Device* device = Video::Device::_singleton;
     if (!device) return nullptr;
-    // B.3.5 bridge: `Video::Device` is block D2's class and is still a POD, so
-    // its `deviceData` member at +0x100 is reached by offset.
-    return reinterpret_cast<Video::DeviceData*>(
-        *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100));
+    return device->deviceData;
 }
 
 }  // namespace
@@ -128,7 +121,7 @@ Video::DeviceData* ActiveDeviceData() {
 
 namespace Video {
 
-// What the `reinterpret_cast<bool&>` in the three sub-serializers stands on.
+// What the `bool` fields the three sub-serializers hand the Bool slot stand on.
 static_assert(sizeof(bool) == 1,
               "the Bool ReaderWriter slot is handed the address of ONE byte");
 
@@ -143,14 +136,14 @@ void RenderState::AlphaBlend::Serialize(IO::Serializer& ser) {
     // NULL (`XOR R8D,R8D` before each one); a text encoding would write those
     // names into the file, so inventing them would change the format.
     //
-    // THE `bool&` CASTS ARE NOT A CONVENIENCE. Retail hands the Bool slot the
-    // ADDRESS of the one byte at this offset, and on the READING direction the
-    // codec writes that byte back through the pointer. Copying into a local
+    // THE FIELD ITSELF IS HANDED OVER, NOT A COPY. Retail hands the Bool slot
+    // the ADDRESS of the one byte at this offset, and on the READING direction
+    // the codec writes that byte back through the pointer. Copying into a local
     // `bool` and normalising the result to 0/1 afterwards would change which
     // byte value a load leaves behind for any file that stored something other
-    // than 0 or 1. `sizeof(bool) == 1` on this ABI (asserted once below), so
-    // the cast is the same byte the bytes name.
-    ser.Serialize(reinterpret_cast<bool&>(enabled), nullptr);
+    // than 0 or 1. B.4 (R-VIDEO): the bool fields are `bool` (RenderState.h),
+    // so the reference is the field's own.
+    ser.Serialize(enabled, nullptr);
     ser.Serialize(srcBlend, nullptr);
     ser.Serialize(dstBlend, nullptr);
     ser.Serialize(blendOp, nullptr);
@@ -159,8 +152,8 @@ void RenderState::AlphaBlend::Serialize(IO::Serializer& ser) {
 
 // ?Serialize@Depth@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z  0x1800f4a00
 void RenderState::Depth::Serialize(IO::Serializer& ser) {
-    ser.Serialize(reinterpret_cast<bool&>(test), nullptr);
-    ser.Serialize(reinterpret_cast<bool&>(write), nullptr);
+    ser.Serialize(test, nullptr);
+    ser.Serialize(write, nullptr);
     ser.Serialize(func, nullptr);
     ser.Serialize(bias, nullptr);
     ser.Serialize(slopeBias, nullptr);
@@ -168,8 +161,8 @@ void RenderState::Depth::Serialize(IO::Serializer& ser) {
 
 // ?Serialize@Stencil@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z  0x1800f48e0
 void RenderState::Stencil::Serialize(IO::Serializer& ser) {
-    ser.Serialize(reinterpret_cast<bool&>(enabled), nullptr);
-    ser.Serialize(reinterpret_cast<bool&>(twoSided), nullptr);
+    ser.Serialize(enabled, nullptr);
+    ser.Serialize(twoSided, nullptr);
     ser.Serialize(readMask, nullptr);
     ser.Serialize(writeMask, nullptr);   // UChar, not UInt — see this file's banner
     ser.Serialize(func, nullptr);
@@ -186,7 +179,7 @@ void RenderState::PlatformConstruct() {
     DeviceData* dd = ActiveDeviceData();
     if (dd == nullptr) { _data = nullptr; return; }
     // `CALL [dd_vtable+0x88]` — slot 17, `CreateRenderStateData(this)`.
-    _data = static_cast<RenderStateData*>(dd->CreateRenderStateData(this));
+    _data = dd->CreateRenderStateData(this);
 }
 // ?PlatformCreate@RenderState@Video@@AEAAXXZ (0x1800f4ea0). Returns void, unlike
 // the shader programs' `_N` (bool) form; retail discards the slot's result.
@@ -284,10 +277,10 @@ void RenderState::Initialize(const AlphaBlend& alphaBlend, const Depth& depth,
 // that prologue and its destructor is the codec teardown at the end of the
 // body, so the local's SCOPE is what places both; see this file's banner.
 bool RenderState::Serialize(void* stream) {
-    // B.3.5 bridge: the slot's parameter is `IO::Stream&` in retail, but
+    // LEFT (B.4 R-VIDEO): the slot's parameter is `IO::Stream&` in retail, but
     // `Object::External::Serialize` is declared `bool(void*)` across the whole
-    // External family and that signature is not this block's to change.
-    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);
+    // External family (R-OBJ's declaration).
+    IO::Stream& s = *static_cast<IO::Stream*>(stream);
     {
         IO::Serializer ser(s, 0);
 
@@ -296,7 +289,7 @@ bool RenderState::Serialize(void* stream) {
         _stencil.Serialize(ser);       // a real CALL 0x1800f48e0
         ser.Serialize(_cullMode, nullptr);
         ser.Serialize(_fillMode, nullptr);
-        ser.Serialize(reinterpret_cast<bool&>(_flag70), nullptr);
+        ser.Serialize(_flag70, nullptr);
 
         if (s.GetDirection() == IO::kReading)
             PlatformCreate();          // retail derefs _data unguarded

@@ -37,6 +37,7 @@
 // ENDGAME B.3.5 block VC: the real `IO::Serializer` / `IO::ReaderWriter`, which
 // replace this file's two hand-inlined ReaderWriter slot offsets.
 #include "../../types/io/Serializer.h"
+#include "../../types/video/ImageBuffer.h"   // RtVideo_SerializeBlobArray
 
 // ============================================================================
 // 0x180054080 — the SHARED blob half of an `Array<Array<uint8>>` serialize.
@@ -96,11 +97,12 @@
 // trait-derived, so a direct `.SetSize()` on the reinterpreted element is that
 // exact body.
 
-extern "C" void RtVideo_SerializeBlobArray(void* ctx, int count, void* data) {
+// B.4 (R-VIDEO): typed (ImageBuffer.h); its one caller in this tree is
+// imagebuffer_platform_serialize.cpp.
+void RtVideo_SerializeBlobArray(IO::Serializer& serRef, int count,
+                                Collection::Array<uint8_t>* e) {
     if (count <= 0) return;                                   // TEST EDX,EDX / JLE
-    // B.3.5 bridge — the registered ABI's first parameter is untyped.
-    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(ctx);
-    Collection::Array<uint8_t>* e = reinterpret_cast<Collection::Array<uint8_t>*>(data);
+    IO::Serializer* const ser = &serRef;
     int64_t n = count;                                        // MOVSXD RSI,EDX
     do {
         // The STACK copy is load-bearing: on a read the slot writes the incoming

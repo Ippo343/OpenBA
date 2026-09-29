@@ -97,8 +97,7 @@
 #include "../../types/video/Device.h"
 
 using RtVideo::CompanionData;
-using RtVideo::ConstantBuffer;
-using RtVideo::DisplayMode;
+using DisplayMode = Video::Device::DisplayMode;
 
 // ============================================================================
 // The twelve companion-base constructors -- DOORS dx11 calls by its import
@@ -189,25 +188,19 @@ RenderStateData::~RenderStateData()       {}
 namespace Video {
 
 void* IndexBuffer::Lock(int sizeBytes, int& outByteOffset) {
-    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
-    return reinterpret_cast<Video::IndexBufferData*>(platformData)
-               ->Lock(sizeBytes, &outByteOffset);
+    return platformData->Lock(sizeBytes, &outByteOffset);
 }
 
 void IndexBuffer::Unlock() {
-    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
-    reinterpret_cast<Video::IndexBufferData*>(platformData)->Unlock();
+    platformData->Unlock();
 }
 
 void* VertexBuffer::Lock(int sizeBytes, int& outByteOffset) {
-    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
-    return reinterpret_cast<Video::VertexBufferData*>(platformData)
-               ->Lock(sizeBytes, &outByteOffset);
+    return platformData->Lock(sizeBytes, &outByteOffset);
 }
 
 void VertexBuffer::Unlock() {
-    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
-    reinterpret_cast<Video::VertexBufferData*>(platformData)->Unlock();
+    platformData->Unlock();
 }
 
 }  // namespace Video
@@ -264,6 +257,6 @@ void* Video_DisplayMode_Ctor(DisplayMode* self, int width, int height) {
 // types/video/Device.h), called by name.
 // ============================================================================
 void Video_DisplayMode_Dtor(DisplayMode* self) {
-    RtVideo_ArrayRefreshDtor(&self->refreshData);
+    RtVideo_ArrayRefreshDtor(self->refreshData, self->refreshCount, self->refreshCapacity);
 }
 

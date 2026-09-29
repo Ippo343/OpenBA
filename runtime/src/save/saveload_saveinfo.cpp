@@ -52,10 +52,8 @@
 using RtSave::SaveInfo;
 
 // Video::Device's recursive render lock, already ported in
-// runtime/src/video/buffers_win.cpp and already used from this directory
-// (saveload_update.cpp:94). Declared, not re-implemented.
-void RtVideoDeviceLock(void** deviceSingleton);
-void RtVideoDeviceUnlock(void** deviceSingleton);
+// runtime/src/video/buffers_win.cpp and declared in video/Device.h (B.4
+// R-VIDEO: it takes the typed singleton cell).
 
 namespace {
 
@@ -81,8 +79,8 @@ void* SaveInfoMemAlloc(uint64_t bytes, int align) {
 
 // ?_singleton@Device@Video@@0PEAV12@EA, 0x1801fe7a8 — the SLOT, not the Device.
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static's address IS this cell.
-void** DeviceSingletonSlot() {
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
+Video::Device** DeviceSingletonSlot() {
+    return &::Video::Device::_singleton;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +218,7 @@ void Save::SaveLoad::SaveInfo::SetThumbnail(void* pixels, int32_t w, int32_t h) 
     // SLOT for that reason. This is a different lock from the allocator's, and
     // running the two in the wrong nesting would be a deadlock, not a style
     // difference — the allocator's is already released by step 1.
-    void** devSlot = DeviceSingletonSlot();
+    Video::Device** devSlot = DeviceSingletonSlot();
     RtVideoDeviceLock(devSlot);
 
     // ImageBufferData vtable slot 5 (+0x28) — the pixel upload. PURECALL in

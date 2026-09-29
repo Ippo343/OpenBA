@@ -7,12 +7,10 @@
 // PLAN §4.1 decision 1 keeps runtime/src/ free of <windows.h> outside a `_win`
 // twin, so it lives here and device_enum_types.cpp stays portable.
 //
-// Offsets are repeated as literals rather than by including
-// runtime/types/video/Device.h, for the reason buffers_win.cpp and
-// device_startup_win.cpp both give: pulling an engine header in behind
-// <windows.h> is the collision that decision exists for (<wingdi.h> declares a
-// function called `Rectangle`). The static_asserts that bind these offsets live
-// in the portable header.
+// B.4 (R-VIDEO): this TU includes runtime/types/video/Device.h AFTER
+// <windows.h> (as buffers_win.cpp does) and the body is the member
+// `Video::Device::AdjustDisplay` on named fields; the literal offsets and the
+// `RtVideo_Device_AdjustDisplay(void*)` C body are gone.
 //
 // WHAT IT DOES. Re-lays the window out for the current Video::Configuration,
 // then reads back the client area and publishes it as the new backbuffer size:
@@ -78,47 +76,30 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Configuration::_singleton
+#include "../../types/video/Device.h"   // Video::Device, Video::Configuration::_singleton
 
-static const size_t kDeviceBackBufferWidth  = 0x04;
-static const size_t kDeviceBackBufferHeight = 0x08;
-static const size_t kDeviceWindowHandle     = 0x90;
-static const size_t kDeviceMonitor          = 0xA0;
-static const size_t kDeviceField9D          = 0x9D;
-
-static const size_t kConfigWindowX      = 0x14;
-static const size_t kConfigWindowY      = 0x18;
-static const size_t kConfigWindowWidth  = 0x1C;
-static const size_t kConfigWindowHeight = 0x20;
-static const size_t kConfigFullscreen   = 0x40;
-
-namespace {
-uint8_t* VideoConfig() {
-    void** slot = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
-    return slot ? static_cast<uint8_t*>(*slot) : nullptr;
-}
-}  // namespace
-
-extern "C" void RtVideo_Device_AdjustDisplay(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-
+// ?AdjustDisplay@Device@Video@@ — B.4 (R-VIDEO): the member itself, on named
+// fields (Device +0x04/+0x08 backBufferWidth/Height, +0x90 windowHandle, +0x9D
+// field9D, +0xA0 monitor; Configuration +0x14..+0x20 window rect, +0x40
+// fullscreen).
+void Video::Device::AdjustDisplay() {
     // The re-entrancy flag. SizeWindow/MoveWindow read it to tell an
     // application-driven resize from this one; set before the first Win32 call
     // and cleared on BOTH exits (0x1800f7e37 and 0x1800f8088).
-    *(self + kDeviceField9D) = 1;
+    field9D = 1;
 
-    HWND hwnd = *reinterpret_cast<HWND*>(self + kDeviceWindowHandle);
+    HWND hwnd = static_cast<HWND>(windowHandle);   // CAST-OK: win32
     LONG style = GetWindowLongW(hwnd, GWL_STYLE);
 
     MONITORINFO mi;
     std::memset(&mi, 0, 0x28);
     mi.cbSize = 0x28;
-    HMONITOR mon = *reinterpret_cast<HMONITOR*>(self + kDeviceMonitor);
+    HMONITOR mon = static_cast<HMONITOR>(monitor);   // CAST-OK: win32
     if (mon) GetMonitorInfoW(mon, &mi);
 
-    uint8_t* cfg = VideoConfig();
+    Configuration* cfg = Configuration::_singleton;
 
-    if (*(cfg + kConfigFullscreen) != 0) {
+    if (cfg->fullscreen != 0) {
         // ---- fullscreen: borderless, pinned to the monitor origin ----------
         // 0xFF30FFFF clears the whole WS_* style nibble pair that carries the
         // caption and border bits; WS_POPUP (0x80000000) is then set.
@@ -128,10 +109,9 @@ extern "C" void RtVideo_Device_AdjustDisplay(void* selfv) {
 
         SetWindowPos(hwnd, nullptr,
                      mi.rcMonitor.left, mi.rcMonitor.top,
-                     *reinterpret_cast<int32_t*>(self + kDeviceBackBufferWidth),
-                     *reinterpret_cast<int32_t*>(self + kDeviceBackBufferHeight),
+                     backBufferWidth, backBufferHeight,
                      0x30 /* SWP_FRAMECHANGED | SWP_NOACTIVATE */);
-        *(self + kDeviceField9D) = 0;
+        field9D = 0;
         return;
     }
 
@@ -145,8 +125,8 @@ extern "C" void RtVideo_Device_AdjustDisplay(void* selfv) {
     RECT rect;
     rect.left   = 0;
     rect.top    = 0;
-    rect.right  = *reinterpret_cast<int32_t*>(self + kDeviceBackBufferWidth);
-    rect.bottom = *reinterpret_cast<int32_t*>(self + kDeviceBackBufferHeight);
+    rect.right  = backBufferWidth;
+    rect.bottom = backBufferHeight;
 
     WINDOWPLACEMENT wp;
     wp.length = 0x2C;
@@ -166,8 +146,8 @@ extern "C" void RtVideo_Device_AdjustDisplay(void* selfv) {
     // window position.
     LONG offX = 0, offY = 0;
     if (!maximized) {
-        offX = *reinterpret_cast<int32_t*>(cfg + kConfigWindowX);
-        offY = *reinterpret_cast<int32_t*>(cfg + kConfigWindowY);
+        offX = cfg->windowX;
+        offY = cfg->windowY;
     }
 
     // The probe rectangle handed to MonitorFromRect. `bottom` takes offX, not
@@ -191,8 +171,8 @@ extern "C" void RtVideo_Device_AdjustDisplay(void* selfv) {
         // A minimized window keeps its persisted origin — the centred values
         // are used for THIS placement but are not written back.
         if (!minimized) {
-            *reinterpret_cast<int32_t*>(cfg + kConfigWindowX) = offX;
-            *reinterpret_cast<int32_t*>(cfg + kConfigWindowY) = offY;
+            cfg->windowX = offX;
+            cfg->windowY = offY;
         }
     }
 
@@ -210,10 +190,10 @@ extern "C" void RtVideo_Device_AdjustDisplay(void* selfv) {
     const int32_t cw = client.right - client.left;
     const int32_t ch = client.bottom - client.top;
 
-    *reinterpret_cast<int32_t*>(self + kDeviceBackBufferHeight) = ch;
-    *reinterpret_cast<int32_t*>(self + kDeviceBackBufferWidth)  = cw;
-    *reinterpret_cast<int32_t*>(cfg + kConfigWindowWidth)  = cw;
-    *reinterpret_cast<int32_t*>(cfg + kConfigWindowHeight) = ch;
+    backBufferHeight  = ch;
+    backBufferWidth   = cw;
+    cfg->windowWidth  = cw;
+    cfg->windowHeight = ch;
 
-    *(self + kDeviceField9D) = 0;
+    field9D = 0;
 }

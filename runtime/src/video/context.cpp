@@ -174,8 +174,6 @@
 // left them ready for.
 using Video::Context;
 using Video::Viewport;
-using RtVideo::RenderBufferPrefix;
-using RtVideo::kContextSize;
 
 namespace {
 
@@ -189,10 +187,8 @@ namespace {
 // each one to its slot so the mapping is checked rather than stated in prose.
 //
 // The object behind the pointer is a `VideoDX11::ContextData` wearing dx11's
-// vtable, which does not derive from `Video::ContextData` in C++ (RULE B5-8's
-// declared leave), so the receiver takes one `// B.3.5 bridge` cast. That is
-// exactly what `video_resources.cpp` (blocks A/D2/VC) already does for
-// `RenderBufferData`, `ImageBufferData` and `DeviceData`.
+// vtable; `_contextData` is typed `Video::ContextData*` (B.4 R-VIDEO), so the
+// receiver needs no view.
 //
 // NO NULL CHECK ON _contextData — retail has none (`MOV RCX,[RCX+0x2160]` then
 // `MOV RAX,[RCX]` unguarded), and CLAUDE.md's rule applies: a guard here would
@@ -200,7 +196,7 @@ namespace {
 // ContextData was never created and that is the bug to find. The virtual call is
 // the same unguarded double deref.
 inline Video::ContextData* Backend(const Context* self) {
-    return reinterpret_cast<Video::ContextData*>(self->_contextData);  // B.3.5 bridge
+    return self->_contextData;
 }
 
 // The nine byte offsets this file dispatched through, each pinned to the slot
@@ -342,19 +338,7 @@ void Context::SetImageBuffer(const void* image, int32_t slot) {
 }
 
 // ---- ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z  0x180019f20
-void Context::SetVertexBuffer(const void* vb, int32_t slot,
-                              int32_t offset, int32_t stride) {
-
-    if (vb != _vertexBuffers[slot] || offset != _vertexOffsets[slot] ||
-        stride != _vertexStrides[slot]) {
-        _dirty |= RtVideo::kDirtyVertexBuffers;
-        _vertexBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
-        _vertexBuffers[slot] = const_cast<void*>(vb);
-        _vertexOffsets[slot] = offset;
-        _vertexStrides[slot] = stride;
-    }
-
-}
+// B.4 (R-VIDEO): MOVED to context_bind.cpp, beside BindResources, its consumer.
 
 // ---- ?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z  0x1800f2100
 void Context::SetRenderBuffer(const void* rb) {
@@ -367,15 +351,7 @@ void Context::SetRenderBuffer(const void* rb) {
 }
 
 // ---- ?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z  0x1800ef3c0
-// One store, no compare, no dirty bit. Note this OVERWRITES the pointer the
-// ctor may have allocated (+0x2138) without freeing it — retail leaks it
-// deliberately, because the caller owns the buffer it hands in. Faithfully
-// reproduced; do not add a delete here.
-void Context::SetDefaultRenderBuffer(void* rb) {
-
-    _defaultRenderBuffer = rb;
-
-}
+// B.4 (R-VIDEO): MOVED to context_ctor.cpp, beside the ctor that first sets it.
 
 // ---- ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z  0x18001a6b0 ---
 // The transform-count update is OUTSIDE the change test: retail raises the
@@ -507,13 +483,15 @@ void Context::Reset() {
 
     // Retail's three leading memsets. Their boundaries do NOT line up with
     // named fields: the first two start at +0x208 and +0x248 — eight bytes
-    // past _pixelProgram, inside the pixel-constant staging block — and stop
-    // short of _materialConstants at +0x298, which Reset does not clear. They
-    // are written as raw offsets for that reason, not out of laziness; naming
-    // them through a field would have changed the region.
-    std::memset(reinterpret_cast<uint8_t*>(this) + 0x208, 0, 0x40);
-    std::memset(reinterpret_cast<uint8_t*>(this) + 0x248, 0, 0x50);
-    std::memset(reinterpret_cast<uint8_t*>(this) + 0x328, 0, 0xd0);
+    // past _pixelProgram, inside the pixel-constant staging block (+0x200) —
+    // and stop short of _materialConstants at +0x298, which Reset does not
+    // clear; the third covers +0x328..+0x3f7, _viewProjection through _fogColor.
+    // B.4 (R-VIDEO): each is spelled from the member it starts in.
+    std::memset(_pixelConstantStaging + (0x208 - 0x200), 0, 0x40);
+    std::memset(_pixelConstantStaging + (0x248 - 0x200), 0, 0x50);
+    static_assert(offsetof(Context, _inverseScale) - offsetof(Context, _viewProjection) == 0xd0,
+                  "Reset's third memset ends where _inverseScale begins");
+    std::memset(static_cast<void*>(&_viewProjection), 0, 0xd0);
     _inverseScale = Math::Vector4();
     _color        = Math::Vector4();
     std::memset(_boneAndProjectionStaging, 0, sizeof(_boneAndProjectionStaging));
@@ -525,7 +503,7 @@ void Context::Reset() {
     // being the single memset the disassembly shows. The cast says "yes, bytes"
     // and keeps the transcription.
     std::memset(static_cast<void*>(_transforms), 0, sizeof(_transforms));
-    std::memset(_lightStaging, 0, sizeof(_lightStaging));
+    std::memset(static_cast<void*>(&_lightStaging), 0, sizeof(_lightStaging));
 
     _transformCount = 0;
     _unknown0024    = 0;   // retail zeroes +0x20 as one qword
@@ -572,13 +550,7 @@ void Context::Reset() {
     // Unguarded deref of _defaultRenderBuffer, exactly as retail: it is set by
     // the ctor (or by SetDefaultRenderBuffer) and Reset relies on it being
     // there. CLAUDE.md: do not "fix" this with a null check.
-    //
-    // `RtVideo::RenderBufferPrefix` is spelled with its namespace deliberately:
-    // inside `namespace Video` a bare `RenderBuffer*` would bind the real
-    // (forward-declared, incomplete) `Video::RenderBuffer`, which is block D2's
-    // class — see the comment on the view in Context.h.
-    const RtVideo::RenderBufferPrefix* rb =
-        static_cast<const RtVideo::RenderBufferPrefix*>(_defaultRenderBuffer);
+    const RenderBuffer* rb = _defaultRenderBuffer;
     const int32_t w = rb->width;
     const int32_t h = rb->height;
 

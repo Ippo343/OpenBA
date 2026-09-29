@@ -80,8 +80,7 @@ using RtSaveDetail::ZeroTime;
 // carries at 0x1800c0f5a..0x1800c0f77. The exported Video::Device::Lock is a
 // different function with the two stores in the other order; using it here
 // would be a normalisation, not a transcription.
-void RtVideoDeviceLock(void** deviceSingleton);
-void RtVideoDeviceUnlock(void** deviceSingleton);
+// (RtVideoDeviceLock / RtVideoDeviceUnlock are declared in video/Device.h.)
 
 // ENDGAME B.3.2 step 2 — two Collection names with external linkage, declared
 // at FILE SCOPE (not inside the anonymous namespace below, which would give a
@@ -112,13 +111,12 @@ namespace {
 // calls, spelled plainly. The ORACLE paragraphs in the banners describe the
 // retired harness; the instruction-level notes in them still stand.
 
-// The Video::Device lock. Declared by its owner's file with a `void**` (the
-// device singleton's cell); the cell's address is the one conversion left
-// here, LEFT for R-VIDEO (buffers_win.cpp owns the signature).
+// The Video::Device lock takes the device singleton's cell, typed since B.4
+// R-VIDEO (video/Device.h).
 // Wave 15 lane ORDER: was a frozen static (see saveload_internal.h's note).
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static's address IS this cell.
-void** DeviceSingletonSlot() {
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
+Video::Device** DeviceSingletonSlot() {
+    return &::Video::Device::_singleton;
 }
 
 // ============================================================================
@@ -237,7 +235,7 @@ void Save::SaveLoad::OnVideoRestart() {
         // argument and returns true unconditionally (rt_sink.h).
         buffer->Recreate();
 
-        void** device = DeviceSingletonSlot();
+        Video::Device** device = DeviceSingletonSlot();
         RtVideoDeviceLock(device);
 
         // Retail RE-READS `_savesData` here (0x1800c0f7d) rather than reusing

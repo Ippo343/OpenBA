@@ -63,8 +63,10 @@
 #include <new>
 
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "../../types/video/CompanionData.h"   // the typed *Data companions
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"               // IO::Stream, IO::kReading
 #include "../../types/video/ShaderProgram.h"
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 #include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_*
@@ -72,99 +74,86 @@
 
 namespace {
 
-using rt::io::Serializer;
-using rt::io::Stream;
-using rt::io::ReaderWriter;
 using Video::PixelProgram;
-namespace ddvt = rt::video::devicedata_vtbl;
-namespace pdvt = rt::video::programdata_vtbl;
 
-void* ActiveDeviceDataPtr() {
-    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    void* device = slot ? *slot : nullptr;
-    if (!device) return nullptr;
-    return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
-}
+// B.4 (R-VIDEO): the version-0 temporaries, typed. Each array is an unrolled
+// `Collection::Array<T>` triple `{data, size, capacity}` handed by address to
+// its unexported template instance (rtcoll::, Collection.h); see
+// vertexprogram.cpp for why they are not `Collection::Array<T>`.
+struct StringArray { System::String* data; int32_t size; int32_t capacity; };
 
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-inline void RwInt(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeInt(*reinterpret_cast<int32_t*>(p), nullptr);
-}
-inline void RwBool(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeBool(*reinterpret_cast<bool*>(p), nullptr);
-}
-
-struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
+struct V0Sampler {                 // stride 0x10
+    System::String name;           // +0x00
+    int32_t        unit;           // +0x08
+    bool           flagA;          // +0x0c
+    bool           flagB;          // +0x0d
+    bool           flagC;          // +0x0e
+};
+static_assert(sizeof(V0Sampler) == 0x10, "v0 sampler is 0x10 bytes");
+static_assert(offsetof(V0Sampler, flagC) == 0x0e, "v0 sampler flags @ 0x0c..0x0e");
+struct V0SamplerArray { V0Sampler* data; int32_t size; int32_t capacity; };
 
 using System::MemoryAllocator;   // MemFree 0x1800c7ad0
 
 // ---- the version-0 legacy block -------------------------------------------
-void SerializeLegacyV0(Serializer* ser) {
-    ReaderWriter* rw = ser->readerWriter;
-    const bool reading = (ser->stream->direction == rt::io::kDirectionReading);
+void SerializeLegacyV0(IO::Serializer& ser) {
+    IO::ReaderWriter* rw = ser._readerWriter;
+    const bool reading = (ser._stream->GetDirection() == IO::kReading);
 
-    void*    droppedVertexProgram = nullptr;   // ExternalPtr<VertexProgram>
-    ArrayHdr strings8 = { nullptr, 0, 0 };     // stride 8, one String each
-    ArrayHdr namesA   = { nullptr, 0, 0 };     // Array<System::String>
-    ArrayHdr namesB   = { nullptr, 0, 0 };     // Array<System::String>
-    ArrayHdr samplers = { nullptr, 0, 0 };     // stride 0x10 {String, int, 3 bools}
+    RtObject::External* droppedVertexProgram = nullptr;   // ExternalPtr<VertexProgram>
+    StringArray    strings8 = { nullptr, 0, 0 };   // stride 8, one String each
+    StringArray    namesA   = { nullptr, 0, 0 };   // Array<System::String>
+    StringArray    namesB   = { nullptr, 0, 0 };   // Array<System::String>
+    V0SamplerArray samplers = { nullptr, 0, 0 };   // stride 0x10 {String, int, 3 bools}
     int32_t  n = 0;
 
+    // LEFT (B.4 R-VIDEO): the ExternalPtr bodies (R-OBJ, External.h) still take
+    // the `rt::io::Serializer` POD; the two are asserted interchangeable.
     RtObject_ExternalPtrSerialize_VertexProgram(                          // 0x1800542a0
-        reinterpret_cast<RtObject::External**>(&droppedVertexProgram), ser);
+        &droppedVertexProgram, reinterpret_cast<rt::io::Serializer*>(&ser));
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     if (reading) rtcoll::RtColl_ArraySetSize_1800547e0(&strings8, n);
-    {
-        uint8_t* e = static_cast<uint8_t*>(strings8.data);
-        // B.3.1 bridge: `strings8` is untyped array storage, one System::String per
-        // 8-byte slot; the cast dies when Collection::Array<T> is a template (B.3.2).
-        for (int32_t i = 0; i < n; ++i, e += 8)
-            reinterpret_cast<System::String*>(e)->Serialize(ser);
-    }
+    for (int32_t i = 0; i < n; ++i)
+        strings8.data[i].Serialize(&ser);
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     // RtIo_SerializeStringArray (0x180029bb0): its 4th parameter is unused --
     // retail spills R9 to its home slot and overwrites that slot (0x180029d00)
     // before any read.
     if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesA, n);
-    RtIo_SerializeStringArray(ser, n, namesA.data, nullptr);
+    RtIo_SerializeStringArray(&ser, n, namesA.data, nullptr);
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesB, n);
-    RtIo_SerializeStringArray(ser, n, namesB.data, nullptr);
+    RtIo_SerializeStringArray(&ser, n, namesB.data, nullptr);
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     if (reading) rtcoll::RtColl_ArraySetSize_180054a20(&samplers, n);
     {
-        uint8_t* e = static_cast<uint8_t*>(samplers.data);
-        for (int32_t i = 0; i < n; ++i, e += 0x10) {
-            reinterpret_cast<System::String*>(e + 0x00)->Serialize(ser);  // B.3.1 bridge
-            RwInt (rw, e + 0x08);
-            RwBool(rw, e + 0x0c);
-            RwBool(rw, e + 0x0d);
-            RwBool(rw, e + 0x0e);
+        V0Sampler* e = samplers.data;
+        for (int32_t i = 0; i < n; ++i, ++e) {
+            e->name.Serialize(&ser);
+            rw->SerializeInt (e->unit,  nullptr);
+            rw->SerializeBool(e->flagA, nullptr);
+            rw->SerializeBool(e->flagB, nullptr);
+            rw->SerializeBool(e->flagC, nullptr);
         }
     }
 
     // Teardown, in retail's order: samplers, namesB, namesA, strings8.
     rtcoll::RtColl_DestroyStrings_180054ba0(nullptr, samplers.data, samplers.size);
-    MemoryAllocator::MemFree(samplers.data); samplers = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(samplers.data); samplers = V0SamplerArray{ nullptr, 0, 0 };
     rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesB.data, namesB.size);
-    MemoryAllocator::MemFree(namesB.data);   namesB   = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(namesB.data);   namesB   = StringArray{ nullptr, 0, 0 };
     rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesA.data, namesA.size);
-    MemoryAllocator::MemFree(namesA.data);   namesA   = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(namesA.data);   namesA   = StringArray{ nullptr, 0, 0 };
     rtcoll::RtColl_DestroyStrings_180054920(nullptr, strings8.data, strings8.size);
-    MemoryAllocator::MemFree(strings8.data); strings8 = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(strings8.data); strings8 = StringArray{ nullptr, 0, 0 };
     (void)samplers; (void)namesA; (void)namesB; (void)strings8; (void)droppedVertexProgram;
 }
 
@@ -225,9 +214,7 @@ const void* PixelProgram::GetData() const { return _data; }
 
 // ?Bind@PixelProgram@Video@@QEBAXAEAVContext@2@H@Z (0x1800f3ed0)
 void PixelProgram::Bind(void* context, int32_t permutation) const {
-    using Fn = void (*)(void*, void*, int);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[pdvt::kBind / 8])(_data, context, permutation);
+    _data->Bind(context, permutation);
 }
 
 // ?PlatformConstruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e40). THE SLOT IS
@@ -235,52 +222,38 @@ void PixelProgram::Bind(void* context, int32_t permutation) const {
 // the two produces a PixelProgramData behind a VertexProgram's vtable, which
 // fails only on the first Bind.
 void PixelProgram::PlatformConstruct() {
-    void* dd = ActiveDeviceDataPtr();
+    Device* device = Device::_singleton;
+    DeviceData* dd = device ? device->deviceData : nullptr;
     if (dd == nullptr) { _data = nullptr; return; }
-    using CreateFn = void* (*)(void*, void*);
-    void** vt = *reinterpret_cast<void***>(dd);
-    _data = reinterpret_cast<CreateFn>(vt[ddvt::kCreatePixelProgramData / 8])(dd, this);
+    _data = dd->CreatePixelProgramData(this);
 }
 // ?PlatformCreate@PixelProgram@Video@@AEAA_NXZ (0x1800f3eb0)
 bool PixelProgram::PlatformCreate() {
-    using Fn = bool (*)(void*);
-    void** vt = *reinterpret_cast<void***>(_data);
-    return reinterpret_cast<Fn>(vt[pdvt::kCreate / 8])(_data);
+    return _data->PlatformCreate();
 }
 // ?PlatformDestruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e90)
 void PixelProgram::PlatformDestruct() {
     if (_data == nullptr) return;
-    using Fn = void (*)(void*, int);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[pdvt::kDeletingDtor / 8])(_data, 1);
+    _data->DeletingDtor(1);
 }
 
 // slot 5 — ?Serialize@PixelProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f3a90)
 bool PixelProgram::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-
     // Retail CALLs 0x1800f5110 here; the QUALIFIED spelling is that call.
-    this->ShaderProgram::Serialize(stream);
+    this->ShaderProgram::Serialize(streamv);
 
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 1);
-    ser.readerWriter = rw;
+    // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
+    // keeps `External`'s `void*` parameter (R-OBJ's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(stream, 1);
 
-    if (AsRw(rw)->GetVersion() == 0)
-        SerializeLegacyV0(&ser);
+    if (ser._readerWriter->GetVersion() == 0)
+        SerializeLegacyV0(ser);
 
-    if (stream->direction == rt::io::kDirectionReading)
+    if (stream.GetDirection() == IO::kReading)
         this->Video::PixelProgram::PlatformCreate();   // retail derefs _data unguarded
 
-    if (rw != nullptr) {
-        delete AsRw(rw);
-    }
-    return true;
+    return true;   // ~Serializer: the ReaderWriter's slot 0, flags 1
 }
 
 }  // namespace Video

@@ -170,58 +170,41 @@ extern "C" void Video_Context_OperatorDelete(void* p);         // context_lifecy
 namespace {
 
 // ENDGAME B.3.5 block VC: `VoidThisFn`, `NewFn`, `RbCreateFn`, `CompanionMk`,
-// `BufSetSizeFn` and `ImgSlotFn` are all GONE. Every one of them typed either an
-// `RT_EXPORT_ONCE` name door onto a class this tree has made real, or a
-// hand-inlined `(*(void***)p)[N]` onto one of block A's `*Data` bases. They are
-// direct member and virtual calls now; the doors and registrations they went
-// through are untouched.
-
-template <typename T> inline T& Field(void* p, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
-inline void* At(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
-
-// `?_singleton@Device@Video@@0PEAV12@EA` — a MINTED data slot, the same door
-// sunlight.cpp and singleton_ctors.cpp use.
-void** DeviceSingletonSlot() {
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
-}
+// `BufSetSizeFn` and `ImgSlotFn` are all GONE. B.4 (R-VIDEO): so are the
+// file-local `Field<T>` / `At` offset helpers and the `void**` singleton-slot
+// accessor; every store below is a named field of a typed receiver, and a
+// retail qword store that covers two fields is written as the two named
+// fields in address order (H7).
 
 // ---------------------------------------------------------------------------
 // The INLINED ConstantBuffer constructor, emitted seven times by MSVC.
 //
 //   +0x00 = 0        +0x08 = 0        +0x10 = -1 as a QWORD (so +0x10 and
 //   +0x14 both become -1)             +0x18 = 0 as a BYTE
-//   +0x1c = 0 as an UNALIGNED QWORD (covers +0x1c..+0x23)
+//   +0x1c = 0 as an UNALIGNED QWORD (covers +0x1c..+0x23: _registerCount AND
+//   _bankStride)
 //   +0x28 = 0        +0x30 = 0        +0x38 = the Device
 //   +0x40 = device->+0x100 ? deviceData->vtbl[11](deviceData, this) : 0
 //
-// +0x19..+0x1b are deliberately left alone; see the banner.
+// +0x19..+0x1b and +0x24..+0x27 are deliberately left alone; retail writes
+// neither here.
 // ---------------------------------------------------------------------------
-// B.3.5: the destination is the real `Video::ConstantBuffer` now, so every write
-// but one is a named field. The exception is retail's `MOV qword ptr
-// [RSI+0x1c],RBX` — a single UNALIGNED eight-byte store covering +0x1c..+0x23,
-// i.e. `_registerCount` AND `_bankStride` AND the unproven `_unknown24`. It
-// stays a `memset` because splitting it into two field stores would silently
-// stop writing +0x24..+0x27, which retail does write here and nowhere else.
-void InitConstantBuffer(Video::ConstantBuffer* buf, void* device) {
-    buf->_prefix        = nullptr;                      // +0x00
-    buf->_typeName      = nullptr;                      // +0x08
-    Field<int64_t>(buf, 0x10) = -1;                     // _ordinalIndex AND _uploadIndex
-    buf->_bindToVertex  = 0;                            // +0x18, a BYTE
-    std::memset(At(buf, 0x1c), 0, 8);                   // +0x1c..+0x23, unaligned
-    buf->_constantData  = nullptr;                      // +0x28
-    Field<int64_t>(buf, 0x30) = 0;                      // _constantCount AND _capacity
-    buf->_device        = device;                       // +0x38
+void InitConstantBuffer(Video::ConstantBuffer* buf, Video::Device* device) {
+    buf->_prefix           = nullptr;                   // +0x00
+    buf->_typeName         = nullptr;                   // +0x08
+    buf->_ordinalIndex     = -1;                        // +0x10 \ one qword -1
+    buf->_uploadIndex      = -1;                        // +0x14 /
+    buf->_bindToVertex     = 0;                         // +0x18, a BYTE
+    buf->_registerCount    = 0;                         // +0x1c \ one unaligned
+    buf->_bankStride       = 0;                         // +0x20 / qword zero
+    buf->_constantData     = nullptr;                   // +0x28
+    buf->_constantCount    = 0;                         // +0x30 \ one qword zero
+    buf->_constantCapacity = 0;                         // +0x34 /
+    buf->_device           = device;                    // +0x38
 
-    // B.3.5 bridge — `Device::deviceData` is a pinned `void*` at +0x100 and the
-    // `device` parameter is itself untyped. `vt[11]` (+0x58) is
-    // `Video::DeviceData::CreateConstantBufferData`, block A's slot name.
-    Video::DeviceData* factory = device
-        ? reinterpret_cast<Video::DeviceData*>(Field<void*>(device, 0x100))
-        : nullptr;
-    void* companion = factory ? factory->CreateConstantBufferData(buf) : nullptr;
-    buf->_platformData = companion;                     // +0x40
+    // `vt[11]` (+0x58) is `Video::DeviceData::CreateConstantBufferData`.
+    Video::DeviceData* factory = device ? device->deviceData : nullptr;
+    buf->_platformData = factory ? factory->CreateConstantBufferData(buf) : nullptr;  // +0x40
 }
 
 // One dynamic buffer: `operator new(0x20)`, two field writes, PlatformConstruct,
@@ -231,25 +214,20 @@ void InitConstantBuffer(Video::ConstantBuffer* buf, void* device) {
 // stores null and dereferences it anyway. Do not add a guard here — the project
 // rule is that an unguarded deref in a faithful body means the value is always
 // there, and the fix for a null is upstream.
-// ENDGAME B.3.5 block VC: templated on the buffer class and its companion, so the
-// two `RT_EXPORT_ONCE("?PlatformConstruct@{Vertex,Index}Buffer@Video@@…")` name
-// doors and the `companion->vt[1]` dispatch are a qualified member call and a
-// virtual call. `vt[1]` is `Video::{Vertex,Index}BufferData::Create(sizeBytes,
-// dynamic, data)` — the same +0x08, with `dynamic` hardcoded true and no initial
-// data, which is what retail's `(companion, bytes, 1, 0)` says.
-template <class Buf, class BufData>
-void MakeDynamicBuffer(void* self, size_t slot, int32_t bytes) {
-    void* p = System::MemoryAllocator::MemAlloc(0x20, 4);                        // 0x180011640
+// `vt[1]` is `Video::{Vertex,Index}BufferData::Create(sizeBytes, dynamic,
+// data)` — +0x08, with `dynamic` hardcoded true and no initial data, which is
+// what retail's `(companion, bytes, 1, 0)` says.
+template <class Buf>
+void MakeDynamicBuffer(Buf*& slot, int32_t bytes) {
+    Buf* p = static_cast<Buf*>(System::MemoryAllocator::MemAlloc(0x20, 4));   // 0x180011640
     if (p) {
-        Field<int32_t>(p, 0x00) = 0;
-        Field<uint8_t>(p, 0x04) = 0;
-        reinterpret_cast<Buf*>(p)->Buf::PlatformConstruct();          // B.3.5 bridge
+        p->size    = 0;
+        p->dynamic = false;
+        p->Buf::PlatformConstruct();
     }
-    Field<void*>(self, slot) = p;
+    slot = p;
 
-    // B.3.5 bridge — `platformData` is a pinned `void*` at +0x08.
-    BufData* companion = reinterpret_cast<BufData*>(Field<void*>(p, 0x08));
-    (void)companion->Create(static_cast<uint32_t>(bytes), 1, nullptr);
+    (void)p->platformData->Create(static_cast<uint32_t>(bytes), 1, nullptr);
 }
 
 }  // namespace
@@ -258,24 +236,15 @@ void MakeDynamicBuffer(void* self, size_t slot, int32_t bytes) {
 // ??2ImageBuffer@Video@@SAPEAX_K@Z    retail 0x18001e910, ord 801
 // ??2RenderBuffer@Video@@SAPEAX_K@Z   retail 0x18001f2e0, ord 861
 // ============================================================================
-// Two class `operator new`s, ported because the ctor's NAME doors exposed them
-// as new cutover debt the moment it started asking for them by name (the
-// unsatisfied-export set-diff went -1 +3, and these were two of the three).
-//
 // **ALIGNMENT IS THE WHOLE DIFFERENCE, AND IT WAS CHECKED BY BODY.** These two
 // and 0x180011640 are the same nineteen instructions —
 // `Enter(alloc+0x640); Allocate(alloc, n, align); Leave; return` — and differ
 // only in one immediate: `MOV R8D,0x8` here against `MOV R8D,0x4` in
-// 0x180011640. Reading one and assuming the others match by resemblance is
-// exactly how this family has been got wrong before. Each was disassembled.
-// ============================================================================
-// ENDGAME B.3.5 block VC — THE BODIES ARE THE MEMBERS. Both mangled names say
-// which class they belong to (`??2ImageBuffer@Video@@`, `??2RenderBuffer@Video@@`
-// — proved by the mangling, not by a prefix), and both classes are real now, so
-// each is `Ns::C::operator new` and each door below is a one-line QUALIFIED call.
-// `operator new` and `operator delete` are STATIC members and change no
-// triviality trait, so `Device.h`'s `is_trivially_copyable<Video::RenderBuffer>`
-// assert still holds and still proves it.
+// 0x180011640. Each was disassembled.
+//
+// ENDGAME B.3.5 block VC — THE BODIES ARE THE MEMBERS (`??2ImageBuffer@Video@@`,
+// `??2RenderBuffer@Video@@` — proved by the mangling). `operator new` and
+// `operator delete` are STATIC members and change no triviality trait.
 void* Video::ImageBuffer::operator new(size_t size) {
     return System::MemoryAllocator::MemAlloc(size, 8);                           // MOV R8D,0x8
 }
@@ -285,12 +254,14 @@ void* Video::RenderBuffer::operator new(size_t size) {
 
 // ============================================================================
 // The four sub-object zero-fills. All four return their argument in RAX.
+// Their parameter is the sub-object retail hands them (`LEA RCX,[RBX+off]`);
+// both Context constructors call them.
 // ============================================================================
 extern "C" void* RtVideo_Ctx_ZeroTransformPair(void* p) {      // 0x180053730
     // Two 4x4 float matrices written COLUMN BY COLUMN (retail interleaves the
-    // four rows of each), then ten zeroed qwords at +0x80..+0xd0.
-    std::memset(p, 0, 0x80);
-    for (size_t off = 0x80; off <= 0xc8; off += 8) Field<void*>(p, off) = nullptr;
+    // four rows of each), then ten zeroed qwords at +0x80..+0xd0: 0xd0 bytes
+    // of zeroes in all, with no hole.
+    std::memset(p, 0, 0xd0);
     return p;
 }
 
@@ -317,25 +288,48 @@ extern "C" void* RtVideo_Ctx_ZeroLightBlock(void* p) {         // 0x180053920
 // ??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z
 //                                                   retail 0x1800f1820, ord 125
 // ============================================================================
-extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
-                                      int32_t vertexBytes, int32_t indexBytes,
-                                      int32_t instanceBytes,
-                                      void* renderBuffer) {
-    Field<void*>(self, 0x00) = device;
-    for (size_t off = 0x08; off <= 0x28; off += 8) Field<void*>(self, off) = nullptr;
-    Field<void*>(self, 0xb0)   = nullptr;
-    Field<void*>(self, 0x1b8)  = nullptr;
-    Field<int32_t>(self, 0x1c0) = 0;
-    for (size_t off = 0x1c8; off <= 0x290; off += 8) Field<void*>(self, off) = nullptr;
+// The zeroing stores are retail's qwords, each written as the named fields it
+// covers, in address order (H7).
+extern "C" Video::Context* RtVideo_Context_Ctor(Video::Context* self, Video::Device* device,
+                                                int32_t vertexBytes, int32_t indexBytes,
+                                                int32_t instanceBytes,
+                                                Video::RenderBuffer* renderBuffer) {
+    self->_device            = device;          // +0x00
+    self->_frameIndex        = 0;               // +0x08 \ qword
+    self->_shaderDetail      = 0;               // +0x0c /
+    self->_dirty             = 0;               // +0x10 \ qword
+    self->_unknown0014       = 0;               // +0x14 /
+    self->_imageBufferDirty  = 0;               // +0x18 \ qword
+    self->_vertexBufferDirty = 0;               // +0x1c /
+    self->_transformCount    = 0;               // +0x20 \ qword
+    self->_unknown0024       = 0;               // +0x24 /
+    self->_renderBuffer      = nullptr;         // +0x28
+    self->_vertexLayout      = nullptr;         // +0xb0
+    self->_indexBuffer       = nullptr;         // +0x1b8
+    self->_indexOffset       = 0;               // +0x1c0 (a dword; +0x1c4 is not written)
+    self->_renderState       = nullptr;         // +0x1c8
+    self->_viewport.x        = 0;               // +0x1d0 \ two qwords
+    self->_viewport.y        = 0;               //         |
+    self->_viewport.width    = 0;               //         |
+    self->_viewport.height   = 0;               //         /
+    self->_scissor.x         = 0;               // +0x1e0 \ two qwords
+    self->_scissor.y         = 0;               //         |
+    self->_scissor.width     = 0;               //         |
+    self->_scissor.height    = 0;               //         /
+    self->_vertexProgram     = nullptr;         // +0x1f0
+    self->_pixelProgram      = nullptr;         // +0x1f8
+    // +0x200..+0x297, nineteen qwords: `_videoProgram` and the pixel staging.
+    std::memset(self->_pixelConstantStaging, 0, sizeof(self->_pixelConstantStaging));
 
     InitConstantBuffer(&self->_materialConstants, device);   // mc_
     InitConstantBuffer(&self->_pixelConstants, device);      // pc_
 
-    RtVideo_Ctx_ZeroTransformPair(At(self, 0x328));
-    for (size_t off = 0x3f8; off <= 0x410; off += 8) Field<void*>(self, off) = nullptr;
-    RtVideo_Ctx_ZeroBoneMatrices(At(self, 0x418));        // 51 x 0x40 -> +0x10d8
-    RtVideo_Ctx_ZeroTransformMatrices(At(self, 0x10d8));  // 52 x 0x40 -> +0x1dd8
-    RtVideo_Ctx_ZeroLightBlock(At(self, 0x1dd8));         // 0x1a0     -> +0x1f78
+    RtVideo_Ctx_ZeroTransformPair(&self->_viewProjection);             // +0x328
+    self->_inverseScale = Math::Vector4();                             // +0x3f8 \ four qwords
+    self->_color        = Math::Vector4();                             // +0x408 /
+    RtVideo_Ctx_ZeroBoneMatrices(self->_boneAndProjectionStaging);     // 51 x 0x40 -> +0x10d8
+    RtVideo_Ctx_ZeroTransformMatrices(self->_transforms);              // 52 x 0x40 -> +0x1dd8
+    RtVideo_Ctx_ZeroLightBlock(&self->_lightStaging);                  // 0x1a0     -> +0x1f78
 
     InitConstantBuffer(&self->_globalConstants, device);     // gc_
     InitConstantBuffer(&self->_instanceConstants, device);   // ic_
@@ -343,17 +337,28 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
     InitConstantBuffer(&self->_transformConstants, device);  // tc_
     InitConstantBuffer(&self->_lightConstants, device);      // lc_
 
-    Field<void*>(self, 0x20e0)   = nullptr;
-    Field<int32_t>(self, 0x20e8) = 0;
-    for (size_t off = 0x20f0; off <= 0x2108; off += 8) Field<void*>(self, off) = nullptr;
-    Field<int32_t>(self, 0x2110) = 0;
-    for (size_t off = 0x2118; off <= 0x2150; off += 8) Field<void*>(self, off) = nullptr;
+    self->_dynamicVertexCursor   = nullptr;     // +0x20e0
+    self->_dynamicVertexStride   = 0;           // +0x20e8 (a dword)
+    self->_unknown20f0           = 0;           // +0x20f0
+    self->_dynamicVertexBuffer   = nullptr;     // +0x20f8
+    self->_unknown2100           = 0;           // +0x2100
+    self->_unknown2108           = 0;           // +0x2108
+    self->_instanceCount         = 0;           // +0x2110 (a dword)
+    self->_dynamicIndexBuffer    = nullptr;     // +0x2118
+    self->_unknown2120           = 0;           // +0x2120
+    self->_unknown2128           = 0;           // +0x2128
+    self->_dynamicInstanceBuffer = nullptr;     // +0x2130
+    self->_defaultRenderBuffer   = nullptr;     // +0x2138
+    self->_defaultColorImage     = nullptr;     // +0x2140
+    self->_defaultDepthImage     = nullptr;     // +0x2148
+    self->_trianglesSubmitted    = 0;           // +0x2150 \ qword
+    self->_verticesSubmitted     = 0;           // +0x2154 /
 
     // 0x1800881b0 is the CRT memset (device_startup.cpp established this).
-    std::memset(At(self, 0x30),  0, 0x80);
-    std::memset(At(self, 0xb8),  0, 0x80);
-    std::memset(At(self, 0x138), 0, 0x40);
-    std::memset(At(self, 0x178), 0, 0x40);
+    std::memset(self->_imageBuffers,  0, sizeof(self->_imageBuffers));    // +0x30,  0x80
+    std::memset(self->_vertexBuffers, 0, sizeof(self->_vertexBuffers));   // +0xb8,  0x80
+    std::memset(self->_vertexOffsets, 0, sizeof(self->_vertexOffsets));   // +0x138, 0x40
+    std::memset(self->_vertexStrides, 0, sizeof(self->_vertexStrides));   // +0x178, 0x40
 
     self->Video::Context::AssignConstants();
 
@@ -361,69 +366,59 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
     // than from the `device` argument — retail reads 0x1801fe7a8 here even
     // though it has a Device in RBP. Kept: the two are the same object in every
     // real call, and reading the argument instead would be a silent
-    // normalisation.
+    // normalisation. `vt[9]` (+0x48) is `Video::DeviceData::CreateContextData`.
     {
-        void* singleton = *DeviceSingletonSlot();
-        // B.3.5 bridge — the singleton slot and `Device::deviceData` are both
-        // untyped here. `vt[9]` (+0x48) is `Video::DeviceData::CreateContextData`.
-        Video::DeviceData* factory = singleton
-            ? reinterpret_cast<Video::DeviceData*>(Field<void*>(singleton, 0x100))
-            : nullptr;
-        Field<void*>(self, 0x2160) = factory ? factory->CreateContextData(self) : nullptr;
+        Video::Device* singleton = Video::Device::_singleton;
+        Video::DeviceData* factory = singleton ? singleton->deviceData : nullptr;
+        self->_contextData = factory ? factory->CreateContextData(self) : nullptr;
     }
 
     if (vertexBytes > 0)
-        MakeDynamicBuffer<Video::VertexBuffer, Video::VertexBufferData>(
-            self, 0x20f8, vertexBytes);
+        MakeDynamicBuffer(self->_dynamicVertexBuffer, vertexBytes);
     if (indexBytes > 0)
-        MakeDynamicBuffer<Video::IndexBuffer, Video::IndexBufferData>(
-            self, 0x2118, indexBytes);
+        MakeDynamicBuffer(self->_dynamicIndexBuffer, indexBytes);
     if (instanceBytes > 0)
-        MakeDynamicBuffer<Video::VertexBuffer, Video::VertexBufferData>(
-            self, 0x2130, instanceBytes);
+        MakeDynamicBuffer(self->_dynamicInstanceBuffer, instanceBytes);
 
     if (renderBuffer) {
         // Retail JUMPS STRAIGHT TO THE RETURN here: with a render buffer handed
         // in, the two default ImageBuffers are never built and +0x2140/+0x2148
         // stay null. That is why ~Context null-checks them.
-        Field<void*>(self, 0x2138) = renderBuffer;
+        self->_defaultRenderBuffer = renderBuffer;
         return self;
     }
 
     // ENDGAME B.3.5 block VC: the whole default-render-buffer tail is direct
-    // calls. Six `RT_EXPORT_ONCE` name doors (spelling 3) retire here —
-    // `??2RenderBuffer@`, `?PlatformConstruct@RenderBuffer@`, `??2ImageBuffer@`
-    // twice, `??0ImageBuffer@` twice and `?Create@RenderBuffer@` — plus two
-    // hand-inlined `img->_data->vt[N]` dispatches. `??0ImageBuffer@` stays a
-    // ctor DOOR and is CALLED as one (B4b-2): it stamps the minted vtable, which
-    // a C++ constructor cannot.
+    // calls; ENDGAME B.3.9 VS: the two default images are built by the real
+    // constructor. LEFT (B.4 R-VIDEO): the three class `operator new` results
+    // are `void*`, viewed as the object each allocation is for (a C++ `new`
+    // expression would assume a non-null result and drop retail's null tests).
     Video::RenderBuffer* rb = static_cast<Video::RenderBuffer*>(
         Video::RenderBuffer::operator new(0x30));
     if (rb) {
         rb->colorBuffer = nullptr;   // +0x00
         rb->depthBuffer = nullptr;   // +0x08
-        Field<int64_t>(rb, 0x10) = 0;  // width AND height, one qword store
+        rb->width       = 0;         // +0x10 \ one qword store
+        rb->height      = 0;         // +0x14 /
         rb->Video::RenderBuffer::PlatformConstruct();
     }
-    Field<void*>(self, 0x2138) = rb;
+    self->_defaultRenderBuffer = rb;
 
     Video::ImageBuffer* color =
         static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
-    // B.3.5 bridge — the ctor DOOR's parameter is the POD view.
-    if (color) ::new (color) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
-    Field<void*>(self, 0x2140) = color;
+    if (color) ::new (color) Video::ImageBuffer();
+    self->_defaultColorImage = color;
 
     Video::ImageBuffer* depth =
         static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
     if (depth) ::new (depth) Video::ImageBuffer();
-    Field<void*>(self, 0x2148) = depth;
+    self->_defaultDepthImage = depth;
 
     // Two UNGUARDED companion calls on the images just built — slot 1 on the
     // colour image, slot 2 on the depth image. Different slots, and swapping them
-    // would be silent, which is exactly why they are spelled as block A's names
-    // now: `Video::ImageBufferData::AttachColorBuffer` / `AttachDepthBuffer`.
-    // Unguarded is retail's: when `operator new` failed, `color`/`depth` is null
-    // and retail dereferences it anyway.
+    // would be silent: `Video::ImageBufferData::AttachColorBuffer` /
+    // `AttachDepthBuffer`. Unguarded is retail's: when `operator new` failed,
+    // `color`/`depth` is null and retail dereferences it anyway.
     color->_data->AttachColorBuffer();
     depth->_data->AttachDepthBuffer();
 
@@ -435,8 +430,7 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
 // ?CreateVideoContext@MainLoop@Engine@@AEAAXXZ     retail 0x1800dd500, ord 2139
 // ============================================================================
 // Replace `MainLoop::+0x10`. The three sizes are hard-coded at the call site and
-// the render buffer is NULL, so the live shape is precisely the branch set that
-// probe configuration B drives.
+// the render buffer is NULL.
 //
 // The old Context is destroyed and freed BEFORE the new block is allocated, so
 // the allocator may well hand back the same address; nothing here may assume
@@ -444,25 +438,39 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
 // ============================================================================
 // ENDGAME B.3.7 (block B1): the body is the member `Engine::MainLoop::
 // CreateVideoContext` (`AEAA`, public here because the door is a free
-// function); `MainLoop::+0x10` is the named field `_context`.
+// function); `MainLoop::+0x10` is the named field `_context` (typed
+// `Video::Context*` since B.4 R-VIDEO).
 void Engine::MainLoop::CreateVideoContext() {
-    if (void* old = _context) {
-        RtVideo_Context_Dtor(static_cast<Video::Context*>(old));
+    if (Video::Context* old = _context) {
+        RtVideo_Context_Dtor(old);
         Video_Context_OperatorDelete(old);   // was RT_EXPORT_ONCE("??3Context@Video@@SAXPEAX@Z")
         _context = nullptr;
     }
 
     // Retail inlines `Enter ; Allocate(alloc, 0x2168, 8) ; Leave`, which is
     // MemAlloc(0x2168, 8) — see the banner.
-    void* block = System::MemoryAllocator::MemAlloc(sizeof(Video::Context), 8);
+    Video::Context* block = static_cast<Video::Context*>(
+        System::MemoryAllocator::MemAlloc(sizeof(Video::Context), 8));
     if (!block) {
         _context = nullptr;
         return;
     }
-    void* device = *DeviceSingletonSlot();
-    _context = RtVideo_Context_Ctor(static_cast<Video::Context*>(block),
-                                    device, 0x800000, 0x400000,
-                                    0x100000, nullptr);
+    _context = RtVideo_Context_Ctor(block, Video::Device::_singleton,
+                                    0x800000, 0x400000, 0x100000, nullptr);
 }
 
-// ============================================================================
+
+// ---- ?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z  0x1800ef3c0
+// B.4 (R-VIDEO): MOVED here from context.cpp (unchanged), beside the ctor that
+// first sets the field.
+// One store, no compare, no dirty bit. Note this OVERWRITES the pointer the
+// ctor may have allocated (+0x2138) without freeing it — retail leaks it
+// deliberately, because the caller owns the buffer it hands in. Faithfully
+// reproduced; do not add a delete here.
+void Video::Context::SetDefaultRenderBuffer(void* rb) {
+
+    // LEFT (B.4 R-VIDEO): code/Game/Game/minimap_paint.cpp hands this `void*`;
+    // the field is typed.
+    _defaultRenderBuffer = static_cast<Video::RenderBuffer*>(rb);
+
+}
