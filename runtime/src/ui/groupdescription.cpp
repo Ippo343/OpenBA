@@ -138,7 +138,7 @@ bool GroupDescription::Serialize(void* streamv) {
 
     RtObject_ExternalPtrArraySerialize_ElementDescription(IoSer(&ser), n, ExtArray(_children._data));
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                    // 180117d9c
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                    // 180117d9c
     return true;                                               // MOV AL,1
 }
 

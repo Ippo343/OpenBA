@@ -76,7 +76,7 @@ bool GraphDescription::Serialize(void* streamArg) {
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));            // 1800d1adc ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);             // 1800d1aed System::String
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                             // 1800d1b05
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                             // 1800d1b05
     return true;
 }
 

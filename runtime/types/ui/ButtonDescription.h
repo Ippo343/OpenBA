@@ -133,10 +133,10 @@ public:
     // one `ElementDescription::_childDesc` if it is ever needed.
     ElementDescription* _childDesc[5]; // +0x68 .. +0x88 (B4 H4: typed)  ExternalPtr<ElementDescription>:
                                    //   [0..3] the four state backgrounds, [4] the label
-    int32_t _word90;               // +0x90  state-0 colour; also the label's slot-10 arg
-    int32_t _word94;               // +0x94  state-1 colour
-    int32_t _word98;               // +0x98  state-2 colour
-    int32_t _word9c;               // +0x9c  state-3 colour
+    uint32_t _word90;              // +0x90  state-0 colour; also the label's slot-10 arg (B4: kScalarUInt, retail's type)
+    uint32_t _word94;              // +0x94  state-1 colour
+    uint32_t _word98;              // +0x98  state-2 colour
+    uint32_t _word9c;              // +0x9c  state-3 colour
 };
 
 static_assert(sizeof(ButtonDescription) == 0xa0,

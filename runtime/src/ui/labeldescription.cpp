@@ -84,7 +84,7 @@ bool LabelDescription::Serialize(void* streamv) {
     rw->SerializeInt(_worda0, nullptr);                      // 1800d2903
     rw->SerializeInt(_worda4, nullptr);                      // 1800d291b
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                  // 1800d2934
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                  // 1800d2934
     return true;
 }
 
@@ -109,13 +109,12 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     void* raw = MemAlloc(0x130, 8);                          // 1800d26f2
 
-    LabelElement* elem = static_cast<LabelElement*>(raw);
+    LabelElement* elem = nullptr;                            // the null allocation stays null
     if (raw != nullptr)                                      // 1800d271d
         elem = ::new (raw) LabelElement();                   // 1800d2722 ??0LabelElement
 
-    Object::InternalPtr<Element> slot(elem);                                       // 1800d272a
-    TextDescription::CreateInstance(                         // 1800d273a  0x18011ef70
-        reinterpret_cast<Object::InternalPtr<TextElement>*>(&slot), dialog);   // B.3.x bridge
+    Object::InternalPtr<TextElement> slot(elem);             // 1800d272a
+    TextDescription::CreateInstance(&slot, dialog);          // 1800d273a  0x18011ef70
 
     {
         SpriteSheet* sheet = _spriteSheet;                   // 1800d273f
@@ -162,8 +161,7 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
 // +0xa8 ExternalPtr is not released.
 namespace UI {
 LabelDescription::~LabelDescription() {
-    System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_spriteName));   // 1800d2980
+    ReleaseStringField(_spriteName);                         // 1800d2980  +0xb0
 }
 }  // namespace UI
 

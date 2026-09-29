@@ -43,20 +43,8 @@ void FreeStringBlock(void* p) {
 }
 
 // The refcounted System::String RELEASE (retail's asymmetry: the freeing
-// branch leaves the field at `data - 8`, the sharing branch nulls it), through
-// the atomic MemFree slot so a member body keeps no first-call static.
-void ReleaseStringFieldAtomic(uint8_t* p, size_t off) {
-    char*& s = *reinterpret_cast<char**>(p + off);
-    if (s != nullptr) {
-        --*reinterpret_cast<int32_t*>(s - 4);
-        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {
-            s = s - 8;
-            FreeStringBlock(s);
-        } else {
-            s = nullptr;
-        }
-    }
-}
+// branch leaves the field at `data - 8`, the sharing branch nulls it) is
+// rtdesc::ReleaseStringField (description_common.h).
 
 // The refcounted System::String ASSIGNMENT retail open-codes twice in
 // CreateInstance (0x1800d102a and 0x1800d1082). Not a release: the old value is
@@ -67,8 +55,8 @@ void ReleaseStringFieldAtomic(uint8_t* p, size_t off) {
 void AssignStringField(char*& d, char* const s) {
     if (d == s) return;                                      // 1800d1035
     if (d != nullptr) {                                      // 1800d103a
-        --*reinterpret_cast<int32_t*>(d - 4);
-        if (*reinterpret_cast<int32_t*>(d - 4) == 0) {
+        --RtSystem::StringRefCount(d);
+        if (RtSystem::StringRefCount(d) == 0) {
             d = d - 8;                                       // 1800d1045
             FreeStringBlock(d);
         } else {
@@ -76,7 +64,7 @@ void AssignStringField(char*& d, char* const s) {
         }
     }
     d = s;                                                   // 1800d106a
-    if (d != nullptr) ++*reinterpret_cast<int32_t*>(d - 4);  // 1800d1076
+    if (d != nullptr) ++RtSystem::StringRefCount(d);         // 1800d1076
 }
 
 }  // namespace
@@ -113,11 +101,11 @@ bool EditDescription::Serialize(void* streamv) {
     StringSerialize(&_string70, &ser);    // 1800d1176
 
     rw->SerializeInt(_word78, nullptr);                      // 1800d118a
-    rw->SerializeBool(reinterpret_cast<bool&>(_flag7c), nullptr); // 1800d119f
+    rw->SerializeBool(_flag7c, nullptr);                     // 1800d119f
 
     StringSerialize(&_string80, &ser);    // 1800d11ae
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                  // 1800d11c6
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                  // 1800d11c6
     return true;
 }
 
@@ -168,9 +156,8 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
 // released.
 namespace UI {
 EditDescription::~EditDescription() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    ReleaseStringFieldAtomic(p, offsetof(EditDescription, _string80));   // 1800d1210
-    ReleaseStringFieldAtomic(p, offsetof(EditDescription, _string70));   // 1800d1246
+    ReleaseStringField(_string80);                           // 1800d1210  +0x80
+    ReleaseStringField(_string70);                           // 1800d1246  +0x70
 }
 
 // ?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ  0x18003f7c0

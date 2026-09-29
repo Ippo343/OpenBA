@@ -152,7 +152,7 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(IO::Serializer* ser, int
         rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->vertical), nullptr);            // +0x98
         rw()->SerializeInt(e->offsetX, nullptr);              // +0xa0
         rw()->SerializeInt(e->offsetY, nullptr);              // +0xa0
-        rw()->SerializeBool(reinterpret_cast<bool&>(e->force), nullptr);               // +0x78
+        rw()->SerializeBool(e->force, nullptr);               // +0x78
     }
 }
 

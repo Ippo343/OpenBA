@@ -121,14 +121,13 @@ bool BorderDescription::Serialize(void* streamv) {
 
     ElementDescription::Serialize(stream);                  // 18010fe3a
 
-    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined                   // [RSP+0x28], [RSP+0x30]
-    IO::ReaderWriter* rw = ser._readerWriter;  // 18010fe62 / 18010fe67
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined: [RSP+0x28], [RSP+0x30]  18010fe62 / 18010fe67
 
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 18010fe78
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
         StringSerialize(&_spriteName[i], &ser);             // 0x1800c9930
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                 // 18010ff23
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 18010ff23
     return true;                                            // MOV AL,1
 }
 

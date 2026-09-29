@@ -109,8 +109,8 @@ public:
     // then +0x70/+0x71 — see containerdescription.cpp.
     int32_t  _requestedWidth;     // +0x68  ctor 0x64; -> ContainerElement::_requestedWidth (+0xc0)
     int32_t  _requestedHeight;    // +0x6c  ctor 0x64; -> ContainerElement::_requestedHeight (+0xc4)
-    uint8_t  _clampWidth;         // +0x70  kScalarBool; -> ContainerElement +0xcc (BYTE)
-    uint8_t  _clampHeight;        // +0x71  kScalarBool; -> ContainerElement +0xcd (BYTE)
+    bool     _clampWidth;         // +0x70  kScalarBool (B4: retail's type); -> ContainerElement +0xcc (BYTE)
+    bool     _clampHeight;        // +0x71  kScalarBool; -> ContainerElement +0xcd (BYTE)
     uint8_t  _pad72[2];           // +0x72  written by nothing
     int32_t  _barSize;            // +0x74  kScalarInt; -> ContainerElement::_barSize (+0xc8)
     // ExternalPtr<UI::ElementDescription> x3 (0x180038f90 each). CreateInstance

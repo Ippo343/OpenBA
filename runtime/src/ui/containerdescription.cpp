@@ -101,10 +101,10 @@ bool ContainerDescription::Serialize(void* streamv) {
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[1]), IoSer(&ser));   // 1800ccf6c
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[2]), IoSer(&ser));   // 1800ccf7d
 
-    rw->SerializeBool(reinterpret_cast<bool&>(_clampWidth), nullptr); // 1800ccf9d
-    rw->SerializeBool(reinterpret_cast<bool&>(_clampHeight), nullptr); // 1800ccfaf
+    rw->SerializeBool(_clampWidth, nullptr);                 // 1800ccf9d
+    rw->SerializeBool(_clampHeight, nullptr);                // 1800ccfaf
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                 // 1800ccfc5
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 1800ccfc5
     return true;
 }
 

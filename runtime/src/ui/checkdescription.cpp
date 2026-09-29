@@ -83,11 +83,10 @@ bool CheckDescription::Serialize(void* streamv) {
     ButtonDescription::Serialize(stream);                  // 18011194a
 
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
-    IO::ReaderWriter* rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_checkDesc), IoSer(&ser)); // 18011198b
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                // 1801119a3
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                // 1801119a3
     return true;
 }
 

@@ -155,7 +155,7 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
 
     RtObject_ExternalPtrSerialize_ExternalList(ExtField(&_resourceList), IoSer(&ser));   // 1800cfae9
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                 // 1800cfb00
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 1800cfb00
     return true;
 }
 

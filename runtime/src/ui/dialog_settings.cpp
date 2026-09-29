@@ -286,18 +286,11 @@ OpenCounts g_openCounts;
 // ############################################################################
 namespace {
 
-// ENDGAME B.3.9 IO (W2, foreign site): the real class; the ??0 / ??1 doors are
-// gone. The destructor is a qualified `T::~T()` call (retail: slot 0, flags 0).
-inline void MsCtor(void* ms) {
-    ::new (ms) IO::MemoryStream();
-}
-inline void MsDtor(void* ms) {
-    static_cast<IO::MemoryStream*>(ms)->IO::MemoryStream::~MemoryStream();
-}
-// ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z, the real constructor.
-inline void SerCtor(void* ser, void* ms) {
-    ::new (ser) IO::Serializer(*reinterpret_cast<IO::Stream*>(ms), 0);   // B.3.x bridge
-}
+// ENDGAME B.3.9 IO (W2, foreign site): the real classes. The MemoryStream is a
+// stack IO::MemoryStream (??0MemoryStream 0x1800ae710 / ??1 0x1800ae890, the
+// latter at scope end, which is retail's position: last). Each scope is a
+// stack IO::Serializer (??0Serializer 0x1800b9960, version 0; ??1Serializer
+// 0x1800b99b0 = `if (rw) delete rw`, at the position the explicit delete had).
 
 }  // namespace
 
@@ -308,25 +301,24 @@ void DialogInstance::SaveSettings() {
     using namespace RtUi;
     if (_userData == nullptr) return;
 
-    RtIo::MemoryStream ms;
-    MsCtor(&ms);
+    IO::MemoryStream ms;
 
     const int32_t size = _userFlags;            // a BYTE LENGTH — see the header
     void* const   buf  = _userData;
-    ms.data           = buf;
-    ms.size           = static_cast<uint32_t>(size);
-    ms.cursor         = 0;
-    ms.base.direction = 1;                      // WRITING
+    ms._data          = buf;
+    ms._size          = static_cast<uint32_t>(size);
+    ms._cursor        = 0;
+    ms._direction     = 1;                      // WRITING
 
     if (size >= 4) {
         // Stored DIRECTLY into the buffer, then the cursor is stepped past it.
+        // LEFT: _userData is the raw settings byte buffer, not a field.
         *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
-        ms.cursor += 4;
+        ms._cursor += 4;
     }
 
-    rt::io::Serializer ser;
-    SerCtor(&ser, &ms);
-    IO::ReaderWriter* rw = reinterpret_cast<IO::ReaderWriter*>(ser.readerWriter);   // B.3.x bridge
+    IO::Serializer ser(ms, 0);
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
 
@@ -338,20 +330,12 @@ void DialogInstance::SaveSettings() {
         uint32_t id = c->Type();                // controller slot 2
         rw->SerializeUInt(id, nullptr);         // +0x98
 
-        rt::io::Serializer ser2;
-        SerCtor(&ser2, &ms);
-        IO::ReaderWriter* rw2 = reinterpret_cast<IO::ReaderWriter*>(ser2.readerWriter);   // B.3.x bridge
+        IO::Serializer ser2(ms, 0);
 
         _controllers._data[i]->OnSerializeSettings(&ms);   // controller slot 10 (re-read)
-
-        if (rw2 != nullptr)
-            delete rw2;
+        // ~Serializer: `if (rw2) delete rw2`.
     }
-
-    if (rw != nullptr)
-        delete rw;
-
-    MsDtor(&ms);
+    // ~Serializer (`if (rw) delete rw`), then ~MemoryStream.
 }
 
 // ?OnClosed@DialogInstance@UI@@UEAAXXZ   0x180115330 — see the door.
@@ -370,30 +354,28 @@ void DialogInstance::OnOpened() {                              // [4]
 
     if (_userData == nullptr) { ++g_openCounts.noBuffer; return; }
 
-    RtIo::MemoryStream ms;
-    MsCtor(&ms);
+    IO::MemoryStream ms;
 
     const int32_t size = _userFlags;            // a BYTE LENGTH — see the header
     void* const   buf  = _userData;
-    ms.data           = buf;
-    ms.size           = static_cast<uint32_t>(size);
-    ms.cursor         = 0;
-    ms.base.direction = 0;                      // READING
+    ms._data          = buf;
+    ms._size          = static_cast<uint32_t>(size);
+    ms._cursor        = 0;
+    ms._direction     = 0;                      // READING
 
     uint32_t magic = 0;
     if (size >= 4) {
+        // LEFT: _userData is the raw settings byte buffer, not a field.
         magic = *reinterpret_cast<const uint32_t*>(buf);
-        ms.cursor += 4;
+        ms._cursor += 4;
     }
     if (magic != 0xdeadbeefu) {
         ++g_openCounts.badMagic;
-        MsDtor(&ms);
-        return;
+        return;                                 // ~MemoryStream
     }
 
-    rt::io::Serializer ser;
-    SerCtor(&ser, &ms);
-    IO::ReaderWriter* rw = reinterpret_cast<IO::ReaderWriter*>(ser.readerWriter);   // B.3.x bridge
+    IO::Serializer ser(ms, 0);
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
 
@@ -413,24 +395,17 @@ void DialogInstance::OnOpened() {                              // [4]
             }
         }
 
-        rt::io::Serializer ser2;
-        SerCtor(&ser2, &ms);
-        IO::ReaderWriter* rw2 = reinterpret_cast<IO::ReaderWriter*>(ser2.readerWriter);   // B.3.x bridge
+        IO::Serializer ser2(ms, 0);
+        IO::ReaderWriter* rw2 = ser2._readerWriter;
 
         if (found < 0) {
             rw2->Skip();                        // +0x10
         } else {
             _controllers._data[found]->OnSerializeSettings(&ms);   // controller slot 10
         }
-
-        if (rw2 != nullptr)
-            delete rw2;
+        // ~Serializer: `if (rw2) delete rw2`.
     }
-
-    if (rw != nullptr)
-        delete rw;
-
-    MsDtor(&ms);
+    // ~Serializer (`if (rw) delete rw`), then ~MemoryStream.
 }
 
 }  // namespace UI

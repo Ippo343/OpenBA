@@ -98,12 +98,12 @@ bool ButtonDescription::Serialize(void* streamv) {
     for (int i = 0; i < 5; ++i)                            // 18011142f .. 180111476
         RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc[i]), IoSer(&ser));
 
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word90), nullptr); // 18011147b .. 1801114d5
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word94), nullptr);
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word98), nullptr);
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word9c), nullptr);
+    rw->SerializeUInt(_word90, nullptr);                     // 18011147b .. 1801114d5
+    rw->SerializeUInt(_word94, nullptr);
+    rw->SerializeUInt(_word98, nullptr);
+    rw->SerializeUInt(_word9c, nullptr);
 
-    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                // 1801114ee
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                // 1801114ee
     return true;
 }
 
@@ -163,14 +163,14 @@ void ButtonDescription::CreateInstance(Object::InternalPtr<ButtonElement>* eleme
         ButtonElement* e = element->Get();                           // 180110a96
         Element* c = e->_children._data[4];                          // 180110aa0
         if (c != nullptr)                                            // 180110aa4
-            c->SetColor(static_cast<uint32_t>(_word90));             // 180110ab2 vt[0x50]
+            c->SetColor(_word90);                                    // 180110ab2 vt[0x50]
     }
 
     // Four dwords, each preceded by its own `MOV RCX,[RDI]`.
-    element->Get()->_stateColor[0] = static_cast<uint32_t>(_word90);   // 180110ab5 .. 180110afa
-    element->Get()->_stateColor[1] = static_cast<uint32_t>(_word94);
-    element->Get()->_stateColor[2] = static_cast<uint32_t>(_word98);
-    element->Get()->_stateColor[3] = static_cast<uint32_t>(_word9c);
+    element->Get()->_stateColor[0] = _word90;                // 180110ab5 .. 180110afa
+    element->Get()->_stateColor[1] = _word94;
+    element->Get()->_stateColor[2] = _word98;
+    element->Get()->_stateColor[3] = _word9c;
 }
 
 // ============================================================================

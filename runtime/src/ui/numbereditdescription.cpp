@@ -139,7 +139,7 @@ bool NumberEditDescription::Serialize(void* streamv) {
     rw->SerializeInt(_i78, nullptr);
     rw->SerializeInt(_i7c, nullptr);
     rw->SerializeInt(_i74, nullptr);
-    rw->SerializeBool(reinterpret_cast<bool&>(_b80), nullptr);
+    rw->SerializeBool(_b80, nullptr);
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                                       // 1800d4faf
     return true;

@@ -79,7 +79,7 @@ public:
         LayoutVertical   vertical;     // +0x24  kScalarUInt; -> record +0x04
         int32_t          offsetX;      // +0x28  kScalarInt;  -> record +0x10
         int32_t          offsetY;      // +0x2c  kScalarInt;  -> record +0x14
-        uint8_t          force;        // +0x30  kScalarBool; -> record +0x18 (laid out even when hidden)
+        bool             force;        // +0x30  kScalarBool (B4: retail's type); -> record +0x18 (laid out even when hidden)
         uint8_t          _pad31[7];    // +0x31  written by nothing
     };
 
