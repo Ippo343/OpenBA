@@ -412,7 +412,6 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity*
         // have mis-read the soak: a tornado crossing a pasture reports its kills here,
         // and filing livestock losses under "debris" hides a herd wipe.
         GameUpdateLoop* gw = GameWorld();
-        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): the removal list stays by offset.
         EntityList* entityMgr = gw ? gw->m_entityList : nullptr;
         ComponentEntity* ibp = entity;
         // Inlined 0x1400c49d0 (EntityList::QueueDestroy): skip entities already
@@ -624,7 +623,6 @@ void AmbientEmitterComponent::MoveTo(const Math::Vector3& newPos) {
     for (int i = 0; i < count; i++) {
         const uint32_t id = slots[i].handle;
         if (id != 0 && gw)
-            // LEFT: GameUpdateLoop::m_audioScene is void* (GAME-a).
             gw->m_audioScene->MoveEmitter(id, position, newPos);
     }
     position = newPos;
@@ -926,7 +924,6 @@ void TornadoComponent::Tick(void* time) {
                     emitter->volume = volume;
                 } else if (emitter->volume != volume) {
                     emitter->volume = volume;
-                    // LEFT: GameUpdateLoop::m_audioScene is void* (GAME-a).
                     gw->m_audioScene->SetEmitterVolume(
                         emitter->handle, audio2->position, volume);
                 }

@@ -228,9 +228,7 @@ void RawMaterialComponent::Startup() {
 
     // Register the entity's template with the town manager.
     if (GameUpdateLoop::_singleton != nullptr) {
-        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): the B4 FORWARD takes it.
-        RawMaterialComponent_RegisterRawMaterial(GameUpdateLoop::_singleton->m_citizenList,
-                                                 _entity->_description);
+        GameUpdateLoop::_singleton->m_citizenList->RegisterRawMaterial(_entity->_description);   // 0x140091e60
     }
 }
 
