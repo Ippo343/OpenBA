@@ -563,10 +563,9 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
     if (newBuf != nullptr) {
         // DialogInstance ctor: (ui, resource, parent = null, dataSource, 0, 0);
         // the template is the data source (identifies the utility type).
-        // LEFT: UIDescription::_descRef is void* (COMP-f's header): the UI::Dialog.
         dialogInst = ::new (newBuf) UI::DialogInstance(
             userInterface,
-            static_cast<const UI::Dialog*>(uiDescItem->_descRef),
+            uiDescItem->_dialog,
             Object::InternalPtr<UI::DialogInstance>(),               // parent: null
             description,
             nullptr, 0);

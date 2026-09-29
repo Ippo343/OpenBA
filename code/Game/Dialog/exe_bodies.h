@@ -97,11 +97,8 @@ extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t pa
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 5 outside caller files -> PlayerToolManager::CenterOnEntity
 
 // ---- toolui.cpp
-// FUN_14012e100: UIDescription_AddControllers — REIMPLEMENTED in code/Game/Dialog/toolui.cpp
-// Iterates UIDescription controller entries, checks for TabElement targets,
-// and calls the appropriate AddController overload for each entry.
-// Old fn_* pointer removed; replaced by UIDesc_AddControllers_Impl().
-void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource);
+// B4 DLG-d: FUN_14012e100 is UIDescription::AddControllers (Component/UIDescription.h),
+// its body in toolui.cpp.
 
 // ---- townhall_helpers.cpp
 extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr);  // 0x14006abf0

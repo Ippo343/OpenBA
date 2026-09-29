@@ -62,24 +62,14 @@ extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                         uint32_t x, uint32_t y);
 
 // ============================================================
-// UIDesc_AddControllers_Impl (was FUN_14012e100)
+// UIDescription::AddControllers (0x14012e100; the tree's UIDesc_AddControllers_Impl)
 // ============================================================
-// Iterates the controller entries in a UIDescription and registers each one
-// with the dialog instance. Each entry is 0x28 bytes:
-//   +0x00: uint32_t controllerTypeId
-//   +0x08: ExternalPtr<ElementDescription> elementDesc
-//   +0x10: ExternalPtr<DialogControllerConfig> config
-//   +0x18: ExternalPtr<ElementDescription> tabDesc
-//   +0x20: System::String elementName (8 bytes)
-//
-// For each entry, looks up the named element in the dialog. If the element
+// Iterates the UIDescription's entries (UIDescriptionEntry, 0x28 each: type,
+// element description, config, tab button description, element name) and
+// adds each one's controller to the dialog instance. If the named element
 // is a TabElement, creates a new tab page via AddTab and uses the 5-arg
 // AddController overload with the tab page. Otherwise, uses the 6-arg
 // AddController overload with the element description and name string.
-//
-// UIDescription layout:
-//   +0x30: void* entries array pointer
-//   +0x38: int entry count
 
 // WAVE 10 LANE UIORACLE — see the census note inside the loop below.
 uint64_t g_uidescEntries = 0, g_uidescFound = 0, g_uidescTab = 0;
@@ -92,7 +82,7 @@ extern "C" void UIDescTabCensusDump() {
         (unsigned long long)g_uidescFound,
         (unsigned long long)g_uidescTab,
         g_uidescEntries == 0
-            ? "   <- UIDesc_AddControllers_Impl NEVER RAN on this route"
+            ? "   <- UIDescription::AddControllers NEVER RAN on this route"
             : (g_uidescTab == 0
                  ? "   <- ran, but this route builds NO tabs: AddTab is unreachable here"
                  : ""));
@@ -105,22 +95,21 @@ extern "C" void UIDescTabCensusDump() {
 namespace { struct UIDescCensusReg { UIDescCensusReg() { std::atexit(&UIDescTabCensusDump); } };
             UIDescCensusReg g_uidescCensusReg; }
 
-void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource) {
-    uintptr_t desc = (uintptr_t)uiDesc;
-    int count = *(int*)(desc + 0x38);
+void UIDescription::AddControllers(UI::DialogInstance* const* dialog, Object::Base* dataSource) const {
+    int count = _entryCount;
     if (count <= 0) return;
 
-    uintptr_t entries = *(uintptr_t*)(desc + 0x30);
+    const UIDescriptionEntry* entries = _entries;
     if (Opt().mapTrace) {
         printf("[UIDescAdd] uiDesc=%p count=%d entries=%p dataSource=%p\n",
-               uiDesc, count, (void*)entries, dataSource);
+               static_cast<const void*>(this), count, static_cast<const void*>(entries),
+               static_cast<void*>(dataSource));
         for (int j = 0; j < count && j < 4; j++) {
-            uintptr_t e = entries + (uintptr_t)j * 0x28;
-            uint64_t nameStrVal = *(uint64_t*)(e + 0x20);
+            const UIDescriptionEntry& e = entries[j];
             printf("[UIDescAdd]   entry[%d]@%p type=%u elemDesc=%p config=%p tabDesc=%p "
-                   "nameStrPtr=0x%llx\n", j, (void*)e, *(uint32_t*)e,
-                   *(void**)(e + 0x08), *(void**)(e + 0x10), *(void**)(e + 0x18),
-                   (unsigned long long)nameStrVal);
+                   "nameStrPtr=%p\n", j, static_cast<const void*>(&e), static_cast<uint32_t>(e.type),
+                   static_cast<void*>(e.ref08), static_cast<void*>(e.ref10), static_cast<void*>(e.ref18),
+                   static_cast<const void*>(e.name._data));
         }
         fflush(stdout);
     }
@@ -142,79 +131,41 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
     extern uint64_t g_uidescEntries, g_uidescFound, g_uidescTab;
     for (int i = 0; i < count; i++) {
         ++g_uidescEntries;
-        uintptr_t entry = entries + (uintptr_t)i * 0x28;
+        const UIDescriptionEntry& entry = entries[i];
 
         // Look up the named element in the dialog
-        void* dialogInst = *(void**)dialogInstPtr;
-
-        void* foundElement = nullptr;
-        void* nameStr = (void*)(entry + 0x20);
-        ::new (&foundElement) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(*reinterpret_cast<const System::String*>(nameStr)));  // B.3.6 bridge
+        UI::Element* foundElement = (*dialog)->FindElement(entry.name).Get();
 
         if (foundElement != nullptr) ++g_uidescFound;
 
-        if (foundElement == nullptr) {
-            // No matching element found — use 6-arg AddController (non-tab path)
-            uint32_t typeId = *(uint32_t*)entry;
-            dialogInst = *(void**)dialogInstPtr;
-            reinterpret_cast<UI::DialogInstance*>(dialogInst)->AddController(  // B.3.6 bridge
-                typeId,
-                reinterpret_cast<Object::Base*>(dataSource),
-                Object::ExternalPtr<UI::DialogControllerConfig>(
-                    reinterpret_cast<UI::DialogControllerConfig*>(*(void**)(entry + 0x10))),   // controllerConfig
-                Object::ExternalPtr<UI::ElementDescription>(
-                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x08))),     // elementDesc
-                *reinterpret_cast<const System::String*>(entry + 0x20));    // nameStr
-            continue;
-        }
-
-        // Check if the found element is a TabElement
-        bool isTabElement = reinterpret_cast<const ::Object::Base*>(foundElement)->IsA(
-            UI::TabElement::TypeId());   // B.3.x bridge (?IsA@Base@Object@@)
-
-        if (!isTabElement) {
-            // Not a tab — use 6-arg AddController (non-tab path)
-            uint32_t typeId = *(uint32_t*)entry;
-            dialogInst = *(void**)dialogInstPtr;
-            reinterpret_cast<UI::DialogInstance*>(dialogInst)->AddController(  // B.3.6 bridge
-                typeId,
-                reinterpret_cast<Object::Base*>(dataSource),
-                Object::ExternalPtr<UI::DialogControllerConfig>(
-                    reinterpret_cast<UI::DialogControllerConfig*>(*(void**)(entry + 0x10))),   // controllerConfig
-                Object::ExternalPtr<UI::ElementDescription>(
-                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x08))),     // elementDesc
-                *reinterpret_cast<const System::String*>(entry + 0x20));    // nameStr
+        // No matching element, or not a TabElement — the 6-arg AddController
+        // (the element description and name)
+        if (foundElement == nullptr || !foundElement->IsA(UI::TabElement::TypeId())) {
+            (*dialog)->AddController(
+                entry.type,
+                dataSource,
+                Object::ExternalPtr<UI::DialogControllerConfig>(entry.ref10),   // controllerConfig
+                Object::ExternalPtr<UI::ElementDescription>(entry.ref08),       // elementDesc
+                entry.name);
             continue;
         }
 
         // Element is a TabElement — cast via IsDerivedFrom and use tab path
         ++g_uidescTab;
-        bool derived = ::Object::IsDerivedFromNullSafe(foundElement, UI::TabElement::TypeId());
-        void* tabElement = derived ? foundElement : nullptr;
+        UI::TabElement* tabElement = ::Object::IsDerivedFromNullSafe(foundElement, UI::TabElement::TypeId())
+                                         ? static_cast<UI::TabElement*>(foundElement) : nullptr;
 
-        // Wrap in InternalBasePtr
-        void* tabPtr = nullptr;
-        new (&tabPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tabElement));   // B.3.3 bridge
+        // Create a new tab page: AddTab(tabDesc, elementDesc)
+        Object::InternalPtr<UI::Element> tabPage = tabElement->AddTab(
+            Object::ExternalPtr<UI::ElementDescription>(entry.ref18),   // tabDesc
+            Object::ExternalPtr<UI::ElementDescription>(entry.ref08));  // elementDesc
 
-        // Create a new tab page: AddTab(tabElement, retval, tabDesc, elementDesc)
-        // Non-trivial return ABI: this=RCX, retval=RDX, tabDesc=R8, elementDesc=R9
-        void* tabPage = nullptr;
-        ::new (&tabPage) Object::InternalPtr<UI::Element>(  // B.3.6 bridge
-            reinterpret_cast<UI::TabElement*>(tabPtr)->AddTab(   // this (TabElement)
-                Object::ExternalPtr<UI::ElementDescription>(
-                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x18))),  // tabDesc
-                Object::ExternalPtr<UI::ElementDescription>(
-                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x08))))); // elementDesc
-
-        // Use 5-arg AddController with the tab page element
-        uint32_t typeId = *(uint32_t*)entry;
-        dialogInst = *(void**)dialogInstPtr;
-        reinterpret_cast<UI::DialogInstance*>(dialogInst)->AddController(  // B.3.6 bridge
-            typeId,
-            reinterpret_cast<Object::Base*>(dataSource),
-            Object::ExternalPtr<UI::DialogControllerConfig>(
-                reinterpret_cast<UI::DialogControllerConfig*>(*(void**)(entry + 0x10))),  // controllerConfig
-            Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tabPage)));   // tab page element (the door read it through &tabPage)
+        // The 5-arg AddController with the tab page element
+        (*dialog)->AddController(
+            entry.type,
+            dataSource,
+            Object::ExternalPtr<UI::DialogControllerConfig>(entry.ref10),       // controllerConfig
+            Object::InternalPtr<UI::Element>(tabPage.Get()));                   // tab page element
     }
 }
 
@@ -223,7 +174,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 // based utility dialog (Map/Help/Goal/…). Its OnCreated (+0x20) reads the
 // dialog's data source (a ComponentEntity → its description), finds the title/
 // close/drag elements, and — crucially — searches the description for a
-// UIDescription and calls UIDesc_AddControllers_Impl, which injects each of the
+// UIDescription and calls UIDescription::AddControllers, which injects each of the
 // UIDescription's sub-controllers (for UtilityMap: the MapUI controller +
 // Dialog/Map.rsc:content = imageMap/imageOverlay/frustum) at their _insertAt
 // element ("userGroup0") via DialogInstance::AddController. OnElementEvent (+0x48)
@@ -358,7 +309,7 @@ void ToolUI::OnCreated() {
         if (!found || uiDesc == nullptr) return;
 
         // Register sub-controllers from UIDescription
-        UIDesc_AddControllers_Impl(uiDesc, &_dialog, _dataSource);
+        uiDesc->AddControllers(&_dialog, _dataSource);
     }
 }
 
