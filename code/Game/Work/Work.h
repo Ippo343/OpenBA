@@ -63,7 +63,15 @@ struct WorkCellAssignment {
     CitizenComponent* citizen;   // +0x08 InternalPtr<CitizenComponent>
 };
 using WorkCellSetNode = Collection::Set<WorkCellAssignment>::Node;
+//   the entity -> citizen pairs of ClearArea's +0x48 set (0x30-byte node keyed on the
+//   entity; the serialize 0x140029c10 validates ComponentEntity, then CitizenComponent).
+struct WorkEntityAssignment {
+    ComponentEntity*  entity;    // +0x00 InternalPtr<ComponentEntity>: the key
+    CitizenComponent* citizen;   // +0x08 InternalPtr<CitizenComponent>
+};
+using WorkEntitySetNode = Collection::Set<WorkEntityAssignment>::Node;
 static_assert(sizeof(WorkCitizenSetNode) == 0x28, "citizen set node: MemAlloc(0x28) in 0x140021b40");
+static_assert(sizeof(WorkEntitySetNode) == 0x30, "entity set node: MemAlloc(0x30) in 0x140029b40");
 static_assert(sizeof(WorkCellSetNode) == 0x30, "cell set node: MemAlloc(0x30)");
 
 
