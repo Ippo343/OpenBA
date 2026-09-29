@@ -20,6 +20,7 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+class Profession;   // Game/Profession.h
 
 class WorkPlaceDescription final : public Description {
     DECLARE_EXE_TYPE(WorkPlaceDescription)
@@ -36,8 +37,8 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14003a100
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _profession0;                         // +0x20 ExternalPtr<Profession>
-    void* _profession1;                         // +0x28 ExternalPtr<Profession>
+    Profession* _profession0;                   // +0x20 ExternalPtr<Profession> (Serialize 0x14012f420: 0x140018020)
+    Profession* _profession1;                   // +0x28 ExternalPtr<Profession> (0x140018020)
 };
 
 static_assert(sizeof(WorkPlaceDescription) == 0x30, "WorkPlaceDescription is 0x30 (create 0x14003a090 MemAlloc(0x30))");

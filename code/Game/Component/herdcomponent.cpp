@@ -363,8 +363,7 @@ void HerdComponent::AddMember(WildAnimalComponent* const* member) {
 // detach the animal from the old herd's member list (FUN_140002cc0 on oldHerd+0x38),
 // store the new herd, and if non-null attach it (HerdComponent::AddMember).
 void WildAnimalComponent::SetHerd(HerdComponent* const* herd) {
-    // LEFT: WildAnimalComponent::data28 is a uint64_t (COMP-f's header).
-    HerdComponent* current = reinterpret_cast<HerdComponent*>(data28);
+    HerdComponent* current = this->herd.Get();
     if (current == *herd) return;
 
     if (current != nullptr) {
@@ -372,7 +371,7 @@ void WildAnimalComponent::SetHerd(HerdComponent* const* herd) {
         CemeteryListErase_Reimpl(&current->members, &self);   // 0x140002cc0
     }
 
-    data28 = reinterpret_cast<uint64_t>(*herd);
+    this->herd = *herd;
     if (*herd != nullptr) {
         WildAnimalComponent* self = this;
         (*herd)->AddMember(&self);   // 0x140121ad0
@@ -536,13 +535,12 @@ void HerdComponent::OnRemove() {
         WildAnimalComponent* member = members[memberCount - 1];
         if (!member) break;
 
-        // LEFT: WildAnimalComponent::data28 is a uint64_t (COMP-f's header).
-        HerdComponent* current = reinterpret_cast<HerdComponent*>(member->data28);
+        HerdComponent* current = member->herd.Get();
         if (current == nullptr) break;  // no progress possible
 
         WildAnimalComponent* memberRef = member;
         CemeteryListErase_Reimpl(&current->members, &memberRef);   // 0x140002cc0
-        member->data28 = 0;
+        member->herd = nullptr;
     }
 
     if (GameUpdateLoop::_singleton == nullptr) return;

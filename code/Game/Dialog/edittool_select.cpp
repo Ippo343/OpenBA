@@ -136,14 +136,13 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
             int32_t ctrlCount = 0;
             if (uiComp != nullptr) {
                 // UIComponent +0x28: the byte array {data, count, capacity}.
-                auto& bytes = GameColl::AsArray<GameColl::U8>(&uiComp->uiData0);
+                auto& bytes = GameColl::AsArray<GameColl::U8>(&uiComp->data);
                 ctrlCount = bytes.GetSize();
                 ctrlData = bytes.GetData();
             }
-            // LEFT: UIDescription::_descRef is void* (COMP-f's header).
             newDialog = ::new (storage) UI::DialogInstance(
                 ui,
-                reinterpret_cast<const UI::Dialog*>(uiDesc->_descRef),
+                uiDesc->_dialog,
                 Object::InternalPtr<UI::DialogInstance>(),   // parent: null
                 entity,
                 ctrlData, ctrlCount);

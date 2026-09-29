@@ -102,7 +102,7 @@ UNIT_TEST(cit_component_member_offsets) {
     CHECK_EQ(offsetof(TombstoneComponent, field28),            (size_t)0x28);
     CHECK_EQ(offsetof(TornadoComponent, pathIndex),            (size_t)0x50);
     CHECK_EQ(offsetof(TornadoComponent, posZ),                 (size_t)0x60);
-    CHECK_EQ(offsetof(WildAnimalComponent, data28),            (size_t)0x28);
+    CHECK_EQ(offsetof(WildAnimalComponent, herd),              (size_t)0x28);
 }
 
 // ===========================================================================

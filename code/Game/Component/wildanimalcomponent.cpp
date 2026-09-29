@@ -74,7 +74,7 @@ static long long g_war_calls = 0, g_war_noHerd = 0;
 
 // 0x14012e3c0. Component() is the CALL 0x1401188b0; the 0x140164af0 stamp is
 // the compiler's; +0x28 = 0; flags |= 0x02 (0x82).
-WildAnimalComponent::WildAnimalComponent() : data28(0) {
+WildAnimalComponent::WildAnimalComponent() : herd(nullptr) {
     OrFlagsInCtor(0x02);
 }
 
@@ -97,49 +97,30 @@ void WildAnimalComponent::Persist(void* stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // Create local IO::Serializer (24 bytes on stack)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
 
-    // Serialize InternalBasePtr at +0x28
-    reinterpret_cast<Object::InternalBasePtr*>(&data28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-    // Post-deserialize type validation
-    if (data28 != 0) {
-        bool valid = reinterpret_cast<const Object::Base*>(data28)->IsDerivedFrom(
-            HerdComponent::TypeId());   // import slot 0x140152a98
-        if (!valid) {
-            data28 = 0;
-        }
-    }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    // The InternalBasePtr at +0x28, nulled when it is not a HerdComponent
+    // (import slot 0x140152a98).
+    herd.Serialize(ser, HerdComponent::TypeId());
 }
 void WildAnimalComponent::OnRemove() {
-    if (data28 == 0) ++g_war_noHerd;
+    HerdComponent* herdComp = herd.Get();
+    if (!herdComp) ++g_war_noHerd;
     ++g_war_calls;
     const bool trace = (g_war_calls % 10) == 1;
-    const uintptr_t herdDbg = static_cast<uintptr_t>(data28);
-    const int before = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
+    // HerdComponent +0x40: the member array's count.
+    const int before = herdComp ? herdComp->memberCount : -1;
 
-    if (data28 != 0) {
-        // Create InternalBasePtr from self (the component)
-        uint64_t ibp = 0;
-        new (&ibp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-
-        // CheckPtr on entity reference
-
-        // Erase self from the herd entity's component list at entity+0x38
-        uintptr_t entity = static_cast<uintptr_t>(data28);
-        CemeteryListErase_Reimpl(reinterpret_cast<void*>(entity + 0x38), &ibp);   // 0x140002cc0
+    if (herdComp) {
+        // Erase self from the herd's member array (+0x38) by value (0x140002cc0).
+        Object::InternalPtr<WildAnimalComponent> self(this);
+        CemeteryListErase_Reimpl(&herdComp->members, &self);
     }
 
     if (trace) {
-        const int after = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
+        const int after = herdComp ? herdComp->memberCount : -1;
         fprintf(stderr, "[WildAnimalRm] calls=%lld noHerd=%lld herd=%p members %d -> %d%s\n",
-                g_war_calls, g_war_noHerd, reinterpret_cast<void*>(herdDbg),
+                g_war_calls, g_war_noHerd, static_cast<void*>(herdComp),
                 before, after, (before == after) ? "  ERASE-NO-OP" : "");
         fflush(stderr);
     }
