@@ -59,21 +59,21 @@ CitizenDescription::CitizenDescription()
     : Description(),
       _f38(FloatBits(0x41700000)),
       _f3c(FloatBits(0x40000000)),
-      _f40(FloatBits(0x3991a2b4)),
-      _f44(FloatBits(0x40000000)),
-      _f48(FloatBits(0x40000000)),
+      agingRate(FloatBits(0x3991a2b4)),
+      adultAge(FloatBits(0x40000000)),
+      marriageAge(FloatBits(0x40000000)),
       _f4c(FloatBits(0x40400000)),
-      _f50(FloatBits(0x40000000)),
-      _f54(FloatBits(0x41000000)),
-      _f58(FloatBits(0x44610000)),
+      minPregnancyAge(FloatBits(0x40000000)),
+      maxPregnancyAge(FloatBits(0x41000000)),
+      pregnancyTime(FloatBits(0x44610000)),
       _f5c(FloatBits(0x44e10000)),
       _f60(FloatBits(0x45a8c000)),
       _f64(FloatBits(0x3c23d70a)),
       _f68(FloatBits(0x3dcccccd)),
       _f6c(FloatBits(0x40c00000)),
-      _f70(FloatBits(0x41200000)),
+      maxHealth(FloatBits(0x41200000)),
       _f74(FloatBits(0x41000000)),
-      _f78(FloatBits(0x40400000)),
+      foodInterval(FloatBits(0x40400000)),
       _f7c(FloatBits(0x3f800000)),
       _f80(FloatBits(0x3f800000)),
       _f84(FloatBits(0x3f800000)),
@@ -83,25 +83,25 @@ CitizenDescription::CitizenDescription()
       _f94(FloatBits(0x3f800000)),
       _f98(FloatBits(0x3f000000)),
       _f9c(FloatBits(0x41400000)),
-      _fa0(FloatBits(0x3e800000)),
-      _fa4(FloatBits(0x41200000)),
+      happinessInterval(FloatBits(0x3e800000)),
+      maxHappiness(FloatBits(0x41200000)),
       _ia8(4),
       _iac(12),
       _ib0(3),
       _fb4(FloatBits(0x3f19999a)),
       _fb8(FloatBits(0x3e800000)),
       _ibc(20),
-      _fc0(FloatBits(0x42c80000)),
+      hungerRate(FloatBits(0x42c80000)),
       _fc4(FloatBits(0x42c80000)),
       _fc8(FloatBits(0x425c0000)),
       _fcc(FloatBits(0x42960000)),
-      _fd0(FloatBits(0x42c80000)),
+      maxHunger(FloatBits(0x42c80000)),
       _fd4(FloatBits(0x41c80000)),
       _fd8(FloatBits(0x3dcccccd)),
       _fe8(FloatBits(0x42480000)),
       _fec(FloatBits(0x42960000)),
-      _ff0(FloatBits(0x42c80000)),
-      _ff4(FloatBits(0x42400000)),
+      maxColdness(FloatBits(0x42c80000)),
+      warmTemperature(FloatBits(0x42400000)),
       _if8(60),
       _ifc(60),
       _i100(2000),
@@ -110,7 +110,7 @@ CitizenDescription::CitizenDescription()
       _f10c(FloatBits(0x42340000)),
       _i110(100),
       _f114(FloatBits(0x40a00000)),
-      _i118(200),
+      maxEducation(200),
       _f11c(FloatBits(0x40800000)),
       _f120(FloatBits(0x40a00000)),
       _f124(FloatBits(0x40a00000)),
@@ -121,7 +121,7 @@ CitizenDescription::CitizenDescription()
       _refCount(0),
       _refCap(0) {
     _professions[0] = _professions[1] = _professions[2] = nullptr;
-    _f3dc[0] = _f3dc[1] = _f3dc[2] = FloatBits(0x41200000);
+    coldRate[0] = coldRate[1] = coldRate[2] = FloatBits(0x41200000);
 }
 
 // dtor (slot 0 0x1400301f0 minus the stamps): the tree's slot 0 skipped ~External; the compiler chain now runs it (B38 D2 — this commit's behaviour change)
@@ -139,11 +139,11 @@ CitizenDescription::~CitizenDescription() {
 // [5] 0x140114900: stream order as retail.
 bool CitizenDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_f44, nullptr);
+    ser.Serialize(adultAge, nullptr);
     ser.Serialize(_f6c, nullptr);
-    ser.Serialize(_f70, nullptr);
+    ser.Serialize(maxHealth, nullptr);
     ser.Serialize(_f74, nullptr);
-    ser.Serialize(_f78, nullptr);
+    ser.Serialize(foodInterval, nullptr);
     ser.Serialize(_f7c, nullptr);
     ser.Serialize(_f80, nullptr);
     ser.Serialize(_f84, nullptr);
@@ -152,26 +152,26 @@ bool CitizenDescription::Serialize(void* stream) {
     ser.Serialize(_f90, nullptr);
     ser.Serialize(_f38, nullptr);
     ser.Serialize(_f3c, nullptr);
-    ser.Serialize(_f40, nullptr);
-    ser.Serialize(_fc0, nullptr);
+    ser.Serialize(agingRate, nullptr);
+    ser.Serialize(hungerRate, nullptr);
     ser.Serialize(_fd8, nullptr);
-    ser.Serialize(3, _f3dc, nullptr);   // float[3] bulk at +0xdc
-    ser.Serialize(_f48, nullptr);
+    ser.Serialize(3, coldRate, nullptr);   // float[3] bulk at +0xdc
+    ser.Serialize(marriageAge, nullptr);
     ser.Serialize(_f4c, nullptr);
-    ser.Serialize(_f50, nullptr);
-    ser.Serialize(_f54, nullptr);
-    ser.Serialize(_f58, nullptr);
+    ser.Serialize(minPregnancyAge, nullptr);
+    ser.Serialize(maxPregnancyAge, nullptr);
+    ser.Serialize(pregnancyTime, nullptr);
     ser.Serialize(_f5c, nullptr);
     ser.Serialize(_f60, nullptr);
     ser.Serialize(_fc4, nullptr);
     ser.Serialize(_fd4, nullptr);
     ser.Serialize(_fc8, nullptr);
     ser.Serialize(_fcc, nullptr);
-    ser.Serialize(_fd0, nullptr);
+    ser.Serialize(maxHunger, nullptr);
     ser.Serialize(_fe8, nullptr);
     ser.Serialize(_fec, nullptr);
-    ser.Serialize(_ff0, nullptr);
-    ser.Serialize(_ff4, nullptr);
+    ser.Serialize(maxColdness, nullptr);
+    ser.Serialize(warmTemperature, nullptr);
     ser.Serialize(_i110, nullptr);
     {
         // dynamic External* array (count at +0x140, data at +0x138)
@@ -187,16 +187,16 @@ bool CitizenDescription::Serialize(void* stream) {
         Reimpl_Array_Serialize_External_GraphicsMesh(&ser, count, _refs);
     }
     ser.Serialize(_f114, nullptr);
-    ser.Serialize(_i118, nullptr);
+    ser.Serialize(maxEducation, nullptr);
     ser.Serialize(_f120, nullptr);
     ser.Serialize(_f11c, nullptr);
     ser.Serialize(_f128, nullptr);
     ser.Serialize(_f124, nullptr);
     ser.Serialize(_f130, nullptr);
-    ser.Serialize(_fa4, nullptr);
+    ser.Serialize(maxHappiness, nullptr);
     ser.Serialize(_ia8, nullptr);
     ser.Serialize(_iac, nullptr);
-    ser.Serialize(_fa0, nullptr);
+    ser.Serialize(happinessInterval, nullptr);
     ser.Serialize(_ib0, nullptr);
     ser.Serialize(_fb4, nullptr);
     ser.Serialize(_fb8, nullptr);
