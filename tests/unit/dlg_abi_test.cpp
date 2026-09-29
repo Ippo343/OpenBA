@@ -207,9 +207,9 @@ UNIT_TEST(dlg_saveload_dialog) {
     CHECK_EQ(offsetof(SaveLoadDialog, selectedIndex), (size_t)0xc0);
     CHECK_EQ(offsetof(SaveLoadDialog, rotation), (size_t)0xc8);
     CHECK_EQ(offsetof(SaveLoadDialog, sprite), (size_t)0xd0);
-    CHECK_EQ(offsetof(SaveLoadDialog, engine), (size_t)0xe0);
-    CHECK_EQ(offsetof(SaveLoadDialog, gameWorld), (size_t)0xe8);
-    CHECK_EQ(offsetof(SaveLoadDialog, dataF0), (size_t)0xf0);
+    CHECK_EQ(offsetof(SaveLoadDialog, menuLoop), (size_t)0xe0);
+    CHECK_EQ(offsetof(SaveLoadDialog, game), (size_t)0xe8);
+    CHECK_EQ(offsetof(SaveLoadDialog, mainPage), (size_t)0xf0);
     CheckShape<SaveLoadDialog>();
     CheckDialogInstanceSlots<SaveLoadDialog>();
 }

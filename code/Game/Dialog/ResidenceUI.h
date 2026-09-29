@@ -19,6 +19,23 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "runtime/types/collection/Collection.h"
+
+namespace UI { class TextElement; }
+
+// One resident row of the residence table (0x30 bytes, OnCreated 0x1400b5850).
+struct ResidenceUIRow {
+    UI::Element*     imageMale;       // +0x00
+    UI::Element*     imageFemale;     // +0x08
+    UI::TextElement* textName;        // +0x10
+    UI::TextElement* textAge;         // +0x18
+    UI::TextElement* textProfession;  // +0x20
+    UI::Element*     buttonGoto;      // +0x28 element id 300 + row
+};
+static_assert(sizeof(ResidenceUIRow) == 0x30, "ResidenceUIRow is 0x30");
+static_assert(offsetof(ResidenceUIRow, textName) == 0x10, "ResidenceUIRow +0x10");
+static_assert(offsetof(ResidenceUIRow, textProfession) == 0x20, "ResidenceUIRow +0x20");
+static_assert(offsetof(ResidenceUIRow, buttonGoto) == 0x28, "ResidenceUIRow +0x28");
 
 class ResidenceUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ResidenceUI)
@@ -28,10 +45,8 @@ public:
 
     // 0x140020fc0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // Retail frees the row array at +0x30; the tree's teardown body (moved into
-    // ~ResidenceUI unchanged) does the same.
-    // the tree's teardown body (see the .cpp)
-    ~ResidenceUI() override;                                      // [0] 0x140020fc0
+    // Retail frees the row array at +0x30: `rows`' own dtor does.
+    ~ResidenceUI() override = default;                            // [0] 0x140020fc0
     void Persist(void* /*stream*/) override {}   // [3] 0x1400b5db0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400b5850
     void OnUpdateLayout() override;   // [7] 0x1400b51f0
@@ -40,10 +55,18 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400b5820
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
+private:
+    void GoToCitizen(int citizenIndex);                           // 0x1400b56a0
+
+public:
+
+    // ---- fields -------------------------------------------------------
+    // +0x30: retail's Collection::Array<ResidenceUIRow> (0x30-byte rows; OnCreated
+    // 0x1400b5850 appends one per table row; ~ResidenceUI 0x140020fc0 frees it:
+    // the Array's own dtor does, as the tree's teardown did).
+    Collection::Array<ResidenceUIRow> rows;   // +0x30 data, +0x38 count, +0x3C capacity
 };
 
 static_assert(sizeof(ResidenceUI) == 0x40, "ResidenceUI is 0x40 (create 0x140020f60 MemAlloc(0x40))");
 static_assert(alignof(ResidenceUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(ResidenceUI, rows) == 0x30, "ResidenceUI::rows @ +0x30");

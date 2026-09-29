@@ -3,16 +3,27 @@
 //
 // ResourceLimitUI (0x40 bytes) — resource limit spinner panel.
 // Extends DialogController. Fields:
-//   +0x10 dataSrc (pointer to typed object with resource index at +0x20)
-//   +0x30 spinnerElement (InternalBasePtr)
+//   +0x10 _config (the row's ResourceLimitUIConfig: resource index at +0x20)
+//   +0x30 editLimit (the SpinnerElement, InternalBasePtr)
 //
 // The resource limit value is stored in a global array accessed through
 // the game world singleton: world->+0xF0->+0x170[index*0x20+8].
 //
 // Decompiled from Application-x64.exe.
+//
+// B4 DLG-c: the three retail-faithful C bodies ResourceLimitUI_Slot4 / _Slot7 /
+// _Slot9 (0x140077970 / 0x1400778d0 / 0x1400777e0) had no caller: the class's
+// members below are what the vtable dispatches. They differ from retail in one
+// standalone way only — the resource index falls back to the dispatch order
+// when the row's config is not bound (retail reads IsDerivedFrom(config) ?
+// config->_resourceIndex : null->+0x20 unconditionally) — and in their null
+// guards. The unreferenced copies were deleted with resourcelimitui_funcs.h.
+//
+// LEFT: the limit table is read through GameUpdateLoop::m_citizenList (void*,
+// block GAME-a: CitizenBehavior::professionResources, +0x170).
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/resourcelimitui_funcs.h"
+#include "Dialog/ResourceLimitUI.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -24,133 +35,6 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/SpinnerElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Dialog/ResourceLimitUIConfig.h"   // X::TypeId() (B.3.9 CG2)
-
-// Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
-static uint64_t FindElemByName(void* dialogElem, const char* name) {
-    System::String nameStr(name);
-
-    uint64_t result = 0;
-    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-
-    return result;
-}
-
-// Helper: Find element by name, dereference, wrap in InternalBasePtr
-static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
-    uint64_t intPtr = FindElemByName(dialogElem, name);
-    void* rawElem = (void*)intPtr;
-    uint8_t basePtrBuf[8];
-    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
-    return *(uint64_t*)basePtrBuf;
-}
-
-// Helper: Read the resource limit value from the global array.
-// Path: world->+0xF0->+0x170[resourceIndex * 0x20 + 8]
-static int GetResourceLimit(void* dataSrc) {
-    int resourceIndex = *(int*)((uintptr_t)dataSrc + 0x20);
-    void* worldSingleton = GameUpdateLoop::_singleton;
-    void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
-    uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
-    return *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8);
-}
-
-// Helper: Write the resource limit value to the global array.
-static void SetResourceLimit(void* dataSrc, int value) {
-    int resourceIndex = *(int*)((uintptr_t)dataSrc + 0x20);
-    void* worldSingleton = GameUpdateLoop::_singleton;
-    void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
-    uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
-    *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8) = value;
-}
-
-// ============================================================
-// ResourceLimitUI::Slot4 (vtable +0x20) — Setup/refresh
-// ============================================================
-// Finds "editLimit" spinner element, sets ID/min/max,
-// reads current limit from global array.
-//
-// Original: 0x140077970.
-
-void ResourceLimitUI_Slot4(ResourceLimitUI* self) {
-    // Get data source from base class +0x10 and type-check
-    // ENDGAME B.3.9 CG2: TypeId_ResourceLimitType binds cell 0x1401c5520, whose
-    // retail class is ResourceLimitUIConfig (Table 1 NAME LIE).
-    void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = ::Object::IsDerivedFromNullSafe(dataSrc, ResourceLimitUIConfig::TypeId());
-    void* typedSrc = isType ? dataSrc : nullptr;
-
-    // Find "editLimit" spinner element
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
-    self->data30 = FindElemAsBasePtr(dialogElem, "editLimit");
-
-    // Configure spinner
-    void* spinner = (void*)self->data30;
-    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetElementId(0x3039);  // B.3.6 bridge
-    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetMinMax(0, 999999);  // B.3.6 bridge
-
-    // Set current value from global resource limit array
-    int currentLimit = GetResourceLimit(typedSrc);
-    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(currentLimit);  // B.3.6 bridge
-}
-
-// ============================================================
-// ResourceLimitUI::Slot7 (vtable +0x38) — Update handler
-// ============================================================
-// Syncs spinner display with current limit (unless spinner is active).
-//
-// Original: 0x1400778D0.
-
-void ResourceLimitUI_Slot7(ResourceLimitUI* self) {
-    // Get data source
-    void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = ::Object::IsDerivedFromNullSafe(dataSrc, ResourceLimitUIConfig::TypeId());
-    void* typedSrc = isType ? dataSrc : nullptr;
-
-    void* spinner = (void*)self->data30;
-
-    int currentLimit = GetResourceLimit(typedSrc);
-    int spinnerVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue();  // B.3.6 bridge
-
-    if (currentLimit != spinnerVal) {
-        bool active = reinterpret_cast<const UI::SpinnerElement*>(spinner)->IsActive();  // B.3.6 bridge
-        if (!active) {
-            reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(currentLimit);  // B.3.6 bridge
-        }
-    }
-}
-
-// ============================================================
-// ResourceLimitUI::Slot9 (vtable +0x48) — Notification handler
-// ============================================================
-// When spinner value changes (event 0x15, ID 0x3039), writes
-// the new value back to the global resource limit array.
-//
-// Original: 0x1400777E0.
-
-void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
-                           int param3, int param4) {
-    if (param3 != 0x15 || param4 != 0x3039) return;
-
-    // Validate sender is the spinner element or its child
-    void* spinner = (void*)self->data30;
-    void* sender = *(void**)param2;
-
-    if (sender != spinner) {
-        uint64_t childResult = 0;
-        ::new (&childResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinner)->Child(0));  // B.3.6 bridge
-        void* child = (void*)childResult;
-        if (sender != child) return;
-    }
-
-    // Get data source
-    void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = ::Object::IsDerivedFromNullSafe(dataSrc, ResourceLimitUIConfig::TypeId());
-    void* typedSrc = isType ? dataSrc : nullptr;
-
-    // Write spinner value to global limit
-    int newVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue();  // B.3.6 bridge
-    SetResourceLimit(typedSrc, newVal);
-}
 
 // ============================================================
 // Standalone entry points — resource index supplied explicitly
@@ -164,15 +48,14 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 // use: Log=0, Stone=1, Iron=2, Herbs=3, Tools=4, Fuel=5, Food=6, Clothing=7,
 // Alcohol=8, Coal=9, Textile=10 -> townMgr(gw+0xf0)+0x170[idx*0x20+8]. So the
 // standalone promotion supplies the index by dispatch order and drives the
-// "editLimit" spinner directly, bypassing the missing config. These mirror the
-// config-based Slot4/7/9 above but take an explicit index and never touch
-// self+0x10 (so IsDerivedFrom is never called on a NULL datasource).
+// "editLimit" spinner directly, bypassing the missing config. These take an
+// explicit index and never call IsDerivedFrom on a NULL config.
 
 static int GetResourceLimitByIdx(int resourceIndex) {
     if (!GameUpdateLoop::_singleton) return 0;
-    void* worldSingleton = GameUpdateLoop::_singleton;
+    GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
     if (!worldSingleton) return 0;
-    void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
+    void* subObj = worldSingleton->m_citizenList;   // LEFT: void* (GAME-a)
     if (!subObj) return 0;
     uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
     if (!arrayBase) return 0;
@@ -181,9 +64,9 @@ static int GetResourceLimitByIdx(int resourceIndex) {
 
 static void SetResourceLimitByIdx(int resourceIndex, int value) {
     if (!GameUpdateLoop::_singleton) return;
-    void* worldSingleton = GameUpdateLoop::_singleton;
+    GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
     if (!worldSingleton) return;
-    void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
+    void* subObj = worldSingleton->m_citizenList;   // LEFT: void* (GAME-a)
     if (!subObj) return;
     uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
     if (!arrayBase) return;
@@ -206,10 +89,8 @@ int ResourceLimitUI_ReadLimit_SA(int resourceIndex) {
 // town-manager ctor (TradeComponent_impl_0a30) seeds real per-resource defaults
 // (200 / 5000 / 100 / 50 / 500 / 1000 ...). Construction stays the stub
 // alloc+zero+vtable; the framework fills the base fields (dialog +0x18,
-// datasource +0x10, element root +0x20) afterward. Same shape as the
+// config +0x10, element root +0x20) afterward. Same shape as the
 // BuildRequirementUI / MapUI promotions above.
-// The standalone-only entry points (index supplied by dispatch order; see the
-// "Standalone entry points" note in code/Game/Dialog/resourcelimitui.cpp).
 namespace resourcelimitui_sa {
     // Resource index for this row. PREFERRED source: the bound config's +0x20,
     // exactly as retail Slot4/7/9 read it — ResourceLimitUIConfig is a real class
@@ -233,19 +114,24 @@ namespace resourcelimitui_sa {
         g_selves[g_count]=self;
         return g_count++;
     }
-    int IdxFor(void* self) {
-        void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self + 0x10) : nullptr;
+    // The row's config (DialogController::_config, +0x10), read as the
+    // ResourceLimitUIConfig it is bound to.
+    static const ResourceLimitUIConfig* ConfigOf(ResourceLimitUI* self) {
+        return self ? static_cast<const ResourceLimitUIConfig*>(self->_config.Get()) : nullptr;
+    }
+    int IdxFor(ResourceLimitUI* self) {
+        const ResourceLimitUIConfig* cfg = ConfigOf(self);
         if (cfg) {
-            int idx = *reinterpret_cast<int*>((uintptr_t)cfg + 0x20);
+            int idx = cfg->_resourceIndex;
             if (idx >= 0 && idx < 11) return idx;
         }
         int idx = IdxForFallback(self);
         return idx;
     }
-    void Trace([[maybe_unused]] const char* slot, void* self, [[maybe_unused]] int idx) {
+    void Trace([[maybe_unused]] const char* slot, ResourceLimitUI* self, [[maybe_unused]] int idx) {
         static int n=0; if (n>=24) return; ++n;
-        void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self+0x10) : nullptr;
-        [[maybe_unused]] int cfgIdx = cfg ? *reinterpret_cast<int*>((uintptr_t)cfg+0x20) : -1;
+        const ResourceLimitUIConfig* cfg = ConfigOf(self);
+        [[maybe_unused]] int cfgIdx = cfg ? cfg->_resourceIndex : -1;
         printf("[ResourceLimitUI] %s self=%p cfg=%p cfg+0x20=%d dispIdx=%d liveLimit=%d\n",
                slot, self, cfg, cfgIdx, idx, ResourceLimitUI_ReadLimit_SA(idx));
         fflush(stdout);
@@ -253,19 +139,20 @@ namespace resourcelimitui_sa {
 }
 
 // Setup (vtable +0x20): find "editLimit" within this row's element subtree, cache
-// it at self->data30, configure id/min/max, seed it from the live limit.
+// it at editLimit (+0x30), configure id/min/max, seed it from the live limit.
 // [4] 0x140077970
 void ResourceLimitUI::OnCreated() {
     int resourceIndex = resourcelimitui_sa::IdxFor(this);
     resourcelimitui_sa::Trace("Slot4", this, resourceIndex);
-    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
+    UI::Element* dialogElem = _container;
     if (!dialogElem) return;
-    this->data30 = FindElemAsBasePtr(dialogElem, "editLimit");
-    void* spinner = (void*)this->data30;
+    System::String nameStr("editLimit");
+    this->editLimit = static_cast<UI::SpinnerElement*>(dialogElem->FindElement(nameStr).Get());
+    UI::SpinnerElement* spinner = this->editLimit;
     if (!spinner) return;
-    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetElementId(0x3039);  // B.3.6 bridge
-    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetMinMax(0, 999999);  // B.3.6 bridge
-    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(GetResourceLimitByIdx(resourceIndex));  // B.3.6 bridge
+    spinner->SetElementId(0x3039);
+    spinner->SetMinMax(0, 999999);
+    spinner->SetValue(GetResourceLimitByIdx(resourceIndex));
 }
 
 // Update (vtable +0x38): keep the spinner synced with the live limit unless the
@@ -273,12 +160,12 @@ void ResourceLimitUI::OnCreated() {
 // [7] 0x1400778d0
 void ResourceLimitUI::OnUpdateLayout() {
     int resourceIndex = resourcelimitui_sa::IdxFor(this);
-    void* spinner = (void*)this->data30;
+    UI::SpinnerElement* spinner = this->editLimit;
     if (!spinner) return;
     int currentLimit = GetResourceLimitByIdx(resourceIndex);
-    int spinnerVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue();  // B.3.6 bridge
-    if (currentLimit != spinnerVal && !reinterpret_cast<const UI::SpinnerElement*>(spinner)->IsActive())  // B.3.6 bridge
-        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(currentLimit);  // B.3.6 bridge
+    int spinnerVal = spinner->GetValue();
+    if (currentLimit != spinnerVal && !spinner->IsActive())
+        spinner->SetValue(currentLimit);
 }
 
 // Event (vtable +0x48): on spinner change (msg 0x15, id 0x3039) write the new
@@ -286,17 +173,15 @@ void ResourceLimitUI::OnUpdateLayout() {
 // [9] 0x1400777e0
 void ResourceLimitUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
                                      int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    void* param2 = element;
     int resourceIndex = resourcelimitui_sa::IdxFor(this);
     resourcelimitui_sa::Trace("Slot9", this, resourceIndex);
     if (msg != 0x15 || id != 0x3039) return;
-    void* spinner = (void*)this->data30;
-    if (!spinner || !param2) return;
-    void* sender = *(void**)param2;
+    UI::SpinnerElement* spinner = this->editLimit;
+    if (!spinner || !element) return;
+    UI::Element* sender = element->Get();
     if (sender != spinner) {
-        uint64_t childResult = 0;
-        ::new (&childResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinner)->Child(0));  // B.3.6 bridge
-        if (sender != (void*)childResult) return;
+        UI::Element* child = spinner->Child(0).Get();
+        if (sender != child) return;
     }
-    SetResourceLimitByIdx(resourceIndex, reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue());  // B.3.6 bridge
+    SetResourceLimitByIdx(resourceIndex, spinner->GetValue());
 }
