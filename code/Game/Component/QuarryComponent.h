@@ -40,6 +40,9 @@ public:
     void OnEvent(int eventId) override;                           // [12] 0x1400550f0
     void OnMessage(int message, void* data,
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x140054b80
+
+    // 0x1400549c0: carve the description's floor mesh into the heightmap, clamped to `depth`.
+    void ApplyDepth(float depth);
 };
 
 static_assert(sizeof(QuarryComponent) == 0x28, "QuarryComponent is 0x28 (create 0x14000b3d0)");
