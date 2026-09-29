@@ -13,7 +13,7 @@
 //   dtor   0x140044a80: MemFree(+0x30), +0x30 = +0x38 = 0, restamp, ~Internal
 //   table  0x140158df0, 16 slots:
 //     [0]  0x140003590 scalar deleting dtor  [1]/[2] TypeName/Type
-//     [3]  0x1400449d0 Persist               [4] 0x140044990 Startup PORT GAP
+//     [3]  0x1400449d0 Persist               [4] 0x140044990 Startup
 //     [13] 0x140044970 CommandMask PORT GAP  [14] 0x140044930 Command PORT GAP
 //     every other slot = Component's
 // ============================================================================
@@ -33,7 +33,7 @@ public:
     // tree never did (Inert_ScalarDtor). Kept as the tree's.
     ~AutoPickupComponent() override = default;                    // [0]  0x140003590
     void     Persist(void* stream) override;                      // [3]  0x1400449d0
-    void     Startup() override;                                  // [4]  0x140044990 PORT GAP
+    void     Startup() override;                                  // [4]  0x140044990
     uint32_t CommandMask(int command) override;                   // [13] 0x140044970 PORT GAP
     void     Command(int command) override;                       // [14] 0x140044930 PORT GAP
 
