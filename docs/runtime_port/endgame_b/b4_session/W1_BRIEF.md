@@ -45,3 +45,19 @@ field has retail's type; a site whose result changes is a `behaviour:` commit.
 - B4 FORWARD forwarders left, with their outside caller files.
 - LEFT reads by reason (owner block named).
 - B11 object comparison: identical / different, each difference explained.
+
+## Shared C-body headers (added 2026-09-29)
+`code/Game/<Module>/exe_bodies.h` and a `*_funcs.h` shared by several families belong to no single
+block. A block edits ONLY the sections headed by its own defining files (`// ---- citizen*.cpp`):
+it deletes the declarations whose bodies became members with no outside caller and keeps the
+`B4 FORWARD` ones. No other line is touched, nothing is reordered or reformatted. The hand-in lists
+the line ranges.
+
+## Headers of other blocks (added 2026-09-29)
+A header owned by a block that has NOT STARTED, or finished by W0, may receive from the block that
+needs it: (a) a ONE-LINE H4 pointer typing of an existing field (`void*` / integer holding a pointer
+becomes `T*` with a forward declaration; layout-neutral, asserts unchanged), (b) an APPENDED member
+function declaration for a body the block converts. By-name sites in other blocks' files that stop
+compiling get the minimal value-identical fix and are listed. Anything more (a field's width, a
+rename, a split of raw storage) is asked of the coordinator. A header of a block that is RUNNING
+is never edited: LEAVE and list.

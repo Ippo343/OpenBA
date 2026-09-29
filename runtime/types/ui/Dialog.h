@@ -76,6 +76,8 @@
 #include "../object/Internal.h"
 #include "../object/External.h"
 
+namespace UI { class ElementDescription; class DialogControllerConfig; class SpriteSheet; }
+
 namespace RtUI {
 
 // One entry of Dialog::_controllerConfigs. Stride 0x20, pinned by the
@@ -116,8 +118,8 @@ namespace RtUI {
 struct DialogControllerConfigEntry {
     uint32_t _typeId;        // +0x00
     uint32_t _pad04;         // +0x04  never read
-    void*    _elementDesc;   // +0x08  ExternalPtr<ElementDescription>  -> arg 5
-    void*    _config;        // +0x10  ExternalPtr<DialogControllerConfig> -> arg 4
+    UI::ElementDescription*     _elementDesc;   // +0x08  ExternalPtr<ElementDescription>  -> arg 5 (B4 H4)
+    UI::DialogControllerConfig* _config;        // +0x10  ExternalPtr<DialogControllerConfig> -> arg 4 (B4 H4)
     char*    _name;          // +0x18  System::String (refcounted char*)
 };
 static_assert(offsetof(DialogControllerConfigEntry, _elementDesc) == 0x08,
@@ -132,7 +134,7 @@ static_assert(sizeof(DialogControllerConfigEntry) == 0x20,
 // String against the requested path identifier, steps 0x10 per iteration, and
 // on a hit re-indexes `data + i*0x10` to read the ExternalPtr at +0x00.
 struct DialogNamedTemplate {
-    void* _description;   // +0x00  ExternalPtr<ElementDescription>
+    UI::ElementDescription* _description;   // +0x00  ExternalPtr<ElementDescription> (B4 H4)
     char* _name;          // +0x08  System::String
 };
 static_assert(sizeof(DialogNamedTemplate) == 0x10,
@@ -377,11 +379,11 @@ public:
 
 public:
     // ---- the 0x68 bytes Dialog adds (evidence: the POD's banner) ---------
-    void*    _spriteSheet;             // +0x20  UI::SpriteSheet* (block D)
+    SpriteSheet* _spriteSheet;         // +0x20  (B4 H4: typed)
     char*    _spriteName;              // +0x28  System::String's one pointer
     uint32_t _backgroundColor;         // +0x30  ctor = 0xFFFFFFFF
     int32_t  _drawLevel;               // +0x34
-    void*    _rootDescription;         // +0x38  ExternalPtr<ElementDescription>
+    ElementDescription* _rootDescription; // +0x38  ExternalPtr<ElementDescription> (B4 H4)
     uint32_t _defaultFlags;            // +0x40
     uint32_t _unknown44;               // +0x44  never written by the ctor
     ElementController* _controllerConfigs;               // +0x48
@@ -390,10 +392,10 @@ public:
     RtUI::DialogNamedTemplate* _namedTemplates;          // +0x58
     int32_t  _namedTemplateCount;      // +0x60
     int32_t  _namedTemplateCapacity;   // +0x64
-    void**   _templates;               // +0x68  ExternalPtr<ElementDescription>[]
+    ElementDescription** _templates;   // +0x68  ExternalPtr<ElementDescription>[] (B4 H4)
     int32_t  _templateCount;           // +0x70
     int32_t  _templateCapacity;        // +0x74
-    void**   _references;              // +0x78  ExternalPtr<Object::External>[]
+    Object::External** _references;    // +0x78  ExternalPtr<Object::External>[] (B4 H4)
     int32_t  _referenceCount;          // +0x80
     int32_t  _referenceCapacity;       // +0x84
 };

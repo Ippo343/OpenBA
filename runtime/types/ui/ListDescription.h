@@ -52,6 +52,11 @@ namespace UI {
 class Dialog;
 class Element;
 
+class SpriteSheet;
+class StringTable;
+class Font;
+class ElementDescription;
+
 class ListDescription : public ElementDescription {
 public:
     // ---- the ten slots, in measured order ----------------------------------
@@ -97,8 +102,8 @@ public:
     // ---- the 0x28 bytes after ElementDescription ---------------------------
     // ExternalPtr<UI::ElementDescription> x2: CreateInstance builds [0] then
     // [1] as the ListElement's _children[0] (backdrop) and [1] (content).
-    void*    _partDescs[2];       // +0x68, +0x70
-    void*    _spriteSheet;        // +0x78  ExternalPtr<UI::SpriteSheet>  -> ListElement::_highlight.sheet
+    ElementDescription* _partDescs[2]; // +0x68, +0x70 (B4 H4: typed)
+    SpriteSheet* _spriteSheet;    // +0x78 (B4 H4: typed)  ExternalPtr<UI::SpriteSheet>  -> ListElement::_highlight.sheet
     char*    _spriteName;         // +0x80  System::String                -> ListElement::_highlight.index
     uint32_t _hoverColor;         // +0x88  ctor 0xff808080 -> ListElement::_hoverColor (+0xd0)
     uint32_t _selectColor;        // +0x8c  ctor 0xffffffff -> ListElement::_selectColor (+0xd4)

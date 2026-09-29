@@ -98,7 +98,7 @@ public:
     Font*   _ptr68;       // +0x68  ExternalPtr<UI::Font>
     char*   _string70;    // +0x70  System::String (refcounted char*)
     int32_t _word78;      // +0x78  kScalarInt
-    uint8_t _flag7c;      // +0x7c  kScalarBool
+    bool    _flag7c;      // +0x7c  kScalarBool (B4: retail's SerializeBool operand)
     uint8_t _pad7d[3];    // +0x7d  never written
     char*   _string80;    // +0x80  System::String (refcounted char*)
 };

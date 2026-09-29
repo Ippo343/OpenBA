@@ -79,6 +79,7 @@
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/Font.h"
+#include "../../types/audio/Audio.h"   // B4: Audio::Scene::Channel (the inlined Play)
 #include "../../types/system/String.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"
@@ -98,17 +99,9 @@ static_assert(kUnderlineSprite == offsetof(UI::DocumentTextElement, _underlineSp
 using Item = UI::DocumentTextElement::DocumentItem;
 using Link = UI::DocumentTextElement::Link;
 
-// UI::UserInterface (block E's class) — raw offsets, as before.
-constexpr int kUiEvents      = 0x48;
-constexpr int kUiEventCount  = 0x50;
-constexpr int kUiAudioScene  = 0x90;
-constexpr int kUiHoverSound  = 0xb8;
-constexpr int kUiClickSound  = 0xc0;
-
-// UI::Font (block D's class)
-constexpr int kFontLineHeight = 0x50;
-constexpr int kFontBaseline   = 0x54;
-constexpr int kFontUnderlineTrim = 0x5c;
+// UserInterface::_sounds[4] (+0xb8) and [5] (+0xc0): the hover and click sounds.
+constexpr int kUiHoverSound  = 4;
+constexpr int kUiClickSound  = 5;
 
 constexpr int32_t kEventActivated = 0x12;
 
@@ -135,10 +128,10 @@ static_assert(sizeof(Event) == 0x30, "UI event record stride");
 // zero rewrite the FIELD to `data - 8` and free that. The asymmetry (nulling
 // the field on the non-zero arm, leaving a freed pointer on the zero arm) is
 // retail's and is the same one runtime/src/ui/groupdescription.cpp documents.
-void ReleaseString(void** slot) {
-    char* s = static_cast<char*>(*slot);
+void ReleaseString(char** slot) {
+    char* s = *slot;
     if (s == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(s - 4);
+    int32_t* rc = &RtSystem::StringRefCount(s);
     --*rc;
     if (*rc == 0) {
         *slot = s - 8;
@@ -156,22 +149,24 @@ void ReleaseString(void** slot) {
 // is computed the way retail computes it rather than written as 0, because the
 // division is what the bytes do — and because `_secondsPerTick` being zero
 // would make it a NaN there too.
-void PlayInline(void* ui, int soundField) {
-    void* sound = Pc(ui, soundField);
+void PlayInline(UI::UserInterface* ui, int soundIndex) {
+    void* sound = ui->_sounds[soundIndex];
     if (sound == nullptr) return;
-    uint8_t* scene = static_cast<uint8_t*>(P(ui, kUiAudioScene));
+    // LEFT: UserInterface::_audioScene is void* (UserInterface.h, R-UI-b).
+    ::Audio::Scene* scene = static_cast<::Audio::Scene*>(ui->_audioScene);
     if (scene == nullptr) return;
 
     const int64_t start = static_cast<int64_t>(0.0 / SecondsPerTick());
-    uint8_t* voices = static_cast<uint8_t*>(P(scene, 0x10));
+    ::Audio::Scene::Channel* voices = scene->channels._data;
     for (int64_t i = 0; i < 0x100; ++i) {
-        uint8_t* v = voices + i * 0x70;
-        if (*reinterpret_cast<const int32_t*>(v + 0x68) != 0) continue;
-        P(v, 0x00) = sound;
-        *reinterpret_cast<int64_t*>(v + 0x10) = start;
-        I32(v, 0x08) = 1;
-        I32(scene, 0x08) += 1;
-        I32(v, 0x68) = static_cast<int32_t>(i) * 2 | (I32(scene, 0x08) << 9);
+        ::Audio::Scene::Channel& v = voices[i];
+        if (v.handleTag != 0) continue;
+        // LEFT: Channel::soundEffectRef is a uint64_t (Audio.h, R-ENG).
+        v.soundEffectRef = reinterpret_cast<uint64_t>(sound);
+        v.startTime = start;
+        v.soundType = 1;
+        scene->playGeneration += 1;
+        v.handleTag = static_cast<uint32_t>(static_cast<int32_t>(i) * 2 | (scene->playGeneration << 9));
         return;
     }
 }
@@ -232,24 +227,26 @@ void DocumentTextElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t
 //                 type-tested, and given its own Draw. A failed type test
 //                 yields null and retail calls through it.
 void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    if (_border != nullptr)
-        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
+    if (_border != nullptr)   // LEFT: _border is void* (the unit test)
+        static_cast<const Element*>(_border)->Draw(context, alpha);   // slot 6
 
-    void* const* const fonts  = static_cast<void* const*>(_fontsData);
+    Font* const* const fonts = _fontsData;
     const int32_t count = _itemsCount;
     for (int32_t i = 0; i < count; ++i) {
-        const Item* item = static_cast<const Item*>(_itemsData) + i;
+        const Item* item = _itemsData + i;
         const uint8_t kind = item->kind;
         const int L = _layoutLeft;
         const int T = _layoutTop;
 
         if (kind == 0) {
-            void* tmp = nullptr;
+            // LEFT (H5): _sourceText and the temporary are System::Strings held
+            // as raw char* storage.
+            char* tmp = nullptr;
             new (static_cast<void*>(&tmp)) System::String(                 // 0x1800c9230, retslot
                 reinterpret_cast<const System::String*>(&_sourceText)->SubString(item->first, item->last));
 
-            void* font = static_cast<void* const*>(_fontsData)[item->index];
-            context.AddFont(Object::ExternalPtr<UI::Font>(static_cast<UI::Font*>(font)),   // 0x18011ccb0
+            Font* font = _fontsData[item->index];
+            context.AddFont(Object::ExternalPtr<UI::Font>(font),          // 0x18011ccb0
                             *reinterpret_cast<const System::String*>(&tmp), false, 0, 0, -1,
                             item->x + L, item->y + T, static_cast<uint32_t>(item->color));
 
@@ -257,8 +254,8 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
             if (underline == 1 || underline == 2) {
                 int width = item->width;
                 if (underline == 2) {
-                    const void* f = fonts[item->index];
-                    width -= I32c(f, kFontUnderlineTrim);
+                    const Font* f = fonts[item->index];
+                    width -= f->_spaceWidth;                          // Font +0x5c
                 }
                 const int x = item->x + L;
                 const int y = item->y + T;
@@ -267,17 +264,17 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
             }
             ReleaseString(&tmp);
         } else if (kind == 1) {
-            struct { void* sheet; int32_t index; int32_t pad; } sprite;
-            sprite.sheet = static_cast<void* const*>(_sheetsData)[item->index];
-            sprite.index = item->first;
-            context.AddSprite(*reinterpret_cast<const UI::Sprite*>(&sprite),   // 0x18011cf00
+            UI::Sprite sprite;
+            sprite.spriteSheet = _sheetsData[item->index];
+            sprite.spriteIndex = item->first;
+            context.AddSprite(sprite,                                       // 0x18011cf00
                               L + item->x, T + item->y, 0xffffffffu);
         } else if (kind == 2) {
-            void* obj = static_cast<void* const*>(Pc(_resourceList, 0x20))[item->index];
-            void* capture = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(UI::SpriteCapture::TypeId())
-                                ? obj : nullptr;
+            Object::External* obj = _resourceList->_resources[item->index];
+            const UI::SpriteCapture* capture = obj->IsDerivedFrom(UI::SpriteCapture::TypeId())
+                                ? static_cast<const UI::SpriteCapture*>(obj) : nullptr;
             // ?Draw@SpriteCapture@UI@@ (0x1800d9230).
-            static_cast<const UI::SpriteCapture*>(capture)->Draw(context, L + item->x, T + item->y);
+            capture->Draw(context, L + item->x, T + item->y);
         }
     }
 }
@@ -314,7 +311,7 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
 
     const int32_t linkCount = _linksCount;
     for (int32_t li = 0; li < linkCount; ++li) {
-        Link* link = static_cast<Link*>(_linksData) + li;
+        Link* link = _linksData + li;
 
         uint32_t colour = _linkColor;
         bool hit = false;
@@ -324,12 +321,12 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
             int32_t j = link->firstItem;
             const int32_t end = link->lastItem;
             for (; j < end; ++j) {
-                const Item* item = static_cast<const Item*>(_itemsData) + j;
+                const Item* item = _itemsData + j;
                 int y0 = item->y + _layoutTop;
                 int y1 = item->height + y0;
                 if (item->kind == 0) {
-                    const void* f = static_cast<void* const*>(_fontsData)[item->index];
-                    const int adj = I32c(f, kFontBaseline) - I32c(f, kFontLineHeight);
+                    const Font* f = _fontsData[item->index];
+                    const int adj = f->_baseLine - f->_lineHeight;
                     y0 += adj;
                     y1 += adj;
                 }
@@ -359,7 +356,7 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
         }
 
         for (int32_t j = link->firstItem; j < link->lastItem; ++j) {
-            Item* item = static_cast<Item*>(_itemsData) + j;
+            Item* item = _itemsData + j;
             if (item->kind != 0) continue;
             item->color = static_cast<int32_t>(colour);
             if (j == link->lastItem - 1 && pressed) item->byte21 = 2;
@@ -370,7 +367,7 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
             PlayInline(ui, kUiHoverSound);
 
         if (state.b04 != 0 && hit && link->armed != 0) {
-            Event ev;
+            ::Event ev;
             ev.dialog    = dialog->Get();
             ev.element   = this;
             ev.kind      = kEventActivated;
@@ -379,9 +376,8 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
             ev.y         = state.mouseY;
             ev.index     = li;
             ev.tail      = 0;
-            // UserInterface's event array (block E's class): raw offsets, by address.
-            rtcoll::RtColl_ArraySetSizeFill_180033690(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
-                                                I32(ui, kUiEventCount) + 1, &ev);
+            rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events,
+                                                      ui->_events._size + 1, &ev);
             PlayInline(ui, kUiClickSound);
         }
     }
@@ -392,16 +388,15 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
 // destroyed in retail's order. The entry restamp and the TAIL JUMP to ~Element
 // are the compiler's.
 DocumentTextElement::~DocumentTextElement() {
-    uint8_t* self = reinterpret_cast<uint8_t*>(this);
-    ReleaseString(reinterpret_cast<void**>(self + 0x198));
-    ReleaseString(reinterpret_cast<void**>(self + 0x168));
+    ReleaseString(&_openLink.text);                  // +0x198
+    ReleaseString(&_sourceText);                     // +0x168
 
-    rtcoll::RtColl_ArrayDtorElem_18003e310(self + 0x158);
-    rtcoll::RtColl_ArrayDtor_18003e0c0(self + 0x148);
-    rtcoll::RtColl_ArrayDtor_18003db40(self + 0x130);
-    rtcoll::RtColl_ArrayDtor_18003da00(self + 0x120);
-    rtcoll::RtColl_ArrayDtor_18003d8c0(self + 0x110);
-    rtcoll::RtColl_ArrayDtor_180037310(self + 0x0e8);
+    rtcoll::RtColl_ArrayDtorElem_18003e310(&_linksData);       // +0x158
+    rtcoll::RtColl_ArrayDtor_18003e0c0(&_itemsData);           // +0x148
+    rtcoll::RtColl_ArrayDtor_18003db40(&_colorsData);          // +0x130
+    rtcoll::RtColl_ArrayDtor_18003da00(&_sheetsData);          // +0x120
+    rtcoll::RtColl_ArrayDtor_18003d8c0(&_fontsData);           // +0x110
+    rtcoll::RtColl_ArrayDtor_180037310(&_frameTableData);      // +0x0e8
 }
 
 // ?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ 0x18003bf40 --

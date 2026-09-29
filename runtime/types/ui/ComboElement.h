@@ -61,9 +61,9 @@
 // `?GetItemCount@` (0x180075180) reads `*(int*)(this+0xf0)`, `?GetItemData@`
 // (0x180075170) reads `*(void**)(*(long*)(this+0x108) + index*8)`, and
 // `?RemoveAllItems@` (0x180075120) tears all three down and resets +0x118 to -1.
-// `Collection::Array<T>` is T-INDEPENDENT in size (always 16 bytes), so
-// `_strings`/`_sprites` are typed `Array<void*>` purely for the CONTAINER shape;
-// nothing indexes their element bytes through these types.
+// `Collection::Array<T>` is T-INDEPENDENT in size (always 16 bytes). `_strings`
+// is typed `Array<void*>` purely for the CONTAINER shape (H5: the String is raw
+// char* storage); `_sprites` carries its element type, UI::Sprite (B4).
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0ComboElement@UI@@QEAA@XZ` (0x1801123f0) minus its vptr stores;
@@ -83,6 +83,9 @@
 #include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
+
+class ComboDialog;
+class ElementDescription;
 
 class ComboElement : public ButtonElement {
 public:
@@ -147,18 +150,18 @@ public:
 private:
 
 public:
-    void* _listDesc;                    // +0xD8  ExternalPtr<UI::ElementDescription>: the
+    ElementDescription* _listDesc;      // +0xD8 (B4 H4: typed)  ExternalPtr<UI::ElementDescription>: the
                                         //        popup LIST. ComboDescription::CreateInstance
                                         //        copies its +0xa0 here (0x180112b18);
                                         //        Update calls its slot 8.
-    void* _itemDesc;                    // +0xE0  ExternalPtr<UI::ElementDescription>: one
+    ElementDescription* _itemDesc;      // +0xE0 (B4 H4: typed)  ExternalPtr<UI::ElementDescription>: one
                                         //        popup ITEM (desc +0xa8, 0x180112b26).
     Collection::Array<void*> _strings;  // +0xE8  element = System::String (see above)
-    Collection::Array<void*> _sprites;  // +0xF8  element = UI::Sprite (see above)
+    Collection::Array<UI::Sprite> _sprites;  // +0xF8  (B4 H4: element typed)
     Collection::Array<void*> _userData; // +0x108 element = void*
     int32_t  _currentItem;              // +0x118 ctor -1 (dword); ?GetCurrentItem@
     uint32_t _pad11c;                   // +0x11C written by nothing
-    void*    _openDialog;               // +0x120 InternalPtr<UI::ComboDialog> the popup;
+    void*    _openDialog;               // +0x120 (stays void*: widgets_input.cpp, R-UI-b, casts it to uint8_t*) InternalPtr<UI::ComboDialog> the popup;
                                         //        ctor 0; Update stores the new dialog
 };
 

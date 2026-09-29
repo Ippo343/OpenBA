@@ -36,6 +36,7 @@
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // Force-work harness target: the first start-town structure (StorageBarn), captured
 // in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
@@ -362,26 +363,8 @@ void CitizenComponent_SetupElder_Reimpl(void* citizen) {
 // scan an entity's component list for the ResidenceComponent type (DAT_1401c7cf0)
 // and construct an InternalBasePtr (param_2) to it (or null).
 void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
-    EnsureCallees();
-    uint8_t* e = reinterpret_cast<uint8_t*>(entity);
-    void* found = nullptr;
-    int count = *reinterpret_cast<int*>(e + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
-    for (int i = 0; i < count; i++) {
-        void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-        int64_t comp = *reinterpret_cast<int64_t*>(ibp);
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-        if (tid == *s_TypeId_ResidenceComponent) {
-            void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-            void* resolved = *ibp2;
-            if (Object::IsDerivedFromNullSafe(resolved, *s_TypeId_ResidenceComponent)) {
-                found = resolved;
-            }
-            break;
-        }
-    }
-    new (outIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return outIBP;
+    return new (outIBP) ::Object::InternalPtr<ResidenceComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<ResidenceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of StorageComponent_QueryCount (0x14012cf10):

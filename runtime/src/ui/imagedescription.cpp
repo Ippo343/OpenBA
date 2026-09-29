@@ -102,12 +102,12 @@ void ImageDescription::Destruct() { this->~ImageDescription(); }
 // `LEA RDX,[RSP+0x28]` (0x180118503, 0x180118511), the {stream, readerWriter}
 // pair, which is why it has to live on this frame.
 bool ImageDescription::Serialize(void* streamv) {
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ElementDescription::Serialize(stream);                     // 1801184ca
 
-    rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1801184fa
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined              // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* rw = ser._readerWriter; // 1801184fa
 
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));   // 180118508 ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);    // 180118516 String
@@ -115,7 +115,7 @@ bool ImageDescription::Serialize(void* streamv) {
     rw->SerializeInt(_width, nullptr);
     rw->SerializeInt(_height, nullptr);
 
-    if (rw != nullptr) delete rw;                    // 18011854b
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                    // 18011854b
     return true;
 }
 
@@ -148,27 +148,16 @@ bool ImageDescription::Serialize(void* streamv) {
 // `ElementDescription::CreateInstance` (0x180115ad0) is a QUALIFIED member
 // call since fragment pass F2 defined it (dialog.cpp).
 void ImageDescription::CreateInstance(Object::InternalPtr<ImageElement>* element) const {
-    void* local = element->Get();                              // 18011857f / 18011858a
-    UI::ElementDescription::CreateInstance(                   // 180118592
-        reinterpret_cast<Object::InternalPtr<Element>*>(&local));  // B.3.6 bridge
+    Object::InternalPtr<Element> local(element->Get());        // 18011857f / 18011858a
+    UI::ElementDescription::CreateInstance(&local);           // 180118592
 
-    void* const sheet = _spriteSheet;                          // 180118597
-
-    uint64_t idxSlot;                                          // [RSP+0x28], see note 2
-    if (sheet != nullptr) {
-        const int32_t idx = static_cast<const SpriteSheet*>(sheet)->GetSpriteIndexFromName(
-            *reinterpret_cast<const System::String*>(&_spriteName));   // B.3.6 bridge — String's one pointer
-        __builtin_memcpy(&idxSlot, &idx, sizeof idx);          // 1801185ac  DWORD store
-    } else {
-        const int32_t minusOne = -1;
-        __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);// 1801185b2  DWORD store
-    }
+    // 180118597 the sheet; 1801185ac / 1801185b2 the DWORD index slot (see
+    // note 2); rtdesc::SpriteFromName returns the {sheet, slot} pair whose
+    // index half is that slot read back as a QWORD.
+    const UI::Sprite sprite = SpriteFromName(_spriteSheet, &_spriteName);
 
     ImageElement* e = element->Get();                          // 1801185ba
-    e->_sprite.spriteSheet = sheet;                            // 1801185c2
-    // index AND the Sprite's pad, one 8-byte store.
-    __builtin_memcpy(reinterpret_cast<uint8_t*>(&e->_sprite) + offsetof(Sprite, spriteIndex),
-                     &idxSlot, sizeof idxSlot);                // 1801185ce  QWORD store
+    e->_sprite = sprite;                                       // 1801185c2 / 1801185ce  QWORD stores
 
     element->Get()->_width  = _width;                          // 1801185d5 / 1801185db
     element->Get()->_height = _height;                         // 1801185e1 / 1801185ec
@@ -220,8 +209,7 @@ Object::InternalPtr<Element>* ImageDescription::CreateInstance(
 // and ~External (retail's tail JMP at 0x1801183f6). +0x68 is NOT released.
 namespace UI {
 ImageDescription::~ImageDescription() {
-    System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_spriteName));     // 180118394
+    ReleaseStringField(_spriteName);                           // 180118394..1801183b2
 }
 }  // namespace UI
 

@@ -78,16 +78,15 @@ void CheckDescription::Destruct() { this->~CheckDescription(); }
 // ElementDescription::Serialize — this is the one place in this batch where the
 // base serializer is a sibling class's rather than the root's.
 bool CheckDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ButtonDescription::Serialize(stream);                  // 18011194a
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_checkDesc), IoSer(&ser)); // 18011198b
 
-    if (rw != nullptr) delete rw;                // 1801119a3
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                // 1801119a3
     return true;
 }
 
@@ -117,9 +116,11 @@ Object::InternalPtr<Element>* CheckDescription::CreateInstance(
     Object::InternalPtr<ButtonElement> slot(elem);         // 180111a67
     ButtonDescription::CreateInstance(&slot, dialog);      // 180111a77
 
-    void** made = DialogCreateElement(dialog, reinterpret_cast<void**>(&slot),
-                                      _checkDesc);         // 180111a8b
-    AttachAndPushChild(reinterpret_cast<uint8_t*>(elem), made);   // 180111a98 .. 180111ad4
+    // ?CreateElement@Dialog@UI@@ (0x180112ed0). Retail's RETSLOT is the applier's
+    // stack slot, which nothing reads afterwards; here it is its own local.
+    Object::InternalPtr<Element> made(
+        dialog->CreateElement(Object::ExternalPtr<ElementDescription>(_checkDesc)));   // 180111a8b
+    AttachAndPushChild(elem, &made);                       // 180111a98 .. 180111ad4
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 180111ad6
     return ret;

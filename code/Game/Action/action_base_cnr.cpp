@@ -39,6 +39,7 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Component/ModelComponent.h"
 #include "Component/GrowthComponent.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Component/ModelDescription.h"
 #include "Component/NaturalResourceDescription.h"
 
@@ -68,29 +69,6 @@ namespace {
 
 inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
-// Generic FindComponent body (matches WorkBase_FindComponent / the exe decompile):
-// scan entity's component list (ptr array at entity+0x30, count int at entity+0x38),
-// call each component's GetTypeId (vtable +0x10); on the first type match run an
-// IsDerivedFrom gate before returning through the out InternalBasePtr.
-void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int i = 0; i < n; i++) {
-        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-        if (t == typeId) {
-            void* c = *slot;
-            found = ::Object::IsDerivedFromNullSafe(c, typeId) ? c : nullptr;
-            break;
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
-}
-
 }  // namespace
 
 // Forward decl: ActCNR_SetAnimIndex_126440 tail-calls RemoveNatRes (defined below).
@@ -102,14 +80,16 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 // animatenaturalresource.cpp as GetModelComp.)
 // ============================================================
 void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, ModelComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<ModelComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<ModelComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================
 // Reimpl of FUN_14000c460 — FindComponent, type 0x1401c77b0 (GrowthComponent).
 // ============================================================
 void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, GrowthComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<GrowthComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<GrowthComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

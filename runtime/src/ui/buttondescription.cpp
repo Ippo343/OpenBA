@@ -88,22 +88,22 @@ void ButtonDescription::Destruct() { this->~ButtonDescription(); }
 // The base call is QUALIFIED: this object wears the leaf's table, whose slot 5
 // is this very function.
 bool ButtonDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ElementDescription::Serialize(stream);                 // 1801113fa
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     for (int i = 0; i < 5; ++i)                            // 18011142f .. 180111476
         RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc[i]), IoSer(&ser));
 
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word90), nullptr); // 18011147b .. 1801114d5
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word94), nullptr);
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word98), nullptr);
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_word9c), nullptr);
+    rw->SerializeUInt(_word90, nullptr);                     // 18011147b .. 1801114d5
+    rw->SerializeUInt(_word94, nullptr);
+    rw->SerializeUInt(_word98, nullptr);
+    rw->SerializeUInt(_word9c, nullptr);
 
-    if (rw != nullptr) delete rw;                // 1801114ee
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                // 1801114ee
     return true;
 }
 
@@ -146,16 +146,14 @@ bool ButtonDescription::Serialize(void* streamv) {
 // only if the array pointer itself is non-null is its vt[0x50] called.
 void ButtonDescription::CreateInstance(Object::InternalPtr<ButtonElement>* element,
                                        const Dialog* dialog) const {
-    void** elemPtr = reinterpret_cast<void**>(element);
-
-    void* local = *elemPtr;                                // 1801108f5
-    UI::ElementDescription::CreateInstance(                   // 1801108fa
-        reinterpret_cast<Object::InternalPtr<Element>*>(&local));  // B.3.6 bridge
+    Object::InternalPtr<Element> local(element->Get());    // 1801108f5
+    UI::ElementDescription::CreateInstance(&local);        // 1801108fa
 
     for (int i = 0; i < 5; ++i) {                          // 1801108ff .. 180110a94
-        uint8_t* parent = *reinterpret_cast<uint8_t**>(elemPtr);
-        void**   made   = DialogCreateElement(dialog, &local, _childDesc[i]);
-        AttachAndPushChild(parent, made);
+        ButtonElement* parent = element->Get();            // re-read from the caller's slot
+        // ?CreateElement@Dialog@UI@@ (0x180112ed0), its RETSLOT the same local.
+        local = dialog->CreateElement(Object::ExternalPtr<ElementDescription>(_childDesc[i]));
+        AttachAndPushChild(parent, &local);
     }
 
     {
@@ -165,14 +163,14 @@ void ButtonDescription::CreateInstance(Object::InternalPtr<ButtonElement>* eleme
         ButtonElement* e = element->Get();                           // 180110a96
         Element* c = e->_children._data[4];                          // 180110aa0
         if (c != nullptr)                                            // 180110aa4
-            c->SetColor(static_cast<uint32_t>(_word90));             // 180110ab2 vt[0x50]
+            c->SetColor(_word90);                                    // 180110ab2 vt[0x50]
     }
 
     // Four dwords, each preceded by its own `MOV RCX,[RDI]`.
-    element->Get()->_stateColor[0] = static_cast<uint32_t>(_word90);   // 180110ab5 .. 180110afa
-    element->Get()->_stateColor[1] = static_cast<uint32_t>(_word94);
-    element->Get()->_stateColor[2] = static_cast<uint32_t>(_word98);
-    element->Get()->_stateColor[3] = static_cast<uint32_t>(_word9c);
+    element->Get()->_stateColor[0] = _word90;                // 180110ab5 .. 180110afa
+    element->Get()->_stateColor[1] = _word94;
+    element->Get()->_stateColor[2] = _word98;
+    element->Get()->_stateColor[3] = _word9c;
 }
 
 // ============================================================================

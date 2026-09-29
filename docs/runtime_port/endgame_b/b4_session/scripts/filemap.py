@@ -66,7 +66,7 @@ def tracked():
     out = subprocess.run(['git', 'ls-files', 'code', 'runtime', 'standalone', 'dx11', 'engine'],
                          capture_output=True, text=True, check=True).stdout
     return [f for f in out.splitlines()
-            if re.search(r'\.(cpp|h|inl|inc)$', f) and '/build' not in f]
+            if re.search(r'\.(cpp|h|inl|inc)$', f) and not re.search(r'(^|/)(build|build-[a-z]+)/', f)]
 
 
 def module_of(f):

@@ -26,6 +26,9 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "Entity/ComponentEntity.h"          // ComponentEntity::FindComponent<T> (OnAdded)
+#include "Component/MapComponent.h"
+#include "Component/MultiObjectComponent.h"
 
 // ============================================================
 // Resolved helpers
@@ -358,10 +361,7 @@ void CemeteryComponent::OnAdded() {
         return;
     }
 
-    const uintptr_t entity = reinterpret_cast<uintptr_t>(_entity);
-
-    void* mapIbp = nullptr;
-    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &mapIbp);   // 0x140004680
+    void* mapIbp = _entity->FindComponent<MapComponent>();   // 0x140004680
     if (!mapIbp) { CEM_TRACE("BAIL no MapComponent"); return; }
     const uintptr_t map = reinterpret_cast<uintptr_t>(mapIbp);
 
@@ -377,9 +377,8 @@ void CemeteryComponent::OnAdded() {
     const int mapWidth = *reinterpret_cast<int*>(world);
 
     // The gate child: multi->children[0], then that entity's MapComponent.
-    uint8_t multiIbp[24] = {};
-    InteractComponent_FindWorkplaceComponent(entity, multiIbp);   // 0x140004740
-    const uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiIbp);
+    void* multiFound = _entity->FindComponent<MultiObjectComponent>();   // 0x140004740
+    const uintptr_t multi = reinterpret_cast<uintptr_t>(multiFound);
     if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
     const uintptr_t childArr = *reinterpret_cast<uintptr_t*>(multi + 0x48);
     if (!childArr) { CEM_TRACE("BAIL no child array"); return; }

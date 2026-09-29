@@ -50,6 +50,11 @@
 
 namespace UI {
 
+class SpriteSheet;
+class StringTable;
+class Font;
+class ElementDescription;
+
 class ClipRegionDescription : public ElementDescription {
 public:
     // ??0ClipRegionDescription@UI@@QEAA@XZ 0x1800cc140 — the REAL constructor,
@@ -99,7 +104,7 @@ public:
     // its own three; spell the base's `ElementDescription::_width` etc.
     int32_t _width;                // +0x68  ctor 0x64; kScalarInt @ 0x1800cc067; to elem +0xc0
     int32_t _height;               // +0x6c  ctor 0x64; kScalarInt @ 0x1800cc07c; to elem +0xc4
-    void*   _childDesc;            // +0x70  ExternalPtr<ElementDescription> (0x180038f90 @ 0x1800cc089)
+    ElementDescription* _childDesc; // +0x70 (B4 H4: typed)  ExternalPtr<ElementDescription> (0x180038f90 @ 0x1800cc089)
 };
 
 static_assert(sizeof(ClipRegionDescription) == 0x78,

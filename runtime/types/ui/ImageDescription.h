@@ -78,6 +78,11 @@ class Dialog;
 class Element;
 class ImageElement;
 
+class SpriteSheet;
+class StringTable;
+class Font;
+class ElementDescription;
+
 class ImageDescription : public ElementDescription {
 public:
     // ??0ImageDescription@UI@@QEAA@XZ 0x1801182d0 — the REAL constructor, the
@@ -125,7 +130,7 @@ public:
 private:
 
 public:
-    void*    _spriteSheet;    // +0x68  ExternalPtr<UI::SpriteSheet> (one raw pointer)
+    SpriteSheet* _spriteSheet; // +0x68 (B4 H4: typed)  ExternalPtr<UI::SpriteSheet> (one raw pointer)
     char*    _spriteName;     // +0x70  System::String's one pointer
     int32_t  _width;          // +0x78  ctor -1 (one qword store with +0x7c)
     int32_t  _height;         // +0x7c  ctor -1

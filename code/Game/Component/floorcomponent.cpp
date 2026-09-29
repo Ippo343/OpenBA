@@ -34,6 +34,7 @@
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
 
@@ -106,24 +107,8 @@
 
 // Reimpl of FUN_140004680 (FindComponentByType on owner+0x30 array; returns IBP wrapping found component)
 void* FloorComponent_FindResData(void* owner, void* outIBP) {
-    uintptr_t o = reinterpret_cast<uintptr_t>(owner);
-    void* found = nullptr;
-    uint32_t wantTypeId = MapComponent::TypeId();
-    int count = *reinterpret_cast<int*>(o + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(o + 0x30);
-    for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        void* comp = *slot;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-        if (tid == wantTypeId) {
-            void* c = *slot;
-            if (::Object::IsDerivedFromNullSafe(c, wantTypeId)) found = c;
-            break;
-        }
-    }
-    new (outIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return outIBP;
+    return new (outIBP) ::Object::InternalPtr<MapComponent>(
+        reinterpret_cast<ComponentEntity*>(owner)->FindComponent<MapComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of FUN_14009cba0 (decrement per-tile floor counter over w*h footprint, then Scene::RemoveMesh)

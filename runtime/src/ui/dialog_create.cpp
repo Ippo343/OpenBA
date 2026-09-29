@@ -139,26 +139,6 @@ using RtUI::DialogTimer;
 
 namespace {
 
-// ============================================================================
-// Offsets this file needs that live in ANOTHER lane's class.
-//
-// runtime/types/ui/Element.h owns these and asserts every one of them; they are
-// re-spelled as named constants rather than included because Element.h pulls
-// the UI::String value type and this file has no other use for it. Each carries
-// the instruction that pins it, which is the convention
-// runtime/types/ui/UserInterface.h states for foreign offsets.
-// ============================================================================
-namespace EL {
-enum : size_t {
-    kName          = 0x10,   // ?SetName@   0x1801154f0            (Element.h)
-    kFlags         = 0x34,   // ?GetElementFlags@ 0x1800354d0      (Element.h)
-    kDialogParent  = 0x90,   // ctor 0x180114965: root->[0x90] = this
-    kParent        = 0x98,   // ?SetParent@ 0x1801154d0            (Element.h)
-    kChildrenData  = 0xa0,   // ?Child@      0x180035540           (Element.h)
-    kChildrenSize  = 0xa8,   // ?ChildCount@ 0x180035530           (Element.h)
-};
-}  // namespace EL
-
 // Element::_flags bit the 6-arg AddController propagates up the parent chain.
 // `OR dword ptr [RBX+0x34],0x8000000` at 0x180113620. Element.h calls bit 27
 // kElementFlagNeedsSizeCalc.
@@ -177,18 +157,6 @@ void* MemAlloc(uint64_t bytes, int align) {
 // inside `RuntimePortInit()`, immediately after `ResolveInit()`'s LoadLibrary —
 // at which point the DLL's `MemoryAllocator` has been CONSTRUCTED but not
 // STARTED (`Engine::Startup` does that later). `?StartTimer@` allocates, so a
-// ---- Byte cursor -----------------------------------------------------------
-inline uint8_t* B(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
-inline const uint8_t* B(const void* p, size_t off) {
-    return static_cast<const uint8_t*>(p) + off;
-}
-template <class T> inline T& F(void* p, size_t off) {
-    return *reinterpret_cast<T*>(B(p, off));
-}
-template <class T> inline const T& F(const void* p, size_t off) {
-    return *reinterpret_cast<const T*>(B(p, off));
-}
-
 // ============================================================================
 // Callees, called by name (B3R RT-UI).
 // ============================================================================
@@ -211,33 +179,6 @@ template <class T> inline const T& F(const void* p, size_t off) {
 //                `Element::_children`.
 //
 // No `ExplicitSpec` bridge needed at any of the three call sites below.
-
-// ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z  0x1800031f0
-// ENDGAME B.3.6 closing pass: the real member (was a function-local lazy
-// ResolveExport cache, a RULE B6-5 shape on a loader-thread path).
-int32_t GetSpriteIndexFromName(const void* sheet, const void* nameString) {
-    return reinterpret_cast<const UI::SpriteSheet*>(sheet)->GetSpriteIndexFromName(  // B.3.6 bridge
-        *static_cast<const System::String*>(nameString));
-}
-
-// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390.
-bool IsDerivedFrom(const void* obj, uint32_t typeId) {
-    return reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(typeId);   // B.3.x bridge
-}
-
-
-// ?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z
-// 0x180115650. HIDDEN RETURN SLOT in RDX, returns that same pointer in RAX
-// (reference_hidden_retslot_wild_write.md — an fn_* typedef that omits the slot
-// is a wild write that still returns the right answer).
-// ENDGAME B.3.6 closing pass: the real member, its prvalue placement-new'd into
-// the caller's slot exactly as the door does (was a lazy ResolveExport cache).
-void** ElementFindElement(void* self, void** out, const void* nameString) {
-    ::new (static_cast<void*>(out)) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::Element*>(self)->FindElement(  // B.3.6 bridge
-            *static_cast<const System::String*>(nameString)));
-    return out;
-}
 
 // ??0Dialog@UI@@QEAA@XZ 0x180112db0 / ??1Dialog@UI@@UEAA@XZ 0x180112e40: the
 // 6-arg AddController builds a default UI::Dialog on its stack with both
@@ -265,7 +206,7 @@ RtObject::Factory* FactorySingleton() {
 // `System::Time` is ONE int64 tick count and is passed BY VALUE in R8 — proved
 // by the body itself, which stores R8 into the record's +0x00 and reloads the
 // SAME home slot for +0x08 (0x1801137eb / 0x1801137f3). Both fields get the
-// same value; DialogInstance.h names them `_remaining` and `_period` and calls
+// same value; DialogInstance.h names them `_duration` and `_remaining` (B4: ?Update@ counts +0x08 down)
 // the second one "the reload", which is what an equal seed means.
 //
 // The loop cursor is a BYTE offset stepped by 0x18 (`ADD RAX,0x18`), and the id
@@ -358,56 +299,53 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
                                 const Object::InternalPtr<DialogInstance>* parentArg,
                                 Object::Base* dataSourceArg, void* userData,
                                 int32_t userFlags) {
-    void* const self = this;
-    void* const ui = uiArg;
-    const void* const dialog = dialogArg;
-    void* const dataSource = dataSourceArg;
-    void* const* const parentPtr = reinterpret_cast<void* const*>(parentArg);   // B.3.8 bridge
-    RtUI::DialogInstance* const d = reinterpret_cast<RtUI::DialogInstance*>(this);  // B.3.8 bridge
-    const RtUI::Dialog* const dlg = static_cast<const RtUI::Dialog*>(dialog);
-    d->_ui         = ui;                          // +0x10
-    d->_dialog     = const_cast<void*>(dialog);   // +0x18
-    d->_flags      = dlg->_defaultFlags;          // +0x20  from _dialog->+0x40
-    d->_result     = 0;                           // +0x24
-    d->_parent     = nullptr;                     // +0x28  written 0 then...
-    d->_parent     = *parentPtr;                  // +0x28  ...the real value
-    d->_dataSource = dataSource;                  // +0x30
-    d->_children._head  = nullptr;                // +0x38
-    d->_children._tail  = nullptr;                // +0x40
-    d->_children._count = 0;                      // +0x48   (+0x4c left alone)
+    const Dialog* const dlg = dialogArg;
+    _ui         = uiArg;                          // +0x10
+    _dialog     = dialogArg;                      // +0x18
+    _flags      = dlg->_defaultFlags;             // +0x20  from _dialog->+0x40
+    _result     = 0;                              // +0x24
+    _parent     = Object::InternalPtr<DialogInstance>();   // +0x28  written 0 then...
+    _parent     = *parentArg;                     // +0x28  ...the real value
+    _dataSource = dataSourceArg;                  // +0x30
+    _children._head  = nullptr;                   // +0x38
+    _children._tail  = nullptr;                   // +0x40
+    _children._count = 0;                         // +0x48   (+0x4c left alone)
 
     // 0x1801148e7: `_dialog->_rootDescription`'s vtable slot 8, with the hidden
     // return slot pointed AT THE OBJECT'S OWN `_root` FIELD and the Dialog as
     // the second argument — the same slot the 6-arg AddController calls.
-    static_cast<const UI::ElementDescription*>(dlg->_rootDescription)->CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&d->_root),   // B.3.x bridge
+    // LEFT: `_root` is an InternalPtr<Element> in retail, held as Element*.
+    dlg->_rootDescription->CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&_root),   // B.3.x bridge
         dialogArg);
 
-    d->_spriteSheet = dlg->_spriteSheet;           // +0x58
+    _spriteSheet = dlg->_spriteSheet;             // +0x58
     // 0x180114900: -1 when the sheet is null, otherwise the sheet's lookup of
     // `&_dialog->_spriteName` — the String OBJECT's address, not the char*.
-    d->_spriteIndex = d->_spriteSheet
-        ? GetSpriteIndexFromName(d->_spriteSheet, &dlg->_spriteName)
-        : -1;                                      // +0x60   (+0x64 left alone)
+    // LEFT (H5): _spriteName is a System::String held as raw char* storage.
+    _spriteIndex = _spriteSheet
+        ? _spriteSheet->GetSpriteIndexFromName(
+              *reinterpret_cast<const System::String*>(&dlg->_spriteName))
+        : -1;                                     // +0x60   (+0x64 left alone)
 
-    d->_timers._data      = nullptr;               // +0x68
-    d->_timers._size      = 0;                     // +0x70
-    d->_timers._capacity  = 0;                     // +0x74
-    d->_controllers._data     = nullptr;           // +0x78
-    d->_controllers._size     = 0;                 // +0x80
-    d->_controllers._capacity = 0;                 // +0x84
-    d->_upperLeftX = 0;                            // +0x88
-    d->_upperLeftY = 0;                            // +0x8c
-    d->_hoverMouseX = -1;                          // +0x90  a QWORD -1 --
-    d->_hoverMouseY = -1;                          // +0x94  both hover ints
-    d->_hovering    = 0;                           // +0x98  a single BYTE
-    d->_hoverTime   = 0;                           // +0xa0   (+0x99.. left alone)
-    d->_userData    = userData;                    // +0xa8
-    d->_userFlags   = userFlags;                   // +0xb0   (+0xb4 left alone)
+    _timers._data      = nullptr;                 // +0x68
+    _timers._size      = 0;                       // +0x70
+    _timers._capacity  = 0;                       // +0x74
+    _controllers._data     = nullptr;             // +0x78
+    _controllers._size     = 0;                   // +0x80
+    _controllers._capacity = 0;                   // +0x84
+    _upperLeftX = 0;                              // +0x88
+    _upperLeftY = 0;                              // +0x8c
+    _hoverMouseX = -1;                            // +0x90  a QWORD -1 --
+    _hoverMouseY = -1;                            // +0x94  both hover ints
+    _hovering    = 0;                             // +0x98  a single BYTE
+    _hoverTime   = 0;                             // +0xa0   (+0x99.. left alone)
+    _userData    = userData;                      // +0xa8
+    _userFlags   = userFlags;                     // +0xb0   (+0xb4 left alone)
 
     // 0x180114965: the freshly created root Element points back at us.
     // UNGUARDED in retail — if slot 8 returned null this faults. Faithful.
-    F<void*>(d->_root, EL::kDialogParent) = self;
+    _root->_dialogParent = this;
 
     // ---- link into the parent's child list -------------------------------
     // A PREPEND: head at +0x38, tail at +0x40, node = {element, prev, next}
@@ -415,60 +353,40 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     // tie-break (`?GetFirstDialog@UserInterface@UI@@`, 0x180031150, reads the
     // FIRST element from the list's +0x00) and warns that reading the ctor
     // alone gets this backwards.
-    if (RtUI::DialogInstance* const parent = static_cast<RtUI::DialogInstance*>(d->_parent)) {
+    using ChildNode = Collection::LinkedList<Object::InternalPtr<DialogInstance> >::Node;
+    if (DialogInstance* const parent = _parent.Get()) {
         // 0x180114999: `MOV EDX,0x18 / LEA R8D,[RDX-0x10]` -> Allocate(0x18, 8),
         // wrapped in Enter/Leave — i.e. exactly ?MemAlloc@…(0x18, 8).
-        uint8_t* node = static_cast<uint8_t*>(MemAlloc(0x18, 8));
+        ChildNode* node = static_cast<ChildNode*>(MemAlloc(0x18, 8));
         if (node) {
-            F<void*>(node, 0x00) = self;      // element
-            F<void*>(node, 0x08) = nullptr;   // prev
-            F<void*>(node, 0x10) = nullptr;   // next
+            node->element = Object::InternalPtr<DialogInstance>(this);
+            node->prev    = nullptr;
+            node->next    = nullptr;
         }
         // 0x1801149cf: on an OOM `node` is null and retail links the null in
         // anyway. Reproduced, guard-free.
-        if (void* head = parent->_children._head) {
-            F<void*>(head, 0x08) = node;                      // old head->prev
-            F<void*>(node, 0x10) = parent->_children._head;   // node->next
+        if (ChildNode* head = parent->_children._head) {
+            head->prev = node;                                 // old head->prev
+            node->next = parent->_children._head;              // node->next
         } else {
-            parent->_children._tail = reinterpret_cast<decltype(parent->_children._tail)>(node);
+            parent->_children._tail = node;
         }
-        parent->_children._head = reinterpret_cast<decltype(parent->_children._head)>(node);
+        parent->_children._head = node;
         parent->_children._count++;
     }
 
     // ---- run the dialog's controller table -------------------------------
-    // Stride 0x20 (`ADD RDI,0x20`).
-    //
-    // *** THE ARGUMENT MAPPING IS THE OPPOSITE OF THE FIELD NAMES, AND THIS
-    //     PORT HAD IT BACKWARDS UNTIL THE DISASSEMBLY WAS RE-READ. ***
-    //
-    //     0x180114a13  MOV RAX,[R9+0x08]  ->  0x180114a17  [RSP+0x20]  = ARG 5
-    //     0x180114a1c  MOV R9,[R9+0x10]                                = ARG 4
-    //
-    // Argument 4 is the `ExternalPtr<DialogControllerConfig>` and argument 5 is
-    // the `ExternalPtr<ElementDescription>`, so entry+0x10 is the CONFIG and
-    // entry+0x08 is the DESCRIPTION.
-    //
-    // *** 2026-09-08, lane DLG2: THE HEADER IS NOW CORRECT AND THIS CALL SITE
-    //     NO LONGER COMPENSATES. *** `runtime/types/ui/Dialog.h` used to name
-    //     `_config` at +0x08 and `_elementDesc` at +0x10, so this loop passed
-    //     them crossed over to get the right bytes into the right registers.
-    //     The header now names them the way the two `MOV`s above prove, and the
-    //     arguments below read straight. THE BYTES DID NOT CHANGE; only the
-    //     spelling did. The three PIN lines at the bottom of this file check
-    //     exactly this mapping against the shipped stream, so a re-swap in
-    //     either place fails loudly rather than silently.
+    // Stride 0x20 (`ADD RDI,0x20`). Argument 4 is the
+    // `ExternalPtr<DialogControllerConfig>` (entry+0x10) and argument 5 the
+    // `ExternalPtr<ElementDescription>` (entry+0x08): 0x180114a13 /
+    // 0x180114a1c, Dialog.h's banner.
     for (int32_t i = 0; i < dlg->_controllerCount; ++i) {
-        const RtUI::DialogControllerConfigEntry& e = dlg->_controllerConfigs[i];
-        // B.3.6: was `ResolveAddr(Module::Runtime, 0x180113470)` — this
-        // block's own non-virtual member now, called directly. `self` is still
-        // the POD this door builds, hence the bridge.
-        reinterpret_cast<UI::DialogInstance*>(self)->AddController(   // B.3.6 bridge
-            e._typeId, static_cast<Object::Base*>(d->_dataSource),
-            Object::ExternalPtr<UI::DialogControllerConfig>(
-                static_cast<UI::DialogControllerConfig*>(e._config)),       // entry+0x10 -> R9
-            Object::ExternalPtr<UI::ElementDescription>(
-                static_cast<UI::ElementDescription*>(e._elementDesc)),      // entry+0x08 -> a5
+        const Dialog::ElementController& e = dlg->_controllerConfigs[i];
+        AddController(
+            e._typeId, _dataSource,
+            Object::ExternalPtr<UI::DialogControllerConfig>(e._config),       // entry+0x10 -> R9
+            Object::ExternalPtr<UI::ElementDescription>(e._elementDesc),      // entry+0x08 -> a5
+            // LEFT (H5): the entry's +0x18 is a System::String held as char*.
             *reinterpret_cast<const System::String*>(&e._name));  // B.3.6 bridge  entry+0x18 -> a6
     }
 }
@@ -492,21 +410,17 @@ namespace UI {
 void DialogInstance::StartTimer(int32_t id, int64_t time) {
     for (int32_t i = 0; i < _timers._size; ++i) {
         // _data is RE-READ from the object on every iteration. Kept.
-        uint8_t* const rec = reinterpret_cast<uint8_t*>(_timers._data) +
-                             static_cast<size_t>(i) * sizeof(DialogTimer);
-        if (F<int32_t>(rec, offsetof(DialogTimer, _id)) == id) {
-            F<int64_t>(rec, offsetof(DialogTimer, _remaining)) = time;
-            uint8_t* const rec2 = reinterpret_cast<uint8_t*>(_timers._data) +
-                                  static_cast<size_t>(i) * sizeof(DialogTimer);
-            F<int64_t>(rec2, offsetof(DialogTimer, _period)) = time;
+        if (_timers._data[i]._id == id) {
+            _timers._data[i]._duration  = time;
+            _timers._data[i]._remaining = time;
             // NO `break`, NO `return`.
         }
     }
     // +0x14..0x17 is never written; `tmp` is deliberately left uninitialised
     // there for the same reason as the door's banner gives.
     DialogTimer tmp;
+    tmp._duration  = time;
     tmp._remaining = time;
-    tmp._period    = time;
     tmp._id        = id;
     _timers.SetSize(_timers.GetSize() + 1, tmp);   // retail 0x180076250
 }
@@ -529,23 +443,24 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
     }
 
     // 0x1801133f7 `MOV RCX,[RAX+0x10]` with RAX possibly zero. FAITHFUL.
-    RtObject::BaseTypeInfo* const info =
-        *reinterpret_cast<RtObject::BaseTypeInfo* const*>(B(found, 0x10));
+    RtObject::BaseTypeInfo* const info = found->value.info;
 
     // info+0x20 (`factoryFn`), RCX left holding `info`.
-    void* const created =
-        reinterpret_cast<void* (*)(void*)>(info->factoryFn)(info);
+    // LEFT: RtObject::BaseTypeInfo::factoryFn is an untyped void* (TypeInfo.h,
+    // block R-IO).
+    Object::Base* const created =
+        reinterpret_cast<Object::Base* (*)(void*)>(info->factoryFn)(info);
 
-    const bool isController = ::IsDerivedFrom(created, UI::DialogController::TypeId());
+    const bool isController = created->IsDerivedFrom(UI::DialogController::TypeId());
 
     // 0x18011341e `CMOVNZ RDI,RBX` — a non-controller leaves the target NULL.
     DialogController* const c =
-        static_cast<DialogController*>(isController ? created : nullptr);
+        isController ? static_cast<DialogController*>(created) : nullptr;
 
     c->_config     = config;                    // +0x10  0x180113422
     c->_dataSource = dataSource;                // +0x28  0x180113426
     c->_dialog     = this;                      // +0x18  0x18011342a
-    c->_container  = static_cast<void*>(container.Get());   // +0x20  0x18011342e
+    c->_container  = container.Get();           // +0x20  0x18011342e
 
     c->OnCreated();                             // 0x18011343d — controller slot 4
 
@@ -558,40 +473,36 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
                                    Object::ExternalPtr<DialogControllerConfig> config,
                                    Object::ExternalPtr<ElementDescription> description,
                                    const System::String& name) {
-    void* const desc = static_cast<void*>(description.Get());
-    void* createdElement = nullptr;   // RDI
+    ElementDescription* const desc = description.Get();
+    Element* createdElement = nullptr;   // RDI
 
     if (desc) {
-        void* insertion = _root;      // RDI starts at this->_root (0x1801134b4)
+        Element* insertion = _root;      // RDI starts at this->_root (0x1801134b4)
 
         // ---- phase 1a: does the ROOT's own name match? --------------------
-        const char* const want = *reinterpret_cast<const char* const*>(&name);
+        const char* const want = name._data;
         bool useRoot = false;
-        if (want && *reinterpret_cast<const int32_t*>(want - 8) != 0) {
+        if (want && RtSystem::StringLength(want) != 0) {
             // 0x1801134cb `MOV RCX,[RDI+0x10]` — UNGUARDED on `insertion`.
-            const char* const have =
-                *reinterpret_cast<const char* const*>(B(insertion, EL::kName));
-            const int32_t haveLen =
-                have ? *reinterpret_cast<const int32_t*>(have - 8) : 0;
-            if (haveLen == *reinterpret_cast<const int32_t*>(want - 8)) {
+            const char* const have = insertion->_name;
+            const int32_t haveLen = have ? RtSystem::StringLength(have) : 0;
+            if (haveLen == RtSystem::StringLength(want)) {
                 if (!have) useRoot = true;
-                else if (*reinterpret_cast<const int32_t*>(have - 8) == 0) useRoot = true;
+                else if (RtSystem::StringLength(have) == 0) useRoot = true;
                 else if (System::String::StrCompare(have, want) == 0) useRoot = true;
             }
         }
 
         // ---- phase 1b: otherwise scan the root's DIRECT children ----------
         if (!useRoot) {
-            const int32_t n =
-                *reinterpret_cast<const int32_t*>(B(insertion, EL::kChildrenSize));
-            void* hit = nullptr;
+            const int32_t n = insertion->_children._size;
+            Element* hit = nullptr;
             if (n > 0) {
-                void** kids = *reinterpret_cast<void***>(B(insertion, EL::kChildrenData));
+                Element** kids = insertion->_children._data;
                 for (int32_t i = 0; i < n; ++i) {
-                    void* const child = kids[i];
+                    Element* const child = kids[i];
                     if (child) {
-                        void* out = nullptr;
-                        ElementFindElement(child, &out, &name);
+                        Element* out = child->FindElement(name).Get();   // 0x180115650
                         if (out) { hit = out; break; }
                     }
                 }
@@ -600,37 +511,35 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
         }
 
         // ---- the GroupElement gate ---------------------------------------
-        void* const target =
-            ::IsDerivedFrom(insertion, UI::GroupElement::TypeId()) ? insertion : nullptr;
+        // `insertion` may be null here; retail calls IsDerivedFrom on it anyway.
+        Element* const target =
+            insertion->IsDerivedFrom(UI::GroupElement::TypeId()) ? insertion : nullptr;
 
         // ---- phase 2: build the element through a UI::Dialog temporary ----
         alignas(16) uint8_t tmpDialog[0x90];
         UI::Dialog* const tmpDlg = ::new (static_cast<void*>(tmpDialog)) UI::Dialog();
 
-        void* newEl = nullptr;
+        Element* newEl = nullptr;
         {
             // The description's slot 8 (CreateInstance, RETSLOT, B6-2).
-            Object::InternalPtr<Element>* const ret = description.Get()->CreateInstance(
-                reinterpret_cast<Object::InternalPtr<Element>*>(&newEl),   // B.3.x bridge
-                tmpDlg);
-            newEl = *reinterpret_cast<void**>(ret);   // 0x1801135ef `MOV RDI,qword ptr [RAX]`
+            Object::InternalPtr<Element> slot;
+            Object::InternalPtr<Element>* const ret = desc->CreateInstance(&slot, tmpDlg);
+            newEl = ret->Get();       // 0x1801135ef `MOV RDI,qword ptr [RAX]`
         }
         createdElement = newEl;
 
-        if (newEl) F<void*>(newEl, EL::kParent) = target;   // 0x1801135fc
+        if (newEl) newEl->_parent = target;   // 0x1801135fc
 
         // 0x180113603: unguarded on `target`; Element::_children through the
         // kSpec_Fill8Z row (see the door's banner).
-        rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(B(target, EL::kChildrenData))
-            ->SetSizeFill(
-                *reinterpret_cast<int32_t*>(B(target, EL::kChildrenSize)) + 1,
-                &newEl);
+        rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&target->_children)
+            ->SetSizeFill(target->_children._size + 1, &newEl);
 
         // 0x180113620: a DO-WHILE — a null target faults here.
-        void* walk = target;
+        Element* walk = target;
         do {
-            F<uint32_t>(walk, EL::kFlags) |= kElementNeedsSizeCalc;
-            walk = F<void*>(walk, EL::kParent);
+            walk->_flags |= kElementNeedsSizeCalc;
+            walk = walk->_parent;
         } while (walk);
 
         tmpDlg->UI::Dialog::~Dialog();
@@ -639,7 +548,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
     // ---- phase 3: id 0 means "element only, no controller" ---------------
     if (typeId != 0)
         AddController(typeId, dataSource, config,
-                      Object::InternalPtr<Element>(static_cast<Element*>(createdElement)));
+                      Object::InternalPtr<Element>(createdElement));
 }
 
 }  // namespace UI
