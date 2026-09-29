@@ -519,8 +519,7 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
     reinterpret_cast<HerdComponent*>(herdComp)->Populate(count);
 }
 
-// B4 FORWARD: 2 outside callers (pasturecomponent_spawn.cpp until COMP-d converts it,
-// tradecomponent_livestock.cpp).
+// B4 FORWARD: 1 outside caller (tradecomponent_livestock.cpp).
 void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pose) {
     reinterpret_cast<AnimalComponent*>(animalComp)->Place(
         reinterpret_cast<const Math::Vector3*>(pos), yaw, pose != 0);

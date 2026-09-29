@@ -64,7 +64,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Component/herdcomponent_funcs.h"     // HerdComponent_Helper7400 (0x140107400)
 #include "Entity/componententity_funcs.h"      // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Game/exe_constants.h"
 
@@ -169,10 +168,10 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     // ── Place, bind, activate, register ───────────────────────────────────────
     if (animal) {
         float yaw = fn_Random_RandFloatTol(rng) * kRdata_140172220;
-        float pos2[2] = { posX, posY };
-        // LEFT: the tree hands Place a two-float position (retail's Vector3 has z = 0);
-        // the forwarder takes the component as int64_t.
-        HerdComponent_Helper7400(reinterpret_cast<int64_t>(animal), pos2, yaw, (char)female);
+        // Retail builds the full Vector3 {x, y, 0} (local_d8 / local_d0 zeroed at
+        // 0x140128670); the callee reads all three floats.
+        const Math::Vector3 pos(posX, posY, 0.0f);
+        animal->Place(&pos, yaw, female);   // 0x140107400
     }
 
     PastureComponent* pastureRef = this;
