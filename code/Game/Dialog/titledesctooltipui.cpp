@@ -43,7 +43,8 @@ void TitleDescToolTipUI::OnCreated() {
     // --- The data source's user data ---
     // (retail narrows the data source to UI::Element first; the tree takes it
     // as one.)
-    Object::Base* userData = static_cast<UI::Element*>(_dataSource)->GetUserData();
+    Object::Base* dataSource = _dataSource;
+    Object::Base* userData = static_cast<UI::Element*>(dataSource)->GetUserData();
 
     if (userData) {
         // LEFT: the user data is two consecutive System::Strings (title at +0,
