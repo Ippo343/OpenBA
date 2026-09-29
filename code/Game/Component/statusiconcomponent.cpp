@@ -50,14 +50,14 @@
 
 // A StatusIconComponent that never ran StatusIconComponent_StartupInit still carries the
 // inert factory's zero-fill: the embedded geometry's vtable (+0x28) is 0 AND the scene
-// object id (+0x100) is 0. That 0 is "never initialised", NOT scene object 0 — feeding it
+// object id (+0x100) is 0. That 0 is "never initialised", NOT scene object 0 ï¿½ feeding it
 // to Graphics::Scene::RemoveObject spins forever (in-world freeze, see
 // reference_inert_component_sentinel_fields), and AddObject-ing a geometry whose vtable is
 // null faults in the renderer's draw pass. The geometry vtable is the in-band marker: the
 // real ctor and StartupInit both always write it, and nothing ever clears it.
 // [STANDALONE GUARD D4] (a guard of the tree's; retail has none).
 // LEFT: the test reads the billboard's vptr (a guard the real ctor makes always-true;
-// removing it is NEXT_SESSION §0.2's).
+// removing it is NEXT_SESSION ï¿½0.2's).
 static inline bool SI_Initialised(const StatusIconComponent* c) {
     return *reinterpret_cast<void* const*>(&c->_geometry) != nullptr;
 }
@@ -714,13 +714,14 @@ void StatusIconComponent::Tick(void* /*time*/) {
     Component* multi = StatusIcon_FindCompByName(entity, MultiObjectComponent::TypeId(), "MultiObjectComponent");
 
     if (multi == nullptr && model != nullptr) {
-        // MODEL-BOUNDS path: Box at model+0x5c = {min(3), max(3)}; size.z = max.z-min.z.
-        // LEFT: ModelComponent's MeshInstance / transform are raw storage (COMP-d's header).
-        uintptr_t modelAddr = reinterpret_cast<uintptr_t>(model);
-        float sizeZ = *(float*)(modelAddr + 0x5c + 0x14) - *(float*)(modelAddr + 0x5c + 0x08);
-        pos[0] = *(float*)(modelAddr + 0x158);
-        pos[1] = *(float*)(modelAddr + 0x15c);
-        pos[2] = *(float*)(modelAddr + 0x160) + sizeZ;
+        // MODEL-BOUNDS path: the mesh's local bounds (model+0x5c = meshInstance+0x34);
+        // size.z = max.z - min.z, on top of the model's translation.
+        const ModelComponent* mdl = static_cast<const ModelComponent*>(model);
+        const ::Box& bounds = mdl->meshInstance._localBounds;
+        float sizeZ = bounds.max.z - bounds.min.z;
+        pos[0] = mdl->transform.translation.x;
+        pos[1] = mdl->transform.translation.y;
+        pos[2] = mdl->transform.translation.z + sizeZ;
     } else {
         // MAP-CELL fallback.
         MapComponent* mc = entity->FindComponent<MapComponent>();   // 0x140004680
