@@ -30,6 +30,8 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
+#include "Component/OrchardComponent.h"
+#include "Entity/ComponentEntity.h"
 
 namespace {
 // 0x140005440 is WorkAcc_FindComponent_5440 (Work/exe_bodies.h), called by name (B3R).
@@ -48,34 +50,31 @@ extern "C" void OrchardDiag_NoteHarvestConstructed();
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
 HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    _field48 = nullptr;
+    _field50 = 0;
+    _field58 = nullptr;   // byte-array base
+    _field60 = 0;         // count (+0x60) + capacity (+0x64): one qword store in retail
+    _field64 = 0;
 
-    *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x58) = 0;   // byte-array base
-    *reinterpret_cast<uint64_t*>(s + 0x60) = 0;   // count (+0x60) + capacity (+0x64)
-
-    int64_t orchardIBP = 0;
-    WorkAcc_FindComponent_5440(static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(s + 0x10)), &orchardIBP);
-    if (!orchardIBP) return;          // SA: retail derefs unguarded below; a HarvestOrchard
+    // The entity's OrchardComponent (0x140005440)
+    OrchardComponent* orchard = field_10->FindComponent<OrchardComponent>();
+    if (!orchard) return;             // SA: retail derefs unguarded below; a HarvestOrchard
                                       // is only ever built for an entity that has an
                                       // orchard, so this can only fire if our caller is
                                       // wrong. Same guard plantorchard_ctor.cpp carries.
 
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
-    GameColl::AsArray<GameColl::U8>(reinterpret_cast<void*>(s + 0x58))
-        .SetSize(*reinterpret_cast<int32_t*>(orchardIBP + 0x58));
+    GameColl::AsArray<GameColl::U8>(&_field58).SetSize(orchard->slotCount);
 
     // One byte per orchard slot: 1 = there is a tree here to pick, 0 = hole. Retail
     // re-runs CheckPtr on the orchard IBP every iteration and loops on the WORK item's
     // own count (+0x60) — the value the resize just produced — not the component's.
-    const int n = *reinterpret_cast<int32_t*>(s + 0x60);
+    const int n = _field60;
     for (int i = 0; i < n; ++i) {
-        uint8_t* base = *reinterpret_cast<uint8_t**>(s + 0x58);
+        bool* base = _field58;
         if (!base) break;
-        uintptr_t slots = *reinterpret_cast<uintptr_t*>(orchardIBP + 0x50);
-        base[i] = (slots && *reinterpret_cast<uint64_t*>(
-                       slots + static_cast<uintptr_t>(i) * 0x28 + 8) != 0) ? 1 : 0;
+        OrchardSlot* slots = orchard->slots;
+        base[i] = (slots && slots[i].tree != nullptr) ? 1 : 0;
     }
 }
 
