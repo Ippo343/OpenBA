@@ -66,6 +66,16 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Component/exe_bodies.h"   // B3R: CitizenEmploy_Strat_*
 
+#include "Dialog/ProfessionUI.h"
+#include "Game/Profession.h"
+#include "Game/ProfessionList.h"
+
+// LEFT in this file (B4 DLG-c): every read through GameUpdateLoop::m_citizenList
+// (void*, typed by block GAME-a) — the town's citizen array and count, its
+// per-profession building tree at +0x100 — and the reads of the citizens,
+// buildings and components reached through it; Profession's three Strings (H5
+// raw, GAME-b); CalcWorkerSlots_Impl's WorkComponent (reached through them).
+
 // ============================================================
 // File-local helper: CalcWorkerSlots (FUN_14012e5c0)
 // ============================================================
@@ -131,81 +141,77 @@ static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
 // ============================================================
 // File-local helpers: AVL BST rotations + rebalance
 // ============================================================
-// BST node layout (used by the profession BST at self+0x60):
-//   +0x00: void* key  (ExternalPtr to profession description)
-//   +0x08: int   index
-//   +0x10: void* parent
-//   +0x18: void* left (field called "left" / "18" in Ghidra)
-//   +0x20: void* right (field called "right" / "20" in Ghidra)
-//   +0x28: int16 balance  (right_height - left_height)
-//   +0x2a: int16 height   (max(left_h, right_h) + 1, or 0 if null)
+// The profession -> row Set at ProfessionUI::professionIndexRoot (+0x60); its
+// node is ProfessionUI::ProfessionIndexNode (0x30 bytes).
 //
-// FUN_14000e580: promotes node's +0x18 child to this node's position (right-rotation)
-// FUN_14000e450: promotes node's +0x20 child to this node's position (left-rotation)
+// FUN_14000e580: promotes node's left child to this node's position (right-rotation)
+// FUN_14000e450: promotes node's right child to this node's position (left-rotation)
 
-static void BST_UpdateNode(uintptr_t n) {
+using ProfNode = ProfessionUI::ProfessionIndexNode;
+
+static void BST_UpdateNode(ProfNode* n) {
     // Recompute balance and height from children.
     int16_t lh = 0, rh = 0;
-    uintptr_t lc = *(uintptr_t*)(n + 0x18);
-    uintptr_t rc = *(uintptr_t*)(n + 0x20);
-    if (lc) lh = (int16_t)(*(int16_t*)(lc + 0x2a) + 1);
-    if (rc) rh = (int16_t)(*(int16_t*)(rc + 0x2a) + 1);
-    *(int16_t*)(n + 0x28) = (int16_t)(rh - lh);
-    *(int16_t*)(n + 0x2a) = (rh > lh) ? rh : lh;
+    ProfNode* lc = n->left;
+    ProfNode* rc = n->right;
+    if (lc) lh = (int16_t)(lc->height + 1);
+    if (rc) rh = (int16_t)(rc->height + 1);
+    n->balance = (int16_t)(rh - lh);
+    n->height = (rh > lh) ? rh : lh;
 }
 
-// FUN_14000e580 — promotes node->left (+0x18) child (right-rotation at node)
-static uintptr_t BST_RotateRight_e580(uintptr_t* rootPtr, uintptr_t node) {
-    uintptr_t parent = *(uintptr_t*)(node + 0x10);
-    uintptr_t pivot  = *(uintptr_t*)(node + 0x18);  // left child becomes new root
+// FUN_14000e580 — promotes node->left child (right-rotation at node)
+static ProfNode* BST_RotateRight_e580(ProfNode** rootPtr, ProfNode* node) {
+    ProfNode* parent = node->parent;
+    ProfNode* pivot  = node->left;  // left child becomes new root
 
     if (node == *rootPtr) *rootPtr = pivot;
     if (parent) {
-        if (*(uintptr_t*)(parent + 0x18) == node) *(uintptr_t*)(parent + 0x18) = pivot;
-        else                                        *(uintptr_t*)(parent + 0x20) = pivot;
+        if (parent->left == node) parent->left = pivot;
+        else                      parent->right = pivot;
     }
-    *(uintptr_t*)(pivot + 0x10) = parent;
+    pivot->parent = parent;
 
     // node.left = pivot.right; if pivot.right, reparent it
-    uintptr_t pivotRight = *(uintptr_t*)(pivot + 0x20);
-    *(uintptr_t*)(node + 0x18) = pivotRight;
-    if (pivotRight) *(uintptr_t*)(pivotRight + 0x10) = node;
+    ProfNode* pivotRight = pivot->right;
+    node->left = pivotRight;
+    if (pivotRight) pivotRight->parent = node;
 
-    *(uintptr_t*)(pivot + 0x20) = node;
-    *(uintptr_t*)(node  + 0x10) = pivot;
+    pivot->right = node;
+    node->parent = pivot;
 
     // Update heights in correct order
-    uintptr_t pr = *(uintptr_t*)(pivot + 0x18);
+    ProfNode* pr = pivot->left;
     if (pr) BST_UpdateNode(pr);
-    uintptr_t pr2 = *(uintptr_t*)(pivot + 0x20);
+    ProfNode* pr2 = pivot->right;
     if (pr2) BST_UpdateNode(pr2);
     BST_UpdateNode(pivot);
     return pivot;
 }
 
-// FUN_14000e450 — promotes node->right (+0x20) child (left-rotation at node)
-static uintptr_t BST_RotateLeft_e450(uintptr_t* rootPtr, uintptr_t node) {
-    uintptr_t parent = *(uintptr_t*)(node + 0x10);
-    uintptr_t pivot  = *(uintptr_t*)(node + 0x20);  // right child becomes new root
+// FUN_14000e450 — promotes node->right child (left-rotation at node)
+static ProfNode* BST_RotateLeft_e450(ProfNode** rootPtr, ProfNode* node) {
+    ProfNode* parent = node->parent;
+    ProfNode* pivot  = node->right;  // right child becomes new root
 
     if (node == *rootPtr) *rootPtr = pivot;
     if (parent) {
-        if (*(uintptr_t*)(parent + 0x18) == node) *(uintptr_t*)(parent + 0x18) = pivot;
-        else                                        *(uintptr_t*)(parent + 0x20) = pivot;
+        if (parent->left == node) parent->left = pivot;
+        else                      parent->right = pivot;
     }
-    *(uintptr_t*)(pivot + 0x10) = parent;
+    pivot->parent = parent;
 
     // node.right = pivot.left; if pivot.left, reparent it
-    uintptr_t pivotLeft = *(uintptr_t*)(pivot + 0x18);
-    *(uintptr_t*)(node + 0x20) = pivotLeft;
-    if (pivotLeft) *(uintptr_t*)(pivotLeft + 0x10) = node;
+    ProfNode* pivotLeft = pivot->left;
+    node->right = pivotLeft;
+    if (pivotLeft) pivotLeft->parent = node;
 
-    *(uintptr_t*)(pivot + 0x18) = node;
-    *(uintptr_t*)(node  + 0x10) = pivot;
+    pivot->left = node;
+    node->parent = pivot;
 
-    uintptr_t pl = *(uintptr_t*)(pivot + 0x18);
+    ProfNode* pl = pivot->left;
     if (pl) BST_UpdateNode(pl);
-    uintptr_t pl2 = *(uintptr_t*)(pivot + 0x20);
+    ProfNode* pl2 = pivot->right;
     if (pl2) BST_UpdateNode(pl2);
     BST_UpdateNode(pivot);
     return pivot;
@@ -213,28 +219,28 @@ static uintptr_t BST_RotateLeft_e450(uintptr_t* rootPtr, uintptr_t node) {
 
 // BSTRebalance_Impl (FUN_140013480): Walk up from startNode, updating heights/balance
 // and performing AVL rotations as needed.
-// treeRootPtr: pointer to the BST root field (e.g. &self->bstRoot)
+// treeRootPtr: pointer to the BST root field (&professionIndexRoot)
 // startNodePtr: pointer to the node to begin from (advances to parent each iteration)
-static void BSTRebalance_Impl(uintptr_t* treeRootPtr, uintptr_t* startNodePtr) {
-    uintptr_t cur = *startNodePtr;
-    while (cur != 0) {
-        uintptr_t curNode = *startNodePtr;
-        uintptr_t nextParent = *(uintptr_t*)(curNode + 0x10);
+static void BSTRebalance_Impl(ProfNode** treeRootPtr, ProfNode** startNodePtr) {
+    ProfNode* cur = *startNodePtr;
+    while (cur != nullptr) {
+        ProfNode* curNode = *startNodePtr;
+        ProfNode* nextParent = curNode->parent;
 
         // Recompute balance/height
         int16_t lh = 0, rh = 0;
-        uintptr_t lc = *(uintptr_t*)(curNode + 0x18);
-        uintptr_t rc = *(uintptr_t*)(curNode + 0x20);
-        if (lc) lh = (int16_t)(*(int16_t*)(lc + 0x2a) + 1);
-        if (rc) rh = (int16_t)(*(int16_t*)(rc + 0x2a) + 1);
-        *(int16_t*)(curNode + 0x28) = (int16_t)(rh - lh);
-        *(int16_t*)(curNode + 0x2a) = (rh > lh) ? rh : lh;
+        ProfNode* lc = curNode->left;
+        ProfNode* rc = curNode->right;
+        if (lc) lh = (int16_t)(lc->height + 1);
+        if (rc) rh = (int16_t)(rc->height + 1);
+        curNode->balance = (int16_t)(rh - lh);
+        curNode->height = (rh > lh) ? rh : lh;
 
         // Right-heavy (balance > 1): need left-rotation
-        uintptr_t pivot = *(uintptr_t*)(curNode + 0x20);
-        if (*(int16_t*)(curNode + 0x28) > 1 && pivot != 0) {
+        ProfNode* pivot = curNode->right;
+        if (curNode->balance > 1 && pivot != nullptr) {
             // If right child is left-heavy (balance < 0): double rotation (right-left)
-            if (*(int16_t*)(pivot + 0x28) < 1 && *(int16_t*)(pivot + 0x28) < 0) {
+            if (pivot->balance < 1 && pivot->balance < 0) {
                 BST_RotateRight_e580(treeRootPtr, pivot);
                 curNode = *startNodePtr;
             }
@@ -243,10 +249,10 @@ static void BSTRebalance_Impl(uintptr_t* treeRootPtr, uintptr_t* startNodePtr) {
 
         curNode = *startNodePtr;
         // Left-heavy (balance < -1): need right-rotation
-        pivot = *(uintptr_t*)(curNode + 0x18);
-        if (*(int16_t*)(curNode + 0x28) < -1 && pivot != 0) {
+        pivot = curNode->left;
+        if (curNode->balance < -1 && pivot != nullptr) {
             // If left child is right-heavy (balance > 0): double rotation (left-right)
-            if (*(int16_t*)(pivot + 0x28) > -1 && *(int16_t*)(pivot + 0x28) > 0) {
+            if (pivot->balance > -1 && pivot->balance > 0) {
                 BST_RotateLeft_e450(treeRootPtr, pivot);
                 curNode = *startNodePtr;
             }
@@ -256,17 +262,6 @@ static void BSTRebalance_Impl(uintptr_t* treeRootPtr, uintptr_t* startNodePtr) {
         *startNodePtr = nextParent;
         cur = nextParent;
     }
-}
-
-// ============================================================
-// Dynamic array push helpers (8-byte element arrays)
-// ============================================================
-// B.3.2 bridge: `self+ptrOffset` is Collection::Array<uint64_t> (stride 8,
-// count +0x08, capacity +0x0C off ptrOffset) inside a struct §B.2 has not
-// converted, so it is reached at its offset.
-static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
-    auto& arr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(self, ptrOffset);
-    arr.SetSize(arr.GetSize() + 1, GameColl::Bytes<8, 8>(value));
 }
 
 // ---- ProfessionUI: PROMOTED to the real reimpl (profession-assignment bring-up) -
@@ -281,37 +276,32 @@ static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
 //                           OnUpdate dispatches this every frame once the controller is
 //                           attached — INCLUDING before Slot5 has populated the caches,
 //                           at which point the reimpl would deref the null spinner array
-//                           (self+0x40). Guard: skip until setup has run (+0x30 counts
-//                           array + +0x40 spinner array both non-null).
+//                           (+0x40). Guard: skip until setup has run (the counts
+//                           array + the spinner array both non-null).
 //   Slot9 (+0x48, event)  — spinner change reassigns citizens between professions
 //                           (uses the CitizenList Find/Request/Remove worker fns already
 //                           registered for the Town Hall profession tab); button click
 //                           centers the camera on a citizen of that profession.
-// The worker-reassignment + type-id deps all resolve in standalone already (see
-// reg_townhallui.cpp / reg_town_workplace_registry_reader.cpp / reg_economy_typeids.cpp);
-// only NumberEditElement's type-id is unregistered — lazy-fill it so Slot5's spinner-
-// child validation runs (the reimpl already guards a null id, so this is optional but
-// tidy). Construction stays the stub alloc+zero+vtable; the framework fills the base
+// Construction stays the stub alloc+zero+vtable; the framework fills the base
 // dialog/datasource fields afterward — same shape as the MapUI/ImmigrationUI promotions.
 namespace professionui_sa {
     // ENDGAME B.3.9 CG2: EnsureTypeIds retired — it healed TypeId_NumberEditElement
     // (a per-file lazy-fill of the exe-side global) which the conversion below to
     // UI::NumberEditElement::TypeId() (the ported Runtime static) makes unnecessary.
-    void Trace([[maybe_unused]] const char* slot, void* self) {
+    void Trace([[maybe_unused]] const char* slot, ProfessionUI* self) {
         static int n=0; if (n>=32) return; ++n;
-        uintptr_t s=reinterpret_cast<uintptr_t>(self);
-        uint32_t spinN = self?*reinterpret_cast<uint32_t*>(s+0x48):0;
+        uint32_t spinN = self ? static_cast<uint32_t>(self->spinnerCount) : 0;
         printf("[ProfessionUI] %s self=%p dlg(+0x18)=%p root(+0x20)=%p counts(+0x30)=%p "
                "spinners(+0x40)=%p n=%u numbers(+0x50)=%p n=%u\n", slot, self,
-               self?*reinterpret_cast<void**>(s+0x18):nullptr,
-               self?*reinterpret_cast<void**>(s+0x20):nullptr,
-               self?*reinterpret_cast<void**>(s+0x30):nullptr,
-               self?*reinterpret_cast<void**>(s+0x40):nullptr, spinN,
-               self?*reinterpret_cast<void**>(s+0x50):nullptr,
-               self?*reinterpret_cast<uint32_t*>(s+0x58):0);
+               self?self->_dialog:nullptr,
+               self?self->_container:nullptr,
+               self?self->countsData:nullptr,
+               self?self->spinnerData:nullptr, spinN,
+               self?self->numberData:nullptr,
+               self?static_cast<uint32_t>(self->numberCount):0);
         // Dump the per-profession citizen counts (+0x30 int array) so we can confirm
         // Slot8 computes real assignments, not all-zero placeholder rows.
-        int32_t* counts = self?*reinterpret_cast<int32_t**>(s+0x30):nullptr;
+        int32_t* counts = self?self->countsData:nullptr;
         if (counts && spinN>0 && spinN<=64) {
             printf("[ProfessionUI]   counts[0..%u]:", spinN-1);
             for (uint32_t i=0;i<spinN;i++) printf(" %d", counts[i]);
@@ -321,10 +311,9 @@ namespace professionui_sa {
     }
     // Has Slot5 populated the caches yet? counts(+0x30) is allocated by the Slot5 tail
     // (ExeArrayResize2), spinners(+0x40) grown as each profession row is added.
-    bool IsSetUp(void* self) {
-        uintptr_t s=reinterpret_cast<uintptr_t>(self);
-        return *reinterpret_cast<void**>(s+0x30)!=nullptr &&
-               *reinterpret_cast<void**>(s+0x40)!=nullptr;
+    bool IsSetUp(ProfessionUI* self) {
+        return self->countsData != nullptr &&
+               self->spinnerData != nullptr;
     }
 }
 
@@ -349,35 +338,27 @@ void ProfessionUI::OnOpened() {
     // setup already ran.
     if (professionui_sa::IsSetUp(this)) { professionui_sa::Trace("Slot5-skip(already set up)", this); return; }
     professionui_sa::Trace("Slot5", this);
-    uintptr_t s = (uintptr_t)this;
 
-    // Find "professionTable" element
-    void* dialogElem = *(void**)(s + 0x20);
+    // Find "professionTable" element in the controller's container
     System::String nameStr("professionTable");
-    uint64_t tableResult = 0;
-    ::new (&tableResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
+    UI::TableElement* tableElem =
+        static_cast<UI::TableElement*>(_container->FindElement(nameStr).Get());
 
-    void* tableElem = (void*)tableResult;
+    // Get column count from the table
+    int colCount = tableElem->_columnCount;
 
-    // Get column count from table element at +0xC4
-    int colCount = *(int*)((uintptr_t)tableElem + 0xC4);
-
-    // Get profession count from game world singleton
-    void* worldSingleton = GameUpdateLoop::_singleton;
-    void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
-    int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
+    // Get profession count from the game's profession list
+    ProfessionList* profListPtr = GameUpdateLoop::_singleton->m_professionList;
+    int profCount = profListPtr->arrayCount;
 
 
-    // Get template factory: first child of table -> element+0xB8
-    uint64_t firstChildBuf = 0;
-    ::new (&firstChildBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(0));  // B.3.6 bridge
-    void* firstChild = (void*)firstChildBuf;
-    // Factory is at element+0xB8 (NOT vtable+0xB8)
-    void** factory = *(void***)((uintptr_t)firstChild + 0xB8);
+    // Get template factory: the first child's description (Element::_description)
+    UI::Element* firstChild = tableElem->Child(0).Get();
+    const UI::ElementDescription* factory = firstChild->_description;
 
     // Set table size: ceil(profCount / colCount) rows
     int rowCount = ((colCount - 1 + profCount) / colCount * colCount) / colCount;
-    reinterpret_cast<UI::TableElement*>(tableElem)->SetSize(rowCount, colCount);  // B.3.6 bridge
+    tableElem->SetSize(rowCount, colCount);
 
 
     // Phase 1: Populate table cells from template factory
@@ -385,21 +366,19 @@ void ProfessionUI::OnOpened() {
     int row = 0;
 
     for (int i = 0; i < profCount; i++) {
-        // Template data from dataSource (self+0x18) -> +0x18
-        uintptr_t templateData = *(uintptr_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
+        // The owning dialog's Dialog resource
+        const UI::Dialog* templateData = _dialog->_dialog;
 
         // Clone the template: `factory` is the first child's Element+0xB8 `_description`
         // (ExternalPtr<UI::ElementDescription>), so vt[8] is ElementDescription slot 8
         // CreateInstance(ret, dialog) -- a RETSLOT virtual (RULE B6-2).
-        uint64_t cloneBuf = 0;
-        Object::InternalPtr<UI::Element>* cloned = reinterpret_cast<UI::ElementDescription*>(factory)->CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(&cloneBuf),
-            reinterpret_cast<const UI::Dialog*>(templateData));  // B.3.6 bridge: ElementDescription slot 8
+        Object::InternalPtr<UI::Element> cloneBuf;
+        Object::InternalPtr<UI::Element>* cloned = factory->CreateInstance(&cloneBuf, templateData);
 
-        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(cloned, col, row);  // B.3.6 bridge
+        tableElem->SetChild(cloned, col, row);
 
         col++;
-        if (col >= *(int*)((uintptr_t)tableElem + 0xC0)) {
+        if (col >= tableElem->_rowCount) {
             row++;
             col = 0;
         }
@@ -409,7 +388,7 @@ void ProfessionUI::OnOpened() {
     int tableCol = 0;
     int tableRow = 0;
     int idBase = 300;
-    void* profArray = *(void**)((uintptr_t)profListPtr + 0x20);
+    Profession** profArray = profListPtr->arrayData;
 
     for (int i = 0; i < profCount; i++) {
         // Re-read the flat-index stride from the table each iteration.
@@ -420,96 +399,89 @@ void ProfessionUI::OnOpened() {
         // SLOW index instead collapses the intended COLUMN-MAJOR layout (builder below
         // laborer, as retail draws it) into row-major (builder to the right). Match the
         // original exactly: stride = +0xC4, flatIdx = stride*tableCol + tableRow.
-        int stride = *(int*)((uintptr_t)tableResult + 0xC4);
+        int stride = tableElem->_columnCount;
 
         int flatIdx = stride * tableCol + tableRow;
-        uint64_t cellElem = 0;
-        ::new (&cellElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableResult)->Child(flatIdx));  // B.3.6 bridge
+        UI::Element* cellElem = tableElem->Child(flatIdx).Get();
 
         // Get 4 children of cell (indices from disassembly: 0, 1, 3, 4):
         //   child[0] = text/label element (name + sprite)
         //   child[1] = spinner element (worker count)
         //   child[3] = number element (actual count)
         //   child[4] = button element (goto)
-        uint64_t textLabelBuf = 0;
-        ::new (&textLabelBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(0));  // B.3.6 bridge
-
-        uint64_t spinnerBuf = 0;
-        ::new (&spinnerBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(1));  // B.3.6 bridge
-
-        uint64_t numberBuf = 0;
-        ::new (&numberBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(3));  // B.3.6 bridge
-
-        uint64_t buttonBuf = 0;
-        ::new (&buttonBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(4));  // B.3.6 bridge
+        UI::LabelElement* textLabel = static_cast<UI::LabelElement*>(cellElem->Child(0).Get());
+        UI::Element* spinner = cellElem->Child(1).Get();
+        UI::NumberElement* number = static_cast<UI::NumberElement*>(cellElem->Child(3).Get());
+        UI::Element* button = cellElem->Child(4).Get();
 
         // Set button element ID: idBase + 200
-        reinterpret_cast<UI::Element*>(buttonBuf)->SetElementId(idBase + 200);  // B.3.6 bridge
+        button->SetElementId(idBase + 200);
 
         // Get profession ExternalPtr from array
-        void* profDesc = *(void**)((uintptr_t)profArray + (uintptr_t)i * 8);
+        Profession* profDesc = profArray[i];
 
         // Set element name from profession file path
         {
             // `GetPath` returns by value through a hidden return slot and the callee
             // CONSTRUCTS into it; copy-initialising the local is the same store.
-            System::Filename pathObj =
-                reinterpret_cast<const ::Object::External*>(profDesc)->GetPath();  // B.3.3 bridge
+            System::Filename pathObj = profDesc->GetPath();
             System::Filename identObj = pathObj.GetPathIdentifer();
-            reinterpret_cast<UI::Element*>(spinnerBuf)->SetName(*reinterpret_cast<const System::String*>(&identObj));  // B.3.6 bridge
+            spinner->SetName(identObj.AsString());
         }
 
         // BST insert: key=profDesc, value=idBase-300 (=i)
         int bstIndex = idBase - 300;
-        void** bstRootPtr = (void**)(s + 0x60);
-        void* existingRoot = *bstRootPtr;
+        ProfNode** bstRootPtr = &professionIndexRoot;
+        ProfNode* existingRoot = *bstRootPtr;
 
         if (existingRoot == nullptr) {
             // First node -- allocate and set as root
-            uint8_t* newNode = (uint8_t*)System::MemoryAllocator::MemAlloc(0x30, 8);
+            ProfNode* newNode = static_cast<ProfNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
             if (newNode) {
-                *(void**)(newNode + 0x00) = profDesc;
-                *(int*)(newNode + 0x08) = bstIndex;
-                *(int*)(newNode + 0x0C) = 0;
-                *(void**)(newNode + 0x10) = nullptr;
-                *(void**)(newNode + 0x18) = nullptr;
-                *(void**)(newNode + 0x20) = nullptr;
-                *(int*)(newNode + 0x28) = 0;
+                newNode->key = profDesc;
+                newNode->index = bstIndex;
+                newNode->_pad0C = 0;
+                newNode->parent = nullptr;
+                newNode->left = nullptr;
+                newNode->right = nullptr;
+                newNode->balance = 0;   // one dword store over balance / height
+                newNode->height = 0;
                 *bstRootPtr = newNode;
             }
         } else {
             // BST insert + rebalance
-            uint8_t* current = (uint8_t*)existingRoot;
-            uint8_t* newNode = (uint8_t*)System::MemoryAllocator::MemAlloc(0x30, 8);
+            ProfNode* current = existingRoot;
+            ProfNode* newNode = static_cast<ProfNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
             if (newNode) {
-                *(void**)(newNode + 0x00) = profDesc;
-                *(int*)(newNode + 0x08) = bstIndex;
-                *(int*)(newNode + 0x0C) = 0;
-                *(void**)(newNode + 0x10) = nullptr;
-                *(void**)(newNode + 0x18) = nullptr;
-                *(void**)(newNode + 0x20) = nullptr;
-                *(int*)(newNode + 0x28) = 0;
+                newNode->key = profDesc;
+                newNode->index = bstIndex;
+                newNode->_pad0C = 0;
+                newNode->parent = nullptr;
+                newNode->left = nullptr;
+                newNode->right = nullptr;
+                newNode->balance = 0;   // one dword store over balance / height
+                newNode->height = 0;
 
                 bool inserted = false;
                 while (!inserted) {
-                    void* curKey = *(void**)(current + 0x00);
-                    if ((uintptr_t)profDesc > (uintptr_t)curKey) {
-                        void* right = *(void**)(current + 0x20);
+                    Profession* curKey = current->key;
+                    if (profDesc > curKey) {
+                        ProfNode* right = current->right;
                         if (right == nullptr) {
-                            *(void**)(newNode + 0x10) = current;
-                            *(void**)(current + 0x20) = newNode;
+                            newNode->parent = current;
+                            current->right = newNode;
                             inserted = true;
                         } else {
-                            current = (uint8_t*)right;
+                            current = right;
                         }
-                    } else if ((uintptr_t)profDesc < (uintptr_t)curKey) {
-                        void* left = *(void**)(current + 0x18);
+                    } else if (profDesc < curKey) {
+                        ProfNode* left = current->left;
                         if (left == nullptr) {
-                            *(void**)(newNode + 0x10) = current;
-                            *(void**)(current + 0x18) = newNode;
+                            newNode->parent = current;
+                            current->left = newNode;
                             inserted = true;
                         } else {
-                            current = (uint8_t*)left;
+                            current = left;
                         }
                     } else {
                         // Duplicate key
@@ -517,63 +489,63 @@ void ProfessionUI::OnOpened() {
                         inserted = true;
                     }
                 }
-                if (*(void**)(newNode + 0x10) != nullptr) {
-                    uintptr_t nodePtr = (uintptr_t)newNode;
-                    BSTRebalance_Impl((uintptr_t*)(s + 0x60), &nodePtr);
+                if (newNode->parent != nullptr) {
+                    ProfNode* nodePtr = newNode;
+                    BSTRebalance_Impl(&professionIndexRoot, &nodePtr);
                 }
             }
         }
-        *(int*)(s + 0x68) = *(int*)(s + 0x68) + 1;
+        professionIndexCount = professionIndexCount + 1;
 
         // Set text, sprite, tooltip on text/label element from profession description
-        uint8_t uiStrBuf[16];
-        ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)profDesc + 0x20))),
-                         *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x30));  // B.3.6 bridge
-        reinterpret_cast<UI::TextElement*>(textLabelBuf)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
+        // (LEFT: Profession's Strings are declared as raw storage, GAME-b, H5)
+        UI::String uiStr(profDesc->stringTable,
+                         *reinterpret_cast<const System::String*>(&profDesc->stringName));
+        textLabel->SetText(&uiStr);
 
-        uint8_t spriteBuf[16];
-        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)profDesc + 0x28))),
-                        *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x30));  // B.3.6 bridge
-        reinterpret_cast<UI::LabelElement*>(textLabelBuf)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+        UI::Sprite sprite(profDesc->spriteSheet,
+                          *reinterpret_cast<const System::String*>(&profDesc->stringName));
+        textLabel->SetSprite(&sprite);
 
-        // Tooltip: UI::String from ExternalPtr + string name at +0x38
-        uint8_t tooltipBuf[16];
-        ::new (tooltipBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)profDesc + 0x20))),
-                         *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x38));  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(textLabelBuf)->SetToolTip(*reinterpret_cast<const UI::String*>(tooltipBuf));  // B.3.6 bridge
+        // Tooltip: UI::String from the table + the string name at +0x38
+        UI::String tooltip(profDesc->stringTable,
+                           *reinterpret_cast<const System::String*>(&profDesc->stringDesc));
+        textLabel->SetToolTip(tooltip);
 
         // Set user data and element ID on spinner
         // Original only sets user data + child element ID, but the event system
         // sends the spinner's own element ID as param4 in msg 0x15 notifications.
         // Without SetElementId on the spinner itself, param4 is -1 and Slot9 never
         // dispatches to HandleSpinner.
-        reinterpret_cast<UI::Element*>(spinnerBuf)->SetUserData(reinterpret_cast<Object::Base*>((uintptr_t)idBase));  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(spinnerBuf)->SetElementId(idBase);  // B.3.6 bridge
+        spinner->SetUserData(reinterpret_cast<Object::Base*>((uintptr_t)idBase));  // CAST-OK: ptr_int
+        spinner->SetElementId(idBase);
 
         // Get child[0] of spinner: set its element ID (original does this too)
-        uint64_t spinnerChild0 = 0;
-        ::new (&spinnerChild0) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinnerBuf)->Child(0));  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(spinnerChild0)->SetElementId(idBase);  // B.3.6 bridge
+        UI::Element* spinnerChild0 = spinner->Child(0).Get();
+        spinnerChild0->SetElementId(idBase);
 
         // Get child[0] again, verify NumberEditElement, wrap in IBP for array push
-        uint64_t numEditBuf = 0;
-        ::new (&numEditBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinnerBuf)->Child(0));  // B.3.6 bridge
-        void* numEditRaw = (void*)numEditBuf;
+        UI::Element* numEditRaw = spinner->Child(0).Get();
         // ENDGAME B.3.9 CG2: TypeId_NumberEditElement -> UI::NumberEditElement::TypeId()
         // (the ported Runtime static always answers; the null-guard on the exe-side
         // global retires with the conversion).
-        void* numEditChecked = nullptr;
+        UI::NumberEditElement* numEditChecked = nullptr;
         if (::Object::IsDerivedFromNullSafe(numEditRaw, UI::NumberEditElement::TypeId()))
-            numEditChecked = numEditRaw;
-        uint64_t numEditIBP = 0;
-        new (&numEditIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(numEditChecked));   // B.3.3 bridge
+            numEditChecked = static_cast<UI::NumberEditElement*>(numEditRaw);
 
         // Push spinner's NumberEditElement to spinner array at +0x40
-        PushToArray8(s, 0x40, numEditIBP);
+        // B.3.2 bridge: +0x40 is Collection::Array<InternalPtr<NumberEditElement>>,
+        // raw storage until ~ProfessionUI frees it (H5).
+        {
+            auto& arr = GameColl::ArrayAt<UI::NumberEditElement*>(this, 0x40);
+            arr.SetSize(arr.GetSize() + 1, numEditChecked);
+        }
 
-        // Push number element to number array at +0x50
-        PushToArray8(s, 0x50, (uint64_t)numberBuf);
+        // Push number element to number array at +0x50 (the same bridge)
+        {
+            auto& arr = GameColl::ArrayAt<UI::NumberElement*>(this, 0x50);
+            arr.SetSize(arr.GetSize() + 1, number);
+        }
 
         // If this profession is the transient "default/laborer" profession (profList+0x30,
         // _default="laborer" in Profession.rsc), hide the two worker-count elements that
@@ -583,18 +555,17 @@ void ProfessionUI::OnOpened() {
         // NB: retail hides child index 2 here (verified in the 0x140076CA0 disassembly:
         // `MOV R8D,0x2` before the Child call), NOT index 4 — hiding 4 wrongly removed the
         // laborer's goto button.
-        void* noneProfession = *(void**)((uintptr_t)profListPtr + 0x30);
+        Profession* noneProfession = profListPtr->field_0x30;
         if (profDesc == noneProfession) {
-            reinterpret_cast<UI::Element*>(numberBuf)->SetFlagsOnOff(1, 0);   // B.3.6 bridge; child[3] numberAvailable
+            number->SetFlagsOnOff(1, 0);   // child[3] numberAvailable
 
-            uint64_t ofTextChild = 0;
-            ::new (&ofTextChild) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(2)); // B.3.6 bridge; child[2] ofText
-            reinterpret_cast<UI::Element*>(ofTextChild)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+            UI::Element* ofTextChild = cellElem->Child(2).Get();   // child[2] ofText
+            ofTextChild->SetFlagsOnOff(1, 0);
         }
 
         // Advance table position
         tableCol++;
-        if (tableCol >= *(int*)((uintptr_t)tableResult + 0xC0)) {
+        if (tableCol >= tableElem->_rowCount) {
             tableRow++;
             tableCol = 0;
         }
@@ -605,12 +576,12 @@ void ProfessionUI::OnOpened() {
     // Resize counts array to profCount.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400021d0, stride 4 align 4,
     // grown tail left as the allocation found it (no init arm). Slot8 zeroes it below.
-    GameColl::ArrayAt<GameColl::I32NoInit>(s, 0x30).SetSize(profCount);
+    GameColl::ArrayAt<GameColl::I32NoInit>(this, 0x30).SetSize(profCount);
 
     // Call Slot8 (vtable +0x40) with Time(0.0)
-    uint8_t timeBuf[8];
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
-    OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
+    System::Time timeVal;
+    RtSystem_Time_Ctor(&timeVal, 0.0f);
+    OnUpdate(timeVal);   // slot 8, virtual
 }
 
 // ============================================================
@@ -626,20 +597,19 @@ void ProfessionUI::OnOpened() {
 void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     if (!professionui_sa::IsSetUp(this)) return;   // OnUpdate fires this pre-setup — skip
     professionui_sa::Trace("Slot8", this);
-    uintptr_t s = (uintptr_t)this;
 
-    void* worldSingleton = GameUpdateLoop::_singleton;
-    uintptr_t citizenMgr = *(uintptr_t*)((uintptr_t)worldSingleton + 0xF0);
-    void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
-    int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
+    GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
+    uintptr_t citizenMgr = (uintptr_t)worldSingleton->m_citizenList;   // LEFT: void* (GAME-a)
+    ProfessionList* profListPtr = worldSingleton->m_professionList;
+    int profCount = profListPtr->arrayCount;
 
     // Zero out counts array
-    int* counts = *(int**)(s + 0x30);
+    int* counts = countsData;
     for (int i = 0; i < profCount; i++) {
         counts[i] = 0;
     }
 
-    // Iterate all citizens
+    // Iterate all citizens (LEFT: through m_citizenList)
     int citizenCount = *(int*)(citizenMgr + 0xA8);
     uintptr_t citizenArray = *(uintptr_t*)(citizenMgr + 0xA0);
 
@@ -647,13 +617,13 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         // CheckPtr on citizen IBP (original does this)
         uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
 
-        // Check if citizen is adult: age (float at +0x3C) >= birthAge (float at desc+0x44)
+        // Check if citizen is adult: age (float at +0x3C) >= adultAge (float at desc+0x44)
         uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
         float birthAge = *(float*)(citizenDesc + 0x44);
         float currentAge = *(float*)(citizen + 0x3C);
         if (currentAge < birthAge) continue;
 
-        // Check if citizen is not dead: deathPtr at +0x208 must be 0
+        // Check if citizen is not a student: school at +0x208 must be 0
         if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
 
         // CheckPtr again before reading profession (original does double CheckPtr)
@@ -661,19 +631,18 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
 
         // Look up profession in BST
         void* profKey = *(void**)(citizen + 0x1F0);
-        void* bstRoot = *(void**)(s + 0x60);
 
         // BST search
-        uint8_t* node = (uint8_t*)bstRoot;
+        ProfNode* node = professionIndexRoot;
         int profIndex = -1;
         while (node) {
-            uintptr_t nodeKey = *(uintptr_t*)(node + 0x00);
-            if ((uintptr_t)profKey < nodeKey) {
-                node = (uint8_t*)*(void**)(node + 0x18);  // left
-            } else if ((uintptr_t)profKey > nodeKey) {
-                node = (uint8_t*)*(void**)(node + 0x20);  // right
+            Profession* nodeKey = node->key;
+            if (profKey < nodeKey) {
+                node = node->left;
+            } else if (profKey > nodeKey) {
+                node = node->right;
             } else {
-                profIndex = *(int*)(node + 0x08);
+                profIndex = node->index;
                 break;
             }
         }
@@ -684,29 +653,25 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     }
 
     // Update first spinner (index 0): set value and min/max to same value (locked)
-    void** firstSpinnerPtr = (void**)(*(uintptr_t*)(s + 0x40));
-    reinterpret_cast<UI::NumberEditElement*>(*firstSpinnerPtr)->SetValue(counts[0]);  // B.3.6 bridge
-    firstSpinnerPtr = (void**)(*(uintptr_t*)(s + 0x40));
-    reinterpret_cast<UI::NumberEditElement*>(*firstSpinnerPtr)->SetMinMax(counts[0], counts[0]);  // B.3.6 bridge
+    spinnerData[0]->SetValue(counts[0]);
+    spinnerData[0]->SetMinMax(counts[0], counts[0]);
 
     // Update remaining spinners
-    int spinnerCount = *(int*)(s + 0x48);
-    for (int i = 1; i < spinnerCount; i++) {
-        void** spinnerPtr = (void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
-        reinterpret_cast<UI::NumberEditElement*>(*spinnerPtr)->SetValue(counts[i]);  // B.3.6 bridge
-        spinnerPtr = (void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
+    int spinnerN = spinnerCount;
+    for (int i = 1; i < spinnerN; i++) {
+        spinnerData[i]->SetValue(counts[i]);
         // Min=0, Max=counts[i]+counts[0] (can reassign from "None" profession)
-        reinterpret_cast<UI::NumberEditElement*>(*spinnerPtr)->SetMinMax(0, counts[i] + counts[0]);  // B.3.6 bridge
+        spinnerData[i]->SetMinMax(0, counts[i] + counts[0]);
     }
 
     // Update number elements with actual worker counts per profession
-    uintptr_t worldProfList = *(uintptr_t*)((uintptr_t)worldSingleton + 0xB0);
-    void* profArrayPtr = *(void**)(worldProfList + 0x20);
+    Profession** profArrayPtr = worldSingleton->m_professionList->arrayData;
 
     for (int p = 0; p < profCount; p++) {
-        uintptr_t profKey = *(uintptr_t*)((uintptr_t)profArrayPtr + (uintptr_t)p * 8);
+        uintptr_t profKey = (uintptr_t)profArrayPtr[p];   // LEFT: compared with the tree's raw keys
 
         // Look up profession in world BST at citizenMgr+0x100 to get entity count
+        // (LEFT: through m_citizenList)
         uint8_t* bstNode = *(uint8_t**)(citizenMgr + 0x100);
         int entityCount = 0;
 
@@ -808,13 +773,12 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         }
 
         // Set number element value (with CheckPtr, matching original)
-        void** numElemPtr = (void**)(*(uintptr_t*)(s + 0x50) + (uintptr_t)p * 8);
-        reinterpret_cast<UI::NumberElement*>(*numElemPtr)->SetValue(static_cast<int32_t>(totalWorkers));  // B.3.6 bridge
+        numberData[p]->SetValue(static_cast<int32_t>(totalWorkers));
     }
 }
 
 // ============================================================
-// ProfessionUI_HandleSpinner (was FUN_1400763c0)
+// ProfessionUI::HandleSpinner (was FUN_1400763c0)
 // ============================================================
 // Handles spinner value change for profession assignment.
 // When user adjusts the spinner for a profession:
@@ -825,7 +789,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
 //
 // Original: 0x1400763c0.
 
-static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
+void ProfessionUI::HandleSpinner(int profIndex) {
     // NO g_wpcRosterOnly guard (removed 2026-08-17). It used to be held here because the
     // Attach/Detach visual block "faults on inert standalone objects (READ of 0x10 in
     // Detach's e710 getter when the player lowered a builder count)". That exact fault is
@@ -836,26 +800,24 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
     // g_wpcRosterOnly is a world-BUILD shim (see its definition); a spinner click is
     // gameplay time, which is exactly when the visual is meant to run. See the block above
     // WorkPlaceUI idx9 in workplaceui.cpp for the full measurement.
-    uintptr_t s = (uintptr_t)self;
     int64_t idx = (int64_t)profIndex;
 
     // Get spinner element at this index and read desired value
-    uintptr_t spinnerArray = *(uintptr_t*)(s + 0x40);
-    void* spinnerElem = *(void**)(spinnerArray + idx * 8);
-    int desired = reinterpret_cast<const UI::NumberEditElement*>(spinnerElem)->GetValue();  // B.3.6 bridge
+    int desired = spinnerData[idx]->GetValue();
 
     // Get current count from counts array
-    int* counts = *(int**)(s + 0x30);
+    int* counts = countsData;
     int current = counts[profIndex];
 
 
     // Add citizens if desired > current
+    // (LEFT: the town's worker functions take the citizen list and the profession
+    // as integers — Component/Game exe_bodies.h — and m_citizenList is void*, GAME-a)
     if (current < desired) {
         uint64_t toAdd = (uint64_t)(uint32_t)(desired - current);
         do {
-            void* citizenList = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
-            // Triple deref: world+0xB0 → profList, +0x20 → profArray, +idx*8 → profId
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xB0) + 0x20) + idx * 8);
+            void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
+            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->arrayData[idx]);
 
             // Request a worker slot
             uint64_t retBuf[2] = {0, 0};
@@ -897,57 +859,55 @@ next_iter:
     if (desired < current) {
         uint64_t toRemove = (uint64_t)(uint32_t)(current - desired);
         do {
-            void* citizenList = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xB0) + 0x20) + idx * 8);
+            void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
+            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->arrayData[idx]);
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
     }
 
     // Refresh display: call Slot8 (vtable +0x40) with Time(0.0)
-    uint8_t timeBuf[8];
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
-    self->OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
+    System::Time timeVal;
+    RtSystem_Time_Ctor(&timeVal, 0.0f);
+    OnUpdate(timeVal);   // slot 8, virtual
 }
 
 // ============================================================
-// ProfessionUI_HandleButton (was FUN_140076a30)
+// ProfessionUI::HandleButton (was FUN_140076a30)
 // ============================================================
 // Handles button click to find and center camera on a citizen of
 // the given profession. Cycles through eligible citizens using
-// a rotation index (self+0x70) that wraps around.
+// a rotation index (gotoIndex, +0x70) that wraps around.
 //
-// Only considers adult, alive citizens (age >= birthAge, death ptr == 0).
+// Only considers adult, non-student citizens (age >= adultAge, school == 0).
 // Calls Toolbar_CenterOnEntity_Impl to snap the camera and select
 // the citizen in the EditTool.
 //
 // Original: 0x140076a30.
 
-static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
-    uintptr_t s = (uintptr_t)self;
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
+void ProfessionUI::HandleButton(int profIndex) {
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
-    void* citizenList = *(void**)(game + 0xF0);
-    uintptr_t citizenMgr = (uintptr_t)citizenList;
+    // LEFT: the citizens are read through m_citizenList (void*, GAME-a).
+    uintptr_t citizenMgr = (uintptr_t)game->m_citizenList;
     int citizenCount = *(int*)(citizenMgr + 0xA8);
     uintptr_t citizenArray = *(uintptr_t*)(citizenMgr + 0xA0);
 
-    // Get the profession ID for this index
-    // Triple deref: world+0xB0 → profList, +0x20 → profArray, +idx*8 → profId
-    uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)(game + 0xB0) + 0x20) + (int64_t)profIndex * 8);
+    // Get the profession ID for this index (compared with the citizens' raw field)
+    uint64_t profId = reinterpret_cast<uint64_t>(game->m_professionList->arrayData[profIndex]);
 
-    // Count eligible (adult, alive) citizens
+    // Count eligible (adult, non-student) citizens
     int eligible = 0;
     for (int i = 0; i < citizenCount; i++) {
         uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
 
-        // Check adult: age >= birthAge (desc+0x44)
+        // Check adult: age >= adultAge (desc+0x44)
         uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
         float birthAge = *(float*)(citizenDesc + 0x44);
         float currentAge = *(float*)(citizen + 0x3C);
         if (currentAge < birthAge) continue;
 
-        // Check alive: death ptr at +0x208 must be 0
+        // Check not a student: school at +0x208 must be 0
         if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
 
         eligible++;
@@ -956,7 +916,7 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
     if (eligible == 0) return;
 
     // Advance rotation index
-    int* rotIdx = (int*)(s + 0x70);
+    int* rotIdx = &gotoIndex;
     (*rotIdx)++;
     if (*rotIdx < 0) *rotIdx = 0;
 
@@ -973,7 +933,7 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
         if (*(uint64_t*)(citizen + 0x1F0) == profId) {
             citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
 
-            // Check adult and alive
+            // Check adult and not a student
             uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
             float birthAge = *(float*)(citizenDesc + 0x44);
             float currentAge = *(float*)(citizen + 0x3C);
@@ -991,9 +951,8 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
                 uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
 
                 // Center camera on this citizen
-                uint64_t dialogInst = *(uint64_t*)(s + 0x18);
-                uintptr_t toolController = *(uintptr_t*)(game + 0x120);
-                Toolbar_CenterOnEntity_Impl((void*)toolController, &dialogInst, &entityPtr);
+                UI::DialogInstance* dialogInst = _dialog;
+                Toolbar_CenterOnEntity_Impl(game->m_toolManager, &dialogInst, &entityPtr);
                 return;
             }
         }
@@ -1009,9 +968,8 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
             citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
             uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
 
-            uint64_t dialogInst = *(uint64_t*)(s + 0x18);
-            uintptr_t toolController = *(uintptr_t*)(game + 0x120);
-            Toolbar_CenterOnEntity_Impl((void*)toolController, &dialogInst, &entityPtr);
+            UI::DialogInstance* dialogInst = _dialog;
+            Toolbar_CenterOnEntity_Impl(game->m_toolManager, &dialogInst, &entityPtr);
             return;
         }
 
@@ -1034,9 +992,8 @@ void ProfessionUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
                                   int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (!professionui_sa::IsSetUp(this)) return;
     professionui_sa::Trace("Slot9", this);
-    void* worldSingleton = GameUpdateLoop::_singleton;
-    void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
-    int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
+    ProfessionList* profListPtr = GameUpdateLoop::_singleton->m_professionList;
+    int profCount = profListPtr->arrayCount;
 
 
     // Original logic: msg 0x15 handles BOTH spinner (300-range) and button (500-range).
@@ -1045,11 +1002,11 @@ void ProfessionUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
         if (param3 != 0x15) return;
         // msg 0x15: spinner value changed -- reassign citizens
         if (param4 >= 300 && param4 <= profCount + 300) {
-            ProfessionUI_HandleSpinner(this, param4 - 300);
+            HandleSpinner(param4 - 300);
         }
     }
     // msg 0x12 or 0x15: button clicked -- find and center on citizen
     if (param4 > 499 && param4 <= profCount + 500) {
-        ProfessionUI_HandleButton(this, param4 - 500);
+        HandleButton(param4 - 500);
     }
 }
