@@ -12,6 +12,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "engine/UpdateLoop.h"   // Engine::DialogLoaderLoopT
 
 // ENDGAME B.3.8 block DLG: LoaderDialog is a real class (Dialog/LoaderDialog.h)
 // with a compiler-generated vtable; retail evidence per slot is in the header.
@@ -19,17 +20,17 @@
 // ============================================================
 // [4] OnOpened (0x1400B2D90) — Setup
 // ============================================================
-// Finds "loadingImage" element and stores pointer at +0xB8.
+// Finds the "loadingImage" element.
 void LoaderDialog::OnOpened() {
     System::String nameStr("loadingImage");
-    loadingImage = FindElement(nameStr).Get();
+    loadingImage = FindElement(nameStr);
 }
 
 // [6] OnUpdateLayout (0x1400B2D00) — Draw
 // Applies the current rotation angle to the loading spinner image element.
 void LoaderDialog::OnUpdateLayout() {
-    if (loadingImage) {
-        static_cast<UI::ImageElement*>(loadingImage)->SetRotation(rotation);
+    if (loadingImage.Get()) {
+        static_cast<UI::ImageElement*>(loadingImage.Get())->SetRotation(rotation);
     }
 }
 
@@ -87,14 +88,13 @@ extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr
         return retInternalBasePtr;
     }
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(LoaderDialog), 8);
-    uintptr_t lp = reinterpret_cast<uintptr_t>(loop);
-    void* ui  = reinterpret_cast<void*>(lp + 0x60);
-    void* rsc = *reinterpret_cast<void**>(lp + 0x50);
-    LoaderDialog* dlg = ::new (mem) LoaderDialog(static_cast<UI::UserInterface*>(ui),
-                                                 static_cast<const UI::Dialog*>(rsc),
+    // LEFT: the C entry's `loop` is the GameLoadDialogLoopT (a DialogLoaderLoopT).
+    Engine::DialogLoaderLoopT* dlt = reinterpret_cast<Engine::DialogLoaderLoopT*>(loop);
+    // LEFT: DialogLoaderLoopT::_dialogExternal is void* (the loop's header).
+    LoaderDialog* dlg = ::new (mem) LoaderDialog(&dlt->_ui,
+                                                 static_cast<const UI::Dialog*>(dlt->_dialogExternal),
                                                  Object::InternalPtr<UI::DialogInstance>());
-    new (retInternalBasePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
+    ::new (retInternalBasePtr) Object::InternalPtr<UI::DialogInstance>(dlg);
     return retInternalBasePtr;
 }
 
