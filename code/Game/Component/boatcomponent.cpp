@@ -55,16 +55,18 @@ static const bool s_boatStateTableBuilt = (BoatCtrl_PopulateTable(), true);
 // the route builder resets it to 0 with the first point, boatcomponent_route.cpp);
 // `_controller(this)` is the member's back-pointer at +0x90. No flag OR (0x80).
 BoatComponent::BoatComponent()
-    : data28(0), data30(0), data38(0), data40(0), data48(0), _pad4C{}, data50(0), data58(0),
-      _pad5C{}, data60(0), data68(0), data70(-1), _pad74{}, _controller(this) {}
+    : destination(), model(), character(), dockPosition(), dockHeading(0.0f), waypoint(),
+      _pad5C{}, route(nullptr), routeCount(0), routeCapacity(0), routeIndex(-1), _pad74{},
+      _controller(this) {}
 
 // 0x140046770: the route waypoint array (+0x60 data, +0x68 count/capacity) is freed
 // and zeroed; the member's and the bases' dtors (restamps only) and ~Internal are
 // the compiler's chain.
 BoatComponent::~BoatComponent() {
-    Object::detail::InternalMemFree(reinterpret_cast<void*>(data60));
-    data60 = 0;
-    data68 = 0;
+    Object::detail::InternalMemFree(route);
+    route = nullptr;
+    routeCount = 0;      // retail: one qword 0 over +0x68..+0x6f
+    routeCapacity = 0;
 }
 
 // create 0x1400036e0: MemAlloc(0x98, 8), then the ctor.
@@ -90,31 +92,26 @@ void* BoatComponent::CreateInPlaceObject(void* storage) {
 // its IsDerivedFrom check is cleared.
 void BoatComponent::Persist(void* stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
-    auto persistPtr = [&ser](uint64_t& field, uint32_t typeId) {
-        reinterpret_cast<Object::InternalBasePtr*>(&field)->Serialize(ser);   // B.3.8 bridge (the field is a raw InternalBasePtr)
-        void* obj = reinterpret_cast<void*>(field);
-        if (obj != nullptr && !::Object::IsDerivedFromNullSafe(obj, typeId))
-            field = 0;
-    };
-    persistPtr(data28, ResidenceComponent::TypeId());
-    reinterpret_cast<Math::Vector3*>(&data40)->Serialize(&ser);                        // B.3.8 bridge (+0x40 is a Vector3)
-    ser.Serialize(*reinterpret_cast<float*>(&_pad4C), nullptr);                        // +0x4c float
-    persistPtr(data30, ModelComponent::TypeId());
-    persistPtr(data38, CharacterComponent::TypeId());
-    reinterpret_cast<Math::Vector3*>(&data50)->Serialize(&ser);                        // B.3.8 bridge (+0x50 is a Vector3)
-    ser.Serialize(*reinterpret_cast<int*>(&data70), nullptr);
-    uint32_t count = *reinterpret_cast<uint32_t*>(&data68);
-    ser.Serialize(*reinterpret_cast<int*>(&count), nullptr);
+    IO::Stream& io = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream is void* (Object::Base)
+    { IO::Serializer scope(io, 0); }
+    IO::Serializer ser(io, 0);
+    destination.Serialize(ser, ResidenceComponent::TypeId());
+    dockPosition.Serialize(&ser);
+    ser.Serialize(dockHeading, nullptr);                                               // +0x4c float
+    model.Serialize(ser, ModelComponent::TypeId());
+    character.Serialize(ser, CharacterComponent::TypeId());
+    waypoint.Serialize(&ser);
+    ser.Serialize(routeIndex, nullptr);
+    int count = routeCount;
+    ser.Serialize(count, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // B.3.2 bridge: exe 0x14000d030 IS Collection::Array<Vector3>::SetSize(n).
-        GameColl::AsArray<GameColl::Vec3>(&data60).SetSize(static_cast<int>(count));
+        GameColl::AsArray<GameColl::Vec3>(&route).SetSize(count);
     }
-    uint8_t* route = reinterpret_cast<uint8_t*>(data60);
-    if (static_cast<int>(count) > 0 && route) {
-        for (uint32_t i = 0; i < count; i++, route += 12)   // sizeof(Vector3) = 12
-            reinterpret_cast<Math::Vector3*>(route)->Serialize(&ser);   // B.3.8 bridge
+    Math::Vector3* points = route;
+    if (count > 0 && points) {
+        for (int i = 0; i < count; i++)
+            points[i].Serialize(&ser);
     }
 }
 

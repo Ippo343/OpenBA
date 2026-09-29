@@ -92,12 +92,18 @@
 #include "Game/exe_constants.h"
 using BoatDispatch = ::ControllerLive::Dispatcher<BoatCtrlTag>;
 
+#include "graphics/Mesh.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Entity/ComponentEntity.h"
+
 namespace {
 
 // ── Leaves, called directly (B.3R) ───────────────────────────────────────────────
-//   0x140003f60 ActCNR_FindComponent_3f60 (ModelComponent)
-//   0x1400012d0 ActMv_FindComponentFamily_12d0 (CharacterComponent)
-//   0x140003ea0 PlayerPath_FindComponent_3ea0 (StateMachineComponent)
+//   0x140003f60 FindComponent<ModelComponent>
+//   0x1400012d0 FindComponent<CharacterComponent>
+//   0x140003ea0 FindComponent<StateMachineComponent>
 //   0x1400a9660 StateMachine_TickReimpl       0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
 //   the Math import slots (Vector3 ctors 0x140152a30 / 0x140151268, Length 0x140151290,
 //   Dot 0x140151298, Normalize 0x1401512c0 / 0x1401512b8, Heading 0x1401512d8,
@@ -119,21 +125,16 @@ const float kApproach   = kRdata_1401721f4;           // state 0 -> 1 range (squ
 // The boat's animation ids, as retail passes them to 0x14010a1f0.
 // (0x14010a1f0 is already ported as ActMv_SetAnimation_a1f0 in action_base_move.cpp.)
 
-// The by-value Math returns, taken into this file's plain float shapes.
-inline const Math::Vector3& V3(const void* p) { return *reinterpret_cast<const Math::Vector3*>(p); }   // B.3.1 bridge
-
-
 // ── Small shared shapes ──────────────────────────────────────────────────────────
 
-struct Vec3 { float x, y, z; };
+// Defined after the 0x1400a70c0 port below; Steer needs it first.
+int NextRoutePoint(BoatComponent* boat, const Math::Vector3* ref);
 
-// Defined after the 0x1400a70c0 port below; Steer_63d0 needs it first.
-int NextRoutePoint(uintptr_t boat, const Vec3* ref);
-
-inline const Vec3* ModelPos(uintptr_t boat) {
-    const uintptr_t model = *reinterpret_cast<uintptr_t*>(boat + 0x30);
+// The model's world position: the translation of its transform (+0x148 + 0x10).
+// LEFT: ModelComponent::transform / meshInstance are raw storage (H5, W0 header).
+inline const Math::Vector3* ModelPos(ModelComponent* model) {
     if (!model) return nullptr;                     // see the guard note in Steer()
-    return reinterpret_cast<const Vec3*>(model + 0x158);
+    return &reinterpret_cast<const Math::Transform*>(model->transform)->translation;
 }
 
 // The request-transition idiom every boat handler ends with, byte-for-byte:
@@ -144,14 +145,15 @@ inline const Vec3* ModelPos(uintptr_t boat) {
 // flush in the first half is retail's way of forcing a valid current index before
 // asking, and it matters here because a boat handler can fire on the very tick the
 // machine entered its state.
+// LEFT: the state machine arrives as void* (controller_state_table.h, COMP-c).
 void RequestTransition(void* smV, int desiredStateId) {
     uint8_t* sm = reinterpret_cast<uint8_t*>(smV);
     if (!sm) return;
     if (static_cast<int8_t>(sm[9]) < 0) {
-        uint8_t zeroTime[8] = {};
-        RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(zeroTime), 0.0f);
+        System::Time zeroTime{0};
+        RtSystem_Time_Ctor(&zeroTime, 0.0f);
         // The time argument is the ADDRESS of the Time (retail passes it by reference).
-        StateMachine_TickReimpl(smV, reinterpret_cast<int64_t>(zeroTime), 0, 0);   // 0x1400a9660
+        StateMachine_TickReimpl(smV, reinterpret_cast<int64_t>(&zeroTime), 0, 0);   // 0x1400a9660
     }
     ::ControllerLive::RequestStateTransition(smV, desiredStateId);
 }
@@ -164,23 +166,23 @@ void RequestTransition(void* smV, int desiredStateId) {
 // smc+0x48 IS the StateMachine struct (its +0x00 is the node), and smc+0x51 is that
 // machine's current node-local index — the same +0x09 byte the node ABI uses one field
 // earlier in the struct.
-void PostEventToDestination(uintptr_t boat, int eventId) {
-    const int64_t destEntity = *reinterpret_cast<int64_t*>(boat + 0x28);
+// LEFT: StateMachineComponent's +0x48 machine and its +0x51 index byte are untyped
+// (COMP-e's header); the node's slot 2 is read from its table as before.
+void PostEventToDestination(BoatComponent* boat, int eventId) {
+    ComponentEntity* destEntity = boat->destination.Get();
     if (!destEntity) return;
 
-    uint64_t smcIBP[2] = {0, 0};
-    void* out = PlayerPath_FindComponent_3ea0(static_cast<uintptr_t>(destEntity), smcIBP);
-    const uintptr_t smc = out ? *reinterpret_cast<uintptr_t*>(out) : 0;
+    StateMachineComponent* smc = destEntity->FindComponent<StateMachineComponent>();
     if (!smc) {
         return;
     }
 
-    void* sm   = reinterpret_cast<void*>(smc + 0x48);
-    void* node = *reinterpret_cast<void**>(smc + 0x48);
+    void* sm   = &smc->controllerSelf;
+    void* node = smc->controllerSelf;
     if (!node) return;
     void** vt = *reinterpret_cast<void***>(node);
     if (!vt || !vt[2]) return;
-    const int curIdx = *reinterpret_cast<int8_t*>(smc + 0x51);
+    const int curIdx = *(reinterpret_cast<int8_t*>(&smc->stateFlags) + 1);
     typedef char (*PostEvent_t)(void*, void*, int, int);
     reinterpret_cast<PostEvent_t>(vt[2])(node, sm, curIdx, eventId);
 }
@@ -188,17 +190,16 @@ void PostEventToDestination(uintptr_t boat, int eventId) {
 // Retail's "the boat is finished — delete it" tail, shared verbatim by 5250 and 4c40
 // (0x140045272.. and 0x140044c52..): mark the boat's own entity for removal and push it
 // onto the entity list's removal array at gw+0xE8 -> +0xd0/+0xd8.
-void DeleteBoatEntity(uintptr_t boat) {
-    int64_t entIBP = *reinterpret_cast<int64_t*>(boat + 0x10);
+// LEFT: GameUpdateLoop::m_entityList is void* (W0 header): the removal array stays by offset.
+void DeleteBoatEntity(BoatComponent* boat) {
+    ComponentEntity* entIBP = boat->_entity;
     if (!entIBP) return;
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
-    if (!gw) return;
-    const uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    if (!GameUpdateLoop::_singleton) return;
+    const uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
     if (!entityList) return;
 
-    if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10) & 1) return;   // already going
-    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entIBP));
+    if ((entIBP->_entityFlags >> 10) & 1) return;   // already going
+    ActHunt_MarkEntityRemoval_c2ea0(entIBP);
     {
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         void* arr = reinterpret_cast<void*>(entityList + 0xd0);
@@ -206,6 +207,8 @@ void DeleteBoatEntity(uintptr_t boat) {
         GameColl::AsArray<GameColl::Ptr8>(arr).SetSizeFill(newCount, &entIBP);
     }
 }
+
+}  // namespace
 
 // ── 0x1400463d0 — the steering core ──────────────────────────────────────────────
 // Ported from DISASSEMBLY. Ghidra's decompile of this one loses the XMM plumbing badly
@@ -227,48 +230,45 @@ void DeleteBoatEntity(uintptr_t boat) {
 // ⚠ +0x28 = 0 here but 0x14010a0e0 (used by state 1) writes 1. That is not a
 // transcription slip: state 0 steers by direction only, state 1 hands the mover an
 // explicit target and speed.
-char Steer_63d0(uintptr_t boat) {
-    const Vec3* mp = ModelPos(boat);
+char BoatComponent::Steer() {
+    const Math::Vector3* mp = ModelPos(model.Get());
     if (!mp) return 0;
-    const Vec3 modelPos = *mp;
-    const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
+    const Math::Vector3 modelPos = *mp;
+    const Math::Vector3* wp = &waypoint;
 
     char ok = 1;
     {
-        Vec3 v = {0, 0, 0};
-        new (&v) Math::Vector3(wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z);   // B.3.1 bridge
+        Math::Vector3 v(wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z);
         v.z = 0.0f;                                   // the flatten at 0x140046473
-        const float len = V3(&v).Length().v;
+        const float len = v.Length().v;
         if (len < kArrive) {
-            const int idx = NextRoutePoint(boat, &modelPos);
+            const int idx = NextRoutePoint(this, &modelPos);
             if (idx < 0) return 0;
-            *reinterpret_cast<int32_t*>(boat + 0x70) = idx;
-            const float* pt = *reinterpret_cast<const float**>(boat + 0x60) + (size_t)idx * 3;
-            const Math::Scalar px(pt[0]), py(pt[1]), pz(0.0f);
-            new (reinterpret_cast<void*>(boat + 0x50)) Math::Vector3(px, py, pz);   // B.3.1 bridge
+            routeIndex = idx;
+            const Math::Vector3& pt = route[idx];
+            const Math::Scalar px(pt.x), py(pt.y), pz(0.0f);
+            waypoint = Math::Vector3(px, py, pz);
         }
     }
 
     // dir = Normalize(waypoint - modelPos), with the length dropped on the floor here
     // (retail passes an out-param it does not read in this function).
-    Vec3 toWp = { wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z };
+    const Math::Vector3 toWp(wp->x - modelPos.x, wp->y - modelPos.y, wp->z - modelPos.z);
     Math::Scalar dropLen;
-    const Math::Vector3 dir = V3(&toWp).Normalize(dropLen);
+    const Math::Vector3 dir = toWp.Normalize(dropLen);
 
-    const uintptr_t chr = *reinterpret_cast<uintptr_t*>(boat + 0x38);
+    CharacterComponent* chr = character.Get();
     if (!chr) return ok;
-    *reinterpret_cast<uint8_t*>(chr + 0x28) = 0;
+    chr->field_0x28 = false;
 
     const Math::Vector3 flat(dir.x, dir.y, 0.0f);
     const Math::Vector3 nrm = flat.Normalize();
-    *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
-    *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
-    *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
-    *reinterpret_cast<float*>(chr + 0x3c) = dir.Heading();
+    chr->field_0x2C.x = nrm.x;
+    chr->field_0x2C.y = nrm.y;
+    chr->field_0x2C.z = nrm.z;
+    chr->field_0x3C = dir.Heading();
     return ok;
 }
-
-}  // namespace
 
 // ── 0x1400a70c0 — the next route point at least `spacing` away ───────────────────
 // Walks FORWARD from the current index (boat+0x70) through the route array
@@ -279,6 +279,8 @@ char Steer_63d0(uintptr_t boat) {
 // Note the argument: retail passes boat+0x50, i.e. the routine reads count/base/index
 // at +0x18/+0x10/+0x20 RELATIVE TO THE WAYPOINT FIELD, which lands on the boat's
 // +0x68/+0x60/+0x70. Same three fields, addressed from a different anchor.
+// LEFT: the receiver is the +0x50 sub-object TornadoComponent shares (0x1400a71e0);
+// it has no class yet.
 extern "C" int BoatCtrl_NextRoutePoint(void* waypointField, const float* ref, float spacing) {
     const uintptr_t w = reinterpret_cast<uintptr_t>(waypointField);
     const int   count = *reinterpret_cast<const int32_t*>(w + 0x18);
@@ -297,10 +299,9 @@ extern "C" int BoatCtrl_NextRoutePoint(void* waypointField, const float* ref, fl
 }
 
 namespace {
-int NextRoutePoint(uintptr_t boat, const Vec3* ref) {
+int NextRoutePoint(BoatComponent* boat, const Math::Vector3* ref) {
     const float spacing = kPointSpace;
-    return BoatCtrl_NextRoutePoint(reinterpret_cast<void*>(boat + 0x50),
-                                   reinterpret_cast<const float*>(ref), spacing);
+    return BoatCtrl_NextRoutePoint(&boat->waypoint, &ref->x, spacing);
 }
 }  // namespace
 
@@ -310,33 +311,32 @@ int NextRoutePoint(uintptr_t boat, const Vec3* ref) {
 //     character+0x2c..0x34 = dir
 //     character+0x3c = heading      (passed in — retail hands it boat+0x4c)
 //     character+0x38 = character.model(+0x13c) * speed
-extern "C" void BoatCtrl_DriveToward(void* charComp, const float* target,
-                                     float heading, float speed) {
-    const uintptr_t chr = reinterpret_cast<uintptr_t>(charComp);
-    if (!chr) return;
-    *reinterpret_cast<uint8_t*>(chr + 0x28) = 1;
+void CharacterComponent::DriveToward(const Math::Vector3* target, float heading, float speed) {
+    field_0x28 = true;
 
-    const uintptr_t model = *reinterpret_cast<uintptr_t*>(chr + 0x68);
+    ModelComponent* model = modelComponent;
     if (!model) return;
-    const float* mp = reinterpret_cast<const float*>(model + 0x158);
+    const Math::Vector3* mp = ModelPos(model);
 
-    const Math::Vector3 v(target[0] - mp[0], target[1] - mp[1], target[2] - mp[2]);
+    const Math::Vector3 v(target->x - mp->x, target->y - mp->y, target->z - mp->z);
     const Math::Vector3 nrm = v.Normalize();
-    *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
-    *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
-    *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
-    const uintptr_t model2 = *reinterpret_cast<uintptr_t*>(chr + 0x68);
-    *reinterpret_cast<float*>(chr + 0x3c) = heading;
-    *reinterpret_cast<float*>(chr + 0x38) =
-        model2 ? *reinterpret_cast<const float*>(model2 + 0x13c) * speed : 0.0f;
+    field_0x2C.x = nrm.x;
+    field_0x2C.y = nrm.y;
+    field_0x2C.z = nrm.z;
+    ModelComponent* model2 = modelComponent;
+    field_0x3C = heading;
+    // LEFT: ModelComponent::meshInstance is raw storage (H5, W0 header); +0x13c is
+    // the MeshInstance's _color[2], the visual scale AnimalComponent writes.
+    field_0x38 =
+        model2 ? reinterpret_cast<const Graphics::MeshInstance*>(model2->meshInstance)->_color[2] * speed : 0.0f;
 }
 
 // 0x14010a1f0 SetAnimation, already ported for the citizen mover (ActMv_SetAnimation_a1f0,
 // Action/exe_bodies.h).
 
 namespace {
-void SetAnim(uintptr_t boat, uint32_t animId) {
-    void* chr = *reinterpret_cast<void**>(boat + 0x38);
+void SetAnim(BoatComponent* boat, uint32_t animId) {
+    CharacterComponent* chr = boat->character.Get();
     if (!chr) return;
     const float f = kSpeedBase;
     ActMv_SetAnimation_a1f0(chr, animId, f, f);
@@ -349,21 +349,12 @@ void SetAnim(uintptr_t boat, uint32_t animId) {
 // Latches the two sibling components the rest of the machine steers through, snaps the
 // current waypoint to the first route point far enough away, faces the hull along the
 // route and starts animation 1.
-extern "C" char BoatCtrl_State0_Enter(void* selfV) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
+char BoatComponent::State0Enter() {
+    model = _entity->FindComponent<ModelComponent>();           // 0x140003f60
+    character = _entity->FindComponent<CharacterComponent>();   // 0x1400012d0
 
-    uint64_t ibp[2] = {0, 0};
-    {
-        void* r = ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(boat + 0x10), ibp);
-        *reinterpret_cast<uint64_t*>(boat + 0x30) = *reinterpret_cast<uint64_t*>(r);
-    }
-    {
-        void* r = ActMv_FindComponentFamily_12d0(*reinterpret_cast<uintptr_t*>(boat + 0x10), ibp);
-        *reinterpret_cast<uint64_t*>(boat + 0x38) = *reinterpret_cast<uint64_t*>(r);
-    }
-
-    const float* route = *reinterpret_cast<const float**>(boat + 0x60);
-    if (!route) {
+    const Math::Vector3* pts = route;
+    if (!pts) {
         // Retail derefs this unguarded — it relies on the route builder having run. If we
         // are here with no route the fault is upstream (layer 2), and a silent no-op would
         // hide it, so say so once and bail rather than fault.
@@ -375,40 +366,41 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
 
     // Snap to the nearest usable route point when we are already close to route[0].
     {
-        const Vec3 p0 = { route[0], route[1], 0.0f };
-        const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
+        const Math::Vector3 p0(pts[0].x, pts[0].y, 0.0f);
+        const Math::Vector3* wp = &waypoint;
         const Math::Vector3 v(wp->x - p0.x, wp->y - p0.y, wp->z - 0.0f);
         const float len = v.Length().v;
         if (len < kArrive) {
-            const int idx = NextRoutePoint(boat, &p0);
+            const int idx = NextRoutePoint(this, &p0);
             if (idx >= 0) {
-                *reinterpret_cast<int32_t*>(boat + 0x70) = idx;
-                const float* pt = route + (size_t)idx * 3;
-                const Math::Scalar px(pt[0]), py(pt[1]), pz(0.0f);
-                new (reinterpret_cast<void*>(boat + 0x50)) Math::Vector3(px, py, pz);   // B.3.1 bridge
+                routeIndex = idx;
+                const Math::Vector3& pt = pts[idx];
+                const Math::Scalar px(pt.x), py(pt.y), pz(0.0f);
+                waypoint = Math::Vector3(px, py, pz);
             }
         }
     }
 
     // Face along (waypoint - route[0]) and push the transform into the model + geometry.
     {
-        const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
-        const Math::Vector3 dir(wp->x - route[0], wp->y - route[1], wp->z - 0.0f);
-        const uintptr_t model = *reinterpret_cast<uintptr_t*>(boat + 0x30);
-        if (model) {
+        const Math::Vector3* wp = &waypoint;
+        const Math::Vector3 dir(wp->x - pts[0].x, wp->y - pts[0].y, wp->z - 0.0f);
+        ModelComponent* m = model.Get();
+        if (m) {
             const float yaw   = dir.Heading();
             const float pitch = 0.0f;
             // ⚠ The OFFSET is route[0], not the origin (R9 = [RBP-0x21] at 0x1400455db,
             // the Vector3 built from route[0] at 0x140045595). This transform is what
             // puts the newly spawned hull at the start of its route; passing a zero
             // offset would park every merchant at the map origin.
-            const Math::Vector3 offset(route[0], route[1], 0.0f);
+            const Math::Vector3 offset(pts[0].x, pts[0].y, 0.0f);
             const Math::Transform xform = Math::Transform::FromYawPitchOffset(
                 Math::Scalar(yaw), Math::Scalar(pitch), offset);
-            *reinterpret_cast<Math::Transform*>(model + 0x148) = xform;   // B.3.1 bridge
-            *reinterpret_cast<float*>(model + 0x168) = yaw;
-            reinterpret_cast<Graphics::Geometry*>(model + 0x28)
-                ->SetTransform(*reinterpret_cast<const Math::Transform*>(model + 0x148));   // B.3.5 bridge
+            // LEFT: ModelComponent::transform / meshInstance are raw storage (H5, W0 header)
+            Math::Transform* modelTransform = reinterpret_cast<Math::Transform*>(m->transform);
+            *modelTransform = xform;
+            m->yaw = yaw;
+            reinterpret_cast<Graphics::Geometry*>(m->meshInstance)->SetTransform(*modelTransform);   // B.3.5 bridge
         }
     }
 
@@ -422,7 +414,7 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
     // both A* legs must be 100% water or the pathfinder and the renderer disagree.
     // Water mask 0x380 = the boat pathfinder's own terrain class set.
 
-    SetAnim(boat, 1);
+    SetAnim(this, 1);
     return 1;
 }
 
@@ -436,23 +428,21 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
 //     MOVSS [..],XMM6 (XORPS'd)             -> z component = 0
 // so it takes Length((0,0,0)) and enters the re-pick branch only when that is < 0.
 // It never is. Whatever the source line meant to subtract, the shipped binary does
-// nothing here, and the real waypoint advance lives in 0x1400463d0 (Steer_63d0) which
+// nothing here, and the real waypoint advance lives in 0x1400463d0 (Steer) which
 // the per-frame trans30 handler calls. Reproducing the fold rather than "fixing" it
 // keeps the port honest — and it matters, because a repaired version would advance the
 // waypoint twice per frame.
-extern "C" char BoatCtrl_State0_Update(void* selfV) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
+char BoatComponent::State0Update() {
     const Math::Vector3 zero(0.0f, 0.0f, 0.0f);
     const float len = zero.Length().v;
     if (len < 0.0f) {                     // never taken; kept for shape
-        const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
-        const int idx = NextRoutePoint(boat, wp);
+        const int idx = NextRoutePoint(this, &waypoint);
         if (idx >= 0) {
-            *reinterpret_cast<int32_t*>(boat + 0x70) = idx;
-            const float* pt = *reinterpret_cast<const float**>(boat + 0x60) + (size_t)idx * 3;
-            *reinterpret_cast<float*>(boat + 0x50) = pt[0];
-            *reinterpret_cast<float*>(boat + 0x54) = pt[1];
-            *reinterpret_cast<float*>(boat + 0x58) = 0.0f;
+            routeIndex = idx;
+            const Math::Vector3& pt = route[idx];
+            waypoint.x = pt.x;
+            waypoint.y = pt.y;
+            waypoint.z = 0.0f;
         }
     }
     return 1;
@@ -468,23 +458,17 @@ extern "C" char BoatCtrl_State0_Update(void* selfV) {
 // The arrival test is Dot(d, d) — the SQUARED distance — against 0x1401721f4, which is
 // therefore a squared radius. Retail calls Vector3::Dot with the same vector for both
 // operands (RCX and R8 are the same address at 0x14004532c).
-extern "C" char BoatCtrl_State0_Tick(void* selfV, void* smV, void* /*time*/) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-
-    if (!Steer_63d0(boat)) {
-        DeleteBoatEntity(boat);
-        PostEventToDestination(boat, 0xb);
+char BoatComponent::State0Tick(void* smV) {
+    if (!Steer()) {
+        DeleteBoatEntity(this);
+        PostEventToDestination(this, 0xb);
     }
 
-    const Vec3* mp = ModelPos(boat);
+    const Math::Vector3* mp = ModelPos(model.Get());
     if (!mp) return 1;
-    const Vec3* dockPos = reinterpret_cast<const Vec3*>(boat + 0x40);
+    const Math::Vector3* dockPos = &dockPosition;
     const Math::Vector3 d(mp->x - dockPos->x, mp->y - dockPos->y, mp->z - dockPos->z);
     const float dist2 = d.Dot(d).v;
-
-    // Bring-up trace: reports OUTCOMES, not intent — the first call proves trans30 is
-    // dispatched at all, and the periodic lines show whether the hull is actually moving
-    // (model pos changing) as opposed to being steered at a target it never approaches.
 
     if (kApproach > dist2) {
         RequestTransition(smV, 1);
@@ -495,8 +479,8 @@ extern "C" char BoatCtrl_State0_Tick(void* selfV, void* smV, void* /*time*/) {
 // ============================================================
 // state 1 ENTER — 0x140045150
 // ============================================================
-extern "C" char BoatCtrl_State1_Enter(void* selfV) {
-    SetAnim(reinterpret_cast<uintptr_t>(selfV), 2);
+char BoatComponent::State1Enter() {
+    SetAnim(this, 2);
     return 1;
 }
 
@@ -514,12 +498,10 @@ extern "C" char BoatCtrl_State1_Enter(void* selfV) {
 // The clamp is read off the branch pair at 0x14005008d/0x14005009a: `COMISS XMM6,max;
 // JA take-max` then `COMISS min,XMM6; JBE keep`, i.e. high clamp to 0x14017214c and low
 // clamp to 0x14017210c. Ghidra renders this as nonsense involving `DAT_1401720ec * 0.0`.
-extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-
-    const Vec3* mp = ModelPos(boat);
+char BoatComponent::State1Tick(void* smV) {
+    const Math::Vector3* mp = ModelPos(model.Get());
     if (!mp) return 1;
-    const Vec3* dockPos = reinterpret_cast<const Vec3*>(boat + 0x40);
+    const Math::Vector3* dockPos = &dockPosition;
     const Math::Vector3 d(dockPos->x - mp->x, dockPos->y - mp->y, dockPos->z - mp->z);
     Math::Scalar distS;
     const Math::Vector3 dir = d.Normalize(distS);
@@ -534,10 +516,9 @@ extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
     if (speed > hi) speed = hi;
     else if (lo > speed) speed = lo;
 
-    void* chr = *reinterpret_cast<void**>(boat + 0x38);
+    CharacterComponent* chr = character.Get();
     if (chr)
-        BoatCtrl_DriveToward(chr, reinterpret_cast<const float*>(boat + 0x40),
-                             *reinterpret_cast<const float*>(boat + 0x4c), speed);
+        chr->DriveToward(&dockPosition, dockHeading, speed);
 
     if (kDockRange > dist) {
         RequestTransition(smV, 2);
@@ -552,20 +533,19 @@ extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
 // This is the single instruction sequence the whole of layer 3 was waiting on: the trade
 // machine's state 0x12 has no per-frame handler at all, only events 9 and 0xb, so until
 // something raised 9 it could never reach 0x13 and run the manifest / buy-and-pay code.
-extern "C" char BoatCtrl_State2_Enter(void* selfV) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-
+char BoatComponent::State2Enter() {
     // 0x140044f8d/f95: XMM2 = 0x14017214c, XMM3 = 0 (XORPS), EDX = 0.
-    if (void* chr = *reinterpret_cast<void**>(boat + 0x38))
+    if (CharacterComponent* chr = character.Get())
         ActMv_SetAnimation_a1f0(chr, 0, kSpeedBase, 0.0f);
 
-    PostEventToDestination(boat, 9);
+    PostEventToDestination(this, 9);
     return 1;
 }
 
 // ============================================================
 // state 2 EVENT 0 — 0x140044f00      (the post releases the merchant)
 // ============================================================
+// Reads nothing of its receiver: stays free (B1).
 extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
     RequestTransition(smV, 3);
     return 1;
@@ -574,6 +554,7 @@ extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
 // ============================================================
 // EVENT 1 on states 0/1/2 — 0x140045670   (abort: go straight to GONE)
 // ============================================================
+// Reads nothing of its receiver: stays free (B1).
 extern "C" char BoatCtrl_Event1_Abort(void* /*selfV*/, void* smV) {
     RequestTransition(smV, 4);
     return 1;
@@ -582,9 +563,8 @@ extern "C" char BoatCtrl_Event1_Abort(void* /*selfV*/, void* smV) {
 // ============================================================
 // state 3 ENTER — 0x140044ec0
 // ============================================================
-extern "C" char BoatCtrl_State3_Enter(void* selfV) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-    if (void* chr = *reinterpret_cast<void**>(boat + 0x38)) {
+char BoatComponent::State3Enter() {
+    if (CharacterComponent* chr = character.Get()) {
         const float f = kSpeedBase;
         ActMv_SetAnimation_a1f0(chr, 3, f, f);
     }
@@ -605,14 +585,12 @@ extern "C" char BoatCtrl_State3_Enter(void* selfV) {
 // CURRENT WAYPOINT, not between the boat and anything. That reads oddly until you note
 // the departing leg re-walks the same route array: the waypoint marching away from the
 // dock is exactly the progress signal.
-extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-
-    const Vec3* mp = ModelPos(boat);
+char BoatComponent::State3Tick(void* smV) {
+    const Math::Vector3* mp = ModelPos(model.Get());
     if (!mp) return 1;
-    const Vec3 modelPos = *mp;
-    const Vec3* dockPos = reinterpret_cast<const Vec3*>(boat + 0x40);
-    const Vec3* wp      = reinterpret_cast<const Vec3*>(boat + 0x50);
+    const Math::Vector3 modelPos = *mp;
+    const Math::Vector3* dockPos = &dockPosition;
+    const Math::Vector3* wp      = &waypoint;
 
     const Math::Vector3 fromDock(dockPos->x - wp->x, dockPos->y - wp->y, dockPos->z - wp->z);
     const float gate = fromDock.Length().v;
@@ -621,14 +599,14 @@ extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
     Math::Scalar dropLen;
     const Math::Vector3 dir = toWp.Normalize(dropLen);
 
-    if (const uintptr_t chr = *reinterpret_cast<uintptr_t*>(boat + 0x38)) {
-        *reinterpret_cast<uint8_t*>(chr + 0x28) = 0;
+    if (CharacterComponent* chr = character.Get()) {
+        chr->field_0x28 = false;
         const Math::Vector3 flat(dir.x, dir.y, 0.0f);
         const Math::Vector3 nrm = flat.Normalize();
-        *reinterpret_cast<float*>(chr + 0x2c) = nrm.x;
-        *reinterpret_cast<float*>(chr + 0x30) = nrm.y;
-        *reinterpret_cast<float*>(chr + 0x34) = nrm.z;
-        *reinterpret_cast<float*>(chr + 0x3c) = dir.Heading();
+        chr->field_0x2C.x = nrm.x;
+        chr->field_0x2C.y = nrm.y;
+        chr->field_0x2C.z = nrm.z;
+        chr->field_0x3C = dir.Heading();
     }
 
     if (kArrive > gate) {
@@ -640,8 +618,8 @@ extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
 // ============================================================
 // state 4 ENTER — 0x140044cd0
 // ============================================================
-extern "C" char BoatCtrl_State4_Enter(void* selfV) {
-    SetAnim(reinterpret_cast<uintptr_t>(selfV), 1);
+char BoatComponent::State4Enter() {
+    SetAnim(this, 1);
     return 1;
 }
 
@@ -650,15 +628,30 @@ extern "C" char BoatCtrl_State4_Enter(void* selfV) {
 // ============================================================
 // Same steer call, same "route exhausted" test — but no event to the post, because by
 // state 4 the post has already released this merchant. Just delete the entity.
-extern "C" char BoatCtrl_State4_Tick(void* selfV, void* /*smV*/, void* /*time*/) {
-    const uintptr_t boat = reinterpret_cast<uintptr_t>(selfV);
-    if (!Steer_63d0(boat)) DeleteBoatEntity(boat);
+char BoatComponent::State4Tick() {
+    if (!Steer()) DeleteBoatEntity(this);
     return 1;
 }
 
 // ============================================================
 // Table build — replicates 0x1400468a0
 // ============================================================
+// The table (controller_state_table.h) holds plain handler addresses called as
+// handler([node+0x18], sm, time): [node+0x18] is the controller's back-pointer,
+// this component, so each entry is a one-line adapter that calls the member.
+namespace {
+char BoatState0Enter(BoatComponent* b)               { return b->State0Enter(); }    // 53f0
+char BoatState0Update(BoatComponent* b)              { return b->State0Update(); }   // 5190
+char BoatState0Tick(BoatComponent* b, void* sm)      { return b->State0Tick(sm); }   // 5250
+char BoatState1Enter(BoatComponent* b)               { return b->State1Enter(); }    // 5150
+char BoatState1Tick(BoatComponent* b, void* sm)      { return b->State1Tick(sm); }   // 4ff0
+char BoatState2Enter(BoatComponent* b)               { return b->State2Enter(); }    // 4f70
+char BoatState3Enter(BoatComponent* b)               { return b->State3Enter(); }    // 4ec0
+char BoatState3Tick(BoatComponent* b, void* sm)      { return b->State3Tick(sm); }   // 4d10
+char BoatState4Enter(BoatComponent* b)               { return b->State4Enter(); }    // 4cd0
+char BoatState4Tick(BoatComponent* b)                { return b->State4Tick(); }     // 4c40
+}  // namespace
+
 // Idempotent: the installer runs once per component instance.
 extern "C" void BoatCtrl_PopulateTable() {
     ::ControllerLive::StateTable& t = BoatDispatch::table;
@@ -668,18 +661,18 @@ extern "C" void BoatCtrl_PopulateTable() {
     // TableRegisterState(t, id, enter, trans30, trans38, update)
     // state 0 — outbound along the route
     TableRegisterState(t, 0,
-        reinterpret_cast<void*>(&BoatCtrl_State0_Enter),    // 53f0
-        reinterpret_cast<void*>(&BoatCtrl_State0_Tick),     // 5250  (R9)
-        nullptr,                                            // retail: always 0
-        reinterpret_cast<void*>(&BoatCtrl_State0_Update));  // 5190  (R8)
+        reinterpret_cast<void*>(&BoatState0Enter),    // 53f0
+        reinterpret_cast<void*>(&BoatState0Tick),     // 5250  (R9)
+        nullptr,                                      // retail: always 0
+        reinterpret_cast<void*>(&BoatState0Update));  // 5190  (R8)
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 4, nullptr);
     TableAddEvent(t, 1, reinterpret_cast<void*>(&BoatCtrl_Event1_Abort));   // 5670
 
     // state 1 — final approach
     TableRegisterState(t, 1,
-        reinterpret_cast<void*>(&BoatCtrl_State1_Enter),    // 5150
-        reinterpret_cast<void*>(&BoatCtrl_State1_Tick),     // 4ff0
+        reinterpret_cast<void*>(&BoatState1Enter),    // 5150
+        reinterpret_cast<void*>(&BoatState1Tick),     // 4ff0
         nullptr, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 4, nullptr);
@@ -687,7 +680,7 @@ extern "C" void BoatCtrl_PopulateTable() {
 
     // state 2 — docked (posts event 9 to the post on entry)
     TableRegisterState(t, 2,
-        reinterpret_cast<void*>(&BoatCtrl_State2_Enter),    // 4f70
+        reinterpret_cast<void*>(&BoatState2Enter),    // 4f70
         nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 4, nullptr);
@@ -696,15 +689,15 @@ extern "C" void BoatCtrl_PopulateTable() {
 
     // state 3 — departing
     TableRegisterState(t, 3,
-        reinterpret_cast<void*>(&BoatCtrl_State3_Enter),    // 4ec0
-        reinterpret_cast<void*>(&BoatCtrl_State3_Tick),     // 4d10
+        reinterpret_cast<void*>(&BoatState3Enter),    // 4ec0
+        reinterpret_cast<void*>(&BoatState3Tick),     // 4d10
         nullptr, nullptr);
     TableAddTransition(t, 4, nullptr);
 
     // state 4 — gone
     TableRegisterState(t, 4,
-        reinterpret_cast<void*>(&BoatCtrl_State4_Enter),    // 4cd0
-        reinterpret_cast<void*>(&BoatCtrl_State4_Tick),     // 4c40
+        reinterpret_cast<void*>(&BoatState4Enter),    // 4cd0
+        reinterpret_cast<void*>(&BoatState4Tick),     // 4c40
         nullptr, nullptr);
 
     std::fprintf(stderr, "[BoatCtrl] table built: %d states (0..4)\n", t.count);
