@@ -171,45 +171,6 @@ int32_t Sprite::Height() const {
 
 }  // namespace UI
 
-// ---- the doors --------------------------------------------------------------
-
-// ??0Sprite@UI@@QEAA@XZ — retail 0x18011ba10. Writes +0x00 and +0x08 only.
-void* RtUi_Sprite_DefaultCtor(void* retval) {
-    new (retval) UI::Sprite();
-    return retval;
-}
-
-// ??0Sprite@UI@@QEAA@V?$ExternalPtr@…@AEBVString@System@@@Z — retail 0x18011b9c0.
-void* RtUi_Sprite_CtorByName(void* retval, uint64_t spriteSheetPtr, const void* spriteName) {
-    new (retval) UI::Sprite(
-        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheetPtr)),  // B.3.6 bridge
-        *static_cast<const System::String*>(spriteName));
-    return retval;
-}
-
-// ??0Sprite@UI@@QEAA@V?$ExternalPtr@…@H@Z — retail 0x18011ba30.
-void* RtUi_Sprite_CtorByIndex(void* retval, void* spriteSheetPtr, int index) {
-    new (retval) UI::Sprite(
-        Object::ExternalPtr<UI::SpriteSheet>(static_cast<UI::SpriteSheet*>(spriteSheetPtr)),
-        index);
-    return retval;
-}
-
-// ?IsValid@Sprite@UI@@QEBA_NXZ — retail 0x180030c40.
-bool RtUi_Sprite_IsValid(const void* spriteRaw) {
-    return reinterpret_cast<const UI::Sprite*>(spriteRaw)->UI::Sprite::IsValid();  // B.3.6 bridge
-}
-
-// ?Width@Sprite@UI@@QEBAHXZ — retail 0x180030bf0.
-int RtUi_Sprite_Width(const void* spriteRaw) {
-    return reinterpret_cast<const UI::Sprite*>(spriteRaw)->UI::Sprite::Width();  // B.3.6 bridge
-}
-
-// ?Height@Sprite@UI@@QEBAHXZ — retail 0x180030c10.
-int RtUi_Sprite_Height(const void* spriteRaw) {
-    return reinterpret_cast<const UI::Sprite*>(spriteRaw)->UI::Sprite::Height();  // B.3.6 bridge
-}
-
 // ============================================================================
 // UI::SpriteSheet — the non-virtual members (ENDGAME B.3.6 block D). The class
 // is runtime/types/ui/SpriteSheet.h; its slots are in spritesheet_vtable.cpp.
@@ -304,45 +265,6 @@ void SpriteSheet::AddSpriteInfo(const System::String& name, const System::String
 
 }  // namespace UI
 
-// ---- the doors ---------------------------------------------------------------
-int RtUi_SpriteSheet_GetSpriteCount(const void* selfRaw) {
-    return reinterpret_cast<const UI::SpriteSheet*>(selfRaw)               // B.3.6 bridge
-        ->UI::SpriteSheet::GetSpriteCount();
-}
-
-int RtUi_SpriteSheet_GetSpriteIndexFromName(const void* selfRaw, const void* nameStrPtr) {
-    return reinterpret_cast<const UI::SpriteSheet*>(selfRaw)               // B.3.6 bridge
-        ->UI::SpriteSheet::GetSpriteIndexFromName(
-            *static_cast<const System::String*>(nameStrPtr));
-}
-
-// RETSLOT: `(this, ret, index)`, the slot handed back in RAX. Getting that arity
-// wrong is reference_hidden_retslot_wild_write.md's failure mode.
-void* RtUi_SpriteSheet_GetSpriteNameFromIndex(const void* selfRaw, void* retval, int index) {
-    new (retval) System::String(
-        reinterpret_cast<const UI::SpriteSheet*>(selfRaw)                  // B.3.6 bridge
-            ->UI::SpriteSheet::GetSpriteNameFromIndex(index));
-    return retval;                             // retail returns the slot in RAX
-}
-
-void RtUi_SpriteSheet_GetUVs(const void* selfRaw, int index, float* u0, float* v0, float* u1, float* v1) {
-    reinterpret_cast<const UI::SpriteSheet*>(selfRaw)                      // B.3.6 bridge
-        ->UI::SpriteSheet::GetUVs(index, *u0, *v0, *u1, *v1);
-}
-
-void RtUi_SpriteSheet_SetSpriteInfo(void* selfRaw, int index, int width, int height,
-                                     float u0, float v0, float u1, float v1) {
-    reinterpret_cast<UI::SpriteSheet*>(selfRaw)                            // B.3.6 bridge
-        ->UI::SpriteSheet::SetSpriteInfo(index, width, height, u0, v0, u1, v1);
-}
-
-void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const void* groupStrPtr,
-                                     int x, int y, int width, int height) {
-    reinterpret_cast<UI::SpriteSheet*>(selfRaw)                            // B.3.6 bridge
-        ->UI::SpriteSheet::AddSpriteInfo(*static_cast<const System::String*>(nameStrPtr),
-                                         *static_cast<const System::String*>(groupStrPtr),
-                                         x, y, width, height);
-}
 // ============================================================================
 // UI::StringTable — the non-virtual members (ENDGAME B.3.6 block D). The class
 // is runtime/types/ui/StringTable.h; its slots are in stringtable_factory.cpp.
@@ -436,31 +358,6 @@ System::String StringTable::GetText(const System::String& name) const {
 
 }  // namespace UI
 
-// ---- the doors ---------------------------------------------------------------
-// GetText x2 are hidden-retslot: `(this, ret, …)`, the member's prvalue is
-// placement-new'd into the caller's slot. THE DOOR DECIDES THE OVERLOAD.
-
-int RtUi_StringTable_GetCount(const void* selfRaw) {
-    return reinterpret_cast<const UI::StringTable*>(selfRaw)->UI::StringTable::GetCount();  // B.3.6 bridge
-}
-
-void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int index) {
-    new (retval) System::String(
-        reinterpret_cast<const UI::StringTable*>(selfRaw)->UI::StringTable::GetText(index));  // B.3.6 bridge
-    return retval;
-}
-
-int RtUi_StringTable_GetIndexFromName(const void* selfRaw, const void* keyRaw) {
-    return reinterpret_cast<const UI::StringTable*>(selfRaw)                    // B.3.6 bridge
-        ->UI::StringTable::GetIndexFromName(*static_cast<const System::String*>(keyRaw));
-}
-
-void* RtUi_StringTable_GetText_Key(const void* selfRaw, void* retval, const void* keyStrPtr) {
-    new (retval) System::String(
-        reinterpret_cast<const UI::StringTable*>(selfRaw)                       // B.3.6 bridge
-            ->UI::StringTable::GetText(*static_cast<const System::String*>(keyStrPtr)));
-    return retval;
-}
 // ============================================================================
 // UI::String — ENDGAME B.3.6 block D (RULE B6-10); retail's `UI::String`,
 // the tree's `UIString`. Same shape as UI::Sprite above.
@@ -502,42 +399,6 @@ String::operator System::String() const {
 }  // namespace UI
 
 // ---- the doors --------------------------------------------------------------
-
-// ??0String@UI@@QEAA@XZ — retail 0x18011da40.
-void* RtUi_UIString_DefaultCtor(void* retval) {
-    new (retval) UI::String();
-    return retval;
-}
-
-// ??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z
-// — retail 0x18011da60.
-void* RtUi_UIString_CtorByName(void* retval, uint64_t stringTablePtr, const void* nameStrPtr) {
-    new (retval) UI::String(
-        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTablePtr)),  // B.3.6 bridge
-        *static_cast<const System::String*>(nameStrPtr));
-    return retval;
-}
-
-// ??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z — retail 0x18011da20.
-void* RtUi_UIString_CtorByIndex(void* retval, uint64_t stringTablePtr, int index) {
-    new (retval) UI::String(
-        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTablePtr)),  // B.3.6 bridge
-        index);
-    return retval;
-}
-
-// ?IsValid@String@UI@@QEBA_NXZ — retail 0x180035060.
-bool RtUi_UIString_IsValid(const void* selfRaw) {
-    return reinterpret_cast<const UI::String*>(selfRaw)->UI::String::IsValid();  // B.3.6 bridge
-}
-
-// ??BString@UI@@QEBA?AV0System@@XZ — retail 0x180035020. RETSLOT: the door
-// placement-news the member's prvalue into the caller's slot (B5-12 as amended).
-void* RtUi_UIString_ToSystemString(const void* selfRaw, void* retval) {
-    new (retval) System::String(
-        reinterpret_cast<const UI::String*>(selfRaw)->UI::String::operator System::String());  // B.3.6 bridge
-    return retval;
-}
 
 // WAVE 9 LANE UIF — runtime/src/ui/spritecontext.cpp.
 
@@ -651,11 +512,3 @@ void SpriteSheet::Set(int32_t p1, int32_t p2, const System::String& p3,
 }
 
 }  // namespace UI
-
-extern "C" void RtUi_SpriteSheet_Set(void* selfRaw, int p1, int p2,
-                                     const void* p3Raw, const void* p4Raw,
-                                     bool p5) {
-    reinterpret_cast<UI::SpriteSheet*>(selfRaw)                            // B.3.6 bridge
-        ->UI::SpriteSheet::Set(p1, p2, *static_cast<const System::String*>(p3Raw),
-                               *static_cast<const System::String*>(p4Raw), p5);
-}

@@ -369,14 +369,6 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
 
 }  // namespace UI
 
-// The door. ENDGAME B.3.6 block D: the five RT_EXPORT_ONCE doors this body
-// used to call on the context (SetScissor, Flush, FlushDeferredFonts,
-// AddSprite, AddLine) are SpriteContext member calls now.
-extern "C" void RtUi_SpriteCapture_Draw(const void* selfv, void* ctxv, int ox, int oy) {
-    reinterpret_cast<const UI::SpriteCapture*>(selfv)                       // B.3.6 bridge
-        ->UI::SpriteCapture::Draw(*static_cast<UI::SpriteContext*>(ctxv), ox, oy);
-}
-
 // ============================================================================
 // The `_entries` element serialize walk   0x18004c0d0   (batch D1)
 // ============================================================================

@@ -375,90 +375,9 @@ inline void MemFreeStatic(void* p) {
 // UI::DialogInstance — const accessors
 // ============================================================================
 
-// ?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
-// Retail 0x180045580, ordinal 2875. Profile build: same one-liner.
-//   MOV RAX,[RCX+0x50] / MOV [RDX],RAX / MOV RAX,RDX / RET
-void** RtUiDialogInstance_GetRoot(DialogInstance* self, void** out) {
-    new (out) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(self)         // B.3.6 bridge
-            ->UI::DialogInstance::GetRoot());
-    return out;
-}
-
-// ?GetController@DialogInstance@UI@@QEBA?AV?$InternalPtr@VDialogController@UI@@@Object@@I@Z
-// Retail 0x180113320, ordinal 2513.
-//
-// THE PARAMETER IS A TYPE ID, NOT AN INDEX. The loop walks every controller
-// and compares the argument against the controller's OWN type id — vtable slot
-// +0x10, which runtime/types/object/Internal.h independently names
-// kInternalVtblType. engine_funcs.h:496 calls it `index`; that comment is
-// corrected as part of this lane (PLAN §6 step 8).
-//
-// Note the two counters retail keeps: EBX is the element index used for the
-// final re-index, RDI is the same thing pre-multiplied by 8. Reproduced with
-// one index because the two can never disagree.
-void** RtUiDialogInstance_GetController(DialogInstance* self, void** out, uint32_t typeId) {
-    new (out) Object::InternalPtr<UI::DialogController>(
-        reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
-            ->UI::DialogInstance::GetController(typeId));
-    return out;
-}
-
-// ?FindElement@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z
-// Retail 0x180114c70, ordinal 2346. A forwarder:
-//   MOV RCX,[RCX+0x50] / CALL Element::FindElement / MOV RAX,RBX / RET
-// NO NULL CHECK on _root — retail has none, and CLAUDE.md's rule applies: a
-// guard here would not restore the behaviour, it would skip it. If this faults
-// the dialog has no root element and THAT is the bug.
-void** RtUiDialogInstance_FindElement(DialogInstance* self, void** out, const void* name) {
-    new (out) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(self)         // B.3.6 bridge
-            ->UI::DialogInstance::FindElement(*static_cast<const System::String*>(name)));
-    return out;
-}
-
-// ?FindElementType@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z
-// Retail 0x1801140c0, ordinal 2348. The same forwarder against
-// Element::FindElementType. Same absent null check, same reason.
-void** RtUiDialogInstance_FindElementType(DialogInstance* self, void** out, uint32_t typeId) {
-    new (out) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(self)         // B.3.6 bridge
-            ->UI::DialogInstance::FindElementType(typeId));
-    return out;
-}
-
 // ============================================================================
 // UI::DialogInstance — self-contained mutators
 // ============================================================================
-
-// ?SetFlagsOnOff@DialogInstance@UI@@QEAAXII@Z
-// Retail 0x180114690, ordinal 3882. Five instructions:
-//   OR EDX,[RCX+0x20] / NOT R8D / AND EDX,R8D / MOV [RCX+0x20],EDX / RET
-// so the ON mask is applied FIRST and the OFF mask wins any overlap.
-void RtUiDialogInstance_SetFlagsOnOff(DialogInstance* self, uint32_t on, uint32_t off) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::SetFlagsOnOff(on, off);
-}
-
-// ?StopTimer@DialogInstance@UI@@QEAAXH@Z
-// Retail 0x180113730, ordinal 4111. Transcribed from the DISASSEMBLY, not the
-// decompiled C, because two details do not survive decompilation:
-//
-//   * `MOVSXD R10,[RCX+0x70]` — the count is sign-extended to 64 bits and the
-//     search loop's bound is that 64-bit value, while the SHIFT loop below
-//     re-reads the 32-bit field each iteration.
-//   * `ADD RCX,RDX / JZ` at 0x180113786 — the "is the entry non-null" test is
-//     against `data + index*0x18`, i.e. against the SUM, not against `data`.
-//     It can only be taken when the array pointer plus the offset is exactly
-//     zero. Reproduced literally; it is retail's own dead-ish guard and
-//     removing it would change nothing except our fidelity to the shipped code.
-//
-// The shift is a copy-down of three qwords (0x18 bytes) per entry, and the
-// count is decremented ONCE at the end — not per entry.
-void RtUiDialogInstance_StopTimer(DialogInstance* self, int32_t id) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::StopTimer(id);
-}
 
 // ============================================================================
 // UI::DialogInstance — the three controller-dispatch virtuals
@@ -492,134 +411,13 @@ void RtUiDialogInstance_StopTimer(DialogInstance* self, int32_t id) {
 // Contains(x,y,UserInterface*). DialogInstance's OWN vtable slots (this file's
 // tables above / tooltipdialog.cpp): 0x30 OnUpdateLayout(), 0x38 OnUpdate(time).
 
-// ?Contains@DialogInstance@UI@@QEBA_NHH@Z — retail 0x180114820, ord 1861.
-// Disassembly: flags bit2 -> always false; flags bit3 -> TAIL CALL into the
-// root Element's own Contains (vtable slot 9/+0x48) with (x, y, this->_ui);
-// otherwise a plain inclusive bounds test against the root's layout rect.
-bool RtUiDialogInstance_Contains(const DialogInstance* self, int32_t x, int32_t y) {
-    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
-        ->UI::DialogInstance::Contains(x, y);
-}
-
-// ?GetMouseCursorIndex@DialogInstance@UI@@QEBAHV?$InternalPtr@VElement@UI@@@Object@@HH@Z
-// Retail 0x180114010, ord 2798. Recurses depth-first over `elem`'s children
-// (Element::_children, +0xa0/+0xa8), keeping `elem`'s own cursor index
-// (+0x3c) as the default and overriding it with whichever child's bounds
-// [left,right) x [top,bottom) (+0x68/+0x70/+0x6c/+0x74, HALF-open, unlike
-// Contains' inclusive test above) contains (x,y) and whose flags low two bits
-// (+0x34 & 3) are both clear.
-extern "C" int32_t RtUiDialogInstance_GetMouseCursorIndex(const DialogInstance* self,
-                                               void** elementPtr,
-                                               int32_t x, int32_t y) {
-    // The InternalPtr arrives BY ADDRESS (MSVC's by-value class ABI); the
-    // member takes it by value (a non-virtual member: GCC at both ends).
-    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
-        ->UI::DialogInstance::GetMouseCursorIndex(
-            Object::InternalPtr<UI::Element>(static_cast<UI::Element*>(*elementPtr)), x, y);
-}
-
-// ?ComputeLayout@DialogInstance@UI@@QEAAXHHHH@Z — retail 0x180113d90, ord 1760.
-// Byte-faithful transcription of the disassembly (the decompiled C mis-shapes
-// the tail-call jump table into a 4-arg call and drops the 5th, stack-passed
-// argument -- see 0x180113fac's "WARNING: Could not recover jumptable").
-//   1. this->OnUpdateLayout() (own vtable slot 6/+0x30) — no extra args.
-//   2. root->ComputeSize(); clamp (x,y) into [0,w)x[0,h) against the root's
-//      computed size plus this->_upperLeftX/Y, then place the root inside the
-//      remaining space per its alignment (Element::_alignment, 9-way grid)
-//      and fill flags (Element::_flags bits 2/3).
-//   3. root->ComputeSize() AGAIN (retail calls it twice; reproduced even
-//      though it looks redundant -- byte-faithful first). Compute the root's
-//      total extent (layout size + padding, floored to its min size), and if
-//      flags bit 4 or 5 (0x30) is set, walk to the OUTERMOST ancestor via
-//      Element::_parent (+0x98) and re-derive width/height from
-//      Video::Device::_singleton's screen size times that ancestor's
-//      DialogInstance's UserInterface::_uiScale (bit 5 -> width, bit 4 ->
-//      height).
-//   4. TAIL-CALL root->ComputeLayout(x, y, x+w, y+h) (vtable slot 5/+0x28).
-void RtUiDialogInstance_ComputeLayout(DialogInstance* self, int32_t x, int32_t y,
-                                      int32_t w, int32_t h) {
-    // B.3.6: the body is UI::DialogInstance::ComputeLayout (bottom of file).
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::ComputeLayout(x, y, w, h);
-}
-
-// ?Update@DialogInstance@UI@@QEAAXAEBVTime@System@@PEAVUserInterface@2@AEAUUpdateState@Element@2@@Z
-// Retail 0x180113980, ord 4483. Read from the disassembly for one detail the
-// decompiler drops: the `OnUpdate` vtable call at +0x38 implicitly reuses RDX
-// (this function's own `time` argument, never reloaded between entry and the
-// call), i.e. it is `this->OnUpdate(time)`, not a bare `this->OnUpdate()`.
-//
-//   1. If ANY child dialog has flags bit1 set, skip straight to step 5 (the
-//      recursive per-child Update sweep) -- this dialog's own frame is
-//      suppressed while a child claims that bit.
-//   2. Otherwise: this->OnUpdate(time) (own vtable slot 7/+0x38). Then, unless
-//      UpdateState bytes +7/+8/+9 say a drag/other block is active: if
-//      UpdateState+0x20 is clear and Contains(mouseX,mouseY), accumulate hover
-//      time once the mouse has settled at the same position, arming
-//      `_hovering` past the tooltip delay; otherwise (some blocking bit set)
-//      and `_hovering` was set, clear it and push a "hover end" event (type
-//      0x11) via `UI::UserInterface::_events`.
-//   3. Walk `_timers` (stride 0x18): decrement the LIVE countdown at +0x08 —
-//      *** CORRECTION: DialogInstance.h's own comment calls +0x08 "_period,
-//      the reload value" and +0x00 "_remaining". This body proves the
-//      opposite is the live field: it is +0x08 that ticks down and fires the
-//      event, so +0x08 is the countdown and +0x00 the untouched reload copy.
-//      Both start equal (StartTimer writes the same value into both), which
-//      is why no consumer noticed until this port read the decrement. ***
-//      When a timer's countdown reaches <=0, push a "timer fired" event
-//      (type 0x13, data = the timer's +0x10 id) and swap the remaining
-//      timers down by one slot (retail does NOT re-visit the slot the swap
-//      just filled; reproduced as-is).
-//   4. root->Update(time, ui, &topDialog, updateState) (Element vtable slot
-//      7/+0x38, five arguments -- the decompiler shows only four; the fifth,
-//      UpdateState*, is passed on the stack, read from 0x180113ad9's
-//      `MOV [RSP+0x20],RDI`). Then, unless flags bit2 (mouse passthrough) is
-//      set -- in which case the whole hit block is SKIPPED: if flags bit3 is set, ask the root's own
-//      Contains(x,y,_dialog) [Element vtable slot 9]; otherwise a bounds test
-//      against the root's layout rect. On a miss, skip straight to step 5.
-//      On a hit, push up to three UI events (types 8/9/0xa) for
-//      UpdateState's own event bits (+1,+3,+2) with the mouse position
-//      (UpdateState+0x18) as payload, then clear those UpdateState bits and
-//      set UpdateState+0x20.
-//   5. Recurse: call this same function on every child dialog in `_children`.
-void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
-                               void* ui, uint8_t* updateState) {
-    // B.3.6: the body is UI::DialogInstance::Update (bottom of file).
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::Update(*static_cast<const System::Time*>(time),
-                                     static_cast<UI::UserInterface*>(ui), updateState);
-}
-
 // ============================================================================
 // UI::Dialog
 // ============================================================================
 
-// ?GetTemplate@Dialog@UI@@QEBA?AV?$ExternalPtr@VElementDescription@UI@@@Object@@H@Z
-// Retail 0x1800388b0, ordinal 2956. Six instructions, no bounds check:
-//   MOV RAX,[RCX+0x68] / MOVSXD RCX,R8D / MOV RCX,[RAX+RCX*8] /
-//   MOV RAX,RDX / MOV [RDX],RCX / RET
-// The MOVSXD is why `index` is int32_t and not uint32_t
-// (reference_ghidra_c_output_vs_disassembly.md: Ghidra prints a MOVSXD as a
-// zero extension). A negative index reads BEFORE the array, faithfully.
-void** RtUiDialog_GetTemplate(Dialog* self, void** out, int32_t index) {
-    new (out) Object::ExternalPtr<UI::ElementDescription>(
-        reinterpret_cast<const UI::Dialog*>(self)           // B.3.6 bridge
-            ->UI::Dialog::GetTemplate(index));
-    return out;
-}
-
 // ============================================================================
 // UI::DialogController
 // ============================================================================
-
-// ?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
-// Retail 0x18003b700, ordinal 2508. The same one-liner as GetRoot, at +0x20.
-void** RtUiDialogController_GetContainer(DialogController* self, void** out) {
-    new (out) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogController*>(self)       // B.3.6 bridge
-            ->UI::DialogController::GetContainer());
-    return out;
-}
 
 // ??1DialogController@UI@@UEAA@XZ (0x1800cd2f0): the door is RETIRED (ENDGAME
 // B.3.9 UI-D) — its only reader was the RT_DELDTOR row of the retired minted
@@ -830,136 +628,7 @@ void** RtUiDialogController_GetContainer(DialogController* self, void** out) {
 // WAVE 9 LANE UIC — the two rows WAVE9_LANE_UIF.md declined at 8 and 11
 // ============================================================================
 
-// ---- ?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@
-//      V?$ExternalPtr@VElementDescription@UI@@@4@@Z   0x180112ed0  ord 1888 ---
-//
-// "Make an element from this description, unless I have a NAMED TEMPLATE that
-// overrides it." The named-template table at Dialog+0x58/+0x60 is already
-// recovered — runtime/types/ui/Dialog.h's `DialogNamedTemplate`, stride 0x10,
-// {ExternalPtr +0x00, String +0x08} — and this body is what pinned it.
-//
-// ABI. `QEBA` returning a class: RCX = this, RDX = the HIDDEN RETURN SLOT,
-// R8 = the `ExternalPtr<ElementDescription>` argument, and RAX = RDX at the RET
-// (`MOV RAX,RSI` at 0x180113089). engine/funcs/engine_funcs.h:689 already
-// declares the three-argument shape, and counting arguments against the mangled
-// name agrees: one by-value pointer-sized argument plus the return slot
-// (reference_hidden_retslot_wild_write.md — an fn_* typedef that omits the slot
-// is a wild write that still returns the right answer).
-//
-// R8 IS THE DESCRIPTION ITSELF, not a pointer to an ExternalPtr. It is handed
-// straight to `?GetPath@External@Object@@` as `this` at 0x180112f08, and in the
-// no-match path it is re-loaded from its home slot and its VTABLE is read
-// (`MOV RAX,[RCX]` at 0x180113054). An 8-byte ExternalPtr has neither.
-//
-// THE VIRTUAL CALL AT 0x18011305d IS SLOT 8, AND SLOT 8 IS PURE.
-// WAVE9_LANE_UIF.md declined this row on that call being "a virtual dispatch on
-// an ElementDescription-family vtable whose slot 8 I did not identify". It is
-// identified, out of a table rather than by guessing:
-// standalone/rt_data_mint_tables.inc's `??_7ElementDescription@UI@@6B@`
-// (kVSlots20, 9 slots) has index 8 — byte offset 0x40 — as `RT_MINT_PURECALL`
-// at 0x18007ec28. So it is PURE VIRTUAL on the base and is only ever reached on
-// a CONCRETE derived description's vtable. That matters for exactly one reason:
-// **porting this body introduces no new cutover symbol.** Retail's own body
-// dispatches through the same derived slot; whether that slot is satisfied is
-// the description class's problem either way, unchanged by this port.
-// Its shape from the call site is
-// `virtual InternalPtr<Element> <slot8>(const Dialog*) const`.
-//
-// THE INLINE STRCMP IS TRANSCRIBED, NOT SUMMARISED. It is guarded by a length
-// compare on `String`'s length dword at [p-8] and only then walks bytes, with
-// the result formed as `(signed char)ours[i] - (signed char)theirs[i]`.
-// reference_uniform_population_is_not_a_verification.md is about precisely this
-// construct: a ported inline strcmp that returned 0 for every distinct pair
-// sharing a first byte survived four waves of oracles because the population it
-// was tested on had thirteen copies of one value. The loop below is written out
-// instruction for instruction for that reason, and §"Oracle" in
-// docs/runtime_port/WAVE9_LANE_UIC.md records what the population actually was.
-//
-// The five direct callees are all ours: `GetPath` (0x180006250) and
-// `GetPathIdentifer` (0x1800c6610) are ported and registered under both doors
-// (runtime/src/object/external.cpp:739/763, runtime/src/system/filename.cpp:
-// 450/477), and `MemFree` (0x1800c7ad0, three call sites) is lane E's.
-//
-// ORACLE: replay, and it is sound here. The body is a PURE READ of the Dialog
-// and of the description — the only writes are to the caller's return slot and
-// to two String refcounts it also releases before returning, so it is net
-// refcount-neutral. Running it twice and comparing the two returned pointers
-// therefore compares the whole decision: which table entry matched, and which
-// object the virtual was dispatched on. What it does NOT isolate is the virtual
-// itself: if slot 8 has a side effect, the replay runs it twice. That is stated
-// rather than hidden, and it is the same disposition every replayed Wave 7
-// dialog getter carries.
-void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
-    // B.3.6: the body is UI::Dialog::CreateElement (bottom of file); RETSLOT
-    // door — placement-new the member's prvalue into the caller's slot.
-    new (ret) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<const UI::Dialog*>(self)           // B.3.6 bridge
-            ->UI::Dialog::CreateElement(Object::ExternalPtr<UI::ElementDescription>(
-                static_cast<UI::ElementDescription*>(desc))));
-    return ret;
-}
-
 // ---- ?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z  0x180114a60  ord 3997 ----
-//
-// Move a dialog so its top-left sits at (x, y), CLAMPED so the dialog stays on
-// screen, and translate the whole element tree by the delta.
-//
-// `_N` is the third argument: when true, (x, y) arrive in UNSCALED units and
-// are multiplied by the UI scale, exactly as the screen size is
-// (0x180114abc..0x180114ada). engine/funcs/engine_funcs.h:2453 already spells
-// the four-argument signature.
-//
-// THE UI SCALE IS `_ui->[+0xdc]`, reached as `DialogInstance+0x10` then +0xdc.
-// runtime/types/ui/Element.h documents the same float from the other side
-// ("?GetPaddedSize@ reaches the UI scale through the ROOT element's copy of
-// this: root->_dialogParent[+0x10][+0xdc]"), which is independent
-// corroboration of the offset rather than the evidence for it.
-//
-// `Video::Device::_singleton` (0x1801fe7a8) supplies the screen size at +4/+8.
-// It is a MINTED data slot (standalone/rt_data_mint_tables.inc:1565), so it is
-// satisfied at cutover; reached here through the same RT_DATA_SLOT door
-// runtime/src/ui/userinterface.cpp uses, not by a raw address read.
-//
-// THE VIRTUAL AT 0x180114ae8 IS ELEMENT SLOT 4 = ComputeSize, which
-// runtime/types/ui/Element.h names and standalone/rt_data_mint_tables.inc's
-// `??_7Element@UI@@6B@` (kVSlots19) confirms is RT_MINT_PURECALL on the base —
-// so, as with CreateElement's slot 8, it is a pure virtual dispatched on the
-// concrete element and introduces NO new cutover symbol.
-//
-// FLAG BITS 0x20 / 0x10 at Element+0x34 mean "this dialog is as wide / as tall
-// as the screen". Retail reaches the scale for that branch through the LAST
-// element on the parent chain (`while (e->_parent) e = e->_parent;` at
-// 0x180114b24..0x180114b36) and then that root's `_dialogParent`, NOT through
-// `self->_ui` — a different route to what is normally the same float.
-// Reproduced as written; collapsing the two would be an assumption.
-//
-// THE CLAMP ORDER IS LOAD-BEARING and is transcribed rather than rewritten:
-// x is floored at 0 FIRST (CMOVS at 0x180114b8a) and the overflow test
-// `w + x > screenW` then uses the ALREADY-FLOORED x (LEA at 0x180114b90). A
-// rewrite that clamps both ends symmetrically gives a different answer whenever
-// a dialog is wider than the screen.
-//
-// The trailing translate open-codes AdjustUpperLeft's first border iteration
-// inline on the root and then calls it for the border chain. Reproduced in that
-// shape.
-//
-// ORACLE: NONE, and none is manufactured. Replay is not a comparison here but a
-// SECOND MOVE: the body's own guard is `delta != 0`, so a second call with the
-// same (x, y) finds delta == 0 and does nothing at all — a replay would compare
-// "the dialog is where we put it" against itself and report green for a port
-// that put it in the wrong place. (That is the same shape as `Audio::Scene::
-// Pause`'s early return, recorded in WAVE9.md's holdback table.) What DOES
-// carry verification is the enabling port underneath it: every translate this
-// body performs goes through `?AdjustUpperLeft@Element@UI@@`, whose
-// invertibility oracle in runtime/src/ui/element.cpp checks the whole subtree.
-// The did-work split here is whether the delta was non-zero, so a zero on
-// every call means the population never moved a dialog.
-void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
-                                     bool scaled) {
-    // B.3.6: the body is UI::DialogInstance::SetUpperLeft (bottom of file).
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::SetUpperLeft(x, y, scaled);
-}
 
 // ============================================================================
 // WAVE 10 LANE UIF
@@ -1098,13 +767,6 @@ constexpr size_t kDialogTempSize = 0x88;
 // the oracle was retired; removed with the body move.)
 
 } // namespace
-
-extern "C" void RtUiElementDescription_CreateInstance(const ElementDescription* self,
-                                                      void** elemPtr) {
-    reinterpret_cast<const UI::ElementDescription*>(self)                 // B.3.6 bridge
-        ->UI::ElementDescription::CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr));
-}
 
 // ############################################################################
 // ENDGAME B.3.6 block B — THE MEMBER BODIES.

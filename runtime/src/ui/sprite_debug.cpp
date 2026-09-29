@@ -69,22 +69,6 @@ void* Debug_Sprite_DefaultCtor(void* retval) {
 // Original: 0x18011ba30
 // Direct construction with known sprite index (no name lookup)
 // ============================================================
-void* Debug_Sprite_CtorByIndex(void* retval, void* spriteSheet, int index) {
-#ifdef _DEBUG
-    printf("[Sprite::CtorByIndex] sheet=%p index=%d retval=%p\n",
-           spriteSheet, index, retval);
-#endif
-    new (retval) UI::Sprite(
-        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
-        index);
-    void* result = retval;
-#ifdef _DEBUG
-    Sprite* s = (Sprite*)retval;
-    printf("[Sprite::CtorByIndex] done -> sheet=%p index=%d valid=%s\n",
-           s->spriteSheet, s->spriteIndex, s->IsValid() ? "true" : "false");
-#endif
-    return result;
-}
 
 // ============================================================
 // Debug wrapper for UI::Sprite::IsValid()

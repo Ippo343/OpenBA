@@ -218,20 +218,6 @@ namespace {
 }  // namespace RtUiDlgV
 
 // ============================================================================
-// ENDGAME B.3.9 block UI-D: the slot doors that stood here (Type, TypeName,
-// GetFileVersion, Destruct, Construct, Reconstruct, and Serialize below) and
-// their `[DlgVtbl] ATTENDANCE` counters are RETIRED with the minted
-// `??_7Dialog@UI@@6B@`, their only reader. Construct is `::new (this)
-// Dialog()` — the same stores the in-place copy at 0x180038750 inlines (its
-// null test sat in the door; a virtual call always has a `this`). ONE door
-// stays: `?TypeId@Dialog@UI@@SAIXZ` (0x180038430) is a static export, not a
-// slot.
-// ============================================================================
-extern "C" uint32_t RtUiDialog_TypeId() {
-    return UI::Dialog::TypeId();
-}
-
-// ============================================================================
 // slot 5  ?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z   0x1801130c0
 // ============================================================================
 //

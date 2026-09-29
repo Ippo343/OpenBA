@@ -162,12 +162,6 @@ inline void SetI32(void* p, size_t off, int32_t v) {
 inline void* Ptr(const void* p, size_t off) {
     void* v; __builtin_memcpy(&v, static_cast<const uint8_t*>(p) + off, sizeof v); return v;
 }
-inline void SetPtr(void* p, size_t off, void* v) {
-    __builtin_memcpy(static_cast<uint8_t*>(p) + off, &v, sizeof v);
-}
-inline uint8_t U8(const void* p, size_t off) {
-    return *(static_cast<const uint8_t*>(p) + off);
-}
 
 // `?SetNeedsSizeCalc@Element@UI@@` (0x180035470) INLINED. Every mutator in this
 // file carries its own copy, exactly as retail does:
@@ -912,60 +906,3 @@ char EditElement::SelectCharacter(int32_t key) const {   // `this` is never read
 }
 
 }  // namespace UI
-
-// ============================================================================
-// THE DOORS — each keeps its registered name and address and delegates with a
-// QUALIFIED non-virtual call. None of these retail bodies tests `this` for
-// null, so no door does.
-// ============================================================================
-extern "C" int32_t RtUi_TableElement_GetRowHeight(void* self, int32_t row) {
-    return reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::GetRowHeight(row);   // B.3.6 bridge
-}
-extern "C" int32_t RtUi_TableElement_GetColumnWidth(void* self, int32_t col) {
-    return reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::GetColumnWidth(col);   // B.3.6 bridge
-}
-extern "C" void RtUi_SliderElement_UpdateNumber(void* self) {
-    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::UpdateNumber();   // B.3.6 bridge
-}
-// The by-value InternalPtr<Element> arrives as the ADDRESS of the caller's copy
-// (RULE B6-11): `MOV RAX,[RDX]` at entry in both AddItem bodies.
-extern "C" void RtUi_RibbonElement_AddItem(void* self, void** itemPtr) {
-    reinterpret_cast<UI::RibbonElement*>(self)->UI::RibbonElement::AddItem(   // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(itemPtr));   // B.3.6 bridge
-}
-extern "C" void RtUi_ListElement_AddItem(void* self, void** itemPtr, void* userData) {
-    reinterpret_cast<UI::ListElement*>(self)->UI::ListElement::AddItem(   // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(itemPtr), userData);   // B.3.6 bridge
-}
-// `AEAVSpriteContext@2@` — a reference, a bare pointer in RDX.
-extern "C" void RtUi_ListElement_DrawHighlight(const void* self, void* ctx,
-                                               int32_t index, uint32_t color) {
-    reinterpret_cast<const UI::ListElement*>(self)->UI::ListElement::DrawHighlight(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), index, color);
-}
-extern "C" void RtUi_ScrollElement_GetBarLayout(const void* self,
-                                                int32_t* left, int32_t* top,
-                                                int32_t* right, int32_t* bottom) {
-    reinterpret_cast<const UI::ScrollElement*>(self)->UI::ScrollElement::GetBarLayout(   // B.3.6 bridge
-        *left, *top, *right, *bottom);
-}
-// The non-virtual applier: (this, InternalPtr<TextElement> by hidden pointer,
-// const Dialog*). THE DOOR DECIDES THE OVERLOAD — the qualified name finds both
-// CreateInstance members and the InternalPtr<TextElement>* argument selects
-// this one, not slot 8.
-extern "C" void RtUi_TextDescription_CreateInstance(const void* self, void** elemPtr,
-                                                    const void* dialog) {
-    reinterpret_cast<const UI::TextDescription*>(self)->UI::TextDescription::CreateInstance(   // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::TextElement>*>(elemPtr),   // B.3.6 bridge
-        static_cast<const UI::Dialog*>(dialog));
-}
-extern "C" void RtUi_LayoutElement_GetChildLayout(void* self, int32_t index, int32_t pass,
-                                                  int32_t left, int32_t top,
-                                                  int32_t right, int32_t bottom,
-                                                  bool applyOffsets) {
-    reinterpret_cast<UI::LayoutElement*>(self)->UI::LayoutElement::GetChildLayout(   // B.3.6 bridge
-        index, pass, left, top, right, bottom, applyOffsets);
-}
-extern "C" char RtUi_EditElement_SelectCharacter(const void* self, int32_t key) {
-    return reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::SelectCharacter(key);   // B.3.6 bridge
-}

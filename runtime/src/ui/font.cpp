@@ -785,39 +785,6 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
 }  // namespace UI
 
 // ============================================================================
-// THE DOORS. ENDGAME B.3.9 UI-D: the eight slot doors and the ??1 door are
-// gone -- their only reader was the minted `??_7Font@UI@@6B@` (and, for ??1,
-// its RT_DELDTOR row). The three metric exports are NOT slots and keep their
-// doors (reached by name/address); each delegates with a QUALIFIED
-// non-virtual call. None of the three is a retslot (the banner).
-// ============================================================================
-extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* text,
-                                               int32_t count, int32_t startX,
-                                               int32_t baseY, int32_t maxWidth,
-                                               int32_t line, void* layoutv) {
-    return reinterpret_cast<const UI::Font*>(selfv)                                  // B.3.6 bridge
-        ->UI::Font::ComputeLineLayout(text, count, startX, baseY, maxWidth, line,
-                                      static_cast<UI::Font::Layout*>(layoutv));
-}
-extern "C" int32_t RtUi_Font_ComputeCharacterPosition(const void* selfv,
-                                                      const void* strRefv,
-                                                      int32_t count) {
-    return reinterpret_cast<const UI::Font*>(selfv)                                  // B.3.6 bridge
-        ->UI::Font::ComputeCharacterPosition(*static_cast<const System::String*>(strRefv), count);
-}
-extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* strRefv,
-                                              bool multiline, int32_t wrapWidth,
-                                              int32_t maxWidth, int32_t justify,
-                                              int32_t* outWidth, int32_t* outHeight,
-                                              void* layoutv) {
-    reinterpret_cast<const UI::Font*>(selfv)                                         // B.3.6 bridge
-        ->UI::Font::ComputeStringLayout(*static_cast<const System::String*>(strRefv),
-                                        multiline, wrapWidth, maxWidth, justify,
-                                        *outWidth, *outHeight,
-                                        static_cast<UI::Font::Layout*>(layoutv));
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::Font's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@Font@UI@@ (0x1801fab68): name "Font", parent

@@ -49,25 +49,13 @@
 // class, beside the constructor that is its only caller.
 // ============================================================================
 
-#include <cstdint>
-
-#include "../../types/system/MemoryAllocator.h"
-
-
-// ---------------------------------------------------------------------------
-// The one body.
-// ---------------------------------------------------------------------------
-// B3R W0-A0: the allocator's static, called directly (it went through
-// rtcoll::MemFree -> rtcoll::DoorFree(), which answers this same function).
-extern "C" void RtUi_ClassOperatorDelete(void* p) {
-    System::MemoryAllocator::MemFree(p);    // if (p) { Enter; Free; Leave; }
-}
-
 // B3R W0-A0 (R3): the 60 rows that registered RtUi_ClassOperatorDelete under these
 // names and addresses had NO reader by name or by address anywhere in the tree
 // (code lines, `ull`-suffixed and padded spellings included), so they are
-// deleted. The body stays (a body is provenance, R3); the table survives as the
-// record of what was read from the shipped DLL's export directory:
+// deleted. B.4 R0 deleted the body too (`RtUi_ClassOperatorDelete`, a one-line
+// door onto `System::MemoryAllocator::MemFree`, which had no caller); the table
+// survives as the record of what was read from the shipped DLL's export
+// directory:
 //
 //   0x180036760  ??3AnimatedImageDescription@UI@@SAXPEAX@Z
 //   0x180036b40  ??3AnimatedImageElement@UI@@SAXPEAX@Z

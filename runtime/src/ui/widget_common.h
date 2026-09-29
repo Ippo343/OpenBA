@@ -51,8 +51,6 @@ inline void*&    PTR(void* p, int off) { return *reinterpret_cast<void**>(B(p, o
 
 inline int32_t  I32c(const void* p, int off) { return *reinterpret_cast<const int32_t*>(B(p, off)); }
 inline uint32_t U32c(const void* p, int off) { return *reinterpret_cast<const uint32_t*>(B(p, off)); }
-inline float    F32c(const void* p, int off) { return *reinterpret_cast<const float*>(B(p, off)); }
-inline uint8_t  U8c (const void* p, int off) { return *reinterpret_cast<const uint8_t*>(B(p, off)); }
 inline void*    PTRc(const void* p, int off) { return *reinterpret_cast<void* const*>(B(p, off)); }
 
 // ---------------------------------------------------------------------------
@@ -162,24 +160,6 @@ inline void ReleaseStringLocal(void** slot) {
     if (p == nullptr) return;
     int32_t* rc = reinterpret_cast<int32_t*>(p - 4);
     if (--*rc == 0) { *slot = p - 8; MemFree(*slot); }
-}
-
-// Assign a System::String body pointer into a field with retail's identity
-// guard (`if (old != new)`), releasing the old and acquiring the new.
-inline void AssignStringField(void* self, int off, void* nv) {
-    uint8_t* old = static_cast<uint8_t*>(PTR(self, off));
-    if (old == nv) return;
-    if (old != nullptr) {
-        int32_t* rc = reinterpret_cast<int32_t*>(old - 4);
-        if (--*rc == 0) {
-            PTR(self, off) = static_cast<uint8_t*>(PTR(self, off)) - 8;
-            MemFree(PTR(self, off));
-        } else {
-            PTR(self, off) = nullptr;
-        }
-    }
-    PTR(self, off) = nv;
-    if (nv != nullptr) ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(nv) - 4);
 }
 
 // ---------------------------------------------------------------------------

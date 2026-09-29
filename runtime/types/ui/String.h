@@ -94,13 +94,3 @@ using UIString = UI::String;
 // Bytes a diff oracle may compare between two UI::String objects -- pad0C is
 // never written, same trap as Sprite.h's kSpriteWrittenBytes.
 inline constexpr size_t kUIStringWrittenBytes = 0x0C;
-
-// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
-// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
-// address in its trailing comment and read through the registry today. It is
-// declared here, copied from its definition (linkage, namespace, types), so the
-// reader can call it by name. Nothing calls it through this declaration yet.
-
-// ---- ui/sprite.cpp
-void* RtUi_UIString_ToSystemString(const void* selfRaw, void* retval);  // 0x180035020
-// ==== end B3R W0-P0c ====

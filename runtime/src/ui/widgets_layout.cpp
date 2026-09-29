@@ -128,8 +128,6 @@ void RtGraphArrayClear(void* arrayHeader) {
     rtcoll::RtColl_ArrayDtorElem_1800416d0(arrayHeader);
 }
 
-namespace TAE = UI::TabElementOffsets;
-
 // ---- ?UpdateContainers@TabElement@UI@@AEAAXXZ  0x1800d9710 -----------------
 //
 // WAVE 10. Lane E declined this in Wave 7 ("visibility recomputation, not
@@ -175,57 +173,6 @@ namespace TAE = UI::TabElementOffsets;
 // retail RE-READS child+0x34 after storing the new flag word, so the child
 // ends at (nf | 0x8000000), not (old | 0x8000000). The predictor gets this
 // right only because it reads back through the sink (RtSink::ReadU32).
-
-static void TabElement_UpdateContainers_Body(void* self, RtSink& out) {
-    const int32_t tabCount = *reinterpret_cast<int32_t*>(B(self, 0xc0));
-    if (tabCount <= 0) return;
-
-    const int32_t active = *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab));
-    uint8_t* const data  = *reinterpret_cast<uint8_t**>(B(self, TAE::kChildrenData));
-
-    for (int32_t i = 0; i < tabCount; i++) {
-        uint8_t* const child =
-            *reinterpret_cast<uint8_t**>(data + 0x20 + static_cast<size_t>(i) * 0x10);
-
-        const uint32_t old = out.ReadU32(child + 0x34);
-        const uint32_t nf  = (i == active) ? (old & 0xfffffffeu)   // show
-                                           : (old | 1u);           // hide
-        out.U32(child + 0x34, nf, "child._flags");
-
-        // Guarded dirty propagation, starting AT THE CHILD (0x1800d9770 ORs
-        // [RCX+0x34] before RCX walks to +0x98).
-        if (((nf ^ old) & 1u) != 0) {
-            for (uint8_t* p = child; p != nullptr;
-                 p = *reinterpret_cast<uint8_t**>(p + 0x98)) {
-                out.U32(p + 0x34, out.ReadU32(p + 0x34) | 0x8000000u,
-                        "ancestor._flags |= dirty");
-            }
-        }
-
-        // The active tab's container is resized to fill the tab body. This is
-        // an indirect call through the child's own vtable slot +0x28; in
-        // predict mode RtSink::Call suppresses it and the caller declares the
-        // footprint it would have written with Exclude().
-        if (i == active) {
-            const int32_t pad = *reinterpret_cast<int32_t*>(B(self, 0xc4));
-            const int32_t a1  = pad + *reinterpret_cast<int32_t*>(B(self, 0x68));
-            const int32_t a2  = *reinterpret_cast<int32_t*>(B(self, 0xfc))
-                              + pad * 2
-                              + *reinterpret_cast<int32_t*>(B(self, 0x6c));
-            const int32_t a3  = *reinterpret_cast<int32_t*>(B(self, 0x70)) - pad;
-            const int32_t a4  = *reinterpret_cast<int32_t*>(B(self, 0x74)) - pad;
-
-            // The recorder is handed the slot's address, taken from the member
-            // (never a literal index); the call itself is by name.
-            const void* const slot =
-                Object::SlotAddressOf(child, &UI::Element::ComputeLayout);
-            if (out.Call("Element::ComputeLayout (resize container)",
-                         slot, a1, a2, a3, a4)) {
-                reinterpret_cast<UI::Element*>(child)->ComputeLayout(a1, a2, a3, a4);
-            }
-        }
-    }
-}
 
 // The body that lived here was a second copy of ?UpdateContainers@TabElement@UI@@
 // (0x1800d9710); runtime/src/ui/tabelement.cpp owns it since vtable batch 4

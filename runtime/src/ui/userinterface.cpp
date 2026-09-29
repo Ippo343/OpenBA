@@ -360,10 +360,6 @@ int32_t UI::UserInterface::GetAddDialogCount() const {
     return _addDialogs._size;
 }
 
-extern "C" int RtUi_UserInterface_GetAddDialogCount(const UserInterface* self) {
-    return self->UI::UserInterface::GetAddDialogCount();
-}
-
 // ---- ?GetFirstDialog@…  0x180031150 ord 2670 -------------------------------
 //   MOV RAX,[RCX] / MOV [RDX],RAX / MOV RAX,RDX / RET
 // Returns a `LinkedList<…>::Iterator` by value. The iterator is EIGHT BYTES
@@ -398,10 +394,6 @@ bool UI::UserInterface::PausesGame() const {
         if (dlg->_flags & 1u) return true;          // DialogInstance +0x20 bit 0
     }
     return false;
-}
-
-extern "C" bool RtUi_UserInterface_PausesGame(const UserInterface* self) {
-    return self->UI::UserInterface::PausesGame();
 }
 
 // ---- ?GetFirstContainedDialog@…@QEBA…HH@Z  0x18011fb00 ord 2669 ------------
@@ -472,10 +464,6 @@ void UI::UserInterface::EndSpriteCapture() {
     _spriteCapture = nullptr;
 }
 
-extern "C" void RtUi_UserInterface_EndSpriteCapture(UserInterface* self) {
-    self->UI::UserInterface::EndSpriteCapture();
-}
-
 // ---- ?SetFullscreenFade@…@QEAAX_NI0@Z  0x18011f500 ord 3887 ----------------
 // Three arguments and two completely different behaviours, which the parameter
 // names hide: `immediate` (the third arg, R9B) does not mean "reverse".
@@ -501,11 +489,6 @@ void UI::UserInterface::SetFullscreenFade(bool fadeIn, uint32_t color, bool imme
     }
 }
 
-extern "C" void RtUi_UserInterface_SetFullscreenFade(
-        UserInterface* self, bool fadeIn, uint32_t color, bool immediate) {
-    self->UI::UserInterface::SetFullscreenFade(fadeIn, color, immediate);
-}
-
 // ---- ?SetFullscreenFadeSprite@…@QEAAXVSprite@2@@Z  0x18011f560 ord 3888 ----
 //   MOV RAX,[RDX] / MOV [RCX+0xe0],RAX / MOV RAX,[RDX+0x8] / MOV [RCX+0xe8],RAX
 // A `UI::Sprite` is 0x10 bytes and is copied WHOLE, including the four padding
@@ -519,11 +502,6 @@ extern "C" void RtUi_UserInterface_SetFullscreenFade(
 // that code/Game/Dialog/optionsdialog.cpp's ApplyKeyMapToUI_Impl builds.
 void UI::UserInterface::SetFullscreenFadeSprite(const Sprite* sprite) {
     std::memcpy(&_fadeSpriteSheet, sprite, 0x10);
-}
-
-extern "C" void RtUi_UserInterface_SetFullscreenFadeSprite(
-        UserInterface* self, const void* sprite) {
-    self->UI::UserInterface::SetFullscreenFadeSprite(static_cast<const UI::Sprite*>(sprite));
 }
 
 // ============================================================================
@@ -644,35 +622,6 @@ extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr)
 }
 
 // ---- ?Play@UserInterface@UI@@QEAAXH@Z  0x1801223d0  ord 3418 ---------------
-//
-// Queues UI sound `id` on the audio scene. Retail, read at 0x1801223d0:
-//
-//     MOVSXD RAX,EDX / MOV RAX,[RCX+RAX*8+0x98]   ; _sounds[id]
-//     TEST RAX,RAX / JZ ret                        ; nothing bound -> nothing
-//     MOV R10,[RCX+0x90]                           ; _audioScene
-//     TEST R10,R10 / JZ ret
-//     MOV R11,[R10+0x10]                           ; the channel table
-//     XORPS XMM0,XMM0 / DIVSD XMM0,[0x1801fe728] / CVTTSD2SI RCX,XMM0
-//
-// THE DIVISION IS REPRODUCED, NOT FOLDED TO ZERO. It is `Timer::SecondsToTicks`
-// inlined on the constant 0.0 — `0.0 / _secondsPerTick` — and it is only zero
-// while `_secondsPerTick` is non-zero. Were that slot ever to read 0.0, retail
-// computes 0.0/0.0 = NaN and CVTTSD2SI yields the x86 "integer indefinite"
-// INT64_MIN, which is a very different value to write into a channel. A literal
-// `0` here would hide that difference; the divide keeps our body wrong in
-// exactly the same way retail is wrong, which is the whole contract.
-//
-// The scan walks 0x100 slots of stride 0x70 for one whose handle word at +0x68
-// is zero. The slot base is `table + i*0x70`: the loop cursor starts at
-// `table+0x68` and steps 0x70, and the found-branch RECOMPUTES the base from
-// the index (`IMUL RDX,RDX,0x70 / ADD RDX,R11`) — which is what pins +0x68 as a
-// FIELD of the slot rather than as the slot's start. A full table falls out of
-// the loop into a bare RET, so retail silently drops the sound; reproduced.
-//
-// The stamped handle is `(index * 2) | (++scene->counter << 9)`.
-extern "C" void RtUi_UserInterface_Play(UserInterface* self, int id) {
-    self->UI::UserInterface::Play(id);
-}
 
 void UI::UserInterface::Play(int32_t id) {
 
@@ -706,35 +655,6 @@ void UI::UserInterface::Play(int32_t id) {
 
 }
 
-// ---- ?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z
-//      0x1801225f0  ord 3865  ------------------------------------------------
-//
-//     MOV [RCX+0xd0],RDX          ; _cursor = cursor   (UNCONDITIONALLY)
-//     TEST RDX,RDX / JZ ret
-//     MOV RAX,[0x1801fe7a8]       ; Video::Device::_singleton
-//     MOV R9D,[RDX+0x24]          ; cursor hotspot Y
-//     MOV RCX,[RAX+0x100]         ; the device's backend object
-//     MOV RAX,[RDX+0x28]          ; the cursor's SpriteSheet
-//     MOV R8,[RAX+0x30]
-//     MOV R10,[RCX]               ; backend vtable
-//     MOV RAX,[R8+0x50]
-//     MOV R8D,[RDX+0x20]          ; cursor hotspot X
-//     MOV RDX,[RAX+0x8]           ; the image
-//     CALL [R10+0x40]             ; slot 8
-//
-// THE ARGUMENT IS THE CURSOR ITSELF, not a pointer to an ExternalPtr. RDX is
-// stored whole into `_cursor` and then dereferenced at +0x20/+0x24/+0x28 in the
-// same basic block; an 8-byte ExternalPtr has no +0x24. Counting arguments
-// against the mangled name agrees: one by-value pointer-sized argument and no
-// hidden return slot, so RCX/RDX is the whole signature.
-//
-// The store to `_cursor` happens BEFORE the null test and is therefore NOT
-// inside the guard — a null cursor still clears the field. Reproduced.
-extern "C" void RtUi_UserInterface_SetCursor(UserInterface* self, void* cursor) {
-    self->UI::UserInterface::SetCursor(
-        Object::ExternalPtr<UI::Cursor>(static_cast<UI::Cursor*>(cursor)));
-}
-
 void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
     // `ExternalPtr` by value is the bare pointer in RDX (banner, B6-11).
     void* const cursor = cursorPtr.Get();
@@ -761,36 +681,6 @@ void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
 }
 
 // ---- ?EnableCursor@UserInterface@UI@@QEAAX_N@Z  0x180122580  ord 2293 ------
-//
-//     MOV [RCX+0xd8],DL           ; _cursorEnabled = enable   (a BYTE store)
-//     MOV RAX,[0x1801fe768]       ; Input::Configuration::_singleton
-//     MOV R10,[0x1801fc678]       ; Application::_singleton
-//     MOVZX ECX,DL / XOR EDX,EDX
-//     CMP [RAX+0xa],DL / CMOVNZ ECX,EDX   ; config+0xa forces the cursor OFF
-//     CMP [R10+0x10],CL / JZ ret          ; already in that state -> nothing
-//     MOV RAX,[R10+0x18]          ; the keyed handler tree
-//     MOV [R10+0x10],CL           ; publish the new state
-//     ... descent keyed on the int at node+0x00 against 0x20 ...
-//     JMP [RAX+0x8]  (window, 0x20, 0, 0)
-//
-// READ THE COMPARE CHAIN CAREFULLY — `JA` then `JNC` is not the obvious pair.
-// `CMP ECX,0x20 / JA` takes the key>0x20 arm to node+0x18. The fallthrough
-// `JNC` fires only when CF is clear AND the JA did not take, i.e. key == 0x20,
-// and it EXITS the loop; only key < 0x20 reaches `MOV RAX,[RAX+0x20]`. Reading
-// that `JNC` as "not less" and merging it with the `JA` arm descends the wrong
-// child and returns a wrong handler — which would fail as a wrong CALL target,
-// not as a visible UI bug.
-//
-// `CMOVNZ ECX,EDX` reads a BYTE at config+0xa: any non-zero value there pins the
-// PUBLISHED state to 0 regardless of the caller's argument, while
-// `_cursorEnabled` still records what the caller asked for. That asymmetry is
-// retail's and is preserved.
-//
-// NO ORACLE, and this is the one where a replay is actively misleading — see
-// the lane banner.
-extern "C" void RtUi_UserInterface_EnableCursor(UserInterface* self, bool enable) {
-    self->UI::UserInterface::EnableCursor(enable);
-}
 
 void UI::UserInterface::EnableCursor(bool enable) {
 
@@ -827,83 +717,6 @@ void UI::UserInterface::EnableCursor(bool enable) {
 // ============================================================================
 // Registration
 // ============================================================================
-// Every port is registered TWICE, under its mangled name and under its retail
-// address. The address form is not defensive housekeeping here — it is load
-// bearing. Three of this class's call sites resolve a mangled name the DLL does
-// not export and reach the function through `ResolveAddr(Module::Runtime, …)`
-// instead (see THE THREE PHANTOM NAMES above), and `ResolveAddr` consults the
-// runtime address registry FIRST (standalone/resolve_standalone.cpp). A
-// name-only registration would leave such a site on the DLL while the census
-// counted the port as landed — the exact both-doors failure Wave 5 lane D hit.
-//
-// Ordering is already right: RuntimePortInit() runs before AddressRegistryInit()
-// and EngineFuncsInit() (standalone/main.cpp:1614 / :1626 / :1631), both of
-// which cache these pointers, so a port registered here is what they cache.
-// EVERY NAME BELOW IS SPELLED AS A STRING LITERAL, on purpose and at the cost
-// of repeating the k* constants above. tools/runtime_census.py matches
-// `RegisterRuntimeExport("<literal>"` and CANNOT see through a named constant:
-// that blind spot hid six live Wave 3 ports for a whole wave and made the
-// Object census read 21/41 when it was 27/41
-// (reference_census_cannot_see_nonliteral_registrations.md). The census is
-// this project's authority over any agent's "N ported" claim, including this
-// lane's, so it has to be able to read this function.
-// ---- ?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@
-//      VDialogInstance@UI@@@Object@@@Z   0x180120440  ord 1672 --------------
-//                                                        WAVE 9 LANE UIC
-//
-// Move one dialog to the FRONT of `_dialogs`, which per
-// runtime/types/ui/UserInterface.h means the TAIL: `_head` is the backmost
-// dialog and `_tail` the frontmost. Retail, all of it:
-//
-//     18012044a  MOV R8,[RCX+0x8]      ; tail
-//     18012044e  MOV RAX,[RDX]         ; the DialogInstance* inside the ptr
-//     180120457  CMP [R8],RAX / JZ ret ; already frontmost -> nothing
-//     18012045c  CALL 0x18007a010      ; LinkedList::Remove(this, ptr)
-//     180120464  MOV RDX,RDI / CALL 0x180032750   ; node = NewNode(ptr)
-//     180120469  MOV RCX,[RBX+0x8]     ; tail, RE-READ after the Remove
-//     180120472  MOV [RCX+0x10],RAX    ; tail->next = node
-//     18012047a  MOV [RAX+0x8],RCX     ; node->prev = tail
-//     18012047e  INC [RBX+0x10] / MOV [RBX+0x8],RAX
-//   (tail was null:)
-//     180120490  INC [RBX+0x10] / MOV [RBX],RAX / MOV [RBX+0x8],RAX
-//
-// THE FIRST DEREFERENCE IS UNGUARDED AND RETAIL MEANS IT. `CMP [R8],RAX` reads
-// through the tail with no null test, so calling this on an EMPTY dialog list
-// faults. That is load-bearing (it asserts the caller already added the
-// dialog), and CLAUDE.md's rule applies: a guard here would skip the behaviour
-// rather than restore it. Reproduced. Note the irony that the code four
-// instructions later DOES test the tail — because `Remove` may have emptied the
-// list in between.
-//
-// THE ARGUMENT IS A POINTER TO AN InternalPtr, NOT THE DIALOG. `MOV RAX,[RDX]`
-// dereferences it once, and both callees take the same `&value`.
-// engine/funcs/engine_funcs.h:2460 already declares the two-argument shape, and
-// counting arguments against the mangled name agrees (one by-value class
-// argument, no hidden return slot).
-//
-// `CALL 0x180032750` IS MADE WITHOUT SETTING RCX. That is not a transcription
-// gap: the callee never reads RCX (`XOR ECX,ECX` destroys it before any use),
-// which is settled by reading the callee, and is written up at the port in
-// runtime/src/collection/linkedlist.cpp.
-//
-// Both internals are ported by this lane and registered by address, so this
-// body introduces no unsatisfied callee: 0x18007a010 and 0x180032750 (and
-// 0x180009c30 underneath them) are all in linkedlist.cpp.
-//
-// ORACLE: NONE, and none is manufactured. The body is a list mutation whose own
-// first test is "already frontmost" — so a replay finds the dialog already at
-// the tail and does NOTHING, comparing an untouched list against itself and
-// reporting green for any port at all. That is the same false-pass shape
-// WAVE9.md records for `Audio::Scene::Pause`'s early return. Ships as a
-// no-oracle port with NO call into the shipped body. `worked=` reports whether
-// the call actually relinked, so `worked=0` everywhere means the population
-// never brought a background dialog forward and the port is UNEXERCISED, not
-// verified (reference_uncalled_port_is_not_verified.md).
-extern "C" void RtUi_UserInterface_BringDialogToFront(UserInterface* self,
-                                                      void** dlgPtr) {
-    self->UI::UserInterface::BringDialogToFront(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
-}
 
 void UI::UserInterface::BringDialogToFront(Object::InternalPtr<DialogInstance>* dialog) {
 
@@ -1298,19 +1111,6 @@ int32_t UI::UserInterface::GetMouseCursorIndex(int32_t x, int32_t y) const {
     return 0;
 }
 
-extern "C" void RtUi_UserInterface_CleanRemovedDialogs(UserInterface* self) {
-    self->UI::UserInterface::CleanRemovedDialogs();
-}
-
-extern "C" void RtUi_UserInterface_UpdateEvents(UserInterface* self) {
-    self->UI::UserInterface::UpdateEvents();
-}
-
-extern "C" int32_t RtUi_UserInterface_GetMouseCursorIndex(const UserInterface* self,
-                                                          int32_t x, int32_t y) {
-    return self->UI::UserInterface::GetMouseCursorIndex(x, y);
-}
-
 extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
     // `worked` is the only thing a LIVE call can report: there is no comparison
     // to make against a destructor that runs once, so `calls=` stays 0 here on
@@ -1520,8 +1320,3 @@ void UI::UserInterface::SaveAllSettings() {
         node = *reinterpret_cast<uint8_t**>(node + 0x10);
     } while (node);
 }
-
-extern "C" void RtUi_UserInterface_SaveAllSettings(UserInterface* self) {
-    self->UI::UserInterface::SaveAllSettings();
-}
-

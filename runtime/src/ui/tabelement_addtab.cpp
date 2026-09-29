@@ -166,18 +166,3 @@ Object::InternalPtr<Element> TabElement::AddTab(Object::ExternalPtr<ElementDescr
 }
 
 }  // namespace UI
-
-// ============================================================================
-// The registered entry point — a DOOR: retail's (this, ret, button, content)
-// shape, the member's prvalue placed into the caller's slot (B5-12).
-// ============================================================================
-extern "C" void** RtUi_TabElement_AddTab(void* self, void** ret,
-                                         void* descA, void* descB) {
-    new (static_cast<void*>(ret)) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::AddTab(
-            Object::ExternalPtr<UI::ElementDescription>(
-                reinterpret_cast<UI::ElementDescription*>(descA)),   // B.3.6 bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                reinterpret_cast<UI::ElementDescription*>(descB)))); // B.3.6 bridge
-    return ret;                                            // 0x1800DA32D
-}

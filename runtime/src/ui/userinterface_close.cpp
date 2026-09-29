@@ -155,9 +155,6 @@
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/collection/Collection.h"
 
-
-extern "C" void RtUi_UserInterface_CloseDialog(UI::UserInterface* self, void** dlgPtr);
-
 namespace {
 
 using UI::UserInterface;
@@ -198,33 +195,6 @@ struct EventRecord {
     void*    dragData;  // +0x28 = _dragDropData (this+0x78)
 };
 static_assert(sizeof(EventRecord) == 0x30, "UI::Event stride");
-
-// THE INVOCATION COUNTER — the evidence that the ported body RAN AT ALL.
-//
-// It is separate from every oracle counter on purpose: none of those could
-// distinguish "the port ran and the oracle was quiet" from "the port was never
-// reached and something upstream still holds the DLL's pointer".
-// `fn_UI_CloseDialog` is resolved ONCE, in
-// `engine/funcs/engine_funcs.cpp:1606`, through `ResolveExport` — and whether
-// that lands on the port or on the DLL depends entirely on whether `RtPortInit`
-// has already run at that moment. No oracle counter can express that question
-// (reference_diagnostic_field_cannot_express_the_answer.md,
-// reference_uncalled_port_is_not_verified.md), and lane UI3 needed a separate
-// `ProbeGate()` for exactly the same reason.
-//
-// So this counts every entry into the wrapper, in EVERY configuration, and is
-// printed unconditionally. A zero here means the row is registered and DEAD,
-// whatever else the board says.
-uint64_t g_entries = 0;
-
-struct CloseDlgSummary {
-    ~CloseDlgSummary() {
-        printf("[RtPort] UI::UserInterface::CloseDialog  entries=%llu\n",
-               (unsigned long long)g_entries);
-        std::fflush(stdout);
-    }
-};
-CloseDlgSummary g_closeDlgSummary;
 
 // ---------------------------------------------------------------------------
 // The shared unlink — 0x180121074..0x180121109 and 0x180121270..0x180121307
@@ -492,23 +462,4 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
     PushRemovedUnlessPresent(self, dlgPtr, dlgPtr, out);
     // and the sound tail is NOT reached on this path — 0x1801213a2 falls into
     // the epilogue at 0x1801213a7.
-}
-
-extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPtr) {
-    // THE PROBE GATE. `g_entries` is printed by a static destructor, so it only
-    // reaches the log when the process EXITS CLEANLY — and the only unattended
-    // route that reaches this body in-game (the pause menu's Resume button)
-    // leaves the game running afterwards and has to be killed. A killed run
-    // would then report nothing at all, which reads exactly like entries=0.
-    // Lane UI3 needed the same thing for the same reason. One line, on the
-    // first entry only, to stderr, which survives an abnormal exit.
-    if (g_entries++ == 0) {
-        std::fprintf(stderr,
-            "[RtPort] UI::UserInterface::CloseDialog ENTERED (first call) -- the "
-            "port is LIVE on this route\n");
-        std::fflush(stderr);
-    }
-
-    self->UI::UserInterface::CloseDialog(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
 }

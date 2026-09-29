@@ -283,19 +283,6 @@ Object::Base* TabElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
-// factory-interpreter row are gone. Their only readers were the minted
-// `??_7TabElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
-// TabElement now wears the compiler's table.
-// ============================================================================
-
-// ?UpdateContainers@TabElement@UI@@AEAAXXZ 0x1800d9710 — a non-virtual private
-// member's door (not mint scaffolding): it stays.
-extern "C" void RtUi_TabElement_UpdateContainers(void* self) {
-    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::UpdateContainers();
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TabElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@TabElement@UI@@ (0x1801fa468): name "TabElement", parent

@@ -162,11 +162,6 @@ namespace {
 // ---------------------------------------------------------------------------
 // ?SaveSettings@DialogInstance@UI@@QEAAXXZ   0x180114240
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_DialogInstance_SaveSettings(DialogInstance* self) {
-    // B.3.6: the body is UI::DialogInstance::SaveSettings (bottom of file).
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::SaveSettings();
-}
 
 // ---------------------------------------------------------------------------
 // ?OnClosed@DialogInstance@UI@@UEAAXXZ   0x180115330  (the member, below; its

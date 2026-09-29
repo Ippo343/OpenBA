@@ -112,10 +112,8 @@ inline const uint8_t* B(const void* p, int off) {
 }
 inline int32_t&  I32(void* p, int off) { return *reinterpret_cast<int32_t*>(B(p, off)); }
 inline int32_t   I32(const void* p, int off) { return *reinterpret_cast<const int32_t*>(B(p, off)); }
-inline uint8_t&  U8 (void* p, int off) { return *reinterpret_cast<uint8_t*>(B(p, off)); }
 inline void*&    PTR(void* p, int off) { return *reinterpret_cast<void**>(B(p, off)); }
 inline void*     PTR(const void* p, int off) { return *reinterpret_cast<void* const*>(B(p, off)); }
-inline char*&    STR(void* p, int off) { return *reinterpret_cast<char**>(B(p, off)); }
 
 // Retail writes several ADJACENT FIELDS with ONE wide store — a qword covering
 // two ints, a word covering two bytes. The width is the faithful part, so it is
@@ -1010,27 +1008,3 @@ DocumentTextElement::Link& DocumentTextElement::Link::operator=(const Link& src)
 // spelled qualified for uniformity).
 // ============================================================================
 using UI::DocumentTextElement;
-
-extern "C" int32_t RtUi_DocumentTextElement_FindNextWhiteSpace(void* self) {
-    return reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::FindNextWhiteSpace();
-}
-extern "C" void RtUi_DocumentTextElement_EndLink(void* self) {
-    reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::EndLink();
-}
-extern "C" void RtUi_DocumentTextElement_BeginLink(void* self, char* const* name) {
-    reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::BeginLink(
-        *reinterpret_cast<const System::String*>(name));   // B.3.6 bridge
-}
-extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* self) {
-    return reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::LayoutRow();
-}
-extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* self, DocumentItem* out) {
-    return reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::GetNextItem(*out);
-}
-extern "C" void RtUi_DocumentTextElement_GenerateItems(void* self) {
-    reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::GenerateItems();
-}
-extern "C" void* RtUi_DocumentTextElement_LinkAssign(void* dst, const void* src) {
-    return &(reinterpret_cast<DocumentTextElement::Link*>(dst)->operator=(
-        *reinterpret_cast<const DocumentTextElement::Link*>(src)));
-}
