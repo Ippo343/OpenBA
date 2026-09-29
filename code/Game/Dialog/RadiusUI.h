@@ -32,11 +32,12 @@ public:
     void OnOpened() override;   // [5] 0x140077650
     void OnClosed() override;   // [6] 0x140077600
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    int32_t data30 = -1;           // +0x30: initialized to -1
+    // ---- fields -------------------------------------------------------
+    int32_t highlightIndex = -1;   // +0x30: the radius overlay OnOpened 0x140077650 adds
+                                   // (0x140055430's result), -1 when none (ctor -1)
     uint8_t _pad34[4] = {};        // +0x34: gap
 };
 
 static_assert(sizeof(RadiusUI) == 0x38, "RadiusUI is 0x38 (create 0x140013590 MemAlloc(0x38))");
 static_assert(alignof(RadiusUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(RadiusUI, data30) == 0x30, "data30 @ 0x30");
+static_assert(offsetof(RadiusUI, highlightIndex) == 0x30, "highlightIndex @ 0x30");
