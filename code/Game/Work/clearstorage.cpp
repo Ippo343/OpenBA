@@ -26,6 +26,13 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
 #include "Component/StorageComponent.h"         // ENDGAME B.3.9 D5
+#include "Component/StorageLocationComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/ProfessionList.h"
 
 // Sub-functions, called by name (B3R): 0x140025520 WorkBST_BSTFindRemove_25520,
 // 0x1400c5400 WorkBase_TaskListCleanup_c5400, 0x140014c30 WorkBase_TreeNodeFree_14c30.
@@ -58,36 +65,29 @@ static inline uint32_t WorldToCell(float x, float z, int gridSize) {
 // sets up citizen pathfinding to carry items.
 //
 // Returns: 0 = failed validation, 1 = no work available (retry), 2 = work assigned
-int ClearStorage::Execute(void* citizenAI, void* time) {
-    // Work base has entity ref at +0x10 (offset 2 in qword terms)
-    uintptr_t workBase = (uintptr_t)this;
-    void* entityRef = (void*)(workBase + 0x10);  // InternalBasePtr to entity
+int ClearStorage::Execute(void* citizenAIArg, void* time) {
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenAI = reinterpret_cast<CitizenComponent**>(citizenAIArg);
 
-    // Find components on the entity
-    void* entity = *(void**)entityRef;
+    // Find components on the entity (+0x10) through the guarded finders (typed locals)
+    BuildComponent* positionComp = nullptr;          // fn_FindComponent_Position: BuildComponent's cell
+    fn_FindComponent_Position(field_10, &positionComp);
 
-    uint64_t positionIBP = 0;
-    fn_FindComponent_Position(entity, &positionIBP);
+    StorageLocationComponent* unknownComp = nullptr; // cell 0x1401c7ee8
+    fn_FindComponent_Unknown7ee8(field_10, &unknownComp);
 
-    uint64_t unknownCompIBP = 0;
-    entity = *(void**)entityRef;
-    fn_FindComponent_Unknown7ee8(entity, &unknownCompIBP);
+    StorageComponent* storage = nullptr;
+    fn_FindComponent_Storage(field_10, &storage);
 
-    uint64_t storageIBP = 0;
-    entity = *(void**)entityRef;
-    fn_FindComponent_Storage(entity, &storageIBP);
+    // Get game world grid data (m_game / m_citizenList are still void*: LEFT)
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    int* gridDataPtr = (int*)gameWorld->m_game;
+    void* worldArray = gameWorld->m_citizenList;
 
-    // Get game world grid data
-    uintptr_t gameWorld = ((uintptr_t)GameUpdateLoop::_singleton);
-    int* gridDataPtr = *(int**)(gameWorld + 0xf8);
-    void* worldArray = *(void**)(gameWorld + 0xf0);
-
-    // Get citizen position from citizenAI -> entity -> +0x278 -> +0x68
-    uintptr_t citizenEntity = *(uintptr_t*)citizenAI;
-
-    uintptr_t comp278 = *(uintptr_t*)(citizenEntity + 0x278);
-
-    uintptr_t posData = *(uintptr_t*)(comp278 + 0x68);
+    // Citizen position: CharacterComponent (+0x278) -> ModelComponent (+0x68); the
+    // transform is raw storage (H5): the float reads are LEFT.
+    uintptr_t posData = reinterpret_cast<uintptr_t>((*citizenAI)->character->modelComponent);
 
     int gridSize = *gridDataPtr;
     // citizenY at +0x160 is stored but only used for searchPos[2] init
@@ -98,8 +98,7 @@ int ClearStorage::Execute(void* citizenAI, void* time) {
     uint32_t srcCell = WorldToCell(citizenX, citizenZ, gridSize);
 
     // Get storage item count
-    uintptr_t storageComp = *(uintptr_t*)&storageIBP;
-    int itemCount = *(int*)(storageComp + 0x30);
+    int itemCount = storage->slotCount;
 
     if (itemCount <= 0) {
         return 1;  // No items in storage
@@ -107,8 +106,8 @@ int ClearStorage::Execute(void* citizenAI, void* time) {
 
     // Iterate over storage items
     for (int i = 0; i < itemCount; i++) {
-        storageComp = *(uintptr_t*)&storageIBP;
-        uintptr_t itemArray = *(uintptr_t*)(storageComp + 0x28);
+        // (StorageComponent's items are raw storage, H5: LEFT)
+        uintptr_t itemArray = (uintptr_t)storage->storageSlots;
         uintptr_t itemEntry = itemArray + (uintptr_t)i * 0x10;
 
         // Check available count: stored - reserved > 0
@@ -139,76 +138,40 @@ int ClearStorage::Execute(void* citizenAI, void* time) {
             }
         }
 
-        // Find StorageComponent on citizen's assigned entity (citizenAI -> +0x10)
-        uintptr_t citizenEnt = *(uintptr_t*)citizenAI;
-        uintptr_t citizenBuilding = *(uintptr_t*)(citizenEnt + 0x10);
-
-        void* destStorage = nullptr;
-        if (*(int*)(citizenBuilding + 0x38) > 0) {
-            for (int64_t k = 0; k < *(int*)(citizenBuilding + 0x38); k++) {
-                void* compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
-                void* comp = *(void**)compIBP;
-                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (typeId == StorageComponent::TypeId()) {
-                    compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
-                    void* compVal = *(void**)compIBP;
-                    if (Object::IsDerivedFromNullSafe(compVal, StorageComponent::TypeId())) {
-                        destStorage = compVal;
-                    }
-                    goto found_dest_storage;
-                }
-            }
-        }
-        destStorage = nullptr;
-found_dest_storage:
-
-        // Create InternalBasePtr for destStorage
-        uint64_t destStorageIBP = 0;
-        new (&destStorageIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(destStorage));   // B.3.3 bridge
+        // Find StorageComponent on the citizen's entity (+0x10): the FindComponent walk
+        StorageComponent* destStorage = (*citizenAI)->_entity->FindComponent<StorageComponent>();
 
         // Check capacity: destStorage capacity - count vs rawMat resourceSize * availCount
-        uintptr_t dsc = *(uintptr_t*)&destStorageIBP;
-        int maxCapacity = *(int*)(dsc + 0x38);
+        int maxCapacity = destStorage->capacity;
 
-        dsc = *(uintptr_t*)&destStorageIBP;
-        int currentCount = fn_StorageComponent_QueryCount((void*)dsc);
+        int currentCount = fn_StorageComponent_QueryCount(destStorage);
 
         int freeSpace = maxCapacity - currentCount;
         int resourceSize = rawMatDesc ? *(int*)((uintptr_t)rawMatDesc + 0x48) : 1;
 
         if (freeSpace < resourceSize * availCount) {
             // Not enough room in dest, check citizen's building storage
-            uintptr_t cEnt = *(uintptr_t*)citizenAI;
-            uintptr_t cBuilding = *(uintptr_t*)(cEnt + 0x10);
+            StorageComponent* altStorage = nullptr;
+            fn_FindComponent_Storage((*citizenAI)->_entity, &altStorage);
 
-            uint64_t altStorageIBP = 0;
-            fn_FindComponent_Storage((void*)cBuilding, &altStorageIBP);
+            int altMax = altStorage->capacity;
 
-            uintptr_t altSC = *(uintptr_t*)&altStorageIBP;
-            int altMax = *(int*)(altSC + 0x38);
-
-            altSC = *(uintptr_t*)&altStorageIBP;
-            int altCurrent = fn_StorageComponent_QueryCount((void*)altSC);
+            int altCurrent = fn_StorageComponent_QueryCount(altStorage);
 
             availCount = (altMax - altCurrent) / resourceSize;
         }
 
         if (availCount == 0) {
             // No capacity available, transition to long-term plan
-            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenAI));
+            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*citizenAI));
             return 2;
         }
 
         // Set up search for destination storage
-        uint64_t entityIBP = 0;
-        uintptr_t wk = (uintptr_t)this;
-        void* entityRefVal = *(void**)(wk + 0x10);
-        // Copy entity IBP value
-        *(void**)&entityIBP = entityRefVal;
+        ComponentEntity* entityIBP = field_10;
 
         float searchPos[3] = {0.0f, 0.0f, 0.0f};
-        uint32_t resourceTypeId = *(uint32_t*)(wk + 0x28);
+        uint32_t resourceTypeId = (uint32_t)field_28;
         void* destEntity = nullptr;
 
         Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(worldArray), reinterpret_cast<int64_t*>(&destEntity), resourceTypeId,
@@ -220,8 +183,7 @@ found_dest_storage:
         }
 
         // Check if path is possible
-        uintptr_t wkPtr = (uintptr_t)this;
-        uint32_t workTypeId = *(uint32_t*)(wkPtr + 0x28);
+        uint32_t workTypeId = (uint32_t)field_28;
         if (!WorkBase_ValidateCell_a00f0(gridDataPtr, 0xe1f, srcCell, workTypeId)) {
             return 1;
         }
@@ -231,22 +193,20 @@ found_dest_storage:
         uint32_t destCell = 0;
 
         int dbgBranch = -1, dbgSlot = 0;   // trace: 0=position, 1=findslot
-        if (unknownCompIBP == 0) {
-            // No position component variant — use positionIBP
-            if (positionIBP == 0) {
+        if (unknownComp == nullptr) {
+            // No storage-location component — use the position component
+            if (positionComp == nullptr) {
                 return 1;
             }
             dbgBranch = 0;
-            Pf_EntityResolvePos_2e20((void*)*(uintptr_t*)&positionIBP,
-                                  reinterpret_cast<float*>(&destPos), 0, 0, nullptr);
+            Pf_EntityResolvePos_2e20(positionComp, destPos, 0, 0, nullptr);
             destCell = WorldToCell(destPos[0], destPos[1], gridSize);
         } else {
             // Use search position
             dbgBranch = 1;
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
-            void* unkComp = *(void**)&unknownCompIBP;
-            int slotIdx = Pf_FindBestAdjacentCell_d5d0(reinterpret_cast<int64_t>(unkComp), destCell, (float*)&destPos, workTypeId);
+            int slotIdx = Pf_FindBestAdjacentCell_d5d0(reinterpret_cast<int64_t>(unknownComp), destCell, destPos, workTypeId);
             dbgSlot = slotIdx;
             if (slotIdx < 0) {
                 return 1;
@@ -254,42 +214,40 @@ found_dest_storage:
         }
 
         // Validate the work assignment
-        void* citizenVal = *(void**)citizenAI;
+        CitizenComponent* citizenVal = *citizenAI;
 
         if (!WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), citizenAI, destCell, srcCell, time)) {
             return 0;
         }
 
         // Set up pathfinding
-        uintptr_t wkBase = (uintptr_t)this;
-        void* workEntity = *(void**)(wkBase + 0x10);
-        int pathType = *(int*)(wkBase + 0x20);
+        ComponentEntity* workEntity = field_10;
+        int pathType = field_20;
         void* destEntityCopy = destEntity;
         uint32_t pathFlags = (availCount << 8) | 0;  // flags from local_res20[0]
 
         uint32_t pathResult = 0;
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, pathType, reinterpret_cast<uint64_t*>(&destEntityCopy),
-                                searchPos, &workEntity, (float*)&destPos,
+                                searchPos, reinterpret_cast<void**>(&workEntity), destPos,
                                 (int64_t)itemEntity, availCount, pathFlags, 0, 1, 0, 0);
 
         // Get the Slot10 result (vtable +0x50)
-        uintptr_t citizenPtr = *(uintptr_t*)citizenAI;
+        CitizenComponent* citizenPtr = *citizenAI;
 
         uint64_t entityRefOut = 0;
-        void* resultPtr = GetTarget(&entityRefOut);
-        uintptr_t resultVal = *(uintptr_t*)resultPtr;
+        Profession* resultVal = *(Profession**)GetTarget(&entityRefOut);
 
         // Update citizen state
-        *(uint32_t*)(citizenPtr + 0x54) |= 4;
-        *(int*)(citizenPtr + 0x30) = pathType;
-        *(uint32_t*)(citizenPtr + 0xb0) = 0;
+        citizenPtr->statusFlags |= 4;
+        citizenPtr->field_0x30 = pathType;
+        citizenPtr->field_0xB0 = 0;
 
-        if (resultVal == *(uintptr_t*)(citizenPtr + 0x1f0) && pathType >= 0) {
-            *(uint32_t*)(citizenPtr + 0x88) |= 0x20000;
+        if (resultVal == citizenPtr->profession && pathType >= 0) {
+            citizenPtr->happinessFlags |= 0x20000;
         }
 
-        // Register work with citizen AI
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(wkBase + 0x58)), &entityRefOut, citizenAI);
+        // Register work with citizen AI (the tree helpers take the root as uintptr_t*: LEFT)
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field58), &entityRefOut, citizenAI);
         return 2;
     }
 
@@ -309,28 +267,25 @@ found_dest_storage:
 // NOTE: Hook is DISABLED due to bug class 3 (MOV RAX,RSP in prologue).
 // This clean implementation exists for documentation and future standalone exe.
 int ClearStorage::Validate() {
-    uintptr_t base = (uintptr_t)this;
-    void* bstRoot = (void*)(base + 0x58);  // BST root pointer
 
     // Phase 1: In-order traverse BST, collect entries that fail CanStartWork
-    void** removeList = nullptr;
+    AssignmentNode** removeList = nullptr;
     int removeCount = 0;
     int removeCapacity = 0;
 
     // Find leftmost node (smallest key)
-    uintptr_t node = *(uintptr_t*)bstRoot;
-    if (node == 0) goto phase2;
+    AssignmentNode* node = _field58;
+    if (node == nullptr) goto phase2;
 
     // Go to leftmost
-    while (*(uintptr_t*)(node + 0x10) != 0) {
-        node = *(uintptr_t*)(node + 0x10);
+    while (node->left != nullptr) {
+        node = node->left;
     }
 
     // In-order traversal
-    while (node != 0) {
+    while (node != nullptr) {
         // Get task key from node
-        uint64_t taskKey = *(uint64_t*)node;
-        uint64_t taskIBP = taskKey;
+        CitizenComponent* taskIBP = node->element;
 
         // Check if task is still valid
         bool canStart = WorkBase_ValidateTask_f7100(this, nullptr, &taskIBP, nullptr);
@@ -345,7 +300,7 @@ int ClearStorage::Validate() {
                     newCap = newCount * 3;
                 }
                 removeCapacity = newCap;
-                void** newList = (void**)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8);
+                AssignmentNode** newList = (AssignmentNode**)System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8);
 
                 // Copy existing entries
                 int copyStart = 0;
@@ -354,9 +309,9 @@ int ClearStorage::Validate() {
                 }
                 for (int j = copyStart; j < newCount; j++) {
                     if (newList != nullptr) {
-                        void* src = (j < removeCount && removeList != nullptr)
+                        AssignmentNode* src = (j < removeCount && removeList != nullptr)
                             ? removeList[j]
-                            : (void*)node;  // Current node for the new entry
+                            : node;  // Current node for the new entry
                         newList[j] = src;
                     }
                 }
@@ -368,31 +323,31 @@ int ClearStorage::Validate() {
             } else {
                 // Enough capacity, just store
                 if (removeList != nullptr) {
-                    removeList[removeCount] = (void*)node;
+                    removeList[removeCount] = node;
                 }
             }
             removeCount = newCount;
         }
 
         // Move to next in-order node
-        uintptr_t right = *(uintptr_t*)(node + 0x18);
-        if (right != 0) {
+        AssignmentNode* right = node->right;
+        if (right != nullptr) {
             // Go to leftmost of right subtree
             node = right;
-            while (*(uintptr_t*)(node + 0x10) != 0) {
-                node = *(uintptr_t*)(node + 0x10);
+            while (node->left != nullptr) {
+                node = node->left;
             }
         } else {
             // Go up until we come from a left child
-            uintptr_t parent = *(uintptr_t*)(node + 0x8);
-            if (parent != 0 && *(uintptr_t*)(parent + 0x10) == node) {
+            AssignmentNode* parent = node->parent;
+            if (parent != nullptr && parent->left == node) {
                 // We are left child of parent, parent is next
                 node = parent;
             } else {
                 // We are right child, go up while we are right child
-                while (parent != 0 && *(uintptr_t*)(parent + 0x18) == node) {
+                while (parent != nullptr && parent->right == node) {
                     node = parent;
-                    parent = *(uintptr_t*)(node + 0x8);
+                    parent = node->parent;
                 }
                 node = parent;
             }
@@ -404,20 +359,20 @@ phase2:
     if (removeCount > 0) {
         for (int i = 0; i < removeCount; i++) {
             // Find node in BST by key
-            uintptr_t searchNode = *(uintptr_t*)bstRoot;
-            uint64_t key = *(uint64_t*)removeList[i];
+            AssignmentNode* searchNode = _field58;
+            CitizenComponent* key = removeList[i]->element;
 
-            while (searchNode != 0) {
-                uint64_t nodeKey = *(uint64_t*)searchNode;
+            while (searchNode != nullptr) {
+                CitizenComponent* nodeKey = searchNode->element;
                 if (key < nodeKey) {
-                    searchNode = *(uintptr_t*)(searchNode + 0x10);
+                    searchNode = searchNode->left;
                 } else {
                     if (key <= nodeKey) {
-                        // Found it, remove
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRoot), (void*)searchNode);
+                        // Found it, remove (the tree helpers take the root as uintptr_t*: LEFT)
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field58), searchNode);
                         break;
                     }
-                    searchNode = *(uintptr_t*)(searchNode + 0x18);
+                    searchNode = searchNode->right;
                 }
             }
         }
@@ -433,10 +388,10 @@ phase2:
 ClearStorage::~ClearStorage() {
 
     // Free BST at +0x58 (citizen assignment tree)
-    void* bstRoot = _field58;
+    AssignmentNode* bstRoot = _field58;
     if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_14c30(&_field58, *(void**)((uintptr_t)bstRoot + 0x10));
-        WorkBase_TreeNodeFree_14c30(&_field58, *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_14c30(&_field58, bstRoot->left);
+        WorkBase_TreeNodeFree_14c30(&_field58, bstRoot->right);
         System::MemoryAllocator::MemFree(bstRoot);
     }
     _field58 = nullptr;
@@ -456,7 +411,7 @@ ClearStorage::~ClearStorage() {
 // entry from the work tracking tree.
 int ClearStorage::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x58)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);
     return 0;
 }
 
@@ -473,7 +428,7 @@ int ClearStorage::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // citizen pointer to Object::IsA, which CALLs through it. Ported 2026-09-05.
 int ClearStorage::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
 
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x58)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field58), param2);
     return 0;
 }
 
@@ -485,7 +440,7 @@ int ClearStorage::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
 // shared Work_Slot11_HasActiveTasks reads), so it needs its own body. Was pinned to
 // Work_SlotRet0, i.e. permanently "nobody is working this".
 int ClearStorage::GetPriority() {
-    return *(int*)((uintptr_t)this + 0x60) > 0 ? 1 : 0;
+    return (int)_field60 > 0 ? 1 : 0;   // retail's signed compare of the dword
 }
 
 // ============================================================
@@ -499,28 +454,26 @@ int ClearStorage::GetPriority() {
 int ClearStorage::Cleanup() {
 
     while (true) {
-        void* node = _field58;
+        AssignmentNode* node = _field58;
         if (node == nullptr) {
             return 0;
         }
 
         // Find leftmost node in BST
-        void* leftmost = node;
-        void* left = *(void**)((uintptr_t)leftmost + 0x10);
+        AssignmentNode* leftmost = node;
+        AssignmentNode* left = leftmost->left;
         while (left != nullptr) {
             leftmost = left;
-            left = *(void**)((uintptr_t)leftmost + 0x10);
+            left = leftmost->left;
         }
 
         if (leftmost == nullptr) {
             return 0;
         }
 
-        // Resolve the citizen entity from the BST node
-        uintptr_t citizenEntity = *(uintptr_t*)leftmost;
-
-        // Navigate to state machine component (+0x278) and cancel its action list (+0x48)
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        // The node's citizen; cancel its CharacterComponent's action list (+0x48)
+        CitizenComponent* citizen = leftmost->element;
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
     }
     return 0;
 }
@@ -528,13 +481,10 @@ int ClearStorage::Cleanup() {
 // ============================================================
 // ClearStorage::GetTarget (Slot10, vtable +0x50, 0x1400e7330)
 // ============================================================
-// Returns the map entity IBP from the game world singleton.
+// Returns the profession list's +0x30 profession (GameUpdateLoop::m_professionList).
 // Uses hidden return pointer ABI (member function returning non-trivial).
-// Path: g_pGameWorldSingleton -> +0xb0 -> +0x30
 void* ClearStorage::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
-    *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
+    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 
@@ -567,15 +517,12 @@ void* ClearStorage::GetTarget(void* retbuf) {
 extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer);
 void ClearStorage::Persist(void* stream) {
     if (!stream) return;
-    const uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(s + 0x58), ser);   // 0x1400296b0 (work_base_bst.cpp)
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field58), &ser);   // 0x1400296b0 (work_base_bst.cpp)
 }
 
 // ============================================================
