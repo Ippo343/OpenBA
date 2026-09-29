@@ -365,7 +365,7 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // run over them yet.
     new (&blank._name0) System::Filename();
     new (&blank._name1) System::Filename();
-    blank.winHandle  = -1;
+    blank.winHandle  = INVALID_HANDLE_VALUE;
     blank._unk04     = 0;                // retail leaves this whatever the stack
     blank._pad14     = 0;                // held; see §4 — zeroed here only so the
                                          // value we copy out is defined.
@@ -388,17 +388,17 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // hTemplateFile NULL.
     const HANDLE h = ::CreateFileW(static_cast<LPCWSTR>(ws.data),
                                    0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
-    fi->winHandle = reinterpret_cast<int64_t>(h);            // 1800adddd
+    fi->winHandle = h;          // 1800adddd
 
     RtIO::RtString_ReleaseInline(
         reinterpret_cast<RtSystem::String*>(&ws));           // 1800adde1
 
     // `LEA RAX,[RCX-1] ; CMP RAX,-3 ; JA fail` — an UNSIGNED test that rejects
-    // exactly two values, INVALID_HANDLE_VALUE (-1) and NULL (0). Spelled as
-    // retail spells it rather than as `h == INVALID_HANDLE_VALUE || !h`, because
-    // the two are only equivalent by accident of those being the only wrap cases.
-    const uint64_t hm1 = static_cast<uint64_t>(fi->winHandle) - 1u;
-    if (hm1 > static_cast<uint64_t>(-3)) {                   // 1800ade12
+    // exactly two values, INVALID_HANDLE_VALUE (-1) and NULL (0): unsigned
+    // `h - 1 > 2^64 - 3` holds for h - 1 in {2^64 - 2, 2^64 - 1}, i.e. for
+    // h == 0 and h == -1 and for nothing else. B.4 R-IO: `winHandle` is the
+    // HANDLE it holds, so the two values are named.
+    if (h == nullptr || h == INVALID_HANDLE_VALUE) {         // 1800ade12
         return false;                                        // 1800ade3c
     }
 
@@ -419,7 +419,7 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {   // 1800ace23  JA
         // ---- LOOSE ------------------------------------------------------
         DWORD got = 0;                                       // 1800acf0f
-        ::ReadFile(reinterpret_cast<HANDLE>(fi->winHandle), dst,
+        ::ReadFile(fi->winHandle, dst,
                    static_cast<DWORD>(n), &got, nullptr);    // 1800acf2a
         fi->cursor += static_cast<int32_t>(got);             // 1800acf37
         return static_cast<int32_t>(got) == n;               // 1800acf3c  SETZ
@@ -441,7 +441,7 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
         ok = true;
     } else {
         ok = (static_cast<int32_t>(::SetFilePointer(
-                  reinterpret_cast<HANDLE>(pack.winHandle), abs, nullptr,
+                  pack.winHandle, abs, nullptr,
                   FILE_BEGIN)) == abs);                      // 1800ace61/67
     }
     if (ok) {
@@ -476,7 +476,7 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
     // live object to release. Their destructors are at the bottom.
     new (&lf._name0) System::Filename();
     new (&lf._name1) System::Filename();
-    lf.winHandle  = -1;
+    lf.winHandle  = INVALID_HANDLE_VALUE;
     lf._pad14     = 0;
     // +0x04 is DELIBERATELY left as-is: retail never writes it and copies it out
     // anyway (§4). Reading it below reproduces that; the oracle excludes it.
@@ -537,7 +537,7 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
             // default ctors (0x180006220), not stores through live objects.
             new (&ret->_name0) System::Filename();
             new (&ret->_name1) System::Filename();
-            ret->winHandle  = -1;                            // 1800aca4c
+            ret->winHandle  = INVALID_HANDLE_VALUE;                            // 1800aca4c
         } else if (!PlatformOpenFile(lf, *name)) {           // 1800acace
             ret->handle     = -1;                            // 1800acadb
             ret->size       = 0;
@@ -545,7 +545,7 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
             ret->baseOffset = 0;
             new (&ret->_name0) System::Filename();           // as above
             new (&ret->_name1) System::Filename();
-            ret->winHandle  = -1;                            // 1800acaff
+            ret->winHandle  = INVALID_HANDLE_VALUE;                            // 1800acaff
         } else {
             lf.handle = -2;                                  // 1800acb77
             emitted   = true;

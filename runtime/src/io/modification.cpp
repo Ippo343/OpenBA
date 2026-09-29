@@ -188,8 +188,9 @@ namespace RtIO {
 // `Collection::Set<System::Filename, …>` of modification_refresh.cpp also uses,
 // and the one BANISHED_REDZONE's instrument seat sits on.
 
+// The String header's refcount word (String.h's accessor).
 static inline int32_t& RefCount(char* s) {
-    return *reinterpret_cast<int32_t*>(s - 4);
+    return RtSystem::StringRefCount(s);
 }
 
 // The release-then-adopt sequence retail inlines at every String member of Mod
@@ -434,9 +435,7 @@ void RtColl_SetDestroySubtree_180010470(void* set, void* nodev) {
 // reproduced literally: the Array members are zeroed and then handed to
 // operator=, which begins by FREEING dst->data — so the zero is what stops the
 // copy ctor from freeing the caller's uninitialised stack.
-void* RtIo_Mod_CopyCtor_1800101e0(void* dstv, const void* srcv) {
-    Mod* dst = static_cast<Mod*>(dstv);
-    const Mod* src = static_cast<const Mod*>(srcv);
+void* RtIo_Mod_CopyCtor_1800101e0(Mod* dst, const Mod* src) {
 
     AdoptShared(&dst->name, src->name);
     AdoptShared(&dst->author, src->author);
@@ -488,9 +487,7 @@ void* RtIo_Mod_CopyCtor_1800101e0(void* dstv, const void* srcv) {
 }
 
 // 0x180026ef0 — Mod::operator=(const Mod&)
-void* RtIo_Mod_Assign_180026ef0(void* dstv, const void* srcv) {
-    Mod* dst = static_cast<Mod*>(dstv);
-    const Mod* src = static_cast<const Mod*>(srcv);
+void* RtIo_Mod_Assign_180026ef0(Mod* dst, const Mod* src) {
 
     AssignShared(&dst->name, src->name);
     AssignShared(&dst->author, src->author);
@@ -534,8 +531,7 @@ void* RtIo_Mod_Assign_180026ef0(void* dstv, const void* srcv) {
 }
 
 // 0x180011460 — Mod::~Mod(). Reverse declaration order, as MSVC emits.
-void RtIo_Mod_Dtor_180011460(void* selfv) {
-    Mod* self = static_cast<Mod*>(selfv);
+void RtIo_Mod_Dtor_180011460(Mod* self) {
 
     // ENDGAME B.3.2 step 2 — +0x70 retail 0x1800098d0. `System::Filename` is a
     // real class (B.3.1), so `SpecFor<System::Filename>()` builds EXACTLY the
@@ -580,7 +576,7 @@ void RtIo_Mod_Dtor_180011460(void* selfv) {
 // 0x180010b80 — Collection::Array<Mod>::~Array
 void* RtColl_ArrayModDtor_180010b80(void* av) {
     ModArray* a = static_cast<ModArray*>(av);
-    Mod* p = static_cast<Mod*>(a->data);
+    Mod* p = static_cast<Mod*>(a->data);   // LEFT: ModArray's buffer is untyped (Mod is a POD, H5)
     for (int32_t i = a->size; i > 0; --i, ++p)
         RtIo_Mod_Dtor_180011460(p);
     return ArrayFreeBuffer(a);
@@ -596,11 +592,10 @@ void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
     RtColl_ArrayModDtor_180010b80(dst);          // CALL 0x180010b80
     ArrayAssignGrow(dst, src, 0x80, 8);
     for (int32_t i = 0; i < dst->size; ++i) {
-        Mod* d = reinterpret_cast<Mod*>(
-            static_cast<uint8_t*>(dst->data) + static_cast<size_t>(i) * 0x80);
+        // LEFT: ModArray's buffer is untyped (Mod is a POD, H5).
+        Mod* d = static_cast<Mod*>(dst->data) + i;
         if (d == nullptr) continue;
-        RtIo_Mod_CopyCtor_1800101e0(
-            d, static_cast<const uint8_t*>(src->data) + static_cast<size_t>(i) * 0x80);
+        RtIo_Mod_CopyCtor_1800101e0(d, static_cast<const Mod*>(src->data) + i);
     }
     return dst;
 }
@@ -691,8 +686,7 @@ int Modification::GetCount() const {
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing. Unbounded, exactly as retail is.
 const RtIO::Mod& Modification::GetModification(int index) const {
-    return *reinterpret_cast<const RtIO::Mod*>(
-        reinterpret_cast<const uint8_t*>(_mods) + (static_cast<int64_t>(index) << 7));
+    return _mods[index];   // a signed int index: MOVSXD, then the 0x80 stride
 }
 
 // ?Enable@Modification@IO@@QEAAXH_N@Z                       retail 0x1800aeab0
@@ -727,12 +721,11 @@ void Modification::Swap(int a, int b) {
 
     _dirty = 1;
 
-    uint8_t tmpStorage[sizeof(RtIO::Mod)];
-    RtIO::Mod* tmp = reinterpret_cast<RtIO::Mod*>(tmpStorage);
-    RtIO::RtIo_Mod_CopyCtor_1800101e0(tmp, _mods + a);
+    RtIO::Mod tmp;   // a POD: uninitialised stack, as retail's
+    RtIO::RtIo_Mod_CopyCtor_1800101e0(&tmp, _mods + a);
     RtIO::RtIo_Mod_Assign_180026ef0(_mods + a, _mods + b);
-    RtIO::RtIo_Mod_Assign_180026ef0(_mods + b, tmp);
-    RtIO::RtIo_Mod_Dtor_180011460(tmp);
+    RtIO::RtIo_Mod_Assign_180026ef0(_mods + b, &tmp);
+    RtIO::RtIo_Mod_Dtor_180011460(&tmp);
 }
 
 // ?SaveList@Modification@IO@@QEAAXXZ                        retail 0x1800b05f0
@@ -764,7 +757,7 @@ void Modification::SaveList() {
         return;
     }
 
-    void* p = ::IO::Persistence::_singleton;   // ENDGAME B.3.9 IO (D7): the class static
+    ::IO::Persistence* p = ::IO::Persistence::_singleton;   // ENDGAME B.3.9 IO (D7): the class static
 
     for (int i = 0; i < _count; ++i) {
         RtIO::Mod* m = _mods + i;
@@ -787,10 +780,8 @@ void Modification::SaveList() {
 
         // The door decides the overload: ?Set@..@QEAAXPEBD0_N@Z (bool), then
         // ?Set@..@QEAAXPEBD0H@Z (int).
-        static_cast<::IO::Persistence*>(p)->Set(
-            "ModEnabled_", ref, static_cast<bool>(m->enabled != 0));
-        static_cast<::IO::Persistence*>(p)->Set(
-            "ModIndex_", ref, static_cast<int>(m->order));
+        p->Set("ModEnabled_", ref, static_cast<bool>(m->enabled != 0));
+        p->Set("ModIndex_", ref, static_cast<int>(m->order));
 
         if (ref != nullptr) {
             if (--RtIO::RefCount(ref) == 0) ::System::MemoryAllocator::MemFree(ref - 8);

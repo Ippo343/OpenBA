@@ -782,7 +782,7 @@ bool TextFileStream::SetCurrentPos(int pos) {
 
     ++RtIO::g_tfs.setPosSeek;
     const DWORD got = ::SetFilePointer(
-        reinterpret_cast<HANDLE>(_file.winHandle),                 // 1800bac0f  +0x38
+        _file.winHandle,                 // 1800bac0f  +0x38
         pos, nullptr, FILE_BEGIN);                                 // 1800bac13/16
     const bool ok = (static_cast<int32_t>(got) == pos);            // 1800bac1f
     return ok;
@@ -830,7 +830,7 @@ bool TextFileStream::Create(const System::Filename& path,
     if (bomLen != 0) {
         ++RtIO::g_tfs.createBom;
         DWORD written = 0;                                                    // 1800ba9c0
-        ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),                // 1800ba9ab
+        ::WriteFile(_file.winHandle,                // 1800ba9ab
                     bom, static_cast<DWORD>(bomLen), &written, nullptr);      // 1800ba9c9
         _file.cursor += static_cast<int32_t>(written);                        // 1800ba9d3
     }
@@ -855,7 +855,7 @@ bool TextFileStream::Write(int len, const void* buf) {
     if (srcFormat == dstFormat) {                               // 1800baa15
         ++RtIO::g_tfs.writeDirect;
         DWORD written = 0;                                      // 1800baa28
-        ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),            // 1800baa1a
+        ::WriteFile(_file.winHandle,            // 1800baa1a
                     buf, static_cast<DWORD>(len), &written, nullptr);     // 1800baa30
         _file.cursor += static_cast<int32_t>(written);                    // 1800baa3d
         const bool ok = (static_cast<int32_t>(written) == len);           // 1800baa41
@@ -899,7 +899,7 @@ bool TextFileStream::Write(int len, const void* buf) {
                            _activeEncoding, 0, 0, dst, outBytes);
 
     DWORD written = 0;                                          // 1800bab74
-    ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),                // 1800bab62
+    ::WriteFile(_file.winHandle,                // 1800bab62
                 dst, static_cast<DWORD>(outBytes), &written, nullptr);    // 1800bab80
     _file.cursor += static_cast<int32_t>(written);              // 1800bab8d
     ::System::MemoryAllocator::MemFree(dst);                    // 1800bab94
@@ -939,7 +939,7 @@ bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format
 
     // UNSIGNED: -1 and -2 seek, a packed descriptor does not (FileStream.h).
     if (static_cast<uint32_t>(_file.handle) > 0xFFFFFFFDu)      // 1800ba695 JBE
-        ::SetFilePointer(reinterpret_cast<HANDLE>(_file.winHandle),
+        ::SetFilePointer(_file.winHandle,
                          0, nullptr, FILE_BEGIN);               // 1800ba6b6
 
     ::RtIo_FileSystem_ReadFile(RtIO::Fs(), &_file, fileSize, raw);  // 1800ba6cd

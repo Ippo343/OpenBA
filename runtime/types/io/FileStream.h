@@ -472,7 +472,7 @@ public:
         _file.baseOffset  = 0;                                   // 1800a824d
         _file._name0.data = nullptr;                             // 1800a8259
         _file._name1.data = nullptr;                             // 1800a8265
-        _file.winHandle   = -1;                                  // 1800a8268
+        _file.winHandle   = reinterpret_cast<void*>(intptr_t{-1});  // 1800a8268 INVALID_HANDLE_VALUE (no <windows.h> in a type header)  // CAST-OK: win32
     }
 
     // slot 0  +0x00  0x18000c090 — MSVC's vector deleting dtor, stride 0x50.

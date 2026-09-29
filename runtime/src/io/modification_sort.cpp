@@ -72,10 +72,8 @@
 
 namespace RtIO {
 
-// The three Mod lifecycle bodies, ported in modification.cpp (lane MOD).
-void* RtIo_Mod_CopyCtor_1800101e0(void* dst, const void* src);   // 0x1800101e0
-void* RtIo_Mod_Assign_180026ef0(void* dst, const void* src);     // 0x180026ef0
-void  RtIo_Mod_Dtor_180011460(void* self);                       // 0x180011460
+// The three Mod lifecycle bodies, ported in modification.cpp (lane MOD), are
+// declared by Modification.h.
 
 namespace {
 
@@ -90,28 +88,26 @@ bool ModLess(const Mod& a, const Mod& b) {
 
 // 0x1800287f4 — tmp from the FIRST argument, as retail writes it.
 void ModSwap(Mod* a, Mod* b) {
-    alignas(16) uint8_t tmpStorage[sizeof(Mod)];
-    Mod* const tmp = reinterpret_cast<Mod*>(tmpStorage);
-    RtIo_Mod_CopyCtor_1800101e0(tmp, a);
+    Mod tmp;   // a POD: uninitialised stack, as retail's
+    RtIo_Mod_CopyCtor_1800101e0(&tmp, a);
     RtIo_Mod_Assign_180026ef0(a, b);
-    RtIo_Mod_Assign_180026ef0(b, tmp);
-    RtIo_Mod_Dtor_180011460(tmp);
+    RtIo_Mod_Assign_180026ef0(b, &tmp);
+    RtIo_Mod_Dtor_180011460(&tmp);
 }
 
 }  // namespace
 
 // 0x180028fc0 — the small-range pass, INCLUSIVE bounds (`CMP RDX,RCX / JBE`
 // before the prologue is the empty-range early-out).
-extern "C" void RtIo_Modification_SortModsSmall(void* lo, void* hi) {
-    rtsort::SelectionSortMaxToHigh(static_cast<Mod*>(lo), static_cast<Mod*>(hi),
-                                   ModLess, ModSwap);
+extern "C" void RtIo_Modification_SortModsSmall(Mod* lo, Mod* hi) {
+    rtsort::SelectionSortMaxToHigh(lo, hi, ModLess, ModSwap);
 }
 
 // 0x180028760 — `(Mod* first, int32_t count, void* scratch)`. RefreshList
 // passes a stack slot as the third argument (`LEA R8,[RBP+0x48]`) and the body
 // never reads R8.
-extern "C" void RtIo_Modification_SortMods(void* data, int32_t count, void*) {
-    rtsort::Introsort(static_cast<Mod*>(data), count, ModLess, ModSwap,
+extern "C" void RtIo_Modification_SortMods(Mod* data, int32_t count, void*) {
+    rtsort::Introsort(data, count, ModLess, ModSwap,
                       [](Mod* lo, Mod* hi) {
                           RtIo_Modification_SortModsSmall(lo, hi);
                       });

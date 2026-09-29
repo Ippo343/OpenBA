@@ -205,7 +205,7 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
                 const int32_t  size = *reinterpret_cast<const int32_t*>(desc + i * 0xc + 8);
                 st->file.cursor = static_cast<int32_t>(off);
                 if (static_cast<uint32_t>(st->file.handle) > 0xfffffffdu &&
-                    SetFilePointer(reinterpret_cast<HANDLE>(st->file.winHandle),
+                    SetFilePointer(st->file.winHandle,
                                    static_cast<LONG>(off), nullptr, FILE_BEGIN) != off) {
                     failed = true;
                     break;

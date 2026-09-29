@@ -386,10 +386,11 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
 
     HANDLE h = ::CreateFileW(tempFile, GENERIC_WRITE, 0, nullptr,
                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    info->winHandle = reinterpret_cast<int64_t>(h);          // 1800adee5 — stored EITHER WAY
+    info->winHandle = h;        // 1800adee5 — stored EITHER WAY
 
-    const uint64_t probe = static_cast<uint64_t>(info->winHandle) - 1;
-    if (probe > static_cast<uint64_t>(-3)) {                 // 1800adee9..f0
+    // `LEA RAX,[h-1] ; CMP RAX,-3 ; JA fail`: the unsigned `h - 1 > 2^64 - 3`
+    // holds for exactly h == 0 and h == -1, i.e. NULL and INVALID_HANDLE_VALUE.
+    if (h == nullptr || h == INVALID_HANDLE_VALUE) {         // 1800adee9..f0
         ++RtIO::g_fcc.createFail;
         return false;                                        // 1800adffa
     }
@@ -460,7 +461,7 @@ RtIO::FileInfo* FileSystem::CreateFileW(RtIO::FileInfo* ret,
     // live objects.
     new (&ret->_name0) System::Filename();   // 1800acc82
     new (&ret->_name1) System::Filename();   // 1800acc8e
-    ret->winHandle   = -1;          // 1800acc91
+    ret->winHandle   = INVALID_HANDLE_VALUE;          // 1800acc91
     // +0x04 deliberately untouched, exactly as in ??0FileStream's prologue.
 
     PlatformCreateFile(*ret, *path);         // 1800acca4 — result discarded
@@ -496,10 +497,10 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
     RtIO::FileInfo* const info = &infoRef;
     ++RtIO::g_fcc.platClose;
 
-    if (info->winHandle == -1) return;                       // 1800ae03d/41
+    if (info->winHandle == INVALID_HANDLE_VALUE) return;                       // 1800ae03d/41
 
-    ::CloseHandle(reinterpret_cast<HANDLE>(info->winHandle));// 1800ae047
-    info->winHandle = -1;                                    // 1800ae04d
+    ::CloseHandle(info->winHandle);// 1800ae047
+    info->winHandle = INVALID_HANDLE_VALUE;                                    // 1800ae04d
 
     if (!info->_name0.data) return;                          // 1800ae059/5f
     if (RtSystem::StringLength(info->_name0.data) == 0) return;  // 1800ae065/69
@@ -567,7 +568,7 @@ void FileSystem::CloseFile(RtIO::FileInfo& infoRef) {
     // hand — one release each, in retail's order.
     new (&fresh._name0) System::Filename();          // 1800accfb
     new (&fresh._name1) System::Filename();          // 1800acd07
-    fresh.winHandle   = -1;                          // 1800acd0b
+    fresh.winHandle   = INVALID_HANDLE_VALUE;                          // 1800acd0b
 
     ::RtIo_FileInfo_Assign(info, &fresh);            // 1800acd1a
 

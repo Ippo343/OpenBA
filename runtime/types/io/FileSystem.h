@@ -239,7 +239,7 @@ struct FileInfo {
     int32_t  cursor;      // +0x0C — READ POSITION, advanced by ReadFile
     int32_t  baseOffset;  // +0x10 — a pack entry's offset within the .pkg; 0 for loose
     int32_t  _pad14;      // +0x14 — not copied by the copy ctor
-    int64_t  winHandle;   // +0x18 — the Win32 HANDLE, -1 when there is none
+    void*    winHandle;   // +0x18 — the Win32 HANDLE (INVALID_HANDLE_VALUE when there is none)
     RtSystem::String _name0;   // +0x20 — a Filename (the copy ctor is ??0Filename@)
     RtSystem::String _name1;   // +0x28
 };

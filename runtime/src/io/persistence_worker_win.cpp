@@ -650,19 +650,19 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 
         DWORD written = 0;
         RtIO::FileInfo* file = &bfs.base.file;
-        BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), &p->fileHeader, 4, &written, nullptr);
+        BOOL ok = ::WriteFile(file->winHandle, &p->fileHeader, 4, &written, nullptr);
         if (ok && written == 4) {
-            ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), &p->magic, 8, &written, nullptr);
+            ok = ::WriteFile(file->winHandle, &p->magic, 8, &written, nullptr);
             if (ok && written == 8) {
                 const DWORD descBytesLen = static_cast<DWORD>(descCount) * 0xC;
-                ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), p->blockDescData, descBytesLen, &written, nullptr);
+                ok = ::WriteFile(file->winHandle, p->blockDescData, descBytesLen, &written, nullptr);
                 if (ok && written == descBytesLen) {
                     wroteAll = true;
                     void** blockPtrs = reinterpret_cast<void**>(p->blockPtrData);
                     for (int32_t i = 0; i < descCount; ++i) {
                         const uint32_t size =
                             *reinterpret_cast<const uint32_t*>(descBytes + i * 0xC + 8);
-                        ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), blockPtrs[i], size, &written, nullptr);
+                        ok = ::WriteFile(file->winHandle, blockPtrs[i], size, &written, nullptr);
                         if (!ok || written != size) { wroteAll = false; break; }
                     }
                 }

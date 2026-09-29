@@ -523,9 +523,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // Only when the handle is -1 or -2, i.e. a LOOSE file, is there an OS
     // handle to mirror it into. `CMP dword [RDI],-3 ; JBE` is UNSIGNED.
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {     // 1800b47d4
-        ::SetFilePointer(reinterpret_cast<HANDLE>(
-                             static_cast<intptr_t>(fi->winHandle)),
-                         hdr, nullptr, FILE_BEGIN);            // 1800b47e3
+        ::SetFilePointer(fi->winHandle, hdr, nullptr, FILE_BEGIN);   // 1800b47e3
     }
 
     // ---- the compressed blob -----------------------------------------------

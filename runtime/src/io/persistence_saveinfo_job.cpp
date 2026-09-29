@@ -330,7 +330,7 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
                             // Loose (-1/-2) only; a packed entry needs no seek.
                             if (static_cast<uint32_t>(bfs.base.file.handle) > 0xFFFFFFFDu)
                                 ::SetFilePointer(
-                                    reinterpret_cast<HANDLE>(bfs.base.file.winHandle),
+                                    bfs.base.file.winHandle,
                                     static_cast<LONG>(d->offset), nullptr, FILE_BEGIN);
 
                             int32_t remaining = static_cast<int32_t>(d->size);
