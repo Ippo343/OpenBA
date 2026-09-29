@@ -78,3 +78,7 @@ Metric at `612f0962`: **38,046** to remove (tier I 330, CAST-OK 237). Floor ceil
 | 17 | W1-DLG-e | `c6681a14` | Dialog e: TradeUI, TownHallUI, WorkPlaceUI, UpgradeUI: 2268 -> 275 in 20 files; three `behaviour:` commits (~TradeUI frees its arrays 0x140086a50, OnDismissButton posts event 10 0x1400819a9, OnProfessionSpinner 0x14007dd10) gated together | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · trade harness on the stress town: 17 trades through the converted checkout (+4,200 each), then exit 3 in `TradeWork::Validate` — **the same crash on the base `b2a5434c`** (19 trades): pre-existing, `known_port_issues` 13 | 0 |
 
 Metric at `c6681a14`: **36,053** to remove.
+
+| 18 | W1-DLG-a | `ae7b443e` | Dialog a: DebugUI, EntityUI, CitizenUI, BuildUI, DestroyUI, AchievementDialog and the smaller panels: 1762 -> 133 in 36 files; `behaviour:` CropUI::OnCreated calls SelectResourceUI's 0x140078be0 (0x1400b2b50); the two literal vtable-index calls of `destroyui` are gone (NEXT_SESSION §0.6) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `ae7b443e`: **34,424** to remove.
