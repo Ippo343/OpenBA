@@ -29,10 +29,67 @@
 //                            int key at +0) and its count (0x14009f100)
 //   every other qword / dword: zeroed by the ctor (+0xD0 = 8), meaning not
 //   settled.
+//
+// MapCell (B.4 GAME-a): the element of the cell array at +0x80, stride 0x30,
+// align 8. Stride and fields from retail's readers:
+//   resize 0x14001aa90 (copies +0x00..+0x24 and +0x26..+0x2D; init +0x18 = -1,
+//     +0x2A = 0xFF), bulk serializer 0x14001ac10 (IBP, IBP, ExternalPtr,
+//     Serialize(9, uchar*) at +0x1C, ushort +0x26, five uchar +0x28..+0x2C,
+//     signed char +0x2D);
+//   +0x00 blocker   the footprint rasterizer 0x14009d360 stores the entity for a
+//                   non-'.' footprint cell and tells the path worker the cell
+//                   is blocked (0x1400a6f00's argument `entity != 0`)
+//   +0x08 occupant  0x14009dc20 stores the placed entity per footprint cell
+//   +0x18 regionId  init -1 (0x14001aa90); the route query 0x14012cd80
+//                   compares two cells' ids
+//   +0x26 zone      path-region word; cleared and rebuilt by 0x14009c480
+//   +0x28 footprintCount  0x14009d360 adds +1 / -1 for a '.' footprint cell;
+//                   0x14009f100's load pass reads 0xFF as "unset"
+//   +0x29 terrainType     the classify helper 0x14009e2c0 (2, 6, 7, 8, 10);
+//                   tested as a bit index (1 << (t & 0x1F)) by the walk masks
+//   +0x2D floorCount      signed: the Map query 0x14009f3e0 ray-picks the
+//                   floor when > 0 (0x14009f4e9 CMP; JLE)
+//   the rest keep typed guess names.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
+
+class ComponentEntity;
+
+struct MapCell {
+    ComponentEntity* blocker;        // +0x00 InternalBasePtr<ComponentEntity> (0x14009d360)
+    ComponentEntity* occupant;       // +0x08 InternalBasePtr<ComponentEntity> (0x14009dc20)
+    void*    field_0x10;             // +0x10 ExternalPtr, string-table serialized (0x140002340)
+    int32_t  regionId;               // +0x18 init -1; not serialized, copied on resize
+    uint8_t  field_0x1C[9];          // +0x1C Serialize(9, uchar*) (0x14001aca0); +0x22 read by 0x140115be0
+    uint8_t  _pad25;                 // +0x25 written by neither resize arm
+    uint16_t zone;                   // +0x26 path-region word (Serialize ushort)
+    uint8_t  footprintCount;         // +0x28 (Serialize uchar)
+    uint8_t  terrainType;            // +0x29 (Serialize uchar)
+    uint8_t  field_0x2A;             // +0x2A init 0xFF (Serialize uchar); the tree: road batch id
+    uint8_t  field_0x2B;             // +0x2B (Serialize uchar); the tree: road blend / orientation
+    uint8_t  field_0x2C;             // +0x2C (Serialize uchar); the tree: growth level (/255)
+    int8_t   floorCount;             // +0x2D (Serialize signed char)
+    uint8_t  _pad2E[2];              // +0x2E written by neither resize arm
+};
+
+static_assert(sizeof(MapCell) == 0x30, "MapCell stride 0x30 (0x14001aa90 / 0x14001ac10)");
+static_assert(alignof(MapCell) == 8, "MapCell is qword-aligned");
+static_assert(offsetof(MapCell, blocker) == 0x00, "MapCell::blocker @ +0x00");
+static_assert(offsetof(MapCell, occupant) == 0x08, "MapCell::occupant @ +0x08");
+static_assert(offsetof(MapCell, field_0x10) == 0x10, "MapCell +0x10");
+static_assert(offsetof(MapCell, regionId) == 0x18, "MapCell::regionId @ +0x18");
+static_assert(offsetof(MapCell, field_0x1C) == 0x1C, "MapCell +0x1C");
+static_assert(offsetof(MapCell, _pad25) == 0x25, "MapCell +0x25");
+static_assert(offsetof(MapCell, zone) == 0x26, "MapCell::zone @ +0x26");
+static_assert(offsetof(MapCell, footprintCount) == 0x28, "MapCell::footprintCount @ +0x28");
+static_assert(offsetof(MapCell, terrainType) == 0x29, "MapCell::terrainType @ +0x29");
+static_assert(offsetof(MapCell, field_0x2A) == 0x2A, "MapCell +0x2A");
+static_assert(offsetof(MapCell, field_0x2B) == 0x2B, "MapCell +0x2B");
+static_assert(offsetof(MapCell, field_0x2C) == 0x2C, "MapCell +0x2C");
+static_assert(offsetof(MapCell, floorCount) == 0x2D, "MapCell::floorCount @ +0x2D");
+static_assert(offsetof(MapCell, _pad2E) == 0x2E, "MapCell +0x2E");
 
 class Map {
 public:
@@ -42,7 +99,7 @@ public:
     void*    field_0x68;         // +0x68 ctor 0 (the tree seeds its pathfinder worker here)
     void*    field_0x70;         // +0x70 ctor 0 (the tree: region-connectivity graph)
     void*    field_0x78;         // +0x78 ctor 0 (the tree: region pair cache)
-    void*    cells;              // +0x80 cell Array data (0x30-byte cells)
+    MapCell* cells;              // +0x80 cell Array data (MapCell, stride 0x30)
     int32_t  cellCount;          // +0x88 cell Array count (Serialize int&)
     int32_t  cellCapacity;       // +0x8C cell Array capacity
     int16_t  field_0x90[9];      // +0x90 Serialize(9, short*)
