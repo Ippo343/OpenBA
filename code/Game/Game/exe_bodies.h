@@ -252,50 +252,6 @@ inline void* GetLoadingSoundString(void* retStr) {
     return retStr;
 }
 
-// --- Game_RemoveEntity (0x140091a20) — adds entity to pending-removal list ---
-// Adds an entity pointer to the game's removal queue at gameWorld+0x120/0x128/0x12c.
-// Uses standard dynamic array grow pattern (triple capacity on first realloc).
-// param_1 = gameWorld ptr (from g_pGameWorldSingleton + offset), param_2 = entity ptr
-// REIMPLEMENTED inline from Ghidra decompilation.
-inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
-    uintptr_t gw = (uintptr_t)gameWorldPtr;
-    uintptr_t entity = (uintptr_t)entityPtr;
-
-    // Check if entity is already in the removal queue
-    int count = *(int*)(gw + 0x128);
-    uintptr_t* arr = *(uintptr_t**)(gw + 0x120);
-    for (int i = 0; i < count; i++) {
-        if (arr[i] == entity) return;  // already queued
-    }
-
-    // Dynamic array push
-    int newCount = count + 1;
-    if (newCount != count) {
-        uintptr_t* oldArr = arr;
-        *(int*)(gw + 0x128) = newCount;
-        int capacity = *(int*)(gw + 0x12c);
-        if (capacity < newCount) {
-            // Grow: triple capacity if non-empty, else use newCount
-            capacity = (count != 0) ? newCount * 3 : newCount;
-            *(int*)(gw + 0x12c) = capacity;
-            void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)capacity * 8, 8);
-            *(void**)(gw + 0x120) = newBuf;
-        }
-        uintptr_t* newArr = *(uintptr_t**)(gw + 0x120);
-        int copyStart = (oldArr == newArr) ? count : 0;
-        for (int i = copyStart; i < newCount; i++) {
-            if (i < count) {
-                newArr[i] = oldArr[i];  // copy existing
-            } else {
-                newArr[i] = entity;     // append new
-            }
-        }
-        if (oldArr != newArr) {
-            System::MemoryAllocator::MemFree(oldArr);
-        }
-    }
-}
-
 // ---- citizenlist_serialize.cpp (B3R G-Game: external linkage given; read by citizenbehavior.cpp)
 void ResizeStride0x10(void* hdr, int n);  // 0x140017640
 void ResizeStride0x20(void* hdr, int n);  // 0x1400177c0

@@ -257,6 +257,8 @@ public:
     // ---- members (B4 GAME-a; bodies in Game/citizenlist_serialize.cpp) ----
     void Serialize(IO::Stream& stream, int* outParam);   // 0x14008f760 (version 6)
     void PostLoad();                       // 0x14008f580 rebuild the +0x140 coarse water index
+    // B4 GAME-a; body in Game/game.cpp: queue a description on the +0x120 list.
+    void RemoveEntity(ComponentDescription* entity);   // 0x140091a20
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");
