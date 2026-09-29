@@ -178,33 +178,12 @@ using RtIo::FileStream;
 using RtIo::BinaryFileStream;
 using RtIo::TextFileStream;
 
-// The FileSystem rows this file calls, ported in filesystem_createfile_win.cpp
-// by this same lane. Called DIRECTLY, not through RT_EXPORT_ONCE: they are
-// ported, and a door here would only be a way to reach the shipped copy by
-// accident (`reference_converting_a_door_is_not_satisfying_it.md`).
-bool      RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path);
-void      RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info);
-FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
-                                      const Filename* path);
-
-// Wave 9 lane PKG2 rung 3 (filesystem_openfile_win.cpp), already ported and
-// registered. The post-report slot tranche below calls both DIRECTLY.
-}  // namespace RtIO
-extern "C" bool      RtIo_FileSystem_ReadFile(RtIO::FileSystem*, RtIO::FileInfo*,
-                                             int32_t, void*);
-extern "C" RtIO::FileInfo* RtIo_FileSystem_OpenFile(RtIO::FileSystem*, RtIO::FileInfo*,
-                                                   const RtSystem::Filename*);
-namespace RtIO {
+// B.4 R-IO: the FileSystem members this file calls (CreatePath, CreateFileW,
+// OpenFile, ReadFile, CloseFile) are called on `IO::FileSystem::_singleton`,
+// read exactly where retail reads it (`?_singleton@FileSystem@IO@@0PEAV12@EA`,
+// exported DATA, ord 4811). The five doors and the POD `Fs()` accessor are gone.
 
 namespace {
-
-// The FileSystem singleton, read exactly where retail reads it. `?_singleton@
-// FileSystem@IO@@0PEAV12@EA` is exported DATA (ord 4811) — a `0`/`AEAA` in a
-// mangling means PRIVATE, not unexported
-// (`reference_aeaa_is_private_not_unexported.md`).
-FileSystem* Fs() {
-    return reinterpret_cast<FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-}
 
 
 // The String-release idiom on a `char*` slot. FileStream::filename and
@@ -312,12 +291,6 @@ extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
 // qualified `T::~T()` at the position the door call had.
 
 
-// Two callees this file does not otherwise use, declared rather than included:
-// both are PORTED and registered by address in their own translation units, and
-// calling them directly (not through a door) is the choice the rest of this file
-// already makes -- a door would resolve to the same body and add a resolve site
-// the cutover census has to carry (reference_count_the_doors_not_the_calls.md).
-extern "C" void RtIo_CompressedStream_Commit(RtIo::CompressedStream* self);
 // ============================================================================
 // ??0BinaryFileStream@IO@@QEAA@XZ                        retail 0x1800a8200
 // ============================================================================
@@ -473,10 +446,17 @@ extern "C" void RtIo_TextFileStream_SetObject(TextFileStream* self,
 // rsp+0x50) before _name0 (+0x20, at rsp+0x48). That is the inlined ~FileInfo,
 // and it is the same order the standalone one at 0x18000c180 uses.
 // ============================================================================
-static bool FileStreamCreateBody(FileStream* self, const Filename* path) {
-    ++g_fsc.create;
+}  // namespace RtIO
 
-    RtIo_FileSystem_CreatePath(Fs(), path);                     // 1800aa919
+// IO::FileStream::Create -- ENDGAME B.3.9 IO (W2): the member is the entry
+// point; B.4 R-IO: the body is the member's own.
+bool IO::FileStream::Create(const System::Filename& path) {
+    ++RtIO::g_fsc.create;
+
+    // LEFT: CreatePath keeps the POD parameter while
+    // runtime/src/video/save_image_to_file.cpp (R-VIDEO) calls it with one.
+    ::IO::FileSystem::_singleton->CreatePath(
+        *reinterpret_cast<const RtSystem::Filename*>(&path));  // 1800aa919
 
     // ---- 1800aa91e..1800aa958: this->filename = *path -------------------
     // ENDGAME B.3.1 step 2: this whole block IS `System::String::operator=`
@@ -486,23 +466,25 @@ static bool FileStreamCreateBody(FileStream* self, const Filename* path) {
     // which is exactly the one pointer a String is, so it is reached as one.
     // NOTE there is NO AdjustDelimiters here: retail's Create does not
     // normalise, so this is String's operator=, not Filename's.
-    reinterpret_cast<System::String&>(self->filename) = Sys(*path).AsString();
+    reinterpret_cast<System::String&>(_filename) = path.AsString();
 
-    self->base.direction = 1;                                   // 1800aa959
+    _direction = 1;                                             // 1800aa959
 
     // ---- 1800aa960..1800aa9ef -------------------------------------------
     // NOT zero-initialised: CreateFileW writes every field of it that anything
     // reads, and _unk04 is one neither side ever writes.
-    FileInfo tmp;
-    RtIo_FileSystem_CreateFileW(Fs(), &tmp, path);              // 1800aa96f
-    RtIo_FileInfo_Assign(&self->file, &tmp);                    // 1800aa97c
-    SysFile(tmp._name1).~Filename();                            // 1800aa982  +0x28 first
-    SysFile(tmp._name0).~Filename();                            // 1800aa9b9  +0x20
+    RtIO::FileInfo tmp;
+    ::IO::FileSystem::_singleton->CreateFileW(&tmp, path);      // 1800aa96f
+    RtIo_FileInfo_Assign(&_file, &tmp);                         // 1800aa97c
+    RtSystem::SysFile(tmp._name1).~Filename();                  // 1800aa982  +0x28 first
+    RtSystem::SysFile(tmp._name0).~Filename();                  // 1800aa9b9  +0x20
 
-    const bool ok = (self->file.handle != -1);                  // 1800aa9f0
-    if (ok) ++g_fsc.createTrue;
+    const bool ok = (_file.handle != -1);                       // 1800aa9f0
+    if (ok) ++RtIO::g_fsc.createTrue;
     return ok;
 }
+
+namespace RtIO {
 
 // Read by file_stream_cutover_probe.cpp, so the attendance figures print beside
 // the door verdicts and a reader cannot see one without the other.
@@ -513,13 +495,6 @@ void RtIoFileStreamCounters(unsigned long long* out) {
 }
 
 }  // namespace RtIO
-
-// IO::FileStream::Create -- ENDGAME B.3.9 IO (W2): the member is the entry
-// point; the ?Create door that stood on the body above is gone.
-bool IO::FileStream::Create(const System::Filename& path) {
-    return RtIO::FileStreamCreateBody(reinterpret_cast<RtIO::FileStream*>(this),
-                                      reinterpret_cast<const RtSystem::Filename*>(&path));
-}
 
 // ============================================================================
 // THE VTABLE SLOT BODIES — Wave 19 lane FILE, POST-REPORT TRANCHE (see §6.16:
@@ -697,7 +672,7 @@ System::String FileStream::GetSource() const {
 // PKG2 rung 3), so it is called DIRECTLY here rather than through a door.
 bool FileStream::Read(int len, void* buf) {
     ++RtIO::g_fss.read;
-    const bool ok = RtIo_FileSystem_ReadFile(RtIO::Fs(), &_file, len, buf);  // 1800aac03
+    const bool ok = FileSystem::_singleton->ReadFile(_file, len, buf);  // 1800aac03
     return ok;
 }
 
@@ -755,15 +730,10 @@ uint32_t FileStream::GetSize() const {
 // PKG2 rung 3) and returns a `FileInfo` BY VALUE — RDX is the hidden return
 // slot, R8 the Filename.
 //
-// THE POD CASTS ON `path` ARE THE `pod_bridge.h` SEAM, not a bridge this block
-// adds: `?OpenFile@FileSystem@IO@@`'s ported entry point still takes the
-// `RtSystem::Filename` POD, and it belongs to PACKAGE+FS's file set. Retail's
-// own signature is the class, which is what the declaration says.
+// B.4 R-IO: `FileSystem::OpenFile` takes the class, as retail's signature says,
+// so `path` goes to it as it is.
 bool FileStream::Open(const System::Filename& path) {
     ++RtIO::g_fss.open;
-    const RtSystem::Filename* podPath =
-        reinterpret_cast<const RtSystem::Filename*>(&path);
-
     // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
     // `System::String::operator=` (0x1800c9810) — the short-circuit that jumps
     // past BOTH halves is the class's, and Open does not normalise either.
@@ -772,7 +742,7 @@ bool FileStream::Open(const System::Filename& path) {
     _direction = 0;                                       // 1800aaccd — READING
 
     RtIO::FileInfo tmp;                                   // not zero-initialised
-    RtIo_FileSystem_OpenFile(RtIO::Fs(), &tmp, podPath);  // 1800aacdf
+    FileSystem::_singleton->OpenFile(&tmp, path);          // 1800aacdf
     RtIo_FileInfo_Assign(&_file, &tmp);                   // 1800aacec
     RtSystem::SysFile(tmp._name1).~Filename();            // 1800aacf2  +0x28 first
     RtSystem::SysFile(tmp._name0).~Filename();            // 1800aad29  +0x20
@@ -795,7 +765,7 @@ bool FileStream::Open(const System::Filename& path) {
 FileStream::~FileStream() {
     ++RtIO::g_fsc.fsDtor;
     if (_file.handle != -1)                                       // 1800aaad5
-        RtIO::RtIo_FileSystem_CloseFile(RtIO::Fs(), &_file);      // 1800aaae6
+        FileSystem::_singleton->CloseFile(_file);                 // 1800aaae6
     RtIO::RtIo_FileInfo_Dtor(&_file);                             // 1800aaaf0
     RtIO::ReleaseStrSlot(&_filename);                             // 1800aaaf6
 }
@@ -901,16 +871,16 @@ TextFileStream::~TextFileStream() {
 // class's inline DeletingDtor is slot 0, and External::Load (the one
 // construction site) ends its stack instance through it.
 IO::CompressedFileStream::~CompressedFileStream() {
-    auto* const self = reinterpret_cast<RtIo::CompressedFileStream*>(this);
 
-    if (self->base.headerSize > 0 &&                                   // 1800a9355
-        self->base.base.direction == 1) {                               // 1800a935b
-        RtIO::RtIo_CompressedStream_Commit(&self->base);                      // 1800a9361
+    if (_headerSize > 0 &&                                              // 1800a9355
+        _direction == 1) {                                              // 1800a935b
+        Commit();                                                       // 1800a9361
     }
 
-    RtIO::FileStream* const inner = &self->file.base;                         // 1800a9366
-    if (inner->file.handle != -1) {                                     // 1800a936e
-        RtIO::RtIo_FileSystem_CloseFile(RtIO::Fs(), &inner->file);                  // 1800a937a
+    // The member BinaryFileStream's FileInfo (this + 0x68 + 0x20).
+    RtIO::FileInfo* const inner = &_file._file;                         // 1800a9366
+    if (inner->handle != -1) {                                          // 1800a936e
+        ::IO::FileSystem::_singleton->CloseFile(*inner);                // 1800a937a
     }
 }                                                                       // 1800a9388 / 1800a939b
 

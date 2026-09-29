@@ -214,11 +214,12 @@ void* RtColl_ArrayModDtor_180010b80(void* av);                          // 0x180
 void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv);    // 0x180010110
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv);    // 0x180011110
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);     // 0x180011220
-void* RtIo_Mod_CopyCtor_1800101e0(void* dstv, const void* srcv);        // 0x1800101e0
-void  RtIo_Mod_Dtor_180011460(void* selfv);                             // 0x180011460
+// (The Mod copy ctor 0x1800101e0 and dtor 0x180011460 are declared, typed, by
+// Modification.h.)
 
+// The String header's refcount word (String.h's accessor).
 static inline int32_t& RefCount(char* s) {
-    return *reinterpret_cast<int32_t*>(s - 4);
+    return RtSystem::StringRefCount(s);
 }
 
 // The release retail inlines eleven times in RefreshList, e.g.
@@ -507,7 +508,7 @@ extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void
     const int32_t oldSize = a->size;                    // MOV ESI,[RCX+8]
     if (n == oldSize) return;                           // CMP R14D,ESI ; JZ
 
-    uint8_t* const oldData = static_cast<uint8_t*>(a->data);   // MOV RBP,[RCX]
+    Mod* const oldData = static_cast<Mod*>(a->data);   // MOV RBP,[RCX]  LEFT: ModArray's buffer is untyped (H5)
     a->size = n;
     if (n > a->capacity) {
         a->capacity = n;
@@ -517,25 +518,25 @@ extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void
             static_cast<uint64_t>(static_cast<int64_t>(a->capacity)) << 7, 8);
     }
 
-    uint8_t* const newData = static_cast<uint8_t*>(a->data);
+    Mod* const newData = static_cast<Mod*>(a->data);   // LEFT: as above
     int32_t i = (oldData == newData) ? oldSize : 0;
     for (; i < n; ++i) {
-        Mod* const dst = reinterpret_cast<Mod*>(newData + static_cast<size_t>(i) * 0x80);
+        Mod* const dst = newData + i;                   // the 0x80 stride
         if (dst == nullptr) continue;                   // ADD RCX,RDI ; JZ
         const Mod* const src = (i < oldSize)
-            ? reinterpret_cast<const Mod*>(oldData + static_cast<size_t>(i) * 0x80)
+            ? oldData + i
             : fill;                                     // CMP EBX,ESI ; JL ; MOV RDX,R12
         RtIo_Mod_CopyCtor_1800101e0(dst, src);          // CALL 0x1800101e0
     }
 
     if (oldData != newData) {                           // CMP RBP,[R15] ; JZ
         for (int32_t k = 0; k < oldSize; ++k)           // TEST ESI,ESI ; JLE
-            RtIo_Mod_Dtor_180011460(oldData + static_cast<size_t>(k) * 0x80);
+            RtIo_Mod_Dtor_180011460(oldData + k);
         ::System::MemoryAllocator::MemFree(oldData);                            // retail's TEST RBP,RBP is inside
     } else if (oldSize > n) {                           // CMP ESI,R14D ; JLE
         const int32_t drop = oldSize - n;
         for (int32_t k = 0; k < drop; ++k)
-            RtIo_Mod_Dtor_180011460(newData + (static_cast<size_t>(n) + k) * 0x80);
+            RtIo_Mod_Dtor_180011460(newData + (static_cast<size_t>(n) + k));
     }
 }
 
@@ -559,15 +560,9 @@ extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void
 // `IO::PackageFile`, at the bottom of this file. Both doors keep their names
 // and both registrations and delegate. Neither is a virtual slot -- they are
 // `QEBA` -- so the qualification below is for the reader, not for dispatch.
-extern "C" void* RtIo_PackageFile_GetIconData(const void* selfv, void* retv) {
-    return reinterpret_cast<const IO::PackageFile*>(selfv)
-               ->IO::PackageFile::GetIconData(retv);
-}
-
-extern "C" void* RtIo_PackageFile_GetPreviewData(const void* selfv, void* retv) {
-    return reinterpret_cast<const IO::PackageFile*>(selfv)
-               ->IO::PackageFile::GetPreviewData(retv);
-}
+// (B.4 R-IO: the two doors `RtIo_PackageFile_GetIconData` /
+// `RtIo_PackageFile_GetPreviewData` had one caller, RefreshList below, which
+// calls the members directly now; the doors are deleted.)
 
 // ===========================================================================
 // PART 4 — 0x18007f034, the registry-string integer parse helper
@@ -647,10 +642,10 @@ void Modification::RefreshList() {
     // The two singletons retail loads at 0x1800af648 / 0x1800af64f. Read through
     // the exported data slots rather than the raw addresses so a standalone run
     // sees the objects Engine::Startup actually constructed.
-    void** const fsSlot = reinterpret_cast<void**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-    void** const psSlot = reinterpret_cast<void**>(&::IO::Persistence::_singleton);   // ENDGAME B.3.9 IO (D7): the class static
-    void* const fs   = fsSlot ? *fsSlot : nullptr;
-    void* const pers = psSlot ? *psSlot : nullptr;
+    // (ENDGAME B.3.9 IO (D7): the class statics; the address of a static is
+    // never null, so the two slot tests the doors carried are gone.)
+    ::IO::FileSystem* const  fs   = ::IO::FileSystem::_singleton;
+    ::IO::Persistence* const pers = ::IO::Persistence::_singleton;
 
     // 0x1800af65f..0x1800af669 — three zeroed slots. The pack-directory Filename
     // at [RBP+0x200] is NOT among them: GetPackDirectory constructs it.
@@ -664,8 +659,7 @@ void Modification::RefreshList() {
         System::Filename pattern;
         pattern.AsString().Set("*.pkm");                         // literal 0x1801557f0
 
-        System::Filename packDir(                                // 0x180007c10
-            static_cast<const ::IO::FileSystem*>(fs)->GetPackDirectory());
+        System::Filename packDir(fs->GetPackDirectory());        // 0x180007c10
 
         static_cast<const ::IO::FileSystem*>(fs)->FindFiles(       // 0x1800ad7a0  B.3.x bridge
             *reinterpret_cast<const RtSystem::String*>(&packDir),
@@ -686,8 +680,8 @@ void Modification::RefreshList() {
         // every path that APPENDS the record writes all three first and the two
         // early-out paths destroy it without reading them. Raw storage rather
         // than `Mod m{}` so this port leaves exactly what retail leaves.
-        alignas(16) uint8_t modStorage[sizeof(Mod)];
-        Mod* const m = reinterpret_cast<Mod*>(modStorage);
+        Mod mod;                 // a POD: uninitialised stack, as retail's
+        Mod* const m = &mod;
         m->name = nullptr; m->author = nullptr; m->description = nullptr;
         m->i18 = 0; m->i1c = 0;                       // one qword store
         m->order = 0;
@@ -713,9 +707,8 @@ void Modification::RefreshList() {
         // storage (the store list the banner compares, in the same order).
         alignas(16) uint8_t pkgStorage[0xF0];
         IO::PackageFile* const pkgObj = ::new (static_cast<void*>(pkgStorage)) IO::PackageFile();
-        uint8_t* const pkg = pkgStorage;
 
-        const bool read = pkgObj->IO::PackageFile::ReadPackfile(foundData[i]);   // 0x1800b46b0
+        const bool read = pkgObj->IO::PackageFile::ReadPackfile(Sys(foundData[i]));   // 0x1800b46b0
         // 0x1800af923 — `platform` (+0x74) non-zero means the package is not for
         // this build, and retail CLOSES THE FILE before discarding it. The
         // ReadPackfile-failed path does NOT close: there the file never opened.
@@ -724,9 +717,8 @@ void Modification::RefreshList() {
             RtIo_Mod_Dtor_180011460(m);                          // 0x180011460
             continue;
         }
-        if (*reinterpret_cast<const int32_t*>(pkg + 0x74) != 0) {
-            static_cast<::IO::FileSystem*>(fs)->CloseFile(       // 0x1800accc0  B.3.x bridge
-                *reinterpret_cast<RtIO::FileInfo*>(pkg + 0xC0));
+        if (pkgObj->_platform != 0) {                            // +0x74
+            fs->CloseFile(pkgObj->_file);                        // 0x1800accc0, +0xC0
             pkgObj->IO::PackageFile::~PackageFile();
             RtIo_Mod_Dtor_180011460(m);
             continue;
@@ -755,29 +747,29 @@ void Modification::RefreshList() {
         }
 
         // 0x1800afaba — the four ints that come straight off the header.
-        m->i18 = *reinterpret_cast<const int32_t*>(pkg + 0x68);  // version
-        m->i1c = *reinterpret_cast<const int32_t*>(pkg + 0x6c);  // userVersion
-        m->i24 = *reinterpret_cast<const int32_t*>(pkg + 0x78);  // iconWidth
-        m->i28 = *reinterpret_cast<const int32_t*>(pkg + 0x7c);  // iconHeight
+        m->i18 = pkgObj->_version;       // +0x68
+        m->i1c = pkgObj->_userVersion;   // +0x6c
+        m->i24 = pkgObj->_iconWidth;     // +0x78
+        m->i28 = pkgObj->_iconHeight;    // +0x7c
 
         // 0x1800afae2 — the icon, then the preview. Each arrives in a temporary
         // Array this body hands to the member's operator= and then frees.
         {
             ModArray tmp;
-            RtIo_PackageFile_GetIconData(pkg, &tmp);             // 0x180025530
+            pkgObj->IO::PackageFile::GetIconData(&tmp);          // 0x180025530
             if (&m->ints != &tmp) RtColl_ArrayI32Assign_180011110(&m->ints, &tmp);
             ::System::MemoryAllocator::MemFree(tmp.data);
             tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
         }
         {
             ModArray tmp;
-            RtIo_PackageFile_GetPreviewData(pkg, &tmp);          // 0x180025580
+            pkgObj->IO::PackageFile::GetPreviewData(&tmp);       // 0x180025580
             if (&m->bytes != &tmp) RtColl_ArrayU8Assign_180011220(&m->bytes, &tmp);
             ::System::MemoryAllocator::MemFree(tmp.data);
             tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
         }
 
-        m->i2c   = *reinterpret_cast<const int32_t*>(pkg + 0xa8); // crc  0x1800afc8e
+        m->i2c   = static_cast<int32_t>(pkgObj->_crc);            // +0xa8 crc  0x1800afc8e
         m->order = 0;                                             //      0x1800afc98
 
         // -------------------------------------------------------------------
@@ -790,7 +782,7 @@ void Modification::RefreshList() {
         // and sends the walk right, while a null SEARCH key descends LEFT in the
         // first arm and ends the walk with NO INSERT in the second.
         // -------------------------------------------------------------------
-        const int32_t entryCount = *reinterpret_cast<const int32_t*>(pkg + 0xb8);
+        const int32_t entryCount = pkgObj->_entryCount;          // +0xb8
         for (int32_t e = 0; e < entryCount; ++e) {
             // GetFileName's by-value return is constructed straight into `key`
             // (the hidden return slot).
@@ -821,8 +813,7 @@ void Modification::RefreshList() {
             // statement of the loop body, exactly where retail's release sat.
         }
 
-        static_cast<::IO::FileSystem*>(fs)->CloseFile(           // 0x1800aff2a  B.3.x bridge
-            *reinterpret_cast<RtIO::FileInfo*>(pkg + 0xC0));
+        fs->CloseFile(pkgObj->_file);                            // 0x1800aff2a, +0xC0
 
         // 0x1800aff3d — the registry key stem: the mod's path with its directory
         // stripped, kept alive across the temporary's release. `nameRef`
@@ -850,11 +841,13 @@ void Modification::RefreshList() {
             System::Filename keyStr;
             ::new (&keyStr.AsString()) System::String(
                 System::String::Format("%s%s", "ModEnabled_", nameRef));
-            void* node = RtSystem_ConfigMap_Find(                // 0x18002ace0  B.3.x bridge
-                pers, reinterpret_cast<const RtSystem::String*>(&keyStr));
+            // The settings map's node is `RtIo::SettingsMapNode` {key, value};
+            // the finder (R-CORE's, system/Configuration.h) returns it as void*.
+            const RtIo::SettingsMapNode* node = static_cast<const RtIo::SettingsMapNode*>(
+                RtSystem_ConfigMap_Find(                         // 0x18002ace0  B.3.x bridge
+                    pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));
             if (node != nullptr) {
-                const char* v = *reinterpret_cast<const char* const*>(
-                    static_cast<const uint8_t*>(node) + 8);
+                const char* v = node->value._data;               // +0x08
                 const int cmp = (v == nullptr) ? -1 : std::strcmp(v, "true");
                 m->enabled = static_cast<uint8_t>(cmp == 0);
             }
@@ -865,11 +858,11 @@ void Modification::RefreshList() {
             System::Filename keyStr;
             ::new (&keyStr.AsString()) System::String(
                 System::String::Format("%s%s", "ModIndex_", nameRef));
-            void* node = RtSystem_ConfigMap_Find(                // B.3.x bridge
-                pers, reinterpret_cast<const RtSystem::String*>(&keyStr));
+            const RtIo::SettingsMapNode* node = static_cast<const RtIo::SettingsMapNode*>(
+                RtSystem_ConfigMap_Find(                         // B.3.x bridge
+                    pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));
             if (node != nullptr) {
-                const char* v = *reinterpret_cast<const char* const*>(
-                    static_cast<const uint8_t*>(node) + 8);
+                const char* v = node->value._data;               // +0x08
                 m->order = RtCrt_ParseInt10_18007f034(v);        // 0x18007f034
             }
         }  // ~keyStr releases here
@@ -953,7 +946,8 @@ void Modification::RefreshList() {
     // argument is a stack slot the callee never reads.
     if (arr->size > 1) {
         void* scratch = nullptr;
-        RtIo_Modification_SortMods(arr->data, arr->size, &scratch);
+        RtIo_Modification_SortMods(static_cast<Mod*>(arr->data),   // LEFT: ModArray's buffer is untyped (H5)
+                                   arr->size, &scratch);
     }
 
     // 0x1800b0350 — release every found Filename, then the array itself.
@@ -989,8 +983,7 @@ namespace IO {
 // used to be spelled here as `self + 0x80` / `self + 0x98` are now the named
 // members `_iconData` / `_previewData`, each pinned by a static_assert in
 // runtime/types/io/PackageFile.h.
-void* PackageFile::GetIconData(void* retv) const {
-    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+void* PackageFile::GetIconData(RtIO::ModArray* ret) const {
     const void* const member = &_iconData;              // LEA RDX,[RCX+0x80]
     ret->data = nullptr;                                // MOV [RBX],RAX
     ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
@@ -999,8 +992,7 @@ void* PackageFile::GetIconData(void* retv) const {
     return ret;
 }
 
-void* PackageFile::GetPreviewData(void* retv) const {
-    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+void* PackageFile::GetPreviewData(RtIO::ModArray* ret) const {
     const void* const member = &_previewData;           // LEA RDX,[RCX+0x98]
     ret->data = nullptr;
     ret->size = 0;

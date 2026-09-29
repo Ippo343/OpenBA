@@ -275,32 +275,10 @@ extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
 // `return FileInfo(this->_fileInfo)`, where `_fileInfo` is the PackageFile's own
 // embedded FileInfo at +0xC0 — the same +0xC0 lane PKG's ClosePackages hands to
 // CloseFile, which is the independent confirmation of the offset.
-// ENDGAME B.3.4a closing: the body is now `IO::PackageFile::GetFileInfo()`
-// (runtime/types/io/PackageFile.h declares it; the definition is in
-// filesystem_packages.cpp beside GetFileName, in that file's existing
-// `namespace IO` block). This door keeps its name, its `extern "C"` linkage,
-// its signature and its registration, and delegates.
-//
-// *** THE QUALIFIED `IO::PackageFile::` IS LOAD-BEARING. *** `IO::PackageFile`
-// IS polymorphic (9 slots, B34_RULES section 1.4) -- unlike `IO::FileSystem`,
-// which is why the FileSystem doors in this file need no qualification.
-// GetFileInfo is non-virtual, so the qualification changes nothing today; it is
-// written anyway because the file's other PackageFile doors are qualified and a
-// mixed convention here is how B34_BRIEFS section A.1's re-entry hazard gets in
-// the day one of these becomes an override.
-//
-// The return is BY VALUE, so `ret` IS retail's hidden return slot (RDX) and the
-// member's by-value return fills it through the same ABI: one FileInfo copy
-// ctor, the same `RtIo_FileInfo_CopyCtor` as before, at the same point.
-//
-// Section D applies to this file: nothing added, removed or reordered on the
-// open/read path -- no lock, no retry, no positioned read, no null check.
-extern "C" FileInfo* RtIo_PackageFile_GetFileInfo(const PackageFileView* self,
-                                                  FileInfo* ret) {
-    new (ret) FileInfo(
-        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileInfo());
-    return ret;
-}
+// The body is `IO::PackageFile::GetFileInfo()` (runtime/types/io/PackageFile.h
+// declares it; the definition is in filesystem_packages.cpp beside GetFileName).
+// B.4 R-IO: the `RtIo_PackageFile_GetFileInfo` door is gone; ReadFile below,
+// its one caller, calls the member on the typed `_packfiles` element.
 
 // ============================================================================
 // ?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBV…@Z  0x1800adce0
@@ -315,15 +293,9 @@ extern "C" FileInfo* RtIo_PackageFile_GetFileInfo(const PackageFileView* self,
 // and NO null check was introduced on the open/read path. The two-loader race
 // LOADER_READ_SPIN.md describes has its own pending fix and it is not this one.
 
-extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
-                                         int32_t n, void* dst) {
-    return reinterpret_cast<IO::FileSystem*>(self)->ReadFile(*fi, n, dst);
-}
-
-extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
-                                              const Filename* name) {
-    return reinterpret_cast<IO::FileSystem*>(self)->OpenFile(ret, *name);
-}
+// B.4 R-IO: the `RtIo_FileSystem_ReadFile` / `RtIo_FileSystem_OpenFile` doors
+// that stood here are gone; every caller calls the member on
+// `IO::FileSystem::_singleton`.
 
 }  // namespace RtIO
 
@@ -347,9 +319,8 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
 namespace IO {
 
 bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
-                                  const RtSystem::Filename& nameRef) {
+                                  const System::Filename& name) {
     RtIO::FileInfo* const fi = &fiRef;
-    const RtSystem::Filename* const name = &nameRef;
     // retail never reads `this` here
 
     // An empty FileInfo, assigned over the caller's — retail builds it on the
@@ -365,7 +336,7 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // run over them yet.
     new (&blank._name0) System::Filename();
     new (&blank._name1) System::Filename();
-    blank.winHandle  = -1;
+    blank.winHandle  = INVALID_HANDLE_VALUE;
     blank._unk04     = 0;                // retail leaves this whatever the stack
     blank._pad14     = 0;                // held; see §4 — zeroed here only so the
                                          // value we copy out is defined.
@@ -379,7 +350,7 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // constructed into the POD slot and released by hand, as before.
     struct { void* data; } ws = { nullptr };                 // 1800add98
     ::new (static_cast<void*>(&ws)) System::WideString(       // B.3.x bridge
-        *reinterpret_cast<const System::String*>(name));     // 1800addad
+        name.AsString());                                    // 1800addad
 
     // 1800addb3..1800addd7 — the argument block, transcribed rather than named
     // from habit: dwDesiredAccess 0x80000000 (GENERIC_READ), dwShareMode 1
@@ -388,17 +359,17 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // hTemplateFile NULL.
     const HANDLE h = ::CreateFileW(static_cast<LPCWSTR>(ws.data),
                                    0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
-    fi->winHandle = reinterpret_cast<int64_t>(h);            // 1800adddd
+    fi->winHandle = h;          // 1800adddd
 
     RtIO::RtString_ReleaseInline(
         reinterpret_cast<RtSystem::String*>(&ws));           // 1800adde1
 
     // `LEA RAX,[RCX-1] ; CMP RAX,-3 ; JA fail` — an UNSIGNED test that rejects
-    // exactly two values, INVALID_HANDLE_VALUE (-1) and NULL (0). Spelled as
-    // retail spells it rather than as `h == INVALID_HANDLE_VALUE || !h`, because
-    // the two are only equivalent by accident of those being the only wrap cases.
-    const uint64_t hm1 = static_cast<uint64_t>(fi->winHandle) - 1u;
-    if (hm1 > static_cast<uint64_t>(-3)) {                   // 1800ade12
+    // exactly two values, INVALID_HANDLE_VALUE (-1) and NULL (0): unsigned
+    // `h - 1 > 2^64 - 3` holds for h - 1 in {2^64 - 2, 2^64 - 1}, i.e. for
+    // h == 0 and h == -1 and for nothing else. B.4 R-IO: `winHandle` is the
+    // HANDLE it holds, so the two values are named.
+    if (h == nullptr || h == INVALID_HANDLE_VALUE) {         // 1800ade12
         return false;                                        // 1800ade3c
     }
 
@@ -419,7 +390,7 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {   // 1800ace23  JA
         // ---- LOOSE ------------------------------------------------------
         DWORD got = 0;                                       // 1800acf0f
-        ::ReadFile(reinterpret_cast<HANDLE>(fi->winHandle), dst,
+        ::ReadFile(fi->winHandle, dst,
                    static_cast<DWORD>(n), &got, nullptr);    // 1800acf2a
         fi->cursor += static_cast<int32_t>(got);             // 1800acf37
         return static_cast<int32_t>(got) == n;               // 1800acf3c  SETZ
@@ -429,10 +400,9 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
     // The pack index is the TOP BYTE of the tag (§1).
     const uint32_t packIndex =
         static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(&fi->handle)[3]);
-    RtIO::PackageFileView* const pkg = _packfiles[packIndex]; // 1800ace31/39
+    PackageFile* const pkg = _packfiles[packIndex];          // 1800ace31/39
 
-    RtIO::FileInfo pack;
-    RtIO::RtIo_PackageFile_GetFileInfo(pkg, &pack);          // 1800ace3d
+    RtIO::FileInfo pack = pkg->IO::PackageFile::GetFileInfo();  // 1800ace3d
 
     const int32_t abs = fi->baseOffset + fi->cursor;         // 1800ace43/46
     bool ok;
@@ -441,7 +411,7 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
         ok = true;
     } else {
         ok = (static_cast<int32_t>(::SetFilePointer(
-                  reinterpret_cast<HANDLE>(pack.winHandle), abs, nullptr,
+                  pack.winHandle, abs, nullptr,
                   FILE_BEGIN)) == abs);                      // 1800ace61/67
     }
     if (ok) {
@@ -463,8 +433,7 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
 // (RCX = this, RDX = ret) and RAX is the slot on the way out — `MOV RAX,RDI` at
 // 0x1800acc2b. Getting that wrong is reference_hidden_retslot_wild_write.md.
 RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
-                                     const RtSystem::Filename& nameRef) {
-    const RtSystem::Filename* const name = &nameRef;
+                                     const System::Filename& name) {
 
     RtIO::FileInfo lf;                                       // 1800ac8b3..
     lf.handle     = -1;
@@ -476,14 +445,14 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
     // live object to release. Their destructors are at the bottom.
     new (&lf._name0) System::Filename();
     new (&lf._name1) System::Filename();
-    lf.winHandle  = -1;
+    lf.winHandle  = INVALID_HANDLE_VALUE;
     lf._pad14     = 0;
     // +0x04 is DELIBERATELY left as-is: retail never writes it and copies it out
     // anyway (§4). Reading it below reproduces that; the oracle excludes it.
 
     bool emitted = false;
 
-    const int32_t nameLen = RtIO::StrLenOf(name->data);      // 1800ac8e2
+    const int32_t nameLen = RtIO::StrLenOf(name._data);      // 1800ac8e2
     const int32_t dirLen  = RtIO::StrLenOf(_dataDirectory.data); // 1800ac8f2
     if (nameLen > dirLen) {                                  // 1800ac904  JLE skips
         // Strip the data-directory prefix; the packfile index is keyed on the
@@ -496,7 +465,7 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
             // Set-then-AdjustDelimiters IS the Filename const char* ctor,
             // ??0Filename@System@@QEAA@PEBD@Z (0x180026cf0); the inner scope is
             // retail's release point at 0x1800ac991, before the node is used.
-            System::Filename key(name->data + dirLen);       // 1800ac91a..932
+            System::Filename key(name._data + dirLen);       // 1800ac91a..932
 
             while (node != nullptr) {                        // 1800ac98c
                 const char* const nk = node->key;            // 1800ac945
@@ -517,9 +486,8 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
         if (node != nullptr && _existsInPackfileGate != 0) {  // 1800ac9bf
             lf.handle = static_cast<int32_t>(
                 (node->packIndex << 24) | node->fileIndex);  // 1800ac9c5..d1
-            const RtIO::PackageFileView* const pkg = _packfiles[node->packIndex];
-            const RtIO::PackageFileEntry* const e =
-                static_cast<const RtIO::PackageFileEntry*>(pkg->entries) + node->fileIndex;
+            const PackageFile* const pkg = _packfiles[node->packIndex];
+            const RtIO::PackageFileEntry* const e = &pkg->_entries[node->fileIndex];
             lf.size       = static_cast<int32_t>(e->size);   // 1800ac9ee  +0xc
             lf.baseOffset = static_cast<int32_t>(e->offset); // 1800aca0c  +0x8
             lf.cursor     = 0;                               // 1800aca13
@@ -537,15 +505,15 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
             // default ctors (0x180006220), not stores through live objects.
             new (&ret->_name0) System::Filename();
             new (&ret->_name1) System::Filename();
-            ret->winHandle  = -1;                            // 1800aca4c
-        } else if (!PlatformOpenFile(lf, *name)) {           // 1800acace
+            ret->winHandle  = INVALID_HANDLE_VALUE;                            // 1800aca4c
+        } else if (!PlatformOpenFile(lf, name)) {            // 1800acace
             ret->handle     = -1;                            // 1800acadb
             ret->size       = 0;
             ret->cursor     = 0;
             ret->baseOffset = 0;
             new (&ret->_name0) System::Filename();           // as above
             new (&ret->_name1) System::Filename();
-            ret->winHandle  = -1;                            // 1800acaff
+            ret->winHandle  = INVALID_HANDLE_VALUE;                            // 1800acaff
         } else {
             lf.handle = -2;                                  // 1800acb77
             emitted   = true;
