@@ -118,7 +118,7 @@
 // keymap_save.cpp and registered there BY ADDRESS. Startup's re-entry arm used
 // to reach it through `ResolveAddr(Module::Runtime, 0x180053440)`; that door
 // resolved to this same body, so it is now a direct call (ENDGAME B.3.7 B5).
-void* RtInput_KeyMap_DeletingDtor(void* selfPtr);
+Input::KeyMap* RtInput_KeyMap_DeletingDtor(Input::KeyMap* self);
 
 namespace {
 

@@ -125,6 +125,10 @@
 // Input::Device::Update and the KeyMap bodies with it.
 // ============================================================================
 
+#define DIRECTINPUT_VERSION 0x0800
+#include <windows.h>
+#include <dinput.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -147,24 +151,8 @@ constexpr unsigned kMsgSetFocus    = 0x0007;   // CMP EAX,0x7   at 0x1800e1b72
 constexpr unsigned kMsgKillFocus   = 0x0008;   // CMP EAX,0x8   at 0x1800e1ba5
 constexpr unsigned kMsgMouseWheel  = 0x020A;   // CMP EAX,0x20a at 0x1800e1bd8
 
-// COM vtable byte offsets. Named, not spelled inline, because a bare `+0x40` in
-// a call is exactly what the Ghidra-drops-arguments warning is about.
-constexpr int kComRelease   = 0x10;   // IUnknown::Release,                 index 2
-constexpr int kComUnacquire = 0x40;   // IDirectInputDevice8::Unacquire,    index 8
-
-// The Set lives at Application+0x18 — the identical door message_callbacks.cpp
-// uses, and its two static_asserts already enforce that root/count land at
-// +0x18/+0x20.
-inline Set* CallbackSet(Application::Application* app) {
-    return reinterpret_cast<Set*>(reinterpret_cast<uint8_t*>(app) + 0x18);
-}
-
-// `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678, through the port-aware
-// DATA door so a minted run and a DLL run both land on whatever storage the
-// ported ctor published into (platform_startup_win.cpp:112 uses the same door).
-Application::Application** AppSingletonSlot() {
-    return reinterpret_cast<Application::Application**>(&::Application::Application::_singleton);
-}
+// B.4 (R-ENG): the COM calls go through <dinput.h>'s interfaces --
+// IUnknown::Release +0x10, IDirectInputDevice8W::Unacquire +0x40.
 
 // ---- attendance ------------------------------------------------------------
 uint64_t g_entries   = 0;
@@ -212,7 +200,7 @@ ShutdownSummary g_summary;
 // DEAD CODE — defined, never called (the only warning this file carried,
 // -Wunused-function) — and is removed rather than kept alive.
 bool EraseCallback(Application::Application* app, unsigned message) {
-    Set* set = CallbackSet(app);
+    Set* set = &app->_messageCallbacks;   // Application + 0x18
     // Read the node out BEFORE the call so a hit can be recognised without
     // duplicating retail's descent logic in two places.
     for (Node* n = set->root; n; ) {
@@ -227,13 +215,6 @@ bool EraseCallback(Application::Application* app, unsigned message) {
     return false;
 }
 
-// A COM call through the vtable at offset 0, per the project's ABI note:
-// virtual calls go through raw function pointers read from the vtable.
-inline void ComCall(void* obj, int slotByteOffset) {
-    void** vtbl = *reinterpret_cast<void***>(obj);
-    using Fn = long (*)(void*);
-    reinterpret_cast<Fn>(vtbl[slotByteOffset / 8])(obj);
-}
 
 }  // namespace
 
@@ -246,8 +227,7 @@ void Device::PlatformShutdown() {
     ++g_entries;
 
     // ---- the three message-callback erases ---------------------------------
-    Application::Application** slot = AppSingletonSlot();
-    Application::Application*  app  = slot ? *slot : nullptr;
+    Application::Application*  app  = Application::Application::_singleton;
     if (app == nullptr) {
         // Retail derefs [0x1801fc678] unguarded. It is NOT guarded here to be
         // safe — it is guarded because our standalone can reach shutdown on a
@@ -265,29 +245,29 @@ void Device::PlatformShutdown() {
 
     // ---- the three COM teardowns, in retail's order and with its asymmetry --
     // MOUSE first (+0x11E8): Unacquire, then Release.
-    void* mouse = _mouseDevice;
+    IDirectInputDevice8W* mouse = _mouseDevice;
     if (mouse != nullptr) {                                   // 0x1800e1bfe
-        ComCall(mouse, kComUnacquire);                        // 0x1800e1c06
+        mouse->Unacquire();                                   // +0x40, 0x1800e1c06
         // Retail RE-LOADS the field between the two calls rather than reusing
         // the register. Reproduced: Unacquire is an outbound call and nothing
         // here may assume it left the field untouched.
-        ComCall(_mouseDevice, kComRelease);                   // 0x1800e1c13
+        _mouseDevice->Release();                              // +0x10, 0x1800e1c13
         ++g_released;
     }
 
     // KEYBOARD (+0x11E0): Unacquire, then Release.
-    void* keyboard = _keyboardDevice;
+    IDirectInputDevice8W* keyboard = _keyboardDevice;
     if (keyboard != nullptr) {                                // 0x1800e1c1d
-        ComCall(keyboard, kComUnacquire);                     // 0x1800e1c25
-        ComCall(_keyboardDevice, kComRelease);                // 0x1800e1c32
+        keyboard->Unacquire();                                // +0x40, 0x1800e1c25
+        _keyboardDevice->Release();                           // +0x10, 0x1800e1c32
         ++g_released;
     }
 
     // FACTORY (+0x11D8): Release ONLY — retail tail-jumps it. No Unacquire,
     // because an IDirectInput8 was never acquired. See the banner.
-    void* dinput = _directInput;
+    IDirectInput8W* dinput = _directInput;
     if (dinput != nullptr) {                                  // 0x1800e1c3f
-        ComCall(dinput, kComRelease);                         // 0x1800e1c49, TAIL JMP
+        dinput->Release();                                    // +0x10, 0x1800e1c49, TAIL JMP
         ++g_released;
     }
 

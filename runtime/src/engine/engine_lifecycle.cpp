@@ -239,7 +239,7 @@ typedef rt::system::MemoryAllocator RtMemoryAllocator;
 
 // The unexported Input::KeyMap scalar deleting destructor 0x180053440, ported
 // and registered by address in runtime/src/input/keymap_save.cpp (block B5).
-void* RtInput_KeyMap_DeletingDtor(void* selfPtr);
+Input::KeyMap* RtInput_KeyMap_DeletingDtor(Input::KeyMap* self);
 
 namespace {
 
