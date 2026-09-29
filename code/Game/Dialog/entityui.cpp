@@ -47,36 +47,50 @@
 #include "Game/PlayerToolManager.h"
 
 // ============================================================
+// The tool manager's selected-entity sets (PlayerToolManager +0x50 / +0x60)
+// ============================================================
+// An AVL tree of 0x38-byte nodes keyed by the entity (0x140102e30 builds them).
+// PlayerToolManager declares the roots as void* (GAME-a's header): the node
+// type is declared here, where its only builder and walkers live.
+struct TrackedEntityNode {
+    ComponentEntity*   key;       // +0x00 the entity (InternalPtr value)
+    uint32_t           x;         // +0x08
+    uint32_t           y;         // +0x0C
+    uint8_t            active;    // +0x10 (the insert stores the dword 1)
+    uint8_t            _pad11[7]; // +0x11
+    TrackedEntityNode* parent;    // +0x18
+    TrackedEntityNode* left;      // +0x20
+    TrackedEntityNode* right;     // +0x28
+    int16_t            balance;   // +0x30
+    int16_t            height;    // +0x32
+    uint8_t            _pad34[4]; // +0x34
+};
+static_assert(sizeof(TrackedEntityNode) == 0x38, "0x140102e30 MemAlloc(0x38)");
+static_assert(offsetof(TrackedEntityNode, active) == 0x10, "+0x10");
+static_assert(offsetof(TrackedEntityNode, parent) == 0x18, "+0x18");
+static_assert(offsetof(TrackedEntityNode, left) == 0x20, "+0x20");
+static_assert(offsetof(TrackedEntityNode, right) == 0x28, "+0x28");
+static_assert(offsetof(TrackedEntityNode, balance) == 0x30, "+0x30");
+
+// ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
 // ============================================================
-// BST remove: walks tree to find node with key == param_2, calls BST_Delete.
-// param_1 = pointer to BST root (root = *param_1)
-// param_2 = InternalBasePtr key to remove
-//
-// BST node layout (at ptr 'this'):
-//   +0x00: key (InternalBasePtr, uint64_t)
-//   +0x20: left child ptr (node**)  [+0x20/8 = offset 4 from uint64_t* = offset 0x20]
-//   +0x28: right child ptr (node**) [+0x28/8 = offset 5 = +0x28]
-static void EntityTrackingSet_Remove_Impl(void* bstRoot, void* key)
+// BST remove: walks the tree to the node whose key == *key, then deletes it
+// (0x140025740).
+static void EntityTrackingSet_Remove_Impl(TrackedEntityNode** root, ComponentEntity* const* key)
 {
-    // param_1 is longlong* (root node double-ptr)
-    uint8_t** rootPtr = (uint8_t**)bstRoot;
-    uint8_t* node = (uint8_t*)*rootPtr;
+    TrackedEntityNode* node = *root;
 
     while (node != nullptr) {
-        uint64_t nodeKey = *(uint64_t*)node;
-        uint64_t searchKey = *(uint64_t*)key;
-
-        if (searchKey < nodeKey) {
-            // Go left: *(node+0x20) = left child
-            node = *(uint8_t**)(node + 0x20);
-        } else if (searchKey <= nodeKey) {
+        if (*key < node->key) {
+            node = node->left;
+        } else if (*key <= node->key) {
             // Found the node — delete it
-            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(bstRoot), (void*)node);   // 0x140025740
+            // LEFT: the shared AVL helper takes the root as int64_t* (PLAYER's declaration).
+            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740
             return;
         } else {
-            // Go right: *(node+0x28) = right child
-            node = *(uint8_t**)(node + 0x28);
+            node = node->right;
         }
     }
     // Not found — nothing to do
@@ -207,120 +221,93 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
 //
 // NOTE: This function is used in both entityui.cpp and toolui.cpp.
 
+// A new node: the key, the position, active, no children, balance 0.
+static TrackedEntityNode* NewTrackedEntityNode(ComponentEntity* key, uint32_t x, uint32_t y,
+                                               TrackedEntityNode* parent)
+{
+    TrackedEntityNode* node =
+        static_cast<TrackedEntityNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    if (node != nullptr) {
+        node->key = key;
+        node->x = x;
+        node->y = y;
+        node->active = 1;
+        node->_pad11[0] = node->_pad11[1] = node->_pad11[2] = 0;   // the dword store of 1
+        node->parent = parent;
+        node->left = nullptr;
+        node->right = nullptr;
+        node->balance = 0;
+        node->height = 0;
+    }
+    return node;
+}
+
 void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                  uint32_t x, uint32_t y)
 {
-    uintptr_t pc = (uintptr_t)playerController;
-    uint64_t entityKey = *(uint64_t*)entityPtr;
-    uintptr_t* rootPtr = (uintptr_t*)(pc + 0x60);
+    // LEFT: the receiver and key arrive as void* (toolui.cpp's declaration, DLG-d),
+    // and PlayerToolManager +0x60 is void* (GAME-a's header).
+    PlayerToolManager* manager = reinterpret_cast<PlayerToolManager*>(playerController);
+    ComponentEntity* entityKey = *reinterpret_cast<ComponentEntity* const*>(entityPtr);
+    TrackedEntityNode** rootPtr = reinterpret_cast<TrackedEntityNode**>(&manager->field_0x60);
 
-    // Search BST for existing node with matching key
-    uintptr_t node = *rootPtr;
-    while (node != 0) {
-        uint64_t nodeKey = *(uint64_t*)node;
-        if (entityKey < nodeKey) {
-            node = *(uintptr_t*)(node + 0x20);  // left
+    // Search the tree for an existing node with this key
+    TrackedEntityNode* node = *rootPtr;
+    while (node != nullptr) {
+        if (entityKey < node->key) {
+            node = node->left;
         } else {
-            if (entityKey <= nodeKey) {
+            if (entityKey <= node->key) {
                 // Found — update position and active flag
-                if (node != 0) {
-                    *(uint8_t*)(node + 0x10) = 1;  // active = true
-                    *(uint32_t*)(node + 0x08) = x;
-                    *(uint32_t*)(node + 0x0C) = y;
-                    return;
-                }
-                break;
+                node->active = 1;
+                node->x = x;
+                node->y = y;
+                return;
             }
-            node = *(uintptr_t*)(node + 0x28);  // right
+            node = node->right;
         }
     }
 
-    // Not found — insert new node
-    // Prepare node data
-    uint32_t activeFlag = 1;
-
-    if (*rootPtr == 0) {
-        // Empty tree — create root node
-        uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
-        if (newNode != nullptr) {
-            *(uint64_t*)newNode = 0;
-            *(uint64_t*)newNode = entityKey;
-            *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
-            *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
-            *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
-            newNode[3] = 0;  // parent = null
-            newNode[4] = 0;  // left = null
-            newNode[5] = 0;  // right = null
-            *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;  // balance = 0
-        }
-        *rootPtr = (uintptr_t)newNode;
+    // Not found — insert a new node
+    if (*rootPtr == nullptr) {
+        // Empty tree — the new node is the root
+        *rootPtr = NewTrackedEntityNode(entityKey, x, y, nullptr);
     } else {
-        // Walk BST to find insertion point
-        uintptr_t cur = *rootPtr;
-        uintptr_t parent = 0;
+        // Walk the tree to the insertion point
+        TrackedEntityNode* cur = *rootPtr;
 
         while (true) {
-            parent = cur;
-            uint64_t curKey = *(uint64_t*)cur;
+            TrackedEntityNode* parent = cur;
 
-            if (curKey <= entityKey) {
-                if (entityKey <= curKey) {
-                    // Duplicate key — should not happen, already handled above
+            if (cur->key <= entityKey) {
+                if (entityKey <= cur->key) {
+                    // Duplicate key — already handled above
                     return;
                 }
-                // Go right
-                uintptr_t right = *(uintptr_t*)(cur + 0x28);
-                if (right == 0) {
-                    // Insert as right child
-                    uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
-                    if (newNode != nullptr) {
-                        *(uint64_t*)newNode = 0;
-                        *(uint64_t*)newNode = entityKey;
-                        *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
-                        *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
-                        *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
-                        newNode[4] = 0;   // left
-                        newNode[5] = 0;   // right
-                        *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;
-                        newNode[3] = parent;  // parent
-                    }
-                    *(uintptr_t*)(cur + 0x28) = (uintptr_t)newNode;
-                    // Rebalance
-                    uintptr_t nodeRef = (uintptr_t)newNode;
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&nodeRef));   // 0x140025920
+                if (cur->right == nullptr) {
+                    // Insert as the right child, then rebalance
+                    TrackedEntityNode* newNode = NewTrackedEntityNode(entityKey, x, y, parent);
+                    cur->right = newNode;
+                    // LEFT: the shared AVL retrace takes int64_t* (PLAYER's declaration).
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&newNode));   // 0x140025920
                     break;
                 }
-                cur = right;
+                cur = cur->right;
             } else {
-                // Go left
-                uintptr_t left = *(uintptr_t*)(cur + 0x20);
-                if (left == 0) {
-                    // Insert as left child
-                    uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
-                    if (newNode != nullptr) {
-                        *(uint64_t*)newNode = 0;
-                        *(uint64_t*)newNode = entityKey;
-                        *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
-                        *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
-                        *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
-                        newNode[4] = 0;   // left
-                        newNode[5] = 0;   // right
-                        *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;
-                        newNode[3] = parent;  // parent
-                    }
-                    *(uintptr_t*)(cur + 0x20) = (uintptr_t)newNode;
-                    // Rebalance
-                    uintptr_t nodeRef = (uintptr_t)newNode;
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&nodeRef));   // 0x140025920
+                if (cur->left == nullptr) {
+                    // Insert as the left child, then rebalance
+                    TrackedEntityNode* newNode = NewTrackedEntityNode(entityKey, x, y, parent);
+                    cur->left = newNode;
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&newNode));   // 0x140025920
                     break;
                 }
-                cur = left;
+                cur = cur->left;
             }
         }
     }
 
-    // Increment entity count
-    *(int*)(pc + 0x68) = *(int*)(pc + 0x68) + 1;
+    // One more tracked entity (+0x68)
+    manager->field_0x68 = manager->field_0x68 + 1;
 }
 
 // ============================================================
@@ -407,7 +394,8 @@ void EntityUI::OnClosed() {
     // The tracking set: the tool manager (g_pGameWorldSingleton +0x120) +0x60
     PlayerToolManager* tools = GameUpdateLoop::_singleton->m_toolManager;
 
-    EntityTrackingSet_Remove_Impl(&tools->field_0x60, &entityKey);
+    // LEFT: PlayerToolManager +0x60 is void* (GAME-a header).
+    EntityTrackingSet_Remove_Impl(reinterpret_cast<TrackedEntityNode**>(&tools->field_0x60), &entityKey);
 }
 
 // ============================================================
@@ -714,7 +702,8 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         if (checkPin->_checked == 0) {
             ComponentEntity* entityKey = entity;
             PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
-            EntityTrackingSet_Remove_Impl(&worldObj->field_0x50, &entityKey);
+            // LEFT: PlayerToolManager +0x50 is void* (GAME-a header).
+            EntityTrackingSet_Remove_Impl(reinterpret_cast<TrackedEntityNode**>(&worldObj->field_0x50), &entityKey);
             return;
         }
 
