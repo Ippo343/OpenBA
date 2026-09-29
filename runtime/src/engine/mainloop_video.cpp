@@ -436,12 +436,6 @@ const ArraySpec kSpec_VideoResource = {           // 0x18004f620
 
 }  // namespace rtcoll
 
-extern "C" void RtColl_ArraySetSizeFill_18004f620(void* a, int n, const void* fill) {
-    rtcoll::SetSizeCore(static_cast<rtcoll::ArrayHdr*>(a), n,
-                        static_cast<const uint8_t*>(fill),
-                        &rtcoll::kSpec_VideoResource);
-}
-
 // ============================================================================
 // ?OnVideoError@MainLoop@Engine@@QEAAXXZ                    retail 0x1800dc5e0
 // ============================================================================
@@ -663,10 +657,6 @@ void Engine::MainLoop::OnVideoError() {
     // three fields itself.
 }
 
-extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
-    self->Engine::MainLoop::OnVideoError();
-}
-
 // ============================================================================
 // ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ                  retail 0x1800dc3b0
 // ============================================================================
@@ -808,8 +798,4 @@ void Engine::MainLoop::OnVideoRestart() {
     // value is a STALE number rather than a zero, so a port that "tidied up" by
     // clearing _capacity fails here and nowhere else. `contextOk` is not our
     // own write either — CreateVideoContext stores it.
-}
-
-extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
-    self->Engine::MainLoop::OnVideoRestart();
 }

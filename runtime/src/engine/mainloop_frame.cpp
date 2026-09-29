@@ -518,7 +518,3 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
 
     return _quit != 0;                   // MOVZX EAX,BYTE PTR [RDI+0x19]
 }
-
-extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
-    return self->Engine::MainLoop::Frame(skipUpdate);
-}

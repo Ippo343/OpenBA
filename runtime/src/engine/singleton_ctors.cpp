@@ -101,7 +101,6 @@
 
 // The platform half (singleton_ctors_win.cpp).
 void RtLaneXPlatformLockInit(void* cs);
-void RtLaneXPlatformLockDelete(void* cs);
 // Installs allocator.cpp's `g_plat` function-pointer seam if it is not already
 // installed, and returns whether it took. See the long comment above the
 // MemoryAllocator subject in the probe: `rtalloc::Construct` opens with

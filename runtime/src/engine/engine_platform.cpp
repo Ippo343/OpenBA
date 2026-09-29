@@ -365,11 +365,6 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     return result == 1;   // 0x1800a1a97: IDOK from the launcher template
 }
 
-extern "C" bool RtEngine_Engine_PlatformConfigure(EngineT* self, bool configure,
-                                                 void* platformHandle) {
-    return self->Engine::Engine::PlatformConfigure(configure, platformHandle);
-}
-
 extern "C" void RtEnginePlatformSummary() {
     printf("[RtPort]   Engine::PlatformConfigure: calls=%u deconfigure=%u "
            "dialog-skipped=%u dialog-shown=%u\n",

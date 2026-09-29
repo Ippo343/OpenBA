@@ -700,13 +700,6 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     return 1;
 }
 
-extern "C" unsigned RtEngine_Engine_Startup(EngineT* self, const char* cmdLine,
-                                            unsigned minRangeMB, unsigned maxTotalMB,
-                                            bool noConfigure) {
-    return self->Engine::Engine::Startup(
-        cmdLine, minRangeMB, maxTotalMB, noConfigure);
-}
-
 // ============================================================================
 // ?Shutdown@Engine@1@QEAAXXZ                               retail 0x1800db4f0
 // ============================================================================
@@ -926,10 +919,6 @@ void Engine::Engine::Shutdown() {
 
     g_shutdownSteps = steps;
 
-}
-
-extern "C" void RtEngine_Engine_Shutdown(EngineT* self) {
-    self->Engine::Engine::Shutdown();
 }
 
 // ============================================================================

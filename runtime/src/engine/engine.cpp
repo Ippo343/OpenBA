@@ -284,10 +284,6 @@ void Engine::MainLoop::SetNextLoop(UpdateLoop* loop) {
     _nextLoop = loop;
 }
 
-extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, void* loop) {
-    self->Engine::MainLoop::SetNextLoop(static_cast<Engine::UpdateLoop*>(loop));
-}
-
 // ============================================================================
 // ??0MainLoop@Engine@@QEAA@PEAV11@@Z                       retail 0x1800dd6b0
 // ============================================================================

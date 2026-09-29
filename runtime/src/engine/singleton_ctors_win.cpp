@@ -58,6 +58,3 @@ void RtLaneXPlatformLockInit(void* cs) {
     SetCriticalSectionSpinCount(static_cast<CRITICAL_SECTION*>(cs), 0x1388);
 }
 
-void RtLaneXPlatformLockDelete(void* cs) {
-    DeleteCriticalSection(static_cast<CRITICAL_SECTION*>(cs));
-}

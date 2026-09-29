@@ -387,12 +387,6 @@ bool Engine::UpdateLoop::IsRunning() const {
     return MainLoopSingleton()->_currentLoop == this;
 }
 
-extern "C" bool RtEngine_UpdateLoop_IsRunning(const UpdateLoop* self) {
-    if (!self) return false;
-    return reinterpret_cast<const Engine::UpdateLoop*>(self)
-        ->Engine::UpdateLoop::IsRunning();                           // B.3.7 bridge
-}
-
 // ---- ?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z  0x1800dc050 ord 3204 ----
 // NO ORACLE, and the marker says so rather than pretending to one. This
 // function switches the mod filesystem over and then WAKES THE LOADING THREAD:
@@ -445,11 +439,6 @@ void Engine::Loader::Load(UpdateLoop* loop) {
     // ENDGAME B.3.7: `Loader` IS a `System::Thread` now; `Start` is a
     // non-virtual member of the base (thread_win.cpp), called directly.
     Start();
-}
-
-extern "C" void RtEngine_Loader_Load(Loader* self, void* loop) {
-    reinterpret_cast<Engine::Loader*>(self)->Engine::Loader::Load(   // B.3.7 bridge
-        static_cast<Engine::UpdateLoop*>(loop));
 }
 
 // ---- ?Load@DialogLoopT@Engine@@UEAAXXZ  0x1800db140 ord 3201 ----------------
@@ -1141,8 +1130,4 @@ void Engine::MainLoop::Draw(float dt) {
     Video::ContextData* cd3 = CtxDataOf(last);
     ++last->_frameIndex;
     cd3->Finish();
-}
-
-extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
-    self->Engine::MainLoop::Draw(dt);
 }
