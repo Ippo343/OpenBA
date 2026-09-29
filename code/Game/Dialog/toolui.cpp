@@ -105,7 +105,7 @@ void UIDescription::AddControllers(UI::DialogInstance* const* dialog, Object::Ba
                static_cast<const void*>(this), count, static_cast<const void*>(entries),
                static_cast<void*>(dataSource));
         for (int j = 0; j < count && j < 4; j++) {
-            const UIDescriptionEntry& e = entries[j];
+            [[maybe_unused]] const UIDescriptionEntry& e = entries[j];
             printf("[UIDescAdd]   entry[%d]@%p type=%u elemDesc=%p config=%p tabDesc=%p "
                    "nameStrPtr=%p\n", j, static_cast<const void*>(&e), static_cast<uint32_t>(e.type),
                    static_cast<void*>(e.ref08), static_cast<void*>(e.ref10), static_cast<void*>(e.ref18),
