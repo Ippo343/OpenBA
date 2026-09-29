@@ -91,6 +91,7 @@
 #include "../../../engine/types/common.h"   // Vector3
 #include "../object/External.h"             // Object::ExternalPtr
 #include "Device.h"                         // Device::AudioChannel (OnSoundEnded)
+#include "../system/Value.h"                // System::Time (the two startTime fields)
 
 namespace System { class Time; class Random; }
 
@@ -130,7 +131,7 @@ public:
     // ------------------------------------------------------------------------
     // Scene::Channel — one 2D/general playback slot, 0x70 (112) bytes.
     // Pinned by Scene::PlayEffect (writes +0x00/+0x08/+0x10/+0x68), Scene::Update
-    // (+0x18 volume, +0x1c pitch, +0x6c "started" flag), Scene::StopEffect /
+    // (+0x18 volume, +0x1c sampleVolume, +0x6c "started" flag), Scene::StopEffect /
     // Scene::PauseEffect (+0x20..+0x5f eight platform-channel pointers, +0x60..
     // +0x67 eight per-sub-channel flag bytes — the default-construct pattern in
     // FUN_180051020 zeroes all of +0x00..+0x67 and +0x6c..+0x6f but sets +0x18
@@ -138,12 +139,13 @@ public:
     // The NAME is descriptive: no mangled signature names this record.
     // ------------------------------------------------------------------------
     struct Channel {
-        uint64_t soundEffectRef;      // +0x00  Object::ExternalPtr<SoundEffect>
+        Object::ExternalPtr<SoundEffect> soundEffectRef; // +0x00
         uint32_t soundType;           // +0x08  Audio::Scene::SoundType
         uint32_t _pad0c;              // +0x0c  never read/written (alignment)
-        int64_t  startTime;           // +0x10  System::Time ticks
+        System::Time startTime;       // +0x10
         float    volume;              // +0x18  default 1.0f
-        float    pitch;               // +0x1c  default 1.0f
+        float    sampleVolume;        // +0x1c  default 1.0f; Update stores the started variant's
+                                      //        volume here (0x1800dfa9b) and mixes it with +0x18
         Device::AudioChannel* platformChannel[8]; // +0x20  up to 8 live Device channels
         uint8_t  channelFlags[8];     // +0x60  one byte per platformChannel slot
         uint32_t handleTag;           // +0x68  see the handle-encoding note above
@@ -155,9 +157,11 @@ public:
     // Pinned by AddEmitter (builds this exact 16-byte value on the stack before
     // calling the array SetSize/insert) and MoveEmitter/SetEmitterVolume/
     // RemoveEmitter, which all stride the nested array in 16-byte steps.
+    // GetAttenuatedVolume hands `&instance` to GetVolumeForPosition's
+    // `const Vector3&` (0x1800dfde0), so the first twelve bytes are a Vector3.
     struct EmitterInstance {
-        float x, y, z;
-        float volume;
+        Vector3 position;
+        float   volume;
     };
 
     // ------------------------------------------------------------------------
@@ -169,10 +173,11 @@ public:
     // `channelHandle`). `EffectSlot` is this tree's older name for it.
     // ------------------------------------------------------------------------
     struct AttenutedEffect {
-        float               posX, posY, posZ;  // +0x00  PlayEffect3D's own position
+        Vector3             pos;               // +0x00  PlayEffect3D's own position; GetAttenuatedVolume
+                                               //        hands `&effect` to a `const Vector3&`
         uint32_t            soundType;         // +0x0c
-        uint64_t            soundEffectRef;    // +0x10  ExternalPtr<SoundEffect>
-        int64_t             startTime;         // +0x18  System::Time ticks
+        Object::ExternalPtr<SoundEffect> soundEffectRef; // +0x10
+        System::Time        startTime;         // +0x18
         uint32_t            channelHandle;     // +0x20  into the Channel table, 0 = none
         uint32_t            idTag;             // +0x24  see the handle-encoding note above
         float               baseVolume;        // +0x28  default 1.0f
@@ -223,7 +228,7 @@ public:
 
     // ---- exported one-line accessor: faithful inline body, NOT REGISTERED --
     // `MOVSXD RAX,EDX ; MOVZX EAX,byte [RAX+RCX+0x30]` — unchecked index.
-    bool IsPaused(int32_t soundType) const { return paused[soundType] != 0; }     // 0x180050990
+    bool IsPaused(int32_t soundType) const { return paused[soundType]; }          // 0x180050990
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     Scene(const Scene& src);                                                       // 0x180050a50  (deep)
@@ -248,7 +253,10 @@ public:
     uint32_t _pad0c;                  // +0x0c
     Collection::Array<Channel>          channels; // +0x10  fixed at 256 entries after ctor
     Collection::Array<AttenutedEffect>  effects;  // +0x20  fixed at 4096 entries after ctor
-    uint8_t  paused[5];               // +0x30  one flag per Audio::Scene::SoundType (0..4)
+    // One flag per Audio::Scene::SoundType (0..4). `bool`: Serialize writes the
+    // five through the ReaderWriter's bool-array slot (+0x20, 0x1800e0050) and
+    // IsPaused returns the byte as the bool.
+    bool     paused[5];               // +0x30
     uint8_t  _pad35[3];               // +0x35..+0x37
 };
 
@@ -257,7 +265,7 @@ static_assert(offsetof(Scene::Channel, soundEffectRef)  == 0x00, "Channel::sound
 static_assert(offsetof(Scene::Channel, soundType)       == 0x08, "Channel::soundType @ +0x08");
 static_assert(offsetof(Scene::Channel, startTime)       == 0x10, "Channel::startTime @ +0x10");
 static_assert(offsetof(Scene::Channel, volume)          == 0x18, "Channel::volume @ +0x18");
-static_assert(offsetof(Scene::Channel, pitch)           == 0x1c, "Channel::pitch @ +0x1c");
+static_assert(offsetof(Scene::Channel, sampleVolume)    == 0x1c, "Channel::sampleVolume @ +0x1c");
 static_assert(offsetof(Scene::Channel, platformChannel) == 0x20, "Channel::platformChannel @ +0x20");
 static_assert(offsetof(Scene::Channel, channelFlags)    == 0x60, "Channel::channelFlags @ +0x60");
 static_assert(offsetof(Scene::Channel, handleTag)       == 0x68, "Channel::handleTag @ +0x68");
@@ -269,13 +277,11 @@ static_assert(sizeof(Scene::EmitterInstance) == 0x10, "EmitterInstance must be 1
 // `kArrayFloat(n=3, &e[0])` then `kScalarFloat(&e[0]+0xc)` and strides 0x10.
 // The widths are not inferred from the field types: each comes from the
 // ReaderWriter vtable slot the body picks (Serializer.h `rw_vtbl`).
-static_assert(offsetof(Scene::EmitterInstance, x)      == 0x00, "0x180051e5a MOV R8,RBX");
-static_assert(offsetof(Scene::EmitterInstance, y)      == 0x04, "kArrayFloat n=3 from +0x00");
-static_assert(offsetof(Scene::EmitterInstance, z)      == 0x08, "kArrayFloat n=3 from +0x00");
-static_assert(offsetof(Scene::EmitterInstance, volume) == 0x0c, "0x180051e6b LEA RDX,[RBX+0xc]");
+static_assert(offsetof(Scene::EmitterInstance, position) == 0x00, "0x180051e5a MOV R8,RBX (kArrayFloat n=3)");
+static_assert(offsetof(Scene::EmitterInstance, volume)   == 0x0c, "0x180051e6b LEA RDX,[RBX+0xc]");
 
 static_assert(sizeof(Scene::AttenutedEffect) == 0x40, "Audio::Scene::AttenutedEffect must be 0x40 bytes");
-static_assert(offsetof(Scene::AttenutedEffect, posX)           == 0x00, "posX @ +0x00");
+static_assert(offsetof(Scene::AttenutedEffect, pos)            == 0x00, "pos @ +0x00");
 static_assert(offsetof(Scene::AttenutedEffect, soundType)      == 0x0c, "soundType @ +0x0c");
 static_assert(offsetof(Scene::AttenutedEffect, soundEffectRef) == 0x10, "soundEffectRef @ +0x10");
 static_assert(offsetof(Scene::AttenutedEffect, startTime)      == 0x18, "startTime @ +0x18");

@@ -470,7 +470,7 @@ public:
     // ExternalPtr<Audio::SoundEffect>, one per UI sound id. Play(id) reads
     // _sounds[id] and queues it on _audioScene; Update calls Play(0) whenever
     // it drained a non-empty _addDialogs, which is the "dialog opened" sound.
-    void* _sounds[7];                                            // +0x098..+0x0c8
+    Audio::SoundEffect* _sounds[7];                              // +0x098..+0x0c8
 
     Cursor* _cursor;                                             // +0x0d0 ExternalPtr<UI::Cursor>
     uint8_t _cursorEnabled;                                      // +0x0d8

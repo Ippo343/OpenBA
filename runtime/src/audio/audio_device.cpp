@@ -100,19 +100,18 @@
 // are one-line qualified delegations.
 
 #include <windows.h>
+#include <xaudio2.h>
 
 #include <cstddef>
 #include <cstdint>
 #include "../../types/audio/Device.h"
 #include "../../types/audio/SoundBuffer.h"
 
-// The XAudio2 source-voice vtable byte offsets these bodies call. +0x90 is
+// The two XAudio2 source-voice calls these bodies make: +0x90 is
 // IXAudio2Voice::DestroyVoice (FreeChannelPlatform), +0xa0 is
 // IXAudio2SourceVoice::Stop (StopPlatform) — deliberately different slots on
 // the SAME object.
 namespace {
-constexpr int kVoiceReleaseSlot = 0x90;
-constexpr int kVoiceStopSlot    = 0xA0;
 
 // Retail tests byte +0x21 of the channel's SoundBuffer (IsStreamed) to decide
 // whether this playback needs the Stream's lock.
@@ -155,15 +154,14 @@ void Device::FreeChannelPlatform(int32_t index) {
         return;
 
     AudioChannel* ch = &_channels[index];             // MOVSXD: signed index
-    auto* lock = reinterpret_cast<CRITICAL_SECTION*>(StreamObject()->_lock);
+    auto* lock = reinterpret_cast<CRITICAL_SECTION*>(_stream._lock);  // CAST-OK: win32
     PlatformChannel& pc = _platformChannels[index];
 
     // Entry test, on the value read NOW.
     if (NeedsStreamLock(ch->source)) EnterCriticalSection(lock);
 
-    if (void* voice = pc.voice) {
-        void** vtable = *reinterpret_cast<void***>(voice);
-        reinterpret_cast<void (*)(void*)>(vtable[kVoiceReleaseSlot / 8])(voice);
+    if (IXAudio2SourceVoice* voice = pc.voice) {
+        voice->DestroyVoice();                        // +0x90
         pc.voice = nullptr;
     }
 
@@ -272,7 +270,7 @@ void Device::StopPlatform(int32_t index) {
 
     AudioChannel* ch = &_channels[index];
     PlatformChannel& pc = _platformChannels[index];
-    Audio::Stream* stream = StreamObject();
+    Audio::Stream* stream = &_stream;
 
     // The wake: only when the source wants the stream lock AND the stream
     // worker is mid-pass (Thread runFlags bit 0, Device+0xa08).
@@ -281,10 +279,8 @@ void Device::StopPlatform(int32_t index) {
         SetEvent(static_cast<HANDLE>(stream->_wakeEvent));   // Device+0xa40
     }
 
-    if (void* voice = pc.voice) {
-        void** vtable = *reinterpret_cast<void***>(voice);
-        reinterpret_cast<void (*)(void*, void*, uint32_t)>(
-            vtable[kVoiceStopSlot / 8])(voice, nullptr, 0);
+    if (IXAudio2SourceVoice* voice = pc.voice) {
+        voice->Stop(0, 0);                            // +0xa0
     }
 
     // Unguarded on purpose - see the banner above.
@@ -338,9 +334,9 @@ void Device::StopPlatform(int32_t index) {
 // ---------------------------------------------------------------------------
 void Device::Stop(AudioChannel* channelPtr) {
     // no early-out; see the banner
-    const int64_t byteDelta = reinterpret_cast<uint8_t*>(channelPtr) -
-                              reinterpret_cast<uint8_t*>(this);
-    const int index = static_cast<int>(byteDelta / static_cast<int64_t>(sizeof(AudioChannel)));
+    // The channel's index in `_channels`: retail's pointer difference, which
+    // MSVC spells as the signed magic division by 0x28.
+    const int index = static_cast<int>(channelPtr - _channels);
 
     StopPlatform(index);
     FreeChannelPlatform(index);

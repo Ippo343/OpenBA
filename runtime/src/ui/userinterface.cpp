@@ -340,7 +340,7 @@ static void CtorBody(UserInterface* self) {
     self->_dragDropGrabY   = 0;                         // +0x84 }
     self->_dragDropActive  = 0;                         // +0x88 (BYTE)
     self->_audioScene = nullptr;                        // +0x90
-    for (void*& sound : self->_sounds) sound = nullptr; // +0x98..+0xc8
+    for (Audio::SoundEffect*& sound : self->_sounds) sound = nullptr; // +0x98..+0xc8
     self->_cursor = nullptr;                            // +0xd0
     self->_cursorEnabled = 0;                           // +0xd8 } one WORD
     self->_mouseCaptured = 0;                           // +0xd9 }
@@ -640,12 +640,11 @@ extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr)
 
 void UI::UserInterface::Play(int32_t id) {
 
-    void* sound = _sounds[id];
+    Audio::SoundEffect* sound = _sounds[id];
     if (!sound) {  return; }
 
     // B.4 LEFT: `_audioScene` (+0x90) stays `void*` (code/Game assigns it a
-    // `void*`: gameupdateloop.cpp:1652, menudialogloopt.cpp:1158), and the
-    // Channel's `soundEffectRef` is a `uint64_t` in R-ENG's Audio.h. The body
+    // `void*`: gameupdateloop.cpp:1652, menudialogloopt.cpp:1158). The body
     // is Audio::Scene::PlayEffect inlined (0x1801223ec..0x180122458).
     Audio::Scene* const scene = reinterpret_cast<Audio::Scene*>(_audioScene);
     if (!scene) {  return; }
@@ -665,8 +664,8 @@ void UI::UserInterface::Play(int32_t id) {
     if (index < 0) {  return; }   // table full: retail drops it
 
     Audio::Scene::Channel& slot = table[index];
-    slot.soundEffectRef = reinterpret_cast<uint64_t>(sound);      // +0x00
-    slot.startTime      = ticks;                                  // +0x10
+    slot.soundEffectRef = sound;                                  // +0x00
+    slot.startTime._ticks = ticks;                                // +0x10
     slot.soundType      = 1;                                      // +0x08
 
     const int32_t counter = ++scene->playGeneration;              // +0x08
