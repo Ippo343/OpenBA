@@ -208,9 +208,9 @@ template <typename T, typename... A>
 struct CanPlacementNew<std::void_t<PlacementNewResult<T, A...>>, T, A...> : std::true_type {};
 
 UNIT_TEST(loop_builders_construct_in_place) {
-    CHECK((CanPlacementNew<void, GameUpdateLoop, void*, uint64_t, int32_t,
+    CHECK((CanPlacementNew<void, GameUpdateLoop, Save::SavedState*, uint64_t, int32_t,
                            const System::String&, int32_t, int32_t, bool,
-                           void*, void*, void*>::value));
+                           MapGenerator*, TerrainGenerator*, ClimateGenerator*>::value));
     CHECK((CanPlacementNew<void, MenuDialogLoopT, const System::String&>::value));
     CHECK((CanPlacementNew<void, GameLoadDialogLoopT, const System::String&,
                            Engine::UpdateLoop*, const System::Time&>::value));
