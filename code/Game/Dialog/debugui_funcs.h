@@ -4,10 +4,6 @@
 #include "Dialog/DebugUI.h"
 #include <cstdint>
 
-// Slot9 (vtable +0x48): Event dispatch — handles button clicks (resource spawn,
-// disasters, debug toggles), combo changes (disease/draw), slider changes (day/colors).
-void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4);
-
-// ToggleDebugFlag: helper for checkbox cases in Slot9 — reads checkbox state,
-// sets/clears a bit in game world debug flags at game+0xD0.
-void DebugUI_ToggleDebugFlag(void* checkboxElement, uint32_t flag);
+// B4 FORWARD: 1 outside caller(s) (standalone/disaster_harness.cpp) -- the body is
+// DebugUI::OnElementEvent (0x140060bc0).
+void DebugUI_Slot9(DebugUI* self, Object::InternalPtr<UI::Element>* element, int param3, int param4);

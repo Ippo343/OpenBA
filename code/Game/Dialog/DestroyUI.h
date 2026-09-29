@@ -19,6 +19,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class Element; class ProgressElement; }
+
 class DestroyUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(DestroyUI)
 
@@ -35,17 +37,27 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140066080
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38
-    uint64_t data40 = 0;           // +0x40
-    uint64_t data48 = 0;           // +0x48
-    uint64_t data50 = 0;           // +0x50
-    uint64_t data58 = 0;           // +0x58
-    uint64_t data60 = 0;           // +0x60
-    uint64_t data68 = 0;           // +0x68
-    uint64_t data70 = 0;           // +0x70
+    // ---- fields (B4 DLG-a: named from the element strings OnCreated
+    // 0x140066150 finds them by; typed with the class each is read as) --------
+    UI::ProgressElement* progressRemove = nullptr;    // +0x30 "progressRemove"
+    UI::ProgressElement* progressDestruct = nullptr;  // +0x38 "progressDestruct"
+    UI::Element* textRemove = nullptr;                // +0x40 "textRemove"
+    UI::Element* textUpgrade = nullptr;               // +0x48 "textUpgrade"
+    UI::Element* textDamage = nullptr;                // +0x50 "textDamage"
+    UI::Element* textFixing = nullptr;                // +0x58 "textFixing"
+    UI::Element* buttonReclaim = nullptr;             // +0x60 "buttonReclaim" (id 0x1771)
+    UI::Element* buttonDestroy = nullptr;             // +0x68 "buttonDestroy" (id 0x1773)
+    UI::Element* buttonRebuild = nullptr;             // +0x70 "buttonRebuild" (id 0x1772)
 };
 
 static_assert(sizeof(DestroyUI) == 0x78, "DestroyUI is 0x78 (create 0x140011130 MemAlloc(0x78))");
 static_assert(alignof(DestroyUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(DestroyUI, progressRemove) == 0x30, "DestroyUI::progressRemove @ +0x30");
+static_assert(offsetof(DestroyUI, progressDestruct) == 0x38, "DestroyUI::progressDestruct @ +0x38");
+static_assert(offsetof(DestroyUI, textRemove) == 0x40, "DestroyUI::textRemove @ +0x40");
+static_assert(offsetof(DestroyUI, textUpgrade) == 0x48, "DestroyUI::textUpgrade @ +0x48");
+static_assert(offsetof(DestroyUI, textDamage) == 0x50, "DestroyUI::textDamage @ +0x50");
+static_assert(offsetof(DestroyUI, textFixing) == 0x58, "DestroyUI::textFixing @ +0x58");
+static_assert(offsetof(DestroyUI, buttonReclaim) == 0x60, "DestroyUI::buttonReclaim @ +0x60");
+static_assert(offsetof(DestroyUI, buttonDestroy) == 0x68, "DestroyUI::buttonDestroy @ +0x68");
+static_assert(offsetof(DestroyUI, buttonRebuild) == 0x70, "DestroyUI::buttonRebuild @ +0x70");

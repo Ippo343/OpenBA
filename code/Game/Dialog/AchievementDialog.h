@@ -25,6 +25,8 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
+namespace UI { class Element; class ImageElement; class TextElement; }
+
 class AchievementDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(AchievementDialog)
 
@@ -42,14 +44,31 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14005d440
 
+    // One achievement row, the element of the +0xC0 Array (stride 0x20): the
+    // four elements OnOpened 0x14005d490 finds in the cloned row, in push order.
+    struct Entry {
+        UI::ImageElement* icon;          // +0x00 "imageIcon"
+        UI::Element*      star;          // +0x08 "imageStar"
+        UI::TextElement*  title;         // +0x10 "textTitle"
+        UI::TextElement*  description;   // +0x18 "textDescription"
+    };
+
 public:
-    uint64_t dataB8;           // +0xB8: "textComplete" element
-    uint64_t dataC0;           // +0xC0: entry array data (stride 0x20)
-    uint64_t dataC8;           // +0xC8: entry array count / capacity
+    UI::TextElement* textComplete;   // +0xB8: "textComplete" element
+    // +0xC0 Collection::Array<Entry>, as its three raw members (the tree's dtor
+    // frees it by hand, as retail's does).
+    Entry*  entryData;               // +0xC0: entry array data (stride 0x20)
+    int32_t entryCount;              // +0xC8: entry array count
+    int32_t entryCapacity;           // +0xCC: entry array capacity
 };
 
-static_assert(offsetof(AchievementDialog, dataB8) == 0xB8, "AchievementDialog +0xb8");
-static_assert(offsetof(AchievementDialog, dataC0) == 0xC0, "AchievementDialog +0xc0");
-static_assert(offsetof(AchievementDialog, dataC8) == 0xC8, "AchievementDialog +0xc8");
+static_assert(sizeof(AchievementDialog::Entry) == 0x20, "AchievementDialog::Entry stride 0x20");
+static_assert(offsetof(AchievementDialog::Entry, star) == 0x08, "Entry::star @ +0x08");
+static_assert(offsetof(AchievementDialog::Entry, title) == 0x10, "Entry::title @ +0x10");
+static_assert(offsetof(AchievementDialog::Entry, description) == 0x18, "Entry::description @ +0x18");
+static_assert(offsetof(AchievementDialog, textComplete) == 0xB8, "AchievementDialog +0xb8");
+static_assert(offsetof(AchievementDialog, entryData) == 0xC0, "AchievementDialog +0xc0");
+static_assert(offsetof(AchievementDialog, entryCount) == 0xC8, "AchievementDialog +0xc8");
+static_assert(offsetof(AchievementDialog, entryCapacity) == 0xCC, "AchievementDialog +0xcc");
 static_assert(sizeof(AchievementDialog) == 0xD0, "AchievementDialog is 0xd0 (create 0x140010320)");
 static_assert(alignof(AchievementDialog) == 8, "AchievementDialog is qword-aligned");
