@@ -6,7 +6,7 @@
 //         +0x38 = checkPin element, +0x40 = pages element
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/entityui_funcs.h"
+#include "Dialog/EntityUI.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
@@ -37,38 +37,60 @@
 #include "Dialog/exe_bodies.h"
 #include "Player/exe_bodies.h"   // B3R: PlayerTrade_BSTRemove_25740, PlayerTrade_Retrace_25920
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "ui/CheckElement.h"          // B4 DLG-a: EntityUI::checkPin
+#include "Component/StateMachineComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/ClearAreaComponent.h"
+#include "Component/DestroyComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Game/PlayerController.h"
+#include "Game/PlayerToolManager.h"
+
+// ============================================================
+// The tool manager's selected-entity sets (PlayerToolManager +0x50 / +0x60)
+// ============================================================
+// An AVL tree of 0x38-byte nodes keyed by the entity (0x140102e30 builds them).
+// PlayerToolManager declares the roots as void* (GAME-a's header): the node
+// type is declared here, where its only builder and walkers live.
+struct TrackedEntityNode {
+    ComponentEntity*   key;       // +0x00 the entity (InternalPtr value)
+    uint32_t           x;         // +0x08
+    uint32_t           y;         // +0x0C
+    uint8_t            active;    // +0x10 (the insert stores the dword 1)
+    uint8_t            _pad11[7]; // +0x11
+    TrackedEntityNode* parent;    // +0x18
+    TrackedEntityNode* left;      // +0x20
+    TrackedEntityNode* right;     // +0x28
+    int16_t            balance;   // +0x30
+    int16_t            height;    // +0x32
+    uint8_t            _pad34[4]; // +0x34
+};
+static_assert(sizeof(TrackedEntityNode) == 0x38, "0x140102e30 MemAlloc(0x38)");
+static_assert(offsetof(TrackedEntityNode, active) == 0x10, "+0x10");
+static_assert(offsetof(TrackedEntityNode, parent) == 0x18, "+0x18");
+static_assert(offsetof(TrackedEntityNode, left) == 0x20, "+0x20");
+static_assert(offsetof(TrackedEntityNode, right) == 0x28, "+0x28");
+static_assert(offsetof(TrackedEntityNode, balance) == 0x30, "+0x30");
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
 // ============================================================
-// BST remove: walks tree to find node with key == param_2, calls BST_Delete.
-// param_1 = pointer to BST root (root = *param_1)
-// param_2 = InternalBasePtr key to remove
-//
-// BST node layout (at ptr 'this'):
-//   +0x00: key (InternalBasePtr, uint64_t)
-//   +0x20: left child ptr (node**)  [+0x20/8 = offset 4 from uint64_t* = offset 0x20]
-//   +0x28: right child ptr (node**) [+0x28/8 = offset 5 = +0x28]
-static void EntityTrackingSet_Remove_Impl(void* bstRoot, void* key)
+// BST remove: walks the tree to the node whose key == *key, then deletes it
+// (0x140025740).
+static void EntityTrackingSet_Remove_Impl(TrackedEntityNode** root, ComponentEntity* const* key)
 {
-    // param_1 is longlong* (root node double-ptr)
-    uint8_t** rootPtr = (uint8_t**)bstRoot;
-    uint8_t* node = (uint8_t*)*rootPtr;
+    TrackedEntityNode* node = *root;
 
     while (node != nullptr) {
-        uint64_t nodeKey = *(uint64_t*)node;
-        uint64_t searchKey = *(uint64_t*)key;
-
-        if (searchKey < nodeKey) {
-            // Go left: *(node+0x20) = left child
-            node = *(uint8_t**)(node + 0x20);
-        } else if (searchKey <= nodeKey) {
+        if (*key < node->key) {
+            node = node->left;
+        } else if (*key <= node->key) {
             // Found the node — delete it
-            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(bstRoot), (void*)node);   // 0x140025740
+            // LEFT: the shared AVL helper takes the root as int64_t* (PLAYER's declaration).
+            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740
             return;
         } else {
-            // Go right: *(node+0x28) = right child
-            node = *(uint8_t**)(node + 0x28);
+            node = node->right;
         }
     }
     // Not found — nothing to do
@@ -77,55 +99,54 @@ static void EntityTrackingSet_Remove_Impl(void* bstRoot, void* key)
 // ============================================================
 // GetDescPage (0x140011320)
 // ============================================================
-// Searches entity description's component array (+0x28 = ptr, +0x30 = count)
-// for a component with type ID == TypeId_UIDescription (DAT_1401c7f90).
-// Returns the found component in retval. Component field +0x40 = page index.
-static void GetDescPage_Impl(void* entityDesc, void* retval)
+// Searches the entity's ComponentDescription sub-descriptions (_subDescs /
+// _subDescCount) for the UIDescription (DAT_1401c7f90). Its _valHead (+0x40)
+// is the default page index. The null guards are the tree's (retail has none).
+static UIDescription* GetDescPage_Impl(const ComponentDescription* entityDesc)
 {
-    void* result = nullptr;
-    if (!entityDesc) { *(void**)retval = result; return; }
+    UIDescription* result = nullptr;
+    if (!entityDesc) return result;
 
-    int count = *(int*)((uintptr_t)entityDesc + 0x30);
-    void** compArray = *(void***)((uintptr_t)entityDesc + 0x28);
+    int count = entityDesc->_subDescCount;
+    void** compArray = entityDesc->_subDescs;
 
     for (int i = 0; i < count; i++) {
-        void* comp = compArray ? compArray[i] : nullptr;
+        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
+        Object::Base* comp = compArray ? reinterpret_cast<Object::Base*>(compArray[i]) : nullptr;
         if (!comp) continue;
 
         // vtable[2] = GetTypeId (returns int typeId)
-        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+        int typeId = comp->Type();
 
         if (typeId == (int)UIDescription::TypeId()) {
             if (::Object::IsDerivedFromNullSafe(comp, UIDescription::TypeId())) {
-                result = comp;
+                result = static_cast<UIDescription*>(comp);
             }
             break;
         }
     }
 
-    *(void**)retval = result;
+    return result;
 }
 
 // ============================================================
-// BuildComplete (0x140109390)
+// BuildComponent::IsBuildComplete (0x140109390)
 // ============================================================
-// Returns true if build is complete: ResourceComponent.totalRequired * multiplier <= delivered
-// posComp+0x18 = description (checked as ResourceComponent)
-// ResourceComponent+0x30 = totalRequired
-// posComp+0x4C = multiplier (build count), posComp+0x48 = delivered count
-static bool BuildComplete_Impl(void* posComp)
+// True once the delivered labour covers the cost: the BuildDescription's +0x30
+// (the cost) times costMultiplier (+0x4C) <= laborProgress (+0x48).
+// The null-description guard is the tree's; retail derefs the checked cast
+// unguarded (`CMOVNZ RDX,RBX ; MOV EDX,[RDX+0x30]`).
+bool BuildComponent::IsBuildComplete() const
 {
-    if (!posComp) return false;
-
-    void* desc = *(void**)((uintptr_t)posComp + 0x18);
+    Description* desc = _description;
     bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
-    void* resourceComp = isResource ? desc : nullptr;
+    BuildDescription* resourceComp = isResource ? static_cast<BuildDescription*>(desc) : nullptr;
 
     if (!resourceComp) return false;
 
-    int totalRequired = *(int*)((uintptr_t)resourceComp + 0x30);
-    int multiplier    = *(int*)((uintptr_t)posComp + 0x4C);
-    int delivered     = *(int*)((uintptr_t)posComp + 0x48);
+    int totalRequired = resourceComp->_i30;
+    int multiplier    = costMultiplier;
+    int delivered     = laborProgress;
 
     return totalRequired * multiplier <= delivered;
 }
@@ -176,8 +197,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);
 
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
 {
-    uintptr_t pc = (uintptr_t)playerController;
-
     // Forward to the single implementation. int64_t vs uint64_t is a spelling
     // difference only - the field at +0x20 is one 8-byte slot either way.
     Toolbar_ShowGroup_Impl(playerController, (int64_t)mode);
@@ -202,120 +221,93 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
 //
 // NOTE: This function is used in both entityui.cpp and toolui.cpp.
 
+// A new node: the key, the position, active, no children, balance 0.
+static TrackedEntityNode* NewTrackedEntityNode(ComponentEntity* key, uint32_t x, uint32_t y,
+                                               TrackedEntityNode* parent)
+{
+    TrackedEntityNode* node =
+        static_cast<TrackedEntityNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    if (node != nullptr) {
+        node->key = key;
+        node->x = x;
+        node->y = y;
+        node->active = 1;
+        node->_pad11[0] = node->_pad11[1] = node->_pad11[2] = 0;   // the dword store of 1
+        node->parent = parent;
+        node->left = nullptr;
+        node->right = nullptr;
+        node->balance = 0;
+        node->height = 0;
+    }
+    return node;
+}
+
 void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                  uint32_t x, uint32_t y)
 {
-    uintptr_t pc = (uintptr_t)playerController;
-    uint64_t entityKey = *(uint64_t*)entityPtr;
-    uintptr_t* rootPtr = (uintptr_t*)(pc + 0x60);
+    // LEFT: the receiver and key arrive as void* (toolui.cpp's declaration, DLG-d),
+    // and PlayerToolManager +0x60 is void* (GAME-a's header).
+    PlayerToolManager* manager = reinterpret_cast<PlayerToolManager*>(playerController);
+    ComponentEntity* entityKey = *reinterpret_cast<ComponentEntity* const*>(entityPtr);
+    TrackedEntityNode** rootPtr = reinterpret_cast<TrackedEntityNode**>(&manager->field_0x60);
 
-    // Search BST for existing node with matching key
-    uintptr_t node = *rootPtr;
-    while (node != 0) {
-        uint64_t nodeKey = *(uint64_t*)node;
-        if (entityKey < nodeKey) {
-            node = *(uintptr_t*)(node + 0x20);  // left
+    // Search the tree for an existing node with this key
+    TrackedEntityNode* node = *rootPtr;
+    while (node != nullptr) {
+        if (entityKey < node->key) {
+            node = node->left;
         } else {
-            if (entityKey <= nodeKey) {
+            if (entityKey <= node->key) {
                 // Found — update position and active flag
-                if (node != 0) {
-                    *(uint8_t*)(node + 0x10) = 1;  // active = true
-                    *(uint32_t*)(node + 0x08) = x;
-                    *(uint32_t*)(node + 0x0C) = y;
-                    return;
-                }
-                break;
+                node->active = 1;
+                node->x = x;
+                node->y = y;
+                return;
             }
-            node = *(uintptr_t*)(node + 0x28);  // right
+            node = node->right;
         }
     }
 
-    // Not found — insert new node
-    // Prepare node data
-    uint32_t activeFlag = 1;
-
-    if (*rootPtr == 0) {
-        // Empty tree — create root node
-        uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
-        if (newNode != nullptr) {
-            *(uint64_t*)newNode = 0;
-            *(uint64_t*)newNode = entityKey;
-            *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
-            *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
-            *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
-            newNode[3] = 0;  // parent = null
-            newNode[4] = 0;  // left = null
-            newNode[5] = 0;  // right = null
-            *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;  // balance = 0
-        }
-        *rootPtr = (uintptr_t)newNode;
+    // Not found — insert a new node
+    if (*rootPtr == nullptr) {
+        // Empty tree — the new node is the root
+        *rootPtr = NewTrackedEntityNode(entityKey, x, y, nullptr);
     } else {
-        // Walk BST to find insertion point
-        uintptr_t cur = *rootPtr;
-        uintptr_t parent = 0;
+        // Walk the tree to the insertion point
+        TrackedEntityNode* cur = *rootPtr;
 
         while (true) {
-            parent = cur;
-            uint64_t curKey = *(uint64_t*)cur;
+            TrackedEntityNode* parent = cur;
 
-            if (curKey <= entityKey) {
-                if (entityKey <= curKey) {
-                    // Duplicate key — should not happen, already handled above
+            if (cur->key <= entityKey) {
+                if (entityKey <= cur->key) {
+                    // Duplicate key — already handled above
                     return;
                 }
-                // Go right
-                uintptr_t right = *(uintptr_t*)(cur + 0x28);
-                if (right == 0) {
-                    // Insert as right child
-                    uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
-                    if (newNode != nullptr) {
-                        *(uint64_t*)newNode = 0;
-                        *(uint64_t*)newNode = entityKey;
-                        *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
-                        *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
-                        *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
-                        newNode[4] = 0;   // left
-                        newNode[5] = 0;   // right
-                        *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;
-                        newNode[3] = parent;  // parent
-                    }
-                    *(uintptr_t*)(cur + 0x28) = (uintptr_t)newNode;
-                    // Rebalance
-                    uintptr_t nodeRef = (uintptr_t)newNode;
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&nodeRef));   // 0x140025920
+                if (cur->right == nullptr) {
+                    // Insert as the right child, then rebalance
+                    TrackedEntityNode* newNode = NewTrackedEntityNode(entityKey, x, y, parent);
+                    cur->right = newNode;
+                    // LEFT: the shared AVL retrace takes int64_t* (PLAYER's declaration).
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&newNode));   // 0x140025920
                     break;
                 }
-                cur = right;
+                cur = cur->right;
             } else {
-                // Go left
-                uintptr_t left = *(uintptr_t*)(cur + 0x20);
-                if (left == 0) {
-                    // Insert as left child
-                    uintptr_t* newNode = (uintptr_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
-                    if (newNode != nullptr) {
-                        *(uint64_t*)newNode = 0;
-                        *(uint64_t*)newNode = entityKey;
-                        *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
-                        *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
-                        *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
-                        newNode[4] = 0;   // left
-                        newNode[5] = 0;   // right
-                        *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;
-                        newNode[3] = parent;  // parent
-                    }
-                    *(uintptr_t*)(cur + 0x20) = (uintptr_t)newNode;
-                    // Rebalance
-                    uintptr_t nodeRef = (uintptr_t)newNode;
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&nodeRef));   // 0x140025920
+                if (cur->left == nullptr) {
+                    // Insert as the left child, then rebalance
+                    TrackedEntityNode* newNode = NewTrackedEntityNode(entityKey, x, y, parent);
+                    cur->left = newNode;
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&newNode));   // 0x140025920
                     break;
                 }
-                cur = left;
+                cur = cur->left;
             }
         }
     }
 
-    // Increment entity count
-    *(int*)(pc + 0x68) = *(int*)(pc + 0x68) + 1;
+    // One more tracked entity (+0x68)
+    manager->field_0x68 = manager->field_0x68 + 1;
 }
 
 // ============================================================
@@ -333,71 +325,61 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // MapComponent / EditTool all have a ported TypeId() now, so the entityui_sa::EnsureGlobals()
 // lazy-cache namespace is dead and its call sites below are removed.
 
+// The sibling ToolUI controller of this dialog (DialogInstance::GetController,
+// then retail's checked cast). No null check on the dialog: retail has none.
+static ToolUI* EntityUI_FindToolUI(UI::DialogInstance* dialog) {
+    UI::DialogController* controller = dialog->GetController(ToolUI::TypeId()).Get();
+
+    ToolUI* toolUI = nullptr;
+    if (controller) {
+        bool isTool = ::Object::IsDerivedFromNullSafe(controller, ToolUI::TypeId());
+        if (isTool) toolUI = static_cast<ToolUI*>(controller);
+    }
+    return toolUI;
+}
+
 // Slot4 (0x1400670D0): Startup — find elements, get entity, reset ToolUI flags.
 // [4] 0x1400670d0
 void EntityUI::OnCreated() {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source (+0x28), check if it's a ComponentEntity
-    void* dataSource = *(void**)(s + 0x28);
+    Object::Base* dataSource = _dataSource;
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
-    void* entity = isEntity ? dataSource : nullptr;
-    new ((void*)(s + 0x30)) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
+    entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
     // Find "buttonCenter" element and set ID 101 (0x65)
     {
         System::String nameStr("buttonCenter");
-        uint8_t retBuf[16];
-        void* dialogInst = *(void**)(s + 0x18);
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        void* elem = *(void**)retBuf;
-        reinterpret_cast<UI::Element*>(elem)->SetElementId(0x65);  // B.3.6 bridge
+        UI::Element* elem = _dialog->FindElement(nameStr).Get();
+        elem->SetElementId(0x65);
     }
 
     // Find "checkPin" element → store at +0x38, set ID 100
     {
         System::String nameStr("checkPin");
-        uint8_t retBuf[16];
-        void* dialogInst = *(void**)(s + 0x18);
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0x38) = *(void**)retBuf;
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x38))->SetElementId(100);  // B.3.6 bridge
+        // Retail stores the found element unchecked; it is read as a CheckElement.
+        checkPin = static_cast<UI::CheckElement*>(_dialog->FindElement(nameStr).Get());
+        checkPin->SetElementId(100);
     }
 
     // Get dialog controller, check if it's a ToolUI type
     {
-        void* dialogInst = *(void**)(s + 0x18);
-        uint8_t ctrlBuf[16];
-        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(ToolUI::TypeId()));  // B.3.6 bridge
-        void* controller = *(void**)ctrlBuf;
+        ToolUI* toolPtr = EntityUI_FindToolUI(_dialog);
 
-        void* toolUI = nullptr;
-        if (controller) {
-            bool isTool = ::Object::IsDerivedFromNullSafe(controller, ToolUI::TypeId());
-            if (isTool) toolUI = controller;
-        }
-
-        uint8_t toolBuf[16];
-        new (toolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolUI));   // B.3.3 bridge
-        void* toolPtr = *(void**)toolBuf;
-
-        // Reset flags at controller+0x40 and +0x41
-        *(uint8_t*)((uintptr_t)toolPtr + 0x40) = 0;
-        if (*(uint8_t*)((uintptr_t)toolPtr + 0x40) == 0 &&
-            *(uint8_t*)((uintptr_t)toolPtr + 0x41) != 0) {
-            *(uint8_t*)((uintptr_t)toolPtr + 0x41) = 0;
+        // Reset the ToolUI's pin flag (+0x40) and, with it, +0x41
+        toolPtr->hasBorderTitle = 0;
+        if (toolPtr->hasBorderTitle == 0 &&
+            toolPtr->isDragging != 0) {
+            toolPtr->isDragging = 0;
         }
     }
 
     // Find "pages" element → store at +0x40
     {
         System::String nameStr("pages");
-        uint8_t retBuf[16];
-        void* dialogInst = *(void**)(s + 0x18);
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0x40) = *(void**)retBuf;
+        // Retail stores the found element unchecked; it is read as a PageElement.
+        pages = static_cast<UI::PageElement*>(_dialog->FindElement(nameStr).Get());
     }
 }
 
@@ -405,71 +387,64 @@ void EntityUI::OnCreated() {
 // [6] 0x140067090
 void EntityUI::OnClosed() {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
     // Copy +0x30 (entity InternalBasePtr) to local
-    uint64_t entityKey = *(uint64_t*)(s + 0x30);
+    ComponentEntity* entityKey = entity;
 
-    // Get BST root: g_pGameWorldSingleton -> +0x120 -> +0x60
-    void* worldSingleton = GameUpdateLoop::_singleton;
-    void* subObj = *(void**)((uintptr_t)worldSingleton + 0x120);
-    void* bstRoot = (void*)((uintptr_t)subObj + 0x60);
+    // The tracking set: the tool manager (g_pGameWorldSingleton +0x120) +0x60
+    PlayerToolManager* tools = GameUpdateLoop::_singleton->m_toolManager;
 
-    EntityTrackingSet_Remove_Impl(bstRoot, &entityKey);
+    // LEFT: PlayerToolManager +0x60 is void* (GAME-a header).
+    EntityTrackingSet_Remove_Impl(reinterpret_cast<TrackedEntityNode**>(&tools->field_0x60), &entityKey);
 }
 
 // ============================================================
-// EntityUI::Slot7 (vtable +0x38) — Page switching logic
+// EntityUI::OnUpdateLayout (vtable +0x38) — Page switching logic
 // ============================================================
 // Determines which page to show based on entity state (build state,
 // destroy state, etc.) and sets the PageElement active page.
-// Also updates ToolUI controller's selection hint.
 //
 // Original: 0x140066D80.
 
 // [7] 0x140066d80
 void EntityUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
         // (risky in SA, cosmetic only); the page-selection below is what makes the
         // entity/citizen content actually render, so it always runs.
 
-    // Find components on entity to determine page state
-    void* entityPtr = *(void**)(s + 0x30);
+    // Find components on entity to determine page state. The finders the tree
+    // called returned null for a null entity (a standalone guard; retail's
+    // FindComponent<T> instances have none): kept.
+    ComponentEntity* entityPtr = entity;
 
-    void* buildStateComp = nullptr;
-    fn_FindComponent_BuildState(entityPtr, &buildStateComp);
-
-    void* posComp = nullptr;
-    fn_FindComponent_Position(entityPtr, &posComp);
-
-    void* smComp = nullptr;  // StateMachine/animation component
-    fn_FindComponent_SM(entityPtr, &smComp);
-
-    void* destroyComp = nullptr;
-    fn_FindComponent_Destroy(entityPtr, &destroyComp);
+    StateMachineComponent* buildStateComp =
+        entityPtr ? entityPtr->FindComponent<StateMachineComponent>() : nullptr;   // 0x140003ea0
+    BuildComponent* posComp =
+        entityPtr ? entityPtr->FindComponent<BuildComponent>() : nullptr;          // 0x14000d6c0
+    ClearAreaComponent* smComp =
+        entityPtr ? entityPtr->FindComponent<ClearAreaComponent>() : nullptr;      // 0x14000a170
+    DestroyComponent* destroyComp =
+        entityPtr ? entityPtr->FindComponent<DestroyComponent>() : nullptr;        // 0x140005780
 
     // Determine page index based on component state
     int pageIdx;
 
     int8_t state52 = 0, state50 = 0;
-    if (buildStateComp == 0) {
+    if (buildStateComp == nullptr) {
         pageIdx = -1;
     } else {
-        // Check build state: +0x52 (if negative) use +0x50
-        state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);
-        state50 = *(int8_t*)((uintptr_t)buildStateComp + 0x50);
+        // Check build state: the pending byte +0x52 (if negative) use the input +0x50
+        state52 = (int8_t)(buildStateComp->stateFlags >> 16);
+        state50 = (int8_t)buildStateComp->stateFlags;
         pageIdx = (state52 < 0) ? (int)state50 : (int)state52;
     }
 
-    if (posComp == 0 && destroyComp == 0) {
-        if (smComp == 0 || pageIdx != 0) {
+    if (posComp == nullptr && destroyComp == nullptr) {
+        if (smComp == nullptr || pageIdx != 0) {
             // Get default page from entity's description
-            void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
-            void* descResult = nullptr;
-            GetDescPage_Impl(entityDesc, &descResult);
-            pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
+            UIDescription* descResult = GetDescPage_Impl(entity->_description);
+            pageIdx = descResult ? descResult->_valHead : 2;
         } else {
             pageIdx = 2;
         }
@@ -480,35 +455,28 @@ void EntityUI::OnUpdateLayout() {
         } else {
             // Check 2: if posComp exists, verify build is complete
             bool gotoPage2 = false;
-            if (posComp != 0) {
-                bool complete = BuildComplete_Impl((void*)posComp);
+            if (posComp != nullptr) {
+                bool complete = posComp->IsBuildComplete();
                 if (!complete) {
                     gotoPage2 = true;
                 }
             }
             // Check 3: if not redirected to page 2 and pageIdx != 0, get desc page
             if (!gotoPage2 && pageIdx != 0) {
-                void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
-                void* descResult = nullptr;
-                GetDescPage_Impl(entityDesc, &descResult);
+                UIDescription* descResult = GetDescPage_Impl(entity->_description);
 
-                void* pagesElem = *(void**)(s + 0x40);
+                UI::PageElement* pagesElem = pages;
                 // Retail (0x140066d80) assigns the ACTIVE page into the same register it
                 // then conditionally overwrites:
                 //     iVar6 = GetActivePage(pages);
                 //     if (iVar6 != 4) iVar6 = descPage;
                 //     SetActivePage(pages, iVar6);
                 // i.e. page 4 -- the user page, which is the production-statistics page --
-                // is DELIBERATELY preserved across this per-frame pass. Our port kept the
-                // `!= 4` test but not the assignment, so on page 4 it wrote back the STALE
-                // build-state pageIdx instead of 4: clicking the statistics button showed
-                // the production page for one frame and the panel snapped back to the
-                // default page every frame after (the reported 'statistics flicker').
-                int activePage = pagesElem ? reinterpret_cast<const UI::PageElement*>(pagesElem)->GetActivePage() : 0;  // B.3.6 bridge
-                const int staleIdx = pageIdx;   // what the pre-fix port wrote back
+                // is DELIBERATELY preserved across this per-frame pass.
+                int activePage = pagesElem ? pagesElem->GetActivePage() : 0;
                 pageIdx = activePage;
                 if (activePage != 4) {
-                    pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
+                    pageIdx = descResult ? descResult->_valHead : 2;
                 }
             } else {
                 pageIdx = 2;
@@ -516,119 +484,88 @@ void EntityUI::OnUpdateLayout() {
         }
     }
 
-    void* pagesElemFinal = *(void**)(s + 0x40);
+    UI::PageElement* pagesElemFinal = pages;
     if (pagesElemFinal) {
-        reinterpret_cast<UI::PageElement*>(pagesElemFinal)->SetActivePage(pageIdx);  // B.3.6 bridge
+        pagesElemFinal->SetActivePage(pageIdx);
     }
 }
 
 // ============================================================
-// EntityUI::Slot8 (vtable +0x40) — Input handler
+// EntityUI::UpdateInput — retail's slot 8 (vtable +0x40) body
 // ============================================================
-// Reads mouse position from KeyMap, scales by dialog scale factor.
-// Gets ToolUI controller, sets +0x4C = 1, syncs map visibility mode.
+// Reads mouse position from KeyMap, scales by the UI scale.
+// Gets ToolUI controller, sets +0x4C = 1, syncs the pin check with it.
 // On key 5 press: checks if mouse is over this dialog and entity exists,
 // then selects the entity in the edit tool (creating one if needed).
 //
-// Original: 0x140066AD0.
-
-void EntityUI_Slot8(EntityUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
+// Original: 0x140066AD0. Not wired (see EntityUI.h).
+void EntityUI::UpdateInput() {
     // Get KeyMap singleton (triple deref from exref: slot → External → KeyMap)
-    void* keyMap = Input::Configuration::_singleton->_keyMap;
+    Input::KeyMap* keyMap = Input::Configuration::_singleton->_keyMap;
 
-    // Get dialog element from +0x18 -> +0x10 (dialog root element)
-    void* dialogInst = *(void**)(s + 0x18);
-    void* dialogElem = *(void**)((uintptr_t)dialogInst + 0x10);
+    // Read mouse axes and scale by the UI scale (UserInterface +0xDC)
+    UI::UserInterface* ui = _dialog->_ui;
+    short axisX = keyMap->GetValue(0, 0);
+    int mouseX = (int)((float)(int)axisX * ui->_uiScale);
 
-    // Read mouse axes and scale by dialog scale factor (+0xDC on element)
-    short axisX = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
-    int mouseX = (int)((float)(int)axisX * *(float*)((uintptr_t)dialogElem + 0xDC));
-
-    // Re-read element since CheckPtr pattern accesses +0x18 again
-    dialogInst = *(void**)(s + 0x18);
-    dialogElem = *(void**)((uintptr_t)dialogInst + 0x10);
-    short axisY = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
-    int mouseY = (int)((float)(int)axisY * *(float*)((uintptr_t)dialogElem + 0xDC));
+    // Re-read the UI since the CheckPtr pattern accesses +0x18 again
+    ui = _dialog->_ui;
+    short axisY = keyMap->GetValue(0, 1);
+    int mouseY = (int)((float)(int)axisY * ui->_uiScale);
 
     // Get ToolUI controller from dialog
-    dialogInst = *(void**)(s + 0x18);
-    uint8_t ctrlBuf[16];
-    ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(ToolUI::TypeId()));  // B.3.6 bridge
-    void* controller = *(void**)ctrlBuf;
-
-    void* toolUI = nullptr;
-    if (controller) {
-        bool isTool = ::Object::IsDerivedFromNullSafe(controller, ToolUI::TypeId());
-        if (isTool) toolUI = controller;
-    }
-    uint8_t toolBuf[8];
-    new (toolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolUI));   // B.3.3 bridge
-    uintptr_t toolPtr = *(uintptr_t*)toolBuf;
+    ToolUI* toolPtr = EntityUI_FindToolUI(_dialog);
 
     // Set controller +0x4C = 1 (input active flag)
-    *(uint8_t*)(toolPtr + 0x4C) = 1;
+    toolPtr->hasTitleDragZone = 1;
 
-    // Sync map visibility mode: compare controller +0x40 with checkPin element +0xD8
-    char checkVal = *(char*)(*(uintptr_t*)(s + 0x38) + 0xD8);
-    char ctrlVal = *(char*)(toolPtr + 0x40);
+    // Sync the pin: compare the controller's +0x40 with checkPin's _checked
+    char checkVal = checkPin->_checked;
+    char ctrlVal = toolPtr->hasBorderTitle;
 
     if (ctrlVal != checkVal) {
-        *(char*)(*(uintptr_t*)(s + 0x38) + 0xD8) = ctrlVal;
+        checkPin->_checked = ctrlVal;
     }
 
     // Check key 5 press (left mouse button / select)
-    if (!reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5))  // B.3.7 bridge
+    if (!keyMap->Pressed(0, 5))
         return;
 
     // Get dialog at mouse position
-    dialogInst = *(void**)(s + 0x18);
-    void* userInterface = *(void**)((uintptr_t)dialogInst + 0x10);
-
-    uint8_t dialogAtPosBuf[16];
-    ::new (dialogAtPosBuf) Object::InternalPtr<UI::DialogInstance>(reinterpret_cast<const UI::UserInterface*>(userInterface)->GetFirstContainedDialog(mouseX, mouseY));  // B.3.6 bridge
-    void* dialogAtPos = *(void**)dialogAtPosBuf;
+    UI::UserInterface* userInterface = _dialog->_ui;
+    UI::DialogInstance* dialogAtPos = userInterface->GetFirstContainedDialog(mouseX, mouseY).Get();
 
     // Check if the dialog at mouse position is this dialog, and entity exists
-    dialogInst = *(void**)(s + 0x18);
-    if (dialogAtPos != dialogInst || *(uintptr_t*)(s + 0x30) == 0)
+    if (dialogAtPos != _dialog || entity == nullptr)
         return;
 
-    // Get current tool from player controller (IBP at +0x28, needs CheckPtr)
-    void* playerController = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
-    void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
+    // Get current tool from the tool manager (IBP at +0x28, needs CheckPtr)
+    PlayerToolManager* playerController = GameUpdateLoop::_singleton->m_toolManager;
+    Tool* currentTool = playerController->currentTool;
 
     // Check if current tool is EditTool
     bool isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
-    void* editTool = isEditTool ? currentTool : nullptr;
+    EditTool* editTool = isEditTool ? static_cast<EditTool*>(currentTool) : nullptr;
 
-    uint8_t editToolBuf[8];
-    new (editToolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
-
-    if (*(void**)editToolBuf == nullptr) {
+    if (editTool == nullptr) {
         // No EditTool active — deselect first, then get new EditTool
         EntityUI_SetEditMode_Impl(playerController, 0);
 
         // Re-read current tool after deselect (with CheckPtr)
-        currentTool = *(void**)((uintptr_t)playerController + 0x28);
+        currentTool = playerController->currentTool;
         isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
-        void* newEditTool = isEditTool ? currentTool : nullptr;
-
-        new (editToolBuf) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(newEditTool));   // B.3.3 bridge
+        editTool = isEditTool ? static_cast<EditTool*>(currentTool) : nullptr;
     }
 
     // Select the entity in the edit tool
-    void* editToolPtr = *(void**)editToolBuf;
-    if (editToolPtr) {
-        void* entityPtr = *(void**)(s + 0x30);
-        EditTool_SelectEntity_Impl(*(void**)editToolBuf, &entityPtr);   // 0x1400fd3b0
+    if (editTool) {
+        Object::InternalPtr<ComponentEntity> entityRef(entity);
+        editTool->SelectEntity(&entityRef);   // 0x1400fd3b0
     }
 }
 
 // ============================================================
-// EntityUI::Slot9 (vtable +0x48) — Button dispatch
+// EntityUI::OnElementEvent (vtable +0x48) — Button dispatch
 // ============================================================
 // Handles button clicks:
 //   ID 1 = close entity panel (set edit mode 0)
@@ -648,7 +585,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     // (id 0x65) tolerates null component type-ids (finders just return "not found").
     if (GameUpdateLoop::_singleton == nullptr) return;
     // Gate the entity read like every other EntityUI slot (4/6/7): this body reads
-    // the cached datasource copy (s+0x30) for center (0x65) and toggles tracking on
+    // the cached datasource copy (+0x30) for center (0x65) and toggles tracking on
     // it for pin (100). On a just-demolished building's still-open panel that +0x30
     // weak-ref dangles, so a center/pin click would deref freed memory
     // (fn_FindComponent_Character). SA_DialogEntityAlive checks the +0x28
@@ -657,8 +594,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     (void)param2;
     if (msg != 0x12) return;
 
-    uintptr_t s = (uintptr_t)this;
-    void* playerController = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
+    PlayerToolManager* playerController = GameUpdateLoop::_singleton->m_toolManager;
 
     if (id == 1) {
         // Close entity panel — set edit mode to 0
@@ -668,7 +604,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
 
     if (id == 0x65) {
         // Center camera on entity (buttonCenter). Faithful to the exe center block
-        // (0x140066880..0x140066a8c) — the same position math as
+        // (0x140066870..0x140066a8c) — the same position math as
         // Toolbar_CenterOnEntity_Impl Section 2:
         //   - ModelComponent present AND no MultiObjectComponent  -> single object
         //     (citizen/animal/small building): use the model's world Transform
@@ -680,38 +616,39 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         // 0 as retail does); the camera smoothly slides to it. No re-select / no snap
         // (that is what distinguishes this from Toolbar_CenterOnEntity, which also
         // reopens the target dialog).
-        uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-        void* entityPtr = *(void**)(s + 0x30);
+        GameUpdateLoop* game = GameUpdateLoop::_singleton;
+        // The finders the tree called returned null for a null entity (kept).
+        ComponentEntity* entityPtr = entity;
 
         float focus[2] = {0.0f, 0.0f};
         bool gotPos = false;
 
-        uint64_t modelRef = 0;
-        fn_FindComponent_Character(entityPtr, &modelRef);
-        if (modelRef != 0) {
-            uint64_t multiRef = 0;
-            fn_FindComponent_MultiObject(entityPtr, &multiRef);
-            if (multiRef == 0) {
-                uintptr_t model = (uintptr_t)modelRef;
-                focus[0] = *(float*)(model + 0x158);
-                focus[1] = *(float*)(model + 0x15C);
+        ModelComponent* model = entityPtr ? entityPtr->FindComponent<ModelComponent>() : nullptr;   // 0x140003f60
+        if (model != nullptr) {
+            MultiObjectComponent* multi =
+                entityPtr ? entityPtr->FindComponent<MultiObjectComponent>() : nullptr;          // 0x140004740
+            if (multi == nullptr) {
+                // LEFT: ModelComponent::transform is raw Math::Transform storage (H5);
+                // the translation is its +0x10 / +0x14.
+                focus[0] = *(float*)&model->transform[0x10];
+                focus[1] = *(float*)&model->transform[0x14];
                 gotPos = true;
             }
         }
 
         if (!gotPos) {
-            uint64_t buildRef = 0;
-            fn_FindComponent_Build(entityPtr, &buildRef);
-            if (buildRef != 0) {
-                uintptr_t build = (uintptr_t)buildRef;
-                int* mapGrid = *(int**)(game + 0xf8);
+            MapComponent* build = entityPtr ? entityPtr->FindComponent<MapComponent>() : nullptr;  // 0x140004680
+            if (build != nullptr) {
+                // LEFT: GameUpdateLoop::m_game is void* (the Map; its +0x00 is the width).
+                int* mapGrid = (int*)game->m_game;
                 int gridSize = *mapGrid;
                 float halfGrid = (float)(gridSize >> 1);
 
-                int16_t posX = *(int16_t*)(build + 0x28);
-                int16_t posY = *(int16_t*)(build + 0x2a);
-                int16_t extX = *(int16_t*)(build + 0x2c);
-                int16_t extY = *(int16_t*)(build + 0x2e);
+                // Retail reads the footprint with MOVSX (0x140066955..0x140066964).
+                int16_t posX = (int16_t)build->tileX0;
+                int16_t posY = (int16_t)build->tileY0;
+                int16_t extX = (int16_t)build->tileX1;
+                int16_t extY = (int16_t)build->tileY1;
 
                 int idx1 = (int)extX + ((int)extY + (int)posY) * gridSize + (int)posX;
                 float inXY1[3] = { (float)(idx1 % gridSize) - halfGrid,
@@ -732,10 +669,10 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         }
 
         if (gotPos) {
-            uintptr_t cameraTarget = *(uintptr_t*)(game + 0xe0);
-            *(float*)(cameraTarget + 0x1c) = focus[0];
-            *(float*)(cameraTarget + 0x20) = focus[1];
-            *(float*)(cameraTarget + 0x24) = 0.0f;
+            PlayerController* cameraTarget = game->m_playerController;
+            cameraTarget->targetX = focus[0];
+            cameraTarget->targetY = focus[1];
+            cameraTarget->targetZ = 0.0f;
         }
         return;
     }
@@ -744,49 +681,36 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         // Pin/unpin: toggle checkPin state and update entity tracking
 
         // Get ToolUI controller
-        void* dialogInst = *(void**)(s + 0x18);
-        uint8_t ctrlBuf[16];
-        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(ToolUI::TypeId()));  // B.3.6 bridge
-        void* controller = *(void**)ctrlBuf;
-
-        void* toolUI = nullptr;
-        if (controller) {
-            bool isTool = ::Object::IsDerivedFromNullSafe(controller, ToolUI::TypeId());
-            if (isTool) toolUI = controller;
-        }
-        uint8_t toolBuf[8];
-        new (toolBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolUI));   // B.3.3 bridge
-        void* toolPtr = *(void**)toolBuf;
+        ToolUI* toolPtr = EntityUI_FindToolUI(_dialog);
 
         // The pin state lives on the checkPin element (+0x38, set in Slot4) and the
         // pin flag on the sibling ToolUI controller (+0x40). Both must exist to pin;
         // in standalone a partially-built dialog could be missing either, so guard
         // before dereferencing them.
-        if (toolPtr == nullptr || *(uintptr_t*)(s + 0x38) == 0) return;
+        if (toolPtr == nullptr || checkPin == nullptr) return;
 
-        // Read current pin state from checkPin element (+0x38) -> +0xD8
-        char pinState = *(char*)(*(uintptr_t*)(s + 0x38) + 0xd8);
+        // Read current pin state from checkPin's _checked (+0xD8)
+        char pinState = checkPin->_checked;
 
         // Set ToolUI +0x40 flag to pin state
-        *(char*)((uintptr_t)toolPtr + 0x40) = pinState;
-        if (pinState == 0 && *(char*)((uintptr_t)toolPtr + 0x41) != 0) {
-            *(char*)((uintptr_t)toolPtr + 0x41) = 0;
+        toolPtr->hasBorderTitle = pinState;
+        if (pinState == 0 && toolPtr->isDragging != 0) {
+            toolPtr->isDragging = 0;
         }
 
-        // If unpinned, remove entity from tracking set
-        if (*(char*)(*(uintptr_t*)(s + 0x38) + 0xd8) == 0) {
-            uint64_t entityKey = *(uint64_t*)(s + 0x30);
-            uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x120);
-            EntityTrackingSet_Remove_Impl(
-                (void*)(worldObj + 0x50),
-                &entityKey);
+        // If unpinned, remove entity from tracking set (tool manager +0x50)
+        if (checkPin->_checked == 0) {
+            ComponentEntity* entityKey = entity;
+            PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
+            // LEFT: PlayerToolManager +0x50 is void* (GAME-a header).
+            EntityTrackingSet_Remove_Impl(reinterpret_cast<TrackedEntityNode**>(&worldObj->field_0x50), &entityKey);
             return;
         }
 
-        // If pinned, select entity in edit tool
-        uint32_t dialogX = *(uint32_t*)(*(uintptr_t*)(s + 0x18) + 0x88);
-        uint32_t dialogY = *(uint32_t*)(*(uintptr_t*)(s + 0x18) + 0x8c);
-        void* entityKey = *(void**)(s + 0x30);
+        // If pinned, select entity in edit tool at the dialog's upper-left corner
+        uint32_t dialogX = _dialog->_upperLeftX;
+        uint32_t dialogY = _dialog->_upperLeftY;
+        void* entityKey = entity;
         EntityUI_SelectEntity_Impl(playerController, &entityKey, dialogX, dialogY);
         return;
     }

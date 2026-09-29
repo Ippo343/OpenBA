@@ -34,8 +34,10 @@ public:
     void              Destruct() override;                         // [7] 0x140001640
     virtual Object::External* Construct();                         // [8] 0x140016c60
 
-    // +0x20 Object::ExternalPtr<ComponentEntity> — raw pointer spelling: the
-    // readers (UpgradeUI, DestroyComponent state 5) reach it at the offset.
+    // +0x20 the target template. Retail's Serialize (0x140086fb0)
+    // validates it as an ExternalPtr<ComponentDescription> (cell 0x1401c7318),
+    // and UpgradeUI reads its _subDescs. B4: stays void* because the serializer
+    // body the tree calls (ExternalPtrSerializeGeneric) takes a void**.
     void* _target = nullptr;                                       // +0x20
 };
 

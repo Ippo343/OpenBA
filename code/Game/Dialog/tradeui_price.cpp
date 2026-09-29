@@ -52,6 +52,8 @@
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/ComponentDescription.h"
+#include "Component/TradeComponent.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -61,21 +63,19 @@ namespace {
 
 constexpr float kTradeDiscount = 0.75f;      // DAT_140172124
 
-// Scan an entity's component array for a type id. Entity layout: component pointer
-// array at +0x28, count at +0x30; each component's type id comes from vtable slot
-// +0x10. Retail follows the id match with an IsDerivedFrom confirmation and keeps
-// the component only if that passes — the same shape as the existing scan in
-// engine_funcs.h's storage-count helper.
-void* PriceFindComponentByTypeId(const void* entity, uint32_t typeId) {
+// Scan a resource template's descriptions for a type id (ComponentDescription
+// _subDescs / _subDescCount); each one's type id comes from Type(). Retail
+// follows the id match with an IsDerivedFrom confirmation and keeps the
+// description only if that passes.
+::Object::Base* PriceFindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId) {
     if (!entity) return nullptr;
-    const uint8_t* e = reinterpret_cast<const uint8_t*>(entity);
-    const int32_t count = *reinterpret_cast<const int32_t*>(e + 0x30);
-    void* const* arr = *reinterpret_cast<void* const* const*>(e + 0x28);
+    const int32_t count = entity->_subDescCount;
+    void* const* arr = entity->_subDescs;
     if (!arr || count <= 0) return nullptr;
     for (int32_t i = 0; i < count; ++i) {
-        void* comp = arr[i];
+        ::Object::Base* comp = reinterpret_cast<::Object::Base*>(arr[i]);   // LEFT: ComponentDescription::_subDescs is void** (COMP-c)
         if (!comp) continue;
-        if (reinterpret_cast<Object::Base*>(comp)->Type() != typeId) continue;  // B.3.8 bridge
+        if (comp->Type() != typeId) continue;
         // Retail stops at the FIRST id match and then confirms; a failed confirm
         // yields null rather than continuing the scan.
         if (!::Object::IsDerivedFromNullSafe(comp, typeId)) return nullptr;
@@ -84,63 +84,57 @@ void* PriceFindComponentByTypeId(const void* entity, uint32_t typeId) {
     return nullptr;
 }
 
-} // namespace
-
-// 0x14000ea80 — find the resource's ValueDescription and write it through the
-// out-param, returning the out-param (MSVC by-value-pointer convention). Returning
-// `out` matters: the caller uses the return value, not its own buffer address.
-extern "C" void** TradeUI_FindValueDescription_ea80(const void* resourceEntity,
-                                                    void** out) {
-    if (!out) return out;
-    *out = nullptr;
-    *out = PriceFindComponentByTypeId(resourceEntity, ValueDescription::TypeId());
-    return out;
+// 0x14000ea80 — find the resource's ValueDescription. Retail returns it by
+// value through the caller's slot (an ExternalPtr); the one caller is a520.
+::Object::Base* TradeUI_FindValueDescription_ea80(const ComponentDescription* resourceEntity) {
+    return PriceFindComponentByTypeId(resourceEntity, ValueDescription::TypeId());
 }
+
+} // namespace
 
 // The BANISHED_TRADE_PRICE_PROBE invariant probe was deleted with the flag (ENDGAME C).
 // standalone/tool_harness.cpp still calls the report entry point; the stub goes with it.
 
 
 // ── 0x14005a520 ──────────────────────────────────────────────────────────────
+// B4 FORWARD: the C signature stays for tradecomponent_dock.cpp, which takes its
+// address and calls it with untyped arguments.
 extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity) {
     if (!tradeState || !resourceEntity) return 0;
-    const uint8_t* ts = reinterpret_cast<const uint8_t*>(tradeState);
-    const int32_t merchantIdx = *reinterpret_cast<const int32_t*>(ts + 0x2c);
+    const TradeComponent* trade = reinterpret_cast<const TradeComponent*>(tradeState);   // LEFT: the C signature
+    const ComponentDescription* resource =
+        reinterpret_cast<const ComponentDescription*>(resourceEntity);   // LEFT: the C signature
+    const int32_t merchantIdx = trade->tradeId;
 
     // ── No merchant docked: the base value, straight out of ValueDescription.
     if (merchantIdx < 0) {
-        void* vd = PriceFindComponentByTypeId(resourceEntity, ValueDescription::TypeId());
-        const int32_t base = vd
-            ? *reinterpret_cast<const int32_t*>(reinterpret_cast<uint8_t*>(vd) + 0x40)
-            : 0;                                   // retail: *(int*)(0 + 0x40)
+        const ValueDescription* vd = static_cast<const ValueDescription*>(
+            PriceFindComponentByTypeId(resource, ValueDescription::TypeId()));
+        const int32_t base = vd ? vd->_i40 : 0;   // retail: *(int*)(0 + 0x40)
         return base;
     }
 
     // ── Merchant docked: the RawMaterialDescription supplies the category flags.
-    void* rawMat = PriceFindComponentByTypeId(resourceEntity, RawMaterialDescription::TypeId());
-    const uint32_t flags = rawMat
-        ? *reinterpret_cast<const uint32_t*>(reinterpret_cast<uint8_t*>(rawMat) + 0x5c)
-        : 0;
+    const RawMaterialDescription* rawMat = static_cast<const RawMaterialDescription*>(
+        PriceFindComponentByTypeId(resource, RawMaterialDescription::TypeId()));
+    const uint32_t flags = rawMat ? rawMat->_flags : 0;
 
-    void* tradeDesc = *reinterpret_cast<void* const*>(ts + 0x18);
-    if (tradeDesc && !::Object::IsDerivedFromNullSafe(tradeDesc, TradeDescription::TypeId())) {
-        tradeDesc = nullptr;                       // retail keeps null on a failed check
-    }
+    Description* description = trade->_description;
+    const TradeDescription* tradeDesc = nullptr;
+    if (description && ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId()))
+        tradeDesc = static_cast<const TradeDescription*>(description);   // retail keeps null on a failed check
     if (!tradeDesc) return 0;                      // retail would deref null here
-    const uintptr_t merchants = *reinterpret_cast<const uintptr_t*>(
-        reinterpret_cast<uint8_t*>(tradeDesc) + 0x48);
-    if (!merchants) return 0;
+    if (!tradeDesc->_merchants) return 0;
 
-    const uint8_t* m = reinterpret_cast<const uint8_t*>(
-        merchants + static_cast<uintptr_t>(merchantIdx) * 0x48);
-    const uint32_t mask14 = *reinterpret_cast<const uint32_t*>(m + 0x14);
-    const uint32_t mask18 = *reinterpret_cast<const uint32_t*>(m + 0x18);
+    // The merchant entry (0x48 stride): the two category masks at +0x14 / +0x18.
+    const uint32_t* m = reinterpret_cast<const uint32_t*>(tradeDesc->_merchants)
+                        + static_cast<uintptr_t>(merchantIdx) * (0x48 / 4);   // LEFT: TradeDescription::_merchants is void* (COMP-f)
+    const uint32_t mask14 = m[0x14 / 4];
+    const uint32_t mask18 = m[0x18 / 4];
 
-    void* vd = nullptr;
-    TradeUI_FindValueDescription_ea80(resourceEntity, &vd);
-    const int32_t base = vd
-        ? *reinterpret_cast<const int32_t*>(reinterpret_cast<uint8_t*>(vd) + 0x40)
-        : 0;                                       // retail: *(int*)(0 + 0x40)
+    const ValueDescription* vd = static_cast<const ValueDescription*>(
+        TradeUI_FindValueDescription_ea80(resource));   // 0x14000ea80
+    const int32_t base = vd ? vd->_i40 : 0;        // retail: *(int*)(0 + 0x40)
 
     int32_t result;
     if ((mask14 & flags) != 0) {

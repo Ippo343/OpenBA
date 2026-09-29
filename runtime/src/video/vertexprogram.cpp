@@ -102,47 +102,42 @@
 #include <new>
 
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "../../types/video/CompanionData.h"   // the typed *Data companions
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
-#include "../../types/video/VideoProgram.h"      // RtVideo_VertexProgram_SerializeStreams
+#include "../../types/io/Stream.h"               // IO::Stream, IO::kReading
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 #include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_*
 #include "../../types/system/MemoryAllocator.h"
 
 namespace {
 
-using rt::io::Serializer;
-using rt::io::Stream;
-using rt::io::ReaderWriter;
 using Video::VertexProgram;
-namespace ddvt = rt::video::devicedata_vtbl;
-namespace pdvt = rt::video::programdata_vtbl;
 
-void* ActiveDeviceDataPtr() {
-    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    void* device = slot ? *slot : nullptr;
-    if (!device) return nullptr;
-    return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
-}
+// B.4 (R-VIDEO): the version-0 temporaries, typed. Each array is an unrolled
+// `Collection::Array<T>` triple `{data, size, capacity}` handed by address to
+// its unexported template instance (rtcoll::, Collection.h), which is why the
+// triples are plain structs here and not `Collection::Array<T>` (H5: an
+// `Array` would run its own destructor on top of the explicit teardown below).
+struct V0Element {                 // stride 0x18
+    System::String name;           // +0x00
+    System::String semantic;       // +0x08
+    uint32_t       format;         // +0x10
+    int32_t        index;          // +0x14
+};
+static_assert(sizeof(V0Element) == 0x18, "v0 vertex element is 0x18 bytes");
+struct V0ElementArray { V0Element* data; int32_t size; int32_t capacity; };
 
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-inline void RwInt(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeInt(*reinterpret_cast<int32_t*>(p), nullptr);
-}
-inline void RwUInt(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(p), nullptr);
-}
-inline void RwBool(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeBool(*reinterpret_cast<bool*>(p), nullptr);
-}
+struct V0Stream {                  // stride 0x18
+    V0ElementArray elements;       // +0x00
+    System::String name;           // +0x10
+};
+static_assert(sizeof(V0Stream) == 0x18, "v0 vertex stream is 0x18 bytes");
+static_assert(offsetof(V0Stream, name) == 0x10, "v0 stream name @ 0x10");
+struct V0StreamArray { V0Stream* data; int32_t size; int32_t capacity; };
 
-struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
+struct StringArray { System::String* data; int32_t size; int32_t capacity; };
 
 // Retail inlines EnterCriticalSection / Free / LeaveCriticalSection here; the
 // exported ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) is that
@@ -150,67 +145,113 @@ struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
 // (runtime/src/collection/array.cpp "THE ALLOCATOR BOUNDARY").
 using System::MemoryAllocator;
 
+// ============================================================================
+// The legacy Stream element serialize loop   0x180056db0   (batch D1)
+// ============================================================================
+// SerializeLegacyV0 below calls this by address. The element is
+// {Collection::Array<Element> @+0x00, System::String* @+0x10}, stride 0x18 —
+// the layout array.cpp's kSpec_VtxStream18 and array_destroy.cpp's
+// 0x180056cb0 row independently agree on. B.4 (R-VIDEO): its one caller is
+// SerializeLegacyV0, so it is this file's own (typed) helper now.
+//
+//   180056de0  n = elem->inner._size                      (e+0x08)
+//   180056df6  kScalarInt(&n)                             — a LOCAL, not the field
+//   180056dfc  if (ser->stream->direction == reading)
+//   180056e0c      0x1800567d0(&elem->inner, n)           SetSize
+//   180056e15  p = elem->inner._data                      (e+0x00)
+//   180056e22  per inner element (stride 0x18):
+//                 String::Serialize(p+0x00) / (p+0x08)
+//                 kScalarUInt(p+0x10) / kScalarInt(p+0x14)
+//   180056e6e  String::Serialize(elem+0x10)
+//
+// The count that drives the inner loop is the LOCAL read back at 0x180056e11,
+// not `elem->inner._size` re-read after the SetSize. On the write path they are
+// the same number; on the read path of a truncated stream they are not, and
+// retail uses the local.
+void RtVideo_VertexProgram_SerializeStreams(IO::Serializer& ser, int count, V0Stream* e) {
+    if (count <= 0) return;                                  // 180056db0 TEST/JLE
+
+    for (int i = 0; i < count; ++i, ++e) {
+        int32_t n = e->elements.size;                        // 180056de0
+        ser._readerWriter->SerializeInt(n, nullptr);         // 180056df6
+
+        if (ser._stream->GetDirection() == IO::kReading)     // 180056dfc
+            rtcoll::RtColl_ArraySetSize_1800567d0(&e->elements, n);   // 180056e0c
+
+        V0Element* p = e->elements.data;                     // 180056e15
+        for (int32_t k = 0; k < n; ++k, ++p) {               // 180056e22
+            p->name.Serialize(&ser);
+            p->semantic.Serialize(&ser);
+            ser._readerWriter->SerializeUInt(p->format, nullptr);
+            ser._readerWriter->SerializeInt(p->index, nullptr);
+        }
+
+        e->name.Serialize(&ser);                             // 180056e6e
+    }
+}
+
 // ---- the version-0 legacy block -------------------------------------------
 // A version-0 file stored the vertex declaration on the program itself. Nothing
 // here is kept; every array is destroyed and freed before the block returns.
-void SerializeLegacyV0(Serializer* ser) {
-    ReaderWriter* rw = ser->readerWriter;
-    const bool reading = (ser->stream->direction == rt::io::kDirectionReading);
+void SerializeLegacyV0(IO::Serializer& ser) {
+    IO::ReaderWriter* rw = ser._readerWriter;
+    const bool reading = (ser._stream->GetDirection() == IO::kReading);
 
-    void*    droppedLayout = nullptr;   // ExternalPtr<VertexLayout>, read and dropped
-    ArrayHdr elements  = { nullptr, 0, 0 };   // stride 0x18 {String, String, uint, int}
-    ArrayHdr streams   = { nullptr, 0, 0 };   // handled entirely by 0x180056db0
-    ArrayHdr namesA    = { nullptr, 0, 0 };   // Array<System::String>
-    ArrayHdr namesB    = { nullptr, 0, 0 };   // Array<System::String>
+    RtObject::External* droppedLayout = nullptr;   // ExternalPtr<VertexLayout>, read and dropped
+    V0ElementArray elements = { nullptr, 0, 0 };
+    V0StreamArray  streams  = { nullptr, 0, 0 };   // handled entirely by 0x180056db0
+    StringArray    namesA   = { nullptr, 0, 0 };   // Array<System::String>
+    StringArray    namesB   = { nullptr, 0, 0 };   // Array<System::String>
     int32_t  n = 0;
 
+    // LEFT (B.4 R-VIDEO): the ExternalPtr bodies (R-OBJ, External.h) still take
+    // the `rt::io::Serializer` POD; the two are asserted interchangeable.
     RtObject_ExternalPtrSerialize_VertexLayout(                // 0x180055090 ExternalPtr<VertexLayout>
-        reinterpret_cast<RtObject::External**>(&droppedLayout), ser);
+        &droppedLayout, reinterpret_cast<rt::io::Serializer*>(&ser));
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     if (reading) rtcoll::RtColl_ArraySetSize_1800567d0(&elements, n);
     {
-        uint8_t* e = static_cast<uint8_t*>(elements.data);
-        for (int32_t i = 0; i < n; ++i, e += 0x18) {
-            // B.3.1 bridge: untyped array storage, two System::Strings per element.
-            reinterpret_cast<System::String*>(e + 0x00)->Serialize(ser);
-            reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);
-            RwUInt(rw, e + 0x10);
-            RwInt (rw, e + 0x14);
+        V0Element* e = elements.data;
+        for (int32_t i = 0; i < n; ++i, ++e) {
+            e->name.Serialize(&ser);
+            e->semantic.Serialize(&ser);
+            rw->SerializeUInt(e->format, nullptr);
+            rw->SerializeInt(e->index, nullptr);
         }
     }
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     if (reading) rtcoll::RtColl_ArraySetSize_180056af0(&streams, n);
     RtVideo_VertexProgram_SerializeStreams(ser, n, streams.data);   // 0x180056db0
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     // RtIo_SerializeStringArray (0x180029bb0): its 4th parameter is unused --
     // retail spills R9 to its home slot and overwrites that slot (0x180029d00)
     // before any read.
     if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesA, n);   // Array<String>::SetSize
-    RtIo_SerializeStringArray(ser, n, namesA.data, nullptr);          // Array<String> serialize loop
+    RtIo_SerializeStringArray(&ser, n, namesA.data, nullptr);         // Array<String> serialize loop
 
     n = 0;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesB, n);
-    RtIo_SerializeStringArray(ser, n, namesB.data, nullptr);
+    RtIo_SerializeStringArray(&ser, n, namesB.data, nullptr);
 
-    uint8_t flag = 0;
-    RwBool(rw, &flag);
+    bool flag = false;
+    rw->SerializeBool(flag, nullptr);
 
     // Teardown, in retail's order: namesB, namesA, streams, elements.
     rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesB.data, namesB.size);
-    MemoryAllocator::MemFree(namesB.data);   namesB  = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(namesB.data);   namesB   = StringArray{ nullptr, 0, 0 };
     rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesA.data, namesA.size);
-    MemoryAllocator::MemFree(namesA.data);   namesA  = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(namesA.data);   namesA   = StringArray{ nullptr, 0, 0 };
     rtcoll::RtColl_DestroyVtxStream_180056cb0(nullptr, streams.data, streams.size);
-    MemoryAllocator::MemFree(streams.data);  streams = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(streams.data);  streams  = V0StreamArray{ nullptr, 0, 0 };
     rtcoll::RtColl_DestroyStrings_180056960(nullptr, elements.data, elements.size);
-    MemoryAllocator::MemFree(elements.data); elements = ArrayHdr{ nullptr, 0, 0 };
+    MemoryAllocator::MemFree(elements.data); elements = V0ElementArray{ nullptr, 0, 0 };
     (void)namesA; (void)namesB; (void)streams; (void)elements; (void)droppedLayout;
 }
 
@@ -277,108 +318,46 @@ const void* VertexProgram::GetData() const { return _data; }
 // ?Bind@VertexProgram@Video@@QEBAXAEAVContext@2@H@Z (0x1800f6660): both
 // arguments pass straight through to the companion's Bind slot.
 void VertexProgram::Bind(void* context, int32_t permutation) const {
-    using Fn = void (*)(void*, void*, int);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[pdvt::kBind / 8])(_data, context, permutation);
+    _data->Bind(context, permutation);
 }
 
-// ?PlatformConstruct@VertexProgram@Video@@AEAAXXZ (0x1800f65e0)
+// ?PlatformConstruct@VertexProgram@Video@@AEAAXXZ (0x1800f65e0) — DeviceData
+// slot 15 (+0x78), CreateVertexProgramData.
 void VertexProgram::PlatformConstruct() {
-    void* dd = ActiveDeviceDataPtr();
+    Device* device = Device::_singleton;
+    DeviceData* dd = device ? device->deviceData : nullptr;
     if (dd == nullptr) { _data = nullptr; return; }
-    using CreateFn = void* (*)(void*, void*);
-    void** vt = *reinterpret_cast<void***>(dd);
-    _data = reinterpret_cast<CreateFn>(vt[ddvt::kCreateVertexProgramData / 8])(dd, this);
+    _data = dd->CreateVertexProgramData(this);
 }
 // ?PlatformCreate@VertexProgram@Video@@AEAA_NXZ (0x1800f6640) — tail-jumps into
 // the companion's slot 1, so it RETURNS whatever that returns.
 bool VertexProgram::PlatformCreate() {
-    using Fn = bool (*)(void*);
-    void** vt = *reinterpret_cast<void***>(_data);
-    return reinterpret_cast<Fn>(vt[pdvt::kCreate / 8])(_data);
+    return _data->PlatformCreate();
 }
 // ?PlatformDestruct@VertexProgram@Video@@AEAAXXZ (0x1800f6620)
 void VertexProgram::PlatformDestruct() {
     if (_data == nullptr) return;
-    using Fn = void (*)(void*, int);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[pdvt::kDeletingDtor / 8])(_data, 1);
+    _data->DeletingDtor(1);
 }
 
 // slot 5 — ?Serialize@VertexProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f6240)
 bool VertexProgram::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-
     // Retail CALLs 0x1800f5110 here. The QUALIFIED spelling is that call; an
     // unqualified `Serialize(stream)` would re-enter this function.
-    this->ShaderProgram::Serialize(stream);
+    this->ShaderProgram::Serialize(streamv);
 
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 1);
-    ser.readerWriter = rw;
+    // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
+    // keeps `External`'s `void*` parameter (R-OBJ's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(stream, 1);
 
-    if (AsRw(rw)->GetVersion() == 0)
-        SerializeLegacyV0(&ser);
+    if (ser._readerWriter->GetVersion() == 0)
+        SerializeLegacyV0(ser);
 
-    if (stream->direction == rt::io::kDirectionReading)
+    if (stream.GetDirection() == IO::kReading)
         this->Video::VertexProgram::PlatformCreate();   // retail derefs _data unguarded
 
-    if (rw != nullptr) {
-        delete AsRw(rw);
-    }
-    return true;
+    return true;   // ~Serializer: the ReaderWriter's slot 0, flags 1
 }
 
 }  // namespace Video
-
-// ============================================================================
-// The legacy Stream element serialize loop   0x180056db0   (batch D1)
-// ============================================================================
-// SerializeLegacyV0 above calls this by address. The element is
-// {Collection::Array<Element> @+0x00, System::String* @+0x10}, stride 0x18 —
-// the layout array.cpp's kSpec_VtxStream18 and array_destroy.cpp's
-// 0x180056cb0 row independently agree on.
-//
-//   180056de0  n = elem->inner._size                      (e+0x08)
-//   180056df6  kScalarInt(&n)                             — a LOCAL, not the field
-//   180056dfc  if (ser->stream->direction == reading)
-//   180056e0c      0x1800567d0(&elem->inner, n)           SetSize
-//   180056e15  p = elem->inner._data                      (e+0x00)
-//   180056e22  per inner element (stride 0x18):
-//                 String::Serialize(p+0x00) / (p+0x08)
-//                 kScalarUInt(p+0x10) / kScalarInt(p+0x14)
-//   180056e6e  String::Serialize(elem+0x10)
-//
-// The count that drives the inner loop is the LOCAL read back at 0x180056e11,
-// not `elem->inner._size` re-read after the SetSize. On the write path they are
-// the same number; on the read path of a truncated stream they are not, and
-// retail uses the local.
-extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, void* basev) {
-    if (count <= 0) return;                                  // 180056db0 TEST/JLE
-    Serializer* ser = static_cast<Serializer*>(serv);
-    uint8_t*    e   = static_cast<uint8_t*>(basev);
-
-    for (int i = 0; i < count; ++i, e += 0x18) {
-        int32_t n = *reinterpret_cast<int32_t*>(e + 0x08);   // 180056de0
-        RwInt(ser->readerWriter, &n);                        // 180056df6
-
-        if (ser->stream->direction == rt::io::kDirectionReading)   // 180056dfc
-            rtcoll::RtColl_ArraySetSize_1800567d0(e + 0x00, n);    // 180056e0c
-
-        uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x00); // 180056e15
-        for (int32_t k = 0; k < n; ++k, p += 0x18) {         // 180056e22
-            // B.3.1 bridge: untyped array storage, two System::Strings per element.
-            reinterpret_cast<System::String*>(p + 0x00)->Serialize(ser);
-            reinterpret_cast<System::String*>(p + 0x08)->Serialize(ser);
-            RwUInt(ser->readerWriter, p + 0x10);
-            RwInt (ser->readerWriter, p + 0x14);
-        }
-
-        reinterpret_cast<System::String*>(e + 0x10)->Serialize(ser);   // B.3.1 bridge
-    }
-}

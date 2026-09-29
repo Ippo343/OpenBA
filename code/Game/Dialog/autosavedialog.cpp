@@ -13,6 +13,10 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
+#include "Game/game.h"         // g_gameContainer
+#include "Game/GameUpdateLoop.h"
+#include "ui/String.h"
+#include "ui/StringTable.h"
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include <cstdint>
@@ -82,11 +86,10 @@ void AutoSaveDialog::OnOpened() {
 
     float interval = kIntervalMinutes[speedSetting] * kMinutesToSeconds;
 
-    uint8_t timeBuf[8];
-    void* timeResult = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), interval);
-    uint64_t timeVal = *(uint64_t*)timeResult;
+    System::Time timerTime;
+    RtSystem_Time_Ctor(&timerTime, interval);   // import slot Time::Time(float)
 
-    StartTimer(0, static_cast<int64_t>(timeVal));
+    StartTimer(0, timerTime._ticks);
 
 }
 
@@ -96,24 +99,72 @@ void AutoSaveDialog::OnOpened() {
 // 12 bytes: CMP R8D,0x13; JZ target; RET
 // If msg (param3) == 0x13 (timer event), triggers autosave via
 // SaveLoad system. Otherwise returns immediately.
-// The autosave body at 0x14005DEC0 is ported as Dialog_AutoSaveHandler
-// (dialog_exe_helpers.cpp); call that directly rather than the unregistered
-// raw address.
+// The autosave body at 0x14005DEC0 is AutoSaveDialog::Autosave below.
 //
 // Original: 0x14005E0F0.
 
-void AutoSaveDialog::OnElementEvent(Object::InternalPtr<UI::Element>* param2,
-                                    int32_t param3, int32_t param4, int32_t /*c*/,
+void AutoSaveDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
+                                    int32_t param3, int32_t /*param4*/, int32_t /*c*/,
                                     int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 != 0x13)
         return;
 
-    // 0x14005DEC0 is the autosave body. It is NOT registered, so resolving the raw
-    // address returned null here and the guard above it swallowed every timer tick -
-    // autosave was dead even where the dialog existed. The function has been ported
-    // all along as Dialog_AutoSaveHandler (dialog_exe_helpers.cpp); it was simply
-    // never wired to its only caller. Fixed 2026-08-30 (LANE1 rows 13/14).
-    Dialog_AutoSaveHandler(this, param2, param3, param4);
+    // 0x14005DEC0, the autosave body (a tail JMP in retail). Wired 2026-08-30
+    // (LANE1 rows 13/14): before that the timer tick was swallowed.
+    Autosave();
+}
+
+// ============================================================
+// AutoSaveDialog::Autosave (0x14005DEC0)
+// ============================================================
+// Triggered by OnElementEvent on timer event 0x13. If the game is not paused and
+// not in the bit-10 "blocked" state, and no save/load operation is already in
+// progress, kicks off an autosave: 1s min-display time, the container's
+// SaveLoadEmpty sprite, the localized "Autosave" name, then SetOperation(4, -4).
+
+// 0x140099d40: the localized "Autosave" name — UI::String over the container's
+// globalNames string table (+0xD8).
+static UI::String AutosaveName(const GameContainer* game) {
+    System::String nameStr("Autosave");
+    return UI::String(game->globalNames, nameStr);
+}
+
+static void AsBail(const char* why, long v) {
+    fprintf(stderr, "[AutoSave] timer FIRED but bailed: %s (%ld)\n", why, v);
+    fflush(stderr);
+}
+
+void AutoSaveDialog::Autosave() {
+    // Not while the UI pauses the game.
+    if (_ui->PausesGame()) { AsBail("UI PausesGame", 1); return; }
+
+    // Not while GameWorld flag bit 10 is set.
+    if (GameUpdateLoop::_singleton == nullptr) { AsBail("no gameWorld", 0); return; }
+    uint32_t gwFlags = GameUpdateLoop::_singleton->m_gameFlags;
+    if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (long)gwFlags); return; }
+
+    // Only when no operation is already in progress (Operation::None == 0).
+    Save::SaveLoad* saveLoad = ::Save::SaveLoad::_singleton;
+    if (!saveLoad) { AsBail("no SaveLoad singleton", 0); return; }
+    { int op = saveLoad->GetOperation();
+      if (op != 0) { AsBail("SaveLoad busy, Operation", (long)op); return; } }
+
+    // Min operation-display time = 1.0s.
+    System::Time minTime;
+    RtSystem_Time_Ctor(&minTime, 1.0f);   // import slot Time::Time(float)
+    saveLoad->SetMinOperationTime(minTime);
+
+    // The container's SaveLoadEmpty sprite (+0xB8), by value.
+    if (g_gameContainer == nullptr) return;
+    UI::Sprite sprite = g_gameContainer->spriteSaveLoadEmpty;
+    saveLoad->SetSaveSprite(&sprite);
+
+    // Localized "Autosave" name -> System::String -> SetSaveName(slot 2).
+    System::String sysStr = AutosaveName(g_gameContainer);
+    saveLoad->SetSaveName(sysStr, 2);
+
+    // Kick off the save operation (Operation 4, param -4).
+    saveLoad->SetOperation(Save::SaveLoad::kOpSave, -4);
 }
 
 // [6] AutoSaveDialog::OnUpdateLayout (0x14005DFC0) — Draw
@@ -121,32 +172,27 @@ void AutoSaveDialog::OnElementEvent(Object::InternalPtr<UI::Element>* param2,
 // and hides save indicator; otherwise shows save and hides load.
 // Applies rotation to the visible indicator.
 void AutoSaveDialog::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
-
-    if (!::Save::SaveLoad::_singleton)
+    Save::SaveLoad* saveLoad = ::Save::SaveLoad::_singleton;
+    if (!saveLoad)
         return;
 
-    void* saveLoad = ::Save::SaveLoad::_singleton;
-    int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
+    int operation = saveLoad->GetOperation();
 
     // operation==4 means "load"; otherwise it's a save
     uint32_t hideFlags = (uint32_t)(operation != 4);
     uint32_t showFlags = (uint32_t)(operation == 4);
 
-    void* elem1 = *(void**)(s + 0xB8);
-    if (elem1) {
-        reinterpret_cast<UI::Element*>(elem1)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
+    if (savingImage) {
+        savingImage->SetFlagsOnOff(hideFlags, showFlags);
     }
 
-    void* elem2 = *(void**)(s + 0xC0);
-    if (elem2) {
-        reinterpret_cast<UI::Element*>(elem2)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
+    if (animatedImage) {
+        animatedImage->SetFlagsOnOff(hideFlags, showFlags);
     }
 
     // Apply rotation to first indicator element
-    float angle = *(float*)(s + 0xC8);
-    if (elem1) {
-        reinterpret_cast<UI::ImageElement*>(elem1)->SetRotation(angle);  // B.3.6 bridge
+    if (savingImage) {
+        savingImage->SetRotation(angle);
     }
 }
 
@@ -154,19 +200,16 @@ void AutoSaveDialog::OnUpdateLayout() {
 // Accumulates rotation angle from elapsed time at 90 degrees/sec.
 // Wraps angle to stay within [0, 360).
 void AutoSaveDialog::OnUpdate(const System::Time& time) {
-    uintptr_t s = (uintptr_t)this;
     float elapsed = time.AsSeconds();
-    float angle = *(float*)(s + 0xC8);
+    float newAngle = angle + elapsed * 90.0f;
 
-    angle += elapsed * 90.0f;
-
-    if (angle >= 360.0f) {
+    if (newAngle >= 360.0f) {
         do {
-            angle -= 360.0f;
-        } while (angle >= 360.0f);
+            newAngle -= 360.0f;
+        } while (newAngle >= 360.0f);
     }
 
-    *(float*)(s + 0xC8) = angle;
+    angle = newAngle;
 }
 
 // ============================================================
@@ -177,18 +220,20 @@ void AutoSaveDialog::OnUpdate(const System::Time& time) {
 // AutoSaveDialog owns no heap of its own: +0xB8/+0xC0 are borrowed element refs and
 // +0xC8 is the spinner angle, so the dtor is just the DialogInstance base dtor.
 
-AutoSaveDialog::AutoSaveDialog() : dataB8(0), dataC0(0) {}
+AutoSaveDialog::AutoSaveDialog() : savingImage(nullptr), animatedImage(nullptr) {}
 
 AutoSaveDialog::AutoSaveDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                                Object::InternalPtr<UI::DialogInstance> parent)
-    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0) {
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      savingImage(nullptr), animatedImage(nullptr) {
     {
+        // Stored unchecked, as retail (0x14005e230); OnUpdateLayout rotates it.
         System::String nameStr("savingImage");
-        dataB8 = reinterpret_cast<uint64_t>(FindElement(nameStr).Get());
+        savingImage = static_cast<UI::ImageElement*>(FindElement(nameStr).Get());
     }
     {
         System::String nameStr("animatedImage");
-        dataC0 = reinterpret_cast<uint64_t>(FindElement(nameStr).Get());
+        animatedImage = FindElement(nameStr).Get();
     }
     angle = 0.0f;   // spinner angle
 }

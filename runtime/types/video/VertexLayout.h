@@ -99,6 +99,8 @@ namespace IO { class Stream; }
 
 namespace Video {
 
+class VertexLayoutData;   // runtime/types/video/CompanionData.h (B.4 R-VIDEO)
+
 // ============================================================
 // Video::VertexLayout — a compiled vertex-buffer layout. 0x48 bytes,
 // `Object::CompiledExternal` base (which adds no bytes over `External`'s 0x20).
@@ -246,7 +248,7 @@ public:
     Collection::Array<Element> _elements;   // +0x20  {data, _size +0x28, _capacity +0x2c}
     // The `Video::VertexLayoutData*` the Device factory hands back
     // (`DeviceData` vtable +0x70, slot 14 — `Dx11_CreateVertexLayoutData`).
-    void*                      _data;       // +0x30
+    VertexLayoutData*          _data;       // +0x30  (B.4 R-VIDEO, H4)
     // The compiled vertex-shader INPUT SIGNATURE blob. Retail reaches it only
     // through `PlatformSerialize`, which is why the field is named for the
     // platform half; VideoDX11 hands it to `CreateInputLayout` as the signature

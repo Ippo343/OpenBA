@@ -3,7 +3,7 @@
 //
 // CemeteryUI (0x38 bytes) — cemetery progress bar panel.
 // Extends DialogController. Fields:
-//   +0x30 progressElement (InternalBasePtr)
+//   +0x30 progress (the ProgressElement)
 //
 // Decompiled from Application-x64.exe.
 
@@ -12,7 +12,9 @@
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
+#include "Dialog/CemeteryUI.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
@@ -25,64 +27,23 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // ============================================================
-// File-local helper: CemeteryGetBurialCount (FUN_140046dd0)
+// 0x140046dd0 — the cemetery's occupied plots
 // ============================================================
-// Counts the number of graves in a CemeteryComponent that have a
-// TombstoneComponent present (meaning they are occupied by a buried citizen).
-//
-// CemeteryComponent (param_1) fields:
-//   +0x48: void* graveIndexArray   (int32[] of entity-slot indices)
-//   +0x50: int32 graveCount
-//
-// Entity storage (accessed via gameWorld+0xf8):
-//   entityStore = *(gameWorld + 0xf8)
-//   entitySlot  = *(entityStore + 0x80) (the flat entity slot array)
-//   entity      = *(entitySlot + 8 + graveIndex*0x30)  -- InternalPtr value
-//
-// Entity component search: looks through entity's component list (+0x30, count +0x38)
-//   for a component with TypeId == TombstoneComponent (DAT_1401c4a30).
-//
-// Original: FUN_140046dd0.
-//
-static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
-    uintptr_t cem = (uintptr_t)cemeteryComp;
-    int count = *(int*)(cem + 0x50);
-    if (count <= 0) return 0;
-
-    uintptr_t entityStore = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xF8);
-    uintptr_t* graveIdxArray = *(uintptr_t**)(cem + 0x48);
+// Counts the plots whose map-cell occupant has a TombstoneComponent (a buried
+// citizen). Retail's body walks CemeteryComponent::plots (+0x48, count +0x50,
+// re-read per pass) and, for each non-null cell occupant, runs the inlined
+// FindComponent<TombstoneComponent>. A member of CemeteryComponent in retail;
+// kept file-local (LEFT: COMP-a's class).
+static int CemeteryGetBurialCount_Impl(CemeteryComponent* cemetery) {
     int burials = 0;
-
-    for (int i = 0; i < count; i++) {
-        int graveIdx = ((int*)graveIdxArray)[i];
-
-        // Get entity InternalPtr from entity slot array
-        uintptr_t entitySlot = *(uintptr_t*)(entityStore + 0x80);
-        uintptr_t entityIPtr = *(uintptr_t*)(entitySlot + 8 + (uintptr_t)graveIdx * 0x30);
-        if (entityIPtr == 0) continue;
-
-        uintptr_t entity = entityIPtr;
-        if (!entity) continue;
-
-        // Search entity's component list for TombstoneComponent
-        int compCount = *(int*)(entity + 0x38);
-        uintptr_t* compArray = *(uintptr_t**)(entity + 0x30);
-        uint32_t tombTypeId = TombstoneComponent::TypeId();
-
-        bool found = false;
-        for (int c = 0; c < compCount; c++) {
-            uintptr_t compIPtr = compArray[c];
-            void* comp = (void*)compIPtr;
-            if (!comp) continue;
-
-            // Check TypeId via vtable[2]
-            int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-            if (typeId == (int)tombTypeId) {
-                bool isTomb = ::Object::IsDerivedFromNullSafe(comp, tombTypeId);
-                if (isTomb) { found = true; break; }
-            }
-        }
-        if (found) burials++;
+    for (int i = 0; i < cemetery->plotCount; i++) {
+        // LEFT: GameUpdateLoop::m_game is void* and Map::cells has no cell type
+        // (GAME-a's headers): the occupant is the 0x30-byte cell's +0x08 entity.
+        const uint8_t* cells = (const uint8_t*)((Map*)GameUpdateLoop::_singleton->m_game)->cells;
+        ComponentEntity* occupant =
+            *(ComponentEntity* const*)(cells + (int64_t)cemetery->plots[i] * 0x30 + 8);
+        if (occupant == nullptr) continue;
+        if (occupant->FindComponent<TombstoneComponent>() != nullptr) burials++;
     }
     return burials;
 }
@@ -92,57 +53,43 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
 // vtable left slots 4 and 7 as no-ops, so neither ProgressElement text parameter was
 // ever set and the panel rendered a literal "  of   graves" with both numbers blank.
 // Same shape as AttendanceUI directly above.
-// ENDGAME B.3.9: ProgressElement/ComponentEntity/CemeteryComponent/TombstoneComponent
-// all have a ported TypeId() now, so the lazy-cache over the exe .rdata globals is dead.
+
+// The data source's CemeteryComponent (retail's checked cast of +0x28, then
+// FindComponent<CemeteryComponent> 0x140010a00). The generic finder the tree
+// called returned null for a null entity (kept).
+static CemeteryComponent* CemeteryUI_FindComponent(Object::Base* dataSource) {
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId())
+                                  ? static_cast<ComponentEntity*>(dataSource) : nullptr;
+    return entity ? entity->FindComponent<CemeteryComponent>() : nullptr;
+}
 
 // ============================================================
 // CemeteryUI::Slot4 (vtable +0x20) — Setup/refresh
 // ============================================================
-// Finds ProgressElement by type, stores at +0x30.
-// Gets CemeteryComponent, reads max slots from +0x50,
-// sets as progress maximum.
+// Finds the ProgressElement by type, stores it at +0x30; the progress maximum is
+// the CemeteryComponent's plot count.
 //
 // Original: 0x14005F090.
 
 // [4] 0x14005f090
 void CemeteryUI::OnCreated() {
-    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
-
-    // Find ProgressElement by type
-    uint64_t result = 0;
-    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ProgressElement::TypeId()));  // B.3.6 bridge
-    void* foundElem = (void*)result;
-
-    // Type-check and wrap as InternalBasePtr
-    bool isProgress = ::Object::IsDerivedFromNullSafe(foundElem, UI::ProgressElement::TypeId());
-    void* progressPtr = isProgress ? foundElem : nullptr;
-    uint8_t basePtrBuf[8];
-    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progressPtr));   // B.3.3 bridge
-    this->data30 = *(uint64_t*)basePtrBuf;
+    // Find the ProgressElement under the container (+0x20)
+    UI::Element* found = _container->FindElementType(UI::ProgressElement::TypeId()).Get();
+    progress = ::Object::IsDerivedFromNullSafe(found, UI::ProgressElement::TypeId())
+                   ? static_cast<UI::ProgressElement*>(found) : nullptr;
 
     // Setup: bail on a dead / marked-for-removal datasource (see Slot7).
     if (!SA_DialogEntityAlive(this)) return;
-    // Get entity, find CemeteryComponent
-    void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-    void* entityInternal = *(void**)entityBuf;
+    CemeteryComponent* cemetery = CemeteryUI_FindComponent(_dataSource);
 
-    void* cemetComp = nullptr;
-    fn_FindComponent_Cemetery(entityInternal, &cemetComp);
-
-    // Set progress maximum from component's max slots field (+0x50)
-    int maxSlots = *(int*)((uintptr_t)cemetComp + 0x50);
-    void* progress = (void*)this->data30;
-    *(float*)((uintptr_t)progress + 0x124) = (float)maxSlots;
+    // Progress maximum = the plot count
+    progress->_maxValue = (float)cemetery->plotCount;
 }
 
 // ============================================================
 // CemeteryUI::Slot7 (vtable +0x38) — Update handler
 // ============================================================
-// Gets burial count and max slots from CemeteryComponent,
+// Gets burial count and plot count from CemeteryComponent,
 // updates progress bar value and two text parameters.
 //
 // Original: 0x14005EF50.
@@ -153,33 +100,22 @@ void CemeteryUI::OnUpdateLayout() {
     // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
     // entitylist.cpp Step 0).
     if (!SA_DialogEntityAlive(this)) return;
-    // Get entity, find CemeteryComponent
-    void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-    void* entityInternal = *(void**)entityBuf;
+    CemeteryComponent* cemetery = CemeteryUI_FindComponent(_dataSource);
 
-    void* cemetComp = nullptr;
-    fn_FindComponent_Cemetery(entityInternal, &cemetComp);
+    // Burial count as the progress current value
+    int burialCount = CemeteryGetBurialCount_Impl(cemetery);
+    progress->_currentValue = (float)burialCount;
 
-    void* progress = (void*)this->data30;
-
-    // Get burial count and set as progress current value
-    int burialCount = CemeteryGetBurialCount_Impl(cemetComp);
-    *(float*)((uintptr_t)progress + 0x128) = (float)burialCount;
-
-    // Set text param 0: burial count
+    // Text param 0: burial count
     {
         System::String str = System::String::Format("%i", (unsigned int)burialCount);
-        reinterpret_cast<UI::ProgressElement*>(progress)->SetProgressTextParameter(0, str);  // B.3.6 bridge
+        progress->SetProgressTextParameter(0, str);
     }
 
-    // Set text param 1: max slots
-    int maxSlots = *(int*)((uintptr_t)cemetComp + 0x50);
+    // Text param 1: plot count
+    int maxSlots = cemetery->plotCount;
     {
         System::String str = System::String::Format("%i", (unsigned int)maxSlots);
-        reinterpret_cast<UI::ProgressElement*>(progress)->SetProgressTextParameter(1, str);  // B.3.6 bridge
+        progress->SetProgressTextParameter(1, str);
     }
 }

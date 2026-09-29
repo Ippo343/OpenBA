@@ -38,7 +38,7 @@ public:
     int32_t  field_0x18;         // +0x18 ctor 0
     uint8_t  _pad1C[4];          // +0x1C
     uint64_t field_0x20;         // +0x20 ctor 0
-    Tool*    currentTool;        // +0x28 InternalPtr<Tool> (ctor null)
+    class Tool* currentTool;     // +0x28 InternalPtr<Tool> (ctor null; B4 H4: typed, DLG-a)
     bool     field_0x30;         // +0x30 ctor 0 (the tree: paused)
     uint8_t  _pad31[3];          // +0x31
     int32_t  field_0x34;         // +0x34 ctor 1 (the tree: game speed)

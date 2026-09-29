@@ -114,9 +114,13 @@
 #include <cstdint>
 #include <type_traits>
 
+namespace System { class String; }
+
 namespace Video {
 
 class Context;
+class Device;              // B.4 R-VIDEO: the typed _device / _platformData
+class ConstantBufferData;
 
 class ConstantBuffer {
 public:
@@ -145,11 +149,13 @@ public:
     // ---- the ported members -------------------------------------------
     // Bodies in `runtime/src/video/constant_buffer.cpp`; the registered doors
     // there are one-line QUALIFIED non-virtual delegations onto these.
-    void BeginConstants(const void* typeName, const void* prefix,
+    // B.4 (R-VIDEO), B6: the two String parameters are the
+    // `const System::String&` the mangled names spell (`AEBVString@System@@0…`).
+    void BeginConstants(const System::String& typeName, const System::String& prefix,
                         int32_t ordinalIndex, int32_t uploadIndex,
                         bool bindToVertex, bool banked,
                         int32_t bankStride);                  // 0x1800eed10
-    void AddConstant(const void* name, const void* typeName,
+    void AddConstant(const System::String& name, const System::String& typeName,
                      int32_t size);                           // 0x1800eec40
     void EndConstants(int32_t unread);                        // 0x1800eebf0
     bool PlatformCreate();                                    // 0x1800ef010
@@ -231,8 +237,8 @@ public:
     int32_t       _constantCount;     // +0x30
     int32_t       _constantCapacity;  // +0x34
 
-    void*    _device;          // +0x38  Video::Device*
-    void*    _platformData;    // +0x40  Video::ConstantBufferData*, ends AT 0x48
+    Device*             _device;        // +0x38  (B.4 R-VIDEO, H4)
+    ConstantBufferData* _platformData;  // +0x40  ends AT 0x48
 };
 
 static_assert(sizeof(ConstantBuffer) == 0x48,
@@ -284,3 +290,21 @@ static_assert(offsetof(ConstantBuffer::ConstantInfo, size)     == 0x10, "Constan
 static_assert(offsetof(ConstantBuffer::ConstantInfo, offset)   == 0x14, "ConstantInfo::offset @ +0x14");
 
 }  // namespace Video
+
+// ---- the Collection::Array<ConstantInfo> instantiations and ~ConstantBuffer ----
+// B.4 (R-VIDEO): the array is `ConstantBuffer`'s three named fields
+// `{_constantData, _constantCount, _constantCapacity}`, by reference. They are
+// template instances (unexported, reached by address in retail) and become
+// `Collection::Array<ConstantInfo>` members when the triple becomes one (H5:
+// an `Array` member would give the class a destructor).
+// runtime/src/video/context_lifecycle.cpp
+void RtVideo_ConstEntryArrayDestroy(Video::ConstantBuffer::ConstantInfo* data,
+                                    int32_t count);                         // 0x18001cfc0
+void RtVideo_ConstEntryArrayDtor(Video::ConstantBuffer::ConstantInfo*& data,
+                                 int32_t& size, int32_t& capacity);        // 0x18001cab0
+// ??1ConstantBuffer@Video@@QEAA@XZ — a door, not `~ConstantBuffer()` (RULE B5-4).
+void Video_ConstantBuffer_Dtor(Video::ConstantBuffer* self);                // 0x1800eeee0
+// runtime/src/video/constant_buffer.cpp
+void RtVideo_ConstEntryArraySetSize(Video::ConstantBuffer::ConstantInfo*& data,
+                                    int32_t& size, int32_t& capacity, int32_t newSize,
+                                    const Video::ConstantBuffer::ConstantInfo& fill);  // 0x180053510

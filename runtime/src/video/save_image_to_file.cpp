@@ -105,6 +105,7 @@
 // free of <windows.h> per PLAN §4.1 decision 1.
 // ============================================================================
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -124,6 +125,36 @@
 extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t bytes);
 
 namespace {
+
+// The two BMP headers, as <wingdi.h> declares them (BITMAPFILEHEADER is packed
+// to 2, which is what makes it 14 bytes). This file stays free of <windows.h>.
+#pragma pack(push, 2)
+struct BmpFileHeader {
+    uint16_t type;        // +0x00  'BM'
+    int32_t  size;        // +0x02
+    uint16_t reserved1;   // +0x06
+    uint16_t reserved2;   // +0x08
+    int32_t  offBits;     // +0x0a
+};
+#pragma pack(pop)
+static_assert(sizeof(BmpFileHeader) == 14, "BITMAPFILEHEADER is 14 bytes");
+static_assert(offsetof(BmpFileHeader, offBits) == 10, "bfOffBits @ 10");
+
+struct BmpInfoHeader {
+    int32_t  size;            // +0x00
+    int32_t  width;           // +0x04
+    int32_t  height;          // +0x08
+    uint16_t planes;          // +0x0c
+    uint16_t bitCount;        // +0x0e
+    uint32_t compression;     // +0x10
+    uint32_t sizeImage;       // +0x14
+    int32_t  xPelsPerMeter;   // +0x18
+    int32_t  yPelsPerMeter;   // +0x1c
+    uint32_t clrUsed;         // +0x20
+    uint32_t clrImportant;    // +0x24
+};
+static_assert(sizeof(BmpInfoHeader) == 40, "BITMAPINFOHEADER is 40 bytes");
+static_assert(offsetof(BmpInfoHeader, xPelsPerMeter) == 24, "biXPelsPerMeter @ 24");
 
 // ---------------------------------------------------------------------------
 // 0x180053da0 — Collection::Array<uint8>::SetSize(newSize, const uint8& fill)
@@ -213,10 +244,7 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
         // a reference; it does not copy. `target` stays null when `withExt` is.
         if (withExt._data != nullptr) {
             target._data = withExt._data;
-            ++*reinterpret_cast<int32_t*>(target._data - 4);   // B.3.1 bridge:
-                                                               // retail's inlined
-                                                               // AddRef on the
-                                                               // adopted block
+            ++RtSystem::StringRefCount(target._data);   // retail's inlined AddRef on the adopted block
         }
         System::FilenamePrivateAccess::AdjustDelimiters(target);
     }
@@ -226,10 +254,10 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     // 14-byte BITMAPFILEHEADER and 40-byte BITMAPINFOHEADER, both built by
     // hand. Retail zeroes the file header with three stores (8+4+2) and the
     // info header with a `memset(p, 0, 0x28)` call into the CRT at 0x1800881b0.
-    uint8_t fileHeader[14];
-    uint8_t infoHeader[40];
-    std::memset(fileHeader, 0, sizeof(fileHeader));
-    std::memset(infoHeader, 0, sizeof(infoHeader));
+    // B.4 (R-VIDEO): the two headers are their structs (the file header packed
+    // to 2, as <wingdi.h> declares it), zeroed by value-initialisation.
+    BmpFileHeader fileHeader = {};
+    BmpInfoHeader infoHeader = {};
 
     // Row stride: 3 bytes per pixel, rounded DOWN to a multiple of 4 after
     // adding one pixel's worth — `LEA EAX,[RDI+1] / LEA R12D,[RAX+RAX*2] /
@@ -237,59 +265,48 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     const int32_t rowBytes =
         static_cast<int32_t>((3u * static_cast<uint32_t>(width + 1)) & 0xfffffffcu);
 
-    const uint16_t kBM = 0x4d42;
-    std::memcpy(fileHeader + 0, &kBM, 2);                       // bfType
-    const int32_t fileSize = rowBytes * height + 0x36;
-    std::memcpy(fileHeader + 2, &fileSize, 4);                  // bfSize
-    const int32_t offBits = 0x36;
-    std::memcpy(fileHeader + 10, &offBits, 4);                  // bfOffBits
+    fileHeader.type    = 0x4d42;                        // bfType 'BM'
+    fileHeader.size    = rowBytes * height + 0x36;      // bfSize
+    fileHeader.offBits = 0x36;                          // bfOffBits
 
-    const int32_t biSize = 0x28;
-    std::memcpy(infoHeader + 0, &biSize, 4);
-    std::memcpy(infoHeader + 4, &width, 4);
-    std::memcpy(infoHeader + 8, &height, 4);
+    infoHeader.size   = 0x28;
+    infoHeader.width  = width;
+    infoHeader.height = height;
     // Retail writes planes, bitCount and compression as ONE eight-byte store of
     // 0x0000000000180001 (0x1800f29d0). Split into its fields here: the bytes
-    // are identical, and compression's zero half is already there from the
-    // memset above.
-    const uint16_t planes = 1, bitCount = 24;
-    std::memcpy(infoHeader + 12, &planes, 2);
-    std::memcpy(infoHeader + 14, &bitCount, 2);
-    const int32_t pelsPerMeter = 0xec4;                          // 3780 == 96 DPI
-    std::memcpy(infoHeader + 24, &pelsPerMeter, 4);
-    std::memcpy(infoHeader + 28, &pelsPerMeter, 4);
+    // are identical, and compression's zero half is already there.
+    infoHeader.planes   = 1;
+    infoHeader.bitCount = 24;
+    infoHeader.xPelsPerMeter = 0xec4;                   // 3780 == 96 DPI
+    infoHeader.yPelsPerMeter = 0xec4;
 
     // ---- 3. open --------------------------------------------------------
     //
     // NOTE THE ARGUMENT: CreatePath is given `path`, the function's ORIGINAL
     // argument, not the `.bmp` target built above (0x1800f29e6 `MOV RDX,R14`).
     ::IO::FileSystem* fs = ::IO::FileSystem::_singleton;
-    // B.3.x bridge: the member takes the RtSystem view of the same Filename.
+    // LEFT (B.4 R-VIDEO): the member still takes the RtSystem view of the same
+    // Filename (R-IO's FileSystem.h). When it takes retail's
+    // `const System::Filename&` this line is `fs->CreatePath(pathRef)`.
     fs->CreatePath(*reinterpret_cast<const RtSystem::Filename*>(path));   // 0x1800ae430
 
     // The stream is a stack object retail constructs, uses and destroys in
-    // place. Raw storage plus retail's own constructor, the technique
-    // FileStream.h describes and saveload_meta.cpp already uses.
-    alignas(8) uint8_t streamStorage[sizeof(RtIo::BinaryFileStream)];
-    uint8_t* const stream = streamStorage;
-    IO::BinaryFileStream* const streamObj =
-        ::new (static_cast<void*>(streamStorage)) IO::BinaryFileStream();   // B.3.9 IO: the class
+    // place: a local, built by its real constructor (0x1800a8200) and destroyed
+    // at the end of the function BEFORE `target` (declared first), which is
+    // retail's order (section 6).
+    IO::BinaryFileStream stream;
 
     // Retail calls FileStream::Create, NOT BinaryFileStream::Create.
-    bool ok = streamObj->IO::FileStream::Create(target);   // B.3.9 IO: the member
+    bool ok = stream.IO::FileStream::Create(target);   // B.3.9 IO: the member
 
     if (ok) {
-        // Both offsets are FileStream.h's, asserted there against three
-        // independent bodies; nothing is re-derived here.
-        void* const handle =
-            *reinterpret_cast<void**>(stream + offsetof(RtIo::FileStream, file) +
-                                      offsetof(RtIO::FileInfo, winHandle));
-        int32_t* const cursor =
-            reinterpret_cast<int32_t*>(stream + offsetof(RtIo::FileStream, file) +
-                                       offsetof(RtIO::FileInfo, cursor));
+        // The Win32 handle and the byte cursor of the stream's FileInfo
+        // (FileStream.h asserts both against three independent bodies).
+        void* const handle = stream._file.winHandle;
+        int32_t& cursor    = stream._file.cursor;
 
-        *cursor += static_cast<int32_t>(RtVideoWriteFileRaw(handle, fileHeader, 14));
-        *cursor += static_cast<int32_t>(RtVideoWriteFileRaw(handle, infoHeader, 0x28));
+        cursor += static_cast<int32_t>(RtVideoWriteFileRaw(handle, &fileHeader, 14));
+        cursor += static_cast<int32_t>(RtVideoWriteFileRaw(handle, &infoHeader, 0x28));
 
         // ---- 4. the pixels, bottom-up, 32bpp -> 24bpp ----------------------
         // ENDGAME B.3.2: default ctor == retail's three zero stores; the
@@ -307,26 +324,25 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
             // only then sign-extends (`IMUL EAX,EDI / CDQE`), so the overflow
             // behaviour on a very large image is 32-bit. Reproduced rather than
             // widened.
-            const int64_t rowStep = static_cast<int64_t>(-width) * 4;
-            const uint8_t* src = reinterpret_cast<const uint8_t*>(pixels) + 2 +
-                                 static_cast<int64_t>(row * width) * 4;
+            const int64_t rowStep = -static_cast<int64_t>(width);
+            const uint32_t* src = pixels + static_cast<int64_t>(row * width);
 
             for (; row >= 0; --row) {
                 if (width > 0) {
                     uint8_t* dst = rowBuf._data;
-                    const uint8_t* s = src;
+                    const uint32_t* s = src;
                     for (int32_t i = 0; i < width; ++i) {
-                        // src points one past the pixel's third byte, so these
-                        // three reads are pixel bytes 0, 1, 2 in order — the
-                        // low 24 bits of each 32-bit pixel, copied unswapped.
-                        dst[0] = s[-2];
-                        dst[1] = s[-1];
-                        dst[2] = s[0];
-                        s   += 4;
+                        // Pixel bytes 0, 1, 2 in order — the low 24 bits of
+                        // each 32-bit (little-endian) pixel, copied unswapped.
+                        const uint32_t px = *s;
+                        dst[0] = static_cast<uint8_t>(px);
+                        dst[1] = static_cast<uint8_t>(px >> 8);
+                        dst[2] = static_cast<uint8_t>(px >> 16);
+                        s   += 1;
                         dst += 3;
                     }
                 }
-                *cursor += static_cast<int32_t>(
+                cursor += static_cast<int32_t>(
                     RtVideoWriteFileRaw(handle, rowBuf._data,
                                         static_cast<uint32_t>(rowBytes)));
                 src += rowStep;
@@ -338,11 +354,8 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
         // Retail closes the file HERE and the destructor below re-tests the
         // same handle field. Both are reproduced: CloseFile resets it to the
         // -1 sentinel, which is what stops the second close.
-        int32_t* const fileHandle =
-            reinterpret_cast<int32_t*>(stream + offsetof(RtIo::FileStream, file));
-        if (*fileHandle != -1) {
-            // 0x1800accc0; B.3.x bridge: the FileInfo starts at the handle field.
-            fs->CloseFile(*reinterpret_cast<RtIO::FileInfo*>(fileHandle));
+        if (stream._file.handle != -1) {
+            fs->CloseFile(stream._file);   // 0x1800accc0
         }
         ok = true;   // 0x1800f2b23 `MOV DIL,1`, after the close, unconditionally
 
@@ -357,7 +370,7 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     // Reached from BOTH paths: the `Create` failure arm jumps straight here
     // (0x1800f2a13).
     //
-    // *** RETAIL INLINES THE DESTRUCTOR; THIS CALLS THE EXPORTED ONE, AND THE
+    // *** RETAIL INLINES THE DESTRUCTOR; THIS RUNS THE CLASS'S OWN ONE, AND THE
     // TWO WERE COMPARED INSTRUCTION BY INSTRUCTION BEFORE THE SUBSTITUTION. ***
     // Porting a destructor by assuming an exported body matches an inlined one
     // is how a prior lane nearly shipped a leak under a byte-identity claim
@@ -377,10 +390,8 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     //   Enter/Free/Leave written out. The only difference is that the inlined
     //   copy stamps FileStream's table directly instead of arriving there
     //   through the thunk, which is the same store.
-    streamObj->IO::BinaryFileStream::~BinaryFileStream();   // B.3.9 IO: ~BinaryFileStream, no free
-    // …then the Filename: `target`'s destructor runs here, after the stream's,
-    // which is retail's order.
-
+    //
+    // `stream`'s destructor runs at the return, then `target`'s: retail's order.
     return ok;
 }
 

@@ -22,7 +22,7 @@
 #include "Object/exe_type.h"
 
 class ComponentEntity;           // Entity/ComponentEntity.h
-namespace UI { class Element; }  // runtime/types/ui/Element.h
+namespace UI { class CheckElement; class PageElement; }  // runtime/types/ui/
 
 class EntityUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(EntityUI)
@@ -41,12 +41,18 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140067050
 
+    // 0x140066ad0 -- retail's [8] OnUpdate body (mouse select of the entity in
+    // the EditTool, pin sync with the ToolUI). NOT WIRED: the tree's OnUpdate
+    // drives OnUpdateLayout per frame instead (standalone deviation); wiring it
+    // is a behaviour decision (B4 DLG-a hand-in).
+    void UpdateInput();
+
     // ---- fields (B.4 W0-H2; retail create 0x140011270 zeroes all three,
     // OnCreated 0x1400670d0 fills them). Retail's types are InternalPtr<T>;
     // declared as plain T* (layout-identical, trivial; B.4 H5).
     ComponentEntity* entity   = nullptr;   // +0x30 the controller's +0x28 object if IsDerivedFrom ComponentEntity
-    UI::Element*     checkPin = nullptr;   // +0x38 FindElement("checkPin"), SetElementId(100)
-    UI::Element*     pages    = nullptr;   // +0x40 FindElement("pages")
+    UI::CheckElement* checkPin = nullptr;  // +0x38 FindElement("checkPin"), SetElementId(100); read as CheckElement::_checked
+    UI::PageElement* pages    = nullptr;   // +0x40 FindElement("pages"); read as PageElement (Get/SetActivePage)
 };
 
 static_assert(sizeof(EntityUI) == 0x48, "EntityUI is 0x48 (create 0x140011270 MemAlloc(0x48))");

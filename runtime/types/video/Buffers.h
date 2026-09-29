@@ -140,9 +140,10 @@ public:
     int32_t  size;          // +0x00  index count (Create's first param); zeroed in ctor
     bool     dynamic;       // +0x04  zeroed in ctor
     uint8_t  pad05[3];
-    void*    platformData;  // +0x08  Video::IndexBufferData*, set by PlatformConstruct
-    void*    listPrev;      // +0x10  intrusive list (Device's live-buffer registry); not touched by Create/Set
-    void*    listNext;      // +0x18  the field the four retail walkers step through
+    // B.4 (R-VIDEO), H4: the pointer members carry their retail types.
+    IndexBufferData* platformData;  // +0x08  set by PlatformConstruct
+    IndexBuffer*     listPrev;      // +0x10  intrusive list (Device's live-buffer registry); not touched by Create/Set
+    IndexBuffer*     listNext;      // +0x18  the field the four retail walkers step through
 };
 
 // ----------------------------------------------------------------------------
@@ -198,9 +199,9 @@ public:
     int32_t  size;
     bool     dynamic;
     uint8_t  pad05[3];
-    void*    platformData;
-    void*    listPrev;
-    void*    listNext;
+    VertexBufferData* platformData;  // +0x08
+    VertexBuffer*     listPrev;      // +0x10
+    VertexBuffer*     listNext;      // +0x18
 };
 
 }  // namespace Video

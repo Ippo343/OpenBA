@@ -3,37 +3,28 @@
 //
 // TradeUI (0x148 bytes): Trading post panel — shows incoming merchants,
 // trade items, buy/sell interface with order management.
-// Extends DialogController (0x30 base).
+// Extends DialogController (0x30 base). The field layout is TradeUI.h's.
 //
-// Layout:
-//   +0x30..+0x58: sell order array (ptr, ptr, count, capacity) x3 vectors
-//   +0x60..+0x78: sell entries (ptr, count, capacity, stride 0x20)
-//   +0x70..+0x88: buy entries (ptr, count, capacity, stride 0x20)
-//   +0x80..+0x98: storage entries (ptr, count, capacity, stride 0x18)
-//   +0x90..+0xA8: order entries (ptr, count, capacity, stride 0x20)
-//   +0xA0..+0xB8: purchase entries (ptr, count, capacity, stride 0x08)
-//   +0xB0..+0xC8: reserved
-//   +0xC0: comboOrder element
-//   +0xC8: tableSell element
-//   +0xD0: tableBuy element
-//   +0xD8: tableStorage element
-//   +0xE0: tablePurchase element
-//   +0xE8: tableOrder element
-//   +0xF0: buttonTrade element
-//   +0xF8: buttonDismiss element
-//   +0x100: numberSellTotal element
-//   +0x108: numberBuyTotal element
-//   +0x110: textNoStorage element
-//   +0x118: textTooMuch element
-//   +0x120: textNotEnough element
-//   +0x128: reserved
-//   +0x130: reserved
-//   +0x138: comboPurchase element
-//   +0x140: sortCombo element
+// The panel's subject is DialogController::_dataSource narrowed to a
+// ComponentEntity (retail: IsDerivedFrom 0x140152a98 against the ComponentEntity
+// cell 0x1401c5d70, then the InternalBasePtr ctor); its TradeComponent is the
+// "trading post" every body reads (FindComponent<TradeComponent>, 0x140015140).
+//
+// READS LEFT AT AN OFFSET (B.4, owner named):
+//   TradeComponent +0x30/+0x40/+0x48/+0x50/+0x58/+0x60 (COMP-f): the order,
+//     order-amount and buy-order arrays and the storage-order tree are `void*`
+//     in TradeComponent.h, their element types undeclared.
+//   StateMachineComponent +0x50/+0x51/+0x52 (COMP-e): the state bytes are one
+//     `uint32_t stateFlags` in the header.
+//   StorageComponent::storageSlots (W0): the 0x10-byte item is raw storage.
+//   GameUpdateLoop::m_citizenList +0x110/+0x118 (CitizenBehavior, WORK-a): the
+//     raw-material list.
+//   ComponentDescription::_subDescs (COMP-c): `void**`.
+//   UI::Element::_description (R-UI-a): `void*`.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/TradeUI.h"
 #include "Dialog/tradeui_funcs.h"
-#include "Component/coll_bridge.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
@@ -43,6 +34,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
+#include "Component/TradeComponent.h"
+#include "Component/StorageComponent.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -51,9 +44,11 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "io/Stream.h"
 #include <new>
 #include "runtime/types/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/DialogInstance.h"
 #include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/Sprite.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
@@ -65,7 +60,9 @@
 #include "runtime/types/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "runtime/types/ui/ButtonElement.h"      // X::TypeId() (B.3.9 CG2)
+#include "runtime/types/ui/CheckElement.h"
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/ComponentDescription.h"
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/StateMachineComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
@@ -81,59 +78,25 @@
 // reg_element_typeids.cpp:36 documents the old "SliderElement" mislabel), so those
 // sites call UI::SpinnerElement::SetMinMax directly (ENDGAME B.3.6).
 
-// ---- TradeUI: PROMOTED to the real reimpl (Wave A), GATED on its exe leaves ----
-// The trading-post panel (Dialog\Trade.rsc). ~2800 lines of real reimplementation
-// already exist in code/Game/Dialog/tradeui.cpp but were unreachable: the generic
-// UI_DIALOG_STUB below registered the type name to a zero-filled 0x148 stub with a
-// no-op vtable, so opening a post gave a blank panel and every ported method was
-// dead code. This promotion follows the ProfessionUI pattern above (own g_vt +
-// REGISTER_TYPE; slots wired by index, never by exe address).
-//
-// Slot map (byte offset = slot * 8), taken from the per-function headers in
-// tradeui.cpp, which were recorded against the retail vtable when each was ported:
-//   slot 4  (+0x20) TradeUI_Serialize — MISNAMED: this is the full UI SETUP
-//                   (element lookup + table building). It is the ProfessionUI-Slot5
-//                   analogue and must run before any other slot touches the caches.
-//   slot 5  (+0x28) TradeUI_Draw      — mark tables for layout recalc
-//   slot 6  (+0x30) TradeUI_Slot6     — clear the building dirty flag
-//   slot 7  (+0x38) TradeUI_Startup   — trade value calcs, warning text, button enable
-//   slot 8  (+0x40) TradeUI_OnCreate  — per-frame refresh when the order count changes
-//   slot 9  (+0x48) TradeUI_OnRemove  — event dispatcher (spinners/combos/buttons)
-//   slot 10 (+0x50) TradeUI_Update    — serialize the tab/sort state
-//
-// ── WHY THE GATE ─────────────────────────────────────────────────────────────
-// tradeui.cpp calls 11 exe-resolved leaf helpers that are NOT ported and NOT
-// registered, so ResolveAddr returns 0 for every one of them:
-//   0x14005a520 fn_Building_GetSellableCount    0x140016050 fn_DynArray_Clear_0x20
-//   0x140059670 fn_Building_GetBuyEntries       0x140016130 fn_DynArray_Clear_0x18_Buy
-//   0x140015fd0 fn_Building_GetOrderName        0x140016200 fn_DynArray_Clear_0x18
-//   0x1400165d0 fn_IntroSort_ByComponent        0x1400162d0 fn_IntroSort_ByName
-//   0x14000e1c0 fn_StorageTree_Insert           0x140059490 fn_Building_AddPurchaseOrder
-//   0x140081420 fn_TradeUI_OnTradeButton (also needs Wave D — it IS the checkout)
-// Eight of those are reachable from the slot-4 SETUP path alone (it tails into
-// RefreshDisplay + RefreshSellTable + RefreshBuyTable), so wiring the real slots
-// today would EXEC-of-0 on the very first dispatch — the panel would crash rather
-// than render. Wave A is therefore "port + register those 11, THEN flip", not a
-// one-line stub removal.
-//
-// Rather than leave that as a tripwire, the wiring is conditional: DepsReady()
-// checks every one of them at first dispatch, and while any is null the slots stay
-// no-ops (identical to the old stub) and a single loud line names what is missing.
-// Once the 11 land, this promotion goes live with no further edit here.
+// Slot map (byte offset = slot * 8), recorded against the retail vtable 0x14015de80:
+//   slot 4  (+0x20) OnCreated        — the full UI SETUP (element lookup + table
+//                   building). It must run before any other slot touches the caches.
+//   slot 5  (+0x28) OnOpened         — mark tables for layout recalc
+//   slot 6  (+0x30) OnClosed         — clear the post's dirty flag
+//   slot 7  (+0x38) OnUpdateLayout   — trade value calcs, warning text, button enable
+//   slot 8  (+0x40) OnUpdate         — per-frame refresh when the order count changes
+//   slot 9  (+0x48) OnElementEvent   — event dispatcher (spinners/combos/buttons)
+//   slot 10 (+0x50) OnSerializeSettings — serialize the tab/sort state
 namespace tradeui_sa {
-    // B3R: DepsReady() is gone -- the eleven door pointers it tested are the bodies
-    // below, called by name, and were never null.
     // Slot 4 builds the element caches (+0xC0..+0x140) every other slot dereferences.
     // Same hazard ProfessionUI documents: the framework dispatches the per-frame slots
     // before setup has run, so they must skip until the caches exist.
-    bool IsSetUp(void* self) {
-        uintptr_t s=reinterpret_cast<uintptr_t>(self);
-        return *reinterpret_cast<void**>(s+0xC8)!=nullptr &&   // tableSell
-               *reinterpret_cast<void**>(s+0xD0)!=nullptr;     // tableBuy
+    bool IsSetUp(const TradeUI* self) {
+        return self->_tableSell != nullptr &&   // +0xC8
+               self->_tableBuy != nullptr;      // +0xD0
     }
-    void Trace(const char* slot, void* self) {
+    void Trace(const char* slot, const TradeUI* self) {
         static int n=0; if (n>=32) return; ++n;
-        uintptr_t s=reinterpret_cast<uintptr_t>(self);
         // stderr, NOT stdout — two independent reasons, both already project rules:
         //  1. `std::printf` does not survive the release build. log_strip.h defines
         //     `printf(...)` as `((void)0)`, so the QUALIFIED call expands to
@@ -144,12 +107,13 @@ namespace tradeui_sa {
         //     NOTHING and looks identical to one that never fired — which is exactly the
         //     symptom this trace was added to investigate.
         std::fprintf(stderr, "[TradeUI] %s self=%p tableSell(+0xC8)=%p tableBuy(+0xD0)=%p "
-               "buttonTrade(+0xF0)=%p sell.n(+0x38)=%d buy.n(+0x48)=%d\n", slot, self,
-               self?*reinterpret_cast<void**>(s+0xC8):nullptr,
-               self?*reinterpret_cast<void**>(s+0xD0):nullptr,
-               self?*reinterpret_cast<void**>(s+0xF0):nullptr,
-               self?*reinterpret_cast<int32_t*>(s+0x38):0,
-               self?*reinterpret_cast<int32_t*>(s+0x48):0);
+               "buttonTrade(+0xF0)=%p sell.n(+0x38)=%d buy.n(+0x48)=%d\n", slot,
+               static_cast<const void*>(self),
+               self?static_cast<const void*>(self->_tableSell):nullptr,
+               self?static_cast<const void*>(self->_tableBuy):nullptr,
+               self?static_cast<const void*>(self->_buttonTrade):nullptr,
+               self?self->_sellItems._size:0,
+               self?self->_buyItems._size:0);
         std::fflush(stderr);
     }
     // Slot 4 is idempotent-guarded for the same reason ProfessionUI's Slot5 is: a second
@@ -157,72 +121,59 @@ namespace tradeui_sa {
 }
 
 // ============================================================
-// Draw (vtable +0x28): Mark tables for layout recalc, set building dirty flag
+// OnOpened (vtable +0x28): Mark tables for layout recalc, set the post's dirty flag
 // ============================================================
 // Original: 0x140082a70
 //
 // Marks tableSell (+0xC8) and tableBuy (+0xD0) as needing size recalculation.
-// Then finds the BuildingComponent on the owning entity and sets its
+// Then finds the TradeComponent on the owning entity and sets its
 // dirty flag (byte at +0x71) to 1, triggering a visual refresh.
 
 // [5] 0x140082a70
 void TradeUI::OnOpened() {
     if (!tradeui_sa::IsSetUp(this)) return;
     tradeui_sa::Trace("Slot5-draw", this);
-    uintptr_t s = (uintptr_t)this;
 
     // Mark sell and buy tables for layout recalculation
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xC8))->SetNeedsSizeCalc();  // B.3.6 bridge
+    _tableSell->SetNeedsSizeCalc();
+    _tableBuy->SetNeedsSizeCalc();
 
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xD0))->SetNeedsSizeCalc();  // B.3.6 bridge
+    // Get owning entity and find the TradeComponent
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    // Get owning entity and find BuildingComponent
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    // Set building dirty flag
-    *(uint8_t*)(buildingPtr[0] + 0x71) = 1;
+    // Set the post's dirty flag
+    trade->tradeFlag = 1;
 }
 
 // ============================================================
-// Slot6 (vtable +0x30): Clear building dirty flag
+// OnClosed (vtable +0x30): Clear the post's dirty flag
 // ============================================================
 // Original: 0x140082a00
 //
-// Finds BuildingComponent on owning entity, clears its dirty flag
+// Finds the TradeComponent on the owning entity, clears its dirty flag
 // (byte at +0x71 = 0). Called when panel is hidden/deactivated.
 
 // [6] 0x140082a00
 void TradeUI::OnClosed() {
     if (!tradeui_sa::IsSetUp(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    *(uint8_t*)(buildingPtr[0] + 0x71) = 0;
+    trade->tradeFlag = 0;
 }
 
 // ============================================================
-// Serialize (vtable +0x20): Full UI setup — element lookup, table building
+// OnCreated (vtable +0x20): Full UI setup — element lookup, table building
 // ============================================================
 // Original: 0x140084dd0
 //
-// Phase 1: Finds 15 named elements and stores as InternalBasePtr in self.
+// Phase 1: Finds 15 named elements and stores them in self.
 // Phase 2: Sets element IDs on buttons, combos, and sort combo.
 // Phase 3: Builds tablePurchase rows with child spinner elements (stride 0x20).
 // Phase 4: Counts resource types via ExternalFactory, counts selectable
@@ -230,72 +181,56 @@ void TradeUI::OnClosed() {
 //          clones template elements, finds row sub-elements (spinners etc).
 // Phase 5: Calls RefreshDisplay, RefreshSellTable, RefreshBuyTable.
 
-// Helper: find named element in dialog, cast via IsDerivedFrom, return raw ptr
-static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32_t* typeId) {
+// Helper: find a named element under the dialog's container and keep it only when
+// it IsDerivedFrom T (retail: FindElement, then the IsDerivedFrom import).
+template <class T>
+static T* TradeUI_FindTypedElement(UI::Element* container, const char* name) {
     System::String strBuf(name);
-    uint64_t foundBuf[2] = {0, 0};
-    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)dialogElem)->FindElement(strBuf));  // B.3.6 bridge
-    void* elem = *(void**)foundBuf;
-    void* result = nullptr;
-    if (elem && typeId) {
-        bool derived = ::Object::IsDerivedFromNullSafe(elem, *typeId);
-        if (derived) result = elem;
+    UI::Element* elem = container->FindElement(strBuf).Get();
+    T* result = nullptr;
+    if (elem) {
+        bool derived = ::Object::IsDerivedFromNullSafe(elem, T::TypeId());
+        if (derived) result = static_cast<T*>(elem);
     }
-    uint64_t ibpBuf[1] = {0};
-
     return result;
 }
-
-// B.3.2 bridge: every TradeUI_DynArrayPush(s, ptrOff, countOff, capOff, entry, stride)
-// call site below was a hand-transcribed copy of retail's inlined
-// Collection::Array<T>::SetSize(count+1, fill) (see Component/coll_bridge.h). Converted
-// in place to GameColl::ArrayAt<GameColl::Bytes<stride, 8>>(s, ptrOff).SetSize(...) — the runtime stride parameter
-// this helper took becomes the compile-time N of the blob element, so the helper is
-// deleted (zero remaining callers, confirmed by grep across code/, standalone/,
-// engine/, runtime/).
 
 // Helper: clone template into all table cells
 // templateObj must be read from first child's +0xB8 BEFORE calling SetSize,
 // because SetSize destroys/replaces children.
-static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem, void* templateObj) {
-    int totalCells = reinterpret_cast<const UI::Element*>(tableElem)->ChildCount();  // B.3.6 bridge
+static void TradeUI_CloneTableCells(const TradeUI* self, UI::TableElement* table,
+                                    const UI::ElementDescription* templateObj) {
+    int totalCells = table->ChildCount();
     for (int i = 0; i < totalCells; i++) {
-        // Get dialog resource reference
-        void* dialogInst = *(void**)(s + 0x18);
-        void* dialogResource = *(void**)((uintptr_t)dialogInst + 0x18);
-
         // Clone via the template's slot 8, UI::ElementDescription::CreateInstance
         // (retslot, B6-2). templateObj is Element::_description (+0xB8) of the
         // table's Child(0) — every caller passes TradeUI_GetTableTemplate's result.
-        uint64_t cloneBuf[2] = {0, 0};
-        reinterpret_cast<const UI::ElementDescription*>(templateObj)->CreateInstance(
-            reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf),
-            reinterpret_cast<const UI::Dialog*>(dialogResource));  // B.3.6 bridge
+        ::Object::InternalPtr<UI::Element> clone;
+        templateObj->CreateInstance(&clone, self->_dialog->_dialog);
 
-        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf), i);  // B.3.6 bridge
+        table->SetChild(&clone, i);
     }
 }
 
 // Helper: read template from table's first child +0xB8 (must be called BEFORE SetSize)
-static void* TradeUI_GetTableTemplate(void* ibpPtr) {
-    uint64_t childBuf[2] = {0, 0};
-    ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)ibpPtr)->Child(0));  // B.3.6 bridge
-    void* firstChild = *(void**)childBuf;
+static const UI::ElementDescription* TradeUI_GetTableTemplate(UI::TableElement* table) {
+    UI::Element* firstChild = table->Child(0).Get();
     if (!firstChild) return nullptr;
-    return *(void**)((uintptr_t)firstChild + 0xB8);
+    return reinterpret_cast<const UI::ElementDescription*>(firstChild->_description);   // LEFT: Element::_description is void* (R-UI-a)
 }
 
 // ============================================================
 // Helper: find a description sub-component by typeId
 // ============================================================
-static void* FindDescComponent(void* descEntity, uint32_t typeId)
+// The description's sub-description array (+0x28, count +0x30); retail stops at
+// the first type-id match and keeps it only when IsDerivedFrom agrees.
+static ::Object::Base* FindDescComponent(const ComponentDescription* descEntity, uint32_t typeId)
 {
     if (!descEntity) return nullptr;
-    int count = *(int*)((uintptr_t)descEntity + 0x30);
-    void** arr = *(void***)((uintptr_t)descEntity + 0x28);
+    int count = descEntity->_subDescCount;
     for (int i = 0; i < count; i++) {
-        void* comp = arr[i];
-        int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+        ::Object::Base* comp = reinterpret_cast<::Object::Base*>(descEntity->_subDescs[i]);   // LEFT: _subDescs is void** (COMP-c)
+        int tid = comp->Type();
         if ((uint32_t)tid == typeId) {
             if (::Object::IsDerivedFromNullSafe(comp, typeId))
                 return comp;
@@ -308,15 +243,15 @@ static void* FindDescComponent(void* descEntity, uint32_t typeId)
 // ============================================================
 // Helper: set spinner increment based on max value
 // ============================================================
-static void SetSpinnerIncrement(void* spinner)
+static void SetSpinnerIncrement(UI::SpinnerElement* spinner)
 {
-    int maxVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetMaxValue();  // B.3.6 bridge
+    int maxVal = spinner->GetMaxValue();
     if (maxVal < 0x15) {
-        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetIncrement(1);  // B.3.6 bridge
+        spinner->SetIncrement(1);
     } else if (maxVal < 0x33) {
-        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetIncrement(5);  // B.3.6 bridge
+        spinner->SetIncrement(5);
     } else if (maxVal < 0x65) {
-        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetIncrement(0x14);  // B.3.6 bridge
+        spinner->SetIncrement(0x14);
     }
     // >= 0x65: no increment set (uses default)
 }
@@ -324,37 +259,13 @@ static void SetSpinnerIncrement(void* spinner)
 // ============================================================
 // Helper: set element name from External resource path
 // ============================================================
-static void SetElementNameFromExternal(void* element, void* externalPtr)
+static void SetElementNameFromExternal(UI::Element* element, const ::Object::External* external)
 {
     // `GetPath` returns by value through a hidden return slot and the callee
     // CONSTRUCTS into it; copy-initialising the local is the same store.
-    System::Filename pathBuf =
-        reinterpret_cast<const ::Object::External*>(externalPtr)->GetPath();  // B.3.3 bridge
+    System::Filename pathBuf = external->GetPath();
     System::Filename nameStr = pathBuf.GetPathFilename(false);
-    reinterpret_cast<UI::Element*>(element)->SetName(*reinterpret_cast<const System::String*>(&nameStr));  // B.3.6 bridge
-}
-
-// ============================================================
-// Helper: virtual call for Element::SetEnabled(this, bool)
-// vtable[8] (offset 0x40)
-// ============================================================
-// UI::Element slot 8 is Enable(bool). Every caller passes an element this file
-// stored from a Child()/FindElement() result (the +0x60/+0x70/+0x80/+0x90/+0xA0
-// row arrays and the +0xC0 combo, all filled in TradeUI_Serialize).
-static inline void VCall_Element_SetEnabled(void* elem, bool enabled)
-{
-    reinterpret_cast<UI::Element*>(elem)->Enable(enabled);  // B.3.6 bridge
-}
-
-// ============================================================
-// Helper: virtual call for Element vtable[10] (offset 0x50)
-// Used as a visibility/show function in some contexts:
-//   arg=0 hides, arg=-1 (0xFFFFFFFF) shows.
-// ============================================================
-// UI::Element slot 10 is SetColor(uint32); callers pass the +0x60 sell rows.
-static inline void VCall_Element_Slot10(void* elem, int arg)
-{
-    reinterpret_cast<UI::Element*>(elem)->SetColor(static_cast<uint32_t>(arg));  // B.3.6 bridge
+    element->SetName(nameStr.AsString());
 }
 
 // ============================================================
@@ -362,58 +273,51 @@ static inline void VCall_Element_Slot10(void* elem, int arg)
 // ============================================================
 // Rebuilds the sell table data and UI.
 //
-// Phase 1: Get entity components (Building, StateMachine).
+// Phase 1: Get entity components (TradeComponent, StorageComponent).
 // Phase 2: Iterate resource entries from the game world's resource table.
-//          For each resource type, check building's storage BST for availability.
+//          For each resource type, check the post's storage BST for availability.
 //          If available (count > 0), find ValueDescription + ResourceType sub-components
 //          and push a 0x20-byte sell data entry.
 // Phase 3: Build state check, then populate sell table UI cells.
 //          For each sell entry: set sprite, text, counts, spinner limits, color.
 // Phase 4: Clear unused sell table cells.
 
-void TradeUI_RefreshSellTable(TradeUI* self)
+void TradeUI::RefreshSellTable()
 {
-    uintptr_t s = (uintptr_t)self;
+    // Get entity, TradeComponent, StorageComponent
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    // Get entity, BuildingComponent, StateMachineComponent
-    void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entityRaw : nullptr;
+    // Check TradeDescription on the post
+    ::Object::IsDerivedFromNullSafe(trade->_description, TradeDescription::TypeId());
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    // Check TradeDescription on building
-    ::Object::IsDerivedFromNullSafe(*(void**)(buildingPtr[0] + 0x18), TradeDescription::TypeId());
-
-    uint64_t smPtr[2] = {0, 0};
-    fn_FindComponent_Storage((void*)entityPtr[0], &smPtr);
+    StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
     // Get resource table from game world singleton (+0xf0 = resource manager)
-    void* resourceMgr = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xf0);
-    int resourceCount = *(int*)((uintptr_t)resourceMgr + 0x118);
+    void* resourceMgr = GameUpdateLoop::_singleton->m_citizenList;
+    int resourceCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(resourceMgr) + 0x118);   // LEFT: CitizenBehavior (WORK-a)
 
     // Clear sell data array at +0x30 (stride 0x20)
-    TradeUI_DynArrayClear_16050(reinterpret_cast<int64_t*>(s + 0x30));   // 0x140016050
+    _sellItems.Clear();   // 0x140016050
 
     // Phase 2: Iterate resources and build sell entries
     if (resourceCount > 0) {
         for (int ri = 0; ri < resourceCount; ri++) {
-            void* valueDesc = nullptr;
-            void* resTypeComp = nullptr;
+            ValueDescription* valueDesc = nullptr;
+            RawMaterialDescription* resTypeComp = nullptr;
 
             // Get resource entity from resource table
-            uint64_t resEntity = *(uint64_t*)(*(uintptr_t*)((uintptr_t)resourceMgr + 0x110)
-                                  + (uintptr_t)ri * 8);
+            ComponentDescription* resEntity = (*reinterpret_cast<ComponentDescription***>(
+                reinterpret_cast<uintptr_t>(resourceMgr) + 0x110))[ri];   // LEFT: CitizenBehavior (WORK-a)
+            const uintptr_t resKey = reinterpret_cast<uintptr_t>(resEntity);
 
-            // Search building's storage BST for this resource
-            uintptr_t* bstNode = *(uintptr_t**)(buildingPtr[0] + 0x60);
+            // Search the post's storage BST for this resource
+            uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->field60);   // LEFT: TradeComponent tree (COMP-f)
             bool found = false;
             while (bstNode != nullptr) {
-                if (resEntity < *bstNode) {
+                if (resKey < *bstNode) {
                     // left at +0x18. Confirmed byte-exact: the node is
                     // { key +0x00, value +0x08, parent +0x10, left +0x18,
                     //   right +0x20, balance +0x28 } -- see the layout block in
@@ -421,28 +325,27 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                     // own insert/rotate bodies) and retail's descent in
                     // TutorialGoalCount::Check case 7 (0x1400df290).
                     bstNode = (uintptr_t*)bstNode[3];  // left
-                } else if (resEntity <= *bstNode) {
+                } else if (resKey <= *bstNode) {
                     // Found — check if count (at node+0x08) > 0
                     if (bstNode != nullptr && (int)bstNode[1] != 0) {
                         // Find ValueDescription and ResourceType in resource entity
-                        int descCount = *(int*)(resEntity + 0x30);
-                        void** descArray = *(void***)(resEntity + 0x28);
+                        int descCount = resEntity->_subDescCount;
                         for (int d = 0; d < descCount; d++) {
-                            void* comp = descArray[d];
-                            int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+                            ::Object::Base* comp = reinterpret_cast<::Object::Base*>(resEntity->_subDescs[d]);   // LEFT: COMP-c
+                            int tid = comp->Type();
                             if ((uint32_t)tid == RawMaterialDescription::TypeId()) {
                                 if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId()))
-                                    resTypeComp = comp;
+                                    resTypeComp = static_cast<RawMaterialDescription*>(comp);
                                 break;
                             }
                         }
                         // Find ValueDescription
                         for (int d = 0; d < descCount; d++) {
-                            void* comp = descArray[d];
-                            int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+                            ::Object::Base* comp = reinterpret_cast<::Object::Base*>(resEntity->_subDescs[d]);   // LEFT: COMP-c
+                            int tid = comp->Type();
                             if ((uint32_t)tid == ValueDescription::TypeId()) {
                                 if (::Object::IsDerivedFromNullSafe(comp, ValueDescription::TypeId()))
-                                    valueDesc = comp;
+                                    valueDesc = static_cast<ValueDescription*>(comp);
                                 break;
                             }
                         }
@@ -457,81 +360,58 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             if (!found) continue;
 
             // Build 0x20-byte sell data entry and push to array at +0x30.
-            // B.3.2 bridge: TradeUI+0x30 is Collection::Array<{resEntity, valueDesc,
-            // resTypeComp, pad}> (stride 0x20, count +0x38, capacity +0x3C).
-            auto& sellRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x30);
-            sellRows.SetSize(sellRows.GetSize() + 1,
-                              GameColl::Bytes<0x20, 8>(resEntity, (uint64_t)valueDesc,
-                                             (uint64_t)resTypeComp, 0));
+            _sellItems.SetSize(_sellItems.GetSize() + 1,
+                               SellItem{resEntity, valueDesc, resTypeComp, 0, 0});
         }
     }
 
     // Phase 3: Get build state, populate sell table UI
-    int sellCount = *(int*)(s + 0x38);
+    int sellCount = _sellItems._size;
     uint64_t sellCountU = (uint64_t)sellCount;
 
-    // Find BuildState component on entity
-    void* buildStateComp = nullptr;
-    {
-        int compCount = *(int*)(entityPtr[0] + 0x38);
-        void** compArr = *(void***)(entityPtr[0] + 0x30);
-        for (int i = 0; i < compCount; i++) {
-            void* comp = compArr[i];
-            int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-            if ((uint32_t)tid == StateMachineComponent::TypeId()) {
-                if (::Object::IsDerivedFromNullSafe(comp, StateMachineComponent::TypeId()))
-                    buildStateComp = comp;
-                break;
-            }
-        }
-    }
+    // Find the state machine on the entity
+    StateMachineComponent* buildStateComp = entity->FindComponent<StateMachineComponent>();
 
     // Check trade state: buildState byte +0x52 (or +0x50 if negative)
     bool tradeActive = false;
     if (buildStateComp) {
-        new (&buildStateComp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(buildStateComp));   // B.3.3 bridge
-        int8_t state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);
+        int8_t state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);   // LEFT: StateMachineComponent bytes (COMP-e)
         int8_t stateVal = state52;
-        if (state52 < 0) stateVal = *(int8_t*)((uintptr_t)buildStateComp + 0x50);
+        if (state52 < 0) stateVal = *(int8_t*)((uintptr_t)buildStateComp + 0x50);   // LEFT: COMP-e
         tradeActive = (stateVal == 0x13);
     }
 
     // Populate sell table cells
     if (sellCount > 0) {
-        uintptr_t dataOffset = 0;
         for (int i = 0; i < sellCount; i++) {
-            uintptr_t* sellData = (uintptr_t*)(*(uintptr_t*)(s + 0x30) + dataOffset);
-            uintptr_t* sellUI = (uintptr_t*)(*(uintptr_t*)(s + 0x60) + dataOffset);
+            SellItem& sellData = _sellItems[i];
+            SellRow& sellUI = _sellRows[i];
 
-            // Get sellable count from building
-            int sellableCount = TradeUI_GetResourcePrice_a520(
-                (void*)buildingPtr[0], (void*)sellData[0]);
+            // Get sellable count from the post
+            int sellableCount = TradeUI_GetResourcePrice_a520(trade, sellData.resource);
 
             bool hasStock = (sellableCount > 0);
             uint32_t color = hasStock ? 0xFFFFFFFF : 0xFF808080;
 
             // Set sprite from ValueDescription (+0x20=spriteSheet, +0x28=spriteName)
-            void* valueDesc = (void*)sellData[1];
-            uint8_t spriteBuf[16] = {0};
-            ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valueDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valueDesc + 0x28));  // B.3.6 bridge
-            reinterpret_cast<UI::LabelElement*>(*(void**)sellUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+            ValueDescription* valueDesc = sellData.value;
+            UI::Sprite sprite(::Object::ExternalPtr<UI::SpriteSheet>(valueDesc->_sprite), valueDesc->_name);
+            sellUI.label->SetSprite(&sprite);
 
             // Set text from ValueDescription (+0x30=stringTable, +0x38=stringName)
-            uint8_t uiStrBuf[16] = {0};
-            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valueDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valueDesc + 0x38));  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(*(void**)sellUI)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
+            UI::String uiStr(::Object::ExternalPtr<UI::StringTable>(valueDesc->_ref30), valueDesc->_s38);
+            sellUI.label->SetText(&uiStr);
 
             // Set sellable count on number element (sellUI+0x10)
-            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)sellUI + 0x10))->SetValue(static_cast<int32_t>(sellableCount));  // B.3.6 bridge
+            sellUI.price->SetValue(static_cast<int32_t>(sellableCount));
 
-            // Search StateMachine's order list for matching resource to get order qty
+            // Search the storage items for the matching resource to get the stock
             int orderQty = 0;
-            int smOrderCount = *(int*)(smPtr[0] + 0x30);
+            int smOrderCount = storage->slotCount;
             if (smOrderCount > 0) {
-                uintptr_t* orderArr = *(uintptr_t**)(smPtr[0] + 0x28);
+                uintptr_t* orderArr = reinterpret_cast<uintptr_t*>(storage->storageSlots);   // LEFT: StorageComponent item (W0 raw storage)
                 for (int j = 0; j < smOrderCount; j++) {
-                    if (orderArr[j * 2] == sellData[0]) {
+                    if (orderArr[j * 2] == reinterpret_cast<uintptr_t>(sellData.resource)) {
                         if (j >= 0) {
                             orderQty = (int)orderArr[j * 2 + 1]
                                        - *(int*)((uintptr_t)&orderArr[j * 2 + 1] + 4);
@@ -542,16 +422,15 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             }
 
             // Set order qty on number element (sellUI+0x08)
-            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)sellUI + 0x08))->SetValue(static_cast<int32_t>(orderQty));  // B.3.6 bridge
+            sellUI.stored->SetValue(static_cast<int32_t>(orderQty));
 
             // Set spinner enabled state
             bool spinnerEnabled = tradeActive && hasStock;
-            void* spinner = *(void**)((uintptr_t)sellUI + 0x18);
-            VCall_Element_SetEnabled(spinner, spinnerEnabled);
+            sellUI.spinner->Enable(spinnerEnabled);
 
             // Set number and label elements enabled
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)sellUI + 0x08), true);
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)sellUI + 0x10), true);
+            sellUI.stored->Enable(true);
+            sellUI.price->Enable(true);
 
             // Set spinner min/max
             int spinnerMax = 0;
@@ -559,59 +438,50 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                 spinnerMax = sellableCount;
             }
             // sellUI+0x18 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
-            reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)sellUI + 0x18))->SetMinMax(0, spinnerMax);  // B.3.6 bridge
+            sellUI.spinner->SetMinMax(0, spinnerMax);
 
             // Set spinner increment based on max value
-            void* spinnerElem = *(void**)((uintptr_t)sellUI + 0x18);
-            SetSpinnerIncrement(spinnerElem);
+            SetSpinnerIncrement(sellUI.spinner);
 
             // Reset spinner value to 0
-            reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)sellUI + 0x18))->SetValue(0);  // B.3.6 bridge
+            sellUI.spinner->SetValue(0);
 
             // Set element name from resource path
-            SetElementNameFromExternal(*(void**)((uintptr_t)sellUI + 0x18),
-                                       (void*)sellData[0]);
+            SetElementNameFromExternal(sellUI.spinner, sellData.resource);
 
             // Set color on label, number, and count elements
-            VCall_Element_Slot10(*(void**)sellUI, color);
-            VCall_Element_Slot10(*(void**)((uintptr_t)sellUI + 0x08), color);
-            VCall_Element_Slot10(*(void**)((uintptr_t)sellUI + 0x10), color);
-
-            dataOffset += 0x20;
+            sellUI.label->SetColor(color);
+            sellUI.stored->SetColor(color);
+            sellUI.price->SetColor(color);
         }
     }
 
     // Phase 4: Clear unused sell table cells
     int totalSellCells = 0;
-    totalSellCells = *(int*)(*(uintptr_t*)(s + 0xC8) + 0xC0);
+    totalSellCells = _tableSell->_rowCount;
     if ((int)sellCountU < totalSellCells) {
-        uintptr_t clearOffset = sellCountU << 5;
         for (int i = (int)sellCountU; i < totalSellCells; i++) {
-            uintptr_t* cellUI = (uintptr_t*)(*(uintptr_t*)(s + 0x60) + clearOffset);
+            SellRow& cellUI = _sellRows[i];
 
             // Set empty sprite
-            uint8_t emptySprite[16] = {0};
-            ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-            reinterpret_cast<UI::LabelElement*>(*(void**)cellUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
+            UI::Sprite emptySprite;
+            cellUI.label->SetSprite(&emptySprite);
 
             // Set empty text
-            uint8_t emptyStr[16] = {0};
-            ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(*(void**)cellUI)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
+            UI::String emptyStr;
+            cellUI.label->SetText(&emptyStr);
 
             // Disable spinner, number, and label elements (null-guard each)
-            if (*(void**)((uintptr_t)cellUI + 0x18))
-                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
-            if (*(void**)((uintptr_t)cellUI + 0x08))
-                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
-            if (*(void**)((uintptr_t)cellUI + 0x10))
-                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
+            if (cellUI.spinner)
+                cellUI.spinner->Enable(false);
+            if (cellUI.stored)
+                cellUI.stored->Enable(false);
+            if (cellUI.price)
+                cellUI.price->Enable(false);
 
             // cellUI+0x18 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
-            if (*(void**)((uintptr_t)cellUI + 0x18))
-                reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)cellUI + 0x18))->SetMinMax(0, 0);  // B.3.6 bridge
-
-            clearOffset += 0x20;
+            if (cellUI.spinner)
+                cellUI.spinner->SetMinMax(0, 0);
         }
     }
 }
@@ -621,75 +491,58 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 // ============================================================
 // Rebuilds the buy table data and UI.
 //
-// Phase 1: Get entity components (Building + TradeDescription).
+// Phase 1: Get entity components (TradeComponent + TradeDescription).
 // Phase 2: Set up order header text ("textName"/"textOrder") with
 //          trade order name and current merchant info.
-// Phase 3: Build buy entries array from trade orders (building+0x50/+0x58).
+// Phase 3: Build buy entries array from trade orders (trade+0x50/+0x58).
 // Phase 4: Populate buy table UI cells with sprite/text/numbers.
 // Phase 5: Clear unused buy table cells.
-// Phase 6: Build purchase reserved entries (building+0xb0/+0xb8).
+// Phase 6: Build purchase reserved entries (+0xb0/+0xb8).
 // Phase 7: Set combo and enable state for order combo.
 // Phase 8: Populate purchase button array with checked states.
 
-void TradeUI_RefreshBuyTable(TradeUI* self)
+void TradeUI::RefreshBuyTable()
 {
-    uintptr_t s = (uintptr_t)self;
+    // Get entity, TradeComponent, TradeDescription
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    // Get entity, BuildingComponent, TradeDescription
-    void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entityRaw : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    void* tradeDescRaw = *(void**)(buildingPtr[0] + 0x18);
-    bool isTrade = ::Object::IsDerivedFromNullSafe(tradeDescRaw, TradeDescription::TypeId());
-    void* tradeDesc = isTrade ? tradeDescRaw : nullptr;
+    Description* description = trade->_description;
+    bool isTrade = ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId());
+    TradeDescription* tradeDesc = isTrade
+        ? static_cast<TradeDescription*>(description) : nullptr;
 
     // Clear buy data array at +0x40 (stride 0x18)
-    TradeUI_DynArrayClear_16130(reinterpret_cast<int64_t*>(s + 0x40));   // 0x140016130
+    _buyItems.Clear();   // 0x140016130
 
     // Phase 2: Set order header text elements
     for (int ti = 0; ti < 2; ti++) {
         const char* elemName = (ti == 0) ? "textName" : "textOrder";
-        System::String nameStr(elemName);
-        uint8_t foundBuf[16] = {0};
-        ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(nameStr));  // B.3.6 bridge
-
-        // IsDerivedFrom TextElement
-        void* textElem = nullptr;
-        if (*(void**)foundBuf) {
-            bool isText = ::Object::IsDerivedFromNullSafe(*(void**)foundBuf, UI::TextElement::TypeId());
-            if (isText) textElem = *(void**)foundBuf;
-        }
-        uint64_t textIbp[1] = {0};
-        new (textIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textElem));   // B.3.3 bridge
+        UI::TextElement* textElem = TradeUI_FindTypedElement<UI::TextElement>(_container, elemName);
 
         // Set text parameters based on current order
-        int orderIdx = *(int*)(buildingPtr[0] + 0x2c);
+        int orderIdx = trade->tradeId;
         if (orderIdx < 0) {
             // No active order — text stays default
         } else {
             // Get order entry from trade description
-            uintptr_t orderEntry = *(uintptr_t*)((uintptr_t)tradeDesc + 0x48)
-                                   + (uintptr_t)orderIdx * 0x48;
+            uintptr_t orderEntry = reinterpret_cast<uintptr_t>(tradeDesc->_merchants)
+                                   + (uintptr_t)orderIdx * 0x48;   // LEFT: the merchant record (COMP-f)
 
             // Set parameter 0: order name string
             System::String orderNameBuf;
-            TradeUI_GetOrderName_15fd0(static_cast<int64_t>(buildingPtr[0]), &orderNameBuf);   // 0x140015fd0
-            reinterpret_cast<UI::TextElement*>(*textIbp)->SetParameter(0, orderNameBuf);  // B.3.6 bridge
+            TradeUI_GetOrderName_15fd0(trade, &orderNameBuf);   // 0x140015fd0
+            textElem->SetParameter(0, orderNameBuf);
 
             // Set parameter 1: UI string from order entry
-            uint8_t uiStrBuf[16] = {0};
-            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)orderEntry)), *reinterpret_cast<const System::String*>(orderEntry + 8));  // B.3.6 bridge
+            UI::String uiStr(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)orderEntry)),
+                             *reinterpret_cast<const System::String*>(orderEntry + 8));   // LEFT: COMP-f
             // Convert to System::String
             System::String sysStrBuf;
-            ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(*textIbp)->SetParameter(1, sysStrBuf);  // B.3.6 bridge
+            ::new (&sysStrBuf) System::String(uiStr.operator System::String());
+            textElem->SetParameter(1, sysStrBuf);
         }
 
         // Show/hide text element based on order validity
@@ -697,260 +550,216 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
         // Original asm: orderIdx<0 → XOR EDX,EDX; orderIdx>=0 → OR EDX,0xffffffff
         // Slot 10 of UI::Element is SetColor(uint32); the receiver is the
         // FindElement("textName"/"textOrder") result above.
-        {
-            void* elem = (void*)*textIbp;
-            reinterpret_cast<UI::Element*>(elem)->SetColor(
-                static_cast<uint32_t>((orderIdx < 0) ? 0 : -1));  // B.3.6 bridge
-        }
+        textElem->SetColor(static_cast<uint32_t>((orderIdx < 0) ? 0 : -1));
     }
 
     // Phase 3: Build buy entries from trade orders
-    int tradeOrderCount = *(int*)(buildingPtr[0] + 0x58);
+    int tradeOrderCount = *(int*)((uintptr_t)trade + 0x58);   // LEFT: TradeComponent (COMP-f)
     if (tradeOrderCount > 0) {
         for (int oi = 0; oi < tradeOrderCount; oi++) {
             // Get trade order entry
-            uintptr_t orderList = *(uintptr_t*)(buildingPtr[0] + 0x50);
-            uintptr_t orderEntry = *(uintptr_t*)(orderList + (uintptr_t)oi * 0x10);
+            ComponentDescription* orderEntry =
+                *reinterpret_cast<ComponentDescription**>((uintptr_t)trade->field50 + (uintptr_t)oi * 0x10);   // LEFT: COMP-f
 
             // Find ValueDescription in order entry's description
-            void* valDesc = FindDescComponent((void*)orderEntry, ValueDescription::TypeId());
+            ValueDescription* valDesc = static_cast<ValueDescription*>(
+                FindDescComponent(orderEntry, ValueDescription::TypeId()));
 
             // Build 0x18-byte buy data entry and push to array at +0x40.
-            // B.3.2 bridge: TradeUI+0x40 is Collection::Array<{orderEntry, valDesc,
-            // pad}> (stride 0x18, count +0x48, capacity +0x4C).
-            auto& buyRows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0x40);
-            buyRows.SetSize(buyRows.GetSize() + 1,
-                             GameColl::Bytes<0x18, 8>(orderEntry, (uint64_t)valDesc, 0));
+            _buyItems.SetSize(_buyItems.GetSize() + 1, BuyItem{orderEntry, valDesc, 0, 0});
         }
     }
 
     // Phase 4: Populate buy table UI cells
-    int buyCount = *(int*)(buildingPtr[0] + 0x58);
+    int buyCount = *(int*)((uintptr_t)trade + 0x58);   // LEFT: TradeComponent (COMP-f)
     uint64_t buyCountU = (uint64_t)buyCount;
 
     if (buyCount > 0) {
-        uintptr_t dataOffset = 0;
         uintptr_t buyDataOffset = 0;
         for (int i = 0; i < buyCount; i++) {
-            uintptr_t* buyUI = (uintptr_t*)(*(uintptr_t*)(s + 0x70) + dataOffset);
+            BuyRow& buyUI = _buyRows[i];
 
-            uintptr_t* buyOrder = (uintptr_t*)(*(uintptr_t*)(buildingPtr[0] + 0x50) + buyDataOffset);
-            uintptr_t orderDesc = *buyOrder;
+            uintptr_t* buyOrder = (uintptr_t*)((uintptr_t)trade->field50 + buyDataOffset);   // LEFT: COMP-f
+            ComponentDescription* orderDesc = reinterpret_cast<ComponentDescription*>(*buyOrder);
 
             // Find ValueDescription
-            void* valDesc = FindDescComponent((void*)orderDesc, ValueDescription::TypeId());
+            ValueDescription* valDesc = static_cast<ValueDescription*>(
+                FindDescComponent(orderDesc, ValueDescription::TypeId()));
 
             // Set sprite from ValueDescription
-            uint8_t spriteBuf[16] = {0};
-            ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x28));  // B.3.6 bridge
-            reinterpret_cast<UI::LabelElement*>(*(void**)buyUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+            UI::Sprite sprite(::Object::ExternalPtr<UI::SpriteSheet>(valDesc->_sprite), valDesc->_name);
+            buyUI.label->SetSprite(&sprite);
 
             // Set text from ValueDescription
-            uint8_t uiStrBuf[16] = {0};
-            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x38));  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(*(void**)buyUI)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
+            UI::String uiStr(::Object::ExternalPtr<UI::StringTable>(valDesc->_ref30), valDesc->_s38);
+            buyUI.label->SetText(&uiStr);
 
-            // Set price number (buyUI+0x18 = price element)
-            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)buyUI + 0x18))->SetValue(  // B.3.6 bridge
+            // Set quantity number (buyUI+0x18)
+            buyUI.quantity->SetValue(
                 static_cast<int32_t>(*(int*)((uintptr_t)buyOrder + 0x0C)));
 
-            // Set quantity number (buyUI+0x08)
-            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)buyUI + 0x08))->SetValue(  // B.3.6 bridge
+            // Set price number (buyUI+0x08)
+            buyUI.price->SetValue(
                 static_cast<int32_t>((int)buyOrder[1]));
 
             // Set spinner min/max (buyUI+0x10 is a SpinnerElement, exe slot 0x140151cf8)
-            reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)buyUI + 0x10))->SetMinMax(  // B.3.6 bridge
+            buyUI.spinner->SetMinMax(
                 0, *(int*)((uintptr_t)buyOrder + 0x0C));
 
             // Set spinner increment
-            void* spinnerElem = *(void**)((uintptr_t)buyUI + 0x10);
-            SetSpinnerIncrement(spinnerElem);
+            SetSpinnerIncrement(buyUI.spinner);
 
             // Set element name from resource path
-            SetElementNameFromExternal(*(void**)((uintptr_t)buyUI + 0x10),
-                                       (void*)*buyOrder);
+            SetElementNameFromExternal(buyUI.spinner, orderDesc);
 
             // Enable all sub-elements
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)buyUI + 0x10), true);
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)buyUI + 0x18), true);
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)buyUI + 0x08), true);
+            buyUI.spinner->Enable(true);
+            buyUI.quantity->Enable(true);
+            buyUI.price->Enable(true);
 
-            dataOffset += 0x20;
             buyDataOffset += 0x10;
         }
     }
 
     // Phase 5: Clear unused buy table cells
-    int totalBuyCells = *(int*)(*(uintptr_t*)(s + 0xD0) + 0xC0);
+    int totalBuyCells = _tableBuy->_rowCount;
     if ((int)buyCountU < totalBuyCells) {
-        uintptr_t clearOffset = buyCountU << 5;
         for (int i = (int)buyCountU; i < totalBuyCells; i++) {
-            uintptr_t* cellUI = (uintptr_t*)(*(uintptr_t*)(s + 0x70) + clearOffset);
+            BuyRow& cellUI = _buyRows[i];
 
             // Set empty sprite
-            uint8_t emptySprite[16] = {0};
-            ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-            reinterpret_cast<UI::LabelElement*>(*(void**)cellUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
+            UI::Sprite emptySprite;
+            cellUI.label->SetSprite(&emptySprite);
 
             // Set empty text
-            uint8_t emptyStr[16] = {0};
-            ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(*(void**)cellUI)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
+            UI::String emptyStr;
+            cellUI.label->SetText(&emptyStr);
 
             // cellUI+0x10 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
-            if (*(void**)((uintptr_t)cellUI + 0x10))
-                reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)cellUI + 0x10))->SetMinMax(0, 0);  // B.3.6 bridge
+            if (cellUI.spinner)
+                cellUI.spinner->SetMinMax(0, 0);
 
-            if (*(void**)((uintptr_t)cellUI + 0x10))
-                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
-            if (*(void**)((uintptr_t)cellUI + 0x18))
-                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
-            if (*(void**)((uintptr_t)cellUI + 0x08))
-                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
-
-            clearOffset += 0x20;
+            if (cellUI.spinner)
+                cellUI.spinner->Enable(false);
+            if (cellUI.quantity)
+                cellUI.quantity->Enable(false);
+            if (cellUI.price)
+                cellUI.price->Enable(false);
         }
     }
 
-    // Phase 6: Build purchase reserved entries (building+0xb0/+0xb8)
-    int orderIdx = *(int*)(buildingPtr[0] + 0x2c);
+    // Phase 6: Build purchase reserved entries (+0xb0/+0xb8)
+    int orderIdx = trade->tradeId;
     if (orderIdx < 0) {
-        // No active order — clear purchase list
-        System::MemoryAllocator::MemFree(*(void**)(s + 0xb0));
-        *(uint64_t*)(s + 0xb0) = 0;
-        *(uint64_t*)(s + 0xb8) = 0;
+        // No active order — clear purchase list (the data, then the size and
+        // capacity: retail's one qword store at +0xb8, H7)
+        System::MemoryAllocator::MemFree(_purchaseItems._data);
+        _purchaseItems._data = nullptr;
+        _purchaseItems._size = 0;
+        _purchaseItems._capacity = 0;
     } else {
         // Populate purchase reserved entries via helper
-        TradeUI_GetBuyEntries_59670((void*)buildingPtr[0], (void*)(s + 0xb0));
+        TradeUI_GetBuyEntries_59670(trade, &_purchaseItems);
     }
 
     // Phase 7: Set order combo current item and enabled state
     int comboIdx = 0;
-    if (*(int*)(buildingPtr[0] + 0x2c) >= 0) {
-        comboIdx = *(int*)(*(uintptr_t*)(buildingPtr[0] + 0x30)
-                    + (uintptr_t)*(int*)(buildingPtr[0] + 0x2c) * 0x20 + 8);
+    if (trade->tradeId >= 0) {
+        comboIdx = *(int*)((uintptr_t)trade->field30
+                    + (uintptr_t)trade->tradeId * 0x20 + 8);   // LEFT: COMP-f
     }
-    reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0xC0))->SetCurrentItem(comboIdx);  // B.3.6 bridge
+    _comboOrder->SetCurrentItem(comboIdx);
 
-    void* comboElem = *(void**)(s + 0xC0);
-    bool comboEnabled = (*(int*)(buildingPtr[0] + 0x2c) >= 0);
-    VCall_Element_SetEnabled(comboElem, comboEnabled);
+    bool comboEnabled = (trade->tradeId >= 0);
+    _comboOrder->Enable(comboEnabled);
 
     // Phase 8: Populate purchase button array with checked states
-    int purchaseCount = *(int*)(s + 0xb8);
+    int purchaseCount = _purchaseItems._size;
     if (purchaseCount > 0) {
-        uintptr_t offset = 0;
         for (int pi = 0; pi < purchaseCount; pi++) {
-            uintptr_t purchaseEntity = *(uintptr_t*)(offset + *(uintptr_t*)(s + 0xb0));
+            ComponentDescription* purchaseEntity = _purchaseItems[pi].resource;
 
             // Find ValueDescription for this purchase entity
-            void* valDesc = FindDescComponent((void*)purchaseEntity, ValueDescription::TypeId());
+            ValueDescription* valDesc = static_cast<ValueDescription*>(
+                FindDescComponent(purchaseEntity, ValueDescription::TypeId()));
 
             // Set sprite and text on purchase button element
-            void* purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-            int childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUI)->ChildCount();  // B.3.6 bridge
+            int childCount = _purchaseRows[pi].check->ChildCount();
 
             for (int ci = 0; ci < childCount; ci++) {
-                void* purchaseUIPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-                uint64_t childBuf[2] = {0, 0};
-                ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)purchaseUIPtr)->Child(ci));  // B.3.6 bridge
+                UI::Element* child = _purchaseRows[pi].check->Child(ci).Get();
 
                 // IsDerivedFrom TextElement check
-                void* childElem = nullptr;
-                if (*(void**)childBuf) {
-                    bool isText = ::Object::IsDerivedFromNullSafe(*(void**)childBuf, UI::TextElement::TypeId());
-                    if (isText) childElem = *(void**)childBuf;
+                UI::TextElement* childElem = nullptr;
+                if (child) {
+                    bool isText = ::Object::IsDerivedFromNullSafe(child, UI::TextElement::TypeId());
+                    if (isText) childElem = static_cast<UI::TextElement*>(child);
                 }
-                uint64_t childIbp[2] = {0, 0};
-                new (childIbp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(childElem));   // B.3.3 bridge
 
-                if ((void*)*childIbp != nullptr) {
+                if (childElem != nullptr) {
                     // Set sprite
-                    uint8_t spriteBuf[16] = {0};
-                    ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x28));  // B.3.6 bridge
-                    reinterpret_cast<UI::LabelElement*>(*childIbp)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+                    UI::Sprite sprite(::Object::ExternalPtr<UI::SpriteSheet>(valDesc->_sprite), valDesc->_name);
+                    static_cast<UI::LabelElement*>(childElem)->SetSprite(&sprite);
 
                     // Set text
-                    uint8_t uiStrBuf[16] = {0};
-                    ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x38));  // B.3.6 bridge
-                    reinterpret_cast<UI::TextElement*>(*childIbp)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
+                    UI::String uiStr(::Object::ExternalPtr<UI::StringTable>(valDesc->_ref30), valDesc->_s38);
+                    childElem->SetText(&uiStr);
                 }
 
-                purchaseUIPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-                childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUIPtr)->ChildCount();  // B.3.6 bridge
+                childCount = _purchaseRows[pi].check->ChildCount();
             }
 
             // Enable purchase button
-            void* purchaseBtn = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-            VCall_Element_SetEnabled(*(void**)purchaseBtn, true);
+            _purchaseRows[pi].check->Enable(true);
 
             // Check if this purchase entity is in the current order's selection list
-            uintptr_t orderData = (uintptr_t)*(int*)(buildingPtr[0] + 0x2c) * 0x20
-                                  + *(uintptr_t*)(buildingPtr[0] + 0x30);
+            uintptr_t orderData = (uintptr_t)trade->tradeId * 0x20
+                                  + (uintptr_t)trade->field30;   // LEFT: COMP-f
             int selCount = *(int*)(orderData + 0x18);
             if (selCount > 0) {
                 uintptr_t* selList = *(uintptr_t**)(orderData + 0x10);
                 for (int si = 0; si < selCount; si++) {
-                    if (selList[si] == *(uintptr_t*)(*(uintptr_t*)(s + 0xb0) + offset)) {
-                        void* purchaseBtnPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-                        *(uint8_t*)(*(uintptr_t*)purchaseBtnPtr + 0xd8) = 1;
+                    if (selList[si] == reinterpret_cast<uintptr_t>(_purchaseItems[pi].resource)) {
+                        _purchaseRows[pi].check->_checked = 1;
                         break;
                     }
                 }
             }
-
-            offset += 8;
         }
     }
 
     // Clear unused purchase buttons
-    int totalPurchaseSlots = *(int*)(s + 0xa8);
+    int totalPurchaseSlots = _purchaseRows._size;
     if (purchaseCount < totalPurchaseSlots) {
-        uintptr_t offset = (uintptr_t)purchaseCount * 8;
         for (int i = purchaseCount; i < totalPurchaseSlots; i++) {
             // Clear children
             int ci = 0;
-            void* purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-            int childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUI)->ChildCount();  // B.3.6 bridge
+            int childCount = _purchaseRows[i].check->ChildCount();
             while (ci < childCount) {
-                purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-                uint64_t childBuf[2] = {0, 0};
-                ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)purchaseUI)->Child(ci));  // B.3.6 bridge
+                UI::Element* child = _purchaseRows[i].check->Child(ci).Get();
 
-                void* childElem = nullptr;
-                if (*(void**)childBuf) {
-                    bool isText = ::Object::IsDerivedFromNullSafe(*(void**)childBuf, UI::TextElement::TypeId());
-                    if (isText) childElem = *(void**)childBuf;
+                UI::TextElement* childElem = nullptr;
+                if (child) {
+                    bool isText = ::Object::IsDerivedFromNullSafe(child, UI::TextElement::TypeId());
+                    if (isText) childElem = static_cast<UI::TextElement*>(child);
                 }
-                uint64_t childIbp[2] = {0, 0};
-                new (childIbp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(childElem));   // B.3.3 bridge
 
-                if ((void*)*childIbp != nullptr) {
-                    uint8_t emptySprite[16] = {0};
-                    ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-                    reinterpret_cast<UI::LabelElement*>(*childIbp)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
+                if (childElem != nullptr) {
+                    UI::Sprite emptySprite;
+                    static_cast<UI::LabelElement*>(childElem)->SetSprite(&emptySprite);
 
-                    uint8_t emptyStr[16] = {0};
-                    ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
-                    reinterpret_cast<UI::TextElement*>(*childIbp)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
+                    UI::String emptyStr;
+                    childElem->SetText(&emptyStr);
                 }
 
                 ci++;
-                purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-                childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUI)->ChildCount();  // B.3.6 bridge
+                childCount = _purchaseRows[i].check->ChildCount();
             }
 
             // Disable button and clear checked state
-            purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-            void* btn = *(void**)purchaseUI;
-            VCall_Element_SetEnabled(btn, false);
+            _purchaseRows[i].check->Enable(false);
 
-            purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-            *(uint8_t*)(*(uintptr_t*)purchaseUI + 0xd8) = 0;
-
-            offset += 8;
+            _purchaseRows[i].check->_checked = 0;
         }
     }
 }
@@ -962,22 +771,22 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 // the faithful call can produce -- the difference between "we tagged something" and
 // "we tagged what retail tags". One line per family (row 0 only) under
 // BANISHED_TRADEUI_EVENTDIAG; every branch prints, including a MISMATCH.
-static void TradeUI_ReportSpinnerTag(const char* family, int idx, void* spinner, int id) {
+static void TradeUI_ReportSpinnerTag(const char* family, int idx, UI::SpinnerElement* spinner, int id) {
+    (void)idx;
     if (!spinner) {
         fprintf(stderr, "[TradeSpinnerTag] %s row0 id=%d spinner=NULL -- nothing tagged\n",
                 family, id);
         fflush(stderr);
         return;
     }
-    uintptr_t sp = (uintptr_t)spinner;
-    int own = *(int*)(sp + 0x88);
-    void** innerPtr = *(void***)(sp + 0xa0);
-    void* inner = innerPtr ? *innerPtr : nullptr;
-    int innerId = inner ? *(int*)((uintptr_t)inner + 0x88) : -1;
+    int own = spinner->_elementId;
+    UI::Element** innerPtr = spinner->_children._data;
+    UI::Element* inner = innerPtr ? *innerPtr : nullptr;
+    int innerId = inner ? inner->_elementId : -1;
     fprintf(stderr,
             "[TradeSpinnerTag] %s row0 id=%d spinner=%p own(+0x88)=%d inner=%p "
             "inner(+0x88)=%d %s\n",
-            family, id, spinner, own, inner, innerId,
+            family, id, static_cast<void*>(spinner), own, static_cast<void*>(inner), innerId,
             (own == id && inner && innerId == id) ? "OK" : "MISMATCH");
     fflush(stderr);
 }
@@ -988,129 +797,89 @@ void TradeUI::OnCreated() {
     // run re-clones table rows and appends to the element arrays instead of clearing.
     if (tradeui_sa::IsSetUp(this)) { tradeui_sa::Trace("Slot4-skip(already set up)", this); return; }
     tradeui_sa::Trace("Slot4-setup", this);
-    uintptr_t s = (uintptr_t)this;
 
-    // --- Get entity and find BuildingComponent ---
-    void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entityRaw : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+    // --- Get entity and find the TradeComponent ---
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
     // --- Phase 1: Find all 15 named elements ---
-    void* dialogElemPtr = (void*)(s + 0x20);
-
-    // ENDGAME B.3.9 CG2: TypeId_TableElement/NumberElement/TextElement ->
-    // UI::TableElement/NumberElement/TextElement::TypeId(); TypeId_HelpButtonElem
-    // shares its initialiser exref (0x1401514f8) with TypeId_ButtonElement ->
-    // UI::ButtonElement::TypeId(); TypeId_HelpComboElem shares its initialiser
-    // exref (0x140151690) with TypeId_ComboElement -> UI::ComboElement::TypeId()
-    // (Table 3 name lies — neither is a distinct "help" element class).
-    uint32_t tableElementTypeId = UI::TableElement::TypeId();
-    uint32_t numberElementTypeId = UI::NumberElement::TypeId();
-    uint32_t buttonElementTypeId = UI::ButtonElement::TypeId();
-    uint32_t textElementTypeId = UI::TextElement::TypeId();
-    uint32_t comboElementTypeId = UI::ComboElement::TypeId();
+    // ENDGAME B.3.9 CG2: TypeId_HelpButtonElem shares its initialiser exref
+    // (0x1401514f8) with TypeId_ButtonElement -> UI::ButtonElement::TypeId();
+    // TypeId_HelpComboElem shares its initialiser exref (0x140151690) with
+    // TypeId_ComboElement -> UI::ComboElement::TypeId() (Table 3 name lies —
+    // neither is a distinct "help" element class).
 
     // Tables (IsDerivedFrom TableElement)
-    *(uintptr_t*)(s + 0xC8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableSell", &tableElementTypeId);
-    *(uintptr_t*)(s + 0xD0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableBuy", &tableElementTypeId);
-    *(uintptr_t*)(s + 0xD8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableStorage", &tableElementTypeId);
-    *(uintptr_t*)(s + 0xE0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tablePurchase", &tableElementTypeId);
-    *(uintptr_t*)(s + 0xE8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableOrder", &tableElementTypeId);
+    _tableSell     = TradeUI_FindTypedElement<UI::TableElement>(_container, "tableSell");
+    _tableBuy      = TradeUI_FindTypedElement<UI::TableElement>(_container, "tableBuy");
+    _tableStorage  = TradeUI_FindTypedElement<UI::TableElement>(_container, "tableStorage");
+    _tablePurchase = TradeUI_FindTypedElement<UI::TableElement>(_container, "tablePurchase");
+    _tableOrder    = TradeUI_FindTypedElement<UI::TableElement>(_container, "tableOrder");
 
-    // Number elements (IsDerivedFrom SpinnerElement/NumberElement)
-    *(uintptr_t*)(s + 0x100) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "numberSellTotal", &numberElementTypeId);
-    *(uintptr_t*)(s + 0x108) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "numberBuyTotal", &numberElementTypeId);
+    // Number elements (IsDerivedFrom NumberElement)
+    _numberSellTotal = TradeUI_FindTypedElement<UI::NumberElement>(_container, "numberSellTotal");
+    _numberBuyTotal  = TradeUI_FindTypedElement<UI::NumberElement>(_container, "numberBuyTotal");
 
     // Buttons (IsDerivedFrom ButtonElement)
-    *(uintptr_t*)(s + 0xF0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "buttonTrade", &buttonElementTypeId);
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xF0))->SetElementId(0x4e20);  // B.3.6 bridge
+    _buttonTrade = TradeUI_FindTypedElement<UI::ButtonElement>(_container, "buttonTrade");
+    _buttonTrade->SetElementId(0x4e20);
 
-    *(uintptr_t*)(s + 0xF8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "buttonDismiss", &buttonElementTypeId);
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xF8))->SetElementId(0x4e21);  // B.3.6 bridge
+    _buttonDismiss = TradeUI_FindTypedElement<UI::ButtonElement>(_container, "buttonDismiss");
+    _buttonDismiss->SetElementId(0x4e21);
 
     // Text elements (IsDerivedFrom TextElement)
-    *(uintptr_t*)(s + 0x110) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "textNoStorage", &textElementTypeId);
-    *(uintptr_t*)(s + 0x118) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "textTooMuch", &textElementTypeId);
-    *(uintptr_t*)(s + 0x120) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "textNotEnough", &textElementTypeId);
+    _textNoStorage = TradeUI_FindTypedElement<UI::TextElement>(_container, "textNoStorage");
+    _textTooMuch   = TradeUI_FindTypedElement<UI::TextElement>(_container, "textTooMuch");
+    _textNotEnough = TradeUI_FindTypedElement<UI::TextElement>(_container, "textNotEnough");
 
     // Combo elements (IsDerivedFrom ComboElement)
-    *(uintptr_t*)(s + 0x138) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "comboPurchase", &comboElementTypeId);
-    // Set comboPurchase current item from building component field
-    int purchaseIdx = *(int*)(buildingPtr[0] + 0x28);
-    reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x138))->SetCurrentItem(purchaseIdx);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0x138))->SetElementId(0x4e22);  // B.3.6 bridge
+    _comboPurchase = TradeUI_FindTypedElement<UI::ComboElement>(_container, "comboPurchase");
+    // Set comboPurchase current item from the post's purchase selection
+    int purchaseIdx = trade->tradeState;
+    _comboPurchase->SetCurrentItem(purchaseIdx);
+    _comboPurchase->SetElementId(0x4e22);
 
-    *(uintptr_t*)(s + 0xC0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "comboOrder", &comboElementTypeId);
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xC0))->SetElementId(0x4e23);  // B.3.6 bridge
+    _comboOrder = TradeUI_FindTypedElement<UI::ComboElement>(_container, "comboOrder");
+    _comboOrder->SetElementId(0x4e23);
 
-    *(uintptr_t*)(s + 0x140) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "sortCombo", &comboElementTypeId);
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0x140))->SetElementId(199);  // B.3.6 bridge — 0xC7
-    reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x140))->SetCurrentItem(0);  // B.3.6 bridge
+    _sortCombo = TradeUI_FindTypedElement<UI::ComboElement>(_container, "sortCombo");
+    _sortCombo->SetElementId(199);   // 0xC7
+    _sortCombo->SetCurrentItem(0);
 
     // --- Phase 2: Build tablePurchase row array (stride 0x20, 4 elements per row) ---
     // tablePurchase uses FLAT indexing with stride 3 per logical row:
-    //   child[k]   = compound cell with sub-child(0)=label, sub-child(1)=number
-    //   child[k+1] = button element (standalone)
+    //   child[k]   = compound cell with sub-child(0)=up, sub-child(1)=down
+    //   child[k+1] = label element (standalone)
     //   child[k+2] = spinner element (standalone)
-    // +0xC0 = row count. Element IDs: label=baseId-1000, number=baseId, spinner=baseId+1000
-    void* tablePurchase = *(void**)(s + 0xE0);
-    int purchaseRowCount = *(int*)((uintptr_t)tablePurchase + 0xC0);
+    // +0xC0 = row count. Element IDs: up=baseId-1000, down=baseId, spinner=baseId+1000
+    int purchaseRowCount = _tablePurchase->_rowCount;
 
     int baseId = 6000;
     int flatIdx = 0;
     for (int row = 0; row < purchaseRowCount; row++) {
-        uint64_t buf[2] = {0, 0};
-        uint64_t sub[2] = {0, 0};
+        // child[flatIdx] = compound cell -> sub-child(0) = up button
+        UI::Element* cell = _tablePurchase->Child(flatIdx).Get();
+        UI::Element* upButton = cell->Child(0).Get();
 
-        // child[flatIdx] = compound cell -> sub-child(0) = label
-        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx));  // B.3.6 bridge
-        ::new (static_cast<void*>(sub)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)buf)->Child(0));  // B.3.6 bridge
-        void* label = *(void**)sub;
-
-        // same compound cell -> sub-child(1) = number
-        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx));  // B.3.6 bridge
+        // same compound cell -> sub-child(1) = down button
+        cell = _tablePurchase->Child(flatIdx).Get();
         flatIdx++;
-        ::new (static_cast<void*>(sub)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)buf)->Child(1));  // B.3.6 bridge
-        void* number = *(void**)sub;
+        UI::Element* downButton = cell->Child(1).Get();
 
-        // child[flatIdx] = button (standalone)
-        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx));  // B.3.6 bridge
-        void* button = *(void**)buf;
+        // child[flatIdx] = label (standalone)
+        UI::LabelElement* label = static_cast<UI::LabelElement*>(_tablePurchase->Child(flatIdx).Get());
 
         // child[flatIdx+1] = spinner (standalone)
-        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx + 1));  // B.3.6 bridge
-        void* spinner = *(void**)buf;
+        UI::SpinnerElement* spinner = static_cast<UI::SpinnerElement*>(_tablePurchase->Child(flatIdx + 1).Get());
 
-        flatIdx += 2;  // advance past button + spinner (total +3 per row)
+        flatIdx += 2;  // advance past label + spinner (total +3 per row)
 
         // Set element IDs
-        uint64_t r0[2] = {0, 0};
-        new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(label));   // B.3.3 bridge
-        if (*(void**)r0) reinterpret_cast<UI::Element*>(*(void**)r0)->SetElementId(baseId - 1000);  // B.3.6 bridge
+        if (upButton) upButton->SetElementId(baseId - 1000);
 
-        new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(number));   // B.3.3 bridge
-        if (*(void**)r0) reinterpret_cast<UI::Element*>(*(void**)r0)->SetElementId(baseId);  // B.3.6 bridge
+        if (downButton) downButton->SetElementId(baseId);
 
         // The spinner carries the id the msg-0x15 (spinner changed) notification sends
         // as param4. Retail tags it through SpinnerElement::SetElementId (exe dispatch slot
@@ -1119,51 +888,40 @@ void TradeUI::OnCreated() {
         // writes +0x88 on the spinner AND on the inner edit element at *(spinner+0xa0), so
         // both halves of the widget answer to the same id. Faithful, verified at the four
         // retail call sites (EDX = base+0x3e8 / +0x7d0 / +0xbb8 / +0xfa0).
-        new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(spinner));   // B.3.3 bridge
-        if (*(void**)r0) reinterpret_cast<UI::SpinnerElement*>(*(void**)r0)->SetElementId(baseId + 1000);  // B.3.6 bridge
-        TradeUI_ReportSpinnerTag("purchase", row, *(void**)r0, baseId + 1000);
+        if (spinner) spinner->SetElementId(baseId + 1000);
+        TradeUI_ReportSpinnerTag("purchase", row, spinner, baseId + 1000);
 
-        // Build 0x20-byte entry {label, number, button, spinner} and push to the
+        // Build 0x20-byte entry {up, down, label, spinner} and push to the
         // order-entries array at +0x90.
-        // B.3.2 bridge: TradeUI+0x90 is Collection::Array<{label, number, button,
-        // spinner}> (stride 0x20, count +0x98, capacity +0x9C).
-        auto& orderRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x90);
-        orderRows.SetSize(orderRows.GetSize() + 1,
-                           GameColl::Bytes<0x20, 8>((uint64_t)label, (uint64_t)number,
-                                          (uint64_t)button, (uint64_t)spinner));
+        _orderRows.SetSize(_orderRows.GetSize() + 1,
+                           OrderRow{upButton, downButton, label, spinner});
 
         baseId++;
     }
 
     // --- Phase 3: Count resources and selectable builds via ExternalFactory ---
     int resourceTypeCount = 0;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    const ::Object::ExternalFactory* etuFactory =
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-    void* ext = const_cast<::Object::External*>(
-        etuFactory->FindNext(RawMaterialDescription::TypeId(), nullptr));  // B.3.3 bridge
+    const ::Object::ExternalFactory* etuFactory = ::Object::ExternalFactory::_singleton;
+    const ::Object::External* ext = etuFactory->FindNext(RawMaterialDescription::TypeId(), nullptr);
     while (ext != nullptr) {
         resourceTypeCount++;
-        ext = const_cast<::Object::External*>(
-            etuFactory->FindNext(RawMaterialDescription::TypeId(),
-                                 reinterpret_cast<const ::Object::External*>(ext)));  // B.3.3 bridge
+        ext = etuFactory->FindNext(RawMaterialDescription::TypeId(), ext);
     }
 
     int selectableCount = 0;
-    void* buildExt = const_cast<::Object::External*>(
-        etuFactory->FindNext(ComponentDescription::TypeId(), nullptr)); // B.3.3 bridge
+    const ::Object::External* buildExt = etuFactory->FindNext(ComponentDescription::TypeId(), nullptr);
     while (buildExt != nullptr) {
         // Check if this ComponentDescription external has a SelectDescription sub-component
         bool isDerivedBuild = ::Object::IsDerivedFromNullSafe(buildExt, ComponentDescription::TypeId());
-        void* buildComp = isDerivedBuild ? buildExt : nullptr;
+        const ComponentDescription* buildComp =
+            isDerivedBuild ? static_cast<const ComponentDescription*>(buildExt) : nullptr;
         if (buildComp) {
-            int compCount = *(int*)((uintptr_t)buildComp + 0x30);
-            void** compArray = *(void***)((uintptr_t)buildComp + 0x28);
+            int compCount = buildComp->_subDescCount;
             for (int c = 0; c < compCount; c++) {
-                void* comp = compArray[c];
-                int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+                ::Object::Base* comp = reinterpret_cast<::Object::Base*>(buildComp->_subDescs[c]);   // LEFT: COMP-c
+                int typeId = comp->Type();
                 if (typeId == (int)SelectDescription::TypeId()) {
-                    void* selectComp = nullptr;
+                    ::Object::Base* selectComp = nullptr;
                     if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId()))
                         selectComp = comp;
                     if (selectComp) selectableCount++;
@@ -1171,227 +929,156 @@ void TradeUI::OnCreated() {
                 }
             }
         }
-        buildExt = const_cast<::Object::External*>(
-            etuFactory->FindNext(ComponentDescription::TypeId(),
-                                 reinterpret_cast<const ::Object::External*>(buildExt))); // B.3.3 bridge
+        buildExt = etuFactory->FindNext(ComponentDescription::TypeId(), buildExt);
     }
 
     // --- Phase 4a: Setup tableStorage ---
-    void* tableStorage = *(void**)(s + 0xD8);
-    int storageColCount = *(int*)((uintptr_t)tableStorage + 0xC4);
+    int storageColCount = _tableStorage->_columnCount;
 
     // Get template BEFORE SetSize (SetSize destroys children)
     {
         int rowCount = ((resourceTypeCount - 1 + storageColCount) / storageColCount * storageColCount)
                        / storageColCount;
-        void* storageTemplate = TradeUI_GetTableTemplate((void*)(s + 0xD8));
-        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xD8))->SetSize(rowCount, storageColCount);  // B.3.6 bridge
+        const UI::ElementDescription* storageTemplate = TradeUI_GetTableTemplate(_tableStorage);
+        _tableStorage->SetSize(rowCount, storageColCount);
 
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xD8), storageTemplate);
+        TradeUI_CloneTableCells(this, _tableStorage, storageTemplate);
     }
 
     // Iterate tableStorage cells, find "ribbonStorageRow" sub-elements
-    tableStorage = *(void**)(s + 0xD8);
-    int storageCellCount = reinterpret_cast<const UI::Element*>(tableStorage)->ChildCount();  // B.3.6 bridge
+    int storageCellCount = _tableStorage->ChildCount();
     for (int i = 0; i < storageCellCount; i++) {
         // Find "ribbonStorageRow" in cell
         System::String strBuf("ribbonStorageRow");
-        uint64_t cellBuf[2] = {0, 0};
-        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xD8))->Child(i));  // B.3.6 bridge
-        uint64_t rowBuf[2] = {0, 0};
-        ::new (static_cast<void*>(rowBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->FindElement(strBuf));  // B.3.6 bridge
+        UI::Element* cell = _tableStorage->Child(i).Get();
+        UI::Element* rowElem = cell->FindElement(strBuf).Get();
 
-        // Get 3 child elements from row: child(0), child(1), child(2)
-        void* rowElem = *(void**)rowBuf;
-
-        uint64_t c0[2] = {0, 0}, c1[2] = {0, 0}, c2[2] = {0, 0};
-        // child(0) = label, child(1) = slider, child(2) = spinner
-        ::new (static_cast<void*>(c0)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
-        void* e0 = *(void**)c0;
-
-        ::new (static_cast<void*>(c1)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(1));  // B.3.6 bridge
-        void* e1 = *(void**)c1;
-
-        ::new (static_cast<void*>(c2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
-        void* e2 = *(void**)c2;
+        // child(0) = label, child(1) = spinner, child(2) = number
+        UI::LabelElement* e0 = static_cast<UI::LabelElement*>(rowElem->Child(0).Get());
+        UI::SpinnerElement* e1 = static_cast<UI::SpinnerElement*>(rowElem->Child(1).Get());
+        UI::NumberElement* e2 = static_cast<UI::NumberElement*>(rowElem->Child(2).Get());
 
         // child(1) is a SpinnerElement, not a slider: retail tags it through
         // SpinnerElement::SetElementId (slot 0x140151cd8), which sets +0x88 on the spinner
         // and on its inner edit element at *(spinner+0xa0). Retail call site 0x140085d40,
         // EDX = i + 0x7d0. See the tablePurchase loop above.
-        new (c0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(e1));   // B.3.3 bridge
-        reinterpret_cast<UI::SpinnerElement*>(*(void**)c0)->SetElementId(i + 2000);  // B.3.6 bridge
-        TradeUI_ReportSpinnerTag("storage", i, *(void**)c0, i + 2000);
-
+        e1->SetElementId(i + 2000);
+        TradeUI_ReportSpinnerTag("storage", i, e1, i + 2000);
 
         // Build 0x18-byte entry {e0, e1, e2} and push to the storage-entries array
         // at +0x80.
-        // B.3.2 bridge: TradeUI+0x80 is Collection::Array<{e0, e1, e2}> (stride
-        // 0x18, count +0x88, capacity +0x8C).
-        auto& storageRows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0x80);
-        storageRows.SetSize(storageRows.GetSize() + 1,
-                             GameColl::Bytes<0x18, 8>((uint64_t)e0, (uint64_t)e1, (uint64_t)e2));
+        _storageRows.SetSize(_storageRows.GetSize() + 1, StorageRow{e0, e1, e2});
     }
 
     // --- Phase 4b: Setup tableSell ---
-    void* tableSell = *(void**)(s + 0xC8);
-    int sellColCount = *(int*)((uintptr_t)tableSell + 0xC4);
+    int sellColCount = _tableSell->_columnCount;
 
     {
         int rowCount = (((resourceTypeCount - 1 + sellColCount) / sellColCount) * sellColCount)
                        / sellColCount;
-        void* sellTemplate = TradeUI_GetTableTemplate((void*)(s + 0xC8));
-        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xC8))->SetSize(rowCount, sellColCount);  // B.3.6 bridge
+        const UI::ElementDescription* sellTemplate = TradeUI_GetTableTemplate(_tableSell);
+        _tableSell->SetSize(rowCount, sellColCount);
 
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xC8), sellTemplate);
+        TradeUI_CloneTableCells(this, _tableSell, sellTemplate);
     }
 
     // Iterate tableSell cells, find "ribbonSellRow" sub-elements (4 children per row)
-    tableSell = *(void**)(s + 0xC8);
-    int sellCellCount = *(int*)((uintptr_t)tableSell + 0xC0);
+    int sellCellCount = _tableSell->_rowCount;
     for (int i = 0; i < sellCellCount; i++) {
         System::String strBuf("ribbonSellRow");
-        uint64_t cellBuf[2] = {0, 0};
-        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xC8))->Child(i));  // B.3.6 bridge
-        uint64_t rowBuf[2] = {0, 0};
-        ::new (static_cast<void*>(rowBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->FindElement(strBuf));  // B.3.6 bridge
-
-        void* rowElem = *(void**)rowBuf;
+        UI::Element* cell = _tableSell->Child(i).Get();
+        UI::Element* rowElem = cell->FindElement(strBuf).Get();
 
         // Get 4 child elements from ribbonSellRow:
-        // child(0)=SpinnerElement, child(1)=LabelElement, child(2)=SpinnerElement, child(3)=SliderElement
-        uint64_t c[2];
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
-        void* spinElem = *(void**)c;      // child(0) = SpinnerElement
-
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(1));  // B.3.6 bridge
-        void* labelElem = *(void**)c;     // child(1) = LabelElement
-
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
-        void* numElem = *(void**)c;       // child(2) = SpinnerElement (amount)
-
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(3));  // B.3.6 bridge
-        void* sliderElem = *(void**)c;    // child(3) = SliderElement
+        // child(0)=stock number, child(1)=LabelElement, child(2)=price number, child(3)=SpinnerElement
+        UI::NumberElement* spinElem = static_cast<UI::NumberElement*>(rowElem->Child(0).Get());
+        UI::LabelElement* labelElem = static_cast<UI::LabelElement*>(rowElem->Child(1).Get());
+        UI::NumberElement* numElem = static_cast<UI::NumberElement*>(rowElem->Child(2).Get());
+        UI::SpinnerElement* sliderElem = static_cast<UI::SpinnerElement*>(rowElem->Child(3).Get());
 
         // child(3) is a SpinnerElement (the "SliderElement" naming is the same mislabel
         // reg_element_typeids.cpp:36 documents). Retail call site 0x14008614e, EDX = i+0xbb8.
-        new (c) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sliderElem));   // B.3.3 bridge
-        reinterpret_cast<UI::SpinnerElement*>(*(void**)c)->SetElementId(i + 3000);  // B.3.6 bridge
-        TradeUI_ReportSpinnerTag("sell", i, *(void**)c, i + 3000);
+        sliderElem->SetElementId(i + 3000);
+        TradeUI_ReportSpinnerTag("sell", i, sliderElem, i + 3000);
 
         // Build 0x20-byte entry {child1, child0, child2, child3} and push to the
         // sell-entries array at +0x60.
-        // +0=LabelElement, +8=SpinnerElement, +10=SpinnerElement, +18=SliderElement
-        // B.3.2 bridge: TradeUI+0x60 is Collection::Array<{labelElem, spinElem,
-        // numElem, sliderElem}> (stride 0x20, count +0x68, capacity +0x6C).
-        auto& sellEntryRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x60);
-        sellEntryRows.SetSize(sellEntryRows.GetSize() + 1,
-                               GameColl::Bytes<0x20, 8>((uint64_t)labelElem, (uint64_t)spinElem,
-                                              (uint64_t)numElem, (uint64_t)sliderElem));
+        _sellRows.SetSize(_sellRows.GetSize() + 1,
+                          SellRow{labelElem, spinElem, numElem, sliderElem});
     }
 
     // --- Phase 4c: Setup tableBuy ---
-    void* tableBuy = *(void**)(s + 0xD0);
-    int buyColCount = *(int*)((uintptr_t)tableBuy + 0xC4);
+    int buyColCount = _tableBuy->_columnCount;
 
     {
         // tableBuy size: rows for (selectableCount + resourceTypeCount - 1) items
         int totalItems = selectableCount + resourceTypeCount - 1;
 
         int rowCount = (((totalItems + buyColCount) / buyColCount) * buyColCount) / buyColCount;
-        void* buyTemplate = TradeUI_GetTableTemplate((void*)(s + 0xD0));
-        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xD0))->SetSize(rowCount, buyColCount);  // B.3.6 bridge
+        const UI::ElementDescription* buyTemplate = TradeUI_GetTableTemplate(_tableBuy);
+        _tableBuy->SetSize(rowCount, buyColCount);
 
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xD0), buyTemplate);
+        TradeUI_CloneTableCells(this, _tableBuy, buyTemplate);
     }
 
     // Iterate tableBuy cells, find "ribbonBuyRow" sub-elements (4 children per row)
-    tableBuy = *(void**)(s + 0xD0);
-    int buyCellCount = *(int*)((uintptr_t)tableBuy + 0xC0);
+    int buyCellCount = _tableBuy->_rowCount;
     for (int i = 0; i < buyCellCount; i++) {
         System::String strBuf("ribbonBuyRow");
-        uint64_t cellBuf[2] = {0, 0};
-        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xD0))->Child(i));  // B.3.6 bridge
-        uint64_t rowBuf[2] = {0, 0};
-        ::new (static_cast<void*>(rowBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->FindElement(strBuf));  // B.3.6 bridge
+        UI::Element* cell = _tableBuy->Child(i).Get();
+        UI::Element* rowElem = cell->FindElement(strBuf).Get();
 
-        void* rowElem = *(void**)rowBuf;
-
-        // child(0)=SpinnerElement, child(1)=LabelElement, child(2)=SpinnerElement, child(3)=SliderElement
-        uint64_t c[2];
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
-        void* spinElem = *(void**)c;      // child(0) = SpinnerElement
-
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(1));  // B.3.6 bridge
-        void* labelElem = *(void**)c;     // child(1) = LabelElement
-
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
-        void* numElem = *(void**)c;       // child(2) = SpinnerElement
-
-        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(3));  // B.3.6 bridge
-        void* sliderElem = *(void**)c;    // child(3) = SliderElement
+        // child(0)=quantity number, child(1)=LabelElement, child(2)=price number, child(3)=SpinnerElement
+        UI::NumberElement* spinElem = static_cast<UI::NumberElement*>(rowElem->Child(0).Get());
+        UI::LabelElement* labelElem = static_cast<UI::LabelElement*>(rowElem->Child(1).Get());
+        UI::NumberElement* numElem = static_cast<UI::NumberElement*>(rowElem->Child(2).Get());
+        UI::SpinnerElement* sliderElem = static_cast<UI::SpinnerElement*>(rowElem->Child(3).Get());
 
         // child(3) is a SpinnerElement (same mislabel as the sell loop).
         // Retail call site 0x14008653e, EDX = i + 0xfa0.
-        new (c) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sliderElem));   // B.3.3 bridge
-        reinterpret_cast<UI::SpinnerElement*>(*(void**)c)->SetElementId(i + 4000);  // B.3.6 bridge
-        TradeUI_ReportSpinnerTag("buy", i, *(void**)c, i + 4000);
+        sliderElem->SetElementId(i + 4000);
+        TradeUI_ReportSpinnerTag("buy", i, sliderElem, i + 4000);
 
         // Build 0x20-byte entry {child1, child2, child3, child0} and push to the
         // buy-entries array at +0x70.
-        // +0=LabelElement, +8=SpinnerElement, +10=SliderElement, +18=SpinnerElement
-        // B.3.2 bridge: TradeUI+0x70 is Collection::Array<{labelElem, numElem,
-        // sliderElem, spinElem}> (stride 0x20, count +0x78, capacity +0x7C).
-        auto& buyEntryRows = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0x70);
-        buyEntryRows.SetSize(buyEntryRows.GetSize() + 1,
-                              GameColl::Bytes<0x20, 8>((uint64_t)labelElem, (uint64_t)numElem,
-                                             (uint64_t)sliderElem, (uint64_t)spinElem));
+        _buyRows.SetSize(_buyRows.GetSize() + 1,
+                         BuyRow{labelElem, numElem, sliderElem, spinElem});
     }
 
     // --- Phase 4d: Setup tableOrder ---
-    void* tableOrder = *(void**)(s + 0xE8);
-    uint32_t orderColCount = *(uint32_t*)((uintptr_t)tableOrder + 0xC4);
+    uint32_t orderColCount = static_cast<uint32_t>(_tableOrder->_columnCount);
 
     {
         int totalOrderItems = selectableCount + orderColCount + resourceTypeCount - 1;
 
         int rowCount = ((int)(totalOrderItems / (int)orderColCount * (int)orderColCount))
                        / (int)orderColCount;
-        void* orderTemplate = TradeUI_GetTableTemplate((void*)(s + 0xE8));
-        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xE8))->SetSize(rowCount, (int)orderColCount);  // B.3.6 bridge
+        const UI::ElementDescription* orderTemplate = TradeUI_GetTableTemplate(_tableOrder);
+        _tableOrder->SetSize(rowCount, (int)orderColCount);
 
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xE8), orderTemplate);
+        TradeUI_CloneTableCells(this, _tableOrder, orderTemplate);
     }
 
-    // Iterate tableOrder cells, set element IDs (0x1F40+i) on purchase button children
-    tableOrder = *(void**)(s + 0xE8);
-    int orderCellCount = reinterpret_cast<const UI::Element*>(tableOrder)->ChildCount();  // B.3.6 bridge
+    // Iterate tableOrder cells, set element IDs (0x1F40+i) on the purchase check cells
+    int orderCellCount = _tableOrder->ChildCount();
     for (int i = 0; i < orderCellCount; i++) {
-        uint64_t cellBuf[2] = {0, 0};
-        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE8))->Child(i));  // B.3.6 bridge
-
-        void* typed = *(void**)cellBuf;
-        uint64_t ibp[2] = {0, 0};
-        new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(typed));   // B.3.3 bridge
-        reinterpret_cast<UI::Element*>(*(void**)ibp)->SetElementId(i + 0x1F40);  // B.3.6 bridge
+        UI::Element* typed = _tableOrder->Child(i).Get();
+        typed->SetElementId(i + 0x1F40);
 
         // Push 8-byte entry (just the element pointer) into the purchase array
         // at +0xA0.
-        // B.3.2 bridge: TradeUI+0xA0 is Collection::Array<{elem}> (stride 0x08,
-        // count +0xA8, capacity +0xAC).
-        auto& purchaseRows = GameColl::ArrayAt<GameColl::Bytes<0x08, 8>>(s, 0xA0);
-        purchaseRows.SetSize(purchaseRows.GetSize() + 1,
-                              GameColl::Bytes<0x08, 8>(*(uint64_t*)ibp));
+        _purchaseRows.SetSize(_purchaseRows.GetSize() + 1,
+                              PurchaseRow{static_cast<UI::CheckElement*>(typed)});
     }
 
     // --- Phase 5: Call refresh functions ---
-    TradeUI_RefreshDisplay(this, 0, 0, 0);
-    TradeUI_RefreshSellTable(this);
-    TradeUI_RefreshBuyTable(this);
+    RefreshDisplay();
+    RefreshSellTable();
+    RefreshBuyTable();
 }
 
 // ============================================================
-// Startup (vtable +0x38): Trade value calculations
+// OnUpdateLayout (vtable +0x38): Trade value calculations
 // ============================================================
 // Original: 0x140082150
 //
@@ -1408,32 +1095,23 @@ void TradeUI::OnCreated() {
 //   component value at +0x48 (identified by vtable+0x10 returning TypeId_RawMaterialDescription)
 // merchant state check: BuildState component, byte at +0x52 (or +0x50 if negative)
 //   0x13 = merchant arrived (enables dismiss button)
-// storage capacity: StateMachineComp+0x38 vs StorageComponent_QueryCount
+// storage capacity: StorageComponent+0x38 vs StorageComponent_QueryCount
 //   bStorageFull = capacity < storageCount + (buyTotal - sellTotal)
-
-// Inline helper to call UI::Element::SetEnabled via vtable slot 8 (+0x40)
-// Callers pass the +0xF0/+0xF8 buttons (FindElement results) and the +0x80
-// storage rows (Child results) — all UI::Element. Slot 8 is Enable(bool).
-static inline void Element_SetEnabled(void* element, bool enabled) {
-    reinterpret_cast<UI::Element*>(element)->Enable(enabled);  // B.3.6 bridge
-}
 
 // Find resource value for a given resource entity ptr by searching its component array
 // Returns 0 if not found. Resource type identified via vtable+0x10 == TypeId_RawMaterialDescription.
-static int FindResourceValue(void* resourceEntity) {
+static int FindResourceValue(const ComponentDescription* resourceEntity) {
     if (!resourceEntity) return 0;
-    uintptr_t entity = (uintptr_t)resourceEntity;
-    int compCount = *(int*)(entity + 0x30);
-    void** compArray = *(void***)(entity + 0x28);
+    int compCount = resourceEntity->_subDescCount;
     for (int k = 0; k < compCount; k++) {
-        void* comp = compArray[k];
+        ::Object::Base* comp = reinterpret_cast<::Object::Base*>(resourceEntity->_subDescs[k]);   // LEFT: COMP-c
         if (!comp) continue;
         // Call vtable+0x10 to get type ID
-        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+        int typeId = comp->Type();
         if (typeId == (int)RawMaterialDescription::TypeId()) {
             // Verify with IsDerivedFrom, then return value at +0x48
             bool isRes = ::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId());
-            if (isRes) return *(int*)((uintptr_t)comp + 0x48);
+            if (isRes) return static_cast<RawMaterialDescription*>(comp)->_weight;
             break;
         }
     }
@@ -1444,166 +1122,140 @@ static int FindResourceValue(void* resourceEntity) {
 void TradeUI::OnUpdateLayout() {
     if (!tradeui_sa::IsSetUp(this)) return;
     tradeui_sa::Trace("Slot7-values", this);
-    uintptr_t s = (uintptr_t)this;
 
-    // Find BuildingComponent and StateMachineComponent
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
+    // Find the TradeComponent and StorageComponent
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
+    (void)trade;
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    uint64_t storageCompPtr[2] = {0, 0};
-    fn_FindComponent_Storage((void*)entityPtr[0], &storageCompPtr);
+    StorageComponent* storageComp = entity->FindComponent<StorageComponent>();
 
     // --- Compute sell total ---
-    // sell orders: ptr at self+0x30, count at self+0x38, stride 0x20
-    // each entry: +0x00=resource entity ptr, +0x18=quantity
     int sellTotal = 0;
-    int sellCount = *(int*)(s + 0x38);
-    uintptr_t sellBase = *(uintptr_t*)(s + 0x30);
+    int sellCount = _sellItems._size;
     for (int i = 0; i < sellCount; i++) {
-        uintptr_t entry = sellBase + (uintptr_t)i * 0x20;
-        int qty = *(int*)(entry + 0x18);
+        int qty = _sellItems[i].quantity;
         if (qty != 0) {
-            void* resEntity = *(void**)(entry);
-            int resVal = FindResourceValue(resEntity);
+            int resVal = FindResourceValue(_sellItems[i].resource);
             sellTotal += resVal * qty;
         }
     }
 
     // --- Compute buy total ---
-    // buy orders: ptr at self+0x40, count at self+0x48, stride 0x18
-    // each entry: +0x00=resource entity ptr, +0x10=quantity
     int buyTotal = 0;
-    int buyCount = *(int*)(s + 0x48);
-    uintptr_t buyBase = *(uintptr_t*)(s + 0x40);
+    int buyCount = _buyItems._size;
     for (int j = 0; j < buyCount; j++) {
-        uintptr_t entry = buyBase + (uintptr_t)j * 0x18;
-        int qty = *(int*)(entry + 0x10);
+        int qty = _buyItems[j].quantity;
         if (qty != 0) {
-            void* resEntity = *(void**)(entry);
-            int resVal = FindResourceValue(resEntity);
+            int resVal = FindResourceValue(_buyItems[j].resource);
             buyTotal += resVal * qty;
         }
     }
 
     // --- Read displayed totals from NumberElements ---
-    int displaySellTotal = *(int*)(*(uintptr_t*)(s + 0x100) + 0xd8);
-    int displayBuyTotal  = *(int*)(*(uintptr_t*)(s + 0x108) + 0xd8);
+    int displaySellTotal = _numberSellTotal->_intValue;
+    int displayBuyTotal  = _numberBuyTotal->_intValue;
 
     bool bOverBought  = displaySellTotal < displayBuyTotal;  // buy value > sell value
     bool bBuySell     = displayBuyTotal  < displaySellTotal; // buy < sell (textTooMuch case)
 
     // --- Storage capacity check ---
-    uintptr_t storageComp = storageCompPtr[0];
-    int storageCapacity = *(int*)(storageComp + 0x38);
-    int storageCount = fn_StorageComponent_QueryCount((void*)storageComp);
+    int storageCapacity = storageComp->capacity;
+    int storageCount = fn_StorageComponent_QueryCount(storageComp);
     bool bStorageFull = storageCapacity < storageCount + (buyTotal - sellTotal);
 
     // --- Show/hide warning texts ---
     if (bOverBought) {
         // Buy value exceeds sell value — show "not enough" text with difference
         System::String strBuf = System::String::Format("%d", (unsigned)(displayBuyTotal - displaySellTotal));
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x120))->SetParameter(0, strBuf);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textTooMuch
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textNotEnough
+        _textNotEnough->SetParameter(0, strBuf);
+        _textNoStorage->SetFlagsOnOff(1, 0);  // hide textNoStorage
+        _textTooMuch->SetFlagsOnOff(1, 0);    // hide textTooMuch
+        _textNotEnough->SetFlagsOnOff(0, 1);  // show textNotEnough
     } else if (bStorageFull) {
         // Storage overflow — show "no storage" text
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textNoStorage
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textTooMuch
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNotEnough
+        _textNoStorage->SetFlagsOnOff(0, 1);  // show textNoStorage
+        _textTooMuch->SetFlagsOnOff(1, 0);    // hide textTooMuch
+        _textNotEnough->SetFlagsOnOff(1, 0);  // hide textNotEnough
     } else if (!bBuySell) {
         // Totals are equal (no net trade) — hide all warning texts
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textTooMuch
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNotEnough
+        _textNoStorage->SetFlagsOnOff(1, 0);  // hide textNoStorage
+        _textTooMuch->SetFlagsOnOff(1, 0);    // hide textTooMuch
+        _textNotEnough->SetFlagsOnOff(1, 0);  // hide textNotEnough
     } else {
         // Sell value exceeds buy value — show "too much" text with difference
         System::String strBuf = System::String::Format("%d", (unsigned)(displaySellTotal - displayBuyTotal));
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x118))->SetParameter(0, strBuf);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textTooMuch
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNotEnough
+        _textTooMuch->SetParameter(0, strBuf);
+        _textNoStorage->SetFlagsOnOff(1, 0);  // hide textNoStorage
+        _textTooMuch->SetFlagsOnOff(0, 1);    // show textTooMuch
+        _textNotEnough->SetFlagsOnOff(1, 0);  // hide textNotEnough
     }
 
     // --- Find BuildState (merchant) component and check merchant arrival state ---
-    // FindComponent_BuildState walks building's component array for the BuildState type
-    uint64_t buildStatePtr[2] = {0, 0};
-    fn_FindComponent_BuildState((void*)entityPtr[0], &buildStatePtr);
+    StateMachineComponent* buildState = entity->FindComponent<StateMachineComponent>();
 
-    uintptr_t buildState = buildStatePtr[0];
     // State byte at +0x52 (primary), +0x50 (fallback if negative)
-    int8_t stateByte = *(int8_t*)(buildState + 0x52);
-    if (stateByte < 0) stateByte = *(int8_t*)(buildState + 0x50);
+    int8_t stateByte = *(int8_t*)((uintptr_t)buildState + 0x52);   // LEFT: COMP-e
+    if (stateByte < 0) stateByte = *(int8_t*)((uintptr_t)buildState + 0x50);   // LEFT: COMP-e
     bool merchantArrived = (stateByte == 0x13);
 
     // --- Enable/disable buttonDismiss (enabled when merchant is present) ---
-    Element_SetEnabled(*(void**)(s + 0xf8), merchantArrived);
+    _buttonDismiss->Enable(merchantArrived);
 
     // --- Enable/disable buttonTrade ---
     // Enabled only if: buyTotal.value > 0, no storage overflow, no over-bought
     bool tradeEnabled = (displayBuyTotal > 0) && !bStorageFull && !bOverBought;
-    Element_SetEnabled(*(void**)(s + 0xf0), tradeEnabled);
+    _buttonTrade->Enable(tradeEnabled);
 
     // --- Layout recalc for sell and buy tables ---
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xC8))->SetNeedsSizeCalc();  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xD0))->SetNeedsSizeCalc();  // B.3.6 bridge
+    _tableSell->SetNeedsSizeCalc();
+    _tableBuy->SetNeedsSizeCalc();
 
     // --- Refresh table displays ---
-    TradeUI_RefreshOrderQuantityDisplay(this);
-    TradeUI_RefreshSellSpinnerValues(this);
-    TradeUI_RefreshOrderDisplay(this);
+    RefreshOrderQuantityDisplay();
+    RefreshSellSpinnerValues();
+    RefreshOrderDisplay();
 }
 
 // ============================================================
-// OnCreate (vtable +0x40): Refresh on order changes
+// OnUpdate (vtable +0x40): Refresh on order changes
 // ============================================================
 // Original: 0x1400827b0
 //
-// Finds BuildingComponent, checks if the buy order count (+0x48 on self)
-// differs from building's order count (+0x58 on building). If changed,
+// Finds the TradeComponent, checks if the buy order count (+0x48 on self)
+// differs from the post's order count (+0x58). If changed,
 // refreshes sell, buy, and order tables.
 
 // [8] 0x1400827b0
 void TradeUI::OnUpdate(const System::Time& /*time*/) {
     if (!tradeui_sa::IsSetUp(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
-    // Get owning entity and find BuildingComponent
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+    // Get owning entity and find the TradeComponent
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
     // Check if order count changed
-    int selfOrderCount = *(int*)(s + 0x48);
-    int buildingOrderCount = *(int*)(buildingPtr[0] + 0x58);
+    int selfOrderCount = _buyItems._size;
+    int buildingOrderCount = *(int*)((uintptr_t)trade + 0x58);   // LEFT: COMP-f
 
     if (selfOrderCount != buildingOrderCount) {
         // Order count changed — refresh sell, buy, and order tables
-        TradeUI_RefreshSellTable(this);
-        TradeUI_RefreshBuyTable(this);
-        TradeUI_RefreshDisplay(this, 0, 0, 0);
+        RefreshSellTable();
+        RefreshBuyTable();
+        RefreshDisplay();
     }
 
     // Always update totals
-    TradeUI_UpdateSellTotals(this);
-    TradeUI_UpdateBuyTotals(this);
+    UpdateSellTotals();
+    UpdateBuyTotals();
 }
 
 // ============================================================
-// OnRemove (vtable +0x48): Event dispatcher
+// OnElementEvent (vtable +0x48): Event dispatcher
 // ============================================================
 // Original: 0x140081f20
 //
@@ -1621,50 +1273,47 @@ void TradeUI::OnUpdate(const System::Time& /*time*/) {
 
 
 // [9] 0x140081f20
-void TradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventId,
+void TradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventId,
                              int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    void* param2 = element;
     if (!tradeui_sa::IsSetUp(this)) return;
     tradeui_sa::Trace("Slot9-event", this);
-    uintptr_t s = (uintptr_t)this;
 
 
     int switchVal = eventType - 0x12;
     if (switchVal == 0) {
         // --- eventType 0x12: click events ---
         if (eventId == 0x4e20) {
-            // buttonTrade — the CHECKOUT. Ported in code/Game/Dialog/tradeui_checkout.cpp
-            // as TradeUI_OnTradeButton (0x140081420) and called by name (B3R; the
-            // never-taken "did not resolve" arm went with the door pointer).
-            TradeUI_OnTradeButton(this, param2, nullptr, 0);
+            // buttonTrade — the CHECKOUT, OnTradeButton (0x140081420) in
+            // code/Game/Dialog/tradeui_checkout.cpp.
+            OnTradeButton();
             return;
         }
         if (eventId == 0x4e21) {
-            TradeUI_OnDismissButton(this);
+            OnDismissButton();
             return;
         }
         // orderUp spinners: id range [0x1388, 0x1388 + orderCount]
         {
-            int orderCount = *(int*)(s + 0x98);
+            int orderCount = _orderRows._size;
             if (eventId >= 0x1388 && eventId <= orderCount + 0x1388) {
-                TradeUI_OnOrderSpinner(this, eventId - 0x1388, eventId - 0x1389);
+                OnOrderSpinner(eventId - 0x1388, eventId - 0x1389);
                 goto check_type14;
             }
         }
         // orderDown spinners: id range [0x1770, 0x1770 + orderCount]
         {
-            int orderCount = *(int*)(s + 0x98);
+            int orderCount = _orderRows._size;
             if (eventId >= 0x1770 && eventId <= orderCount + 0x1770) {
                 // Note: second arg is idx+1 relative to base (idx-0x176f = idx-0x1770+1)
-                TradeUI_OnOrderSpinner(this, eventId - 0x1770, eventId - 0x176f);
+                OnOrderSpinner(eventId - 0x1770, eventId - 0x176f);
                 goto check_type14;
             }
         }
         // purchase buttons: id range [0x1f40, 0x1f40 + purchaseCount]
         {
-            int purchaseCount = *(int*)(s + 0xa8);
+            int purchaseCount = _purchaseRows._size;
             if (eventId >= 0x1f40 && eventId <= purchaseCount + 0x1f40) {
-                TradeUI_OnPurchaseButton(this, eventId - 0x1f40);
+                OnPurchaseButton(eventId - 0x1f40);
                 goto check_type14;
             }
         }
@@ -1686,35 +1335,33 @@ void TradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
     // --- eventType 0x15: spinner change events ---
     // storage spinners: id range [0x7d0, 0x7d0 + storageCount)
     {
-        int storageCount = *(int*)(s + 0x58);
+        int storageCount = _storageItems._size;
         if (eventId >= 0x7d0 && eventId < storageCount + 0x7d0) {
-            TradeUI_OnStorageSpinner(this, eventId - 0x7d0, param2);
+            OnStorageSpinner(eventId - 0x7d0);
             return;
         }
     }
-    // sell spinners: id range [0xbb8, 0xbb8 + tableSell.childCount)
+    // sell spinners: id range [0xbb8, 0xbb8 + tableSell rows)
     if (eventId >= 0xbb8) {
-        void* tableSell = *(void**)(s + 0xC8);
-        int sellChildCount = *(int*)((uintptr_t)tableSell + 0xC0);
+        int sellChildCount = _tableSell->_rowCount;
         if (eventId < sellChildCount + 0xbb8) {
-            TradeUI_OnSellSpinner(this, eventId - 0xbb8);
+            OnSellSpinner(eventId - 0xbb8);
             return;
         }
     }
-    // buy spinners: id range [0xfa0, 0xfa0 + tableBuy.childCount)
+    // buy spinners: id range [0xfa0, 0xfa0 + tableBuy rows)
     if (eventId >= 0xfa0) {
-        void* tableBuy = *(void**)(s + 0xD0);
-        int buyChildCount = *(int*)((uintptr_t)tableBuy + 0xC0);
+        int buyChildCount = _tableBuy->_rowCount;
         if (eventId < buyChildCount + 0xfa0) {
-            TradeUI_OnBuySpinner(this, eventId - 0xfa0);
+            OnBuySpinner(eventId - 0xfa0);
             return;
         }
     }
     // order amount spinners: id range [0x1b58, 0x1b58 + orderCount)
     {
-        int orderCount = *(int*)(s + 0x98);
+        int orderCount = _orderRows._size;
         if (eventId >= 0x1b58 && eventId < orderCount + 0x1b58) {
-            TradeUI_OnOrderAmountSpinner(this, eventId - 0x1b58);
+            OnOrderAmountSpinner(eventId - 0x1b58);
             return;
         }
     }
@@ -1723,20 +1370,20 @@ void TradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
 check_type14:
     // Shared check for combo/sort events (reached from type 0x12 and 0x14)
     if (eventId == 0x4e22) {
-        TradeUI_OnComboPurchase(this);
+        OnComboPurchase();
         return;
     }
     if (eventId == 0x4e23) {
-        TradeUI_OnComboOrder(this);
+        OnComboOrder();
         return;
     }
     if (eventId == 0xc7) {
-        TradeUI_RefreshDisplay(this, 0, 0, 0);
+        RefreshDisplay();
     }
 }
 
 // ============================================================
-// Update (vtable +0x50): Serialize tab/sort state
+// OnSerializeSettings (vtable +0x50): Serialize tab/sort state
 // ============================================================
 // Original: 0x1400868c0
 //
@@ -1746,98 +1393,61 @@ check_type14:
 
 // [10] 0x1400868c0
 void TradeUI::OnSerializeSettings(void* stream) {
-    int64_t p4 = 0;
     if (!tradeui_sa::IsSetUp(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
     // Find "tradeTabs" TabElement
-    System::String strBuf("tradeTabs");
-
-    uint64_t foundBuf[2] = {0, 0};
-    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
-
-    void* element = *(void**)foundBuf;
-
-    // Cast to TabElement via IsDerivedFrom
-    void* tabElement = nullptr;
-    if (element && ::Object::IsDerivedFromNullSafe(element, UI::TabElement::TypeId())) {
-        tabElement = element;
-    }
-
-    uint64_t tabIBP = 0;
-    new (&tabIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tabElement));   // B.3.3 bridge
+    UI::TabElement* tabElement = TradeUI_FindTypedElement<UI::TabElement>(_container, "tradeTabs");
 
     // Read current tab index from TabElement (+0xf8)
-    int tabIndex = *(int*)(tabIBP + 0xf8);
+    int tabIndex = tabElement->_activeTab;
 
     // Read current sortCombo selection (+0x140 element, +0x118 = combo index)
-    uint32_t sortIndex = *(uint32_t*)(*(uintptr_t*)(s + 0x140) + 0x118);
+    int sortIndex = _sortCombo->_currentItem;
 
     // Create serializer
-    alignas(8) uint64_t serializer[3] = {0, 0, 0};
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // LEFT: the slot's IO::Stream& is spelled void* (DialogController.h)
 
     // Only serialize if version > 0 (newer save format)
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    int version = serializer.GetVersion();
     if (version > 0) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((int*)&sortIndex), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&tabIndex), nullptr);   // B.3.4 bridge
+        serializer.Serialize(sortIndex, nullptr);
+        serializer.Serialize(tabIndex, nullptr);
     }
 
     // On load (mode == 0), restore tab and combo state
-    if (*(int*)(serializer[0] + 8) == 0) {
-        reinterpret_cast<UI::TabElement*>(tabIBP)->SetActiveTab(tabIndex);  // B.3.6 bridge
+    if (serializer.GetDirection() == IO::kReading) {
+        tabElement->SetActiveTab(tabIndex);
 
-        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x140))->SetCurrentItem(sortIndex);  // B.3.6 bridge
+        _sortCombo->SetCurrentItem(sortIndex);
 
         // Refresh sorted display
-        TradeUI_RefreshDisplay(this, (uint64_t)sortIndex, 0, p4);
+        RefreshDisplay();
     }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
-// UpdateBuyTotals (FUN_140082850): Sum buy order values into numberBuyTotal
+// UpdateBuyTotals (0x140082850): Sum buy order values into numberBuyTotal
 // ============================================================
-// Iterates all buy orders (ptr at self+0x40, count at self+0x48, stride 0x18).
-// Each entry: +0x10 = quantity. Resource value = building's resource value table:
-//   building+0x50 = resource type ptr array (sorted), stride 0x10
-//   For entry i: value at *(building+0x50)[stride*i - 8]
+// Iterates all buy orders (self+0x40, stride 0x18). Each entry: +0x10 = quantity.
+// Unit price: the TradeComponent's buy-order array (+0x50, stride 0x10: +0x00
+// entity, +0x08 unit price, +0x0c quantity).
 // Then sets numberBuyTotal (+0x108) to the accumulated total.
 
-void TradeUI_UpdateBuyTotals(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+void TradeUI::UpdateBuyTotals() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    // Iterate buy orders: ptr at +0x40, count at +0x48, stride 0x18
-    // Each entry: [0]=resource entity ptr, [+0x10]=quantity int
-    // Resource value = building's type-indexed price table:
-    //   building+0x50 = ptr to struct of resource types (sorted set/tree?)
-    //   Ghidra: *(int *)(pIVar3 + *(longlong *)(local_res10 + 0x50) + -8)
-    //   where pIVar3 increments by 0x10 per iteration starting at 0
     int total = 0;
-    int buyCount = *(int*)(s + 0x48);
-    uintptr_t building = buildingPtr[0];
+    int buyCount = _buyItems._size;
 
-    uintptr_t resourceTypeBase = *(uintptr_t*)(building + 0x50);
-    uintptr_t buyBase = *(uintptr_t*)(s + 0x40);
+    uintptr_t resourceTypeBase = (uintptr_t)trade->field50;   // LEFT: COMP-f
     for (int i = 0; i < buyCount; i++) {
-        uintptr_t entry = buyBase + (uintptr_t)i * 0x18;
-        int qty = *(int*)(entry + 0x10);
+        int qty = _buyItems[i].quantity;
         if (qty != 0) {
             // Price lives at entry+8 of the TradeComponent's buy-order array
-            // (building+0x50, stride 0x10: +0x00 entity, +0x08 unit price,
+            // (trade+0x50, stride 0x10: +0x00 entity, +0x08 unit price,
             //  +0x0c quantity — the same layout TradeComponent_RemoveBuyOrder
             //  edits in tradeui_checkout.cpp).
             //
@@ -1852,200 +1462,133 @@ void TradeUI_UpdateBuyTotals(TradeUI* self) {
         }
     }
 
-    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x108))->SetValue(static_cast<int32_t>(total));  // B.3.6 bridge
+    _numberBuyTotal->SetValue(static_cast<int32_t>(total));
 }
 
 // ============================================================
-// UpdateSellTotals (FUN_140082920): Sum sell order values into numberSellTotal
+// UpdateSellTotals (0x140082920): Sum sell order values into numberSellTotal
 // ============================================================
-// Iterates all sell orders (ptr at self+0x30, count at self+0x38, stride 0x20).
-// Each entry: +0x18 = quantity. Uses Building_GetSellableCount to get unit value.
+// Iterates all sell orders (self+0x30, stride 0x20). Each entry: +0x18 = quantity.
+// Uses the TradeComponent price lookup (0x14005a520) for the unit value.
 // Sets numberSellTotal (+0x100) to accumulated total.
 
-void TradeUI_UpdateSellTotals(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+void TradeUI::UpdateSellTotals() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
     int total = 0;
-    int sellCount = *(int*)(s + 0x38);
-    uintptr_t building = buildingPtr[0];
+    int sellCount = _sellItems._size;
 
-    uintptr_t sellBase = *(uintptr_t*)(s + 0x30);
     for (int i = 0; i < sellCount; i++) {
-        uintptr_t entry = sellBase + (uintptr_t)i * 0x20;
-        int qty = *(int*)(entry + 0x18);
+        int qty = _sellItems[i].quantity;
         if (qty != 0) {
-            void* resourceEntity = *(void**)(entry);
-            // FUN_14005a520: gets available sell value for this resource at the building
-            int unitVal = TradeUI_GetResourcePrice_a520((void*)building, resourceEntity);
+            // 0x14005a520: the post's price for this resource
+            int unitVal = TradeUI_GetResourcePrice_a520(trade, _sellItems[i].resource);
             total += qty * unitVal;
         }
     }
 
-    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x100))->SetValue(static_cast<int32_t>(total));  // B.3.6 bridge
+    _numberSellTotal->SetValue(static_cast<int32_t>(total));
 }
 
 // ============================================================
-// OnBuySpinner (FUN_1400819f0): Store buy spinner value into buy order entry
+// OnBuySpinner (0x1400819f0): Store buy spinner value into buy order entry
 // ============================================================
-// Reads spinner value from buy entry [idx].spinner (+0x10 in 0x20-stride buyEntries array).
-// Stores to buy orders (+0x40 base, stride 0x18, offset +0x10 for qty).
-// Then calls UpdateBuyTotals.
+void TradeUI::OnBuySpinner(int idx) {
+    int val = _buyRows[idx].spinner->GetValue();
 
-void TradeUI_OnBuySpinner(TradeUI* self, int idx) {
-    uintptr_t s = (uintptr_t)self;
+    _buyItems[idx].quantity = val;
 
-    // Buy entries at self+0x70, stride 0x20, spinner at +0x10
-    uintptr_t entryBase = *(uintptr_t*)(s + 0x70);
-    uintptr_t entry = entryBase + (uintptr_t)idx * 0x20;
-
-    int val = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entry + 0x10))->GetValue();  // B.3.6 bridge
-
-    // Store to buy order qty at (buyOrdersBase + idx*0x18 + 0x10)
-    uintptr_t buyOrders = *(uintptr_t*)(s + 0x40);
-    *(int*)(buyOrders + (uintptr_t)idx * 0x18 + 0x10) = val;
-
-    TradeUI_UpdateBuyTotals(self);
+    UpdateBuyTotals();
 }
 
 // ============================================================
-// OnSellSpinner (FUN_140081a50): Store sell spinner value into sell order entry
+// OnSellSpinner (0x140081a50): Store sell spinner value into sell order entry
 // ============================================================
-// Reads spinner value from sell entry [idx].spinner (+0x18 in 0x20-stride sellEntries).
-// Stores to sell orders (+0x30 base, stride 0x20, offset +0x18 for qty).
-// Then calls UpdateSellTotals.
+void TradeUI::OnSellSpinner(int idx) {
+    int val = _sellRows[idx].spinner->GetValue();
 
-void TradeUI_OnSellSpinner(TradeUI* self, int idx) {
-    uintptr_t s = (uintptr_t)self;
+    _sellItems[idx].quantity = val;
 
-    // Sell entries at self+0x60, stride 0x20, spinner at +0x18
-    uintptr_t entryBase = *(uintptr_t*)(s + 0x60);
-    uintptr_t entry = entryBase + (uintptr_t)idx * 0x20;
-
-    int val = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entry + 0x18))->GetValue();  // B.3.6 bridge
-
-    // Store to sell order qty at (sellOrdersBase + idx*0x20 + 0x18)
-    uintptr_t sellOrders = *(uintptr_t*)(s + 0x30);
-    *(int*)(sellOrders + (uintptr_t)idx * 0x20 + 0x18) = val;
-
-    TradeUI_UpdateSellTotals(self);
+    UpdateSellTotals();
 }
 
 // ============================================================
-// OnComboPurchase (FUN_140081bc0): Save comboPurchase selection to building
+// OnComboPurchase (0x140081bc0): Save comboPurchase selection to the post
 // ============================================================
 // Reads comboPurchase (+0x138) current item index (+0x118).
-// Stores it to building component's field at +0x28.
+// Stores it to the TradeComponent's field at +0x28.
 
-void TradeUI_OnComboPurchase(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+void TradeUI::OnComboPurchase() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
     // Read combo selection
-    uint32_t comboIdx = *(uint32_t*)(*(uintptr_t*)(s + 0x138) + 0x118);
+    uint32_t comboIdx = static_cast<uint32_t>(_comboPurchase->_currentItem);
 
-    // Store to building +0x28
-    *(uint32_t*)(buildingPtr[0] + 0x28) = comboIdx;
+    // Store to trade +0x28
+    trade->tradeState = comboIdx;
 }
 
 // ============================================================
-// OnComboOrder (FUN_140081e80): Save comboOrder selection to building's order record
+// OnComboOrder (0x140081e80): Save comboOrder selection to the post's order record
 // ============================================================
 // Reads comboOrder (+0xC0) current item index (+0x118).
-// Stores to building's order slot at: orders_ptr + (curOrderSlot * 0x20 + 8)
-// where curOrderSlot = building +0x2c.
+// Stores to the post's order slot at: orders_ptr + (curOrderSlot * 0x20 + 8)
+// where curOrderSlot = trade +0x2c.
 
-void TradeUI_OnComboOrder(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+void TradeUI::OnComboOrder() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
     // Read comboOrder selection
-    uint32_t comboIdx = *(uint32_t*)(*(uintptr_t*)(s + 0xC0) + 0x118);
+    uint32_t comboIdx = static_cast<uint32_t>(_comboOrder->_currentItem);
 
-    // Store to building's current order slot +8
-    uintptr_t building = buildingPtr[0];
-    int curSlot = *(int*)(building + 0x2c);
-    uintptr_t ordersBase = *(uintptr_t*)(building + 0x30);
+    // Store to the post's current order slot +8
+    int curSlot = trade->tradeId;
+    uintptr_t ordersBase = (uintptr_t)trade->field30;   // LEFT: COMP-f
     *(uint32_t*)(ordersBase + (uintptr_t)(uint32_t)curSlot * 0x20 + 8) = comboIdx;
 }
 
 // ============================================================
-// OnOrderAmountSpinner (FUN_140081c50): Save order amount to building order table
+// OnOrderAmountSpinner (0x140081c50): Save order amount to the post's order table
 // ============================================================
 // Reads order amount spinner from orderEntries (+0x90, stride 0x20, spinner at +0x18).
-// Stores to building's order amount at: building.orders (+0x40) + idx*0xc + 8.
+// Stores to the post's order amount at: trade.orders (+0x40) + idx*0xc + 8.
 
-void TradeUI_OnOrderAmountSpinner(TradeUI* self, int idx) {
-    uintptr_t s = (uintptr_t)self;
+void TradeUI::OnOrderAmountSpinner(int idx) {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
+    // Read spinner value from orderEntries[idx].spinner
+    int val = _orderRows[idx].spinner->GetValue();
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    // Read spinner value from orderEntries[idx].spinner (at +0x18 in 0x20-stride array)
-    uintptr_t orderEntryBase = *(uintptr_t*)(s + 0x90);
-    uintptr_t entry = orderEntryBase + (uintptr_t)idx * 0x20;
-
-    int val = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entry + 0x18))->GetValue();  // B.3.6 bridge
-
-    // Store to building's order amount table: building.ordersAmt (+0x40) + idx*0xc + 8
-    uintptr_t ordersAmt = *(uintptr_t*)(buildingPtr[0] + 0x40);
+    // Store to the post's order amount table: trade.ordersAmt (+0x40) + idx*0xc + 8
+    uintptr_t ordersAmt = (uintptr_t)trade->field40;   // LEFT: COMP-f
     *(int*)(ordersAmt + (uintptr_t)idx * 0xc + 8) = val;
 }
 
 // ============================================================
-// OnOrderSpinner (FUN_140081d00): Swap two order entries in building's order table
+// OnOrderSpinner (0x140081d00): Swap two order entries in the post's order table
 // ============================================================
-// Swaps entries at indices param_2 and param_3 in building's 0xc-stride order array (+0x40).
+// Swaps entries at indices param_2 and param_3 in the post's 0xc-stride order array (+0x40).
 // Used when up/down order spinner buttons are clicked.
 
-void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2) {
-    uintptr_t s = (uintptr_t)self;
+void TradeUI::OnOrderSpinner(int idx, int idx2) {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    uintptr_t ordersBase = *(uintptr_t*)(buildingPtr[0] + 0x40);
+    uintptr_t ordersBase = (uintptr_t)trade->field40;   // LEFT: COMP-f
 
     // Swap 12-byte entries at idx and idx2 (stride 0xc)
     uintptr_t a = ordersBase + (uintptr_t)idx  * 0xc;
@@ -2065,131 +1608,96 @@ void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2) {
 }
 
 // ============================================================
-// OnDismissButton (FUN_140081950): Dismiss the merchant
+// OnDismissButton (0x140081950): Dismiss the merchant
 // ============================================================
-// Finds BuildState component on the owning entity. Reads merchant
-// state byte from +0x51 (sign-extended). Calls vtable[2] on the
-// object at buildState+0x48 to trigger dismissal, then refreshes
+// Finds the state machine on the owning entity. Reads merchant
+// state byte from +0x51 (sign-extended). Posts event 10 to the controller
+// node at buildState+0x48 to trigger dismissal, then refreshes
 // display and both sell/buy tables.
 //
-// Original asm register setup (interleaved for RefreshDisplay):
-//   RCX = *(buildState+0x48)        — object ptr (this for vtable call)
-//   R8D = MOVSX byte [buildState+0x51] — state byte (3rd arg to RefreshDisplay)
-//   RDX = buildState + 0x48         — address (2nd arg to RefreshDisplay)
-//   R9D = 10                        — constant (4th arg to RefreshDisplay)
+// Retail's register setup is the PostEvent call's, not RefreshDisplay's
+// (RefreshDisplay 0x1400846b0 reads only RCX):
+//   RCX = *(buildState+0x48)           — the controller node (`this`)
+//   RDX = buildState + 0x48            — the state machine
+//   R8D = MOVSX byte [buildState+0x51] — the state index
+//   R9D = 10                           — the event id
+//   CALL [RAX+0x10]                    — Controller slot 2, PostEvent
 
-void TradeUI_OnDismissButton(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+void TradeUI::OnDismissButton() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    // Find BuildState component (FUN_140003ea0)
-    uint64_t buildStatePtr[2] = {0, 0};
-    fn_FindComponent_BuildState((void*)entityPtr[0], buildStatePtr);
-
-    uintptr_t buildState = buildStatePtr[0];
+    // Find the state machine (FUN_140003ea0)
+    StateMachineComponent* buildState = entity->FindComponent<StateMachineComponent>();
 
     // Read merchant state byte from +0x51 (sign-extended, no fallback)
-    int8_t stateByte = *(int8_t*)(buildState + 0x51);
-    uintptr_t stateAddr = buildState + 0x48;
-    uint64_t stateVal = (uint64_t)(uint32_t)(int32_t)stateByte;
+    int8_t stateByte = *(int8_t*)((uintptr_t)buildState + 0x51);   // LEFT: COMP-e
 
-    // Call vtable[2] on object at buildState+0x48 (dismiss notification)
-    // Original: MOV RCX,[RDX+0x48]; MOV RAX,[RCX]; CALL [RAX+0x10]
-    void* obj = *(void**)(buildState + 0x48);
-    void** vtbl = *(void***)obj;
-    typedef void (*StateCall_t)(void* self);
-    ((StateCall_t)(vtbl[2]))(obj);
+    // Post event 10 to the current controller node (dismiss notification):
+    // Controller slot 2, PostEvent(stateMachine, stateIndex, eventId), with the
+    // state machine at +0x48 and the state byte at +0x51 (0x1400819a9..0x1400819c2).
+    ControllerComponent::Controller* node =
+        reinterpret_cast<ControllerComponent::Controller*>(buildState->controllerSelf);   // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e; boatcomponent_route.cpp takes its address as void**)
+    node->PostEvent(&buildState->controllerSelf, stateByte, 10);
 
     // Refresh display and tables
-    TradeUI_RefreshDisplay(self, stateAddr, stateVal, 10);
-    TradeUI_RefreshSellTable(self);
-    TradeUI_RefreshBuyTable(self);
+    RefreshDisplay();
+    RefreshSellTable();
+    RefreshBuyTable();
 }
 
 // ============================================================
-// OnPurchaseButton (FUN_140081dd0): Toggle a purchase order entry
+// OnPurchaseButton (0x140081dd0): Toggle a purchase order entry
 // ============================================================
 // Reads the checked state of the purchase button at index param_2 (+0xd8 = checked byte).
 // Gets the corresponding resource entity from self's purchaseReserved (+0xb0, stride 8).
-// Calls Building_AddPurchaseOrder(building, resource, checkedState).
+// Calls the post's AddPurchaseOrder(resource, checkedState).
 
-void TradeUI_OnPurchaseButton(TradeUI* self, int idx) {
-    uintptr_t s = (uintptr_t)self;
-
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    // Get purchase button element from purchaseEntries (+0xA0, stride 8)
-    uintptr_t purchaseBase = *(uintptr_t*)(s + 0xA0);
-    uintptr_t buttonPtr = purchaseBase + (uintptr_t)idx * 8;
-    void* button = *(void**)buttonPtr;
+void TradeUI::OnPurchaseButton(int idx) {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
     // Read checked state byte at +0xd8
-    int8_t checked = *(int8_t*)((uintptr_t)button + 0xd8);
+    int8_t checked = static_cast<int8_t>(_purchaseRows[idx].check->_checked);
 
     // Get corresponding resource entity from purchaseReserved (+0xb0, stride 8)
-    uintptr_t reservedBase = *(uintptr_t*)(s + 0xB0);
-    void* resourceEntity = *(void**)(reservedBase + (uintptr_t)idx * 8);
+    ComponentDescription* resourceEntity = _purchaseItems[idx].resource;
 
-    // Call Building_AddPurchaseOrder
-    TradeUI_AddPurchaseOrder_59490(static_cast<int64_t>(buildingPtr[0]),
-                                   reinterpret_cast<int64_t>(resourceEntity), checked);   // 0x140059490
+    // 0x140059490
+    TradeUI_AddPurchaseOrder_59490(trade, resourceEntity, checked);
 }
 
 // ============================================================
-// OnStorageSpinner (FUN_140081ab0): Update storage resource assignment
+// OnStorageSpinner (0x140081ab0): Update storage resource assignment
 // ============================================================
 // Reads the new storage spinner value for resource at idx.
-// Looks up resource entity from self's storageOrdersArray (+0x50, stride 0x18).
-// Searches building's storage BST (+0x60) for the resource.
+// Looks up resource entity from self's storage items (+0x50, stride 0x18).
+// Searches the post's storage BST (+0x60) for the resource.
 // If found: update quantity. If not found: insert new entry.
 // Then refreshes sell table and display.
 
-void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
-    uintptr_t s = (uintptr_t)self;
-
+void TradeUI::OnStorageSpinner(int idx) {
     // storageEntries at self+0x80, stride 0x18, spinner at +0x08
-    uintptr_t storageEntries = *(uintptr_t*)(s + 0x80);
-    uintptr_t entryOffset = (uintptr_t)idx * 0x18;
-    int newVal = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(storageEntries + 0x08 + entryOffset))->GetValue();  // B.3.6 bridge
+    int newVal = _storageRows[idx].spinner->GetValue();
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    // Get resource entity ptr from storageOrdersArray (+0x50, stride 0x18, first field)
-    uintptr_t storageOrders = *(uintptr_t*)(s + 0x50);
-    void* resourceEntity = *(void**)(storageOrders + entryOffset);
-
-    uintptr_t building = buildingPtr[0];
-    uintptr_t storageBST = building + 0x60;  // BST root pointer at building+0x60
+    // Get resource entity ptr from the storage items (+0x50, stride 0x18, first field)
+    ComponentDescription* resourceEntity = _storageItems[idx].resource;
 
     // Search BST for existing entry and update or insert
     // The insert/update logic (FUN_14000e1c0) handles both cases:
     // If resource already in BST: update quantity
     // If not found: insert new leaf
-    uint64_t newEntry[2] = { (uint64_t)resourceEntity, (uint64_t)(uint32_t)newVal };
+    uint64_t newEntry[2] = { reinterpret_cast<uint64_t>(resourceEntity), (uint64_t)(uint32_t)newVal };
     void* retval = nullptr;
-    TradeUI_StorageTree_Insert_e1c0(reinterpret_cast<int64_t*>(storageBST), &retval, newEntry);   // 0x14000e1c0
+    TradeUI_StorageTree_Insert_e1c0(reinterpret_cast<int64_t*>(&trade->field60), &retval, newEntry);   // 0x14000e1c0; LEFT: the tree header (COMP-f)
 
     // If we got a result back (found existing), update its qty
     if (retval) {
@@ -2197,54 +1705,41 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     }
 
 
-    TradeUI_RefreshSellTable(self);
-    TradeUI_RefreshDisplay(self, (uint64_t)retval, (uint64_t)newEntry, (int64_t)building);
+    RefreshSellTable();
+    RefreshDisplay();
 }
 
 // ============================================================
-// RefreshOrderQuantityDisplay (FUN_140082fb0): Update order quantity spinners
+// RefreshOrderQuantityDisplay (0x140082fb0): Update storage count numbers
 // ============================================================
-// For each storage entry (count at self+0x58, storageArray at self+0x50, stride 0x18):
-//   - Gets resource entity from storageArray[i] (offset 0)
+// For each storage entry (self+0x50, stride 0x18):
+//   - Gets resource entity from the storage item
 //   - Searches StorageComponent's list (at +0x28/+0x30) for matching entity
-//   - Sets NumberElement value (storageEntries[i].numberElement at +0x10) to found qty
-// Note: StorageComponent is found via entity+FindComponent_Storage (0x140006270).
+//   - Sets NumberElement value (storage row's number at +0x10) to found qty
 
-void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+void TradeUI::RefreshOrderQuantityDisplay() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
+    (void)trade;
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
+    // Check the post's base type — used later for sprite/text lookups
+    // IsDerivedFrom call on the post's type desc at +0x18 — just a type check, result unused here
+    // ::Object::IsDerivedFromNullSafe(trade->_description, DAT_1401c4bb8);
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
+    StorageComponent* storageComp = entity->FindComponent<StorageComponent>();
 
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
-
-    // Check building's base type — used later for sprite/text lookups
-    // IsDerivedFrom call on building's type desc at +0x18 — just a type check, result unused here
-    // ::Object::IsDerivedFromNullSafe(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
-
-    uint64_t storageCompPtr[2] = {0, 0};
-    fn_FindComponent_Storage((void*)entityPtr[0], &storageCompPtr);
-
-    int storageCount = *(int*)(s + 0x58);
+    int storageCount = _storageItems._size;
 
     if (storageCount > 0) {
         for (int i = 0; i < storageCount; i++) {
-            uintptr_t orderOffset = (uintptr_t)i * 0x18;
-            uintptr_t storageOrders = *(uintptr_t*)(s + 0x50);   // re-read each iteration like original
-            uintptr_t storageEntries = *(uintptr_t*)(s + 0x80);  // re-read each iteration like original
-            void* resourceEntity = *(void**)(storageOrders + orderOffset);
+            ComponentDescription* resourceEntity = _storageItems[i].resource;   // re-read each iteration like original
 
             // Search StorageComponent's item list for this resource entity
-            // Storage list: ptr at comp+0x28, count at comp+0x30
             // List entries: pairs [resource_entity_ptr, qty] each 0x10 bytes (2 x 8-byte)
-            uintptr_t storageComp = storageCompPtr[0];
-            int listCount = *(int*)(storageComp + 0x30);
-            void** itemList = *(void***)(storageComp + 0x28);
+            int listCount = storageComp->slotCount;
+            void** itemList = reinterpret_cast<void**>(storageComp->storageSlots);   // LEFT: StorageComponent item (W0 raw storage)
 
             int foundQty = 0;
             for (int64_t j = 0; j < listCount; j++) {
@@ -2257,70 +1752,54 @@ void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
             }
 
             // Set NumberElement value
-            reinterpret_cast<UI::NumberElement*>(*(void**)(storageEntries + orderOffset + 0x10))->SetValue(static_cast<int32_t>(foundQty));  // B.3.6 bridge
+            _storageRows[i].count->SetValue(static_cast<int32_t>(foundQty));
         }
     }
 }
 
 // ============================================================
-// RefreshSellSpinnerValues (FUN_140082d80): Update sell spinners with available amounts
+// RefreshSellSpinnerValues (0x140082d80): Update sell spinners with available amounts
 // ============================================================
-// For each sell order entry (count at self+0x38, sellOrders at self+0x30, stride 0x20):
-//   - Gets available resource count via Building_GetSellableCount
+// For each sell order entry (self+0x30, stride 0x20):
+//   - Gets the post's price for the resource (0x14005a520)
 //   - Searches StorageComponent's list for current stored qty
 //   - Sets NumberElement (+0x08) to storedQty
-//   - Sets SpinnerElement (+0x18) min=0, max=storedQty (or 0 if no merchant / available<=0)
+//   - Sets SpinnerElement (+0x18) min=0, max=storedQty (or 0 if no merchant / price<=0)
 //   - Sets spinner increment (1 if max<=0x14, 5 if max<=0x32, 20 if max<=0x64, skip if >0x64)
 // Also checks merchant state: if not arrived, force max=0 (spinners disabled).
 
-void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+void TradeUI::RefreshSellSpinnerValues() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
+    // Type check on the post's class info at +0x18 (unused result, but done in original)
+    // ::Object::IsDerivedFromNullSafe(trade->_description, DAT_1401c4bb8);
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
+    StorageComponent* storageComp = entity->FindComponent<StorageComponent>();
 
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+    int sellCount = _sellItems._size;
 
-    // Type check on building's class info at +0x18 (unused result, but done in original)
-    // ::Object::IsDerivedFromNullSafe(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
+    // Check merchant state: find the state machine
+    StateMachineComponent* bsComp = entity->FindComponent<StateMachineComponent>();
 
-    uint64_t storageCompPtr[2] = {0, 0};
-    fn_FindComponent_Storage((void*)entityPtr[0], &storageCompPtr);
-
-    int sellCount = *(int*)(s + 0x38);
-
-    // Check merchant state: Find BuildState component
-    uint64_t buildStatePtr[2] = {0, 0};
-    fn_FindComponent_BuildState((void*)entityPtr[0], buildStatePtr);
-
-    // BuildState component: buildStatePtr[0] is the component pointer after CheckPtr.
-    // The decompiler shows *(longlong*)self which is the IBP dereference = buildStatePtr[0].
-    // Then byte at +0x52 (fallback +0x50 if negative) compared to 0x13 (merchant arrived).
-    uintptr_t bsComp = buildStatePtr[0];
-    int8_t stateByte = *(int8_t*)(bsComp + 0x52);
-    if (stateByte < 0) stateByte = *(int8_t*)(bsComp + 0x50);
+    // Byte at +0x52 (fallback +0x50 if negative) compared to 0x13 (merchant arrived).
+    int8_t stateByte = *(int8_t*)((uintptr_t)bsComp + 0x52);   // LEFT: COMP-e
+    if (stateByte < 0) stateByte = *(int8_t*)((uintptr_t)bsComp + 0x50);   // LEFT: COMP-e
     bool merchantArrived = (stateByte == 0x13);
 
     if (sellCount > 0) {
         for (int i = 0; i < sellCount; i++) {
-            uintptr_t sellOffset = (uintptr_t)i * 0x20;
-            uintptr_t sellEntries = *(uintptr_t*)(s + 0x60);  // re-read each iteration
-            uintptr_t sellOrders  = *(uintptr_t*)(s + 0x30);  // re-read each iteration
-            uintptr_t entryBase   = sellEntries + sellOffset;
-            void* resourceEntity  = *(void**)(sellOrders + sellOffset);
+            SellRow& entryBase = _sellRows[i];   // re-read each iteration
+            ComponentDescription* resourceEntity = _sellItems[i].resource;
 
-            // Get available sell count from building component
-            int available = TradeUI_GetResourcePrice_a520((void*)buildingPtr[0], resourceEntity);
+            // Get the post's price for this resource
+            int available = TradeUI_GetResourcePrice_a520(trade, resourceEntity);
 
             // Search StorageComponent's item list for current stored qty
-            uintptr_t storageComp = storageCompPtr[0];
-            int listCount = *(int*)(storageComp + 0x30);
-            void** itemList = *(void***)(storageComp + 0x28);
+            int listCount = storageComp->slotCount;
+            void** itemList = reinterpret_cast<void**>(storageComp->storageSlots);   // LEFT: W0 raw storage
             int storedQty = 0;
             for (int64_t j = 0; j < listCount; j++) {
                 if (itemList[j * 2] == resourceEntity) {
@@ -2332,7 +1811,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
             }
 
             // Set NumberElement (+0x08) to storedQty
-            reinterpret_cast<UI::NumberElement*>(*(void**)(entryBase + 0x08))->SetValue(static_cast<int32_t>(storedQty));  // B.3.6 bridge
+            entryBase.stored->SetValue(static_cast<int32_t>(storedQty));
 
             // Determine spinner max: storedQty if merchant arrived AND available > 0, else 0
             int spinnerMax = storedQty;
@@ -2341,18 +1820,18 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
             }
 
             // sellUI+0x18 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
-            reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetMinMax(0, spinnerMax);  // B.3.6 bridge
+            entryBase.spinner->SetMinMax(0, spinnerMax);
 
-            // Re-read spinner ptr and CheckPtr for GetMaxValue (matches original pattern)
-            int actualMax = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->GetMaxValue();  // B.3.6 bridge
+            // Re-read spinner ptr for GetMaxValue (matches original pattern)
+            int actualMax = entryBase.spinner->GetMaxValue();
 
             // Set increment based on max value; skip SetIncrement entirely if max > 0x64
             if (actualMax <= 0x14) {
-                reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetIncrement(1);  // B.3.6 bridge
+                entryBase.spinner->SetIncrement(1);
             } else if (actualMax <= 0x32) {
-                reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetIncrement(5);  // B.3.6 bridge
+                entryBase.spinner->SetIncrement(5);
             } else if (actualMax <= 0x64) {
-                reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetIncrement(20);  // B.3.6 bridge
+                entryBase.spinner->SetIncrement(20);
             }
             // else: max > 0x64 (100), do NOT call SetIncrement (original skips it)
         }
@@ -2360,105 +1839,85 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
 }
 
 // ============================================================
-// RefreshOrderDisplay (FUN_140082b20): Update order table UI rows
+// RefreshOrderDisplay (0x140082b20): Update order table UI rows
 // ============================================================
-// For each active order in building.orders (+0x40, count at building+0x48, stride 0xc):
+// For each active order in trade.orders (+0x40, count at trade+0x48, stride 0xc):
 //   entry +0 = type index, entry +4 = resource type index, entry +8 = amount
-// Gets sprite from BuildType description sprite sheet and sets it on LabelElement.
-// Gets name text from BuildType string table and sets it on TextElement/LabelElement.
+// Gets sprite from the TradeDescription sprite sheet and sets it on LabelElement.
+// Gets name text from the TradeDescription string table and sets it on the label.
 // Sets SpinnerElement value (order amount).
-// Also handles enable/disable on the last element differently.
-// NOTE: This function requires UI::Sprite and UI::String constructors — calls via
-//       existing fn_LabelElement_SetSprite and fn_TextElement_SetText as raw vtable calls.
+// Also handles enable/disable on the first two elements differently.
 
-void TradeUI_RefreshOrderDisplay(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    void* entity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? entity : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    uint64_t buildingPtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+void TradeUI::RefreshOrderDisplay() {
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
     int iVar7 = 0;
-    uintptr_t building = buildingPtr[0];
 
-    int orderCount = *(int*)(building + 0x48);
+    int orderCount = *(int*)((uintptr_t)trade + 0x48);   // LEFT: COMP-f
     if (orderCount <= 0) return;
 
     for (int64_t idx = 0; idx < orderCount; idx++) {
-        // UI entry array at self+0x90, stride 0x20 (4 InternalBasePtrs per entry)
-        uintptr_t uiEntry = *(uintptr_t*)(s + 0x90) + (uintptr_t)idx * 0x20;
+        // UI entry array at self+0x90, stride 0x20
+        OrderRow& uiEntry = _orderRows[(int)idx];
 
-        // Read order amount from building orders array (stride 0xc)
+        // Read order amount from the post's orders array (stride 0xc)
         int64_t orderOff = idx * 0xc;
-        uintptr_t ordersBase = *(uintptr_t*)(buildingPtr[0] + 0x40);
+        uintptr_t ordersBase = (uintptr_t)trade->field40;   // LEFT: COMP-f
         int amount = *(int*)(ordersBase + orderOff + 8);
 
         // Set spinner value (uiEntry[3] = offset +0x18)
-        reinterpret_cast<UI::SpinnerElement*>(*(void**)(uiEntry + 0x18))->SetValue(amount);  // B.3.6 bridge
+        uiEntry.spinner->SetValue(amount);
 
-        // Get buildTypeDesc and typeIdx for sprite/string lookups
-        void* rawDesc = *(void**)(buildingPtr[0] + 0x18);
-        uintptr_t ordersBase2 = *(uintptr_t*)(buildingPtr[0] + 0x40);
+        // Get the description and typeIdx for sprite/string lookups
+        uintptr_t ordersBase2 = (uintptr_t)trade->field40;   // LEFT: COMP-f
         int typeIdx = *(int*)(ordersBase2 + orderOff + 4);
 
         // IsDerivedFrom check for TradeDescription — original does this each iteration
-        bool isTradeDesc = ::Object::IsDerivedFromNullSafe(rawDesc, TradeDescription::TypeId());
-        void* tradeDesc = isTradeDesc ? rawDesc : nullptr;
+        Description* description = trade->_description;
+        bool isTradeDesc = ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId());
+        TradeDescription* tradeDesc = isTradeDesc
+            ? static_cast<TradeDescription*>(description) : nullptr;
 
-        // Construct UI::Sprite via fn_Sprite_Ctor (NOT raw struct init)
-        // fn_Sprite_Ctor(retbuf, spriteSheet_ExternalPtr, &spriteName_String)
-        // Sprite name is at entriesBase + (typeIdx*3 + 1)*8
-        uint64_t spriteTemp[2] = {0, 0};  // 16-byte retbuf for Sprite constructor
-        uint64_t spriteSheet = *(uint64_t*)((uintptr_t)tradeDesc + 0x20);
-        uintptr_t entriesBase = *(uintptr_t*)((uintptr_t)tradeDesc + 0x38);
-        void* spriteName = (void*)(entriesBase + ((int64_t)typeIdx * 3 + 1) * 8);
-        ::new (static_cast<void*>(spriteTemp)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), *reinterpret_cast<const System::String*>(spriteName));  // B.3.6 bridge
+        // Sprite name is at pairs + (typeIdx*3 + 1)*8 (the 0x18-stride pair array)
+        uintptr_t entriesBase = (uintptr_t)tradeDesc->_pairs;   // LEFT: COMP-f
+        const System::String* spriteName = (const System::String*)(entriesBase + ((int64_t)typeIdx * 3 + 1) * 8);
+        UI::Sprite spriteTemp(::Object::ExternalPtr<UI::SpriteSheet>(tradeDesc->_ref20), *spriteName);
 
         // Copy constructed sprite to local for SetSprite (matches MOVAPS/MOVDQA in original)
-        uint64_t spriteLocal[2];
-        spriteLocal[0] = spriteTemp[0];
-        spriteLocal[1] = spriteTemp[1];
+        UI::Sprite spriteLocal = spriteTemp;
 
-        reinterpret_cast<UI::LabelElement*>(*(void**)(uiEntry + 0x10))->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteLocal));  // B.3.6 bridge
+        uiEntry.label->SetSprite(&spriteLocal);
 
-        // Get buildTypeDesc and typeIdx AGAIN for string lookup (original re-reads)
-        rawDesc = *(void**)(buildingPtr[0] + 0x18);
-        uintptr_t ordersBase3 = *(uintptr_t*)(buildingPtr[0] + 0x40);
+        // Get the description and typeIdx AGAIN for string lookup (original re-reads)
+        uintptr_t ordersBase3 = (uintptr_t)trade->field40;   // LEFT: COMP-f
         typeIdx = *(int*)(ordersBase3 + orderOff + 4);
 
-        isTradeDesc = ::Object::IsDerivedFromNullSafe(rawDesc, TradeDescription::TypeId());
-        tradeDesc = isTradeDesc ? rawDesc : nullptr;
+        description = trade->_description;
+        isTradeDesc = ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId());
+        tradeDesc = isTradeDesc
+            ? static_cast<TradeDescription*>(description) : nullptr;
 
-        // Construct UI::String via fn_UIString_Ctor (NOT raw struct init)
-        // fn_UIString_Ctor(retbuf, stringTable_ExternalPtr, &stringName_String)
-        // String name is at entriesBase + (typeIdx*3 + 2)*8 = entriesBase + typeIdx*0x18 + 0x10
-        uint64_t stringTemp[2] = {0, 0};  // 16-byte retbuf for UIString constructor
-        uint64_t stringTable = *(uint64_t*)((uintptr_t)tradeDesc + 0x28);
-        entriesBase = *(uintptr_t*)((uintptr_t)tradeDesc + 0x38);
-        void* stringName = (void*)(entriesBase + (int64_t)typeIdx * 0x18 + 0x10);
-        ::new (static_cast<void*>(stringTemp)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), *reinterpret_cast<const System::String*>(stringName));  // B.3.6 bridge
+        // String name is at pairs + typeIdx*0x18 + 0x10
+        entriesBase = (uintptr_t)tradeDesc->_pairs;   // LEFT: COMP-f
+        const System::String* stringName = (const System::String*)(entriesBase + (int64_t)typeIdx * 0x18 + 0x10);
+        UI::String stringTemp(::Object::ExternalPtr<UI::StringTable>(tradeDesc->_ref28), *stringName);
 
         // Copy constructed string to local for SetText (matches MOVAPS/MOVDQA in original)
-        uint64_t stringLocal[2];
-        stringLocal[0] = stringTemp[0];
-        stringLocal[1] = stringTemp[1];
+        UI::String stringLocal = stringTemp;
 
-        reinterpret_cast<UI::TextElement*>(*(void**)(uiEntry + 0x10))->SetText(reinterpret_cast<const UI::String*>(stringLocal));  // B.3.6 bridge
+        uiEntry.label->SetText(&stringLocal);
 
         // Enable/disable logic:
         // i==0: disable uiEntry[0] (first up/down button)
         // i==orderCount-1: disable uiEntry[1] (second up/down button)
         if (idx == 0) {
-            VCall_Element_SetEnabled(*(void**)(uiEntry), false);
+            uiEntry.upButton->Enable(false);
         } else {
-            if (iVar7 == *(int*)(buildingPtr[0] + 0x48) - 1) {
-                VCall_Element_SetEnabled(*(void**)(uiEntry + 0x08), false);
+            if (iVar7 == *(int*)((uintptr_t)trade + 0x48) - 1) {   // LEFT: COMP-f
+                uiEntry.downButton->Enable(false);
             }
         }
 
@@ -2467,15 +1926,15 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
 }
 
 // ============================================================
-// RefreshDisplay (FUN_1400846b0): Rebuild sorted storage table display
+// RefreshDisplay (0x1400846b0): Rebuild sorted storage table display
 // ============================================================
-// Original: 0x1400846b0 (336 lines)
+// Original: 0x1400846b0 (336 lines). Takes only `this` (RDX/R8/R9 are never read).
 //
-// Iterates the global trade entity list (game world +0xF0), finds
+// Iterates the global raw-material list (game world +0xF0), finds
 // ResourceType and ValueDescription sub-objects on each entity,
 // builds a display array (stride 0x18: {entity, resourceComp, valueDescComp}).
 //
-// Finds TradeComponent and StorageComponent on the owning building entity.
+// Finds TradeComponent and StorageComponent on the owning post entity.
 // Sorts entries by name (sort combo == 0) or by quantity (sort combo != 0).
 //
 // For each entry: sets sprite icon + name text on label element, looks up
@@ -2483,123 +1942,111 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
 // from TradeComponent's BST, sets NumberElement and SpinnerElement values.
 // Clears remaining UI rows beyond the data.
 
-// Helper: find a sub-object on a description/external entity (array at +0x28, count at +0x30)
-static void* FindDescSubObject(void* descEntity, uint32_t* typeIdPtr) {
-    if (!descEntity || !typeIdPtr) return nullptr;
-    uint32_t target = *typeIdPtr;
-    void** compArray = *(void***)((uintptr_t)descEntity + 0x28);
-    int compCount = *(int*)((uintptr_t)descEntity + 0x30);
-    for (int i = 0; i < compCount; i++) {
-        void* comp = compArray[i];
-        if (!comp) continue;
-        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if ((uint32_t)typeId == target) {
-            if (::Object::IsDerivedFromNullSafe(comp, target))
-                return comp;
-            break;
-        }
-    }
-    return nullptr;
-}
-
-void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Get trade entity list from game world singleton (+0xF0)
-    uintptr_t tradeList = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
-    int entityCount = *(int*)(tradeList + 0x118);
+void TradeUI::RefreshDisplay() {
+    // Get the raw-material list from game world singleton (+0xF0)
+    void* tradeList = GameUpdateLoop::_singleton->m_citizenList;
+    int entityCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tradeList) + 0x118);   // LEFT: CitizenBehavior (WORK-a)
 
     // Clear display entries array at self+0x50
-    TradeUI_DynArrayClear_16200(reinterpret_cast<int64_t*>(s + 0x50));   // 0x140016200
+    _storageItems.Clear();   // 0x140016200
 
-    // Build display entries: for each trade entity, find ResourceType + ValueDescription
+    // Build display entries: for each entity, find ResourceType + ValueDescription
     for (int i = 0; i < entityCount; i++) {
-        uintptr_t entity = *(uintptr_t*)(*(uintptr_t*)(tradeList + 0x110) + (uintptr_t)i * 8);
+        ComponentDescription* entity = (*reinterpret_cast<ComponentDescription***>(
+            reinterpret_cast<uintptr_t>(tradeList) + 0x110))[i];   // LEFT: CitizenBehavior (WORK-a)
 
-        uint32_t rawMaterialDescriptionTypeId = RawMaterialDescription::TypeId();
-        void* resourceComp = FindDescSubObject((void*)entity, &rawMaterialDescriptionTypeId);
-        uint32_t valueDescriptionTypeId = ValueDescription::TypeId();
-        void* valueComp = FindDescSubObject((void*)entity, &valueDescriptionTypeId);
+        RawMaterialDescription* resourceComp = nullptr;
+        {
+            int compCount = entity ? entity->_subDescCount : 0;
+            for (int c = 0; c < compCount; c++) {
+                ::Object::Base* comp = reinterpret_cast<::Object::Base*>(entity->_subDescs[c]);   // LEFT: COMP-c
+                if (!comp) continue;
+                if ((uint32_t)comp->Type() == RawMaterialDescription::TypeId()) {
+                    if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId()))
+                        resourceComp = static_cast<RawMaterialDescription*>(comp);
+                    break;
+                }
+            }
+        }
+        ValueDescription* valueComp = nullptr;
+        {
+            int compCount = entity ? entity->_subDescCount : 0;
+            for (int c = 0; c < compCount; c++) {
+                ::Object::Base* comp = reinterpret_cast<::Object::Base*>(entity->_subDescs[c]);   // LEFT: COMP-c
+                if (!comp) continue;
+                if ((uint32_t)comp->Type() == ValueDescription::TypeId()) {
+                    if (::Object::IsDerivedFromNullSafe(comp, ValueDescription::TypeId()))
+                        valueComp = static_cast<ValueDescription*>(comp);
+                    break;
+                }
+            }
+        }
 
         // Push 0x18-byte entry {entity, resourceComp, valueComp} into the display
         // array at +0x50.
-        // B.3.2 bridge: TradeUI+0x50 is Collection::Array<{entity, resourceComp,
-        // valueComp}> (stride 0x18, count +0x58, capacity +0x5C).
-        auto& displayRows = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0x50);
-        displayRows.SetSize(displayRows.GetSize() + 1,
-                             GameColl::Bytes<0x18, 8>(entity, (uint64_t)resourceComp,
-                                            (uint64_t)valueComp));
+        _storageItems.SetSize(_storageItems.GetSize() + 1,
+                              StorageItem{entity, resourceComp, valueComp});
     }
 
     // Get owning entity -> TradeComponent + StorageComponent
-    void* ownerEntity = *(void**)(s + 0x28);
-    bool isDerived = ::Object::IsDerivedFromNullSafe(ownerEntity, ComponentEntity::TypeId());
-    void* compEntity = isDerived ? ownerEntity : nullptr;
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* ownerEntity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
 
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
-
-    // Find TradeComponent (uses TypeId_TradeComponent_FC = DAT_1401c4b80)
-    uint64_t tradePtr[2] = {0, 0};
-    fn_FindComponent_Building((void*)entityPtr[0], &tradePtr);
+    // Find TradeComponent (cell 0x1401c4b80)
+    TradeComponent* trade = ownerEntity->FindComponent<TradeComponent>();
 
     // Validate TradeDescription derivation (result unused — validation only)
-    ::Object::IsDerivedFromNullSafe(*(void**)(tradePtr[0] + 0x18), TradeDescription::TypeId());
+    ::Object::IsDerivedFromNullSafe(trade->_description, TradeDescription::TypeId());
 
     // Find StorageComponent
-    uint64_t storagePtr[2] = {0, 0};
-    fn_FindComponent_Storage((void*)entityPtr[0], &storagePtr);
+    StorageComponent* storage = ownerEntity->FindComponent<StorageComponent>();
 
     // Sort entries based on sort combo selection (+0x140 = sortCombo element)
-    int entryCount = *(int*)(s + 0x58);
-    int sortMode = *(int*)(*(uintptr_t*)(s + 0x140) + 0x118);
+    int entryCount = _storageItems._size;
+    int sortMode = _sortCombo->_currentItem;
 
     if (sortMode == 0) {
         // Sort by name
         if (entryCount > 1) {
-            uint64_t sortCtx = (uint64_t)tradeList;
-            TradeUI_IntroSort_ByName_162d0(*(void**)(s + 0x50), entryCount, &sortCtx, p4);
+            TradeUI_IntroSort_ByName_162d0(_storageItems._data, entryCount);
         }
     } else {
         // Sort by quantity (uses TradeComponent as context)
-        uint64_t sortCtx = tradePtr[0];
-        TradeUI_IntroSort_ByComponent_165d0(*(void**)(s + 0x50), entryCount, &sortCtx);
+        TradeComponent* sortCtx = trade;
+        TradeUI_IntroSort_ByComponent_165d0(_storageItems._data, entryCount, &sortCtx);
     }
 
     // Re-read count (may have been modified)
-    entryCount = *(int*)(s + 0x58);
+    entryCount = _storageItems._size;
 
     // --- Display loop: populate UI rows with data ---
     for (int i = 0; i < entryCount; i++) {
-        int byteOff = i * 0x18;
-        uintptr_t* entry = (uintptr_t*)(*(uintptr_t*)(s + 0x50) + byteOff);
-        uintptr_t* uiRow = (uintptr_t*)(*(uintptr_t*)(s + 0x80) + byteOff);
+        StorageItem& entry = _storageItems[i];
+        StorageRow& uiRow = _storageRows[i];
 
-        uintptr_t valueDesc = entry[2];  // ValueDescription component
+        ValueDescription* valueDesc = entry.value;  // ValueDescription component
 
         // Set sprite icon from ValueDescription (+0x20=spriteSheet, +0x28=spriteName)
-        uint8_t spriteTmp[32] = {};
-        ::new (static_cast<void*>(spriteTmp)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(valueDesc + 0x20))), *reinterpret_cast<const System::String*>(valueDesc + 0x28));  // B.3.6 bridge
-        uint64_t spriteVal[2] = {((uint64_t*)spriteTmp)[0], ((uint64_t*)spriteTmp)[1]};
-        reinterpret_cast<UI::LabelElement*>(*(void**)uiRow)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteVal));  // B.3.6 bridge
+        UI::Sprite spriteTmp(::Object::ExternalPtr<UI::SpriteSheet>(valueDesc->_sprite), valueDesc->_name);
+        UI::Sprite spriteVal = spriteTmp;
+        uiRow.label->SetSprite(&spriteVal);
 
         // Set text name from ValueDescription (+0x30=stringTable, +0x38=stringName)
         // Original uses fn_UIString_Ctor — TextElement::SetText expects UI::String, not System::String
-        uint64_t strBuf[2] = {0, 0};
-        ::new (static_cast<void*>(strBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(valueDesc + 0x30))), *reinterpret_cast<const System::String*>(valueDesc + 0x38));  // B.3.6 bridge
-        uint64_t strVal[2] = {strBuf[0], strBuf[1]};
-        reinterpret_cast<UI::TextElement*>(*(void**)uiRow)->SetText(reinterpret_cast<const UI::String*>(strVal));  // B.3.6 bridge
+        UI::String strBuf(::Object::ExternalPtr<UI::StringTable>(valueDesc->_ref30), valueDesc->_s38);
+        UI::String strVal = strBuf;
+        uiRow.label->SetText(&strVal);
 
         // Lookup inventory count from StorageComponent item array (+0x28/+0x30)
         // Each item is 0x10 bytes: {key(uint64), countA(int32), countB(int32)}
         // Result = countA - countB (available = total - committed)
         int invCount = 0;
-        uintptr_t scAddr = storagePtr[0];
-        int scItemCount = *(int*)(scAddr + 0x30);
-        uintptr_t scItems = *(uintptr_t*)(scAddr + 0x28);
+        int scItemCount = storage->slotCount;
+        uintptr_t scItems = (uintptr_t)storage->storageSlots;   // LEFT: W0 raw storage
         for (int j = 0; j < scItemCount; j++) {
             uintptr_t itemAddr = scItems + (uintptr_t)j * 0x10;
-            if (*(uintptr_t*)itemAddr == entry[0]) {
+            if (*(uintptr_t*)itemAddr == reinterpret_cast<uintptr_t>(entry.resource)) {
                 if (j >= 0) {
                     invCount = *(int*)(itemAddr + 8) - *(int*)(itemAddr + 0xC);
                 }
@@ -2608,17 +2055,17 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         }
 
         // Set NumberElement value (at uiRow + 0x10)
-        void* numSlot = (void*)((uintptr_t)uiRow + 0x10);
-        reinterpret_cast<UI::NumberElement*>(*(void**)numSlot)->SetValue(static_cast<int32_t>(invCount));  // B.3.6 bridge
+        uiRow.count->SetValue(static_cast<int32_t>(invCount));
 
-        // Lookup trade order amount from TradeComponent BST (red-black tree at +0x60)
+        // Lookup trade order amount from TradeComponent BST (tree at +0x60)
         // Node: {key(+0), value(+8), color(+10), left(+18), right(+20)}
         int orderAmt = 0;
-        uintptr_t* bstNode = *(uintptr_t**)(tradePtr[0] + 0x60);
+        const uintptr_t key = reinterpret_cast<uintptr_t>(entry.resource);
+        uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->field60);   // LEFT: COMP-f
         while (bstNode != nullptr) {
-            if (entry[0] < *bstNode) {
+            if (key < *bstNode) {
                 bstNode = (uintptr_t*)bstNode[3];  // left child at +0x18
-            } else if (entry[0] > *bstNode) {
+            } else if (key > *bstNode) {
                 bstNode = (uintptr_t*)bstNode[4];  // right child at +0x20
             } else {
                 orderAmt = (int)bstNode[1];  // value at +0x08
@@ -2627,55 +2074,61 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         }
 
         // Set SpinnerElement value (at uiRow + 0x08)
-        void* spinSlot = (void*)((uintptr_t)uiRow + 8);
-        reinterpret_cast<UI::SpinnerElement*>(*(void**)spinSlot)->SetValue(orderAmt);  // B.3.6 bridge
+        uiRow.spinner->SetValue(orderAmt);
 
         // Enable spinner and number elements via vtable[8] (+0x40) = SetEnabled
-        Element_SetEnabled(*(void**)spinSlot, true);
-        Element_SetEnabled(*(void**)numSlot, true);
+        uiRow.spinner->Enable(true);
+        uiRow.count->Enable(true);
 
         // spinSlot is storage entry[1] = SpinnerElement (confirmed via vtable at runtime)
-        reinterpret_cast<UI::SpinnerElement*>(*(void**)spinSlot)->SetMinMax(0, 9999);  // B.3.6 bridge
+        uiRow.spinner->SetMinMax(0, 9999);
 
         // Set spinner element name to resource path filename.
         // `GetPath` returns by value through a hidden return slot and the callee
         // CONSTRUCTS into it; copy-initialising the local is the same store.
-        System::Filename pathBuf =
-            reinterpret_cast<const ::Object::External*>(entry[0])->GetPath();  // B.3.3 bridge
+        System::Filename pathBuf = entry.resource->GetPath();
         System::Filename filenameBuf = pathBuf.GetPathFilename(false);
-        reinterpret_cast<UI::Element*>(*(void**)spinSlot)->SetName(*reinterpret_cast<const System::String*>(&filenameBuf));  // B.3.6 bridge
+        uiRow.spinner->SetName(filenameBuf.AsString());
     }
 
     // --- Clear remaining UI rows beyond data ---
-    int uiRowCount = *(int*)(s + 0x88);
+    int uiRowCount = _storageRows._size;
     for (int i = entryCount; i < uiRowCount; i++) {
-        int byteOff = i * 0x18;
-        uintptr_t* uiRow = (uintptr_t*)(*(uintptr_t*)(s + 0x80) + byteOff);
+        StorageRow& uiRow = _storageRows[i];
 
         // Set blank sprite
-        uint8_t blankSprite[16] = {};
-        ::new (static_cast<void*>(blankSprite)) UI::Sprite();  // B.3.6 bridge
-        uint64_t spriteVal[2] = {((uint64_t*)blankSprite)[0], ((uint64_t*)blankSprite)[1]};
-        reinterpret_cast<UI::LabelElement*>(*(void**)uiRow)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteVal));  // B.3.6 bridge
+        UI::Sprite blankSprite;
+        UI::Sprite spriteVal = blankSprite;
+        uiRow.label->SetSprite(&spriteVal);
 
         // Set blank text — must use UI::String default ctor, not System::String
-        uint64_t blankStr[2] = {0, 0};
-        ::new (static_cast<void*>(blankStr)) UI::String();  // B.3.6 bridge
-        uint64_t strVal[2] = {blankStr[0], blankStr[1]};
-        reinterpret_cast<UI::TextElement*>(*(void**)uiRow)->SetText(reinterpret_cast<const UI::String*>(strVal));  // B.3.6 bridge
+        UI::String blankStr;
+        UI::String strVal = blankStr;
+        uiRow.label->SetText(&strVal);
 
         // Disable spinner (at +8) via vtable SetEnabled
-        void* spinSlot = (void*)((uintptr_t)uiRow + 8);
-        Element_SetEnabled(*(void**)spinSlot, false);
+        uiRow.spinner->Enable(false);
 
         // Disable number (at +0x10) via vtable SetEnabled
-        void* numSlot = (void*)((uintptr_t)uiRow + 0x10);
-        Element_SetEnabled(*(void**)numSlot, false);
+        uiRow.count->Enable(false);
 
         // spinSlot is storage entry[1] = SpinnerElement (confirmed via vtable at runtime)
-        reinterpret_cast<UI::SpinnerElement*>(*(void**)spinSlot)->SetMinMax(0, 0);  // B.3.6 bridge
+        uiRow.spinner->SetMinMax(0, 0);
     }
 }
+
+// ============================================================
+// B4 FORWARD: the C spellings of the members above that callers outside this
+// block still name (standalone/trade_buy_harness.cpp declares its own copies).
+// ============================================================
+// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
+void TradeUI_UpdateBuyTotals(TradeUI* self) { self->UpdateBuyTotals(); }
+// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
+void TradeUI_UpdateSellTotals(TradeUI* self) { self->UpdateSellTotals(); }
+// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
+void TradeUI_RefreshSellTable(TradeUI* self) { self->RefreshSellTable(); }
+// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
+void TradeUI_RefreshBuyTable(TradeUI* self) { self->RefreshBuyTable(); }
 
 // ============================================================
 // NOTE: this block used to defer three functions as "needs opus". All three have
@@ -2683,8 +2136,8 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 // that outlives the deferral is exactly the kind of comment this project keeps
 // getting bitten by.
 //
-//   fn_TradeUI_RefreshSellTable (0x140083c70) -> TradeUI_RefreshSellTable, above
-//   fn_TradeUI_RefreshBuyTable  (0x140083100) -> TradeUI_RefreshBuyTable, above
+//   fn_TradeUI_RefreshSellTable (0x140083c70) -> TradeUI::RefreshSellTable, above
+//   fn_TradeUI_RefreshBuyTable  (0x140083100) -> TradeUI::RefreshBuyTable, above
 //   fn_TradeUI_OnTradeButton    (0x140081420) -> code/Game/Dialog/tradeui_checkout.cpp
 //
 // The old description of the checkout said it "destroys/removes/spawns entities".

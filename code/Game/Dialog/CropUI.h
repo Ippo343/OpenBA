@@ -19,6 +19,8 @@
 #include "Dialog/SelectResourceUI.h"
 #include "Object/exe_type.h"
 
+namespace UI { class ProgressElement; }
+
 class CropUI final : public SelectResourceUI {
     DECLARE_EXE_TYPE(CropUI)
 
@@ -38,7 +40,8 @@ public:
     int   GetCategory() override;                                 // [13] 0x1400b29c0  XOR EAX,EAX
 
     // ---- fields (the Panels.h POD's names) -----------------------------------
-    uint64_t data38 = 0;           // +0x38: "yield" ProgressElement (InternalBasePtr)
+    UI::ProgressElement* yield = nullptr;  // +0x38: "yield" ProgressElement (0x1400b2b50)
+    // +0x40 / +0x50: two Array/String members (H5 raw: retail's teardown frees them)
     uint64_t data40 = 0;           // +0x40
     uint64_t data48 = 0;           // +0x48
     uint64_t data50 = 0;           // +0x50
@@ -47,4 +50,6 @@ public:
 
 static_assert(sizeof(CropUI) == 0x60, "CropUI is 0x60 (create 0x140020b10 MemAlloc(0x60))");
 static_assert(alignof(CropUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(CropUI, data38) == 0x38, "yield @ +0x38 (0x1400b2b50)");
+static_assert(offsetof(CropUI, yield) == 0x38, "yield @ +0x38 (0x1400b2b50)");
+static_assert(offsetof(CropUI, data40) == 0x40, "+0x40");
+static_assert(offsetof(CropUI, data50) == 0x50, "+0x50");

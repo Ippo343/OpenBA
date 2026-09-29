@@ -66,8 +66,8 @@
 
 using RtSystem::WideString;
 using System::String;
-using RtVideo::Device;
-using RtVideo::InterfaceSlot;
+using Video::Device;
+using InterfaceSlot = Video::Device::InterfaceSlot;
 
 // standalone/video_interface.cpp. Declared at FILE scope (it used to be a
 // block-scope `extern` inside the body; inside a `Video::Device` member that
@@ -89,13 +89,8 @@ const char kSuffixExt[]  = ".dll";
 const char kProcCreateDeviceData[] = "CreateDeviceData";
 const char kProcGetDeviceName[]    = "GetDeviceName";
 
+// Device::dllSlots (+0xB0). B.4 (R-VIDEO): the unused by-offset `SlotAt` is gone.
 constexpr int kSlotCount  = 3;
-constexpr uintptr_t kSlot0 = 0xb0;
-
-inline InterfaceSlot* SlotAt(Device* self, int i) {
-    return reinterpret_cast<InterfaceSlot*>(
-        reinterpret_cast<uint8_t*>(self) + kSlot0 + static_cast<uintptr_t>(i) * 0x18);
-}
 
 // ENDGAME B.3.1 step 2: retail's inlined `String::operator=(const String&)` at
 // 0x1800f7b7a (and the two identical copies at 0x1800f7bc9 / 0x1800f7c16) IS

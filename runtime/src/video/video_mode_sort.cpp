@@ -98,13 +98,11 @@
 
 #include "../../types/video/Device.h"
 
-using RtVideo::DisplayMode;
-using RtVideo::RefreshRate;
+using DisplayMode = Video::Device::DisplayMode;
+using RefreshRate = Video::Device::RefreshRate;
 
-// Lane VID2's ports, registered at device_startup.cpp:873/877. Declared rather
-// than included: they live in that file's translation unit with C linkage.
-extern "C" void* RtVideo_ArrayRefreshAssign(void* dst, const void* src);
-extern "C" void  RtVideo_ArrayRefreshDtor(void* a);
+// Lane VID2's Array<RefreshRate> ports (device_startup.cpp) are declared in
+// Device.h and take the DisplayMode's three named fields.
 
 namespace rtvidsort {
 
@@ -171,26 +169,28 @@ void SwapMode(DisplayMode* a, DisplayMode* b) {
     tmp.refreshData     = nullptr;               // 0x1800584ee — ZEROED before
     tmp.refreshCount    = 0;                     //   the assign, so operator=
     tmp.refreshCapacity = 0;                     //   sees an empty destination
-    RtVideo_ArrayRefreshAssign(&tmp.refreshData, &a->refreshData);   // 0x180058501
+    RtVideo_ArrayRefreshAssign(tmp.refreshData, tmp.refreshCount, tmp.refreshCapacity,
+                               a->refreshData, a->refreshCount);     // 0x180058501
 
     a->width  = b->width;                        // 0x180058507
     a->height = b->height;
-    RtVideo_ArrayRefreshAssign(&a->refreshData, &b->refreshData);    // 0x180058519
+    RtVideo_ArrayRefreshAssign(a->refreshData, a->refreshCount, a->refreshCapacity,
+                               b->refreshData, b->refreshCount);     // 0x180058519
 
     b->width  = tmp.width;                       // 0x18005851e
     b->height = tmp.height;
-    RtVideo_ArrayRefreshAssign(&b->refreshData, &tmp.refreshData);   // 0x180058534
+    RtVideo_ArrayRefreshAssign(b->refreshData, b->refreshCount, b->refreshCapacity,
+                               tmp.refreshData, tmp.refreshCount);   // 0x180058534
 
-    RtVideo_ArrayRefreshDtor(&tmp.refreshData);  // 0x18005853f
+    RtVideo_ArrayRefreshDtor(tmp.refreshData, tmp.refreshCount,
+                             tmp.refreshCapacity);                   // 0x18005853f
 }
 
 // A plain 8-byte swap; retail moves RefreshRate as one qword (0x1800577d4).
 inline void SwapRate(RefreshRate* a, RefreshRate* b) {
-    uint64_t* x = reinterpret_cast<uint64_t*>(a);
-    uint64_t* y = reinterpret_cast<uint64_t*>(b);
-    const uint64_t t = *x;
-    *x = *y;
-    *y = t;
+    const RefreshRate t = *a;
+    *a = *b;
+    *b = t;
 }
 
 // ---------------------------------------------------------------------------
@@ -377,11 +377,12 @@ void IntroSort(T* first, int32_t count, SortCounters* sc) {
         // Retail computes both spans in BYTES and masks the low bits off
         // (`AND ...,-8`), then compares with a SIGNED `JL`. Kept in that form:
         // the mask is a no-op on well-formed pointers and the signedness is
-        // what the mask exists to make safe.
-        const int64_t rightBytes = (reinterpret_cast<int64_t>(hi) -
-                                    reinterpret_cast<int64_t>(i)) & ~static_cast<int64_t>(7);
-        const int64_t leftBytes  = (reinterpret_cast<int64_t>(j) -
-                                    reinterpret_cast<int64_t>(lo)) & ~static_cast<int64_t>(7);
+        // what the mask exists to make safe. The byte span of two slots of one
+        // array is their element distance times the element size.
+        const int64_t rightBytes = (static_cast<int64_t>(hi - i) *
+                                    static_cast<int64_t>(sizeof(T))) & ~static_cast<int64_t>(7);
+        const int64_t leftBytes  = (static_cast<int64_t>(j - lo) *
+                                    static_cast<int64_t>(sizeof(T))) & ~static_cast<int64_t>(7);
 
         if (leftBytes >= rightBytes) {
             if (lo < j) { ++sc->pushes; stackLo[depth] = lo; stackHi[depth] = j; ++depth; }

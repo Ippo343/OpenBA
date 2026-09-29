@@ -17,6 +17,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class ProgressElement; }
+
 class CemeteryUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(CemeteryUI)
 
@@ -30,8 +32,9 @@ public:
     void OnUpdateLayout() override;   // [7] 0x14005ef50
 
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
+    UI::ProgressElement* progress = nullptr;  // +0x30 FindElementType(ProgressElement) (0x14005f090)
 };
 
 static_assert(sizeof(CemeteryUI) == 0x38, "CemeteryUI is 0x38 (create 0x140010900 MemAlloc(0x38))");
 static_assert(alignof(CemeteryUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(CemeteryUI, progress) == 0x30, "CemeteryUI::progress @ +0x30 (0x14005f090)");

@@ -58,15 +58,28 @@
 #include "Entity/componententity_funcs.h"     // B3R: ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Component/firecomponent_funcs.h"    // B3R: FireComponent_Ignite_610
 #include "Component/diseasecomponent_funcs.h" // B3R: DiseaseComp_Infect
+#include "Entity/CitizenBehavior.h"            // B4 DLG-a: the town lists
+#include "Component/PastureComponent.h"
+#include "Component/PopulationComponent.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "ui/SliderElement.h"          // B4 DLG-a: the typed DebugUI fields
+#include "ui/CheckElement.h"
+#include "ui/ImageElement.h"
+#include "ui/ButtonElement.h"
+#include "Entity/ComponentEntity.h"    // FindComponent<T>
+#include "Component/FireComponent.h"
+#include "Component/EnvironmentDescription.h"
+#include "Game/WeatherParticleGeometry.h"
+#include "Game/ProfessionList.h"
 
 // ============================================================
-// Static inline implementations (replaces fn_* exe pointer calls)
+// Static helpers (no DebugUI field is read through their first argument)
 // ============================================================
 
 // Game_GetMonthFromTime (FUN_1400932A0)
-// Converts weather manager time to month index 0-11.
-// param_1 = weatherMgr ptr; time stored at +8.
+// Converts the day counter's time to a month index 0-11.
+// param_1 = the day counter (GameUpdateLoop +0x128); its time is at +8.
+// LEFT (B4 DLG-a): the day counter has no class in the tree.
 static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
     float seconds = reinterpret_cast<const System::Time*>((void*)((uintptr_t)weatherMgr + 8))->AsSeconds();   // B.3.4 bridge
     int month = (int)((seconds / 3600.0f) * 12.0f);  // 3600s/yr (DAT_14017225c), 12 months
@@ -74,172 +87,152 @@ static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
     return month;
 }
 
-// DebugUI_SetDayLighting (FUN_140061780)
-// Reads per-month lighting data from weather table, writes to slider elements.
-// Weather table = **(gameWorld+0x130); entry stride = 0x20; month=param_2.
-// Entry layout (+month*0x20): [+0x38]=R [+0x3d]=G [+0x3c]=B sun byte channels
-// Sun: [0x3e]=R [0x3d]=G [0x3c]=B; Amb: [0x3a]=R [0x39]=G [0x38]=B;
-// Fog: [0x42]=R [0x41]=G [0x40]=B; sun H/P at [0x50/0x54]; fog N/F/M at [0x44/0x48/0x4c]
-static void DebugUI_SetDayLighting_Impl(DebugUI* self, int month) {
-    uintptr_t s = (uintptr_t)self;
+// The weather simulation (GameUpdateLoop +0x130, 0x78 bytes) has no class in the
+// tree: its first qword is the ExternalPtr<EnvironmentDescription> (the
+// Environment.rsc keyframe table), +0x10 an int state, +0x50 the per-weather
+// particle geometries. LEFT (B4 DLG-a): each read below keeps one cast of
+// `m_weather`.
+
+// DebugUI::SetDayLighting (FUN_140061780)
+// Reads one month's lighting keyframe from the environment, writes the sliders.
+// The keyframe is EnvironmentDescription::_months[month] (+0x38 + month*0x20):
+// sun = the dword at +0x04 (R at byte 2, G byte 1, B byte 0), ambient = +0x00,
+// fog = +0x08; fog near / far / max at +0x0c / +0x10 / +0x14; sun heading /
+// pitch at +0x18 / +0x1c.
+void DebugUI::SetDayLighting(int month) {
     // weatherTable = **(gameWorld+0x130) == envRes (null if Environment.rsc
     // failed to load; guard so the reads below don't hit a wild low address).
-    void** weatherListPtr = *(void***)((uintptr_t)(GameUpdateLoop::_singleton) + 0x130);
-    uintptr_t weatherTable = weatherListPtr ? *(uintptr_t*)weatherListPtr : 0;
-    if (!weatherTable) return;
-    uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
+    EnvironmentDescription** weatherSim = (EnvironmentDescription**)GameUpdateLoop::_singleton->m_weather;
+    EnvironmentDescription* env = weatherSim ? *weatherSim : nullptr;
+    if (!env) return;
+    const EnvironmentDescription::WeatherEntry& entry = env->_months[month];
 
-    *(float*)(*(uintptr_t*)(s + 0x80) + 0x128) = (float)*(uint8_t*)(entry + 0x3e); // sunR
-    *(float*)(*(uintptr_t*)(s + 0x88) + 0x128) = (float)*(uint8_t*)(entry + 0x3d); // sunG
-    *(float*)(*(uintptr_t*)(s + 0x90) + 0x128) = (float)*(uint8_t*)(entry + 0x3c); // sunB
-    *(uint32_t*)(*(uintptr_t*)(s + 0xe0) + 0x128) = *(uint32_t*)(entry + 0x50);    // sunH (float)
-    *(uint32_t*)(*(uintptr_t*)(s + 0xe8) + 0x128) = *(uint32_t*)(entry + 0x54);    // sunP (float)
-    *(float*)(*(uintptr_t*)(s + 0x98) + 0x128) = (float)*(uint8_t*)(entry + 0x3a); // ambR
-    *(float*)(*(uintptr_t*)(s + 0xa0) + 0x128) = (float)*(uint8_t*)(entry + 0x39); // ambG
-    *(float*)(*(uintptr_t*)(s + 0xa8) + 0x128) = (float)*(uint8_t*)(entry + 0x38); // ambB
-    *(float*)(*(uintptr_t*)(s + 0xb0) + 0x128) = (float)*(uint8_t*)(entry + 0x42); // fogR
-    *(float*)(*(uintptr_t*)(s + 0xb8) + 0x128) = (float)*(uint8_t*)(entry + 0x41); // fogG
-    *(float*)(*(uintptr_t*)(s + 0xc0) + 0x128) = (float)*(uint8_t*)(entry + 0x40); // fogB
-    *(uint32_t*)(*(uintptr_t*)(s + 0xc8) + 0x128) = *(uint32_t*)(entry + 0x44);    // fogN (float)
-    *(uint32_t*)(*(uintptr_t*)(s + 0xd0) + 0x128) = *(uint32_t*)(entry + 0x48);    // fogF (float)
-    *(float*)(*(uintptr_t*)(s + 0xd8) + 0x128) =
-        *(float*)(entry + 0x4c) * 255.0f;  // fogM (normalize)
+    valueSunR->_value = (float)(uint8_t)(entry.groundColor >> 16);   // sunR  (+0x3e)
+    valueSunG->_value = (float)(uint8_t)(entry.groundColor >> 8);    // sunG  (+0x3d)
+    valueSunB->_value = (float)(uint8_t)entry.groundColor;           // sunB  (+0x3c)
+    valueSunH->_value = entry.sunAngle;                              // sunH  (+0x50)
+    valueSunP->_value = entry.sunSpread;                             // sunP  (+0x54)
+    valueAmbR->_value = (float)(uint8_t)(entry.skyColor >> 16);      // ambR  (+0x3a)
+    valueAmbG->_value = (float)(uint8_t)(entry.skyColor >> 8);       // ambG  (+0x39)
+    valueAmbB->_value = (float)(uint8_t)entry.skyColor;              // ambB  (+0x38)
+    valueFogR->_value = (float)(uint8_t)(entry.fogColor >> 16);      // fogR  (+0x42)
+    valueFogG->_value = (float)(uint8_t)(entry.fogColor >> 8);       // fogG  (+0x41)
+    valueFogB->_value = (float)(uint8_t)entry.fogColor;              // fogB  (+0x40)
+    valueFogN->_value = entry.fogStart;                              // fogN  (+0x44)
+    valueFogF->_value = entry.fogEnd;                                // fogF  (+0x48)
+    valueFogM->_value = entry.sunIntensity * 255.0f;                 // fogM  (+0x4c, normalize)
 }
 
-// DebugUI_WriteLightingColors (FUN_140061530)
-// Reads slider values from UI elements, writes packed ARGB colors to weather table.
-// Inverse of SetDayLighting: slider → weather table.
-static void DebugUI_WriteLightingColors_Impl(DebugUI* self, int month) {
-    uintptr_t s = (uintptr_t)self;
-    void** weatherListPtr = *(void***)((uintptr_t)(GameUpdateLoop::_singleton) + 0x130);
+// DebugUI::WriteLightingColors (FUN_140061530)
+// Reads the sliders, writes packed ARGB colours into the month's keyframe.
+// Inverse of SetDayLighting: slider -> keyframe.
+void DebugUI::WriteLightingColors(int month) {
     // weatherTable == *(weatherSim+0) == envRes (Environment.rsc keyframe table).
     // Null if Environment.rsc failed to load; without this guard the per-month
     // writes below would target (0 + month*0x20) — a wild low-address store.
-    uintptr_t weatherTable = weatherListPtr ? *(uintptr_t*)weatherListPtr : 0;
-    if (!weatherTable) return;
-    uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
+    EnvironmentDescription** weatherSim = (EnvironmentDescription**)GameUpdateLoop::_singleton->m_weather;
+    EnvironmentDescription* env = weatherSim ? *weatherSim : nullptr;
+    if (!env) return;
+    EnvironmentDescription::WeatherEntry& entry = env->_months[month];
 
-    float sunR = *(float*)(*(uintptr_t*)(s + 0x80) + 0x128);
-    float sunG = *(float*)(*(uintptr_t*)(s + 0x88) + 0x128);
+    float sunR = valueSunR->_value;
+    float sunG = valueSunG->_value;
     // Pack sun ARGB at entry+0x3c
-    *(uint32_t*)(entry + 0x3c) = ((int)sunR << 8 | (int)sunG) << 8
-        | (int)*(float*)(*(uintptr_t*)(s + 0x90) + 0x128) | 0xFF000000;
+    entry.groundColor = ((int)sunR << 8 | (int)sunG) << 8
+        | (int)valueSunB->_value | 0xFF000000;
 
-    float ambR = *(float*)(*(uintptr_t*)(s + 0x98) + 0x128);
-    float ambG = *(float*)(*(uintptr_t*)(s + 0xa0) + 0x128);
+    float ambR = valueAmbR->_value;
+    float ambG = valueAmbG->_value;
     // Pack amb ARGB at entry+0x38
-    *(uint32_t*)(entry + 0x38) = ((int)ambR << 8 | (int)ambG) << 8
-        | (int)*(float*)(*(uintptr_t*)(s + 0xa8) + 0x128) | 0xFF000000;
+    entry.skyColor = ((int)ambR << 8 | (int)ambG) << 8
+        | (int)valueAmbB->_value | 0xFF000000;
 
-    float fogR = *(float*)(*(uintptr_t*)(s + 0xb0) + 0x128);
-    float fogG = *(float*)(*(uintptr_t*)(s + 0xb8) + 0x128);
+    float fogR = valueFogR->_value;
+    float fogG = valueFogG->_value;
     // Pack fog ARGB at entry+0x40
-    *(uint32_t*)(entry + 0x40) = ((int)fogR << 8 | (int)fogG) << 8
-        | (int)*(float*)(*(uintptr_t*)(s + 0xc0) + 0x128) | 0xFF000000;
+    entry.fogColor = ((int)fogR << 8 | (int)fogG) << 8
+        | (int)valueFogB->_value | 0xFF000000;
 
-    *(uint32_t*)(entry + 0x50) = *(uint32_t*)(*(uintptr_t*)(s + 0xe0) + 0x128); // sunH
-    *(uint32_t*)(entry + 0x54) = *(uint32_t*)(*(uintptr_t*)(s + 0xe8) + 0x128); // sunP
-    *(uint32_t*)(entry + 0x44) = *(uint32_t*)(*(uintptr_t*)(s + 0xc8) + 0x128); // fogN
-    *(uint32_t*)(entry + 0x48) = *(uint32_t*)(*(uintptr_t*)(s + 0xd0) + 0x128); // fogF
-    *(float*)(entry + 0x4c) = *(float*)(*(uintptr_t*)(s + 0xd8) + 0x128) / 255.0f; // fogM
+    entry.sunAngle     = valueSunH->_value;           // sunH (+0x50)
+    entry.sunSpread    = valueSunP->_value;           // sunP (+0x54)
+    entry.fogStart     = valueFogN->_value;           // fogN (+0x44)
+    entry.fogEnd       = valueFogF->_value;           // fogF (+0x48)
+    entry.sunIntensity = valueFogM->_value / 255.0f;  // fogM (+0x4c)
 }
 
-// DebugUI_OnDaySliderChanged (FUN_1400607E0)
+// DebugUI::OnDaySliderChanged (FUN_1400607E0)
 // Reads slider value (0-359), converts to game time, resets weather, sets lighting.
 // DAT_140172238 = 360.0f (slider range), DAT_14017225c = 3600.0f (seconds/year)
 // DAT_1401721cc = 30.0f (days/month for month index calc)
-static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
-    uintptr_t s = (uintptr_t)self;
-    float sliderVal = *(float*)(*(uintptr_t*)(s + 0x78) + 0x128);
+void DebugUI::OnDaySliderChanged() {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    float sliderVal = sliderDay->_value;
 
     // Convert slider (0-359) to game time in ticks
-    int64_t timeTicks;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeTicks), (sliderVal / 360.0f) * 3600.0f);
+    System::Time time;
+    RtSystem_Time_Ctor(&time, (sliderVal / 360.0f) * 3600.0f);
 
-    // Set game world time
-    *(int64_t*)(*(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x128) + 8) = timeTicks;
+    // Set game world time (the day counter's time at +8; LEFT: no class)
+    *(int64_t*)((uintptr_t)gameWorld->m_dayCounter + 8) = time._ticks;
 
     // Reset weather time to 0
-    int64_t zeroTick;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroTick), 0.0f);
-    void** weatherListPtr = *(void***)((uintptr_t)(GameUpdateLoop::_singleton) + 0x130);
-    Weather_ResetTime_Reimpl(weatherListPtr, &zeroTick);   // 0x1400944e0
+    System::Time zeroTime;
+    RtSystem_Time_Ctor(&zeroTime, 0.0f);
+    Weather_ResetTime_Reimpl(GameUpdateLoop::_singleton->m_weather, &zeroTime);   // 0x1400944e0
 
     // Update lighting sliders for the new month
     int monthIdx = (int)(sliderVal / 30.0f);  // 30 days/month
-    DebugUI_SetDayLighting_Impl(self, monthIdx);
+    SetDayLighting(monthIdx);
 }
 
-// DebugUI_OnDiseaseComboChanged (FUN_14005FC60)
-// Handles disease combo selection — updates internal pointer.
-// self+0x38 = diseaseCombo (InternalBasePtr); combo item data is the disease entity.
-static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
-    uintptr_t s = (uintptr_t)self;
-    int selIdx = *(int*)(*(uintptr_t*)(s + 0x38) + 0x118);  // selected item index
+// DebugUI::OnDrawComboChanged (FUN_14005FC60)
+// Element 0x166, the drawCombo (+0x38): retail reads the selected row
+// (`CMP EDI,0x4 ; JL`: rows 0..3 are not population entries), fetches its item
+// data and builds an InternalBasePtr from it that nothing reads (a bare
+// `mov [rcx],rdx` into a stack slot, 0x14005fca1) — the call has no effect.
+void DebugUI::OnDrawComboChanged() {
+    int selIdx = drawCombo->_currentItem;  // selected item index
     if (selIdx > 3) {
-        // Only take action if index > 3 (first 3 are non-disease entries)
-        void* comboElem = *(void**)(s + 0x38);
-        void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(selIdx);  // B.3.6 bridge
-        // Construct InternalBasePtr from item data — used internally by disease system
-        uint8_t basePtrBuf[8];
-        new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(itemData));   // B.3.3 bridge
-        // (result discarded — original function only constructs local_res8 on stack)
+        void* itemData = drawCombo->GetItemData(selIdx);
+        (void)itemData;   // retail's discarded InternalBasePtr(itemData)
     }
 }
 
 // ============================================================
-// DebugUI_OnDrawComboChanged (FUN_1400608A0)
-// Handles draw combo selection — shows/hides scene debug geometry.
+// DebugUI::OnWeatherComboChanged (FUN_1400608A0)
+// Element 0x163, the comboWeather (+0x108): shows the selected weather's
+// particle geometry and fades every other one out.
 //
-// When a draw combo item is selected, this function iterates through
-// all draw entries in the draw manager (world+0x130). For the selected
-// entry, it creates a DrawGeometry + AudioObjectGroup if they don't
-// exist, adds them to the graphics/audio scenes. For all other entries,
-// it hides the geometry by setting alpha to -1.0f.
-//
-// Draw manager struct layout (pointed to by world+0x130):
-//   R14 = *(world+0x130) — draw manager ptr
-//   *R14 = inner data ptr:
-//     +0x28 = ptr to array of draw descriptors (0x10 stride per entry)
-//     +0x30 = count of draw entries
-//   R14+0x10 = state field (int, set to 0 on show, 3 on hide)
-//   R14+0x50 = ptr to array of Geometry* (one per draw entry)
-//   R14+0x60 = ptr to array of audio object ptrs (one per draw entry)
-//
-// Draw descriptor entry (at inner[+0x28] + i*0x10):
-//   +0x00 = geometry descriptor ptr (passed to DrawGeometry_Init)
-//   +0x08 = audio descriptor ptr (null if no audio; +0x20 = sound type)
-//
-// Audio component (found via Entity_FindAudioComponent):
-//   +0x28 = position (Vector3, 12 bytes)
-//   +0x38 = emitter array ptr (each entry 0x10: [emitterId(4), ?(4), ...])
-//   +0x40 = emitter count
+// The weather simulation (world+0x130), read as it has no class:
+//   +0x00 = ExternalPtr<EnvironmentDescription>: _weatherArray (0x10 stride:
+//           {weather descriptor, audio descriptor}), _weatherCount
+//   +0x10 = state field (int, set to 0 on show, 3 on hide)
+//   +0x50 = WeatherParticleGeometry* per weather entry
+//   +0x60 = audio object per weather entry (read only by the PORT GAP arm)
 //
 // Original: 0x1400608A0
 // ============================================================
-static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
+void DebugUI::OnWeatherComboChanged() {
     // The DrawGeometry ctor / init are 0x1400d3f10 WeatherParticle_GeoCtor and
     // 0x1400d3f80 WeatherParticle_Config, called by name (B3R; the old
     // "not reimplemented" bail-out never ran: both are registered).
 
     // Get selected combo index
-    int selectedIdx = *(int*)(*(uintptr_t*)(s + 0x108) + 0x118);
+    int selectedIdx = comboWeather->_currentItem;
 
-    // Get item data (cast to int index into draw list)
-    void* itemData = reinterpret_cast<const UI::ComboElement*>(*(void**)(s + 0x108))->GetItemData(selectedIdx);  // B.3.6 bridge
-    int selectedDrawIdx = (int)(intptr_t)itemData;
+    // Item data is the weather index itself (AddItem stored `(void*)i`).
+    void* itemData = comboWeather->GetItemData(selectedIdx);
+    int selectedDrawIdx = (int)(intptr_t)itemData;  // CAST-OK: ptr_int
 
-    // Get draw manager from game world
-    uintptr_t world = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t* drawMgr = *(uintptr_t**)(world + 0x130);  // R14 = plVar1
+    // The weather simulation from the game world
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
+    uintptr_t* drawMgr = (uintptr_t*)world->m_weather;  // R14 = plVar1
 
-    uintptr_t innerData = *(uintptr_t*)drawMgr;  // *plVar1
-    int drawCount = *(int*)(innerData + 0x30);
-    uintptr_t descArray = *(uintptr_t*)(innerData + 0x28);  // array of 0x10-stride descriptors
+    EnvironmentDescription* env = (EnvironmentDescription*)drawMgr[0];  // *plVar1
+    int drawCount = (int)env->_weatherCount;
+    void** descArray = (void**)env->_weatherArray;  // {descriptor, audio descriptor} pairs
 
-    void** geometryArray = (void**)(drawMgr[10]);  // R14+0x50 = plVar1[10] (offset 0x50)
+    WeatherParticleGeometry** geometryArray = (WeatherParticleGeometry**)drawMgr[10];  // R14+0x50
     // R14+0x60 = plVar1[0xC] (offset 0x60) is the audio object array; only the
     // PORT GAP audio branch below reads it in retail.
 
@@ -249,27 +242,26 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
             if (geometryArray[i] == nullptr) {
                 // Allocate and construct DrawGeometry (0xf0 bytes)
                 void* geomMem = System::MemoryAllocator::MemAlloc(0xf0, 8);
-                void* geometry = nullptr;
+                WeatherParticleGeometry* geometry = nullptr;
                 if (geomMem) {
-                    geometry = WeatherParticle_GeoCtor(geomMem);   // 0x1400d3f10
+                    geometry = (WeatherParticleGeometry*)WeatherParticle_GeoCtor(geomMem);   // 0x1400d3f10
                 }
                 geometryArray[i] = geometry;
 
                 // Initialize with descriptor data
-                uintptr_t descPtr = *(uintptr_t*)(descArray + (uintptr_t)i * 0x10);
-                WeatherParticle_Config(geometryArray[i], (void*)descPtr);   // 0x1400d3f80
+                void* descPtr = descArray[i * 2];
+                WeatherParticle_Config(geometryArray[i], descPtr);   // 0x1400d3f80
 
                 // Add to graphics scene
-                void* graphicsScene = *(void**)(world + 0x60);
+                void* graphicsScene = world->m_graphicsScene;
                 reinterpret_cast<Graphics::Scene*>(graphicsScene)
-                    ->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(
-                        geometryArray[i]));   // B.3.5 bridge
+                    ->AddGlobalObject(geometryArray[i]);   // B.3.5 bridge
 
                 // Reset state to 0 (showing)
                 *(int*)((uintptr_t)drawMgr + 0x10) = 0;
 
                 // Check if this entry has an audio descriptor
-                uintptr_t audioDescPtr = *(uintptr_t*)(descArray + (uintptr_t)i * 0x10 + 8);
+                void* audioDescPtr = descArray[i * 2 + 1];
                 // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail
                 // calls it here. Retail's audio branch for an entry with an audio
                 // descriptor (0x48-byte group built from the descriptor, registered
@@ -277,7 +269,7 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
                 // then FindAudioComponent(group) -> move every emitter to the origin and
                 // mute the first) waited on the finder, so today an entry carrying an
                 // audio template shows its geometry only. This is that null arm.
-                if (audioDescPtr != 0) {
+                if (audioDescPtr != nullptr) {
                     static bool warnedAudio = false;
                     if (!warnedAudio) {
                         warnedAudio = true;
@@ -288,10 +280,10 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
             }
         } else {
             // Non-selected entry — hide geometry if it exists
-            void* geometry = geometryArray[i];
+            WeatherParticleGeometry* geometry = geometryArray[i];
             if (geometry != nullptr) {
-                // Set alpha to -1.0f (0xbf800000) to hide
-                *(uint32_t*)((uintptr_t)geometry + 0xC4) = 0xbf800000;
+                // Fade direction -1.0f (0xbf800000) to hide
+                geometry->_fadeDirection = -1.0f;
                 // Set state to 3 (hiding)
                 *(int*)((uintptr_t)drawMgr + 0x10) = 3;
             }
@@ -309,71 +301,73 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 // If found, destroys the entity via Game_DestroyEntity.
 // ============================================================
 static void Game_DestroyAllRawMaterials_Impl() {
-    void* factory = ::Object::ExternalFactory::_singleton;
-    const ::Object::ExternalFactory* efactoryRaw =
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
+    ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;
 
     // Iterate all entities with ComponentDescription type
-    void* entity = const_cast<::Object::External*>(
-        efactoryRaw->FindNext(ComponentDescription::TypeId(), nullptr));  // B.3.3 bridge
+    const ::Object::External* entity = factory->FindNext(ComponentDescription::TypeId(), nullptr);
     while (entity) {
         // IsDerivedFrom check against ComponentDescription
         bool isBuild = ::Object::IsDerivedFromNullSafe(entity, ComponentDescription::TypeId());
-        void* buildEntity = isBuild ? entity : nullptr;
+        const ComponentDescription* buildEntity =
+            isBuild ? static_cast<const ComponentDescription*>(entity) : nullptr;
 
-        // Search entity's components for RawMaterialDescription
-        uintptr_t e = (uintptr_t)buildEntity;
-        int compCount = *(int*)(e + 0x30);
-        void** compArray = *(void***)(e + 0x28);
+        // Search entity's sub-descriptions for RawMaterialDescription
+        int compCount = buildEntity->_subDescCount;
+        void** compArray = buildEntity->_subDescs;
 
         for (int i = 0; i < compCount; i++) {
             void* comp = compArray[i];
             // Get component type via vtable[2] (+0x10)
+            // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (typeId == RawMaterialDescription::TypeId()) {
                 // Re-read component pointer from array and confirm with IsDerivedFrom
                 void* rawComp = compArray[i];
                 bool isRawMat = ::Object::IsDerivedFromNullSafe(rawComp, RawMaterialDescription::TypeId());
                 if (isRawMat && rawComp != nullptr) {
-                    // Destroy the entity (re-read entityList from global each time)
-                    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-                    void* entityList = *(void**)(game + 0xF0);
+                    // Destroy the entity (re-read the list from the global each time)
                     // The door was named fn_Game_DestroyEntity; it is bound to
                     // 0x140091e60 RawMaterialComponent_RegisterRawMaterial (B3R: the
                     // binding decides, INVENTORY_E §5.8).
-                    RawMaterialComponent_RegisterRawMaterial(entityList, buildEntity);
+                    RawMaterialComponent_RegisterRawMaterial(GameUpdateLoop::_singleton->m_citizenList,
+                                                             const_cast<ComponentDescription*>(buildEntity));
                 }
                 break;
             }
         }
 
-        entity = const_cast<::Object::External*>(
-            efactoryRaw->FindNext(ComponentDescription::TypeId(),
-                                  reinterpret_cast<const ::Object::External*>(entity)));  // B.3.3 bridge
+        entity = factory->FindNext(ComponentDescription::TypeId(), entity);
     }
+}
+
+// The town lists (GameUpdateLoop +0xF0).
+static CitizenBehavior* DebugUI_Town() {
+    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a's header).
+    return (CitizenBehavior*)GameUpdateLoop::_singleton->m_citizenList;
 }
 
 // ============================================================
 // Game_SpawnItemsInStorage (FUN_140060290)
 // Iterates the storage list at gameWorld+0xF0, sub-list at +0x90/+0x98.
 // For each storage, spawns up to 5 items if current count < capacity.
+// The lists are CitizenBehavior's pastures (+0x90 / +0x98).
 // ============================================================
 static void Game_SpawnItemsInStorage_Impl() {
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+    CitizenBehavior* town = DebugUI_Town();
 
-    int storageCount = *(int*)(entityListBase + 0x98);
+    int storageCount = town->pastureCount;
     if (storageCount <= 0) return;
 
-    uintptr_t arrayBase = *(uintptr_t*)(entityListBase + 0x90);
     for (int i = 0; i < storageCount; i++) {
-        void* storage = *(void**)(arrayBase + (uintptr_t)i * 8);
+        PastureComponent* storage = town->pastures[i];
 
         // Check if storage has items to spawn (component+0x28 != 0)
-        if (*(uintptr_t*)((uintptr_t)storage + 0x28) == 0) continue;
+        if (storage->field28 == nullptr) continue;
 
         for (int j = 0; j < 5; j++) {
-            int currentCount = *(int*)((uintptr_t)storage + 0x38);
+            // LEFT: PastureComponent +0x38 is declared void* (COMP-d's header); its
+            // low dword is the animal count.
+            int currentCount = *reinterpret_cast<const int32_t*>(&storage->field38);
             // 0x140128570 PastureComponent_ComputeCapacity (door misnamed
             // fn_StorageComponent_GetCapacity; the int the door read is the low dword).
             int capacity = static_cast<int>(PastureComponent_ComputeCapacity(reinterpret_cast<uintptr_t>(storage)));
@@ -394,10 +388,11 @@ static void Game_SpawnItemsInStorage_Impl() {
 // spawning multiple citizens per building until full or 4 total.
 // ============================================================
 static void Game_SpawnCitizens_Impl() {
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-    void* randomPtr = *(void**)(game + 0xD8);
-    uintptr_t* entityListPtr = *(uintptr_t**)(game + 0xF0);
-    int buildingCount = (int)entityListPtr[1]; // building count at entityList+0x08
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
+    System::Random* random = game->m_random;
+    // The building list: CitizenBehavior +0x00 / +0x08.
+    CitizenBehavior* town = DebugUI_Town();
+    int buildingCount = town->field_0x08;
 
     if (buildingCount == 0) return;
 
@@ -406,65 +401,35 @@ static void Game_SpawnCitizens_Impl() {
         // Inner loop: scan all buildings
         int buildIdx = 0; // local_res10
         if (buildingCount > 0) {
-            uintptr_t buildOffset = 0; // local_b0 — byte offset into building array
             do {
-                // Get building from array: *(entityListPtr[0] + buildOffset)
-                uintptr_t buildArrayBase = entityListPtr[0];
-                void* building = *(void**)(buildOffset + buildArrayBase);
+                // The building (the array is re-read per pass)
+                ComponentEntity* building = town->field_0x00[buildIdx];
 
                 if (building != nullptr) {
 
-                    // Find ResidenceComponent (DAT_1401c7900) on this building
-                    void* residenceComp = nullptr;
-                    {
-                        uintptr_t b = (uintptr_t)building;
-                        int compCount = *(int*)(b + 0x38);
-                        uintptr_t compArrayBase = *(uintptr_t*)(b + 0x30);
-                        int ci = 0;
-                        int64_t cOffset = 0;
-                        while (ci < compCount) {
-                            void** pComp = (void**)(compArrayBase + cOffset * 8);
-                            void* comp = *pComp;
-                            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                            if (typeId == InteractComponent::TypeId()) {
-                                // Re-read and CheckPtr on the array slot
-                                pComp = (void**)(compArrayBase + cOffset * 8);
-                                comp = *pComp;
-                                bool isRes = ::Object::IsDerivedFromNullSafe(comp, InteractComponent::TypeId());
-                                residenceComp = isRes ? comp : nullptr;
-                                goto found_residence;
-                            }
-                            ci++;
-                            cOffset++;
-                        }
-                        residenceComp = nullptr;
-                    }
-found_residence:
-                    // Store in InternalBasePtr
-                    void* resCompIBP = nullptr;
-                    new (&resCompIBP) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(residenceComp));   // B.3.3 bridge
+                    // Find the InteractComponent (DAT_1401c7900) on this building:
+                    // FindComponent<InteractComponent> inlined in retail.
+                    InteractComponent* resComp = building->FindComponent<InteractComponent>();
 
-                    if (resCompIBP != nullptr) {
+                    if (resComp != nullptr) {
                         // Inner while(true) loop: spawn citizens at this building until full
                         int spawnedHere = 0; // R12D — per-building spawn counter
                         while (true) {
-                            // Re-check ResidenceComponent each iteration
-                            uintptr_t resComp = (uintptr_t)resCompIBP;
-
-                            // Get ResidenceDescription from component+0x18
-                            void* desc = *(void**)(resComp + 0x18);
+                            // Get the InteractDescription from Component::_description (+0x18)
+                            Description* desc = resComp->_description;
                             bool isResDesc = ::Object::IsDerivedFromNullSafe(desc, InteractDescription::TypeId());
-                            void* resDesc = isResDesc ? desc : nullptr;
+                            InteractDescription* resDesc = isResDesc ? static_cast<InteractDescription*>(desc) : nullptr;
 
-                            // Read capacity value from desc+0x30 (maxOccupants)
+                            // Capacity: the use-node count (+0x30)
                             // GetOccupantCount returns values that add to this
-                            int capacityAccum = *(int*)((uintptr_t)resDesc + 0x30);
+                            int capacityAccum = resDesc->_useNodes.count;
 
                             // Sum occupant counts from children at resComp+0x28/+0x30
-                            int childCount = *(int*)(resComp + 0x30);
+                            // LEFT: InteractComponent's +0x28/+0x30 are one raw
+                            // void* pair in its header (COMP-d's).
+                            int childCount = *(int*)((uintptr_t)resComp + 0x30);
                             if (childCount > 0) {
-                                uintptr_t childArrayBase = *(uintptr_t*)(resComp + 0x28);
+                                uintptr_t childArrayBase = *(uintptr_t*)((uintptr_t)resComp + 0x28);
                                 int si = 0;
                                 uintptr_t sOffset = 0;
                                 do {
@@ -482,10 +447,10 @@ found_residence:
                             if (spawnedHere >= capacityAccum) break;
 
                             // Get spawn point for this slot
-                            uint8_t spawnPos[16] = {0};
+                            float spawnPos[4] = {0};
                             // 0x140122e20 Pf_EntityResolvePos_2e20 (door misnamed
                             // fn_ResidenceComponent_GetSpawnPoint)
-                            Pf_EntityResolvePos_2e20(resCompIBP, reinterpret_cast<float*>(spawnPos), 0, spawnedHere, nullptr);
+                            Pf_EntityResolvePos_2e20(resComp, spawnPos, 0, spawnedHere, nullptr);
 
                             // Check if we've reached the global limit of 4
                             if (spawnedTotal >= 4) {
@@ -500,105 +465,65 @@ found_residence:
                             int savedSpawnedTotal = spawnedTotal;
 
                             // Random gender
-                            uint32_t gender = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(2));   // B.3.4 bridge
+                            uint32_t gender = random->Rand(static_cast<uint32_t>(2));
                             uint32_t genderFlag = (gender != 0) ? 1 : 0;
 
                             // Load citizen template
                             System::Filename filenameBuf("Template/Citizen.rsc");
-                            void* factory = ::Object::ExternalFactory::_singleton;
-                            void* extTemplate = const_cast<::Object::External*>(
-                                reinterpret_cast<::Object::ExternalFactory*>(factory)   // B.3.3 bridge
-                                    ->FindOrLoad(filenameBuf));
+                            const ::Object::External* extTemplate =
+                                ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
 
                             // Determine entity description (RDI in disasm)
                             // If extTemplate is null, use null.
                             // If non-null, IsDerivedFrom check; use result (may be null).
-                            void* entityDesc = nullptr;
+                            const ComponentDescription* entityDesc = nullptr;
                             if (extTemplate == nullptr) {
                                 entityDesc = nullptr;
                             } else {
                                 bool isBuildDesc = ::Object::IsDerivedFromNullSafe(extTemplate, ComponentDescription::TypeId());
-                                entityDesc = isBuildDesc ? extTemplate : nullptr;
+                                entityDesc = isBuildDesc ? static_cast<const ComponentDescription*>(extTemplate) : nullptr;
                             }
 
                             // Allocate and create entity (0x48 bytes)
-                            void* memBlock = System::MemoryAllocator::MemAlloc(0x48, 8);
-                            void* newEntity = nullptr;
+                            ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+                            ComponentEntity* newEntity = nullptr;
                             if (memBlock != nullptr) {
                                 newEntity = ComponentEntity_CtorFromDescription(
-                                    reinterpret_cast<ComponentEntity*>(memBlock), entityDesc);   // 0x1400c3720
+                                    memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720
                             }
 
-                            // Wrap new entity in InternalBasePtr
-                            void* newEntityIBP = nullptr;
-                            new (&newEntityIBP) ::Object::InternalBasePtr(
-                                reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
+                            // Find the CitizenComponent (DAT_1401c7158) on the new entity:
+                            // FindComponent<CitizenComponent> inlined in retail.
+                            CitizenComponent* citizen = newEntity->FindComponent<CitizenComponent>();
 
-                            // Find CitizenAIComponent (DAT_1401c7158) on the new entity
-                            void* aiComp = nullptr;
-                            {
-                                uintptr_t ne = (uintptr_t)newEntityIBP;
-                                int compCount = *(int*)(ne + 0x38);
-                                uintptr_t compArrayBase = *(uintptr_t*)(ne + 0x30);
-                                int ci = 0;
-                                int64_t cOffset = 0;
-                                while (ci < compCount) {
-                                    void** pComp = (void**)(compArrayBase + cOffset * 8);
-                                    void* comp = *pComp;
-                                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                                    if (typeId == CitizenComponent::TypeId()) {
-                                        pComp = (void**)(compArrayBase + cOffset * 8);
-                                        comp = *pComp;
-                                        bool isAI = ::Object::IsDerivedFromNullSafe(comp, CitizenComponent::TypeId());
-                                        aiComp = isAI ? comp : nullptr;
-                                        goto found_ai;
-                                    }
-                                    ci++;
-                                    cOffset++;
-                                }
-                                aiComp = nullptr;
-                            }
-found_ai:
-                            // Wrap CitizenAI in InternalBasePtr
-                            void* aiCompIBP = nullptr;
-                            new (&aiCompIBP) ::Object::InternalBasePtr(
-                                reinterpret_cast<RtObject::Internal*>(aiComp));   // B.3.3 bridge
-
-                            // Setup citizen
-                            void* citizenAI = aiCompIBP;
-
-                            // Get CitizenDescription (DAT_1401c7190) from AI component
-                            void* citDescRaw = *(void**)((uintptr_t)citizenAI + 0x18);
+                            // Get CitizenDescription (DAT_1401c7190) from Component::_description
+                            Description* citDescRaw = citizen->_description;
                             bool isCitDesc = ::Object::IsDerivedFromNullSafe(citDescRaw, CitizenDescription::TypeId());
-                            void* citDesc = isCitDesc ? citDescRaw : nullptr;
+                            CitizenDescription* citDesc = isCitDesc ? static_cast<CitizenDescription*>(citDescRaw) : nullptr;
 
                             // Get profession list from game (re-read global)
-                            game = (uintptr_t)GameUpdateLoop::_singleton;
-                            void* profList = *(void**)(*(uintptr_t*)(game + 0xB0) + 0x30);
+                            Profession* profList = GameUpdateLoop::_singleton->m_professionList->field_0x30;
 
-                            // Create null parent InternalBasePtr
-                            void* parentIBP = nullptr;
-                            new (&parentIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                            // Null parent InternalBasePtr
+                            int64_t parentIBP = 0;
 
-                            // Read age range from CitizenDescription
-                            citizenAI = aiCompIBP;
-                            float minAge = *(float*)((uintptr_t)citDesc + 0x50);
-                            float randAge = reinterpret_cast<System::Random*>(randomPtr)->RandFloat();   // B.3.4 bridge
-                            float maxAge = *(float*)((uintptr_t)citDesc + 0x54);
+                            // Read age range from CitizenDescription (+0x50 / +0x54)
+                            float minAge = citDesc->minPregnancyAge;
+                            float randAge = random->RandFloat();
+                            float maxAge = citDesc->maxPregnancyAge;
                             float age = randAge * (maxAge - minAge) + minAge;
 
-                            CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(citizenAI), spawnPos,
+                            // LEFT: the body takes int64_t for its receiver and key (COMP-b's declaration).
+                            CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(citizen), spawnPos,
                                                       genderFlag, '\0',
-                                                      age, '\x01', reinterpret_cast<int64_t*>(&parentIBP),
+                                                      age, '\x01', &parentIBP,
                                                       reinterpret_cast<int64_t>(profList));   // 0x140117080
 
                             // Register entity with entity manager
-                            // Use newEntityIBP (the InternalBasePtr value) as the entity ref
-                            void* entityRef = newEntityIBP;
-                            game = (uintptr_t)GameUpdateLoop::_singleton;
-                            void* entityMgr = *(void**)(game + 0xE8);
-                            EntityList_RegisterEntity_Impl(entityMgr, &entityRef,
-                                                         *(int*)((uintptr_t)entityDesc + 0x20));   // 0x1400c48a0
+                            // Use the new entity (the InternalBasePtr value) as the entity ref
+                            void* entityRef = newEntity;
+                            EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entityRef,
+                                                         entityDesc->_category);   // 0x1400c48a0
 
                             // Restore spawnedTotal
                             spawnedTotal = savedSpawnedTotal;
@@ -610,44 +535,41 @@ found_ai:
 
                 // Advance to next building
                 buildIdx++;
-                buildOffset += 8;
                 // Re-read building count (may change if entities are added)
-                buildingCount = (int)entityListPtr[1];
+                buildingCount = town->field_0x08;
             } while (buildIdx < buildingCount);
         }
     } while (spawnedTotal < 4);
 }
 
 // ============================================================
-// DebugUI_TriggerDisasterOnBuilding (FUN_14005FF30)
+// DebugUI::TriggerDisasterOnBuilding (FUN_14005FF30)
 // Picks a random building from the building list, reads disease
 // combo selection, and applies disease disaster to the building.
 // ============================================================
-static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
-    uintptr_t s = (uintptr_t)self;
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+void DebugUI::TriggerDisasterOnBuilding() {
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
+    CitizenBehavior* town = DebugUI_Town();
 
-    // Pick random building from the building list
-    uint32_t buildingCount = *(uint32_t*)(entityListBase + 0xA8);
+    // Pick a random citizen (CitizenBehavior +0xA0 / +0xA8; the tree called it the
+    // building list)
+    uint32_t buildingCount = (uint32_t)town->citizenCount;
     if (buildingCount == 0) return;
-    void* randomPtr = *(void**)(game + 0xD8);
-    uint32_t randIdx = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(buildingCount));   // B.3.4 bridge
+    uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(buildingCount));
 
     // Get disease description from combo selection
-    void* combo = *(void**)(s + 0x30);
+    UI::ComboElement* combo = diseaseCombo;
     if (!combo) return;
-    int diseaseIdx = *(int*)((uintptr_t)combo + 0x118);
-    void* externalList = *(void**)((uintptr_t)game + 0xA8);
+    int diseaseIdx = combo->_currentItem;
+    ::Object::ExternalList* externalList = game->m_diseaseList;
     if (!externalList) return;
-    void* diseaseEntry = *(void**)(*(uintptr_t*)((uintptr_t)externalList + 0x20) +
-                                   (int64_t)diseaseIdx * 8);
+    ::Object::External* diseaseEntry = externalList->_resources[diseaseIdx];
     bool isDisease = ::Object::IsDerivedFromNullSafe(diseaseEntry, Disease::TypeId());
-    void* diseaseDesc = isDisease ? diseaseEntry : nullptr;
+    Disease* diseaseDesc = isDisease ? static_cast<Disease*>(diseaseEntry) : nullptr;
     if (!diseaseDesc) return;
 
     // Get building entity from building array
-    void* building = *(void**)(*(uintptr_t*)(entityListBase + 0xA0) + (int64_t)(int)randIdx * 8);
+    CitizenComponent* building = town->citizens[(int)randIdx];
     if (!building) return;
 
     // Apply disease to building
@@ -659,24 +581,22 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
 // Picks a random building, finds its FireComponent, ignites it.
 // ============================================================
 static void Game_StartRandomFire_Impl() {
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
-    uint32_t buildingCount = *(uint32_t*)(entityListBase + 0x28);
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
+    // The building list: CitizenBehavior +0x20 / +0x28.
+    CitizenBehavior* town = DebugUI_Town();
+    uint32_t buildingCount = (uint32_t)town->field_0x28;
 
     if (buildingCount == 0) return;
 
-    void* randomPtr = *(void**)(game + 0xD8);
-    uint32_t randIdx = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(buildingCount));   // B.3.4 bridge
+    uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(buildingCount));
 
     // Get random building entity
-    void* building = *(void**)(*(uintptr_t*)(entityListBase + 0x20) + (uintptr_t)randIdx * 8);
+    ComponentEntity* building = town->field_0x20[randIdx];
 
-    // Find FireComponent on the building
-    uint8_t fireCompBuf[8] = {0};
-    fn_FindComponent_Fire(building, fireCompBuf);
+    // Find FireComponent on the building (FindComponent<FireComponent>, cell 0x1401c41e0)
+    FireComponent* fireComp = building->FindComponent<FireComponent>();
 
     // Ignite
-    void* fireComp = *(void**)fireCompBuf;
     FireComponent_Ignite_610(fireComp);   // 0x140049610
 }
 
@@ -685,41 +605,36 @@ static void Game_StartRandomFire_Impl() {
 // Loads Template/Tornado.rsc, creates entity, registers it.
 // ============================================================
 static void Game_SpawnTornado_Impl() {
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
     // Load tornado template
     System::Filename filenameBuf("Template/Tornado.rsc");
-    void* factory = ::Object::ExternalFactory::_singleton;
-    void* extTemplate = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(factory)   // B.3.3 bridge
-            ->FindOrLoad(filenameBuf));
+    const ::Object::External* extTemplate =
+        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
 
     // Cast to entity description (must be derived from ComponentDescription type)
-    void* entityDesc = nullptr;
+    const ComponentDescription* entityDesc = nullptr;
     if (extTemplate) {
         bool isEntityDesc = ::Object::IsDerivedFromNullSafe(extTemplate, ComponentDescription::TypeId());
         if (isEntityDesc) {
-            entityDesc = extTemplate;
+            entityDesc = static_cast<const ComponentDescription*>(extTemplate);
         }
     }
 
     // filenameBuf releases via its destructor (System::Filename) at scope exit.
 
     // Allocate and create entity (0x48 bytes)
-    void* newEntity = nullptr;
-    void* memBlock = System::MemoryAllocator::MemAlloc(0x48, 8);
+    ComponentEntity* newEntity = nullptr;
+    ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (memBlock) {
         newEntity = ComponentEntity_CtorFromDescription(
-            reinterpret_cast<ComponentEntity*>(memBlock), entityDesc);   // 0x1400c3720
+            memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720
     }
 
     // Register entity with entity manager
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
-    void* entityRef = *(void**)entityBuf;
-    void* entityMgr = *(void**)(game + 0xE8);
-    EntityList_RegisterEntity_Impl(entityMgr, &entityRef,
-                                  *(int*)((uintptr_t)entityDesc + 0x20));   // 0x1400c48a0
+    void* entityRef = newEntity;
+    EntityList_RegisterEntity_Impl(game->m_entityList, &entityRef,
+                                  entityDesc->_category);   // 0x1400c48a0
 }
 
 // ============================================================
@@ -727,23 +642,23 @@ static void Game_SpawnTornado_Impl() {
 // Picks a random citizen from the citizen list, infects them.
 // ============================================================
 static void Game_InfectRandomCitizen_Impl() {
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
+    // The disease components: CitizenBehavior +0xF0 / +0xF8.
+    CitizenBehavior* town = DebugUI_Town();
 
-    uint32_t citizenCount = *(uint32_t*)(entityListBase + 0xF8);
+    uint32_t citizenCount = (uint32_t)town->diseaseCount;
     if (citizenCount == 0) return;
 
-    void* randomPtr = *(void**)(game + 0xD8);
-    uint32_t randIdx = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(citizenCount));   // B.3.4 bridge
+    uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(citizenCount));
 
     // Get random citizen
-    uintptr_t citizenArray = *(uintptr_t*)(entityListBase + 0xF0);
+    DiseaseComponent** citizenArray = town->diseases;
     if (!citizenArray) return;
-    void* citizen = *(void**)(citizenArray + (uintptr_t)randIdx * 8);
+    DiseaseComponent* citizen = citizenArray[randIdx];
     if (!citizen) return;
 
     // Infect citizen's disease component
-    DiseaseComp_Infect(reinterpret_cast<DiseaseComponent*>(citizen));   // 0x1400483a0
+    DiseaseComp_Infect(citizen);   // 0x1400483a0
 }
 
 // ENDGAME B.3.9: every global the old debugui_sa::EnsureGlobals() healed now has a
@@ -759,27 +674,15 @@ static void Game_InfectRandomCitizen_Impl() {
 // namespace is dead.
 
 // ============================================================
-// DebugUI::Slot8 (vtable +0x40) -- Update performance counters
+// DebugUI::OnUpdate (vtable +0x40) -- Update performance counters
 // ============================================================
 // Reads 4 debug counters from engine state, updates NumberElements.
 // Smooths FPS/frame timing with exponential moving average (alpha=0.95).
 // Displays smoothed FPS, frame ms, and total ms (* 1000).
 //
-// Engine state: singleton exref -> +0x10 sub-object holds counters:
+// Engine state: MainLoop::_context (+0x10) holds counters:
 //   +0x2150, +0x2154, +0x2158, +0x215C (int debug stats)
-// Timing: singleton -> +0x58 (total time ticks), +0x68 (frame time ticks)
-//
-// Struct fields used:
-//   +0x40 = numberDrawCalls NumberElement (counter from +0x215C)
-//   +0x48 = numberTriangles NumberElement (counter from +0x2150)
-//   +0x50 = numberVertices NumberElement (counter from +0x2154)
-//   +0x58 = numberBatches NumberElement (counter from +0x2158)
-//   +0x60 = numberFPS display (NumberElement, int, smoothed)
-//   +0x68 = numberFrameMS display (NumberElement, float, smoothed)
-//   +0x70 = numberTotalMS display (NumberElement, float, smoothed)
-//   +0x120 = smoothed FPS accumulator (float)
-//   +0x124 = smoothed frame time accumulator (float)
-//   +0x128 = smoothed total time accumulator (float)
+// Timing: MainLoop +0x58 (_frameTime) and +0x68 (_frameUpdateTime).
 //
 // Original: 0x1400610C0
 // [8] 0x1400610c0
@@ -787,207 +690,155 @@ void DebugUI::OnUpdate(const System::Time& /*time*/) {
     // perf counters (self-guarded), then keep swatches/day live (the tree's
     // per-frame drive of slot 7, a standalone deviation).
     [this] {
-        uintptr_t s = (uintptr_t)this;
-
-        // MainLoop singleton access: slot → *slot → *(result + 0x10)
-        // g_pMainLoopSingleton = &Engine::MainLoop::_singleton (retail: *exref 0x140151440)
-        // So: *g_pMainLoopSingleton = the MainLoop, then +0x10 = its video context
         // Disasm: MOV RAX,[slot] / MOV RDX,[RAX] / MOV RSI,[RDX+0x10]
-        uintptr_t engineObj = (uintptr_t)::Engine::MainLoop::_singleton;
+        ::Engine::MainLoop* engineObj = ::Engine::MainLoop::_singleton;
         if (!engineObj) return;
-        uintptr_t engineState = *(uintptr_t*)(engineObj + 0x10);
+        // LEFT: MainLoop::_context is void* (the Video::Context, R-VIDEO's).
+        uintptr_t engineState = (uintptr_t)engineObj->_context;
         if (!engineState) return;
 
         // Read and display 4 debug counters from engine state
-        void* numBatches = *(void**)(s + 0x58);
-        if (numBatches) reinterpret_cast<UI::NumberElement*>(numBatches)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2158)));  // B.3.6 bridge
-
-        void* numDrawCalls = *(void**)(s + 0x40);
-        if (numDrawCalls) reinterpret_cast<UI::NumberElement*>(numDrawCalls)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x215C)));  // B.3.6 bridge
-
-        void* numTriangles = *(void**)(s + 0x48);
-        if (numTriangles) reinterpret_cast<UI::NumberElement*>(numTriangles)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2150)));  // B.3.6 bridge
-
-        void* numVertices = *(void**)(s + 0x50);
-        if (numVertices) reinterpret_cast<UI::NumberElement*>(numVertices)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2154)));  // B.3.6 bridge
+        if (numberBatches) numberBatches->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2158)));
+        if (numberDrawCalls) numberDrawCalls->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x215C)));
+        if (numberTriangles) numberTriangles->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2150)));
+        if (numberVertices) numberVertices->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2154)));
 
         // Read frame time and total time from engine object (NOT engineState)
         // Original: *(*(exref 0x140151440) + 0x68) and + 0x58
-        int64_t frameTimeTicks = *(int64_t*)(engineObj + 0x68);
-        int64_t totalTimeTicks = *(int64_t*)(engineObj + 0x58);
-        float frameSeconds = reinterpret_cast<const System::Time*>(&frameTimeTicks)->AsSeconds();   // B.3.4 bridge
-        float totalSeconds = reinterpret_cast<const System::Time*>(&totalTimeTicks)->AsSeconds();   // B.3.4 bridge
+        System::Time frameTime = { engineObj->_frameUpdateTime };
+        System::Time totalTime = { engineObj->_frameTime };
+        float frameSeconds = frameTime.AsSeconds();
+        float totalSeconds = totalTime.AsSeconds();
 
         // Exponential moving average smoothing constants
         const float alpha = 0.95f;
         const float beta  = 0.05f;
 
-        float* smoothedFPS     = (float*)(s + 0x120);
-        float* smoothedFrameMS = (float*)(s + 0x124);
-        float* smoothedTotalMS = (float*)(s + 0x128);
-
         float instantFPS = (totalSeconds > 0.0f) ? (1.0f / totalSeconds) : 0.0f;
-        *smoothedTotalMS = (*smoothedTotalMS) * alpha + totalSeconds * beta;
-        *smoothedFPS     = instantFPS * beta + (*smoothedFPS) * alpha;
-        *smoothedFrameMS = (*smoothedFrameMS) * alpha + frameSeconds * beta;
+        smoothedTotalMS = smoothedTotalMS * alpha + totalSeconds * beta;
+        smoothedFPS     = instantFPS * beta + smoothedFPS * alpha;
+        smoothedFrameMS = smoothedFrameMS * alpha + frameSeconds * beta;
 
         // Display smoothed values
-        void* numFPS = *(void**)(s + 0x60);
-        if (numFPS) reinterpret_cast<UI::NumberElement*>(numFPS)->SetValue(static_cast<int32_t>((int)*smoothedFPS));  // B.3.6 bridge
-
-        void* numFrameMS = *(void**)(s + 0x68);
-        if (numFrameMS) reinterpret_cast<UI::NumberElement*>(numFrameMS)->SetValue(static_cast<float>(*smoothedFrameMS * 1000.0f));  // B.3.6 bridge
-
-        void* numTotalMS = *(void**)(s + 0x70);
-        if (numTotalMS) reinterpret_cast<UI::NumberElement*>(numTotalMS)->SetValue(static_cast<float>(*smoothedTotalMS * 1000.0f));  // B.3.6 bridge
+        if (numberFPS) numberFPS->SetValue(static_cast<int32_t>((int)smoothedFPS));
+        if (numberFrameMS) numberFrameMS->SetValue(static_cast<float>(smoothedFrameMS * 1000.0f));
+        if (numberTotalMS) numberTotalMS->SetValue(static_cast<float>(smoothedTotalMS * 1000.0f));
     }();
     DebugUI::OnUpdateLayout();
 }
 
 // ============================================================
-// DebugUI::Slot7 (vtable +0x38) -- Update day text and color swatches
+// DebugUI::OnUpdateLayout (vtable +0x38) -- Update day text and color swatches
 // ============================================================
 // 1. Gets first child of sliderDay (+0x78), formats day text
 // 2. Reads RGB slider values for sun/amb/fog, packs ARGB, sets color
 //    on preview ImageElements via vtable[10] (SetColor at +0x50)
 //
-// Struct fields used:
-//   +0x78 = sliderDay element (slider for day-of-year)
-//   +0x80/+0x88/+0x90 = valueSunR/G/B slider elements
-//   +0x98/+0xA0/+0xA8 = valueAmbR/G/B slider elements
-//   +0xB0/+0xB8/+0xC0 = valueFogR/G/B slider elements
-//   +0xF0 = imageColorSun preview element
-//   +0xF8 = imageColorAmb preview element
-//   +0x100 = imageColorFog preview element
-//
 // Original: 0x140061280
 // [7] 0x140061280
 void DebugUI::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
-
     // --- Day slider text update ---
     // Original: CheckPtr(+0x78), get child, CheckPtr child, IsDerivedFrom, IBP ctor,
     //           CheckPtr(+0x78) again for value, CheckPtr child for format, SetText
-    void* sliderDay = *(void**)(s + 0x78);
     if (sliderDay) {
-        uint8_t childBuf[16];
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(sliderDay)->Child(0));  // B.3.6 bridge
-        void* childRaw = *(void**)childBuf;
+        UI::Element* childRaw = sliderDay->Child(0).Get();
         // IsDerivedFrom check + IBP wrap (matches original)
         bool isText = childRaw && ::Object::IsDerivedFromNullSafe(childRaw, UI::Element::TypeId());
-        void* textChild = isText ? childRaw : nullptr;
-        uint8_t textIBP[8];
-        new (textIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textChild));   // B.3.3 bridge
+        UI::TextElement* textElem = isText ? static_cast<UI::TextElement*>(childRaw) : nullptr;
 
-        float dayValue = *(float*)(*(uintptr_t*)(s + 0x78) + 0x128);
+        float dayValue = sliderDay->_value;
 
-        void* textElem = *(void**)textIBP;
         if (textElem) {
-            uint8_t uiStrBuf[16];
-            uint64_t fmtRef = *(uint64_t*)((uintptr_t)textElem + 0xD8);
-            *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textElem + 0xE0);
-            ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(fmtRef)), (int)dayValue / 30);  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(*(void**)textIBP)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
+            // UI::String(textElem->_text's table, day / 30): the table and the
+            // (untouched) pad come from the element's own text.
+            UI::String dayText = textElem->_text;
+            dayText.index = (int)dayValue / 30;
+            textElem->SetText(&dayText);
         }
     }
 
-    // Helper: read slider value with CheckPtr (matches original pattern)
-    auto readSlider = [](uintptr_t s, uintptr_t offset) -> float {
-        return *(float*)(*(uintptr_t*)(s + offset) + 0x128);
-    };
-
     // --- Sun color swatch ---
-    void* imageColorSun = *(void**)(s + 0xF0);
     if (imageColorSun) {
-        float sunB = readSlider(s, 0x90);
-        float sunG = readSlider(s, 0x88);
-        uint32_t sunColor = ((int)*(float*)(*(uintptr_t*)(s + 0x80) + 0x128) << 8
+        float sunB = valueSunB->_value;
+        float sunG = valueSunG->_value;
+        uint32_t sunColor = ((int)valueSunR->_value << 8
             | (int)sunG) << 8 | (int)sunB | 0xFF000000;
-        reinterpret_cast<UI::Element*>(imageColorSun)->SetColor(sunColor);  // B.3.6 bridge
+        imageColorSun->SetColor(sunColor);
     }
 
     // --- Ambient color swatch ---
-    void* imageColorAmb = *(void**)(s + 0xF8);
     if (imageColorAmb) {
-        float ambB = readSlider(s, 0xA8);
-        float ambG = readSlider(s, 0xA0);
-        uint32_t ambColor = ((int)*(float*)(*(uintptr_t*)(s + 0x98) + 0x128) << 8
+        float ambB = valueAmbB->_value;
+        float ambG = valueAmbG->_value;
+        uint32_t ambColor = ((int)valueAmbR->_value << 8
             | (int)ambG) << 8 | (int)ambB | 0xFF000000;
-        reinterpret_cast<UI::Element*>(imageColorAmb)->SetColor(ambColor);  // B.3.6 bridge
+        imageColorAmb->SetColor(ambColor);
     }
 
     // --- Fog color swatch ---
-    void* imageColorFog = *(void**)(s + 0x100);
     if (imageColorFog) {
-        float fogB = readSlider(s, 0xC0);
-        float fogG = readSlider(s, 0xB8);
-        uint32_t fogColor = ((int)*(float*)(*(uintptr_t*)(s + 0xB0) + 0x128) << 8
+        float fogB = valueFogB->_value;
+        float fogG = valueFogG->_value;
+        uint32_t fogColor = ((int)valueFogR->_value << 8
             | (int)fogG) << 8 | (int)fogB | 0xFF000000;
-        reinterpret_cast<UI::Element*>(imageColorFog)->SetColor(fogColor);  // B.3.6 bridge
+        imageColorFog->SetColor(fogColor);
     }
 }
 
 // ============================================================
-// DebugUI::Slot9 (vtable +0x48) -- Event dispatch
+// DebugUI::OnElementEvent (vtable +0x48) -- Event dispatch
 // ============================================================
 // Handles button clicks, combo changes, and slider changes for
 // the debug panel. Dispatches to sub-functions for resource spawning,
 // disasters, citizen spawning, debug render toggles, weather/lighting.
 //
-// Event types (param3):
+// Event types (a):
 //   0x12 = button click → IDs 300-339 (resource buttons, disaster buttons, debug toggles)
-//   0x14 = combo change → ID 0x163 (drawCombo), ID 0x166 (diseaseCombo)
+//   0x14 = combo change → ID 0x163 (comboWeather), ID 0x166 (drawCombo)
 //   0x17 = slider change → ID 0x154 (sliderDay), IDs 0x155-0x162 (color sliders)
 //
-// Struct fields read by sub-functions:
-//   +0x30 = diseaseCombo (used by OnDiseaseComboChanged)
-//   +0x38 = drawCombo (unused here, handled by OnDrawComboChanged)
-//   +0x78 = sliderDay (used by OnDaySliderChanged)
-//   +0x80..+0xE8 = color sliders (used by WriteLightingColors)
-//   +0x108 = drawCombo (used by OnDrawComboChanged, offset in combo handler)
-//
 // Original: 0x140060BC0
-void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
-    void* game = GameUpdateLoop::_singleton;
+// [9] 0x140060bc0
+void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                             int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
     // ---- Combo change (0x14) ----
-    if (param3 == 0x14) {
-        if (param4 == 0x166) {
-            // Disease combo changed
-            DebugUI_OnDiseaseComboChanged_Impl(self);
-        } else if (param4 == 0x163) {
-            // Draw combo changed (select visible scene/mesh)
-            DebugUI_OnDrawComboChanged_Impl(self);
+    if (a == 0x14) {
+        if (b == 0x166) {
+            OnDrawComboChanged();
+        } else if (b == 0x163) {
+            // Weather combo changed (select the visible weather)
+            OnWeatherComboChanged();
         }
         return;
     }
 
     // ---- Slider/number change (0x17) ----
-    if (param3 == 0x17) {
-        if (param4 == 0x154) {
+    if (a == 0x17) {
+        if (b == 0x154) {
             // Day slider changed → update game time and lighting
-            DebugUI_OnDaySliderChanged_Impl(self);
-        } else if ((unsigned)(param4 - 0x155) <= 0xD) {
+            OnDaySliderChanged();
+        } else if ((unsigned)(b - 0x155) <= 0xD) {
             // Color sliders (0x155-0x162) changed → write lighting colors
-            void* weatherMgr = *(void**)((uintptr_t)game + 0x128);
-            int month = DebugUI_GetMonthFromTime_Impl(weatherMgr);
-            DebugUI_WriteLightingColors_Impl(self, month);
+            int month = DebugUI_GetMonthFromTime_Impl(game->m_dayCounter);
+            WriteLightingColors(month);
         }
         return;
     }
 
     // ---- Button click (0x12) ----
-    if (param3 != 0x12)
+    if (a != 0x12)
         return;
 
     // Range check: element IDs 300 (0x12C) through 339 (0x153)
-    if ((unsigned)(param4 - 300) > 0x39)
+    if ((unsigned)(b - 300) > 0x39)
         return;
 
     // Get citizen list from game world (+0xF0)
-    void** citizenList = *(void***)((uintptr_t)game + 0xF0);
+    void* citizenList = game->m_citizenList;
 
-    switch (param4) {
+    switch (b) {
     // --- Resource spawn buttons ---
     // Each calls Game_SpawnResources(citizenList, resourceFlag, count)
     case 300:  Game_SpawnResources_Impl(citizenList, 0x400,     50);   return;  // Logs
@@ -1019,57 +870,58 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     case 324:  Game_DestroyAllRawMaterials_Impl();  return;  // Destroy all loose raw material entities
     case 325:  Game_SpawnItemsInStorage_Impl();    return;  // Spawn items in all storage
     case 326:  Game_SpawnCitizens_Impl();          return;  // Spawn new citizens
-    case 327:  DebugUI_TriggerDisasterOnBuilding_Impl(self); return;  // Disaster on random building
+    case 327:  TriggerDisasterOnBuilding();        return;  // Disaster on random building
     case 328:  Game_StartRandomFire_Impl();        return;  // Start random fire
     case 329:  Game_SpawnTornado_Impl();           return;  // Spawn tornado
     case 330:  Game_InfectRandomCitizen_Impl();    return;  // Infect random citizen
 
     // --- Debug render flag toggles (checkboxes) ---
-    // param2 is a pointer to an InternalBasePtr (the checkbox element IBP).
-    // Original copies *param2 (deref) to a local IBP, passes &local to ToggleDebugFlag.
-    // ToggleDebugFlag calls CheckPtr on the IBP, then dereferences to get element.
-    case 331: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x1);   return; }
-    case 332: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x2);   return; }
-    case 333: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x4);   return; }
-    case 334: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x8);   return; }
-    case 335: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x10);  return; }
-    case 336: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x20);  return; }
-    case 337: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x40);  return; }
-    case 338: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x80);  return; }
-    case 339: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x200); return; }
+    // `element` points at the caller's InternalPtr (the checkbox element).
+    // Retail copies *element to a local and passes &local to ToggleDebugFlag.
+    case 331: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x1);   return; }
+    case 332: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x2);   return; }
+    case 333: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x4);   return; }
+    case 334: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x8);   return; }
+    case 335: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x10);  return; }
+    case 336: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x20);  return; }
+    case 337: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x40);  return; }
+    case 338: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x80);  return; }
+    case 339: { Object::InternalPtr<UI::Element> check = *element; ToggleDebugFlag(&check, 0x200); return; }
 
     default: return;
     }
 }
 
+// B4 FORWARD: 1 outside caller(s) (standalone/disaster_harness.cpp, which reaches
+// the tornado button with a null DebugUI; case 329 reads no DebugUI field).
+void DebugUI_Slot9(DebugUI* self, Object::InternalPtr<UI::Element>* element, int param3, int param4) {
+    self->DebugUI::OnElementEvent(element, param3, param4, 0, 0, 0, nullptr);
+}
+
 // ============================================================
-// DebugUI_ToggleDebugFlag -- helper for debug render checkboxes
+// DebugUI::ToggleDebugFlag -- helper for debug render checkboxes
 // ============================================================
-// param_2 is an InternalBasePtr* pointing to the checkbox element.
-// Must CheckPtr then deref through IBP to reach actual element.
-// Reads checkbox checked state (element+0xD8), sets or clears a bit in
-// the game world's debug flags at game+0xD0.
+// Reads the checkbox state (CheckElement::_checked, +0xD8), sets or clears a bit
+// in the game world's flags (GameUpdateLoop::m_gameFlags, +0xD0).
 //
 // Original: 0x14005FCC0
-void DebugUI_ToggleDebugFlag(void* ibpPtr, uint32_t flag) {
-    void* game = GameUpdateLoop::_singleton;
-    uint32_t* debugFlags = (uint32_t*)((uintptr_t)game + 0xD0);
+void DebugUI::ToggleDebugFlag(Object::InternalPtr<UI::Element>* check, uint32_t flag) {
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
-    // CheckPtr resolves the InternalBasePtr (lazy/weak pointer resolution)
-
-    // Deref through IBP to get actual checkbox element, then read +0xD8
-    void* element = *(void**)ibpPtr;
-    bool checked = *(uint8_t*)((uintptr_t)element + 0xD8) != 0;
+    // CheckPtr resolves the InternalBasePtr (a bare RET), then the element is read
+    // as the CheckElement the checkbox is (retail's InternalPtr<CheckElement>).
+    UI::CheckElement* element = static_cast<UI::CheckElement*>(check->Get());
+    bool checked = element->_checked != 0;
 
     if (checked) {
-        *debugFlags |= flag;
+        game->m_gameFlags |= flag;
     } else {
-        *debugFlags &= ~flag;
+        game->m_gameFlags &= ~flag;
     }
 }
 
 // ============================================================
-// DebugUI::Slot4 (vtable +0x20) -- Setup / element binding
+// DebugUI::OnCreated (vtable +0x20) -- Setup / element binding
 // ============================================================
 // Finds 50+ named UI elements in the dialog, assigns element IDs for
 // event dispatch, stores persistent elements in DebugUI struct fields,
@@ -1079,47 +931,28 @@ void DebugUI_ToggleDebugFlag(void* ibpPtr, uint32_t flag) {
 //
 // Original: 0x1400619E0
 
-// UI::StringTable::GetText(table, retStr, nameStr) — the exe .rdata dispatch slot
-// 0x140151718 retail's diseaseCombo populate calls (export fallback for the case
-// where the slot is unregistered in standalone). Non-trivial return: RDX is the
-// hidden System::String out-param, R8 the name to look up.
-// ENDGAME B.3.6 (K2): the slot/export cache went with this, its last caller; the
-// body is the door's, moved here -- one construction into the caller's storage.
-static void DebugUI_StringTableGetText(void* table, void* retStr, const void* nameStr) {
-    ::new (retStr) System::String(reinterpret_cast<const UI::StringTable*>(table)  // B.3.6 bridge
-        ->GetText(*static_cast<const System::String*>(nameStr)));
-}
-
-// Helper: Find element by name, return raw pointer.
-static void* DebugUI_FindElem(void* parentElem, const char* name) {
+// Helper: Find element by name, wrap it through IsDerivedFrom.
+static UI::Element* DebugUI_FindElemBase(UI::Element* parentElem, const char* name) {
     System::String nameBuf(name);
-    uint8_t retBuf[16] = {};  // InternalPtr is 16 bytes (hidden return)
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameBuf));  // B.3.6 bridge
-    return *(void**)retBuf;
-}
-
-// Helper: Find element by name, wrap in InternalBasePtr via IsDerivedFrom.
-static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
-    void* rawElem = DebugUI_FindElem(parentElem, name);
+    UI::Element* rawElem = parentElem->FindElement(nameBuf).Get();
 #ifdef _DEBUG
     if (!rawElem) printf("[DebugUI::Slot4] FindElemBase('%s') = NULL\n", name);
-    else printf("[DebugUI::Slot4] FindElemBase('%s') = %p\n", name, rawElem);
+    else printf("[DebugUI::Slot4] FindElemBase('%s') = %p\n", name, static_cast<void*>(rawElem));
 #endif
-    // Original uses UI::Element's own id (exe slot 0x140151660), NOT
-    // TypeId_ButtonElement which excludes sliders/images/numbers.
+    // The tree checks UI::Element's own id (exe slot 0x140151660) for every
+    // element; retail checks each field's own class (the check / combo / slider
+    // type cells) — a known deviation, kept.
     if (!rawElem || !::Object::IsDerivedFromNullSafe(rawElem, UI::Element::TypeId())) {
         rawElem = nullptr;
     }
-    uint8_t basePtrBuf[8];
-    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawElem));   // B.3.3 bridge
-    return *(void**)basePtrBuf;
+    return rawElem;
 }
 
-// Helper: Find element, set element ID, return as InternalBasePtr.
+// Helper: Find element, set element ID.
 // Returns nullptr if element not found (e.g., Debug Menu mod missing elements).
-static void* DebugUI_FindAndSetId(void* parentElem, const char* name, int id) {
-    void* elem = DebugUI_FindElemBase(parentElem, name);
-    if (elem) reinterpret_cast<UI::Element*>(elem)->SetElementId(id);  // B.3.6 bridge
+static UI::Element* DebugUI_FindAndSetId(UI::Element* parentElem, const char* name, int id) {
+    UI::Element* elem = DebugUI_FindElemBase(parentElem, name);
+    if (elem) elem->SetElementId(id);
     return elem;
 }
 
@@ -1132,8 +965,7 @@ void DebugUI::OnCreated() {
     if (!UI::Element::TypeId() || !Disease::TypeId() || !PopulationDescription::TypeId()) {
         return;
     }
-    uintptr_t s = (uintptr_t)this;
-    void* parentElem = *(void**)(s + 0x20);
+    UI::Element* parentElem = _container;
 
     // ==========================================================
     // 1. Resource spawn buttons (IDs 300..0x136)
@@ -1174,23 +1006,18 @@ void DebugUI::OnCreated() {
     // 3. Disease combo + disease button (ID 0x147)
     // ==========================================================
     {
-        void* combo = DebugUI_FindElemBase(parentElem, "diseaseCombo");
-        this->diseaseCombo = combo;
+        this->diseaseCombo = static_cast<UI::ComboElement*>(DebugUI_FindElemBase(parentElem, "diseaseCombo"));
 
-        if (combo) {
+        if (this->diseaseCombo) {
             // Populate from ExternalList (resource descriptions at gameWorld+0xA8).
             // STANDALONE: this list can be null/unpopulated, and
             // GetResourceCount(null) faults reading null+0x28. Guard so a missing
             // list yields an empty combo instead of crashing.
-            void* gameWorld_dc = GameUpdateLoop::_singleton;
-            void* externalList = gameWorld_dc ? *(void**)((uintptr_t)gameWorld_dc + 0xa8) : nullptr;
-            int resourceCount = externalList
-                                    ? reinterpret_cast<const ::Object::ExternalList*>(
-                                          externalList)->GetResourceCount()  // B.3.3 bridge
-                                    : 0;
+            GameUpdateLoop* gameWorld_dc = GameUpdateLoop::_singleton;
+            ::Object::ExternalList* externalList = gameWorld_dc ? gameWorld_dc->m_diseaseList : nullptr;
+            int resourceCount = externalList ? externalList->GetResourceCount() : 0;
             for (int i = 0; i < resourceCount; i++) {
-                void* resource = *(void**)((uintptr_t)i * 8 +
-                    *(uintptr_t*)((uintptr_t)externalList + 0x20));
+                ::Object::External* resource = externalList->_resources[i];
                 // Retail's checked cast. Every entry of the Diseases.rsc ExternalList
                 // IS a Disease, so this never narrows to null in practice — retail
                 // relies on that and derefs the result unguarded two lines later
@@ -1199,21 +1026,20 @@ void DebugUI::OnCreated() {
                 // exactly how DebugUI::TriggerDisasterOnBuilding (0x14005ff30) reads
                 // the selection back.
                 bool isDisease = ::Object::IsDerivedFromNullSafe(resource, Disease::TypeId());
-                void* disease = isDisease ? resource : nullptr;
+                Disease* disease = isDisease ? static_cast<Disease*>(resource) : nullptr;
                 if (!disease) continue;
 
                 // Row text = StringTable::GetText(disease->stringTable(+0x20),
                 //                                 &out, disease->stringName(+0x28))
                 // — retail's 0x14006257c call, whose third argument Ghidra hides.
-                System::String textBuf;
-                DebugUI_StringTableGetText(*(void**)((uintptr_t)disease + 0x20),
-                                           &textBuf,
-                                           (void*)((uintptr_t)disease + 0x28));
-                uint8_t spriteBuf[16];
-                ::new (spriteBuf) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(this->diseaseCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textBuf, nullptr);  // B.3.6 bridge
+                // LEFT: Disease's _stringTable is void* and _name raw String
+                // storage (H5) in GAME-a's header.
+                System::String textBuf = reinterpret_cast<const UI::StringTable*>(disease->_stringTable)  // B.3.6 bridge
+                    ->GetText(*reinterpret_cast<const System::String*>(&disease->_name));
+                UI::Sprite sprite;
+                this->diseaseCombo->AddItem(sprite, textBuf, nullptr);
             }
-            reinterpret_cast<UI::ComboElement*>(this->diseaseCombo)->SetCurrentItem(0);  // B.3.6 bridge
+            this->diseaseCombo->SetCurrentItem(0);
         }
     }
     DebugUI_FindAndSetId(parentElem, "diseaseButton", 0x147);
@@ -1228,72 +1054,54 @@ void DebugUI::OnCreated() {
     // ==========================================================
     // 5. Cheat checkboxes (IDs 0x14B..0x153) with initial state
     // ==========================================================
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uint32_t cheatFlags = *(uint32_t*)((uintptr_t)gameWorld + 0xD0);
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    uint32_t cheatFlags = gameWorld->m_gameFlags;
 
-    void* elem;
-    elem = DebugUI_FindAndSetId(parentElem, "zeroCostCheck",      0x14B);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = cheatFlags & 1;
-
-    elem = DebugUI_FindAndSetId(parentElem, "noHungerCheck",      0x14C);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 1) & 1;
-
-    elem = DebugUI_FindAndSetId(parentElem, "noColdCheck",        0x14D);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 2) & 1;
-
-    elem = DebugUI_FindAndSetId(parentElem, "noHealthCheck",      0x14E);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 3) & 1;
-
-    elem = DebugUI_FindAndSetId(parentElem, "noSickCheck",        0x14F);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 4) & 1;
-
-    elem = DebugUI_FindAndSetId(parentElem, "noCropDiseaseCheck", 0x150);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 5) & 1;
-
-    elem = DebugUI_FindAndSetId(parentElem, "noFireCheck",        0x151);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 6) & 1;
-
-    elem = DebugUI_FindAndSetId(parentElem, "noTornadoCheck",     0x152);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 7) & 1;
-
+    // CheckElement::_checked (+0xD8) from one bit of the game flags.
+    auto initCheck = [&](const char* name, int id, uint32_t bit) {
+        UI::Element* elem = DebugUI_FindAndSetId(parentElem, name, id);
+        if (elem) static_cast<UI::CheckElement*>(elem)->_checked = (cheatFlags >> bit) & 1;
+    };
+    initCheck("zeroCostCheck",      0x14B, 0);
+    initCheck("noHungerCheck",      0x14C, 1);
+    initCheck("noColdCheck",        0x14D, 2);
+    initCheck("noHealthCheck",      0x14E, 3);
+    initCheck("noSickCheck",        0x14F, 4);
+    initCheck("noCropDiseaseCheck", 0x150, 5);
+    initCheck("noFireCheck",        0x151, 6);
+    initCheck("noTornadoCheck",     0x152, 7);
     // educatedCheck -- bit 9 (bit 8 is skipped)
-    elem = DebugUI_FindAndSetId(parentElem, "educatedCheck",      0x153);
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 9) & 1;
+    initCheck("educatedCheck",      0x153, 9);
 
     // ==========================================================
     // 6. Draw combo (ID 0x166) with drawable type entries
     // ==========================================================
     {
-        void* combo = DebugUI_FindElemBase(parentElem, "drawCombo");
-        this->drawCombo = combo;
+        this->drawCombo = static_cast<UI::ComboElement*>(DebugUI_FindElemBase(parentElem, "drawCombo"));
 
-        if (combo) {
-            reinterpret_cast<UI::Element*>(this->drawCombo)->SetElementId(0x166);  // B.3.6 bridge
+        if (this->drawCombo) {
+            this->drawCombo->SetElementId(0x166);
 
-            // Populate from drawable type list at gameWorld+0xF0.
+            // Populate from the population list at gameWorld+0xF0 (+0xC0/+0xC8).
             // STANDALONE: guard a null list (empty combo instead of a fault).
-            uintptr_t drawableList = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
-            int drawCount = drawableList ? *(int*)(drawableList + 200) : 0; // +0xC8
+            CitizenBehavior* town = DebugUI_Town();
+            int drawCount = town ? town->populationCount : 0; // +0xC8
             int selectedIndex = 0;
             for (int i = 0; i < drawCount; i++) {
-                void* entry = *(void**)((uintptr_t)i * 8 +
-                    *(uintptr_t*)(drawableList + 0xC0));
-                void* inner = *(void**)((uintptr_t)entry + 0x18);
+                Component* entry = town->populations[i];   // +0xC0
+                Description* inner = entry->_description;
                 bool isDrawable = ::Object::IsDerivedFromNullSafe(inner, PopulationDescription::TypeId());
-                void* drawableDesc = isDrawable ? inner : nullptr;
+                PopulationDescription* drawableDesc = isDrawable ? static_cast<PopulationDescription*>(inner) : nullptr;
 
-                uint8_t spriteBuf[16];
-                ::new (spriteBuf) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(this->drawCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>((void*)((uintptr_t)drawableDesc + 0x20)), entry);  // B.3.6 bridge
+                UI::Sprite sprite;
+                this->drawCombo->AddItem(sprite, drawableDesc->_name, entry);
 
-                // Check if current entry matches the null/default internal ptr
-                uint8_t nullBuf[8];
-                new (nullBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                if (entry == *(void**)nullBuf) {
+                // Retail compares the entry with an InternalBasePtr built from null.
+                if (entry == nullptr) {
                     selectedIndex = i + 4;
                 }
             }
-            reinterpret_cast<UI::ComboElement*>(this->drawCombo)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
+            this->drawCombo->SetCurrentItem(selectedIndex);
         }
     }
 
@@ -1302,117 +1110,108 @@ void DebugUI::OnCreated() {
     // ==========================================================
     // Original finds all slider elements first, stores IBPs, sets IDs.
     // Min/max are set later (after image elements) matching original order.
+    auto findSlider = [&](const char* name, int id) {
+        UI::SliderElement* slider = static_cast<UI::SliderElement*>(DebugUI_FindElemBase(parentElem, name));
+        slider->SetElementId(id);
+        return slider;
+    };
 
-    #define FIND_SLIDER(field, name, id) do { \
-        this->field = DebugUI_FindElemBase(parentElem, name); \
-        reinterpret_cast<UI::Element*>(*(void**)(s + offsetof(DebugUI, field)))->SetElementId(id);  /* B.3.6 bridge */ \
-    } while(0)
-
-    FIND_SLIDER(sliderDay, "sliderDay", 0x154);
-    FIND_SLIDER(valueSunR, "valueSunR", 0x155);
-    FIND_SLIDER(valueSunG, "valueSunG", 0x156);
-    FIND_SLIDER(valueSunB, "valueSunB", 0x157);
-    FIND_SLIDER(valueSunH, "valueSunH", 0x158);
-    FIND_SLIDER(valueSunP, "valueSunP", 0x159);
-    FIND_SLIDER(valueAmbR, "valueAmbR", 0x15A);
-    FIND_SLIDER(valueAmbG, "valueAmbG", 0x15B);
-    FIND_SLIDER(valueAmbB, "valueAmbB", 0x15C);
-    FIND_SLIDER(valueFogR, "valueFogR", 0x15D);
-    FIND_SLIDER(valueFogG, "valueFogG", 0x15E);
-    FIND_SLIDER(valueFogB, "valueFogB", 0x15F);
-    FIND_SLIDER(valueFogN, "valueFogN", 0x160);
-    FIND_SLIDER(valueFogF, "valueFogF", 0x161);
-    FIND_SLIDER(valueFogM, "valueFogM", 0x162);
-
-    #undef FIND_SLIDER
+    sliderDay = findSlider("sliderDay", 0x154);
+    valueSunR = findSlider("valueSunR", 0x155);
+    valueSunG = findSlider("valueSunG", 0x156);
+    valueSunB = findSlider("valueSunB", 0x157);
+    valueSunH = findSlider("valueSunH", 0x158);
+    valueSunP = findSlider("valueSunP", 0x159);
+    valueAmbR = findSlider("valueAmbR", 0x15A);
+    valueAmbG = findSlider("valueAmbG", 0x15B);
+    valueAmbB = findSlider("valueAmbB", 0x15C);
+    valueFogR = findSlider("valueFogR", 0x15D);
+    valueFogG = findSlider("valueFogG", 0x15E);
+    valueFogB = findSlider("valueFogB", 0x15F);
+    valueFogN = findSlider("valueFogN", 0x160);
+    valueFogF = findSlider("valueFogF", 0x161);
+    valueFogM = findSlider("valueFogM", 0x162);
 
     // ==========================================================
     // 8. Color preview images (no IDs, just stored)
     // ==========================================================
-    this->imageColorSun = DebugUI_FindElemBase(parentElem, "imageColorSun");
-    this->imageColorAmb = DebugUI_FindElemBase(parentElem, "imageColorAmb");
-    this->imageColorFog = DebugUI_FindElemBase(parentElem, "imageColorFog");
+    this->imageColorSun = static_cast<UI::ImageElement*>(DebugUI_FindElemBase(parentElem, "imageColorSun"));
+    this->imageColorAmb = static_cast<UI::ImageElement*>(DebugUI_FindElemBase(parentElem, "imageColorAmb"));
+    this->imageColorFog = static_cast<UI::ImageElement*>(DebugUI_FindElemBase(parentElem, "imageColorFog"));
 
     // ==========================================================
     // 8b. Slider min/max — set AFTER image elements (matches original order)
     // ==========================================================
-    // Original uses CheckPtr + deref for every write. +0x118 = min, +0x11C = max.
-    // Helper: CheckPtr on IBP field, then write float to resolved element.
-    #define SET_MINMAX(field, minVal, maxVal) do { \
-        *(float*)(*(uintptr_t*)(s + offsetof(DebugUI, field)) + 0x118) = minVal; \
-        *(float*)(*(uintptr_t*)(s + offsetof(DebugUI, field)) + 0x11C) = maxVal; \
-    } while(0)
+    // SliderElement::_minimum (+0x118) / _maximum (+0x11C).
+    auto setMinMax = [](UI::SliderElement* slider, float minVal, float maxVal) {
+        slider->_minimum = minVal;
+        slider->_maximum = maxVal;
+    };
 
-    SET_MINMAX(sliderDay, 0.0f, 359.0f);
-    SET_MINMAX(valueSunR, 0.0f, 255.0f);
-    SET_MINMAX(valueSunG, 0.0f, 255.0f);
-    SET_MINMAX(valueSunB, 0.0f, 255.0f);
-    SET_MINMAX(valueSunH, -180.0f, 180.0f);
-    SET_MINMAX(valueSunP, 0.0f, 90.0f);
-    SET_MINMAX(valueAmbR, 0.0f, 255.0f);
-    SET_MINMAX(valueAmbG, 0.0f, 255.0f);
-    SET_MINMAX(valueAmbB, 0.0f, 255.0f);
-    SET_MINMAX(valueFogR, 0.0f, 255.0f);
-    SET_MINMAX(valueFogG, 0.0f, 255.0f);
-    SET_MINMAX(valueFogB, 0.0f, 255.0f);
-    SET_MINMAX(valueFogN, -50.0f, 500.0f);
-    SET_MINMAX(valueFogF, -50.0f, 500.0f);
-    SET_MINMAX(valueFogM, 0.0f, 255.0f);
-
-    #undef SET_MINMAX
+    setMinMax(sliderDay, 0.0f, 359.0f);
+    setMinMax(valueSunR, 0.0f, 255.0f);
+    setMinMax(valueSunG, 0.0f, 255.0f);
+    setMinMax(valueSunB, 0.0f, 255.0f);
+    setMinMax(valueSunH, -180.0f, 180.0f);
+    setMinMax(valueSunP, 0.0f, 90.0f);
+    setMinMax(valueAmbR, 0.0f, 255.0f);
+    setMinMax(valueAmbG, 0.0f, 255.0f);
+    setMinMax(valueAmbB, 0.0f, 255.0f);
+    setMinMax(valueFogR, 0.0f, 255.0f);
+    setMinMax(valueFogG, 0.0f, 255.0f);
+    setMinMax(valueFogB, 0.0f, 255.0f);
+    setMinMax(valueFogN, -50.0f, 500.0f);
+    setMinMax(valueFogF, -50.0f, 500.0f);
+    setMinMax(valueFogM, 0.0f, 255.0f);
 
     // ==========================================================
     // 9. Weather combo (ID 0x163) with weather preset entries
     // ==========================================================
     {
-        this->comboWeather = DebugUI_FindElemBase(parentElem, "comboWeather");
+        this->comboWeather = static_cast<UI::ComboElement*>(DebugUI_FindElemBase(parentElem, "comboWeather"));
 
         if (this->comboWeather) {
             // Add "None" entry with userData = -1
             System::String noneBuf("None");
-            uint8_t spriteBuf[16];
-            ::new (spriteBuf) UI::Sprite();
-            reinterpret_cast<UI::ComboElement*>(this->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), noneBuf, (void*)(intptr_t)-1);  // B.3.6 bridge
+            UI::Sprite sprite;
+            this->comboWeather->AddItem(sprite, noneBuf, (void*)(intptr_t)-1);  // CAST-OK: ptr_int
 
-            // Populate from weather list at gameWorld+0x130.
+            // Populate from the environment's weather list (weather sim +0x00).
             // STANDALONE: guard a null weather manager / list.
-            void** weatherListPtr = *(void***)((uintptr_t)gameWorld + 0x130);
-            uintptr_t weatherList = weatherListPtr ? *(uintptr_t*)weatherListPtr : 0;
-            int weatherCount = weatherList ? *(int*)(weatherList + 0x30) : 0;
+            // LEFT: the weather simulation has no class (see SetDayLighting).
+            void** weatherListPtr = (void**)gameWorld->m_weather;
+            EnvironmentDescription* env = weatherListPtr ? (EnvironmentDescription*)weatherListPtr[0] : nullptr;
+            int weatherCount = env ? (int)env->_weatherCount : 0;
             int selectedIndex = 0;
             for (int i = 0; i < weatherCount; i++) {
-                void* entry = *(void**)((uintptr_t)i * 0x10 +
-                    *(uintptr_t*)(weatherList + 0x28));
+                const ::Object::External* entry = ((::Object::External**)env->_weatherArray)[i * 2];
                 // `GetPath` returns by value through a hidden return slot and the callee
                 // CONSTRUCTS into it; copy-initialising the local is the same store.
-                System::Filename pathBuf =
-                    reinterpret_cast<const ::Object::External*>(entry)->GetPath();  // B.3.3 bridge
+                System::Filename pathBuf = entry->GetPath();
                 System::Filename filenameBuf = pathBuf.GetPathFilename(false);
 
-                uint8_t spr[16];
-                ::new (spr) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(this->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spr), *reinterpret_cast<const System::String*>(&filenameBuf), (void*)(intptr_t)i);  // B.3.6 bridge
+                UI::Sprite spr;
+                this->comboWeather->AddItem(spr, filenameBuf.AsString(), (void*)(intptr_t)i);  // CAST-OK: ptr_int
 
-                // Check if this weather is currently active
-                uintptr_t activeCheck = *(uintptr_t*)((uintptr_t)i * 8 +
-                    (uintptr_t)weatherListPtr[10]);
-                if (activeCheck != 0 && *(float*)(activeCheck + 0xC4) > 0.0f) {
+                // Check if this weather is currently active (its geometry fading in)
+                WeatherParticleGeometry* active = ((WeatherParticleGeometry**)weatherListPtr[10])[i];
+                if (active != nullptr && active->_fadeDirection > 0.0f) {
                     selectedIndex = i + 1;
                 }
             }
-            reinterpret_cast<UI::ComboElement*>(this->comboWeather)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
-            reinterpret_cast<UI::Element*>(this->comboWeather)->SetElementId(0x163);  // B.3.6 bridge
+            this->comboWeather->SetCurrentItem(selectedIndex);
+            this->comboWeather->SetElementId(0x163);
         }
     }
 
     // ==========================================================
     // 10. Action buttons (IDs 0x164, 0x165)
     // ==========================================================
-    this->buttonSave = DebugUI_FindElemBase(parentElem, "buttonSave");
-    if (this->buttonSave) reinterpret_cast<UI::Element*>(this->buttonSave)->SetElementId(0x164);  // B.3.6 bridge
+    this->buttonSave = static_cast<UI::ButtonElement*>(DebugUI_FindElemBase(parentElem, "buttonSave"));
+    if (this->buttonSave) this->buttonSave->SetElementId(0x164);
 
-    this->buttonMenuScene = DebugUI_FindElemBase(parentElem, "buttonMenuScene");
-    if (this->buttonMenuScene) reinterpret_cast<UI::Element*>(this->buttonMenuScene)->SetElementId(0x165);  // B.3.6 bridge
+    this->buttonMenuScene = static_cast<UI::ButtonElement*>(DebugUI_FindElemBase(parentElem, "buttonMenuScene"));
+    if (this->buttonMenuScene) this->buttonMenuScene->SetElementId(0x165);
 
     // ==========================================================
     // Initialize day slider from current game time
@@ -1421,30 +1220,31 @@ void DebugUI::OnCreated() {
         // STANDALONE: gw+0x128 (weather time) can be null; Time_AsSeconds(null+8)
         // would fault. SetDayLighting derefs **(gw+0x130) (the weather table), also
         // null-able — only call it when that chain is live.
-        uintptr_t weatherTime = *(uintptr_t*)((uintptr_t)gameWorld + 0x128);
+        // LEFT: the day counter and the weather simulation have no class.
+        uintptr_t weatherTime = (uintptr_t)gameWorld->m_dayCounter;
         float timeSeconds = weatherTime ? reinterpret_cast<const System::Time*>((void*)(weatherTime + 8))->AsSeconds() : 0.0f;   // B.3.4 bridge
         // Convert time to month index: (seconds / secondsPerYear) * monthsPerYear
         // DAT_14017225c = 3600.0f, DAT_1401721b8 = 12.0f
         int monthIndex = (int)(timeSeconds / 3600.0f * 12.0f);
         if (monthIndex > 11) monthIndex = 0;
 
-        void** weatherLive = *(void***)((uintptr_t)gameWorld + 0x130);
+        void** weatherLive = (void**)gameWorld->m_weather;
         if (this->sliderDay) {
-            *(float*)((uintptr_t)this->sliderDay + 0x128) = (float)(monthIndex * 30);
-            if (weatherLive && *weatherLive) DebugUI_SetDayLighting_Impl(this, monthIndex);
+            this->sliderDay->_value = (float)(monthIndex * 30);
+            if (weatherLive && *weatherLive) SetDayLighting(monthIndex);
         }
     }
 
     // ==========================================================
     // 11. Performance counter elements (stored in struct fields)
     // ==========================================================
-    this->numberFrameMS   = DebugUI_FindElemBase(parentElem, "numberFrameMS");
-    this->numberTotalMS   = DebugUI_FindElemBase(parentElem, "numberTotalMS");
-    this->numberFPS       = DebugUI_FindElemBase(parentElem, "numberFPS");
-    this->numberDrawCalls = DebugUI_FindElemBase(parentElem, "numberDrawCalls");
-    this->numberTriangles = DebugUI_FindElemBase(parentElem, "numberTriangles");
-    this->numberVertices  = DebugUI_FindElemBase(parentElem, "numberVertices");
-    this->numberBatches   = DebugUI_FindElemBase(parentElem, "numberBatches");
+    this->numberFrameMS   = static_cast<UI::NumberElement*>(DebugUI_FindElemBase(parentElem, "numberFrameMS"));
+    this->numberTotalMS   = static_cast<UI::NumberElement*>(DebugUI_FindElemBase(parentElem, "numberTotalMS"));
+    this->numberFPS       = static_cast<UI::NumberElement*>(DebugUI_FindElemBase(parentElem, "numberFPS"));
+    this->numberDrawCalls = static_cast<UI::NumberElement*>(DebugUI_FindElemBase(parentElem, "numberDrawCalls"));
+    this->numberTriangles = static_cast<UI::NumberElement*>(DebugUI_FindElemBase(parentElem, "numberTriangles"));
+    this->numberVertices  = static_cast<UI::NumberElement*>(DebugUI_FindElemBase(parentElem, "numberVertices"));
+    this->numberBatches   = static_cast<UI::NumberElement*>(DebugUI_FindElemBase(parentElem, "numberBatches"));
 
     // Zero the smoothing accumulators
     this->smoothedFPS = 0.0f;
@@ -1453,63 +1253,17 @@ void DebugUI::OnCreated() {
 }
 
 // ============================================================
-// DebugUI::Slot6 (vtable +0x30) — No-op
-// ============================================================
-
-// ============================================================
 // STANDALONE promotion — real DebugUI controller vtable
 // ============================================================
 // The developer debug/cheat panel is opened by the game's own data-driven
 // dialog system (a .rsc that names DebugUI as its controller, opened via the
 // dev keybind). In standalone this type was registered as a passive
 // UI_DIALOG_STUB (all slots StubNop) in ui_dialog_stub_factories.cpp, so the
-// panel window rendered from its .rsc but Slot4 (element binding / combo
-// populate / element-id assignment / perf-counter binding) never ran — hence
-// "it launches but none of the game data is linked to it". Slot7 (swatches),
-// Slot8 (perf counters) and Slot9 (button/combo/slider events) were likewise
-// dead. This block promotes DebugUI to a real per-class vtable wiring the
-// reimplemented slots above, following the CitizenUI/BuildRequirementUI
-// promotion pattern. The stub REGISTER_TYPE in ui_dialog_stub_factories.cpp is
-// REMOVED to avoid a duplicate registration.
-//
-// Verified vtable slot indices (exe DebugUI vtable @ 0x14015b870, read live):
-//   +0x20 (idx4) Slot4 = Setup (framework-dispatched once after construction)
-//   +0x30 (idx6)       = Slot6 no-op (OnClosed)
-//   +0x38 (idx7) Slot7 = swatches/day text (framework OnUpdateLayout drives it
-//                        on show/resize; Runtime dispatch is live in standalone)
-//   +0x40 (idx8)       = per-frame OnUpdate. The real +0x40 override IS Slot8
-//                        (perf counters), so we call Slot8 here; we ALSO append
-//                        Slot7 so the color swatches / day text stay synced to
-//                        the sliders every frame regardless of layout re-fires.
-//   +0x48 (idx9) Slot9 = event dispatch (OnElementEvent drives it)
-//
-// Every exe-.rdata type-id DebugUI dereferences is NULL in standalone (raw
-// .rdata addr -> ResolveAddr returns 0). EnsureGlobals lazy-fills them from the
-// live Runtime factory tree (post-Engine::Startup) by each id's REAL registered
-// name (the engine_funcs labels now match, verified against the Ghidra
-// registration writers):
-//   TypeId_ComponentDescription_FC(0x1401c7318)        -> "ComponentDescription"
-//   TypeId_RawMaterialDescription(0x1401c7cb8)-> "RawMaterialDescription"
-//   TypeId_InteractComponent_FC(0x1401c7900) -> "InteractComponent"
-//   TypeId_InteractDescription_FC(0x1401c7938)  -> "InteractDescription"
-//   TypeId_CitizenDescription(0x1401c7190)    -> "CitizenDescription"
-//   TypeId_DiseaseDescription(0x1401c5948)    -> "Disease"
-//   TypeId_DrawableType(0x1401c47c8)          -> "PopulationDescription"
-//   TypeId_Element                     -> "Internal"
-//   TypeId_CitizenComponent_FC(0x1401c7158) -> "CitizenComponent" (name now correct)
-//     (via GetTypeIdByName, matching the proven CitizenUI heal)
-// Slot8 reads the MainLoop through g_pMainLoopSingleton (the exe's exref
-// 0x140151440 names the same symbol) and opens with a null check on it.
-
-// [9] 0x140060bc0
-void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                             int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    // Resource-spawn buttons use no type-ids; the entity-manipulation buttons
-    // (raw-material purge, spawn citizens, disasters, tornado) do, and those ids
-    // reliably resolve above. The body stays the free DebugUI_Slot9: it is reached
-    // BY NAME with a null self from standalone/disaster_harness.cpp.
-    DebugUI_Slot9(this, reinterpret_cast<uint64_t>(element), a, b);
-}
+// panel window rendered from its .rsc but Slot4 never ran. DebugUI is a real
+// class now; the slots are the members above (table 0x14015b870):
+//   +0x20 (idx4) OnCreated, +0x30 (idx6) OnClosed (no-op), +0x38 (idx7)
+//   OnUpdateLayout, +0x40 (idx8) OnUpdate (perf counters, then OnUpdateLayout
+//   every frame: a standalone deviation), +0x48 (idx9) OnElementEvent.
 
 // create 0x140010ec0: MemAlloc(0x130, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).

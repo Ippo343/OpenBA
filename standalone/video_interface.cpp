@@ -117,8 +117,8 @@ void VideoInterfaceFillDx9Placeholder(void* device) {
     Video::Device::InterfaceSlot& slot =                              // B.3.5 bridge
         reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX9];
     slot.module           = reinterpret_cast<void*>(SentinelModule());
-    slot.getDeviceName    = reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_GetDeviceName);
-    slot.createDeviceData = reinterpret_cast<void*>(&VideoDX11::Dx9Placeholder_CreateDeviceData);
+    slot.getDeviceName    = &VideoDX11::Dx9Placeholder_GetDeviceName;
+    slot.createDeviceData = reinterpret_cast<Video::Device::CreateDeviceDataFn>(&VideoDX11::Dx9Placeholder_CreateDeviceData);
     printf("[VideoInterface] DX9 slot filled with the cutover PLACEHOLDER on Device %p "
            "(VideoDX9-x64.dll cannot load without Runtime-x64.dll)\n", device);
 }
@@ -129,8 +129,8 @@ void FillDx11Slot(void* device) {
     Video::Device::InterfaceSlot& slot =                              // B.3.5 bridge
         reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX11];
     slot.module           = reinterpret_cast<void*>(SentinelModule());
-    slot.getDeviceName    = reinterpret_cast<void*>(&VideoDX11::Dx11_GetDeviceName);
-    slot.createDeviceData = reinterpret_cast<void*>(&VideoDX11::Dx11_CreateDeviceData);
+    slot.getDeviceName    = &VideoDX11::Dx11_GetDeviceName;
+    slot.createDeviceData = reinterpret_cast<Video::Device::CreateDeviceDataFn>(&VideoDX11::Dx11_CreateDeviceData);
 
     g_filled = true;
     printf("[VideoInterface] DX11 slot pre-filled on Device %p: "
