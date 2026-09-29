@@ -39,25 +39,25 @@ int g_nMods = 0;
 FILE* g_out = nullptr;
 
 void LoadExports(ModInfo& m) {
-    auto* base = reinterpret_cast<const uint8_t*>(m.base);
-    auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    auto* base = reinterpret_cast<const uint8_t*>(m.base);  // CAST-OK: pe_walk
+    auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);  // CAST-OK: pe_walk
     if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
-    auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);  // CAST-OK: pe_walk
     if (nt->Signature != IMAGE_NT_SIGNATURE) return;
     m.hi = m.lo + nt->OptionalHeader.SizeOfImage;
     const IMAGE_DATA_DIRECTORY& dd = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
     if (!dd.VirtualAddress || !dd.Size) return;
-    auto* ex = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(base + dd.VirtualAddress);
-    auto* funcs = reinterpret_cast<const uint32_t*>(base + ex->AddressOfFunctions);
-    auto* names = reinterpret_cast<const uint32_t*>(base + ex->AddressOfNames);
-    auto* ords  = reinterpret_cast<const uint16_t*>(base + ex->AddressOfNameOrdinals);
+    auto* ex = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(base + dd.VirtualAddress);  // CAST-OK: pe_walk
+    auto* funcs = reinterpret_cast<const uint32_t*>(base + ex->AddressOfFunctions);  // CAST-OK: pe_walk
+    auto* names = reinterpret_cast<const uint32_t*>(base + ex->AddressOfNames);  // CAST-OK: pe_walk
+    auto* ords  = reinterpret_cast<const uint16_t*>(base + ex->AddressOfNameOrdinals);  // CAST-OK: pe_walk
     m.exports.reserve(ex->NumberOfNames);
     for (uint32_t i = 0; i < ex->NumberOfNames; ++i) {
         const uint16_t o = ords[i];
         if (o >= ex->NumberOfFunctions) continue;
         const uint32_t rva = funcs[o];
         if (rva >= dd.VirtualAddress && rva < dd.VirtualAddress + dd.Size) continue;  // forwarder
-        m.exports.push_back({ rva, reinterpret_cast<const char*>(base + names[i]) });
+        m.exports.push_back({ rva, reinterpret_cast<const char*>(base + names[i]) });  // CAST-OK: pe_walk
     }
     std::sort(m.exports.begin(), m.exports.end());
 }
@@ -66,10 +66,10 @@ void AddMod(const char* name, char prefix, bool withExports) {
     HMODULE h = GetModuleHandleA(name);
     if (!h || g_nMods >= 3) return;
     ModInfo& m = g_mods[g_nMods++];
-    m.base = h; m.lo = reinterpret_cast<uintptr_t>(h); m.hi = m.lo + 0x10000000; m.prefix = prefix;
+    m.base = h; m.lo = reinterpret_cast<uintptr_t>(h); m.hi = m.lo + 0x10000000; m.prefix = prefix;  // CAST-OK: pe_walk
     if (withExports) LoadExports(m); else {
-        auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(h);
-        auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(reinterpret_cast<const uint8_t*>(h) + dos->e_lfanew);
+        auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(h);  // CAST-OK: pe_walk
+        auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(reinterpret_cast<const uint8_t*>(h) + dos->e_lfanew);  // CAST-OK: pe_walk
         m.hi = m.lo + nt->OptionalHeader.SizeOfImage;
     }
 }
@@ -98,11 +98,11 @@ void PrintFrame(FILE* o, uintptr_t rip) {
     }
     HMODULE mod = nullptr;
     if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (LPCSTR)rip, &mod) && mod) {
+                           (LPCSTR)rip, &mod) && mod) {  // CAST-OK: crash_walk
         char path[MAX_PATH] = {0};
         GetModuleFileNameA(mod, path, MAX_PATH);
         const char* nm = std::strrchr(path, '\\');
-        std::fprintf(o, " ?:%s+0x%llx", nm ? nm + 1 : path, (unsigned long long)(rip - (uintptr_t)mod));
+        std::fprintf(o, " ?:%s+0x%llx", nm ? nm + 1 : path, (unsigned long long)(rip - (uintptr_t)mod));  // CAST-OK: crash_walk
     } else {
         std::fprintf(o, " ?:0x%llx", (unsigned long long)rip);
     }
@@ -135,7 +135,7 @@ bool TakeSample(Sample& s) {
             PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
             if (!fn) {
                 // leaf function: return address is at [rsp]
-                const uintptr_t* sp = reinterpret_cast<const uintptr_t*>(ctx.Rsp);
+                const uintptr_t* sp = reinterpret_cast<const uintptr_t*>(ctx.Rsp);  // CAST-OK: crash_walk
                 if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
                 ctx.Rip = *sp; ctx.Rsp += 8;
                 continue;

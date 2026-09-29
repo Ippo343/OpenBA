@@ -81,7 +81,7 @@ int  g_watchIntervalMs = -1;   // -1 = disabled
 uintptr_t g_exeBase = 0;
 
 inline uint8_t* CanaryPtr(void* userPtr, size_t reqSize) {
-    return reinterpret_cast<uint8_t*>(userPtr) + reqSize;
+    return reinterpret_cast<uint8_t*>(userPtr) + reqSize;  // CAST-OK: alloc_header
 }
 
 bool CanaryIntact(void* userPtr, size_t reqSize) {
@@ -134,11 +134,11 @@ void PrintEntry(const char* why, void* userPtr, const Entry& e) {
     // First user qword = vtable for engine objects; names the corrupted block's type.
     if (!IsBadReadPtr(userPtr, 8))
         RZBoth("[REDZONE]   user+0 qword: 0x%016llx\n",
-               (unsigned long long)*reinterpret_cast<uint64_t*>(userPtr));
+               (unsigned long long)*reinterpret_cast<uint64_t*>(userPtr));  // CAST-OK: alloc_header
     char bt[512]; int off = 0;
     off += snprintf(bt + off, sizeof(bt) - off, "[REDZONE]   alloc backtrace:");
     for (int i = 0; i < e.btCount && off < (int)sizeof(bt) - 32; ++i) {
-        uintptr_t a = reinterpret_cast<uintptr_t>(e.bt[i]);
+        uintptr_t a = reinterpret_cast<uintptr_t>(e.bt[i]);  // CAST-OK: crash_walk
         if (g_exeBase && a >= g_exeBase && a < g_exeBase + 0x600000) {
             // exe-relative → Ghidra address (image base 0x140000000)
             off += snprintf(bt + off, sizeof(bt) - off, " 0x%llx",
@@ -163,7 +163,7 @@ void PrintHereBacktrace(const char* what) {
     char buf[512]; int off = 0;
     off += snprintf(buf + off, sizeof(buf) - off, "[REDZONE]   %s backtrace:", what);
     for (USHORT i = 0; i < n && off < (int)sizeof(buf) - 32; ++i) {
-        uintptr_t a = reinterpret_cast<uintptr_t>(bt[i]);
+        uintptr_t a = reinterpret_cast<uintptr_t>(bt[i]);  // CAST-OK: crash_walk
         if (g_exeBase && a >= g_exeBase && a < g_exeBase + 0x600000) {
             off += snprintf(buf + off, sizeof(buf) - off, " 0x%llx",
                             (unsigned long long)(0x140000000ull + (a - g_exeBase)));
@@ -292,7 +292,7 @@ static void RedzoneStartWatchdog() {
         if (ms > 0) {
             printf("[REDZONE-SELFTEST] armed: will clobber one boundary tag at t=%dms\n", ms);
             fflush(stdout);
-            CreateThread(nullptr, 0, &RedzoneSelfTest, (LPVOID)(intptr_t)ms, 0, nullptr);
+            CreateThread(nullptr, 0, &RedzoneSelfTest, (LPVOID)(intptr_t)ms, 0, nullptr);  // CAST-OK: win32
         }
     }
 }
@@ -309,7 +309,7 @@ void RedzoneAlloc_Install() {
     // ~BANISHED_REDZONE_WATCH ms of the write together with EVERY thread's stack.
     if (env[0] == 'w' || env[0] == 'W') {
         g_live = new std::unordered_map<void*, Entry>();
-        g_exeBase = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+        g_exeBase = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));  // CAST-OK: crash_walk
         g_mainTid = GetCurrentThreadId();
         g_mainThread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
                                   FALSE, g_mainTid);
@@ -331,7 +331,7 @@ void RedzoneAlloc_Install() {
     // the seat, so a shimmed call is instrumented exactly once.
     g_realAlloc = &RtAllocInstrument_MemAlloc;
     g_realFree  = &RtAllocInstrument_MemFree;
-    g_exeBase   = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+    g_exeBase   = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));  // CAST-OK: crash_walk
     if (Opt().redzoneScan > 0) g_scanEvery = (uint32_t)Opt().redzoneScan;
     if (Opt().redzonePad > 0) g_pad = (size_t)((Opt().redzonePad + 7) & ~7);  // 8-byte multiple
     if (Opt().redzoneWatchMs != -1) {
@@ -415,7 +415,7 @@ extern "C" int RedzoneAlloc_CheckLinks(const char* tag) {
                 fflush(stdout);
                 ExitProcess(0x124);
             }
-            uint64_t link = *reinterpret_cast<uint64_t*>(curFT);
+            uint64_t link = *reinterpret_cast<uint64_t*>(curFT);  // CAST-OK: alloc_header
             int64_t off = (int64_t)(link << 23) >> 23;
             if (off == 0) break;
             uint8_t* next = curFT + off;
@@ -462,7 +462,7 @@ bool ReadablePtr(const void* p, size_t n) {
     if (!p || n == 0) return false;
     static thread_local const uint8_t* s_lo = nullptr;
     static thread_local const uint8_t* s_hi = nullptr;
-    const uint8_t* b = static_cast<const uint8_t*>(p);
+    const uint8_t* b = static_cast<const uint8_t*>(p);  // CAST-OK: crash_walk
     if (b >= s_lo && b + n <= s_hi) return true;
     MEMORY_BASIC_INFORMATION mbi;
     if (!VirtualQuery(p, &mbi, sizeof(mbi))) { s_lo = s_hi = nullptr; return false; }
@@ -471,7 +471,7 @@ bool ReadablePtr(const void* p, size_t n) {
         s_lo = s_hi = nullptr;
         return false;
     }
-    s_lo = static_cast<const uint8_t*>(mbi.BaseAddress);
+    s_lo = static_cast<const uint8_t*>(mbi.BaseAddress);  // CAST-OK: crash_walk
     s_hi = s_lo + mbi.RegionSize;
     return b >= s_lo && b + n <= s_hi;
 }
@@ -502,13 +502,13 @@ void PrintModOff(const char* label, uint64_t addr) {
     HMODULE mod = nullptr;
     if (addr && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   (LPCSTR)addr, &mod) && mod) {
+                                   (LPCSTR)addr, &mod) && mod) {  // CAST-OK: crash_walk
         char path[MAX_PATH] = {0};
         GetModuleFileNameA(mod, path, MAX_PATH);
         const char* nm = strrchr(path, '\\');
         RZOut("[REDZONE-HEAP]   %s = %s+0x%llX\n",
                label, nm ? nm + 1 : path,
-               (unsigned long long)(addr - (uintptr_t)mod));
+               (unsigned long long)(addr - (uintptr_t)mod));  // CAST-OK: crash_walk
     } else {
         RZOut("[REDZONE-HEAP]   %s = 0x%016llx (not in a module)\n",
                label, (unsigned long long)addr);
@@ -543,19 +543,19 @@ static void DumpOneThreadStack(HANDLE th, DWORD tid, const char* label) {
             HMODULE mod = nullptr;
             if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   (LPCSTR)(uintptr_t)ctx.Rip, &mod) && mod) {
+                                   (LPCSTR)(uintptr_t)ctx.Rip, &mod) && mod) {  // CAST-OK: crash_walk
                 char path[MAX_PATH] = {0};
                 GetModuleFileNameA(mod, path, MAX_PATH);
                 const char* nm = strrchr(path, '\\');
                 printf("[REDZONE-HEAP]   #%-2d %-18s + 0x%-8llX\n", frame, nm ? nm + 1 : path,
-                       (unsigned long long)((uintptr_t)ctx.Rip - (uintptr_t)mod));
+                       (unsigned long long)((uintptr_t)ctx.Rip - (uintptr_t)mod));  // CAST-OK: crash_walk
             } else {
                 printf("[REDZONE-HEAP]   #%-2d ??? @ %p\n", frame, (void*)ctx.Rip);
             }
             DWORD64 imageBase = 0;
             PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
             if (!fn) {
-                uintptr_t* sp = reinterpret_cast<uintptr_t*>(ctx.Rsp);
+                uintptr_t* sp = reinterpret_cast<uintptr_t*>(ctx.Rsp);  // CAST-OK: crash_walk
                 if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
                 ctx.Rip = *sp; ctx.Rsp += 8;
                 if (!ctx.Rip) break;
@@ -584,12 +584,12 @@ static void DumpMainThreadStack() {
             HMODULE mod = nullptr;
             if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   (LPCSTR)bt[i], &mod) && mod) {
+                                   (LPCSTR)bt[i], &mod) && mod) {  // CAST-OK: crash_walk
                 char path[MAX_PATH] = {0};
                 GetModuleFileNameA(mod, path, MAX_PATH);
                 const char* nm = strrchr(path, '\\');
                 printf("[REDZONE-HEAP]   #%-2d %-18s + 0x%llX\n", i, nm ? nm + 1 : path,
-                       (unsigned long long)((uintptr_t)bt[i] - (uintptr_t)mod));
+                       (unsigned long long)((uintptr_t)bt[i] - (uintptr_t)mod));  // CAST-OK: crash_walk
             } else printf("[REDZONE-HEAP]   #%-2d ??? @ %p\n", i, bt[i]);
         }
     }
@@ -652,7 +652,7 @@ static int HeapCheckLocked(const char* tag, bool report) {
                 if (!ReadablePtr(p, 8)) {
                     badBlock = p; badPrev = prev; badRange = r; ++bad; break;
                 }
-                uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);
+                uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);  // CAST-OK: alloc_header
                 size_t blkBytes = (size_t)(blkTag & 0x1ffffffffffULL) * 4;
                 if (blkBytes < 8 || p + blkBytes > end) {
                     badBlock = p; badPrev = prev; badRange = r;
@@ -687,7 +687,7 @@ static int HeapCheckLocked(const char* tag, bool report) {
         // class. Also check our table (stale-flagged) for an alloc backtrace.
         if (badPrev && ReadablePtr(badPrev, 0x20)) {
             void* prevUser = badPrev + 8;
-            const uint64_t* q = reinterpret_cast<const uint64_t*>(badPrev);
+            const uint64_t* q = reinterpret_cast<const uint64_t*>(badPrev);  // CAST-OK: alloc_header
             printf("[REDZONE-HEAP] preceding block @%p raw: "
                    "tag=%016llx user[0]=%016llx user[1]=%016llx user[2]=%016llx\n",
                    (void*)badPrev,
@@ -717,26 +717,26 @@ static int HeapCheckLocked(const char* tag, bool report) {
             if (badPrev && AllocStats_Lookup(badPrev + 8, &sz, &caller, &actx)) {
                 printf("[REDZONE-HEAP] preceding block ALLOCSTATS: size=%llu ctx(array header)=%p caller=",
                        (unsigned long long)sz, actx);
-                PrintModOff("alloc-caller", (uint64_t)(uintptr_t)caller);
-                if (actx && ReadablePtr((uint8_t*)actx - 0x40, 0x60)) {
-                    const uint64_t* q = reinterpret_cast<const uint64_t*>((uint8_t*)actx - 0x40);
+                PrintModOff("alloc-caller", (uint64_t)(uintptr_t)caller);  // CAST-OK: crash_walk
+                if (actx && ReadablePtr((uint8_t*)actx - 0x40, 0x60)) {  // CAST-OK: crash_walk
+                    const uint64_t* q = reinterpret_cast<const uint64_t*>((uint8_t*)actx - 0x40);  // CAST-OK: crash_walk
                     printf("[REDZONE-HEAP]   owner struct around header (header at +0x40):\n");
                     for (int i = 0; i < 12; i += 2)
-                        printf("[REDZONE-HEAP]     %p: %016llx %016llx\n", (void*)((uint8_t*)actx - 0x40 + i * 8),
+                        printf("[REDZONE-HEAP]     %p: %016llx %016llx\n", (void*)((uint8_t*)actx - 0x40 + i * 8),  // CAST-OK: crash_walk
                                (unsigned long long)q[i], (unsigned long long)q[i + 1]);
                     PrintModOff("owner candidate vtable (header-0x40)", q[0]);
                 }
             }
             if (AllocStats_Lookup(badBlock + 8, &sz, &caller, &actx)) {
                 printf("[REDZONE-HEAP] bad block ALLOCSTATS: size=%llu ctx=%p caller=", (unsigned long long)sz, actx);
-                PrintModOff("alloc-caller", (uint64_t)(uintptr_t)caller);
+                PrintModOff("alloc-caller", (uint64_t)(uintptr_t)caller);  // CAST-OK: crash_walk
             }
         }
 
         // (2) Any live block of OURS that physically CONTAINS the bad tag
         // address — the genuine victim whose tag was clobbered.
         for (auto& kv : *g_live) {
-            uint8_t* u = reinterpret_cast<uint8_t*>(kv.first);
+            uint8_t* u = reinterpret_cast<uint8_t*>(kv.first);  // CAST-OK: alloc_header
             uint8_t* blk = u - 8;
             size_t recBlock = ((kv.second.reqSize + g_pad + 7) & ~size_t(7)) + 8;
             if (badBlock >= blk && badBlock < blk + recBlock) {
@@ -771,7 +771,7 @@ static int HeapCheckLocked(const char* tag, bool report) {
         // Dump the 64 bytes around the bad tag: the clobber VALUE identifies the writer
         // (a refcount bump, a state int, a pointer) better than any backtrace of the victim.
         if (ReadablePtr(badBlock - 0x20, 0x60)) {
-            const uint64_t* q = reinterpret_cast<const uint64_t*>(badBlock - 0x20);
+            const uint64_t* q = reinterpret_cast<const uint64_t*>(badBlock - 0x20);  // CAST-OK: alloc_header
             for (int i = 0; i < 12; i += 2)
                 printf("[REDZONE-HEAP]   %p: %016llx %016llx\n", (void*)(badBlock - 0x20 + i * 8),
                        (unsigned long long)q[i], (unsigned long long)q[i + 1]);
@@ -865,10 +865,10 @@ extern "C" void* RedzoneAlloc_FindCorruptBlockNative() {
                 if (!VirtualQuery(p, &mbi, sizeof(mbi))) return p;
                 if (mbi.State != MEM_COMMIT ||
                     (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) != 0) return p;
-                safeEnd = static_cast<uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;
+                safeEnd = static_cast<uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;  // CAST-OK: crash_walk
                 if (p + 8 > safeEnd) return p;
             }
-            uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);
+            uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);  // CAST-OK: alloc_header
             size_t blkBytes = (size_t)(blkTag & 0x1ffffffffffULL) * 4;
             if (blkBytes < 8 || p + blkBytes > end) return p;
             p += blkBytes;
@@ -894,7 +894,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     // user+0 vtable resolution, and our alloc backtrace if the table is tracking.
     auto dumpBlockInfo = [](uint8_t* block) {
         if (!block || IsBadReadPtr(block, 0x10)) return;
-        const uint64_t* q = reinterpret_cast<const uint64_t*>(block);
+        const uint64_t* q = reinterpret_cast<const uint64_t*>(block);  // CAST-OK: alloc_header
         size_t pb = (size_t)(q[0] & 0x1ffffffffffULL) * 4;
         RZOut("[REDZONE-DUMP]   OVERFLOWER block @%p tag=%016llx size=%zu (payload %zu):\n",
                (void*)block, (unsigned long long)q[0], pb, pb >= 8 ? pb - 8 : 0);
@@ -904,7 +904,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
         if (payQ > 32) payQ = 32;
         for (size_t i = 0; i < payQ; ++i) {
             if (IsBadReadPtr(u + i*8, 8)) break;
-            uint64_t v = *reinterpret_cast<uint64_t*>(u + i*8);
+            uint64_t v = *reinterpret_cast<uint64_t*>(u + i*8);  // CAST-OK: alloc_header
             // Show ASCII for each byte too (catches embedded strings/paths).
             char asc[9]; for (int b = 0; b < 8; ++b) { char c = (char)((v >> (b*8)) & 0xff); asc[b] = (c >= 32 && c < 127) ? c : '.'; } asc[8] = 0;
             RZOut("[REDZONE-DUMP]     user+0x%02zx = %016llx  '%s'\n",
@@ -940,7 +940,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
                        r, (void*)p, (void*)prev);
                 ++found; break;
             }
-            uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);
+            uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);  // CAST-OK: alloc_header
             size_t blkBytes = (size_t)(blkTag & 0x1ffffffffffULL) * 4;
             if (blkBytes < 8 || p + blkBytes > end) {
                 RZOut("[REDZONE-DUMP] range %d [%p..%p): CORRUPT block @%p "
@@ -985,7 +985,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
             uint8_t* pp = s; uint8_t* prev = nullptr; int g2 = 0;
             while (pp < badBlock && ++g2 < 4000000) {
                 if (IsBadReadPtr(pp, 8)) { prev = nullptr; break; }
-                uint64_t t = *reinterpret_cast<uint64_t*>(pp);
+                uint64_t t = *reinterpret_cast<uint64_t*>(pp);  // CAST-OK: alloc_header
                 size_t bb = (size_t)(t & 0x1ffffffffffULL) * 4;
                 if (bb < 8) { prev = nullptr; break; }
                 prev = pp; pp += bb;
@@ -1021,15 +1021,15 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
                     // node by grafting each range's high 32 bits onto the corrupt
                     // node's low 32 bits, then dump the LIVE block physically before
                     // it = the overflow source (names the class via its vtable).
-                    uint64_t corruptLow = reinterpret_cast<uint64_t>(curFT) & 0xffffffffULL;
+                    uint64_t corruptLow = reinterpret_cast<uint64_t>(curFT) & 0xffffffffULL;  // CAST-OK: ptr_int
                     for (int rr = 0; rr < rangeCnt; ++rr) {
                         uint8_t* rg2 = ranges + (size_t)rr * 0x18;
                         if (IsBadReadPtr(rg2, 0x18)) continue;
                         uint8_t* s2 = *reinterpret_cast<uint8_t**>(rg2 + 0x00);
                         uint8_t* e2 = *reinterpret_cast<uint8_t**>(rg2 + 0x08);
                         if (!s2 || !e2) continue;
-                        uint64_t hi = reinterpret_cast<uint64_t>(s2) & ~0xffffffffULL;
-                        uint8_t* cand = reinterpret_cast<uint8_t*>(hi | corruptLow);
+                        uint64_t hi = reinterpret_cast<uint64_t>(s2) & ~0xffffffffULL;  // CAST-OK: ptr_int
+                        uint8_t* cand = reinterpret_cast<uint8_t*>(hi | corruptLow);  // CAST-OK: ptr_int
                         if (cand >= s2 && cand < e2) {
                             RZOut("[REDZONE-DUMP]   reconstructed in-range node @%p "
                                   "(corrupt low32 grafted onto range hi) — dumping its predecessor:\n",
@@ -1041,7 +1041,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
                 }
                 ++found; break;
             }
-            uint64_t link = *reinterpret_cast<uint64_t*>(curFT);
+            uint64_t link = *reinterpret_cast<uint64_t*>(curFT);  // CAST-OK: alloc_header
             int64_t off = (int64_t)(link << 23) >> 23;  // sign-extend low 41 bits
             if (off == 0) break;                          // end of chain
             uint8_t* next = curFT + off;
@@ -1051,7 +1051,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
                        bucket, (void*)block, (unsigned long long)link,
                        (long long)off, (void*)next);
                 if (!IsBadReadPtr(block, 0x28)) {
-                    const uint64_t* q = reinterpret_cast<const uint64_t*>(block);
+                    const uint64_t* q = reinterpret_cast<const uint64_t*>(block);  // CAST-OK: alloc_header
                     RZOut("[REDZONE-DUMP]   clobbered free block body: "
                            "tag=%016llx +8=%016llx +10=%016llx +18=%016llx +20=%016llx\n",
                            (unsigned long long)q[0], (unsigned long long)q[1],
@@ -1086,7 +1086,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
 // watchdog's failure to notice. Without that, "no detection" would have two
 // causes and could not discriminate them.
 static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
-    const int delayMs = (int)(intptr_t)param;
+    const int delayMs = (int)(intptr_t)param;  // CAST-OK: win32
     Sleep((DWORD)delayMs);
     uint8_t* alloc    = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
     if (!alloc) {
@@ -1116,13 +1116,13 @@ static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
         // the real zeroed-tag corruption the watchdog exists to catch.
         for (int i = 0; p && start && end && p < end && i < 64; ++i) {
             if (!ReadablePtr(p, 8)) break;
-            uint64_t t = *reinterpret_cast<uint64_t*>(p);
+            uint64_t t = *reinterpret_cast<uint64_t*>(p);  // CAST-OK: alloc_header
             size_t   b = (size_t)(t & 0x1ffffffffffULL) * 4;
             if (b < 8 || p + b > end) break;
             victim = p; before = t;
             p += b;
         }
-        if (victim) *reinterpret_cast<uint64_t*>(victim) = 0;
+        if (victim) *reinterpret_cast<uint64_t*>(victim) = 0;  // CAST-OK: alloc_header
     }
     LeaveCriticalSection(cs);
     if (victim) {
@@ -1208,23 +1208,23 @@ extern "C" void RedzoneAlloc_PrintBacktrace(const char* tag) {
     void* bt[32];
     USHORT n = CaptureStackBackTrace(1, 32, bt, nullptr);
     RZOut("[WILDWRITE] backtrace (%s):\n", tag ? tag : "");
-    for (USHORT i = 0; i < n; ++i) PrintModOff("  bt", (uint64_t)(uintptr_t)bt[i]);
+    for (USHORT i = 0; i < n; ++i) PrintModOff("  bt", (uint64_t)(uintptr_t)bt[i]);  // CAST-OK: crash_walk
     fflush(stderr);
 }
 
 extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
-    uint8_t* bad = static_cast<uint8_t*>(badV);
+    uint8_t* bad = static_cast<uint8_t*>(badV);  // CAST-OK: alloc_header
     uint8_t* alloc = reinterpret_cast<uint8_t*>(System::MemoryAllocator::_singleton);   // one live read (B3R STORAGE)
     if (!bad || !alloc) return;
     uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
     int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return;
 
-    const uint64_t badTag = *reinterpret_cast<uint64_t*>(bad);
+    const uint64_t badTag = *reinterpret_cast<uint64_t*>(bad);  // CAST-OK: alloc_header
     // The observed damage never touches the low dword (the size), so the block's
     // true extent is recoverable from it and the walk can step OVER the victim.
     auto blockBytes = [&](uint8_t* p) -> size_t {
-        uint64_t t = *reinterpret_cast<uint64_t*>(p);
+        uint64_t t = *reinterpret_cast<uint64_t*>(p);  // CAST-OK: alloc_header
         if (p == bad) t &= 0xffffffffULL;
         return (size_t)(t & 0x1ffffffffffULL) * 4;
     };
@@ -1257,20 +1257,20 @@ extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
     size_t   prevPay   = prevBytes >= 8 ? prevBytes - 8 : 0;
     RZOut("[WILDWRITE] preceding block @%p user=%p tag=0x%016llx payload=%zu bytes; "
           "victim dword = user+0x%zx\n",
-          (void*)prev, (void*)prevUser, (unsigned long long)*reinterpret_cast<uint64_t*>(prev),
+          (void*)prev, (void*)prevUser, (unsigned long long)*reinterpret_cast<uint64_t*>(prev),  // CAST-OK: alloc_header
           prevPay, prevPay + 4);
     {
         size_t q = prevPay / 8; if (q > 8) q = 8;
         for (size_t i = 0; i < q; ++i) {
-            const uint32_t* d = reinterpret_cast<const uint32_t*>(prevUser + i * 8);
+            const uint32_t* d = reinterpret_cast<const uint32_t*>(prevUser + i * 8);  // CAST-OK: alloc_header
             RZOut("[WILDWRITE]   user+0x%02zx = %08x %08x\n", i * 8, d[0], d[1]);
         }
-        PrintModOff("preceding user+0 as vtable", *reinterpret_cast<uint64_t*>(prevUser));
+        PrintModOff("preceding user+0 as vtable", *reinterpret_cast<uint64_t*>(prevUser));  // CAST-OK: alloc_header
         uint64_t sz = 0; void* caller = nullptr; void* actx = nullptr;
         if (AllocStats_Lookup(prevUser, &sz, &caller, &actx)) {
             RZOut("[WILDWRITE] preceding block ALLOCSTATS size=%llu arrayHeader=%p\n",
                   (unsigned long long)sz, actx);
-            PrintModOff("preceding block alloc caller", (uint64_t)(uintptr_t)caller);
+            PrintModOff("preceding block alloc caller", (uint64_t)(uintptr_t)caller);  // CAST-OK: crash_walk
         }
     }
 
@@ -1287,13 +1287,13 @@ extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
             if (!ReadablePtr(p, 8)) break;
             size_t nb = blockBytes(p);
             if (nb < 8 || p + nb > end) break;
-            const uint64_t tag = *reinterpret_cast<uint64_t*>(p);
+            const uint64_t tag = *reinterpret_cast<uint64_t*>(p);  // CAST-OK: alloc_header
             const bool isFree = (tag & 0x0000200000000000ull) != 0;   // kTagThisFree, bit 45
             if (!isFree && p != prev && nb >= 16 && ReadablePtr(p, nb)) {
-                const uint64_t* q = reinterpret_cast<const uint64_t*>(p + 8);
+                const uint64_t* q = reinterpret_cast<const uint64_t*>(p + 8);  // CAST-OK: alloc_header
                 size_t nq = (nb - 8) / 8;
                 for (size_t i = 0; i < nq; ++i) {
-                    if (q[i] != (uint64_t)(uintptr_t)prevUser) continue;
+                    if (q[i] != (uint64_t)(uintptr_t)prevUser) continue;  // CAST-OK: ptr_int
                     ++hits;
                     if (hits <= 12) {
                         RZOut("[WILDWRITE] OWNER candidate #%d: block @%p user=%p size=%zu holds the "
@@ -1308,7 +1308,7 @@ extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
                             HMODULE mod = nullptr;
                             if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                                   (LPCSTR)(uintptr_t)q[i - back], &mod) && mod) {
+                                                   (LPCSTR)(uintptr_t)q[i - back], &mod) && mod) {  // CAST-OK: crash_walk
                                 char lbl[96];
                                 snprintf(lbl, sizeof lbl, "  module ptr at user+0x%zx", (i - back) * 8);
                                 PrintModOff(lbl, q[i - back]);
@@ -1325,9 +1325,9 @@ extern "C" void RedzoneAlloc_ReportWildWrite(void* badV) {
     // Repair + watch. Clearing the high dword restores the size; the prev-size/prev-free
     // bits it also carried are lost, which only matters if this block is freed while its
     // neighbour is free — acceptable in a run whose purpose is to name the writer.
-    *reinterpret_cast<uint64_t*>(bad) = badTag & 0xffffffffULL;
+    *reinterpret_cast<uint64_t*>(bad) = badTag & 0xffffffffULL;  // CAST-OK: alloc_header
     RZOut("[WILDWRITE] tag REPAIRED to 0x%016llx; arming write watchpoint on %p (4 bytes)\n",
-          (unsigned long long)*reinterpret_cast<uint64_t*>(bad), (void*)(bad + 4));
+          (unsigned long long)*reinterpret_cast<uint64_t*>(bad), (void*)(bad + 4));  // CAST-OK: alloc_header
     fflush(stderr);
     HwWatch_Arm(bad + 4, 4, "teardown wild write victim dword (user+payload+4 of preceding block)");
 }

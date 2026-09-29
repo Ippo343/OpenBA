@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""castmetric.py DIR|FILE... [--by-file] [--tsv] [--detail] [--static] [--all-cstyle]
+"""castmetric.py DIR|FILE... [--by-file] [--tsv] [--detail] [--static] [--all-cstyle] [--floor]
 
 THE B.4 cast metric (NEXT_SESSION.md 3b.6): ONE summed count of every spelling of a
-pointer reinterpretation in C/C++ CODE (comments and string contents blanked).
+pointer reinterpretation in C/C++ CODE (comments and string contents blanked), less the
+floor (B4_RULES.md M2 / M3, FLOOR.md):
 
 Columns (occurrences, not lines):
   reinterpret     every `reinterpret_cast`
@@ -22,7 +23,19 @@ Columns (occurrences, not lines):
                   `base + off` of its own parameters, e.g. `At<int>(self, 0x28)`, `P64(n, 0x20)`)
                   with a numeric-literal argument: a raw offset read spelled as a call
   total           the sum of the columns above: THE METRIC
+  tier_i          (not in total) a counted cast of one of the three tier-I SHAPES (M3):
+                  placement_new  `new (static_cast<void*>(x))`, `::new (...)`, `new ((void*)x)`
+                  print_arg      a `void*` cast (any spelling) that is a whole argument of a
+                                 printf-family / TRACE-style call (PRINTF_FAMILY below)
+                                 (neither when x holds a `+ 0x…` offset: that is a field)
+                  alloc_result   `static_cast<T*>(MemAlloc…|Allocate…(…))`, `(T*)MemAlloc…(…)`
+  cast_ok         (not in total) a counted cast on a line carrying `// CAST-OK: <category>`
+                  (tier R, M2; CATEGORIES below). A marked line whose cast has an operand
+                  `+ 0x…` offset, whose operand is `self` / `this`, which holds an accessor call,
+                  or whose category is unknown is a BAD MARKER: its casts stay in the total.
   bridge          `// B.3.x bridge` marker lines (comment text; not in total)
+  The columns before `total` count what is left AFTER tier_i and cast_ok are taken out, so
+  (old metric) == total + tier_i + cast_ok, per file.
 
 Deterministic; stdlib only; no build. Paths are reported relative to the repo root and the
 type index (known type names, pointer typedefs, member / return types, accessor helpers) is
@@ -33,6 +46,11 @@ does not depend on the working directory nor on which DIRs were asked for.
 --detail    one line per counted hit: file:line:col<TAB>column<TAB>snippet
 --static    the static_cast classification per directory (arith, hier, void, ...)
 --all-cstyle  with --detail, also print the C-style casts that are NOT counted (cstyle_other)
+--floor     the floor report (TSV sections, each headed `# section`): cast_ok per category,
+            per file and category, per category and column; tier_i per shape; every BAD MARKER
+            and STRAY MARKER (a CAST-OK line with no counted cast); offset-accessor definitions
+            (ACCESSOR; one whose cast sits on a valid CAST-OK line is ACCESSOR CAST-OK, a
+            tier-R helper such as a canary reader, and is not an offset helper)
 """
 import bisect
 import functools
@@ -46,7 +64,27 @@ INDEX_ROOTS = ('code', 'runtime', 'standalone', 'dx11', 'engine', 'tests')
 EXTS = ('.cpp', '.h', '.hpp', '.inc', '.c')
 COUNTED = ('reinterpret', 'cstyle_ptr', 'functional', 'static_void', 'static_uintptr',
            'static_cross', 'const_cast', 'pun', 'accessor')
-COLS = COUNTED + ('total', 'bridge')
+COLS = COUNTED + ('total', 'tier_i', 'cast_ok', 'bridge')
+
+# Tier R (B4_RULES.md M2): the categories a `// CAST-OK: <category>` marker may name.
+CATEGORIES = ('alloc_header', 'ptr_int', 'crash_walk', 'win32', 'float_bits', 'string_header',
+              'pe_walk', 'byte_io', 'elem_stride', 'gpu_map', 'com_iid', 'crt', 'hash', 'vslot',
+              'dx11_seam')
+# Tier I (M3), shape print_arg: the callees whose arguments are printf-style (a format string
+# and `...`). Read from the tree: the CRT family, the variadic loggers
+# (redzone_alloc.cpp RZOut / RZBoth, main.cpp CrashLogf, boot_state_watchdog.cpp HangLogf,
+# System::String::Format / FormatIndexed) and the variadic trace macros (gameupdateloop.cpp
+# TRACE, disaster_harness.cpp DLOG, market_overstock_harness.cpp MO_LOG, edittool.cpp
+# REPO_DIAG, cemeterycomponent.cpp CEM_TRACE, tornadocomponent.cpp TORNADO_TRACE).
+PRINTF_FAMILY = frozenset((
+    'printf', 'fprintf', 'sprintf', 'snprintf', '_snprintf', 'sprintf_s', 'snprintf_s',
+    'wprintf', 'fwprintf', 'swprintf', '_snwprintf', 'wsprintfA', 'wsprintfW',
+    'RZOut', 'RZBoth', 'CrashLogf', 'HangLogf', 'Format', 'FormatIndexed',
+    'TRACE', 'DLOG', 'MO_LOG', 'REPO_DIAG', 'CEM_TRACE', 'TORNADO_TRACE'))
+_RE_MARKER = re.compile(r'CAST-OK:\s*([A-Za-z0-9_]+)')
+_RE_ALLOC_CALL = re.compile(r'^(?:::)?(?:[A-Za-z_]\w*\s*(?:\(\s*\))?\s*(?:::|->|\.)\s*)*'
+                            r'(MemAlloc\w*|Allocate\w*)\s*\(')
+_RE_BAD_OPND = re.compile(r'\+\s*0[xX][0-9a-fA-F]')
 
 
 def excluded(rel):
@@ -707,12 +745,119 @@ def operand_after(code, j):
     return code[start:k]
 
 
+# ---------------------------------------------------------------- the floor (M2, M3)
+def find_markers(src, code, starts):
+    """{line: category} for every `// CAST-OK: <category>` in a LINE COMMENT. The marker is
+    read from the raw source (the blanked code has no comments); it counts only where the
+    blanked code is blank from its `//` to the end of the line, so a string literal holding
+    the text is not a marker."""
+    out = {}
+    if 'CAST-OK:' not in src:
+        return out
+    for m in _RE_MARKER.finditer(src):
+        ln = bisect.bisect_right(starts, m.start())
+        ls = starts[ln - 1]
+        le = code.find('\n', ls)
+        le = len(code) if le < 0 else le
+        sl = src.rfind('//', ls, m.start())
+        if sl < 0 or code[sl:le].strip():
+            continue
+        out[ln] = m.group(1)
+    return out
+
+
+def _skip_ws_back(code, i):
+    while i >= 0 and code[i] in ' \t\r\n\\':
+        i -= 1
+    return i
+
+
+def _skip_ws_fwd(code, i):
+    n = len(code)
+    while i < n and code[i] in ' \t\r\n\\':
+        i += 1
+    return i
+
+
+def enclosing_call(code, pos):
+    """Name of the call whose argument list holds pos (the identifier before the unmatched
+    '('), or '' when pos is not inside a call's parentheses in this statement."""
+    depth = 0
+    i = pos - 1
+    while i >= 0:
+        c = code[i]
+        if c in ')]':
+            depth += 1
+        elif c in '([':
+            if depth == 0:
+                if c == '[':
+                    return ''
+                j = _skip_ws_back(code, i - 1)
+                k = j
+                while k >= 0 and (code[k].isalnum() or code[k] == '_'):
+                    k -= 1
+                return code[k + 1:j + 1]
+            depth -= 1
+        elif c in ';{}':
+            return ''
+        i -= 1
+    return ''
+
+
+def tier_i_shape(code, pos, end, target, spelling, opnd):
+    """The tier-I shape of a counted cast at code[pos:end], or None.
+    target: 'void' (the cast yields void*), 'ptr' (a non-void object pointer), else None.
+    spelling: 'static', 'reinterpret' or 'cstyle'."""
+    if end is None or target is None:
+        return None
+    if target == 'void':
+        if _RE_BAD_OPND.search(opnd or ''):
+            return None    # `new ((void*)(s + 0x30)) T` / `(void*)(p + 0x68)`: an offset, not x
+        b = _skip_ws_back(code, pos - 1)
+        a = _skip_ws_fwd(code, end)
+        after = code[a] if a < len(code) else ''
+        before = code[b] if b >= 0 else ''
+        if spelling in ('static', 'cstyle') and before == '(' and after == ')':
+            j = _skip_ws_back(code, b - 1)
+            if j >= 2 and code[j - 2:j + 1] == 'new' and (j < 3 or not (code[j - 3].isalnum() or
+                                                                         code[j - 3] == '_')):
+                return 'placement_new'
+        if before in ',(' and after in ',)' and enclosing_call(code, pos) in PRINTF_FAMILY:
+            return 'print_arg'
+        return None
+    if target == 'ptr' and spelling in ('static', 'cstyle'):
+        o = opnd.strip()
+        while o.startswith('(') and match_paren(o, 0) == len(o) - 1:
+            o = o[1:-1].strip()
+        m = _RE_ALLOC_CALL.match(o)
+        if m and match_paren(o, m.end() - 1) == len(o) - 1:
+            return 'alloc_result'
+    return None
+
+
+def bad_operand(col, opnd):
+    """Why a cast on a CAST-OK line is not tier R (M2), or ''."""
+    if col == 'accessor':
+        return 'offset accessor call'
+    if _RE_BAD_OPND.search(opnd or ''):
+        return 'operand + 0x offset'
+    o = (opnd or '').strip()
+    while o.startswith('(') and match_paren(o, 0) == len(o) - 1:
+        o = o[1:-1].strip()
+    if o in ('self', 'this'):
+        return 'operand is ' + o
+    return ''
+
+
+FLOOR = {}   # rel -> {'ok': {(cat, col): n}, 'tier_i': {shape: n}, 'bad': [...], 'stray': [...]}
+
+
 def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
     if code is None:
         code = blank(src)
     idx.set_file(rel)
     accessors = idx.accessors | idx.acc_f.get(rel, set())
-    counts = dict.fromkeys(COUNTED, 0)
+    counts = dict.fromkeys(COUNTED + ('tier_i', 'cast_ok'), 0)
     sc = {}
     hits = []
     starts = [0]
@@ -720,15 +865,32 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
         starts.append(m.end())
     decls = idx.decls.get(rel)
     ctx = Ctx(idx, code, decls if decls is not None else file_decls(idx, code))
+    markers = find_markers(src, code, starts)
+    fl = {'ok': {}, 'lines': {}, 'ok_lines': set(), 'tier_i': {}, 'bad': [], 'stray': []}
+    marked = {}   # line -> [(col, pos, opnd)]
 
-    def hit(col, pos, counted=True):
-        if counted:
-            counts[col] += 1
-        if want_detail and (counted or all_cstyle):
+    def detail(col, pos):
+        if want_detail:
             ln = line_of(code, pos, starts)
             colno = pos - starts[ln - 1] + 1
             snippet = code[pos:pos + 90].split('\n')[0].strip()
             hits.append(f'{rel}:{ln}:{colno}\t{col}\t{snippet}')
+
+    def hit(col, pos, counted=True, end=None, target=None, spelling=None, opnd=''):
+        if counted:
+            shape = tier_i_shape(code, pos, end, target, spelling, opnd)
+            if shape:
+                counts['tier_i'] += 1
+                fl['tier_i'][shape] = fl['tier_i'].get(shape, 0) + 1
+                detail('tier_i:' + shape, pos)
+                return
+            ln = line_of(code, pos, starts)
+            if ln in markers:
+                marked.setdefault(ln, []).append((col, pos, opnd))
+                return
+            counts[col] += 1
+        if counted or all_cstyle:
+            detail(col, pos)
 
     # ---- named casts
     named_parens = set()
@@ -751,12 +913,15 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
         target = code[lt + 1:gt]
         ok, core, decl = parse_typeid(idx, target, assume=True)
         is_ptr = ok and ('*' in decl or '(*)' in decl or (core and core[-1] in idx.ptrtypedefs))
+        nopnd = code[k + 1:op_end] if op_end > 0 else ''
+        nend = op_end + 1 if op_end > 0 else None
         if kw == 'reinterpret_cast':
-            hit('reinterpret', m.start())
+            hit('reinterpret', m.start(), end=nend, spelling='reinterpret', opnd=nopnd,
+                target='void' if ok and core == ['void'] and decl == '*' else None)
             if is_ptr and op_end > 0:
                 ptr_operand_spans.append((k + 1, op_end))
         elif kw == 'const_cast':
-            hit('const_cast', m.start())
+            hit('const_cast', m.start(), opnd=nopnd)
         elif kw == 'static_cast' and op_end > 0:
             static_sites.append((m.start(), ok, core, decl, k + 1, op_end))
     # ---- C-style casts
@@ -807,28 +972,31 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
             cstyle.append((p, m.end(), core, decl))
     for p, e, core, decl in cstyle:
         opnd = operand_after(code, e)
+        oend = e + (len(code[e:e + 200]) - len(code[e:e + 200].lstrip())) + len(opnd)
         last = [c for c in core if c != '<>'][-1]
         if '*' in decl or '&' in decl or '(*)' in decl or last in idx.ptrtypedefs:
             if first_term(opnd) in _NULLS:
                 hit('cstyle_null', p, counted=False)
                 continue
-            if core == ['void'] and decl == '*':
+            tvoid = core == ['void'] and decl == '*'
+            if tvoid:
                 # `(void*)typedPtr` is the implicit T* -> void* conversion spelled out (a %p
                 # argument): not a reinterpretation. From an integer it is one.
                 t = type_of_expr(ctx, opnd, p)
                 if t is not None and t[0] >= 1:
                     hit('cstyle_tovoid', p, counted=False)
                     continue
-            hit('cstyle_ptr', p)
-            ptr_operand_spans.append((e, e + (len(code[e:e + 200]) - len(code[e:e + 200].lstrip())) + len(opnd)))
+            ptarget = 'void' if tvoid else ('ptr' if decl and set(decl) == {'*'} else None)
+            hit('cstyle_ptr', p, end=oend, target=ptarget, spelling='cstyle', opnd=opnd)
+            ptr_operand_spans.append((e, oend))
         elif last in UINTPTR or last in WIDEINT or core == ['unsigned', 'long', 'long'] or \
                 core == ['long', 'long'] or core == ['unsigned', '__int64'] or core == ['__int64']:
             t = type_of_expr(ctx, opnd, p)
             if t is not None and t[0] >= 1:
-                hit('cstyle_ptr', p)
+                hit('cstyle_ptr', p, opnd=opnd)
             elif t is None and last in UINTPTR and first_term(opnd) not in _NULLS and \
                     not re.match(r'^[\d(]', first_term(opnd) or '0'):
-                hit('cstyle_ptr', p)
+                hit('cstyle_ptr', p, opnd=opnd)
             else:
                 hit('cstyle_other', p, counted=False)
         else:
@@ -862,15 +1030,15 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
         if name in idx.ptrtypedefs:
             if first_term(inner) in _NULLS:
                 continue
-            hit('functional', s)
+            hit('functional', s, opnd=inner)
             ptr_operand_spans.append((op + 1, e))
             continue
         t = type_of_expr(ctx, inner, s)
         if t is not None and t[0] >= 1:
-            hit('functional', s)
+            hit('functional', s, opnd=inner)
         elif t is None and name in UINTPTR and first_term(inner) not in _NULLS and \
                 not re.match(r'^[\d(]', first_term(inner)):
-            hit('functional', s)
+            hit('functional', s, opnd=inner)
     # ---- static_cast classification
     ptr_operand_spans.sort()
     for (ms, ok, core, decl, a, b) in static_sites:
@@ -935,14 +1103,15 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
             else:
                 cls = 'conv'
         sc[cls] = sc.get(cls, 0) + 1
-        if cls in ('void', 'ptr_unknown'):
-            hit('static_void', ms, counted=(cls == 'void'))
-            if cls == 'ptr_unknown':
-                hits and want_detail and hits.__setitem__(-1, hits[-1].replace('\tstatic_void\t', '\tstatic_unknown\t'))
+        if cls == 'void':
+            hit('static_void', ms, end=b + 1, spelling='static', opnd=opnd,
+                target='ptr' if ok and decl and set(decl) == {'*'} else None)
+        elif cls == 'ptr_unknown':
+            hit('static_unknown', ms, counted=False)
         elif cls == 'cross':
-            hit('static_cross', ms)
+            hit('static_cross', ms, opnd=opnd)
         elif cls == 'uintptr_addr':
-            hit('static_uintptr', ms)
+            hit('static_uintptr', ms, opnd=opnd)
         else:
             hit('static:' + cls, ms, counted=False)
     # ---- memcpy / bit_cast puns
@@ -968,7 +1137,7 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
                                             args[2]):
                 pun = True
         if pun:
-            hit('pun', m.start())
+            hit('pun', m.start(), opnd=code[op + 1:e])
     for m in _RE_UNION.finditer(code):
         e = match_paren(code, m.end() - 1, '{', '}')
         if e > 0 and '*' in code[m.end():e]:
@@ -1013,6 +1182,33 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
             args = [x.strip() for x in split_args(code[k + 1:e])]
             if len(args) >= 2 and any(re.match(r'^-?(0[xX][0-9a-fA-F]+|\d+)[uUlL]*$', x) for x in args[1:]):
                 hit('accessor', m.start(1))
+    # ---- CAST-OK lines: tier R, or a BAD MARKER whose casts stay in the total
+    for ln in sorted(markers):
+        cat = markers[ln]
+        lst = marked.get(ln)
+        if not lst:
+            fl['stray'].append((ln, cat))
+            continue
+        why = '' if cat in CATEGORIES else 'unknown category ' + cat
+        for col, pos, opnd in lst:
+            why = why or bad_operand(col, opnd)
+        for col, pos, opnd in sorted(lst, key=lambda x: x[1]):
+            if why:
+                counts[col] += 1
+                detail(col, pos)
+            else:
+                counts['cast_ok'] += 1
+                fl['ok'][(cat, col)] = fl['ok'].get((cat, col), 0) + 1
+                detail('cast_ok:' + cat, pos)
+        if why:
+            fl['bad'].append((ln, cat, why))
+        else:
+            fl['lines'][cat] = fl['lines'].get(cat, 0) + 1
+            fl['ok_lines'].add(ln)
+    if want_detail:
+        hits.sort(key=lambda h: (int(h.split('\t')[0].rsplit(':', 2)[1]),
+                                 int(h.split('\t')[0].rsplit(':', 2)[2])))
+    FLOOR[rel] = fl
     counts['total'] = sum(counts[c] for c in COUNTED)
     counts['bridge'] = sum(1 for ln in src.split('\n') if _RE_BRIDGE.search(ln))
     return counts, sc, hits
@@ -1029,6 +1225,7 @@ def build_index(root, files_code):
     idx = Index()
     idx.enums = set()
     idx.acc_f = {}
+    idx.acc_defs = []    # (rel, name, (first line, last line)) of every offset-accessor definition
     for rel, code in files_code:
         index_file_types(idx, code, rel)
         for m in _RE_ENUM.finditer(code):
@@ -1054,12 +1251,13 @@ def build_index(root, files_code):
             e = match_paren(code, m.end() - 1, '{', '}')
             if e < 0 or e - m.end() > 400:
                 continue
-            defs.append((rel, name, pn[0], pn[1], code[m.end():e]))
+            defs.append((rel, name, pn[0], pn[1], code[m.end():e],
+                         (code.count('\n', 0, m.start()) + 1, code.count('\n', 0, e) + 1)))
     # an accessor casts `base + off` of its own parameters, or forwards both to an accessor
     changed = True
     while changed:
         changed = False
-        for rel, name, pb, po, body in defs:
+        for rel, name, pb, po, body, span in defs:
             acc = idx.accessors if is_header(rel) else idx.acc_f.setdefault(rel, set())
             if name in acc:
                 continue
@@ -1072,6 +1270,7 @@ def build_index(root, files_code):
                       for k in known if k != name)
             if direct or fwd:
                 acc.add(name)
+                idx.acc_defs.append((rel, name, span))
                 changed = True
     return idx
 
@@ -1121,8 +1320,12 @@ def load_index():
     return build_index(ROOT, fc)
 
 
+INDEX = [None]
+
+
 def run(dirs, want_detail=False, all_cstyle=False):
     idx = load_index()
+    INDEX[0] = idx
     files = []
     seen = set()
     for d in dirs:
@@ -1216,8 +1419,72 @@ def main(argv):
                     print('\t'.join([rel] + [str(c[k]) for k in COLS]))
                 else:
                     print(f'{rel} ' + ' '.join(f'{k}={c[k]}' for k in COLS if c[k]))
+    if '--floor' in flags:
+        print_floor([r[0] for r in rows])
     print(f'# castmetric total: {tot["total"]}')
     return 0
+
+
+def print_floor(rels):
+    """The floor report over the scanned files (TSV sections)."""
+    percat, lines, bycol, byfile, shapes, bad, stray = {}, {}, {}, [], {}, [], []
+    for rel in rels:
+        fl = FLOOR.get(rel)
+        if not fl:
+            continue
+        fc = {}
+        for (cat, col), n in fl['ok'].items():
+            percat[cat] = percat.get(cat, 0) + n
+            bycol[(cat, col)] = bycol.get((cat, col), 0) + n
+            fc[cat] = fc.get(cat, 0) + n
+        for cat, n in fl['lines'].items():
+            lines[cat] = lines.get(cat, 0) + n
+        for cat in sorted(fc):
+            byfile.append((rel, cat, fc[cat]))
+        for s, n in fl['tier_i'].items():
+            shapes[s] = shapes.get(s, 0) + n
+        bad.extend((rel, ln, cat, why) for ln, cat, why in fl['bad'])
+        stray.extend((rel, ln, cat) for ln, cat in fl['stray'])
+    # An accessor whose cast sits on a valid CAST-OK line is a tier-R helper (a boundary-tag
+    # or canary reader), not an offset helper: it is listed apart and not counted.
+    acc, acc_ok = set(), set()
+    for r, n, (a, b) in (INDEX[0].acc_defs if INDEX[0] else []):
+        if r not in FLOOR:
+            continue
+        ok_lines = FLOOR[r]['ok_lines']
+        (acc_ok if any(a <= x <= b for x in ok_lines) else acc).add((r, n))
+    acc, acc_ok = sorted(acc), sorted(acc_ok)
+    print()
+    print('# floor: cast_ok per category')
+    print('category\tcasts\tlines')
+    for cat in sorted(set(percat) | set(lines), key=lambda c: (CATEGORIES.index(c) if c in CATEGORIES else 99, c)):
+        print(f'{cat}\t{percat.get(cat, 0)}\t{lines.get(cat, 0)}')
+    print(f'TOTAL\t{sum(percat.values())}\t{sum(lines.values())}')
+    print('# floor: cast_ok per file and category')
+    print('file\tcategory\tcasts')
+    for rel, cat, n in byfile:
+        print(f'{rel}\t{cat}\t{n}')
+    print('# floor: cast_ok per category and column')
+    print('category\tcolumn\tcasts')
+    for (cat, col) in sorted(bycol):
+        print(f'{cat}\t{col}\t{bycol[(cat, col)]}')
+    print('# floor: tier_i per shape')
+    print('shape\tcasts')
+    for s in ('placement_new', 'print_arg', 'alloc_result'):
+        print(f'{s}\t{shapes.get(s, 0)}')
+    print('# floor: BAD MARKER (the line\'s casts stay in the total)')
+    for rel, ln, cat, why in bad:
+        print(f'BAD MARKER\t{rel}:{ln}\t{cat}\t{why}')
+    print('# floor: STRAY MARKER (a CAST-OK line with no counted cast)')
+    for rel, ln, cat in stray:
+        print(f'STRAY MARKER\t{rel}:{ln}\t{cat}')
+    print('# floor: offset-accessor definitions')
+    for rel, name in acc:
+        print(f'ACCESSOR\t{rel}\t{name}')
+    for rel, name in acc_ok:
+        print(f'ACCESSOR CAST-OK\t{rel}\t{name}')
+    print(f'# floor summary: cast_ok={sum(percat.values())} tier_i={sum(shapes.values())} '
+          f'bad_markers={len(bad)} stray_markers={len(stray)} accessor_defs={len(acc)}')
 
 
 if __name__ == '__main__':

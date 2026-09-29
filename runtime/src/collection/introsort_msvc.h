@@ -68,11 +68,11 @@ namespace rtsort {
 // written unsigned because that is what the bytes say.
 template <class T>
 inline bool PtrLt(const T* a, const T* b) {
-    return reinterpret_cast<uintptr_t>(a) < reinterpret_cast<uintptr_t>(b);
+    return reinterpret_cast<uintptr_t>(a) < reinterpret_cast<uintptr_t>(b);  // CAST-OK: ptr_int
 }
 template <class T>
 inline bool PtrLe(const T* a, const T* b) {
-    return reinterpret_cast<uintptr_t>(a) <= reinterpret_cast<uintptr_t>(b);
+    return reinterpret_cast<uintptr_t>(a) <= reinterpret_cast<uintptr_t>(b);  // CAST-OK: ptr_int
 }
 
 // ---------------------------------------------------------------------------

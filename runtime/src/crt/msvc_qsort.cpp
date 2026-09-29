@@ -59,8 +59,8 @@ constexpr size_t kStackSize = 62;   // auStack_408[62] / auStack_218[62]
 // keeps the EARLIER element (strict `> 0` test), as in the CRT source.
 extern "C" void RtCrt_Shortsort_18007f340(void* first, void* last, size_t width,
                                           CompareFn comp) {
-    uint8_t* lo = static_cast<uint8_t*>(first);
-    uint8_t* hi = static_cast<uint8_t*>(last);
+    uint8_t* lo = static_cast<uint8_t*>(first);  // CAST-OK: crt
+    uint8_t* hi = static_cast<uint8_t*>(last);  // CAST-OK: crt
     while (hi > lo) {
         uint8_t* max = lo;
         for (uint8_t* p = lo + width; p <= hi; p += width) {
@@ -84,7 +84,7 @@ extern "C" void RtCrt_Qsort_18007f050(void* base, size_t num, size_t width,
     }
     if (num < 2) return;
 
-    uint8_t* lo = static_cast<uint8_t*>(base);
+    uint8_t* lo = static_cast<uint8_t*>(base);  // CAST-OK: crt
     uint8_t* hi = lo + (num - 1) * width;
 
     uint8_t* loStk[kStackSize];
