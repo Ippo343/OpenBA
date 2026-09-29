@@ -139,6 +139,7 @@ CitizenBehaviorRaw* CitizenBehavior_Ctor(CitizenBehaviorRaw* self) {
     if (pg) {
         pg->m_pairs = nullptr;
         pg->m_pairCount = 0;
+        pg->m_pairCapacity = 0;
         pg->m_pendingIdx = -1;
         pg->_pad14 = 0;
         pg->m_bstRoot = nullptr;

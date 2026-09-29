@@ -6,7 +6,7 @@
 // Profile source path: Entity\CitizenBehavior.cpp
 // Size: 0x1C0 bytes, no vtable.
 
-#include "CitizenBehavior.h"
+#include "engine/types/CitizenBehavior.h"   // the forwarder: also carries CitizenBehaviorRaw
 #include <cstdint>
 
 // ============================================================
