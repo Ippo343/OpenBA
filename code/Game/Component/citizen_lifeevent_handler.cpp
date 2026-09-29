@@ -60,6 +60,9 @@
 #include "Game/exe_bodies.h"
 #include "Entity/componententity_funcs.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Component/CitizenComponent.h"      // B.4 W1 COMP-b: HandleLifeEvent is a member
+#include "Component/CharacterComponent.h"
+#include "Entity/ComponentEntity.h"
 
 // Component vtable slot [2] (offset 0x10) = GetTypeId(this).
 static inline uint32_t CompTypeId(void* comp) {
@@ -83,16 +86,15 @@ static void* FindComponentByTypeId(uint8_t* entity, uint32_t tid) {
 }
 
 // ---------------------------------------------------------------- 0x140113a70
-// Walk the circular family ring (+0x260 head, +0x268 next) OR-ing the life-event
-// flag into each member's +0x88 status word.
-extern "C" void Citizen_FamilyRingOrFlag_3a70(void* citizenV, uint32_t flags) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(citizenV);
-    uint8_t** head = reinterpret_cast<uint8_t**>(self + 0x260);
-    uint8_t* cur = *head;
+// CitizenComponent::OrFamilyFlags: walk the circular children ring (+0x260 head,
+// +0x268 next) OR-ing the life-event flag into each child's +0x88 status word.
+void CitizenComponent::OrFamilyFlags(uint32_t flags) {
+    CitizenComponent** head = &_firstChild;
+    CitizenComponent* cur = *head;
     if (!cur) return;
     do {
-        *reinterpret_cast<uint32_t*>(cur + 0x88) |= flags;
-        cur = *reinterpret_cast<uint8_t**>(cur + 0x268);
+        cur->happinessFlags |= flags;
+        cur = cur->_nextSibling;
         // [STANDALONE GUARD] retail rings are always circular; a half-built ring
         // would spin *(0+0x88) here, so bail instead.
         if (!cur) return;
@@ -291,18 +293,19 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
 // ---------------------------------------------------------------- 0x140116dd0
 // Citizen death handler. Returns 1 (handled) or 0 when the world is in the
 // bit-8 state at +0xd0 (loading/shutdown) — retail early-outs with AL=0 there.
-extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType, const char* strParam) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    uint8_t* world = GameUpdateLoop::_singleton ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr;
+uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) {
+    void* selfV = this;
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return 0;   // [STANDALONE GUARD]
-    if ((*reinterpret_cast<uint32_t*>(world + 0xd0) >> 8 & 1) != 0) return 0;
+    if ((world->m_gameFlags >> 8 & 1) != 0) return 0;
 
-    // --- Death position: workplace (+0x238) if employed, else home (+0x278) ---
+    // --- Death position: the home's InteractComponent (+0x238) if housed, else the
+    // citizen's own model (+0x278 -> +0x68, raw transform storage) ---
     float pos[3] = {0.0f, 0.0f, 0.0f};
-    if (*reinterpret_cast<int64_t*>(self + 0x238) == 0) {
-        uint8_t* home = *reinterpret_cast<uint8_t**>(self + 0x278);
-        if (home) {   // [STANDALONE GUARD] retail derefs unguarded
-            uint8_t* homeEnt = *reinterpret_cast<uint8_t**>(home + 0x68);
+    if (home == nullptr) {
+        CharacterComponent* ch = character;
+        if (ch) {   // [STANDALONE GUARD] retail derefs unguarded
+            uint8_t* homeEnt = reinterpret_cast<uint8_t*>(ch->modelComponent);
             if (homeEnt) {
                 pos[0] = *reinterpret_cast<float*>(homeEnt + 0x158);
                 pos[1] = *reinterpret_cast<float*>(homeEnt + 0x15c);
@@ -310,14 +313,11 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
             }
         }
     } else {
-        int64_t ibp = 0;
-        void* p = WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(self + 0x238), &ibp);
-        if (p)
-            Pf_EntityResolvePos_2e20(*reinterpret_cast<void**>(p), pos, 0, 0, nullptr);
+        Pf_EntityResolvePos_2e20(home->FindComponent<InteractComponent>(), pos, 0, 0, nullptr);
     }
 
-    // --- Clamp to a map cell ---
-    int size = **reinterpret_cast<int**>(world + 0xf8);
+    // --- Clamp to a map cell (the map: m_game, a void* member, read raw) ---
+    int size = *reinterpret_cast<int*>(world->m_game);
     int cx = static_cast<int>(pos[0] + static_cast<float>(size >> 1));
     int cy = static_cast<int>(pos[1] + static_cast<float>(size >> 1));
     if (cx < 0) cx = 0;
@@ -332,12 +332,13 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
     // this port the answer was always the first one, because the cemetery list at
     // *(gw+0xf0)+0x40 had no writer at all. Report the town-level count, the per-cemetery
     // plot count, and which branch was taken, so a regression names itself.
-    const uintptr_t townMgrForTrace = *reinterpret_cast<uintptr_t*>(world + 0xf0);
+    // m_citizenList is a void* member: its pointee is read raw.
+    const uintptr_t townMgrForTrace = reinterpret_cast<uintptr_t>(world->m_citizenList);
     const int cemCountForTrace =
         townMgrForTrace ? *reinterpret_cast<int*>(townMgrForTrace + 0x48) : -1;
 
     void* cem = nullptr;
-    Cemetery_FindNearestWithSlot_9740(*reinterpret_cast<void**>(world + 0xf0), &cem, cell);
+    Cemetery_FindNearestWithSlot_9740(world->m_citizenList, &cem, cell);
     uint32_t flags;
     if (!cem) {
         flags = (eventType != 2) ? 0x80u : 0x2u;
@@ -377,29 +378,36 @@ extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType,
         fflush(stderr);
     }
 
-    // --- OR the flag into partner (+0x258), parent (+0x250) + its ring, own ring ---
-    if (*reinterpret_cast<int64_t*>(self + 0x258) != 0) {
-        *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x258) + 0x88) |= flags;
+    // --- OR the flag into the parent (+0x258), the spouse (+0x250) + the spouse's
+    //     children ring, and our own children ring ---
+    if (_parent != nullptr) {
+        _parent->happinessFlags |= flags;
     }
-    if (*reinterpret_cast<int64_t*>(self + 0x250) != 0) {
-        *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x250) + 0x88) |= flags;
-        Citizen_FamilyRingOrFlag_3a70(*reinterpret_cast<void**>(self + 0x250), flags);
+    if (spouse != nullptr) {
+        spouse->happinessFlags |= flags;
+        spouse->OrFamilyFlags(flags);
     }
-    Citizen_FamilyRingOrFlag_3a70(selfV, flags);
+    OrFamilyFlags(flags);
 
     // --- Post the event-log message (severity 1) ---
-    CitizenComponent_PostLifeEvent(selfV, eventType, 1, strParam);
+    PostLifeEvent(eventType, 1, strParam);
 
-    // --- Queue the citizen entity for removal on GameUpdateLoop (+0xd0 list) ---
-    int64_t entIBP = *reinterpret_cast<int64_t*>(self + 0x10);
-    uint8_t* loop = *reinterpret_cast<uint8_t**>(world + 0xe8);
-    if (entIBP != 0 && loop) {
-        if ((*reinterpret_cast<uint32_t*>(entIBP + 0x40) >> 10 & 1) == 0) {
-            ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entIBP));
+    // --- Queue the citizen entity for removal (the EntityList's removal list at
+    //     +0xd0: m_entityList is a void* member, its pointee is read raw) ---
+    ComponentEntity* entIBP = _entity;
+    uint8_t* loop = reinterpret_cast<uint8_t*>(world->m_entityList);
+    if (entIBP != nullptr && loop) {
+        if ((entIBP->_entityFlags >> 10 & 1) == 0) {
+            ActHunt_MarkEntityRemoval_c2ea0(entIBP);
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             GameColl::AsArray<GameColl::Ptr8>(loop + 0xd0)
                 .SetSizeFill(*reinterpret_cast<int*>(loop + 0xd8) + 1, &entIBP);
         }
     }
     return 1;
+}
+
+// B4 FORWARD: 2 outside caller(s) (tornadocomponent.cpp, standalone/death_harness.cpp)
+extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType, const char* strParam) {
+    return reinterpret_cast<CitizenComponent*>(selfV)->HandleLifeEvent(eventType, strParam);
 }
