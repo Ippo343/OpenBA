@@ -38,6 +38,14 @@
 #include "Tutorial/exe_bodies.h"   // WorkComponent_CalcMaxWorkers (0x14012e5c0, the registered body)
 #include "Work/exe_bodies.h"       // WorkBase_FindComponent_2f90 / _3050
 #include "system/Value.h"          // RtSystem_Time_Ctor
+#include "Entity/ComponentEntity.h"            // ComponentEntity::FindComponent<T>
+#include "Component/StatusIconComponent.h"     // 0x140002f90's class
+#include "Component/DestroyComponent.h"        // 0x140005780's class
+#include "Component/StateMachineComponent.h"   // 0x140003ea0's class
+#include "Component/WorkComponent.h"           // 0x140003050's class
+#include "Game/GameSettings.h"
+#include "Game/Profession.h"
+#include "Game/ProfessionList.h"
 
 // ============================================================
 // Helpers
@@ -60,38 +68,21 @@
 // then if a replacement was produced, reattach via FUN_14012fa20.
 // 0x14012f7e0 WorkplaceComponent_Detach / 0x14012fa20 WorkplaceComponent_Attach (below).
 
-// Find the first component on `host` whose GetTypeId (vtable+0x10) == typeId.
-static void* WPC_FindJobHostComponent(int64_t host, uint32_t typeId) {
-    int count = *(int*)(host + 0x38);
-    int64_t arr = *(int64_t*)(host + 0x30);
-    for (int i = 0; i < count; i++) {
-        int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-        void* comp = (void*)*slot;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-        if (tid == typeId) {
-            void* c = (void*)*slot;
-            if (Object::IsDerivedFromNullSafe(c, typeId)) return c;
-            return nullptr;
-        }
-    }
-    return nullptr;
-}
-
 // ============================================================
 // Reimpl bodies for the detach/attach helpers (0x14012f7e0 / 0x14012fa20).
 // Their full exe FUN_ closure became registered in the gap wave, so they are now
 // closure-safe to port. Sub-helpers used:
 //   FUN_140002cc0 CemeteryListErase_Reimpl (worker-list remove)
 //   FUN_1400c2b70 ModelComponentNotify_Reimpl (mesh visibility/state kick)
-//   FUN_140002f90 WorkBase_FindComponent_2f90 (Entity_FindComponent_MeshInstance)
+//   FUN_140002f90 FindComponent<StatusIconComponent>
 //   FUN_14012c3f0 CitizenComp_FUN_14012c3f0 (mesh-instance flag setter)
-//   FUN_140005780 PlayerPath_FindComponent_5780 (IBP accessor)
+//   FUN_140005780 FindComponent<DestroyComponent>
 //     + FUN_14011e710 PlayerPath_Sub_11e710 (bool getter)
 //   FUN_140003110 (worker-list append)
 //     + FUN_1400c3470 ActHunt_NotifyEntityChanged_c3470 (entity flag notify)
-// SetAccepting pause path (0x14012fc00): the owner's BuildComponent state finder
-// (0x140003ea0 PlayerPath_FindComponent_3ea0), the two citizen workplace finders the
-// eviction loop dispatches between (0x14010ffc0 CitizenComp_sub_ffc0 / 0x140110470
+// SetAccepting pause path (0x14012fc00): the owner's state machine finder
+// (0x140003ea0 FindComponent<StateMachineComponent>), the two citizen workplace finders
+// the eviction loop dispatches between (0x14010ffc0 CitizenComp_sub_ffc0 / 0x140110470
 // CitizenComp_sub_0470), and AssignHousing (0x140111ee0 CitizenComp_AssignHousing).
 
 // Build-time roster-only mode (set by StartTown_AssignFoundingHousing). When true,
@@ -106,65 +97,67 @@ static void* WPC_FindJobHostComponent(int64_t host, uint32_t typeId) {
 // unchanged (full faithful visual).
 bool g_wpcRosterOnly = false;
 
-// Reimpl of FUN_14012f7e0 (WorkplaceComponent worker DETACH): remove the worker IBP
-// from the comp's worker list (+0x58), then if the comp is in its initial state
-// (+0x60==0): kick the model (mode 3), set the mesh flags 2 and 3, and — when the
-// worker's job slot matches the comp's description job (desc+0x20) and the entity is
-// not already culled — hide the entity's mesh (clear AddObject / set update flag).
-// Faithful 1:1 port; closure fully registered.
-void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
-    CemeteryListErase_Reimpl((void*)(comp + 0x58), workerIbp);   // 0x140002cc0
+// The WorkPlaceDescription off +0x18, null when it is not one.
+static WorkPlaceDescription* WPC_Description(const WorkPlaceComponent* wpc) {
+    Description* d = wpc->_description;
+    return Object::IsDerivedFromNullSafe(d, WorkPlaceDescription::TypeId())
+        ? static_cast<WorkPlaceDescription*>(d) : nullptr;
+}
+
+// 0x14012f7e0 — worker DETACH: remove the worker from the roster (+0x58), then if the
+// roster is now empty: kick the model (mode 3), clear the icon flags 2 and 3, and —
+// when the workplace is accepting, the entity is not being destroyed, the profession
+// is the description's (desc+0x20) and the entity is not culled — raise icon bit 4
+// (the inlined 0x14012c3f0 set arm).
+void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
+    CemeteryListErase_Reimpl(&workers, worker);   // 0x140002cc0
     // Build-time roster-only mode (see g_wpcRosterOnly): stop after the roster removal,
     // skipping the gameplay-time Scene mesh-visual toggle that deadlocks mid-build.
     if (g_wpcRosterOnly) return;
-    if (*(int*)(comp + 0x60) != 0) return;
+    if (workerCount != 0) return;
 
-    ModelComponentNotify_Reimpl(*(void**)(comp + 0x10), 3);   // 0x1400c2b70
+    ModelComponentNotify_Reimpl(_entity, 3);   // 0x1400c2b70
 
-    // Partial-world guard (see WorkplaceComponent_Attach): skip the status-icon visual
-    // toggles when the standalone entity lacks the renderable StatusIconComponent (c7e08).
-    uint64_t meshIbp = 0;
-    WorkBase_FindComponent_2f90(*(uintptr_t*)(comp + 0x10), &meshIbp);   // 0x140002f90
-    if (*(int64_t**)&meshIbp) CitizenComp_FUN_14012c3f0(*(int64_t**)&meshIbp, 2, '\0');   // 0x14012c3f0
+    // Partial-world guard (see Attach): skip the status-icon visual toggles when the
+    // standalone entity lacks the renderable StatusIconComponent (c7e08).
+    // LEFT: 0x14012c3f0 takes the icon as int64_t* (COMP-b's declaration).
+    StatusIconComponent* iconA = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
+    if (iconA) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(iconA), 2, '\0');   // 0x14012c3f0
 
-    WorkBase_FindComponent_2f90(*(uintptr_t*)(comp + 0x10), &meshIbp);
-    if (*(int64_t**)&meshIbp) CitizenComp_FUN_14012c3f0(*(int64_t**)&meshIbp, 3, '\0');
+    StatusIconComponent* iconB = _entity->FindComponent<StatusIconComponent>();
+    if (iconB) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(iconB), 3, '\0');
 
-    if (*(char*)(comp + 0x50) == '\0') return;
+    if (!isAccepting) return;
 
-    uint64_t accIbp = 0;
-    PlayerPath_FindComponent_5780(*(uintptr_t*)(comp + 0x10), &accIbp);   // 0x140005780
-    // Partial-world guard: on an inert standalone workplace, Accessor5780 yields a null
-    // accessor object; passing it to Getter_e710 dereferences null+0x10 (READ of 0x10),
+    // Partial-world guard: on an inert standalone workplace, 0x140005780 yields a null
+    // DestroyComponent; passing it to Getter_e710 dereferences null+0x10 (READ of 0x10),
     // which crashed when a citizen switched workplaces during the per-frame update (that
     // path doesn't hold g_wpcRosterOnly). A null accessor means "nothing renderable to
     // toggle", so skip the visual tail — same as g != 0 (entity already culled).
-    if (accIbp == 0) return;
+    DestroyComponent* destroy = _entity->FindComponent<DestroyComponent>();   // 0x140005780
+    if (!destroy) return;
     // The door read AL off 0x14011e710; the body returns uint64_t — take the same byte.
-    char g = (char)PlayerPath_Sub_11e710(*(uintptr_t*)&accIbp);
+    // LEFT: 0x14011e710 takes the component as an integer (Player block's declaration).
+    char g = (char)PlayerPath_Sub_11e710(reinterpret_cast<uintptr_t>(destroy));
     if (g != '\0') return;
 
-    int64_t jobSlot = *(int64_t*)(comp + 0x48);
-    if (jobSlot == 0) return;
+    Profession* jobSlot = profession;
+    if (jobSlot == nullptr) return;
 
-    void* descObj = *(void**)(comp + 0x18);
-    // Guard descObj before IsDerivedFrom (Runtime IsDerivedFrom has no null-check) and
-    // desc before the +0x20 deref: an inert standalone workplace can carry a null/absent
-    // description. A null desc means the job can't match -> skip the visual tail.
-    void* desc = (descObj && Object::IsDerivedFromNullSafe(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
-    if (!desc || jobSlot != *(int64_t*)((uintptr_t)desc + 0x20)) return;
+    // Guard the description before IsDerivedFrom (Runtime IsDerivedFrom has no
+    // null-check) and before the +0x20 read: an inert standalone workplace can carry a
+    // null/absent description. A null desc means the job can't match -> skip the tail.
+    WorkPlaceDescription* desc = _description ? WPC_Description(this) : nullptr;
+    if (!desc || jobSlot != desc->_profession0) return;
 
-    uint64_t meshIbp2 = 0;
-    WorkBase_FindComponent_2f90(*(uintptr_t*)(comp + 0x10), &meshIbp2);
-    int64_t* mesh = *(int64_t**)&meshIbp2;
+    StatusIconComponent* mesh = _entity->FindComponent<StatusIconComponent>();
     if (!mesh) return;   // partial-world guard: no StatusIconComponent renderable
-    if ((*(uint32_t*)(mesh[2] + 0x40) >> 10 & 1) != 0) return;
+    if ((mesh->_entity->_entityFlags >> 10 & 1) != 0) return;
 
-    uint32_t* pFlagsE = (uint32_t*)(mesh + 0x1e);
-    *pFlagsE |= 0x10;
-    // Each branch reads mesh+0x20 FRESH right before the OR/AND (the original reads
-    // *(uint*)(plVar2+4) at the assignment, NOT a value captured before the branch —
-    // the add-branch's MeshInstance::Update (vtable +0x40) can mutate this flags word).
+    mesh->_geometry.activeMask |= 0x10;
+    // Each branch reads the component flags FRESH right before the OR/AND (the original
+    // reads *(uint*)(plVar2+4) at the assignment, NOT a value captured before the branch —
+    // the add-branch's Tick (vtable +0x40) can mutate this flags word).
     uint32_t changed;
     // NOTE this block is retail 0x14012c3f0 INLINED, and that function is ported in TWO
     // other places as well -- CitizenComp_FUN_14012c3f0 (citizencomponent.cpp, the copy
@@ -180,78 +173,70 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     //     the scene never issued -- the non-terminating quadtree walk (d06def5), a FREEZE;
     //   * the set arm used to AddObject a geometry whose vtable was still 0 -- the corrupt
     //     scene node behind the `EXEC of <heap>` in Scene::Clean.
-    if ((int)mesh[0x1e] == 0) {
-        if ((int)*(uint32_t*)(mesh + 0x20) >= 0) {
+    // (The mask was just OR'ed with 0x10, so the clear arm is retail's dead arm.)
+    // LEFT: GameUpdateLoop::m_graphicsScene is void* (GAME-a).
+    if (mesh->_geometry.activeMask == 0) {
+        if (mesh->iconId >= 0) {
             if (GameUpdateLoop::_singleton)
-                reinterpret_cast<Graphics::Scene*>(
-                    *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60))
-                    ->RemoveObject(*(uint32_t*)(mesh + 0x20));   // B.3.5 bridge
-            *(uint32_t*)(mesh + 0x20) = 0xffffffff;
+                reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
+                    ->RemoveObject(mesh->iconId);   // B.3.5 bridge
+            mesh->iconId = -1;
         }
-        uint32_t old4 = *(uint32_t*)(mesh + 4);
+        uint32_t old4 = mesh->_flags;
         uint32_t new4 = old4 & 0xfffffffb;
-        *(uint32_t*)(mesh + 4) = new4;
+        mesh->_flags = new4;
         changed = new4 ^ old4;
     } else {
         if (g_gameSettings != nullptr &&
-            ((uint8_t*)g_gameSettings)[0xc] != '\0' && (int)mesh[0x20] < 0) {
+            g_gameSettings->statusIconEnable != '\0' && mesh->iconId < 0) {
             if (GameUpdateLoop::_singleton) {
-                uint32_t id = reinterpret_cast<Graphics::Scene*>(
-                    *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60))
-                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(mesh + 5));   // B.3.5 bridge
-                *(uint32_t*)(mesh + 0x20) = id;
-                SceneWatch_Note(id, (void*)(mesh + 5), "WorkPlaceComponent carry-mesh");
+                uint32_t id = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
+                    ->AddObject(&mesh->_geometry);   // B.3.5 bridge
+                mesh->iconId = static_cast<int32_t>(id);
+                SceneWatch_Note(id, &mesh->_geometry, "WorkPlaceComponent carry-mesh");
             }
         }
-        uint64_t t = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), 0.0f);   // import slot 0x140152b00
-        // (**(code**)(*mesh + 0x40))(mesh, &time): `mesh` is the COMPONENT (its
-        // Geometry is mesh+0x28; +0x10 entity / +0x20 flags below), so +0x40 is
-        // Component::Tick, not MeshInstance::Update.
-        reinterpret_cast<Component*>(mesh)->Tick(&t);   // B.3.x bridge (slot 8)
-        uint32_t old4 = *(uint32_t*)(mesh + 4);   // FRESH after Update
+        System::Time t = {0};
+        RtSystem_Time_Ctor(&t, 0.0f);   // import slot 0x140152b00
+        // (**(code**)(*mesh + 0x40))(mesh, &time): Component::Tick, slot 8.
+        mesh->Tick(&t);
+        uint32_t old4 = mesh->_flags;   // FRESH after Tick
         uint32_t new4 = old4 | 4;
-        *(uint32_t*)(mesh + 4) = new4;
+        mesh->_flags = new4;
         changed = new4 ^ old4;
     }
-    if ((changed & 0xffff) != 0 && mesh[2] != 0) {
-        ActHunt_NotifyEntityChanged_c3470((void*)mesh[2]);   // 0x1400c3470
+    if ((changed & 0xffff) != 0 && mesh->_entity != nullptr) {
+        ActHunt_NotifyEntityChanged_c3470(mesh->_entity);   // 0x1400c3470
     }
 }
 
-// Reimpl of FUN_14012fa20 (WorkplaceComponent worker ATTACH): if the comp is in its
-// initial state (+0x60==0) and the worker's job slot matches the comp's description
-// job (desc+0x20), kick the model (mode 2); always set the mesh flag (mode 4) and
-// append the worker IBP to the worker list (+0x58, new count = +0x60+1).
-// Faithful 1:1 port; closure fully registered.
-void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
+// 0x14012fa20 — worker ATTACH: if the roster is empty and the profession is the
+// description's (desc+0x20), kick the model (mode 2); clear icon bit 4; append the
+// worker to the roster (+0x58, new count = +0x60 + 1).
+void WorkPlaceComponent::Attach(Object::InternalPtr<CitizenComponent>* worker) {
     if (!g_wpcRosterOnly) {
-        if (*(int*)(comp + 0x60) == 0) {
-            void* descObj = *(void**)(comp + 0x18);
-            int64_t jobSlot = *(int64_t*)(comp + 0x48);
-            // Guard descObj before IsDerivedFrom (no null-check) and desc before the +0x20
-            // deref — an inert standalone workplace may have a null description.
-            void* desc = (descObj && Object::IsDerivedFromNullSafe(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
-            if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
-                ModelComponentNotify_Reimpl(*(void**)(comp + 0x10), 2);   // 0x1400c2b70
+        if (workerCount == 0) {
+            Profession* jobSlot = profession;
+            // Guard the description before IsDerivedFrom (no null-check) and before the
+            // +0x20 read — an inert standalone workplace may have a null description.
+            WorkPlaceDescription* desc = _description ? WPC_Description(this) : nullptr;
+            if (desc && jobSlot == desc->_profession0) {
+                ModelComponentNotify_Reimpl(_entity, 2);   // 0x1400c2b70
             }
         }
 
-        uint64_t meshIbp = 0;
-        WorkBase_FindComponent_2f90(*(uintptr_t*)(comp + 0x10), &meshIbp);   // 0x140002f90
         // Faithful-equivalent partial-world guard: the original always toggles the building's
         // status-icon mesh (FUN_14012c3f0) because every real building carries the renderable
         // StatusIconComponent (c7e08). A standalone-spawned entity may lack it (inert factory /
         // template not fully materialised) → the finder returns a null component and
         // FUN_14012c3f0 faults reading mesh+0x10. Skip only the visual toggle when absent; the
         // occupant roster append below still runs, so the house tracks its occupants regardless.
-        int64_t* mesh = *(int64_t**)&meshIbp;
-        if (mesh) CitizenComp_FUN_14012c3f0(mesh, 4, '\0');   // 0x14012c3f0
+        StatusIconComponent* mesh = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
+        if (mesh) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 4, '\0');   // 0x14012c3f0
     }
 
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>((void*)(comp + 0x58))
-        .SetSizeFill(*(int*)(comp + 0x60) + 1, workerIbp);
+    GameColl::AsArray<GameColl::Ptr8>(&workers).SetSizeFill(workerCount + 1, worker);
 }
 
 // ============================================================
@@ -289,35 +274,32 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
 // correct component every operand is a live object (verified live: two pause clicks, real
 // citizens evicted, zero guard trips).
 
-static void WorkPlaceComponent_EvictRoster(int64_t comp) {
+void WorkPlaceComponent::EvictRoster() {
     const bool savedRosterOnly = g_wpcRosterOnly;
     g_wpcRosterOnly = true;
 
     int guard = 0;
-    while (*(int*)(comp + 0x60) > 0) {
-        int before = *(int*)(comp + 0x60);
+    while (workerCount > 0) {
+        int before = workerCount;
 
-        int64_t* roster = *(int64_t**)(comp + 0x58);
-        int64_t worker = *roster;
+        CitizenComponent* worker = workers[0].Get();
 
         // Pick the finder off the worker's profession record (+0x1f0 -> +0x4c).
-        int64_t profession = *(int64_t*)(worker + 0x1f0);
+        // LEFT: 0x14010ffc0 / 0x140110470 take the citizen as an integer (COMP-b's).
         int64_t newWorkplaceIbp = 0;
-        if (*(char*)(profession + 0x4c) == '\0') {
-            CitizenComp_sub_ffc0(worker, &newWorkplaceIbp);   // 0x14010ffc0
+        if (!worker->profession->field4C) {
+            CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(worker), &newWorkplaceIbp);   // 0x14010ffc0
         } else {
-            CitizenComp_sub_0470(worker, &newWorkplaceIbp);   // 0x140110470
+            CitizenComp_sub_0470(reinterpret_cast<int64_t>(worker), &newWorkplaceIbp);   // 0x140110470
         }
 
         // Re-read the roster base — the finders above can reallocate it.
-        int64_t* rosterNow = *(int64_t**)(comp + 0x58);
-        CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(*rosterNow),
-                                  &newWorkplaceIbp);   // 0x140111ee0
+        CitizenComp_AssignHousing(workers[0].Get(), &newWorkplaceIbp);   // 0x140111ee0
 
-        if (*(int*)(comp + 0x60) >= before || ++guard > 4096) {
+        if (workerCount >= before || ++guard > 4096) {
             std::fprintf(stderr, "[WorkPlace] pause eviction made no progress on comp=%p "
                          "(roster %d -> %d, worker=%p) — breaking to avoid a spin\n",
-                         (void*)comp, before, *(int*)(comp + 0x60), (void*)worker);
+                         static_cast<void*>(this), before, workerCount, static_cast<void*>(worker));
             std::fflush(stderr);
             break;
         }
@@ -332,21 +314,18 @@ static void WorkPlaceComponent_EvictRoster(int64_t comp) {
 // Retail fires this when a workplace comes online. For accepting=true it: stores the
 // accepting flag (+0x50), clears the "closed"/"manually-disabled" status-icon bits (1,0),
 // then — when the workplace is UNSTAFFED on its designated job (roster +0x60 == 0 &&
-// jobSlot +0x48 == desc.job desc+0x20) — RAISES the "no workers" warning bit 4 (0x10) on
-// the building's StatusIconComponent. This is the SOLE faithful raiser of that warning;
-// once a worker is attached, WorkplaceComponent_Attach clears the bit again
-// (MeshFlag(mesh,4,0)). The 2D panel (statusiconui.cpp) reads the resulting +0xF0 bitfield.
+// profession +0x48 == desc.profession desc+0x20) — RAISES the "no workers" warning bit 4
+// (0x10) on the building's StatusIconComponent. This is the SOLE faithful raiser of that
+// warning; once a worker is attached, Attach clears the bit again (MeshFlag(mesh,4,0)).
+// The 2D panel (statusiconui.cpp) reads the resulting +0xF0 bitfield.
 //
-// The status-icon mesh is located and toggled through the SAME registered exe helpers
-// Attach/Detach use — the finder Entity_FindComponent_MeshInstance (0x140002f90, keyed off
-// the StatusIconComponent type id) and the flag setter FUN_14012c3f0 (0x14012c3f0). Both
-// resolve in standalone (seeded by reg_economy_typeids / reg_component_people), so the
-// warning is driven by the real toggle code path, not a second port. The raise's cull-guard
-// and Scene Add/position/notify all live inside FUN_14012c3f0, so a plain MeshFlag(mesh,4,1)
-// reproduces the original's inlined raise byte-for-byte.
+// The status-icon component is found through FindComponent<StatusIconComponent>
+// (0x140002f90) and toggled through the flag setter FUN_14012c3f0 (0x14012c3f0). The
+// raise's cull-guard and Scene Add/position/notify all live inside FUN_14012c3f0, so a
+// plain MeshFlag(mesh,4,1) reproduces the original's inlined raise byte-for-byte.
 //
 // The accepting=false (PAUSE) path does three more things, all ported below:
-//   a. raise the "closed" indicator — bit 0 when the building's BuildComponent state
+//   a. raise the "closed" indicator — bit 0 when the building's state machine state
 //      (found via 0x140003ea0, byte +0x52 or +0x50 when +0x52 is negative) is one of
 //      {0,1,8} ("(s & 0xf6) == 0 && s != 9"), bit 1 otherwise
 //   b. clear the worker/warning icons — flags 2, 3 and 4
@@ -361,68 +340,62 @@ static void WorkPlaceComponent_EvictRoster(int64_t comp) {
 // StatusIconComponent layout — mask +0xf0, scene id +0x100 — not citizen-specific.)
 // NB: this is not the only writer of +0x50. A raw field write lives at
 // buildcomponent_state1.cpp:427 (construction-site enable, no status icon), and the
-// ctor default is set in WorkPlaceComponent_FinishLiveVtable above. A grep for
-// "SetAccepting" will miss both — see the block at buildcomponent_state1.cpp for why
-// that matters.
-void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
-    *(char*)(comp + 0x50) = accepting ? 1 : 0;
-
+// ctor default is set in the ctor below. A grep for "SetAccepting" will miss both — see
+// the block at buildcomponent_state1.cpp for why that matters.
+void WorkPlaceComponent::SetAccepting(bool accepting) {
+    isAccepting = accepting ? 1 : 0;
 
     // Locate the building's StatusIconComponent (the "mesh" the icon toggles hang off).
-    uint64_t meshIbp = 0;
-    WorkBase_FindComponent_2f90(*(uintptr_t*)(comp + 0x10), &meshIbp);   // 0x140002f90
-    int64_t* mesh = *(int64_t**)&meshIbp;
+    // LEFT: 0x14012c3f0 takes the icon as int64_t* (COMP-b's declaration).
+    StatusIconComponent* mesh = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
     if (!mesh) {
         // Partial-world: no renderable icon. The eviction below is gameplay state, not
         // visuals, so it must still run on the pause path.
-        if (!accepting) WorkPlaceComponent_EvictRoster(comp);
+        if (!accepting) EvictRoster();
         return;
     }
 
     if (accepting) {
         // Clear the "closed"/"disabled" indicator bits (1 then 0) — a now-accepting
         // workplace is no longer showing the closed sign.
-        CitizenComp_FUN_14012c3f0(mesh, 1, '\0');   // 0x14012c3f0
-        CitizenComp_FUN_14012c3f0(mesh, 0, '\0');
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 1, '\0');   // 0x14012c3f0
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 0, '\0');
     } else {
-        // (a) raise the closed indicator, keyed on the owner's build state.
-        uint64_t stateIbp = 0;
-        PlayerPath_FindComponent_3ea0(*(uintptr_t*)(comp + 0x10), &stateIbp);   // 0x140003ea0
-        // Partial-world guard: a standalone workplace can lack the BuildComponent. The
+        // (a) raise the closed indicator, keyed on the owner's state machine state.
+        StateMachineComponent* sm = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+        // Partial-world guard: a standalone workplace can lack the state machine. The
         // original derefs it unguarded; with none present treat the building as "normal"
         // (the state the start-town / force-completed buildings are actually in).
+        // The state bytes +0x52 / +0x50 are bytes 2 and 0 of StateMachineComponent::stateFlags.
         uint8_t state = 0;
-        if (stateIbp) {
-            state = *(uint8_t*)(stateIbp + 0x52);
-            if ((int8_t)state < 0) state = *(uint8_t*)(stateIbp + 0x50);
+        if (sm) {
+            state = static_cast<uint8_t>(sm->stateFlags >> 16);
+            if ((int8_t)state < 0) state = static_cast<uint8_t>(sm->stateFlags);
         }
         bool normalState = ((state & 0xf6) == 0) && (state != 9);
-        CitizenComp_FUN_14012c3f0(mesh, normalState ? 0 : 1, '\x01');
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), normalState ? 0 : 1, '\x01');
     }
 
     if (!accepting) {
         // (b) clear the worker/warning icons. Each toggle re-finds the mesh in the
         // original; the finder is pure, so one lookup is equivalent.
-        CitizenComp_FUN_14012c3f0(mesh, 2, '\0');
-        CitizenComp_FUN_14012c3f0(mesh, 3, '\0');
-        CitizenComp_FUN_14012c3f0(mesh, 4, '\0');
-    } else if (*(int*)(comp + 0x60) == 0) {
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 2, '\0');
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 3, '\0');
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 4, '\0');
+    } else if (workerCount == 0) {
         // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on
-        // its designated job (roster empty && jobSlot == desc.job) — the faithful raise.
-        void* descObj = *(void**)(comp + 0x18);
-        void* desc = (Object::IsDerivedFromNullSafe(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
-        if (desc && *(int64_t*)(comp + 0x48) == *(int64_t*)((uintptr_t)desc + 0x20)) {
+        // its designated job (roster empty && profession == desc.profession) — the faithful raise.
+        WorkPlaceDescription* desc = WPC_Description(this);
+        if (desc && profession == desc->_profession0) {
             // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
             // cull-guard + Scene Add + positioning + entity-notify all run inside the toggle.
-            meshIbp = 0;
-            WorkBase_FindComponent_2f90(*(uintptr_t*)(comp + 0x10), &meshIbp);
-            mesh = *(int64_t**)&meshIbp;
-            if (mesh) CitizenComp_FUN_14012c3f0(mesh, 4, '\x01');
+            mesh = _entity->FindComponent<StatusIconComponent>();
+            if (mesh) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 4, '\x01');
         }
     }
 
     // (c) evict the roster.
-    if (!accepting) WorkPlaceComponent_EvictRoster(comp);
+    if (!accepting) EvictRoster();
 }
 
 // Apply the OCCUPIED end-state visual for a house whose roster was filled in roster-only
@@ -435,20 +408,19 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
 // already full (+0x60 != 0), so the original's "first occupant" gate no longer holds.
 // MUST be called at GAMEPLAY time (live scene), never during world-build, or Scene::Remove
 // Object deadlocks. All visual calls are null-guarded for partial-world entities.
-void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
+void WorkPlaceComponent::ApplyOccupiedVisual() {
     // ModelKick(mode 2) — notify the building's components of the occupied state, gated (as
     // the original attach is) on this WorkPlaceComponent being the residence/job the
-    // description designates (jobSlot == desc+0x20). This is the faithful notify; it is
+    // description designates (profession == desc+0x20). This is the faithful notify; it is
     // crash-free. NOTE on visibility: ModelComponent's notify slot (vtable +0x60 =
     // 0x140118ab0) is an EMPTY no-op even in the original exe, and the houses' other
     // visual-bearing components (AmbientEmitterComponent smoke, StatusIconComponent icon)
     // are INERT in standalone (spawned but never scene-registered), so this notify produces
     // no visible change yet — it's correct scaffolding awaiting those components' bring-up.
-    void* descObj = *(void**)(comp + 0x18);
-    int64_t jobSlot = *(int64_t*)(comp + 0x48);
-    void* desc = (Object::IsDerivedFromNullSafe(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
-    if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
-        ModelComponentNotify_Reimpl(*(void**)(comp + 0x10), 2);   // 0x1400c2b70
+    Profession* jobSlot = profession;
+    WorkPlaceDescription* desc = WPC_Description(this);
+    if (desc && jobSlot == desc->_profession0) {
+        ModelComponentNotify_Reimpl(_entity, 2);   // 0x1400c2b70
     }
 
     // The StatusIconComponent mesh-flag toggle (FUN_14012c3f0) is DELIBERATELY NOT driven
@@ -462,63 +434,48 @@ void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
     // so skipping its "hide" toggle changes nothing observable.
 }
 
-void WorkPlaceComponent_OnCreateInit(void* selfP) {    uintptr_t self = (uintptr_t)selfP;
-
-
-    while (*(int*)(self + 0x60) > 0) {
+// 0x14012ee60 — release every seated worker: detach each from its current workplace
+// and reattach it to the (empty) replacement.
+void WorkPlaceComponent::ReleaseWorkers() {
+    while (workerCount > 0) {
         // Termination depends on the detach below removing worker[0] from this
         // component's array (+0x58 / count +0x60) — which it only does when the
-        // worker's own job-host back-pointer (+0x248) still names this workplace.
+        // worker's own workplace (+0x248) still names this workplace.
         // Retail holds that invariant; standalone seats workers through several
         // paths (WorkPlaceUI spinners, the builder pool auto-seat), so a stale
         // back-pointer would spin here forever. A HANG is far worse than a leaked
         // roster slot, so drop the entry ourselves if an iteration made no progress.
-        const int countBefore = *(int*)(self + 0x60);
+        const int countBefore = workerCount;
 
-        int64_t emptyIbp = 0;
-        new (&emptyIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        ComponentEntity* emptyHost = nullptr;   // the InternalBasePtr(nullptr) retail builds
 
-        int64_t* workerSlot = *(int64_t**)(self + 0x58);
-        int64_t worker = *workerSlot;
-        int64_t* pJobHost = (int64_t*)(worker + 0x248);
+        CitizenComponent* worker = workers[0].Get();
 
-        if (*pJobHost != 0) {
-            int64_t host = *pJobHost;
-            void* comp = WPC_FindJobHostComponent(host, WorkPlaceComponent::TypeId());
-            int64_t compIbp = 0;
-            new (&compIbp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-            int64_t workerIbp = 0;
-            new (&workerIbp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)worker));   // B.3.3 bridge
-            WorkplaceComponent_Detach(compIbp, &workerIbp);   // 0x14012f7e0
+        if (worker->workplace != nullptr) {
+            WorkPlaceComponent* comp = worker->workplace->FindComponent<WorkPlaceComponent>();
+            Object::InternalPtr<CitizenComponent> workerIbp(worker);
+            comp->Detach(&workerIbp);   // 0x14012f7e0
         }
 
-        *pJobHost = emptyIbp;
-        if (emptyIbp != 0) {
-            int64_t host = *pJobHost;
-            void* comp = WPC_FindJobHostComponent(host, WorkPlaceComponent::TypeId());
-            int64_t compIbp = 0;
-            new (&compIbp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-            int64_t workerIbp = 0;
-            new (&workerIbp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)worker));   // B.3.3 bridge
-            WorkplaceComponent_Attach(compIbp, &workerIbp);   // 0x14012fa20
+        worker->workplace = emptyHost;
+        if (emptyHost != nullptr) {
+            WorkPlaceComponent* comp = worker->workplace->FindComponent<WorkPlaceComponent>();
+            Object::InternalPtr<CitizenComponent> workerIbp(worker);
+            comp->Attach(&workerIbp);   // 0x14012fa20
         }
 
-        if (*(int*)(self + 0x60) >= countBefore) {
+        if (workerCount >= countBefore) {
             // No progress — shift worker[0] out by hand and keep going.
-            int n = *(int*)(self + 0x60);
-            int64_t* arr = *(int64_t**)(self + 0x58);
+            int n = workerCount;
+            Object::InternalPtr<CitizenComponent>* arr = workers;
             if (arr) for (int i = 1; i < n; ++i) arr[i - 1] = arr[i];
-            *(int*)(self + 0x60) = n - 1;
+            workerCount = n - 1;
             static int s_reported = 0;
             if (s_reported++ < 10) {
                 printf("[WorkPlaceComponent] release: worker[0]=%p did not detach "
                             "(its +0x248 job host does not name this workplace %p); "
                             "dropped it by hand, roster %d -> %d\n",
-                            (void*)worker, selfP, n, n - 1);
+                            static_cast<void*>(worker), static_cast<void*>(this), n, n - 1);
             }
         }
     }
@@ -528,43 +485,47 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {    uintptr_t self = (uintptr
 // bucket for `key` in the town BST (townMgr+0x100), creating the bucket if absent.
 extern "C" void ResidenceComponent_impl_95a0(int64_t townMgr, void* ownerRefLocal, uint64_t key);
 
+// 0x14012f670 — leave the Builder profession: drop the owner from the Builder bucket of
+// the town's profession tree, refresh the WorkComponent's capacity, hand the posted work
+// over to the natural profession, seat it, and release every worker.
+void WorkPlaceComponent::LeaveBuilderProfession() {
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
-
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {    if (!selfP || GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-    uintptr_t gw   = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-
-    uint64_t key = *reinterpret_cast<uint64_t*>(self + 0x48);
-    uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
-    uint64_t builderKey = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
-    if (key == 0 || key != builderKey) {
+    Profession* key = profession;
+    ProfessionList* profReg = gw->m_professionList;
+    Profession* builderKey = profReg ? profReg->field_0x38 : nullptr;
+    if (key == nullptr || key != builderKey) {
         return;   // not a construction workplace
     }
 
     // Remove the owner entity from the Builder bucket in the profession BST.
-    int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
-    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
-    uint64_t* node = townMgr ? *reinterpret_cast<uint64_t**>(townMgr + 0x100) : nullptr;
+    // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a); its BST
+    // node reads stay by offset.
+    ComponentEntity* ownerRef = _entity;
+    uintptr_t townMgr = (uintptr_t)gw->m_citizenList;
+    uint64_t* node = townMgr ? *(uint64_t**)(townMgr + 0x100) : nullptr;
+    const uint64_t keyBits = (uint64_t)key;
     while (node) {
-        if (key < node[0]) {
-            node = reinterpret_cast<uint64_t*>(node[4]);          // left
+        if (keyBits < node[0]) {
+            node = (uint64_t*)node[4];          // left
         } else {
-            if (key <= node[0]) {
-                uint64_t localRef[4] = { static_cast<uint64_t>(ownerRef), 0, 0, 0 };
-                CemeteryListErase_Reimpl(reinterpret_cast<void*>(node + 1), localRef);   // 0x140002cc0
+            if (keyBits <= node[0]) {
+                ComponentEntity* localRef[4] = { ownerRef, nullptr, nullptr, nullptr };
+                CemeteryListErase_Reimpl(node + 1, localRef);   // 0x140002cc0
                 break;
             }
-            node = reinterpret_cast<uint64_t*>(node[5]);          // right
+            node = (uint64_t*)node[5];          // right
         }
     }
 
     // Refresh the WorkComponent's worker capacity (+0x30 = CalcMaxWorkers).
-    // 0x140003050 WorkBase_FindComponent_3050; 0x14012e5c0 WorkComponent_CalcMaxWorkers
-    // (the registered body — fn_StorageCountQuery is the other port of that address).
-    uintptr_t workComp = 0;
-    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workComp);
+    // 0x140003050 FindComponent<WorkComponent>; 0x14012e5c0 WorkComponent_CalcMaxWorkers
+    // (the registered body — WorkComponent::CalcMaxWorkers is the other port of that
+    // address). LEFT: that body takes the component as an integer (Tutorial's).
+    WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
     if (workComp)
-        *reinterpret_cast<int32_t*>(workComp + 0x30) = WorkComponent_CalcMaxWorkers(workComp);
+        workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));
 
     // The natural profession comes from the linked WorkPlaceDescription (+0x20). Retail
     // reads it through IsDerivedFrom(desc, DAT_1401c8118) — and if that check FAILS retail
@@ -574,7 +535,7 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {    if (
     // description we do have (the partial-factory-tree landmine — see
     // MapComponent_DetachOccupancy_4750), log once and trust the linked description anyway.
     // A genuinely null desc yields key 0 = "no profession", the correct end state for a house.
-    void* desc = *reinterpret_cast<void**>(self + 0x18);
+    Description* desc = _description;
     if (desc &&
         !Object::IsDerivedFromNullSafe(desc, WorkPlaceDescription::TypeId())) {
         static bool s_warnedDesc = false;
@@ -582,29 +543,31 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {    if (
             s_warnedDesc = true;
             printf("[WorkPlaceComponent] LeaveBuilderProfession: WPC+0x18=%p is not a "
                    "WorkPlaceDescription (type id %u) — retail would fault here; trusting "
-                   "it and reading +0x20 anyway\n", desc, WorkPlaceDescription::TypeId());
+                   "it and reading +0x20 anyway\n", static_cast<void*>(desc), WorkPlaceDescription::TypeId());
         }
     }
-    uint64_t naturalKey = desc
-        ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20) : 0;
+    Profession* naturalKey = desc
+        ? static_cast<WorkPlaceDescription*>(desc)->_profession0 : nullptr;
 
     // Hand any in-flight work item over from Builder to the natural profession, so it stops
     // being offered to builders the moment the building is finished. FUN_1400f8400 —
     // citizenai_work_scheduler.cpp CitizenAI_WorkScheduler_Rekey.
-    if (workComp && *reinterpret_cast<int32_t*>(workComp + 0x28) >= 0) {
-        uintptr_t sched = *reinterpret_cast<uintptr_t*>(gw + 0x118);
+    // LEFT: the scheduler is GameUpdateLoop::m_tutorial (void*, GAME-a) and the rekey
+    // takes its keys as integers (COMP-b's declaration).
+    if (workComp && workComp->workId >= 0) {
+        uintptr_t sched = (uintptr_t)gw->m_tutorial;
         if (sched)
-            CitizenAI_WorkScheduler_Rekey(sched, *reinterpret_cast<uint32_t*>(workComp + 0x28),
-                    *reinterpret_cast<uint64_t*>(self + 0x48), naturalKey);
+            CitizenAI_WorkScheduler_Rekey(sched, static_cast<uint32_t>(workComp->workId),
+                    (uint64_t)profession, (uint64_t)naturalKey);
     }
 
-    *reinterpret_cast<uint64_t*>(self + 0x48) = naturalKey;
-    WorkPlaceComponent_OnCreateInit(selfP);   // ee60 — release every seated worker
+    profession = naturalKey;
+    ReleaseWorkers();   // ee60 — release every seated worker
 }
 
 // ============================================================
-// WorkPlaceDescription_helper_edf0 (0x14012edf0) — the WorkPlaceComponent controller's
-// state-2 ("built") ENTER handler.
+// WorkPlaceComponent::EnterBuilt (0x14012edf0) — the controller's state-2 ("built")
+// ENTER handler.
 // ============================================================
 // State table proof (WorkPlaceDescription_helper_f3a0 @ 0x14012f3a0, the component's
 // controller table builder): state 0 -> ee40, state 2 -> edf0, state 3 -> ed60. So the
@@ -615,90 +578,77 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {    if (
 // spinner iff WPC+0x48 != 0 (workplaceui.cpp UpdateVisibility, faithful to Startup
 // 0x140087080). Without this the Builder key survived completion, so a finished house
 // kept showing the construction worker up/down buttons.
-//
-// Our WorkPlaceComponent is an inert component with no controller node, so the state
-// machine cannot dispatch this. It is therefore driven from the build-completion site
-// (BuildComponent_State8Finalize) — the same "collapse the missing controller into the
-// site" pattern as MapComponent's cell occupancy. If WorkPlaceComponent is ever promoted
-// to a live controller, move this call into its state-2 enter and delete the hook.
-extern "C" void WorkPlaceComponent_EnterBuiltState(void* selfP) {
-    if (!selfP) return;
-    WorkPlaceComponent_LeaveBuilderProfession(selfP);
 
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-    uint64_t key = *reinterpret_cast<uint64_t*>(self + 0x48);
-    if (key == 0) return;   // no profession (house / storage) -> nothing to register
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
-    if (!townMgr) return;
-    int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
-    ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, key);
+// First-N bring-up trace for the three controller enters (stderr, unconditional —
+// these fire a handful of times per run and are the proof the SM dispatches them).
+static void WPC_TraceEnter(const char* which, const WorkPlaceComponent* comp) {
+    static int n = 0;
+    if (n >= 24) return;
+    ++n;
+    fprintf(stderr, "[WPCCtrl] %s enter: comp=%p key(+0x48)=%p roster(+0x60)=%d\n",
+            which, static_cast<const void*>(comp), static_cast<void*>(comp->profession),
+            comp->workerCount);
+    fflush(stderr);
 }
 
-// ============================================================
-// WorkPlaceComponent_EnterBuiltState_Full — state-2 ("built") entry for ANY workplace
-// ============================================================
-// Retail dispatches edf0 from the WorkPlaceComponent controller's own state-2 enter, so
-// EVERY workplace gets its profession seated the moment its entity's state machine
-// reaches state 2. Our WorkPlaceComponent is inert (no controller node), and the port
-// collapsed that dispatch into BuildComponent_State8Finalize — which is strictly
-// narrower than retail's trigger. A player-placed CROP FIELD or ORCHARD completes
-// through its OWN state machine and has no BuildComponent completion, so it never
-// reached the hand-off at all:
-//
-//   MEASURED 2026-08-18, hand-built crop field: WPC+0x48 = NULL, and
-//   [WorkPlaceUI] 0 shown / 5466 HIDDEN -- WorkplaceUI_Startup hides the whole
-//   workPlace ribbon (worker up/down spinner AND the stop-sign icon) on +0x48 == 0.
-//   The same session logged 8 construction hand-offs, all storage/houses/fishing dock,
-//   and ZERO events for the crop field or orchard.
-//
-// TRIGGER: driven from StateMachineComponent on the entity's FIRST TICK and on any
-// state change - NOT on state index 2. Retail keys the WPC controller off state 2,
-// but a field has its own state space: a player-placed crop field sits in state 0
-// until a crop is chosen (measured: zero transitions), so an index-keyed trigger
-// never fires for the very buildings this exists to fix.
-//
-// EnterBuiltState alone does not fix them: it delegates to LeaveBuilderProfession, which
-// bails on `key == 0`. A field never ran State1Enter, so it never held the Builder key
-// there is nothing to "leave". The natural profession therefore has to be seated
-// directly from the description, which is exactly what StartTown_ActivateWorkplace
-// already does for spawned-complete buildings (starttown.cpp) -- and why demo-spawned
-// fields have working arrows while player-built ones do not.
-//
-// A house or storage barn keeps key 0: their WorkPlaceDescription+0x20 is legitimately
-// zero, so the natural-seat branch skips them and the profession BST (the EMPLOYER list)
-// stays correct.
-extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* selfP) {
-    if (!selfP) return;
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+char WorkPlaceComponent::EnterBuilt() {
+    WPC_TraceEnter("state-2 (built/edf0)", this);
+    LeaveBuilderProfession();
 
-    // 1) The construction hand-off. No-op unless the Builder key is currently installed,
-    //    so buildings that DID go through BuildComponent behave exactly as before.
-    WorkPlaceComponent_EnterBuiltState(selfP);
-
-    // 2) Never-constructed workplaces (crop field / orchard): seat the natural profession.
-    if (*reinterpret_cast<uint64_t*>(self + 0x48) != 0) return;
-    void* desc = *reinterpret_cast<void**>(self + 0x18);
-    uint64_t natural = desc
-        ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20) : 0;
-    if (natural == 0) return;   // house / storage: correctly professionless
-
-    *reinterpret_cast<uint64_t*>(self + 0x48) = natural;
-    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(selfP), true);
-
-    if (GameUpdateLoop::_singleton != nullptr) {
-        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
-        if (townMgr) {
-            int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
-            ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, natural);
-        }
-    }
-
+    Profession* key = profession;
+    if (key == nullptr) return 0;   // no profession (house / storage) -> nothing to register
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a), and
+    // 0x1400895a0 takes it and the key as integers (Game block's declaration).
+    uintptr_t townMgr = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
+    if (!townMgr) return 0;
+    ComponentEntity* ownerRef = _entity;
+    ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerRef, (uint64_t)key);
+    return 0;
 }
 
+// 0x14012ee40 — state 0 ("construction") ENTER: become a Builder workplace (0x14012f520).
+char WorkPlaceComponent::EnterConstruction() {
+    WPC_TraceEnter("state-0 (construction/f520)", this);
+    EnterBuilderProfession();
+    return 0;
+}
 
+// 0x14012ed60 — state 3 ("demolish") ENTER: ee60 (release every worker) + the BST erase on
+// the +0x48 key. The ported OnRemove body is the same pair in erase-first order; the
+// halves touch disjoint state (+0x48/BST vs the +0x58 roster), so the order is immaterial.
+char WorkPlaceComponent::EnterDemolish() {
+    WPC_TraceEnter("state-3 (demolish/ed60)", this);
+    WorkPlaceComponent::OnRemove();   // the ported slot-7 body
+    return 0;
+}
+
+// ---- B4 FORWARD: the C spellings outside callers still use; the closing wave rewires
+// them. Detach / Attach: citizencomponent.cpp. SetAccepting: attendancecomponent(_states),
+// cropfieldcomponent(_states), destroycomponent_workerrelease, orchardcomponent(_states),
+// pasturecomponent_states, resourceproducecomponent_states, Dialog/buildui.cpp,
+// Game/starttown.cpp. OnCreateInit: destroycomponent_workerrelease.
+// LeaveBuilderProfession: destroycomponent_states (the null test is the tree's).
+// ApplyOccupiedVisual: Game/starttown.cpp.
+void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
+    ((WorkPlaceComponent*)comp)->Detach((Object::InternalPtr<CitizenComponent>*)workerIbp);   // B4 FORWARD
+}
+void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
+    ((WorkPlaceComponent*)comp)->Attach((Object::InternalPtr<CitizenComponent>*)workerIbp);   // B4 FORWARD
+}
+void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
+    ((WorkPlaceComponent*)comp)->SetAccepting(accepting);   // B4 FORWARD
+}
+void WorkPlaceComponent_OnCreateInit(void* selfP) {
+    ((WorkPlaceComponent*)selfP)->ReleaseWorkers();   // B4 FORWARD
+}
+extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
+    if (!selfP) return;
+    ((WorkPlaceComponent*)selfP)->LeaveBuilderProfession();   // B4 FORWARD
+}
+void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
+    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD
+}
 
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====
 // (WorkPlaceComponent.h). Before: COMPONENT_INERT_FACTORY expanded by hand (48-slot
@@ -721,41 +671,9 @@ extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* selfP) {
 //     the natural profession, register under it) transitions {3}; 3 enter=ed60
 //     ("demolish": release workers + BST-erase) transitions {6,4,5}.
 
-// destroycomponent_workerrelease.cpp — faithful f520 port (0x14012f520).
-extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc);
-
-// First-N bring-up trace for the three controller enters (stderr, unconditional —
-// these fire a handful of times per run and are the proof the SM dispatches them).
-static void WPC_TraceEnter(const char* which, void* comp) {
-    static int n = 0;
-    if (n >= 24) return;
-    ++n;
-    fprintf(stderr, "[WPCCtrl] %s enter: comp=%p key(+0x48)=0x%llx roster(+0x60)=%d\n",
-            which, comp,
-            (unsigned long long)*reinterpret_cast<uint64_t*>(
-                reinterpret_cast<uintptr_t>(comp) + 0x48),
-            *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(comp) + 0x60));
-    fflush(stderr);
-}
-
-static char WPC_EnterConstructionState(void* comp, void* /*sm*/) {   // ee40 -> f520
-    WPC_TraceEnter("state-0 (construction/f520)", comp);
-    WorkPlaceComponent_EnterBuilderProfession(reinterpret_cast<int64_t>(comp));
-    return 0;
-}
-static char WPC_EnterBuiltStateNode(void* comp, void* /*sm*/) {      // edf0
-    WPC_TraceEnter("state-2 (built/edf0)", comp);
-    WorkPlaceComponent_EnterBuiltState(comp);
-    return 0;
-}
-static char WPC_EnterDemolishState(void* comp, void* /*sm*/) {       // ed60
-    // ed60 = ee60 (release every worker) + BST-erase on the +0x48 key. The ported
-    // OnCreate body is the same pair in erase-first order; the halves touch disjoint
-    // state (+0x48/BST vs the +0x58 roster), so the order is immaterial.
-    WPC_TraceEnter("state-3 (demolish/ed60)", comp);
-    reinterpret_cast<WorkPlaceComponent*>(comp)->WorkPlaceComponent::OnRemove();   // B.3.8 bridge (the ported slot-7 body)
-    return 0;
-}
+static char WPC_EnterConstructionState(WorkPlaceComponent* c) { return c->EnterConstruction(); }   // 0x14012ee40
+static char WPC_EnterBuiltStateNode(WorkPlaceComponent* c)    { return c->EnterBuilt(); }          // 0x14012edf0
+static char WPC_EnterDemolishState(WorkPlaceComponent* c)     { return c->EnterDemolish(); }       // 0x14012ed60
 
 using WPCCtrlDispatch = ::ControllerLive::Dispatcher<WPCCtrlTag>;
 
@@ -866,18 +784,14 @@ void WorkPlaceComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // Empty serializer block (version 0, immediately destroyed)
-    alignas(8) uint8_t emptySerializer[24];
-    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
 
     // Main serializer block (version 1)
-    alignas(8) uint8_t serializer[16];  // Ghidra shows local_30[2] = 16 bytes
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge
 
-    // Serialize worker count from +0x60
-    int workerCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x60);
+    // Serialize the worker count from +0x60
     int countBuf = workerCount;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
+    ser.Serialize(countBuf, nullptr);
 
     // On load, resize the worker array to the count just read.
     //
@@ -893,54 +807,37 @@ void WorkPlaceComponent::Persist(void* stream) {
     // handing InternalFactory::PersistObject a bogus objId (0xAAA12C08, identical
     // across saves because it is stream content, not heap garbage) which it used
     // to index its id map out of bounds -> ACCESS_VIOLATION on load.
-    const uintptr_t serStream = *(uintptr_t*)serializer;
-    const bool loadingLeg = serStream && (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    const bool loadingLeg = ser._stream && (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (loadingLeg) {
-        GameColl::AsArray<GameColl::Ptr8>((void*)(reinterpret_cast<uintptr_t>(this) + 0x58)).SetSize(countBuf);
+        GameColl::AsArray<GameColl::Ptr8>(&workers).SetSize(countBuf);
     }
 
-    // Serialize each worker InternalBasePtr and validate type
-    void* workerArray = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x58);
+    // Serialize each worker InternalBasePtr, nulled when it is not a CitizenComponent
+    // (import slot 0x140152a98).
+    Object::InternalPtr<CitizenComponent>* workerArray = workers;
     int64_t count = (int64_t)countBuf;
     if (count > 0 && workerArray) {
-        uintptr_t ptr = (uintptr_t)workerArray;
-        for (int64_t i = 0; i < count; i++) {
-            reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            // Validate: if ptr dereferences to non-null, check IsDerivedFrom
-            void* obj = *(void**)ptr;
-            if (obj != nullptr) {
-                bool valid = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(
-                    CitizenComponent::TypeId());   // import slot 0x140152a98
-                if (!valid) {
-                    *(uint64_t*)ptr = 0;  // Clear invalid reference
-                }
-            }
-            ptr += 8;  // InternalBasePtr is 8 bytes
-        }
+        for (int64_t i = 0; i < count; i++)
+            workerArray[i].Serialize(ser, CitizenComponent::TypeId());
     }
 
     // Serialize isAccepting bool at +0x50
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&isAccepting), nullptr);   // B.3.4 bridge
+    ser.Serialize(isAccepting, nullptr);
 
     // Version check for +0x48 field
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
     if (version < 1) {
         // Legacy path: read from description component via IsDerivedFrom
-        void* obj = _description;
-        bool derived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(
-            WorkPlaceDescription::TypeId());   // import slot 0x140152a98
-        void* descComp = derived ? obj : nullptr;
-        if (descComp) {
-            *(uint64_t*)&profession = *(uint64_t*)((uintptr_t)descComp + 0x20);
+        Description* obj = _description;
+        bool derived = obj->IsDerivedFrom(WorkPlaceDescription::TypeId());   // import slot 0x140152a98
+        if (derived) {
+            profession = static_cast<WorkPlaceDescription*>(obj)->_profession0;
         }
     } else {
         // Version >= 1: serialize via FUN_140018020
-        Reimpl_ExternalPtr_Serialize_StringTable(
-            (void*)(reinterpret_cast<uintptr_t>(this) + 0x48), serializer);
+        Reimpl_ExternalPtr_Serialize_StringTable(&profession, &ser);
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // ============================================================
 // WorkPlaceComponent::OnRemovedFromWorld (vtable slot [7], 0x14012f090)
@@ -965,39 +862,40 @@ void WorkPlaceComponent::Persist(void* stream) {
 // and PickingComponent pick-mesh teardowns.
 
 void WorkPlaceComponent::OnRemove() {
-    uint64_t professionId = *(uint64_t*)(reinterpret_cast<uintptr_t>(this) + 0x48);
-    if (professionId != 0 && GameUpdateLoop::_singleton != nullptr) {
-        // Build InternalBasePtr for owner
-        uint64_t ownerRef = *(uint64_t*)(reinterpret_cast<uintptr_t>(this) + 0x10);
+    Profession* professionId = profession;
+    if (professionId != nullptr && GameUpdateLoop::_singleton != nullptr) {
+        ComponentEntity* ownerRef = _entity;
 
-        // Get BST root from game world +0xf0 -> +0x100
-        uintptr_t gameState = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xf0);
+        // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a); the
+        // BST root at +0x100 and its node reads stay by offset.
+        uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
         uint64_t* node = *(uint64_t**)(gameState + 0x100);
+        const uint64_t key = (uint64_t)professionId;
 
         bool found = false;
         while (node != nullptr) {
-            if (professionId < *node) {
+            if (key < *node) {
                 node = (uint64_t*)node[4];  // left child
-            } else if (professionId > *node) {
+            } else if (key > *node) {
                 node = (uint64_t*)node[5];  // right child
             } else {
                 // Found: UNregister the owner entity from this bucket's entity array.
-                uint64_t localRef[4];
+                ComponentEntity* localRef[4];
                 localRef[0] = ownerRef;
-                CemeteryListErase_Reimpl((void*)(node + 1), (void*)localRef);   // 0x140002cc0
+                CemeteryListErase_Reimpl(node + 1, localRef);   // 0x140002cc0
                 found = true;
                 break;
             }
         }
 
         if (!found) {
-            WorkPlaceComponent_OnCreateInit(this);   // 0x14012ee60
+            ReleaseWorkers();   // 0x14012ee60
             return;
         }
     }
 
     // Always call fallback init
-    WorkPlaceComponent_OnCreateInit(this);   // 0x14012ee60
+    ReleaseWorkers();   // 0x14012ee60
 }
 
 DEFINE_EXE_TYPE(WorkPlaceComponent, "ControllerComponent")
