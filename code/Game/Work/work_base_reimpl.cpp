@@ -105,7 +105,7 @@ void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
 // real leaf (LocationWork / ClearStorage / FireWork) through `Work(void*)`.
 void Work::InitFromEntity(void* pEntityIBP) {
     field_10 = nullptr;
-    field_10 = pEntityIBP ? *reinterpret_cast<void**>(pEntityIBP) : nullptr;
+    field_10 = pEntityIBP ? *reinterpret_cast<ComponentEntity**>(pEntityIBP) : nullptr;
     field_18 = nullptr;
     field_20 = -1;
     field_24 = 0;

@@ -34,7 +34,6 @@
 //
 // fn_SetupBuildActions corresponds to the exe helper at c0690.
 
-#include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
@@ -48,15 +47,22 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Component/BuildComponent.h"   // ENDGAME B.3.8 CB3: BuildComponent::TypeId()
 #include "Component/DestroyComponent.h"   // ENDGAME B.3.8 CB3: DestroyComponent::TypeId()
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Entity/ComponentEntity.h"
 
 namespace {
 
 // Already-ported action ctors + stack ops, called by name (B3R; Action/ and Work/
 // exe_bodies.h): 0x1400c5400 WorkBase_TaskListCleanup_c5400, 0x1400c54e0
-// Pf_ActStackPush_54e0, 0x1400c29a0 ActChild_Entity29a0_c29a0, 0x1400012d0
-// ActMv_FindComponentFamily_12d0, 0x1400cb1d0 Pf_SendComponentMessageCopyCtor_b1d0,
-// 0x1400c5da0 Pf_CompleteTaskCopyCtor_5da0, 0x140042890 ActChild_ShowToolCtor_42890,
-// 0x1400c9720 Pf_PerformWorkCtor7_9720, 0x1400c9170 Pf_MoveToCtor_9170.
+// Pf_ActStackPush_54e0, 0x1400c29a0 ActChild_Entity29a0_c29a0, 0x1400cb1d0
+// Pf_SendComponentMessageCopyCtor_b1d0, 0x1400c5da0 Pf_CompleteTaskCopyCtor_5da0,
+// 0x140042890 ActChild_ShowToolCtor_42890, 0x1400c9720 Pf_PerformWorkCtor7_9720,
+// 0x1400c9170 Pf_MoveToCtor_9170; 0x1400012d0 (the CharacterComponent lookup) is
+// ComponentEntity::FindComponent<CharacterComponent>.
+//
+// The action ctors take their InternalPtr arguments as `uint64_t*` / `int64_t*`
+// (Action/exe_bodies.h, not this block's header): those casts are LEFT.
 uint32_t s_msg7008 = 0, s_msg75f0 = 0;
 bool s_init = false;
 // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7008 and 0x1401c75f0 are registered type-id
@@ -76,25 +82,24 @@ void EnsureInit() {
 }
 
 
-inline void  Ctor(void* self, void* obj) { new (self) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 inline void* Alloc(uint64_t sz)          { return System::MemoryAllocator::MemAlloc(sz, 8); }
 
 } // namespace
 
-extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t priority,
-                    int64_t* buildingIBPptr, float* position, uint32_t taskParam, uint32_t altAnim) {
+extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority,
+                    ComponentEntity** building, float* position, uint32_t taskParam, uint32_t altAnim) {
     EnsureInit();
-    if (!citizenIBPptr) return;
+    if (!citizenRef) return;
 
-    uintptr_t citizenEntity = *reinterpret_cast<uintptr_t*>(citizenIBPptr);
-    if (!citizenEntity) return;
-    uintptr_t charComp = *reinterpret_cast<uintptr_t*>(citizenEntity + 0x278);
-    if (!charComp) return;
-    void* stack = reinterpret_cast<void*>(charComp + 0x48);   // action stack (base +0x48, top +0x60)
+    CitizenComponent* citizen = *citizenRef;
+    if (!citizen) return;
+    CharacterComponent* character = citizen->character;
+    if (!character) return;
+    // The action stack (base +0x48, top +0x60), as the stack ops take it.
+    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);
 
     // heading = Entity_impl_29a0(position, &buildingEntityValue) — used as PerformWork anim.
-    int64_t buildingEntity = buildingIBPptr ? *buildingIBPptr : 0;
+    ComponentEntity* buildingEntity = building ? *building : nullptr;
     float heading = 0.0f;
     heading = ActChild_Entity29a0_c29a0(position, &buildingEntity);
 
@@ -106,24 +111,23 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* mem = Alloc(0x40);
         void* act = nullptr;
         if (mem) {
-            int64_t outIBP = 0; Ctor(&outIBP, nullptr);
+            uint64_t outIBP = 0;
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-            int64_t targetEntity = *reinterpret_cast<int64_t*>(citizenEntity + 0x10);  // *(citizenEntity+0x10)
-            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&targetEntity), &msgId, 0, reinterpret_cast<uint64_t*>(&outIBP), 0);
+            ComponentEntity* targetEntity = citizen->_entity;
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&targetEntity), &msgId, 0, &outIBP, 0);
         }
-        int64_t leadIBP = 0; Ctor(&leadIBP, act);
-        if (*reinterpret_cast<int64_t*>(charComp + 0x58) != 0)
-            reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(charComp + 0x58))->DeletePtr(
+        if (character->field_0x58 != nullptr)
+            reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr(
                 );   // B.3.3 bridge
-        *reinterpret_cast<int64_t*>(charComp + 0x58) = leadIBP;
+        character->field_0x58 = reinterpret_cast<Action*>(act);
     }
 
     // uVar2 = Random::Rand(*(gw+0xd8), 2) — tool/anim variant (0 or 1).
     uint32_t uVar2 = 0;
     {
-        uintptr_t gw = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
-        void* rng = gw ? *reinterpret_cast<void**>(gw + 0xd8) : nullptr;
-        if (rng) uVar2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(2));   // B.3.4b bridge
+        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+        System::Random* rng = gw ? gw->m_random : nullptr;
+        if (rng) uVar2 = rng->Rand(static_cast<uint32_t>(2));
     }
 
     // --- CompleteTask (0x38) -> PUSH ---
@@ -131,13 +135,13 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* mem = Alloc(0x38);
         void* act = nullptr;
         if (mem) {
-            int64_t outIBP = 0; Ctor(&outIBP, nullptr);
-            int64_t ent = *reinterpret_cast<int64_t*>(citizenIBPptr);   // citizen entity
+            uint64_t outIBP = 0;
+            CitizenComponent* ent = *citizenRef;   // citizen
             act = Pf_CompleteTaskCopyCtor_5da0(mem, priority, reinterpret_cast<uint64_t*>(&ent),
-                             reinterpret_cast<uint64_t*>(&outIBP), taskParam);
+                             &outIBP, taskParam);
         }
-        int64_t ibp = 0; Ctor(&ibp, act);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(stack), &ibp);
+        void* ibp = act;
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 
     // --- SendComponentMessage #2 (msg c7008 idle / c75f0 alt, target=building) -> PUSH ---
@@ -145,13 +149,13 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* mem = Alloc(0x40);
         void* act = nullptr;
         if (mem) {
-            int64_t outIBP = 0; Ctor(&outIBP, nullptr);
+            uint64_t outIBP = 0;
             uint32_t msgId = (altAnim & 0xff) ? s_msg75f0 : s_msg7008;
-            int64_t bldg = buildingIBPptr ? *buildingIBPptr : 0;   // building entity
-            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&bldg), &msgId, 0, reinterpret_cast<uint64_t*>(&outIBP), 0);
+            ComponentEntity* bldg = building ? *building : nullptr;   // building entity
+            act = Pf_SendComponentMessageCopyCtor_b1d0(mem, reinterpret_cast<uint64_t*>(&bldg), &msgId, 0, &outIBP, 0);
         }
-        int64_t ibp = 0; Ctor(&ibp, act);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(stack), &ibp);
+        void* ibp = act;
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 
     // --- ShowTool #1 (tool = -1) -> PUSH ---
@@ -159,11 +163,11 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* mem = Alloc(0x30);
         void* act = nullptr;
         if (mem) {
-            int64_t ent = *reinterpret_cast<int64_t*>(citizenIBPptr);
+            CitizenComponent* ent = *citizenRef;
             act = ActChild_ShowToolCtor_42890(mem, &ent, -1);
         }
-        int64_t ibp = 0; Ctor(&ibp, act);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(stack), &ibp);
+        void* ibp = act;
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 
     // --- PerformWork (0x48, timed 3.0s, heading anim) -> PUSH ---
@@ -171,28 +175,26 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* mem = Alloc(0x48);
         void* act = nullptr;
         if (mem) {
-            int64_t ent = *reinterpret_cast<int64_t*>(citizenIBPptr);
-            int64_t timeVal[2] = { 0, 0 };
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 3.0f);   // DAT_140172180
+            CitizenComponent* ent = *citizenRef;
+            System::Time workTime;
+            RtSystem_Time_Ctor(&workTime, 3.0f);   // DAT_140172180
             uint32_t actionType = (uVar2 != 0) ? 0xd : 0x10;
-            act = Pf_PerformWorkCtor7_9720(mem, &ent, heading, actionType, timeVal[0], 1, -1);
+            act = Pf_PerformWorkCtor7_9720(mem, &ent, heading, actionType, workTime._ticks, 1, -1);
         }
-        int64_t ibp = 0; Ctor(&ibp, act);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(stack), &ibp);
+        void* ibp = act;
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 
-    // --- MoveTo (0x480, Fast, to family-component pos) -> PUSH ---
+    // --- MoveTo (0x480, Fast, to the citizen entity's CharacterComponent) -> PUSH ---
     {
         void* mem = Alloc(0x480);
         void* act = nullptr;
         if (mem) {
-            int64_t entInner = *reinterpret_cast<int64_t*>(citizenEntity + 0x10);
-            int64_t famIBP = 0;
-            void* fam = ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entInner), &famIBP);
-            act = Pf_MoveToCtor_9170(mem, fam, 2 /*pathType Fast*/, 0, position, 0xe1f, 0, -1.0f /*DAT_140172280*/);
+            CharacterComponent* mover = citizen->_entity->FindComponent<CharacterComponent>();
+            act = Pf_MoveToCtor_9170(mem, &mover, 2 /*pathType Fast*/, 0, position, 0xe1f, 0, -1.0f /*DAT_140172280*/);
         }
-        int64_t ibp = 0; Ctor(&ibp, act);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(stack), &ibp);
+        void* ibp = act;
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 
     // --- ShowTool #2 (tool = uVar2 ? 4(Saw) : 7(Knife)) -> PUSH ---
@@ -200,12 +202,12 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* mem = Alloc(0x30);
         void* act = nullptr;
         if (mem) {
-            int64_t ent = *reinterpret_cast<int64_t*>(citizenIBPptr);
+            CitizenComponent* ent = *citizenRef;
             int toolType = (uVar2 != 0) ? 4 : 7;
             act = ActChild_ShowToolCtor_42890(mem, &ent, toolType);
         }
-        int64_t ibp = 0; Ctor(&ibp, act);
-        Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(stack), &ibp);
+        void* ibp = act;
+        Pf_ActStackPush_54e0(stack, &ibp);
     }
 
 }

@@ -20,6 +20,7 @@
 // served by Action::Vtable() (ACT).
 
 #include "Entity/componententity_funcs.h"
+#include "Entity/EntityList.h"
 #include "Component/ComponentDescription.h"
 #include "Component/Component.h"
 #include "Component/Description.h"
@@ -106,7 +107,6 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
       _componentCount(0),
       _componentCap(0),
       _entityFlags(0) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     int descCompCount = description->_subDescCount;
 
     // Sanity guard: a corrupted/unexpected description (component-count field read
@@ -130,7 +130,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
     // Allocate component array.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte component InternalBasePtr (byte-copy).
-    GameColl::ArrayAt<GameColl::Ptr8>(s, 0x30).SetSize(validCount);
+    GameColl::AsArray<GameColl::Ptr8>(&_components).SetSize(validCount);
 
     // Second pass: create components
     int insertIdx = 0;
@@ -140,11 +140,10 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
         if (typeId == 0) continue;
 
         // Create component from factory
-        void* factoryPtr = ::Object::Factory::_singleton;
-        void* newObj = nullptr;
-        if (factoryPtr) {
-            newObj = reinterpret_cast<const ::Object::Factory*>(factoryPtr)->CreateObject(
-                typeId);   // B.3.3 bridge
+        const ::Object::Factory* factory = ::Object::Factory::_singleton;
+        ::Object::Base* newObj = nullptr;
+        if (factory) {
+            newObj = factory->CreateObject(typeId);
         }
 
         // Verify it derives from Component. In standalone the Runtime factory
@@ -154,28 +153,19 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
         // only began executing once the description +0x40 GetComponentTypeId
         // was implemented; before that typeId was always 0 and no component was
         // ever created, masking the missing CheckPtr below.
-        void* newComp = nullptr;
+        Component* newComp = nullptr;
         if (newObj && Object::IsDerivedFromOrTrust(
                           newObj, Component::TypeId())) {   // cell 0x1401c72a8 (ENDGAME B.3.9 RF)
-            newComp = newObj;
+            newComp = static_cast<Component*>(newObj);
         }
 
-        // Create IBP for new component and owner
-        ::Object::InternalPtr<Component> newIBP;
-        {
-            new ((void*)&newIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(newComp));   // B.3.3 bridge
-        }
-        uintptr_t ownerIBP = 0;
-        {
-            new ((void*)&ownerIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-        }
+        // Create IBP for new component (the owner IBP is `this`)
+        ::Object::InternalPtr<Component> newIBP(newComp);
 
         // Resolve the component IBP (the original CopyCtor calls CheckPtr
         // before the field writes) then set owner (+0x10) and description
         // (+0x18).
-        void* compPtr = newIBP.Get();
+        Component* compPtr = newIBP.Get();
         if (!compPtr) {
             // STANDALONE: this component typeId has no working factory (the
             // Runtime/our factory tree is incomplete — e.g. a Tree's component
@@ -189,8 +179,8 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
             }
             continue;
         }
-        *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
-        *(void**)((uintptr_t)compPtr + 0x18) = compTemplate;
+        compPtr->_entity = this;
+        compPtr->_description = compTemplate;
 
         // Store in component array
         _components[insertIdx] = newIBP;
@@ -234,33 +224,23 @@ ComponentEntity::~ComponentEntity() {
     // the entity, while it is still addressable. Same idea as the drain's
     // EntityList_ClearToolSelectionForDyingEntities, but retail-authored.
     if (GameUpdateLoop::_singleton != nullptr) {
-        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+        void* townMgr = GameUpdateLoop::_singleton->m_citizenList;
         if (townMgr) {
-            void* entityIbp = nullptr;
-            new (&entityIbp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            TownMgr_AbortCitizenActionsFor_89e30(reinterpret_cast<void*>(townMgr),
-                                                 &entityIbp);
+            void* entityIbp = this;   // the InternalBasePtr onto the dying entity
+            TownMgr_AbortCitizenActionsFor_89e30(townMgr, &entityIbp);
         }
     }
 
     // Iterate component IBPs: null each out, then delete old value
     int count = _componentCount;
     if (count > 0) {
-        uintptr_t arr = (uintptr_t)_components;
         for (int i = 0; i < count; i++) {
-            uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
             // Save old IBP value
-            uintptr_t oldIBP = *(uintptr_t*)ibpAddr;
+            ::Object::InternalPtr<Component> oldIBP = _components[i];
             // Construct null IBP in place
-            {
-                new ((void*)ibpAddr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            }
+            _components[i] = ::Object::InternalPtr<Component>();
             // Delete old IBP (releases the component)
-            {
-                reinterpret_cast< ::Object::InternalBasePtr*>((void*)&oldIBP)->DeletePtr();   // B.3.3 bridge
-            }
+            oldIBP.DeletePtr();
         }
     }
 
@@ -285,19 +265,15 @@ void ComponentEntity::ShutdownComponents() {
     int count = _componentCount;
     if (count <= 0) return;
 
-    uintptr_t arr = (uintptr_t)_components;
     for (int i = 0; i < count; i++) {
-        uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
-
-
-        uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+        Component* compPtr = _components[i].Get();
         // Component+0x20 is uint32 containing capability flags
-        uint32_t compFlags = *(uint32_t*)(compPtr + 0x20);
+        uint32_t compFlags = compPtr->_flags;
         if (((compFlags >> 8) & 1) != 0) {
             // Re-check after potential lazy resolve
-            compPtr = *(uintptr_t*)ibpAddr;
+            compPtr = _components[i].Get();
             // Virtual slot 5 (+0x28, the shutdown slot)
-            reinterpret_cast<Component*>(compPtr)->Slot5();  // B.3.8 bridge
+            compPtr->Slot5();
         }
     }
 }
@@ -313,18 +289,14 @@ void ComponentEntity::StartupComponents() {
     int count = _componentCount;
     if (count <= 0) return;
 
-    uintptr_t arr = (uintptr_t)_components;
     for (int i = 0; i < count; i++) {
-        uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
-
-
-        uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+        Component* compPtr = _components[i].Get();
         if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
-        uint32_t compFlags = *(uint32_t*)(compPtr + 0x20);
+        uint32_t compFlags = compPtr->_flags;
         if (((compFlags >> 7) & 1) != 0) {
-            compPtr = *(uintptr_t*)ibpAddr;
+            compPtr = _components[i].Get();
             // Virtual slot 4 (+0x20): Startup
-            reinterpret_cast<Component*>(compPtr)->Startup();  // B.3.8 bridge
+            compPtr->Startup();
         }
     }
 }
@@ -342,13 +314,11 @@ void ComponentEntity::RefreshEntityFlags() {
     _entityFlags = 0;
     int count = _componentCount;
     if (count > 0) {
-        uintptr_t arr = (uintptr_t)_components;
         for (int i = 0; i < count; i++) {
-            uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
-            uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+            Component* compPtr = _components[i].Get();
             if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
-            // Component::+0x20 is a uint16 containing capability flags
-            uint16_t compFlags = *(uint16_t*)(compPtr + 0x20);
+            // Retail reads the low WORD of Component::_flags (+0x20)
+            uint16_t compFlags = static_cast<uint16_t>(compPtr->_flags);
             _entityFlags |= (uint32_t)compFlags;
         }
     }
@@ -361,30 +331,22 @@ void ComponentEntity::RefreshEntityFlags() {
         if (((oldFlags ^ _entityFlags) & 4) != 0) {
             // EntityList +0x88 = update entity array, +0x90 = update count
             int updateCount = *(int*)(entityListPtr + 0x90) + 1;
-            uintptr_t ibp = 0;
-            {
-                new ((void*)&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            }
+            GameColl::Ptr8 ibp;
+            ibp.v = this;   // the InternalBasePtr onto this entity
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
             // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x88).SetSize(
-                updateCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
+            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x88).SetSize(updateCount, ibp);
         }
 
         // If draw bit (bit 4) changed, register in draw bucket
         if (((oldFlags ^ _entityFlags) & 0x10) != 0) {
             // EntityList +0x98 = draw entity array, +0xa0 = draw count
             int drawCount = *(int*)(entityListPtr + 0xa0) + 1;
-            uintptr_t ibp = 0;
-            {
-                new ((void*)&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            }
+            GameColl::Ptr8 ibp;
+            ibp.v = this;   // the InternalBasePtr onto this entity
             // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
             // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x98).SetSize(
-                drawCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
+            GameColl::ArrayAt<GameColl::Ptr8>(entityListPtr, 0x98).SetSize(drawCount, ibp);
         }
     }
 }
@@ -396,16 +358,14 @@ void ComponentEntity::RefreshEntityFlags() {
 // component IBPs, entity flags. On load, creates components from
 // factory and inserts them into the component array.
 void ComponentEntity::Persist(void* stream) {
-    uintptr_t s = (uintptr_t)this;
-
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
 
     // Serialize description ExternalPtr at +0x28
     Reimpl_ExternalPtr_Serialize_StringTable(&_description, &ser);
 
     // Serialize component count
-    uint32_t compCount = (uint32_t)_componentCount;
-    ser.Serialize(*reinterpret_cast<int*>((void*)&compCount), nullptr);
+    int compCount = _componentCount;
+    ser.Serialize(compCount, nullptr);
 
     // Check if loading (encoding mode == 0)
     int encodingMode = static_cast<int>(ser.GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
@@ -414,14 +374,14 @@ void ComponentEntity::Persist(void* stream) {
     if (encodingMode == 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte component InternalBasePtr (byte-copy).
-        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x30).SetSize((int)compCount);
+        GameColl::AsArray<GameColl::Ptr8>(&_components).SetSize(compCount);
         // Save/load wave diagnostics: a garbage count (stream misalignment) or
         // a failed resize (data still null with count>0) crashes the IBP loop
         // below — log the state on the way in so the crash log has context.
-        if (s_loadLogCount.load() < 8 || _components == nullptr || compCount > 64) {
+        if (s_loadLogCount.load() < 8 || _components == nullptr || static_cast<uint32_t>(compCount) > 64) {
             s_loadLogCount.fetch_add(1);
             fprintf(stderr, "[CompEnt::Serialize] LOAD ent=%p desc=%p compCount=%u "
-                    "arr=%p cap=%d\n", (void*)this, (void*)_description, compCount,
+                    "arr=%p cap=%d\n", (void*)this, (void*)_description, static_cast<uint32_t>(compCount),
                     _components, _componentCap);
             fflush(stderr);
         }
@@ -432,7 +392,7 @@ void ComponentEntity::Persist(void* stream) {
     // what puts 0xAA-pattern objId/typeId into the stream and makes the LOAD
     // index PersistObject's id map out of bounds. Diagnostic only.
     if (encodingMode != 0)
-        EntityCompValidate(this, _description, _components, (int)compCount);
+        EntityCompValidate(this, _description, _components, compCount);
 
     // Save/load wave debug (BANISHED_SERIALIZE_TRACE): per-component progress
     // marker so a stream desync pinpoints the last-good component instead of a
@@ -441,19 +401,19 @@ void ComponentEntity::Persist(void* stream) {
     const bool trace = traceOpt && traceOpt[0] && traceOpt[0] != '0';
 
     // Serialize each component IBP
-    uintptr_t ibpArr = (uintptr_t)_components;
-    int64_t cnt = (int64_t)(int)compCount;
+    int64_t cnt = (int64_t)compCount;
     if (cnt > 0) {
         for (int64_t i = 0; i < cnt; i++) {
-            uintptr_t ibpAddr = ibpArr + (uintptr_t)i * 8;
+            Object::InternalPtr<Component>* slot = &_components[i];
             if (trace) {
                 fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld/%u begin raw=%p\n",
-                        (void*)this, (long long)i, compCount, *(void**)ibpAddr);
+                        (void*)this, (long long)i, static_cast<uint32_t>(compCount),
+                        static_cast<void*>(slot->Get()));
                 fflush(stderr);
             }
             // Serialize the InternalBasePtr
-            reinterpret_cast<Object::InternalBasePtr*>((void*)ibpAddr)->Serialize(ser);
-            void* rawAfterSer = *(void**)ibpAddr;   // before our IsDerivedFrom filter
+            slot->Object::InternalBasePtr::Serialize(ser);   // the base body: the Component check follows by hand
+            Component* rawAfterSer = slot->Get();   // before our IsDerivedFrom filter
             if (trace && !rawAfterSer) {
                 fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld RAW NULL from "
                         "IBP::Serialize (create failed -> stream desync!)\n",
@@ -461,10 +421,10 @@ void ComponentEntity::Persist(void* stream) {
                 fflush(stderr);
             }
             if (trace) {
-                void* c = *(void**)ibpAddr;
+                Component* c = slot->Get();
                 uint32_t tid = 0;
                 if (c) {
-                    tid = reinterpret_cast<Object::Base*>(c)->Type();  // B.3.8 bridge
+                    tid = c->Type();
                 }
                 // Stream cursor (CompressedMemoryStream + 0x8C — see
                 // engine/types/io_serializer.h). Logged on BOTH save and load:
@@ -547,18 +507,18 @@ void ComponentEntity::Persist(void* stream) {
                     }
                 }
                 fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld -> %p tid=%08x (%s) pos8C=%u pos24=%u\n",
-                        (void*)this, (long long)i, c, tid,
+                        (void*)this, (long long)i, static_cast<void*>(c), tid,
                         c ? (::Object::GetTypeNameById(tid) ? ::Object::GetTypeNameById(tid) : "?") : "null",
                         pos, pos24);
                 fflush(stderr);
             }
             // Verify component is derived from Component base; null out if not
-            void* comp = *(void**)ibpAddr;
+            Component* comp = slot->Get();
             if (comp != nullptr) {
                 {
                     bool isDerived = ::Object::IsDerivedFromNullSafe(comp, Component::TypeId());   // cell 0x1401c72a8
                     if (!isDerived) {
-                        *(void**)ibpAddr = nullptr;
+                        *slot = Object::InternalPtr<Component>();
                     }
                 }
             }
@@ -589,10 +549,9 @@ void ComponentEntity::Persist(void* stream) {
 
                 // Check if existing component at insertPos already matches
                 if (insertIdx < _componentCount) {
-                    uintptr_t existIBPAddr = (uintptr_t)_components + insertPos * 8;
-                    uintptr_t existComp = *(uintptr_t*)existIBPAddr;
+                    Component* existComp = _components[insertPos].Get();
                     // Get existing component's type ID via vtable+0x10
-                    uint32_t existTypeId = reinterpret_cast<Object::Base*>(existComp)->Type();  // B.3.8 bridge
+                    uint32_t existTypeId = existComp->Type();
                     if (existTypeId == typeId) {
                         // Already have this component -- skip
                         insertIdx++;
@@ -602,62 +561,48 @@ void ComponentEntity::Persist(void* stream) {
                 }
 
                 // Create new component from factory
-                void* factoryPtr = ::Object::Factory::_singleton;
-                void* newObj = nullptr;
-                if (factoryPtr) {
-                    newObj = reinterpret_cast<const ::Object::Factory*>(factoryPtr)->CreateObject(
-                        typeId);   // B.3.3 bridge
+                const ::Object::Factory* factory = ::Object::Factory::_singleton;
+                ::Object::Base* newObj = nullptr;
+                if (factory) {
+                    newObj = factory->CreateObject(typeId);
                 }
 
                 // Verify it's a Component
-                void* newComp = nullptr;
+                Component* newComp = nullptr;
                 if (newObj) {
                     if (::Object::IsDerivedFromNullSafe(newObj, Component::TypeId())) {   // cell 0x1401c72a8
-                        newComp = newObj;
+                        newComp = static_cast<Component*>(newObj);
                     }
                 }
 
                 // Create IBP for new component
-                uintptr_t newIBP = 0;
-                {
-                    new ((void*)&newIBP) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(newComp));   // B.3.3 bridge
-                }
+                ::Object::InternalPtr<Component> newIBP(newComp);
 
                 // Get description template ptr for this component
                 void* descTemplate = desc->_subDescs[descIdx];
 
-                // Create IBP for owner (this entity)
-                uintptr_t ownerIBP = 0;
-                {
-                    new ((void*)&ownerIBP) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-                }
-
-                // Set component fields: +0x10 = owner IBP, +0x18 = description template
-                void* compPtr = (void*)newIBP;
-                *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
-                *(void**)((uintptr_t)compPtr + 0x18) = descTemplate;
+                // Set component fields: +0x10 = owner IBP (this entity), +0x18 = description template
+                Component* compPtr = newIBP.Get();
+                compPtr->_entity = this;
+                compPtr->_description = descTemplate;
 
                 // Component's virtual slot 4 (+0x20): Startup
-                compPtr = (void*)newIBP;
-                reinterpret_cast<Component*>(compPtr)->Startup();  // B.3.8 bridge
+                newIBP.Get()->Startup();
 
                 // Resize component array to make room
                 int oldCount = _componentCount;
                 // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
                 // align 8, new tail zeroed. Element is the component InternalBasePtr.
-                GameColl::ArrayAt<GameColl::Ptr8>(s, 0x30).SetSize(oldCount + 1);
+                GameColl::AsArray<GameColl::Ptr8>(&_components).SetSize(oldCount + 1);
 
                 // Shift existing components right to make room at insertPos
-                uintptr_t compArr = (uintptr_t)_components;
+                Object::InternalPtr<Component>* compArr = _components;
                 for (int64_t k = (int64_t)oldCount; k > insertPos; k--) {
-                    *(uintptr_t*)(compArr + (uintptr_t)k * 8) =
-                        *(uintptr_t*)(compArr + (uintptr_t)(k - 1) * 8);
+                    compArr[k] = compArr[k - 1];
                 }
 
                 // Insert new component IBP at insertPos
-                *(uintptr_t*)(compArr + insertPos * 8) = newIBP;
+                compArr[insertPos] = newIBP;
 
                 insertIdx++;
                 insertPos++;
@@ -694,23 +639,19 @@ void ComponentEntity::RegisterUpdateDraw(uint32_t oldFlags) {
     uint32_t changed = oldFlags ^ _entityFlags;
     if ((changed & 4) != 0) {
         int updateCount = *(int*)(el + 0x90) + 1;
-        uintptr_t ibp = 0;
-        new ((void*)&ibp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+        GameColl::Ptr8 ibp;
+        ibp.v = this;   // the InternalBasePtr onto this entity
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x88).SetSize(
-            updateCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
+        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x88).SetSize(updateCount, ibp);
     }
     if ((changed & 0x10) != 0) {
         int drawCount = *(int*)(el + 0xa0) + 1;
-        uintptr_t ibp = 0;
-        new ((void*)&ibp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+        GameColl::Ptr8 ibp;
+        ibp.v = this;   // the InternalBasePtr onto this entity
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x98).SetSize(
-            drawCount, *reinterpret_cast<const GameColl::Ptr8*>(&ibp));
+        GameColl::ArrayAt<GameColl::Ptr8>(el, 0x98).SetSize(drawCount, ibp);
     }
 }
 
@@ -721,20 +662,18 @@ void ComponentEntity::OnAddedPass() {
 
     if ((_entityFlags & 1) == 0) return;
     int count = _componentCount;
-    uintptr_t arr = (uintptr_t)_components;
     for (int i = 0; i < count; i++) {
-        uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
-        uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+        Component* compPtr = _components[i].Get();
         if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
-        const bool armed = (*(uint8_t*)(compPtr + 0x20) & 1) != 0;
+        const bool armed = (compPtr->_flags & 1) != 0;   // retail tests the low BYTE
         if (armed) {
-            compPtr = *(uintptr_t*)ibpAddr;
-            reinterpret_cast<Component*>(compPtr)->OnAdded();  // B.3.8 bridge (slot 6, +0x30)
+            compPtr = _components[i].Get();
+            compPtr->OnAdded();   // slot 6, +0x30
         }
     }
 }
 
-// FUN_1400c48a0 — EntityList::RegisterEntity(entityList, &entityIBP, category).
+// EntityList::RegisterEntity (0x1400c48a0) (entityList, &entityIBP, category).
 // Adds a freshly-instantiated entity to the world entity list. Offsets verified
 // against the disassembly:
 //   entityList+0xE0 (byte) : "closed" flag — if set, drop (delete) the entity.
@@ -745,60 +684,62 @@ void ComponentEntity::OnAddedPass() {
 //   entity+0x1C low-24     = bucket index (pre-insert bucket count); +0x1F = category.
 //   category 6 = no bucket (entity+0x1C low-24 set to 0xFFFFFF sentinel).
 // Also registers update/draw (c33e0) and runs the OnAdded pass (c2f60).
-void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int category) {
-    uint8_t* el = (uint8_t*)entityListV;
-    if (!el || !entityIBP) return;
-
-    if (*(int8_t*)(el + 0xE0) != 0) {                  // list closed → drop the entity
-        reinterpret_cast< ::Object::InternalBasePtr*>(entityIBP)->DeletePtr(
-            );   // B.3.3 bridge
+void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
+    if (shuttingDown) {                                 // list closed -> drop the entity
+        // Object::InternalBasePtr::DeletePtr (0x1800c0150) on the slot: delete
+        // through the virtual dtor, null the slot.
+        if (ComponentEntity* dying = *entityIBP) {
+            delete dying;
+            *entityIBP = nullptr;
+        }
         return;
     }
 
-    // Resolve the entity pointer (CheckPtr each time, matching the original).
-    auto entity = [&]() -> uint8_t* {
-        return *(uint8_t**)entityIBP;
-    };
-
-    uint8_t* ent = entity();
-    *(void**)(ent + 0x10) = el;                         // owner = entityList
-    int32_t id = *(int32_t*)(el + 0x10);               // id = current main-array count
-    ent = entity();
-    *(int32_t*)(ent + 0x18) = id;
-    ent = entity();
-    *(void**)(ent + 0x20) = *(void**)el;               // externals = entityList[0]
-    ent = entity();
-    reinterpret_cast<ComponentEntity*>(ent)->RegisterUpdateDraw(0);   // B.3.8 bridge
+    // Every step re-reads the slot (CheckPtr each time, matching the original).
+    (*entityIBP)->_entityList = this;                   // owner = entityList
+    int32_t id = masterArray.count;                     // id = current main-array count
+    (*entityIBP)->_entityId = id;
+    // entity+0x20 = entityList+0x00: the last-update System::Time takes the list's
+    // accumulated time. ComponentEntity.h still declares +0x20 `void* _externals`:
+    // LEFT for the header's owner.
+    *(int64_t*)&(*entityIBP)->_externals = accumulatedTime._ticks;
+    (*entityIBP)->RegisterUpdateDraw(0);
 
     // Append to the main entity array (count -> id+1).
     // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
     // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-    GameColl::ArrayAt<GameColl::Ptr8>(el, 0x08).SetSize(
-        id + 1, *reinterpret_cast<const GameColl::Ptr8*>(entityIBP));
+    GameColl::Ptr8 fill;
+    fill.v = *entityIBP;
+    GameColl::AsArray<GameColl::Ptr8>(&masterArray).SetSize(id + 1, fill);
 
-    ent = entity();
-    *(int8_t*)(ent + 0x1F) = (int8_t)category;          // category byte (handle high byte)
+    // The category byte +0x1F (the handle's high byte): retail stores the BYTE.
+    // ComponentEntity.h declares +0x1C..+0x1F as one uint32 `_handle`: LEFT.
+    reinterpret_cast<int8_t*>(&(*entityIBP)->_handle)[3] = (int8_t)category;
     if (category == 6) {
-        ent = entity();
-        *(uint32_t*)(ent + 0x1C) |= 0xFFFFFF;           // no category bucket
+        (*entityIBP)->_handle |= 0xFFFFFF;               // no category bucket
     } else {
-        // bucket index = current per-category bucket count (count field aliases
-        // the +(C+2)*0x10 slot read by the original).
-        uint32_t bucketIdx = *(uint32_t*)(el + (uintptr_t)(category + 2) * 0x10);
-        ent = entity();
-        uint32_t* pf = (uint32_t*)(ent + 0x1C);
-        *pf ^= (*pf ^ bucketIdx) & 0xFFFFFF;            // low-24 = bucket index
-        uint8_t* bucket = el + (uintptr_t)category * 0x10 + 0x18;
-        int bcount = *(int32_t*)(bucket + 8);
+        // bucket index = the category bucket's current count
+        uint32_t bucketIdx = static_cast<uint32_t>(buckets[category].count);
+        uint32_t& handle = (*entityIBP)->_handle;
+        handle ^= (handle ^ bucketIdx) & 0xFFFFFF;       // low-24 = bucket index
+        UpdateBucket* bucket = &buckets[category];
+        int bcount = bucket->count;
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        GameColl::AsArray<GameColl::Ptr8>(bucket).SetSize(
-            bcount + 1, *reinterpret_cast<const GameColl::Ptr8*>(entityIBP));
+        GameColl::Ptr8 bfill;
+        bfill.v = *entityIBP;
+        GameColl::AsArray<GameColl::Ptr8>(bucket).SetSize(bcount + 1, bfill);
     }
 
-    ent = entity();
-    reinterpret_cast<ComponentEntity*>(ent)->OnAddedPass();   // B.3.8 bridge
+    (*entityIBP)->OnAddedPass();
+}
 
+// B4 FORWARD: 38 outside caller(s) (code/Game/Action, Component, Game, Work,
+// standalone; componententity_funcs.h). The null guards are the tree's (retail's
+// 0x1400c48a0 has none); kept here, not extended into the member.
+void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int category) {
+    if (!entityListV || !entityIBP) return;
+    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);
 }
 
 // ============================================================

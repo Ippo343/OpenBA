@@ -28,6 +28,9 @@
 #include <cstddef>
 #include "Work/Work.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Set<T>::Node
+
+class CitizenComponent;
 
 
 class FireWork final : public Work {
@@ -57,14 +60,21 @@ public:
     int   GetPriority() override;                                   // [11] 0x14002a220
 
     // --- FireWork fields (+0x48) ---
-    void*    _field48;           // +0x48: zeroed
-    void*    _field50;           // +0x50: zeroed
-    uint32_t _field58;           // +0x58: zeroed
+    int32_t  _field48;           // +0x48: the firefighter capacity (Persist 0x1400e9a50 int&;
+                                 //        Execute 0x1400e9620 compares it signed with +0x58)
+    uint32_t _field4C;           // +0x4C: the default ctor zeroes it (a qword store with +0x48);
+                                 //        the 3-argument ctor 0x1400e9bd0 leaves it
+    // +0x50: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
+    // Cleanup 0x1400e99a0 reads the element's +0x278). The container stays raw (H5).
+    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
+    AssignmentNode* _field50;
+    int32_t  _field58;           // +0x58: assigned count (0x14002a220 `CMP [RCX+0x58],EAX; SETG`)
     uint8_t  _pad5C[4];          // +0x5C: padding
 };
 
 static_assert(sizeof(FireWork) == 0x60, "FireWork is 0x60 (retail create MemAlloc)");
 static_assert(alignof(FireWork) == 8, "FireWork is 8-aligned");
 static_assert(offsetof(FireWork, _field48) == 0x48, "FireWork +0x48");
+static_assert(offsetof(FireWork, _field4C) == 0x4c, "FireWork +0x4c");
 static_assert(offsetof(FireWork, _field50) == 0x50, "FireWork +0x50");
 static_assert(offsetof(FireWork, _field58) == 0x58, "FireWork +0x58");

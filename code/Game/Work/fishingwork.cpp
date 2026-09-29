@@ -42,6 +42,13 @@
 #include "Component/StorageComponent.h"     // ENDGAME B.3.9 D5: StorageComponent::TypeId()
 #include "Component/WorkComponent.h"        // ENDGAME B.3.9 D5: WorkComponent::TypeId()
 #include "Component/CitizenComponent.h"     // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/InteractComponent.h"
+#include "Component/StatusIconComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
@@ -62,43 +69,18 @@
 // GameColl::AsArray<T> member calls (ENDGAME B.3.2 step 2).
 
 // ============================================================
-// Helper: Find a specific component by type ID on an entity's component list
-// Searches componentList at entity+0x30 (array ptr) / entity+0x38 (count)
-// Returns raw pointer to component, or nullptr if not found.
+// Helper: Find a description on a ComponentDescription's sub-description list
+// (+0x28 array / +0x30 count) — different from an entity's component list.
 // ============================================================
-static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
-    int count = *(int*)(entity + 0x38);
-    uintptr_t arrayPtr = *(uintptr_t*)(entity + 0x30);
+static Object::Base* FindComponentOnSubObject(ComponentDescription* subObj, uint32_t typeId) {
+    int count = subObj->_subDescCount;
 
     for (int i = 0; i < count; i++) {
-        uintptr_t* ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
-        uintptr_t comp = *ibpSlot;
-        uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+        // ComponentDescription.h keeps the sub-descriptions as void* (LEFT)
+        Object::Base* comp = reinterpret_cast<Object::Base*>(subObj->_subDescs[i]);
+        uint32_t compTypeId = comp->Type();
         if (compTypeId == typeId) {
-            ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
-            void* result = (void*)*ibpSlot;
-            if (Object::IsDerivedFromNullSafe(result, typeId)) {
-                return result;
-            }
-            return nullptr;
-        }
-    }
-    return nullptr;
-}
-
-// ============================================================
-// Helper: Find component on a sub-object (entity+0x28 description).
-// Sub-objects use +0x28 (array ptr) / +0x30 (count) — different from entities.
-// ============================================================
-static void* FindComponentOnSubObject(uintptr_t subObj, uint32_t typeId) {
-    int count = *(int*)(subObj + 0x30);
-    uintptr_t arrayPtr = *(uintptr_t*)(subObj + 0x28);
-
-    for (int i = 0; i < count; i++) {
-        uintptr_t comp = *(uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
-        uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-        if (compTypeId == typeId) {
-            void* c = *(void**)(arrayPtr + (uintptr_t)i * 8);
+            Object::Base* c = reinterpret_cast<Object::Base*>(subObj->_subDescs[i]);
             if (Object::IsDerivedFromNullSafe(c, typeId)) {
                 return c;
             }
@@ -125,62 +107,55 @@ static inline int ClampToMap(int val, int mapSize) {
 //
 // Returns: 1 = not ready/retry, 2 = action pushed
 // ============================================================
-int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
-    uintptr_t selfAddr = (uintptr_t)this;
-    int64_t* selfQ = (int64_t*)this;  // for 8-byte indexed access matching Ghidra
+int FishingWork::Execute(void* citizenIBPArg, void* /*time*/) {
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenIBP = reinterpret_cast<CitizenComponent**>(citizenIBPArg);
 
     // Get game world
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    // CheckPtr on building entity IBP (at self+0x10)
-    uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);
-
-    // Find FishingComponent (DAT_1401c7660) on building entity
-    void* fishingComp = FindComponentOnEntity(buildingEntity, FishingComponent::TypeId());
-
-    // Wrap in IBP
-    uintptr_t fishingIBP = 0;
-    new (&fishingIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(fishingComp));   // B.3.3 bridge
+    // Find FishingComponent (DAT_1401c7660) on the building entity (+0x10)
+    FishingComponent* fishing = field_10->FindComponent<FishingComponent>();
 
     // Get fishing description via IsDerivedFrom check on component+0x18
-    void* compBase = *(void**)(fishingIBP + 0x18);
-    void* fishingDesc = nullptr;
+    void* compBase = fishing->_description;
+    FishingDescription* fishingDesc = nullptr;
     if (Object::IsDerivedFromNullSafe(compBase, FishingDescription::TypeId())) {
-        fishingDesc = compBase;
+        // Component::_description is void*: LEFT for Component.h's owner
+        fishingDesc = reinterpret_cast<FishingDescription*>(compBase);
     }
 
     // Check if fishing season is valid
-    // Get terrain type from map grid for the spot index from fishingDesc+0x28
-    int spotMapIdx = *(int*)((uintptr_t)fishingDesc + 0x28);
-    uintptr_t mapEntries = *(uintptr_t*)(*(uintptr_t*)(gameWorld + 0xf0) + 0x170);
+    // The town's resource entry for fishingDesc+0x28 (CitizenBehavior +0x170 through
+    // GameUpdateLoop::m_citizenList, still void*: LEFT)
+    int spotMapIdx = (int)fishingDesc->_u28;
+    uintptr_t mapEntries = *(uintptr_t*)((uintptr_t)gameWorld->m_citizenList + 0x170);
     int64_t offset = (int64_t)spotMapIdx * 0x20;
     // atCapacity = (limit <= current) — true when resource count is at/above limit
     bool atCapacity = *(int*)(mapEntries + offset + 8) <= *(int*)(mapEntries + offset);
 
-    // Toggle mesh instance visibility based on capacity (visGroup 2)
-    uintptr_t meshIBPBuf = 0;
-    WorkBase_FindComponent_2f90(*(uintptr_t*)(selfAddr + 0x10), &meshIBPBuf);
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(*(void**)&meshIBPBuf), 2, atCapacity ? 1 : 0);
+    // Toggle status icon visibility based on capacity (visGroup 2)
+    StatusIconComponent* statusIcon = field_10->FindComponent<StatusIconComponent>();
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon), 2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
         return 1;
     }
 
-    // Find position component on building entity
-    uintptr_t posIBP = 0;
-    WorkBase_FindComponent_2ed0(*(uintptr_t*)(selfAddr + 0x10), &posIBP);
+    // Find InteractComponent (the spot positions) on building entity
+    InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
-    int citizenCount = (int)selfQ[10];  // +0x50
+    int citizenCount = this->citizenCount;  // +0x50
 
     if (citizenCount < 1) {
         return 1;
     }
 
     // Find first empty citizen slot
-    uintptr_t citizenRefs = (uintptr_t)selfQ[9];  // +0x48
     int emptySlot = -1;
     for (int i = 0; i < citizenCount; i++) {
-        if (*(uintptr_t*)(citizenRefs + (uintptr_t)i * 8) == 0) {
+        if (citizenRefs[i] == nullptr) {
             emptySlot = i;
             break;
         }
@@ -192,9 +167,10 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
 
     // Find first available fishing spot (state == 0)
     // Also reset spots that were marked as state 2 if the map cell is now empty
-    int spotCount = (int)selfQ[0xc];    // +0x60
-    uintptr_t spotStates = (uintptr_t)selfQ[0xb];  // +0x58
-    int* mapGridPtr = *(int**)(gameWorld + 0xf8);
+    int spotCount = this->spotCount;    // +0x60
+    int32_t* spotStates = this->spotStates;  // +0x58
+    // The world map (GameUpdateLoop::m_game is still void*: LEFT)
+    int* mapGridPtr = (int*)gameWorld->m_game;
     int mapSize = *mapGridPtr;
     int freeSpot = -1;
     int freeSpotMapCell = -1;
@@ -203,7 +179,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
         for (int i = 0; i < spotCount; i++) {
             // Get spot position (mode=2)
             float spotPos[3];
-            Pf_EntityResolvePos_2e20((void*)posIBP, spotPos, 2, i, nullptr);
+            Pf_EntityResolvePos_2e20(posComp, spotPos, 2, i, nullptr);
 
             int half = mapSize >> 1;
             int cx = ClampToMap((int)(spotPos[0] + (float)half), mapSize);
@@ -211,7 +187,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             int cellIdx = mapSize * cy + cx;
 
             // If spot state is 2 (waiting for reset) and map cell is empty, reset to 0
-            int* spotState = (int*)(spotStates + (uintptr_t)i * 4);
+            int* spotState = &spotStates[i];
             if (*spotState == 2) {
                 uintptr_t mapEntryBase = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
                 const uintptr_t occupant =
@@ -234,12 +210,12 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             // Get citizen position (mode=0) for pathfinding
             float citizenPos[3];
             float citizenHeading;
-            Pf_EntityResolvePos_2e20((void*)posIBP, citizenPos, 0, emptySlot, &citizenHeading);
+            Pf_EntityResolvePos_2e20(posComp, citizenPos, 0, emptySlot, &citizenHeading);
 
-            // Get citizen's home position for pathfinding source
-            uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
-            uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
-            uintptr_t citizenPosData = *(uintptr_t*)(smComp + 0x68);
+            // The citizen's position (CharacterComponent -> ModelComponent; its
+            // transform is raw storage, H5: LEFT)
+            uintptr_t citizenPosData =
+                reinterpret_cast<uintptr_t>((*citizenIBP)->character->modelComponent);
 
             int cMapSize = *mapGridPtr;
             float cPosX = *(float*)(citizenPosData + 0x158);
@@ -251,7 +227,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
 
             // Get spot cell
             float spotPos[3];
-            Pf_EntityResolvePos_2e20((void*)posIBP, spotPos, 0, emptySlot, &citizenHeading);
+            Pf_EntityResolvePos_2e20(posComp, spotPos, 0, emptySlot, &citizenHeading);
 
             int spHalf = cMapSize >> 1;
             int scx = ClampToMap((int)(spotPos[0] + (float)spHalf), cMapSize);
@@ -269,22 +245,21 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 return 1;
             }
 
-            // Find RadiusComponent on building's description sub-object (+0x28)
-            // Sub-objects use +0x28/+0x30 layout, NOT entity +0x30/+0x38
-            uintptr_t entityForRadius = *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x28);
+            // Find the RadiusDescription on the building's description (+0x28)
             // DAT_1401c4870 = RadiusDescription (ENDGAME B.3.9 D5: by cell, not by the
             // legacy variable name "RadiusComponent").
-            void* radiusComp = FindComponentOnSubObject(entityForRadius, RadiusDescription::TypeId());
+            RadiusDescription* radiusComp = static_cast<RadiusDescription*>(
+                FindComponentOnSubObject(field_10->_description, RadiusDescription::TypeId()));
 
-            int radius = *(int*)((uintptr_t)radiusComp + 0x28);
+            int radius = radiusComp->_radius;
             int radiusSq = radius * radius;
 
-            // Citizen's grid position for random offset
-            int citizenGridX = (int)selfQ[5] / cMapSize;  // +0x28
-            int citizenGridY = (int)selfQ[5] % cMapSize;
+            // The work's target cell (+0x28) as grid coordinates for the random offset
+            int citizenGridX = field_28 / cMapSize;
+            int citizenGridY = field_28 % cMapSize;
 
             // Get random source from game world
-            void* randPtr = *(void**)(gameWorld + 0xd8);
+            System::Random* randPtr = gameWorld->m_random;
 
             // Try up to 10 random fishing positions within radius.
             // Original uses nested do-while to guarantee each attempt has a
@@ -295,8 +270,8 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 // Inner do-while: generate valid position within radius + bounds
                 do {
                     do {
-                        rx = reinterpret_cast<System::Random*>(randPtr)->RandTol(radius);   // B.3.4b bridge
-                        ry = reinterpret_cast<System::Random*>(randPtr)->RandTol(radius);   // B.3.4b bridge
+                        rx = randPtr->RandTol(radius);
+                        ry = randPtr->RandTol(radius);
                         targetX = citizenGridY + rx;
                         targetY = citizenGridX + ry;
                     } while (radiusSq < ry * ry + rx * rx);
@@ -310,14 +285,14 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 }
 
 
-                // Check map cell for valid water terrain
+                // Check map cell for valid water terrain (Map cells: LEFT)
                 int64_t mapCellIdx = (int64_t)(cMapSize * targetY + targetX);
                 uintptr_t mapData = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
                 uint8_t terrainType = *(uint8_t*)(mapData + 0x24 + mapCellIdx * 0x30);
                 uint8_t terrainBit = *(uint8_t*)(mapData + 0x29 + mapCellIdx * 0x30);
 
                 // Check fishing description allows this terrain and terrain is nonzero
-                uint32_t fishingTerrainMask = *(uint32_t*)((uintptr_t)fishingDesc + 0x2c);
+                uint32_t fishingTerrainMask = fishingDesc->_u2c;
                 if (((fishingTerrainMask >> (terrainBit & 0x1f)) & 1) == 0) {
                     attemptCount++;
                     continue;
@@ -330,84 +305,75 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 // Valid spot found — create fishing action
 
                 // Build action parameters
-                uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
-                uintptr_t citizenRef = *(uintptr_t*)citizenIBP;
-                float uvScale = (kRdata_14017214c / (float)terrainType) * *(float*)(fishingIBP + 0x54);
+                ComponentEntity* entityRef = field_10;
+                CitizenComponent* citizenRef = *citizenIBP;
+                float uvScale = (kRdata_14017214c / (float)terrainType) * fishing->fishingRate;
                 uint32_t spotInfo = ((freeSpot | 0x800) << 4) | emptySlot;
 
                 WorkAct_FishWorkCtor_beae0(
-                    &citizenRef, (int)selfQ[4], reinterpret_cast<int64_t*>(&entityRef),
+                    &citizenRef, field_20, reinterpret_cast<int64_t*>(&entityRef),
                     citizenPos, citizenHeading,
-                    *(uint64_t*)((uintptr_t)fishingDesc + 0x20),
+                    reinterpret_cast<uint64_t>(fishingDesc->_fish),
                     uvScale, freeSpotMapCell, spotInfo);
 
                 // Mark spot as in-use (state = 1)
-                *(int*)(spotStates + (uintptr_t)freeSpot * 4) = 1;
+                spotStates[freeSpot] = 1;
 
                 // Finalize: push action, set citizen slot
-                int priority = (int)selfQ[4];  // +0x20
-                uintptr_t ce = *(uintptr_t*)citizenIBP;
+                int priority = field_20;  // +0x20
+                CitizenComponent* ce = *citizenIBP;
 
-                uint64_t* res = static_cast<uint64_t*>(GetTarget(&entityRef));
-                uint64_t actionVal = *res;
+                Profession* actionVal = *(Profession**)GetTarget(&entityRef);
 
-                *(uint32_t*)(ce + 0x54) |= 4;
-                *(int32_t*)(ce + 0x30) = priority;
-                *(int32_t*)(ce + 0xb0) = 0;
+                ce->statusFlags |= 4;
+                ce->field_0x30 = priority;
+                ce->field_0xB0 = 0;
 
-                if (actionVal == *(uint64_t*)(ce + 0x1f0) && priority >= 0) {
-                    *(uint32_t*)(ce + 0x88) |= 0x20000;
+                if (actionVal == ce->profession && priority >= 0) {
+                    ce->happinessFlags |= 0x20000;
                 }
 
                 // Store citizen ref in slot
-                *(uintptr_t*)(selfQ[9] + (int64_t)emptySlot * 8) = *(uintptr_t*)citizenIBP;
+                citizenRefs[emptySlot] = *citizenIBP;
                 // Reset retry counter
-                *(int*)(selfAddr + 0x68) = 0;
+                retryCount = 0;
                 return 2;
             } while (attemptCount < 10);
 
             // All 10 random attempts failed — retry with animation if under limit
-            if ((int)selfQ[0xd] < 0xb) {  // retry count < 11
-                uintptr_t citizenRef2 = *(uintptr_t*)citizenIBP;
-                WorkAct_PlayAnimationCtor_c2490(&citizenRef2, (int)selfQ[4], emptySlot);
+            if (retryCount < 0xb) {  // retry count < 11
+                CitizenComponent* citizenRef2 = *citizenIBP;
+                WorkAct_PlayAnimationCtor_c2490(&citizenRef2, field_20, emptySlot);
 
-                int priority = (int)selfQ[4];
-                uintptr_t ce = *(uintptr_t*)citizenIBP;
+                int priority = field_20;
+                CitizenComponent* ce = *citizenIBP;
 
-                uint64_t* res = static_cast<uint64_t*>(GetTarget(&citizenRef2));
-                uint64_t actionVal = *res;
+                Profession* actionVal = *(Profession**)GetTarget(&citizenRef2);
 
-                *(uint32_t*)(ce + 0x54) |= 4;
-                *(int32_t*)(ce + 0x30) = priority;
-                *(int32_t*)(ce + 0xb0) = 0;
+                ce->statusFlags |= 4;
+                ce->field_0x30 = priority;
+                ce->field_0xB0 = 0;
 
-                if (actionVal == *(uint64_t*)(ce + 0x1f0) && priority >= 0) {
-                    *(uint32_t*)(ce + 0x88) |= 0x20000;
+                if (actionVal == ce->profession && priority >= 0) {
+                    ce->happinessFlags |= 0x20000;
                 }
 
-                *(uintptr_t*)(selfQ[9] + (int64_t)emptySlot * 8) = *(uintptr_t*)citizenIBP;
+                citizenRefs[emptySlot] = *citizenIBP;
                 // Increment retry counter
-                *(int*)(selfAddr + 0x68) = (int)selfQ[0xd] + 1;
+                retryCount = retryCount + 1;
                 return 2;
             }
 
-            // Retries exhausted — check if storage has items, go to long-term plan
-            uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
-            uintptr_t homeEntity = *(uintptr_t*)(citizenEnt + 0x10);
+            // Retries exhausted — check if the citizen's storage has items, go to long-term plan
+            StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-            // Find StorageComponent on home entity
-            void* storageComp = FindComponentOnEntity(homeEntity, StorageComponent::TypeId());
-            uintptr_t storageIBP = 0;
-            new (&storageIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
-
-            int storageCount = fn_StorageComponent_QueryCount((void*)storageIBP);
+            int storageCount = fn_StorageComponent_QueryCount(storage);
             if (storageCount < 1) {
                 return 1;
             }
 
             // Has storage items — replan citizen
-            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenIBP));
+            CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*citizenIBP));
             return 2;
         }
     }
@@ -417,17 +383,17 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
             float spotPos[3];
-            Pf_EntityResolvePos_2e20((void*)posIBP, spotPos, 2, i, nullptr);
+            Pf_EntityResolvePos_2e20(posComp, spotPos, 2, i, nullptr);
 
             int half = *mapGridPtr >> 1;
             int cx = ClampToMap((int)(spotPos[0] + (float)half), *mapGridPtr);
             int cy = ClampToMap((int)(spotPos[1] + (float)half), *mapGridPtr);
             int cellIdx = *mapGridPtr * cy + cx;
 
-            // Check if there's a structure at this cell
+            // Check if there's a structure at this cell (Map cells: LEFT)
             uintptr_t mapData = *(uintptr_t*)((uintptr_t)mapGridPtr + 0x80);
-            uintptr_t cellEntity = *(uintptr_t*)(mapData + 8 + (uintptr_t)cellIdx * 0x30);
-            if (cellEntity == 0) continue;
+            ComponentEntity* cellEntity = *(ComponentEntity**)(mapData + 8 + (uintptr_t)cellIdx * 0x30);
+            if (cellEntity == nullptr) continue;
 
             // ⚠ KNOWN DIVERGENCE FROM RETAIL — self-assignment guard.
             //
@@ -454,7 +420,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
             // leaves those cells unowned, so this branch should now be unreachable. It
             // stays as a tripwire: if it ever fires again the claim is back, and the
             // dock's 4-catch cap is back with it.
-            if (cellEntity == *(uintptr_t*)((uintptr_t)this + 0x10)) {
+            if (cellEntity == field_10) {
                 static bool s_warned = false;
                 if (!s_warned) {
                     s_warned = true;
@@ -467,33 +433,13 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 continue;
             }
 
-            // Check for WorkplaceComponent (DAT_1401c8070) on cell entity
-            uintptr_t cellEnt = *(uintptr_t*)&cellEntity;
-            int compCount = *(int*)(cellEnt + 0x38);
-            uintptr_t compArray = *(uintptr_t*)(cellEnt + 0x30);
-            void* workplaceComp = nullptr;
-
-            for (int j = 0; j < compCount; j++) {
-                uintptr_t* ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
-                uintptr_t comp = *ibpSlot;
-                // slot 2 Type() on a component-array element (an exe Component)
-                uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (tid == WorkComponent::TypeId()) {
-                    ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
-                    void* c = (void*)*ibpSlot;
-                    if (Object::IsDerivedFromNullSafe(c, WorkComponent::TypeId())) {
-                        workplaceComp = c;
-                    }
-                    break;
-                }
-            }
-
-            uintptr_t workplaceIBP = 0;
-            new (&workplaceIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
+            // Check for WorkComponent (DAT_1401c8070) on cell entity
+            ComponentEntity* cellEnt = cellEntity;
+            int compCount = cellEnt->_componentCount;
+            WorkComponent* workplaceComp = cellEnt->FindComponent<WorkComponent>();
 
             // ── GUARD FOR ONE OF OUR OWN DEVIATIONS (READ of 0x28) ───────────────────
-            // The `*(int*)(workplaceIBP + 0x28)` below is FAITHFUL. Verified against
+            // The `workplaceComp->workId` read below is FAITHFUL. Verified against
             // retail 0x1400ea775..0x1400ea793: the not-found arm does
             // `xor edx,edx; Ctor(&ibp, edx); CheckPtr; mov rax,[ibp]; mov r8d,[rax+0x28]`
             // and the found arm `cmovne`s the component into the same rdx before joining
@@ -535,14 +481,13 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                     std::fprintf(stderr,
                         "[FishWork] +0x28 NULL: spot[%d] cell=%d tile=(%d,%d) "
                         "cellEntity=%p dock=%p wanted tid=0x%x (%s) — entity carries "
-                        "%d component(s):\n", i, cellIdx, cx, cy, (void*)cellEnt,
-                        (void*)*(uintptr_t*)((uintptr_t)this + 0x10), want,
+                        "%d component(s):\n", i, cellIdx, cx, cy, static_cast<void*>(cellEnt),
+                        static_cast<void*>(field_10), want,
                         wantName ? wantName : "UNREGISTERED", compCount);
                     for (int k = 0; k < compCount; ++k) {
-                        uintptr_t* s2 = (uintptr_t*)(compArray + (uintptr_t)k * 8);
-                        uintptr_t c2 = *s2;
+                        Component* c2 = cellEnt->_components[k].Get();
                         if (!c2) { std::fprintf(stderr, "[FishWork]     [%d] <null>\n", k); continue; }
-                        uint32_t t2 = reinterpret_cast<Object::Base*>(c2)->Type();   // B.3.x bridge (slot 2)
+                        uint32_t t2 = c2->Type();
                         const char* n2 = ::Object::GetTypeNameById(t2);
                         std::fprintf(stderr, "[FishWork]     [%d] tid=0x%x %s\n",
                                      k, t2, n2 ? n2 : "(unregistered)");
@@ -552,10 +497,10 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
                 continue;   // skip this spot — see the block above; remove with the '_' claim
             }
 
-            // Try assignment via FUN_1400f8620
-            uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
-            void* citizenRef = *(void**)citizenIBP;
-            int spotRadius = *(int*)(workplaceIBP + 0x28);
+            // Try assignment via FUN_1400f8620 (GameUpdateLoop +0x118, still void*: LEFT)
+            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;
+            CitizenComponent* citizenRef = *citizenIBP;
+            int spotRadius = workplaceComp->workId;
             uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, spotRadius, '\x01');
 
             if ((char)assignResult != '\0') {
@@ -576,9 +521,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/) {
 // Returns: 1 = all valid (or no citizens), 0 = some invalid
 // ============================================================
 int FishingWork::Validate() {
-    int64_t* selfQ = (int64_t*)this;
-
-    int citizenCount = (int)selfQ[10];  // +0x50
+    int citizenCount = this->citizenCount;  // +0x50
     if (citizenCount <= 0) {
         return 1;
     }
@@ -588,22 +531,19 @@ int FishingWork::Validate() {
     int mappingCapacity = 0;
     bool allValid = true;
     int iterIndex = 0;
-    uintptr_t citizenRefs = (uintptr_t)selfQ[9];  // +0x48
 
     for (int i = 0; i < citizenCount; i++) {
-        uintptr_t citizenRef = *(uintptr_t*)(citizenRefs + (uintptr_t)i * 8);
-        if (citizenRef == 0) continue;
+        CitizenComponent* citizenRef = citizenRefs[i];
+        if (citizenRef == nullptr) continue;
 
         // Validate this citizen's task
-        uintptr_t citizenIBP = citizenRef;
+        CitizenComponent* citizenIBP = citizenRef;
         uintptr_t outTask = 0;
         char valid = (char)WorkBase_ValidateTask_f7100(this, nullptr, &citizenIBP, reinterpret_cast<void**>(&outTask));
 
         if (valid == '\0') {
-            // Invalid — clear citizen slot
-            uintptr_t temp = 0;
-            new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            *(uintptr_t*)(citizenRefs + (uintptr_t)i * 8) = temp;
+            // Invalid — clear citizen slot (the InternalBasePtr ctor with null)
+            citizenRefs[i] = nullptr;
             allValid = false;
         } else {
             // Valid — record the spot index from task data
@@ -655,8 +595,7 @@ int FishingWork::Validate() {
 
     // If any citizen was invalid, mark orphaned spots as needing reset
     if (!allValid) {
-        int spotCount = (int)selfQ[0xc];  // +0x60
-        uintptr_t spotStates = (uintptr_t)selfQ[0xb];  // +0x58
+        int spotCount = this->spotCount;  // +0x60
 
         for (int s = 0; s < spotCount; s++) {
             // Check if any valid citizen maps to this spot
@@ -670,7 +609,7 @@ int FishingWork::Validate() {
 
             if (!spotOccupied) {
                 // If spot was in-use (state 1), mark for reset (state 2)
-                int* state = (int*)(spotStates + (uintptr_t)s * 4);
+                int* state = &spotStates[s];
                 if (*state == 1) {
                     *state = 2;
                 }
@@ -694,70 +633,65 @@ int FishingWork::Validate() {
 //   7. Serialize retryCount (+0x68)
 // ============================================================
 void FishingWork::Persist(void* stream) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // 1. Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
     // 2. Create IO::Serializer (version=0)
-    alignas(8) uint8_t serializer[24] = {0};
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
     // 3. Serialize citizenCount at +0x50
-    int citizenCount = *(int*)(selfAddr + 0x50);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&citizenCount), nullptr);   // B.3.4 bridge
+    int citizenCount = this->citizenCount;
+    serializer.Serialize(citizenCount, nullptr);
 
     // If loading (serializer mode == 0 at *(int*)(serializer[0] + 8)):
     // resize the IBP array at +0x48 to the deserialized count
     // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
     // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp).
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        GameColl::AsArray<GameColl::Ptr8>((void*)(selfAddr + 0x48)).SetSize(citizenCount);
+    if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        GameColl::AsArray<GameColl::Ptr8>(&citizenRefs).SetSize(citizenCount);
     }
 
     // 4. Loop over each citizen IBP, serialize and validate
-    uintptr_t ibpArray = *(uintptr_t*)(selfAddr + 0x48);
+    CitizenComponent** ibpPtr = citizenRefs;
     int64_t remaining = (int64_t)citizenCount;
     if (remaining > 0) {
-        uintptr_t ibpPtr = ibpArray;
         do {
             // Serialize the InternalBasePtr
-            reinterpret_cast<Object::InternalBasePtr*>((void*)ibpPtr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(ibpPtr)->Serialize(serializer);   // B.3.4 bridge
 
             // Validate: if the ptr is non-null and not derived from expected type, null it
-            uintptr_t ptrVal = *(uintptr_t*)ibpPtr;
-            if (ptrVal != 0) {
-                if (!Object::IsDerivedFromNullSafe((void*)ptrVal, CitizenComponent::TypeId())) {
-                    *(uintptr_t*)ibpPtr = 0;
+            CitizenComponent* ptrVal = *ibpPtr;
+            if (ptrVal != nullptr) {
+                if (!Object::IsDerivedFromNullSafe(ptrVal, CitizenComponent::TypeId())) {
+                    *ibpPtr = nullptr;
                 }
             }
 
-            ibpPtr += 8;
+            ibpPtr++;
             remaining--;
         } while (remaining != 0);
     }
 
     // 5. Serialize spotCount at +0x60
-    int spotCount = *(int*)(selfAddr + 0x60);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&spotCount), nullptr);   // B.3.4 bridge
+    int spotCount = this->spotCount;
+    serializer.Serialize(spotCount, nullptr);
 
     // If loading, resize the int array at +0x58
     // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
     // FishingWork_Shutdown calls it at 1400ea9ef). I32NoInit — a grown tail is left as
     // the allocation found it, like retail. Safe: the resize runs only when loading and
     // the bulk int read below writes all spotCount spot states from the stream.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x58)).SetSize(spotCount);
+    if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        GameColl::AsArray<GameColl::I32NoInit>(&spotStates).SetSize(spotCount);
     }
 
     // 6. Serialize the spotStates int array
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(spotCount, reinterpret_cast<int*>(*(int**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge
+    serializer.Serialize(spotCount, spotStates, nullptr);
 
     // 7. Serialize retryCount at +0x68
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((selfAddr + 0x68)), nullptr);   // B.3.4 bridge
+    serializer.Serialize(retryCount, nullptr);
 
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    // The serializer's destructor runs here
 }
 
 // ============================================================
@@ -775,30 +709,26 @@ int FishingWork::OnComplete(void* param2, void* param3, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     (void)param2;
     (void)param3;
-    uintptr_t selfAddr = (uintptr_t)this;
 
     // Clear citizen IBP slot: citizenRefs[param4 & 0xf] = nullptr IBP
-    uintptr_t nullIBP = 0;
-    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint32_t citizenSlot = param4 & 0xf;
-    *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x48) + (uintptr_t)citizenSlot * 8) = nullIBP;
+    citizenRefs[citizenSlot] = nullptr;
 
     // If bit 15 is set, mark the spot state as 2 (done/needs reset)
     if ((param4 >> 15) & 1) {
         uint32_t spotIdx = (param4 >> 4) & 0xf;
-        uintptr_t spotStates = *(uintptr_t*)(selfAddr + 0x58);
         // TEARDOWN_WILD_WRITE.md: same unbounded retail store (0x1400e9eb0) as
         // ConsumeProduce::OnComplete; report an index past the spot count first.
-        if ((int)spotIdx >= *(int*)(selfAddr + 0x60) || (int)citizenSlot >= *(int*)(selfAddr + 0x50)) {
+        if ((int)spotIdx >= spotCount || (int)citizenSlot >= citizenCount) {
             std::fprintf(stderr,
                 "[WILDWRITE] FishingWork::Slot6 OUT OF RANGE: work=%p entity=%p workId=%d "
                 "param4=0x%x -> spotIdx=%u (count %d, cap %d, array %p) citizenSlot=%u (count %d)\n",
-                (void*)this, *(void**)(selfAddr + 0x10), *(int*)(selfAddr + 0x20), param4,
-                spotIdx, *(int*)(selfAddr + 0x60), *(int*)(selfAddr + 0x64), (void*)spotStates,
-                citizenSlot, *(int*)(selfAddr + 0x50));
+                (void*)this, static_cast<void*>(field_10), field_20, param4,
+                spotIdx, spotCount, spotCapacity, static_cast<void*>(spotStates),
+                citizenSlot, citizenCount);
             RedzoneAlloc_PrintBacktrace("FishingWork::Slot6");
         }
-        *(int32_t*)(spotStates + (uintptr_t)spotIdx * 4) = 2;
+        spotStates[spotIdx] = 2;
     }
 
     return 0;
@@ -826,8 +756,8 @@ int FishingWork::OnComplete(void* param2, void* param3, int arg3) {
 int FishingWork::OnCancel(void* param2, void* param3, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
     // Copy the pointed-to values
-    uintptr_t copy2 = *(uintptr_t*)param2;
-    uintptr_t copy3 = *(uintptr_t*)param3;
+    void* copy2 = *(void**)param2;
+    void* copy3 = *(void**)param3;
 
     // Dispatch slot 6 OnComplete with the packed slot word forwarded; retail
     // returns its result (0 on every path).
@@ -842,29 +772,20 @@ int FishingWork::OnCancel(void* param2, void* param3, int arg3) {
 //   - Then clears the citizen IBP slot
 // ============================================================
 int FishingWork::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    int citizenCount = *(int*)(selfAddr + 0x50);
     if (citizenCount <= 0) return 0;
 
     int i = 0;
-    int64_t offset = 0;
     do {
-        uintptr_t* citizenSlot = (uintptr_t*)(*(uintptr_t*)(selfAddr + 0x48) + offset);
-        if (*citizenSlot != 0) {
-            // CheckPtr on citizen IBP
-            uintptr_t citizenEntity = *citizenSlot;
+        if (citizenRefs[i] != nullptr) {
+            // CheckPtr on citizen IBP; its CharacterComponent (+0x278)
+            CharacterComponent* character = citizenRefs[i]->character;
 
-            // Get state machine component at citizen+0x278
-            uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
-
-            // Cancel pending actions on smComp+0x48 (action list)
-            WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
+            // Cancel pending actions on the character's action list (+0x48)
+            WorkBase_TaskListCleanup_c5400(&character->actions);
         }
 
         i++;
-        offset += 8;
-    } while (i < *(int*)(selfAddr + 0x50));
+    } while (i < citizenCount);
     return 0;
 }
 
@@ -876,20 +797,14 @@ int FishingWork::Cleanup() {
 // Returns param2 (hidden return pointer pattern).
 // ============================================================
 void* FishingWork::GetTarget(void* param2) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    // CheckPtr on building entity IBP (at self+0x10)
-    uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);
-
-    // Find PositionComponent via FUN_140002e10
-    uintptr_t posIBP[1] = {0};
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(buildingEntity), posIBP);
+    // CheckPtr on building entity IBP (at self+0x10); its WorkPlaceComponent
+    // (FUN_140002e10)
+    WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
 
     // CheckPtr on the returned IBP
 
-    // Read position entity's field at +0x48 and store in output
-    uintptr_t posEntity = *(uintptr_t*)posIBP;
-    *(uintptr_t*)param2 = *(uintptr_t*)(posEntity + 0x48);
+    // The workplace's profession (+0x48) into the return slot
+    *(Profession**)param2 = workPlace->profession;
 
     return param2;
 }

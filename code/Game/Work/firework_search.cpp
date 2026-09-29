@@ -1,26 +1,29 @@
 // code/Game/Work/firework_search.cpp
 // FireWork burning-entity spiral search (FireWork action / building-on-fire propagation).
 //
-//   FireWork_helper_81d0          @ 0x1400881d0  -> FireWork_SpiralSearch_81d0
-//   FireWork_helper_81d0_sub_8730 @ 0x140088730  -> FireWork_SpiralCell_8730
+//   FireWork_helper_81d0          @ 0x1400881d0  -> CitizenBehavior::FindWater
+//   FireWork_helper_81d0_sub_8730 @ 0x140088730  -> CitizenBehavior::ScanWaterCell
+//
+// B4: both are CitizenBehavior (TownManager) members -- rcx is the TownManager in
+// retail (0x1400881d9 spills it as `this`), whatever the Ghidra names say.
 #include "Work/exe_bodies.h"
 //
-// FireWork_SpiralSearch_81d0 scans the TownManager's coarse cell index in an
-// expanding ring spiral around a centre cell (param_2). For every in-bounds cell it
-// invokes the per-cell helper (8730), which walks that cell's entity list, filters by
-// flag/type, validates reachability (a00f0 + f810 path queries) and tracks the closest
-// burnable target (best path cost in *param_7, its list id in *param_8, an IBP to it in
-// *param_9). When the ring radius exceeds the search limit (param_3) the scan stops.
+// FindWater scans the TownManager's coarse cell index in an expanding ring spiral
+// around a centre cell. For every in-bounds cell it invokes the per-cell helper (8730),
+// which walks that cell's water-id list, filters by cell type, validates reachability
+// (a00f0 + f810 path queries) and tracks the closest source (best path cost in
+// *bestCost, its water id in *bestId, the well in *bestWell). When the ring radius
+// exceeds the search limit (extent) the scan stops.
 //
 // After the scan:
-//   - if nothing was found (local_88 == 0): sample two terrain positions for the best
-//     fallback cell (local_b8) via the map terrain sampler and write them to param_4/param_5.
-//   - if a target IBP was found: locate an InteractComponent (type DAT_1401c7900) sub-entity
-//     of the found entity, random-index it (Random::Rand over the recursive child count),
-//     resolve its world position (Entity_impl_2e20) and anchor cell (Entity_impl_7fb0), then
+//   - if no well was found: sample two terrain positions for the best water pair
+//     (local_b8) via the map terrain sampler and write them to outA/outB.
+//   - if a well was found: take the InteractComponent (type DAT_1401c7900) of its
+//     entity, random-index it (Random::Rand over the recursive child count), resolve its
+//     world position (Entity_impl_2e20) and anchor cell (Entity_impl_7fb0), then
 //     write both terrain positions.
 //
-// ⚠ param_1 IS NOT THE GameWorld. Slot 4 passes `*(GameWorld+0xF0)` -- the
+// ⚠ `this` IS NOT THE GameWorld. Slot 4 passes `*(GameWorld+0xF0)` -- the
 // TownManager -- and that is faithful: retail 0x1400e977c does `mov rsi,rcx` with rsi
 // loaded from `0xf0(g_GameWorld)`. The three fields this pair walks are TownManager
 // fields, and the GameWorld's same-numbered fields are unrelated (GW+0xE0 = camera
@@ -40,79 +43,60 @@
 // Faithful, offset-by-offset port of the decompiled exe helpers; do not "improve" behavior.
 // Every numeric constant, the spiral index arithmetic and the per-cell call argument order
 // were confirmed against disassemble_function.
-//
-// All exe sub-callees are already ported + registered elsewhere (closure-safe):
-//   0x140122e20 Entity_impl_2e20    (reg_pf_road.cpp  Pf_EntityResolvePos_2e20)
-//   0x140123070 FUN_140123070       (reg_pf_ctors.cpp Pf_RecursiveChildSum_123070)
-//   0x140087fb0 Entity_impl_7fb0    (reg_pf_road.cpp  Pf_EntityAnchorCell_7fb0)
-//   0x14009f3e0 CharacterComponent_impl_f3e0 == fn_MapGetTerrainPos
-//   0x1400a00f0 FUN_1400a00f0       (reg_work_base.cpp WorkBase_ValidateCell_a00f0)
-//   0x14009f810 BuildStructure_impl_f810 (reg_pf_roots_route.cpp Pf_IsDstReachable_f810)
-//   0x140132010 FUN_140132010       (reg_work_impl2.cpp WorkImpl_Sqrtf_132010)
-//   0x140002ed0 Entity_FindComponent_Position (reg_work_base.cpp WorkBase_FindComponent_2ed0)
-//
 
-#include <new>
 #include "object/TypeInfo.h"
-#include "Game/exe_bodies.h"
-#include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // B3R: the Pf_* helpers called by name
-#include "Game/exe_constants.h"  // B3R: kRdata_140172114
+#include "Game/exe_bodies.h"      // Reimpl_MapGetTerrainPos (0x14009f3e0)
+#include "Game/GameUpdateLoop.h"  // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
+#include "Action/exe_bodies.h"    // B3R: the Pf_* helpers called by name
+#include "Game/exe_constants.h"   // B3R: kRdata_140172114
 #include <cstdint>
-#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "system/Value.h"      // ENDGAME B.3.4b System callers
-#include "Component/InteractComponent.h"   // ENDGAME B.3.9 D5: InteractComponent::TypeId()
+#include "system/Value.h"         // ENDGAME B.3.4b System callers
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/InteractComponent.h"
+#include "Component/WellComponent.h"
 
 // ---------------------------------------------------------------------------
 // Sub-helpers, called by name (B3R): 0x140122e20 Pf_EntityResolvePos_2e20,
 // 0x140123070 Pf_RecursiveChildSum_123070, 0x140087fb0 Pf_EntityAnchorCell_7fb0,
-// 0x140002ed0 WorkBase_FindComponent_2ed0, 0x1400a00f0 WorkBase_ValidateCell_a00f0,
-// 0x14009f810 Pf_IsDstReachable_f810, 0x140132010 WorkImpl_Sqrtf_132010;
+// 0x1400a00f0 WorkBase_ValidateCell_a00f0, 0x14009f810 Pf_IsDstReachable_f810,
+// 0x140132010 WorkImpl_Sqrtf_132010; the InteractComponent lookups (0x140002ed0 and
+// the one 0x1400881d0 inlines) are ComponentEntity::FindComponent<InteractComponent>;
 // DAT_140172114 = kRdata_140172114 (0.5f).
 // ---------------------------------------------------------------------------
 
 static inline float HalfCell() { return kRdata_140172114; }   // DAT_140172114 = 0.5f
 
 // ===========================================================================
-// FireWork_SpiralCell_8730  (FUN_140088730)
-//   Per-cell check: walk the entity-id list of coarse cell `param_3`, and for each
-//   burnable + reachable entity update the closest-target trackers (param_7/8/9).
-// param_1 = TownManager (= *(GameWorld+0xF0)), param_2 = WorldGrid (int*), param_3 = coarse cell index,
-// param_4/param_5 = ring offsets (used for the radius-vs-limit early reject),
-// param_6 = source cell, param_7 = &bestCost, param_8 = &bestId, param_9 = &bestIBP.
+// CitizenBehavior::ScanWaterCell  (FUN_140088730)
+//   Per-cell check: walk the water-id list of coarse cell `coarseCell`, and for each
+//   reachable source update the closest-target trackers (bestCost / bestId / bestWell).
+// map = the world Map, ringX / ringY = ring offsets (the radius-vs-limit early reject),
+// srcCell = source cell.
 // ===========================================================================
-void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
-                              int param_4, int param_5, uint32_t param_6,
-                              int* param_7, int* param_8, uint64_t* param_9) {
-
-    // plVar8 = *(param_1 + 0x140) + param_3 * 0x10 ; entry: {ptr ids, int count, ...}
-    int64_t* plVar8 = reinterpret_cast<int64_t*>(
-        *reinterpret_cast<int64_t*>(param_1 + 0x140) + static_cast<int64_t>(param_3) * 0x10);
-    if (*reinterpret_cast<int*>(reinterpret_cast<int64_t>(plVar8) + 8) <= 0)
+void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int ringY,
+                                    uint32_t srcCell, int* bestCost, int* bestId,
+                                    WellComponent** bestWell) {
+    // The bucket {int* ids, int count, ...}; its count is re-read every pass.
+    if (field_0x140[coarseCell].GetSize() <= 0)
         return;
 
-    int  iVar10 = 0;
-    int64_t lVar9 = 0;
+    int idx = 0;
     do {
         // Ring radius (in fine units, *8) vs current best/limit squared distance.
-        if (param_5 * 8 * param_5 * 8 + param_4 * 8 * param_4 * 8 <= (*param_7) * (*param_7)) {
-            int iVar1 = *reinterpret_cast<int*>(lVar9 + *plVar8);   // entity list id
+        if (ringY * 8 * ringY * 8 + ringX * 8 * ringX * 8 <= (*bestCost) * (*bestCost)) {
+            int id = field_0x140[coarseCell][idx];   // water id
             uint32_t uVar7;
-            if (iVar1 < 0) {
-                // Negative id -> indirect entity ref at GameWorld+0xe0[-1-iVar1].
-                int64_t* refSlot = reinterpret_cast<int64_t*>(
-                    *reinterpret_cast<int64_t*>(param_1 + 0xe0) +
-                    static_cast<int64_t>(-1 - iVar1) * 8);
-
-                int64_t entIBP = *reinterpret_cast<int64_t*>(*refSlot + 0x10);
-
-                int64_t posIBP = 0;
-                WorkBase_FindComponent_2ed0(static_cast<uintptr_t>(entIBP), &posIBP);
+            if (id < 0) {
+                // Negative id -> the well at wells[-1-id].
+                ComponentEntity* wellEntity = wells[-1 - id]->_entity;
+                InteractComponent* interact = wellEntity->FindComponent<InteractComponent>();
 
                 float pos[3] = {0.0f, 0.0f, 0.0f};
-                Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(posIBP), pos, 0, 0, nullptr);
+                Pf_EntityResolvePos_2e20(interact, pos, 0, 0, nullptr);
 
-                int iVar6 = *param_2;                  // grid width W
+                int iVar6 = map->size;                 // grid width W
                 int iVar2 = static_cast<int>(pos[0] + static_cast<float>(iVar6 >> 1));
                 int iVar3 = static_cast<int>(pos[1] + static_cast<float>(iVar6 >> 1));
                 if (iVar2 < 0)       iVar2 = 0;
@@ -121,81 +105,61 @@ void FireWork_SpiralCell_8730(int64_t param_1, int* param_2, int param_3,
                 if (iVar6 <= iVar3)  iVar3 = iVar6 - 1;
                 uVar7 = static_cast<uint32_t>(iVar6 * iVar3 + iVar2);
             } else {
-                uVar7 = *reinterpret_cast<uint32_t*>(
-                    *reinterpret_cast<int64_t*>(param_1 + 0x130) + static_cast<int64_t>(iVar1) * 8);
+                uVar7 = static_cast<uint32_t>(field_0x130[static_cast<int64_t>(id) * 2]);
                 // Cell-type gate: bit (cellType & 0x1f) of mask 0xe07 must be set.
-                // param_2 is int*; Ghidra's "param_2 + 0x20" is byte offset 0x80
-                // (disasm: MOV RAX,[R14 + 0x80]). cellType = (*(param_2+0x80))[uVar7*0x30 + 0x29].
-                uint8_t cellType = *reinterpret_cast<uint8_t*>(
-                    *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(param_2) + 0x80) +
-                    0x29 + static_cast<int64_t>(static_cast<int>(uVar7)) * 0x30);
+                // cellType = byte +0x29 of the 0x30-byte map cell (disasm:
+                // MOV RAX,[R14 + 0x80]). The cell is raw storage (H5): LEFT.
+                uint8_t cellType = reinterpret_cast<uint8_t*>(map->cells)
+                    [0x29 + static_cast<int64_t>(static_cast<int>(uVar7)) * 0x30];
                 if (((1u << (cellType & 0x1f)) & 0xe07u) == 0)
                     goto next;
             }
 
             // Reachability: path-type 0xe07 query then explicit length query.
             {
-                uint64_t ok = WorkBase_ValidateCell_a00f0(param_2, 0xe07, param_6, static_cast<int>(uVar7));
+                uint64_t ok = WorkBase_ValidateCell_a00f0(&map->size, 0xe07, srcCell, static_cast<int>(uVar7));
                 if (static_cast<char>(ok) != '\0') {
                     int iVar2;
-                    iVar2 = Pf_IsDstReachable_f810(param_2, param_6, uVar7, '\x01');
+                    iVar2 = Pf_IsDstReachable_f810(&map->size, srcCell, uVar7, '\x01');
                     if (iVar2 < 0) {
                         // Unreachable by road -> fall back to euclidean (in cells) + bias.
-                        int W2  = *param_2;
-                        int dr  = static_cast<int>(param_6) / W2 - static_cast<int>(uVar7) / W2;
-                        int dc  = static_cast<int>(param_6) % W2 - static_cast<int>(uVar7) % W2;
+                        int W2  = map->size;
+                        int dr  = static_cast<int>(srcCell) / W2 - static_cast<int>(uVar7) / W2;
+                        int dc  = static_cast<int>(srcCell) % W2 - static_cast<int>(uVar7) % W2;
                         float d = WorkImpl_Sqrtf_132010(static_cast<float>(dr * dr + dc * dc));
                         iVar2 = static_cast<int>(d) + W2;
                     }
-                    if (iVar2 < *param_7) {
-                        *param_7 = iVar2;
-                        *param_8 = iVar1;
-                        uint64_t bestRef;
-                        if (iVar1 < 0) {
-                            // The wrapped object one slot below the ref entry.
-                            bestRef = *reinterpret_cast<uint64_t*>(
-                                *reinterpret_cast<int64_t*>(param_1 + 0xe0) -
-                                (static_cast<int64_t>(iVar1) * 8 + 8));
-                        } else {
-                            uint64_t emptyIBP = 0;
-                            new (&emptyIBP) ::Object::InternalBasePtr(
-                                nullptr);   // B.3.3 bridge
-                            bestRef = emptyIBP;
-                        }
-                        *param_9 = bestRef;
+                    if (iVar2 < *bestCost) {
+                        *bestCost = iVar2;
+                        *bestId = id;
+                        // The well itself for a negative id; an empty ref for a water pair.
+                        *bestWell = (id < 0) ? wells[-1 - id] : nullptr;
                     }
                 }
             }
         }
     next:
-        iVar10 = iVar10 + 1;
-        lVar9 = lVar9 + 4;
-        plVar8 = reinterpret_cast<int64_t*>(
-            *reinterpret_cast<int64_t*>(param_1 + 0x140) + static_cast<int64_t>(param_3) * 0x10);
-    } while (iVar10 < *reinterpret_cast<int*>(reinterpret_cast<int64_t>(plVar8) + 8));
+        idx = idx + 1;
+    } while (idx < field_0x140[coarseCell].GetSize());
 }
 
 // ===========================================================================
-// FireWork_SpiralSearch_81d0  (FUN_1400881d0)
-//   Expanding-ring spiral over the coarse cell grid around centre cell param_2,
-//   bounded by half-search-extent param_3. Returns true (low byte) when it wrote
-//   the two terrain positions to param_4/param_5.
-// param_1 = TownManager (= *(GameWorld+0xF0)), param_2 = centre cell, param_3 = search extent (fine units),
-// param_4 / param_5 = out Vector3 (two terrain positions).
+// CitizenBehavior::FindWater  (FUN_1400881d0)
+//   Expanding-ring spiral over the coarse cell grid around centreCell, bounded by
+//   half-search-extent `extent`. Returns true (low byte) when it wrote the two terrain
+//   positions to outA / outB.
 // ===========================================================================
-int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_3,
-                                   float* param_4, float* param_5) {
+int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA, float* outB) {
 
-    // WorldGrid pointer at GameWorld(+0xf8). piVar1[0] = grid width W.
-    int* piVar1 = *reinterpret_cast<int**>(
-        reinterpret_cast<int64_t>(GameUpdateLoop::_singleton) + 0xf8);
+    // The world Map at GameUpdateLoop+0xF8 (m_game is still void*: LEFT).
+    Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
 
-    uint64_t local_88 = 0;          // found-target IBP (0 = none)
-    int W      = *piVar1;
+    WellComponent* found = nullptr;   // found well (null = none)
+    int W      = map->size;
     int cellW  = W >> 3;            // coarse grid dimension
-    int local_b8 = -1;             // best fallback coarse cell id
-    int iVar14 = static_cast<int>(param_2) % W >> 3;   // coarse col
-    int local_b4 = static_cast<int>(param_2) / W >> 3; // coarse row
+    int local_b8 = -1;             // best water id
+    int iVar14 = static_cast<int>(centreCell) % W >> 3;   // coarse col
+    int local_b4 = static_cast<int>(centreCell) / W >> 3; // coarse row
 
     int neg_cellW = -cellW;
     int local_a8  = cellW * local_b4;
@@ -211,7 +175,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
     while (true) {
         int iVar3 = (iVar6 < 0) ? 0 : iVar6;
         local_70 = iVar14;          // capture entry iVar14 (restored at 2nd-for body end)
-        if (param_3 <= iVar3 * 8) break;   // search-extent exit
+        if (extent <= iVar3 * 8) break;   // search-extent exit
 
         iVar3 = iVar6 + 1;
         int iVar8 = local_80 + iVar14;
@@ -223,13 +187,13 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
             local_b0 = iVar4;
             if ((-1 < iVar8 + local_b4) && (iVar8 + local_b4 < cellW)) {
                 if ((-1 < iVar14) && (iVar14 < cellW)) {
-                    FireWork_SpiralCell_8730(param_1, piVar1, iVar14 + iVar10, local_ac, iVar8,
-                                             param_2, &param_3, &local_b8, &local_88);
+                    ScanWaterCell(map, iVar14 + iVar10, local_ac, iVar8,
+                                  centreCell, &extent, &local_b8, &found);
                 }
                 iVar4 = local_58 + iVar6;
                 if ((-1 < iVar4) && (iVar4 < cellW)) {
-                    FireWork_SpiralCell_8730(param_1, piVar1, iVar4 + iVar10, iVar3, iVar8,
-                                             param_2, &param_3, &local_b8, &local_88);
+                    ScanWaterCell(map, iVar4 + iVar10, iVar3, iVar8,
+                                  centreCell, &extent, &local_b8, &found);
                 }
             }
             iVar10 = iVar10 + cellW;
@@ -242,12 +206,12 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
             if ((-1 < iVar14) && (iVar14 < cellW)) {
                 int row = local_ac + local_b4;
                 if ((-1 < row) && (row < cellW)) {
-                    FireWork_SpiralCell_8730(param_1, piVar1, row * cellW + iVar14, iVar8, local_ac,
-                                             param_2, &param_3, &local_b8, &local_88);
+                    ScanWaterCell(map, row * cellW + iVar14, iVar8, local_ac,
+                                  centreCell, &extent, &local_b8, &found);
                 }
                 if ((-1 < local_68row + iVar6) && (local_68row + iVar6 < cellW)) {
-                    FireWork_SpiralCell_8730(param_1, piVar1, iVar4 + iVar14, iVar8, iVar3,
-                                             param_2, &param_3, &local_b8, &local_88);
+                    ScanWaterCell(map, iVar4 + iVar14, iVar8, iVar3,
+                                  centreCell, &extent, &local_b8, &found);
                 }
             }
             iVar10 = local_70;   // decompile restores iVar10 = local_70 (entry iVar14), NOT the incremented iVar14
@@ -258,103 +222,71 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
         iVar6 = iVar3;
     }
 
-    if (local_88 == 0) {
-        // No target found: emit terrain positions for the best fallback cell, if any.
+    if (found == nullptr) {
+        // No well found: emit terrain positions for the best water pair, if any.
         if (local_b8 < 0)
             return 0;   // low byte 0 (CONCAT garbage upper bytes; callers test the bool)
 
         int64_t lVar7 = static_cast<int64_t>(local_b8);
-        float half = static_cast<float>(*piVar1 >> 1) - HalfCell();
+        float half = static_cast<float>(map->size >> 1) - HalfCell();
 
-        // First terrain position: cell id at TownManager+0x130[best].
-        int cellA = *reinterpret_cast<int*>(
-            *reinterpret_cast<int64_t*>(param_1 + 0x130) + lVar7 * 8);
+        // First terrain position: the pair's first cell id at +0x130[best].
+        int cellA = field_0x130[lVar7 * 2];
         float inXY_a[3];
-        inXY_a[0] = static_cast<float>(cellA % *piVar1) - half;
-        inXY_a[1] = static_cast<float>(cellA / *piVar1) - half;
+        inXY_a[0] = static_cast<float>(cellA % map->size) - half;
+        inXY_a[1] = static_cast<float>(cellA / map->size) - half;
         inXY_a[2] = 0.0f;
-        float outA[3];
-        Reimpl_MapGetTerrainPos(piVar1, outA, inXY_a, '\0', nullptr);
-        param_4[0] = outA[0];
-        param_4[1] = outA[1];
-        param_4[2] = outA[2];
+        float outPosA[3];
+        Reimpl_MapGetTerrainPos(map, outPosA, inXY_a, '\0', nullptr);
+        outA[0] = outPosA[0];
+        outA[1] = outPosA[1];
+        outA[2] = outPosA[2];
 
-        // Second terrain position: cell id at TownManager+0x130[best] +4.
-        int cellB = *reinterpret_cast<int*>(
-            *reinterpret_cast<int64_t*>(param_1 + 0x130) + 4 + lVar7 * 8);
-        float half2 = static_cast<float>(*piVar1 >> 1) - HalfCell();
+        // Second terrain position: the pair's second cell id.
+        int cellB = field_0x130[lVar7 * 2 + 1];
+        float half2 = static_cast<float>(map->size >> 1) - HalfCell();
         float inXY_b[3];
-        inXY_b[0] = static_cast<float>(cellB % *piVar1) - half2;
-        inXY_b[1] = static_cast<float>(cellB / *piVar1) - half2;
+        inXY_b[0] = static_cast<float>(cellB % map->size) - half2;
+        inXY_b[1] = static_cast<float>(cellB / map->size) - half2;
         inXY_b[2] = 0.0f;
-        float outB[3];
-        Reimpl_MapGetTerrainPos(piVar1, outB, inXY_b, '\0', nullptr);
-        param_5[0] = outB[0];
-        param_5[1] = outB[1];
-        param_5[2] = outB[2];
+        float outPosB[3];
+        Reimpl_MapGetTerrainPos(map, outPosB, inXY_b, '\0', nullptr);
+        outB[0] = outPosB[0];
+        outB[1] = outPosB[1];
+        outB[2] = outPosB[2];
         return 1;
     }
 
-    // A target was found: dig into its InteractComponent sub-entity tree.
-    int64_t entIBP = *reinterpret_cast<int64_t*>(local_88 + 0x10);
+    // A well was found: its entity's InteractComponent (the inlined FindComponent).
+    ComponentEntity* wellEntity = found->_entity;
+    InteractComponent* chosen = wellEntity->FindComponent<InteractComponent>();
 
-    // Scan the entity's children for the first one whose type == DAT_1401c7900,
-    // then verify it via IsDerivedFrom; chosen entity -> `chosen`.
-    void* chosen = nullptr;
-    uint32_t typeId = InteractComponent::TypeId();  // DAT_1401c7900 (ENDGAME B.3.9 D5)
-    int  childCount = *reinterpret_cast<int*>(entIBP + 0x38);
-    if (childCount > 0) {
-        int   idx = 0;
-        int64_t off = 0;
-        do {
-            uint64_t* childSlot = reinterpret_cast<uint64_t*>(
-                *reinterpret_cast<int64_t*>(entIBP + 0x30) + off);
-            void* child = reinterpret_cast<void*>(*childSlot);
-            uint32_t t = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
-            if (t == typeId) {
-                uint64_t* sel = reinterpret_cast<uint64_t*>(
-                    *reinterpret_cast<int64_t*>(entIBP + 0x30) + static_cast<int64_t>(idx) * 8);
-                void* candidate = reinterpret_cast<void*>(*sel);
-                if (Object::IsDerivedFromNullSafe(candidate, typeId))
-                    chosen = candidate;
-                break;
-            }
-            idx = idx + 1;
-            off = off + 8;
-        } while (idx < *reinterpret_cast<int*>(entIBP + 0x38));
-    }
-
-    // Wrap the chosen entity in an IBP, random-index a sub-entity, resolve its position.
-    uint64_t chosenIBP = 0;
-    new (&chosenIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(chosen));   // B.3.3 bridge
-
-    uint32_t count = static_cast<uint32_t>(Pf_RecursiveChildSum_123070(static_cast<int64_t>(chosenIBP), 0));
-    void* rng = *reinterpret_cast<void**>(
-        reinterpret_cast<int64_t>(GameUpdateLoop::_singleton) + 0xd8);
-    uint32_t randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
+    // Random-index a sub-entity of it, resolve its position. (The child-sum helper's
+    // parameter is an integer in Action/exe_bodies.h, not this block's header: LEFT.)
+    uint32_t count = static_cast<uint32_t>(
+        Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(chosen), 0));
+    uint32_t randIdx = GameUpdateLoop::_singleton->m_random->Rand(count);
 
     float resolved[3] = {0.0f, 0.0f, 0.0f};
-    Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(chosenIBP), resolved, 0,
-                     static_cast<int>(randIdx), nullptr);
+    Pf_EntityResolvePos_2e20(chosen, resolved, 0, static_cast<int>(randIdx), nullptr);
 
-    // Anchor cell of the found entity (entIBP), then its terrain position into param_5.
-    uint64_t anchorIBP = entIBP;
-    int anchorCell = Pf_EntityAnchorCell_7fb0(&anchorIBP, nullptr);
-    float half = static_cast<float>(*piVar1 >> 1) - HalfCell();
+    // Anchor cell of the well's entity, then its terrain position into outB.
+    ComponentEntity* anchorEntity = wellEntity;
+    int anchorCell = Pf_EntityAnchorCell_7fb0(&anchorEntity, nullptr);
+    float half = static_cast<float>(map->size >> 1) - HalfCell();
     float inXY[3];
-    inXY[0] = static_cast<float>(anchorCell % *piVar1) - half;
-    inXY[1] = static_cast<float>(anchorCell / *piVar1) - half;
+    inXY[0] = static_cast<float>(anchorCell % map->size) - half;
+    inXY[1] = static_cast<float>(anchorCell / map->size) - half;
     inXY[2] = 0.0f;
     float outP[3];
-    Reimpl_MapGetTerrainPos(piVar1, outP, inXY, '\0', nullptr);
-    param_5[0] = outP[0];
-    param_5[1] = outP[1];
-    param_5[2] = outP[2];
+    Reimpl_MapGetTerrainPos(map, outP, inXY, '\0', nullptr);
+    outB[0] = outP[0];
+    outB[1] = outP[1];
+    outB[2] = outP[2];
 
-    // The random-resolved sub-entity position goes to param_4.
-    param_4[0] = resolved[0];
-    param_4[1] = resolved[1];
-    param_4[2] = resolved[2];
+    // The random-resolved sub-entity position goes to outA.
+    outA[0] = resolved[0];
+    outA[1] = resolved[1];
+    outA[2] = resolved[2];
     return 1;
 }
