@@ -27,6 +27,7 @@
 
 namespace UI { class StringTable; }
 namespace IO { class Stream; }
+namespace Object { class InternalBasePtr; }
 
 // One message (stride 0x28): Serialize 0x1400952c0's field order.
 struct EventLogEntry {
@@ -64,6 +65,18 @@ public:
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x1400952c0
+
+    // ---- members (B4 GAME-a; bodies in eventlog.cpp) ----
+    // entityIBP: the entity the message jumps to (null / empty: no location).
+    void AddEvent(int eventType, int severity, const Object::InternalBasePtr* entityIBP);   // 0x140095580
+    void AddEventWithName(int eventType, int severity, const Object::InternalBasePtr* entityIBP,
+                          const System::String* name);                                    // 0x140095750
+    void AddCitizenEvent(int eventType, int severity, const Object::InternalBasePtr* entityIBP,
+                         const System::String* name, const System::String* title,
+                         const System::String* extra);                                    // 0x140094e00
+    // The three writers' one shared body (retail inlines it in each).
+    void AddEventCore(int eventType, int severity, const Object::InternalBasePtr* entityIBP,
+                      const char* const* extra, int nExtra);
 };
 
 static_assert(sizeof(EventLog) == 0x28, "EventLog is 0x28 (Load MemAlloc(0x28, 4))");

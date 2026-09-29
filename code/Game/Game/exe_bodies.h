@@ -40,9 +40,8 @@ extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  
 // ---- citizenlist_serialize.cpp
 
 // ---- eventlog.cpp
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580
-extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr);  // 0x140095750
-extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr, void* titleStr, void* extraStr);  // 0x140094e00
+extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580 B4 FORWARD -> EventLog::AddEvent
+extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr, void* titleStr, void* extraStr);  // 0x140094e00 B4 FORWARD -> EventLog::AddCitizenEvent
 
 // ---- game.cpp
 // --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---

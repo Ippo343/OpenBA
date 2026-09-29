@@ -87,16 +87,10 @@
 // builds the ribbon dialog (DialogInstance base + our SA vtable + field init).
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
 extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
-// Event-log writer (code/Game/Game/eventlog.cpp) — appends a real entry to the
-// gameWorld+0x138 event log (formatted from the events/seasons StringTables).
-extern "C" void EventLog_AddSimple(int eventType, int severity);
 extern "C" void BuildingGoal_Probe(const char* templateName);  // code/Game/Goal/buildinggoal.cpp
-extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
-                                          void* entityIBP, void* nameStr);  // 0x140095750
-// NOTE: EventLog_CheckResourceShortages (code/Game/Game/eventlog.cpp, port of
-// FUN_14008c100) is intentionally NOT called from here anymore — see the retirement
-// note at its former call site below. The scan now runs once per tick from
-// CitizenBehavior_CheckThresholds via the registered fn_NotificationEvent path.
+// NOTE: the tree's second port of FUN_14008c100 (EventLog_CheckResourceShortages)
+// is gone (B4 GAME-a: it had no caller) — see the retirement note at its former
+// call site below. The scan runs once per tick from CitizenBehavior::CheckThresholds.
 
 // GUI_PLAN Keystone F Phase 3 — player tool activation + per-frame tick
 // (code/Game/Player/tool_activation_standalone.cpp). Gated behind BANISHED_LIVE_TOOLS
@@ -576,13 +570,13 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
-    // It is superseded by the registered tick path: CitizenBehavior_CheckThresholds
+    // It is superseded by the registered tick path: CitizenBehavior::CheckThresholds
     // (citizenbehavior.cpp) scans the SAME townMgr+0x170/+0x180 shortage tables every
     // tick and, now that 0x140095580 (EventLog_AddEvent) is registered as
     // fn_NotificationEvent, fires the same 0x11-0x18 sev-3 events. Keeping this block
     // would double-decrement those shared cooldown timers and double-log each
     // shortage, so it is removed — following the "retire stale duplicate" precedent.
-    // EventLog_CheckResourceShortages stays defined (faithful port) but uncalled.
+    // (B4 GAME-a: the uncalled duplicate port is deleted.)
     // The scenario/achievement popup (0x1a-0x1d) source op_6830 (0x140096830) and the
     // ribbon / EventPopupDialog paths are unaffected and stay live for any real event.
 
@@ -2243,8 +2237,7 @@ void GameUpdateLoop::OnScenarioComplete() {
         // No parent achievement — simple notification
         // Event type: 0x1d (win) or 0x1c (fail) depending on IsMet
         TRACE("[GameUpdateLoop::OnScenarioComplete] no parent achievement, firing simple notification...\n");
-        int64_t nullEntity[1] = {0};
-        new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        ::Object::InternalBasePtr nullEntity(nullptr);
 
         bool isMet = m_scenarioInstance->IsMet();   // B.3.7 bridge
 
@@ -2252,7 +2245,7 @@ void GameUpdateLoop::OnScenarioComplete() {
         // (The IDs were documented inverted here; the live string table settles it —
         // the named sibling 0x1b reads "You've failed to meet a goal in the scenario".)
         int eventType = 0x1d - (int)isMet;
-        EventLog_AddEvent(m_eventNotifier, eventType, 4, nullEntity);   // 0x140095580
+        if (m_eventNotifier) m_eventNotifier->AddEvent(eventType, 4, &nullEntity);   // 0x140095580
     } else {
         // Has parent achievement — notification with achievement title
         TRACE("[GameUpdateLoop::OnScenarioComplete] has parent achievement, firing named notification...\n");
@@ -2274,14 +2267,13 @@ void GameUpdateLoop::OnScenarioComplete() {
         // Convert to System::String (member, non-trivial return: this, retval)
         System::String sysStr(uiStr.operator System::String());
 
-        int64_t nullEntity[1] = {0};
-        new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        ::Object::InternalBasePtr nullEntity(nullptr);
 
         bool isMet = m_scenarioInstance->IsMet();   // B.3.7 bridge
 
         // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)
         int eventType = 0x1b - (int)isMet;
-        EventLog_AddEventWithName(m_eventNotifier, eventType, 4, nullEntity, &sysStr);   // 0x140095750
+        if (m_eventNotifier) m_eventNotifier->AddEventWithName(eventType, 4, &nullEntity, &sysStr);   // 0x140095750
     }
 
     TRACE("[GameUpdateLoop::OnScenarioComplete] EXIT\n");
