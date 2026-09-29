@@ -24,6 +24,7 @@
 // handler behind it. Structure follows orchardui.cpp exactly.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/cropui_funcs.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"

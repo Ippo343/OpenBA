@@ -319,4 +319,19 @@ void* ShowTool::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_140042890 — ShowTool_Action_Ctor
+//   RCX=self, RDX=param_2 ({inner ptr}), R8D=toolType (int @ +0x28).
+//   Base Internal ctor; Action vtable -> ShowTool vtable; +0x20 = *param_2; +0x28 = toolType.
+// ============================================================
+void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
+    // ENDGAME B.3.8 ACT: the real ctor (ShowTool.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) ShowTool(param_2, toolType));
+}
+
+// 0x140042890: Action() (Internal, +0x10/+0x18 = 0), then +0x20 = *param_2 (the
+// door's double store `+0x20 = 0; +0x20 = *param_2` keeps only the second), +0x28.
+ShowTool::ShowTool(void* entity, int toolId)
+    : _field20(*static_cast<void**>(entity)), _field28(toolId) {}
+
 DEFINE_EXE_TYPE(ShowTool, "Action")

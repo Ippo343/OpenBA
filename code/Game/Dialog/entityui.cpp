@@ -6,6 +6,7 @@
 //         +0x38 = checkPin element, +0x40 = pages element
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/entityui_funcs.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"

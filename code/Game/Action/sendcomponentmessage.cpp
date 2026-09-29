@@ -22,6 +22,7 @@
 #include "Component/Component.h"          // ENDGAME B.3.8 CB3: slot 15 OnMessage
 #include "Component/OrchardComponent.h"   // ENDGAME B.3.8 CB3: OrchardComponent::TypeId()
 #include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 C4: ComponentEntity::TypeId()
+#include "Component/CitizenComponent.h"   // CitizenComponent::TypeId() (moved ctor)
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -247,5 +248,45 @@ void* SendComponentMessage::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) SendComponentMessage());
 }
 
+
+// ============================================================
+// FUN_1400cb1d0 — SendComponentMessage_Action CopyCtor
+// Base Internal ctor, Action -> SendComponentMessage vtable; copies IBP +0x20 (param_2),
+// IBP +0x28 (param_5), int +0x30 (*param_3), +0x34 (param_4), +0x38 (param_6), +0x3c=0.
+// ============================================================
+void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3,
+                                           uint32_t param_4, uint64_t* param_5, uint32_t param_6) {
+    // ENDGAME B.3.8 ACT: the real ctor (SendComponentMessage.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (param_1) SendComponentMessage(param_2, param_3, param_4, param_5, param_6));
+}
+
+// 0x1400cb1d0 — the ctor body, moved from the door above: +0x20 = *param_2,
+// +0x28 = *param_5, then the retail stores (and the tree's typeid heal) verbatim.
+SendComponentMessage::SendComponentMessage(uint64_t* param_2, uint32_t* param_3, uint32_t param_4,
+                                           uint64_t* param_5, uint32_t param_6)
+    : _field20(reinterpret_cast<void*>(*param_2)),
+      _field28(reinterpret_cast<void*>(*param_5)) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    uint32_t compTypeId = *param_3;
+    // [ECONOMY M-D — BANISHED_LIVE_STORAGE typeid heal]
+    // The eat push (PerformWork_Action_Ctor6, citizenai_actionctors.cpp) reads the
+    // component-typeid from .rdata DWORD_1401c7158 (CitizenComponent) — deliberately
+    // NOT registered in standalone (see reg_work_tail_trade.cpp), so it arrives here
+    // as 0 and SendComponentMessage::AbstractImpl can never match a component
+    // (returns 2, message silently dropped). Under BANISHED_LIVE_STORAGE, heal the
+    // msg==2 (EAT) case only — msg 2 with a zero typeid is uniquely the ctor6
+    // eat-delivery message — substituting the live GetTypeIdByName CRC that our
+    // CitizenComponent live vtable's GetTypeId (slot 2) returns. msg 0 stays
+    // unhealed: a zero-typeid msg 0 is ambiguous (CitizenAIComponent 0x1401c70e8
+    // completion lead vs CitizenComponent warm-house), deferred.
+    if (compTypeId == 0 && param_4 == 2) {
+        compTypeId = CitizenComponent::TypeId();
+    }
+    *reinterpret_cast<uint32_t*>(s + 0x30) = compTypeId;
+    *reinterpret_cast<uint32_t*>(s + 0x34) = param_4;
+    *reinterpret_cast<uint32_t*>(s + 0x38) = param_6;
+    *reinterpret_cast<uint32_t*>(s + 0x3c) = 0;
+}
 
 DEFINE_EXE_TYPE(SendComponentMessage, "Action")

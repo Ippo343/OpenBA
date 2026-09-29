@@ -392,4 +392,20 @@ void* HuntAnimal::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400c8400 — HuntAnimal_Action_CopyCtor
+//   RCX=self, RDX=p2, R8=p3.  +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0(byte).
+// ============================================================
+void* ActChild_HuntAnimalCopyCtor_c8400(void* self, uint64_t* p2, uint64_t* p3) {
+    // ENDGAME B.3.8 ACT: the real ctor (HuntAnimal.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) HuntAnimal(p2, p3));
+}
+
+// 0x1400c8400: +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0 (byte).
+HuntAnimal::HuntAnimal(uint64_t* herd, uint64_t* animal)
+    : _field20(reinterpret_cast<void*>(*animal)),
+      _field28(reinterpret_cast<void*>(*herd)),
+      _field30(nullptr),
+      _field38(0) {}
+
 DEFINE_EXE_TYPE(HuntAnimal, "Action")
