@@ -176,12 +176,16 @@ void RtArrayAssignI32(void* dst, const void* src) {
 // FIFTY-THREE dword copies covering +0x00..+0xd3, then ONE byte at +0xd4
 // (`MOVZX EAX,byte ptr [RDX+0xd4]` / `MOV byte ptr [RCX+0xd4],AL`). sizeof is
 // 0xd8, so +0xd5..+0xd7 is a hole retail does not touch — see the banner.
-Camera* RtGraphics_Camera_CopyCtor(Camera* self, const Camera* src) {
-    uint32_t*       d = reinterpret_cast<uint32_t*>(self);
-    const uint32_t* s = reinterpret_cast<const uint32_t*>(src);
-    for (int i = 0; i < 0xd4 / 4; ++i) d[i] = s[i];        // 53 dwords
-    reinterpret_cast<uint8_t*>(self)[0xd4] =
-        reinterpret_cast<const uint8_t*>(src)[0xd4];
+// B.4: on the real class -- the 53 dwords are the frustum (incl. its pad), the
+// Transform3 and the projection, then the `_zUp` byte.
+Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
+                                             const Graphics::Camera* src) {
+    // 53 dwords, +0x00..+0xd3: the whole frustum (its +0x61..+0x63 pad
+    // included, as the dword run includes it), the Transform3, the projection.
+    std::memcpy(&self->_frustum, &src->_frustum, sizeof self->_frustum);
+    self->_cameraToWorld = src->_cameraToWorld;
+    self->_projection    = src->_projection;
+    self->_zUp = src->_zUp;                                     // +0xd4
     return self;
 }
 
@@ -253,8 +257,8 @@ Camera* RtGraphics_Camera_DefaultCtor(Camera* self) {
 uint8_t* SceneEntryAssign(uint8_t* dst, const uint8_t* src) {
     std::memcpy(dst + 0x00, src + 0x00, 8);
     std::memcpy(dst + 0x08, src + 0x08, 8);
-    RtGraphics_Camera_CopyCtor(reinterpret_cast<Camera*>(dst + 0x10),
-                               reinterpret_cast<const Camera*>(src + 0x10));
+    RtGraphics_Camera_CopyCtor(reinterpret_cast<Graphics::Camera*>(dst + 0x10),
+                               reinterpret_cast<const Graphics::Camera*>(src + 0x10));
     for (uint32_t off : {0xe8u, 0xecu, 0xf0u, 0xf4u, 0xf8u})   // +0xfc SKIPPED
         std::memcpy(dst + off, src + off, 4);
     std::memset(dst + 0x100, 0, 8);
@@ -559,9 +563,7 @@ void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuf
 
     rec->_scene        = scene;
     rec->_renderBuffer = renderBuffer;
-    rtgfxd::RtGraphics_Camera_CopyCtor(                                  // B.3.5 bridge
-        reinterpret_cast<RtGraphics::Camera*>(&rec->_camera),
-        reinterpret_cast<const RtGraphics::Camera*>(&camera));
+    rtgfxd::RtGraphics_Camera_CopyCtor(&rec->_camera, &camera);
 
     rec->_shaderDetail      = shaderDetail;   // +0xe8
     rec->_shader            = shader;         // +0xec

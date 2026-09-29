@@ -585,8 +585,8 @@ namespace {
 // `??0Camera@Graphics@@QEAA@AEBV01@@Z` 0x180017a70 — its ported body,
 // rtgfxd::RtGraphics_Camera_CopyCtor (wave9_lane_gfxd.cpp), by name.
 void CameraCopyCtor(void* dst, const void* src) {
-    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<RtGraphics::Camera*>(dst),
-                                       static_cast<const RtGraphics::Camera*>(src));
+    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<Graphics::Camera*>(dst),
+                                       static_cast<const Graphics::Camera*>(src));
 }
 
 // `Collection::Array<T>::SetSize(n, const T&)` 0x1800637b0 and

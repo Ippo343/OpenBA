@@ -43,8 +43,8 @@ void ArrayGeometryPtrAssign(void* dst, const void* src) {
 // 0x18001be7e / 0x18001be91 rather than resolved by a mangled name this file
 // would have had to guess (reference_resolveexport_phantom_names.md).
 void CameraCopyCtor(void* dst, const void* src) {
-    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<RtGraphics::Camera*>(dst),
-                                       static_cast<const RtGraphics::Camera*>(src));
+    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<Graphics::Camera*>(dst),
+                                       static_cast<const Graphics::Camera*>(src));
 }
 
 // The per-element copy constructor the eh_vector iterator is handed at

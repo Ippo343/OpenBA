@@ -760,8 +760,9 @@ static_assert(offsetof(Renderer, _pad_4c)            == 0x4c, "Renderer::+0x4c i
 // (the defaulted `Graphics::Camera` copy ctor would copy the hole too).
 namespace rtgfxd {
 // ---- graphics/wave9_lane_gfxd.cpp
-RtGraphics::Camera* RtGraphics_Camera_CopyCtor(RtGraphics::Camera* self,
-                                               const RtGraphics::Camera* src);  // 0x180017a70
+// B.4: typed on the real class (the POD describes the same 0xd8 bytes).
+Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
+                                             const Graphics::Camera* src);  // 0x180017a70
 }  // namespace rtgfxd
 // ==== end B3R RT-VG ====
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
