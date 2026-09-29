@@ -182,7 +182,7 @@ void PostEventToDestination(BoatComponent* boat, int eventId) {
     if (!node) return;
     void** vt = *reinterpret_cast<void***>(node);
     if (!vt || !vt[2]) return;
-    const int curIdx = *(reinterpret_cast<int8_t*>(&smc->stateFlags) + 1);
+    const int curIdx = smc->activeState;
     typedef char (*PostEvent_t)(void*, void*, int, int);
     reinterpret_cast<PostEvent_t>(vt[2])(node, sm, curIdx, eventId);
 }

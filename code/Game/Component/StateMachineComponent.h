@@ -79,8 +79,16 @@ public:
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     RootController _controller;   // +0x28 root node (vptr, +0x30 parent, +0x38 first child, +0x40 owner)
-    void*    controllerSelf;      // +0x48 StateMachine: current node (retail ctor this+0x28)
-    uint32_t stateFlags;          // +0x50 input/active/pending/transition (retail ctor 0xff00ffff)
+    // +0x48.. is the StateMachine StateMachine::Tick (0x1400a9660) runs: `&controllerSelf`
+    // is its address. The four state bytes are signed (Tick's MOVSX / JS tests; Persist
+    // 0x14012b940 serializes each through Serialize(signed char&), import 0x140152418);
+    // the retail ctor writes them as one dword 0xff00ffff (input, active, transition
+    // = -1, pending = 0).
+    ControllerComponent::Controller* controllerSelf; // +0x48 current node (retail ctor this+0x28)
+    int8_t   currentInput;        // +0x50 the state the machine was asked for last
+    int8_t   activeState;         // +0x51 the running state's table index (-1: none)
+    int8_t   pendingState;        // +0x52 the requested state (-1: nothing pending)
+    int8_t   transitionState;     // +0x53 the transition being run (-1: none)
     uint8_t  _pad54[4];           // +0x54
 };
 
@@ -89,4 +97,7 @@ static_assert(alignof(StateMachineComponent) == 8, "StateMachineComponent alignm
 static_assert(sizeof(StateMachineComponent::RootController) == 0x20, "the root node is 0x20 bytes");
 static_assert(offsetof(StateMachineComponent, _controller) == 0x28, "member root node at +0x28 (0x14012ba5b)");
 static_assert(offsetof(StateMachineComponent, controllerSelf) == 0x48, "StateMachine current node +0x48 (0x14012ba86)");
-static_assert(offsetof(StateMachineComponent, stateFlags) == 0x50, "state bytes +0x50 (0x14012ba8a)");
+static_assert(offsetof(StateMachineComponent, currentInput) == 0x50, "state bytes +0x50 (0x14012ba8a)");
+static_assert(offsetof(StateMachineComponent, activeState) == 0x51, "active state +0x51 (Persist 0x14012b983)");
+static_assert(offsetof(StateMachineComponent, pendingState) == 0x52, "pending state +0x52 (Persist 0x14012b995)");
+static_assert(offsetof(StateMachineComponent, transitionState) == 0x53, "transition state +0x53 (Persist 0x14012b9a7)");

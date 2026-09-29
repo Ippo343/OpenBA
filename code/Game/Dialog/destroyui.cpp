@@ -50,9 +50,9 @@ static StateMachineComponent* DestroyUI_FindStateMachine(ComponentEntity* entity
 // The state byte the StateMachine reports: the pending byte (+0x52) unless it is
 // negative, then the input byte (+0x50).
 static int8_t DestroyUI_StateByte(const StateMachineComponent* buildState) {
-    int8_t stateByte = (int8_t)(buildState->stateFlags >> 16);
+    int8_t stateByte = buildState->pendingState;
     if (stateByte < 0) {
-        stateByte = (int8_t)buildState->stateFlags;
+        stateByte = buildState->currentInput;
     }
     return stateByte;
 }
@@ -137,9 +137,8 @@ static void DestroyComponent_Reclaim_Impl(DestroyComponent* destroyComp)
     // Find the StateMachineComponent on the entity (param_1[2] = Component::_entity)
     StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
 
-    int8_t stateFrom = (int8_t)(buildState->stateFlags >> 8);   // the active byte +0x51
-    // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e's header).
-    ControllerComponent::Controller* node = (ControllerComponent::Controller*)buildState->controllerSelf;
+    int8_t stateFrom = buildState->activeState;
+    ControllerComponent::Controller* node = buildState->controllerSelf;
     node->PostEvent(&buildState->controllerSelf, (int)stateFrom, 0);
 
     // Also call the component's slot 4 — the "Reclaim" notification
@@ -151,8 +150,8 @@ static void DestroyComponent_Rebuild_Impl(DestroyComponent* destroyComp)
     if (!destroyComp) return;
     StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
 
-    int8_t stateFrom = (int8_t)(buildState->stateFlags >> 8);
-    ControllerComponent::Controller* node = (ControllerComponent::Controller*)buildState->controllerSelf;
+    int8_t stateFrom = buildState->activeState;
+    ControllerComponent::Controller* node = buildState->controllerSelf;
     node->PostEvent(&buildState->controllerSelf, (int)stateFrom, 0);
 }
 
@@ -161,8 +160,8 @@ static void DestroyComponent_Destroy_Impl(DestroyComponent* destroyComp)
     if (!destroyComp) return;
     StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
 
-    int8_t stateFrom = (int8_t)(buildState->stateFlags >> 8);
-    ControllerComponent::Controller* node = (ControllerComponent::Controller*)buildState->controllerSelf;
+    int8_t stateFrom = buildState->activeState;
+    ControllerComponent::Controller* node = buildState->controllerSelf;
     node->PostEvent(&buildState->controllerSelf, (int)stateFrom, 1);
 }
 
@@ -173,7 +172,7 @@ static void DestroyComponent_Destroy_Impl(DestroyComponent* destroyComp)
 // code/Game/Player/keystone_a_removalcalcpath.cpp, registered for 0x14011dfa0;
 // UpgradeUI_OnRemove calls it by name.
 //
-// StateMachine state bytes (StateMachineComponent::stateFlags):
+// StateMachine state bytes (StateMachineComponent +0x50..+0x53):
 //   +0x50 previousState, +0x51 currentSubState,
 //   +0x52 targetState (-1 = needs processing), +0x53 transitionTarget
 

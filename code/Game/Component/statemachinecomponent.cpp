@@ -600,7 +600,8 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
 // shape is kept unchanged; moving the two stores into the ctor is its own
 // titled commit.
 StateMachineComponent::StateMachineComponent()
-    : _controller(this), controllerSelf(nullptr), stateFlags(0), _pad54{} {
+    : _controller(this), controllerSelf(nullptr), currentInput(0), activeState(0),
+      pendingState(0), transitionState(0), _pad54{} {
     OrFlagsInCtor(0xcd);
 }
 

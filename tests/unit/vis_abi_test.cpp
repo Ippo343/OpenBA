@@ -120,7 +120,7 @@ UNIT_TEST(vis_member_offsets) {
     // D6: the two embedded members at +0x28.
     CHECK_EQ(offsetof(StateMachineComponent, _controller),  (size_t)0x28);
     CHECK_EQ(offsetof(StateMachineComponent, controllerSelf),(size_t)0x48);
-    CHECK_EQ(offsetof(StateMachineComponent, stateFlags),   (size_t)0x50);
+    CHECK_EQ(offsetof(StateMachineComponent, currentInput), (size_t)0x50);
     CHECK_EQ(offsetof(ControllerComponent::Controller, _owner), (size_t)0x18);  // root node +0x40
     CHECK_EQ(offsetof(StatusIconComponent, _geometry),      (size_t)0x28);
     CHECK_EQ(offsetof(StatusIconComponent, iconId),         (size_t)0x100);
