@@ -1052,6 +1052,8 @@ void RtVideo_ArrayModeSetSize(Video::Device::DisplayMode*& data, int32_t& size,
 void RtVideo_ArrayAdapterElemDestroy(Video::Device::Adapter* data, int32_t count);  // 0x180010da0
 void RtVideo_ArrayAdapterDtor(Video::Device::Adapter*& data, int32_t& size,
                               int32_t& capacity);                               // 0x180010900
+void RtVideo_ArrayInterfaceElemDestroy(Video::Device::GraphicsInterface* data,
+                                       int32_t count);                          // 0x180010f00
 void RtVideo_ArrayAdapterAssign(Video::Device::Adapter*& data, int32_t& size,
                                 int32_t& capacity,
                                 Video::Device::Adapter* const& srcData,
@@ -1073,6 +1075,8 @@ void Video_Device_Dtor(RtVideo::Device* self);  // 0x1800f7290  ??1Device@Video@
 void RtVideoDeviceLock(Video::Device** deviceSingleton);
 void RtVideoDeviceUnlock(Video::Device** deviceSingleton);
 void RtVideoDeviceLockThis(Video::Device* device);
+// runtime/src/video/video_resources_win.cpp -- ??1Device's DeleteCriticalSection.
+void RtVideoDeleteDeviceLock(Video::Device* device);
 void RtVideoDeviceUnlockThis(Video::Device* device);
 
 // runtime/src/video/device_startup.cpp -- prints the run-identity line (this

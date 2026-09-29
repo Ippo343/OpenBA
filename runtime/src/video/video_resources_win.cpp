@@ -8,12 +8,8 @@
 // Same split, and the same reason, as device_startup_win.cpp and
 // buffers_win.cpp.
 //
-// The offset is a literal here rather than an include of
-// runtime/types/video/Device.h, for the reason buffers_win.cpp gives: pulling
-// an engine header in behind <windows.h> is the collision PLAN §4.1 is about
-// (<wingdi.h> declares a function called `Rectangle`; <windef.h> #defines
-// `near` and `far` away). The static_assert that binds this constant to
-// `Device::lock` lives in the portable half.
+/// B.4 (R-VIDEO): this TU includes runtime/types/video/Device.h AFTER
+// <windows.h> (as buffers_win.cpp does) and reads `Device::lock` by name.
 //
 // Retail: `LEA RCX,[RBX+0x60] / CALL qword ptr [0x18014b370]` at 0x1800f72d9.
 // 0x18014b370 is Runtime-x64.dll's IAT slot for KERNEL32!DeleteCriticalSection
@@ -24,13 +20,12 @@
 #include <windows.h>
 #include <cstdint>
 
-static const size_t kDeviceLock = 0x60;
+#include "../../types/video/Device.h"   // Video::Device::lock
 
-extern "C" void RtVideoDeleteDeviceLock(void* device) {
+void RtVideoDeleteDeviceLock(Video::Device* device) {
     // Retail does not null-check `this` — nor does it need to, the caller is
-    // the destructor. The cast is the whole body.
-    DeleteCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(
-        static_cast<uint8_t*>(device) + kDeviceLock));
+    // the destructor. `lock` is the opaque CRITICAL_SECTION bytes (RULE B5-6).
+    DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(device->lock));   // CAST-OK: win32
 }
 
 // ============================================================================
@@ -43,9 +38,9 @@ extern "C" void RtVideoDeleteDeviceLock(void* device) {
 // failed write contributes whatever the pre-zeroed out-parameter holds, which
 // is zero. That is reproduced here rather than turned into an error path: a
 // port that returned early on failure would stop writing rows retail keeps
-// writing.
+// writing. (`HANDLE` is `void*`: the handle passes straight through.)
 extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t bytes) {
     DWORD written = 0;
-    WriteFile(reinterpret_cast<HANDLE>(handle), buf, bytes, &written, nullptr);
+    WriteFile(handle, buf, bytes, &written, nullptr);
     return static_cast<uint32_t>(written);
 }

@@ -232,6 +232,32 @@ void RtVideo_ArrayAdapterElemDestroy(Adapter* data, int32_t count) {
 }
 
 // ============================================================================
+// 0x180010f00 — the per-element destroy for Array<GraphicsInterface>.
+//
+// B.4 (R-VIDEO): MOVED here from video_resources.cpp (where ??1Device, its one
+// caller, composed it out of lane D2's byte-offset bodies) beside its two
+// siblings. Per element, stride 0x18, in retail's order: the nested per-Adapter
+// destroy (0x180010da0, above) over the element's Array<Adapter>, then that
+// array's block freed and its 16-byte header cleared (BODY A @+0x08: the free is
+// behind the null test, then two qword zero stores, written as the three named
+// fields), then the String at +0x00 (BODY B, spelling B).
+// ============================================================================
+void RtVideo_ArrayInterfaceElemDestroy(GraphicsInterface* data, int32_t count) {
+    if (count <= 0) return;
+    GraphicsInterface* g = data;
+    for (int64_t i = count; i != 0; --i) {
+        RtVideo_ArrayAdapterElemDestroy(g->adapterData, g->adapterCount);   // 0x180010f3f
+        Adapter* adapters = g->adapterData;
+        if (adapters) System::MemoryAllocator::MemFree(adapters);
+        g->adapterData     = nullptr;
+        g->adapterCount    = 0;
+        g->adapterCapacity = 0;
+        StringReleaseInLoop(g->name);
+        ++g;
+    }
+}
+
+// ============================================================================
 // 0x180010900 — Collection::Array<Adapter>::~Array
 // ============================================================================
 void RtVideo_ArrayAdapterDtor(Adapter*& data, int32_t& size, int32_t& capacity) {
