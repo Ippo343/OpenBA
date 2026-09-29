@@ -35,6 +35,7 @@
 #include "Object/exe_type.h"
 
 struct AttendanceCtrlTag {};
+class CitizenComponent;   // Component/CitizenComponent.h
 
 class AttendanceComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(AttendanceComponent)
@@ -54,9 +55,20 @@ public:
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x1400026b0
 
-    // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
-    void*           field28;       // +0x28 waiting-queue array (InternalBasePtr[])
-    void*           field30;       // +0x30 queue count (int) / capacity (int)
+    // ---- non-virtual members (retail addresses) ----
+    void ProcessQueue();                                          // 0x140043f60 send every queued citizen home
+    char AllFull();                                               // 0x140043db0 every building of this description full?
+    // The state handlers of the controller's table (RCX = [node+0x18] = this).
+    char State2Enter();                                           // 0x140043c90 open
+    char State2Frame();                                           // 0x140043c30 per frame (trans38)
+    char State3Enter();                                           // 0x140043bd0 closed
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Persist
+    // 0x140044410: the count, then per entry an InternalBasePtr nulled unless
+    // IsDerivedFrom CitizenComponent (0x1401c7158).
+    CitizenComponent** queue;          // +0x28 the waiting citizens (Array data, freed by the dtor)
+    int32_t            queueCount;     // +0x30
+    int32_t            queueCapacity;  // +0x34
     StateController _controller;   // +0x38 the embedded controller (D6)
 };
 
@@ -66,5 +78,6 @@ static_assert(offsetof(AttendanceComponent, _controller) == 0x38,
               "AttendanceComponent's controller member at +0x38 (slot 17 0x1400026b0: LEA RAX,[RCX+0x38])");
 static_assert(offsetof(AttendanceComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x50,
               "controller back-pointer at +0x50 (ctor 0x140044580)");
-static_assert(offsetof(AttendanceComponent, field28) == 0x28, "AttendanceComponent +0x28 queue");
-static_assert(offsetof(AttendanceComponent, field30) == 0x30, "AttendanceComponent +0x30 queue count");
+static_assert(offsetof(AttendanceComponent, queue) == 0x28, "AttendanceComponent +0x28 queue");
+static_assert(offsetof(AttendanceComponent, queueCount) == 0x30, "AttendanceComponent +0x30 queue count");
+static_assert(offsetof(AttendanceComponent, queueCapacity) == 0x34, "AttendanceComponent +0x34 queue capacity");

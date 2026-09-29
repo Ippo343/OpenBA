@@ -76,6 +76,22 @@ public:
     // +0x30 cost times costMultiplier <= laborProgress (`CMP [RDI+0x48],EDX; SETGE`).
     bool IsBuildComplete() const;
 
+    // ---- non-virtual members (retail addresses) ----
+    // 0x140108720: the OnAdded body (slot 6 is a thunk that skips it while the
+    // instant-build bit is set); State8Enter's instant branch calls it directly.
+    void FillModelLists();
+    bool HaveAllMaterials();                                      // 0x140108630
+    // The state handlers of the controller's table. The node dispatchers call
+    // them as `MOV RCX,[node+0x18]; JMP h` with RDX = the state machine: RCX is
+    // the controller's back-pointer (+0x40), i.e. this component.
+    int  State1Enter(void* sm);                                   // 0x140108290
+    char State1Update(void* sm);                                  // 0x1401081e0 (per frame)
+    char State8Enter(void* sm);                                   // 0x140107ae0
+    char State8Update(void* sm);                                  // 0x1401076e0 (per frame)
+    char State8OneShot(void* sm);                                 // 0x140107600 (state 8 exit)
+    char State8To2Action();                                       // 0x1401075e0 (the 8->2 action)
+    void State8Finalize();                                        // 0x140107ff0
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
     int32_t         laborProgress;   // +0x48 labour units delivered (OnMessage 0)
@@ -106,3 +122,10 @@ static_assert(offsetof(BuildComponent, modelComponentCapacity) == 0x64, "BuildCo
 static_assert(offsetof(BuildComponent, pickingComponents) == 0x68, "BuildComponent picking array data @ +0x68");
 static_assert(offsetof(BuildComponent, pickingComponentCount) == 0x70, "BuildComponent picking array count @ +0x70");
 static_assert(offsetof(BuildComponent, pickingComponentCapacity) == 0x74, "BuildComponent picking array capacity @ +0x74");
+
+// The standalone's construction gate (no retail address): a BuildComponent whose
+// model is already at its final sub-mesh and that never ran State1Enter is a
+// force-completed start-town building, and the state handlers skip it
+// (buildcomponent_state1.cpp).
+bool BuildComponent_DemoGateSkip(BuildComponent* buildComp);
+void BuildComponent_ClearLiveSite(BuildComponent* bc);

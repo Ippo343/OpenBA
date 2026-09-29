@@ -62,6 +62,10 @@
 #include "Component/InteractDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7938 cell class
 #include "Component/ModelComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7a50 cell class
 #include "Component/BoatComponent.h"         // ENDGAME B.3.9 C1: 0x1401c4020 cell class
+#include "Component/InteractComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/WorldGeometry.h"
 #include "Action/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
@@ -196,24 +200,23 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
 // nothing matches, and the merchant spawn quietly routes nothing — the exact failure
 // mode of reference_gated_element_typeid_disables_controller. reg_tradeui_typeids.cpp
 // seeds it behind BANISHED_LIVE_TRADE_TIDS.
-extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
+// B4 FORWARD: 1 outside caller (tradecomponent_states.cpp) holds the entity as an
+// integer. The null-entity and null-slot guards are the tree's (retail's template has
+// neither); kept, not extended.
+extern "C" void* BoatRoute_FindBoatComponent(int64_t entityI, void* outIBP) {
+    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityI);
     const uint32_t wanted = BoatComponent::TypeId();
-    void* found = nullptr;
-    const int n = entity ? *reinterpret_cast<int*>(entity + 0x38) : 0;
+    BoatComponent* found = nullptr;
+    const int n = entity ? entity->_componentCount : 0;
     for (int i = 0; i < n; ++i) {
-        const uintptr_t slot = *reinterpret_cast<uintptr_t*>(entity + 0x30) +
-                               static_cast<uintptr_t>(i) * 8;
-        const uintptr_t obj = *reinterpret_cast<uintptr_t*>(slot);
+        Component* obj = entity->_components[i].Get();
         if (!obj) continue;
-        if (reinterpret_cast<Object::Base*>(obj)->Type() == wanted) {   // B.3.8 bridge (slot 2)
-            void* cand = *reinterpret_cast<void**>(slot);
-            found = (::Object::IsDerivedFromNullSafe(cand, wanted)) ? cand : nullptr;
+        if (obj->Type() == wanted) {
+            found = (::Object::IsDerivedFromNullSafe(obj, wanted)) ? static_cast<BoatComponent*>(obj) : nullptr;
             break;
         }
     }
-    new (outIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return outIBP;
+    return new (outIBP) ::Object::InternalPtr<BoatComponent>(found);
 }
 
 // ============================================================
@@ -290,38 +293,35 @@ namespace {
 //   grow to count+1 (capacity = count+1, or (count+1)*3 when growing from non-zero)
 //   copy the surviving elements, write pt into the new tail
 // The `if (dst)` inside retail's copy loop is a NULL-BASE test (JZ on base+offset), kept.
-void AppendRoutePoint(uintptr_t comp, const float pt[3]) {
-    if (*reinterpret_cast<int*>(comp + 0x68) == 0) {
-        *reinterpret_cast<float*>(comp + 0x50) = pt[0];
-        *reinterpret_cast<float*>(comp + 0x54) = pt[1];
-        *reinterpret_cast<float*>(comp + 0x58) = pt[2];
-        *reinterpret_cast<uint32_t*>(comp + 0x70) = 0;
+void AppendRoutePoint(BoatComponent* comp, const float pt[3]) {
+    if (comp->routeCount == 0) {
+        comp->waypoint.x = pt[0];
+        comp->waypoint.y = pt[1];
+        comp->waypoint.z = pt[2];
+        comp->routeIndex = 0;
     }
 
-    const int oldCount = *reinterpret_cast<int*>(comp + 0x68);
+    const int oldCount = comp->routeCount;
     const int newCount = oldCount + 1;
-    uint8_t* oldBase = *reinterpret_cast<uint8_t**>(comp + 0x60);
-    *reinterpret_cast<int*>(comp + 0x68) = newCount;
+    Math::Vector3* oldBase = comp->route;
+    comp->routeCount = newCount;
 
-    if (newCount > *reinterpret_cast<int*>(comp + 0x6c)) {
-        *reinterpret_cast<int*>(comp + 0x6c) = newCount;
-        if (oldCount != 0) *reinterpret_cast<int*>(comp + 0x6c) = newCount * 3;
-        void* fresh = ::System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(*reinterpret_cast<int*>(comp + 0x6c)) * 0xc, 4);
-        *reinterpret_cast<void**>(comp + 0x60) = fresh;
+    if (newCount > comp->routeCapacity) {
+        comp->routeCapacity = newCount;
+        if (oldCount != 0) comp->routeCapacity = newCount * 3;
+        comp->route = static_cast<Math::Vector3*>(::System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(comp->routeCapacity) * 0xc, 4));
     }
 
-    uint8_t* newBase = *reinterpret_cast<uint8_t**>(comp + 0x60);
+    Math::Vector3* newBase = comp->route;
     int i = (oldBase == newBase) ? oldCount : 0;
     for (; i < newCount; ++i) {
         if (!newBase) continue;          // retail's JZ on base+offset: skip, do not break
-        float* dst = reinterpret_cast<float*>(newBase + static_cast<size_t>(i) * 0xc);
-        const float* src = (i < oldCount)
-                         ? reinterpret_cast<const float*>(oldBase + static_cast<size_t>(i) * 0xc)
-                         : pt;
-        dst[0] = src[0];
-        dst[1] = src[1];
-        dst[2] = src[2];
+        Math::Vector3* dst = &newBase[i];
+        const float* src = (i < oldCount) ? &oldBase[i].x : pt;
+        dst->x = src[0];
+        dst->y = src[1];
+        dst->z = src[2];
     }
     if (oldBase != newBase && oldBase) ::System::MemoryAllocator::MemFree(oldBase);
 }
@@ -344,54 +344,52 @@ inline bool TileInMap(float x, float y, int mapSize) {
 
 }  // namespace
 
-extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityIBP) {
-    const uintptr_t comp = static_cast<uintptr_t>(compI);
-    const int64_t dest = destEntityIBP ? *destEntityIBP : 0;
-    *reinterpret_cast<int64_t*>(comp + 0x28) = dest;
+void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* destEntityIBP) {
+    ComponentEntity* dest = destEntityIBP ? destEntityIBP->Get() : nullptr;
+    destination = dest;
 
     // ── Null destination: RELEASE the boat ───────────────────────────────────────
     // The controller's teardown (0x14005b160) calls in with a null entity to hand the
     // merchant back. Retail finds a component on the boat's own entity and dispatches
     // its +0x48 owner through vtable slot 2, passing the byte at +0x51.
-    if (dest == 0) {
-        uint64_t outIBP[2] = {0, 0};
-        void* found = PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(comp + 0x10), outIBP);
-        if (!found) return;
-        const uintptr_t state = *reinterpret_cast<uintptr_t*>(found);
+    // LEFT: StateMachineComponent's +0x48 machine and +0x51 byte are untyped (COMP-e);
+    // the node's slot 2 is read from its table as before.
+    if (dest == nullptr) {
+        StateMachineComponent* state = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
         if (!state) return;
-        uintptr_t* ownerSlot = reinterpret_cast<uintptr_t*>(state + 0x48);
-        const uintptr_t owner = *ownerSlot;
+        void** ownerSlot = &state->controllerSelf;
+        void* owner = *ownerSlot;
         if (!owner) return;
         typedef void (*Release_t)(void*, void*, int, int);
-        Release_t release = *reinterpret_cast<Release_t*>(*reinterpret_cast<uintptr_t*>(owner) + 0x10);
+        Release_t release = (*reinterpret_cast<Release_t**>(owner))[2];
         if (release)
-            release(reinterpret_cast<void*>(owner), ownerSlot,
-                    static_cast<int>(*reinterpret_cast<int8_t*>(state + 0x51)), 1);
+            release(owner, ownerSlot,
+                    static_cast<int>(*(reinterpret_cast<int8_t*>(&state->stateFlags) + 1)), 1);
         return;
     }
 
     // ── Where the boat is going: the destination's "boat" attach point ───────────
-    uint64_t interactIBP[2] = {0, 0};
-    WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(comp + 0x28), interactIBP);   // 0x140002ed0
+    InteractComponent* interact = destination.Get()->FindComponent<InteractComponent>();   // 0x140002ed0
 
     System::String boatName("boat");
-    float* const destPos = reinterpret_cast<float*>(comp + 0x40);   // Vector3
-    float* const destYaw = reinterpret_cast<float*>(comp + 0x4c);
-    BoatRoute_FindAttachPoint(reinterpret_cast<void*>(interactIBP[0]),
-                              &boatName, destPos, destYaw);
+    float* const destPos = &dockPosition.x;   // Vector3
+    float* const destYaw = &dockHeading;
+    BoatRoute_FindAttachPoint(interact, &boatName, destPos, destYaw);
 
     // The dock's facing, as a direction vector. Flipped at the end if the route
     // approaches from the opposite side. (Vector3::FromYawPitch, slot 0x1401512a0.)
     const float zeroPitch = 0.0f;
     Math::Vector3 dockForward = Math::Vector3::FromYawPitch(*destYaw, zeroPitch);
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    int* terrain   = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
-    uintptr_t wgeo = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0x110);
+    // LEFT: GameUpdateLoop::m_game is void* (W0 header); WorldGeometry's +0x1E0 header
+    // is an untyped {data, size} pair: the polyline reads stay by offset.
+    int* terrain   = reinterpret_cast<int*>(gw->m_game);
+    WorldGeometry* wgeo = gw->m_worldGeometry;
     if (!terrain || !wgeo) return;
 
-    const uintptr_t poly = *reinterpret_cast<uintptr_t*>(wgeo + 0x1e0);   // record 0 — retail
+    const uintptr_t poly = reinterpret_cast<uintptr_t>(wgeo->_arrays[4].data);   // record 0 — retail
     const int   polyCount = poly ? *reinterpret_cast<int*>(poly + 8) : 0; // int32 (140045840)
     const float* polyPts  = poly ? *reinterpret_cast<const float**>(poly) : nullptr;
 
@@ -408,7 +406,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
             entryY = py;
             if (TileInMap(px, py, *terrain)) { resumeIdx = i; break; }
             const float pt[3] = {px, py, 0.0f};
-            AppendRoutePoint(comp, pt);
+            AppendRoutePoint(this, pt);
             entryX = 0.0f;
             entryY = 0.0f;
             resumeIdx = 0;
@@ -478,7 +476,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
                 };
                 float snapped[3] = {0.0f, 0.0f, 0.0f};
                 Reimpl_MapGetTerrainPos(terrain, snapped, const_cast<float*>(cellPos), '\0', nullptr);   // 0x14009f3e0
-                AppendRoutePoint(comp, snapped);
+                AppendRoutePoint(this, snapped);
             }
         }
     }
@@ -487,7 +485,7 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     if (polyPts) {
         for (int i = resumeIdx; i < polyCount; ++i) {
             const float pt[3] = {polyPts[i * 2 + 0], polyPts[i * 2 + 1], 0.0f};
-            AppendRoutePoint(comp, pt);
+            AppendRoutePoint(this, pt);
         }
     }
 
@@ -499,12 +497,12 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     // two points of a route. Left faithful — a negative index here means the route is
     // degenerate (an empty polyline, or both A* legs failed), and the fix belongs upstream
     // at whichever of those produced it, not in a guard that silently yields a wrong yaw.
-    const int nearest = BoatRoute_NearestPointIndex(reinterpret_cast<void*>(comp + 0x50), destPos);
-    const float* route = *reinterpret_cast<const float* const*>(comp + 0x60);
-    if (route) {
-        const float* a = route + static_cast<size_t>(nearest) * 3;
-        const float* b = route + static_cast<size_t>(nearest - 2) * 3;
-        const Math::Vector3 dir(a[0] - b[0], a[1] - b[1], 0.0f);
+    const int nearest = BoatRoute_NearestPointIndex(&waypoint, destPos);
+    const Math::Vector3* pts = route;
+    if (pts) {
+        const Math::Vector3& a = pts[nearest];
+        const Math::Vector3& b = pts[nearest - 2];
+        const Math::Vector3 dir(a.x - b.x, a.y - b.y, 0.0f);
         const Math::Vector3 normalized = dir.Normalize();   // slot 0x1401512c0
         const float dot = normalized.x * dockForward.x +
                           normalized.y * dockForward.y +
@@ -517,4 +515,10 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
         *destYaw = dockForward.Heading();   // slot 0x1401512d8
     }
 
+}
+
+// B4 FORWARD: 1 outside caller (tradecomponent_states.cpp)
+extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityIBP) {
+    reinterpret_cast<BoatComponent*>(compI)->SetDestination(
+        reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(destEntityIBP));
 }

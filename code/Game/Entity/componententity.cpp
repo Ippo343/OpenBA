@@ -135,7 +135,8 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
     // Second pass: create components
     int insertIdx = 0;
     for (int64_t i = 0; i < (int64_t)descCompCount; i++) {
-        void* compTemplate = description->_subDescs[i];
+        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header, running).
+        Description* compTemplate = static_cast<Description*>(description->_subDescs[i]);
         uint32_t typeId = TemplateComponentType(compTemplate);
         if (typeId == 0) continue;
 
@@ -579,7 +580,8 @@ void ComponentEntity::Persist(void* stream) {
                 ::Object::InternalPtr<Component> newIBP(newComp);
 
                 // Get description template ptr for this component
-                void* descTemplate = desc->_subDescs[descIdx];
+                // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header, running).
+                Description* descTemplate = static_cast<Description*>(desc->_subDescs[descIdx]);
 
                 // Set component fields: +0x10 = owner IBP (this entity), +0x18 = description template
                 Component* compPtr = newIBP.Get();

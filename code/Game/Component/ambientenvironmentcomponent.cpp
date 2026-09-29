@@ -42,6 +42,7 @@
 #include "Component/AmbientEnvironmentDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Entity/ComponentEntity.h"
 #include "perf_experimental.h"
 #include <unordered_map>
 #include <new>
@@ -56,162 +57,48 @@
 #include <cstdlib>
 #include <cstdio>
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
-#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "system/MemoryAllocator.h"
-
-// Emitter-array resize helper, shared with the sibling component reimpl
-// (exe FUN_140001770 / AmbientEmitterComponent_sub_1770).
-extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount);
 
 namespace {
 
 // Type-id values (CRC32 of the type name; populated after Engine::Startup).
-// In standalone the .rdata type-id globals are NOT resolvable via
-// ResolveAddr(Module::Exe, addr) (they hit a not-implemented stub), so we look
-// them up by name via the factory registry — the same value fn_IsDerivedFrom and
-// the inert GetTypeId vtable slot compare against.
 uint32_t s_tidEnvDesc     = 0;  // AmbientEnvironmentDescription (0x1401c3f08)
 uint32_t s_tidEmitterComp = 0;  // AmbientEmitterComponent       (0x1401c3e60)
-uint32_t s_tidEmitterDesc = 0;  // AmbientEmitterDescription     (0x1401c3e98)
 bool s_resolved = false;
 
 void EnsureResolved() {
     if (s_resolved) return;
     s_tidEnvDesc     = AmbientEnvironmentDescription::TypeId();
     s_tidEmitterComp = AmbientEmitterComponent::TypeId();
-    s_tidEmitterDesc = AmbientEmitterDescription::TypeId();
     // Only latch as resolved once the factory registry has frozen the ids
     // (they start at the 0xFFFFFFFF sentinel before Factory::Startup).
     if (s_tidEnvDesc != 0 && s_tidEnvDesc != 0xFFFFFFFFu)
         s_resolved = true;
 }
 
-inline void* WorldScene() {
-    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
-    return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x78);
-}
-
-// Get the AmbientEmitterDescription from a component's +0x18, or null.
-inline void* EmitterDesc(void* comp) {
-    void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(comp) + 0x18);
-    if (!obj || !s_tidEmitterDesc) return nullptr;
-    return ::Object::IsDerivedFromNullSafe(obj, s_tidEmitterDesc) ? obj : nullptr;
-}
-
-// ---- sub_2c60: (re)play the effect for one emitter slot and add its emitter. ----
-// entry (stride 0x10 in comp+0x38 array): +0x00 uint handle, +0x04 float vol,
-// +0x08 ExternalPtr soundRef.
-void PlayNewSlot(void* comp, int slot) {
-    void* scene = WorldScene();
-    if (!scene) return;
-    void* desc = EmitterDesc(comp);
-    uint8_t* arr = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(comp) + 0x38);
-    if (!arr) return;
-    uint8_t* entry = arr + (intptr_t)slot * 0x10;
-    uint64_t* soundRef = reinterpret_cast<uint64_t*>(entry + 8);
-
-    if (*soundRef == 0 && desc) {
-        void* sounds = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x28);
-        if (sounds) *soundRef = reinterpret_cast<const uint64_t*>(sounds)[slot];
-    }
-
-    uint32_t handle = reinterpret_cast<Audio::Scene*>(scene)->FindEffect3D(
-        reinterpret_cast<Audio::SoundEffect*>(*soundRef));   // B.3.7 bridge
-    *reinterpret_cast<uint32_t*>(entry + 0) = handle;
-    if (handle == 0) {
-        int64_t timeZero = 0;
-        float   posZero[3] = { 0.0f, 0.0f, 0.0f };
-        handle = reinterpret_cast<Audio::Scene*>(scene)->PlayEffect3D(
-            reinterpret_cast<Audio::SoundEffect*>(*soundRef), static_cast<Audio::Scene::SoundType>(3),
-            *reinterpret_cast<const System::Time*>(&timeZero),
-            *reinterpret_cast<const Vector3*>(posZero));   // B.3.7 bridge
-        *reinterpret_cast<uint32_t*>(entry + 0) = handle;
-    }
-    const void* pos = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
-    reinterpret_cast<Audio::Scene*>(scene)->AddEmitter(
-        handle, *reinterpret_cast<const Vector3*>(pos), *reinterpret_cast<float*>(entry + 4));   // B.3.7 bridge
-}
-
-// ---- sub_2a10: set slot `slot` of the emitter component to `soundRef` @ `vol`. ----
-void SetSlot(void* comp, int slot, uint64_t soundRef, float vol) {
-    void* desc = EmitterDesc(comp);
-    // Ensure the emitter array matches the description's emitter count.
-    if (desc) {
-        int wantCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x30);
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(comp) + 0x40) != wantCount)
-            AmbientEmitterResize_Reimpl(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(comp) + 0x38), wantCount);
-    }
-
-    uint8_t* arr = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(comp) + 0x38);
-    if (!arr) return;
-    uint8_t* entry = arr + (intptr_t)slot * 0x10;
-    const void* pos = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
-
-    uint32_t handle = *reinterpret_cast<uint32_t*>(entry + 0);
-    uint64_t* curRef = reinterpret_cast<uint64_t*>(entry + 8);
-
-    if (handle == 0) {
-        // Record the sound reference + volume, then START playback.
-        //
-        // DEVIATION FROM RETAIL: the exe's sub_2a10 only records here (return
-        // without playing) because retail initializes the emitter handles earlier
-        // via the AmbientEmitterComponent's OnAdded (FUN_140042e10). In standalone
-        // that component is inert (OnAdded is a no-op stub), so nothing ever seeds
-        // the handle and sub_2a10's play branches (which require handle!=0) would
-        // never fire. We seed it on-demand here: PlayNewSlot does FindEffect3D /
-        // PlayEffect3D + AddEmitter for this slot's biome sound. Once handle!=0 the
-        // subsequent ticks follow the faithful volume-crossfade / sound-swap paths.
-        *curRef = soundRef;
-        *reinterpret_cast<float*>(entry + 4) = vol;
-        if (soundRef != 0) PlayNewSlot(comp, slot);
-        return;
-    }
-
-    if (*curRef != soundRef) {
-        // Sound changed — tear down the old emitter, then play the new one.
-        void* scene = WorldScene();
-        if (scene) {
-            reinterpret_cast<Audio::Scene*>(scene)->RemoveEmitter(
-                handle, *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
-            int cnt = reinterpret_cast<Audio::Scene*>(scene)->GetEmitterCount(handle);   // B.3.7 bridge
-            if (cnt == 0) reinterpret_cast<Audio::Scene*>(scene)->StopEffect3D(handle);   // B.3.7 bridge
-        }
-        *reinterpret_cast<uint32_t*>(entry + 0) = 0;
-        *reinterpret_cast<float*>(entry + 4) = vol;
-        *curRef = soundRef;
-        PlayNewSlot(comp, slot);
-        return;
-    }
-
-    // Same sound, live handle — just adjust volume if it moved.
-    if (*reinterpret_cast<float*>(entry + 4) == vol) return;
-    *reinterpret_cast<float*>(entry + 4) = vol;
-    void* scene = WorldScene();
-    if (scene)
-        reinterpret_cast<Audio::Scene*>(scene)->SetEmitterVolume(
-            handle, *reinterpret_cast<const Vector3*>(pos), vol);   // B.3.7 bridge
-}
-
 inline float saturate(float x, float hi) { return x < 0.0f ? 0.0f : (x > hi ? hi : x); }
 
 // Find the entity's AmbientEmitterComponent by scanning its component list.
-// owner (self+0x10) -> +0x30 array of component IBPs (stride 8), +0x38 count.
-void* FindSiblingEmitter(void* self) {
-    void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10);
+// The tree's null and bad-id guards are its own; kept, not extended.
+AmbientEmitterComponent* FindSiblingEmitter(AmbientEnvironmentComponent* self) {
+    ComponentEntity* owner = self->_entity;
     if (!owner) return nullptr;
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(owner) + 0x38);
-    void** list = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(owner) + 0x30);
-    if (!list || !s_tidEmitterComp) return nullptr;
+    int count = owner->_componentCount;
+    if (!owner->_components || !s_tidEmitterComp) return nullptr;
     for (int i = 0; i < count; ++i) {
-        void** ibp = &list[i];
-        void* comp = *ibp;
+        Component* comp = owner->_components[i].Get();
         if (!comp) continue;
-        // component->GetTypeId() is vtable slot +0x10.
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
+        uint32_t tid = comp->Type();   // slot 2
         if (tid == s_tidEmitterComp)
-            return (::Object::IsDerivedFromNullSafe(comp, s_tidEmitterComp)) ? comp : nullptr;
+            return (::Object::IsDerivedFromNullSafe(comp, s_tidEmitterComp)) ? static_cast<AmbientEmitterComponent*>(comp) : nullptr;
     }
     return nullptr;
+}
+
+// The tile grid (the Game object at gameWorld+0xf8): +0x00 width, +0x80 cells.
+// LEFT: GameUpdateLoop::m_game is void* (W0 header): the grid reads stay by offset.
+inline uint8_t* TileGrid() {
+    return reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton->m_game);
 }
 
 }  // namespace
@@ -232,20 +119,16 @@ void* FindSiblingEmitter(void* self) {
 //   Update(self)                              // the per-frame slot already runs
 //                                             // this every tick, so we skip it here
 //                                             // to avoid seeding play before OnAdded.
-void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
-                                            int gridX, int gridY, int rw, int rh) {
-    if (!selfC) return;
+void AmbientEnvironmentComponent::InitRegion(int gridX, int gridY, int rw, int rh) {
     EnsureResolved();
 
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfC);
-    *reinterpret_cast<int*>(self + 0x28) = gridX;
-    *reinterpret_cast<int*>(self + 0x2c) = gridY;
-    *reinterpret_cast<int*>(self + 0x30) = rw;
-    *reinterpret_cast<int*>(self + 0x34) = rh;
+    regionX = gridX;
+    regionY = gridY;
+    regionWidth = rw;
+    regionHeight = rh;
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uint8_t* gw   = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-    uint8_t* grid = *reinterpret_cast<uint8_t**>(gw + 0xf8);
+    uint8_t* grid = TileGrid();
     if (!grid) return;
     int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
     if (gridWidth <= 0) return;
@@ -256,21 +139,27 @@ void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
     float worldY = (float)(center / gridWidth) - off;
 
     // Env component position (comp+0x38 Vector3), z forced to 0 as in the original.
-    *reinterpret_cast<float*>(self + 0x38) = worldX;
-    *reinterpret_cast<float*>(self + 0x3c) = worldY;
-    *reinterpret_cast<float*>(self + 0x40) = 0.0f;
+    position.x = worldX;
+    position.y = worldY;
+    position.z = 0.0f;
 
     // Push the position onto the sibling AmbientEmitterComponent (+0x28 Vector3).
     // At spawn the emitter has no live handles yet (OnAdded runs at register time,
     // after this), so FUN_140042960's MoveEmitter loop is a no-op and it only
     // writes the position — which is all we do here.
-    void* emitter = FindSiblingEmitter(self);
+    AmbientEmitterComponent* emitter = FindSiblingEmitter(this);
     if (emitter) {
-        uint8_t* e = reinterpret_cast<uint8_t*>(emitter);
-        *reinterpret_cast<float*>(e + 0x28) = worldX;
-        *reinterpret_cast<float*>(e + 0x2c) = worldY;
-        *reinterpret_cast<float*>(e + 0x30) = 0.0f;
+        emitter->position.x = worldX;
+        emitter->position.y = worldY;
+        emitter->position.z = 0.0f;
     }
+}
+
+// B4 FORWARD: 1 outside caller (code/Game/Game/starttown.cpp)
+void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
+                                            int gridX, int gridY, int rw, int rh) {
+    if (!selfC) return;
+    selfC->InitRegion(gridX, gridY, rw, rh);
 }
 
 // ============================================================================
@@ -290,7 +179,7 @@ void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
 // the compiler's; +0x38 = 0, +0x40 (dword) = 0; flags |= 0x88. Retail leaves
 // +0x28/+0x30 unwritten; they are zeroed as the tree's factory did.
 AmbientEnvironmentComponent::AmbientEnvironmentComponent()
-    : field28(nullptr), field30(nullptr), field38(nullptr), field40(0), _pad44{} {
+    : regionX(0), regionY(0), regionWidth(0), regionHeight(0), position(), _pad44{} {
     OrFlagsInCtor(0x88);
 }
 
@@ -313,21 +202,19 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     if (!s_tidEnvDesc || !::System::MemoryAllocator::_singleton) return;
 
-    uint8_t* self = reinterpret_cast<uint8_t*>(this);
-    uint8_t* gw   = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-
     // Grid (Game object at gameWorld+0xf8): +0x00 width, +0x80 cells (stride 0x30).
-    uint8_t* grid = *reinterpret_cast<uint8_t**>(gw + 0xf8);
+    uint8_t* grid = TileGrid();
     if (!grid) return;
     int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
     uint8_t* cells = *reinterpret_cast<uint8_t**>(grid + 0x80);
 
-    // Biome config description at self+0x18.
-    void* descRaw = *reinterpret_cast<void**>(self + 0x18);
-    void* desc = ::Object::IsDerivedFromNullSafe(descRaw, s_tidEnvDesc) ? descRaw : nullptr;
+    // Biome config description at +0x18.
+    Description* descRaw = _description;
+    AmbientEnvironmentDescription* desc = ::Object::IsDerivedFromNullSafe(descRaw, s_tidEnvDesc)
+                                              ? static_cast<AmbientEnvironmentDescription*>(descRaw) : nullptr;
     if (!desc) return;
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
-    uint8_t* table = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
+    int count = desc->_entryCount;
+    AmbientEnvironmentBiome* table = desc->_entries;
     if (count <= 0 || !table) return;
 
     // [PerfX AMBIENT_THROTTLE -- NON-RETAIL] the biome histogram over the emitter's tile
@@ -347,14 +234,14 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
         }
     }
 
-    int gridX = *reinterpret_cast<int*>(self + 0x28);
-    int gridY = *reinterpret_cast<int*>(self + 0x2c);
-    int rw    = *reinterpret_cast<int*>(self + 0x30);
-    int rh    = *reinterpret_cast<int*>(self + 0x34);
+    int gridX = regionX;
+    int gridY = regionY;
+    int rw    = regionWidth;
+    int rh    = regionHeight;
 
     int* hist = nullptr;
     if (cachedDominant < 0) {
-    hist = reinterpret_cast<int*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
+    hist = static_cast<int*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
     if (!hist) return;
     for (int i = 0; i < count; ++i) hist[i] = 0;
 
@@ -366,22 +253,22 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
                 uint8_t bits = cell[0x29];
 
                 // Cell's entity reference (cell+0x00, else cell+0x08).
-                void* ent = *reinterpret_cast<void**>(cell + 0x00);
-                if (!ent) ent = *reinterpret_cast<void**>(cell + 0x08);
+                ComponentEntity* ent = *reinterpret_cast<ComponentEntity**>(cell + 0x00);
+                if (!ent) ent = *reinterpret_cast<ComponentEntity**>(cell + 0x08);
 
                 for (int k = 0; k < count; ++k) {
-                    uint8_t* bt = table + (intptr_t)k * 0x28;
-                    uint32_t mask = *reinterpret_cast<uint32_t*>(bt + 0x00);
+                    AmbientEnvironmentBiome* bt = &table[k];
+                    uint32_t mask = bt->terrainMask;
                     if ((mask & (1u << (bits & 0x1f))) == 0) continue;
                     // Entity filter: no filter, or the cell entity matches bt+0x08.
-                    void* filt = *reinterpret_cast<void**>(bt + 0x08);
+                    ComponentDescription* filt = bt->entityFilter;
                     bool match = (ent == nullptr) || (filt == nullptr);
                     if (!match) {
                         // ent+0x28 == filter target?
-                        match = (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ent) + 0x28) == filt);
+                        match = (ent->_description == filt);
                     }
                     if (match) {
-                        hist[k] += *reinterpret_cast<int*>(bt + 0x20);
+                        hist[k] += bt->weight;
                         break;
                     }
                 }
@@ -404,24 +291,25 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     }
 
     // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].
+    // LEFT: GameUpdateLoop::m_weather is void* (W0 header): the temperature read stays by offset.
     float unit = kRdata_14017214c;
-    void* weather = *reinterpret_cast<void**>(gw + 0x130);
+    void* weather = GameUpdateLoop::_singleton->m_weather;
     float f = 0.0f;
     if (weather) {
         float temp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(weather) + 0x18);
-        float lo = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x30);
-        float hi = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x34);
+        float lo = desc->_f30;
+        float hi = desc->_f34;
         float denom = hi - lo;
         f = saturate((denom != 0.0f) ? (temp - lo) / denom : 0.0f, unit);
     }
 
     // Drive the sibling AmbientEmitterComponent: slot 0 = day, slot 1 = night.
-    void* emitter = FindSiblingEmitter(self);
+    AmbientEmitterComponent* emitter = FindSiblingEmitter(this);
     if (emitter) {
-        uint64_t daySound   = *reinterpret_cast<uint64_t*>(table + (intptr_t)dominant * 0x28 + 0x10);
-        uint64_t nightSound = *reinterpret_cast<uint64_t*>(table + (intptr_t)dominant * 0x28 + 0x18);
-        SetSlot(emitter, 0, daySound,   f);
-        SetSlot(emitter, 1, nightSound, unit - f);
+        Audio::SoundEffect* daySound   = table[dominant].daySound;
+        Audio::SoundEffect* nightSound = table[dominant].nightSound;
+        emitter->SetSlot(0, daySound,   f);
+        emitter->SetSlot(1, nightSound, unit - f);
     }
     if (hist) ::System::MemoryAllocator::MemFree(hist);
 }

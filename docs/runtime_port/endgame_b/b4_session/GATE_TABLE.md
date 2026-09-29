@@ -49,3 +49,22 @@ the session died; the game-dir lock was left held by `coord` (released by hand);
 agent worktree was written as NUL bytes (`runtime/types/ui/UserInterface.h` in COMP-b's worktree,
 restored from its index); main and the object database were intact (`git fsck` clean). From here:
 at most FOUR agents, building at **-j2**.
+
+| 11 | W1-COMP-b | `4681d217` | the citizen family: CitizenComponent / CitizenAIComponent bodies are members: 3406 -> 2059 in its files | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | ui ok · tools ok | 0 |
+| 12 | W1-R-GFX | `d5644a3f` | runtime graphics: 1409 -> 159 in 50 files | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | ui ok · tools ok · devlost COMPLETE=221, crash log empty, killed at 600 s · `sa-stress` exit 0, crash log empty, update 1.91 ms/frame (p95 2.68; recorded, not chased) | 0 |
+| 13 | W1-WORK-a | `58f05f12` | Work a-f and Entity: EntityList, CitizenBehavior, PathGraph members: 1697 -> 583 in 36 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 14 | W1-WORK-a-beh | `4c4c75c1` | `behaviour:` EntityList tree counts +0x70 / +0x80 are int32 (0x1400c3fe8 / 0x1400c3ff7) | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 15 | W1-COMP-a | `6fced53f` | Component a: 1383 -> 341 in 64 files; four `behaviour:` commits (Cemetery OnRemove 0x1400471c4, Boat Persist 0x140046635, AmbientEnvironmentDescription Serialize 0x140043a25, AutoPickup Startup 0x140044990) gated together | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · 4767 · perf 0 | 5/5 | tools ok | 0 |
+
+Metric at `6fced53f`: **38,598** to remove.
+
+Notes:
+- Row 13: `build_actions` calls `FindComponent<CharacterComponent>()` where the tree's helper skipped
+  a type id of 0 or -1 (a guard of the tree's, not retail's; block T). No value changes: the type is
+  always registered. A guard removed without a `behaviour:` title.
+- Row 15: the merged tree did not build (COMP-a typed `Component::_description` and split
+  `AutoPickupComponent::field38`; WORK-a's code used both). `mergegate.sh` stopped BEFORE the merge
+  commit; the fixes are in the merge. `componententity.cpp` carries two `static_cast<Description*>`
+  marked LEFT: `ComponentDescription::_subDescs` is `void**` (COMP-c types it).
+- Row 12: R-GFX's B11 attribution of its 154 differing functions was not handed in; two
+  restructurings (`BeginDrawGroup`, `Render`) add zeroing stores retail does not have.

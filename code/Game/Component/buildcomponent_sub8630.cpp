@@ -28,18 +28,16 @@
 //
 
 #include "object/TypeInfo.h"
+#include "Component/BuildComponent.h"
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/StorageComponent.h"
+#include "Entity/ComponentEntity.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Work/exe_bodies.h"
-
-// Entity_FindComponent_Storage @ 0x140006270 — returns the site StorageComponent
-// (type-id 0x1401c7e78) into the retIBP buffer. Registered in standalone
-// (reg_work_base.cpp -> WorkBase_FindComponent_6270), called directly.
 
 // Type-id for "BuildDescription" (DWORD_1401c7040). The .rdata BaseTypeInfo is
 // created by BuildDescription_Register (0x14014e5f5):
@@ -50,40 +48,37 @@ static uint32_t BC8630_BuildDescTypeId() {
     return BuildDescription::TypeId();   // B.3.8: the lazy cache over it went (B6-5)
 }
 
-extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
-    if (!buildComp) return false;
-    uintptr_t self = reinterpret_cast<uintptr_t>(buildComp);
-
-    // --- BuildDescription at BuildComponent+0x18, type-checked ---
-    void* descObj = *reinterpret_cast<void**>(self + 0x18);
+// 0x140108630
+bool BuildComponent::HaveAllMaterials() {
+    // --- BuildDescription at +0x18, type-checked ---
+    Description* descObj = _description;
     uint32_t descTid = BC8630_BuildDescTypeId();
-    void* desc = nullptr;
+    BuildDescription* desc = nullptr;
     if (descObj && descTid && ::Object::IsDerivedFromNullSafe(descObj, descTid))
-        desc = descObj;
+        desc = static_cast<BuildDescription*>(descObj);
     // Original derefs desc unconditionally; if desc were null it would loop over
     // count at desc+0x28 (crash). Guard: no BuildDescription => no required
     // materials => treat as "all delivered".
     if (!desc) return true;
-    uintptr_t descAddr = reinterpret_cast<uintptr_t>(desc);
 
-    // --- Find the site StorageComponent via BuildComponent+0x10 entity IBP ---
-    uintptr_t storage = 0;
-    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x10), &storage);   // 0x140006270
+    // --- the site StorageComponent (0x140006270 FindComponent<StorageComponent>) ---
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();
 
-    int matCount   = *reinterpret_cast<int*>(descAddr + 0x28);
-    int multiplier = *reinterpret_cast<int*>(self + 0x4c);
-    uintptr_t matArr = *reinterpret_cast<uintptr_t*>(descAddr + 0x20);
+    int matCount   = desc->_costCount;
+    int multiplier = costMultiplier;
+    BuildCost* matArr = desc->_costs;
 
     for (int i = 0; i < matCount; i++) {
-        uintptr_t matEntry = matArr + static_cast<uintptr_t>(i) * 0x10;
-        void* matType = *reinterpret_cast<void**>(matEntry);       // +0x00 rawMaterial
-        int   costQty = *reinterpret_cast<int*>(matEntry + 8);      // +0x08 costQty
+        void* matType = matArr[i].material;   // +0x00 rawMaterial
+        int   costQty = matArr[i].quantity;   // +0x08 costQty
 
         // Delivered amount = matching site-storage slot's (total - reserved), else 0.
+        // LEFT: StorageComponent::storageSlots is void* (no slot type yet, COMP-e):
+        // the slot reads stay by offset.
         int delivered = 0;
         if (storage) {
-            int slotCount = *reinterpret_cast<int*>(storage + 0x30);
-            uintptr_t* slots = *reinterpret_cast<uintptr_t**>(storage + 0x28);
+            int slotCount = storage->slotCount;
+            uintptr_t* slots = reinterpret_cast<uintptr_t*>(storage->storageSlots);
             if (slots) {
                 for (int s = 0; s < slotCount; s++) {
                     if (reinterpret_cast<void*>(slots[s * 2]) == matType) {
@@ -99,13 +94,15 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
         }
 
         int required = costQty * multiplier;
-        // Trace ONLY when the delivered amount CHANGES (this gate is polled every frame in
-        // state 1; an unthrottled per-frame fflush floods the log and stalls the game while
-        // the site waits for materials). Keyed by (buildComp,slot) so each site's progress
-        // still shows, without the per-frame spam.
         if (delivered < required)
             return false;   // this material is not fully delivered yet
     }
 
     return true;   // every material satisfied (or matCount <= 0)
+}
+
+// B4 FORWARD: 1 outside caller (code/Game/Game/construction_force_harness.cpp)
+extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
+    if (!buildComp) return false;
+    return reinterpret_cast<BuildComponent*>(buildComp)->HaveAllMaterials();
 }

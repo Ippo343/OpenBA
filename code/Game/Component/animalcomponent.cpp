@@ -55,6 +55,10 @@
 #include "Component/coll_bridge.h"
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "graphics/Mesh.h"
 #include <new>
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
@@ -120,31 +124,13 @@ inline float MoveSpeed()  { return kRdata_140172280; }
 
 namespace {
 
-// --- small accessors -------------------------------------------------------
-inline uint8_t* Raw(void* p) { return reinterpret_cast<uint8_t*>(p); }
-
-template <typename T>
-inline T& At(void* base, ptrdiff_t off) {
-    return *reinterpret_cast<T*>(Raw(base) + off);
-}
-template <typename T>
-inline T& At(uintptr_t base, ptrdiff_t off) {
-    return *reinterpret_cast<T*>(base + off);
-}
-
-inline uintptr_t GameWorld() {
-    return (GameUpdateLoop::_singleton != nullptr)
-               ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton)
-               : 0;
-}
-
 // The map grid lives at gameWorld+0xf8. Its cell array is at grid+0x80 (Ghidra
 // renders that as `*(int*)(grid + 0x20)` because the pointer is typed int* —
 // ELEMENTS, not bytes). Cell stride is 0x30: +0x00 occupant IBP, +0x29 terrain
 // type (0x02 == the grass an animal will stand on).
+// LEFT: GameUpdateLoop::m_game is void* (W0 header): the grid reads stay by offset.
 inline int* MapGrid() {
-    uintptr_t w = GameWorld();
-    return w ? *reinterpret_cast<int**>(w + 0xf8) : nullptr;
+    return GameUpdateLoop::_singleton ? reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game) : nullptr;
 }
 inline uintptr_t CellArray(int* grid) {
     return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
@@ -155,16 +141,22 @@ inline uint8_t CellTerrain(uintptr_t cells, int64_t index) {
 inline int64_t CellOccupant(uintptr_t cells, int64_t index) {
     return *reinterpret_cast<int64_t*>(cells + index * 0x30);
 }
-inline void* Rng() {
-    uintptr_t w = GameWorld();
-    return w ? *reinterpret_cast<void**>(w + 0xd8) : nullptr;
+inline System::Random* Rng() {
+    return GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_random : nullptr;
 }
 
 // Resolve self->_description as an AnimalDescription (the retail IsDerivedFrom guard).
-inline void* AnimalDesc(AnimalComponent* self) {
-    void* raw = At<void*>(self, 0x18);
+inline AnimalDescription* AnimalDesc(AnimalComponent* self) {
+    Description* raw = self->_description;
     if (!raw) return nullptr;
-    return ::Object::IsDerivedFromNullSafe(raw, AnimalDescription::TypeId()) ? raw : nullptr;
+    return ::Object::IsDerivedFromNullSafe(raw, AnimalDescription::TypeId()) ? static_cast<AnimalDescription*>(raw) : nullptr;
+}
+
+// A model's world position and visual scale live in its raw MeshInstance /
+// Transform storage. LEFT: ModelComponent::meshInstance / transform are raw
+// storage (H5, W0 header).
+inline Math::Transform* ModelTransform(ModelComponent* model) {
+    return reinterpret_cast<Math::Transform*>(model->transform);
 }
 
 inline int ClampCell(int v, int dim) {
@@ -194,7 +186,7 @@ constexpr int kTraceCap = 24;
 // ============================================================
 
 // ============================================================
-// AnimalComponent_FindHabitat (0x140106020)
+// AnimalComponent::FindHabitat (0x140106020)
 // ------------------------------------------------------------
 // Expanding-ring search around the animal's current cell for a free grass tile.
 // Ring side length grows 5, 7, 9, ... and only the ring's PERIMETER is tested
@@ -203,11 +195,11 @@ constexpr int kTraceCap = 24;
 //
 // A candidate qualifies when terrain == 0x02 AND the cell has no occupant.
 // ============================================================
-int AnimalComponent_FindHabitat(AnimalComponent* self) {
+int AnimalComponent::FindHabitat() {
     int* grid = MapGrid();
-    if (!self || !grid) return 0;
+    if (!grid) return 0;
 
-    const int startCell = At<int>(self, 0x28);
+    const int startCell = habitatCell;
     int side = 3;
 
     for (;;) {
@@ -261,44 +253,50 @@ int AnimalComponent_FindHabitat(AnimalComponent* self) {
 }
 
 // ============================================================
-// AnimalComponent_UpdateBehavior (0x140107320)
+// AnimalComponent::UpdateBehavior (0x140107320)
 // ------------------------------------------------------------
 // Maps age onto the mesh's visual scale so a fawn grows into a deer:
 //   scale = min(1.0, age / desc->adultAge * 0.67 + 0.33)
-// The scalar is broadcast into a Vector4 and stored at MeshInstance+0x134.
+// The scalar is broadcast into a Vector4 and stored at MeshInstance+0x10c
+// (the model's +0x134).
 // ============================================================
-void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
-    if (!self) return;
-
-    void* desc = AnimalDesc(self);
+void AnimalComponent::UpdateBehavior() {
+    AnimalDescription* desc = AnimalDesc(this);
     if (!desc) return;                       // retail trusts the type check; see notes
 
-    const float adultAge = At<float>(desc, 0x30);
+    const float adultAge = desc->_f30;
     if (adultAge == 0.0f) return;
 
-    float scale = (At<float>(self, 0x44) / adultAge) * ScaleGain() + ScaleBase();
+    float scale = (age / adultAge) * ScaleGain() + ScaleBase();
     if (scale > ScaleMax()) scale = ScaleMax();
 
-    int64_t entity = At<int64_t>(self, 0x10);
+    ComponentEntity* entity = _entity;
     if (!entity) return;
 
-    int64_t character = 0;
-    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
+    CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (!character) return;
 
-    int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
+    ModelComponent* model = character->modelComponent;
     if (!model) return;
 
     const Math::Scalar scaleS(scale);
     Math::Vector4 vec4(scaleS);   // Vector4(const Scalar&) splat, slot 0x140152958
-    At<float>(static_cast<uintptr_t>(model), 0x134) = vec4.x;
-    At<float>(static_cast<uintptr_t>(model), 0x138) = vec4.y;
-    At<float>(static_cast<uintptr_t>(model), 0x13c) = vec4.z;
-    At<float>(static_cast<uintptr_t>(model), 0x140) = vec4.w;
+    // LEFT: ModelComponent::meshInstance is raw storage (H5, W0 header)
+    Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(model->meshInstance);
+    mesh->_color[0] = vec4.x;
+    mesh->_color[1] = vec4.y;
+    mesh->_color[2] = vec4.z;
+    mesh->_color[3] = vec4.w;
+}
+
+// B4 FORWARD: 2 outside callers (pasturecomponent_spawn.cpp, tradecomponent_livestock.cpp)
+void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
+    if (!self) return;
+    self->UpdateBehavior();
 }
 
 // ============================================================
-// AnimalComponent_SetWanderTimer (0x140106250)
+// AnimalComponent::SetWanderTimer (0x140106250)
 // ------------------------------------------------------------
 // The "stand still for a while" path. Plays idle animation `animId` on the
 // model, arms the move timer at +0x30 with `seconds`, and — when the description
@@ -309,39 +307,33 @@ void AnimalComponent_UpdateBehavior(AnimalComponent* self) {
 // scratch, then the scratch's XY are re-normalized into the character's facing.
 // Reproduced as-is (the second pass is a no-op on an already-unit 2D vector).
 // ============================================================
-void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, float seconds) {
-    if (!self) return;
-
-    int64_t entity = At<int64_t>(self, 0x10);
+void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
+    ComponentEntity* entity = _entity;
     if (!entity) return;
 
-    int64_t character = 0;
-    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
-    int64_t model = 0;
-    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(entity), &model);
+    CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
+    ModelComponent* model = entity->FindComponent<ModelComponent>();                // 0x140003f60
 
     if (!character) return;
 
-    void* charDescRaw = At<void*>(static_cast<uintptr_t>(character), 0x18);
-    void* charDesc = nullptr;
+    Description* charDescRaw = character->_description;
+    CharacterDescription* charDesc = nullptr;
     if (charDescRaw && ::Object::IsDerivedFromNullSafe(charDescRaw, CharacterDescription::TypeId())) {
-        charDesc = charDescRaw;
+        charDesc = static_cast<CharacterDescription*>(charDescRaw);
     }
 
     if (model && charDesc) {
-        ActMvDep_AnimHelper_50f0(static_cast<uintptr_t>(model), animId, 0.0f,
-                                 At<float>(charDesc, 0x2c), ScaleMax());
+        // LEFT: ActMvDep_AnimHelper_50f0 takes the model as uintptr_t (Action/exe_bodies.h, ACT's)
+        ActMvDep_AnimHelper_50f0(reinterpret_cast<uintptr_t>(model), animId, 0.0f,
+                                 charDesc->_turnFilter, ScaleMax());
     }
 
-    // System::Time::Time writes EIGHT bytes — the destination must be int64-sized.
-    int64_t timeVal = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&timeVal), seconds);
-    At<int64_t>(self, 0x30) = timeVal;
+    RtSystem_Time_Ctor(&moveTimer, seconds);
 
-    void* desc = AnimalDesc(self);
-    if (!desc || At<uint8_t>(desc, 0x3c) == 0) return;
+    AnimalDescription* desc = AnimalDesc(this);
+    if (!desc || !desc->_b3c) return;
 
-    void* rng = Rng();
+    System::Random* rng = Rng();
     if (!rng) return;
 
     const float r1 = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
@@ -350,15 +342,15 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 
     Math::Vector3 dir = src.Normalize();
 
-    At<uint8_t>(static_cast<uintptr_t>(character), 0x28) = 0;
+    character->field_0x28 = false;
 
     const Math::Vector3 src2(dir.x, dir.y, 0.0f);
     Math::Vector3 facing = src2.Normalize();
-    At<float>(static_cast<uintptr_t>(character), 0x2c) = facing.x;
-    At<float>(static_cast<uintptr_t>(character), 0x30) = facing.y;
-    At<float>(static_cast<uintptr_t>(character), 0x34) = facing.z;
+    character->field_0x2C.x = facing.x;
+    character->field_0x2C.y = facing.y;
+    character->field_0x2C.z = facing.z;
 
-    At<float>(static_cast<uintptr_t>(character), 0x3c) = dir.Heading();
+    character->field_0x3C = dir.Heading();
 }
 
 // ============================================================
@@ -407,40 +399,40 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 
 
 // 0x140106fc0. Component() is the CALL 0x1401188b0; the 0x140162110 stamp is
-// the compiler's; +0x28 (dword), +0x30, +0x38, +0x40 (byte), +0x44 (qword),
-// +0x50 = 0; flags |= 0xc9.
+// the compiler's; +0x28 (dword), +0x30, +0x38, +0x40 (byte), +0x44 (one qword
+// store over age and deathAge, H7), +0x50 = 0; flags |= 0xc9.
 AnimalComponent::AnimalComponent()
-    : data28(0), _pad2C{}, data30(0), data38(0), data40(0), _pad41{},
-      data44(0), data48(0), _pad4C{}, data50(0) {
+    : habitatCell(0), _pad2C{}, moveTimer{0}, wanderX(0), wanderY(0), wanderWidth(0),
+      wanderHeight(0), canGraze(false), _pad41{}, age(0.0f), deathAge(0.0f), _pad4C{},
+      grazeTimer{0} {
     OrFlagsInCtor(0xc9);
 }
 
 void AnimalComponent::Startup() {
-    void* desc = AnimalDesc(this);
-    void* rng  = Rng();
+    AnimalDescription* desc = AnimalDesc(this);
+    System::Random* rng  = Rng();
     if (!desc || !rng) {
         if (s_traceMissing++ < kTraceCap) {
             fprintf(stderr, "[AnimalUpd] Startup skipped: desc=%p rng=%p this=%p\n",
-                    desc, rng, static_cast<void*>(this));
+                    static_cast<void*>(desc), static_cast<void*>(rng), static_cast<void*>(this));
         }
         return;
     }
 
     float tol = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
-    At<float>(this, 0x48) = tol * At<float>(desc, 0x2c) + At<float>(desc, 0x28);
+    deathAge = tol * desc->_f2c + desc->_f28;
 }
 void AnimalComponent::OnAdded() {
-    const uint32_t flags = At<uint32_t>(this, 0x20);
+    const uint32_t flags = _flags;
     if (((flags >> 0x16) & 1) == 0) return;
 
-    int64_t entity = At<int64_t>(this, 0x10);
+    ComponentEntity* entity = _entity;
     if (!entity) return;
 
-    int64_t character = 0;
-    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
+    CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (!character) return;
 
-    const int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
+    ModelComponent* model = character->modelComponent;
     if (!model) return;
 
     int* grid = MapGrid();
@@ -449,53 +441,51 @@ void AnimalComponent::OnAdded() {
     if (dim <= 0) return;
 
     const float half = static_cast<float>(dim >> 1);
-    const int x = ClampCell(static_cast<int>(At<float>(static_cast<uintptr_t>(model), 0x158) + half), dim);
-    const int y = ClampCell(static_cast<int>(At<float>(static_cast<uintptr_t>(model), 0x15c) + half), dim);
-    At<int>(this, 0x28) = dim * y + x;
+    const int x = ClampCell(static_cast<int>(ModelTransform(model)->translation.x + half), dim);
+    const int y = ClampCell(static_cast<int>(ModelTransform(model)->translation.y + half), dim);
+    habitatCell = dim * y + x;
 
-    void* desc = AnimalDesc(this);
+    AnimalDescription* desc = AnimalDesc(this);
     if (desc) {
-        PastureComponent_AnimalSetBounds(this,
-                      reinterpret_cast<short*>(Raw(this) + 0x38),
-                      reinterpret_cast<short*>(Raw(this) + 0x3a),
-                      reinterpret_cast<short*>(Raw(this) + 0x3c),
-                      reinterpret_cast<short*>(Raw(this) + 0x3e),
-                      At<int>(desc, 0x20));
+        PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+                                         desc->_i20);
     }
 
     // Retail: System::Time::Time(&t, 0.0f) then (*vtable[9])(this, &t). Slot 9 is
     // this component's own Update.
-    int64_t zeroTime = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&zeroTime), 0.0f);
+    System::Time zeroTime{0};
+    RtSystem_Time_Ctor(&zeroTime, 0.0f);
     Update(&zeroTime);   // slot 9, virtual as retail
 }
 
 // [9] 0x140106420. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void AnimalComponent::Update(void* time) {
-    int64_t* deltaTime = static_cast<int64_t*>(time);
+    const System::Time* deltaTime = static_cast<const System::Time*>(time);
     if (!deltaTime) return;
 
     // ---- 1. aging + death ------------------------------------------------
-    const float dtSeconds = reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds();   // B.3.4b bridge
-    const float prevAge = At<float>(this, 0x44);
-    const float age = dtSeconds * AgeRate() + prevAge;
-    At<float>(this, 0x44) = age;
+    const float dtSeconds = deltaTime->AsSeconds();
+    const float prevAge = age;
+    const float newAge = dtSeconds * AgeRate() + prevAge;
+    age = newAge;
 
-    const float deathAge = At<float>(this, 0x48);
-    if (age >= deathAge && age != deathAge) {
-        int64_t entity = At<int64_t>(this, 0x10);
-        const uintptr_t world = GameWorld();
-        const int64_t corpseOwner = world ? At<int64_t>(world, 0xe8) : 0;
-        if (entity == 0) return;
+    const float death = deathAge;
+    if (newAge >= death && newAge != death) {
+        ComponentEntity* entity = _entity;
+        // LEFT: GameUpdateLoop::m_entityList is void* (W0 header): the corpse list
+        // reads stay by offset.
+        const int64_t corpseOwner = GameUpdateLoop::_singleton
+                                        ? reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_entityList) : 0;
+        if (entity == nullptr) return;
 
-        if ((At<uint32_t>(static_cast<uintptr_t>(entity), 0x40) >> 10) & 1) return;
+        if ((entity->_entityFlags >> 10) & 1) return;
 
-        ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entity));
+        ActHunt_MarkEntityRemoval_c2ea0(entity);
         if (corpseOwner) {
             // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
             // Collection::Array<void*>::SetSize(n, fill).
-            const int newCount = At<int>(static_cast<uintptr_t>(corpseOwner), 0xd8) + 1;
+            const int newCount = *reinterpret_cast<int*>(corpseOwner + 0xd8) + 1;
             GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(corpseOwner + 0xd0))
                 .SetSizeFill(newCount, &entity);
         }
@@ -506,17 +496,17 @@ void AnimalComponent::Update(void* time) {
         if (s_traceDeath <= kTraceCap || (s_traceDeath % 10) == 0) {
             fprintf(stderr, "[AnimalUpd] death #%d: this=%p entity=%p age=%.2f deathAge=%.2f\n",
                     s_traceDeath, static_cast<void*>(this),
-                    reinterpret_cast<void*>(entity), age, deathAge);
+                    static_cast<void*>(entity), newAge, death);
         }
         return;
     }
 
-    void* rng  = Rng();
-    void* desc = AnimalDesc(this);
+    System::Random* rng  = Rng();
+    AnimalDescription* desc = AnimalDesc(this);
     if (!desc) {
         if (s_traceMissing++ < kTraceCap) {
             fprintf(stderr, "[AnimalUpd] no AnimalDescription on this=%p (raw=%p) — tick skipped\n",
-                    static_cast<void*>(this), At<void*>(this, 0x18));
+                    static_cast<void*>(this), static_cast<void*>(_description));
         }
         return;
     }
@@ -525,24 +515,24 @@ void AnimalComponent::Update(void* time) {
     // never +0x44, and the inert factory zeroes the body).
     if (prevAge == 0.0f && s_traceFirstUpdate++ < kTraceCap) {
         fprintf(stderr, "[AnimalUpd] first tick: this=%p desc=%p deathAge=%.2f flags=0x%08x cell=%d\n",
-                static_cast<void*>(this), desc, deathAge,
-                At<uint32_t>(this, 0x20), At<int>(this, 0x28));
+                static_cast<void*>(this), static_cast<void*>(desc), death,
+                _flags, habitatCell);
     }
 
-    const uint32_t flags = At<uint32_t>(this, 0x20);
+    const uint32_t flags = _flags;
 
     // ---- 2. graze latch --------------------------------------------------
-    if (At<uint8_t>(this, 0x40) != 0 && ((flags >> 0x15) & 1) == 0 && ((flags >> 0x17) & 1) != 0) {
-        const int64_t timer = At<int64_t>(this, 0x50);
+    if (canGraze && ((flags >> 0x15) & 1) == 0 && ((flags >> 0x17) & 1) != 0) {
+        const int64_t timer = grazeTimer._ticks;
         float seconds = 0.0f;
         bool rearm = true;
 
-        if (timer != 0 || age <= At<float>(desc, 0x30)) {
+        if (timer != 0 || newAge <= desc->_f30) {
             if (timer < 1) {
                 rearm = false;                       // nothing to run down
             } else {
-                const int64_t remaining = timer - *deltaTime;
-                At<int64_t>(this, 0x50) = remaining;
+                const int64_t remaining = timer - deltaTime->_ticks;
+                grazeTimer._ticks = remaining;
                 if (remaining > 0) {
                     rearm = false;
                 } else {
@@ -551,39 +541,36 @@ void AnimalComponent::Update(void* time) {
                 }
             }
         } else {
-            const float interval = At<float>(desc, 0x34);
-            const float roll = rng ? reinterpret_cast<System::Random*>(rng)->RandFloat()   /* B.3.4b bridge */ : 0.0f;
+            const float interval = desc->_f34;
+            const float roll = rng ? rng->RandFloat() : 0.0f;
             seconds = (roll * interval + interval) * HoursToSec();
         }
 
         if (rearm) {
-            int64_t timeVal = 0;
-            RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&timeVal), seconds);
-            At<int64_t>(this, 0x50) = timeVal;
+            RtSystem_Time_Ctor(&grazeTimer, seconds);
         }
     }
 
     // ---- 3. visual scale -------------------------------------------------
-    AnimalComponent_UpdateBehavior(this);
+    UpdateBehavior();
 
     // ---- 4. busy / timer gates -------------------------------------------
-    int64_t entity = At<int64_t>(this, 0x10);
+    ComponentEntity* entity = _entity;
     if (!entity) return;
 
-    int64_t character = 0;
-    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entity), &character);
+    CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (!character) {
         if (s_traceMissing++ < kTraceCap) {
             fprintf(stderr, "[AnimalUpd] no CharacterComponent on entity=%p — pathing skipped\n",
-                    reinterpret_cast<void*>(entity));
+                    static_cast<void*>(entity));
         }
         return;
     }
 
-    if (At<int>(static_cast<uintptr_t>(character), 0x60) + 1 > 0) return;  // action queued
+    if (character->currentAction + 1 > 0) return;  // action queued
 
-    At<int64_t>(this, 0x30) -= *deltaTime;
-    if (At<int64_t>(this, 0x30) > 0) return;
+    moveTimer._ticks -= deltaTime->_ticks;
+    if (moveTimer._ticks > 0) return;
 
     // ---- 5. destination search -------------------------------------------
     int* grid = MapGrid();
@@ -591,18 +578,19 @@ void AnimalComponent::Update(void* time) {
 
     // Retail re-reads the flag word here (the graze block above may have set
     // bit 21 through ModifyFlags), so do not reuse the cached copy.
-    const uint32_t liveFlags = At<uint32_t>(this, 0x20);
+    const uint32_t liveFlags = _flags;
     uint32_t wanderDir = 1;
 
     if (((liveFlags >> 0x14) & 1) == 0) {      // not penned
         if (((liveFlags >> 0x16) & 1) != 0) {  // habitat is revalidated per repath
             const uintptr_t cells = CellArray(grid);
-            const int cell = At<int>(this, 0x28);
+            const int cell = habitatCell;
             int64_t occupant = cells ? CellOccupant(cells, cell) : 0;
 
             bool blocked = false;
             if (occupant != 0) {
                 int64_t buildingIBP = 0;
+                // LEFT: the map cell's occupant is read by offset (m_game, W0 header)
                 fn_FindComponent_Building(reinterpret_cast<void*>(occupant), &buildingIBP);
                 // ⚠ fn_FindComponent_Building is a MISLABEL — retail 0x140015140
                 // matches DWORD_1401c4b80, which is TradeComponent, not any notion of
@@ -617,30 +605,26 @@ void AnimalComponent::Update(void* time) {
             }
 
             if ((cells && CellTerrain(cells, cell) != 0x02) || blocked) {
-                At<int>(this, 0x28) = AnimalComponent_FindHabitat(this);
-                PastureComponent_AnimalSetBounds(this,
-                              reinterpret_cast<short*>(Raw(this) + 0x38),
-                              reinterpret_cast<short*>(Raw(this) + 0x3a),
-                              reinterpret_cast<short*>(Raw(this) + 0x3c),
-                              reinterpret_cast<short*>(Raw(this) + 0x3e),
-                              At<int>(desc, 0x20));
+                habitatCell = FindHabitat();
+                PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+                                                 desc->_i20);
             }
         }
 
         // Current tile from the model's world position.
-        const int64_t model = At<int64_t>(static_cast<uintptr_t>(character), 0x68);
+        ModelComponent* model = character->modelComponent;
         if (!model) return;
 
         const int dim = *grid;
         if (dim <= 0) return;
         const float halfDim = static_cast<float>(dim >> 1);
-        int curX = ClampCell(static_cast<int>(At<float>(static_cast<uintptr_t>(model), 0x158) + halfDim), dim);
-        int curY = ClampCell(static_cast<int>(At<float>(static_cast<uintptr_t>(model), 0x15c) + halfDim), dim);
+        int curX = ClampCell(static_cast<int>(ModelTransform(model)->translation.x + halfDim), dim);
+        int curY = ClampCell(static_cast<int>(ModelTransform(model)->translation.y + halfDim), dim);
 
-        const short boxX = At<short>(this, 0x38);
-        const short boxY = At<short>(this, 0x3a);
-        const short boxW = At<short>(this, 0x3c);
-        const short boxH = At<short>(this, 0x3e);
+        const short boxX = wanderX;
+        const short boxY = wanderY;
+        const short boxW = wanderWidth;
+        const short boxH = wanderHeight;
 
         const bool outOfBox =
             (((liveFlags >> 0x14) & 1) == 0 && curX < boxX) || curY < boxY ||
@@ -651,7 +635,7 @@ void AnimalComponent::Update(void* time) {
         if (!repath) {
             // NOTE: retail keeps the roll in the same register it later passes as
             // the idle-animation id, so a non-zero roll becomes the wander dir.
-            wanderDir = rng ? reinterpret_cast<System::Random*>(rng)->Rand(4u)   /* B.3.4b bridge */ : 1;
+            wanderDir = rng ? rng->Rand(4u) : 1;
             repath = (wanderDir == 0);
         }
 
@@ -669,8 +653,7 @@ void AnimalComponent::Update(void* time) {
         }
 
         if (repath) {
-            uint8_t discard[8] = {0};
-            ActCNR_FindComponent_3f60(static_cast<uintptr_t>(At<int64_t>(this, 0x10)), discard);
+            (void)_entity->FindComponent<ModelComponent>();   // 0x140003f60, result discarded (retail)
 
             const float jitter   = Jitter();
             const float halfCell = HalfCell();
@@ -686,11 +669,11 @@ void AnimalComponent::Update(void* time) {
                 const int d = *g;
                 if (d <= 0) return;
 
-                const uint32_t ry = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(this, 0x3e)))   /* B.3.4b bridge */ : 0;
-                const short   by = At<short>(this, 0x3a);
-                const uint32_t rx = rng ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(this, 0x3c)))   /* B.3.4b bridge */ : 0;
+                const uint32_t ry = rng ? rng->Rand(static_cast<uint32_t>(wanderHeight)) : 0;
+                const short   by = wanderY;
+                const uint32_t rx = rng ? rng->Rand(static_cast<uint32_t>(wanderWidth)) : 0;
                 const int candidate =
-                    static_cast<int>(rx) + At<short>(this, 0x38) +
+                    static_cast<int>(rx) + wanderX +
                     (static_cast<int>(ry) + static_cast<int>(by)) * d;
 
                 const float bias = static_cast<float>(d >> 1) - halfCell;
@@ -710,13 +693,9 @@ void AnimalComponent::Update(void* time) {
                 dest[1] += jy * jitter;
 
                 if (misses > 10) {
-                    At<int>(this, 0x28) = AnimalComponent_FindHabitat(this);
-                    PastureComponent_AnimalSetBounds(this,
-                                  reinterpret_cast<short*>(Raw(this) + 0x38),
-                                  reinterpret_cast<short*>(Raw(this) + 0x3a),
-                                  reinterpret_cast<short*>(Raw(this) + 0x3c),
-                                  reinterpret_cast<short*>(Raw(this) + 0x3e),
-                                  At<int>(desc, 0x20));
+                    habitatCell = FindHabitat();
+                    PastureComponent_AnimalSetBounds(this, &wanderX, &wanderY, &wanderWidth, &wanderHeight,
+                                                     desc->_i20);
                     misses = 0;
                 }
                 ++misses;
@@ -744,7 +723,9 @@ void AnimalComponent::Update(void* time) {
             }
 
             if (accept) {
-                int64_t* stack = reinterpret_cast<int64_t*>(character + 0x48);
+                // LEFT: the action-stack helpers take the Array header as int64_t* / void*
+                // (Work/exe_bodies.h, Action/exe_bodies.h: other blocks' declarations)
+                int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);
                 WorkBase_TaskListCleanup_c5400(stack);
 
                 void* action = nullptr;
@@ -752,7 +733,7 @@ void AnimalComponent::Update(void* time) {
                                 ? ::System::MemoryAllocator::MemAlloc(0x480, 8)
                                 : nullptr;
                 if (mem) {
-                    int64_t moverIBP = character;
+                    CharacterComponent* moverIBP = character;
                     action = Pf_MoveToCtor_9170(mem, &moverIBP, 0 /*Normal*/, 1,
                                                 dest, 0xf9f, 1, MoveSpeed());
                 }
@@ -764,7 +745,7 @@ void AnimalComponent::Update(void* time) {
                 new (&actionIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(action));   // B.3.3 bridge
                 Pf_ActStackPush_54e0(stack, &actionIBP);
-                At<int64_t>(this, 0x30) = 0;
+                moveTimer._ticks = 0;
 
                 if (s_traceMoveTo++ < kTraceCap) {
                     fprintf(stderr, "[AnimalUpd] MoveTo: this=%p dest=(%.2f, %.2f, %.2f) attempts=%d\n",
@@ -774,13 +755,13 @@ void AnimalComponent::Update(void* time) {
             }
 
             // No walkable destination after 100 tries — idle and try again later.
-            wanderDir = (rng ? reinterpret_cast<System::Random*>(rng)->Rand(3u)   /* B.3.4b bridge */ : 0) + 1;
+            wanderDir = (rng ? rng->Rand(3u) : 0) + 1;
         }
     }
 
-    const float retry = At<float>(desc, 0x40);
-    const float roll = rng ? reinterpret_cast<System::Random*>(Rng())->RandFloat()   /* B.3.4b bridge */ : 0.0f;
-    AnimalComponent_SetWanderTimer(this, wanderDir, roll * retry + retry);
+    const float retry = desc->_f40;
+    const float roll = rng ? Rng()->RandFloat() : 0.0f;
+    SetWanderTimer(wanderDir, roll * retry + retry);
 }
 
 // [11] 0x140106dd0 (104 B). PORT GAP (retail 0x140106dd0) — B38 D9: not ported
