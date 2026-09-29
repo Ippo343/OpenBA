@@ -3,7 +3,7 @@
 //
 // GoalDialog (0xC8 bytes) — achievement goal progress display.
 // Extends DialogInstance (0xB8 base).
-// +0xB8 = goal entry array (stride 0x18), +0xC0 = goal count.
+// +0xB8 = goals, one GoalDialogRow per scenario goal.
 //
 // Decompiled from Application-x64.exe.
 
@@ -21,7 +21,6 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/GoalDialog.h"
 #include "Object/factory_registration.h"
-#include "Component/coll_bridge.h"
 #include "system/Value.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
@@ -30,239 +29,179 @@
 #include <cstdint>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
-// GoalDialog::Slot4 (vtable +0x20) — Setup: populate goal table
+// GoalDialog::OnOpened (vtable +0x20) — Setup: populate goal table
 // ============================================================
 // Finds "buttonOk" (ID 100), "tableGoal", and "textScenario".
-// Gets GoalList from game world (+0x150). For each goal:
+// Gets the scenario's AchievementInstance from the game. For each goal:
 //   - Creates a row element from dialog template[0]
 //   - Inserts into tableGoal via SetChild
 //   - Finds "textGoal", "imageComplete", "imageFail" sub-elements
 //   - Sets goal text on textGoal via UI::String
 //   - Hides both complete/fail images initially
-//   - Pushes {imageComplete, imageFail, textGoal} into array at +0xB8
-// If scenario has an Achievement (+0x20), sets title on textScenario.
+//   - Appends {imageComplete, imageFail, textGoal} to `goals`
+// If the scenario has an Achievement, sets its title on textScenario.
 // Otherwise hides textScenario.
-//
-// Entry layout at +0xB8 (stride 0x18 per entry):
-//   +0x00: Element* imageComplete (shown when goal is met)
-//   +0x08: Element* imageFail (shown when goal has failed)
-//   +0x10: TextElement* textGoal (goal description text)
 //
 // Original: 0x140069810.
 
 void GoalDialog::OnOpened() {
-    uintptr_t s = (uintptr_t)this;
-
     // Find "buttonOk" and set element ID 100
     {
         System::String nameStr("buttonOk");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        void* buttonOk = *(void**)retBuf;
-        if (buttonOk) reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(100);  // B.3.6 bridge
+        UI::Element* buttonOk = FindElement(nameStr).Get();
+        if (buttonOk) buttonOk->SetElementId(100);
     }
 
-    // Get GoalList from game world singleton at +0x150
-    uintptr_t goalListObj = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x150);
+    // The scenario's AchievementInstance (the game's +0x150)
+    Achievement::AchievementInstance* goalListObj = GameUpdateLoop::_singleton->m_scenarioInstance;
 
-    if (goalListObj != 0) {
-        // GoalList is at goalListObj+0x10
-        void* goalList = (void*)(goalListObj + 0x10);
+    if (goalListObj != nullptr) {
+        const Achievement::GoalList* goalList = &goalListObj->_goalList;
 
         // Find "tableGoal"
-        void* tableGoal = nullptr;
+        UI::TableElement* tableGoal = nullptr;
         {
             System::String nameStr("tableGoal");
-            uint8_t retBuf[16];
-            ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-            tableGoal = *(void**)retBuf;
+            tableGoal = static_cast<UI::TableElement*>(FindElement(nameStr).Get());
         }
 
-        int goalCount = reinterpret_cast<const Achievement::GoalList*>(goalList)->GetGoalCount();  // B.3.7 bridge
-        void* dialog = *(void**)(s + 0x18); // Dialog* at this+0x18
+        int goalCount = goalList->GetGoalCount();
+        const UI::Dialog* dialog = _dialog;
 
         for (int i = 0; i < goalCount; i++) {
             // Create row element from dialog template[0]
-            uint8_t templateBuf[16] = {0};
-            ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(0));  // B.3.6 bridge
-            void* elemDesc = *(void**)templateBuf;
+            Object::ExternalPtr<UI::ElementDescription> elemDesc = dialog->GetTemplate(0);
 
-            // Call ElementDescription::Create(this, retval, dialog) via vtable+0x40
-            uint8_t newElemBuf[16] = {0};
-            if (elemDesc) {
-                reinterpret_cast<const UI::ElementDescription*>(elemDesc)->CreateInstance(  // B.3.6 bridge
-                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf),
-                    reinterpret_cast<const UI::Dialog*>(dialog));
+            // ElementDescription slot 8 CreateInstance (RETSLOT)
+            Object::InternalPtr<UI::Element> newElemPtr;
+            if (elemDesc.Get()) {
+                elemDesc->CreateInstance(&newElemPtr, dialog);
             }
 
             // Insert the new element as a child of the table
             if (tableGoal) {
-                reinterpret_cast<UI::TableElement*>(tableGoal)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf), i);  // B.3.6 bridge
+                tableGoal->SetChild(&newElemPtr, i);
             }
 
             // Find sub-elements within the new row
-            void* newElem = *(void**)newElemBuf;
-            void* imageComplete = nullptr;
-            void* imageFail = nullptr;
-            void* textGoal = nullptr;
+            UI::Element* newElem = newElemPtr.Get();
+            UI::Element* imageComplete = nullptr;
+            UI::Element* imageFail = nullptr;
+            UI::TextElement* textGoal = nullptr;
 
-            // Find "textGoal"
             {
                 System::String nameStr("textGoal");
-                uint8_t retBuf[16];
-                ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(newElem)->FindElement(nameStr));  // B.3.6 bridge
-                textGoal = *(void**)retBuf;
+                textGoal = static_cast<UI::TextElement*>(newElem->FindElement(nameStr).Get());
             }
-
-            // Find "imageComplete"
             {
                 System::String nameStr("imageComplete");
-                uint8_t retBuf[16];
-                ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(newElem)->FindElement(nameStr));  // B.3.6 bridge
-                imageComplete = *(void**)retBuf;
+                imageComplete = newElem->FindElement(nameStr).Get();
             }
-
-            // Find "imageFail"
             {
                 System::String nameStr("imageFail");
-                uint8_t retBuf[16];
-                ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(newElem)->FindElement(nameStr));  // B.3.6 bridge
-                imageFail = *(void**)retBuf;
+                imageFail = newElem->FindElement(nameStr).Get();
             }
 
             // Get goal text and set on textGoal element
             {
-                // Get GoalInstance at index i
-                uint8_t goalInstBuf[16] = {0};
-                ::new (goalInstBuf) Object::InternalPtr<Achievement::GoalInstance>(reinterpret_cast<const Achievement::GoalList*>(goalList)->GetGoal(i));  // B.3.7 bridge
-                void* goalInstPtr = *(void**)goalInstBuf;
+                Object::InternalPtr<Achievement::GoalInstance> goalInst = goalList->GetGoal(i);
 
-                // GoalInstance -> Goal at +0x18
-                void* goal = *(void**)((uintptr_t)goalInstPtr + 0x18);
+                // GoalInstance -> its Goal
+                Achievement::Goal* goal = goalInst->_goal.Get();
 
-                // Get goal text (non-trivial return: fills retval with System::String)
-                System::String textStr;
-                ::new (&textStr) System::String(reinterpret_cast<const Achievement::Goal*>(goal)->GetText());  // B.3.7 bridge
+                // Goal text (non-trivial return: a System::String)
+                System::String textStr(goal->GetText());
 
-                // Read StringTable from Goal+0x20 (ExternalPtr<StringTable>)
-                uint64_t stringTable = *(uint64_t*)((uintptr_t)goal + 0x20);
-
-                // Construct UI::String from StringTable + text
-                uint8_t uiStr[16] = {0};
-                ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), textStr);  // B.3.6 bridge
+                // UI::String from the Goal's StringTable + text
+                UI::String uiStr(goal->_stringTable, textStr);
+                uiStr.pad0C = 0;   // built in a zeroed 16-byte slot before
 
                 // Set text on textGoal element
                 if (textGoal) {
-                    reinterpret_cast<UI::TextElement*>(textGoal)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+                    textGoal->SetText(&uiStr);
                 }
             }
 
             // Hide both complete and fail images initially
-            if (imageComplete) reinterpret_cast<UI::Element*>(imageComplete)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-            if (imageFail) reinterpret_cast<UI::Element*>(imageFail)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+            if (imageComplete) imageComplete->SetFlagsOnOff(1, 0);
+            if (imageFail) imageFail->SetFlagsOnOff(1, 0);
 
-            // Push entry {imageComplete, imageFail, textGoal} to array at +0xB8.
-            // B.3.2 bridge: GoalDialog+0xB8 is Collection::Array<{imageComplete,
-            // imageFail, textGoal}> (stride 0x18, count +0xC0, capacity +0xC4)
-            // inside a struct §B.2 has not converted, so it is reached at its
-            // offset. The original was GoalDialog::Slot4's own inlined copy of
-            // Collection::Array<T>::SetSize — NOT FUN_140011750 (that one has a
-            // 0x30 stride with a String at +0x20 — different array).
-            auto& goals = GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(s, 0xB8);
-            goals.SetSize(goals.GetSize() + 1,
-                          GameColl::Bytes<0x18, 8>((uint64_t)imageComplete, (uint64_t)imageFail,
-                                         (uint64_t)textGoal));
+            // Append {imageComplete, imageFail, textGoal}. GoalDialog::OnOpened's own
+            // inlined copy of Collection::Array<T>::SetSize — NOT FUN_140011750
+            // (that one has a 0x30 stride with a String at +0x20 — different array).
+            GoalDialogRow row;
+            row.imageComplete = Object::InternalPtr<UI::Element>(imageComplete);
+            row.imageFail = Object::InternalPtr<UI::Element>(imageFail);
+            row.textGoal = Object::InternalPtr<UI::Element>(textGoal);
+            goals.SetSize(goals.GetSize() + 1, row);
         }
     }
 
     // Find "textScenario" element
-    void* textScenario = nullptr;
+    UI::TextElement* textScenario = nullptr;
     {
         System::String nameStr("textScenario");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        textScenario = *(void**)retBuf;
+        textScenario = static_cast<UI::TextElement*>(FindElement(nameStr).Get());
     }
 
-    // If GoalList has an Achievement at +0x20, set its title on textScenario
-    if (goalListObj != 0 && *(void**)(goalListObj + 0x20) != nullptr) {
-        void* achievement = *(void**)(goalListObj + 0x20);
+    // If the scenario has an Achievement, set its title on textScenario
+    if (goalListObj != nullptr && goalListObj->_achievement.Get() != nullptr) {
+        Achievement::Achievement* achievement = goalListObj->_achievement.Get();
 
-        // Get title string (non-trivial return)
-        System::String titleStr;
-        ::new (&titleStr) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());  // B.3.7 bridge
+        // Title string (non-trivial return)
+        System::String titleStr(achievement->GetTitle());
 
-        // Read StringTable from Achievement+0x20
-        uint64_t stringTable = *(uint64_t*)((uintptr_t)achievement + 0x20);
-
-        // Construct UI::String from StringTable + title
-        uint8_t uiStr[16] = {0};
-        ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), titleStr);  // B.3.6 bridge
+        // UI::String from the Achievement's StringTable + title
+        UI::String uiStr(achievement->_stringTable, titleStr);
+        uiStr.pad0C = 0;   // built in a zeroed 16-byte slot before
 
         // Convert UI::String to System::String for SetParameter
-        System::String sysStr;
-        ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
+        System::String sysStr(uiStr.operator System::String());
 
         // Set as parameter 0 on textScenario
         if (textScenario) {
-            reinterpret_cast<UI::TextElement*>(textScenario)->SetParameter(0, sysStr);  // B.3.6 bridge
+            textScenario->SetParameter(0, sysStr);
         }
     } else {
         // No achievement/scenario — hide textScenario
-        if (textScenario) reinterpret_cast<UI::Element*>(textScenario)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textScenario) textScenario->SetFlagsOnOff(1, 0);
     }
 }
 
 // ============================================================
-// GoalDialog::Slot6 (vtable +0x30) — Update goal entry visibility
+// GoalDialog::OnUpdateLayout (vtable +0x30) — Update goal entry visibility
 // ============================================================
-// Gets the GoalList from game world (+0x150), iterates each goal entry.
+// Gets the scenario's goal list, iterates each row.
 // For each goal: checks IsMet/HasFailed, sets visibility flags on
-// corresponding UI elements (entry+0 for met, entry+8 for failed).
-//
-// Entry layout at +0xB8 (stride 0x18 per entry):
-//   +0x00: Element* metIndicator (shown when goal is met)
-//   +0x08: Element* failedIndicator (shown when goal has failed)
-//   +0x10: (unused in Slot6)
+// the row's two images.
 //
 // Original: 0x140069640.
 
 void GoalDialog::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
+    Achievement::AchievementInstance* goalListObj = GameUpdateLoop::_singleton->m_scenarioInstance;
 
-    // Get GoalList from game world singleton at +0x150
-    void* world = GameUpdateLoop::_singleton;
-    uintptr_t goalListObj = *(uintptr_t*)((uintptr_t)world + 0x150);
-
-    int count = *(int*)(s + 0xC0);
-    uintptr_t entryArray = *(uintptr_t*)(s + 0xB8);
+    int count = goals._size;
 
     for (int i = 0; i < count; i++) {
-        uintptr_t entryOffset = (uintptr_t)i * 0x18;
+        // Goal at index i from the GoalList
+        Object::InternalPtr<Achievement::GoalInstance> goalInst = goalListObj->_goalList.GetGoal(i);
 
-        // Get goal at index i from the GoalList
-        uint64_t goalInst = 0;
-        ::new (&goalInst) Object::InternalPtr<Achievement::GoalInstance>(reinterpret_cast<const Achievement::GoalList*>((void*)(goalListObj + 0x10))->GetGoal(i));  // B.3.7 bridge
-
-        // Check if goal is met and if it has failed
-        bool isMet = reinterpret_cast<const Achievement::GoalInstance*>((void*)goalInst)->IsMet();  // B.3.7 bridge
-        bool hasFailed = reinterpret_cast<const Achievement::GoalInstance*>((void*)goalInst)->HasFailed();  // B.3.7 bridge
+        // Is the goal met / has it failed
+        bool isMet = goalInst->IsMet();
+        bool hasFailed = goalInst->HasFailed();
 
         // Met indicator: show if met, hide if not
-        void* metElem = *(void**)(entryArray + entryOffset);
-        reinterpret_cast<UI::Element*>(metElem)->SetFlagsOnOff(isMet ? 0 : 1, isMet ? 1 : 0);  // B.3.6 bridge
+        goals._data[i].imageComplete->SetFlagsOnOff(isMet ? 0 : 1, isMet ? 1 : 0);
 
         // Failed indicator: show if failed, hide if not
-        void* failedElem = *(void**)(entryArray + 8 + entryOffset);
-        reinterpret_cast<UI::Element*>(failedElem)->SetFlagsOnOff(hasFailed ? 0 : 1, hasFailed ? 1 : 0);  // B.3.6 bridge
+        goals._data[i].imageFail->SetFlagsOnOff(hasFailed ? 0 : 1, hasFailed ? 1 : 0);
     }
 }
 
 // ============================================================
-// GoalDialog::Slot7 (vtable +0x38) — no-op handler
+// GoalDialog::OnUpdate (vtable +0x38) — no-op handler
 // ============================================================
 // 3-byte no-op: XOR EAX,EAX; RET. Returns 0.
 // Original: 0x140069800.
@@ -270,7 +209,7 @@ void GoalDialog::OnUpdateLayout() {
 void GoalDialog::OnUpdate(const System::Time& /*time*/) {}
 
 // ============================================================
-// GoalDialog::Slot8 (vtable +0x40) — OnCommand
+// GoalDialog::OnElementEvent (vtable +0x40) — OnCommand
 // ============================================================
 // When msg==0x12 (button click) and id==100 (buttonOk):
 //   Wraps self in InternalBasePtr, calls UserInterface::CloseDialog.
@@ -279,9 +218,8 @@ void GoalDialog::OnUpdate(const System::Time& /*time*/) {}
 
 void GoalDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 == 0x12 && param4 == 100) {
-        uint8_t selfIBP[16];
-        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)this + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
+        Object::InternalPtr<UI::DialogInstance> selfIBP(this);
+        _ui->CloseDialog(&selfIBP);
     }
 }
 
@@ -289,21 +227,17 @@ void GoalDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, i
 // Construction, destruction, reflection (ENDGAME B.3.8 block DLG)
 // ============================================================
 
-GoalDialog::GoalDialog() : dataB8(0), dataC0(0) {}
+// The member Array zeroes its header (retail's two qword zero stores).
+GoalDialog::GoalDialog() {}
 
 // MainMenuDialog's opener inlines this ctor: DialogInstance(ui, dialog,
 // nullParent, 0, 0, 0), then the fields zeroed.
 GoalDialog::GoalDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
              Object::InternalPtr<UI::DialogInstance> parent)
-    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0) {}
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {}
 
-// Retail's dtor (inside [0] 0x140011c10): MemFree the entry array at +0xb8 and
-// zero its header (+0xb8 data, +0xc0 count/capacity), then ~DialogInstance.
-GoalDialog::~GoalDialog() {
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dataB8));
-    dataB8 = 0;
-    dataC0 = 0;
-}
+// Retail's dtor (inside [0] 0x140011c10) is the member ~Array: MemFree the row
+// buffer and zero the header, then ~DialogInstance (GoalDialog.h).
 
 // create 0x140011b60: MemAlloc(0xc8, 8), then the ctor.
 void* GoalDialog::CreateNewObject() {
