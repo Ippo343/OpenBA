@@ -41,8 +41,12 @@
 #include <cstddef>
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
+#include "system/Value.h"      // System::Time (+0x30 / +0x38; trivial, 8 bytes)
 
 class ComponentEntity;   // B4 WORK-a: field_10 typed (H4)
+class WorkComponent;     // B4 WORK-c: field_18 typed (H4)
+class CitizenComponent;
+class CompleteTask;
 
 
 class Work : public Object::Internal {
@@ -82,13 +86,13 @@ public:
     // ---- the 0x38 bytes Work adds, retail order ------------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
     ComponentEntity* field_10;   // +0x10 InternalPtr — the owning entity (a ComponentEntity)
-    void*    field_18;   // +0x18 InternalPtr — the entity's WorkComponent
+    WorkComponent* field_18;   // +0x18 InternalPtr — the entity's WorkComponent (Persist validates it)
     int32_t  field_20;   // +0x20 work id (-1)
     int32_t  field_24;   // +0x24 (Persist copies +0x20 into it before v1)
     int32_t  field_28;   // +0x28 target map cell (-1)
     int32_t  field_2c;   // +0x2c
-    void*    field_30;   // +0x30 System::Time
-    void*    field_38;   // +0x38 System::Time
+    System::Time field_30;   // +0x30 System::Time (Persist v3, ?Serialize@Time@System@@)
+    System::Time field_38;   // +0x38 System::Time (Persist v3)
     int32_t  field_40;   // +0x40
     uint8_t  _pad44[4];  // +0x44 never written
 
@@ -96,6 +100,13 @@ public:
     // and vptr store. `Work(void*)` runs it after the compiler's stamps (its
     // by-address door `Work_Ctor25_Impl` went at ENDGAME B.3.9 OBJ).
     void InitFromEntity(void* pEntityIBP);
+
+    // 0x1400f7100: is `citizen` still working this job? True when one of the
+    // citizen's actions up to the running one (CharacterComponent +0x48 array,
+    // +0x60 index) is a CompleteTask whose task index is this work's id (+0x20);
+    // that task is written to `out` when `out` is non-null. RDX is spilled and
+    // never read (0x1400f7100 stores it, 0x1400f71a4 overwrites the slot).
+    bool ValidateTask(void* unusedRdx, CitizenComponent** citizen, CompleteTask** out);
 
 protected:
     // The default base init every retail leaf ctor inlines after `??0Internal`

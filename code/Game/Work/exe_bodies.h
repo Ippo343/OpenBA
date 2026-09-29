@@ -55,10 +55,6 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* 
 // ---- tendarea_ctor.cpp
 extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
 
-// ---- tradework_serialize.cpp
-extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t param_3);  // 0x14002c710 (local extern in tradework.cpp)
-extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2);  // 0x14002c8a0
-
 // ---- work_act_clear.cpp
 void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3, void** param_4, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530
 
@@ -119,11 +115,10 @@ void* WorkBase_FindComponent_2f90(uintptr_t entity, void* retIBP);  // 0x140002f
 void* WorkBase_FindComponent_3050(uintptr_t entity, void* retIBP);  // 0x140003050
 void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP);  // 0x1400052c0
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP);  // 0x140006270
-void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP);  // 0x140015140
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 void WorkBase_TaskListCleanup_c5400(void* self);  // 0x1400c5400
-uint8_t WorkBase_ValidateTask_f7100(void* self, void*, void* taskIBP, void** out);  // 0x1400f7100
+uint8_t WorkBase_ValidateTask_f7100(void* self, void*, void* taskIBP, void** out);  // 0x1400f7100 B4 FORWARD: 20 outside callers (Work::ValidateTask)
 int WorkBase_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB);  // 0x140008830
 uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 

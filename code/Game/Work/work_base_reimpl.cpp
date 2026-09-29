@@ -38,6 +38,10 @@
 #include "Component/StatusIconComponent.h"          // ENDGAME B.3.9 D5
 #include "Component/NaturalResourceComponent.h"     // ENDGAME B.3.9 D5
 #include "Entity/ComponentEntity.h"                 // ENDGAME B.3.9 D5
+#include "Component/CharacterComponent.h"            // B4 WORK-c: Work::ValidateTask
+#include "Component/MapComponent.h"                  // B4 WORK-c: Work::InitFromEntity
+#include "Action/Action.h"
+#include "Game/Map.h"                                // B4 WORK-c: Map, MapCell
 
 
 // ============================================================
@@ -82,14 +86,6 @@ void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
     return ForwardFindComponent<StorageComponent>(entity, retIBP);
 }
 
-// Reimpl of Entity_FindComponent_Building (FUN_140015140, type 0x1401c4b80 = TradeComponent).
-// Byte-for-byte the same component scan as the family above; the Ghidra name is a misnomer
-// (it matches the TradeComponent type-id, not a generic "building"). Ported to close the
-// TradeWork::Slot4 closure gap.
-void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
-    return ForwardFindComponent<TradeComponent>(entity, retIBP);
-}
-
 // ============================================================
 // Work_Ctor25 (0x1400f72e0) — the shared Work base constructor.
 // ============================================================
@@ -104,40 +100,35 @@ void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
 // callers, the attendance / destroy / fire CreateWork builders, which now construct the
 // real leaf (LocationWork / ClearStorage / FireWork) through `Work(void*)`.
 void Work::InitFromEntity(void* pEntityIBP) {
+    // LEFT: Work(void*) and InitFromEntity(void*) keep their callers' untyped
+    // entity reference (the leaves' ctors in other blocks).
+    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(pEntityIBP);
     field_10 = nullptr;
-    field_10 = pEntityIBP ? *reinterpret_cast<ComponentEntity**>(pEntityIBP) : nullptr;
+    field_10 = entityRef ? *entityRef : nullptr;   // the tree's guard (retail reads *param_2)
     field_18 = nullptr;
     field_20 = -1;
     field_24 = 0;
     field_28 = -1;
     field_2c = 0;
-    field_30 = nullptr;
-    field_38 = nullptr;
+    field_30._ticks = 0;
+    field_38._ticks = 0;
     field_40 = 0;
 
     if (field_10 != nullptr) {
-        // 0x140004680 = FloorComponent_FindResData (Component/exe_bodies.h), by name (B3R).
-        uintptr_t tmp = 0;
-        {
-            void* r = FloorComponent_FindResData(field_10, &tmp);
-            if (r && *reinterpret_cast<uintptr_t*>(r) != 0) {
-                r = FloorComponent_FindResData(field_10, &tmp);
-                uintptr_t comp = *reinterpret_cast<uintptr_t*>(r);
-                if (comp && GameUpdateLoop::_singleton != nullptr) {
-                    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-                    int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
-                    int mapSize = mapGrid ? *mapGrid : 0;
-                    int16_t f2e = *reinterpret_cast<int16_t*>(comp + 0x2e);
-                    int16_t f2a = *reinterpret_cast<int16_t*>(comp + 0x2a);
-                    int16_t f2c = *reinterpret_cast<int16_t*>(comp + 0x2c);
-                    int16_t f28 = *reinterpret_cast<int16_t*>(comp + 0x28);
-                    field_28 = (((int)f2e >> 1) + (int)f2a) * mapSize + (((int)f2c >> 1) + (int)f28);
-                }
+        // 0x140004680 = FindComponent<MapComponent>, called twice as retail does.
+        if (field_10->FindComponent<MapComponent>() != nullptr) {
+            MapComponent* footprint = field_10->FindComponent<MapComponent>();
+            // The footprint / singleton / map null arms are the tree's guards;
+            // retail reads **(gw + 0xF8) unguarded.
+            if (footprint && GameUpdateLoop::_singleton != nullptr) {
+                Map* map = GameUpdateLoop::_singleton->m_game;
+                int mapSize = map ? map->size : 0;
+                field_28 = (((int)footprint->tileY1 >> 1) + (int)footprint->tileY0) * mapSize +
+                           (((int)footprint->tileX1 >> 1) + (int)footprint->tileX0);
             }
         }
-        void* r2 = WorkBase_FindComponent_3050(
-            pEntityIBP ? *reinterpret_cast<uintptr_t*>(pEntityIBP) : 0, &tmp);
-        if (r2) field_18 = *reinterpret_cast<void**>(r2);
+        // 0x140003050 = FindComponent<WorkComponent>, on the entity re-read from *param_2.
+        field_18 = (*entityRef)->FindComponent<WorkComponent>();
     }
 }
 
@@ -226,67 +217,66 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 // +0x24 is version-gated (copied from +0x20 pre-v1); two Times + an int at +0x30..+0x40
 // added at v3+.   Caller signature: void fn(void* self, void* stream)
 void Work::Persist(void* stream) {
-    alignas(8) uint64_t ser[3];  // IO::Serializer, 0x18 bytes on the original's stack
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 3);   // Persist's stream is void*
 
-    reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    // LEFT: +0x10 / +0x18 are InternalPtrs retail serializes through
+    // InternalBasePtr::Serialize; the members are declared T* (their readers in
+    // other blocks spell them so), so the Serialize view is a cast.
+    reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(ser);
     if (field_10) {
         if (!Object::IsDerivedFromNullSafe(field_10, ComponentEntity::TypeId()))
             field_10 = nullptr;
     }
-    reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(ser);
     if (field_18) {
         if (!Object::IsDerivedFromNullSafe(field_18, WorkComponent::TypeId()))
             field_18 = nullptr;
     }
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_20, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_28, nullptr);   // B.3.4 bridge
-    int ver = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
+    ser.Serialize(field_20, nullptr);
+    ser.Serialize(field_28, nullptr);
+    int ver = ser.GetVersion();
     if (ver < 1)
         field_24 = field_20;
     else
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_24, nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2) {   // B.3.4 bridge
-        reinterpret_cast<System::Time*>(&field_30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-        reinterpret_cast<System::Time*>(&field_38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_40, nullptr);   // B.3.4 bridge
+        ser.Serialize(field_24, nullptr);
+    if (ser.GetVersion() > 2) {
+        field_30.Serialize(ser);
+        field_38.Serialize(ser);
+        ser.Serialize(field_40, nullptr);
     }
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
+}   // ~Serializer after the last field, as retail
 
-uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {
-    if (*reinterpret_cast<uintptr_t*>(taskIBP) == 0) return 0;
-    void* obj = *reinterpret_cast<void**>(taskIBP);
-    // DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, read directly --
-    // the registered cell always holds this id, so the old healing fallback is gone).
-    uint32_t ciTid = CitizenComponent::TypeId();
-    if (!reinterpret_cast<const Object::Base*>(obj)->IsA(ciTid)) return 0;   // B.3.x bridge (fn_IsA)
+// 0x1400f7100 (see Work.h). RCX = this (+0x20 read), RDX never read, R8 = the
+// citizen InternalPtr, R9 = the optional out slot.
+bool Work::ValidateTask(void* /*unusedRdx*/, CitizenComponent** citizen, CompleteTask** out) {
+    if (*citizen == nullptr) return false;
+    // DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell).
+    if (!(*citizen)->IsA(CitizenComponent::TypeId())) return false;
 
-    uintptr_t ci = *reinterpret_cast<uintptr_t*>(taskIBP);
-    uintptr_t container = *reinterpret_cast<uintptr_t*>(ci + 0x278);
-    int count = *reinterpret_cast<int*>(container + 0x60) + 1;
-    uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(container + 0x48);
-
+    CharacterComponent* character = (*citizen)->character;
     // 0x1401c5e50 (CompleteTask's own cell) is UNREGISTERED -- the old raw-.rdata read
     // always failed and fell through to this same CompleteTask::TypeId() call, so
     // calling it directly is not a behaviour change (ENDGAME B.3.9 D5 note).
     uint32_t completeTaskTid = CompleteTask::TypeId();
-    int wantId = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x20);
-
-    for (int i = 0; i < count; i++) {
-        void* elem = *reinterpret_cast<void**>(arrBase + static_cast<uintptr_t>(i) * 8);
-        void* ptr = (completeTaskTid && Object::IsDerivedFromNullSafe(elem, completeTaskTid)) ? elem : nullptr;
-        uintptr_t res = 0;
-        new (&res) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(ptr));   // B.3.3 bridge
-        if (res != 0) {
-            if (*reinterpret_cast<int*>(res + 0x30) == wantId) {
-                if (out) *out = reinterpret_cast<void*>(res);
-                return 1;
-            }
+    // The bound (+0x60 + 1) is re-read every pass, as retail (0x1400f7204).
+    for (int i = 0; i < character->currentAction + 1; i++) {
+        Action* action = character->actions[i];
+        // The tid arm is the tree's guard; retail calls IsDerivedFrom directly.
+        CompleteTask* task = (completeTaskTid && Object::IsDerivedFromNullSafe(action, completeTaskTid))
+                                 ? static_cast<CompleteTask*>(action) : nullptr;
+        if (task != nullptr && task->taskIndex == field_20) {
+            if (out) *out = task;
+            return true;
         }
     }
-    return 0;
+    return false;
+}
+
+// B4 FORWARD: 20 outside callers (the Work leaves' Validate slots in WORK-a / WORK-b
+// files) still hand the receiver, the citizen reference and the out slot untyped.
+uint8_t WorkBase_ValidateTask_f7100(void* self, void* unusedRdx, void* taskIBP, void** out) {
+    return reinterpret_cast<Work*>(self)->ValidateTask(unusedRdx, reinterpret_cast<CitizenComponent**>(taskIBP),
+                                                      reinterpret_cast<CompleteTask**>(out));
 }
 
 // ============================================================
@@ -334,21 +324,22 @@ uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t d
 
     Pf_ZoneRefresh_9c480(mapGrid);   // 0x14009c480 (RCX only)
 
-    uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
-    uintptr_t recSrc  = cellArr + static_cast<uintptr_t>(static_cast<uint32_t>(srcCell)) * 0x30;
-    uintptr_t recDest = cellArr + static_cast<uintptr_t>(destCell) * 0x30;
+    // LEFT: the outside callers hand the Map as its leading `int size`.
+    Map* map = reinterpret_cast<Map*>(mapGrid);
+    const MapCell& recSrc  = map->cells[static_cast<uint32_t>(srcCell)];
+    const MapCell& recDest = map->cells[destCell];
 
-    uint32_t typeSrc  = 1u << (*reinterpret_cast<const uint8_t*>(recSrc  + 0x29) & 0x1f);
-    uint32_t typeDest = 1u << (*reinterpret_cast<const uint8_t*>(recDest + 0x29) & 0x1f);
+    uint32_t typeSrc  = 1u << (recSrc.terrainType & 0x1f);
+    uint32_t typeDest = 1u << (recDest.terrainType & 0x1f);
     uint32_t combined = typeDest | typeSrc;
     uint64_t ret = combined;
 
     uint32_t mask = pathType | combined;
     if ((mask & typeDest) && (mask & typeSrc)) {
         if (mask & 0x1e0u) return (ret & 0xffffffffffffff00ull) | 1u;
-        uint16_t regionDest = *reinterpret_cast<const uint16_t*>(recDest + 0x26);
+        uint16_t regionDest = recDest.zone;
         if (regionDest != 0) {
-            uint16_t regionSrc = *reinterpret_cast<const uint16_t*>(recSrc + 0x26);
+            uint16_t regionSrc = recSrc.zone;
             ret = regionSrc;
             if (regionSrc != 0 && regionDest == regionSrc)
                 return (ret & 0xffffffffffffff00ull) | 1u;
