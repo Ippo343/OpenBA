@@ -99,7 +99,9 @@ extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform);  // 0x140
 extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, float farZ);  // 0x140098660
 
 // ---- gameupdateloop_serialize.cpp
-extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* , void* bucketsPtr);  // 0x140021ba0
+struct UpdateBucket;   // Entity/EntityList.h
+namespace IO { class Serializer; }
+extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0
 
 // ---- gameupdateloop_teardown.cpp
 extern "C" void EntityList_Shutdown_c3d30(void* selfV);  // 0x1400c3d30

@@ -109,7 +109,7 @@ extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);       
 
 // code/Game/Game/gameupdateloop_serialize.cpp — the serializer roundtrip check;
 // the LOAD-FROM-SAVE branch below calls SaveRestoreOut (slot 7's body) directly.
-extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* loadedState);
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::SavedState* loadedState);
 
 // code/Game/Game/eventlog_achievement.cpp — the achievement award TOAST (exe
 // 0x140096960). Installed on the AchievementManager at step 30 below.

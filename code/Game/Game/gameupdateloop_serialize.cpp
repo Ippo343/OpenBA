@@ -583,25 +583,26 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
 // {IBP* data; int count/cap}): serialize count, resize on load
 // (Collection::Array<Ptr8>::SetSize = 0x1400032e0), then per-element InternalBasePtr
 // serialize with a ComponentEntity IsDerivedFrom filter.
-extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
-                                           void* bucketsPtr) {
+extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*unused*/,
+                                           UpdateBucket* buckets) {
     const uint32_t s_tidCompEnt = ComponentEntity::TypeId();   // caller batch CB6: was a lazy by-name cache
 
-    uintptr_t hdr = (uintptr_t)bucketsPtr;
-    for (int b = 0; b < 5; b++, hdr += 0x10) {
-        int count = *(int*)(hdr + 0x8);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-        if (*(int*)((uintptr_t)*(void**)serializer + 8) == 0) {
+    UpdateBucket* hdr = buckets;
+    for (int b = 0; b < 5; b++, hdr++) {
+        int count = hdr->count;
+        serializer->Serialize(count, nullptr);
+        if (serializer->_stream->GetDirection() == IO::kReading) {   // the stream's +0x08, read inline
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
             // align 8, new tail zeroed. Element is the 8-byte InternalBasePtr slot.
             GameColl::AsArray<GameColl::Ptr8>(hdr).SetSize(count);
         }
-        uint8_t* slot = *(uint8_t**)hdr;
-        for (int i = 0; i < count; i++, slot += 8) {
-            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (*(void**)slot != nullptr && s_tidCompEnt &&
-                !::Object::IsDerivedFromNullSafe(*(void**)slot, s_tidCompEnt)) {
-                *(void**)slot = nullptr;
+        ComponentEntity** slot = hdr->data;
+        for (int i = 0; i < count; i++, slot++) {
+            // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
+            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge
+            if (*slot != nullptr && s_tidCompEnt &&
+                !::Object::IsDerivedFromNullSafe(*slot, s_tidCompEnt)) {
+                *slot = nullptr;
             }
         }
     }
@@ -662,8 +663,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
             // caches and the "[PreloadRefs] SKIPPED ... unresolved" arm are gone).
             // +0x28 is the reference map's entry count (SerializeReferenceTable zeroes
             // it at entry and the insert helper bumps it per row).
-            const int refCount = *reinterpret_cast<int*>(
-                reinterpret_cast<uint8_t*>(extFactory) + 0x28);
+            const int refCount = extFactory->_references.GetCount();
             if (refCount > 0 && refCount < (1 << 20)) {
                 extFactory->EnableReferenceMode(false);
                 int loaded = 0, missing = 0;
@@ -834,12 +834,11 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
 // so a difference can be diffed offline.
 // ENDGAME B.3.9 IO (W2): the ?Read / ?GetSize@CompressedStream doors it
 // resolved by name are the class's own members now, called non-virtually.
-static bool RoundtripDecompress(void* savedState, uint8_t** outData, uint32_t* outSize) {
+static bool RoundtripDecompress(Save::SavedState* savedState, uint8_t** outData, uint32_t* outSize) {
     alignas(16) uint8_t cmsStorage[sizeof(IO::CompressedMemoryStream)];
     IO::CompressedMemoryStream* const cms =
         ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
-    reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
-        cms->GetMemoryStream());
+    savedState->Retrieve(cms->GetMemoryStream());
     if (!cms->Open()) { cms->IO::CompressedMemoryStream::~CompressedMemoryStream(); return false; }
     const uint32_t size = cms->IO::CompressedStream::GetSize();
     uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));
@@ -857,23 +856,25 @@ static void RoundtripDump(const char* name, const uint8_t* data, uint32_t size) 
     std::fclose(f);
 }
 
-extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* loadedState) {
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::SavedState* loadedState) {
     const char* e = Opt().saveTest;
     if (!e || _stricmp(e, "roundtrip") != 0) return;
 
+    // The fresh image is a SavedState's three fields on the stack, WITHOUT its
+    // destructor (freed by hand below, on the success path only, as before).
     struct SS { uint32_t id; uint32_t size; void* data; };
-    const SS* loaded = static_cast<const SS*>(loadedState);
-    SS fresh = { loaded->id, 0, nullptr };
+    const Save::SavedState* loaded = loadedState;
+    SS fresh = { loaded->_id, 0, nullptr };
     int out = 0;
     fprintf(stderr, "[Roundtrip] SaveRestore(save) into a fresh SavedState (loaded image %u bytes)\n",
-            loaded->size);
+            loaded->_size);
     fflush(stderr);
     self->SaveRestoreOut(true, reinterpret_cast<Save::SavedState*>(&fresh), &out);   // B.3.8 bridge
 
     uint8_t* a = nullptr; uint32_t an = 0;
     uint8_t* b = nullptr; uint32_t bn = 0;
     const bool okA = RoundtripDecompress(loadedState, &a, &an);
-    const bool okB = RoundtripDecompress(&fresh, &b, &bn);
+    const bool okB = RoundtripDecompress(reinterpret_cast<Save::SavedState*>(&fresh), &b, &bn);   // LEFT: the destructor-less stack twin
     if (!okA || !okB) {
         fprintf(stderr, "[Roundtrip] RESULT=ERROR decompress loaded=%d resaved=%d\n", okA, okB);
         fflush(stderr);
@@ -890,7 +891,7 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* lo
     const bool equal = (an == bn) && diffs == 0;
     fprintf(stderr, "[Roundtrip] RESULT=%s raw loaded=%u resaved=%u compressed loaded=%u resaved=%u"
                     " firstDiff=%u diffBytes=%u tail=%u\n",
-            equal ? "PASS" : "DIFF", an, bn, loaded->size, fresh.size,
+            equal ? "PASS" : "DIFF", an, bn, loaded->_size, fresh.size,
             first, diffs, an > bn ? an - bn : bn - an);
     fflush(stderr);
     std::free(a); std::free(b);
