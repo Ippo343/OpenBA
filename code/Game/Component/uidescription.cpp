@@ -84,7 +84,7 @@
 UIDescription::UIDescription()
     : Description(),
       _valTail(0),
-      _descRef(nullptr),
+      _dialog(nullptr),
       _entries(nullptr),
       _entryCount(0),
       _entryCap(0),
@@ -94,11 +94,11 @@ UIDescription::UIDescription()
 // The compiler then chains ~Description -> ~External.
 UIDescription::~UIDescription() {
     // Destroys each element's String (+0x20), frees the element-array buffer.
-    uint8_t* buf = static_cast<uint8_t*>(_entries);
+    UIDescriptionEntry* buf = _entries;
     int n = _entryCount;
     if (buf) {
-        uint8_t* e = buf;
-        for (int i = 0; i < n; ++i, e += 0x28) reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
+        UIDescriptionEntry* e = buf;
+        for (int i = 0; i < n; ++i, ++e) e->name.~String();
     }
     System::MemoryAllocator::MemFree(buf);
     _entries = nullptr;
@@ -112,7 +112,7 @@ bool UIDescription::Serialize(void* stream) {
 
     // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
     //    to the registered Serialize2 (typeId trusted in standalone).
-    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_dialog, &ser);
     // 2. int (+0x40)
     ser.Serialize(_valHead, nullptr);
     // 3. count (+0x38)
@@ -128,37 +128,37 @@ bool UIDescription::Serialize(void* stream) {
     // payload bytes, never a clean 0/1), so it was ALWAYS false and the array was
     // NEVER allocated → every UIDescription dialog lost its sub-controllers.
     int cap = _entryCap;
-    uint8_t* arr = static_cast<uint8_t*>(_entries);
+    UIDescriptionEntry* arr = _entries;
     if (count > 0 && (arr == nullptr || cap < count)) {
-        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)count * 0x28, 8);
+        UIDescriptionEntry* buf = static_cast<UIDescriptionEntry*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)count * sizeof(UIDescriptionEntry), 8));
         _entries = buf;
         _entryCap = buf ? count : 0;
         if (buf) {
-            uint8_t* e = reinterpret_cast<uint8_t*>(buf);
-            for (int i = 0; i < count; ++i, e += 0x28) {
-                *(uint64_t*)(e + 0x00) = 0;
-                *(uint64_t*)(e + 0x08) = 0;
-                *(uint64_t*)(e + 0x10) = 0;
-                *(uint64_t*)(e + 0x18) = 0;
-                *(uint64_t*)(e + 0x20) = 0;  // String (empty)
+            UIDescriptionEntry* e = buf;
+            for (int i = 0; i < count; ++i, ++e) {
+                e->type._type = 0;             // the tree zeroes the whole first qword
+                e->_pad04[0] = e->_pad04[1] = e->_pad04[2] = e->_pad04[3] = 0;
+                e->ref08 = nullptr;
+                e->ref10 = nullptr;
+                e->ref18 = nullptr;
+                ::new (&e->name) System::String();   // _data = null (0x180006760)
             }
         }
     }
     _entryCount = count;
     if (Opt().mapTrace)
         printf("[UIDescSer] self=%p count=%d entries=%p cap->%d\n",
-               static_cast<void*>(this), count, _entries, _entryCap);
+               static_cast<void*>(this), count, static_cast<void*>(_entries), _entryCap);
     
     // 5. per-element serialize
-    uint8_t* buf = static_cast<uint8_t*>(_entries);
-    if (buf) {
-        uint8_t* e = buf;
-        for (int i = 0; i < count; ++i, e += 0x28) {
-            RtObject::RtObject_Type_Serialize(e + 0x00, &ser);   // import slot 0x1401516b0
-            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x08, &ser);
-            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x10, &ser);
-            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x18, &ser);
-            reinterpret_cast<System::String*>(e + 0x20)->Serialize(&ser);  // B.3.1 bridge
+    if (UIDescriptionEntry* e = _entries) {
+        for (int i = 0; i < count; ++i, ++e) {
+            RtObject::RtObject_Type_Serialize(&e->type, &ser);   // import slot 0x1401516b0
+            Reimpl_ExternalPtr_Serialize_StringTable(&e->ref08, &ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(&e->ref10, &ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(&e->ref18, &ser);
+            e->name.Serialize(&ser);
         }
     }
     ser.Serialize(_valTail, nullptr);

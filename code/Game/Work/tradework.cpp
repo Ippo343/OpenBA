@@ -209,17 +209,15 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/) {
         // (existence probe of the RawMaterialDescription; result discarded, as in exe)
         TW_FindRawMaterial(resType);
 
-        // requested count from the TradeComponent's stock tree (+0x60):
-        //   node: +0x00 key, +0x08 value, +0x18 left, +0x20 right
+        // requested count from the TradeComponent's stock tree (+0x60), keyed on the
+        // resource (retail compares the keys as unsigned 64-bit values)
         int requested = 0;
         if (tradeComp) {
-            // LEFT: TradeComponent +0x60 is untyped on this base (COMP-f types it).
-            uint64_t key = reinterpret_cast<uint64_t>(resType);
-            uint64_t* node = reinterpret_cast<uint64_t*>(tradeComp->field60);
+            TradeResourceNode* node = tradeComp->stockRoot;
             while (node) {
-                if (key < node[0])       node = reinterpret_cast<uint64_t*>(node[3]);   // left  +0x18
-                else if (key <= node[0]) { requested = static_cast<int>(node[1]); break; } // value +0x08
-                else                     node = reinterpret_cast<uint64_t*>(node[4]);   // right +0x20
+                if (resType < node->resource)       node = node->left;
+                else if (resType <= node->resource) { requested = node->quantity; break; }
+                else                                node = node->right;
             }
         }
 

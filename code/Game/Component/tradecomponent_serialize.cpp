@@ -18,8 +18,8 @@
 //                in tradecomponent.cpp).
 //   +0x60        AVL tree {root@+0x00, count@+0x08} keyed by ComponentRef,
 //                value int. See the TradeBst_* block below.
-//   +0x30/+0x38  trade-name array, stride 0x20, count @+0x38 (the SAME array
-//                TradeComponent_ResizeNames in tradecomponent.cpp already
+//   +0x30/+0x38  merchant-order array, stride 0x20, count @+0x38 (the SAME array
+//                TradeMerchantOrders_SetSize in tradecomponent.cpp already
 //                grows/shrinks — reused here, not re-implemented).
 //                elem+0x00 String (g_fn_String_Serialize, retail 0x140151238)
 //                elem+0x08 int
@@ -31,7 +31,7 @@
 //                          Reimpl_ExternalPtrArray_Serialize (retail 0x1400049c0,
 //                          already ported as Reimpl_ExternalPtrArray_Serialize
 //                          in serialize_externals_array.cpp).
-//   +0x40/+0x48  item table, stride 0xc, count @+0x48 (TradeComponent_ResizeItems,
+//   +0x40/+0x48  buy orders, stride 0xc, count @+0x48 (TradeBuyOrders_SetSize,
 //                reused from tradecomponent.cpp).
 //                elem+0x00 int resourceId — an ENUM, serialized through the
 //                          serializer's own "encoding" object (ser+8's vtable
@@ -88,179 +88,160 @@
 #include "Component/exe_bodies.h"   // StorageComponent_DynArrayResize (0x14000f090)
 #include "Game/exe_bodies.h"        // Reimpl_ExternalPtr_Serialize_StringTable, Reimpl_ExternalPtrArray_Serialize
 
-// TradeComponent's own array-resize helpers (tradecomponent.cpp, file-scope,
-// external linkage — not declared in tradecomponent_funcs.h).
-void TradeComponent_ResizeNames(int64_t* field, int count);
-void TradeComponent_ResizeItems(int64_t* field, int count);
-
 namespace {
 
-inline uint8_t* At(void* self, ptrdiff_t off) { return reinterpret_cast<uint8_t*>(self) + off; }
-
-// True when the serializer is READING — same double-dereference pattern used
-// by every other slot-3 body in this project (see animalwave_serialize.cpp).
-inline bool Loading(void* ser) {
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-}
-
-// The enum field, through the UINT door. `ser + 8` is NOT "a live encoding
-// object" as this comment used to say — it is the READERWRITER
-// (IO::Serializer::_readerWriter); IO::Encoding lives at stream+0x10 and has a
-// five-slot table. Vtable +0x98 is rw_vtbl::kScalarUInt. Identical idiom to
-// storagedescription.cpp's SerializeEnum, converted with it.
-inline void SerializeEnumField(void* ser, void* field) {
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(field), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+// True when the serializer is READING (IO::Serializer::GetDirection, retail 0x180006210).
+inline bool Loading(IO::Serializer& ser) {
+    return static_cast<int>(ser.GetDirection()) == 0;
 }
 
 // ============================================================================
 // +0x60 field — AVL tree of ComponentRef -> int
 // ============================================================================
-inline int16_t TradeBst_ChildHeightPlus1(uint8_t* child) {
-    return child ? static_cast<int16_t>(*reinterpret_cast<int16_t*>(child + 0x2a) + 1) : 0;
+inline int16_t TradeBst_ChildHeightPlus1(const TradeResourceNode* child) {
+    return child ? static_cast<int16_t>(child->height + 1) : 0;
 }
-inline void TradeBst_Recompute(uint8_t* n) {
-    uint8_t* left  = *reinterpret_cast<uint8_t**>(n + 0x18);
-    uint8_t* right = *reinterpret_cast<uint8_t**>(n + 0x20);
-    int16_t lh = TradeBst_ChildHeightPlus1(left);
-    int16_t rh = TradeBst_ChildHeightPlus1(right);
-    *reinterpret_cast<int16_t*>(n + 0x28) = static_cast<int16_t>(rh - lh);  // balance
-    *reinterpret_cast<int16_t*>(n + 0x2a) = (rh > lh) ? rh : lh;            // height
+inline void TradeBst_Recompute(TradeResourceNode* n) {
+    int16_t lh = TradeBst_ChildHeightPlus1(n->left);
+    int16_t rh = TradeBst_ChildHeightPlus1(n->right);
+    n->balance = static_cast<int16_t>(rh - lh);
+    n->height  = (rh > lh) ? rh : lh;
 }
 
 // 0x14000e580 — rotate RIGHT at `node` (node's LEFT child becomes the subtree root).
-uint8_t* TradeBst_RotateRight(void* treeHdr, uint8_t* node) {
-    uint8_t** rootSlot = reinterpret_cast<uint8_t**>(treeHdr);
-    uint8_t* pivot = *reinterpret_cast<uint8_t**>(node + 0x18);
+TradeResourceNode* TradeBst_RotateRight(TradeResourceNode** rootSlot, TradeResourceNode* node) {
+    TradeResourceNode* pivot = node->left;
     if (node == *rootSlot) *rootSlot = pivot;
-    if (uint8_t* parent = *reinterpret_cast<uint8_t**>(node + 0x10)) {
-        if (*reinterpret_cast<uint8_t**>(parent + 0x18) == node)
-            *reinterpret_cast<uint8_t**>(parent + 0x18) = pivot;
+    if (TradeResourceNode* parent = node->parent) {
+        if (parent->left == node)
+            parent->left = pivot;
         else
-            *reinterpret_cast<uint8_t**>(parent + 0x20) = pivot;
+            parent->right = pivot;
     }
-    *reinterpret_cast<uint8_t**>(pivot + 0x10) = *reinterpret_cast<uint8_t**>(node + 0x10);
-    uint8_t* pivotRight = *reinterpret_cast<uint8_t**>(pivot + 0x20);
-    *reinterpret_cast<uint8_t**>(node + 0x18) = pivotRight;
-    if (pivotRight) *reinterpret_cast<uint8_t**>(pivotRight + 0x10) = node;
-    *reinterpret_cast<uint8_t**>(pivot + 0x20) = node;
-    *reinterpret_cast<uint8_t**>(node + 0x10) = pivot;
+    pivot->parent = node->parent;
+    TradeResourceNode* pivotRight = pivot->right;
+    node->left = pivotRight;
+    if (pivotRight) pivotRight->parent = node;
+    pivot->right = node;
+    node->parent = pivot;
 
-    if (uint8_t* pl = *reinterpret_cast<uint8_t**>(pivot + 0x18)) TradeBst_Recompute(pl);
-    if (uint8_t* pr = *reinterpret_cast<uint8_t**>(pivot + 0x20)) TradeBst_Recompute(pr);
+    if (TradeResourceNode* pl = pivot->left) TradeBst_Recompute(pl);
+    if (TradeResourceNode* pr = pivot->right) TradeBst_Recompute(pr);
     TradeBst_Recompute(pivot);
     return pivot;
 }
 
 // 0x14000e450 — rotate LEFT at `node` (node's RIGHT child becomes the subtree root).
-uint8_t* TradeBst_RotateLeft(void* treeHdr, uint8_t* node) {
-    uint8_t** rootSlot = reinterpret_cast<uint8_t**>(treeHdr);
-    uint8_t* pivot = *reinterpret_cast<uint8_t**>(node + 0x20);
+TradeResourceNode* TradeBst_RotateLeft(TradeResourceNode** rootSlot, TradeResourceNode* node) {
+    TradeResourceNode* pivot = node->right;
     if (node == *rootSlot) *rootSlot = pivot;
-    if (uint8_t* parent = *reinterpret_cast<uint8_t**>(node + 0x10)) {
-        if (*reinterpret_cast<uint8_t**>(parent + 0x18) == node)
-            *reinterpret_cast<uint8_t**>(parent + 0x18) = pivot;
+    if (TradeResourceNode* parent = node->parent) {
+        if (parent->left == node)
+            parent->left = pivot;
         else
-            *reinterpret_cast<uint8_t**>(parent + 0x20) = pivot;
+            parent->right = pivot;
     }
-    *reinterpret_cast<uint8_t**>(pivot + 0x10) = *reinterpret_cast<uint8_t**>(node + 0x10);
-    uint8_t* pivotLeft = *reinterpret_cast<uint8_t**>(pivot + 0x18);
-    *reinterpret_cast<uint8_t**>(node + 0x20) = pivotLeft;
-    if (pivotLeft) *reinterpret_cast<uint8_t**>(pivotLeft + 0x10) = node;
-    *reinterpret_cast<uint8_t**>(pivot + 0x18) = node;
-    *reinterpret_cast<uint8_t**>(node + 0x10) = pivot;
+    pivot->parent = node->parent;
+    TradeResourceNode* pivotLeft = pivot->left;
+    node->right = pivotLeft;
+    if (pivotLeft) pivotLeft->parent = node;
+    pivot->left = node;
+    node->parent = pivot;
 
-    if (uint8_t* pl = *reinterpret_cast<uint8_t**>(pivot + 0x18)) TradeBst_Recompute(pl);
-    if (uint8_t* pr = *reinterpret_cast<uint8_t**>(pivot + 0x20)) TradeBst_Recompute(pr);
+    if (TradeResourceNode* pl = pivot->left) TradeBst_Recompute(pl);
+    if (TradeResourceNode* pr = pivot->right) TradeBst_Recompute(pr);
     TradeBst_Recompute(pivot);
     return pivot;
 }
 
+} // namespace
+
 // 0x14000e360 — AVL retrace/rebalance, walking from `startNode` up to the root.
-void TradeBst_Retrace(void* treeHdr, uint8_t* startNode) {
-    uint8_t* node = startNode;
+void TradeResourceTree_Retrace(TradeResourceNode** rootSlot, TradeResourceNode* startNode) {
+    TradeResourceNode* node = startNode;
     while (node) {
-        uint8_t* parent = *reinterpret_cast<uint8_t**>(node + 0x10);
+        TradeResourceNode* parent = node->parent;
         TradeBst_Recompute(node);
 
-        int16_t bal = *reinterpret_cast<int16_t*>(node + 0x28);
+        int16_t bal = node->balance;
         if (bal > 1) {
-            uint8_t* right = *reinterpret_cast<uint8_t**>(node + 0x20);
+            TradeResourceNode* right = node->right;
             if (right) {
-                int16_t rbal = *reinterpret_cast<int16_t*>(right + 0x28);
-                if (rbal < 0) TradeBst_RotateRight(treeHdr, right);
-                TradeBst_RotateLeft(treeHdr, node);
+                int16_t rbal = right->balance;
+                if (rbal < 0) TradeBst_RotateRight(rootSlot, right);
+                TradeBst_RotateLeft(rootSlot, node);
             }
         }
-        bal = *reinterpret_cast<int16_t*>(node + 0x28);
+        bal = node->balance;
         if (bal < -1) {
-            uint8_t* left = *reinterpret_cast<uint8_t**>(node + 0x18);
+            TradeResourceNode* left = node->left;
             if (left) {
-                int16_t lbal = *reinterpret_cast<int16_t*>(left + 0x28);
-                if (lbal > 0) TradeBst_RotateLeft(treeHdr, left);
-                TradeBst_RotateRight(treeHdr, node);
+                int16_t lbal = left->balance;
+                if (lbal > 0) TradeBst_RotateLeft(rootSlot, left);
+                TradeBst_RotateRight(rootSlot, node);
             }
         }
         node = parent;
     }
 }
 
-void* TradeBst_NewNode(uint64_t key, int64_t value, void* parent) {
-    void* mem = System::MemoryAllocator::MemAlloc(0x30, 8);
-    if (!mem) return nullptr;
-    uint8_t* n = reinterpret_cast<uint8_t*>(mem);
-    *reinterpret_cast<uint64_t*>(n + 0x00) = key;
-    *reinterpret_cast<int64_t*>(n + 0x08)  = value;
-    *reinterpret_cast<void**>(n + 0x10)    = parent;
-    *reinterpret_cast<void**>(n + 0x18)    = nullptr;
-    *reinterpret_cast<void**>(n + 0x20)    = nullptr;
-    *reinterpret_cast<int32_t*>(n + 0x28)  = 0;
-    return mem;
+TradeResourceNode* TradeResourceTree_NewNode(ComponentDescription* key, int32_t value, TradeResourceNode* parent) {
+    TradeResourceNode* n = static_cast<TradeResourceNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+    if (!n) return nullptr;
+    n->resource = key;
+    n->quantity = value;
+    n->_pad0C[0] = n->_pad0C[1] = n->_pad0C[2] = n->_pad0C[3] = 0;   // the tree's zero high dword
+    n->parent   = parent;
+    n->left     = nullptr;
+    n->right    = nullptr;
+    n->balance  = 0;
+    n->height   = 0;
+    return n;
 }
+
+namespace {
 
 // 0x14000ebe0 — the whole +0x60 field body: count-prefixed, then either an
 // ordered insert-if-absent loop (loading) or an in-order walk of the existing
 // tree (saving, no mutation).
-void TradeComp_BstSerialize(void* treeHdr, void* ser) {
-    int32_t count = *reinterpret_cast<int32_t*>(At(treeHdr, 0x08));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
+    int32_t count = trade.stockCount;
+    ser.Serialize(count, nullptr);
 
     if (Loading(ser)) {
         for (int32_t i = 0; i < count; ++i) {
-            uint64_t key = 0;
-            Reimpl_ExternalPtr_Serialize_StringTable(&key, ser);
-            int64_t value = 0;
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(&value), nullptr);   // B.3.4 bridge
+            ComponentDescription* key = nullptr;
+            Reimpl_ExternalPtr_Serialize_StringTable(&key, &ser);
+            int32_t value = 0;
+            ser.Serialize(value, nullptr);
 
-            uint8_t* root = *reinterpret_cast<uint8_t**>(treeHdr);
+            TradeResourceNode* root = trade.stockRoot;
             if (!root) {
-                void* node = TradeBst_NewNode(key, value, nullptr);
-                *reinterpret_cast<void**>(treeHdr) = node;
-                *reinterpret_cast<int32_t*>(At(treeHdr, 8)) += 1;
+                trade.stockRoot = TradeResourceTree_NewNode(key, value, nullptr);
+                trade.stockCount += 1;
                 continue;
             }
 
-            uint8_t* cur = root;
+            TradeResourceNode* cur = root;
             for (;;) {
-                uint64_t curKey = *reinterpret_cast<uint64_t*>(cur);
+                ComponentDescription* curKey = cur->resource;
                 if (key < curKey) {
-                    uint8_t* left = *reinterpret_cast<uint8_t**>(cur + 0x18);
+                    TradeResourceNode* left = cur->left;
                     if (!left) {
-                        void* node = TradeBst_NewNode(key, value, cur);
-                        *reinterpret_cast<void**>(cur + 0x18) = node;
-                        TradeBst_Retrace(treeHdr, cur);
-                        *reinterpret_cast<int32_t*>(At(treeHdr, 8)) += 1;
+                        cur->left = TradeResourceTree_NewNode(key, value, cur);
+                        TradeResourceTree_Retrace(&trade.stockRoot, cur);
+                        trade.stockCount += 1;
                         break;
                     }
                     cur = left;
                     continue;
                 }
                 if (curKey >= key) break;   // duplicate key: retail skips, no update
-                uint8_t* right = *reinterpret_cast<uint8_t**>(cur + 0x20);
+                TradeResourceNode* right = cur->right;
                 if (!right) {
-                    void* node = TradeBst_NewNode(key, value, cur);
-                    *reinterpret_cast<void**>(cur + 0x20) = node;
-                    TradeBst_Retrace(treeHdr, cur);
-                    *reinterpret_cast<int32_t*>(At(treeHdr, 8)) += 1;
+                    cur->right = TradeResourceTree_NewNode(key, value, cur);
+                    TradeResourceTree_Retrace(&trade.stockRoot, cur);
+                    trade.stockCount += 1;
                     break;
                 }
                 cur = right;
@@ -270,22 +251,22 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     }
 
     // SAVE: in-order walk, no mutation.
-    uint8_t* n = *reinterpret_cast<uint8_t**>(treeHdr);
+    TradeResourceNode* n = trade.stockRoot;
     if (!n) return;
-    while (uint8_t* l = *reinterpret_cast<uint8_t**>(n + 0x18)) n = l;
+    while (TradeResourceNode* l = n->left) n = l;
     while (n) {
-        Reimpl_ExternalPtr_Serialize_StringTable(n, ser);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(n + 0x08), nullptr);   // B.3.4 bridge
+        Reimpl_ExternalPtr_Serialize_StringTable(&n->resource, &ser);
+        ser.Serialize(n->quantity, nullptr);
 
-        uint8_t* r = *reinterpret_cast<uint8_t**>(n + 0x20);
+        TradeResourceNode* r = n->right;
         if (r) {
             n = r;
-            while (uint8_t* l = *reinterpret_cast<uint8_t**>(n + 0x18)) n = l;
+            while (TradeResourceNode* l = n->left) n = l;
         } else {
-            uint8_t* p = *reinterpret_cast<uint8_t**>(n + 0x10);
-            while (p && *reinterpret_cast<uint8_t**>(p + 0x18) != n) {
+            TradeResourceNode* p = n->parent;
+            while (p && p->left != n) {
                 n = p;
-                p = *reinterpret_cast<uint8_t**>(p + 0x10);
+                p = p->parent;
             }
             n = p;
         }
@@ -309,36 +290,36 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
 // difference: retail's loader SKIPS a duplicate key (it is reading a stream it trusts
 // to be unique), whereas a fixture called every visit has to be able to top a resource
 // back up, so an existing key has its value overwritten.
+// The two parameters stay untyped for the harness's local declaration.
 extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, int qty) {
     if (!tradeComp || !resourceEntity) return;
-    void* treeHdr = At(tradeComp, 0x60);
-    const uint64_t key = reinterpret_cast<uint64_t>(resourceEntity);
+    TradeComponent& trade = *reinterpret_cast<TradeComponent*>(tradeComp);
+    ComponentDescription* const key = reinterpret_cast<ComponentDescription*>(resourceEntity);
 
-    uint8_t* root = *reinterpret_cast<uint8_t**>(treeHdr);
+    TradeResourceNode* root = trade.stockRoot;
     if (!root) {
-        void* node = TradeBst_NewNode(key, qty, nullptr);
+        TradeResourceNode* node = TradeResourceTree_NewNode(key, qty, nullptr);
         if (!node) return;
-        *reinterpret_cast<void**>(treeHdr) = node;
-        *reinterpret_cast<int32_t*>(At(treeHdr, 8)) += 1;
+        trade.stockRoot = node;
+        trade.stockCount += 1;
         return;
     }
 
-    uint8_t* cur = root;
+    TradeResourceNode* cur = root;
     for (;;) {
-        const uint64_t curKey = *reinterpret_cast<uint64_t*>(cur);
+        ComponentDescription* const curKey = cur->resource;
         if (key == curKey) {
-            *reinterpret_cast<int64_t*>(cur + 0x08) = qty;   // top up, see note above
+            cur->quantity = qty;   // top up, see note above (the tree wrote the whole qword)
+            cur->_pad0C[0] = cur->_pad0C[1] = cur->_pad0C[2] = cur->_pad0C[3] = qty < 0 ? 0xff : 0;
             return;
         }
-        uint8_t** childSlot = (key < curKey)
-            ? reinterpret_cast<uint8_t**>(cur + 0x18)
-            : reinterpret_cast<uint8_t**>(cur + 0x20);
+        TradeResourceNode** childSlot = (key < curKey) ? &cur->left : &cur->right;
         if (!*childSlot) {
-            void* node = TradeBst_NewNode(key, qty, cur);
+            TradeResourceNode* node = TradeResourceTree_NewNode(key, qty, cur);
             if (!node) return;
-            *childSlot = reinterpret_cast<uint8_t*>(node);
-            TradeBst_Retrace(treeHdr, cur);
-            *reinterpret_cast<int32_t*>(At(treeHdr, 8)) += 1;
+            *childSlot = node;
+            TradeResourceTree_Retrace(&trade.stockRoot, cur);
+            trade.stockCount += 1;
             return;
         }
         cur = *childSlot;
@@ -365,91 +346,83 @@ void TradeComponent::Persist(void* stream) {
     // An empty scope is NOT free: it is 16 real bytes in the save encoding. This
     // port opened only the second, so it read 16 bytes too few at the very start
     // of the body -- every field below then came from the wrong offset, refCount
-    // and nameCount decoded as poison, and TradeComponent_ResizeNames walked a
+    // and nameCount decoded as poison, and the merchant-order resize walked a
     // garbage array. Same trap as the two empty scopes in AbsorbResourceComponent
     // and HealerComponent.
-    alignas(8) uint8_t serStub[24] = {0};
-    ::new (static_cast<void*>(serStub)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serStub)->~Serializer();                                       // B.3.4 bridge
+    { IO::Serializer stub(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
 
-    alignas(8) uint8_t ser[24] = {0};
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);        // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);        // B.3.8 bridge
 
-    // +0x50/+0x58: ComponentRef table, stride 0x10 {ComponentRef, int, int}.
-    int32_t refCount = *reinterpret_cast<int32_t*>(At(this, 0x58));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(refCount, nullptr);   // B.3.4 bridge
+    // +0x50/+0x58: the manifest, stride 0x10 {ComponentRef, int, int}.
+    int32_t refCount = manifestCount;
+    ser.Serialize(refCount, nullptr);
     if (Loading(ser))
-        StorageComponent_DynArrayResize(At(this, 0x50), refCount);
+        StorageComponent_DynArrayResize(&manifest, refCount);
     {
-        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(this, 0x50));
-        for (int32_t i = 0; i < refCount && elem; ++i, elem += 0x10) {
-            Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x0, ser);
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0xc), nullptr);   // B.3.4 bridge
+        TradeManifestLine* elem = manifest;
+        for (int32_t i = 0; i < refCount && elem; ++i, ++elem) {
+            Reimpl_ExternalPtr_Serialize_StringTable(&elem->good, &ser);
+            ser.Serialize(elem->price, nullptr);
+            ser.Serialize(elem->stock, nullptr);
         }
     }
 
-    // +0x2c: selected-merchant index.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(this, 0x2c)), nullptr);   // B.3.4 bridge
+    // +0x2c: the docked merchant's index.
+    ser.Serialize(tradeId, nullptr);
 
     // +0x60: AVL tree, ComponentRef -> int.
-    TradeComp_BstSerialize(At(this, 0x60), ser);
+    TradeComp_BstSerialize(*this, ser);
 
-    // +0x30/+0x38: trade-name array, stride 0x20.
-    int32_t nameCount = *reinterpret_cast<int32_t*>(At(this, 0x38));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(nameCount, nullptr);   // B.3.4 bridge
+    // +0x30/+0x38: the merchant orders, stride 0x20.
+    int32_t nameCount = merchantOrderCount;
+    ser.Serialize(nameCount, nullptr);
     if (Loading(ser))
-        TradeComponent_ResizeNames(reinterpret_cast<int64_t*>(At(this, 0x30)), nameCount);
+        TradeMerchantOrders_SetSize(*this, nameCount);
     {
-        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(this, 0x30));
-        for (int32_t i = 0; i < nameCount && elem; ++i, elem += 0x20) {
-            reinterpret_cast<System::String*>(elem + 0x0)->Serialize(ser);   // B.3.1 bridge
-            int32_t innerCount = *reinterpret_cast<int32_t*>(elem + 0x18);
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(innerCount, nullptr);   // B.3.4 bridge
+        TradeMerchantOrder* elem = merchantOrders;
+        for (int32_t i = 0; i < nameCount && elem; ++i, ++elem) {
+            elem->merchantName.Serialize(&ser);
+            int32_t innerCount = elem->goodsCount;
+            ser.Serialize(innerCount, nullptr);
             // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
             // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
             if (Loading(ser))
-                GameColl::ArrayAt<GameColl::Ptr8>(elem, 0x10).SetSize(innerCount);
-            Reimpl_ExternalPtrArray_Serialize(ser, innerCount,
-                *reinterpret_cast<long long*>(elem + 0x10), nullptr);
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
+                GameColl::AsArray<GameColl::Ptr8>(&elem->goods).SetSize(innerCount);
+            // LEFT: 0x1400049c0 takes the array base as an integer (Game block's declaration).
+            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount,
+                reinterpret_cast<long long>(elem->goods), nullptr);
+            ser.Serialize(elem->orderKind, nullptr);
         }
     }
 
-    // +0x40/+0x48: item table, stride 0xc {resourceId(enum), index, spare}.
-    int32_t itemCount = *reinterpret_cast<int32_t*>(At(this, 0x48));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(itemCount, nullptr);   // B.3.4 bridge
+    // +0x40/+0x48: the buy orders, stride 0xc {flags(enum), index, amount}.
+    int32_t itemCount = buyOrderCount;
+    ser.Serialize(itemCount, nullptr);
     if (Loading(ser))
-        TradeComponent_ResizeItems(reinterpret_cast<int64_t*>(At(this, 0x40)), itemCount);
+        TradeBuyOrders_SetSize(*this, itemCount);
     {
-        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(this, 0x40));
-        for (int32_t i = 0; i < itemCount && elem; ++i, elem += 0xc) {
-            SerializeEnumField(ser, elem + 0x0);
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x4), nullptr);   // B.3.4 bridge
+        TradeBuyOrder* elem = buyOrders;
+        for (int32_t i = 0; i < itemCount && elem; ++i, ++elem) {
+            // The enum through the UINT door (vtable +0x98), as storagedescription.cpp's
+            // SerializeEnum. Retail's own field order: +0x08 before +0x04.
+            ser.Serialize(elem->rawMaterialFlags, nullptr);
+            ser.Serialize(elem->amount, nullptr);
+            ser.Serialize(elem->categoryIndex, nullptr);
         }
     }
 
     // +0x28: plain int.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
+    ser.Serialize(tradeState, nullptr);
 
     // +0x78: Time.
-    reinterpret_cast<System::Time*>(At(this, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    merchantTimer.Serialize(ser);
 
     // +0x71: bool.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x71)), nullptr);   // B.3.4 bridge
+    ser.Serialize(tradeFlag, nullptr);
 
-    // +0x80: InternalBasePtr, validated against ComponentEntity.
-    reinterpret_cast<Object::InternalBasePtr*>(At(this, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    {
-        void* obj = *reinterpret_cast<void**>(At(this, 0x80));
-        if (obj &&
-            !Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()))
-            *reinterpret_cast<uint64_t*>(At(this, 0x80)) = 0;
-    }
+    // +0x80: InternalBasePtr, nulled when it is not a ComponentEntity.
+    merchant.Serialize(ser, ComponentEntity::TypeId());
 
     // +0x70: bool.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x70)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(workEnabled, nullptr);
 }

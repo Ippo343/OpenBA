@@ -39,11 +39,13 @@ public:
     // slot-3 Serialize, 0x14012dd00, and its resize helper FUN_14000a590):
     // ptr@+0x28, count@+0x30, cap@+0x34 — see uicomponent_serialize.cpp.
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    uiData0;      // +0x28 byte-array pointer (ctor 0)
-    void*    uiData1;      // +0x30 {int32 count; int32 cap;} (ctor 0)
+    uint8_t* data;         // +0x28 Array<uint8_t> data (ctor 0)
+    int32_t  dataCount;    // +0x30 (ctor: one qword 0 over +0x30..+0x37)
+    int32_t  dataCap;      // +0x34
 };
 
 static_assert(sizeof(UIComponent) == 0x38, "UIComponent is 0x38 (create 0x140039550)");
 static_assert(alignof(UIComponent) == 8, "UIComponent alignment");
-static_assert(offsetof(UIComponent, uiData0) == 0x28, "UIComponent +0x28");
-static_assert(offsetof(UIComponent, uiData1) == 0x30, "UIComponent +0x30");
+static_assert(offsetof(UIComponent, data) == 0x28, "UIComponent +0x28");
+static_assert(offsetof(UIComponent, dataCount) == 0x30, "UIComponent +0x30");
+static_assert(offsetof(UIComponent, dataCap) == 0x34, "UIComponent +0x34");
