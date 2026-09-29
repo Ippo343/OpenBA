@@ -258,6 +258,7 @@ in the code carries a comment.
 | 11 | Tombstone slot 4 | the tree's form | checks the description type and always writes the timer | CONFIRMED (COMP-e) |
 | 12 | `TerraformComponent_RegionRecalc` | a second copy of `Pf_RegionDirty4_b150` with the tree's zero-chunk guard | one body | CONFIRMED (COMP-e) |
 | 33 | `Audio::Stream::Run` (`vtbatch7b_stream_run_win.cpp`), `IXAudio2SourceVoice::GetState` | mingw's `<xaudio2.h>` is the 2.8 interface, so the call passes a second argument (`Flags = 0` in R8) | XAudio2 2.7's `GetState(pVoiceState)` takes one; slot +0xc8 is the same and 2.7 ignores R8 | SUSPECTED harmless (R-ENG) |
+| 34 | `Engine::PlatformConfigure`'s launcher (`engine_platform_win.cpp`) | reads the two launcher check-box bytes and calls the dialog proc 0x1800a1ae0 at module-relative addresses of a LOADED `Runtime-x64.dll` (`GetModuleHandleW`); the standalone never loads it, so the launcher dialog is never shown and both bytes read 0 | retail runs its own dialog proc 0x1800a1ae0 over resource 0x66 | CONFIRMED from the code, not from retail (R-ENG); a door into the retail binary, LEFT |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -308,6 +309,11 @@ stated condition.
 - KEPT: `OptionsDialog::ApplyInputSettings` (`optionsdialog.cpp`) returns early when
   `Input::Configuration::_singleton` is null; retail 0x140072360 loads it (0x14007237f) and stores
   through it with no test. CONFIRMED (R-ENG read it; the file is DLG's).
+- KEPT: `Input::Device::PlatformStartup` tests `Application::_singleton` for null before reading
+  `_windowHandle` (twice); `KeyMap::Load`'s settings lookup tests the Persistence pointer before the
+  root; `Input::Device::PlatformShutdown` skips the three callback erases when `Application::_singleton`
+  is null (its comment says why). Retail loads each unguarded. SUSPECTED for the first two (not
+  re-read), CONFIRMED by the file's own banner for the third (R-ENG).
 - DROPPED: `ComponentEntity::FindComponent<T>()` does not skip a null component slot and does not
   test the type id for 0 / -1 (retail's per-type instances do neither: 26 read by block T). Safe
   while `ComponentEntity`'s ctor never stores a null slot (it skips a component with no factory) and
