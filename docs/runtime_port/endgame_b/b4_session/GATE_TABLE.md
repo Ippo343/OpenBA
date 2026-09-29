@@ -145,3 +145,10 @@ cast that can only be removed by changing behaviour is LEFT and listed with the 
 `sa-stress` p95, recorded only (the 95th percentile moves with the machine's load; the mean does
 not): base 2.40; COMP-c 2.71; COMP-d 3.33; GAME-a 2.57; COMP-f 2.53; COMP-e 3.04. Mean update:
 1.92 / 1.88 / 2.03 / 1.77 / 1.78 / 1.97 ms.
+
+| 27 | W1-R-ENG | `59975715` | runtime engine / application / achievement / input / audio: 590 -> 65 in 66 files; settles `known_port_issues` 14e from retail (the input flags are `bool`; the options dialog should copy the check box byte raw) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `59975715`: **24,258** to remove. Floor ceilings raised in `FLOOR.md` after the coordinator
+read the marked lines: `win32` 34 -> 56 (Win32 handle parameters on NAMED fields: `HWND`,
+`HINSTANCE`, `CRITICAL_SECTION*`, `WAVEFORMATEX*`; the class headers do not include `<windows.h>`),
+`crt` 7 -> 9 (`qsort` comparator parameters).
