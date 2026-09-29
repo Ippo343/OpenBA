@@ -38,7 +38,6 @@ using RtObject::InternalBasePtr;
 // mismatch here would be a link error, not a silent one, but naming it exactly
 // is cheaper than proving that each time.
 namespace RtObject {
-void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, ::IO::Serializer* ser);
 bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId);
 }
 
