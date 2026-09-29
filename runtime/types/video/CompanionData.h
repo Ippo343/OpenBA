@@ -196,7 +196,7 @@ static_assert(offsetof(ImageBufferData, imageBuffer) == 0x08, "imageBuffer at +0
 // B.4 (R-VIDEO): each slot 0 returns `void*` -- what MSVC's `??_E` returns (the
 // block it freed or `this`) -- and its vector arm reads the element count out of
 // the vector-new cookie in the qword before element 0 through ONE marked cast
-// (`CAST-OK: dx11_seam`: the arm exists only because these classes keep the
+// (marked with the `dx11_seam` category: the arm exists only because these classes keep the
 // hand slot 0 instead of a compiler virtual destructor, and it goes with the
 // seam, plan §4.1). The elements are `this[i]`: `sizeof(XData) == 0x10` is the
 // retail element stride and RT_VIDEO_COMPANION_PINS below asserts it.
