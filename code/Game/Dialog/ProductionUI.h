@@ -18,6 +18,16 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class LabelElement; class NumberElement; }
+
+// One resource row of the production panel (0x10 bytes): the "labelStorage"
+// LabelElement and the "numberCount" NumberElement (OnCreated 0x140075da0).
+struct ProductionUIRow {
+    UI::LabelElement*  labelStorage;   // +0x00
+    UI::NumberElement* numberCount;    // +0x08
+};
+static_assert(sizeof(ProductionUIRow) == 0x10, "ProductionUIRow is 0x10");
+
 class ProductionUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ProductionUI)
 
@@ -33,9 +43,27 @@ public:
     void OnCreated() override;   // [4] 0x140075da0
     void OnUpdateLayout() override;   // [7] 0x140075a20
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint8_t vectorItems[0x20] = {};// +0x30: 2x 0x10-byte items (constructor-initialized)
+private:
+    void UpdateList(int listIndex);                               // 0x140075a50
+
+public:
+    // ---- fields: retail's two Collection::Array<ProductionUIRow> (consumed,
+    // produced; OnCreated 0x140075da0 appends the rows). ~ProductionUI 0x1400132b0
+    // destroys both (`eh vector destructor iterator`); the tree's does not, so
+    // they stay raw storage (data / count / capacity) until it does (H5).
+    ProductionUIRow* consumedData = nullptr;   // +0x30
+    int32_t consumedCount = 0;                 // +0x38
+    int32_t consumedCapacity = 0;              // +0x3C
+    ProductionUIRow* producedData = nullptr;   // +0x40
+    int32_t producedCount = 0;                 // +0x48
+    int32_t producedCapacity = 0;              // +0x4C
 };
 
 static_assert(sizeof(ProductionUI) == 0x50, "ProductionUI is 0x50 (create 0x140013230 MemAlloc(0x50))");
 static_assert(alignof(ProductionUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(ProductionUI, consumedData) == 0x30, "ProductionUI +0x30");
+static_assert(offsetof(ProductionUI, consumedCount) == 0x38, "ProductionUI +0x38");
+static_assert(offsetof(ProductionUI, consumedCapacity) == 0x3C, "ProductionUI +0x3C");
+static_assert(offsetof(ProductionUI, producedData) == 0x40, "ProductionUI +0x40");
+static_assert(offsetof(ProductionUI, producedCount) == 0x48, "ProductionUI +0x48");
+static_assert(offsetof(ProductionUI, producedCapacity) == 0x4C, "ProductionUI +0x4C");

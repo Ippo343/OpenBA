@@ -36,33 +36,14 @@
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/TrackerComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Dialog/ProductionUI.h"
 
 // ============================================================
-// ProductionUI struct layout:
-//   +0x00: DialogController base (0x30 bytes)
-//   +0x30: consumed array data ptr (8 bytes)
-//   +0x38: consumed array count (uint32_t)
-//   +0x3C: consumed array capacity (uint32_t)
-//   +0x40: produced array data ptr (8 bytes)
-//   +0x48: produced array count (uint32_t)
-//   +0x4C: produced array capacity (uint32_t)
-//
-// Each array element = 0x10 bytes:
-//   +0x00: InternalBasePtr to "labelStorage" element
-//   +0x08: InternalBasePtr to "numberCount" element
+// ProductionUI layout: Dialog/ProductionUI.h (two Collection::Arrays of
+// ProductionUIRow {labelStorage, numberCount} at +0x30 consumed, +0x40 produced).
+// LEFT (B4 DLG-c): the TrackerComponent's fields (TrackerComponent.h, COMP-e:
+// raw) and the day counter through GameUpdateLoop::m_dayCounter (void*, GAME-a).
 // ============================================================
-
-// Helper: dynamically grow and append a 0x10-byte {labelPtr, numberPtr} entry
-// to one of the arrays.
-// B.3.2 bridge: self+arrayOffset is Collection::Array<{InternalBasePtr,
-// InternalBasePtr}> (stride 0x10, count +0x08, capacity +0x0C off
-// arrayOffset) inside a struct §B.2 has not converted, so it is reached at
-// its offset.
-static void PushElementPair(uintptr_t self, int arrayOffset,
-                            uint64_t labelPtr, uint64_t numberPtr) {
-    auto& arr = GameColl::ArrayAt<GameColl::Bytes<0x10, 8>>(self, arrayOffset);
-    arr.SetSize(arr.GetSize() + 1, GameColl::Bytes<0x10, 8>(labelPtr, numberPtr));
-}
 
 // ---- element type ids for retail's two casts --------------------------------
 // Retail Slot4 stores `IsDerivedFrom(hit, id) ? hit : nullptr`, reading the ids
@@ -89,13 +70,21 @@ bool ProductionUI_TypeIdsReady() {
         && ProductionUI_NumberElementTypeId() != 0;
 }
 
-static void* CastLabel(void* elem) {
+static UI::LabelElement* CastLabel(UI::Element* elem) {
     if (!elem) return nullptr;
-    return ::Object::IsDerivedFromNullSafe(elem, ProductionUI_LabelElementTypeId()) ? elem : nullptr;
+    return ::Object::IsDerivedFromNullSafe(elem, ProductionUI_LabelElementTypeId())
+        ? static_cast<UI::LabelElement*>(elem) : nullptr;
 }
-static void* CastNumber(void* elem) {
+static UI::NumberElement* CastNumber(UI::Element* elem) {
     if (!elem) return nullptr;
-    return ::Object::IsDerivedFromNullSafe(elem, ProductionUI_NumberElementTypeId()) ? elem : nullptr;
+    return ::Object::IsDerivedFromNullSafe(elem, ProductionUI_NumberElementTypeId())
+        ? static_cast<UI::NumberElement*>(elem) : nullptr;
+}
+
+// Helper: find a named element under a parent element.
+static UI::Element* FindChildElem(UI::Element* parent, const char* name) {
+    System::String nameStr(name);
+    return parent->FindElement(nameStr).Get();
 }
 
 // ---- ProductionUI: PROMOTED to the real reimpl (production-statistics content) -
@@ -142,7 +131,7 @@ namespace productionui_sa {
         return ok;
     }
     // Standalone-only precondition (see PageToggleUI::Slot7 above): with no cached
-    // rows there is nothing for the retail body to write, and self+0x30/+0x40 are
+    // rows there is nothing for the retail body to write, and the two arrays are
     // still null.
 }
 
@@ -159,110 +148,71 @@ namespace productionui_sa {
 // [4] 0x140075da0
 void ProductionUI::OnCreated() {
     if (!productionui_sa::Ready()) return;
-    uintptr_t s = (uintptr_t)this;
 
-    // Get dialog element from controller base (+0x20)
-    void* dialogElem = *(void**)(s + 0x20);
+    // The controller's container element (+0x20)
+    UI::Element* dialogElem = _container;
 
     // Find "production" element (with fallbacks)
-    uint64_t result = 0;
+    UI::Element* productionElem = FindChildElem(dialogElem, "production");
 
-    { System::String nameStr("production");
-      ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr)); }  // B.3.6 bridge
+    if (productionElem == nullptr) {
+        productionElem = FindChildElem(dialogElem, "production3");
 
-    if (result == 0) {
-        System::String nameStr("production3");
-        uint64_t retBuf = 0;
-        ::new (&retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-        result = retBuf;
-
-        if (result == 0) {
-            System::String nameStr2("production4");
-            uint64_t retBuf2 = 0;
-            ::new (&retBuf2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr2));  // B.3.6 bridge
-            result = retBuf2;
+        if (productionElem == nullptr) {
+            productionElem = FindChildElem(dialogElem, "production4");
         }
     }
 
-    void* productionElem = (void*)result;
-
     // Get two child containers: Child(0) = consumed, Child(1) = produced
-    uint64_t consumedContainer = 0;
-    ::new (&consumedContainer) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(productionElem)->Child(0));  // B.3.6 bridge
-
-    uint64_t producedContainer = 0;
-    ::new (&producedContainer) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(productionElem)->Child(1));  // B.3.6 bridge
+    UI::Element* consumedContainer = productionElem->Child(0).Get();
+    UI::Element* producedContainer = productionElem->Child(1).Get();
 
     // Iterate consumed container children (start at index 1)
-    int childCount = reinterpret_cast<const UI::Element*>(consumedContainer)->ChildCount();  // B.3.6 bridge
+    int childCount = consumedContainer->ChildCount();
     int idx = 1;
     while (idx < childCount) {
         // Get child element at index
-        uint64_t childElem = 0;
-        ::new (&childElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(consumedContainer)->Child(idx));  // B.3.6 bridge
+        UI::Element* childElem = consumedContainer->Child(idx).Get();
 
-        // Find "labelStorage" sub-element
-        uint64_t labelResult = 0;
-        { System::String nameStr("labelStorage");
-          ::new (&labelResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
+        // Retail casts the "labelStorage" hit through IsDerivedFrom(LabelElement) and
+        // stores NULL when it isn't one (0x140075da0 uses TypeId_LabelElement_exref
+        // @0x140151668); "numberCount" through IsDerivedFrom(NumberElement) (exref
+        // 0x1401516c8, engine_funcs label "SpinnerElement" — the id is NumberElement's).
+        ProductionUIRow row;
+        row.labelStorage = CastLabel(FindChildElem(childElem, "labelStorage"));
+        row.numberCount = CastNumber(FindChildElem(childElem, "numberCount"));
 
-        // Retail casts the hit through IsDerivedFrom(LabelElement) and stores NULL
-        // when it isn't one (0x140075da0 uses TypeId_LabelElement_exref @0x140151668).
-        uint64_t labelBP = 0;
-        new (&labelBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(CastLabel((void*)labelResult)));   // B.3.3 bridge
-
-        // Find "numberCount" sub-element
-        uint64_t numberResult = 0;
-        { System::String nameStr("numberCount");
-          ::new (&numberResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
-
-        // Retail casts through IsDerivedFrom(NumberElement) (exref 0x1401516c8,
-        // engine_funcs label "SpinnerElement" — the id is UI::NumberElement's).
-        uint64_t numberBP = 0;
-        new (&numberBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(CastNumber((void*)numberResult)));   // B.3.3 bridge
-
-        // Push pair to consumed array at +0x30
-        PushElementPair(s, 0x30, labelBP, numberBP);
+        // Push pair to the consumed array (+0x30).
+        // B.3.2 bridge: Collection::Array<ProductionUIRow>, raw storage until
+        // ~ProductionUI destroys it (H5).
+        auto& arr = GameColl::ArrayAt<ProductionUIRow>(this, 0x30);
+        arr.SetSize(arr.GetSize() + 1, row);
 
         idx++;
-        childCount = reinterpret_cast<const UI::Element*>(consumedContainer)->ChildCount();  // B.3.6 bridge
+        childCount = consumedContainer->ChildCount();
     }
 
     // Iterate produced container children (start at index 1)
-    childCount = reinterpret_cast<const UI::Element*>(producedContainer)->ChildCount();  // B.3.6 bridge
+    childCount = producedContainer->ChildCount();
     idx = 1;
     while (idx < childCount) {
-        uint64_t childElem = 0;
-        ::new (&childElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(producedContainer)->Child(idx));  // B.3.6 bridge
+        UI::Element* childElem = producedContainer->Child(idx).Get();
 
-        uint64_t labelResult = 0;
-        { System::String nameStr("labelStorage");
-          ::new (&labelResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
+        ProductionUIRow row;
+        row.labelStorage = CastLabel(FindChildElem(childElem, "labelStorage"));
+        row.numberCount = CastNumber(FindChildElem(childElem, "numberCount"));
 
-        uint64_t labelBP = 0;
-        new (&labelBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(CastLabel((void*)labelResult)));   // B.3.3 bridge
-
-        uint64_t numberResult = 0;
-        { System::String nameStr("numberCount");
-          ::new (&numberResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
-
-        uint64_t numberBP = 0;
-        new (&numberBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(CastNumber((void*)numberResult)));   // B.3.3 bridge
-
-        // Push pair to produced array at +0x40
-        PushElementPair(s, 0x40, labelBP, numberBP);
+        // Push pair to the produced array (+0x40), the same bridge
+        auto& arr = GameColl::ArrayAt<ProductionUIRow>(this, 0x40);
+        arr.SetSize(arr.GetSize() + 1, row);
 
         idx++;
-        childCount = reinterpret_cast<const UI::Element*>(producedContainer)->ChildCount();  // B.3.6 bridge
+        childCount = producedContainer->ChildCount();
     }
 }
 
 // ============================================================
-// ProductionUI::Slot7 helper — update one production list
+// ProductionUI::UpdateList — update one production list
 // ============================================================
 // Updates the UI for either consumed (listIndex=0) or produced (listIndex=1)
 // items by reading from the TrackerComponent and setting sprite/text/count
@@ -270,20 +220,15 @@ void ProductionUI::OnCreated() {
 //
 // Original helper: 0x140075A50.
 
-
-
-static void UpdateProductionList(uintptr_t self, int listIndex) {
-    // Get entity from controller data (+0x28)
-    void* entity = *(void**)(self + 0x28);
+void ProductionUI::UpdateList(int listIndex) {
+    // Get entity from the controller's data source (+0x28)
+    Object::Base* entity = _dataSource;
     bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
-
-    uint64_t entityBP = 0;
-    new (&entityBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
+    ComponentEntity* entityPtr = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
     // Find TrackerComponent via fn_FindComponent_Tracker
     uint64_t trackerBP = 0;
-    fn_FindComponent_Tracker((void*)entityBP, &trackerBP);
+    fn_FindComponent_Tracker(entityPtr, &trackerBP);
     uintptr_t tracker = (uintptr_t)trackerBP;
 
     // STANDALONE DEVIATION (the only guard in this file). Retail derefs
@@ -300,7 +245,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     }
 
     // Check if game world item count changed; rebuild tracker if so
-    int gameItemCount = **(int**)((uintptr_t)GameUpdateLoop::_singleton + 0x128);
+    int gameItemCount = *(int*)GameUpdateLoop::_singleton->m_dayCounter;   // LEFT: void* (GAME-a)
     if (gameItemCount != *(int*)(tracker + 0x48)) {
         // Call tracker rebuild: FUN_14000d9d0 moves data from +0x38 to +0x28
         fn_TrackerComponent_Rebuild((void*)(tracker + 0x38), (void*)(tracker + 0x28));
@@ -318,9 +263,9 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         itemCount = *(int*)(tracker + 0x40);
     }
 
-    // Get element array for this list
-    uintptr_t elemArrayPtr = *(uintptr_t*)(self + ((int64_t)listIndex + 3) * 0x10);
-    int elemCount = *(int*)(self + (int64_t)listIndex * 0x10 + 0x38);
+    // Get element array for this list (+0x30 consumed, +0x40 produced)
+    ProductionUIRow* elemArray = (listIndex == 0) ? consumedData : producedData;
+    int elemCount = (listIndex == 0) ? consumedCount : producedCount;
 
 
     int i = 0;
@@ -328,7 +273,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         // Stop if we've used all cached UI elements
         if (i == elemCount) break;
 
-        uintptr_t elemPair = elemArrayPtr + (uintptr_t)i * 0x10;
+        ProductionUIRow& elemPair = elemArray[i];
 
         // Get item array from tracker
         uintptr_t itemArray;
@@ -343,15 +288,15 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         // Search sub-entries for ResourceType description
         int subCount = *(int*)(item + 0x30);
         uintptr_t subArray = *(uintptr_t*)(item + 0x28);
-        void* resourceDesc = nullptr;
+        RawMaterialDescription* resourceDesc = nullptr;
 
         for (int j = 0; j < subCount; j++) {
-            void* subEntry = *(void**)(subArray + (uintptr_t)j * 8);
+            Object::Base* subEntry = *(Object::Base**)(subArray + (uintptr_t)j * 8);
             // Call GetTypeId virtual (vtable+0x10)
-            int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
+            int typeId = subEntry->Type();
             if (typeId == (int)RawMaterialDescription::TypeId()) {
                 if (::Object::IsDerivedFromNullSafe(subEntry, RawMaterialDescription::TypeId())) {
-                    resourceDesc = subEntry;
+                    resourceDesc = static_cast<RawMaterialDescription*>(subEntry);
                 }
                 break;
             }
@@ -364,51 +309,46 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
             itemArray = *(uintptr_t*)(tracker + 0x38);
         }
         int count = *(int*)(itemArray + (uintptr_t)i * 0x10 + 0x08);
-        // Create sprite from ResourceDescription
-        uintptr_t rd = (uintptr_t)resourceDesc;
-        uint8_t spriteBuf[16];
-        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(rd + 0x20))), *reinterpret_cast<const System::String*>(rd + 0x30));  // B.3.6 bridge
+        // Create sprite from the RawMaterialDescription
+        UI::Sprite sprite(resourceDesc->_spriteSheet, resourceDesc->_name);
 
         // Set sprite on label element
-        void* labelElem = (void*)*(uint64_t*)elemPair;
-        reinterpret_cast<UI::LabelElement*>(labelElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+        UI::LabelElement* labelElem = elemPair.labelStorage;
+        labelElem->SetSprite(&sprite);
 
-        // Create UI::String from ResourceDescription
-        uint8_t uiStrBuf[16];
-        ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(rd + 0x28))), *reinterpret_cast<const System::String*>(rd + 0x30));  // B.3.6 bridge
+        // Create UI::String from the RawMaterialDescription
+        UI::String uiStr(resourceDesc->_stringTable, resourceDesc->_name);
 
         // Set text on label element
-        reinterpret_cast<UI::TextElement*>(labelElem)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
+        labelElem->SetText(&uiStr);
 
         // Set count on number element
-        void* numberElem = (void*)*(uint64_t*)(elemPair + 8);
-        reinterpret_cast<UI::NumberElement*>(numberElem)->SetValue(static_cast<int32_t>(count));  // B.3.6 bridge
+        UI::NumberElement* numberElem = elemPair.numberCount;
+        numberElem->SetValue(static_cast<int32_t>(count));
 
         // Show both elements
-        reinterpret_cast<UI::Element*>(labelElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(numberElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+        labelElem->SetFlagsOnOff(0, 1);
+        numberElem->SetFlagsOnOff(0, 1);
 
         i++;
     }
 
     // Hide unused elements
     while (i < elemCount) {
-        uintptr_t elemPair = elemArrayPtr + (uintptr_t)i * 0x10;
+        ProductionUIRow& elemPair = elemArray[i];
 
         // Set empty sprite on label element
-        uint8_t emptySprite[16];
-        ::new (emptySprite) UI::Sprite();  // B.3.6 bridge
-        void* labelElem = (void*)*(uint64_t*)elemPair;
-        reinterpret_cast<UI::LabelElement*>(labelElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
+        UI::Sprite emptySprite;
+        UI::LabelElement* labelElem = elemPair.labelStorage;
+        labelElem->SetSprite(&emptySprite);
 
         // Set empty text on label element
-        uint8_t emptyStr[16];
-        ::new (emptyStr) UI::String();  // B.3.6 bridge
-        reinterpret_cast<UI::TextElement*>(labelElem)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
+        UI::String emptyStr;
+        labelElem->SetText(&emptyStr);
 
         // Hide number element
-        void* numberElem = (void*)*(uint64_t*)(elemPair + 8);
-        reinterpret_cast<UI::Element*>(numberElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        UI::NumberElement* numberElem = elemPair.numberCount;
+        numberElem->SetFlagsOnOff(1, 0);
 
         i++;
     }
@@ -425,13 +365,11 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
 void ProductionUI::OnUpdateLayout() {
     if (!productionui_sa::Ready()) return;
     // Standalone-only precondition (see PageToggleUI::OnUpdateLayout): with no cached
-    // rows there is nothing for the retail body to write, and self+0x30/+0x40 are
+    // rows there is nothing for the retail body to write, and the two arrays are
     // still null.
-    if (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(this) + 0x38) == 0 &&
-        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(this) + 0x48) == 0) return;
-    uintptr_t s = (uintptr_t)this;
-    UpdateProductionList(s, 0);
-    UpdateProductionList(s, 1);
+    if (consumedCount == 0 && producedCount == 0) return;
+    UpdateList(0);
+    UpdateList(1);
 }
 
 // ============================================================
