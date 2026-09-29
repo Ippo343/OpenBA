@@ -18,6 +18,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class TextElement; }
+
 class ImmigrationUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ImmigrationUI)
 
@@ -32,12 +34,17 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x14006b300
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38
-    uint64_t data40 = 0;           // +0x40
-    uint64_t data48 = 0;           // +0x48
+    // ---- fields (OnCreated 0x14006b330 finds them) ------------------------
+    UI::TextElement* textNone = nullptr;     // +0x30 shown when no nomads wait
+    UI::TextElement* textNomad = nullptr;    // +0x38 "%i nomads ... %s"
+    UI::Element*     buttonAllow = nullptr;  // +0x40 id 39000
+    UI::Element*     buttonDeny = nullptr;   // +0x48 id 0x9859
 };
+
+static_assert(offsetof(ImmigrationUI, textNone) == 0x30, "ImmigrationUI +0x30");
+static_assert(offsetof(ImmigrationUI, textNomad) == 0x38, "ImmigrationUI +0x38");
+static_assert(offsetof(ImmigrationUI, buttonAllow) == 0x40, "ImmigrationUI +0x40");
+static_assert(offsetof(ImmigrationUI, buttonDeny) == 0x48, "ImmigrationUI +0x48");
 
 static_assert(sizeof(ImmigrationUI) == 0x50, "ImmigrationUI is 0x50 (create 0x140011ee0 MemAlloc(0x50))");
 static_assert(alignof(ImmigrationUI) == 8, "qword-aligned (the vptr)");
