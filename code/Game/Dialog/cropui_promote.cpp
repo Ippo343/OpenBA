@@ -88,7 +88,7 @@ void CropUI::SetResource(int64_t newType) {
         comp->Command(2);   // slot 14
     }
     // LEFT: SelectResourceUI's SetResource takes the type as int64_t (DLG-d's header).
-    comp->field50 = (void*)newType;
+    comp->field50 = reinterpret_cast<void*>(newType);
 }
 
 // idx12 (+0x60) — retail 0x1400b29d0. Current crop type via out-param.
@@ -96,7 +96,7 @@ void CropUI::SetResource(int64_t newType) {
 void* CropUI::GetResource(void* out) {
     CropFieldComponent* comp = FindComp(this);
     // LEFT: the out slot is void* in SelectResourceUI's declaration (DLG-d's header).
-    *(void**)out = comp ? comp->field50 : nullptr;
+    *reinterpret_cast<void**>(out) =comp ? comp->field50 : nullptr;
     return out;
 }
 
