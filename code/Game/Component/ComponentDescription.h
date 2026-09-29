@@ -26,6 +26,8 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+class Description;   // Component/Description.h
+
 class ComponentDescription final : public Object::External {
     DECLARE_EXE_TYPE(ComponentDescription)
 
@@ -42,7 +44,8 @@ public:
     // ---- fields (PUBLIC: ComponentEntity and the finders read them at raw offsets) ----
     int32_t  _category;          // +0x20 default 6
     uint8_t  _pad24[4];          // +0x24 never written by the ctor
-    void**   _subDescs;          // +0x28 array of sub-description External* (stride 8)
+    Description** _subDescs;     // +0x28 array of sub-descriptions (stride 8; each answers
+                                 //       Description slot 8 GetComponentType, ComponentEntity ctor 0x1400c3720)
     int32_t  _subDescCount;      // +0x30
     int32_t  _subDescCap;        // +0x34
 };

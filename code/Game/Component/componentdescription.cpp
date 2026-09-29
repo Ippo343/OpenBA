@@ -162,10 +162,9 @@ bool ComponentDescription::Serialize(void* stream) {
     ser.Serialize(_subDescCount, nullptr);
     int count = _subDescCount;
     if (SerStreamErr(&ser) == 0 && count > 0 && ::System::MemoryAllocator::_singleton) {
-        void* buf = ::System::MemoryAllocator::MemAlloc((uint64_t)count * 8, 8);
-        _subDescs = static_cast<void**>(buf);
+        _subDescs = static_cast<Description**>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 8, 8));
         _subDescCap = count;
-        if (buf) for (int i = 0; i < count; ++i) static_cast<void**>(buf)[i] = nullptr;
+        if (_subDescs) for (int i = 0; i < count; ++i) _subDescs[i] = nullptr;
     }
 
     // load each sub-description (FUN_140032090)
