@@ -44,23 +44,10 @@
 
 #include <new>
 
+#include "../../types/io/Stream.h"
+
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 void ReleaseStringField(char** field) {
     char* s = *field;
@@ -106,19 +93,15 @@ void ProgressDescription::Destruct() { this->~ProgressDescription(); }
 
 // [5] ?Serialize@ProgressDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x180119f60
 bool ProgressDescription::Serialize(void* streamArg) {
-    Stream* stream = static_cast<Stream*>(streamArg);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
     ElementDescription::Serialize(stream);                              // 180119f7a
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                              // 180119faa
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     // kScalarUInt, NOT kScalarInt — vt+0x98 at 0x180119fbe.
     rw->SerializeUInt(_unknown68, nullptr);
@@ -132,9 +115,7 @@ bool ProgressDescription::Serialize(void* streamArg) {
     reinterpret_cast<System::String*>(&_trackRightName)->Serialize(&ser);         // 18011a030
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 18011a041 ExternalPtr<ElementDescription>
 
-    if (rw != nullptr) {                                                // 18011a04f
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (18011a04f).
     return true;
 }
 

@@ -54,23 +54,10 @@
 
 #include <new>
 
+#include "../../types/io/Stream.h"
+
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 
 
@@ -129,19 +116,15 @@ void SliderDescription::Destruct() { this->~SliderDescription(); }
 
 // [5] ?Serialize@SliderDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d7890
 bool SliderDescription::Serialize(void* streamArg) {
-    Stream* stream = static_cast<Stream*>(streamArg);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
     ElementDescription::Serialize(stream);                              // 1800d78aa
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                              // 1800d78da
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_childDescription), reinterpret_cast<rt::io::Serializer*>(&ser));       // 1800d78e8 ExternalPtr<ElementDescription>
     RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800d78f6 ExternalPtr<SpriteSheet>
@@ -157,9 +140,7 @@ bool SliderDescription::Serialize(void* streamArg) {
     rw->SerializeFloat(_maximum, nullptr);
     rw->SerializeInt(_steps, nullptr);
 
-    if (rw != nullptr) {                                                // 1800d79ce
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (1800d79ce).
     return true;
 }
 

@@ -50,29 +50,11 @@
 #include "../../types/ui/TextElement.h"
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../../types/system/MemoryAllocator.h"
 
 namespace {
 
-// The same two-field views the sibling *Description files carry: these bodies
-// read exactly `Stream::mode` (+0x08) and `Stream::encodingFactory` (+0x10),
-// and the {stream, readerWriter} PAIR must live on this frame because
-// `LEA RDX,[RSP+0x28]` is what every callee receives.
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;              // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;   // +0x10
-};
-struct Serializer {
-    Stream* stream;            // +0x00
-    void*   readerWriter;      // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 }  // namespace
 
@@ -139,25 +121,21 @@ TextDescription::~TextDescription() {
 // own version is >= 1, OR when the encoding's vtable slot 0 predicate says no.
 // The two are read in THAT order and the `||` short-circuits.
 bool TextDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
 
     UI::ElementDescription::Serialize(stream);                 // 18011ee4a
 
-    Serializer ser = { stream, nullptr };                      // [RSP+0x28], [RSP+0x30]
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;       // Create{Reader,Writer}
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 1);  // R8D=1
-    ser.readerWriter = rw;                                     // 18011ee7d
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 1.
+    IO::Serializer ser(*stream, 1);                      // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 18011ee8b ExternalPtr<Font>
     RtObject_ExternalPtrSerialize_StringTable(reinterpret_cast<RtObject::External**>(&_stringTable2), reinterpret_cast<rt::io::Serializer*>(&ser));  // 18011ee99 ExternalPtr<StringTable>
     reinterpret_cast<System::String*>(&_name)->Serialize(&ser);   // 18011eea7 String 0x1800c9930
 
-    rw->SerializeBool(reinterpret_cast<bool&>(_b84), nullptr);
-    rw->SerializeBool(reinterpret_cast<bool&>(_b85), nullptr);
+    rw->SerializeBool(_b84, nullptr);
+    rw->SerializeBool(_b85, nullptr);
     rw->SerializeInt(_i88, nullptr);
     rw->SerializeUInt(_u80, nullptr);
 
@@ -165,17 +143,13 @@ bool TextDescription::Serialize(void* streamv) {
 
     bool emitTail = (rwVersion >= 1);                          // 18011ef11 CMP EAX,1 / JGE
     if (!emitTail) {
-        using EncPredFn = bool (*)(void* encoding);
-        void** evt = VTableOf(stream->encodingFactory);        // 18011ef16
-        emitTail = !reinterpret_cast<EncPredFn>(evt[0])(stream->encodingFactory);
+        emitTail = !stream->_encoding->IsBinary();             // 18011ef16, slot 0
     }
     if (emitTail) {
         rw->SerializeInt(_i8c, nullptr);
     }
 
-    if (rw != nullptr) {                                       // 18011ef41
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (18011ef41).
     return true;
 }
 

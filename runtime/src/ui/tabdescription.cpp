@@ -54,23 +54,10 @@
 
 #include <new>
 
+#include "../../types/io/Stream.h"
+
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 
 
@@ -149,19 +136,15 @@ void TabDescription::Destruct() { this->~TabDescription(); }
 // read-path SetSize and the element loop then use — not `_tabs._size`, which
 // SetSize is in the middle of changing.
 bool TabDescription::Serialize(void* streamArg) {
-    Stream* stream = static_cast<Stream*>(streamArg);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
     ElementDescription::Serialize(stream);                              // 1800da77a
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                              // 1800da7aa
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_stripBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));   // 1800da7b8
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));    // 1800da7c6
@@ -176,7 +159,7 @@ bool TabDescription::Serialize(void* streamArg) {
     int32_t n = _tabsCount;                                             // 1800da835
     rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->mode == 0) {                                        // 1800da85a (re-read)
+    if (ser._stream->_direction == 0) {                                        // 1800da85a (re-read)
         rtcoll::RtColl_ArraySetSize_18004cdf0(&_tabsData, n);               // 1800da86b
     }
 
@@ -189,9 +172,7 @@ bool TabDescription::Serialize(void* streamArg) {
         RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab + 1), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da897
     }
 
-    if (rw != nullptr) {                                                // 1800da8ad
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (1800da8ad).
     return true;
 }
 

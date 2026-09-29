@@ -33,6 +33,8 @@
 // ui_factory_wave28.cpp), so this file adds none.
 // ============================================================================
 #include <new>
+
+#include "../../types/io/Stream.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -53,21 +55,6 @@
 
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 void ReleaseStringField(char** field) {
     char* s = *field;
@@ -104,18 +91,14 @@ void ScrollDescription::Destruct() { this->~ScrollDescription(); }
 
 // ?Serialize@ScrollDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x18011a940
 bool ScrollDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
 
     UI::ElementDescription::Serialize(stream);                 // 18011a95a (qualified)
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 18011a98a
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));   // 18011a998
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
@@ -127,9 +110,7 @@ bool ScrollDescription::Serialize(void* streamv) {
     rw->SerializeUInt(_barColor, nullptr);
     rw->SerializeUInt(_unknownC4, nullptr);
 
-    if (rw != nullptr) {                                       // 18011aa96
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (18011aa96).
     return true;
 }
 

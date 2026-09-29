@@ -43,6 +43,8 @@
 // ??0TableElement@UI@@ (0x18011e2f0) is already ported (ui_factory_wave28.cpp).
 // ============================================================================
 #include <new>
+
+#include "../../types/io/Stream.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -66,21 +68,6 @@ namespace {
 
 
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 void ReleaseStringField(char** field) {
     char* s = *field;
@@ -122,18 +109,14 @@ void TableDescription::Destruct() { this->~TableDescription(); }
 // per-cell loop that emits {int, int, ExternalPtr}. The String at +0x90 is NOT
 // serialized — the destructor is the only body in the class that touches it.
 bool TableDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
 
     UI::ElementDescription::Serialize(stream);                 // 18011e5aa (qualified)
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 18011e5da
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     rw->SerializeInt(_columnCount, nullptr);
     rw->SerializeInt(_rowCount, nullptr);
@@ -142,7 +125,7 @@ bool TableDescription::Serialize(void* streamv) {
     int32_t n = _cells._size;                                  // 18011e61e
     rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->mode == 0) {                               // 18011e643 (re-read)
+    if (ser._stream->_direction == 0) {                               // 18011e643 (re-read)
         rtcoll::RtColl_ArraySetSize_1800799a0(&_cells, n);         // 18011e651
     }
 
@@ -155,9 +138,7 @@ bool TableDescription::Serialize(void* streamv) {
             reinterpret_cast<rt::io::Serializer*>(&ser));               // B.3.x bridge
     }
 
-    if (rw != nullptr) {                                       // 18011e6b8
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (18011e6b8).
     return true;
 }
 
