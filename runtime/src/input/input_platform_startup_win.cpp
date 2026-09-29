@@ -95,15 +95,6 @@
 
 namespace {
 
-// `?_singleton@Configuration@Input@@0PEAV12@EA` @ 0x1801fe768 and
-// `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678, both through the
-// port-aware door.
-Input::Configuration** InputConfigSlot() {
-    return reinterpret_cast<Input::Configuration**>(&::Input::Configuration::_singleton);
-}
-Application::Application** AppSingletonSlot() {
-    return reinterpret_cast<Application::Application**>(&::Application::Application::_singleton);
-}
 
 // `?SetText@Error@System@@SAXPEBD_N@Z` 0x1800c5fa0, called by name (B3R).
 void ErrorSetText(const char* text, bool flag) {
@@ -119,13 +110,6 @@ void ErrorSetText(const char* text, bool flag) {
 // the same bodies the member calls reach; their `if (fn)` miss arms, which
 // could only fire with the port unregistered, go with them.
 
-inline void* const* VtblOf(void* obj) {
-    return *reinterpret_cast<void* const* const*>(obj);
-}
-template <typename Fn>
-inline Fn Slot(void* obj, size_t byteOffset) {
-    return reinterpret_cast<Fn>(VtblOf(obj)[byteOffset / sizeof(void*)]);
-}
 
 // `Input::Configuration` +0x08 / +0x09 are the only two bytes this body reads
 // of it: +0x09 (`_legacy`) is the "skip DirectInput entirely" flag
@@ -138,10 +122,9 @@ inline Fn Slot(void* obj, size_t byteOffset) {
 // (`MOV R8D,0x6` at 0x1800e1965 and 0x1800e1a21).
 constexpr DWORD kCoopLevel = DISCL_FOREGROUND | DISCL_NONEXCLUSIVE;
 
-using CreateDeviceFn = HRESULT (STDMETHODCALLTYPE*)(void*, const GUID&, void**, void*);
-using SetDataFormatFn = HRESULT (STDMETHODCALLTYPE*)(void*, const DIDATAFORMAT*);
-using SetCoopFn = HRESULT (STDMETHODCALLTYPE*)(void*, HWND, DWORD);
-using AcquireFn = HRESULT (STDMETHODCALLTYPE*)(void*);
+// B.4 (R-ENG): the DirectInput calls go through <dinput.h>'s interfaces:
+// IDirectInput8W::CreateDevice +0x18, IDirectInputDevice8W::Acquire +0x38,
+// SetDataFormat +0x58, SetCooperativeLevel +0x68 -- the slots retail calls.
 
 }  // namespace
 
@@ -154,11 +137,6 @@ using AcquireFn = HRESULT (STDMETHODCALLTYPE*)(void*);
 // WindowProc's caller then falls through to its own switch and on to
 // DefWindowProcW, which is why WM_SETFOCUS still reaches Application's own
 // focus bookkeeping.
-namespace {
-Input::Device** InputDeviceSlot() {
-    return reinterpret_cast<Input::Device**>(&::Input::Device::_singleton);
-}
-}  // namespace
 
 namespace Input {
 
@@ -166,20 +144,18 @@ namespace Input {
 // Note it re-loads the singleton for the second use (0x1800e1812) instead of
 // keeping the first in a register. Kept.
 int Device::OnFocusMessage(void*, uint32_t, uint64_t, int64_t) {
-    Device** slot = InputDeviceSlot();
-    Device* dev = slot ? *slot : nullptr;
+    Device* dev = Device::_singleton;
     dev->_hasFocus = 1;                            // 0x1800e180b, unguarded in retail
-    Device* dev2 = slot ? *slot : nullptr;         // 0x1800e1812, retail re-reads
+    Device* dev2 = Device::_singleton;             // 0x1800e1812, retail re-reads
     dev2->PlatformUpdate();
     return 0;
 }
 
 // 0x1800e17d0: the same, with 0.
 int Device::OnLostFocusMessage(void*, uint32_t, uint64_t, int64_t) {
-    Device** slot = InputDeviceSlot();
-    Device* dev = slot ? *slot : nullptr;
+    Device* dev = Device::_singleton;
     dev->_hasFocus = 0;                            // 0x1800e17db
-    Device* dev2 = slot ? *slot : nullptr;
+    Device* dev2 = Device::_singleton;
     dev2->PlatformUpdate();
     return 0;
 }
@@ -196,8 +172,7 @@ int Device::OnLostFocusMessage(void*, uint32_t, uint64_t, int64_t) {
 int Device::OnMouseWheelMessage(void*, uint32_t, uint64_t wParam, int64_t) {
     const int16_t delta = static_cast<int16_t>((wParam >> 16) & 0xFFFF);
     const int32_t sign = (delta < 0) ? -1 : 1;
-    Device** slot = InputDeviceSlot();
-    Device* dev = slot ? *slot : nullptr;
+    Device* dev = Device::_singleton;
     dev->_wheelAccum = sign;
     return 0;
 }
@@ -249,18 +224,13 @@ namespace Input {
 
 bool Device::PlatformStartup() {
 
-    Configuration** cfgSlot = InputConfigSlot();
-    Configuration* cfg = cfgSlot ? *cfgSlot : nullptr;
-    Application::Application** appSlot = AppSingletonSlot();
-    Application::Application* app = appSlot ? *appSlot : nullptr;
+    Configuration* cfg = Configuration::_singleton;
+    Application::Application* app = Application::Application::_singleton;
 
     // 0x1800e1899 — unguarded in retail, and a null here is an upstream fault
     // to find rather than one to paper over.
     const bool skipDirectInput = cfg->_legacy != 0;
 
-    void** di8Slot   = &_directInput;
-    void** kbdSlot   = &_keyboardDevice;
-    void** mouseSlot = &_mouseDevice;
 
     if (!skipDirectInput) {
         // See the header: retail's first argument is Runtime-x64.dll's own
@@ -268,44 +238,45 @@ bool Device::PlatformStartup() {
         HINSTANCE hinst = GetModuleHandleW(nullptr);
 
         HRESULT hr = DirectInput8Create(hinst, DIRECTINPUT_VERSION, IID_IDirectInput8W,
-                                        di8Slot, nullptr);       // 0x1800e18c6
-        if (hr != 0 || *di8Slot == nullptr) {                    // 0x1800e18cc, 0x1800e18db
+                                        reinterpret_cast<void**>(&_directInput),  // CAST-OK: com_iid
+                                        nullptr);                // 0x1800e18c6
+        if (hr != 0 || _directInput == nullptr) {                // 0x1800e18cc, 0x1800e18db
             ErrorSetText("InputDevice: The application failed to create a DirectInput interface.", false);
             return false;                                        // 0x1800e1a55
         }
-        void* di8 = *di8Slot;
+        IDirectInput8W* di8 = _directInput;
 
-        hr = Slot<CreateDeviceFn>(di8, 0x18)(di8, GUID_SysKeyboard, kbdSlot, nullptr);
+        hr = di8->CreateDevice(GUID_SysKeyboard, &_keyboardDevice, nullptr);   // +0x18
         if (hr != 0) {                                           // 0x1800e18fb
             ErrorSetText("InputDevice: The application failed to create a keyboard device interface.", false);
             return false;
         }
-        void* kbd = *kbdSlot;
-        hr = Slot<SetDataFormatFn>(kbd, 0x58)(kbd, &c_dfDIKeyboard);  // 0x1800e1930
+        IDirectInputDevice8W* kbd = _keyboardDevice;
+        hr = kbd->SetDataFormat(&c_dfDIKeyboard);                // +0x58, 0x1800e1930
         if (hr != 0) {
             ErrorSetText("InputDevice: The application failed to set the keyboard device data format.", false);
             return false;
         }
         // 0x1800e195e: the window handle comes from Application::_singleton[0].
-        HWND hwnd = app ? static_cast<HWND>(app->_windowHandle) : nullptr;
-        hr = Slot<SetCoopFn>(kbd, 0x68)(kbd, hwnd, kCoopLevel);  // 0x1800e1971
+        HWND hwnd = app ? static_cast<HWND>(app->_windowHandle) : nullptr;  // CAST-OK: win32
+        hr = kbd->SetCooperativeLevel(hwnd, kCoopLevel);         // +0x68, 0x1800e1971
         if (hr != 0) {
             ErrorSetText("InputDevice: The application failed to set the keyboard device cooperative level.", false);
             return false;
         }
 
-        hr = Slot<CreateDeviceFn>(di8, 0x18)(di8, GUID_SysMouse, mouseSlot, nullptr);
+        hr = di8->CreateDevice(GUID_SysMouse, &_mouseDevice, nullptr);   // +0x18
         if (hr != 0) {                                           // 0x1800e19b7
             ErrorSetText("InputDevice: The application failed to create a mouse device interface.", false);
             return false;
         }
-        void* mouse = *mouseSlot;
-        hr = Slot<SetDataFormatFn>(mouse, 0x58)(mouse, &c_dfDIMouse2);  // 0x1800e19ec
+        IDirectInputDevice8W* mouse = _mouseDevice;
+        hr = mouse->SetDataFormat(&c_dfDIMouse2);                // +0x58, 0x1800e19ec
         if (hr != 0) {
             ErrorSetText("InputDevice: The application failed to set the mouse device data format.", false);
             return false;
         }
-        hr = Slot<SetCoopFn>(mouse, 0x68)(mouse, hwnd, kCoopLevel);     // 0x1800e1a2d
+        hr = mouse->SetCooperativeLevel(hwnd, kCoopLevel);       // +0x68, 0x1800e1a2d
         if (hr != 0) {
             ErrorSetText("InputDevice: The application failed to set the mouse device cooperative level.", false);
             return false;
@@ -318,25 +289,23 @@ bool Device::PlatformStartup() {
     app->RegisterMessageCallback(WM_MOUSEWHEEL, &Device::OnMouseWheelMessage);
 
     // 0x1800e1abd — retail RE-READS the configuration singleton here.
-    Configuration* cfg2 = cfgSlot ? *cfgSlot : nullptr;
+    Configuration* cfg2 = Configuration::_singleton;
     _mouseClipping = static_cast<uint8_t>(cfg2->_mouseClipping);
 
     PlatformUpdate();                                            // 0x1800e1ad1
 
     POINT p;
     GetCursorPos(&p);                                            // 0x1800e1adb
-    ScreenToClient(app ? static_cast<HWND>(app->_windowHandle) : nullptr, &p);  // 0x1800e1af0
+    ScreenToClient(app ? static_cast<HWND>(app->_windowHandle) : nullptr, &p);  // 0x1800e1af0  CAST-OK: win32
     _lastCursorX = p.x;
     _lastCursorY = p.y;
 
     // 0x1800e1b0a — the THIRD read of the configuration singleton, and it is a
     // separate read in retail rather than the entry value reused.
-    Configuration* cfg3 = cfgSlot ? *cfgSlot : nullptr;
+    Configuration* cfg3 = Configuration::_singleton;
     if (cfg3->_legacy == 0) {
-        void* kbd = *kbdSlot;
-        Slot<AcquireFn>(kbd, 0x38)(kbd);                         // 0x1800e1b21
-        void* mouse = *mouseSlot;
-        Slot<AcquireFn>(mouse, 0x38)(mouse);                     // 0x1800e1b2e
+        _keyboardDevice->Acquire();                              // +0x38, 0x1800e1b21
+        _mouseDevice->Acquire();                                 // +0x38, 0x1800e1b2e
     }
 
     return true;                                                 // 0x1800e1b3b

@@ -91,8 +91,7 @@ BindingNode* Successor(BindingNode* n) {
 // through the port-aware data door (carry-over 5: it stays a slot until the
 // end of B.3), exactly like engine_funcs.cpp's own g_pInputDeviceSingleton.
 Input::Device* DeviceSingleton() {
-    Input::Device** slot = reinterpret_cast<Input::Device**>(&::Input::Device::_singleton);
-    return slot ? *slot : nullptr;
+    return ::Input::Device::_singleton;
 }
 
 // Resolve a (device, joystick) pair to the base of that device's State block,
@@ -100,16 +99,15 @@ Input::Device* DeviceSingleton() {
 // joystick block `joystick` (the function's OWN first int parameter, threaded
 // through unchanged), device 1 = keyboard, device 2 = mouse, anything else =
 // nullptr (retail's R8 stays 0 in that branch too — a faithful potential null
-// deref on an invalid device index, not a case this port invents). BYTE
-// arithmetic, not `&d->_joystick[joystick]`: retail neither bounds the index
-// nor requires `d` to be non-null, and neither does this.
-State* DeviceArrayBase(const Input::Device* d, int32_t device, int32_t joystick) {
-    auto* base = reinterpret_cast<uint8_t*>(const_cast<Input::Device*>(d));
+// deref on an invalid device index, not a case this port invents). Retail
+// neither bounds the joystick index nor requires `d` to be non-null; the
+// member arithmetic below is the same address arithmetic
+// (d + joystick * 0x1b0, d + 0x6c0, d + 0x1098) and tests neither.
+const State* DeviceArrayBase(const Input::Device* d, int32_t device, int32_t joystick) {
     switch (device) {
-        case 0: return reinterpret_cast<State*>(
-                    base + static_cast<int64_t>(joystick) * RtInput::kJoystickStride);
-        case 1: return reinterpret_cast<State*>(base + RtInput::kKeyboardOffset);
-        case 2: return reinterpret_cast<State*>(base + RtInput::kMouseOffset);
+        case 0: return d->_joystick[joystick];
+        case 1: return d->_keyboard;
+        case 2: return d->_mouse;
         default: return nullptr;
     }
 }
@@ -153,7 +151,7 @@ T ReadBoundState(const Input::KeyMap* km, int32_t joystick, int32_t id, Read rea
         const int8_t device = static_cast<int8_t>(n->element.device[slot]);
         if (km->_suspendCount > 0 && device == 1) return T();
         if (device < 0) continue;
-        State* base = DeviceArrayBase(dev, device, joystick);
+        const State* base = DeviceArrayBase(dev, device, joystick);
         const T v = read(base[n->element.inputId[slot]]);
         if (v) return v;
     }
@@ -473,7 +471,7 @@ void Configuration::Save() {
 void RtInput_Configuration_Dtor(void* /*selfPtr - never read*/) {
           // unconditional; there is no branch
 
-    *reinterpret_cast<void**>(&::Input::Configuration::_singleton) = nullptr;
+    ::Input::Configuration::_singleton = nullptr;
 
 }
 

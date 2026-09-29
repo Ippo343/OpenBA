@@ -257,6 +257,8 @@ in the code carries a comment.
 | 10 | `WorkPlaceUI` element finds | unchecked | narrows each with IsDerivedFrom | CONFIRMED (DLG-e) |
 | 11 | Tombstone slot 4 | the tree's form | checks the description type and always writes the timer | CONFIRMED (COMP-e) |
 | 12 | `TerraformComponent_RegionRecalc` | a second copy of `Pf_RegionDirty4_b150` with the tree's zero-chunk guard | one body | CONFIRMED (COMP-e) |
+| 33 | `Audio::Stream::Run` (`vtbatch7b_stream_run_win.cpp`), `IXAudio2SourceVoice::GetState` | mingw's `<xaudio2.h>` is the 2.8 interface, so the call passes a second argument (`Flags = 0` in R8) | XAudio2 2.7's `GetState(pVoiceState)` takes one; slot +0xc8 is the same and 2.7 ignores R8 | SUSPECTED harmless (R-ENG) |
+| 34 | `Engine::PlatformConfigure`'s launcher (`engine_platform_win.cpp`) | reads the two launcher check-box bytes and calls the dialog proc 0x1800a1ae0 at module-relative addresses of a LOADED `Runtime-x64.dll` (`GetModuleHandleW`); the standalone never loads it, so the launcher dialog is never shown and both bytes read 0 | retail runs its own dialog proc 0x1800a1ae0 over resource 0x66 | CONFIRMED from the code, not from retail (R-ENG); a door into the retail binary, LEFT |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -301,6 +303,17 @@ stated condition.
   disaster finders, `Pasture_FindLivestockComp`, `NaturalResourceComponent_FindComponentByType`,
   `ActMv_FindComponentFamily_12d0`); `(uintptr_t)comp < 0x10000` at `townhallui.cpp`; the standalone
   `dialogRes != nullptr` skips of EventNotifyDialog / AutoSaveDialog.
+- KEPT: `UpdateLoop::LoadResources` (`updateloop_loadresources.cpp`) tests `IO::Modification::_singleton`
+  and `IO::FileSystem::_singleton` for null; retail loads both and dereferences them unguarded
+  (0x1800dd8c8 / 0x1800dd8d2, 0x1800dd988 / 0x1800dd98f). CONFIRMED (R-ENG).
+- KEPT: `OptionsDialog::ApplyInputSettings` (`optionsdialog.cpp`) returns early when
+  `Input::Configuration::_singleton` is null; retail 0x140072360 loads it (0x14007237f) and stores
+  through it with no test. CONFIRMED (R-ENG read it; the file is DLG's).
+- KEPT: `Input::Device::PlatformStartup` tests `Application::_singleton` for null before reading
+  `_windowHandle` (twice); `KeyMap::Load`'s settings lookup tests the Persistence pointer before the
+  root; `Input::Device::PlatformShutdown` skips the three callback erases when `Application::_singleton`
+  is null (its comment says why). Retail loads each unguarded. SUSPECTED for the first two (not
+  re-read), CONFIRMED by the file's own banner for the third (R-ENG).
 - DROPPED: `ComponentEntity::FindComponent<T>()` does not skip a null component slot and does not
   test the type id for 0 / -1 (retail's per-type instances do neither: 26 read by block T). Safe
   while `ComponentEntity`'s ctor never stores a null slot (it skips a component with no factory) and
@@ -312,7 +325,16 @@ stated condition.
 
 - `optionsdialog.cpp:745,748`: `inputCfg->_mouseClipping = checkMouseClip->_checked != 0;` and
   `_mouseDisplay` likewise. UI's `EnableCursor` tests `Input::Configuration::_mouseDisplay` as a
-  `bool` where retail compares a byte. Several flags became `bool` in R-UI-b and R-VIDEO
+  `bool` where retail compares a byte. SETTLED by R-ENG from retail: the three Input::Configuration
+  flags ARE `bool` -- `Input::Configuration::Startup` reads them through
+  `?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z` (0x1800b8290, `AEA_N` = `bool&`), and `EnableCursor`
+  0x180122580 tests `CMP byte ptr [RAX+0xa],0` / `CMOVNZ` (0x180122599), a bool's zero test.
+  `ApplyInputSettings` 0x140072360 copies the check box's +0xd8 byte RAW: `MOVZX EAX,byte [R8+0xd8]`
+  / `MOV byte [RDX+0x8],AL` (0x140072390 / 0x14007239f) and `MOVZX EAX,byte [RDX+0xd8]` /
+  `MOV byte [RCX+0xa],AL` (0x1400723b9 / 0x1400723c2) -- a bool-to-bool copy in the source, so
+  `CheckElement::_checked` (+0xd8, `uint8_t` in the tree) is the retail `bool`. The tree's `!= 0` is
+  value-identical while `_checked` holds 0 / 1; the faithful spelling is the raw copy
+  `inputCfg->_mouseClipping = checkMouseClip->_checked;` (DLG's file, not changed). CONFIRMED. Several flags became `bool` in R-UI-b and R-VIDEO
   (`SpriteSheet::m_field50`, `TextDescription::_b84/_b85`, the ribbon / scroll `_vertical`,
   RenderState's six flags). Identical only if the byte is always 0 or 1. SUSPECTED; the settings
   flags were the same question and retail copies raw (0x14007248f), so those are `uint8_t`.
@@ -333,6 +355,10 @@ stated condition.
   ("GetHappiness") is the carry count.
 - Two tree bodies both claim retail 0x1400049c0 (`Reimpl_ExternalPtrArray_Serialize`,
   `Desc_LoadExternalArray`).
+- `Video::Device::gap50[0x10]` (+0x50 / +0x58) is not a gap: MainLoop's ctor stores the video-error
+  and video-restart callbacks there (the profile build's `Video::Device::SetVideoErrorFuncs`,
+  0x1800fd860, inlined); `engine.cpp` still writes them as raw bytes because the header (R-VIDEO)
+  has no named fields.
 
 ### 14g. Commit messages that state something nobody verified
 

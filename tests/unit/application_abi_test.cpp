@@ -45,8 +45,8 @@ UNIT_TEST(application_field_offsets) {
     CHECK_EQ((int)offsetof(App, _platformHandle), 0x08);        // GetInstance
     CHECK_EQ((int)offsetof(App, _cursorEnabled), 0x10);         // IsCursorEnabled / EnableCursor
     CHECK_EQ((int)offsetof(App, _running), 0x11);               // IsPaused / PlatformIsPaused
-    CHECK_EQ((int)offsetof(App, _messageCallbackRoot), 0x18);   // the Set's root
-    CHECK_EQ((int)offsetof(App, _messageCallbackCount), 0x20);  // the Set's count
+    CHECK_EQ((int)offsetof(App, _messageCallbacks), 0x18);      // the Set's root
+    CHECK_EQ((int)(offsetof(App, _messageCallbacks) + offsetof(rtsetavl::Set, count)), 0x20);  // the Set's count
     CHECK_EQ((int)offsetof(App, _quitRequested), 0x28);         // Quit / MainLoop::Frame
     CHECK_EQ((int)offsetof(Engine::Engine, _application), 0x690);
 }

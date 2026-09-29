@@ -225,12 +225,12 @@ void GoalList::Initialize(GoalArray* src) {
         Object::Type typeSlot;
         const uint32_t instanceTypeId = *goal->GetInstanceType(&typeSlot);
 
-        void* inst = FactorySingleton()->CreateObject(instanceTypeId);   // 0x1800c0ae0
+        ::Object::Base* inst = FactorySingleton()->CreateObject(instanceTypeId);   // 0x1800c0ae0
 
         // The inlined dynamic cast at 0x18009f17e..0x18009f1cd. On failure
         // retail nulls the instance (`XOR ESI,ESI`) and then writes through it
         // two instructions later. Faithful.
-        if (!static_cast<const ::Object::Base*>(inst)->IsDerivedFrom(GoalInstanceTypeId()))   // 0x1800c0390
+        if (!inst->IsDerivedFrom(GoalInstanceTypeId()))                  // 0x1800c0390
             inst = nullptr;
 
         _goals[i] = Object::InternalPtr<GoalInstance>(static_cast<GoalInstance*>(inst));

@@ -163,17 +163,18 @@ bool RetailKeyLess(const char* a, const char* b) {
 // with `MOV R12,qword ptr [0x1801FC678-ish]` once, outside both loops, and
 // re-reads `*R12` per lookup. Reproduced: the singleton is hoisted, the root
 // is not.
-const char* FindSettingValue(void* persistence, const char* key) {
-    if (persistence == nullptr) return nullptr;   // retail's `TEST R11,R11` on the root
-    auto* node = *reinterpret_cast<uint8_t**>(persistence);
+const char* FindSettingValue(const ::IO::Persistence* persistence, const char* key) {
+    // The tree's own guard; retail's `TEST R11,R11` is the root test the loop makes.
+    if (persistence == nullptr) return nullptr;
+    const RtIo::SettingsMapNode* node = persistence->_settingsMapRoot;   // +0x00
     while (node != nullptr) {
-        const char* nodeKey = *reinterpret_cast<const char* const*>(node);
+        const char* nodeKey = node->key._data;                            // +0x00
         if (RetailKeyLess(key, nodeKey)) {
-            node = *reinterpret_cast<uint8_t**>(node + 0x18);      // left
+            node = node->left;                                            // +0x18
         } else if (RetailKeyLess(nodeKey, key)) {
-            node = *reinterpret_cast<uint8_t**>(node + 0x20);      // right
+            node = node->right;                                           // +0x20
         } else {
-            return *reinterpret_cast<const char* const*>(node + 0x08);  // value
+            return node->value._data;                                     // +0x08
         }
     }
     return nullptr;
@@ -239,7 +240,7 @@ void KeyMap::Load() {
     // Retail hoists the singleton once, before the traversal
     // (0x1800A71AA), and re-reads the map root on every lookup. ENDGAME
     // B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    void* persistence = ::IO::Persistence::_singleton;
+    const ::IO::Persistence* persistence = ::IO::Persistence::_singleton;
 
     // KeyMap::_root is at +0x08 (Input.h, pinned by every ported KeyMap point
     // function). Retail loads `[RCX+8]` at 0x1800A71B1.

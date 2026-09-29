@@ -104,12 +104,6 @@ struct Element {
 };
 static_assert(sizeof(Element) == 0x10, "Set element is 0x10 bytes");
 
-// `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678. The port-aware door, so
-// a minted run and a DLL run both land on whatever storage the ported ctor
-// (singleton_ctors.cpp) published into.
-App** AppSingletonSlot() {
-    return reinterpret_cast<App**>(&::Application::Application::_singleton);
-}
 
 // `?SetText@Error@System@@SAXPEBD_N@Z` @ 0x1800c5fa0 — ported in Wave 2
 // (runtime/src/system/error.cpp), called by name (B3R).
@@ -162,14 +156,13 @@ const char kClassName[]   = "Banished";
 // ============================================================================
 int64_t Application::Application::WindowProc(void* hwndArg, uint32_t msg,
                                              uint64_t wParamArg, int64_t lParamArg) {
-    HWND   hwnd   = static_cast<HWND>(hwndArg);
+    HWND   hwnd   = static_cast<HWND>(hwndArg);  // CAST-OK: win32
     WPARAM wParam = static_cast<WPARAM>(wParamArg);
     LPARAM lParam = static_cast<LPARAM>(lParamArg);
-    App** slot = AppSingletonSlot();
-    App*  app  = slot ? *slot : nullptr;
+    App*  app  = ::Application::Application::_singleton;   // ?_singleton@Application@1@0PEAV11@EA
 
     if (app != nullptr) {                                   // 0x18009f95c
-        Node* n = static_cast<Node*>(app->_messageCallbackRoot);
+        Node* n = app->_messageCallbacks.root;
         if (n != nullptr) {                                 // 0x18009f965
             Node* found = nullptr;
             while (n != nullptr) {
@@ -279,10 +272,10 @@ bool Application::Application::PlatformStartup() {
     wc.lpfnWndProc   = &RtApp_WindowProc;                          // 0x18009fc45
     wc.cbClsExtra    = 0;                                          // 0x18009fc51 (one qword
     wc.cbWndExtra    = 0;                                          //   store covering both)
-    wc.hInstance     = static_cast<HINSTANCE>(_platformHandle);  // 0x18009fc59
+    wc.hInstance     = static_cast<HINSTANCE>(_platformHandle);  // 0x18009fc59  CAST-OK: win32
     wc.hIcon         = nullptr;                                    // 0x18009fc68 XORPS/MOVDQA
     wc.hCursor       = nullptr;
-    wc.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));  // 0x180161780
+    wc.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));  // 0x180161780  CAST-OK: win32
     wc.lpszMenuName  = nullptr;
     wc.lpszClassName = className.data;                             // 0x18009fc8a
 
@@ -302,7 +295,7 @@ bool Application::Application::PlatformStartup() {
             10,                             // nHeight [RSP+0x38]
             nullptr,                        // hWndParent  [RSP+0x40]
             nullptr,                        // hMenu       [RSP+0x48]
-            static_cast<HINSTANCE>(_platformHandle),  // [RSP+0x50], re-read
+            static_cast<HINSTANCE>(_platformHandle),  // [RSP+0x50], re-read  CAST-OK: win32
             nullptr);                       // lpParam     [RSP+0x58]
         _windowHandle = hwnd;                                 // 0x18009fcf4
         if (hwnd == nullptr) {                                      // 0x18009fcf7
@@ -381,7 +374,7 @@ void Application::Application::PlatformShutdown() {
     BOOL destroyed = FALSE;
     DWORD destroyErr = 0;
     if (_windowHandle) {                                   // 0x18009fd82/85
-        destroyed = DestroyWindow(static_cast<HWND>(_windowHandle));
+        destroyed = DestroyWindow(static_cast<HWND>(_windowHandle));  // CAST-OK: win32
         if (!destroyed) destroyErr = GetLastError();             // 0x18009fd8a
     }
 
@@ -390,7 +383,7 @@ void Application::Application::PlatformShutdown() {
 
     const BOOL unregistered =                                    // 0x18009fda9
         UnregisterClassW(className.data,
-                         static_cast<HINSTANCE>(_platformHandle));
+                         static_cast<HINSTANCE>(_platformHandle));  // CAST-OK: win32
     const DWORD unregisterErr = unregistered ? 0 : GetLastError();
 
     RtSystem::RtSystem_WideString_Dtor(&className);              // 0x18009fdb0..fde1

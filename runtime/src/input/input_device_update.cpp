@@ -151,7 +151,9 @@
 //                and it reads like a bug if you assume a reset to 0.
 // ============================================================================
 
+#define DIRECTINPUT_VERSION 0x0800
 #include <windows.h>
+#include <dinput.h>
 
 #include <cstdint>
 #include <cstddef>
@@ -170,12 +172,6 @@ using State = Input::Device::State;
 // RT_DATA_SLOT is the never-cache-a-null form (rt_port.h). Lane E3 measured 22
 // sites in the tree using the FROZEN form, where the first caller fixes a null
 // for the whole process; these three use the correct one deliberately.
-inline void** ApplicationSingleton() {
-    return reinterpret_cast<void**>(&::Application::Application::_singleton);
-}
-inline Input::Configuration** InputConfigSingleton() {
-    return reinterpret_cast<Input::Configuration**>(&::Input::Configuration::_singleton);
-}
 inline const double* TimerSecondsPerTick() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
     return &::System::Timer::_secondsPerTick;
@@ -273,13 +269,8 @@ constexpr int kComGetDeviceState = 0x48;   // COM index 9
 // result — success included — leaves the loop.
 constexpr uint32_t kDiErrInputLost = 0x8007001Eu;
 
-inline void* ComSlot(void* com, int byteOffset) {
-    void** vtbl = *reinterpret_cast<void***>(com);
-    return vtbl[byteOffset / 8];
-}
-
-using GetStateFn = uint32_t (*)(void*, uint32_t, void*);
-using AcquireFn  = uint32_t (*)(void*);
+// B.4 (R-ENG): the two calls go through <dinput.h>'s IDirectInputDevice8W,
+// whose Acquire / GetDeviceState sit at exactly those two slots.
 
 // ---------------------------------------------------------------------------
 // Device::UpdateState — retail 0x1800E0FC0. 234 instructions, ZERO calls.
@@ -423,11 +414,11 @@ void Device::UpdateState(State* dst, State* src, int32_t count, const System::Ti
 // ---------------------------------------------------------------------------
 bool Device::PlatformGetKeyboardState(State* out) {
 
-    const Configuration* config = *InputConfigSingleton();
+    const Configuration* config = ::Input::Configuration::_singleton;
 
     if (config->_legacy) {
-        auto* app  = *ApplicationSingleton();
-        HWND  hwnd = *reinterpret_cast<HWND*>(app);       // Application +0x00
+        auto* app  = ::Application::Application::_singleton;
+        HWND  hwnd = static_cast<HWND>(app->_windowHandle);  // Application +0x00  CAST-OK: win32
 
         if (GetForegroundWindow() == hwnd) {
             for (int i = 0; i < kKeyboardInputCount; ++i) {
@@ -440,11 +431,10 @@ bool Device::PlatformGetKeyboardState(State* out) {
         return true;
     }
 
-    void*   keyboard = _keyboardDevice;
+    IDirectInputDevice8W* keyboard = _keyboardDevice;
     uint8_t keys[256];   // deliberately uninitialised — see the banner
 
-    const uint32_t hr = reinterpret_cast<GetStateFn>(
-        ComSlot(keyboard, kComGetDeviceState))(keyboard, 0x100, keys);
+    const uint32_t hr = static_cast<uint32_t>(keyboard->GetDeviceState(0x100, keys));   // +0x48
 
     if (hr != 0) {
         // The pointer is RE-READ on every spin (retail 0x1800E1D30 reloads
@@ -452,9 +442,8 @@ bool Device::PlatformGetKeyboardState(State* out) {
         // re-acquire is exactly the moment a device pointer could be replaced,
         // and hoisting it out is a change with no upside.
         for (;;) {
-            void* dev = _keyboardDevice;
-            const uint32_t a =
-                reinterpret_cast<AcquireFn>(ComSlot(dev, kComAcquire))(dev);
+            IDirectInputDevice8W* dev = _keyboardDevice;
+            const uint32_t a = static_cast<uint32_t>(dev->Acquire());   // +0x38
             if (a != kDiErrInputLost) break;
         }
         return true;
@@ -505,7 +494,7 @@ bool Device::PlatformGetKeyboardState(State* out) {
 // ---------------------------------------------------------------------------
 bool Device::PlatformGetMouseState(State* out) {
 
-    const Configuration* config = *InputConfigSingleton();
+    const Configuration* config = ::Input::Configuration::_singleton;
 
     auto swapIfLeftHanded = [&]() {
         if (GetSystemMetrics(SM_SWAPBUTTON)) {
@@ -516,8 +505,8 @@ bool Device::PlatformGetMouseState(State* out) {
     };
 
     if (config->_legacy) {
-        auto* app  = *ApplicationSingleton();
-        HWND  hwnd = *reinterpret_cast<HWND*>(app);
+        auto* app  = ::Application::Application::_singleton;
+        HWND  hwnd = static_cast<HWND>(app->_windowHandle);   // CAST-OK: win32
 
         if (GetForegroundWindow() != hwnd) {
             for (int i = 0; i < kMouseInputCount; ++i) out[i].value = 0;
@@ -557,7 +546,7 @@ bool Device::PlatformGetMouseState(State* out) {
         return true;
     }
 
-    void* mouse = _mouseDevice;
+    IDirectInputDevice8W* mouse = _mouseDevice;
 
     // DIMOUSESTATE: int32 lX, lY, lZ; BYTE rgbButtons[8]. Retail zeroes all 20
     // bytes before the call (three stores at 0x1800E1F8E/F92/F96) even though a
@@ -566,14 +555,12 @@ bool Device::PlatformGetMouseState(State* out) {
     static_assert(sizeof(DiMouseState) == 20, "DIMOUSESTATE must be 20 bytes");
     DiMouseState st = {};
 
-    const uint32_t hr = reinterpret_cast<GetStateFn>(
-        ComSlot(mouse, kComGetDeviceState))(mouse, 0x14, &st);
+    const uint32_t hr = static_cast<uint32_t>(mouse->GetDeviceState(0x14, &st));   // +0x48
 
     if (hr != 0) {
         for (;;) {
-            void* dev = _mouseDevice;
-            const uint32_t a =
-                reinterpret_cast<AcquireFn>(ComSlot(dev, kComAcquire))(dev);
+            IDirectInputDevice8W* dev = _mouseDevice;
+            const uint32_t a = static_cast<uint32_t>(dev->Acquire());   // +0x38
             if (a != kDiErrInputLost) break;
         }
         return true;
@@ -596,7 +583,7 @@ bool Device::PlatformGetMouseState(State* out) {
     // it loaded earlier on this path; kept.
     POINT pt;
     GetCursorPos(&pt);
-    ScreenToClient(*reinterpret_cast<HWND*>(*ApplicationSingleton()), &pt);
+    ScreenToClient(static_cast<HWND>(::Application::Application::_singleton->_windowHandle), &pt);  // CAST-OK: win32
     out[0].value = static_cast<int16_t>(pt.x);
     out[1].value = static_cast<int16_t>(pt.y);
 
@@ -626,9 +613,13 @@ namespace {
 // reference_never_written_needs_by_whom.md).
 void ZeroScratch(State* buf, int32_t count) {
     for (int32_t i = 0; i < count; ++i) {
-        auto* p = reinterpret_cast<uint8_t*>(&buf[i]);
-        std::memset(p + 0x00, 0, 8);
-        std::memset(p + 0x10, 0, 8);
+        // B.4 (R-ENG): the two qwords by field -- +0x00..+0x07 is
+        // normalized / value / pressed / released, +0x10 is holdTicks.
+        buf[i].normalized = 0.0f;
+        buf[i].value      = 0;
+        buf[i].pressed    = false;
+        buf[i].released   = false;
+        buf[i].holdTicks  = 0;
     }
 }
 

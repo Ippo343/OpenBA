@@ -37,11 +37,11 @@
 //       audio_voice_callback_win.cpp), the Device ctor door placement-news all
 //       64 records, and the minted unnamed row 0x180157c60 is retired.
 //
-// HOLDS THE POLYMORPHIC STREAM BY VALUE (RULE B7-12): the Device holds the
-// `RtAudio::Stream` POD (B4b-3), the Stream keeps its ctor door, and the
-// Device gets NO real constructor this step — `Ctor_AudioDevice`
-// (runtime/src/engine/singleton_ctors.cpp) stays the door. Member bodies that
-// need the Stream's members reach them through `StreamObject()`, one bridge.
+// HOLDS THE POLYMORPHIC STREAM BY VALUE: `_stream` is the `Audio::Stream`
+// class (B.4 R-ENG; it was the `RtAudio::Stream` POD). The Device still has NO
+// real constructor — `Ctor_AudioDevice` (runtime/src/engine/singleton_ctors.cpp)
+// builds the Stream in place — and `~Device` is declared and undefined, so no
+// Stream ctor or dtor runs that did not run before.
 //
 // `_singleton` (`?_singleton@Device@Audio@@0PEAV12@EA`, 0x1801fe760) is the class
 // static below; its minted row is RETIRED (ENDGAME B.3.9 ENG W2).
@@ -52,7 +52,7 @@
 // and the XAudio2 callback thread (PlatformChannel slot 2 ORs
 // `AudioChannel::flags` with 2, WITHOUT a lock — retail's design, no lock added).
 //
-// PORTABILITY: no <windows.h>. COM interfaces are `void*`.
+// PORTABILITY: no <windows.h>. COM interfaces are forward-declared.
 // ============================================================================
 
 #include <cstdint>
@@ -63,6 +63,14 @@
 #include "../object/External.h"   // Object::ExternalPtr
 
 namespace System { class Time; }
+
+// The XAudio2 2.7 interfaces, `<xaudio2.h>`'s names (the .cpp files that call
+// them include it). Retail creates the engine by the 2.7 CLSID / IID
+// (audio_platform_startup_win.cpp), so the engine is `IXAudio27`; the voices
+// are the types `IXAudio27::CreateSourceVoice` / `CreateMasteringVoice` return.
+struct IXAudio27;
+struct IXAudio2MasteringVoice;
+struct IXAudio2SourceVoice;
 
 namespace Audio {
 
@@ -120,7 +128,7 @@ public:
         virtual void OnLoopEnd(void* bufferContext);                       // [5] 0x180050220
         virtual void OnVoiceError(void* bufferContext, int32_t error);     // [6] 0x180050230
 
-        void*         voice;        // +0x08  IXAudio2SourceVoice*
+        IXAudio2SourceVoice* voice; // +0x08
         AudioChannel* channel;      // +0x10  &_channels[i] (ctor loop 3)
         void*         bufferEvent;  // +0x18  HANDLE: Stream::_bufferEvent, or null
     };
@@ -142,12 +150,6 @@ public:
                       const System::Time& startTime, float volume, float pitch,
                       float unused);                                               // 0x1800de7a0 (AEAA)
     void StopPlatform(int32_t index);                                              // 0x1800dea20 (AEAA)
-
-    // The embedded Stream as the real class. ONE bridge for every member body
-    // that needs a Stream member (the Device holds the POD, B7-12).
-    Audio::Stream* StreamObject() {
-        return reinterpret_cast<Audio::Stream*>(&_stream);   // B.3.7 bridge
-    }
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static Device* Get();                                                          // 0x18000c740 (reads _singleton)
@@ -180,9 +182,9 @@ public:
 
     // ---- the 0x1298 bytes, at retail's offsets (public: the doors reach them)
     AudioChannel     _channels[64];          // +0x000
-    RtAudio::Stream  _stream;                // +0xa00  B4b-3: the POD, by value
-    void*            _xaudio2;               // +0xa88  IXAudio2* (0 => no platform)
-    void*            _masteringVoice;        // +0xa90  IXAudio2MasteringVoice*
+    Audio::Stream    _stream;                // +0xa00  by value (`LEA RCX,[RBX+0xa00]; CALL ??0Stream`)
+    IXAudio27*       _xaudio2;               // +0xa88  0 => no platform
+    IXAudio2MasteringVoice* _masteringVoice; // +0xa90
     PlatformChannel  _platformChannels[64];  // +0xa98
 };
 
@@ -203,11 +205,11 @@ static_assert(offsetof(Device, _stream)           == 0xa00, "ctor: LEA RCX,[RBX+
 static_assert(offsetof(Device, _xaudio2)          == 0xa88, "PlatformStartup: LEA RDI,[RCX+0xa88]");
 static_assert(offsetof(Device, _masteringVoice)   == 0xa90, "PlatformStartup: LEA RSI,[RBX+0xa90]");
 static_assert(offsetof(Device, _platformChannels) == 0xa98, "ctor loop 2: LEA RAX,[RBX+0xa98]");
-static_assert(offsetof(Device, _stream) + offsetof(RtAudio::Stream, _lock) == 0xa50,
+static_assert(offsetof(Device, _stream) + offsetof(Audio::Stream, _lock) == 0xa50,
               "FreeChannelPlatform's CRITICAL_SECTION at Device+0xa50 IS the Stream's lock");
-static_assert(offsetof(Device, _stream) + offsetof(RtAudio::Stream, _wakeEvent) == 0xa40,
+static_assert(offsetof(Device, _stream) + offsetof(Audio::Stream, _wakeEvent) == 0xa40,
               "StopPlatform's SetEvent([Device+0xa40]) IS the Stream's wake event");
-static_assert(offsetof(Device, _stream) + offsetof(RtAudio::Stream, _stopping) == 0xa80,
+static_assert(offsetof(Device, _stream) + offsetof(Audio::Stream, _stopping) == 0xa80,
               "StopPlatform's byte [Device+0xa80] IS the Stream's stop flag");
 
 }  // namespace Audio
