@@ -41,6 +41,12 @@
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/exe_bodies.h"   // B3R: WorkPlaceComponent_SetAccepting
+#include "Component/MapComponent.h"          // B4 DLG-a: by-name reads
+#include "Component/WorkPlaceComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Game/Map.h"
+#include "ui/CheckElement.h"
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -54,47 +60,41 @@ extern void Debug_LabelElement_SetSprite(void* self, void* spriteData);
 // CountOccupiedBuildTiles (0x140118330)
 // ============================================================
 // Counts tiles in the entity's building footprint that are occupied
-// by other entities (not self). Uses the BuildComponent footprint
+// by other entities (not self). Uses the MapComponent footprint
 // to iterate the tile grid and checks each tile's occupant.
 //
-// param: smComp = StorageComponent ptr (smComp in BuildUI_Slot7)
+// Retail reads ClearAreaComponent fields through RCX (a ClearAreaComponent
+// member); LEFT a file-local function: the class header is COMP-c's.
 // Returns: count of occupied tiles not owned by self.
-static int CountOccupiedBuildTiles_Impl(void* smComp)
+static int CountOccupiedBuildTiles_Impl(ClearAreaComponent* clearArea)
 {
-    uintptr_t sc = (uintptr_t)smComp;
+    // The owning entity (Component::_entity) = self identity
+    ComponentEntity* entityRef = clearArea->_entity;
 
-    // Entity InternalBasePtr at smComp+0x10
-    uintptr_t entityRef = *(uintptr_t*)(sc + 0x10);  // inner ptr value = self identity
+    // Find the MapComponent on the entity (FindComponent<MapComponent>, 0x140004680)
+    MapComponent* bc = entityRef->FindComponent<MapComponent>();
 
-    // Find BuildComponent on entity
-    uint64_t buildComp = 0;
-    fn_FindComponent_Build((void*)entityRef, &buildComp);
-    uintptr_t bc = buildComp;
+    // The footprint, read signed (the tree's int16 reads; the header says uint16):
+    //   tileX0 = originX, tileY0 = originY, tileX1 = width, tileY1 = height
+    int originX = (int)(int16_t)bc->tileX0;
+    int originY = (int)(int16_t)bc->tileY0;
+    int width   = (int)(int16_t)bc->tileX1;
+    int height  = (int)(int16_t)bc->tileY1;
 
-    // BuildComponent footprint fields:
-    //   +0x28 = originX (short), +0x2a = originY (short)
-    //   +0x2c = width (short),   +0x2e = height (short)
-    int originX = (int)*(int16_t*)(bc + 0x28);
-    int originY = (int)*(int16_t*)(bc + 0x2a);
-    int width   = (int)*(int16_t*)(bc + 0x2c);
-    int height  = (int)*(int16_t*)(bc + 0x2e);
-
-    // WorldGrid at gameWorld+0xF8
-    // piVar3 = *(int**)(gameWorld + 0xF8)
-    // *piVar3 = mapWidth (int), *(piVar3+0x20) = tile array base ptr
-    void* gameWorld = GameUpdateLoop::_singleton;
-    int* piVar3 = *(int**)((uintptr_t)gameWorld + 0xF8);
-    int mapWidth = *piVar3;
-    uintptr_t tileArrayBase = *(uintptr_t*)((uintptr_t)piVar3 + 0x20 * sizeof(int));
+    // The Map at gameWorld+0xF8: size = mapWidth, cells = the 0x30-byte cell array
+    // LEFT: GameUpdateLoop::m_game is void*; Map::cells is void*.
+    Map* map = (Map*)GameUpdateLoop::_singleton->m_game;
+    int mapWidth = map->size;
+    const uint8_t* tileArrayBase = (const uint8_t*)map->cells;
 
     int count = 0;
     for (int row = 0; row < height; ++row) {
         for (int col = 0; col < width; ++col) {
             // Each tile entry is 0x30 bytes; occupant ptr is at offset +8
             int tileIndex = (originY + row) * mapWidth + originX + col;
-            uintptr_t occupant = *(uintptr_t*)(tileArrayBase + 8 + (uintptr_t)tileIndex * 0x30);
+            void* occupant = *(void* const*)(tileArrayBase + 8 + (uintptr_t)tileIndex * 0x30);
             // Count tiles occupied by other entities (not self, not null)
-            if (occupant != *(uintptr_t*)(sc + 0x10) && occupant != 0) {
+            if (occupant != clearArea->_entity && occupant != nullptr) {
                 count++;
             }
         }
@@ -102,49 +102,48 @@ static int CountOccupiedBuildTiles_Impl(void* smComp)
     return count;
 }
 
-// Helper: find element by name in parent element, returns raw InternalPtr value
-static void* BuildUI_FindChildElem(void* parentElem, const char* name) {
-    uint8_t retBuf[16];
+// Helper: find element by name in parent element
+static UI::Element* BuildUI_FindChildElem(UI::Element* parentElem, const char* name) {
     System::String nameStr(name);
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
-    void* result = *(void**)retBuf;
-    return result;
+    return parentElem->FindElement(nameStr).Get();
 }
 
-// Helper: find element by name, wrap result as InternalBasePtr
-static uint64_t BuildUI_FindElemAsBasePtr(void* parentElem, const char* name) {
-    void* raw = BuildUI_FindChildElem(parentElem, name);
-    uint8_t bpBuf[8];
-    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
-    return *(uint64_t*)bpBuf;
+// The data source's ComponentEntity (retail's checked cast of +0x28).
+static ComponentEntity* BuildUI_Entity(Object::Base* dataSource) {
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
+    return isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
+}
+
+// The building's BuildDescription: its BuildComponent's Component::_description,
+// checked (retail's IsDerivedFrom BuildDescription).
+static BuildDescription* BuildUI_Description(BuildComponent* posComp) {
+    if (posComp == nullptr) return nullptr;
+    void* desc = posComp->_description;
+    bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
+    // LEFT: Component::_description is void* (COMP-a's header).
+    return isResource ? (BuildDescription*)desc : nullptr;
 }
 
 // ---- BuildUI: PROMOTED to the real reimpl (2026-07-13) -----------------------
 // The in-game "under construction" panel: a per-material storage table
 // (delivered / required), a construction progress bar + percent, and a
 // pause-construction button. It is a DialogController bound into a building's
-// info dialog (created by EditTool select); the generic stub left every slot a
-// no-op, so selecting a building being built showed the ordinary (empty) info
-// panel with no materials/progress. Wiring Slot4 (setup +0x20), Slot7
-// (per-frame update +0x38) and Slot9 (button event +0x48) to the real bodies in
-// code/Game/Dialog/buildui.cpp populates it. Construction stays the stub
-// alloc+zero+vtable; the engine fills the base fields (dialog +0x20 / datasource
-// +0x28) afterward. Same shape as the BuildRequirementUI promotion above.
+// info dialog (created by EditTool select).
 namespace buildui_sa {
-    // ENDGAME B.3.9: ComponentEntity / BuildDescription (was TypeId_ResourceComponent,
-    // a misnamed alias) / RawMaterialDescription / BuildComponent / ClearAreaComponent
-    // all have a ported TypeId() now, so the EnsureTypeIds()/HardIdsReady() lazy-cache
-    // over the exe .rdata globals is dead — the statics always answer.
-    // Slot4 has run once self+0x40 (the "progress" element IBP) is populated.
-    inline bool IsSetUp(void* self) { return self && *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x40) != 0; }
+    // Slot4 has run once the "progress" element (+0x40) is populated.
+    inline bool IsSetUp(const BuildUI* self) { return self && self->progress != nullptr; }
 }
 
+// The finders the tree called (the generic walk) returned null for a null
+// entity (a standalone guard; retail's FindComponent<T> instances have none):
+// kept on every find below.
+
 // ============================================================
-// BuildUI::Slot4 (vtable +0x20) — Setup/populate build storage table
+// BuildUI::OnCreated (vtable +0x20) — Setup/populate build storage table
 // ============================================================
 // Finds "storageTable", "progress", "buttonPause" elements.
 // Iterates storage table rows, populating each with resource sprite,
-// label, and required amount from the ToolbarDescription.
+// label, and required amount from the BuildDescription.
 // Sets up the progress bar and pause button state.
 //
 // Original: 0x1400B1F40.
@@ -153,213 +152,179 @@ namespace buildui_sa {
 void BuildUI::OnCreated() {
     if (!SA_DialogEntityAlive(this)) return;
     // Idempotent: the framework dispatches setup on attach; a re-drive would
-    // append a second copy of the storage rows to self+0x30 (count never reset)
+    // append a second copy of the storage rows to +0x30 (count never reset)
     // — exactly the ProfessionUI double-populate class. Skip if already set up.
     if (buildui_sa::IsSetUp(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
-    // Find "storageTable" element, wrap as InternalBasePtr
-    void* dialogElem = *(void**)(s + 0x20);
-    uint64_t tableElem = BuildUI_FindElemAsBasePtr(dialogElem, "storageTable");
+    // Find "storageTable" element
+    UI::Element* dialogElem = _container;
+    UI::Element* tableElem = BuildUI_FindChildElem(dialogElem, "storageTable");
 
-    // Find "progress" element, store at +0x40
-    void* progressRaw = BuildUI_FindChildElem(dialogElem, "progress");
-    *(uint64_t*)(s + 0x40) = (uint64_t)progressRaw;
+    // Find "progress" element, store at +0x40 (stored unchecked, read as a ProgressElement)
+    progress = static_cast<UI::ProgressElement*>(BuildUI_FindChildElem(dialogElem, "progress"));
 
-    // Set progress max to 1.0f: *(float*)(progressElem + 0x124) = 1.0f
-    *(float*)(*(uintptr_t*)(s + 0x40) + 0x124) = 1.0f;
+    // Progress maximum 1.0f
+    progress->_maxValue = 1.0f;
 
     // Get entity from data source +0x28, check ComponentEntity
-    void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
-    void* entity = isEntity ? entityRaw : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    uintptr_t entityPtr = *(uintptr_t*)entityBuf;
+    ComponentEntity* entity = BuildUI_Entity(_dataSource);
 
-    // Find PositionComponent (FUN_14000d6c0) → has ToolbarDescription at +0x18
-    uint64_t posComp = 0;
-    fn_FindComponent_Position((void*)entityPtr, &posComp);
+    // Find the BuildComponent (FUN_14000d6c0) → its BuildDescription
+    BuildComponent* posComp = entity ? entity->FindComponent<BuildComponent>() : nullptr;
 
-    // Find WorkplaceComponent (FUN_140002e10)
-    uint64_t workplaceComp = 0;
-    fn_FindComponent_WorkPlace((void*)entityPtr, &workplaceComp);
+    // Find the WorkPlaceComponent (FUN_140002e10)
+    WorkPlaceComponent* workplaceComp = entity ? entity->FindComponent<WorkPlaceComponent>() : nullptr;
 
     // Find "buttonPause" element, set ID 6000
-    uint64_t buttonPause = BuildUI_FindElemAsBasePtr(dialogElem, "buttonPause");
-    reinterpret_cast<UI::Element*>(buttonPause)->SetElementId(6000);  // B.3.6 bridge
+    UI::Element* buttonPause = BuildUI_FindChildElem(dialogElem, "buttonPause");
+    buttonPause->SetElementId(6000);
 
     // Configure pause button based on workplace state
-    if (workplaceComp == 0) {
-        // No workplace — hide button via vtable[8](button, false)
-        reinterpret_cast<UI::Element*>(buttonPause)->Enable(false);  // B.3.6 bridge: Element slot 8 Enable
+    if (workplaceComp == nullptr) {
+        // No workplace — disable the button (Element slot 8)
+        buttonPause->Enable(false);
     } else {
-        // Set button checked state: element+0xD8 = (workplace+0x50 == 0)
-        char wpEnabled = *(char*)(workplaceComp + 0x50);
-        *(uint8_t*)(buttonPause + 0xD8) = (wpEnabled == 0) ? 1 : 0;
+        // The button is a check: checked = !isAccepting
+        char wpEnabled = workplaceComp->isAccepting;
+        static_cast<UI::CheckElement*>(buttonPause)->_checked = (wpEnabled == 0) ? 1 : 0;
     }
 
-    // Get ResourceComponent from PositionComponent+0x18
-    void* resourceComp = nullptr;
+    // Get the BuildDescription from the BuildComponent
+    BuildDescription* resourceComp = BuildUI_Description(posComp);
     int resourceCount = 0;
-    if (posComp != 0) {
-        void* desc = *(void**)(posComp + 0x18);
-        bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
-        if (isResource) {
-            resourceComp = desc;
-        }
-    }
     if (resourceComp) {
-        resourceCount = *(int*)((uintptr_t)resourceComp + 0x28);
+        resourceCount = resourceComp->_costCount;
     }
 
-    // Find SM component (FUN_14000a170) → storage info
-    uint64_t smComp = 0;
-    fn_FindComponent_SM((void*)entityPtr, &smComp);
+    // Find the ClearAreaComponent (FUN_14000a170) → storage info
+    ClearAreaComponent* smComp = entity ? entity->FindComponent<ClearAreaComponent>() : nullptr;
 
     // Find first child's "textTotal" element → store at +0x48
     // First child (row 0) is the header/total row
-    uint8_t childBuf[16];
-    ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(0));  // B.3.6 bridge
-    void* firstChild = *(void**)childBuf;
-    uint64_t textTotalElem = BuildUI_FindElemAsBasePtr(firstChild, "textTotal");
-    *(uint64_t*)(s + 0x48) = textTotalElem;
+    UI::Element* firstChild = tableElem->Child(0).Get();
+    textTotal = static_cast<UI::TextElement*>(BuildUI_FindChildElem(firstChild, "textTotal"));
 
     // Set header textTotal: param 0 = "0", param 1 = storage capacity
     {
         System::String zeroStr("0");
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x48))->SetParameter(0, zeroStr);  // B.3.6 bridge
+        textTotal->SetParameter(0, zeroStr);
 
         // smComp (the site's build-material storage, found via fn_FindComponent_SM =
         // ClearAreaComponent) can be null in standalone if that component isn't present
         // / its type-id didn't resolve. Retail always has it; guard the deref so a
         // partial panel (no capacity number) beats a crash.
-        int capacity = smComp ? *(int*)(smComp + 0x48) : 0;
+        int capacity = smComp ? (int)smComp->clearState : 0;
         System::String capStr = System::String::Format("%d", (uint64_t)(uint32_t)capacity);
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x48))->SetParameter(1, capStr);  // B.3.6 bridge
+        textTotal->SetParameter(1, capStr);
     }
 
     // Iterate storage table rows (skip first child = header)
-    int childCount = reinterpret_cast<const UI::Element*>(tableElem)->ChildCount();  // B.3.6 bridge
+    int childCount = tableElem->ChildCount();
     int rowIdx = 0;
 
     for (int i = 1; i < childCount; i++) {
         // Get row child element
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(i));  // B.3.6 bridge
-        void* rowElem = *(void**)childBuf;
+        UI::Element* rowElem = tableElem->Child(i).Get();
 
-        // Find "labelStorage" and "textTotal" in this row
-        uint64_t labelStorage = BuildUI_FindElemAsBasePtr(rowElem, "labelStorage");
-        uint64_t rowTextTotal = BuildUI_FindElemAsBasePtr(rowElem, "textTotal");
+        // Find "labelStorage" and "textTotal" in this row (stored unchecked)
+        UI::LabelElement* labelStorage =
+            static_cast<UI::LabelElement*>(BuildUI_FindChildElem(rowElem, "labelStorage"));
+        UI::TextElement* rowTextTotal =
+            static_cast<UI::TextElement*>(BuildUI_FindChildElem(rowElem, "textTotal"));
 
-        // Push {labelStorage, textTotal} pair into the row array at +0x30.
-        // B.3.2 bridge: BuildUI+0x30 is Collection::Array<{InternalBasePtr,
-        // InternalBasePtr}> (stride 0x10, count +0x38, capacity +0x3C) inside a
-        // struct §B.2 has not converted, so it is reached at its offset.
-        auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x10, 8>>(s, 0x30);
-        rows.SetSize(rows.GetSize() + 1, GameColl::Bytes<0x10, 8>(labelStorage, rowTextTotal));
+        // Push {labelStorage, textTotal} into the row array at +0x30.
+        // B.3.2 bridge: the Array is raw storage in the class (H5), reached as one.
+        auto& rows = GameColl::ArrayAt<StorageRow>(&rowData, 0);
+        rows.SetSize(rows.GetSize() + 1, StorageRow{labelStorage, rowTextTotal});
 
         // Populate row content based on resource index
-        uintptr_t resBase = resourceComp ? *(uintptr_t*)((uintptr_t)resourceComp + 0x20) : 0;
+        BuildCost* resBase = resourceComp ? resourceComp->_costs : nullptr;
         if (rowIdx < resourceCount) {
             // Active resource row: set amount, sprite, text, tooltip
-            uintptr_t resEntry = *(uintptr_t*)(resBase + rowIdx * 0x10);
+            ComponentDescription* resEntry = resBase[rowIdx].material;
 
-            // Find RawMaterialDescription in entry's component list
-            int compCount = *(int*)(resEntry + 0x30);
-            void* resType = nullptr;
+            // Find RawMaterialDescription in the entry's sub-descriptions
+            int compCount = resEntry->_subDescCount;
+            RawMaterialDescription* resType = nullptr;
             for (int c = 0; c < compCount; c++) {
-                void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
+                // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
+                Object::Base* comp = reinterpret_cast<Object::Base*>(resEntry->_subDescs[c]);
                 // Get TypeId via vtable[2] and compare with RawMaterialDescription
-                int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
+                int typeId = comp->Type();
                 if (typeId == (int)RawMaterialDescription::TypeId()) {
                     if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
-                        resType = comp;
+                        resType = static_cast<RawMaterialDescription*>(comp);
                     }
                     break;
                 }
             }
 
-            // Calculate required amount: entry_count * multiplier
-            int entryCount = *(int*)(resBase + rowIdx * 0x10 + 8);
-            int multiplier = *(int*)(posComp + 0x4C);
+            // Calculate required amount: quantity * multiplier
+            int entryCount = resBase[rowIdx].quantity;
+            int multiplier = posComp->costMultiplier;
             {
                 System::String reqStr =
                     System::String::Format("%d", (uint64_t)(uint32_t)(entryCount * multiplier));
-                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(1, reqStr);  // B.3.6 bridge
+                rowTextTotal->SetParameter(1, reqStr);
             }
 
             // Set row textTotal param 0 = "0" initially
             {
                 System::String zeroStr("0");
-                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(0, zeroStr);  // B.3.6 bridge
+                rowTextTotal->SetParameter(0, zeroStr);
             }
 
             if (resType) {
                 // Set sprite from resource type
+                // LEFT: RawMaterialDescription's _spriteSheet / _stringTable are void*.
+#ifdef _DEBUG
                 uint8_t spriteBuf[16];
-#ifdef _DEBUG
-                Debug_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)resType + 0x20),
-                               (void*)((uintptr_t)resType + 0x30));
+                Debug_Sprite_Ctor(spriteBuf, (uint64_t)resType->_spriteSheet, &resType->_name);
+                Debug_LabelElement_SetSprite(labelStorage, spriteBuf);
 #else
-                ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)resType + 0x20))),
-                               *reinterpret_cast<const System::String*>((uintptr_t)resType + 0x30));  // B.3.6 bridge
-#endif
-#ifdef _DEBUG
-                Debug_LabelElement_SetSprite((void*)labelStorage, spriteBuf);
-#else
-                reinterpret_cast<UI::LabelElement*>(labelStorage)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+                UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>((UI::SpriteSheet*)resType->_spriteSheet),
+                                  resType->_name);
+                labelStorage->SetSprite(&sprite);
 #endif
 
                 // Set text from resource type
-                uint8_t uiStrBuf[16];
-                ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)resType + 0x28))),
-                                 *reinterpret_cast<const System::String*>((uintptr_t)resType + 0x30));  // B.3.6 bridge
-                reinterpret_cast<UI::TextElement*>(labelStorage)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
+                UI::String text(Object::ExternalPtr<UI::StringTable>((UI::StringTable*)resType->_stringTable),
+                                resType->_name);
+                labelStorage->SetText(&text);
 
-                // Set tooltip: "ResourceTip" string from label's string table
+                // Set tooltip: "ResourceTip" from the label's tooltip string table
                 System::String tipNameStr("ResourceTip");
-                uint64_t stringTable = *(uint64_t*)(labelStorage + 0x48);
-                uint8_t tipStrBuf[16];
-                ::new (tipStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), tipNameStr);  // B.3.6 bridge
-                reinterpret_cast<UI::Element*>(labelStorage)->SetToolTip(*reinterpret_cast<const UI::String*>(tipStrBuf));  // B.3.6 bridge
+                UI::String tip(labelStorage->_toolTip.GetStringTable(), tipNameStr);
+                labelStorage->SetToolTip(tip);
             }
         } else if (rowIdx == resourceCount && resourceComp != nullptr) {
-            // Total row: shows total required materials
-            int totalCount = *(int*)((uintptr_t)resourceComp + 0x30);
-            int multiplier = *(int*)(posComp + 0x4C);
+            // Total row: shows total required labour
+            int totalCount = resourceComp->_i30;
+            int multiplier = posComp->costMultiplier;
             System::String totStr =
                 System::String::Format("%d", (uint64_t)(uint32_t)(totalCount * multiplier));
-            reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(1, totStr);  // B.3.6 bridge
+            rowTextTotal->SetParameter(1, totStr);
         } else {
             // Empty row: clear text and sprite (blanks table rows beyond the material
             // count — a WoodHouse uses only 2 of the 7 storageItem cells). This mirrors the
             // retail else-branch of 0x1400b1f40, which builds an EMPTY UI::String via the
-            // DEFAULT ctor (UI::String::String()) and SetText's it. The earlier reimpl used
-            // fn_UIString_Ctor_Entry — the NAMED single-arg ctor (IAT dispatch slot
-            // 0x140151300, unpopulated in standalone -> null -> EXEC of 0), so the clear was
-            // guarded off and the surplus rows kept their .rsc placeholder ("CountGathered"
-            // /"Labor"). fn_UIString_DefaultCtor is the correct default ctor (dispatch
-            // 0x140151ca8 + Runtime-export fallback) and resolves in standalone (same call
-            // TradeUI/ProductionUI use to blank their surplus rows).
+            // DEFAULT ctor (UI::String::String()) and SetText's it.
             {
-                uint8_t emptyStr[16] = {};
-                ::new (emptyStr) UI::String();  // B.3.6 bridge
-                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
+                UI::String emptyStr;
+                rowTextTotal->SetText(&emptyStr);
 
-                uint8_t emptyStr2[16] = {};
-                ::new (emptyStr2) UI::String();  // B.3.6 bridge
-                reinterpret_cast<UI::TextElement*>(labelStorage)->SetText(reinterpret_cast<const UI::String*>(emptyStr2));  // B.3.6 bridge
+                UI::String emptyStr2;
+                labelStorage->SetText(&emptyStr2);
             }
 
             {
-                uint8_t emptySprite[16];
 #ifdef _DEBUG
+                uint8_t emptySprite[16];
                 Debug_Sprite_DefaultCtor(emptySprite);
-                Debug_LabelElement_SetSprite((void*)labelStorage, emptySprite);
+                Debug_LabelElement_SetSprite(labelStorage, emptySprite);
 #else
-                ::new (emptySprite) UI::Sprite();  // B.3.6 bridge
-                reinterpret_cast<UI::LabelElement*>(labelStorage)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
+                UI::Sprite emptySprite;
+                labelStorage->SetSprite(&emptySprite);
 #endif
             }
         }
@@ -369,10 +334,10 @@ void BuildUI::OnCreated() {
 }
 
 // ============================================================
-// BuildUI::Slot7 (vtable +0x38) — Update build progress and materials
+// BuildUI::OnUpdateLayout (vtable +0x38) — Update build progress and materials
 // ============================================================
 // Updates the build progress bar and per-resource delivered amounts.
-// Reads StateMachine component to determine how many materials have
+// Reads the StorageComponent to determine how many materials have
 // been delivered for each resource type. Calculates total progress
 // ratio and displays as percentage.
 //
@@ -381,100 +346,82 @@ void BuildUI::OnCreated() {
 // [7] 0x1400b1a50
 void BuildUI::OnUpdateLayout() {
     // Per-frame update: the framework fires this every tick, including before
-    // Slot4 populates (self+0x40 progress / self+0x30 rows still null). Guard.
+    // Slot4 populates (progress / rows still null). Guard.
     if (!buildui_sa::IsSetUp(this)) return;
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
     // Get entity, check ComponentEntity
-    void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
-    void* entity = isEntity ? entityRaw : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    uintptr_t entityPtr = *(uintptr_t*)entityBuf;
+    ComponentEntity* entity = BuildUI_Entity(_dataSource);
 
-    // Find PositionComponent → ToolbarDescription at +0x18
-    uint64_t posComp = 0;
-    fn_FindComponent_Position((void*)entityPtr, &posComp);
+    // Find the BuildComponent → its BuildDescription
+    BuildComponent* posComp = entity ? entity->FindComponent<BuildComponent>() : nullptr;
+    BuildDescription* resourceComp = BuildUI_Description(posComp);
 
-    // Get ResourceComponent from PositionComponent+0x18
-    void* resourceComp = nullptr;
-    if (posComp != 0) {
-        void* desc = *(void**)(posComp + 0x18);
-        bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
-        if (isResource) {
-            resourceComp = desc;
-        }
-    }
-
-    // Find SM component (storage info)
-    uint64_t smComp = 0;
-    fn_FindComponent_SM((void*)entityPtr, &smComp);
+    // Find the ClearAreaComponent (storage info)
+    ClearAreaComponent* smComp = entity ? entity->FindComponent<ClearAreaComponent>() : nullptr;
     // Progress/percent math below unconditionally derefs smComp (+0x48 capacity, +0x10
     // entity self-ref via CountOccupiedBuildTiles). If the build-material storage
     // component isn't found (standalone: missing component / unresolved type-id), skip
     // this update rather than fault. Slot4 already set an initial "0/total" display.
-    if (smComp == 0) return;
+    if (smComp == nullptr) return;
 
-    // Check if build is complete: totalRequired * multiplier <= posComp delivered total
-    if (posComp != 0 && resourceComp != nullptr) {
-        int totalRequired = *(int*)((uintptr_t)resourceComp + 0x30);
-        int multiplier = *(int*)(posComp + 0x4C);
-        if (totalRequired * multiplier <= *(int*)(posComp + 0x48)) {
+    // Check if build is complete: cost * multiplier <= laborProgress
+    if (posComp != nullptr && resourceComp != nullptr) {
+        int totalRequired = resourceComp->_i30;
+        int multiplier = posComp->costMultiplier;
+        if (totalRequired * multiplier <= posComp->laborProgress) {
             return;  // Build complete, nothing to update
         }
     }
 
     // Calculate remaining capacity: capacity - occupied tiles
-    int capacity = *(int*)(smComp + 0x48);
-    int occupied = CountOccupiedBuildTiles_Impl((void*)smComp);
+    int capacity = smComp->clearState;
+    int occupied = CountOccupiedBuildTiles_Impl(smComp);
     uint32_t remaining = (uint32_t)(capacity - occupied);
 
     // Update header textTotal param 0 with remaining count
     {
         System::String remStr = System::String::Format("%d", (uint64_t)remaining);
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x48))->SetParameter(0, remStr);  // B.3.6 bridge
+        textTotal->SetParameter(0, remStr);
     }
 
     int totalRequired = 0;
     uint32_t totalDelivered = 0;
 
-    if (posComp == 0 || resourceComp == nullptr) {
+    if (posComp == nullptr || resourceComp == nullptr) {
         // No resource component — just use capacity
-        totalRequired = *(int*)(smComp + 0x48);
+        totalRequired = smComp->clearState;
         totalDelivered = remaining;
     } else {
         // Find StorageComponent for delivered counts (DAT_1401c7e78, FUN_140006270)
-        uint64_t stateMachineComp = 0;
-        fn_FindComponent_Storage((void*)*(uintptr_t*)entityBuf, &stateMachineComp);
+        StorageComponent* storage = entity ? entity->FindComponent<StorageComponent>() : nullptr;
 
-        // Iterate resource rows, query StateMachine for delivered counts
-        int resourceCount = *(int*)((uintptr_t)resourceComp + 0x28);
-        int rowCount = *(int*)(s + 0x38);
-        if (rowCount > resourceCount) rowCount = resourceCount;
+        // Iterate resource rows, query the storage for delivered counts
+        int resourceCount = resourceComp->_costCount;
+        int rowTotal = rowCount;
+        if (rowTotal > resourceCount) rowTotal = resourceCount;
 
         int sumDelivered = 0;
         int sumCapacity = 0;
-        uintptr_t rowOffset = 0;
 
-        for (int i = 0; i < rowCount; i++) {
-            uintptr_t rowArrayBase = *(uintptr_t*)(s + 0x30);
-            uintptr_t resBase = *(uintptr_t*)((uintptr_t)resourceComp + 0x20);
-            uintptr_t resEntry = *(uintptr_t*)(resBase + rowOffset);
+        for (int i = 0; i < rowTotal; i++) {
+            BuildCost* resBase = resourceComp->_costs;
+            ComponentDescription* resEntry = resBase[i].material;
 
-            // Search StateMachine component for matching resource entry
-            int smCount = stateMachineComp ? *(int*)(stateMachineComp + 0x30) : 0;
+            // Search the storage items for the matching resource entry
+            int smCount = storage ? storage->slotCount : 0;
             uint64_t delivered = 0;
             if (smCount > 0) {
-                uintptr_t smArray = *(uintptr_t*)(stateMachineComp + 0x28);
+                // LEFT: StorageComponent's items {resource, _count, _reserve} are raw
+                // (void* data, W0's header).
+                const uint8_t* smArray = (const uint8_t*)storage->storageSlots;
                 for (int j = 0; j < smCount; j++) {
-                    uintptr_t smEntry = *(uintptr_t*)(smArray + j * 0x10);
+                    void* smEntry = *(void* const*)(smArray + j * 0x10);
                     if (smEntry == resEntry) {
                         if (j >= 0) {
-                            // Delivered = entry[j].count - entry[j].reserved
-                            int count = *(int*)(smArray + j * 0x10 + 8);
-                            int reserved = *(int*)(smArray + j * 0x10 + 0xC);
+                            // Delivered = item[j]._count - item[j]._reserve
+                            int count = *(const int*)(smArray + j * 0x10 + 8);
+                            int reserved = *(const int*)(smArray + j * 0x10 + 0xC);
                             delivered = (uint64_t)(uint32_t)(count - reserved);
                         }
                         break;
@@ -485,30 +432,26 @@ void BuildUI::OnUpdateLayout() {
             // Update row textTotal param 0 with delivered count
             {
                 System::String delStr = System::String::Format("%d", delivered);
-                void* rowTextTotal = *(void**)(rowArrayBase + 8 + rowOffset);
-                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(0, delStr);  // B.3.6 bridge
+                rowData[i].total->SetParameter(0, delStr);
             }
 
             sumDelivered += (int)delivered;
-            int entryCount = *(int*)(resBase + i * 0x10 + 8);
-            int multiplier = *(int*)(posComp + 0x4C);
+            int entryCount = resBase[i].quantity;
+            int multiplier = posComp->costMultiplier;
             sumCapacity += entryCount * multiplier;
-            rowOffset += 0x10;
         }
 
-        // Update the total row (at index = rowCount in array)
-        uintptr_t totalRowPtr = rowCount * 0x10 + *(uintptr_t*)(s + 0x30);
+        // Update the total row (at index = rowTotal in the array)
         {
             System::String rowStr =
-                System::String::Format("%d", (uint64_t)(uint32_t)*(int*)(posComp + 0x48));
-            void* totalRowText = *(void**)(totalRowPtr + 8);
-            reinterpret_cast<UI::TextElement*>(totalRowText)->SetParameter(0, rowStr);  // B.3.6 bridge
+                System::String::Format("%d", (uint64_t)(uint32_t)posComp->laborProgress);
+            rowData[rowTotal].total->SetParameter(0, rowStr);
         }
 
         // Calculate totals for progress
-        int multiplier = *(int*)(posComp + 0x4C);
-        totalRequired = *(int*)((uintptr_t)resourceComp + 0x30) * multiplier + *(int*)(smComp + 0x48) + sumCapacity;
-        totalDelivered = *(int*)(posComp + 0x48) + sumDelivered + remaining;
+        int multiplier = posComp->costMultiplier;
+        totalRequired = resourceComp->_i30 * multiplier + (int)smComp->clearState + sumCapacity;
+        totalDelivered = posComp->laborProgress + sumDelivered + remaining;
     }
 
     // Calculate fill ratio and percentage
@@ -519,9 +462,9 @@ void BuildUI::OnUpdateLayout() {
     int percent = (int)(ratio * 100.0f + 0.5f);
 
     // Update progress bar
-    *(float*)(*(uintptr_t*)(s + 0x40) + 0x128) = ratio;
+    progress->_currentValue = ratio;
     System::String pctStr = System::String::Format("%d", (uint64_t)(uint32_t)percent);
-    reinterpret_cast<UI::ProgressElement*>(*(void**)(s + 0x40))->SetProgressTextParameter(0, pctStr);  // B.3.6 bridge
+    progress->SetProgressTextParameter(0, pctStr);
 }
 
 // Slot9: On button click (event 0x12, id 6000), toggle workplace enabled state.
@@ -529,45 +472,30 @@ void BuildUI::OnUpdateLayout() {
 void BuildUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
                              int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
     if (param3 == 0x12 && param4 == 6000) {
         // Get entity at +0x28, check IsA ComponentEntity
-        void* entity = (void*)*(uint64_t*)(s + 0x28);
-        uint32_t entityTypeId = ComponentEntity::TypeId();
-        void* checkedEntity = nullptr;
-        if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
-            checkedEntity = entity;
-        }
-
-        // Wrap in InternalBasePtr for FindComponent call
-        uint64_t entityBasePtr = 0;
-        new (&entityBasePtr) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
+        ComponentEntity* checkedEntity = BuildUI_Entity(_dataSource);
 
         // Find the WorkPlaceComponent on the entity. Retail (BuildUI_Update 0x1400b1ea0)
         // calls FUN_140002e10 — the DAT_1401c80e0 (WorkPlaceComponent) finder. It must NOT
         // be fn_FindComponent_Work: despite the name that helper is the DAT_1401c8070
-        // (StorageLocation/WorkComponent) finder, FUN_140003050. Handing the c8070 component
-        // to Entity_impl_fc00 below made it read +0x50/+0x58/+0x60 off the wrong object, so
-        // the pause path treated non-roster fields as the worker roster (live 2026-07-25:
-        // base(+0x58)==8 with count>0, then a non-citizen fed to CitizenComponent::
-        // AssignHousing -> FUN_140002e10 -> READ of 0xffffffffffffffff).
-        // fn_FindComponent_WorkPlace is the c80e0 finder (likewise misnamed).
-        uint64_t workplaceComp = 0;
-        fn_FindComponent_WorkPlace((void*)entityBasePtr, &workplaceComp);
+        // (StorageLocation/WorkComponent) finder, FUN_140003050.
+        WorkPlaceComponent* workplaceComp =
+            checkedEntity ? checkedEntity->FindComponent<WorkPlaceComponent>() : nullptr;
 
-        // Read enabled state byte at comp+0x50, toggle it. The building need not have a
+        // Read the accepting byte (+0x50), toggle it. The building need not have a
         // WorkPlaceComponent at all. The toggle is 0x14012fc00
         // WorkPlaceComponent_SetAccepting, called by name (B3R).
-        if (workplaceComp == 0) {
+        if (workplaceComp == nullptr) {
             std::fprintf(stderr, "[BuildUI] Slot9 pause click ignored: workplaceComp=%p "
                          "toggleFn=%p\n", (void*)workplaceComp,
                          (void*)&WorkPlaceComponent_SetAccepting);
             std::fflush(stderr);
             return;
         }
-        char currentState = *(char*)(workplaceComp + 0x50);
-        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(workplaceComp), currentState == 0);
+        char currentState = workplaceComp->isAccepting;
+        // LEFT: the body takes its receiver as int64_t (COMP-f's declaration).
+        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(workplaceComp), currentState == 0);
     }
 }
