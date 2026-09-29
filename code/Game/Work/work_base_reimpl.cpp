@@ -168,9 +168,24 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
 // invoking each action's vtable +0x40 (cancel/abort); then DeletePtr the slot IBP and
 // re-init it to null. Finally reset the +0x18 sentinel to -1 and clear the +0x10 IBP.
 // Caller signature: void fn(void* self)
+// The receiver is the action stack embedded in CharacterComponent at +0x48 (its
+// actions / actionCount / actionCapacity / field_0x58 / currentAction). The body is a
+// member of that retail sub-object; CharacterComponent's header is COMP-a's, so this
+// stays free and views the stack through the struct below.
+namespace {
+struct CharacterActionStack {
+    Action** actions;          // +0x00 (character +0x48) InternalPtr<Action> array
+    int32_t  count;            // +0x08 (+0x50) the array's size
+    int32_t  capacity;         // +0x0c (+0x54)
+    Action*  message;          // +0x10 (+0x58) the pending SendComponentMessage
+    int32_t  top;              // +0x18 (+0x60) the running action
+};
+static_assert(offsetof(CharacterActionStack, top) == 0x18, "CharacterComponent +0x60 - +0x48");
+}  // namespace
+
 void WorkBase_TaskListCleanup_c5400(void* self) {
-    uintptr_t* p = reinterpret_cast<uintptr_t*>(self);
-    uintptr_t base = reinterpret_cast<uintptr_t>(self);
+    // LEFT: the callers hand the stack as void*.
+    CharacterActionStack* stack = reinterpret_cast<CharacterActionStack*>(self);
     // ⚠ Retail re-reads BOTH the array pointer (*param_1) and the capacity
     // ((int)param_1[1]) on EVERY iteration — the +0x40 Cancel vcalls below can
     // push onto this same list (FUN_1400c54e0) and grow/realloc it mid-loop.
@@ -178,31 +193,30 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
     // grow left the cached pointer dangling and the walk read freed memory
     // (crash: organic herder's first PastureWork claim, GrazingWorkCtor →
     // cleanup → MoveTo cancel → push → walk of the stale array).
-    for (int i = 0; i < *reinterpret_cast<int*>(base + 8); i++) {
-        uintptr_t slot = p[0] + static_cast<uintptr_t>(i) * 8;
-        void* node = *reinterpret_cast<void**>(slot);
+    for (int i = 0; i < stack->count; i++) {
+        Action* node = stack->actions[i];
         if (!node) continue;
-        void* cur = node;
+        Action* cur = node;
         do {
             // 0x1400c5444: RCX = cur only.
-            reinterpret_cast<Action*>(cur)->CheckEntity();   // B.3.x bridge (slot 8)
-            cur = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cur) + 0x10);  // node[2] = next
+            cur->CheckEntity();   // slot 8
+            // LEFT: the +0x10 InternalBasePtr is the chained action (Action.h declares
+            // it as the base pointer).
+            cur = reinterpret_cast<Action*>(cur->_entity.Get());   // node[2] = next
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).
-        slot = p[0] + static_cast<uintptr_t>(i) * 8;
-        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(slot))->DeletePtr(
-            );   // B.3.3 bridge
-        uintptr_t nul = 0;
+        Action** slot = &stack->actions[i];
+        reinterpret_cast< ::Object::InternalBasePtr*>(slot)->DeletePtr();   // B.3.3 bridge
+        Action* nul = nullptr;
         new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<uintptr_t*>(slot) = nul;
+        *slot = nul;
     }
-    *reinterpret_cast<int*>(base + 0x18) = -1;
-    if (p[2] != 0) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&p[2])->DeletePtr(
-            );   // B.3.3 bridge
-        uintptr_t nul = 0;
+    stack->top = -1;
+    if (stack->message != nullptr) {
+        reinterpret_cast< ::Object::InternalBasePtr*>(&stack->message)->DeletePtr();   // B.3.3 bridge
+        Action* nul = nullptr;
         new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        p[2] = nul;
+        stack->message = nul;
     }
 }
 
