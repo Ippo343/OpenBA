@@ -52,9 +52,9 @@ namespace {
 UNIT_TEST(act_action_layout) {
     CHECK_EQ(sizeof(Action), (size_t)0x20);
     CHECK_EQ(alignof(Action), (size_t)8);
-    CHECK_EQ(offsetof(Action, _entity), (size_t)0x10);
+    CHECK_EQ(offsetof(Action, _next), (size_t)0x10);
     CHECK_EQ(offsetof(Action, _status), (size_t)0x18);
-    CHECK_EQ(sizeof(Action::_entity), (size_t)8);
+    CHECK_EQ(sizeof(Action::_next), (size_t)8);
 }
 
 UNIT_TEST(act_action_shape) {
