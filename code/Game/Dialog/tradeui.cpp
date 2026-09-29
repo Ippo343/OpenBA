@@ -314,7 +314,7 @@ void TradeUI::RefreshSellTable()
             const uintptr_t resKey = reinterpret_cast<uintptr_t>(resEntity);
 
             // Search the post's storage BST for this resource
-            uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->field60);   // LEFT: TradeComponent tree (COMP-f)
+            uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->stockRoot);   // LEFT: TradeComponent tree (COMP-f)
             bool found = false;
             while (bstNode != nullptr) {
                 if (resKey < *bstNode) {
@@ -559,7 +559,7 @@ void TradeUI::RefreshBuyTable()
         for (int oi = 0; oi < tradeOrderCount; oi++) {
             // Get trade order entry
             ComponentDescription* orderEntry =
-                *reinterpret_cast<ComponentDescription**>((uintptr_t)trade->field50 + (uintptr_t)oi * 0x10);   // LEFT: COMP-f
+                *reinterpret_cast<ComponentDescription**>((uintptr_t)trade->manifest + (uintptr_t)oi * 0x10);   // LEFT: COMP-f
 
             // Find ValueDescription in order entry's description
             ValueDescription* valDesc = static_cast<ValueDescription*>(
@@ -579,7 +579,7 @@ void TradeUI::RefreshBuyTable()
         for (int i = 0; i < buyCount; i++) {
             BuyRow& buyUI = _buyRows[i];
 
-            uintptr_t* buyOrder = (uintptr_t*)((uintptr_t)trade->field50 + buyDataOffset);   // LEFT: COMP-f
+            uintptr_t* buyOrder = (uintptr_t*)((uintptr_t)trade->manifest + buyDataOffset);   // LEFT: COMP-f
             ComponentDescription* orderDesc = reinterpret_cast<ComponentDescription*>(*buyOrder);
 
             // Find ValueDescription
@@ -665,7 +665,7 @@ void TradeUI::RefreshBuyTable()
     // Phase 7: Set order combo current item and enabled state
     int comboIdx = 0;
     if (trade->tradeId >= 0) {
-        comboIdx = *(int*)((uintptr_t)trade->field30
+        comboIdx = *(int*)((uintptr_t)trade->merchantOrders
                     + (uintptr_t)trade->tradeId * 0x20 + 8);   // LEFT: COMP-f
     }
     _comboOrder->SetCurrentItem(comboIdx);
@@ -714,7 +714,7 @@ void TradeUI::RefreshBuyTable()
 
             // Check if this purchase entity is in the current order's selection list
             uintptr_t orderData = (uintptr_t)trade->tradeId * 0x20
-                                  + (uintptr_t)trade->field30;   // LEFT: COMP-f
+                                  + (uintptr_t)trade->merchantOrders;   // LEFT: COMP-f
             int selCount = *(int*)(orderData + 0x18);
             if (selCount > 0) {
                 uintptr_t* selList = *(uintptr_t**)(orderData + 0x10);
@@ -1442,7 +1442,7 @@ void TradeUI::UpdateBuyTotals() {
     int total = 0;
     int buyCount = _buyItems._size;
 
-    uintptr_t resourceTypeBase = (uintptr_t)trade->field50;   // LEFT: COMP-f
+    uintptr_t resourceTypeBase = (uintptr_t)trade->manifest;   // LEFT: COMP-f
     for (int i = 0; i < buyCount; i++) {
         int qty = _buyItems[i].quantity;
         if (qty != 0) {
@@ -1552,7 +1552,7 @@ void TradeUI::OnComboOrder() {
 
     // Store to the post's current order slot +8
     int curSlot = trade->tradeId;
-    uintptr_t ordersBase = (uintptr_t)trade->field30;   // LEFT: COMP-f
+    uintptr_t ordersBase = (uintptr_t)trade->merchantOrders;   // LEFT: COMP-f
     *(uint32_t*)(ordersBase + (uintptr_t)(uint32_t)curSlot * 0x20 + 8) = comboIdx;
 }
 
@@ -1572,7 +1572,7 @@ void TradeUI::OnOrderAmountSpinner(int idx) {
     int val = _orderRows[idx].spinner->GetValue();
 
     // Store to the post's order amount table: trade.ordersAmt (+0x40) + idx*0xc + 8
-    uintptr_t ordersAmt = (uintptr_t)trade->field40;   // LEFT: COMP-f
+    uintptr_t ordersAmt = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
     *(int*)(ordersAmt + (uintptr_t)idx * 0xc + 8) = val;
 }
 
@@ -1588,7 +1588,7 @@ void TradeUI::OnOrderSpinner(int idx, int idx2) {
         ? static_cast<ComponentEntity*>(source) : nullptr;
     TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    uintptr_t ordersBase = (uintptr_t)trade->field40;   // LEFT: COMP-f
+    uintptr_t ordersBase = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
 
     // Swap 12-byte entries at idx and idx2 (stride 0xc)
     uintptr_t a = ordersBase + (uintptr_t)idx  * 0xc;
@@ -1697,7 +1697,7 @@ void TradeUI::OnStorageSpinner(int idx) {
     // If not found: insert new leaf
     uint64_t newEntry[2] = { reinterpret_cast<uint64_t>(resourceEntity), (uint64_t)(uint32_t)newVal };
     void* retval = nullptr;
-    TradeUI_StorageTree_Insert_e1c0(reinterpret_cast<int64_t*>(&trade->field60), &retval, newEntry);   // 0x14000e1c0; LEFT: the tree header (COMP-f)
+    TradeUI_StorageTree_Insert_e1c0(reinterpret_cast<int64_t*>(&trade->stockRoot), &retval, newEntry);   // 0x14000e1c0; LEFT: the tree header (COMP-f)
 
     // If we got a result back (found existing), update its qty
     if (retval) {
@@ -1865,14 +1865,14 @@ void TradeUI::RefreshOrderDisplay() {
 
         // Read order amount from the post's orders array (stride 0xc)
         int64_t orderOff = idx * 0xc;
-        uintptr_t ordersBase = (uintptr_t)trade->field40;   // LEFT: COMP-f
+        uintptr_t ordersBase = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
         int amount = *(int*)(ordersBase + orderOff + 8);
 
         // Set spinner value (uiEntry[3] = offset +0x18)
         uiEntry.spinner->SetValue(amount);
 
         // Get the description and typeIdx for sprite/string lookups
-        uintptr_t ordersBase2 = (uintptr_t)trade->field40;   // LEFT: COMP-f
+        uintptr_t ordersBase2 = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
         int typeIdx = *(int*)(ordersBase2 + orderOff + 4);
 
         // IsDerivedFrom check for TradeDescription — original does this each iteration
@@ -1892,7 +1892,7 @@ void TradeUI::RefreshOrderDisplay() {
         uiEntry.label->SetSprite(&spriteLocal);
 
         // Get the description and typeIdx AGAIN for string lookup (original re-reads)
-        uintptr_t ordersBase3 = (uintptr_t)trade->field40;   // LEFT: COMP-f
+        uintptr_t ordersBase3 = (uintptr_t)trade->buyOrders;   // LEFT: COMP-f
         typeIdx = *(int*)(ordersBase3 + orderOff + 4);
 
         description = trade->_description;
@@ -2061,7 +2061,7 @@ void TradeUI::RefreshDisplay() {
         // Node: {key(+0), value(+8), color(+10), left(+18), right(+20)}
         int orderAmt = 0;
         const uintptr_t key = reinterpret_cast<uintptr_t>(entry.resource);
-        uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->field60);   // LEFT: COMP-f
+        uintptr_t* bstNode = reinterpret_cast<uintptr_t*>(trade->stockRoot);   // LEFT: COMP-f
         while (bstNode != nullptr) {
             if (key < *bstNode) {
                 bstNode = (uintptr_t*)bstNode[3];  // left child at +0x18

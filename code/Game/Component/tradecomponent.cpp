@@ -323,9 +323,13 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node);                       /
 // (dword); +0x71 = 0; +0x78 = +0x80 = 0; the member at +0x88 with its back-pointer
 // (+0xa0); then `_flags |= 3` (0x83).
 TradeComponent::TradeComponent()
-    : tradeState(0), tradeId(-1), field30(nullptr), field38(nullptr), field40(nullptr),
-      field48(nullptr), field50(nullptr), field58(nullptr), field60(nullptr), field68(0),
-      _pad6C{}, tradeFlag(0), _pad72{}, field78(nullptr), field80(nullptr),
+    : tradeState(0), tradeId(-1),
+      merchantOrders(nullptr), merchantOrderCount(0), merchantOrderCap(0),
+      buyOrders(nullptr), buyOrderCount(0), buyOrderCap(0),
+      manifest(nullptr), manifestCount(0), manifestCap(0),
+      stockRoot(nullptr), stockCount(0),
+      _pad6C{}, workEnabled(0),   // the tree's: retail's ctor leaves +0x6c..+0x70 as allocated
+      tradeFlag(0), _pad72{}, merchantTimer{0}, merchant(nullptr),
       _controller(this) {
     OrFlagsInCtor(0x3);
 }
@@ -339,26 +343,27 @@ TradeComponent::TradeComponent()
 //   +0x30: the name array's elements through 0x14000ef10 (count +0x38), MemFree,
 //          +0x30 = +0x38 = 0
 TradeComponent::~TradeComponent() {
-    if (void* root = field60) {
-        WorkBase_TreeNodeFree_e320(&field60, *reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(root) + 0x18));
-        WorkBase_TreeNodeFree_e320(&field60, *reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(root) + 0x20));
+    if (TradeResourceNode* root = stockRoot) {
+        WorkBase_TreeNodeFree_e320(&stockRoot, root->left);
+        WorkBase_TreeNodeFree_e320(&stockRoot, root->right);
         Object::detail::InternalMemFree(root);
     }
-    field60 = nullptr;
-    field68 = 0;
-    Object::detail::InternalMemFree(field50);
-    field50 = nullptr;
-    field58 = nullptr;
-    Object::detail::InternalMemFree(field40);
-    field40 = nullptr;
-    field48 = nullptr;
-    TradeComponent_DtorNameArray(nullptr, reinterpret_cast<int64_t>(field30),
-                                 *reinterpret_cast<int32_t*>(&field38));
-    Object::detail::InternalMemFree(field30);
-    field30 = nullptr;
-    field38 = nullptr;
+    stockRoot = nullptr;
+    stockCount = 0;
+    Object::detail::InternalMemFree(manifest);
+    manifest = nullptr;
+    manifestCount = 0;   // retail: one qword 0 over +0x58..+0x5f
+    manifestCap = 0;
+    Object::detail::InternalMemFree(buyOrders);
+    buyOrders = nullptr;
+    buyOrderCount = 0;
+    buyOrderCap = 0;
+    TradeComponent_DtorNameArray(nullptr, reinterpret_cast<int64_t>(merchantOrders),
+                                 merchantOrderCount);
+    Object::detail::InternalMemFree(merchantOrders);
+    merchantOrders = nullptr;
+    merchantOrderCount = 0;
+    merchantOrderCap = 0;
 }
 
 // create 0x14000db60: MemAlloc(0xa8, 8), then the ctor.

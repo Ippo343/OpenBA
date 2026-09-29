@@ -198,7 +198,7 @@ UNIT_TEST(mib_controller_member_fields) {
     CHECK_EQ(offsetof(PastureComponent, field44),      (size_t)0x44);
     CHECK_EQ(offsetof(TradeComponent, tradeId),        (size_t)0x2c);
     CHECK_EQ(offsetof(TradeComponent, tradeFlag),      (size_t)0x71);
-    CHECK_EQ(offsetof(TradeComponent, field80),        (size_t)0x80);
+    CHECK_EQ(offsetof(TradeComponent, merchant),       (size_t)0x80);
     CHECK_EQ(offsetof(WorkPlaceComponent, profession), (size_t)0x48);
     CHECK_EQ(offsetof(WorkPlaceComponent, isAccepting),(size_t)0x50);
     CHECK_EQ(offsetof(WorkPlaceComponent, workerCount),(size_t)0x60);
