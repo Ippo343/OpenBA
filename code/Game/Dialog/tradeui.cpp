@@ -509,9 +509,10 @@ void TradeUI::RefreshBuyTable()
         ? static_cast<ComponentEntity*>(source) : nullptr;
     TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    bool isTrade = ::Object::IsDerivedFromNullSafe(trade->_description, TradeDescription::TypeId());
+    Description* description = trade->_description;
+    bool isTrade = ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId());
     TradeDescription* tradeDesc = isTrade
-        ? reinterpret_cast<TradeDescription*>(trade->_description) : nullptr;   // LEFT: Component::_description is void*
+        ? static_cast<TradeDescription*>(description) : nullptr;
 
     // Clear buy data array at +0x40 (stride 0x18)
     _buyItems.Clear();   // 0x140016130
@@ -1636,7 +1637,9 @@ void TradeUI::OnDismissButton() {
     // Post event 10 to the current controller node (dismiss notification):
     // Controller slot 2, PostEvent(stateMachine, stateIndex, eventId), with the
     // state machine at +0x48 and the state byte at +0x51 (0x1400819a9..0x1400819c2).
-    buildState->controllerSelf->PostEvent(&buildState->controllerSelf, stateByte, 10);
+    ControllerComponent::Controller* node =
+        reinterpret_cast<ControllerComponent::Controller*>(buildState->controllerSelf);   // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e; boatcomponent_route.cpp takes its address as void**)
+    node->PostEvent(&buildState->controllerSelf, stateByte, 10);
 
     // Refresh display and tables
     RefreshDisplay();
@@ -1873,9 +1876,10 @@ void TradeUI::RefreshOrderDisplay() {
         int typeIdx = *(int*)(ordersBase2 + orderOff + 4);
 
         // IsDerivedFrom check for TradeDescription — original does this each iteration
-        bool isTradeDesc = ::Object::IsDerivedFromNullSafe(trade->_description, TradeDescription::TypeId());
+        Description* description = trade->_description;
+        bool isTradeDesc = ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId());
         TradeDescription* tradeDesc = isTradeDesc
-            ? reinterpret_cast<TradeDescription*>(trade->_description) : nullptr;   // LEFT: Component::_description is void*
+            ? static_cast<TradeDescription*>(description) : nullptr;
 
         // Sprite name is at pairs + (typeIdx*3 + 1)*8 (the 0x18-stride pair array)
         uintptr_t entriesBase = (uintptr_t)tradeDesc->_pairs;   // LEFT: COMP-f
@@ -1891,9 +1895,10 @@ void TradeUI::RefreshOrderDisplay() {
         uintptr_t ordersBase3 = (uintptr_t)trade->field40;   // LEFT: COMP-f
         typeIdx = *(int*)(ordersBase3 + orderOff + 4);
 
-        isTradeDesc = ::Object::IsDerivedFromNullSafe(trade->_description, TradeDescription::TypeId());
+        description = trade->_description;
+        isTradeDesc = ::Object::IsDerivedFromNullSafe(description, TradeDescription::TypeId());
         tradeDesc = isTradeDesc
-            ? reinterpret_cast<TradeDescription*>(trade->_description) : nullptr;   // LEFT: void*
+            ? static_cast<TradeDescription*>(description) : nullptr;
 
         // String name is at pairs + typeIdx*0x18 + 0x10
         entriesBase = (uintptr_t)tradeDesc->_pairs;   // LEFT: COMP-f
