@@ -66,6 +66,9 @@ public:
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x140093c90
+    // 0x140093e30: binds the environment (its weather descriptors size the two
+    // arrays) and the climate (+0x34 seeds +0x2C / +0x30). Body in gameupdateloop_load.cpp.
+    void Bind(EnvironmentDescription* env, ClimateGenerator* climate);
 };
 
 static_assert(sizeof(WeatherSimulation) == 0x78, "WeatherSimulation is 0x78 (Load MemAlloc(0x78, 8))");

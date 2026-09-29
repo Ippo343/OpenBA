@@ -80,6 +80,11 @@ static_assert(offsetof(TrackedEntityNode, height) == 0x32, "TrackedEntityNode::h
 
 class PlayerToolManager {
 public:
+    // 0x1401025c0 — the ctor Load runs in the MemAlloc(0xb0, 4) block (body in
+    // gameupdateloop_load.cpp). No destructor runs in C++: Shutdown calls
+    // 0x1401024d0's port and MemFrees the block.
+    PlayerToolManager();
+
     void*    field_0x00;         // +0x00 InternalBasePtr (ctor null)
     uint64_t field_0x08;         // +0x08 not written by the ctor
     uint64_t field_0x10;         // +0x10 ctor 0

@@ -42,6 +42,9 @@
 #include "Component/CharacterGrid.h"  // m_characterGrid's class (B.4 GAME-a)
 #include "Calendar.h"                // m_dayCounter's class (B.4 GAME-a)
 #include "WeatherSimulation.h"       // m_weather's class (B.4 GAME-a)
+#include "Component/EnvironmentDescription.h"   // WeatherSimulation::Bind
+#include "Game/ClimateGenerator.h"
+#include "Game/Disease.h"            // the disease list dump
 #include "WorkScheduler.h"           // m_tutorial's class (B.4 GAME-a)
 #include "EventLog.h"                // m_eventNotifier's class (B.4 GAME-a)
 #include "MusicPlayer.h"             // m_musicPlayer's class (B.4 GAME-a)
@@ -299,16 +302,17 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
     // (disease.cpp:82), so an entry reading 0 means the .rsc never wrote the field.
     // Report it; do not clamp it — that would hide a real load failure.
     if (isList && count > 0) {
-        uintptr_t arr = *(uintptr_t*)((uintptr_t)list + 0x20);
+        ::Object::External** arr = self->m_diseaseList->_resources;   // list+0x20
         for (int i = 0; i < count && arr; i++) {
-            uint8_t* d = *(uint8_t**)(arr + (uintptr_t)i * 8);
+            // The list's entries are the Disease resources (Diseases.rsc).
+            const Disease* d = static_cast<const Disease*>(arr[i]);
             if (!d) { fprintf(stderr, "[GUL::DiseaseList]   [%d] NULL entry\n", i); continue; }
             fprintf(stderr, "[GUL::DiseaseList]   [%d] %p spreadMonths(+0x30)=%.3f "
                     "contagion(+0x34)=%.3f radius(+0x38)=%.3f weight(+0x3c)=%.3f "
                     "recipMortality(+0x40)=%.3f%s\n",
-                    i, (void*)d, *(float*)(d + 0x30), *(float*)(d + 0x34),
-                    *(float*)(d + 0x38), *(float*)(d + 0x3c), *(float*)(d + 0x40),
-                    (*(float*)(d + 0x40) == 0.0f) ? "  <== ZERO: deathChance is INFINITE" : "");
+                    i, (const void*)d, d->_field30, d->_field34,
+                    d->_field38, d->_field3C, d->_field40,
+                    (d->_field40 == 0.0f) ? "  <== ZERO: deathChance is INFINITE" : "");
         }
     }
     fflush(stderr);
@@ -391,27 +395,26 @@ static void* Reimpl_FUN_14002e000(void* hdr, int n) {
 }
 
 // helper @ 0x14000f9e0 — deep-copy of an inner stride-4 (uint32) array header (16 bytes).
-static void* Reimpl_TradeComponent_helper_f9e0(void* dstElem, void* srcElem) {
-    if (dstElem == srcElem) return dstElem;
-    uint8_t* d = (uint8_t*)dstElem;
-    uint8_t* s = (uint8_t*)srcElem;
-    void* old = *(void**)(d + 0x00);
+static Collection::Array<int32_t>* Reimpl_TradeComponent_helper_f9e0(Collection::Array<int32_t>* d,
+                                                                     const Collection::Array<int32_t>* s) {
+    if (d == s) return d;
+    void* old = d->_data;
     if (old) System::MemoryAllocator::MemFree(old);
-    *(int32_t*)(d + 0x08) = 0;
-    *(void**)(d + 0x00) = 0;
-    int32_t cnt = *(int32_t*)(s + 0x08);
-    *(int32_t*)(d + 0x08) = cnt;
+    d->_size = 0;
+    d->_data = nullptr;
+    int32_t cnt = s->_size;
+    d->_size = cnt;
     if (cnt > 0) {
-        *(int32_t*)(d + 0x0C) = cnt;
-        *(void**)(d + 0x00) = System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4);
+        d->_capacity = cnt;
+        d->_data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4));
     }
-    int32_t newCnt = *(int32_t*)(d + 0x08);
+    int32_t newCnt = d->_size;
     if (newCnt > 0) {
-        int32_t* dp = *(int32_t**)(d + 0x00);
-        int32_t* sp = *(int32_t**)(s + 0x00);
+        int32_t* dp = d->_data;
+        int32_t* sp = s->_data;
         for (int32_t i = 0; i < newCnt; ++i) dp[i] = sp[i];
     }
-    return dstElem;
+    return d;
 }
 
 namespace {
@@ -421,21 +424,29 @@ namespace {
 // 0x14000f9e0 deep copy (an operator= over a zeroed lhs); init = zero the
 // header; destroy = free the inner buffer and zero the header — this body
 // zeroed on BOTH the truncation and the realloc arm, so the row is exact.
+// The spec row's element is raw bytes; each element is one inner Array<int32>
+// (LEFT: the ArraySpec hooks take uint8_t*).
 void AssignIntAssocOuterL(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    Reimpl_TradeComponent_helper_f9e0(d, const_cast<uint8_t*>(s));
+    Collection::Array<int32_t>* dst = reinterpret_cast<Collection::Array<int32_t>*>(d);
+    dst->_data = nullptr;                     // +0x00
+    dst->_size = 0;                           // +0x08 / +0x0c: one qword store (H7: two stores)
+    dst->_capacity = 0;
+    Reimpl_TradeComponent_helper_f9e0(dst, reinterpret_cast<const Collection::Array<int32_t>*>(s));
 }
 void InitIntAssocOuterL(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    Collection::Array<int32_t>* dst = reinterpret_cast<Collection::Array<int32_t>*>(d);
+    dst->_data = nullptr;
+    dst->_size = 0;                           // one qword store (H7)
+    dst->_capacity = 0;
 }
 void DestroyIntAssocOuterL(void* /*ignoredThis*/, uint8_t* base, int count) {
+    Collection::Array<int32_t>* elems = reinterpret_cast<Collection::Array<int32_t>*>(base);
     for (int i = 0; i < count; ++i) {
-        uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(e + 0x00));
-        *reinterpret_cast<uint64_t*>(e + 0x00) = 0;
-        *reinterpret_cast<uint64_t*>(e + 0x08) = 0;
+        Collection::Array<int32_t>* e = &elems[i];
+        System::MemoryAllocator::MemFree(e->_data);
+        e->_data = nullptr;
+        e->_size = 0;                         // one qword store (H7)
+        e->_capacity = 0;
     }
 }
 const rtcoll::ArraySpec kSpec_IntAssocOuterL = {         // exe 0x140017640
@@ -665,27 +676,26 @@ static void WeatherSimulation_Construct(WeatherSimulation* w) {
     w->disasterTime._ticks = 0;
 }
 
-// FUN_140093e30 — weather env-config helper. (envRes may be null on the deferred path.)
-static void* Reimpl_FUN_140093e30(void* weatherObj, void* envRes, void* climateGen) {
-    uint8_t* p = (uint8_t*)weatherObj;
-    *(void**)(p + 0x00) = envRes;
-    *(void**)(p + 0x08) = climateGen;
-    if (envRes) {
-        int count = *(int32_t*)((uint8_t*)envRes + 0x30);
-        Reimpl_FUN_1400191f0((void*)(p + 0x50), count);
+// 0x140093e30 — binds the environment and the climate into the weather sim.
+// (env may be null on the deferred path.)
+void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* climateGen) {
+    environment = env;
+    climate = climateGen;
+    if (env) {
+        int count = env->_weatherCount;          // env+0x30
+        Reimpl_FUN_1400191f0(&effects, count);
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is an 8-byte object handle (byte-copy, zeroing).
-        GameColl::ArrayAt<GameColl::Ptr8>(p, 0x60).SetSize(count);
-        int n0 = *(int32_t*)(p + 0x58);
-        void** arr0 = *(void***)(p + 0x50);
+        GameColl::AsArray<GameColl::Ptr8>(&emitters).SetSize(count);
+        int n0 = effectCount;
+        Graphics::Geometry** arr0 = effects;
         for (int i = 0; i < n0; ++i) arr0[i] = nullptr;
     }
     if (climateGen) {
-        float v = *(float*)((uint8_t*)climateGen + 0x34);
-        *(float*)(p + 0x2c) = v;
-        *(float*)(p + 0x30) = v;
+        float v = climateGen->temperatureBase;   // climate+0x34
+        field_0x2C = v;
+        field_0x30 = v;
     }
-    return weatherObj;
 }
 
 // FUN_1400182b0 - CharacterGrid ctor (+0x88, 0x60). A loose Morton (Z-order)
@@ -747,34 +757,37 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
         *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge
 }
 
-// FUN_1401025c0 (helper_25c0) — in-game EntityUI-style ctor (+0x120, 0xb0).
-static void* Reimpl_FUN_1401025c0(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    new ((void*)(p + 0x00)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    *(int64_t*)(p + 0x10) = 0;
-    *(int32_t*)(p + 0x18) = 0;
-    *(int64_t*)(p + 0x20) = 0;
-    new ((void*)(p + 0x28)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    *(uint8_t*)(p + 0x30) = 0;
-    *(int32_t*)(p + 0x34) = 1;
-    *(uint8_t*)(p + 0x38) = 0;
-    *(int64_t*)(p + 0x3c) = 0;
-    *(float*)(p + 0x44) = 0.75f;
-    *(int64_t*)(p + 0x48) = 0;
-    *(int64_t*)(p + 0x50) = 0;
-    *(int32_t*)(p + 0x58) = 0;
-    *(int64_t*)(p + 0x60) = 0;
-    *(int32_t*)(p + 0x68) = 0;
-    *(int64_t*)(p + 0x70) = 0;
-    *(int64_t*)(p + 0x78) = 0;
-    *(uint8_t*)(p + 0x80) = 0;
-    *(int64_t*)(p + 0x88) = 0;
-    *(int64_t*)(p + 0x90) = 0;
-    *(int64_t*)(p + 0x98) = -1;
-    *(int32_t*)(p + 0xa0) = -1;
-    *(uint8_t*)(p + 0xa4) = 0;
-    Reimpl_FUN_14002e000((void*)(p + 0x70), 5);
-    return selfMem;
+// 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
+// (+0x00, +0x28) are declared as plain pointers (H5); their null ctor is the
+// null store.
+PlayerToolManager::PlayerToolManager() {
+    field_0x00 = nullptr;
+    field_0x10 = 0;
+    field_0x18 = 0;
+    field_0x20 = 0;
+    currentTool = nullptr;
+    field_0x30 = false;
+    field_0x34 = 1;
+    field_0x38 = false;
+    field_0x3C = 0.0f;                        // +0x3c / +0x40: one qword store (H7: two stores)
+    field_0x40 = 0.0f;
+    field_0x44 = 0.75f;
+    field_0x48 = nullptr;
+    field_0x50 = nullptr;
+    field_0x58 = 0;
+    field_0x60 = nullptr;
+    field_0x68 = 0;
+    cameraViews = nullptr;
+    cameraViewCount = 0;                      // +0x78 / +0x7c: one qword store
+    cameraViewCapacity = 0;
+    field_0x80 = false;
+    field_0x88 = nullptr;
+    field_0x90 = nullptr;
+    field_0x98 = -1;                          // +0x98 / +0x9c: one qword store of -1
+    field_0x9C = -1;
+    field_0xA0 = -1;
+    field_0xA4 = false;
+    Reimpl_FUN_14002e000(&cameraViews, 5);
 }
 
 // ============================================================
@@ -1025,10 +1038,7 @@ void GameUpdateLoop::Load() {
     // Step 13 — EntityUI (+0x120, 0xb0).
     {
         void* mem = AllocSub(0xb0, 4);
-        // B.4 W0-H2: the trivial PlayerToolManager's lifetime begins in the raw
-        // block (constructs nothing); the ctor body is still 0x1401025c0's port.
-        PlayerToolManager* tm = mem ? ::new (mem) PlayerToolManager : nullptr;
-        if (mem) Reimpl_FUN_1401025c0(mem);
+        PlayerToolManager* tm = mem ? ::new (mem) PlayerToolManager() : nullptr;   // 0x1401025c0
         m_toolManager = tm;
     }
 
@@ -1061,19 +1071,20 @@ void GameUpdateLoop::Load() {
     // the same. A partial/failed load degrades gracefully to null (the weather
     // sim still runs its temperature/snow half).
     if (m_weather) {
-        void* envRes = nullptr;
+        EnvironmentDescription* envRes = nullptr;
         if (::Object::ExternalFactory::_singleton) {
             System::Filename fname("Environment/Environment.rsc");
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            envRes = const_cast<::Object::External*>(
+            // The file's root resource is the EnvironmentDescription.
+            envRes = static_cast<EnvironmentDescription*>(const_cast<::Object::External*>(
                 ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(fname));                                    // B.3.3 bridge
-            int wxCount = envRes ? *(int*)((uint8_t*)envRes + 0x30) : 0;
+                    ->FindOrLoad(fname)));                                   // B.3.3 bridge
+            int wxCount = envRes ? static_cast<int>(envRes->_weatherCount) : 0;   // env+0x30
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
-                    envRes, wxCount);
+                    (void*)envRes, wxCount);
             fflush(stderr);
         }
-        Reimpl_FUN_140093e30(m_weather, envRes, /*climateGen*/m_climateConfig);
+        m_weather->Bind(envRes, /*climateGen*/m_climateConfig);   // 0x140093e30
     }
 
     // Step 17 — StringTable-pair struct (+0x138, 0x28) zero + flag bytes.
@@ -1268,14 +1279,14 @@ void GameUpdateLoop::Load() {
     // We call our port directly rather than through ResolveAddr — the address IS
     // registered for any retail-shaped caller, but this is the only call site.
     {
-        void* achMgr = ::Achievement::AchievementManager::_singleton;
+        Achievement::AchievementManager* achMgr = ::Achievement::AchievementManager::_singleton;
         if (achMgr) {
-            reinterpret_cast<Achievement::AchievementManager*>(achMgr)->SetEventHandler(&EventLog_OnAchievementAwarded);   // B.3.7 bridge
+            achMgr->SetEventHandler(&EventLog_OnAchievementAwarded);   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30 AchievementManager::SetEventHandler "
-                            "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", achMgr);
+                            "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", (void*)achMgr);
         } else {
             fprintf(stderr, "[GUL::Load] step30 SetEventHandler SKIPPED (mgr=%p)\n",
-                    achMgr);
+                    (void*)achMgr);
         }
         fflush(stderr);
     }
@@ -1309,15 +1320,15 @@ void GameUpdateLoop::Load() {
     // to say why. The dialog looked healthy the whole time because it reads the
     // ACHIEVEMENT list (mgr+0x00), not the instance list.
     if (m_savedState == nullptr /*new game*/) {
-        void* mgr = ::Achievement::AchievementManager::_singleton;
+        Achievement::AchievementManager* mgr = ::Achievement::AchievementManager::_singleton;
         if (mgr) {
-            reinterpret_cast<Achievement::AchievementManager*>(mgr)->Reset();   // B.3.7 bridge
+            mgr->Reset();   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30b AchievementManager::Reset(mgr=%p) -> "
-                            "instances=%d\n", mgr, *(int32_t*)((uintptr_t)mgr + 0x20));
+                            "instances=%d\n", (void*)mgr, mgr->_instances._size);   // mgr+0x20
         } else {
             fprintf(stderr, "[GUL::Load] step30b Reset SKIPPED (mgr=%p) — "
                             "no achievement can ever be awarded\n",
-                    mgr);
+                    (void*)mgr);
         }
         fflush(stderr);
     }
@@ -1596,7 +1607,7 @@ void GameUpdateLoop::Load() {
                     (void*)g_gameContainer);
             fflush(stderr);
         } else {
-            void* instance = nullptr;
+            Achievement::AchievementInstance* instance = nullptr;
             void* mem = System::MemoryAllocator::MemAlloc(0x28, 8);
             if (mem) {
                 // ENDGAME B.3.8 LOOP (B38_RULES D8): retail runs the imported
@@ -1613,34 +1624,34 @@ void GameUpdateLoop::Load() {
                 // placement operator new.
                 instance = ::new (mem) Achievement::AchievementInstance();
             }
-            uint64_t ibp = 0;
-            new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(instance));   // B.3.3 bridge
-            m_scenarioInstance = reinterpret_cast<Achievement::AchievementInstance*>(ibp);
+            // InternalBasePtr(instance): the member holds the bare pointer.
+            m_scenarioInstance = instance;
 
             // scenario = resourceList->data[achievementId]
             //   MOV RAX,[0x1401c3de8] / MOV RCX,[RAX+8] / MOV RAX,[RCX+0x20] / [RAX+idx*8]
-            void* scenario  = nullptr;
-            void* container = g_gameContainer;
-            void* resList   = container ? *(void**)((uintptr_t)container + 0x08) : nullptr;
-            void** data     = resList ? *(void***)((uintptr_t)resList + 0x20) : nullptr;
+            ::Object::External* scenario = nullptr;
+            GameContainer* container = g_gameContainer;
+            ::Object::ExternalList* resList = container ? container->scenarioList.Get() : nullptr;   // +0x08
+            ::Object::External** data = resList ? resList->_resources : nullptr;                       // +0x20
             if (data) scenario = data[achievementId];
 
             // IsDerivedFrom(scenario, Achievement::_typeInfo.typeId). Retail reads the id
             // through the .rdata slot at 0x140151f68, which points at the Runtime's
             // exported BaseTypeInfo for Achievement; its first dword IS the type id.
-            void* checked = scenario;
+            ::Object::External* checked = scenario;
             if (scenario && achTypeId)
                 checked = ::Object::IsDerivedFromNullSafe(scenario, achTypeId) ? scenario : nullptr;
 
-            void* inst = m_scenarioInstance;
+            Achievement::AchievementInstance* inst = m_scenarioInstance;
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",
-                    achievementId, inst, scenario, checked,
+                    achievementId, (void*)inst, (void*)scenario, (void*)checked,
                     achTypeId);
             fflush(stderr);
             // ExternalPtr<Achievement> arrives as a bare register value (B7-5).
-            if (inst) reinterpret_cast<Achievement::AchievementInstance*>(inst)->SetAchievement(   // B.3.7 bridge
-                Object::ExternalPtr<Achievement::Achievement>(reinterpret_cast<Achievement::Achievement*>(checked)));
+            // `checked` passed the IsDerivedFrom(Achievement) gate above.
+            if (inst) inst->SetAchievement(   // B.3.7 bridge
+                Object::ExternalPtr<Achievement::Achievement>(static_cast<Achievement::Achievement*>(checked)));
             m_scenarioIndex = achievementId;
         }
     }
