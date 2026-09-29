@@ -360,11 +360,11 @@ void PastureComponent::OnEvent(int msgId) {
         *terrain = 2;
         // LEFT: Map +0x70 / +0x68 are untyped (GAME-b); the helpers take int64_t.
         if (wasRough)
-            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->field_0x70),
+            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->regionGraph),
                                    cell % width, cell / width);
         // The door typed args 3/4 as (int, uint64_t); the body declares them void*: the
         // same register values, cast at the call.
-        Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->field_0x68),
+        Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->pathfinder),
                              (uint32_t)cell, (void*)(uintptr_t)2, (void*)(uintptr_t)i);
         // LEFT: the cell's +0x08 is the entity on it (no cell type yet).
         *reinterpret_cast<ComponentEntity**>(grid + 8 + (uintptr_t)cell * 0x30) = nullptr;
