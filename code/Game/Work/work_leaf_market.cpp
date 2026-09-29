@@ -7,8 +7,9 @@
 // skipped) unless registered in standalone/address_registry.cpp. This file provides faithful 1:1
 // reimplementations so the standalone exe can fire real logic.
 //
-// SCOPE: this file currently contains ONLY the two closure-safe recursive BST/tree
-// cleanup helpers (0x14002af40 + 0x140014b00). Their ENTIRE exe sub-callee closure is:
+// SCOPE: this file currently contains ONLY the closure-safe recursive tree cleanup
+// helper 0x14002af40 (its unreferenced sibling port of 0x140014b00 went in B.4: the
+// live port is TradeWork_helper_14b00, Player/). Its ENTIRE exe sub-callee closure is:
 //   - recursive self-calls (self-contained)
 //   - System::MemoryAllocator::MemFree (a Runtime export) — reached here via
 //     fn_MemFreeStatic, the canonical static wrapper, so no exe registration is needed.
@@ -26,6 +27,7 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 #include <cstdint>
 
 // ============================================================
@@ -39,33 +41,29 @@
 // (which fetches the singleton internally) — matches the exe's System::MemoryAllocator
 // ::MemFree, called via dispatch slot [0x140152b68] in the original.
 // Verified offset-by-offset against disassembly @0x14002af40.
+// The node is a Collection::Set node over MarketWork's demand record (0x18 bytes:
+// a key, then an inner Collection::Array {data, count, capacity}). LEFT: the
+// caller (MarketWork, WORK-b) hands the node as void*.
+namespace {
+struct MarketDemand {
+    void*    key;        // +0x00
+    void*    data;       // +0x08 the inner array's data (freed here)
+    int32_t  count;      // +0x10
+    int32_t  capacity;   // +0x14
+};
+using MarketDemandNode = Collection::Set<MarketDemand>::Node;
+static_assert(sizeof(MarketDemandNode) == 0x38, "left +0x20, right +0x28");
+}  // namespace
+
 void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node) {
     (void)ctx;
     if (node == nullptr) return;
-    uintptr_t n = reinterpret_cast<uintptr_t>(node);
-    WorkLeaf_MarketTreeCleanup_2af40(ctx, *reinterpret_cast<void**>(n + 0x20)); // left
-    WorkLeaf_MarketTreeCleanup_2af40(ctx, *reinterpret_cast<void**>(n + 0x28)); // right
-    System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(n + 0x08)); // data buffer
-    *reinterpret_cast<void**>(n + 0x08) = nullptr;
-    *reinterpret_cast<void**>(n + 0x10) = nullptr;
-    System::MemoryAllocator::MemFree(node); // node
-}
-
-// ============================================================
-// 0x140014b00 — recursive extended-BST node cleanup (frees node only)
-// ============================================================
-// __fastcall FUN_140014b00(allocCtx param_1 [RCX], void* node [RDX])
-// Post-order recursion: free left child (node+0x20), free right child (node+0x28),
-// then MemFree the node.  No data-buffer free (unlike 0x14002af40).  param_1 is the
-// alloc context threaded through, unused once frees route through fn_MemFreeStatic.
-// In the original the free is the dispatch-slot call [0x140152b68]
-// (System::MemoryAllocator::MemFree).
-// Verified offset-by-offset against disassembly @0x140014b00.
-void WorkLeaf_TradeTreeCleanup_14b00(void* ctx, void* node) {
-    (void)ctx;
-    if (node == nullptr) return;
-    uintptr_t n = reinterpret_cast<uintptr_t>(node);
-    WorkLeaf_TradeTreeCleanup_14b00(ctx, *reinterpret_cast<void**>(n + 0x20)); // left
-    WorkLeaf_TradeTreeCleanup_14b00(ctx, *reinterpret_cast<void**>(n + 0x28)); // right
+    MarketDemandNode* n = reinterpret_cast<MarketDemandNode*>(node);
+    WorkLeaf_MarketTreeCleanup_2af40(ctx, n->left);  // left
+    WorkLeaf_MarketTreeCleanup_2af40(ctx, n->right); // right
+    System::MemoryAllocator::MemFree(n->element.data); // data buffer
+    n->element.data = nullptr;
+    n->element.count = 0;      // retail: one qword store over count and capacity
+    n->element.capacity = 0;
     System::MemoryAllocator::MemFree(node); // node
 }

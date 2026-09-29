@@ -41,8 +41,38 @@
 #include <cstddef>
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
+#include "system/Value.h"      // System::Time (+0x30 / +0x38; trivial, 8 bytes)
+#include "collection/Collection.h"   // Collection::Set<T>::Node (the leaves' worker sets)
 
 class ComponentEntity;   // B4 WORK-a: field_10 typed (H4)
+class WorkComponent;     // B4 WORK-c: field_18 typed (H4)
+class CitizenComponent;
+class CompleteTask;
+
+// The AVL sets the Work leaves keep their workers in are Collection::Set
+// instantiations the exe inlines (insert / erase / serialize: work_base_bst.cpp
+// and work_base_cellbst.cpp). Two element shapes:
+//   the citizens working the job, keyed on the citizen (0x28-byte node; 0x1400296b0
+//   validates each key against CitizenComponent);
+using WorkCitizenSetNode = Collection::Set<CitizenComponent*>::Node;
+//   the map cell -> citizen of the area works (0x30-byte node, int key; the insert
+//   0x140029a40 copies the 0x10-byte element).
+struct WorkCellAssignment {
+    int32_t           cell;      // +0x00 the key: the index into the work's cell list
+    uint32_t          _pad04;    // +0x04 copied with the element, never read
+    CitizenComponent* citizen;   // +0x08 InternalPtr<CitizenComponent>
+};
+using WorkCellSetNode = Collection::Set<WorkCellAssignment>::Node;
+//   the entity -> citizen pairs of ClearArea's +0x48 set (0x30-byte node keyed on the
+//   entity; the serialize 0x140029c10 validates ComponentEntity, then CitizenComponent).
+struct WorkEntityAssignment {
+    ComponentEntity*  entity;    // +0x00 InternalPtr<ComponentEntity>: the key
+    CitizenComponent* citizen;   // +0x08 InternalPtr<CitizenComponent>
+};
+using WorkEntitySetNode = Collection::Set<WorkEntityAssignment>::Node;
+static_assert(sizeof(WorkCitizenSetNode) == 0x28, "citizen set node: MemAlloc(0x28) in 0x140021b40");
+static_assert(sizeof(WorkEntitySetNode) == 0x30, "entity set node: MemAlloc(0x30) in 0x140029b40");
+static_assert(sizeof(WorkCellSetNode) == 0x30, "cell set node: MemAlloc(0x30)");
 
 
 class Work : public Object::Internal {
@@ -82,13 +112,13 @@ public:
     // ---- the 0x38 bytes Work adds, retail order ------------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
     ComponentEntity* field_10;   // +0x10 InternalPtr — the owning entity (a ComponentEntity)
-    void*    field_18;   // +0x18 InternalPtr — the entity's WorkComponent
+    WorkComponent* field_18;   // +0x18 InternalPtr — the entity's WorkComponent (Persist validates it)
     int32_t  field_20;   // +0x20 work id (-1)
     int32_t  field_24;   // +0x24 (Persist copies +0x20 into it before v1)
     int32_t  field_28;   // +0x28 target map cell (-1)
     int32_t  field_2c;   // +0x2c
-    void*    field_30;   // +0x30 System::Time
-    void*    field_38;   // +0x38 System::Time
+    System::Time field_30;   // +0x30 System::Time (Persist v3, ?Serialize@Time@System@@)
+    System::Time field_38;   // +0x38 System::Time (Persist v3)
     int32_t  field_40;   // +0x40
     uint8_t  _pad44[4];  // +0x44 never written
 
@@ -96,6 +126,24 @@ public:
     // and vptr store. `Work(void*)` runs it after the compiler's stamps (its
     // by-address door `Work_Ctor25_Impl` went at ENDGAME B.3.9 OBJ).
     void InitFromEntity(void* pEntityIBP);
+
+    // 0x1400f7100: is `citizen` still working this job? True when one of the
+    // citizen's actions up to the running one (CharacterComponent +0x48 array,
+    // +0x60 index) is a CompleteTask whose task index is this work's id (+0x20);
+    // that task is written to `out` when `out` is non-null. RDX is spilled and
+    // never read (0x1400f7100 stores it, 0x1400f71a4 overwrites the slot).
+    bool ValidateTask(void* unusedRdx, CitizenComponent** citizen, CompleteTask** out);
+
+    // 0x1400e3db0: the auto-pickup check the gatherer leaves run first in Execute:
+    // when the entity's AutoPickupComponent is enabled, offer the citizen each work id
+    // it lists (the scheduler's TryAssignWorkplace 0x1400f8620), dropping ids the
+    // scheduler no longer knows. Returns 2 when one took the citizen, else 0.
+    int TryAutoPickup(void* citizenRef);
+
+    // 0x1400f6ef0: the build-progress / time-budget step (reads and updates +0x30,
+    // +0x38 and +0x40). The low byte of the result is "keep going"; the tree's callers
+    // read the whole register, so the upper bytes are kept as retail leaves them.
+    uint64_t StepProgress(CitizenComponent** citizen, uint32_t cellA, uint32_t cellB, const System::Time* now);
 
 protected:
     // The default base init every retail leaf ctor inlines after `??0Internal`

@@ -43,6 +43,12 @@
 #include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
 #include <cstdint>
 #include "Component/GrowthDescription.h"   // ENDGAME B.3.9 D5: GrowthDescription::TypeId()
+#include "Component/GrowthComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
 
 // ============================================================
 // 0x140116540 — gatherrawmaterials.cpp helper
@@ -53,16 +59,18 @@
 //   0x140006270 Entity_FindComponent_Storage = WorkBase_FindComponent_6270 (by name, B3R)
 //   0x14012cf10 StorageComponent_QueryCount  = CitizenComp_StorageComponent_QueryCount (by name)
 // ============================================================
+// RCX is a Component (only its +0x10 entity is read; the callers hand citizens).
+// LEFT: the five outside callers hand it as an integer; QueryCount's C signature
+// (COMP-b) takes the storage as one.
 int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
-    void* ibpStorage[4] = { nullptr, nullptr, nullptr, nullptr };
+    Component* owner = reinterpret_cast<Component*>(self);
 
     // CheckPtr(self+0x10); FindComponent_Storage(*(self+0x10), &ibpStorage)
-    WorkBase_FindComponent_6270(static_cast<uintptr_t>(*reinterpret_cast<intptr_t*>(self + 0x10)), ibpStorage);
+    StorageComponent* storage = owner->_entity->FindComponent<StorageComponent>();   // 0x140006270
 
-    // CheckPtr(&ibpStorage); iVar1 = *(int*)(storage + 0x38)
-    void* storage = ibpStorage[0];
-    if (!storage) return 0;
-    int capacity = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(storage) + 0x38);
+    // CheckPtr(&ibpStorage); iVar1 = storage->capacity (+0x38)
+    if (!storage) return 0;   // the tree's guard; retail reads +0x38 unguarded
+    int capacity = storage->capacity;
 
     // CheckPtr(&ibpStorage); iVar2 = StorageComponent_QueryCount(storage)
     int count = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
@@ -81,22 +89,25 @@ int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
 //   slot 0x140152a98 IsDerivedFrom                      [engine dispatch]
 //   DAT_1401c77e8 type-ID global                        [runtime-filled by RegisterType]
 // ============================================================
+// RCX is a ComponentDescription (the list is its sub-descriptions).
+// LEFT: the caller (ForesterWork, WORK-b) hands it as an integer and the out slot as void*.
 void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
+    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(entity);
     const uint32_t typeId = GrowthDescription::TypeId();  // 0x1401c77e8
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x30);
-    uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(entity + 0x28);
+    GrowthDescription* found = nullptr;
+    int n = desc->_subDescCount;
+    Description** arrBase = desc->_subDescs;
     for (int i = 0; i < n; i++) {
-        void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-        // GetTypeId is component vtable slot +0x10.
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+        Description* comp = arrBase[i];
+        // GetTypeId is vtable slot +0x10.
+        uint32_t t = comp->Type();
         if (t == typeId) {
-            void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
+            Description* c = arrBase[i];
+            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? static_cast<GrowthDescription*>(c) : nullptr;
             break;
         }
     }
-    *reinterpret_cast<void**>(retOut) = found;
+    *reinterpret_cast<GrowthDescription**>(retOut) = found;
     return retOut;
 }
 
@@ -120,13 +131,18 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
 //   g_pGameWorldSingleton (DAT_1401c3dd8)              [runtime global]
 //   DAT_1401c77e8 type-ID global                        [runtime-filled]
 // ============================================================
+// RCX is the GrowthDescription whose planting is tested (its +0x58 / +0x5c limits
+// are read, and a neighbour's growth counts as "owned" when its description is it).
+// LEFT: the three outside callers hand it as an integer.
 long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
+    GrowthDescription* growth = reinterpret_cast<GrowthDescription*>(self);
+    // The singleton / map null arms are the tree's guards (retail reads them unguarded).
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 
-    // grid = *(int**)((*g_pGameWorldSingleton) + 0xf8); mapW = *grid
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+    // grid = (*g_pGameWorldSingleton)->m_game (+0xF8); mapW = its size
+    Map* grid = GameUpdateLoop::_singleton->m_game;
     if (!grid) return 1;
-    int mapW = *grid;
+    int mapW = grid->size;
 
     int touched = 0;   // iVar11
     int owned   = 0;   // iVar8
@@ -141,19 +157,17 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
             if ((colDelta != 0) || (rowIdx != row)) {
                 long long c = static_cast<long long>(col) + colDelta;
                 if (c >= 0 && c < mapW && rowIdx >= 0 && rowIdx < mapW) {
-                    void* cell = *reinterpret_cast<void**>(
-                        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80)
-                        + (static_cast<long long>(mapW) * rowIdx + c) * 0x30 + 0x8);
+                    ComponentEntity* cell = grid->cells[static_cast<long long>(mapW) * rowIdx + c].occupant;
                     if (cell != nullptr) {
                         touched++;
-                        void* outIBP = nullptr;
-                        ActCNR_FindComponent_c460(reinterpret_cast<uintptr_t>(cell), &outIBP);
-                        if (outIBP != nullptr) {
-                            void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(outIBP) + 0x18);
-                            void* owner = nullptr;
+                        // 0x14000c460 = FindComponent<GrowthComponent>
+                        GrowthComponent* growthComp = cell->FindComponent<GrowthComponent>();
+                        if (growthComp != nullptr) {
+                            Description* obj = growthComp->_description;
+                            Description* owner = nullptr;
                             if (Object::IsDerivedFromNullSafe(obj, GrowthDescription::TypeId()))
                                 owner = obj;
-                            if (owner == reinterpret_cast<void*>(self))
+                            if (owner == growth)
                                 owned++;
                         }
                     }
@@ -162,8 +176,8 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
         }
     }
 
-    if (owned   > *reinterpret_cast<int*>(self + 0x5c) ||
-        touched > *reinterpret_cast<int*>(self + 0x58))
+    if (owned   > growth->_i5c ||
+        touched > growth->_i58)
         return 0;
     return 1;
 }

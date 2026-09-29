@@ -27,6 +27,7 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
 
 class PlantArea final : public Work {
     DECLARE_EXE_TYPE(PlantArea)
@@ -46,13 +47,18 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- PlantArea fields (+0x48) ---
-    void*    field_48;           // +0x48: BST root (assigned work items, int-keyed)
-    int32_t  field_50;           // +0x50: BST count (assigned workers)
+    WorkCellSetNode* field_48;   // +0x48: the cell -> citizen set (0x140029a40 / 0x14001ca60 / 0x140029de0)
+    int32_t  field_50;           // +0x50: its count (0x140029860 `CMP [RCX+0x50]; SETG`: signed)
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    field_58;           // +0x58: validity byte array (one per field cell)
-    int32_t  field_60;           // +0x60: field cell count
-    uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: ExternalPtr (crop description resource)
+    // +0x58 / +0x60 / +0x64 are one byte Collection::Array {data, count, capacity}
+    // (SetSize 0x14000a590; Persist streams it through the bool-array overload
+    // 0x140151458): one byte per CropFieldComponent slot, 1 = still to plant.
+    bool*    field_58;           // +0x58: the array's data (bool: the overload Persist streams it with)
+    int32_t  field_60;           // +0x60: its count (= the field's slot count)
+    uint8_t  _pad64[4];          // +0x64: its capacity (written by SetSize; kept raw bytes for
+                                 //        the crop-field state that zeroes it bytewise)
+    ComponentDescription* field_68;   // +0x68: ExternalPtr<ComponentDescription> (0x140002340):
+                                      //        the crop the field plants
 };
 
 static_assert(sizeof(PlantArea) == 0x70, "PlantArea is 0x70 (retail create MemAlloc)");
