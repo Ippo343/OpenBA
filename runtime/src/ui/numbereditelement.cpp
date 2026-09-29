@@ -53,11 +53,11 @@ void AssignString(char*& field, char* nv) {
     field = nv;
     if (nv != nullptr) ++RtSystem::StringRefCount(nv);
 }
-void ReleaseStringLocal(void** slot) {
-    char* p = static_cast<char*>(*slot);
+void ReleaseStringLocal(char*& slot) {
+    char* p = slot;
     if (p == nullptr) return;
     int32_t* rc = &RtSystem::StringRefCount(p);
-    if (--*rc == 0) { *slot = p - 8; MemFree(*slot); }
+    if (--*rc == 0) { slot = p - 8; MemFree(slot); }
 }
 
 }  // namespace
@@ -87,12 +87,12 @@ void NumberEditElement::FinalizeText() {
         if (_max < v) clamped = _max;
     }
 
-    void* tmp = nullptr;
+    char* tmp = nullptr;
     // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns BY VALUE:
     // its hidden return slot is `tmp`.
     new (static_cast<void*>(&tmp)) System::String(System::String::Format("%i", clamped));
-    AssignString(_text, static_cast<char*>(tmp));
-    ReleaseStringLocal(&tmp);
+    AssignString(_text, tmp);
+    ReleaseStringLocal(tmp);
 }
 
 }  // namespace UI
