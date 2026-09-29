@@ -2384,11 +2384,14 @@ GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t s
     m_gameFlags     = disasters ? 0u : 0xF0u;   // retail: p8 ? 0 : 0xF0
     // +0xD8..+0x148, in field order.
     m_random = nullptr;
-    m_playerController = m_entityList = m_citizenList = m_game = nullptr;
+    m_playerController = nullptr;
+    m_entityList = m_citizenList = m_game = nullptr;
     m_sunLight      = nullptr;
     m_skyMesh       = nullptr;
     m_worldGeometry = nullptr;
-    m_tutorial = m_toolManager = m_dayCounter = m_weather = nullptr;
+    m_tutorial    = nullptr;
+    m_toolManager = nullptr;
+    m_dayCounter = m_weather = nullptr;
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;

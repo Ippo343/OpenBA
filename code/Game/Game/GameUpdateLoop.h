@@ -46,6 +46,8 @@ namespace Object      { class ExternalList; }
 namespace Achievement { class AchievementInstance; }
 class ProfessionList;     // Game/ProfessionList.h (block W0-H1)
 class WorldGeometry;      // Game/WorldGeometry.h
+class PlayerController;   // Game/PlayerController.h
+class PlayerToolManager;  // Game/PlayerToolManager.h
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -135,10 +137,10 @@ public:
 
     // Game systems (created in Load, destroyed in Shutdown)
     System::Random* m_random;       // +0xD8  MemAlloc(0x9c4) + Random(seed +0x30) in Load
-    void*    m_playerController;    // +0xE0  PlayerController* (0x10C bytes, camera+frustum)
+    PlayerController* m_playerController; // +0xE0  camera controller, MemAlloc(0x10c) + ctor 0x1400985b0
     void*    m_entityList;          // +0xE8  EntityList*, MemAlloc(0xe8) + ctor 0x1400c3f90 in Load
     void*    m_citizenList;         // +0xF0  CitizenBehavior* (town manager), MemAlloc(0x1c0) + ctor 0x140090a30 in Load
-    void*    m_game;                // +0xF8  Game* (0xF8 bytes, timed events at +0x78)
+    void*    m_game;                // +0xF8  Map* (Game/Map.h): the world map (tile grid), MemAlloc(0xf8) + ctor 0x14009ee70
 
     // Scene geometry objects (added to Graphics::Scene as globals)
     Graphics::SunLight*     m_sunLight;      // +0x100 MemAlloc(0x108) in Load (exe table 0x14015e290)
@@ -153,7 +155,7 @@ public:
     //   Update's per-frame call 0x1401026a0 checks against EditTool and drives
     //   through the tool's slots, +0x30 the paused byte, +0x34 the game speed
     //   (ctor 1), a 5-entry Array at +0x70). Renamed from m_entityUI (B.4 W0-H2).
-    void*    m_toolManager;         // +0x120 player tool manager (0xB0 bytes)
+    PlayerToolManager* m_toolManager; // +0x120 player tool manager (0xB0 bytes)
     void*    m_dayCounter;          // +0x128 DayCounter* (0x18 bytes: {day, accumulated, dayLength})
     void*    m_weather;             // +0x130 Weather* (0x78 bytes)
     void*    m_eventNotifier;       // +0x138 EventNotifier* (0x28 bytes)

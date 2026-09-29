@@ -34,6 +34,8 @@
 #include "GameUpdateLoop.h"
 #include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
 #include "ProfessionList.h"     // m_professionList's class (B.4 W0-H2)
+#include "PlayerController.h"   // m_playerController's class (B.4 W0-H2)
+#include "PlayerToolManager.h"  // m_toolManager's class (B.4 W0-H2)
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -932,6 +934,9 @@ void GameUpdateLoop::Load() {
         }
         float aspect = (height != 0) ? (float)width / (float)height : 1.7777778f;
         void* mem = AllocSub(0x10c, 4);
+        // B.4 W0-H2: begin the (trivial) PlayerController's lifetime in the raw
+        // block -- constructs nothing -- so the member is stored typed.
+        PlayerController* pc = mem ? ::new (mem) PlayerController : nullptr;
         if (mem) {
             float nearZ = 2.0f, farZ = 70.0f, fovX = 60.0f, fovY = aspect * 60.0f;
             uint8_t frustum[0xC0] = {};
@@ -940,7 +945,7 @@ void GameUpdateLoop::Load() {
                 reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
             Reimpl_FUN_1400985b0(mem, frustum, 0.0f, -40.0f, 25.0f);
         }
-        m_playerController = mem;
+        m_playerController = pc;
     }
 
     // Step 7 — Renderer (+0x90, 0x50).
@@ -988,8 +993,11 @@ void GameUpdateLoop::Load() {
     // Step 13 — EntityUI (+0x120, 0xb0).
     {
         void* mem = AllocSub(0xb0, 4);
+        // B.4 W0-H2: the trivial PlayerToolManager's lifetime begins in the raw
+        // block (constructs nothing); the ctor body is still 0x1401025c0's port.
+        PlayerToolManager* tm = mem ? ::new (mem) PlayerToolManager : nullptr;
         if (mem) Reimpl_FUN_1401025c0(mem);
-        m_toolManager = mem;
+        m_toolManager = tm;
     }
 
     // Step 14 — DayCounter Time struct (+0x128, 0x18): flag=1, Time(+8,0.0), Time(+0x10,3600.0).
@@ -1392,7 +1400,7 @@ void GameUpdateLoop::Load() {
                 uint8_t* mapGen = static_cast<uint8_t*>(m_mapConfig);   // startConfig (MapGenerator rsc)
                 uint8_t* game   = static_cast<uint8_t*>(m_game);
                 WorldGeometry* wgeom = m_worldGeometry;
-                uint8_t* pctrl  = static_cast<uint8_t*>(m_playerController);
+                PlayerController* pctrl = m_playerController;
                 fprintf(stderr, "[startTown::DIAG] mapGen(loop+0x40)=%p game=%p worldGeom=%p playerCtrl=%p\n",
                         mapGen, game, wgeom, pctrl);
                 if (mapGen) {
