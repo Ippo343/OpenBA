@@ -738,7 +738,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
 static void EntityList_ClearToolSelectionForDyingEntities() {
     void* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    void* entityUI = reinterpret_cast<GameUpdateLoop*>(gw)->m_entityUI;   // B.3.8 bridge
+    void* entityUI = reinterpret_cast<GameUpdateLoop*>(gw)->m_toolManager;   // B.3.8 bridge
     if (!entityUI) return;
     void* toolSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(entityUI) + 0x28);
     if (*reinterpret_cast<void**>(toolSlot) == nullptr) return;

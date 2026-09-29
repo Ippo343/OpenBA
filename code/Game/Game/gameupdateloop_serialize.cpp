@@ -23,7 +23,7 @@
 //   0x140093c90  weather-sim serialize (m_weather +0x130; env ExternalPtr,
 //                params, per-effect-slot active flag + 2 floats; on load
 //                re-creates active effects via WeatherEffect_SetEnabled).
-//   0x140102920  EntityUI serialize (m_entityUI +0x120: paused/speed/times,
+//   0x140102920  EntityUI serialize (m_toolManager +0x120: paused/speed/times,
 //                goal-ref tree, IBP-keyed AVL, saved camera views 1-5).
 //   0x14002e2e0  goal-ref tree serialize (helper of 102920).
 //   0x14002e470  IBP-keyed AVL serialize (helper of 102920).
@@ -694,7 +694,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     intFactory->ResetPersistState(stream);
 
     if (IsSaving(stream)) {
-        reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->SaveAllSettings();  // B.3.6 bridge
+        self->m_userInterface->SaveAllSettings();  // B.3.6 bridge
     }
 
     Reimpl_ExternalPtr_Serialize_ClimateGenerator(&self->m_climateConfig, ser);   // 0x1400194a0
@@ -708,7 +708,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2)   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_scenarioIndex, nullptr);   // B.3.4 bridge
 
-    reinterpret_cast<System::Random*>(self->m_random)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    self->m_random->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     self->m_saveName.Serialize(ser);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(&self->m_scenarioCompleted), nullptr);   // B.3.4 bridge
 
@@ -755,7 +755,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     CitizenList_Serialize_8f760(self->m_citizenList, stream, nullptr, outParam);          // 0x14008f760
     GameGrid_Serialize_9f100(self->m_game, stream);                                       // 0x14009f100
     Goals_Serialize_f9240(self->m_tutorial, stream, nullptr, outParam);                   // 0x1400f9240
-    EntityUI_Serialize_102920(self->m_entityUI, stream);
+    EntityUI_Serialize_102920(self->m_toolManager, stream);
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.
     {

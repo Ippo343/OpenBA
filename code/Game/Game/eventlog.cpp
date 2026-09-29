@@ -308,7 +308,7 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     if (eventType > 0xa && (eventType < 0xd || (unsigned)(eventType - 0x1e) < 2u)) {
         if (g_gameSettings != nullptr &&
             *((const char*)g_gameSettings + 0x17) != 0) {
-            void* speedObj = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_entityUI;   // B.3.8 bridge
+            void* speedObj = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_toolManager;   // B.3.8 bridge
             if (speedObj) *(int32_t*)((uintptr_t)speedObj + 0x34) = 1;
         }
     }

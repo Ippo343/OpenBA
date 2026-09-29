@@ -561,7 +561,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     const long long frameT0 = simProf ? QpcNow() : 0;
     g_samplerTag = 1;   // [Sampler] inside Update
     struct SamplerTagReset { ~SamplerTagReset() { g_samplerTag = 0; } } samplerTagReset;
-    ApplyForceSpeed(m_entityUI);
+    ApplyForceSpeed(m_toolManager);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
     PerfX::BeginFrame(m_renderer);      // [PerfX] per-frame frustum + pause flush (no-op unless enabled)
 
@@ -580,7 +580,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
-    ToolHarness_Tick(m_entityUI, s_frameNum);
+    ToolHarness_Tick(m_toolManager, s_frameNum);
 
     // Open the IN-GAME pause menu (the toolbar menu button's action, retail
     // ToolbarDialog_OnRemove case 3) and click one of its buttons -- by default
@@ -588,13 +588,13 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // this is the only unattended way to reach the in-game one, which needs a
     // live world underneath it. No-op unless BANISHED_PAUSEMENU is set
     // (standalone/pausemenu_harness.cpp).
-    PauseMenuHarness_Tick(m_entityUI, s_frameNum);
+    PauseMenuHarness_Tick(m_toolManager, s_frameNum);
 
     // Dialog harness for the six food-production panels: opens each building's info
     // panel and reports the controllers on it plus the component's CanCommand verdicts
     // (what greys or enables each button). No-op unless BANISHED_FOOD_PANEL is set
     // (standalone/food_panel_harness.cpp).
-    FoodPanel_Tick(m_entityUI, s_frameNum);
+    FoodPanel_Tick(m_toolManager, s_frameNum);
 
     // Placement + SLOT-COVERAGE harness: where each food building landed, and which of
     // its 22 component vtable slots are actually live versus still holding the shared
@@ -647,9 +647,9 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // under-capacity workplace. Automatic for unattended runs only; replaces the old
     // BANISHED_PASTURE_HERDERS / BANISHED_BUILDER_AUTOPOOL cascade-bypass stand-ins
     // (standalone/panel_staffing_driver.cpp).
-    PanelStaffingDriver_Tick(m_entityUI, s_frameNum);
+    PanelStaffingDriver_Tick(m_toolManager, s_frameNum);
     // Hold one building panel open so its layout can be captured (BANISHED_PANEL_HOLD).
-    PanelHoldHarness_Tick(m_entityUI, s_frameNum);
+    PanelHoldHarness_Tick(m_toolManager, s_frameNum);
 
     // Player stand-in for the town-hall Builder spinner. No-op unless BANISHED_BUILDERS.
     BuilderSeat_Tick(s_frameNum);
@@ -661,7 +661,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // THE VIRTUAL MERCHANT CUSTOMER: with a merchant docked, fill the sell rows and
     // press Trade through the ported checkout. No-op unless BANISHED_TRADE_SELL is
     // set (standalone/trade_buy_harness.cpp).
-    TradeSellHarness_Tick(m_entityUI, s_frameNum);
+    TradeSellHarness_Tick(m_toolManager, s_frameNum);
 
     // Finish every structure still under construction, the way the stress placer
     // finishes its own. No-op unless BANISHED_FINISH_BUILDS is set
@@ -688,7 +688,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // tree type via the live combo-select path, so the state-2->state-9 transition
     // has something to prove. No-op unless BANISHED_ORCHARD_FORCE_START is set
     // (standalone/orchard_force_start.cpp).
-    OrchardForceStart_Tick(m_entityUI, s_frameNum);
+    OrchardForceStart_Tick(m_toolManager, s_frameNum);
 
     // Seat the first worker at each orchard — the one player click the employment
     // allocator structurally cannot make (it gates on roster != 0). No-op unless
@@ -740,7 +740,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
     // Step 1: Check if UI pauses game
     TRACE("[GameUpdateLoop::Update] checking PausesGame...\n");
-    bool paused = reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame();  // B.3.6 bridge
+    bool paused = m_userInterface->PausesGame();  // B.3.6 bridge
     TRACE("[GameUpdateLoop::Update] PausesGame = %d\n", (int)paused);
 
     if (paused) {
@@ -754,7 +754,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
         // Step 2: Read speed multiplier from EntityUI
         // EntityUI+0x30 = paused flag, EntityUI+0x34 = speed multiplier
-        uint8_t* entityUI = (uint8_t*)m_entityUI;
+        uint8_t* entityUI = (uint8_t*)m_toolManager;
         bool entityUIPaused = (*(char*)(entityUI + 0x30)) != 0;
         if (!entityUIPaused) {
             speedMultiplier = *(int32_t*)(entityUI + 0x34);
@@ -860,15 +860,15 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                m_scenarioInstance, (int)m_scenarioCompleted);
         if (m_scenarioInstance != nullptr && m_scenarioCompleted == 0) {
             TRACE("[GameUpdateLoop::Update] calling AchievementInstance::Update...\n");
-            reinterpret_cast<Achievement::AchievementInstance*>(m_scenarioInstance)->Update(   // B.3.7 bridge
+            m_scenarioInstance->Update(   // B.3.7 bridge
                 *reinterpret_cast<const System::Time*>(time));
             TRACE("[GameUpdateLoop::Update] AchievementInstance::Update done\n");
 
-            bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->IsMet();   // B.3.7 bridge
+            bool isMet = m_scenarioInstance->IsMet();   // B.3.7 bridge
             TRACE("[GameUpdateLoop::Update] AchievementInstance::IsMet = %d\n", (int)isMet);
 
             if (!isMet) {
-                bool hasFailed = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->HasFailed();   // B.3.7 bridge
+                bool hasFailed = m_scenarioInstance->HasFailed();   // B.3.7 bridge
                 TRACE("[GameUpdateLoop::Update] AchievementInstance::HasFailed = %d\n", (int)hasFailed);
                 if (hasFailed) {
                     TRACE("[GameUpdateLoop::Update] calling OnScenarioComplete (failed)...\n");
@@ -1036,7 +1036,7 @@ post_simulation:
         // Caller batch CB6: slot 1 (vtable +0x08) of the real class. The receiver is
         // PROVED: Load's step 23 builds it with WorldGeometry's ctor (and Load is
         // m_worldGeometry's only writer). A virtual call, as retail's is.
-        static_cast<WorldGeometry*>(m_worldGeometry)->Update(
+        m_worldGeometry->Update(
             *reinterpret_cast<const System::Time*>(time));   // B.3.8 bridge
     }
     TRACE("[GameUpdateLoop::Update] WorldGeometry::Update done\n");
@@ -1049,7 +1049,7 @@ post_simulation:
     // placed -- after this frame's input poll, before the UI decodes it. Both
     // calls are a cached-getenv no-op unless BANISHED_MOUSE_INJECT is set.
     MouseInject::PreUpdate(m_userInterface);
-    int uiCursor = reinterpret_cast<UI::UserInterface*>(m_userInterface)->Update(  // B.3.6 bridge
+    int uiCursor = m_userInterface->Update(  // B.3.6 bridge
         *reinterpret_cast<const System::Time*>(time));
     MouseInject::PostUpdate(m_userInterface);
     TRACE("[GameUpdateLoop::Update] UI::UserInterface::Update done (cursor=%d)\n", uiCursor);
@@ -1057,21 +1057,21 @@ post_simulation:
     // Step 10: EntityUI / player tool update
     int cursorIndex = 1;
     {
-        bool pausedNow = reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame();  // B.3.6 bridge
+        bool pausedNow = m_userInterface->PausesGame();  // B.3.6 bridge
         if (!pausedNow) {
             // Check if UI has input focus: userInterface+0xd9 == 0 means no dialog has input
-            bool noInputFocus = (reinterpret_cast<UI::UserInterface*>(m_userInterface)->_mouseCaptured == 0);   // B.3.8 bridge
+            bool noInputFocus = (m_userInterface->_mouseCaptured == 0);   // B.3.8 bridge
             // Standalone: EntityUI::Update (the camera/tool controller) is not
             // registered, so fn_EntityUI_Update is null and the camera never moved.
             // Drive the camera directly from the KeyMap here — hotkeys (pause/presets)
             // first, then per-frame movement, matching the original helper order.
-            Game::Camera_UpdateHotkeys(m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
-            Game::Camera_UpdateMovement(m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
+            Game::Camera_UpdateHotkeys(m_toolManager, noInputFocus ? 1 : 0, *(int64_t*)time);
+            Game::Camera_UpdateMovement(m_toolManager, noInputFocus ? 1 : 0, *(int64_t*)time);
             // Phase 3: tick the active player tool (the tool half of EntityUI::Update
             // that camera_input.cpp omitted) — OnKey (dialog + left-click confirm) +
             // Serialize (ghost preview) + cursor. -1 = no active tool -> keep default.
             {
-                int toolCursor = EntityUI_ToolTick_SA(m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
+                int toolCursor = EntityUI_ToolTick_SA(m_toolManager, noInputFocus ? 1 : 0, *(int64_t*)time);
                 if (toolCursor >= 0) cursorIndex = toolCursor;
             }
             TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
@@ -1083,8 +1083,8 @@ post_simulation:
         }
 
         // Override cursor if UI has input or game is paused
-        bool hasInput = (reinterpret_cast<UI::UserInterface*>(m_userInterface)->_mouseCaptured != 0);   // B.3.8 bridge
-        if (hasInput || reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame()) {  // B.3.6 bridge
+        bool hasInput = (m_userInterface->_mouseCaptured != 0);   // B.3.8 bridge
+        if (hasInput || m_userInterface->PausesGame()) {  // B.3.6 bridge
             cursorIndex = uiCursor;
         }
     }
@@ -1095,7 +1095,7 @@ post_simulation:
         void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x28 + (int64_t)cursorIndex * 8);
-            reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetCursor(  // B.3.6 bridge
+            m_userInterface->SetCursor(  // B.3.6 bridge
                 Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
         }
     }
@@ -1118,7 +1118,7 @@ post_simulation:
 
         // Get speed multiplier for audio time scaling
         int speedMul = 0;
-        uint8_t* entityUI = (uint8_t*)m_entityUI;
+        uint8_t* entityUI = (uint8_t*)m_toolManager;
         if (*(char*)(entityUI + 0x30) == 0) {
             speedMul = *(int32_t*)(entityUI + 0x34);
         }
@@ -1146,7 +1146,7 @@ post_simulation:
             System::Time audioNow;    audioNow._ticks    = *(int64_t*)time;
             System::Time audioScaled; audioScaled._ticks = scaledTime[0];
             reinterpret_cast<Audio::Scene*>(m_audioScene)->Update(
-                audioNow, audioScaled, *reinterpret_cast<System::Random*>(m_random),
+                audioNow, audioScaled, *m_random,
                 *reinterpret_cast<const Vector3*>(listenerPos), windFactor);   // B.3.7 bridge
         }
     }
@@ -1199,7 +1199,7 @@ post_simulation:
     // Step 14: SaveLoad::Update if active
     if (m_saveLoad != nullptr) {  // [GUARD-M5]
         TRACE("[GameUpdateLoop::Update] calling SaveLoad::Update...\n");
-        reinterpret_cast<Save::SaveLoad*>(m_saveLoad)->Update(*reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
+        m_saveLoad->Update(*reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
         TRACE("[GameUpdateLoop::Update] SaveLoad::Update done\n");
     }
 
@@ -1261,11 +1261,11 @@ post_simulation:
     // Step 17: Next loop transition check
     if (m_nextLoop != nullptr) {
         // Check if fullscreen fade is done (UI+0xf0 == 0.0f)
-        float fadeProgress = reinterpret_cast<UI::UserInterface*>(m_userInterface)->_fadeVelocity;   // B.3.8 bridge
+        float fadeProgress = m_userInterface->_fadeVelocity;   // B.3.8 bridge
         if (fadeProgress == 0.0f) {
             TRACE("[GameUpdateLoop::Update] transitioning to next loop %p\n", m_nextLoop);
             ::Engine::MainLoop::_singleton->SetNextLoop(   // B.3.7 bridge
-                reinterpret_cast<Engine::UpdateLoop*>(m_nextLoop));
+                m_nextLoop);
         }
     }
 
@@ -1280,8 +1280,8 @@ post_simulation:
         if (m_entityList)
             entCount = *reinterpret_cast<int*>((uint8_t*)m_entityList + 0x30);
         int spd = 0;
-        if (m_entityUI && *(char*)((uint8_t*)m_entityUI + 0x30) == 0)
-            spd = *(int32_t*)((uint8_t*)m_entityUI + 0x34);
+        if (m_toolManager && *(char*)((uint8_t*)m_toolManager + 0x30) == 0)
+            spd = *(int32_t*)((uint8_t*)m_toolManager + 0x34);
         SimProfReport(spd, entCount);
     }
     // [STRESS] close the Update bracket; the harness's own periodic work (CSV row,
@@ -1341,8 +1341,8 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
 
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
-    bool paused = reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame();  // B.3.6 bridge
-    bool entityUIPaused = (*(char*)((uintptr_t)m_entityUI + 0x30) != 0);
+    bool paused = m_userInterface->PausesGame();  // B.3.6 bridge
+    bool entityUIPaused = (*(char*)((uintptr_t)m_toolManager + 0x30) != 0);
     if (paused || entityUIPaused) {
         alpha = kRdata_14017214c; // 1.0f
     }
@@ -1377,13 +1377,13 @@ void GameUpdateLoop::Draw(float alpha) {
             void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
 
             Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
-            gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight));       // B.3.5 bridge
-            gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
+            gs->RemoveGlobalObject(m_sunLight);       // B.3.5 bridge
+            gs->RemoveGlobalObject(m_worldGeometry);  // B.3.5 bridge
 
             Minimap_PaintTerrain(imageCapture, videoCtx, m_worldGeometry, m_sunLight);   // 0x1400a5140
 
-            gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight));       // B.3.5 bridge
-            gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
+            gs->AddGlobalObject(m_sunLight);       // B.3.5 bridge
+            gs->AddGlobalObject(m_worldGeometry);  // B.3.5 bridge
         }
     }
     TRACE("[GameUpdateLoop::Draw] image capture terrain done\n");
@@ -1513,9 +1513,9 @@ void GameUpdateLoop::Draw(float alpha) {
         void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         // Save::SaveLoad::Draw — the ExternalPtr<Material> is a bare register value (B7-5).
-        reinterpret_cast<Save::SaveLoad*>(m_saveLoad)->Draw(   // B.3.7 bridge
+        m_saveLoad->Draw(   // B.3.7 bridge
             *reinterpret_cast<Video::Context*>(videoCtx),
-            Object::ExternalPtr<Graphics::Material>(reinterpret_cast<Graphics::Material*>(m_uiMaterial)));
+            Object::ExternalPtr<Graphics::Material>(m_uiMaterial));
         TRACE("[GameUpdateLoop::Draw] SaveLoad::Draw done\n");
     }
 
@@ -1563,13 +1563,13 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 11: EntityUI toolbar draw (via vtable call on EntityUI's current tool)
     TRACE("[GameUpdateLoop::Draw] calling EntityUI toolbar draw...\n");
     {
-        uintptr_t entityUI = (uintptr_t)m_entityUI;
+        uintptr_t entityUI = (uintptr_t)m_toolManager;
         void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
 
         // Check if UI has input focus or pauses game -> pass as flag
-        bool hasInput = (reinterpret_cast<UI::UserInterface*>(m_userInterface)->_mouseCaptured != 0);   // B.3.8 bridge
-        bool pauseCheck = reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame();  // B.3.6 bridge
+        bool hasInput = (m_userInterface->_mouseCaptured != 0);   // B.3.8 bridge
+        bool pauseCheck = m_userInterface->PausesGame();  // B.3.6 bridge
         uint64_t drawFlag = (hasInput || pauseCheck) ? 1 : 0;
 
         // EntityUI+0x28 is InternalBasePtr to current tool
@@ -1590,7 +1590,7 @@ void GameUpdateLoop::Draw(float alpha) {
     {
         void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
-        reinterpret_cast<UI::UserInterface*>(m_userInterface)->Draw(*reinterpret_cast<Video::Context*>(videoCtx));  // B.3.6 bridge
+        m_userInterface->Draw(*reinterpret_cast<Video::Context*>(videoCtx));  // B.3.6 bridge
     }
     TRACE("[GameUpdateLoop::Draw] UI::UserInterface::Draw done\n");
 
@@ -1649,7 +1649,7 @@ void GameUpdateLoop::Startup() {
 
     // Set audio scene on UI
     TRACE("[GameUpdateLoop::Startup] setting audio scene on UI...\n");
-    reinterpret_cast<UI::UserInterface*>(m_userInterface)->_audioScene = m_audioScene;   // B.3.8 bridge
+    m_userInterface->_audioScene = m_audioScene;   // B.3.8 bridge
 
     // Setup UI references (cursors, lists, etc.)
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
@@ -1672,14 +1672,14 @@ void GameUpdateLoop::Startup() {
         void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x30);
-            reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetCursor(  // B.3.6 bridge
+            m_userInterface->SetCursor(  // B.3.6 bridge
                 Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
         }
     }
 
     // Enable cursor
     TRACE("[GameUpdateLoop::Startup] enabling cursor...\n");
-    reinterpret_cast<UI::UserInterface*>(m_userInterface)->EnableCursor(true);  // B.3.6 bridge
+    m_userInterface->EnableCursor(true);  // B.3.6 bridge
 
     // ProfessionList startup — builds the sorted profession ARRAY at profList+0x20/+0x28
     // (FUN_1400a90a0) for the profession UI panel. m_professionList (gw+0xb0) is normally
@@ -1796,7 +1796,7 @@ void GameUpdateLoop::Startup() {
             int64_t dialogPtr[1];
             new (dialogPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(toolbar));   // B.3.3 bridge
-            reinterpret_cast<UI::UserInterface*>(m_userInterface)->AddDialog(  // B.3.6 bridge
+            m_userInterface->AddDialog(  // B.3.6 bridge
                 reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
             fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p itemCount(+0xD8)=%d "
                     "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", toolbar,
@@ -1851,7 +1851,7 @@ void GameUpdateLoop::Startup() {
             int64_t dialogPtr[1];
             new (dialogPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(eventNotify));   // B.3.3 bridge
-            reinterpret_cast<UI::UserInterface*>(m_userInterface)->AddDialog(  // B.3.6 bridge
+            m_userInterface->AddDialog(  // B.3.6 bridge
                 reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
             fprintf(stderr, "[HUD] EventNotify ribbon CONSTRUCTED + added to UI: %p\n", eventNotify);
             fflush(stderr);
@@ -1901,7 +1901,7 @@ void GameUpdateLoop::Startup() {
             int64_t dialogPtr[1];
             new (dialogPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(autoSave));   // B.3.3 bridge
-            reinterpret_cast<UI::UserInterface*>(m_userInterface)->AddDialog(  // B.3.6 bridge
+            m_userInterface->AddDialog(  // B.3.6 bridge
                 reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
         } else if (mem) {
             System::MemoryAllocator::MemFree(mem);
@@ -1914,20 +1914,20 @@ void GameUpdateLoop::Startup() {
 
     // Set fullscreen fade
     TRACE("[GameUpdateLoop::Startup] setting fullscreen fade...\n");
-    reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetFullscreenFade(true, 0xFF000000, true);  // B.3.6 bridge
-    reinterpret_cast<UI::UserInterface*>(m_userInterface)->SetFullscreenFade(false, 0xFF000000, false);  // B.3.6 bridge
+    m_userInterface->SetFullscreenFade(true, 0xFF000000, true);  // B.3.6 bridge
+    m_userInterface->SetFullscreenFade(false, 0xFF000000, false);  // B.3.6 bridge
     TRACE("[GameUpdateLoop::Startup] fullscreen fade set\n");
 
     TRACE("[GameUpdateLoop::Startup] calling EntityUI::Startup...\n");
     // PORT GAP 0x140101ee0 EntityUI::Startup: not ported; retail calls it here
     // (RCX=entityUI). Standalone builds the tool-mode tree itself (Phase 3) so a
     // build-button click resolves the PlacementTool.
-    EntityUI_BuildToolModeTree_SA(m_entityUI);
+    EntityUI_BuildToolModeTree_SA(m_toolManager);
     // ...and its second half: open every dialog registered in the EntityUI+0x50 tree.
     // That tree is how a tutorial asks for its panel (FinishTutorialInstance::Slot4 ->
     // 0x1401001f0 only RECORDS the request); nothing else opens it. Empty on a plain
     // new game, so this is a no-op there — hence no live gate.
-    EntityUI_OpenRegisteredDialogs_SA(m_entityUI);
+    EntityUI_OpenRegisteredDialogs_SA(m_toolManager);
     TRACE("[GameUpdateLoop::Startup] EntityUI::Startup done\n");
 
     TRACE("[GameUpdateLoop::Startup] EXIT\n");
@@ -1947,7 +1947,7 @@ void GameUpdateLoop::Shutdown() {
 
     // Stage C entry guard (TEMPORARY): on the new-game path the world was never
     // built (GameUpdateLoop::Load is a stub), so m_game (+0xF8) is null and the
-    // teardown below dereferences unbuilt subsystems (m_entityUI, m_userInterface,
+    // teardown below dereferences unbuilt subsystems (m_toolManager, m_userInterface,
     // m_audioScene, m_citizenList). Nothing was constructed, so there is nothing
     // to tear down — return. (Destroy still runs afterward to free the loop.)
     if (m_game == nullptr) {
@@ -1974,11 +1974,11 @@ void GameUpdateLoop::Shutdown() {
 
     // EntityUI::SetTool(nullptr)
     TRACE("[GameUpdateLoop::Shutdown] calling EntityUI::SetTool(0)...\n");
-    Toolbar_ShowGroup_Impl(m_entityUI, 0);   // 0x140102b60
+    Toolbar_ShowGroup_Impl(m_toolManager, 0);   // 0x140102b60
 
     // Disable cursor
     TRACE("[GameUpdateLoop::Shutdown] disabling cursor...\n");
-    reinterpret_cast<UI::UserInterface*>(m_userInterface)->EnableCursor(false);  // B.3.6 bridge
+    m_userInterface->EnableCursor(false);  // B.3.6 bridge
 
     // Stop all audio
     TRACE("[GameUpdateLoop::Shutdown] stopping all audio...\n");
@@ -2043,9 +2043,9 @@ void GameUpdateLoop::Shutdown() {
         void* gameWorld = GameUpdateLoop::_singleton;
         void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
         Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
-        gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
-        gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight));       // B.3.5 bridge
-        gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_skyMesh));        // B.3.5 bridge
+        gs->RemoveGlobalObject(m_worldGeometry);  // B.3.5 bridge
+        gs->RemoveGlobalObject(m_sunLight);       // B.3.5 bridge
+        gs->RemoveGlobalObject(m_skyMesh);        // B.3.5 bridge
     }
 
     // Delete scenario instance
@@ -2088,7 +2088,7 @@ void GameUpdateLoop::Shutdown() {
     if (m_userInterface != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying UserInterface...\n");
         // Call Runtime destructor
-        RtUi_UserInterface_Dtor(static_cast<UI::UserInterface*>(m_userInterface));
+        RtUi_UserInterface_Dtor(m_userInterface);
         System::MemoryAllocator::MemFree(m_userInterface);
     }
 
@@ -2114,10 +2114,10 @@ void GameUpdateLoop::Shutdown() {
     }
 
     // EntityUI
-    if (m_entityUI != nullptr) {
+    if (m_toolManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EntityUI...\n");
-        EntityUI_Dtor_1024d0(m_entityUI);   // 0x1401024d0
-        System::MemoryAllocator::MemFree(m_entityUI);
+        EntityUI_Dtor_1024d0(m_toolManager);   // 0x1401024d0
+        System::MemoryAllocator::MemFree(m_toolManager);
     }
 
     // DayCounter
@@ -2165,15 +2165,15 @@ void GameUpdateLoop::Shutdown() {
     if (m_worldGeometry != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying WorldGeometry...\n");
         // Caller batch CB6: slot 0 of the real class (proved as in Update step 8).
-        delete static_cast<WorldGeometry*>(m_worldGeometry);   // B.3.8 bridge
+        delete m_worldGeometry;   // B.3.8 bridge
     }
     if (m_sunLight != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SunLight...\n");
-        delete static_cast<Graphics::SunLight*>(m_sunLight);   // B.3.x bridge (slot 0, free)
+        delete m_sunLight;   // B.3.x bridge (slot 0, free)
     }
     if (m_skyMesh != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SkyMesh...\n");
-        delete static_cast<Graphics::MeshInstance*>(m_skyMesh);   // B.3.x bridge (slot 0, free)
+        delete m_skyMesh;   // B.3.x bridge (slot 0, free)
     }
 
     // AnimationManager
@@ -2193,7 +2193,7 @@ void GameUpdateLoop::Shutdown() {
     // SaveLoad
     if (m_saveLoad != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SaveLoad...\n");
-        RtSave_SaveLoad_Dtor(static_cast<Save::SaveLoad*>(m_saveLoad));
+        RtSave_SaveLoad_Dtor(m_saveLoad);
         System::MemoryAllocator::MemFree(m_saveLoad);
     }
 
@@ -2274,7 +2274,7 @@ void GameUpdateLoop::OnScenarioComplete() {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->IsMet();   // B.3.7 bridge
+        bool isMet = m_scenarioInstance->IsMet();   // B.3.7 bridge
 
         // 0x1c = scenario won (28), 0x1d = scenario failed (29). IsMet=1 -> 0x1c.
         // (The IDs were documented inverted here; the live string table settles it —
@@ -2309,7 +2309,7 @@ void GameUpdateLoop::OnScenarioComplete() {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->IsMet();   // B.3.7 bridge
+        bool isMet = m_scenarioInstance->IsMet();   // B.3.7 bridge
 
         // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)
         int eventType = 0x1b - (int)isMet;
@@ -2372,18 +2372,27 @@ GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t s
     m_savedState    = savedState;
     // +0x60..+0xB8, in field order (retail's qword stores).
     m_graphicsScene = m_animationManager = m_pickingScene = m_audioScene = nullptr;
-    m_musicPlayer = m_characterGrid = m_renderer = m_userInterface = nullptr;
-    m_helpTopics = m_diseaseList = m_professionList = m_uiMaterial = nullptr;
+    m_musicPlayer = m_characterGrid = m_renderer = nullptr;
+    m_userInterface  = nullptr;
+    m_helpTopics     = nullptr;
+    m_diseaseList    = nullptr;
+    m_professionList = nullptr;
+    m_uiMaterial     = nullptr;
     m_quickSavePressed = 0;
     m_quickLoadPressed = 0;
     m_nextLoop      = nullptr;
     m_gameFlags     = disasters ? 0u : 0xF0u;   // retail: p8 ? 0 : 0xF0
     // +0xD8..+0x148, in field order.
-    m_random = m_playerController = m_entityList = m_citizenList = m_game = nullptr;
-    m_sunLight = m_skyMesh = m_worldGeometry = nullptr;
-    m_tutorial = m_entityUI = m_dayCounter = m_weather = nullptr;
-    m_eventNotifier = m_saveLoad = m_imageCapture = nullptr;
-    m_scenarioInstance  = reinterpret_cast<void*>(scenarioIbp);   // *param_3
+    m_random = nullptr;
+    m_playerController = m_entityList = m_citizenList = m_game = nullptr;
+    m_sunLight      = nullptr;
+    m_skyMesh       = nullptr;
+    m_worldGeometry = nullptr;
+    m_tutorial = m_toolManager = m_dayCounter = m_weather = nullptr;
+    m_eventNotifier = nullptr;
+    m_saveLoad      = nullptr;
+    m_imageCapture  = nullptr;
+    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
 }

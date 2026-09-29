@@ -110,7 +110,7 @@ inline char SettingByte(int byteOffset) {
 // ============================================================
 // UpdateCamera — port of FUN_1400feec0
 // ============================================================
-//   entityUI  = GameUpdateLoop::m_entityUI (+0x120 controller)
+//   entityUI  = GameUpdateLoop::m_toolManager (+0x120 controller)
 //   inputFlag = "no UI input focus" (1 = gameplay has input)
 //   timeTicks = frame delta as System::Time ticks (int64)
 void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {

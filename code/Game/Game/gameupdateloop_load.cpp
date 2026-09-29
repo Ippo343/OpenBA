@@ -33,6 +33,7 @@
 #include "graphics/Material.h"   // Graphics::Material::TypeId() (ENDGAME B.3.9 TR)
 #include "GameUpdateLoop.h"
 #include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
+#include "ProfessionList.h"     // m_professionList's class (B.4 W0-H2)
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -139,9 +140,9 @@ static void LoadProfessionList_Step2(GameUpdateLoop* self) {
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     System::Filename fname("Game/Profession/Profession.rsc");
-    void* profList = const_cast<::Object::External*>(
+    ::Object::External* profList = const_cast<::Object::External*>(
         efactory->FindOrLoad(fname));                                       // B.3.3 bridge
-    self->m_professionList = profList;
+    self->m_professionList = static_cast<ProfessionList*>(profList);   // unchecked, as before
 
     void* defProf  = profList ? *(void**)((uint8_t*)profList + 0x30) : nullptr;
     void* profRef2 = profList ? *(void**)((uint8_t*)profList + 0x38) : nullptr;
@@ -182,7 +183,7 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
 
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    void* mat = const_cast<::Object::External*>(
+    ::Object::External* mat = const_cast<::Object::External*>(
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
@@ -191,7 +192,7 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
     bool isMat = false;
     if (mat)
         isMat = ::Object::IsDerivedFromNullSafe(mat, Graphics::Material::TypeId());
-    if (isMat) self->m_uiMaterial = mat;
+    if (isMat) self->m_uiMaterial = static_cast<Graphics::Material*>(mat);
 
     fprintf(stderr, "[GUL::UIMat] gw+0xb8=%p (loaded=%p isMaterial=%d)\n",
             self->m_uiMaterial, mat, (int)isMat);
@@ -210,7 +211,7 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Help/HelpTopics.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    void* list = const_cast<::Object::External*>(
+    ::Object::External* list = const_cast<::Object::External*>(
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
@@ -219,12 +220,11 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
     bool isList = false;
     if (list)
         isList = ::Object::IsDerivedFromNullSafe(list, ::Object::ExternalList::TypeId());
-    if (isList) self->m_helpTopics = list;
+    if (isList) self->m_helpTopics = static_cast<::Object::ExternalList*>(list);
 
     fprintf(stderr, "[GUL::Help] gw+0xa0=%p (loaded=%p isExternalList=%d topics=%d)\n",
             self->m_helpTopics, list, (int)isList,
-            isList ? reinterpret_cast<const ::Object::ExternalList*>(list)->GetResourceCount()
-                   : -1);
+            isList ? self->m_helpTopics->GetResourceCount() : -1);
     fflush(stderr);
 }
 
@@ -264,7 +264,7 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Disease/Diseases.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    void* list = const_cast<::Object::External*>(
+    ::Object::External* list = const_cast<::Object::External*>(
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
@@ -272,13 +272,10 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
     bool isList = false;
     if (list)
         isList = ::Object::IsDerivedFromNullSafe(list, ::Object::ExternalList::TypeId());
-    if (isList) self->m_diseaseList = list;
+    if (isList) self->m_diseaseList = static_cast<::Object::ExternalList*>(list);
 
     // B3R: the `fn_ExternalList_GetResourceCount` readiness test went with the door.
-    int count = isList
-                    ? reinterpret_cast<const ::Object::ExternalList*>(list)  // B.3.3 bridge
-                          ->GetResourceCount()
-                    : -1;
+    int count = isList ? self->m_diseaseList->GetResourceCount() : -1;
     fprintf(stderr, "[GUL::DiseaseList] gw+0xa8=%p (loaded=%p isExternalList=%d diseases=%d)\n",
             self->m_diseaseList, list, (int)isList, count);
 
@@ -785,13 +782,16 @@ static inline void* AllocSub(uint64_t size, int align) {
 // (the same export, `??0Time@System@@QEAA@M@Z`).
 static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     void* mem = AllocSub(0x120, 8);
-    self->m_skyMesh = mem;
     if (!mem) {
+        self->m_skyMesh = nullptr;
         fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p\n", mem);
         fflush(stderr);
         return;
     }
-    ::new (mem) Graphics::MeshInstance();
+    // B.4 W0-H2: m_skyMesh is typed, so it is stored from the placement new's
+    // result (after the ctor; it was stored before it). Load runs alone here.
+    Graphics::MeshInstance* sky = ::new (mem) Graphics::MeshInstance();
+    self->m_skyMesh = sky;
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;
@@ -809,8 +809,7 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     // all went in the closing pass: a diagnostic that prints the address of a door
     // nobody calls any more reports nothing. `meshRes` is an object test and stays.
     if (meshRes)
-        reinterpret_cast<Graphics::MeshInstance*>(mem)->SetMesh(
-            Graphics::ExternalPtrHandle{meshRes});   // B.3.5 bridge
+        sky->SetMesh(Graphics::ExternalPtrHandle{meshRes});   // B.3.5 bridge
 
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
@@ -823,7 +822,7 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
         reinterpret_cast<Graphics::Geometry*>(mem)->Update(
             *reinterpret_cast<const System::Time*>(&timeObj));   // B.3.5 bridge
     }
-    reinterpret_cast<Graphics::MeshInstance*>(mem)->_detailId = 0;   // +0x28  B.3.5 bridge
+    sky->_detailId = 0;   // +0x28
 
     fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p\n",
             mem, meshRes);
@@ -919,8 +918,8 @@ void GameUpdateLoop::Load() {
     // source — NOT in seeding. Leading suspect: iteration over a container keyed by heap
     // POINTERS (the profession BST is confirmed pointer-keyed), which ASLR reorders.
     {
-        void* mem = AllocSub(0x9c4, 4);
-        if (mem) RtSystem_Random_CtorSeed(static_cast<System::Random*>(mem), static_cast<uint32_t>(m_seed));
+        System::Random* mem = static_cast<System::Random*>(AllocSub(0x9c4, 4));
+        if (mem) RtSystem_Random_CtorSeed(mem, static_cast<uint32_t>(m_seed));
         m_random = mem;
     }
 
@@ -960,8 +959,8 @@ void GameUpdateLoop::Load() {
 
     // Step 9 — UserInterface (+0x98, 0x128).
     {
-        void* mem = AllocSub(0x128, 4);
-        if (mem) RtUi_UserInterface_Ctor(static_cast<UI::UserInterface*>(mem));
+        UI::UserInterface* mem = static_cast<UI::UserInterface*>(AllocSub(0x128, 4));
+        if (mem) RtUi_UserInterface_Ctor(mem);
         m_userInterface = mem;
     }
 
@@ -990,7 +989,7 @@ void GameUpdateLoop::Load() {
     {
         void* mem = AllocSub(0xb0, 4);
         if (mem) Reimpl_FUN_1401025c0(mem);
-        m_entityUI = mem;
+        m_toolManager = mem;
     }
 
     // Step 14 — DayCounter Time struct (+0x128, 0x18): flag=1, Time(+8,0.0), Time(+0x10,3600.0).
@@ -1089,8 +1088,7 @@ void GameUpdateLoop::Load() {
     // address-registry row), which placement-news the same class.
     {
         void* mem = AllocSub(0x230, 8);
-        if (mem) ::new (mem) WorldGeometry();
-        m_worldGeometry = mem;
+        m_worldGeometry = mem ? ::new (mem) WorldGeometry() : nullptr;
     }
 
     // Step 24 — SunLight (+0x100, 0x108): ctor + Set(dir,col1,col2). No exe vtable override
@@ -1102,7 +1100,7 @@ void GameUpdateLoop::Load() {
             // runs the imported ctor and stamps the exe's 11-slot copy of its
             // table (0x14015e290, slot 0 the exe scalar deleting dtor
             // 0x140019e40); SunLight's own DeletingDtor is that body since RB.
-            ::new (mem) Graphics::SunLight();
+            Graphics::SunLight* sun = ::new (mem) Graphics::SunLight();
             // Initial sun dir = normalize(0.5, 0.33, 1.33) then negate (faithful to
             // the original Load, exe .rdata DAT_140172114/_10c/_15c). This is just a
             // bootstrap: in standalone Weather_SunUpdate (gameupdateloop.cpp Draw
@@ -1114,21 +1112,23 @@ void GameUpdateLoop::Load() {
             float col1[4] = { 0.8f, 0.8f, 0.8f, 0.85f };
             float col2[4] = { 0.37f, 0.37f, 0.4f, 1.0f };
             // B.3.5 bridge — ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z.
-            reinterpret_cast<Graphics::SunLight*>(mem)->Set(
+            sun->Set(
                 *reinterpret_cast<const Math::Vector3*>(dir),
                 *reinterpret_cast<const Math::Vector4*>(col1),
                 *reinterpret_cast<const Math::Vector4*>(col2));   // B.3.5 bridge
-            reinterpret_cast<Graphics::SunLight*>(mem)->_detailId = 0;   // +0x28  B.3.5 bridge
+            sun->_detailId = 0;   // +0x28
+            m_sunLight = sun;
+        } else {
+            m_sunLight = nullptr;
         }
-        m_sunLight = mem;
     }
     if (m_worldGeometry)   // worldGeom +0x28 = 1
-        static_cast<WorldGeometry*>(m_worldGeometry)->_detailId = 1;   // B.3.8 bridge
+        m_worldGeometry->_detailId = 1;
 
     // Step 25 — SaveLoad (+0x140, 0x90).
     {
-        void* mem = AllocSub(0x90, 4);
-        if (mem) RtSave_SaveLoad_Ctor(static_cast<Save::SaveLoad*>(mem));
+        Save::SaveLoad* mem = static_cast<Save::SaveLoad*>(AllocSub(0x90, 4));
+        if (mem) RtSave_SaveLoad_Ctor(mem);
         m_saveLoad = mem;
     }
 
@@ -1391,7 +1391,7 @@ void GameUpdateLoop::Load() {
             {
                 uint8_t* mapGen = static_cast<uint8_t*>(m_mapConfig);   // startConfig (MapGenerator rsc)
                 uint8_t* game   = static_cast<uint8_t*>(m_game);
-                uint8_t* wgeom  = static_cast<uint8_t*>(m_worldGeometry);
+                WorldGeometry* wgeom = m_worldGeometry;
                 uint8_t* pctrl  = static_cast<uint8_t*>(m_playerController);
                 fprintf(stderr, "[startTown::DIAG] mapGen(loop+0x40)=%p game=%p worldGeom=%p playerCtrl=%p\n",
                         mapGen, game, wgeom, pctrl);
@@ -1426,7 +1426,7 @@ void GameUpdateLoop::Load() {
                     }
                 }
                 if (wgeom)
-                    fprintf(stderr, "[startTown::DIAG]   worldGeom+0xc0(dim)=%d\n", *(int32_t*)(wgeom + 0xc0));
+                    fprintf(stderr, "[startTown::DIAG]   worldGeom+0xc0(dim)=%d\n", wgeom->_gridSize);
                 // Keystone sanity: sample terrain height via Reimpl_MapGetTerrainPos
                 // (FUN_14009f3e0) at map centre + a few offsets. Banished valley => centre
                 // should be low/buildable, edges higher.
@@ -1568,7 +1568,7 @@ void GameUpdateLoop::Load() {
             }
             uint64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(instance));   // B.3.3 bridge
-            m_scenarioInstance = reinterpret_cast<void*>(ibp);
+            m_scenarioInstance = reinterpret_cast<Achievement::AchievementInstance*>(ibp);
 
             // scenario = resourceList->data[achievementId]
             //   MOV RAX,[0x1401c3de8] / MOV RCX,[RAX+8] / MOV RAX,[RCX+0x20] / [RAX+idx*8]
@@ -1608,7 +1608,7 @@ void GameUpdateLoop::Load() {
         if (gScene) {
             Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(gScene);   // B.3.5 bridge
             if (m_worldGeometry)
-                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry)); // WorldGeom  B.3.5 bridge
+                gs->AddGlobalObject(m_worldGeometry); // WorldGeom  B.3.5 bridge
             // M5 5b lighting: add the SunLight so the directional light + ambient
             // light the terrain in the main render pass (Renderer::Draw dispatches the
             // light's vtable+0x50 SunLight::Draw → Context::SetLight + DrawItemList).
@@ -1621,12 +1621,12 @@ void GameUpdateLoop::Load() {
             // DrawShadowMap 0x180106bc0, AddScene 0x180105700).
             static const bool kAddSunLight = true;
             if (kAddSunLight && m_sunLight)
-                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight)); // SunLight  B.3.5 bridge
+                gs->AddGlobalObject(m_sunLight); // SunLight  B.3.5 bridge
             // SkyMesh: add as a Scene global object so the reflection + main passes
             // both draw the `_clear_` sky dome (the dark-water fix; see BuildSkyMesh_Step28).
             static const bool kAddSkyMesh = true;
             if (kAddSkyMesh && m_skyMesh)
-                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_skyMesh)); // SkyMesh  B.3.5 bridge
+                gs->AddGlobalObject(m_skyMesh); // SkyMesh  B.3.5 bridge
         }
         void* aScene = m_audioScene;   // g_pGameWorld+0x78
         if (aScene) {
