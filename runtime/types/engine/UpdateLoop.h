@@ -52,16 +52,10 @@
 #include "../system/String.h"
 #include "../ui/UserInterface.h"
 
-// DELIBERATELY NOT INCLUDED: ../system/Value.h. Nothing here needs it — `Time`
-// appears in this file only inside comments, and `LoaderLoop::_delayTicks` is
-// declared as the int64 it is. Pulling it in would drag a GLOBAL `struct Time`
-// (Value.h:65) into every consumer, which collides outright with the exe tree's
-// own global `struct Time` (engine/types/common.h:12): a translation unit that
-// included both this header and anything from engine/types/ would fail with
-// `redefinition of 'struct Time'`. That duplicate is pre-existing and belongs to
-// whoever owns Value.h; this header simply declines to be the thing that carries
-// it into the exe tree. Files that genuinely need `Time` — such as
-// runtime/src/engine/loops.cpp — include Value.h themselves.
+// ../system/Value.h: `System::Time` for LoaderLoop's constructor. (Value.h no
+// longer defines a GLOBAL `struct Time`, so it no longer collides with
+// engine/types/common.h's.)
+#include "../system/Value.h"
 
 namespace RtEngine {
 
@@ -289,7 +283,7 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 
 namespace System { class Time; class String; }
 namespace Save   { class SavedState; }
-namespace UI     { class DialogInstance; }
+namespace UI     { class DialogInstance; class Dialog; }
 
 namespace Engine {
 
@@ -396,10 +390,9 @@ public:
     // 0x1800dc1e0 — the REAL constructor (ENDGAME B.3.8 block RB, B8-1):
     // UpdateLoop() then the stamp are the compiler's. PUBLIC since the class is
     // concrete (B39_RULES D1.1); the door is gone. `Time` is by reference in
-    // retail too. `System::Time` is incomplete here on purpose (the banner's
-    // Value.h note); it is ONE int64 tick count at +0x00 (Value.h asserts it).
+    // retail too: ONE int64 tick count at +0x00 (Value.h asserts it).
     LoaderLoop(UpdateLoop* nextLoop, const System::Time& delay) {
-        InitFields(nextLoop, *reinterpret_cast<const int64_t*>(&delay));
+        InitFields(nextLoop, delay._ticks);
     }
 
     // [0] 0x18004d4f0 -- retail's VECTOR deleting destructor (element 0x48).
@@ -489,8 +482,12 @@ private:
 
 public:
     System::String    _dialogFilename;  // +0x028  the ctor's argument, refcounted
-    void*             _dialogExternal;  // +0x030  Object::External* (Load)
-    void*             _dialogInstance;  // +0x038  InternalPtr<UI::DialogInstance> (Startup)
+    // Load stores the FindOrLoad result only when it IsDerivedFrom UI::Dialog
+    // (0x1800db140), so the field holds a Dialog (H4, layout-neutral).
+    const UI::Dialog*  _dialogExternal; // +0x030
+    // The InternalPtr<UI::DialogInstance> slot 12 returns, kept as its one
+    // pointer (Startup 0x1800db2f0 stores RAX's pointee here).
+    UI::DialogInstance* _dialogInstance; // +0x038
     UI::UserInterface _ui;              // +0x040  0x128 bytes, GetUserInterface
 };
 
@@ -534,8 +531,8 @@ private:
 
 public:
     System::String    _dialogFilename;  // +0x048
-    void*             _dialogExternal;  // +0x050
-    void*             _dialogInstance;  // +0x058
+    const UI::Dialog*  _dialogExternal; // +0x050  as DialogLoopT's
+    UI::DialogInstance* _dialogInstance; // +0x058  as DialogLoopT's
     UI::UserInterface _ui;              // +0x060
 };
 

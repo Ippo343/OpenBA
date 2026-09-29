@@ -222,8 +222,7 @@ using SecToTicksFn = int64_t (*)(float);
 // Data globals — resolved by exported name, never through the registry.
 // See "HOW THE DEPENDENCIES ARE RESOLVED" above.
 MainLoop** MainLoopSingletonSlot() {
-    MainLoop** p = reinterpret_cast<MainLoop**>(&::Engine::MainLoop::_singleton);
-    return p;
+    return &::Engine::MainLoop::_singleton;
 }
 
 // Video::Device::_singleton. The MainLoop ctor stores its two error callbacks
@@ -436,7 +435,7 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     self->_startTicks      = 0;
     self->_accumulator     = 0;
     self->_totalTime       = 0;
-    self->_deltaTime       = 0;
+    self->_deltaTime._ticks = 0;
     self->_maxAccumulator  = 0;
     self->_frameTime       = 0;
     self->_frameStartTicks = 0;
@@ -450,7 +449,7 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     self->_postUpdate._size     = 0;
     self->_postUpdate._capacity = 0;
 
-    self->_deltaTime      = SecondsToTicksInline(kFixedStepSeconds);
+    self->_deltaTime._ticks = SecondsToTicksInline(kFixedStepSeconds);
     self->_maxAccumulator = SecondsToTicksInline(kMaxAccumSeconds);
 
     *MainLoopSingletonSlot() = self;
@@ -576,9 +575,9 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
 // all three counts are asserted, not just the pointers.
 extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
 
-    void* context = self->_context;
+    Video::Context* context = self->_context;
     if (context) {
-        RtVideo_Context_Dtor(static_cast<Video::Context*>(context));   // ~Context 0x1800f16e0
+        RtVideo_Context_Dtor(context);                                // ~Context 0x1800f16e0
         Video_Context_OperatorDelete(context);                        // operator delete 0x180018500
     }
     self->_context = nullptr;

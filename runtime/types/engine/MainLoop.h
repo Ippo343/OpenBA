@@ -113,6 +113,7 @@
 // `using RtVideo::ImageBuffer;` (runtime/types/video/ImageBuffer.h) in
 // video/context_ctor.cpp, which now defines MainLoop::CreateVideoContext.
 #include "../collection/Collection.h"
+#include "../system/Value.h"      // System::Time (_deltaTime)
 
 // Everything below lives in `RtEngine`, matching runtime/types/engine/UpdateLoop.h
 // (lane A) and the RtVideo / RtObject convention the earlier waves set. This is
@@ -230,7 +231,7 @@ public:
     void CreateVideoContext();                                     // 0x1800dd500  video/context_ctor.cpp
 
     // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
-    Video::Context& GetContext() { return *static_cast<Video::Context*>(_context); }  // 0x1800314d0  MOV RAX,[RCX+0x10]
+    Video::Context& GetContext() { return *_context; }             // 0x1800314d0  MOV RAX,[RCX+0x10]
     UpdateLoop* GetCurrentLoop() { return _currentLoop; }          // 0x1800314e0  MOV RAX,[RCX+0x20]
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
@@ -279,7 +280,10 @@ public:
     int64_t  _startTicks;         // +0x30
     int64_t  _accumulator;        // +0x38  fixed-step carry
     int64_t  _totalTime;          // +0x40
-    int64_t  _deltaTime;          // +0x48  SecondsToTicks((float)1/60)
+    // A System::Time: Frame / Run hand `&_deltaTime` to Update(const Time&)
+    // and to Input::Device::Update (`LEA RDX,[RDI+0x48]`); GetDeltaTime
+    // (0x1800314f0) returns it by value.
+    System::Time _deltaTime;      // +0x48  SecondsToTicks((float)1/60)
     int64_t  _maxAccumulator;     // +0x50  SecondsToTicks((float)1/15) -- 4 steps
     int64_t  _frameTime;          // +0x58  _frameEndTicks - _frameStartTicks
     int64_t  _frameStartTicks;    // +0x60

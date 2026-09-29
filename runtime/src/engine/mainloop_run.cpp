@@ -275,23 +275,21 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     loop->Startup();                                                     // slot 1
 
     ::Engine::Engine* engine = _engine;
-    const void* deltaTime = &_deltaTime;                    // the `Time&` retail passes
+    const System::Time& deltaTime = _deltaTime;             // the `Time&` retail passes
 
     // Input::Device::Update — ENDGAME B.3.7 callers (K5): a member of the real
     // class (was the name door).
-    reinterpret_cast< ::Input::Device*>(engine->_inputDevice)->Update(   // +0x6e0, B.3.7 bridge
-        *reinterpret_cast<const System::Time*>(deltaTime));
+    engine->_inputDevice->Update(deltaTime);                             // +0x6e0
 
     // Audio::Device::Update (0x1800de520). ENDGAME B.3.7: a member call on the
     // real class (was BY ADDRESS through a namespace-scope atomic slot).
-    engine->GetAudioDevice()->Update(
-        *static_cast<const System::Time*>(deltaTime));                   // +0x6d0
+    engine->GetAudioDevice()->Update(deltaTime);                         // +0x6d0
     // Application::PlatformUpdate (0x18009fdf0, AEAA): was reached BY ADDRESS
     // (`ResolveAddr(Module::Runtime, 0x18009fdf0)` in a function-local static);
     // ENDGAME B.3.7: a member call on the real class. Result discarded, as retail's.
     engine->GetApplication()->PlatformUpdate();                          // +0x690
 
-    Update(*reinterpret_cast<const System::Time*>(&_deltaTime));   // LEA RDX,[RBX+0x48]
+    Update(_deltaTime);                                                  // LEA RDX,[RBX+0x48]
 
     // MainLoop::Frame — **PORTED, Wave 25 lane BODY** (mainloop_frame.cpp).
     // ENDGAME B.3.7: a direct member call, as retail's rel32 CALL is. (The
