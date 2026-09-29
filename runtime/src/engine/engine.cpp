@@ -225,13 +225,6 @@ MainLoop** MainLoopSingletonSlot() {
     return &::Engine::MainLoop::_singleton;
 }
 
-// Video::Device::_singleton. The MainLoop ctor stores its two error callbacks
-// into the pointed-at Device at +0x50/+0x58 — the profile build calls that
-// setter `Video::Device::SetVideoErrorFuncs` (0x1800fd860); retail inlines it.
-void** VideoDeviceSingletonSlot() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
-}
 
 // System::Timer::_secondsPerTick — the divisor in the inlined SecondsToTicks.
 // Was a RAW-DOOR data read of the DLL's slot (WAVE9_LANE_V.md §4 names this
@@ -485,11 +478,17 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     // reaches the member through the PORT REGISTRY, so a later port of
     // `?OnVideoError@MainLoop@Engine@@QEAAXXZ` is picked up with no further
     // change here. See the two bodies above.
-    uint8_t* device = static_cast<uint8_t*>(*VideoDeviceSingletonSlot());
-    *reinterpret_cast<void**>(device + MainLoopAddr::DeviceErrorFuncSlot) =
-        reinterpret_cast<void*>(&RtEngine_MainLoop_OnVideoError_static);
-    *reinterpret_cast<void**>(device + MainLoopAddr::DeviceRestartFuncSlot) =
-        reinterpret_cast<void*>(&RtEngine_MainLoop_OnVideoRestart_static);
+    // Video::Device::_singleton's +0x50 / +0x58 -- the profile build's setter
+    // `Video::Device::SetVideoErrorFuncs` (0x1800fd860), inlined by retail.
+    // LEFT (B.4 R-ENG): Device.h (R-VIDEO) still declares +0x50..+0x5f as
+    // `gap50[0x10]`; the two callback slots are viewed over it until that
+    // header names them (known_port_issues 14f).
+    static_assert(MainLoopAddr::DeviceErrorFuncSlot   == offsetof(::Video::Device, gap50), "error callback @ +0x50");
+    static_assert(MainLoopAddr::DeviceRestartFuncSlot == offsetof(::Video::Device, gap50) + 8, "restart callback @ +0x58");
+    using VideoCallback = void (*)();
+    VideoCallback* const callbacks = reinterpret_cast<VideoCallback*>(::Video::Device::_singleton->gap50);
+    callbacks[0] = &RtEngine_MainLoop_OnVideoError_static;     // +0x50
+    callbacks[1] = &RtEngine_MainLoop_OnVideoRestart_static;   // +0x58
 
     // ⛔ KNOWN, UNFIXED CUTOVER NULL — but it now has a NAME. (Wave 9 lane VID2.)
     //
