@@ -532,8 +532,8 @@ namespace {
 // that the FIELD is used as the scratch for the pointer arithmetic:
 // `field -= 8` and then `MemFree(field)`, which leaves a freed pointer in the
 // field for the two instructions before it is overwritten. Reproduced.
-void AssignStringField(void*& field, char* incoming) {
-    char* const previous = static_cast<char*>(field);
+void AssignStringField(char*& field, char* incoming) {
+    char* const previous = field;
     if (previous != incoming) {
         if (previous) {
             if (--RtSystem::StringRefCount(previous) == 0) {
