@@ -218,7 +218,7 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0x81. (Retail leaves +0x38 to
 // OnAdded / the build-complete init; the tree's zero is kept.)
 StorageComponent::StorageComponent()
-    : storageSlots(nullptr), slotCount(0), _pad34{}, field38(nullptr) {
+    : storageSlots(nullptr), slotCount(0), slotCapacity(0), capacity(0), rawMaterialFlags(0) {
     OrFlagsInCtor(0x81);
 }
 

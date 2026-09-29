@@ -19,6 +19,20 @@
 //     `LEA RAX,[RCX+0x28]`; every other slot = ControllerComponent's / Component's.
 //   member table 0x140164ce0: the table-driven controller over the class's state
 //     table (ControllerLive::Dispatcher<WPCCtrlTag>).
+//
+// B.4 W0-H2 fields (retail ctor 0x14012f2e0, dtor 0x14012f270, Persist
+// 0x14012f120; Persist passes no key names):
+//   +0x48 ExternalPtr<Profession> profession: Persist version >= 1 serializes
+//         it with ExternalPtr<Profession>::Serialize (0x140018020, type gate
+//         TypeInfo_Profession); version 0 copies the description's +0x20.
+//         Declared as a plain Profession* (layout-identical; the tree's ctor
+//         zeroes it, as retail's does).
+//   +0x50 bool  isAccepting: Serialize(bool&); ctor `MOV byte [+0x50],1`.
+//   +0x58 Collection::Array<InternalPtr<CitizenComponent>> the worker roster:
+//         data +0x58, count +0x60, capacity +0x64 (Persist: count via
+//         Serialize(int&), SetSize 0x1400032e0, each element
+//         InternalBasePtr::Serialize + IsDerivedFrom CitizenComponent). Raw
+//         members (B.4 H5: the tree's dtor frees the data by hand, as retail's).
 // ============================================================================
 
 #include <cstdint>
@@ -28,6 +42,8 @@
 #include "Object/exe_type.h"
 
 struct WPCCtrlTag {};
+class Profession;         // Game/Profession.h
+class CitizenComponent;   // Component/CitizenComponent.h
 
 class WorkPlaceComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(WorkPlaceComponent)
@@ -46,11 +62,12 @@ public:
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    void*    workerData;           // +0x48 the profession-registry key (serialized IBP)
-    uint8_t  isAccepting;          // +0x50 1 from the ctor
+    Profession* profession;        // +0x48 ExternalPtr<Profession>
+    bool     isAccepting;          // +0x50 1 from the ctor (Serialize bool&)
     uint8_t  _pad51[7];            // +0x51
-    void*    field58;              // +0x58 the worker roster (Array data)
-    void*    field60;              // +0x60 its count / capacity
+    Object::InternalPtr<CitizenComponent>* workers;   // +0x58 roster Array data
+    int32_t  workerCount;          // +0x60 roster Array count
+    int32_t  workerCapacity;       // +0x64 roster Array capacity
 };
 
 static_assert(sizeof(WorkPlaceComponent) == 0x68, "WorkPlaceComponent is 0x68 (create 0x14003a030)");
@@ -59,7 +76,9 @@ static_assert(offsetof(WorkPlaceComponent, _controller) == 0x28,
               "WorkPlaceComponent's controller member at +0x28 (slot 17 0x140004080)");
 static_assert(offsetof(WorkPlaceComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x14012f33c)");
-static_assert(offsetof(WorkPlaceComponent, workerData) == 0x48, "WorkPlaceComponent +0x48");
+static_assert(offsetof(WorkPlaceComponent, profession) == 0x48, "WorkPlaceComponent::profession @ +0x48 (0x140018020)");
 static_assert(offsetof(WorkPlaceComponent, isAccepting) == 0x50, "WorkPlaceComponent +0x50 (ctor 0x14012f344)");
-static_assert(offsetof(WorkPlaceComponent, field58) == 0x58, "WorkPlaceComponent +0x58");
-static_assert(offsetof(WorkPlaceComponent, field60) == 0x60, "WorkPlaceComponent +0x60");
+static_assert(offsetof(WorkPlaceComponent, _pad51) == 0x51, "WorkPlaceComponent +0x51 padding");
+static_assert(offsetof(WorkPlaceComponent, workers) == 0x58, "WorkPlaceComponent roster data @ +0x58");
+static_assert(offsetof(WorkPlaceComponent, workerCount) == 0x60, "WorkPlaceComponent roster count @ +0x60");
+static_assert(offsetof(WorkPlaceComponent, workerCapacity) == 0x64, "WorkPlaceComponent roster capacity @ +0x64");

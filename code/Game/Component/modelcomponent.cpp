@@ -182,7 +182,7 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
 // +0x28, Transform() builds +0x148, variant/scale = 0, modelId = -1,
 // flags |= 0x83.
 ModelComponent::ModelComponent()
-    : meshInstance{}, transform{}, _pad164{}, modelId(-1) {
+    : meshInstance{}, transform{}, meshGroup(0), meshIndex(0), yaw(0.0f), modelId(-1) {
     ::new (static_cast<void*>(meshInstance)) Graphics::MeshInstance();   // +0x28, retail CALL [??0MeshInstance] (B.3.9 GFX)
     ::new (static_cast<void*>(transform)) Math::Transform();   // +0x148 Math::Transform (slot 0x140151328)   // B.3.1 bridge
     OrFlagsInCtor(0x83);

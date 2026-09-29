@@ -24,6 +24,23 @@
 //   member table 0x140162210 (9 slots): the table-driven state controller over the
 //     class's state table (ControllerLive::Dispatcher<BuildCtrlTag>), stamped at
 //     this+0x28 after the interface 0x14015f070; back-pointer at this+0x40.
+//
+// B.4 W0-H2 fields (retail ctor 0x140108fc0, dtor 0x140108f30, Persist
+// 0x140108d80, OnMessage 0x140108710; Persist passes no key names):
+//   +0x48 int32 laborProgress   Serialize(int&); OnMessage(0) is `+0x48 += 1`
+//                               (one unit of labour delivered); ctor 0
+//   +0x4C int32 costMultiplier  Serialize(int&); ctor 1; the state-1 body sets
+//                               it from the site's multiplier; completion is
+//                               laborProgress reaching (materials x this)
+//   +0x50 bool  buildFlag       Serialize(bool&); ctor 0 (meaning not settled)
+//   +0x58 Collection::Array<InternalPtr<ModelComponent>>: data +0x58, count
+//         +0x60, capacity +0x64 (Persist: count via Serialize(int&), SetSize
+//         0x1400032e0, each element InternalBasePtr::Serialize + IsDerivedFrom
+//         ModelComponent's type id 0x1401c7a50)
+//   +0x68 Collection::Array<InternalPtr<PickingComponent>>: data +0x68, count
+//         +0x70, capacity +0x74 (the same, PickingComponent's type id)
+//   The two arrays are declared as their raw members (B.4 H5: the tree's dtor
+//   frees them by hand, as retail's does; an Array member would free twice).
 // ============================================================================
 
 #include <cstdint>
@@ -33,6 +50,8 @@
 #include "Object/exe_type.h"
 
 struct BuildCtrlTag {};
+class ModelComponent;     // Component/ModelComponent.h
+class PickingComponent;   // Component/PickingComponent.h
 
 class BuildComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(BuildComponent)
@@ -56,14 +75,16 @@ public:
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    uint32_t        buildState;    // +0x48 labour-progress accumulator
-    uint32_t        buildProgress; // +0x4c cost multiplier (retail ctor: 1)
-    uint8_t         buildFlag;     // +0x50 (serialized)
-    uint8_t         _pad51[7];     // +0x51
-    void*           field58;       // +0x58 mesh list (InternalBasePtr[])
-    void*           field60;       // +0x60 mesh list count / capacity
-    void*           field68;       // +0x68 picking list (InternalBasePtr[])
-    void*           field70;       // +0x70 picking list count / capacity
+    int32_t         laborProgress;   // +0x48 labour units delivered (OnMessage 0)
+    int32_t         costMultiplier;  // +0x4c cost multiplier (retail ctor: 1)
+    bool            buildFlag;       // +0x50 (serialized bool)
+    uint8_t         _pad51[7];       // +0x51
+    Object::InternalPtr<ModelComponent>*   modelComponents;        // +0x58 Array data
+    int32_t                                modelComponentCount;    // +0x60 Array count
+    int32_t                                modelComponentCapacity; // +0x64 Array capacity
+    Object::InternalPtr<PickingComponent>* pickingComponents;      // +0x68 Array data
+    int32_t                                pickingComponentCount;    // +0x70 Array count
+    int32_t                                pickingComponentCapacity; // +0x74 Array capacity
 };
 
 static_assert(sizeof(BuildComponent) == 0x78, "BuildComponent is 0x78 (create 0x14002f2b0)");
@@ -72,9 +93,13 @@ static_assert(offsetof(BuildComponent, _controller) == 0x28,
               "BuildComponent's controller member at +0x28 (slot 17 0x140004080: LEA RAX,[RCX+0x28])");
 static_assert(offsetof(BuildComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x140108fc0)");
-static_assert(offsetof(BuildComponent, buildState) == 0x48, "BuildComponent +0x48");
-static_assert(offsetof(BuildComponent, buildProgress) == 0x4c, "BuildComponent +0x4c");
-static_assert(offsetof(BuildComponent, buildFlag) == 0x50, "BuildComponent +0x50");
-static_assert(offsetof(BuildComponent, field58) == 0x58, "BuildComponent +0x58");
-static_assert(offsetof(BuildComponent, field68) == 0x68, "BuildComponent +0x68");
-static_assert(offsetof(BuildComponent, field70) == 0x70, "BuildComponent +0x70");
+static_assert(offsetof(BuildComponent, laborProgress) == 0x48, "BuildComponent::laborProgress @ +0x48 (Serialize int&)");
+static_assert(offsetof(BuildComponent, costMultiplier) == 0x4c, "BuildComponent::costMultiplier @ +0x4c (Serialize int&)");
+static_assert(offsetof(BuildComponent, buildFlag) == 0x50, "BuildComponent::buildFlag @ +0x50 (Serialize bool&)");
+static_assert(offsetof(BuildComponent, _pad51) == 0x51, "BuildComponent +0x51 padding");
+static_assert(offsetof(BuildComponent, modelComponents) == 0x58, "BuildComponent model array data @ +0x58");
+static_assert(offsetof(BuildComponent, modelComponentCount) == 0x60, "BuildComponent model array count @ +0x60");
+static_assert(offsetof(BuildComponent, modelComponentCapacity) == 0x64, "BuildComponent model array capacity @ +0x64");
+static_assert(offsetof(BuildComponent, pickingComponents) == 0x68, "BuildComponent picking array data @ +0x68");
+static_assert(offsetof(BuildComponent, pickingComponentCount) == 0x70, "BuildComponent picking array count @ +0x70");
+static_assert(offsetof(BuildComponent, pickingComponentCapacity) == 0x74, "BuildComponent picking array capacity @ +0x74");

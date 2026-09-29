@@ -34,7 +34,9 @@ extern "C" GameContainer* Game_Ctor(GameContainer* self) {
     // Zero the entire 0xe0-byte struct, including the regions where the
     // sprites will be initialized — Sprite default ctor is itself a 16-byte
     // zero-init in the engine, so this is safe.
-    std::memset(self, 0, 0xe0);
+    // (Raw memory: GameContainer is never constructed as a C++ object.)
+    void* raw = self;
+    std::memset(raw, 0, 0xe0);
 
     // Two embedded UI::Sprite default ctors at +0xA8 and +0xB8.
     ::new (&self->spriteWhite) UI::Sprite();           // B.3.6: value-type ctor in place (B6-10)
