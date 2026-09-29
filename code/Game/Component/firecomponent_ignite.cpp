@@ -58,6 +58,13 @@
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
+#include "Component/DestroyComponent.h"
+#include "Component/ParticleComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/MapComponent.h"
+#include "Game/PlayerToolManager.h"
+#include "Game/GameSettings.h"
+#include "Entity/ComponentEntity.h"
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp),
 // declared in Game/exe_bodies.h. The three shared SM-state helpers are ported once
@@ -66,10 +73,10 @@
 // ============================================================
 // Dependencies, called directly
 // ============================================================
-//   0x140005780 DestroyComponent finder   PlayerPath_FindComponent_5780
-//   0x140005200 ParticleComponent finder  NaturalResourceComponent_FindComponentByType
-//   0x140003050 WorkComponent finder      WorkBase_FindComponent_3050
-//   0x140004680 MapComponent finder       FloorComponent_FindResData
+//   0x140005780 DestroyComponent finder   FindComponent<DestroyComponent>
+//   0x140005200 ParticleComponent finder  FindComponent<ParticleComponent>
+//   0x140003050 WorkComponent finder      FindComponent<WorkComponent>
+//   0x140004680 MapComponent finder       FindComponent<MapComponent>
 //   0x140002280 AmbientEmitterComponent finder — NOT PORTED (PORT GAP arms below)
 //   0x14012ec60 CitizenAI_WorkScheduler_Post, 0x1400f9ad0 RemovalCalc_CitizenAI_9ad0,
 //   0x14012eb50 WorkComponent_RegisterWorkSlot, 0x140053660 ParticleComponent_StartEmitterFade,
@@ -78,15 +85,14 @@
 //   .rdata: 0x140172234 = 300.0f (seconds-per-unit scale), 0x140172114 = 0.5f.
 namespace {
 
-inline uintptr_t GameWorld() {
-    return (GameUpdateLoop::_singleton != nullptr)
-         ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
+inline GameUpdateLoop* GameWorld() {
+    return GameUpdateLoop::_singleton;
 }
 
 inline int64_t MakeTime(float seconds) {
-    int64_t t = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t), seconds);
-    return t;
+    ::System::Time t = {0};
+    RtSystem_Time_Ctor(&t, seconds);
+    return t._ticks;
 }
 
 }  // namespace
@@ -108,10 +114,11 @@ inline int64_t MakeTime(float seconds) {
 // cascade. Trusting a non-null +0x18 reproduces retail's effective behaviour —
 // retail always has the real description here — instead of substituting a null
 // that retail can never produce.
-static inline void* FireDesc(const void* self) {
-    void* obj = *(void**)((uintptr_t)self + 0x18);
+static inline FireDescription* FireDesc(const Component* self) {
+    Description* obj = self->_description;
     if (!obj) return nullptr;
-    return ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId()) ? obj : nullptr;
+    return ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId())
+        ? static_cast<FireDescription*>(obj) : nullptr;
 }
 
 // ============================================================
@@ -147,24 +154,23 @@ extern "C" void FireComp_StampDangerRect_9fa80(int* grid, uint64_t /*unused*/,
 // ============================================================
 // FireComponent_sub_99c0 (0x1400499c0) — add (+1) / remove (-1) the danger rect.
 // ============================================================
-extern "C" void FireComp_MarkDanger_99c0(void* self, short delta) {
-    void* desc = FireDesc(self);
+void FireComponent::MarkDanger(short delta) {
+    FireDescription* desc = FireDesc(this);
 
-    void* ibpSlot = reinterpret_cast<uint8_t*>(self) + 0x10;
-    uintptr_t mapIbp = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(ibpSlot), &mapIbp);
+    MapComponent* map = _entity->FindComponent<MapComponent>();   // 0x140004680
 
-    const int r = *reinterpret_cast<int*>(
-        reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::DangerRadius);
-    const int16_t ox = *reinterpret_cast<int16_t*>(mapIbp + 0x28);
-    const int16_t oy = *reinterpret_cast<int16_t*>(mapIbp + 0x2a);
-    const int16_t w  = *reinterpret_cast<int16_t*>(mapIbp + 0x2c);
-    const int16_t h  = *reinterpret_cast<int16_t*>(mapIbp + 0x2e);
+    const int r = desc->dangerRadius;
+    // Retail loads the footprint with MOVSX: signed shorts.
+    const int16_t ox = static_cast<int16_t>(map->tileX0);
+    const int16_t oy = static_cast<int16_t>(map->tileY0);
+    const int16_t w  = static_cast<int16_t>(map->tileX1);
+    const int16_t h  = static_cast<int16_t>(map->tileY1);
     const uint32_t yMax = static_cast<uint32_t>(oy - 1 + h + r);
 
-    const uintptr_t gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
+    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT.
+    int* grid = reinterpret_cast<int*>(gw->m_game);
     FireComp_StampDangerRect_9fa80(grid, yMax, ox - r, oy - r, ox - 1 + w + r,
                                    static_cast<int>(yMax), delta);
 }
@@ -184,12 +190,14 @@ extern "C" void FireComp_MarkDanger_99c0(void* self, short delta) {
 // Entry {+0x00 uint handle, +0x04 float volume, +0x08 ExternalPtr sound}, stride
 // 0x10; the sound ref is lazily copied from the AmbientEmitterDescription's
 // (+0x28) sound array. SoundType 3 = ambient looping.
+// (An AmbientEmitterComponent body, COMP-a's class; its reads stay as they were.)
 extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx) {
     if (!ambientComp) return;
     uintptr_t a = reinterpret_cast<uintptr_t>(ambientComp);
-    const uintptr_t gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    void* scene = *reinterpret_cast<void**>(gw + 0x78);
+    // GameUpdateLoop::m_audioScene (+0x78) is still void* (GAME-a): LEFT.
+    void* scene = gw->m_audioScene;
     if (!scene) return;
 
     void* obj = *reinterpret_cast<void**>(a + 0x18);
@@ -227,59 +235,44 @@ extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx) {
 }
 
 // ============================================================
-// FireWork_Ctor (0x1400e9bd0) — the 3-arg ctor. The ONLY producer of a FireWork.
+// FireWork_Ctor (0x1400e9bd0) — the 3-arg ctor, the ONLY producer of a FireWork:
+// FireWork(void* pEntityIBP, uint32_t capacity) (FireWork.h), called by name from
+// Ignite below. The C wrapper around it (FireWork_CtorFull_e9bd0) is gone.
 // ============================================================
-extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32_t capacity) {
-    // ENDGAME B.3.9 OBJ: the real 3-argument ctor (FireWork.h) -- the Work
-    // base ctor 0x1400f72e0, the table, the +0x48 dword / +0x50 / +0x58 stores
-    // and FireWork_ResolveFuncs() (the Work's own leaf pointers: the factory
-    // path is not the only construction path, and this is the only producer)
-    // -- instead of the `??0Internal` door, a hand stamp and three raw stores.
-    if (!mem) return nullptr;
-    uint64_t local = pEntityIBP ? *pEntityIBP : 0;
-    return ::new (mem) FireWork(&local, capacity);
-}
 
 // ============================================================
 // FireComponent_Extinguish (0x1400494c0)
 // ============================================================
-extern "C" void FireComponent_Extinguish_4c0(void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
-
-    *reinterpret_cast<int64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<int64_t*>(s + 0x38) = 0;
-    void* desc = FireDesc(self);
+void FireComponent::Extinguish() {
+    fireTimer._ticks = 0;
+    spreadTimer._ticks = 0;
+    FireDescription* desc = FireDesc(this);
 
     // ParticleComponent: fade the flames out.
     {
-        uintptr_t partIbp = 0;
-        NaturalResourceComponent_FindComponentByType(*reinterpret_cast<void**>(ibpSlot), &partIbp);
-        Tornado_ParticleReverse_53720(reinterpret_cast<void*>(partIbp),
-                                      *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) +
-                                                              FireDescriptionField::ParticleEmitter));
+        ParticleComponent* part = _entity->FindComponent<ParticleComponent>();   // 0x140005200
+        Tornado_ParticleReverse_53720(part, desc->particleEmitter);
     }
 
-    // DestroyComponent: leave the BURNING state.
+    // DestroyComponent: leave the BURNING state. (The tree's null test on the
+    // DestroyComponent stays in the B4 FORWARD body it calls.)
     {
-        uintptr_t destIbp = 0;
-        PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
-        FireComponent_StopBurning_11ea10(reinterpret_cast<void*>(destIbp));
+        DestroyComponent* dest = _entity->FindComponent<DestroyComponent>();   // 0x140005780
+        FireComponent_StopBurning_11ea10(dest);
     }
 
     // WorkComponent: release the firefighting work slot (this is what retires the
     // FireWork Ignite posted).
     {
-        uintptr_t workIbp = 0;
-        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(ibpSlot), &workIbp);
-        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(workIbp));
+        WorkComponent* work = _entity->FindComponent<WorkComponent>();   // 0x140003050
+        WorkComponent_RegisterWorkSlot(work);
     }
 
     // AmbientEmitterComponent: stop the crackle.
     // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it here.
     // Its null arm: no emitter is found, so the crackle-stop block is skipped.
 
-    FireComp_MarkDanger_99c0(self, -1);
+    MarkDanger(-1);
 
     // OUTCOME trace — say which of the two Slot15/Update conditions brought us here.
 }
@@ -287,17 +280,12 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
 // ============================================================
 // FireComponent_Ignite (0x140049610)
 // ============================================================
-extern "C" void FireComponent_Ignite_610(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
-    const uintptr_t gw = GameWorld();
+void FireComponent::Ignite() {
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
 
     // --- the two abort gates, on the DestroyComponent ---
-    uintptr_t destIbp = 0;
-    PlayerPath_FindComponent_5780(*reinterpret_cast<uintptr_t*>(ibpSlot), &destIbp);
-    void* destroyComp = reinterpret_cast<void*>(destIbp);
+    DestroyComponent* destroyComp = _entity->FindComponent<DestroyComponent>();   // 0x140005780
 
     if (FireComponent_IsBeingDemolished_11e690(destroyComp)) {
         return;
@@ -306,59 +294,52 @@ extern "C" void FireComponent_Ignite_610(void* self) {
         return;
     }
 
-    void* desc = FireDesc(self);
-    const uintptr_t d = reinterpret_cast<uintptr_t>(desc);
+    FireDescription* desc = FireDesc(this);
 
     // Burn duration = Time(BurnScale * 300 + BurnBase); the DestroyComponent gets
     // HALF of it (its own damage clock).
-    const int64_t burnFull = MakeTime(
-        *reinterpret_cast<float*>(d + FireDescriptionField::BurnScale) * kRdata_140172234 +
-        *reinterpret_cast<float*>(d + FireDescriptionField::BurnBase));
-    const float   burnSecs = reinterpret_cast<const System::Time*>(const_cast<int64_t*>(&burnFull))->AsSeconds();   // B.3.4b bridge
-    const int64_t burnHalf = MakeTime(burnSecs * kRdata_140172114);
+    const int64_t burnFull = MakeTime(desc->burnScale * kRdata_140172234 + desc->burnBase);
+    const System::Time burnFullTime = {burnFull};
+    const float   burnSecs = burnFullTime.AsSeconds();
+    const System::Time burnHalf = {MakeTime(burnSecs * kRdata_140172114)};
 
-    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
+    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf._ticks)) {
         return;
     }
 
-    *reinterpret_cast<int64_t*>(s + 0x30) = burnFull;
-    *reinterpret_cast<int64_t*>(s + 0x38) =
-        MakeTime(*reinterpret_cast<float*>(d + FireDescriptionField::SpreadInterval));
-    *reinterpret_cast<int64_t*>(s + 0x28) = 0;      // bucketsApplied + bucketsAtSpread
+    fireTimer._ticks = burnFull;
+    spreadTimer._ticks = MakeTime(desc->spreadInterval);
+    bucketsApplied = 0;      // one qword store in the tree (+0x28 and +0x2c): H7
+    bucketsAtSpread = 0;
 
     // ParticleComponent: fade the flames in.
     {
-        uintptr_t partIbp = 0;
-        NaturalResourceComponent_FindComponentByType(*reinterpret_cast<void**>(ibpSlot), &partIbp);
-        ParticleComponent_StartEmitterFade(reinterpret_cast<ParticleComponent*>(partIbp),
-                         *reinterpret_cast<int*>(d + FireDescriptionField::ParticleEmitter));
+        ParticleComponent* part = _entity->FindComponent<ParticleComponent>();   // 0x140005200
+        ParticleComponent_StartEmitterFade(part, desc->particleEmitter);
     }
 
     // --- MINT the FireWork and POST it to the reservation ledger ---
-    uintptr_t workCompIbp = 0;
-    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(ibpSlot), &workCompIbp);
+    WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
 
-    void* work = nullptr;
+    // FireWork's 3-argument ctor 0x1400e9bd0, called by name (the old
+    // FireWork_CtorFull_e9bd0 wrapper around it is no longer called from here).
+    FireWork* work = nullptr;
     if (::System::MemoryAllocator::_singleton) {
         void* mem = ::System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
-            uint64_t entityIbp = *reinterpret_cast<uint64_t*>(s + 0x10);
-            work = FireWork_CtorFull_e9bd0(
-                mem, &entityIbp,
-                *reinterpret_cast<uint32_t*>(d + FireDescriptionField::MaxFirefighters));
+            ComponentEntity* entityIbp = _entity;
+            work = ::new (mem) FireWork(&entityIbp, static_cast<uint32_t>(desc->maxFirefighters));
         }
     }
 
-    uint64_t workIbp = 0;
-    new (&workIbp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
+    ::Object::InternalPtr<FireWork> workIbp(work);
 
-    if (workCompIbp) {
-        CitizenAI_WorkScheduler_Post(workCompIbp, 0x4000, 0, &workIbp);
+    if (workComp) {
+        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x4000, 0, &workIbp);
     }
-    if (workCompIbp) {
-        RemovalCalc_CitizenAI_9ad0(*reinterpret_cast<int64_t*>(gw + 0x118),
-                      *reinterpret_cast<int*>(workCompIbp + 0x28));
+    if (workComp) {
+        // GameUpdateLoop +0x118 is still void* (GAME-a): the scheduler handle is LEFT.
+        RemovalCalc_CitizenAI_9ad0(reinterpret_cast<int64_t>(gw->m_tutorial), workComp->workId);
     }
 
     // --- first-fire-in-town announcement ---
@@ -372,18 +353,19 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     //   local_60    = -1          == PopupIndex(0x1F)   => -1         (agrees)
     //   EventArray_Grow(eventLog+0x18, *(int*)(eventLog+0x20) + 1, entry)
     // All five literals reproduce, so the call is the inline.
-    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
+    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): the Map's active-fire
+    // count (+0x9c, inside Map::field_0x90's shorts) is read by offset: LEFT.
+    int* grid = reinterpret_cast<int*>(gw->m_game);
     if (grid && *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(grid) + 0x9c) < 1) {
-        void* eventLog = *reinterpret_cast<void**>(gw + 0x138);
-        uint64_t entityIbp = *reinterpret_cast<uint64_t*>(s + 0x10);
+        void* eventLog = gw->m_eventNotifier;   // +0x138
+        ComponentEntity* entityIbp = _entity;
         if (eventLog) EventLog_AddEvent(eventLog, 0x1f, 3, &entityIbp);
         // The settings' auto-slow byte (+0x17). Retail 0x1400498e6:
         // MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of the settings
         // BLOCK (this read indexed the cell pointer, 0xb8 bytes past it).
-        if (g_gameSettings != nullptr &&
-            reinterpret_cast<const uint8_t*>(g_gameSettings)[0x17] != 0) {
-            int64_t evt = *reinterpret_cast<int64_t*>(gw + 0x120);
-            if (evt) *reinterpret_cast<uint32_t*>(evt + 0x34) = 1;
+        if (g_gameSettings != nullptr && g_gameSettings->autoSlow != 0) {
+            PlayerToolManager* evt = gw->m_toolManager;   // +0x120
+            if (evt) evt->field_0x34 = 1;
         }
     }
 
@@ -392,7 +374,7 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     // Its null arm: no emitter is found, so the move (0x140042960) and the start
     // (0x140042c60) are skipped, and the ModelComponent find (0x140003f60) with them.
 
-    FireComp_MarkDanger_99c0(self, 1);
+    MarkDanger(1);
 
 }
 
@@ -401,25 +383,23 @@ extern "C" void FireComponent_Ignite_610(void* self) {
 // ============================================================
 // Spread census — see the comment at the roll site below.
 
-extern "C" void FireComponent_Spread_130(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    const uintptr_t gw = GameWorld();
+void FireComponent::SpreadToNeighbors() {
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
 
-    void* myDesc = FireDesc(self);
-    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
+    FireDescription* myDesc = FireDesc(this);
+    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): the grid reads are LEFT.
+    int* grid = reinterpret_cast<int*>(gw->m_game);
     if (!grid) return;
 
-    void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
-    uintptr_t mapIbp = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(ibpSlot), &mapIbp);
+    MapComponent* map = _entity->FindComponent<MapComponent>();   // 0x140004680
 
-    // Footprint-derived sample rect, expanded by min(w,h) on each side.
-    int w  = static_cast<int>(*reinterpret_cast<int16_t*>(mapIbp + 0x2c));
-    int h  = static_cast<int>(*reinterpret_cast<int16_t*>(mapIbp + 0x2e));
-    const int16_t oy = *reinterpret_cast<int16_t*>(mapIbp + 0x2a);
-    const int16_t ox = *reinterpret_cast<int16_t*>(mapIbp + 0x28);
+    // Footprint-derived sample rect, expanded by min(w,h) on each side. Retail loads
+    // the shorts with MOVSX.
+    int w  = static_cast<int>(static_cast<int16_t>(map->tileX1));
+    int h  = static_cast<int>(static_cast<int16_t>(map->tileY1));
+    const int16_t oy = static_cast<int16_t>(map->tileY0);
+    const int16_t ox = static_cast<int16_t>(map->tileX0);
     const int pad = (w < h) ? w : h;
     int xMax = w - 1 + pad + ox;
     int yMax = h - 1 + pad + oy;
@@ -429,12 +409,12 @@ extern "C" void FireComponent_Spread_130(void* self) {
     if (gwidth <= xMax) xMax = gwidth - 1;
     if (gwidth <= yMax) yMax = gwidth - 1;
 
-    if (*reinterpret_cast<int64_t*>(s + 0x30) < 1) {
-        *reinterpret_cast<int32_t*>(s + 0x2c) = *reinterpret_cast<int32_t*>(s + 0x28);
+    if (fireTimer._ticks < 1) {
+        bucketsAtSpread = bucketsApplied;
         return;
     }
 
-    void* rng = *reinterpret_cast<void**>(gw + 0xd8);
+    System::Random* rng = gw->m_random;
 
     // Retail's `do { ... } while (fireTimer > 0)` relies on the spread interval
     // (desc+0x30 * 300) being non-zero — each pass adds it to +0x38 and the loop
@@ -445,61 +425,57 @@ extern "C" void FireComponent_Spread_130(void* self) {
     int passes = 0;
 
     do {
-        if (*reinterpret_cast<int64_t*>(s + 0x38) > 0) break;
+        if (spreadTimer._ticks > 0) break;
         if (++passes > kMaxPasses) {
             break;
         }
 
-        *reinterpret_cast<int64_t*>(s + 0x38) += MakeTime(
-            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(myDesc) +
-                                      FireDescriptionField::SpreadInterval) * kRdata_140172234);
+        spreadTimer._ticks += MakeTime(myDesc->spreadInterval * kRdata_140172234);
 
-        int cx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<int32_t>(xMin), static_cast<int32_t>(xMax));   // B.3.4b bridge
-        int cy = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<int32_t>(oy - pad), static_cast<int32_t>(yMax));   // B.3.4b bridge
+        int cx = rng->Rand(static_cast<int32_t>(xMin), static_cast<int32_t>(xMax));
+        int cy = rng->Rand(static_cast<int32_t>(oy - pad), static_cast<int32_t>(yMax));
 
-        // Fine-cell array at grid+0x80, stride 0x30; +0x00 is the occupant.
-        int64_t occupant = *reinterpret_cast<int64_t*>(
+        // Fine-cell array at grid+0x80, stride 0x30; +0x00 is the occupant (the Map's
+        // cells are untyped: LEFT).
+        ComponentEntity* occupant = *reinterpret_cast<ComponentEntity**>(
             *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80) +
             (static_cast<int64_t>(*grid) * cy + cx) * 0x30);
 
-        uint64_t neighbourFire = 0;
-        if (occupant != 0) {
-            const int n = *reinterpret_cast<int*>(occupant + 0x38);
-            int64_t comps = *reinterpret_cast<int64_t*>(occupant + 0x30);
+        // Retail inlines the exact-id scan here (no IsDerivedFrom): the generic find.
+        FireComponent* neighbourFire = nullptr;
+        if (occupant != nullptr) {
+            const int n = occupant->_componentCount;
             for (int i = 0; i < n; ++i) {
-                uint64_t* slot = reinterpret_cast<uint64_t*>(comps + static_cast<int64_t>(i) * 8);
-                uint32_t tid = reinterpret_cast<Object::Base*>(*slot)->Type();   // B.3.8 bridge (slot 2)
+                Component* c = occupant->_components[i].Get();
+                uint32_t tid = c->Type();   // slot 2
                 if (tid == FireComponent::TypeId()) {
-                    neighbourFire = *slot;
+                    neighbourFire = static_cast<FireComponent*>(c);
                     break;
                 }
             }
         }
 
-        if (occupant != 0 && neighbourFire != 0) {
-            void* nDescObj = *reinterpret_cast<void**>(neighbourFire + 0x18);
-            void* nDesc = (nDescObj && ::Object::IsDerivedFromOrTrust(
-                               nDescObj, FireDescription::TypeId())) ? nDescObj : nullptr;
-            const uintptr_t nd = reinterpret_cast<uintptr_t>(nDesc);
+        if (occupant != nullptr && neighbourFire != nullptr) {
+            FireDescription* nDesc = FireDesc(neighbourFire);
 
-            float chance = *reinterpret_cast<float*>(nd + FireDescriptionField::SpreadChance);
+            float chance = nDesc->spreadChance;
             // Half the chance while the game is at its slowest speed step.
-            int64_t speedObj = *reinterpret_cast<int64_t*>(gw + 0x130);
+            // GameUpdateLoop::m_weather (+0x130) is still void* (GAME-a): LEFT.
+            int64_t speedObj = reinterpret_cast<int64_t>(gw->m_weather);
             if (speedObj && *reinterpret_cast<int*>(speedObj + 0x10) == 0) chance *= kRdata_140172114;
             // Half it again once the brigade is visibly winning here.
-            if (*reinterpret_cast<int*>(nd + FireDescriptionField::BucketsToOut) / 5 <
-                *reinterpret_cast<int32_t*>(s + 0x28) - *reinterpret_cast<int32_t*>(s + 0x2c))
+            if (nDesc->bucketsToOut / 5 < bucketsApplied - bucketsAtSpread)
                 chance *= kRdata_140172114;
 
-            const float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+            const float roll = rng->RandFloat();
             const bool caught = roll < chance;
             if (caught) {
-                FireComponent_Ignite_610(reinterpret_cast<void*>(neighbourFire));
+                neighbourFire->Ignite();
             }
         }
-    } while (*reinterpret_cast<int64_t*>(s + 0x30) > 0);
+    } while (fireTimer._ticks > 0);
 
-    *reinterpret_cast<int32_t*>(s + 0x2c) = *reinterpret_cast<int32_t*>(s + 0x28);
+    bucketsAtSpread = bucketsApplied;
 }
 
 // ============================================================
@@ -512,21 +488,25 @@ extern "C" void FireComponent_Spread_130(void* self) {
 // body reads only the message id.
 void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
     if (message != 0) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    void* desc = FireDesc(this);
-    const uintptr_t d = reinterpret_cast<uintptr_t>(desc);
+    FireDescription* desc = FireDesc(this);
 
-    *reinterpret_cast<int32_t*>(s + 0x28) += 1;
+    bucketsApplied += 1;
 
-    const int needed = *reinterpret_cast<int*>(d + FireDescriptionField::BucketsToOut);
-    const int64_t step = MakeTime(
-        (*reinterpret_cast<float*>(d + FireDescriptionField::SpreadInterval) * kRdata_140172234) /
-        static_cast<float>(needed));
-    *reinterpret_cast<int64_t*>(s + 0x30) -= step;
+    const int needed = desc->bucketsToOut;
+    const int64_t step = MakeTime((desc->spreadInterval * kRdata_140172234) /
+                                  static_cast<float>(needed));
+    fireTimer._ticks -= step;
 
-    const int32_t buckets = *reinterpret_cast<int32_t*>(s + 0x28);
-    const int64_t timer   = *reinterpret_cast<int64_t*>(s + 0x30);
+    const int32_t buckets = bucketsApplied;
+    const int64_t timer   = fireTimer._ticks;
 
     if (timer < 1 || needed <= buckets)
-        FireComponent_Extinguish_4c0(this);
+        Extinguish();
+}
+
+// ---- B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp); the closing wave
+// rewires it. The null test is the tree's.
+extern "C" void FireComponent_Ignite_610(void* self) {
+    if (!self) return;
+    reinterpret_cast<FireComponent*>(self)->Ignite();
 }

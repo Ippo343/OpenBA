@@ -36,33 +36,32 @@
 // the defaults.
 FireDescription::FireDescription()
     : Description(),
-      _f20(1.0f),
-      _f24(0.0f),
-      _i28(1),
-      _i2c(0),
-      _f30(0.25f),
-      _f34(0.5f),
-      _i38(8),
-      _i3c(100),
-      _i40(50),
-      _f44(1.0f),
-      _f48(1.0f),
+      burnBase(1.0f),
+      burnScale(0.0f),
+      particleEmitter(1),
+      audioEmitter(0),
+      spreadInterval(0.25f),
+      spreadChance(0.5f),
+      dangerRadius(8),
+      bucketsToOut(100),
+      maxFirefighters(50),
+      igniteChance{1.0f, 1.0f},
       _i4c(0) {}
 
 // [5] 0x140049c00: stream order as retail.
 bool FireDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_f20, nullptr);
-    ser.Serialize(_f24, nullptr);
-    ser.Serialize(_i28, nullptr);
-    ser.Serialize(_i2c, nullptr);
-    ser.Serialize(_f30, nullptr);
-    ser.Serialize(_f34, nullptr);
-    ser.Serialize(_i3c, nullptr);
-    ser.Serialize(_f44, nullptr);
-    ser.Serialize(_f48, nullptr);
-    ser.Serialize(_i38, nullptr);
-    ser.Serialize(_i40, nullptr);
+    ser.Serialize(burnBase, nullptr);
+    ser.Serialize(burnScale, nullptr);
+    ser.Serialize(particleEmitter, nullptr);
+    ser.Serialize(audioEmitter, nullptr);
+    ser.Serialize(spreadInterval, nullptr);
+    ser.Serialize(spreadChance, nullptr);
+    ser.Serialize(bucketsToOut, nullptr);
+    ser.Serialize(igniteChance[0], nullptr);
+    ser.Serialize(igniteChance[1], nullptr);
+    ser.Serialize(dangerRadius, nullptr);
+    ser.Serialize(maxFirefighters, nullptr);
     return true;
 }
 
