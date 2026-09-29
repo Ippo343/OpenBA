@@ -171,7 +171,6 @@ void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMas
 void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780  B4 FORWARD: NaturalResourceComponent::ResetGrowthState (tornadocomponent.cpp)
 
 // ---- happinesscomponent.cpp
-void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, short delta);  // 0x14009f990
 
 // ---- herdcomponent.cpp
 char HerdComponent_Helper6b10(int64_t param_1);  // 0x140106b10

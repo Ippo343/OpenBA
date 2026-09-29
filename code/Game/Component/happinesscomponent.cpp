@@ -34,6 +34,7 @@
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -100,8 +101,9 @@
 // short array starts at mgr+0x90, indexed by `state` (param2). Pure leaf (no callees).
 // Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
-void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, short delta) {
-    uint8_t* base = reinterpret_cast<uint8_t*>(mgr);
+void Map::StampInfluence(int state, int cx, int cy, int r, short delta) {
+    // Map's cells are raw 0x30-byte records (GAME-b): LEFT.
+    uint8_t* grid = reinterpret_cast<uint8_t*>(cells);
     int yy = cy - r;
     if (yy <= cy + r) {
         int dy = cy - yy;
@@ -111,12 +113,11 @@ void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, shor
                 int dx = cx - xx;
                 int ix = xx;
                 do {
-                    int width = *mgr;
+                    int width = size;
                     if (ix >= 0 && yy >= 0 && ix < width && yy < width &&
                         dy * dy + dx * dx <= r * r) {
-                        int64_t gridBase = *reinterpret_cast<int64_t*>(base + 0x80);
                         char* cell = reinterpret_cast<char*>(
-                            (int64_t)state + 0x1c + (int64_t)(width * yy + ix) * 0x30 + gridBase);
+                            grid + (int64_t)state + 0x1c + (int64_t)(width * yy + ix) * 0x30);
                         *cell = (char)(*cell + (char)delta);
                     }
                     ix++;
@@ -127,8 +128,7 @@ void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, shor
             dy--;
         } while (yy <= cy + r);
     }
-    short* acc = reinterpret_cast<short*>(base + (int64_t)state * 2 + 0x90);
-    *acc = (short)(*acc + delta);
+    field_0x90[state] = (short)(field_0x90[state] + delta);
 }
 
 // Retail's `IsDerivedFrom(p, tid) ? p : nullptr` idiom on a component's description.
@@ -185,7 +185,7 @@ void HappinessComponent::UpdateInfluence(int16_t delta) {
     int r = radius ? radius->_radius : 0;
 
     // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT.
-    FishingComponent_BrushTile(reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game), state, x, y,
+    reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game)->StampInfluence(state, x, y,
                                r, delta);   // 0x14009f990
 }
 

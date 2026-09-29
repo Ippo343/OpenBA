@@ -292,7 +292,7 @@ int FishingWork::Execute(void* citizenIBPArg, void* /*time*/) {
                 uint8_t terrainBit = *(uint8_t*)(mapData + 0x29 + mapCellIdx * 0x30);
 
                 // Check fishing description allows this terrain and terrain is nonzero
-                uint32_t fishingTerrainMask = fishingDesc->_u2c;
+                uint32_t fishingTerrainMask = fishingDesc->_terrainMask;   // COMP-c named FishingDescription +0x2c
                 if (((fishingTerrainMask >> (terrainBit & 0x1f)) & 1) == 0) {
                     attemptCount++;
                     continue;
