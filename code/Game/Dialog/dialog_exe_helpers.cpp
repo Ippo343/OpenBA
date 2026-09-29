@@ -29,6 +29,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/exe_bodies.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 
 // ============================================================
@@ -41,27 +42,8 @@
 // check before returning the component through an out InternalBasePtr.
 // Caller signature (workplaceui.cpp): void* fn(void* entity, void* retIBP).
 void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
-    // 0x1401c7008 is BuildComponent's type-id cell (Table 1).
-    const uint32_t tid = BuildComponent::TypeId();
-    void* found = nullptr;
-    {
-        uintptr_t e = reinterpret_cast<uintptr_t>(entity);
-        int n = *reinterpret_cast<int*>(e + 0x38);
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(e + 0x30);
-        for (int i = 0; i < n; i++) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-            if (t == tid) {
-                void* c = *slot;
-                found = (::Object::IsDerivedFromNullSafe(c, tid)) ? c : nullptr;
-                break;
-            }
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+    return new (retIBP) ::Object::InternalPtr<BuildComponent>(
+        static_cast<ComponentEntity*>(entity)->FindComponent<BuildComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

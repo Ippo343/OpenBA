@@ -43,62 +43,38 @@
 // ============================================================
 // FindComponent family
 // ============================================================
-// FUN_140002ed0 / 2f90 / 3050 / 52c0 / 6270 are byte-for-byte identical except for
-// the component type-ID global they compare against. Each scans the entity's
-// component list (ptr array at entity+0x30, count at entity+0x38), calls each
-// component's GetTypeId (vtable +0x10), and on the first type match runs an
-// IsDerivedFrom check before returning the component through an out InternalBasePtr.
-//
-// Caller signature (matches the s_fn_FindComponent_* typedefs in the Work .cpp files
-// and the fn_FindComponent_* decls in engine_funcs.h): the function returns the
-// out-IBP it was handed.   void* fn(uintptr_t entity, void* retIBP)
-
-// Generic body shared by all variants (ENDGAME B.3.9 D5: typeId is the class's own
-// TypeId() value, not a cell pointer -- every cell in this family is registered, so
-// the value is always available and no resolve/heal is needed).
-static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int i = 0; i < n; i++) {
-        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
-        // GetTypeId is component vtable slot +0x10.
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-        if (t == typeId) {
-            void* c = *slot;
-            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
-            break;
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
-}
-
+// FUN_140002ed0 / 2f90 / 3050 / 52c0 / 6270 / 15140 are instances of
+// ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h). These names stay as
+// B4 FORWARD forwarders, returning the out-IBP they were handed, until their callers
+// hold a typed entity.
 // Reimpl of Entity_FindComponent_Position (FUN_140002ed0, type 0x1401c7900 = InteractComponent)
 void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, InteractComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<InteractComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<InteractComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of Entity_FindComponent_MeshInstance (FUN_140002f90, type 0x1401c7e08 = StatusIconComponent)
 void* WorkBase_FindComponent_2f90(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, StatusIconComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<StatusIconComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StatusIconComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of FUN_140003050 (type 0x1401c8070 = WorkComponent)
 void* WorkBase_FindComponent_3050(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, WorkComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<WorkComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of FUN_1400052c0 (type 0x1401c7b30 = NaturalResourceComponent)
 void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, NaturalResourceComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<NaturalResourceComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<NaturalResourceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of Entity_FindComponent_Storage (FUN_140006270, type 0x1401c7e78 = StorageComponent)
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, StorageComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<StorageComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StorageComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of Entity_FindComponent_Building (FUN_140015140, type 0x1401c4b80 = TradeComponent).
@@ -106,7 +82,8 @@ void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
 // (it matches the TradeComponent type-id, not a generic "building"). Ported to close the
 // TradeWork::Slot4 closure gap.
 void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeId(entity, retIBP, TradeComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<TradeComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<TradeComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

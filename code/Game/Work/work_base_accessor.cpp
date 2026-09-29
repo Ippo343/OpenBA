@@ -22,47 +22,22 @@
 #include "Component/OrchardComponent.h"         // ENDGAME B.3.9 D5
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
 #include "Component/AutoPickupComponent.h"      // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // ============================================================
-// FindComponent family (clones of the WorkBase_FindComponent_* set in
-// work_base_reimpl.cpp — byte-for-byte identical except for the component
-// type-ID global they compare against)
+// FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
+// These names stay as B4 FORWARD forwarders until their callers hold a typed entity.
 // ============================================================
-// Each scans the entity's component list (ptr array at entity+0x30, count at
-// entity+0x38), calls each component's GetTypeId (vtable +0x10), and on the first
-// type match runs an IsDerivedFrom recheck before returning the component through
-// an out InternalBasePtr. Caller signature (all variants):
-//   void* fn(uintptr_t entity, void* retIBP)
-//
-// ENDGAME B.3.9 D5: same scan, but the type-id is a class's own TypeId() value
-// (registered cell, always available -- no resolve/null-gate needed).
-static void* FindComponentByTypeIdVal(uintptr_t entity, void* retIBP, uint32_t typeId) {
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int i = 0; i < n; i++) {
-        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-        if (t == typeId) {
-            void* c = *slot;
-            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
-            break;
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
-}
-
 // Reimpl of FUN_140005380 — FindComponent (type-ID DAT_1401c7510, CropFieldComponent)
 void* WorkAcc_FindComponent_5380(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeIdVal(entity, retIBP, CropFieldComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<CropFieldComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<CropFieldComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of FUN_140005440 — FindComponent (type-ID DWORD_1401c46b0, OrchardComponent)
 void* WorkAcc_FindComponent_5440(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeIdVal(entity, retIBP, OrchardComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<OrchardComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<OrchardComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of FUN_140022520 — FindComponent<AutoPickupComponent>: retail compares against
@@ -72,7 +47,8 @@ void* WorkAcc_FindComponent_5440(uintptr_t entity, void* retIBP) {
 // component (AutoPickupWork::Cleanup, WorkGrid_AutoPickup_e3db0, CreateNaturalResource
 // and CreateRawMaterial reach it through the registered 0x140022520).
 void* WorkAcc_FindComponent_22520(uintptr_t entity, void* retIBP) {
-    return FindComponentByTypeIdVal(entity, retIBP, AutoPickupComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<AutoPickupComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<AutoPickupComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

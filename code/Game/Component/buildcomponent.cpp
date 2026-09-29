@@ -35,6 +35,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Action/exe_bodies.h"
 #include "Component/pickingcomponent_funcs.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 extern "C" void* g_pConstructionDemoSite;
 
@@ -295,26 +296,8 @@ void BuildComponent_DrawReimpl(void* selfP) {
 // Closure: CheckPtr / IsDerivedFrom / InternalBasePtr_Ctor (all engine).
 // Returns retbuf (caller passes &out).
 void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
-    void* found = nullptr;
-    {
-        const uint32_t tidPicking = PickingComponent::TypeId();
-        int count = *(int*)(compHost + 0x38);
-        int64_t arr = *(int64_t*)(compHost + 0x30);
-        for (int i = 0; i < count; i++) {
-            int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-            void* comp = (void*)*slot;
-            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == tidPicking) {
-                void* c = (void*)*slot;
-                if (::Object::IsDerivedFromNullSafe(c, tidPicking))
-                    found = c;
-                break;
-            }
-        }
-    }
-    new (retbuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retbuf;
+    return new (retbuf) ::Object::InternalPtr<PickingComponent>(
+        reinterpret_cast<ComponentEntity*>(compHost)->FindComponent<PickingComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================================
