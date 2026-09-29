@@ -203,8 +203,8 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
                 nullptr, ibpCopy, scenIdx, displayNameStr,
                 static_cast<int32_t>(seedVal), static_cast<int32_t>(terrainSizeVal),
-                /*p8=*/disasterOff != 0, reinterpret_cast<void*>(mapGen),
-                reinterpret_cast<void*>(terrainGen), reinterpret_cast<void*>(climateGen));
+                /*p8=*/disasterOff != 0, reinterpret_cast<MapGenerator*>(mapGen),
+                reinterpret_cast<TerrainGenerator*>(terrainGen), reinterpret_cast<ClimateGenerator*>(climateGen));
         }
     } else {
         // ---- SAVED-SCENARIO branch -----------------------------------------
@@ -255,7 +255,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         *reinterpret_cast<System::String*>(
             reinterpret_cast<uintptr_t>(::IO::Persistence::_singleton) + 0x90) = savePathBuf;
 
-        void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();   // B.3.7 bridge
+        Save::SavedState* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();   // B.3.7 bridge
 
         void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         if (gameLoop) {

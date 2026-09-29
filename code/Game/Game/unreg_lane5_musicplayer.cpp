@@ -172,7 +172,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
 
     // --- Town mood: average health and happiness over the citizen list, -----
     // each normalised by the corresponding max on citizen[0]'s description.
-    uint8_t* citizens   = static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
+    uint8_t* citizens   = reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
     float    moodA = 0.0f, moodB = 0.0f;
     if (citizens) {
         int      count = *reinterpret_cast<int32_t*>(citizens + 0xa8);

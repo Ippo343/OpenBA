@@ -36,6 +36,21 @@
 #include "ProfessionList.h"     // m_professionList's class (B.4 W0-H2)
 #include "PlayerController.h"   // m_playerController's class (B.4 W0-H2)
 #include "PlayerToolManager.h"  // m_toolManager's class (B.4 W0-H2)
+#include "Map.h"                // m_game's class (B.4 GAME-a)
+#include "Entity/EntityList.h"       // m_entityList's class (B.4 GAME-a)
+#include "Entity/CitizenBehavior.h"  // m_citizenList's class (B.4 GAME-a)
+#include "Component/CharacterGrid.h"  // m_characterGrid's class (B.4 GAME-a)
+#include "Calendar.h"                // m_dayCounter's class (B.4 GAME-a)
+#include "WeatherSimulation.h"       // m_weather's class (B.4 GAME-a)
+#include "Component/EnvironmentDescription.h"   // WeatherSimulation::Bind
+#include "Game/ClimateGenerator.h"
+#include "Game/Disease.h"            // the disease list dump
+#include "WorkScheduler.h"           // m_tutorial's class (B.4 GAME-a)
+#include "EventLog.h"                // m_eventNotifier's class (B.4 GAME-a)
+#include "MusicPlayer.h"             // m_musicPlayer's class (B.4 GAME-a)
+#include "Minimap.h"                 // m_imageCapture's class (B.4 GAME-a)
+#include "MapGenerator.h"            // m_mapConfig's class (B.4 GAME-a)
+#include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -97,7 +112,7 @@ extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);       
 
 // code/Game/Game/gameupdateloop_serialize.cpp — the serializer roundtrip check;
 // the LOAD-FROM-SAVE branch below calls SaveRestoreOut (slot 7's body) directly.
-extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* loadedState);
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::SavedState* loadedState);
 
 // code/Game/Game/eventlog_achievement.cpp — the achievement award TOAST (exe
 // 0x140096960). Installed on the AchievementManager at step 30 below.
@@ -287,16 +302,17 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
     // (disease.cpp:82), so an entry reading 0 means the .rsc never wrote the field.
     // Report it; do not clamp it — that would hide a real load failure.
     if (isList && count > 0) {
-        uintptr_t arr = *(uintptr_t*)((uintptr_t)list + 0x20);
+        ::Object::External** arr = self->m_diseaseList->_resources;   // list+0x20
         for (int i = 0; i < count && arr; i++) {
-            uint8_t* d = *(uint8_t**)(arr + (uintptr_t)i * 8);
+            // The list's entries are the Disease resources (Diseases.rsc).
+            const Disease* d = static_cast<const Disease*>(arr[i]);
             if (!d) { fprintf(stderr, "[GUL::DiseaseList]   [%d] NULL entry\n", i); continue; }
             fprintf(stderr, "[GUL::DiseaseList]   [%d] %p spreadMonths(+0x30)=%.3f "
                     "contagion(+0x34)=%.3f radius(+0x38)=%.3f weight(+0x3c)=%.3f "
                     "recipMortality(+0x40)=%.3f%s\n",
-                    i, (void*)d, *(float*)(d + 0x30), *(float*)(d + 0x34),
-                    *(float*)(d + 0x38), *(float*)(d + 0x3c), *(float*)(d + 0x40),
-                    (*(float*)(d + 0x40) == 0.0f) ? "  <== ZERO: deathChance is INFINITE" : "");
+                    i, (const void*)d, d->_field30, d->_field34,
+                    d->_field38, d->_field3C, d->_field40,
+                    (d->_field40 == 0.0f) ? "  <== ZERO: deathChance is INFINITE" : "");
         }
     }
     fflush(stderr);
@@ -379,27 +395,26 @@ static void* Reimpl_FUN_14002e000(void* hdr, int n) {
 }
 
 // helper @ 0x14000f9e0 — deep-copy of an inner stride-4 (uint32) array header (16 bytes).
-static void* Reimpl_TradeComponent_helper_f9e0(void* dstElem, void* srcElem) {
-    if (dstElem == srcElem) return dstElem;
-    uint8_t* d = (uint8_t*)dstElem;
-    uint8_t* s = (uint8_t*)srcElem;
-    void* old = *(void**)(d + 0x00);
+static Collection::Array<int32_t>* Reimpl_TradeComponent_helper_f9e0(Collection::Array<int32_t>* d,
+                                                                     const Collection::Array<int32_t>* s) {
+    if (d == s) return d;
+    void* old = d->_data;
     if (old) System::MemoryAllocator::MemFree(old);
-    *(int32_t*)(d + 0x08) = 0;
-    *(void**)(d + 0x00) = 0;
-    int32_t cnt = *(int32_t*)(s + 0x08);
-    *(int32_t*)(d + 0x08) = cnt;
+    d->_size = 0;
+    d->_data = nullptr;
+    int32_t cnt = s->_size;
+    d->_size = cnt;
     if (cnt > 0) {
-        *(int32_t*)(d + 0x0C) = cnt;
-        *(void**)(d + 0x00) = System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4);
+        d->_capacity = cnt;
+        d->_data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc((uint64_t)cnt << 2, 4));
     }
-    int32_t newCnt = *(int32_t*)(d + 0x08);
+    int32_t newCnt = d->_size;
     if (newCnt > 0) {
-        int32_t* dp = *(int32_t**)(d + 0x00);
-        int32_t* sp = *(int32_t**)(s + 0x00);
+        int32_t* dp = d->_data;
+        int32_t* sp = s->_data;
         for (int32_t i = 0; i < newCnt; ++i) dp[i] = sp[i];
     }
-    return dstElem;
+    return d;
 }
 
 namespace {
@@ -409,21 +424,29 @@ namespace {
 // 0x14000f9e0 deep copy (an operator= over a zeroed lhs); init = zero the
 // header; destroy = free the inner buffer and zero the header — this body
 // zeroed on BOTH the truncation and the realloc arm, so the row is exact.
+// The spec row's element is raw bytes; each element is one inner Array<int32>
+// (LEFT: the ArraySpec hooks take uint8_t*).
 void AssignIntAssocOuterL(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    Reimpl_TradeComponent_helper_f9e0(d, const_cast<uint8_t*>(s));
+    Collection::Array<int32_t>* dst = reinterpret_cast<Collection::Array<int32_t>*>(d);
+    dst->_data = nullptr;                     // +0x00
+    dst->_size = 0;                           // +0x08 / +0x0c: one qword store (H7: two stores)
+    dst->_capacity = 0;
+    Reimpl_TradeComponent_helper_f9e0(dst, reinterpret_cast<const Collection::Array<int32_t>*>(s));
 }
 void InitIntAssocOuterL(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    Collection::Array<int32_t>* dst = reinterpret_cast<Collection::Array<int32_t>*>(d);
+    dst->_data = nullptr;
+    dst->_size = 0;                           // one qword store (H7)
+    dst->_capacity = 0;
 }
 void DestroyIntAssocOuterL(void* /*ignoredThis*/, uint8_t* base, int count) {
+    Collection::Array<int32_t>* elems = reinterpret_cast<Collection::Array<int32_t>*>(base);
     for (int i = 0; i < count; ++i) {
-        uint8_t* e = base + static_cast<int64_t>(i) * 0x10;
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(e + 0x00));
-        *reinterpret_cast<uint64_t*>(e + 0x00) = 0;
-        *reinterpret_cast<uint64_t*>(e + 0x08) = 0;
+        Collection::Array<int32_t>* e = &elems[i];
+        System::MemoryAllocator::MemFree(e->_data);
+        e->_data = nullptr;
+        e->_size = 0;                         // one qword store (H7)
+        e->_capacity = 0;
     }
 }
 const rtcoll::ArraySpec kSpec_IntAssocOuterL = {         // exe 0x140017640
@@ -505,118 +528,134 @@ static void* Reimpl_FUN_14000f090(void* hdr, int n) {
 // Subsystem constructors (verified bodies)
 // ============================================================
 
-// FUN_1400983f0 — PlayerController/Camera lookAt-transform builder (helper_83f0).
-// Exposed (extern "C") + registered at 0x1400983f0 so gameupdateloop.cpp's
-// fn_PlayerController_CalcTransform (resolved via ResolveAddr) finds it in standalone.
-extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform) {
-    uint8_t* p = (uint8_t*)self;
-    float yaw = *(float*)(p + 0x28);
-    float pitch = *(float*)(p + 0x2c);
-    float distance = *(float*)(p + 0x30);
+// 0x1400983f0 — the look-at transform builder. Returns the transform through
+// retail's hidden return slot and stores it into +0x00.
+Math::Transform PlayerController::CalcTransform() {
     // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0
     Math::Vector3 dir = Math::Vector3::FromYawPitch(yaw, pitch);
-    // The camera focus point lives inline at self+0x1c (Transform::translation).
-    const Math::Vector3& pos = *reinterpret_cast<const Math::Vector3*>(p + 0x1c);
+    // The camera focus point: the three target floats at +0x1c.
+    const Math::Vector3 pos(targetX, targetY, targetZ);
     Math::Vector3 eye(pos.x - dir.x * distance,
                       pos.y - dir.y * distance,
                       pos.z - dir.z * distance);
     // ?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z  retail 0x18007dbb0
     Math::Transform lookAt = Math::Transform::FromLookAt(eye, pos);
-    *reinterpret_cast<Math::Transform*>(p) = lookAt;              // self[+0x00..+0x1b]
-    *reinterpret_cast<Math::Transform*>(outTransform) = lookAt;
+    // LEFT: +0x00 is raw storage (H5: Math::Transform's ctor would run).
+    *reinterpret_cast<Math::Transform*>(transform) = lookAt;   // self[+0x00..+0x1b]
+    return lookAt;
+}
+
+// B4 FORWARD: 1 outside caller file (Dialog/toolbardialog.cpp).
+extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform) {
+    *reinterpret_cast<Math::Transform*>(outTransform) =
+        reinterpret_cast<PlayerController*>(self)->CalcTransform();
     return outTransform;
 }
 
-// FUN_1400985b0 — PlayerController camera-system ctor (+0xE0, 0x10c).
-static void* Reimpl_FUN_1400985b0(void* selfMem, void* frustum, float yaw, float pitch, float distance) {
-    uint8_t* p = (uint8_t*)selfMem;
+// 0x1400985b0 — the PlayerController ctor (+0xE0, 0x10c).
+PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float pitch_, float distance_) {
     // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
-    *reinterpret_cast<Math::Transform*>(selfMem) = Math::Transform();
-    *(uint64_t*)(p + 0x1c) = 0;
-    *(uint32_t*)(p + 0x24) = 0;
-    *(float*)(p + 0x28) = yaw;
-    *(float*)(p + 0x2c) = pitch;
-    *(float*)(p + 0x30) = distance;
-    Math::Transform localTransform;
-    void* lt = Reimpl_FUN_1400983f0(selfMem, &localTransform);
-    if (!lt) lt = &localTransform;
-    Math::Transform3 t3 = reinterpret_cast<const Math::Transform*>(lt)->AsTransform3();
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(p + 0x34),
-                           reinterpret_cast<const ::Frustum*>(frustum), &t3, true);
-    return selfMem;
+    // LEFT: +0x00 is raw storage (H5).
+    *reinterpret_cast<Math::Transform*>(transform) = Math::Transform();
+    targetX = 0.0f;                           // +0x1c / +0x20: retail's qword 0 (H7: two stores)
+    targetY = 0.0f;
+    targetZ = 0.0f;                           // +0x24: dword 0
+    yaw = yaw_;
+    pitch = pitch_;
+    distance = distance_;
+    Math::Transform localTransform = CalcTransform();
+    Math::Transform3 t3 = localTransform.AsTransform3();
+    // LEFT: +0x34 is raw storage (H5: Camera's default ctor is protected); the
+    // ctor door takes the POD mirror.
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &t3, true);
 }
 
-// FUN_1400c3f90 — EntityList ctor (+0xE8, 0xe8). memset + the 5 non-zero defaults.
-static void* Reimpl_FUN_1400c3f90(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    memset(p, 0, 0xe8);                       // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
-    *(int32_t*)(p + 0xa8) = 0x32;             // 50
-    *(int32_t*)(p + 0xac) = 0xf;              // 15
-    *(int32_t*)(p + 0xb0) = 8;
-    *(int32_t*)(p + 0xb4) = 5;
-    *(uint64_t*)(p + 0xb8) = 2;
-    return selfMem;
+// 0x1400c3f90 — the EntityList ctor's body (+0xE8, 0xe8): memset + the 5
+// non-zero defaults. EntityList is trivially constructible: Load begins its
+// lifetime with a placement new (no code) and runs this on it.
+static_assert(std::is_trivially_default_constructible<EntityList>::value,
+              "placement new of EntityList runs no code");
+static_assert(std::is_trivially_default_constructible<CitizenBehavior>::value,
+              "placement new of CitizenBehavior runs no code");
+static_assert(std::is_trivially_default_constructible<Calendar>::value,
+              "placement new of Calendar runs no code");
+static_assert(std::is_trivially_default_constructible<EventLog>::value,
+              "placement new of EventLog runs no code");
+static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
+              "placement new of MusicPlayer runs no code");
+static_assert(std::is_trivially_default_constructible<Minimap>::value,
+              "placement new of Minimap runs no code");
+static void EntityList_Construct(EntityList* list) {
+    memset(list, 0, sizeof(EntityList));      // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
+    list->processCount[0] = 0x32;             // +0xA8 50
+    list->processCount[1] = 0xf;              // +0xAC 15
+    list->processCount[2] = 8;                // +0xB0
+    list->processCount[3] = 5;                // +0xB4
+    list->processCount[4] = 2;                // +0xB8 retail's qword store of 2 (H7: two stores)
+    list->cursor[0] = 0;                      // +0xBC
 }
 
-// TradeComponent_impl_0a30 @ 0x140090a30 — town/trade manager ctor (+0xF0, 0x1c0).
-static void* Reimpl_TradeComponent_impl_0a30(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    for (int i = 0; i < 0x1b4; ++i) p[i] = 0;
-    Reimpl_TradeComponent_sub_77c0(p + 0x170, 0x15);
-    uint8_t* prices = *(uint8_t**)(p + 0x170);
+// 0x140090a30 — the CitizenBehavior (town manager) ctor's body (+0xF0, 0x1c0).
+// Trivially constructible, as EntityList above.
+static void CitizenBehavior_Construct(CitizenBehavior* cb) {
+    memset(cb, 0, offsetof(CitizenBehavior, _pad1B4));   // zero +0x00..+0x1B3
+    Reimpl_TradeComponent_sub_77c0(&cb->professionResources, 0x15);
+    ProfessionResourceEntry* prices = cb->professionResources;
     if (prices) {
         static const int32_t kDefaultPrices[21] = {
             200, 200, 200, 200, 50, 5000, 100, 50, 500, 200, 200,
             1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
         };
         for (int i = 0; i < 21; ++i)
-            *(int32_t*)(prices + (size_t)i * 0x20 + 0x8) = kDefaultPrices[i];
+            prices[i].maxCount = kDefaultPrices[i];
     }
-    Reimpl_FUN_14000f090(p + 0x180, 2);
-    Reimpl_FUN_140017640(p + 0x150, 0x47);
-    *(int32_t*)(p + 0x1a8) = 0;
-    void* sub = System::MemoryAllocator::MemAlloc(0x28, 4);
+    Reimpl_FUN_14000f090(&cb->notifyEntries, 2);
+    Reimpl_FUN_140017640(&cb->field_0x150, 0x47);
+    cb->field_0x1A8 = 0.0f;                   // retail's dword store of 0 (the same bits)
+    PathGraph* sub = static_cast<PathGraph*>(System::MemoryAllocator::MemAlloc(0x28, 4));
     if (sub) {
-        uint8_t* s = (uint8_t*)sub;
-        *(void**)(s + 0x00) = nullptr;
-        *(void**)(s + 0x08) = nullptr;
-        *(int32_t*)(s + 0x10) = -1;
-        *(void**)(s + 0x18) = nullptr;
-        *(int32_t*)(s + 0x20) = 0;
+        sub->m_pairs = nullptr;
+        sub->m_pairCount = 0;                 // +0x08 / +0x0C: one qword store (H7: two stores)
+        sub->m_pairCapacity = 0;
+        sub->m_pendingIdx = -1;
+        sub->m_bstRoot = nullptr;
+        sub->m_bstCount = 0;
     }
-    *(void**)(p + 0x1b8) = sub;
-    return selfMem;
+    cb->pathGraph = sub;
 }
 
-// FUN_14009ee70 — REAL Game ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8.
-static void* Reimpl_FUN_14009ee70(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    RtPicking_Scene_Ctor((void*)(p + 8));
-    memset(p + 0x68, 0, 0xf8 - 0x68);         // zero +0x68..+0xf8 (preserves the embedded Scene at +8)
-    *(uint8_t*)(p + 0xa2) = 1;
-    *(uint64_t*)(p + 0xd0) = 8;
-    return selfMem;
+// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8
+// (raw storage, H5: constructed by hand, as the tree always has).
+Map::Map() {
+    RtPicking_Scene_Ctor(pickingScene);
+    memset(&field_0x68, 0, sizeof(Map) - offsetof(Map, field_0x68));   // zero +0x68..+0xf8 (keeps the Scene at +8)
+    field_0xA2 = true;
+    field_0xD0 = 8;
 }
 
-// MainMenuDialog_helper_9180 @ 0x1400f9180 — Tutorial-ish ctor (+0x118, 0x138).
-static void* Reimpl_FUN_1400f9180(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    memset(p, 0, 0x138);                      // zeroes header + the 15x16 array @+0x30
-    *(int32_t*)(p + 0x08) = 1;
-    return selfMem;
+// 0x1400f9180 — the WorkScheduler ctor's body (+0x118, 0x138).
+static_assert(std::is_trivially_default_constructible<WorkScheduler>::value,
+              "placement new of WorkScheduler runs no code");
+static void WorkScheduler_Construct(WorkScheduler* scheduler) {
+    memset(scheduler, 0, sizeof(WorkScheduler));   // zeroes header + the 15x16 array @+0x30
+    scheduler->stepCount = 1;
 }
 
 // FUN_140093f60 — in-game Weather SIMULATION ctor (+0x130, 0x78). PerlinNoise-driven.
-static void* Reimpl_FUN_140093f60(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    *(uint64_t*)(p + 0x00) = 0;
-    *(uint64_t*)(p + 0x08) = 0;
-    *(uint32_t*)(p + 0x10) = 0;
-    *(uint32_t*)(p + 0x14) = 4;               // default count = 4
-    *(uint32_t*)(p + 0x18) = 0;
-    *(uint64_t*)(p + 0x1c) = 0;
-    *(uint64_t*)(p + 0x24) = 0;
-    *(uint64_t*)(p + 0x2c) = 0;
+static_assert(std::is_trivially_default_constructible<WeatherSimulation>::value,
+              "placement new of WeatherSimulation runs no code");
+static void WeatherSimulation_Construct(WeatherSimulation* w) {
+    w->environment = nullptr;
+    w->climate = nullptr;
+    w->field_0x10 = 0;
+    w->field_0x14 = 4;                        // default count = 4
+    w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
+    w->field_0x1C[0] = 0.0f;                  // +0x1C..+0x2B: two qword stores (H7: named stores)
+    w->field_0x1C[1] = 0.0f;
+    w->field_0x1C[2] = 0.0f;
+    w->field_0x1C[3] = 0.0f;
+    w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
+    w->field_0x30 = 0.0f;
     uint8_t rng1[2520];
     uint8_t rng2[2520];
     uint32_t seed1 = 0, seed2 = 0;
@@ -624,80 +663,80 @@ static void* Reimpl_FUN_140093f60(void* selfMem) {
     seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // B.3.4b bridge
     RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng2));
     seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // B.3.4b bridge
-    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(p + 0x34),
-                               0.25f, 4.0f, (int)seed2, (int)seed1);
-    *(uint64_t*)(p + 0x44) = 0;
-    *(uint32_t*)(p + 0x4c) = 0xffffffffu;
-    *(uint64_t*)(p + 0x50) = 0;
-    *(uint64_t*)(p + 0x58) = 0;
-    *(uint64_t*)(p + 0x60) = 0;
-    *(uint64_t*)(p + 0x68) = 0;
-    *(uint64_t*)(p + 0x70) = 0;
-    return selfMem;
+    RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
+    w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
+    w->field_0x48 = 0.0f;
+    w->seasonStep = -1;
+    w->effects = nullptr;
+    w->effectCount = 0;                       // +0x58 / +0x5C: one qword store
+    w->effectCapacity = 0;
+    w->emitters = nullptr;
+    w->emitterCount = 0;                      // +0x68 / +0x6C: one qword store
+    w->emitterCapacity = 0;
+    w->disasterTime._ticks = 0;
 }
 
-// FUN_140093e30 — weather env-config helper. (envRes may be null on the deferred path.)
-static void* Reimpl_FUN_140093e30(void* weatherObj, void* envRes, void* climateGen) {
-    uint8_t* p = (uint8_t*)weatherObj;
-    *(void**)(p + 0x00) = envRes;
-    *(void**)(p + 0x08) = climateGen;
-    if (envRes) {
-        int count = *(int32_t*)((uint8_t*)envRes + 0x30);
-        Reimpl_FUN_1400191f0((void*)(p + 0x50), count);
+// 0x140093e30 — binds the environment and the climate into the weather sim.
+// (env may be null on the deferred path.)
+void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* climateGen) {
+    environment = env;
+    climate = climateGen;
+    if (env) {
+        int count = env->_weatherCount;          // env+0x30
+        Reimpl_FUN_1400191f0(&effects, count);
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is an 8-byte object handle (byte-copy, zeroing).
-        GameColl::ArrayAt<GameColl::Ptr8>(p, 0x60).SetSize(count);
-        int n0 = *(int32_t*)(p + 0x58);
-        void** arr0 = *(void***)(p + 0x50);
+        GameColl::AsArray<GameColl::Ptr8>(&emitters).SetSize(count);
+        int n0 = effectCount;
+        Graphics::Geometry** arr0 = effects;
         for (int i = 0; i < n0; ++i) arr0[i] = nullptr;
     }
     if (climateGen) {
-        float v = *(float*)((uint8_t*)climateGen + 0x34);
-        *(float*)(p + 0x2c) = v;
-        *(float*)(p + 0x30) = v;
+        float v = climateGen->temperatureBase;   // climate+0x34
+        field_0x2C = v;
+        field_0x30 = v;
     }
-    return weatherObj;
 }
 
 // FUN_1400182b0 - CharacterGrid ctor (+0x88, 0x60). A loose Morton (Z-order)
 // quadtree over characters, NOT a SkyMesh transform (that older name came from a
 // wrong plate comment on retail Load; corrected 2026-08-30 - see
 // engine/types/GameUpdateLoop.h +0x88).
-static void* Reimpl_FUN_1400182b0(void* selfMem, float param2) {
-    uint8_t* p = (uint8_t*)selfMem;
-    memset(p, 0, 0x60);
-    *(float*)(p + 0x00) = param2;
-    *(int32_t*)(p + 0x0C) = 8;
+static_assert(std::is_trivially_default_constructible<CharacterGrid>::value,
+              "placement new of CharacterGrid runs no code");
+static void CharacterGrid_Construct(CharacterGrid* grid, float param2) {
+    memset(grid, 0, sizeof(CharacterGrid));
+    grid->worldSize = param2;
+    grid->levels = 8;
     float scale = param2 * 0.5f;
-    *(float*)(p + 0x04) = scale;
-    *(float*)(p + 0x08) = scale;
-    Reimpl_Array_Resize_Stride04((void*)(p + 0x40), 8);
+    grid->centerX = scale;
+    grid->centerY = scale;
+    Reimpl_Array_Resize_Stride04(&grid->levelOffsets, 8);
     {
-        int32_t* lod = *(int32_t**)(p + 0x40);
+        int32_t* lod = grid->levelOffsets;
         if (lod) {
             lod[0] = 0x0; lod[1] = 0x1; lod[2] = 0x5; lod[3] = 0x15;
             lod[4] = 0x55; lod[5] = 0x155; lod[6] = 0x555; lod[7] = 0x1555;
         }
     }
-    Reimpl_Array_Resize_Stride04((void*)(p + 0x30), 0x5555);
-    Reimpl_Array_Resize_Stride04((void*)(p + 0x50), 0x5555);
+    Reimpl_Array_Resize_Stride04(&grid->cellHead, 0x5555);
+    Reimpl_Array_Resize_Stride04(&grid->cellOccupancy, 0x5555);
     {
-        int32_t* aFF = *(int32_t**)(p + 0x30);
-        int32_t* aZ = *(int32_t**)(p + 0x50);
+        int32_t* aFF = grid->cellHead;
+        int32_t* aZ = grid->cellOccupancy;
         if (aFF && aZ) {
             for (int idx = 0; idx < 0x5555; ++idx) { aFF[idx] = (int32_t)0xffffffff; aZ[idx] = 0; }
         }
     }
-    return selfMem;
 }
 
-// FUN_140098660 — PlayerController::UpdateCamera (builds projection frustum on camera+0x34).
-// Exposed + registered at 0x140098660 (gameupdateloop.cpp Draw + Load step 33 call it).
-extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, float farZ) {
+// 0x140098660 — PlayerController::UpdateCamera (builds the projection frustum on
+// the camera at +0x34). Draw and Load step 33 call it.
+void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
     int width = 1920, height = 1080;          // default 16:9 if viewport singleton unavailable
     {
-        uint8_t* vp = reinterpret_cast<uint8_t*>(::Video::Device::_singleton);
-        if (vp) { width = *(int32_t*)(vp + 4); height = *(int32_t*)(vp + 8); }
+        const ::Video::Device* vp = ::Video::Device::_singleton;
+        if (vp) { width = vp->backBufferWidth; height = vp->backBufferHeight; }   // +0x04 / +0x08
     }
     const float kAspectThresh = 1.7777778f, kHalf = 0.5f, kDeg2Rad = 0.017453292f,
                 kTwo = 2.0f, kRad2Deg = 57.29578f;
@@ -713,39 +752,42 @@ extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, flo
     void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),
         reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
         reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
-    reinterpret_cast<Graphics::Camera*>((uint8_t*)camera + 0x34)->SetFrustum(
+    // LEFT: +0x34 is raw storage (H5).
+    reinterpret_cast<Graphics::Camera*>(camera)->SetFrustum(
         *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge
-    return camera;
 }
 
-// FUN_1401025c0 (helper_25c0) — in-game EntityUI-style ctor (+0x120, 0xb0).
-static void* Reimpl_FUN_1401025c0(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    new ((void*)(p + 0x00)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    *(int64_t*)(p + 0x10) = 0;
-    *(int32_t*)(p + 0x18) = 0;
-    *(int64_t*)(p + 0x20) = 0;
-    new ((void*)(p + 0x28)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    *(uint8_t*)(p + 0x30) = 0;
-    *(int32_t*)(p + 0x34) = 1;
-    *(uint8_t*)(p + 0x38) = 0;
-    *(int64_t*)(p + 0x3c) = 0;
-    *(float*)(p + 0x44) = 0.75f;
-    *(int64_t*)(p + 0x48) = 0;
-    *(int64_t*)(p + 0x50) = 0;
-    *(int32_t*)(p + 0x58) = 0;
-    *(int64_t*)(p + 0x60) = 0;
-    *(int32_t*)(p + 0x68) = 0;
-    *(int64_t*)(p + 0x70) = 0;
-    *(int64_t*)(p + 0x78) = 0;
-    *(uint8_t*)(p + 0x80) = 0;
-    *(int64_t*)(p + 0x88) = 0;
-    *(int64_t*)(p + 0x90) = 0;
-    *(int64_t*)(p + 0x98) = -1;
-    *(int32_t*)(p + 0xa0) = -1;
-    *(uint8_t*)(p + 0xa4) = 0;
-    Reimpl_FUN_14002e000((void*)(p + 0x70), 5);
-    return selfMem;
+// 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
+// (+0x00, +0x28) are declared as plain pointers (H5); their null ctor is the
+// null store.
+PlayerToolManager::PlayerToolManager() {
+    field_0x00 = nullptr;
+    field_0x10 = 0;
+    field_0x18 = 0;
+    field_0x20 = 0;
+    currentTool = nullptr;
+    field_0x30 = false;
+    field_0x34 = 1;
+    field_0x38 = false;
+    field_0x3C = 0.0f;                        // +0x3c / +0x40: one qword store (H7: two stores)
+    field_0x40 = 0.0f;
+    field_0x44 = 0.75f;
+    field_0x48 = 0;
+    field_0x50 = nullptr;
+    field_0x58 = 0;
+    field_0x60 = nullptr;
+    field_0x68 = 0;
+    cameraViews = nullptr;
+    cameraViewCount = 0;                      // +0x78 / +0x7c: one qword store
+    cameraViewCapacity = 0;
+    field_0x80 = false;
+    field_0x88 = nullptr;
+    field_0x90 = nullptr;
+    field_0x98 = -1;                          // +0x98 / +0x9c: one qword store of -1
+    field_0x9C = -1;
+    field_0xA0 = -1;
+    field_0xA4 = false;
+    Reimpl_FUN_14002e000(&cameraViews, 5);
 }
 
 // ============================================================
@@ -930,21 +972,20 @@ void GameUpdateLoop::Load() {
     {
         int width = 1920, height = 1080;
         {
-            uint8_t* vp = reinterpret_cast<uint8_t*>(::Video::Device::_singleton);
-            if (vp) { width = *(int32_t*)(vp + 8); height = *(int32_t*)(vp + 4); }  // step6 reads +8/+4
+            const ::Video::Device* vp = ::Video::Device::_singleton;
+            if (vp) { width = vp->backBufferHeight; height = vp->backBufferWidth; }  // step6 reads +8/+4
         }
         float aspect = (height != 0) ? (float)width / (float)height : 1.7777778f;
         void* mem = AllocSub(0x10c, 4);
-        // B.4 W0-H2: begin the (trivial) PlayerController's lifetime in the raw
-        // block -- constructs nothing -- so the member is stored typed.
-        PlayerController* pc = mem ? ::new (mem) PlayerController : nullptr;
+        PlayerController* pc = nullptr;
         if (mem) {
             float nearZ = 2.0f, farZ = 70.0f, fovX = 60.0f, fovY = aspect * 60.0f;
             uint8_t frustum[0xC0] = {};
-            RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),
+            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);
+            RtVolume_Frustum_Ctor_Perspective(fr,
                 reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
                 reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
-            Reimpl_FUN_1400985b0(mem, frustum, 0.0f, -40.0f, 25.0f);
+            pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
         m_playerController = pc;
     }
@@ -952,15 +993,16 @@ void GameUpdateLoop::Load() {
     // Step 7 — Renderer (+0x90, 0x50).
     {
         void* mem = AllocSub(0x50, 4);
-        if (mem) RtGraphics_Renderer_Ctor(static_cast<RtGraphics::Renderer*>(mem));
-        m_renderer = mem;
+        if (mem) RtGraphics_Renderer_Ctor(static_cast<RtGraphics::Renderer*>(mem));   // the ctor door takes the POD mirror
+        m_renderer = static_cast<Graphics::Renderer*>(mem);
     }
 
     // Step 8 — EntityList (+0xE8, 0xe8).
     {
         void* mem = AllocSub(0xe8, 4);
-        if (mem) Reimpl_FUN_1400c3f90(mem);
-        m_entityList = mem;
+        EntityList* list = mem ? new (mem) EntityList : nullptr;
+        if (list) EntityList_Construct(list);
+        m_entityList = list;
     }
 
     // Step 9 — UserInterface (+0x98, 0x128).
@@ -973,51 +1015,51 @@ void GameUpdateLoop::Load() {
     // Step 10 — town/trade manager (+0xF0, 0x1c0) — exe ctor 0x140090a30.
     {
         void* mem = AllocSub(0x1c0, 4);
-        if (mem) Reimpl_TradeComponent_impl_0a30(mem);
-        m_citizenList = mem;
+        CitizenBehavior* cb = mem ? new (mem) CitizenBehavior : nullptr;
+        if (cb) CitizenBehavior_Construct(cb);
+        m_citizenList = cb;
     }
 
     // Step 11 — Game (+0xF8, 0xf8) — CRITICAL: clears the m_game==null Stage-C guards.
     {
         void* mem = AllocSub(0xf8, 8);
-        if (mem) Reimpl_FUN_14009ee70(mem);
-        m_game = mem;
+        Map* map = mem ? new (mem) Map : nullptr;
+        m_game = map;
     }
 
     // Step 12 — Tutorial-ish (+0x118, 0x138).
     {
         void* mem = AllocSub(0x138, 4);
-        if (mem) Reimpl_FUN_1400f9180(mem);
-        m_tutorial = mem;
+        WorkScheduler* scheduler = mem ? new (mem) WorkScheduler : nullptr;
+        if (scheduler) WorkScheduler_Construct(scheduler);
+        m_tutorial = scheduler;
     }
 
     // Step 13 — EntityUI (+0x120, 0xb0).
     {
         void* mem = AllocSub(0xb0, 4);
-        // B.4 W0-H2: the trivial PlayerToolManager's lifetime begins in the raw
-        // block (constructs nothing); the ctor body is still 0x1401025c0's port.
-        PlayerToolManager* tm = mem ? ::new (mem) PlayerToolManager : nullptr;
-        if (mem) Reimpl_FUN_1401025c0(mem);
+        PlayerToolManager* tm = mem ? ::new (mem) PlayerToolManager() : nullptr;   // 0x1401025c0
         m_toolManager = tm;
     }
 
     // Step 14 — DayCounter Time struct (+0x128, 0x18): flag=1, Time(+8,0.0), Time(+0x10,3600.0).
     {
         void* mem = AllocSub(0x18, 8);
-        if (mem) {
-            uint8_t* d = (uint8_t*)mem;
-            *(uint32_t*)d = 1;
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(d + 8), 0.0f);
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(d + 0x10), 3600.0f);
+        Calendar* calendar = mem ? new (mem) Calendar : nullptr;
+        if (calendar) {
+            calendar->year = 1;
+            RtSystem_Time_Ctor(&calendar->yearTime, 0.0f);
+            RtSystem_Time_Ctor(&calendar->yearLength, 3600.0f);
         }
-        m_dayCounter = mem;
+        m_dayCounter = calendar;
     }
 
     // Step 15 — Weather sim (+0x130, 0x78).
     {
         void* mem = AllocSub(0x78, 8);
-        if (mem) Reimpl_FUN_140093f60(mem);
-        m_weather = mem;
+        WeatherSimulation* weather = mem ? new (mem) WeatherSimulation : nullptr;
+        if (weather) WeatherSimulation_Construct(weather);
+        m_weather = weather;
     }
 
     // Step 16 — env config: bind (envRes, climateGen) into the weather sim.
@@ -1029,67 +1071,74 @@ void GameUpdateLoop::Load() {
     // the same. A partial/failed load degrades gracefully to null (the weather
     // sim still runs its temperature/snow half).
     if (m_weather) {
-        void* envRes = nullptr;
+        EnvironmentDescription* envRes = nullptr;
         if (::Object::ExternalFactory::_singleton) {
             System::Filename fname("Environment/Environment.rsc");
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            envRes = const_cast<::Object::External*>(
+            // The file's root resource is the EnvironmentDescription.
+            envRes = static_cast<EnvironmentDescription*>(const_cast<::Object::External*>(
                 ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(fname));                                    // B.3.3 bridge
-            int wxCount = envRes ? *(int*)((uint8_t*)envRes + 0x30) : 0;
+                    ->FindOrLoad(fname)));                                   // B.3.3 bridge
+            int wxCount = envRes ? static_cast<int>(envRes->_weatherCount) : 0;   // env+0x30
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
-                    envRes, wxCount);
+                    (void*)envRes, wxCount);
             fflush(stderr);
         }
-        Reimpl_FUN_140093e30(m_weather, envRes, /*climateGen*/m_climateConfig);
+        m_weather->Bind(envRes, /*climateGen*/m_climateConfig);   // 0x140093e30
     }
 
     // Step 17 — StringTable-pair struct (+0x138, 0x28) zero + flag bytes.
     {
         void* mem = AllocSub(0x28, 4);
-        if (mem) {
-            uint8_t* d = (uint8_t*)mem;
-            memset(d, 0, 0x28);
-            *(uint32_t*)(d + 0x10) = 0x01010101;
-            *(uint16_t*)(d + 0x14) = 0x0101;
-            *(uint8_t*)(d + 0x10) = 0;   // clear low byte (matches exe)
+        EventLog* eventLog = mem ? new (mem) EventLog : nullptr;
+        if (eventLog) {
+            memset(eventLog, 0, sizeof(EventLog));
+            // Retail: dword 0x01010101 at +0x10, word 0x0101 at +0x14, then byte
+            // +0x10 = 0 (H7: the six named bytes, in address order, final values).
+            eventLog->field_0x10[0] = false;
+            eventLog->field_0x10[1] = true;
+            eventLog->field_0x10[2] = true;
+            eventLog->field_0x10[3] = true;
+            eventLog->field_0x10[4] = true;
+            eventLog->field_0x10[5] = true;
         }
-        m_eventNotifier = mem;
+        m_eventNotifier = eventLog;
     }
 
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
         void* mem = AllocSub(0x78, 8);
         if (mem) RtGraphics_Scene_Ctor(static_cast<RtGraphics::Scene*>(mem));
-        m_graphicsScene = mem;
+        m_graphicsScene = static_cast<Graphics::Scene*>(mem);
     }
 
     // Step 19 — Audio::Scene (+0x78, 0x38).
     {
         void* mem = AllocSub(0x38, 8);
         if (mem) RtAudio_Scene_Ctor(mem);
-        m_audioScene = mem;
+        m_audioScene = static_cast<Audio::Scene*>(mem);
     }
 
     // Step 20 — Picking::Scene (+0x70, 0x60).
     {
         void* mem = AllocSub(0x60, 8);
-        if (mem) RtPicking_Scene_Ctor(mem);
-        m_pickingScene = mem;
+        // Retail stores the ctor's return (this), as here (0x140096b00).
+        m_pickingScene = mem ? RtPicking_Scene_Ctor(mem) : nullptr;
     }
 
     // Step 21 - CharacterGrid: loose Morton quadtree over characters (+0x88, 0x60).
     {
         void* mem = AllocSub(0x60, 8);
-        if (mem) Reimpl_FUN_1400182b0(mem, 2048.0f);
-        m_characterGrid = mem;
+        CharacterGrid* grid = mem ? new (mem) CharacterGrid : nullptr;
+        if (grid) CharacterGrid_Construct(grid, 2048.0f);
+        m_characterGrid = grid;
     }
 
     // Step 22 — AnimationManager (+0x68, 0x9d8).
     {
         void* mem = AllocSub(0x9d8, 8);
         if (mem) RtGraphics_AnimationManager_Ctor(static_cast<RtGraphics::AnimationManager*>(mem));
-        m_animationManager = mem;
+        m_animationManager = static_cast<Graphics::AnimationManager*>(mem);
     }
 
     // Step 23 — WorldGeometry (+0x110, 0x230): the real ctor (0x1400b00e0).
@@ -1144,24 +1193,25 @@ void GameUpdateLoop::Load() {
     // Step 26 — KeyState/map-input struct (+0x148, 0x38) zero-init.
     {
         void* mem = AllocSub(0x38, 4);
-        if (mem) memset(mem, 0, 0x38);
-        m_imageCapture = mem;
+        Minimap* minimap = mem ? new (mem) Minimap : nullptr;
+        if (minimap) memset(minimap, 0, sizeof(Minimap));
+        m_imageCapture = minimap;
     }
 
     // Step 27 — MusicTracks struct (+0x80, 0x18): {idx=-1, res=null (Find deferred), 0}.
     {
         void* mem = AllocSub(0x18, 4);
-        if (mem) {
-            uint8_t* d = (uint8_t*)mem;
-            *(int32_t*)(d + 0x00) = -1;
-            *(void**)(d + 0x08) = nullptr;     // MusicTrackList - DEFERRED.
+        MusicPlayer* player = mem ? new (mem) MusicPlayer : nullptr;
+        if (player) {
+            player->effect = 0xFFFFFFFFu;         // -1
+            player->trackList = nullptr;          // MusicTrackList - DEFERRED.
             // BLOCKER for porting MusicPlayer::Update (0x1400a40e0): that
             // function reads *(int*)(musicPlayer[+0x08] + 0x28) as the track
             // count with no null check, so it MUST NOT be wired until this
             // Find("Game/MusicTracks.rsc") is done. See LANE1 report row 39.
-            *(uint64_t*)(d + 0x10) = 0;
+            player->field_0x10 = 0;
         }
-        m_musicPlayer = mem;
+        m_musicPlayer = player;
     }
 
     // Step 28 — SkyMesh MeshInstance (+0x108): the sky `_clear_` dome (helper above).
@@ -1176,7 +1226,7 @@ void GameUpdateLoop::Load() {
     // mirroring the Environment/SkyMesh finds above. The ":events"/":seasons"
     // suffix selects the named sub-resource within Dialog/StringTable.rsc.
     {
-        void* evStruct = m_eventNotifier;
+        EventLog* evStruct = m_eventNotifier;
         if (evStruct && ::Object::ExternalFactory::_singleton) {
             void* factory = ::Object::ExternalFactory::_singleton;
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
@@ -1190,21 +1240,21 @@ void GameUpdateLoop::Load() {
 
             // Load a StringTable sub-resource. AdjustDelimiters normalizes the
             // "rsc:subname" delimiter so FindOrLoad resolves the named sub-table.
-            auto loadStringTable = [&](const char* name) -> void* {
+            auto loadStringTable = [&](const char* name) -> UI::StringTable* {
                 // Retail: String(name) then Filename::AdjustDelimiters on it —
                 // Filename(const char*) is exactly Set + AdjustDelimiters.
                 System::Filename fname(name);
-                void* ext = const_cast<::Object::External*>(
+                ::Object::External* ext = const_cast<::Object::External*>(
                     efactory->FindOrLoad(fname));                            // B.3.3 bridge
                 if (!ext) return nullptr;
                 if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;
-                return ext;
+                return static_cast<UI::StringTable*>(ext);   // checked above (B10)
             };
 
-            void* evTable = loadStringTable("Dialog/StringTable.rsc:events");
-            void* seTable = loadStringTable("Dialog/StringTable.rsc:seasons");
-            *(void**)((uint8_t*)evStruct + 0x00) = evTable;
-            *(void**)((uint8_t*)evStruct + 0x08) = seTable;
+            UI::StringTable* evTable = loadStringTable("Dialog/StringTable.rsc:events");
+            UI::StringTable* seTable = loadStringTable("Dialog/StringTable.rsc:seasons");
+            evStruct->events = evTable;
+            evStruct->seasons = seTable;
 
             fprintf(stderr, "[GUL::Load] step29 event StringTables: events=%p seasons=%p (tid=%u)\n",
                     evTable, seTable, stTid);
@@ -1229,14 +1279,14 @@ void GameUpdateLoop::Load() {
     // We call our port directly rather than through ResolveAddr — the address IS
     // registered for any retail-shaped caller, but this is the only call site.
     {
-        void* achMgr = ::Achievement::AchievementManager::_singleton;
+        Achievement::AchievementManager* achMgr = ::Achievement::AchievementManager::_singleton;
         if (achMgr) {
-            reinterpret_cast<Achievement::AchievementManager*>(achMgr)->SetEventHandler(&EventLog_OnAchievementAwarded);   // B.3.7 bridge
+            achMgr->SetEventHandler(&EventLog_OnAchievementAwarded);   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30 AchievementManager::SetEventHandler "
-                            "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", achMgr);
+                            "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", (void*)achMgr);
         } else {
             fprintf(stderr, "[GUL::Load] step30 SetEventHandler SKIPPED (mgr=%p)\n",
-                    achMgr);
+                    (void*)achMgr);
         }
         fflush(stderr);
     }
@@ -1270,15 +1320,15 @@ void GameUpdateLoop::Load() {
     // to say why. The dialog looked healthy the whole time because it reads the
     // ACHIEVEMENT list (mgr+0x00), not the instance list.
     if (m_savedState == nullptr /*new game*/) {
-        void* mgr = ::Achievement::AchievementManager::_singleton;
+        Achievement::AchievementManager* mgr = ::Achievement::AchievementManager::_singleton;
         if (mgr) {
-            reinterpret_cast<Achievement::AchievementManager*>(mgr)->Reset();   // B.3.7 bridge
+            mgr->Reset();   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30b AchievementManager::Reset(mgr=%p) -> "
-                            "instances=%d\n", mgr, *(int32_t*)((uintptr_t)mgr + 0x20));
+                            "instances=%d\n", (void*)mgr, mgr->_instances._size);   // mgr+0x20
         } else {
             fprintf(stderr, "[GUL::Load] step30b Reset SKIPPED (mgr=%p) — "
                             "no achievement can ever be awarded\n",
-                    mgr);
+                    (void*)mgr);
         }
         fflush(stderr);
     }
@@ -1312,28 +1362,28 @@ void GameUpdateLoop::Load() {
             // the first ring probe faulted reading 0x2510 (= coarse cell 593 * 0x10).
             // This was the "TradeComponent trade-map resize" deferred at Step 31.
             {
-                uint8_t* townMgr = static_cast<uint8_t*>(m_citizenList);
+                CitizenBehavior* townMgr = m_citizenList;
                 if (townMgr && dim > 0) {
                     const int coarse = (int)dim >> 3;
-                    Reimpl_FUN_140017640(townMgr + 0x140, coarse * coarse);
+                    Reimpl_FUN_140017640(&townMgr->field_0x140, coarse * coarse);
                     fprintf(stderr, "[TownMgr] coarse cell index sized: dim=%u coarse=%d "
                             "buckets=%d base=%p (FireWork water search indexes this; a "
                             "null base faults at coarseCell*0x10)\n",
                             dim, coarse, coarse * coarse,
-                            *(void**)(townMgr + 0x140));
+                            townMgr->field_0x140);
                     fflush(stderr);
                 }
             }
 
             // Gameplay tile-grid arrays at the map struct (+0x148): store dim,
             // allocate two dim*dim arrays (+0x18/+0x28), zero the +0x28 one.
-            void* mapStruct = m_imageCapture;
+            Minimap* mapStruct = m_imageCapture;
             if (mapStruct && dim > 0) {
-                *(uint32_t*)((uint8_t*)mapStruct + 4) = dim;
+                mapStruct->size = (int32_t)dim;
                 int n = (int)(dim * dim);
-                Reimpl_Array_Resize_Stride04((uint8_t*)mapStruct + 0x28, n);
-                Reimpl_Array_Resize_Stride04((uint8_t*)mapStruct + 0x18, n);
-                void* arr = *(void**)((uint8_t*)mapStruct + 0x28);
+                Reimpl_Array_Resize_Stride04(&mapStruct->overlayPixels, n);
+                Reimpl_Array_Resize_Stride04(&mapStruct->terrainPixels, n);
+                uint32_t* arr = mapStruct->overlayPixels;
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }
 
@@ -1375,13 +1425,13 @@ void GameUpdateLoop::Load() {
             // tile is deferred. See code/Game/Game/starttown.cpp.
             {
                 void* startCfg   = m_mapConfig;   // mapGen
-                void* playerCtrl = m_playerController;
+                PlayerController* playerCtrl = m_playerController;
                 if (startCfg && playerCtrl && game && dim > 0) {
                     float camPos[3] = { 0, 0, 0 };
                     StartTown_ComputeCamera(startCfg, game, camPos);
-                    *(float*)((uint8_t*)playerCtrl + 0x1c) = camPos[0];
-                    *(float*)((uint8_t*)playerCtrl + 0x20) = camPos[1];
-                    *(float*)((uint8_t*)playerCtrl + 0x24) = camPos[2];
+                    playerCtrl->targetX = camPos[0];   // +0x1c
+                    playerCtrl->targetY = camPos[1];   // +0x20
+                    playerCtrl->targetZ = camPos[2];   // +0x24
                     fprintf(stderr, "[startTown::DIAG]   camPos = (%.2f, %.2f, %.2f)\n",
                             camPos[0], camPos[1], camPos[2]);
                     fflush(stderr);
@@ -1398,35 +1448,35 @@ void GameUpdateLoop::Load() {
             // and the camera target, WITHOUT calling FUN_1400a3300 yet. Remove once
             // start-town is implemented. See project_newgame_path_roadmap / task #6/#7.
             {
-                uint8_t* mapGen = static_cast<uint8_t*>(m_mapConfig);   // startConfig (MapGenerator rsc)
-                uint8_t* game   = static_cast<uint8_t*>(m_game);
+                MapGenerator* mapGen = m_mapConfig;   // startConfig (MapGenerator rsc)
+                Map* game       = m_game;
                 WorldGeometry* wgeom = m_worldGeometry;
                 PlayerController* pctrl = m_playerController;
                 fprintf(stderr, "[startTown::DIAG] mapGen(loop+0x40)=%p game=%p worldGeom=%p playerCtrl=%p\n",
                         mapGen, game, wgeom, pctrl);
                 if (mapGen) {
                     fprintf(stderr, "[startTown::DIAG]   mapGen+0x3c(townSize)=%d\n",
-                            *(int32_t*)(mapGen + 0x3c));
+                            mapGen->subdivisions);
                     fprintf(stderr, "[startTown::DIAG]   pools: a0=%p a8(cnt)=%d | b0=%p b8(cnt)=%d | "
                             "c0=%p c8(cnt)=%d | d0=%p d8(cnt)=%d | e0=%d e4=%d e8=%d\n",
-                            *(void**)(mapGen + 0xa0), *(int32_t*)(mapGen + 0xa8),
-                            *(void**)(mapGen + 0xb0), *(int32_t*)(mapGen + 0xb8),
-                            *(void**)(mapGen + 0xc0), *(int32_t*)(mapGen + 0xc8),
-                            *(void**)(mapGen + 0xd0), *(int32_t*)(mapGen + 0xd8),
-                            *(int32_t*)(mapGen + 0xe0), *(int32_t*)(mapGen + 0xe4),
-                            *(int32_t*)(mapGen + 0xe8));
+                            mapGen->refArray4.data, mapGen->refArray4.count,
+                            mapGen->refArray5.data, mapGen->refArray5.count,
+                            mapGen->refArray6.data, mapGen->refArray6.count,
+                            mapGen->refArray7.data, mapGen->refArray7.count,
+                            mapGen->paramE0, mapGen->paramE4,
+                            mapGen->paramE8);
                 }
                 if (game) {
-                    int gdim = *(int32_t*)game;
-                    uint8_t* cells = *(uint8_t**)(game + 0x80);
+                    int gdim = game->size;
+                    MapCell* cells = game->cells;
                     fprintf(stderr, "[startTown::DIAG]   *game(dim)=%d  tileGrid(*(game+0x80))=%p  cnt=%d\n",
-                            gdim, cells, *(int32_t*)(game + 0x88));
+                            gdim, cells, game->cellCount);
                     // Tile-type histogram (2=buildable 6/10=mountain 7=shore 8=deep water).
                     if (cells && gdim > 0) {
                         int hist[16] = {0};
                         int total = gdim * gdim;
                         for (int i = 0; i < total; ++i) {
-                            uint8_t t = cells[(size_t)i * 0x30 + 0x29];
+                            uint8_t t = cells[i].terrainType;
                             hist[t < 16 ? t : 0]++;
                         }
                         fprintf(stderr, "[startTown::DIAG]   tiles: buildable(2)=%d shore(7)=%d "
@@ -1461,7 +1511,7 @@ void GameUpdateLoop::Load() {
     // worldgen/StartTown branch above. We call the ported SaveRestore directly
     // (it IS our vtable +0x38 slot).
     if (m_savedState != nullptr) {
-        void* savedState = m_savedState;
+        Save::SavedState* savedState = m_savedState;
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE branch: SaveRestore(load) state=%p\n",
                 savedState);
         fflush(stderr);
@@ -1471,11 +1521,11 @@ void GameUpdateLoop::Load() {
         // it before the citizen spawn for the same reason).
         CharManager_Seed();
         int loadOut = 0;
-        SaveRestoreOut(false, static_cast<Save::SavedState*>(savedState), &loadOut);
+        SaveRestoreOut(false, savedState, &loadOut);
         // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
         GameUpdateLoop_SaveRoundtripCheck(this, savedState);
-        RtSave_SavedState_Dtor(static_cast<Save::SavedState*>(savedState));
+        RtSave_SavedState_Dtor(savedState);
         System::MemoryAllocator::MemFree(savedState);
         m_savedState = nullptr;
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
@@ -1489,8 +1539,8 @@ void GameUpdateLoop::Load() {
         // + same order as the worldgen branch above; dim comes from the
         // deserialized map object itself (+0x00, what e8c0's *param_1 reads).
         {
-            void* game = m_game;
-            int dim = game ? *(int32_t*)game : 0;
+            Map* game = m_game;
+            int dim = game ? game->size : 0;
             fprintf(stderr, "[GUL::Load] post-load rebuild: game=%p dim=%d\n", game, dim);
             fflush(stderr);
             if (game && dim > 0) {
@@ -1516,14 +1566,13 @@ void GameUpdateLoop::Load() {
                 // wipe, these read 0 and every citizen silently loses its job a few
                 // hundred frames later. One line per load.
                 {
-                    const uint8_t* tiles =
-                        *reinterpret_cast<const uint8_t* const*>((const uint8_t*)game + 0x80);
+                    const MapCell* tiles = game->cells;
                     fprintf(stderr, "[GridProbe] tiles=%p regionIds:", (const void*)tiles);
                     if (tiles)
                         for (int c = 32000; c <= 35000; c += 500)
                             fprintf(stderr, " [%d]=%u/kind%u", c,
-                                    *reinterpret_cast<const uint16_t*>(tiles + (size_t)c*0x30 + 0x26),
-                                    tiles[(size_t)c*0x30 + 0x29]);
+                                    tiles[c].zone,
+                                    tiles[c].terrainType);
                     fprintf(stderr, "\n"); fflush(stderr);
                 }
             }
@@ -1558,7 +1607,7 @@ void GameUpdateLoop::Load() {
                     (void*)g_gameContainer);
             fflush(stderr);
         } else {
-            void* instance = nullptr;
+            Achievement::AchievementInstance* instance = nullptr;
             void* mem = System::MemoryAllocator::MemAlloc(0x28, 8);
             if (mem) {
                 // ENDGAME B.3.8 LOOP (B38_RULES D8): retail runs the imported
@@ -1575,47 +1624,47 @@ void GameUpdateLoop::Load() {
                 // placement operator new.
                 instance = ::new (mem) Achievement::AchievementInstance();
             }
-            uint64_t ibp = 0;
-            new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(instance));   // B.3.3 bridge
-            m_scenarioInstance = reinterpret_cast<Achievement::AchievementInstance*>(ibp);
+            // InternalBasePtr(instance): the member holds the bare pointer.
+            m_scenarioInstance = instance;
 
             // scenario = resourceList->data[achievementId]
             //   MOV RAX,[0x1401c3de8] / MOV RCX,[RAX+8] / MOV RAX,[RCX+0x20] / [RAX+idx*8]
-            void* scenario  = nullptr;
-            void* container = g_gameContainer;
-            void* resList   = container ? *(void**)((uintptr_t)container + 0x08) : nullptr;
-            void** data     = resList ? *(void***)((uintptr_t)resList + 0x20) : nullptr;
+            ::Object::External* scenario = nullptr;
+            GameContainer* container = g_gameContainer;
+            ::Object::ExternalList* resList = container ? container->scenarioList.Get() : nullptr;   // +0x08
+            ::Object::External** data = resList ? resList->_resources : nullptr;                       // +0x20
             if (data) scenario = data[achievementId];
 
             // IsDerivedFrom(scenario, Achievement::_typeInfo.typeId). Retail reads the id
             // through the .rdata slot at 0x140151f68, which points at the Runtime's
             // exported BaseTypeInfo for Achievement; its first dword IS the type id.
-            void* checked = scenario;
+            ::Object::External* checked = scenario;
             if (scenario && achTypeId)
                 checked = ::Object::IsDerivedFromNullSafe(scenario, achTypeId) ? scenario : nullptr;
 
-            void* inst = m_scenarioInstance;
+            Achievement::AchievementInstance* inst = m_scenarioInstance;
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",
-                    achievementId, inst, scenario, checked,
+                    achievementId, (void*)inst, (void*)scenario, (void*)checked,
                     achTypeId);
             fflush(stderr);
             // ExternalPtr<Achievement> arrives as a bare register value (B7-5).
-            if (inst) reinterpret_cast<Achievement::AchievementInstance*>(inst)->SetAchievement(   // B.3.7 bridge
-                Object::ExternalPtr<Achievement::Achievement>(reinterpret_cast<Achievement::Achievement*>(checked)));
+            // `checked` passed the IsDerivedFrom(Achievement) gate above.
+            if (inst) inst->SetAchievement(   // B.3.7 bridge
+                Object::ExternalPtr<Achievement::Achievement>(static_cast<Achievement::Achievement*>(checked)));
             m_scenarioIndex = achievementId;
         }
     }
 
     // Step 33 — finalize camera + add scene globals + unpause audio channels.
     if (m_playerController)
-        Reimpl_FUN_140098660(m_playerController, 40.0f, 2.0f, 512.0f);
+        m_playerController->UpdateCamera(40.0f, 2.0f, 512.0f);   // 0x140098660
     {
-        void* gScene = m_graphicsScene;   // g_pGameWorld+0x60
+        Graphics::Scene* gScene = m_graphicsScene;   // g_pGameWorld+0x60
         // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term went with
         // the door; `gScene` is an object test and stays.
         if (gScene) {
-            Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(gScene);   // B.3.5 bridge
+            Graphics::Scene* gs = gScene;
             if (m_worldGeometry)
                 gs->AddGlobalObject(m_worldGeometry); // WorldGeom  B.3.5 bridge
             // M5 5b lighting: add the SunLight so the directional light + ambient
@@ -1637,11 +1686,11 @@ void GameUpdateLoop::Load() {
             if (kAddSkyMesh && m_skyMesh)
                 gs->AddGlobalObject(m_skyMesh); // SkyMesh  B.3.5 bridge
         }
-        void* aScene = m_audioScene;   // g_pGameWorld+0x78
+        Audio::Scene* aScene = m_audioScene;   // g_pGameWorld+0x78
         if (aScene) {
-            reinterpret_cast<Audio::Scene*>(aScene)->Pause(4, false);   // B.3.7 bridge
-            reinterpret_cast<Audio::Scene*>(aScene)->Pause(3, false);   // B.3.7 bridge
-            reinterpret_cast<Audio::Scene*>(aScene)->Pause(2, false);   // B.3.7 bridge
+            aScene->Pause(4, false);
+            aScene->Pause(3, false);
+            aScene->Pause(2, false);
         }
     }
 

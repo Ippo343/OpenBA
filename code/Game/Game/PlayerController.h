@@ -24,9 +24,25 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "math/Math.h"   // Math::Transform (CalcTransform's by-value return)
+#include <type_traits>
+
+struct Frustum;   // ::Frustum (volume/Volume.h)
 
 class PlayerController {
 public:
+    // 0x1400985b0 — the ctor Load runs in the MemAlloc(0x10c, 4) block. Builds
+    // the transform and the camera in the raw storage below (bodies in
+    // gameupdateloop_load.cpp).
+    PlayerController(const ::Frustum& frustum, float yaw, float pitch, float distance);
+
+    // 0x1400983f0 — the look-at transform from (target, yaw, pitch, distance):
+    // stored into +0x00 and returned (retail's hidden return slot).
+    Math::Transform CalcTransform();
+    // 0x140098660 — rebuilds the camera's perspective frustum from the back
+    // buffer's aspect (Load step 33, Draw).
+    void UpdateCamera(float fovY, float nearZ, float farZ);
+
     uint8_t transform[0x1C];     // +0x00 Math::Transform (raw, H5)
     float   targetX;             // +0x1C look-at target
     float   targetY;             // +0x20
@@ -37,6 +53,8 @@ public:
     uint8_t camera[0xD8];        // +0x34 Graphics::Camera (raw, H5)
 };
 
+static_assert(std::is_trivially_destructible<PlayerController>::value,
+              "retail MemFrees the controller with no destructor (Shutdown)");
 static_assert(sizeof(PlayerController) == 0x10C, "PlayerController is 0x10C (Load MemAlloc(0x10c, 4))");
 static_assert(alignof(PlayerController) == 4, "PlayerController is dword-aligned");
 static_assert(offsetof(PlayerController, transform) == 0x00, "PlayerController::transform @ +0x00");

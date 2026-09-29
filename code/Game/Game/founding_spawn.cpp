@@ -76,6 +76,10 @@
 #include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()
 #include "Component/CitizenComponent.h"     // caller batch CB6: TypeId()
 #include "Component/CitizenDescription.h"
+#include "Component/ComponentDescription.h"   // the citizen template (B.4 GAME-a)
+#include "Entity/ComponentEntity.h"
+#include "Game/MapGenerator.h"               // the start config (B.4 GAME-a)
+#include "Game/ProfessionList.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -83,16 +87,8 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "object/External.h"   // ENDGAME B.3.9 SS2: Object::ExternalFactory::_singleton
 
-// Start-config offsets (mirrors of the constants in starttown.cpp).
-static constexpr int SC_JITTER       = 0x40;   // float spawn-jitter radius
-static constexpr int SC_CITIZEN_REF  = 0x48;   // ExternalRef {String, int gen, External*}
-static constexpr int SC_CITIZEN_TMPL = 0x58;   // = SC_CITIZEN_REF + 0x10 (cached template)
-static constexpr int TEMPLATE_CATEGORY = 0x20; // *(template+0x20) = entity-list category
-static constexpr int DESC_SUB_ARR    = 0x28;   // description/template sub-block array
-static constexpr int DESC_SUB_CNT    = 0x30;   // ... and its count
-static constexpr int ENT_COMP_ARR    = 0x30;   // entity component-IBP array
-static constexpr int ENT_COMP_CNT    = 0x38;   // ... and its count
-static constexpr int ENTITY_SIZE     = 0x48;   // ComponentEntity allocation
+// The ComponentEntity allocation (0x1400a1040's MemAlloc(0x48, 8)).
+static constexpr int ENTITY_SIZE     = 0x48;
 
 static constexpr float kAdultAgeBias = 0.5f;   // DAT_140172114
 
@@ -117,53 +113,51 @@ static uint32_t TidCitizenDescription() {
 }
 
 // Entity_FindComponent_Citizen (0x140009790), reimplemented — see deviation (a).
-// Writes the found component into `outIBP` through the IBP ctor, exactly as retail's
-// finder does (its callers then CheckPtr the slot).
-static void FoundingSpawn_FindCitizenComp(void* entity, uintptr_t* outIBP) {
-    void* found = nullptr;
+// Retail writes the find into an InternalBasePtr through its ctor (its callers
+// then CheckPtr the slot); the value is the bare component pointer.
+static CitizenComponent* FoundingSpawn_FindCitizenComp(ComponentEntity* entity) {
+    Component* found = nullptr;
     uint32_t want = TidCitizenComponent();
     if (entity && want != 0) {
-        uint8_t* e = reinterpret_cast<uint8_t*>(entity);
-        int count = *reinterpret_cast<int32_t*>(e + ENT_COMP_CNT);
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + ENT_COMP_ARR);
+        int count = entity->_componentCount;                          // +0x38
+        Object::InternalPtr<Component>* arr = entity->_components;    // +0x30
         for (int i = 0; i < count && arr; ++i) {
-            void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-            void* comp = *slot;
+            Component* comp = arr[i].Get();
             if (!comp) continue;
-            // Slot 2 on an entity component-array element (proved Object::Base).
-            if (reinterpret_cast<const Object::Base*>(comp)->Type() == want) {   // B.3.8 bridge
+            // Slot 2 on an entity component-array element.
+            if (comp->Type() == want) {
                 found = comp;
                 break;
             }
         }
     }
-    new (outIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+    return static_cast<CitizenComponent*>(found);   // its type id matched
 }
 
 // The head of impl_0dd0: find the CitizenDescription in the citizen template's
 // sub-description array (raw pointers, no IBPs; match on vtable+0x10 GetTypeId, then
 // IsDerivedFrom-validate). Result cached per template — retail re-scans on each
 // impl_0dd0 call, but the scan draws no RNG and reads nothing mutable.
-extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
+static CitizenDescription* FoundingCitizenDescription(void* citizenTemplate) {
     static void* s_tmpl = nullptr;
-    static void* s_desc = nullptr;
+    static CitizenDescription* s_desc = nullptr;
     static bool  s_cached = false;
     if (s_cached && citizenTemplate == s_tmpl) return s_desc;   // includes the null case
-    void* found = nullptr;
+    CitizenDescription* found = nullptr;
     uint32_t want = TidCitizenDescription();
     if (citizenTemplate && want != 0) {
-        uint8_t* t = reinterpret_cast<uint8_t*>(citizenTemplate);
-        int count = *reinterpret_cast<int32_t*>(t + DESC_SUB_CNT);
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(t + DESC_SUB_ARR);
+        // LEFT: starttown.cpp (its block) hands the template as void*.
+        const ComponentDescription* t = reinterpret_cast<const ComponentDescription*>(citizenTemplate);
+        int count = t->_subDescCount;    // +0x30
+        Description** arr = t->_subDescs;   // +0x28
         for (int i = 0; i < count && arr; ++i) {
-            void* desc = *reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
+            Description* desc = arr[i];
             if (!desc) continue;
-            // Slot 2 on a template description-array element (proved Object::Base).
-            if (reinterpret_cast<const Object::Base*>(desc)->Type() == want) {   // B.3.8 bridge
+            // Slot 2 on a template description-array element.
+            if (desc->Type() == want) {
                 // Retail keeps the hit only if IsDerivedFrom agrees; standalone trusts
                 // the GetTypeId match when the derive check can't run (deviation (b)).
-                found = desc;
+                found = static_cast<CitizenDescription*>(desc);
                 break;
             }
         }
@@ -173,14 +167,15 @@ extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
     s_cached = true;
     if (found && s_trace < 24) {
         ++s_trace;
-        const uint8_t* d = reinterpret_cast<const uint8_t*>(found);
+        // +0x50 / +0x54 are the header's pregnancy-age pair; impl_0dd0 draws the
+        // founders' ages from them (the tree's ageMin / ageMax).
         fprintf(stderr, "[FoundingSpawn] CitizenDescription=%p tid=%u adultAge(+0x44)=%.2f "
                 "ageMin(+0x50)=%.2f ageMax(+0x54)=%.2f -> adult range [%.2f, %.2f)\n",
-                found, want, *reinterpret_cast<const float*>(d + 0x44),
-                *reinterpret_cast<const float*>(d + 0x50),
-                *reinterpret_cast<const float*>(d + 0x54),
-                *reinterpret_cast<const float*>(d + 0x50),
-                *reinterpret_cast<const float*>(d + 0x54) * kAdultAgeBias);
+                (void*)found, want, found->adultAge,
+                found->minPregnancyAge,
+                found->maxPregnancyAge,
+                found->minPregnancyAge,
+                found->maxPregnancyAge * kAdultAgeBias);
         fflush(stderr);
     } else if (!found) {
         fprintf(stderr, "[FoundingSpawn] NO CitizenDescription on template=%p (tid=%u) — "
@@ -190,7 +185,11 @@ extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
     return found;
 }
 
-static void* FoundingSpawn_Rng() {
+extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
+    return FoundingCitizenDescription(citizenTemplate);
+}
+
+static System::Random* FoundingSpawn_Rng() {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
     return GameUpdateLoop::_singleton->m_random;
 }
@@ -201,13 +200,12 @@ static void* FoundingSpawn_Rng() {
 // feeds), so the caller must not hoist them.
 // ---------------------------------------------------------------------------
 extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate) {
-    void* desc = StartTown_FoundingCitizenDescription(citizenTemplate);
-    void* rng  = FoundingSpawn_Rng();
+    const CitizenDescription* desc = FoundingCitizenDescription(citizenTemplate);
+    System::Random* rng = FoundingSpawn_Rng();
     if (!desc || !rng) return 0.0f;
-    const uint8_t* d = reinterpret_cast<const uint8_t*>(desc);
-    float ageMin = *reinterpret_cast<const float*>(d + 0x50);
-    float ageMax = *reinterpret_cast<const float*>(d + 0x54);
-    float r = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+    float ageMin = desc->minPregnancyAge;   // +0x50
+    float ageMax = desc->maxPregnancyAge;   // +0x54
+    float r = rng->RandFloat();
     // FAITHFUL, including the odd shape: the upper bound is HALF the description's max
     // age, so the range is [ageMin, ageMax*0.5). No clamp to the adult threshold —
     // the hand-rolled path added one; retail has none, and if this ever produces an
@@ -216,21 +214,20 @@ extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate) {
 }
 
 extern "C" float StartTown_FoundingChildAge(void* citizenTemplate) {
-    void* desc = StartTown_FoundingCitizenDescription(citizenTemplate);
-    void* rng  = FoundingSpawn_Rng();
+    const CitizenDescription* desc = FoundingCitizenDescription(citizenTemplate);
+    System::Random* rng = FoundingSpawn_Rng();
     if (!desc || !rng) return 0.0f;
-    float adultAge = *reinterpret_cast<const float*>(
-        reinterpret_cast<const uint8_t*>(desc) + 0x44);
-    return reinterpret_cast<System::Random*>(rng)->RandFloat() * adultAge;   // uniform [0, adult threshold)  B.3.4b bridge
+    float adultAge = desc->adultAge;   // +0x44
+    return rng->RandFloat() * adultAge;   // uniform [0, adult threshold)
 }
 
 // Retail's two FUN_14001b1d0 calls (steps 1 and 8) — see deviation (c). Returns the
 // template pointer the CopyCtor source and the entity-list category are both read from.
-static void* FoundingSpawn_RefreshTemplate(uint8_t* startConfig, void* fallback) {
+static void* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, void* fallback) {
     if (!startConfig) return fallback;
     if (::Object::ExternalFactory::_singleton)
-        ResolveExternalByName_Impl(startConfig + SC_CITIZEN_REF);
-    void** cache = reinterpret_cast<void**>(startConfig + SC_CITIZEN_TMPL);
+        ResolveExternalByName_Impl(&startConfig->templateRef);   // +0x48
+    void** cache = &startConfig->templateRef.resolved;           // +0x58
     if (*cache == nullptr && fallback != nullptr) {
         *cache = fallback;                       // restore what FindOrLoad had loaded
         if (s_trace < 24) { ++s_trace;
@@ -251,17 +248,19 @@ static void* FoundingSpawn_RefreshTemplate(uint8_t* startConfig, void* fallback)
 // Returns the new entity (raw pointer); *outCitizenComp receives the CheckPtr'd
 // CitizenComponent the family links are written through.
 // ---------------------------------------------------------------------------
-extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citizenTemplate,
+extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfigBytes, void* citizenTemplate,
                                                void* entityList, const float base[3],
                                                float age, char genderSel, char educated,
                                                uint8_t** outCitizenComp) {
     if (outCitizenComp) *outCitizenComp = nullptr;
-    void* rng = FoundingSpawn_Rng();
+    // LEFT: starttown.cpp (its block) hands the start config (the MapGenerator) as bytes.
+    MapGenerator* startConfig = reinterpret_cast<MapGenerator*>(startConfigBytes);
+    System::Random* rng = FoundingSpawn_Rng();
 
     // 1. allocate + copy-construct the entity from the (re-resolved) citizen template
     void* tmpl = FoundingSpawn_RefreshTemplate(startConfig, citizenTemplate);
     void* mem  = System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8);
-    void* ent  = (mem && tmpl)
+    ComponentEntity* ent = (mem && tmpl)
                      ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), tmpl)   // 0x1400c3720
                      : nullptr;
     if (!ent) {
@@ -271,26 +270,24 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
         return nullptr;
     }
 
-    uintptr_t entIBP = 0;
-    new (&entIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(ent));   // B.3.3 bridge
+    // The entity's InternalPtr (retail wraps it in an InternalBasePtr).
+    ::Object::InternalPtr<ComponentEntity> entIBP(ent);
 
     // 2. find the CitizenComponent
-    uintptr_t compIBP = 0;
-    FoundingSpawn_FindCitizenComp(reinterpret_cast<void*>(entIBP), &compIBP);
-    uint8_t* comp = reinterpret_cast<uint8_t*>(compIBP);
+    CitizenComponent* comp = FoundingSpawn_FindCitizenComp(entIBP.Get());
     if (!comp) {
         // Never true in retail (the entity is a copy of the citizen template, so it
         // always carries the component). Registering a citizen entity with no
         // CitizenComponent would seed the town list with something no consumer can
         // read, so drop the whole colonist instead.
         fprintf(stderr, "[FoundingSpawn] ABORT: entity %p has no CitizenComponent "
-                "(tid=%u) — colonist dropped\n", ent, TidCitizenComponent());
+                "(tid=%u) — colonist dropped\n", (void*)ent, TidCitizenComponent());
         fflush(stderr);
         return nullptr;
     }
 
     // 3. the linked CitizenDescription (derive-or-trust, deviation (b))
-    void* desc = *reinterpret_cast<void**>(comp + 0x18);
+    Description* desc = comp->_description;   // +0x18
     if (desc) {
         uint32_t tid = TidCitizenDescription();
         if (tid != 0 && !::Object::IsDerivedFromNullSafe(desc, tid)) {
@@ -299,13 +296,12 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
             static bool s_said = false;
             if (!s_said) { s_said = true;
                 fprintf(stderr, "[FoundingSpawn] IsDerivedFrom(desc=%p, CitizenDescription=%u) "
-                        "false — trusting comp+0x18 (standalone derive gap)\n", desc, tid);
+                        "false — trusting comp+0x18 (standalone derive gap)\n", (void*)desc, tid);
                 fflush(stderr);
             }
         }
     }
-    const float adultAge = desc ? *reinterpret_cast<float*>(
-                                      reinterpret_cast<uint8_t*>(desc) + 0x44)
+    const float adultAge = desc ? static_cast<CitizenDescription*>(desc)->adultAge   // +0x44
                                 : 0.0f;
     const bool isChild = (age < adultAge);
 
@@ -314,7 +310,7 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
 
     // 5. spawn position — jittered around the town centre. Draw order preserved:
     //    first RandFloatTol scales Y, second scales X.
-    float jitter = *reinterpret_cast<float*>(startConfig + SC_JITTER);
+    float jitter = startConfig->scale;   // +0x40 (_citizenRadius)
     if (!(jitter == jitter) || jitter < 0.0f || jitter > 1.0e4f) jitter = 0.0f;  // deviation (d)
     float jy = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
     float jx = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
@@ -323,34 +319,37 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
     // 6. the Laborer profession key (ProfessionList at gw+0xb0, +0x30)
     int64_t laborerProf = 0;
     if (GameUpdateLoop::_singleton != nullptr) {
-        int64_t profList = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_professionList);
-        if (profList) laborerProf = *reinterpret_cast<int64_t*>(profList + 0x30);
+        ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
+        // LEFT: 0x140117080's port takes the profession as int64 (Component/exe_bodies.h).
+        if (profList) laborerProf = reinterpret_cast<int64_t>(profList->field_0x30);
     }
 
     // 7. the whole per-citizen init
     int64_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    CitizenComp_DeferredInit_117080(static_cast<int64_t>(compIBP), pos,   // 0x140117080
+    // LEFT: 0x140117080's port takes the component as int64 (Component/exe_bodies.h).
+    CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(comp), pos,   // 0x140117080
                                     static_cast<uint32_t>(genderSel == '\0'),
                                     isChild ? '\x01' : '\0', age, educated, &nullIBP,
                                     laborerProf);
 
     // 8. register with the world entity list under the template's category
     tmpl = FoundingSpawn_RefreshTemplate(startConfig, tmpl);
-    int category = tmpl ? *reinterpret_cast<int32_t*>(
-                              reinterpret_cast<uint8_t*>(tmpl) + TEMPLATE_CATEGORY)
+    // LEFT: the template comes back as the void* the ExternalRef caches.
+    int category = tmpl ? reinterpret_cast<const ComponentDescription*>(tmpl)->_category   // +0x20
                         : 0;
-    uintptr_t regIBP = entIBP;
+    ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
     EntityList_RegisterEntity_Impl(entityList, &regIBP, category);   // 0x1400c48a0
 
-    if (outCitizenComp) *outCitizenComp = comp;
+    // LEFT: starttown.cpp (its block) takes the component as bytes.
+    if (outCitizenComp) *outCitizenComp = reinterpret_cast<uint8_t*>(comp);
 
     if (TraceOn()) {
         ++s_trace;
         fprintf(stderr, "[FoundingSpawn] colonist ent=%p comp=%p gender=%d %s age=%.2f "
                 "(adultAge=%.2f) educated=%d pos=(%.1f,%.1f,%.1f) jitter=%.2f "
                 "laborerProf=0x%llx category=%d\n",
-                ent, comp, (int)(genderSel == '\0'), isChild ? "child" : "adult", age,
+                (void*)ent, (void*)comp, (int)(genderSel == '\0'), isChild ? "child" : "adult", age,
                 adultAge, (int)educated, pos[0], pos[1], pos[2], jitter,
                 (unsigned long long)laborerProf, category);
         fflush(stderr);
