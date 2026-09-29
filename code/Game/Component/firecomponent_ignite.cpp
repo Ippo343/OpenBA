@@ -45,6 +45,8 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
+#include "Component/AmbientEmitterComponent.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
@@ -128,27 +130,23 @@ static inline FireDescription* FireDesc(const Component* self) {
 // per-cell fire-danger counter, and grid byte 0x9c (grid[0x27] as int16) is the
 // town-wide count of active fires. `delta` is +1 on ignite, -1 on extinguish.
 // param_2 in the listing is dead (the caller passes yMax twice).
-extern "C" void FireComp_StampDangerRect_9fa80(int* grid, uint64_t /*unused*/,
-                                               int xMin, int yMin,
-                                               int xMax, int yMax, short delta) {
-    if (!grid) return;
+// Its receiver is the Map (GameUpdateLoop +0xf8): Map::StampDanger. The Map's cells are
+// raw 0x30-byte records (GAME-b): the cell read is LEFT. The active-fire count is
+// Map::field_0x90[6] (+0x9c), one of the per-kind shorts StampInfluence also keeps.
+void Map::StampDanger(int xMin, int yMin, int xMax, int yMax, short delta) {
     if (yMin <= yMax) {
         for (int y = yMin; y <= yMax; ++y) {
             for (int x = xMin; x <= xMax; ++x) {
-                const int w = *grid;
+                const int w = size;
                 if (x >= 0 && y >= 0 && x < w && y < w) {
-                    char* cell = reinterpret_cast<char*>(
-                        static_cast<int64_t>(w * y + x) * 0x30 +
-                        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80) +
-                        0x22);
+                    char* cell = reinterpret_cast<char*>(cells) +
+                                 static_cast<int64_t>(w * y + x) * 0x30 + 0x22;
                     *cell = static_cast<char>(*cell + static_cast<char>(delta));
                 }
             }
         }
     }
-    int16_t* activeFires =
-        reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(grid) + 0x9c);
-    *activeFires = static_cast<int16_t>(*activeFires + delta);
+    field_0x90[6] = static_cast<int16_t>(field_0x90[6] + delta);
 }
 
 // ============================================================
@@ -170,9 +168,9 @@ void FireComponent::MarkDanger(short delta) {
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
     // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT.
-    int* grid = reinterpret_cast<int*>(gw->m_game);
-    FireComp_StampDangerRect_9fa80(grid, yMax, ox - r, oy - r, ox - 1 + w + r,
-                                   static_cast<int>(yMax), delta);
+    Map* grid = reinterpret_cast<Map*>(gw->m_game);
+    if (!grid) return;   // the tree's (retail passes the map unguarded)
+    grid->StampDanger(ox - r, oy - r, ox - 1 + w + r, static_cast<int>(yMax), delta);   // 0x14009fa80
 }
 
 // ── 0x140053720 (ParticleComponent fade-out) and 0x140042960 (move this entity's
@@ -191,47 +189,44 @@ void FireComponent::MarkDanger(short delta) {
 // 0x10; the sound ref is lazily copied from the AmbientEmitterDescription's
 // (+0x28) sound array. SoundType 3 = ambient looping.
 // (An AmbientEmitterComponent body, COMP-a's class; its reads stay as they were.)
-extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx) {
-    if (!ambientComp) return;
-    uintptr_t a = reinterpret_cast<uintptr_t>(ambientComp);
+extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientCompV, int idx) {
+    if (!ambientCompV) return;
+    // B4 FORWARD: the callers (and citizen_assignworkplace.cpp) hand the component in untyped.
+    AmbientEmitterComponent* ac = reinterpret_cast<AmbientEmitterComponent*>(ambientCompV);
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
     // GameUpdateLoop::m_audioScene (+0x78) is still void* (GAME-a): LEFT.
-    void* scene = gw->m_audioScene;
+    Audio::Scene* scene = reinterpret_cast<Audio::Scene*>(gw->m_audioScene);
     if (!scene) return;
 
-    void* obj = *reinterpret_cast<void**>(a + 0x18);
+    Description* obj = ac->_description;
     static uint32_t s_tidEmitterDesc = 0;
     if (s_tidEmitterDesc == 0 || s_tidEmitterDesc == 0xFFFFFFFFu)
         s_tidEmitterDesc = AmbientEmitterDescription::TypeId();
-    void* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, s_tidEmitterDesc)) ? obj : nullptr;
+    AmbientEmitterDescription* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, s_tidEmitterDesc))
+                                          ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
 
-    int64_t base = *reinterpret_cast<int64_t*>(a + 0x38);
-    if (!base) return;
-    uint32_t* entry = reinterpret_cast<uint32_t*>(base + static_cast<int64_t>(idx) * 0x10);
-    uint64_t* soundRef = reinterpret_cast<uint64_t*>(entry + 2);
+    if (!ac->slots) return;
+    AmbientEmitterSlot& entry = ac->slots[idx];
 
-    if (*soundRef == 0 && desc) {
-        int64_t soundArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
-        if (soundArr)
-            *soundRef = *reinterpret_cast<uint64_t*>(soundArr + static_cast<int64_t>(idx) * 8);
+    if (entry.sound == nullptr && desc) {
+        if (desc->_emitters)
+            entry.sound = desc->_emitters[idx];
     }
 
-    uint32_t handle = reinterpret_cast<Audio::Scene*>(scene)->FindEffect3D(
-        reinterpret_cast<Audio::SoundEffect*>(*soundRef));   // B.3.7 bridge
-    *entry = handle;
+    uint32_t handle = scene->FindEffect3D(Object::ExternalPtr<Audio::SoundEffect>(entry.sound));
+    entry.handle = handle;
     if (handle == 0) {
-        int64_t t0 = MakeTime(0.0f);
-        float   posZero[3] = { 0.0f, 0.0f, 0.0f };
-        handle = reinterpret_cast<Audio::Scene*>(scene)->PlayEffect3D(
-            reinterpret_cast<Audio::SoundEffect*>(*soundRef), static_cast<Audio::Scene::SoundType>(3),
-            *reinterpret_cast<const System::Time*>(&t0),
-            *reinterpret_cast<const Vector3*>(posZero));   // B.3.7 bridge
-        *entry = handle;
+        const System::Time t0{MakeTime(0.0f)};
+        const Vector3 posZero = { 0.0f, 0.0f, 0.0f };
+        handle = scene->PlayEffect3D(
+            Object::ExternalPtr<Audio::SoundEffect>(entry.sound), static_cast<Audio::Scene::SoundType>(3),
+            t0, posZero);
+        entry.handle = handle;
     }
-    reinterpret_cast<Audio::Scene*>(scene)->AddEmitter(
-        *entry, *reinterpret_cast<const Vector3*>(a + 0x28),
-        *reinterpret_cast<float*>(entry + 1));   // B.3.7 bridge
+    // AmbientEmitterComponent::position is a Math::Vector3; Audio::Scene takes the
+    // engine's POD ::Vector3 (the same 12 bytes): the one bridge is LEFT.
+    scene->AddEmitter(entry.handle, *reinterpret_cast<const Vector3*>(&ac->position), entry.volume);
 }
 
 // ============================================================
@@ -353,10 +348,10 @@ void FireComponent::Ignite() {
     //   local_60    = -1          == PopupIndex(0x1F)   => -1         (agrees)
     //   EventArray_Grow(eventLog+0x18, *(int*)(eventLog+0x20) + 1, entry)
     // All five literals reproduce, so the call is the inline.
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): the Map's active-fire
-    // count (+0x9c, inside Map::field_0x90's shorts) is read by offset: LEFT.
-    int* grid = reinterpret_cast<int*>(gw->m_game);
-    if (grid && *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(grid) + 0x9c) < 1) {
+    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT. The Map's
+    // active-fire count is Map::field_0x90[6] (+0x9c).
+    const Map* grid = reinterpret_cast<const Map*>(gw->m_game);
+    if (grid && grid->field_0x90[6] < 1) {
         void* eventLog = gw->m_eventNotifier;   // +0x138
         ComponentEntity* entityIbp = _entity;
         if (eventLog) EventLog_AddEvent(eventLog, 0x1f, 3, &entityIbp);
@@ -389,7 +384,7 @@ void FireComponent::SpreadToNeighbors() {
 
     FireDescription* myDesc = FireDesc(this);
     // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): the grid reads are LEFT.
-    int* grid = reinterpret_cast<int*>(gw->m_game);
+    const Map* grid = reinterpret_cast<const Map*>(gw->m_game);
     if (!grid) return;
 
     MapComponent* map = _entity->FindComponent<MapComponent>();   // 0x140004680
@@ -405,7 +400,7 @@ void FireComponent::SpreadToNeighbors() {
     int yMax = h - 1 + pad + oy;
     int xMin = ox - pad;
     if (xMin < 0) xMin = 0;
-    const int gwidth = *grid;
+    const int gwidth = grid->size;
     if (gwidth <= xMax) xMax = gwidth - 1;
     if (gwidth <= yMax) yMax = gwidth - 1;
 
@@ -437,9 +432,9 @@ void FireComponent::SpreadToNeighbors() {
 
         // Fine-cell array at grid+0x80, stride 0x30; +0x00 is the occupant (the Map's
         // cells are untyped: LEFT).
-        ComponentEntity* occupant = *reinterpret_cast<ComponentEntity**>(
-            *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80) +
-            (static_cast<int64_t>(*grid) * cy + cx) * 0x30);
+        ComponentEntity* occupant = *reinterpret_cast<ComponentEntity* const*>(
+            reinterpret_cast<uintptr_t>(grid->cells) +
+            (static_cast<int64_t>(grid->size) * cy + cx) * 0x30);
 
         // Retail inlines the exact-id scan here (no IsDerivedFrom): the generic find.
         FireComponent* neighbourFire = nullptr;

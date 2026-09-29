@@ -16,9 +16,7 @@
 // FireComponent::Ignite / SpreadToNeighbors / Extinguish / MarkDanger are members
 // (FireComponent.h). B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
 extern "C" void FireComponent_Ignite_610(void* self);          // 0x140049610
-extern "C" void FireComp_StampDangerRect_9fa80(int* grid, uint64_t unused,
-                                               int xMin, int yMin, int xMax, int yMax,
-                                               short delta);           // 0x14009fa80
+// 0x14009fa80 is Map::StampDanger (Game/Map.h), defined in firecomponent_ignite.cpp.
 extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx);
 
 // ---- shared with the TORNADO lane, firecomponent_smstate.cpp ----
