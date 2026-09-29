@@ -161,7 +161,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
         }
 
         // Create IBP for new component and owner
-        uintptr_t newIBP = 0;
+        ::Object::InternalPtr<Component> newIBP;
         {
             new ((void*)&newIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(newComp));   // B.3.3 bridge
@@ -175,7 +175,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
         // Resolve the component IBP (the original CopyCtor calls CheckPtr
         // before the field writes) then set owner (+0x10) and description
         // (+0x18).
-        void* compPtr = (void*)newIBP;
+        void* compPtr = newIBP.Get();
         if (!compPtr) {
             // STANDALONE: this component typeId has no working factory (the
             // Runtime/our factory tree is incomplete — e.g. a Tree's component
@@ -193,7 +193,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
         *(void**)((uintptr_t)compPtr + 0x18) = compTemplate;
 
         // Store in component array
-        static_cast<uintptr_t*>(_components)[insertIdx] = newIBP;
+        _components[insertIdx] = newIBP;
         insertIdx++;
     }
 
