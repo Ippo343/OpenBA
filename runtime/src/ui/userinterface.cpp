@@ -245,6 +245,8 @@
 #include "audio/Audio.h"
 #include "element_common.h"
 #include "../../types/video/Device.h"        // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/video/CompanionData.h"  // Video::DeviceData::SetImageBuffer
+#include "../../types/graphics/Material.h"   // Graphics::MaterialInstance::_textures
 #include "../../types/application/Application.h"  // ENDGAME B.3.9 SS1: Application::_singleton
 #include "../../types/input/Input.h"         // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
 #include "../../types/system/Timer.h"        // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
@@ -681,19 +683,19 @@ void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
 
     // B.4 LEFT: `Video::Device::deviceData` (+0x100) is `void*` in R-VIDEO's
     // header and `SpriteSheet::m_field30` (+0x30) is a `uint64_t` another block
-    // writes as an integer (saveload_draw.cpp); the chain below them stays a
-    // raw read until both are typed. `DeviceData` slot 8 (+0x40) is
-    // `SetImageBuffer(image, hotX, hotY)` (CompanionData.h).
-    uint8_t* backend = reinterpret_cast<uint8_t*>(Video::Device::_singleton->deviceData);
-    void**   vtbl    = *reinterpret_cast<void***>(backend);
+    // writes as an integer (saveload_draw.cpp). The sheet's MaterialInstance
+    // texture 0 (`_textures` +0x50, entry +0x08 the image) goes to
+    // `DeviceData` slot 8 (+0x40) `SetImageBuffer(image, hotX, hotY)`
+    // (CompanionData.h).
+    Video::DeviceData* const backend =
+        reinterpret_cast<Video::DeviceData*>(Video::Device::_singleton->deviceData);
 
     const SpriteSheet* sheet = cursor->_spriteSheet.Get();
-    uint8_t* sheetA = reinterpret_cast<uint8_t*>(sheet->m_field30);  // MaterialInstance*
-    uint8_t* entry  = *reinterpret_cast<uint8_t**>(sheetA + 0x50);
-    void*    image  = *reinterpret_cast<void**>(entry + 0x08);
+    const Graphics::MaterialInstance* const material =
+        reinterpret_cast<const Graphics::MaterialInstance*>(sheet->m_field30);
+    void* const image = material->_textures.GetData()[0].image;
 
-    reinterpret_cast<void (*)(void*, void*, int32_t, int32_t)>(vtbl[8])(
-        backend, image, cursor->_hotSpotX, cursor->_hotSpotY);
+    backend->SetImageBuffer(image, cursor->_hotSpotX, cursor->_hotSpotY);
 
 }
 
