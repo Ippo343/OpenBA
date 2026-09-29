@@ -129,19 +129,28 @@ void ImageBufferCtor(void* p) {
 // `Create` are DEFINED members of the real `Video::RenderBuffer` today, so the
 // three by-name doors become member calls and `RbCreateFn` goes with them. The
 // `??3` operator delete below is the class member too (B3R).
-void RenderBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
+void RenderBufferPlatformConstruct(Video::RenderBuffer* p) {
+    p->PlatformConstruct();
 }
-void RenderBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
+void RenderBufferPlatformDestruct(Video::RenderBuffer* p) {
+    p->PlatformDestruct();
 }
 void RenderBufferOperatorDelete(void* p) {
     Video::RenderBuffer::operator delete(p);       // 0x18001f360
 }
-bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
-        reinterpret_cast<const Video::ImageBuffer*>(colour),
-        reinterpret_cast<const Video::ImageBuffer*>(depth));          // B.3.5 bridge
+bool RenderBufferCreate(Video::RenderBuffer* rb, const Video::ImageBuffer* colour,
+                        const Video::ImageBuffer* depth) {
+    return rb->Create(colour, depth);
+}
+
+// The three zeroed qwords retail stores into a fresh RenderBuffer before
+// PlatformConstruct: +0x00 / +0x08 (the two attachments) and +0x10 (width,
+// height).
+void RenderBufferZeroHeader(Video::RenderBuffer* rb) {
+    rb->colorBuffer = nullptr;
+    rb->depthBuffer = nullptr;
+    rb->width  = 0;
+    rb->height = 0;
 }
 
 // ENDGAME B.3.9 block GFX: `VtFrameCopy` / `VtGenerated` (the two minted
@@ -228,61 +237,55 @@ bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
 // 0x1800a3d10 after the FrameCopy stamp, and 0x1800a3c80 between its restamp
 // and the Generated restamp -- the bodies the B.3.8 `InitFields` /
 // `ReleaseFields` split shared with the retired doors, MOVED VERBATIM through
-// the field-identical `RtGraphics::FrameCopyImageBuffer` POD view.
+// the field-identical `RtGraphics::FrameCopyImageBuffer` POD view. B.4: on
+// the real class's own fields.
 // ============================================================================
 Graphics::FrameCopyImageBuffer::FrameCopyImageBuffer() {
     Attend("FrameCopyImageBuffer::ctor", g_ctorCalls);
-    RtGraphics::FrameCopyImageBuffer* const p =
-        reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
-    p->_backBufferImage = nullptr;                   // 0x1800a3d4c
-    p->_sourceTarget    = nullptr;                   // 0x1800a3d50
-    p->_destTarget      = nullptr;                   // 0x1800a3d54
+    _backBufferImage = nullptr;                      // 0x1800a3d4c
+    _sourceTarget    = nullptr;                      // 0x1800a3d50
+    _destTarget      = nullptr;                      // 0x1800a3d54
 
     // --- the back-buffer alias ---------------------------------------------
-    void* const image = System::MemoryAllocator::MemAlloc(0x68, 8);           // LEA EDX,[RBP+0x68] / LEA R8D,[RBP+8]
+    // The raw 0x68-byte block, typed once as the ImageBuffer built in it.
+    Video::ImageBuffer* const image = static_cast<Video::ImageBuffer*>(
+        System::MemoryAllocator::MemAlloc(0x68, 8));                          // LEA EDX,[RBP+0x68] / LEA R8D,[RBP+8]
     if (image != nullptr) ImageBufferCtor(image);
-    p->_backBufferImage = image;                     // never the ctor's return; see banner
+    _backBufferImage = image;                        // never the ctor's return; see banner
 
     // `MOV RCX,[RAX+0x60]; MOV RAX,[RCX]; CALL [RAX+8]` — slot 1 of the
     // ImageBuffer's platform companion, `this` and nothing else (retail sets no
-    // other argument register). dx11/src/imagebufferdata.cpp:11 names slot 1
-    // "alias the DeviceData color buffer, build an RTV", which is what makes
-    // this member the back buffer rather than a fresh texture.
-    {
-        void* const data = *reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(image) + 0x60);      // faithful: unguarded
-        void** const vt = *reinterpret_cast<void***>(data);
-        reinterpret_cast<void (*)(void*)>(vt[1])(data);
-    }
+    // other argument register): `ImageBufferData::AttachColorBuffer`.
+    // dx11/src/imagebufferdata.cpp:11 names slot 1 "alias the DeviceData color
+    // buffer, build an RTV", which is what makes this member the back buffer
+    // rather than a fresh texture.
+    image->_data->AttachColorBuffer();               // faithful: unguarded
 
     // --- the RenderBuffer over it -------------------------------------------
-    void* const rb = System::MemoryAllocator::MemAlloc(0x30, 8);              // MOV EDX,0x30 / LEA R8D,[RDX-0x28]
+    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(
+        System::MemoryAllocator::MemAlloc(0x30, 8));                          // MOV EDX,0x30 / LEA R8D,[RDX-0x28]
     if (rb != nullptr) {
         // Three qword zero stores INSIDE the success arm, then PlatformConstruct
         // — the same shape saveload_draw.cpp:497 transcribed for the standalone
         // RenderBuffer it builds.
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferZeroHeader(rb);
         RenderBufferPlatformConstruct(rb);
     }
-    p->_sourceTarget = rb;
+    _sourceTarget = rb;
 
-    RenderBufferCreate(rb, p->_backBufferImage, nullptr);   // XOR R8D,R8D => depth = null
+    RenderBufferCreate(rb, _backBufferImage, nullptr);   // XOR R8D,R8D => depth = null
 }
 
 Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
     Attend("FrameCopyImageBuffer::dtor", g_dtorCalls);
-    RtGraphics::FrameCopyImageBuffer* const p =
-        reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
 
-    if (p->_sourceTarget != nullptr) {               // +0x78
-        RenderBufferPlatformDestruct(p->_sourceTarget);
-        RenderBufferOperatorDelete(p->_sourceTarget);
+    if (_sourceTarget != nullptr) {                  // +0x78
+        RenderBufferPlatformDestruct(_sourceTarget);
+        RenderBufferOperatorDelete(_sourceTarget);
     }
-    if (p->_destTarget != nullptr) {                 // +0x80
-        RenderBufferPlatformDestruct(p->_destTarget);
-        RenderBufferOperatorDelete(p->_destTarget);
+    if (_destTarget != nullptr) {                    // +0x80
+        RenderBufferPlatformDestruct(_destTarget);
+        RenderBufferOperatorDelete(_destTarget);
     }
     if (_backBufferImage != nullptr) {               // +0x70
         // Retail: slot 0 with EDX = 1 -> the deleting destructor frees as well
@@ -568,9 +571,8 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
     // slot 3 of the platform companion, "create the texture and all its views"
     // (dx11/src/imagebufferdata.cpp:13), taking the level-descriptor array.
     // TWO arguments: retail sets RCX and RDX and nothing else.
-    void* const data = _data;                          // +0x60
-    void** const vt = *reinterpret_cast<void***>(data);
-    const bool ok = reinterpret_cast<bool (*)(void*, void*)>(vt[3])(data, levels);
+    // `ImageBufferData::Create(levels)`, by name.
+    const bool ok = _data->Create(levels);             // +0x60
     if (!ok) return false;                              // TEST AL,AL / JZ -> return AL
 
     // The second RenderBuffer, this time with `this` as the colour attachment.
@@ -579,11 +581,10 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
     // 0x1800a3be2. Same five instructions as the inlined form in the ctor, and
     // MemAlloc(0x30, 8) is that body (see the MemAlloc note above), so this is
     // spelled the same way for one arena and one reader.
-    void* const rb = System::MemoryAllocator::MemAlloc(0x30, 8);
+    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(
+        System::MemoryAllocator::MemAlloc(0x30, 8));
     if (rb != nullptr) {
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferZeroHeader(rb);
         RenderBufferPlatformConstruct(rb);
     }
     _destTarget = rb;                                   // +0x80
@@ -611,11 +612,10 @@ void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
     Attend("FrameCopyImageBuffer::Generate BLIT", g_generateCopies);
 
     // rax = _destTarget (+0x80); rcx = rax->platformData (+0x28); r8 = _sourceTarget.
-    void* const data = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(_destTarget) + 0x28);   // faithful: unguarded
-    void** const vt = *reinterpret_cast<void***>(data);
-    reinterpret_cast<void (*)(void*, void*, void*, bool)>(vt[3])(
-        data, context, _sourceTarget, true);
+    // `RenderBufferData::Resolve` (slot 3). LEFT: `RenderBuffer::platformData`
+    // is `void*` (Device.h), viewed once as the companion it is.
+    static_cast<Video::RenderBufferData*>(_destTarget->platformData)   // faithful: unguarded
+        ->Resolve(context, _sourceTarget, true);
 
     const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]
 }
