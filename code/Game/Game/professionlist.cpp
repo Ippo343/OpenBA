@@ -171,7 +171,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
 
     // Sort ascending by sort priority (Profession+0x48) — FUN_14001e7c0 semantics.
     int n = self->arrayCount;                                    // +0x28 count
-    uintptr_t* arr = static_cast<uintptr_t*>(self->arrayData);  // +0x20
+    uintptr_t* arr = reinterpret_cast<uintptr_t*>(self->arrayData);  // +0x20 (DLG-c: arrayData typed Profession**)
     if (n > 1 && arr) {
         for (int i = 1; i < n; i++) {
             uintptr_t key = arr[i];
