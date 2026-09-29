@@ -842,7 +842,7 @@ LAB_140113873:
                         // this branch look like a bug. desc+0x24 is the per-household OCCUPANT
                         // cap (distinct from desc+0x20, the household SLOT count).
                         int slotIdx = homeSlot;
-                        bool householdFull = CitizenComp_helper_a4f0(reinterpret_cast<int64_t>(storComp), slotIdx);
+                        bool householdFull = storComp->IsFamilyFull(slotIdx);   // 0x14012a4f0
                         if (!householdFull) {
                             // Room for another occupant — start the pregnancy timer.
                             pregnancyTimer = desc->pregnancyTime;
@@ -1174,18 +1174,6 @@ void CitizenComponent::SetParent(CitizenComponent* parent) {
             parent->AddChild(this);
         }
     }
-}
-
-// Reimpl of CitizenComponent_helper_a4f0 (0x14012a4f0):
-// returns whether the citizen's education level (residence comp +0x24) is <= the
-// storage row capacity at +0x50 + param2*0x10 + 8.
-bool CitizenComp_helper_a4f0(int64_t self, int param2) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    void* obj = *reinterpret_cast<void**>(s + 0x18);
-    void* res = Object::IsDerivedFromNullSafe(obj, ResidenceDescription::TypeId()) ? obj : nullptr;
-    int eduLevel = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x24) : 0;
-    int cap = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(s + 0x50) + 8 + (int64_t)param2 * 0x10);
-    return eduLevel <= cap;
 }
 
 // CitizenComponent::FindWorkplace (0x14010ffc0):

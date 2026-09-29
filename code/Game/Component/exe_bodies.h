@@ -121,7 +121,6 @@ int CitizenComp_Storage_GetResourceCount(int64_t self);  // 0x14012a9d0
 
 // ---- citizencomponent.cpp
 void CitizenComp_sub_1fa0(int64_t selfV, void* param2);  // 0x140111fa0
-bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2);  // 0x14010ffc0
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2);  // 0x140110470
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0
@@ -234,8 +233,8 @@ void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain)
 // ---- residencecomponent.cpp
 void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP);  // 0x140007960
 void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);  // 0x140037ad0
-void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void* arrayPtr);  // 0x140037c50
-void ResidenceComponent_ResidenceInit(void* selfP);  // 0x140129ef0
+void ResidenceComponent_ResidenceInit(void* selfP);  // 0x140129ef0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::EvictResidents
+bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0 B4 FORWARD: 1 outside caller (standalone/death_harness.cpp) -> ResidenceComponent::IsFamilyFull (moved from citizencomponent.cpp)
 
 // ---- spawncomponent.cpp
 void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag);  // 0x140055780

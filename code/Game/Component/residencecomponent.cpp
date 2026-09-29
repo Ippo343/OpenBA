@@ -5,62 +5,79 @@
 // Manages citizen residence assignments (housing).
 //
 // Vtable at 0x1401642c0. Three non-trivial overrides:
-//   Shutdown  (0x14012a170) — serialization with Time + arrays
-//   Serialize (0x14012a120) — IsDerivedFrom check + field init from description
-//   OnCreate  (0x14012a0e0) — calls init helper + registers with game state
+//   Persist  (0x14012a170) — serialization with Time + arrays
+//   Startup  (0x14012a120) — IsDerivedFrom check + field init from description
+//   OnRemove (0x14012a0e0) — evict the residents + unregister from the town
+//
+// The family roster (moved here from citizen_assignworkplace.cpp / citizencomponent.cpp:
+// retail's receiver is the ResidenceComponent — 0x14012a4f0 reads [RCX+0x18] as a
+// ResidenceDescription (cell 0x1401c7d28) and [RCX+0x50] as the family array):
+//   0x14012a4f0  IsFamilyFull
+//   0x14012a550  RemoveResident  (find + compact + decrement; empty house -> icons / model / audio)
+//   0x14012a710  AddResident     (work slot, audio, model, append + qsort)
+//   0x140129ff0  CountResidents  (sum of every family's count)
+//   0x140129e20  the qsort comparator (file-local)
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/residencecomponent_funcs.h"
 #include "Component/CitizenComponent.h"
 #include "Component/ResidenceDescription.h"
+#include "Component/StatusIconComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Component/coll_bridge.h"
+#include "Component/firecomponent_funcs.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/exe_constants.h"
 #include "system/MemoryAllocator.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "math/Math.h"
+#include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>   // qsort
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Action/exe_bodies.h"
 
 // The exe helpers this file calls, by retail address:
 //   0x140037ad0 ResidenceComponent_ResizeResidentArray (below)
-//   0x140037c50 ResidenceComponent_SerializeResidentArray (below)
-//   0x140129ef0 ResidenceComponent_ResidenceInit (below)
+//   0x140037c50 ResidenceComponent::SerializeFamilies (below)
+//   0x140129ef0 ResidenceComponent::EvictResidents (below)
 //   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
 //   0x140007960 ResidenceComponent_CopyInnerArray (below)
-//   0x1401163d0 CitizenComponent_AssignWorkplace
+//   0x1401163d0 CitizenComponent::SetHome
 //   0x140152a98 ?IsDerivedFrom@Base@Object@@ (import slot)
 
 // ============================================================
-// ResidenceComponent::OnCreate (vtable slot [7], 0x14012a0e0)
+// The body of [7] 0x14012a0e0 (and of the state-3 enter 0x140129920)
 // ============================================================
-// Calls init helper (ResidenceComponent_helper_9ef0), then registers
-// owning entity with game world residence list at worldMgr+0x20.
+// Evicts the residents (0x140129ef0), then removes the owning entity from
+// the town manager's residence list at +0x20.
 //
 // Original decompilation:
 //   ResidenceComponent_helper_9ef0(self)
 //   local_res8 = *(self+0x10)    // owner entity
 //   FUN_140002cc0(*(g_pGameWorldSingleton+0xf0)+0x20, &local_res8)
 
-void ResidenceComponent_OnCreate(ResidenceComponent* self) {
-    // Call init helper
-    ResidenceComponent_ResidenceInit(self);
+void ResidenceComponent::EvictAndUnregister() {
+    EvictResidents();
 
     if (GameUpdateLoop::_singleton == nullptr)
         return;
 
-    // Build an InternalBasePtr on the stack with the owner entity
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
+    // The owner entity, as the InternalBasePtr value retail builds on the stack
+    ComponentEntity* entityPtr = _entity;
 
-    // Get the world manager from game state
-    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
+    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): its +0x20 list stays by offset.
+    uintptr_t worldMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
 
-    // Register entity at worldMgr+0x20 (residence entity list)
+    // Unregister the entity from worldMgr+0x20 (the residence entity list)
     CemeteryListErase_Reimpl((void*)(worldMgr + 0x20), &entityPtr);   // 0x140002cc0
 }
 
@@ -171,49 +188,41 @@ void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
 }
 
 // ============================================================
-// Reimpl of FUN_140037c50 (ResidenceComponent_helper_7c50:
-//   serialize the nested resident IBP arrays)
+// ResidenceComponent::SerializeFamilies (0x140037c50, ResidenceComponent_helper_7c50):
+//   serialize the nested resident IBP arrays
 // ============================================================
-// For each of `count` outer entries (16-byte stride at arrayPtr): serialize the
-// inner element count; on load grow the inner array; then serialize each inner
-// InternalBasePtr and clear it if not derived from the resident type.
-void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void* arrayPtr) {
+// For each of `count` families: serialize the member count; on load grow the
+// member array; then serialize each member InternalBasePtr and clear it if not
+// derived from the resident type.
+void ResidenceComponent::SerializeFamilies(IO::Serializer& ser, int count, Family* families) {
     if (count <= 0) return;
-    int64_t* entry = (int64_t*)arrayPtr;
+    Family* entry = families;
     for (int o = 0; o < count; o++) {
-        int innerCount = (int)entry[1];
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(innerCount, nullptr);   // B.3.4 bridge
-        // On load (serializer internal +8 == 0): resize the inner array
+        int innerCount = entry->count;
+        ser.Serialize(innerCount, nullptr);
+        // On load (direction 0): resize the member array
         // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            GameColl::AsArray<GameColl::Ptr8>((void*)entry).SetSize(innerCount);
+        if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+            GameColl::AsArray<GameColl::Ptr8>(&entry->members).SetSize(innerCount);
         }
-        uintptr_t inner = (uintptr_t)entry[0];
+        Object::InternalPtr<CitizenComponent>* inner = entry->members;
         for (int i = 0; i < innerCount; i++) {
-            void* ibp = (void*)(inner + (uintptr_t)i * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            void* val = *(void**)ibp;
-            // Require the VALUE, not just the pointer: with 0x1401c7158 registered the
-            // slot existed from startup but only held the CRC after a post-Startup fill.
-            // IsDerivedFrom(val, 0) matches nothing, so a bare pointer check would clear
-            // every resident ref in that window.
-            if (val &&
-                !Object::IsDerivedFromNullSafe(val, CitizenComponent::TypeId())) {
-                *(uint64_t*)ibp = 0;
-            }
+            // InternalPtr<CitizenComponent>::Serialize: InternalBasePtr::Serialize, then a
+            // non-null VALUE not derived from CitizenComponent is cleared. (The value, not
+            // the pointer: with 0x1401c7158 registered the slot existed from startup but
+            // only held the CRC after a post-Startup fill.)
+            inner[i].Serialize(ser, CitizenComponent::TypeId());
         }
-        entry += 2;   // 16-byte stride
+        entry += 1;   // 16-byte stride
     }
 }
 
 // ============================================================
-// Reimpl of FUN_140129ef0 (ResidenceComponent_helper_9ef0:
-//   on create, refresh mesh flags and re-assign resident workplaces)
+// ResidenceComponent::EvictResidents (0x140129ef0, ResidenceComponent_helper_9ef0):
+//   every resident of every family is sent home-less (SetHome(null, -1)), which
+//   removes it from this roster — the loop re-reads the count until it is 0.
 // ============================================================
-void ResidenceComponent_ResidenceInit(void* selfP) {
-    uintptr_t self = (uintptr_t)selfP;
-    uint8_t ibpBuf[8];
-
+void ResidenceComponent::EvictResidents() {
     // Mesh flags 6 and 7 — clear two MeshInstance status/skin flags on the house.
     // STANDALONE: skipped. In standalone the house's ModelComponent mesh was force-set
     // to the completed-build variant (starttown.cpp StartTown_SpawnStructures); this
@@ -221,21 +230,257 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
     // state, hides the building (it assumes the real game's fully-live mesh pipeline).
     // The registration below (push into townMgr+0x20) is the part standalone needs.
 
-    // Re-assign workplaces for each resident slot at +0x50 (count +0x58, stride 0x10)
-    int slotCount = *(int*)(self + 0x58);
+    // Evict each family's residents (+0x50, count +0x58, stride 0x10)
+    int slotCount = residentSlotCount;
     for (int s = 0; s < slotCount; s++) {
-        uintptr_t base = *(uintptr_t*)(self + 0x50);
-        uintptr_t entry = base + (uintptr_t)s * 0x10;
-        int innerCount = *(int*)(entry + 8);
+        int innerCount = residentSlots[s].count;
         while (innerCount > 0) {
-            new (ibpBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            uintptr_t cur = *(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10;
-            void* residentSlotPtr = *(void**)cur;
-            void* citizen = *(void**)residentSlotPtr;
-            CitizenComponent_AssignWorkplace(citizen, ibpBuf, -1);   // 0x1401163d0
-            innerCount = *(int*)(*(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10 + 8);
+            CitizenComponent* citizen = residentSlots[s].members[0].Get();
+            citizen->SetHome(nullptr, -1);   // 0x1401163d0 with a null IBP
+            innerCount = residentSlots[s].count;
         }
     }
+}
+
+// B4 FORWARD: 1 outside caller (Game/starttown.cpp)
+void ResidenceComponent_ResidenceInit(void* selfP) {
+    reinterpret_cast<ResidenceComponent*>(selfP)->EvictResidents();
+}
+
+// ============================================================
+// The family roster (moved from Component/citizencomponent.cpp and
+// Component/citizen_assignworkplace.cpp; COMP-b left them free)
+// ============================================================
+
+// ResidenceComponent::IsFamilyFull (0x14012a4f0): the family's member count
+// against ResidenceDescription::_maxResidentsPerFamily (+0x24), `SETGE`.
+bool ResidenceComponent::IsFamilyFull(int family) const {
+    Description* obj = _description;
+    const ResidenceDescription* res =
+        Object::IsDerivedFromNullSafe(obj, ResidenceDescription::TypeId())
+            ? static_cast<const ResidenceDescription*>(obj) : nullptr;
+    // A guard of the tree's: retail 0x14012a538 reads [0+0x24] when the
+    // description is not a ResidenceDescription.
+    int eduLevel = res ? res->_maxResidentsPerFamily : 0;
+    int cap = residentSlots[family].count;
+    return eduLevel <= cap;
+}
+
+// B4 FORWARD: 1 outside caller (standalone/death_harness.cpp)
+bool CitizenComp_helper_a4f0(int64_t self, int param2) {
+    return reinterpret_cast<ResidenceComponent*>(self)->IsFamilyFull(param2);
+}
+
+namespace {
+
+// The live Audio::Scene lives at gameWorld+0x78 (disasm: MOV RAX,[0x1401c3dd8];
+// MOV RDI,[RAX+0x78]). Null in standalone unless the audio scene was built.
+inline void* AudioScene() {
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return GameUpdateLoop::_singleton->m_audioScene;
+}
+
+// ------------------------------------------------------------
+// qsort comparator — faithful port of CitizenComponent_helper_9e20 (0x140129e20).
+// Elements are raw 8-byte citizen-component pointers. Ranks by "has-guardian"
+// (+0x258 == 0 -> +0x1000) and "is-child/education-state==1" (+0x38 == 1 -> +0x100),
+// preferring guardianed adults toward the front. CheckPtr resolves each lazy ptr on a
+// stack copy before the field reads (exactly as the original does).
+// ------------------------------------------------------------
+int RosterCompare_9e20(const void* pa, const void* pb) {
+    // qsort's element pointers: each element is a CitizenComponent pointer.
+    const CitizenComponent* ea = *reinterpret_cast<CitizenComponent* const*>(pa);
+    const CitizenComponent* eb = *reinterpret_cast<CitizenComponent* const*>(pb);
+
+    const CitizenComponent* a258 = ea->_parent;   // +0x258 parent
+    int a38 = ea->gender;                         // +0x38 gender
+
+    const CitizenComponent* b258 = eb->_parent;
+    int b38 = eb->gender;
+
+    uint32_t ub = (b38 == 1) ? 0x100u : 0u;
+    uint32_t ua = (a38 == 1) ? 0x100u : 0u;
+    uint32_t lhs = ub | ((b258 == nullptr) ? 0x1000u : 0u);
+    uint32_t rhs = ((a258 == nullptr) ? 0x1000u : 0u) | ua;
+    return static_cast<int>(lhs - rhs);
+}
+
+}  // namespace
+
+// ============================================================
+// ResidenceComponent::CountResidents (0x140129ff0) — sum of the member counts
+// across every family (+0x58 families, +0x50 the family array, count @ +8).
+// The exe hand-unrolls the sum 4-wide; this is the identical scalar equivalent.
+// ============================================================
+uint32_t ResidenceComponent::CountResidents() const {
+    int professions = residentSlotCount;
+    uint32_t total = 0;
+    for (int i = 0; i < professions; ++i)
+        total += static_cast<uint32_t>(residentSlots[i].count);
+    return total;
+}
+
+// ============================================================
+// ResidenceComponent::RemoveResident (0x14012a550) — REMOVE a citizen from a family.
+//   family     = the household slot
+//   citizenIBP = InternalBasePtr wrapping the citizen component to remove
+// Roster bookkeeping (find + compact + decrement) is the faithful core and runs
+// unconditionally. When the house goes fully empty, the exe tears down the status
+// icon + 3D audio emitter — that whole branch is inert and guarded here.
+// ============================================================
+void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenComponent>* citizenIBP) {
+
+    // --- Find the citizen's index in this family's array. ---
+    Family* rec = &residentSlots[family];
+    int idx = -1;
+    {
+        int count = rec->count;
+        Object::InternalPtr<CitizenComponent>* arr = rec->members;
+        for (int i = 0; i < count; ++i) {
+            if (arr[i] == *citizenIBP) {
+                idx = i;
+                break;
+            }
+        }
+    }
+
+    // --- Compact the array down over the removed slot, then decrement count. ---
+    // (Faithful to 0x14012a5b6..603, which reloads the table pointer here.)
+    rec = &residentSlots[family];
+    int cnt = rec->count;
+    // idx >= 0 is guaranteed by the caller invariant (the citizen being removed was
+    // assigned to this home/slot, hence present in its roster). The original does
+    // an out-of-bounds array[-1] shift on the assert-only "can't find item in priority
+    // list" path; guarding the shift keeps that impossible path a crash-safe no-op
+    // while remaining byte-identical for every real removal.
+    if (idx >= 0) {
+        Object::InternalPtr<CitizenComponent>* base = rec->members;
+        for (int i = idx; i + 1 < cnt; ++i) {
+            Object::InternalPtr<CitizenComponent>* slot = base + i;
+            if (slot)
+                *slot = base[i + 1];
+        }
+    }
+    rec->count = cnt - 1;   // DEC dword[rec+8] — unconditional, as in the original.
+
+    // --- Inert: house became empty -> clear status icon + tear down audio emitter. ---
+    if (CountResidents() == 0) {
+        // Status-icon toggles (flags 6 and 7 off). The icon may be absent.
+        for (int flag = 6; flag <= 7; ++flag) {
+            StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
+            if (icon)
+                CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon),   // LEFT: B4 FORWARD's old signature (StatusIconComponent::SetFlag)
+                                          static_cast<uint8_t>(flag), 0);
+        }
+        // Model refresh (variant 3 = idle/empty).
+        ModelComponentNotify_Reimpl(_entity, 3);
+        // 3D positional audio teardown.
+        {
+            int64_t emIBP[2] = {0, 0};
+            // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
+            // here (entity, emIBP). The null arm leaves emIBP null, so the teardown below
+            // does not run.
+            int64_t emData = emIBP[0];
+            void* scene = AudioScene();
+            if (emData && scene) {
+                // LEFT: the emitter component's class is not settled (its finder is a PORT GAP).
+                int64_t desc = *reinterpret_cast<int64_t*>(emData + 0x38);
+                uint32_t id = *reinterpret_cast<uint32_t*>(desc + 0x10);
+                const void* pos = reinterpret_cast<const void*>(emData + 0x28);
+                reinterpret_cast<Audio::Scene*>(scene)->RemoveEmitter(
+                    id, *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
+                int remaining = reinterpret_cast<Audio::Scene*>(scene)->GetEmitterCount(id);   // B.3.7 bridge
+                if (remaining == 0) reinterpret_cast<Audio::Scene*>(scene)->StopEffect3D(id);   // B.3.7 bridge
+                *reinterpret_cast<uint32_t*>(desc + 0x10) = 0;
+            }
+        }
+    }
+}
+
+// ============================================================
+// ResidenceComponent::AddResident (0x14012a710) — ADD a citizen to a family.
+//   family / citizenIBP as above.
+// Material reservation (guarded) + inert audio reposition (guarded) run first; the
+// FAITHFUL CORE is: model refresh when the family was empty (guarded), then
+// grow-array append of the citizen ptr, then qsort the family when it now holds >1.
+// ============================================================
+void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComponent>* citizenIBP) {
+    // --- Material reserve (guarded; the WorkComponent may be absent). ---
+    WorkComponent* work = _entity->FindComponent<WorkComponent>();   // 0x140003050
+    if (work && WorkComponent_CheckWorkSlot(work)) {
+        WorkComponent_RegisterWorkSlot(work);
+    }
+
+    // --- Inert: house was empty -> move emitter to model position + set volume. ---
+    if (CountResidents() == 0) {
+        int64_t emIBP[2] = {0, 0};
+        // PORT GAP 0x140002280 Entity::FindAudioComponent: not ported; retail calls it
+        // here (entity, emIBP). The null arm leaves emIBP null, so the emitter block
+        // below does not run.
+        // Model/transform position (guarded; component may be absent).
+        float pos[3] = {0.0f, 0.0f, 0.0f};
+        {
+            ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
+            int64_t modelComp = reinterpret_cast<int64_t>(model);   // LEFT: ModelComponent::transform is raw storage (COMP-d)
+            if (modelComp) {
+                pos[0] = *reinterpret_cast<float*>(modelComp + 0x158);
+                pos[1] = *reinterpret_cast<float*>(modelComp + 0x15c);
+                pos[2] = *reinterpret_cast<float*>(modelComp + 0x160);
+            }
+        }
+        int64_t emData = emIBP[0];
+        void* scene = AudioScene();
+        if (emData) {
+            // LEFT: the emitter component's class is not settled (its finder is a PORT GAP).
+            const void* emPos = reinterpret_cast<const void*>(emData + 0x28);
+            (void)emPos;
+            // PORT GAP 0x140152a70 Math::Vector3::operator==: not ported; retail calls it
+            // here (pos, emPos). The null arm answers "equal".
+            char same = 1;
+            if (!same) {
+                if (scene) {
+                    int nEm = *reinterpret_cast<int*>(emData + 0x40);
+                    int64_t emArr = *reinterpret_cast<int64_t*>(emData + 0x38);
+                    for (int i = 0; i < nEm; ++i) {
+                        uint32_t id = *reinterpret_cast<uint32_t*>(emArr + static_cast<int64_t>(i) * 0x10);
+                        if (id != 0)
+                            reinterpret_cast<Audio::Scene*>(scene)->MoveEmitter(
+                                id, *reinterpret_cast<const Vector3*>(emPos),
+                                *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
+                    }
+                }
+                *reinterpret_cast<float*>(emData + 0x28) = pos[0];
+                *reinterpret_cast<float*>(emData + 0x2c) = pos[1];
+                *reinterpret_cast<float*>(emData + 0x30) = pos[2];
+            }
+            FireComp_StartAudioEmitter_42c60(reinterpret_cast<void*>(emData), 1);
+            int64_t desc = *reinterpret_cast<int64_t*>(emData + 0x38);
+            if (*reinterpret_cast<uint32_t*>(desc + 0x10) == 0) {
+                *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
+            } else {
+                float uv = kRdata_14017214c;   // g_fUVScale 0x14017214c
+                if (*reinterpret_cast<float*>(desc + 0x14) != uv) {
+                    *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
+                    if (scene)
+                        reinterpret_cast<Audio::Scene*>(scene)->SetEmitterVolume(
+                            *reinterpret_cast<uint32_t*>(desc + 0x10),
+                            *reinterpret_cast<const Vector3*>(emData + 0x28), uv);   // B.3.7 bridge
+                }
+            }
+        }
+    }
+
+    // --- FAITHFUL CORE: model refresh on the family's first member, then append. ---
+    Family* rec = &residentSlots[family];
+    if (rec->count == 0) {
+        ModelComponentNotify_Reimpl(_entity, 2);   // variant 2 = occupied
+    }
+    // Grow the family array to count+1 and append the citizen pointer (*citizenIBP).
+    ActHunt_DynArraySetCount_3110(rec, rec->count + 1, citizenIBP);
+    // Re-read count (3110 updated it) and sort the family when it holds >1 member.
+    int newCount = rec->count;
+    if (newCount > 1)
+        qsort(rec->members, static_cast<size_t>(newCount), 8, &RosterCompare_9e20);
 }
 
 // ===== Standalone factory (Foundation D → Keystone D states) =====
@@ -273,8 +518,6 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
 #include <atomic>
 #include <cstring>
 
-// residence_heattick.cpp — state-2 per-frame handler (0x140129970 port).
-extern "C" char ResidenceComponent_HeatTick(void* comp, void* sm, void* dt);
 // citizen_employ_cascade.cpp — helper_9de0 port (append house IBP to townMgr+0x20).
 extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP);
 
@@ -282,8 +525,8 @@ extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP);
 // VALUE (comp+0x10) to the townMgr+0x20 residence list. Retail returns 0 in AL, so
 // the SM Enter walk continues past this node (Build's state-2 has no enter) — keep
 // that return value.
-static char ResidenceComponent_EnterBuilt(void* comp, void* /*sm*/) {
-    int64_t ibp = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x10);
+char ResidenceComponent::EnterBuilt() {
+    int64_t ibp = reinterpret_cast<int64_t>(_entity);   // LEFT: TownRegistry_RegisterResidence takes the IBP value as int64_t (COMP-b's declaration)
     TownRegistry_RegisterResidence(ibp);
     {
         static int n = 0;
@@ -295,7 +538,7 @@ static char ResidenceComponent_EnterBuilt(void* comp, void* /*sm*/) {
             // itself ([TownRegistry] lines); read those, not this one.
             fprintf(stderr, "[Residence] state-2 enter FIRED: house comp=%p entityIBP=%llx "
                     "-> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)\n",
-                    comp, (unsigned long long)ibp);
+                    static_cast<void*>(this), (unsigned long long)ibp);
             fflush(stderr);
         }
     }
@@ -303,19 +546,27 @@ static char ResidenceComponent_EnterBuilt(void* comp, void* /*sm*/) {
 }
 
 // State-3 enter — faithful helper_9920 (0x140129920): evict via helper_9ef0 + remove
-// from townMgr+0x20 via FUN_140002cc0. That is exactly the ported OnCreate body.
-static char ResidenceComponent_EnterDemolish(void* comp, void* /*sm*/) {
+// from townMgr+0x20 via FUN_140002cc0. That is exactly the slot-7 body.
+char ResidenceComponent::EnterDemolish() {
     // Discriminator (2026-07-31): this body ERASES the house from townMgr+0x20, and
     // something is running it during StartTown right after each state-2 append, which is
     // what keeps the residence count pinned at 0. Two call sites can reach it — this
     // state-3 enter and the slot-7 removal hook — so each says which one fired.
     static int n = 0;
     if (n < 12) { ++n;
-        fprintf(stderr, "[Residence] ERASE via STATE-3 DEMOLISH enter: comp=%p\n", comp);
+        fprintf(stderr, "[Residence] ERASE via STATE-3 DEMOLISH enter: comp=%p\n", static_cast<void*>(this));
         fflush(stderr);
     }
-    ResidenceComponent_OnCreate(reinterpret_cast<ResidenceComponent*>(comp));
+    EvictAndUnregister();
     return 0;
+}
+
+// The table's handler thunks: the dispatcher calls (component, sm[, time]).
+static char ResidenceEnterBuilt(ResidenceComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }      // 0x140129de0
+static char ResidenceEnterDemolish(ResidenceComponent* c, void* /*sm*/) { return c->EnterDemolish(); }   // 0x140129920
+static char ResidenceHeatTick(ResidenceComponent* c, void* /*sm*/, System::Time* dt) {
+    if (!c) return 1;   // a guard of the tree's
+    return c->HeatTick(dt);                                                                             // 0x140129970
 }
 
 using ResidenceCtrlDispatch = ::ControllerLive::Dispatcher<ResidenceCtrlTag>;
@@ -325,11 +576,11 @@ static void ResidenceComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = ResidenceCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&ResidenceComponent_EnterBuilt),
-                       nullptr, reinterpret_cast<void*>(&ResidenceComponent_HeatTick),
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&ResidenceEnterBuilt),
+                       nullptr, reinterpret_cast<void*>(&ResidenceHeatTick),
                        nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&ResidenceComponent_EnterDemolish),
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&ResidenceEnterDemolish),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);
@@ -351,7 +602,8 @@ static const bool s_residenceStateTableBuilt = (ResidenceComponent_PopulateState
 // `_controller(this)` is the member's back-pointer; +0x48 = +0x50 = +0x58 = 0; then
 // `_flags |= 0x82`.
 ResidenceComponent::ResidenceComponent()
-    : _controller(this), heatRemaining(0), residentSlots(nullptr), residentSlotCount(0), _pad5c{} {
+    : _controller(this), heatRemaining{0}, residentSlots(nullptr), residentSlotCount(0),
+      residentSlotCapacity(0) {
     OrFlagsInCtor(0x82);
 }
 
@@ -361,16 +613,17 @@ ResidenceComponent::ResidenceComponent()
 // dtors (restamps only) and ~Internal are the compiler's chain.
 ResidenceComponent::~ResidenceComponent() {
     const int count = residentSlotCount;
-    void** slot = static_cast<void**>(residentSlots);
-    for (int i = 0; i < count; ++i, slot += 2) {
-        Object::detail::InternalMemFree(slot[0]);
-        slot[0] = nullptr;
-        slot[1] = nullptr;
+    Family* slot = residentSlots;
+    for (int i = 0; i < count; ++i, ++slot) {
+        Object::detail::InternalMemFree(slot->members);
+        slot->members = nullptr;
+        slot->count = 0;
+        slot->capacity = 0;
     }
     Object::detail::InternalMemFree(residentSlots);
     residentSlots = nullptr;
     residentSlotCount = 0;
-    std::memset(_pad5c, 0, sizeof _pad5c);        // +0x5c: 0x1400175d0 stores a qword at +0x58
+    residentSlotCapacity = 0;        // +0x5c: 0x1400175d0 stores a qword at +0x58
 }
 
 // create 0x140037440: MemAlloc(0x60, 8), then the ctor.
@@ -390,8 +643,8 @@ void* ResidenceComponent::CreateInPlaceObject(void* storage) {
 // ResidenceComponent::Persist (vtable slot [3], 0x14012a170)
 // ============================================================
 // Serializes Component base + empty serializer block + versioned
-// serializer with: resident count (+0x58), resident array resize on load,
-// resident array serialize, and Time::Serialize at +0x48.
+// serializer with: family count (+0x58), family array resize on load,
+// family array serialize, and Time::Serialize at +0x48.
 //
 // Original decompilation:
 //   Component_Serialize(self, stream)
@@ -409,45 +662,37 @@ void ResidenceComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // Empty serializer block (version 0)
-    alignas(8) uint8_t serBuf1[24];
-    ::new (static_cast<void*>(serBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serBuf1)->~Serializer();                                       // B.3.4 bridge
+    {
+        IO::Serializer empty(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    }
 
     // Versioned serializer block (version 0) with resident data
-    alignas(8) uint8_t serBuf2[24];
-    int64_t* pSerData = (int64_t*)serBuf2;
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
 
-    ::new (static_cast<void*>(serBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize resident count via local copy
+    // Serialize the family count via a local copy
     // (same pattern as ConsumeProduceComponent — local copy needed so resize
     // sees old vs new count correctly)
-    int localCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x58);
-    reinterpret_cast<IO::Serializer*>(serBuf2)->Serialize(localCount, nullptr);   // B.3.4 bridge
+    int localCount = residentSlotCount;
+    ser.Serialize(localCount, nullptr);
 
-    // On load (direction == 0): resize resident array
-    if (*(int*)(pSerData[0] + 8) == 0) {
-        ResidenceComponent_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), localCount);
+    // On load (direction == 0): resize the family array
+    if (static_cast<int>(ser.GetDirection()) == 0) {
+        ResidenceComponent_ResizeResidentArray(&residentSlots, localCount);
     }
 
-    // Serialize resident array
-    {
-        void* arrayPtr = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x50);
-        ResidenceComponent_SerializeResidentArray(serBuf2, localCount, arrayPtr);
-    }
+    // Serialize the families
+    SerializeFamilies(ser, localCount, residentSlots);
 
     // Serialize Time at +0x48
-    reinterpret_cast<System::Time*>((void*)(reinterpret_cast<uintptr_t>(this) + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serBuf2));   // B.3.4b bridge
-
-    reinterpret_cast<IO::Serializer*>(serBuf2)->~Serializer();                                       // B.3.4 bridge
+    heatRemaining.Serialize(ser);
 }
 
 // ============================================================
 // ResidenceComponent::Startup (vtable slot [4], 0x14012a120)
 // ============================================================
 // Checks IsDerivedFrom on +0x18 with ResidenceDescription type,
-// reads resident capacity from description at +0x20, resizes
-// resident array at +0x50 to that capacity.
+// reads the family count from the description at +0x20, resizes
+// the family array at +0x50 to it.
 //
 // Original decompilation:
 //   obj = *(self+0x18)
@@ -456,32 +701,28 @@ void ResidenceComponent::Persist(void* stream) {
 //   ResizeResidentArray(self+0x50, *(pvVar2+0x20))
 
 void ResidenceComponent::Startup() {
-    void* obj = _description;
+    Description* obj = _description;
     if (!obj) return;
 
-    bool derived = reinterpret_cast<const Object::Base*>(obj)
-                       ->IsDerivedFrom(ResidenceDescription::TypeId());   // B.3.x bridge (slot 0x140152a98)
-    void* desc = derived ? obj : nullptr;
+    bool derived = obj->IsDerivedFrom(ResidenceDescription::TypeId());   // import slot 0x140152a98
+    ResidenceDescription* desc = derived ? static_cast<ResidenceDescription*>(obj) : nullptr;
     if (!desc) return;
 
-    // Read resident capacity from description at +0x20
-    int capacity = *(int*)((uintptr_t)desc + 0x20);
-
-    // Resize resident array at +0x50
-    ResidenceComponent_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), capacity);
+    // Resize the family array at +0x50 to the description's family count (+0x20)
+    ResidenceComponent_ResizeResidentArray(&residentSlots, desc->_maxFamilies);
 }
 
-// [7] 0x14012a0e0 — helper_9ef0 (re-assign resident workplaces / evict) + remove the
-// owner entity from the townMgr+0x20 residence list, dispatched by FUN_1400c2ea0 at
-// entity removal. See the note on ResidenceComponent_EnterDemolish — this is the
-// other route into the townMgr+0x20 erase, so it says which one fired.
+// [7] 0x14012a0e0 — helper_9ef0 (evict the residents) + remove the owner entity from
+// the townMgr+0x20 residence list, dispatched by FUN_1400c2ea0 at entity removal.
+// See the note on EnterDemolish — this is the other route into the townMgr+0x20
+// erase, so it says which one fired.
 static std::atomic<int> s_residenceSlot7Logged{0};
 void ResidenceComponent::OnRemove() {
     if (s_residenceSlot7Logged.fetch_add(1, std::memory_order_relaxed) < 12) {
         fprintf(stderr, "[Residence] ERASE via SLOT-7 removal hook: comp=%p\n", static_cast<void*>(this));
         fflush(stderr);
     }
-    ResidenceComponent_OnCreate(this);
+    EvictAndUnregister();
 }
 
 DEFINE_EXE_TYPE(ResidenceComponent, "ControllerComponent")
