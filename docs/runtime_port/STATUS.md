@@ -24,9 +24,9 @@ built them wrong, and callbacks stored in data.
   casts go completely (any spelling of a read by offset or of a `void*` / integer receiver
   reinterpreted as a class), only safe casts stay; the differences from retail found on the way are a
   separate task (`docs/known_port_issues.md` 13, 14). Metric (`endgame_b/b4_session/castmetric.py`, every
-  spelling summed): **46,226 to remove at block 0 -> 24,792** at `c7ec34a1`; 26 gated merges, 0 problems;
+  spelling summed): **46,226 to remove at block 0 -> 17,621** at `af21c719`; 31 gated merges, 0 problems;
   invariants unchanged. First pass merged: W0, T, runtime UI / IO / Graphics / Video, Component a-f,
-  Dialog a-c and e, Work a, Game a. Running when paused: ACT-a, DLG-d, R-ENG, WORK-b, WORK-c. Not
+  Dialog a-e, Work a-c, Game a, Action a, runtime Engine. Nothing is running or half merged. Not
   started: ACT-b, GAME-b, GAME-c, PLAYER, TUT, R-CORE, STANDALONE, tests; then the second pass, the
   closing wave (forwarders), the audit and the close. **How to resume: `endgame_b/NEXT_SESSION.md`.**
   Rule sheet `endgame_b/B4_RULES.md`, kit and gate table `endgame_b/b4_session/`.

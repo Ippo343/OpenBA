@@ -164,3 +164,8 @@ Metric at `5c6051a0`: **21,374** to remove.
 | 30 | W1-WORK-b | `c8d6a8d6` | Work b: MarketWork, GatherRawMaterials, Forester, Pasture, Herbalist, Hunt, Pickup, LocationWork, HarvestArea, HarvestOrchard: 1784 -> 184 in 43 files; HarvestArea / HarvestOrchard +0x58 is an `Array<bool>` | exit 0 · 918 / 0 · 0 (the retyped `work_act_consume.cpp` warning of row 28 flagged again: the coordinator's baseline file was left unsorted) | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.67 ms/frame, p95 2.31 | 0 |
 
 Metric at `c8d6a8d6`: **19,774** to remove.
+
+| 31 | W1-ACT-a | `af21c719` | Action a: route, drop, walker, placement, herd, road, hunt, move, raw-material and complete bodies typed; `Action::_next`, `ActionStack`, the grid walker, road vertex and work-id node types; PathfinderThread and Map +0xA8 storage named: 2439 -> 331 in 21 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.64 ms/frame, p95 2.03 (no agents building) | 0 |
+
+Metric at `af21c719`: **17,621** to remove. **B.4 PAUSED here by the user (2026-09-29): no agent is
+running, no merge is in progress, every handed-in block is merged and gated.**

@@ -22,9 +22,9 @@ members, entry 14c row 31) is LEFT and listed with the row that blocks it: expec
 
 | | |
 |---|---|
-| main | see `git log -1`; last gated merge `c7ec34a1` (GATE_TABLE row 26) |
-| metric | 46,226 to remove at block 0 -> **24,792** (46% removed); floor marked 276 of ceiling 358 |
-| gated merges | 26, every one 0 problems (`b4_session/GATE_TABLE.md`) |
+| main | see `git log -1`; last gated merge `af21c719` (GATE_TABLE row 31) |
+| metric | 46,226 to remove at block 0 -> **17,621** (62% removed); floor ceilings in `b4_session/FLOOR.md` (total 382) |
+| gated merges | 31, every one 0 problems (`b4_session/GATE_TABLE.md`) |
 | invariants, unchanged | new game `calls=5683 openFileFail=0`; tutorial `5773/12`; typetable 428 lines md5 `b983f144`; resave golden md5 `dd3893af…`; unit 918 / 0; stub set 0 |
 
 Documents: rule sheet `B4_RULES.md` (M, H, B rules; corrections §8); `b4_session/` — `BLOCK0_BRIEF`,
@@ -36,8 +36,8 @@ disjoint file sets; regenerate with `scripts/filemap.py`), `GATE_TABLE.md`, the 
 
 | state | blocks |
 |---|---|
-| MERGED and gated | W0: R0-EXE, R0-RT, E0, W0-H1, W0-H2 · T · R-UI-a, R-UI-b, R-IO, R-GFX, R-VIDEO · COMP-a, b, c, d, e, f · DLG-a, b, c, e · WORK-a · GAME-a |
-| RUNNING when paused (branch `b4-W1-<block>`, worktree `.claude/worktrees/agent-*`) | ACT-a, DLG-d, R-ENG, WORK-b, WORK-c |
+| MERGED and gated | W0: R0-EXE, R0-RT, E0, W0-H1, W0-H2 · T · R-UI-a, R-UI-b, R-IO, R-GFX, R-VIDEO, R-ENG · COMP-a, b, c, d, e, f · DLG-a, b, c, d, e · WORK-a, b, c · GAME-a · ACT-a |
+| RUNNING when paused | none: every started block handed in and is merged. The five last worktrees (`.claude/worktrees/agent-*`) are merged and can be removed |
 | NOT STARTED | ACT-b, GAME-b, GAME-c, PLAYER, TUT (Tutorial / Goal / Object), R-CORE, STANDALONE, the tests |
 
 `PathfinderThread.h` was moved from GAME-b to ACT-a (ACT-a splits its raw storage).
@@ -53,7 +53,7 @@ disjoint file sets; regenerate with `scripts/filemap.py`), `GATE_TABLE.md`, the 
    scratchpad is empty: copy `b4_session/` there and re-cut the baseline FIRST, from a
    `make clean` rebuild of main: `gate.sh baseline 3`, then `gate.sh baseline 3 warnbaseline`.
    `mergegate.sh` in `b4_session/` builds the merged tree BEFORE the merge commit exists.
-3. **A block that was running:** its branch and worktree survive. If it has a hand-in (a final
+3. **A block that was running** (none at this pause; kept for the next one)**:** its branch and worktree survive. If it has a hand-in (a final
    message), merge it: `mergegate.sh <branch> <label> "<title>" ui tools`, plus `sa-stress` on
    gameplay blocks and `devlost.sh` on Video / Graphics / Model changes. If it has none, resume the
    agent by message, or start a fresh agent on the same branch with the block's brief
@@ -105,6 +105,17 @@ disjoint file sets; regenerate with `scripts/filemap.py`), `GATE_TABLE.md`, the 
   step's base. Compare against the base before blaming a merge.
 - **Two merge commits on main do not build** (`f41a352a`, `18662af7`; each fixed by the next
   commit): `git bisect skip`. Several block branches hold one such commit inside them too.
+- **The warning check compares text.** Naming a type changes a standing warning's wording
+  (`uintptr_t [0]` -> `ConsumeProduceRecipe* [0]`) and the gate counts it as new; the routes and
+  the stress run are then skipped. Read `warn_new_*.txt`; update the baseline file and keep it
+  SORTED (`LC_ALL=C sort -u`). Log-only locals need `[[maybe_unused]]`: the perf build strips the
+  log lines that read them.
+- **`known_port_issues` 14 conflicts on every merge** (row numbers are global and two blocks take
+  the same next number): keep both sides, renumber the incoming rows. Rows run to 50.
+- **Asked of the blocks not started** (from the last hand-ins): `Work.h` slot parameters and the
+  Persist stream are still `void*` (second pass); the Scenario Strings in GAME-b's header;
+  `UserInterface::_dialogs`; `WorkSchedulerTree::root`; `PlayerController::camera`; ACT-b's ctor
+  C declarations; `~NoiseUI` leaks now that its OnCreated runs (14c row 42).
 - **A lockup corrupts files**: one header in an agent worktree was written as NUL bytes and one
   object file was unreadable. After a lockup: `git status` everywhere, `git fsck`, delete object
   directories when a link fails with "file format not recognized".
