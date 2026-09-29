@@ -87,19 +87,17 @@ bool EnvironmentDescription::Serialize(void* stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_environmentRef, &ser);   // ExternalPtr +0x20
 
     // count through a local (the resize below owns +0x30)
-    uint32_t count = _weatherCount;
-    ser.Serialize(*reinterpret_cast<int*>(&count), nullptr);
+    int count = _weatherCount;
+    ser.Serialize(count, nullptr);
 
     // On load: resize the dynamic weather-entry array.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        Reimpl_WeatherArray_Resize(&_weatherArray, (int)count);
+        Reimpl_WeatherArray_Resize(&_weatherArray, count);
     }
 
-    uintptr_t* arrPtr = static_cast<uintptr_t*>(_weatherArray);
-    for (uint32_t i = 0; i < count; ++i) {
-        Reimpl_ExternalPtr_Serialize_Weather(arrPtr, &ser);
-        Reimpl_ExternalPtr_Serialize_StringTable(arrPtr + 1, &ser);
-        arrPtr += 2;   // 16-byte entries
+    for (uint32_t i = 0; i < static_cast<uint32_t>(count); ++i) {
+        Reimpl_ExternalPtr_Serialize_Weather(&_weatherArray[i].weather, &ser);
+        Reimpl_ExternalPtr_Serialize_StringTable(&_weatherArray[i].description, &ser);
     }
 
     // 12 inline weather entries @ +0x38, each 0x20 bytes: 3 Colors + 5 floats,
