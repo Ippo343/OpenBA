@@ -28,11 +28,16 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "system/Value.h"   // System::Time (8 bytes, trivial)
+
+class ComponentEntity;
+namespace IO { class Stream; }
 
 // IBPArray — dynamic array of InternalBasePtr (8-byte elements)
 // Layout: +0x00 = void* data, +0x08 = int32_t count, +0x0C = int32_t capacity
 struct IBPArray {
-    void*    data;      // +0x00: pointer to array of 8-byte IBP entries
+    ComponentEntity** data;  // +0x00: InternalPtr<ComponentEntity> slots (8 bytes each; retail
+                             //        CheckPtr's a slot, then reads the bare pointer: 0x1400c38e0)
     int32_t  count;     // +0x08: current element count
     int32_t  capacity;  // +0x0C: allocated capacity
 };
@@ -45,7 +50,8 @@ static_assert(offsetof(IBPArray, capacity) == 0x0C, "IBPArray::capacity at +0x0C
 // Layout: +0x00 = entity IBP, +0x08 = parent, +0x10 = left, +0x18 = right, +0x20 = balance info
 // Allocated as 0x28 bytes by the tree insert function (0x140021a30).
 struct EntityTreeNode {
-    uint64_t     entityIBP;  // +0x00: InternalBasePtr to ComponentEntity
+    ComponentEntity* entityIBP;  // +0x00: InternalBasePtr to ComponentEntity (the key: retail
+                                 //        compares it unsigned, 0x1400c38e0)
     EntityTreeNode* parent;  // +0x08: parent node
     EntityTreeNode* left;    // +0x10: left child
     EntityTreeNode* right;   // +0x18: right child
@@ -66,7 +72,7 @@ static_assert(offsetof(EntityTreeNode, _pad24) == 0x24, "EntityTreeNode::_pad24 
 // entity IBPs (retail constructs the five with the vector-ctor iterator
 // 0x14003accc: element 0x10, count 5, ctor 0x140008080, dtor 0x140001740).
 struct UpdateBucket {
-    int64_t* data;     // +0x00: pointer to array of entity IBPs (8-byte each)
+    ComponentEntity** data;  // +0x00: InternalPtr<ComponentEntity> slots (8-byte each)
     int32_t  count;    // +0x08: number of entities in this bucket
     int32_t  _pad0C;   // +0x0C: Array capacity
 };
@@ -78,7 +84,8 @@ static_assert(offsetof(UpdateBucket, _pad0C) == 0x0C, "UpdateBucket::_pad0C at +
 // EntityList — main entity management structure
 // Size: 0xE8 bytes (GameUpdateLoop::Load 0x140096b00: MemAlloc(0xe8, 4) + ctor 0x1400c3f90)
 struct EntityList {
-    int64_t         accumulatedTime;    // +0x00: accumulated simulation time
+    System::Time    accumulatedTime;    // +0x00: accumulated simulation time (Serialize 0x1400c44a0:
+                                        //        System::Time::Serialize on +0x00)
     IBPArray        masterArray;        // +0x08: master array of all entity IBPs {data, count, cap}
     UpdateBucket    buckets[5];         // +0x18: 5 round-robin update buckets (each 0x10)
     EntityTreeNode* updateTreeRoot;     // +0x68: root of binary tree for per-tick entity processing
@@ -90,12 +97,26 @@ struct EntityList {
                                         //        int32 (ctor 0x1400c3ff7), as +0x70 (H8, listed)
     IBPArray        stagingUpdate;      // +0x88: staging array for update tree (added by FlagAggregation)
     IBPArray        stagingPostUpdate;  // +0x98: staging array for post-update tree
-    uint32_t        processCount[5];    // +0xA8: per-bucket entities to process per tick
-    uint32_t        cursor[5];          // +0xBC: per-bucket round-robin cursor position
+    int32_t         processCount[5];    // +0xA8: per-bucket entities to process per tick (int: Serialize
+                                        //        0x1400c45d0 writes it through the int-array overload)
+    int32_t         cursor[5];          // +0xBC: per-bucket round-robin cursor position (int: 0x1400c45e8)
     IBPArray        removalList;        // +0xD0: entities pending removal
     bool            shuttingDown;       // +0xE0: ctor 0; 0x1400c3d30 (the shutdown drain) sets it
                                         //        first; RegisterEntity drops an entity while it is set
     uint8_t         _padE1[7];          // +0xE1
+
+    // ---- members (retail addresses; bodies in entitylist.cpp) ----
+    void Update(void* time);                          // 0x1400c4090 (time: a System::Time*)
+    void PreUpdate();                                 // 0x1400c3bd0
+    void PostUpdateStaging();                         // 0x1400c3ab0
+    void PostUpdate();                                // 0x1400c43d0
+    void RemoveEntity(ComponentEntity** entityIBP);   // 0x1400c38e0 (an InternalPtr slot)
+    void Serialize(IO::Stream& stream);               // 0x1400c44a0
+
+private:
+    // The retail step-5 tail of Update (0x1400c4090), relocated to the top of the
+    // NEXT frame's Update (the tree's one-frame removal deferral; see the body).
+    void DrainRemovals();
 };
 static_assert(offsetof(EntityList, accumulatedTime) == 0x00, "EntityList::accumulatedTime at +0x00");
 static_assert(offsetof(EntityList, masterArray) == 0x08, "EntityList::masterArray at +0x08");
