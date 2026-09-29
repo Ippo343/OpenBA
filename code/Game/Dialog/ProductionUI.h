@@ -17,6 +17,7 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "runtime/types/collection/Collection.h"
 
 namespace UI { class LabelElement; class NumberElement; }
 
@@ -36,8 +37,9 @@ public:
 
     // 0x1400132b0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail runs `eh vector destructor iterator` over the two 0x10-byte
-    // members at +0x30; the tree never did (leak kept).
+    // Retail runs `eh vector destructor iterator` over the two Arrays at +0x30
+    // (element dtor 0x140001740: MemFree, zero data / count / capacity), last
+    // first: `lists`' own dtor does exactly that.
     ~ProductionUI() override = default;                           // [0] 0x1400132b0
     void Persist(void* /*stream*/) override {}   // [3] 0x140076300  RET 0 in retail
     void OnCreated() override;   // [4] 0x140075da0
@@ -47,23 +49,12 @@ private:
     void UpdateList(int listIndex);                               // 0x140075a50
 
 public:
-    // ---- fields: retail's two Collection::Array<ProductionUIRow> (consumed,
-    // produced; OnCreated 0x140075da0 appends the rows). ~ProductionUI 0x1400132b0
-    // destroys both (`eh vector destructor iterator`); the tree's does not, so
-    // they stay raw storage (data / count / capacity) until it does (H5).
-    ProductionUIRow* consumedData = nullptr;   // +0x30
-    int32_t consumedCount = 0;                 // +0x38
-    int32_t consumedCapacity = 0;              // +0x3C
-    ProductionUIRow* producedData = nullptr;   // +0x40
-    int32_t producedCount = 0;                 // +0x48
-    int32_t producedCapacity = 0;              // +0x4C
+    // ---- fields: retail's array of two Collection::Array<ProductionUIRow>
+    // ([0] consumed, [1] produced; OnCreated 0x140075da0 appends the rows, the
+    // helper 0x140075a50 indexes them by list, ~ProductionUI destroys both).
+    Collection::Array<ProductionUIRow> lists[2];   // +0x30, +0x40
 };
 
 static_assert(sizeof(ProductionUI) == 0x50, "ProductionUI is 0x50 (create 0x140013230 MemAlloc(0x50))");
 static_assert(alignof(ProductionUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(ProductionUI, consumedData) == 0x30, "ProductionUI +0x30");
-static_assert(offsetof(ProductionUI, consumedCount) == 0x38, "ProductionUI +0x38");
-static_assert(offsetof(ProductionUI, consumedCapacity) == 0x3C, "ProductionUI +0x3C");
-static_assert(offsetof(ProductionUI, producedData) == 0x40, "ProductionUI +0x40");
-static_assert(offsetof(ProductionUI, producedCount) == 0x48, "ProductionUI +0x48");
-static_assert(offsetof(ProductionUI, producedCapacity) == 0x4C, "ProductionUI +0x4C");
+static_assert(offsetof(ProductionUI, lists) == 0x30, "ProductionUI +0x30 (the two lists, 0x10 each)");

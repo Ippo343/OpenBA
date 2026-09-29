@@ -182,11 +182,8 @@ void ProductionUI::OnCreated() {
         row.labelStorage = CastLabel(FindChildElem(childElem, "labelStorage"));
         row.numberCount = CastNumber(FindChildElem(childElem, "numberCount"));
 
-        // Push pair to the consumed array (+0x30).
-        // B.3.2 bridge: Collection::Array<ProductionUIRow>, raw storage until
-        // ~ProductionUI destroys it (H5).
-        auto& arr = GameColl::ArrayAt<ProductionUIRow>(this, 0x30);
-        arr.SetSize(arr.GetSize() + 1, row);
+        // Push pair to the consumed list (+0x30)
+        lists[0].SetSize(lists[0].GetSize() + 1, row);
 
         idx++;
         childCount = consumedContainer->ChildCount();
@@ -202,9 +199,8 @@ void ProductionUI::OnCreated() {
         row.labelStorage = CastLabel(FindChildElem(childElem, "labelStorage"));
         row.numberCount = CastNumber(FindChildElem(childElem, "numberCount"));
 
-        // Push pair to the produced array (+0x40), the same bridge
-        auto& arr = GameColl::ArrayAt<ProductionUIRow>(this, 0x40);
-        arr.SetSize(arr.GetSize() + 1, row);
+        // Push pair to the produced list (+0x40)
+        lists[1].SetSize(lists[1].GetSize() + 1, row);
 
         idx++;
         childCount = producedContainer->ChildCount();
@@ -264,8 +260,8 @@ void ProductionUI::UpdateList(int listIndex) {
     }
 
     // Get element array for this list (+0x30 consumed, +0x40 produced)
-    ProductionUIRow* elemArray = (listIndex == 0) ? consumedData : producedData;
-    int elemCount = (listIndex == 0) ? consumedCount : producedCount;
+    ProductionUIRow* elemArray = lists[listIndex]._data;
+    int elemCount = lists[listIndex]._size;
 
 
     int i = 0;
@@ -367,7 +363,7 @@ void ProductionUI::OnUpdateLayout() {
     // Standalone-only precondition (see PageToggleUI::OnUpdateLayout): with no cached
     // rows there is nothing for the retail body to write, and the two arrays are
     // still null.
-    if (consumedCount == 0 && producedCount == 0) return;
+    if (lists[0]._size == 0 && lists[1]._size == 0) return;
     UpdateList(0);
     UpdateList(1);
 }
