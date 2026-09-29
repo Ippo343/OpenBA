@@ -39,14 +39,26 @@
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
+#include <cstring>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CharacterComponent.h"
 #include "Component/PopulationComponent.h"
+#include "Component/CharacterDescription.h"   // CharacterDescription::TypeId() (moved ctor)
+#include "system/Value.h"      // System::Random (moved ctor)
 
 // ============================================================
 // Helpers, called by name (B3R)
 // ============================================================
+
+namespace {
+// The .rdata float constants (Game/exe_constants.h) that are stored as bit patterns.
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+// 0x1400032e0 (Array<Ptr8>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
+// GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
+// is gone.
+} // namespace
 
 // ENDGAME B.3.1 step 2: Math::Vector3::Serialize was read from the IAT slot at
 // 0x140152a68; it is now a direct member call on Math::Vector3.
@@ -657,5 +669,61 @@ void* MoveTo::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MoveTo());
 }
 
+
+// ============================================================
+// FUN_1400c9170 — MoveTo_Action Ctor
+// Base Internal ctor, Action -> MoveTo vtable; inits fields, copies destination vec3
+// (+0x38..+0x40), the entity IBP (+0x28 from param_2), resolves a derived component at
+// +0x30 (IsDerivedFrom obj, DAT_1401c70b0). Speed: if >=0 use it, else a randomised
+// default = RandFloatTol(world.random) * DAT_1401720e4 + DAT_14017214c.
+// Note: hidden float arg `speed` arrives in XMM (XMM2 per the prologue), param order
+// matches Ghidra (pathType, param_4, destination, param_6, param_7, speed).
+// ============================================================
+void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4,
+                         float* destination, int param_6, int param_7, float speed) {
+    // ENDGAME B.3.8 ACT: the real ctor (MoveTo.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (self) MoveTo(param_2, pathType, param_4, destination, param_6, param_7, speed));
+}
+
+// 0x1400c9170 — the ctor body, moved from the door above; after Action() the
+// retail stores are kept verbatim at their raw offsets (the destination and the
+// path block have no named members yet).
+MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination, int param_6,
+               int param_7, float speed) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    *reinterpret_cast<uint32_t*>(s + 0x20) = 0xffffffff;
+    *reinterpret_cast<uint32_t*>(s + 0x24) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x28) = *reinterpret_cast<uint64_t*>(param_2);
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    *reinterpret_cast<float*>(s + 0x38) = destination[0];
+    *reinterpret_cast<float*>(s + 0x3c) = destination[1];
+    *reinterpret_cast<float*>(s + 0x40) = destination[2];
+    *reinterpret_cast<uint64_t*>(s + 0x44) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x4c) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x54) = 0;
+    *reinterpret_cast<int*>(s + 0x5c) = param_6;
+    *reinterpret_cast<uint32_t*>(s + 0x60) = 0xffffffff;
+    *reinterpret_cast<uint32_t*>(s + 0x64) = 0;
+    *reinterpret_cast<uint32_t*>(s + 0x468) = pathType;
+    *reinterpret_cast<int*>(s + 0x46c) = param_4;
+    *reinterpret_cast<int*>(s + 0x470) = param_7;
+    s[0x474] = 0;
+    void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x18);
+    // DAT_1401c70b0 is CharacterDescription's type-id cell (Table 1).
+    uint32_t charDescTid = CharacterDescription::TypeId();
+    bool derived = charDescTid && ::Object::IsDerivedFromNullSafe(obj, charDescTid);
+    *reinterpret_cast<void**>(s + 0x30) = derived ? obj : nullptr;
+    if (0.0f <= speed) {
+        *reinterpret_cast<float*>(s + 0x478) = speed;
+    } else {
+        void* random = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
+        float r = random ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
+        *reinterpret_cast<float*>(s + 0x478) =
+            r * RdataF(kRdata_1401720e4) + kRdata_14017214c;   // 0x1401720e4 / 0x14017214c
+    }
+}
 
 DEFINE_EXE_TYPE(MoveTo, "Action")
