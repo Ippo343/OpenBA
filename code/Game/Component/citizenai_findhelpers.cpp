@@ -68,7 +68,6 @@
 #include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>

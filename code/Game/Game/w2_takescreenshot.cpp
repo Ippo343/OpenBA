@@ -64,7 +64,6 @@
 // ENDGAME B.3.5 batch K1 adds FrameCopyImageBuffer.h for Create/Generate. Its chain
 // (GeneratedImageBuffer.h -> ImageBuffer.h) reaches no Volume.h either, so the
 // after-resolve.h placement this file already uses still holds.
-#include "resolve.h"
 #include "video/ImageBuffer.h"
 #include "graphics/FrameCopyImageBuffer.h"
 #include "system/String.h"

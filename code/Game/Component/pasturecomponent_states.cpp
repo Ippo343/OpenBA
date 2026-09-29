@@ -43,7 +43,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "Object/factory_registration.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

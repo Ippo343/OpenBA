@@ -15,7 +15,6 @@
 // ============================================================================
 
 #include "../../types/volume/Volume.h"
-#include "../../funcs/rt_port.h"
 
 // ??0Box@Volume@@QEAA@XZ   retail 0x180011ea0
 // Default ctor: empty box (min = +1.0e8f, max = -1.0e8f) so the first

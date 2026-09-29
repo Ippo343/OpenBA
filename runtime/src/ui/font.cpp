@@ -68,7 +68,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Font.h"
 #include "../../types/system/String.h"

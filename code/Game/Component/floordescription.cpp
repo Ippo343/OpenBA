@@ -21,7 +21,6 @@
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
-#include "resolve.h"
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"

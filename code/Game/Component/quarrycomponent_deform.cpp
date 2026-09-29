@@ -45,7 +45,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
 #include "perf_terrain.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include "picking/PickingMesh.h"   // ENDGAME B.3.7 callers (K2)
 #include "Component/exe_bodies.h"   // Destroy_FindDecalComponent_b630, FloorComponent_FindResData

@@ -63,7 +63,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Device.h"
 
 namespace {

@@ -83,7 +83,6 @@
 #include <cstddef>
 #include <new>       // ENDGAME B.3.5: the hidden-retslot door placement-news (RULE B5-12)
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/video/Device.h"
 

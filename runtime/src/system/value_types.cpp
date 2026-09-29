@@ -54,7 +54,6 @@
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
 #include "../../types/system/Timer.h"   // B3R: the Timer statics by name
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
-#include "../../funcs/rt_port.h"
 #include "widestring.h"
 
 // ============================================================================
@@ -619,20 +618,4 @@ System::String System::Configuration::GetVersionString(uint32_t version, bool de
 // ?CurrentVersion@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4f40
 System::String System::Configuration::CurrentVersion() {
     return GetVersionString(0x010007ffu, false);
-}
-
-// ============================================================
-// RtSystemValueRegister — called from RtSystemPortInit() (rt_system_port.cpp).
-// ============================================================
-int RtSystemValueRegister() {
-    int n = 0;
-
-    // B3R W2-EZ: ??0Random@System@@QEAA@XZ, ?AsString@DateTime@System@@...,
-    // ?CurrentBuildId@ / ?CurrentVersion@ / ?GetVersionString@Configuration@System@@...
-    // went: their one reader was EngineFuncsInit (deleted).
-
-    RegisterRuntimeExport("??0Time@System@@QEAA@M@Z", (void*)&RtSystem_Time_Ctor); ++n;
-    RegisterRuntimeExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Time_Serialize); ++n;
-
-    return n;
 }

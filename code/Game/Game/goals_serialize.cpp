@@ -70,7 +70,6 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Object/factory_registration.h"
 #include "Work/Work.h"                // Work::TypeId() -- cell 0x1401c6cf8 (ENDGAME B.3.9 RF)
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

@@ -33,7 +33,6 @@
 #include "system/MemoryAllocator.h"
 #include "system/String.h"
 #include "math/Math.h"
-#include "resolve.h"
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection

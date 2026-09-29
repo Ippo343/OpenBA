@@ -108,7 +108,6 @@
 // more unregistered by-address doors.
 // ============================================================================
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/SunLight.h"
 #include "../../types/video/Device.h"      // RtVideo::Device, RtVideo::RenderBuffer
 #include "../../types/video/ImageBuffer.h" // ENDGAME B.3.9 VS: ::new (p) Video::ImageBuffer()

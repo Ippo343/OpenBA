@@ -174,7 +174,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/object/Internal.h"
 #include "../../types/object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton

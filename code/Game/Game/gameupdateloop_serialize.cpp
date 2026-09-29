@@ -51,7 +51,6 @@
 #include "graphics/Camera.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "options.h"
-#include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"

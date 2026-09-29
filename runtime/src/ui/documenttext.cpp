@@ -87,7 +87,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"   // rtcrt::StrICmp
 #include "../../types/ui/DocumentTextElement.h"
 #include "../../types/ui/SpriteCapture.h"   // B.3.9 TI-UI: SpriteCapture::TypeId()

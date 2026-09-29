@@ -41,7 +41,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/ListDescription.h"
 #include "../../types/ui/ListElement.h"
 #include "../../types/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()

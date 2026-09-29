@@ -45,7 +45,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/math/Math.h"
 #include "../../types/graphics/FrameCopyImageBuffer.h"
 #include "../../types/graphics/GeneratedImageBuffer.h"

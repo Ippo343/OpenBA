@@ -45,7 +45,6 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
-#include "resolve.h"
 #include "options.h"
 #include "system/String.h"
 #include "system/MemoryAllocator.h"

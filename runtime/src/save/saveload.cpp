@@ -98,7 +98,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
 #include "../../types/video/ImageBuffer.h"   // B3X W0: ~SaveInfo deletes one by name
@@ -1044,15 +1043,5 @@ Save::SaveLoad* Save::SaveLoad::Get() {
     return slot ? *slot : nullptr;
 }
 
-int RtSaveLoadRegister() {
-    int n = 0;
-    // B3R W2-RT: ??0SaveLoad (name), 0x1800c3c90 (~SaveLoad's address) and
-    // 0x1800c3f40 (SaveInfo_Dtor) had no reader and went. B3R W2-EZ: so did
-    // ??0SavedState@Save@@QEAA@XZ and ??1SaveLoad@Save@@QEAA@XZ, whose one
-    // reader was EngineFuncsInit (deleted). This function registers nothing.
-    return n;
-}
-
-// ?_singleton@SaveLoad@Save@@0PEAV12@EA (0x1801fc6f0) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
-// RtSavePortInit redirects the minted storage row onto it.
+// ?_singleton@SaveLoad@Save@@0PEAV12@EA (0x1801fc6f0) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
 ::Save::SaveLoad* ::Save::SaveLoad::_singleton = nullptr;

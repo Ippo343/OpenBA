@@ -88,7 +88,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"
 #include "../../types/input/Input.h"

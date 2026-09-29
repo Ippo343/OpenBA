@@ -149,7 +149,6 @@
 #include <cstddef>    // offsetof — the Set<Filename> node-layout asserts below
 #include <new>        // placement new into freshly allocated Filename storage
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/system/Filename.h"

@@ -22,7 +22,6 @@
 #include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>

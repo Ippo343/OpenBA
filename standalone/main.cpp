@@ -6,18 +6,15 @@
 // Build with: make standalone
 // Deploy to: C:/GOG Games/Banished/Application-x64.exe (rename original first!)
 //
-// This is the long-term goal. Initially many functions will hit NOT_IMPLEMENTED
-// stubs. As the address registry fills in, more gameplay systems come alive.
 
 
-// ENDGAME B.3.5: Video::Context, ahead of the <windows.h> that "resolve.h"
-// pulls in — <wingdi.h> declares a FUNCTION named Rectangle, which breaks
+// ENDGAME B.3.5: Video::Context, ahead of <windows.h> — <wingdi.h> declares a
+// FUNCTION named Rectangle, which breaks
 // Volume.h's Volume::Rectangle (B35 caller brief, the <windows.h> trap).
 #include "video/Context.h"
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device / Configuration::_singleton
 #include "options.h"
-#include "resolve.h"
-#include "runtime_funcs.h"
+#include "runtime_init.h"
 #include "dx11_seam.h"
 #include "video_interface.h"
 #include "renderdoc_integration.h"
@@ -28,7 +25,7 @@
 #include "sampler.h"
 #include "hw_watch.h"
 #include "redzone_alloc.h"
-#include "rt_port.h"                        // RtResolveMissSummary
+#include "alloc_cutover_arm.h"            // RtAllocSwapArmCutover
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetCutoverArmer
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
@@ -56,10 +53,6 @@ extern "C" {
     __declspec(dllexport) unsigned long AmdPowerXpressRequestHighPerformance = 1;
 }
 
-// Session-3 diagnostic installer (standalone/filename_dtor_check.cpp).
-// The composed (locked) MemoryAllocator entry points (standalone/alloc_cutover_arm.cpp).
-extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
-                                      void** outComposedAllocate, void** outComposedFree);
 
 // ============================================================
 // Reset Video* registry keys to known-safe values BEFORE Engine::Startup.
@@ -545,11 +538,6 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
                           (unsigned long long)*((uint64_t*)target + i));
         }
     }
-
-    // Check registry stats
-    RegistryStats stats = GetRegistryStats();
-    CrashLogf("Registry: %zu registered, %zu stubs hit\n",
-              stats.registered, stats.stubs);
 
     // B34B_RULES 6.3 (open defect): the allocator "LockEnter on a NULL lock" crash is
     // Get() returning null, i.e. EnterCriticalSection(0x640). Two windows fit that stack
@@ -1288,42 +1276,25 @@ static bool Init() {
     BootState::Start();
     StallDebug::Mark("registry probe + harness guard");
 
-    // 2. Address resolution. No engine DLL is loaded (ENDGAME.md A.1).
-    printf("[Standalone] Resolving addresses (no engine DLLs are loaded)...\n");
-    StallDebug::Mark("(pre ResolveInit)");
-    if (!ResolveInit()) {
-        fprintf(stderr, "[Standalone] FATAL: ResolveInit failed -- Runtime-x64.dll is "
+    // 2. No engine DLL may be mapped (ENDGAME.md A.1).
+    StallDebug::Mark("(pre RuntimeDllNotMapped)");
+    if (!RuntimeDllNotMapped()) {
+        fprintf(stderr, "[Standalone] FATAL: Runtime-x64.dll is "
                         "mapped in this process and must not be (ENDGAME A.1).\n");
         return false;
     }
 
-    StallDebug::Mark("ResolveInit");
+    StallDebug::Mark("RuntimeDllNotMapped");
 
-    // 2b-i. Allocator ownership, in the ONE order that is safe.
-    //
-    //     The DLL-ABSENT arming path for the ported allocator: with no DLL there
-    //     are no DLL-internal callers to redirect, so registering the exports IS
-    //     the complete swap -- but the composed (locked) Allocate/Free entry
-    //     points still have to come from somewhere, and they come from here.
-    //     Without this seam RtSystemAllocatorRegister() refuses and
-    //     MemAlloc/MemFree are left unresolved.
+    // 3. The allocator's cutover armer (standalone/alloc_cutover_arm.cpp), handed
+    //    in BEFORE RuntimeInit() arms the allocator: without it
+    //    RtSystemAllocatorArm() refuses.
     RtSystemAllocatorSetCutoverArmer(&RtAllocSwapArmCutover);
 
-
-    // 2c. Runtime-x64.dll port registry (docs/runtime_port/PLAN.md §4.1).
-    //     Must run BEFORE AddressRegistryInit and EngineFuncsInit: both cache
-    //     Runtime function pointers through ResolveExport/ResolveAddr, and a
-    //     port registered after they run would be resolved by nobody.
-    RuntimePortInit();
-    StallDebug::Mark("RuntimePortInit");
-
-    // 3. (B3R W2-EXE: AddressRegistryInit() and standalone/address_registry.cpp
-    //    are gone; no exe address is registered any more.)
-
-    // 4. (B3R W2-EZ: EngineFuncsInit() and engine/funcs/ are gone; nothing binds
-    //    engine function pointers any more.)
-    RuntimeFuncsInit();
-    StallDebug::Mark("EngineFuncsInit + RuntimeFuncsInit");
+    // 4. The ported Runtime's one-time initialisation (standalone/runtime_init.cpp):
+    //    libm seam, allocator, [ExtLoad] exit hooks, run identity, [SLOTS29].
+    RuntimeInit();
+    StallDebug::Mark("RuntimeInit");
 
     // 4b. Install the renderer seam: verify all 84 vtable slots against the
     //     map in dx11/README.md and patch in our reimplementations.
@@ -1460,19 +1431,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     }
 
     printf("\n[Standalone] === INIT SUCCESS ===\n");
-    RegistryStats stats = GetRegistryStats();
-    printf("[Standalone] Coverage: %zu / 582 exe addresses registered (%.1f%%)\n",
-           stats.registered, stats.registered * 100.0 / 582.0);
 
     printf("\n[Standalone] === ENTERING GameMain ===\n");
     int rc = Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "");
     printf("[Standalone] === GameMain returned %d ===\n", rc);
-    // Unregistered-address census (BANISHED_UNREG_CENSUS=1). Dumped here and
-    // not from atexit: the crash handler ends in ExitProcess, which skips it.
-    DumpUnregCensus();
-    // Wave 9 lane F: symbols that resolved to NOTHING. Always on, prints only
-    // when the list is non-empty. After lane G this is the missing-symbol list.
-    DumpUnresolvedSymbols();
     // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
     // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
     // own section 11.3 mis-read, so the branch split is printed next to it.
@@ -1525,12 +1487,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // reports that these lines were SEEN TO PRINT before any zero in them was
     // believed (reference_uncalled_port_is_not_verified.md).
     { extern void RtGraphicsWave29GfxbodySummary(); RtGraphicsWave29GfxbodySummary(); }
-    // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
-    // A non-zero count names the symbols that would be unminted at cutover.
-    RtResolveMissSummary();
-    // Wave 9 lane H: is the early-snapshot port-bypass class LIVE? A number,
-    // not an argument -- see runtime/funcs/rt_resolve_cache.cpp.
-    RtResolveEarlySummary();
     // Wave 11 follow-up 3 lane AVL: ExternalFactory::SerializeReferenceTable's
     // attendance counters and its MUTATION A post-condition. Printed here, from
     // the process exit path rather than a static destructor, because an

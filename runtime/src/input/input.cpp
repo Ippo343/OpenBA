@@ -24,7 +24,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include "../../funcs/rt_port.h"
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton

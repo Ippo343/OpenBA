@@ -25,7 +25,6 @@
 //
 // Everything here is fprintf(stderr)-based so it survives the release log strip.
 #include "stress_harness.h"
-#include "resolve.h"
 #include "options.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton

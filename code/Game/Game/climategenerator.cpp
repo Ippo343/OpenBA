@@ -23,7 +23,6 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
-#include "resolve.h"
 #include "system/String.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree

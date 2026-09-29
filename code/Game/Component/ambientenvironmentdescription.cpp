@@ -42,7 +42,6 @@
 #include "Object/factory_registration.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include <cstdint>
 #include <new>
 #include "Component/exe_bodies.h"

@@ -37,7 +37,6 @@
 #include "Component/ResourceProduceComponent.h"
 #include "Object/factory_registration.h"
 #include "system/Value.h"
-#include "resolve.h"
 #include "io/Serializer.h"
 #include <cstdint>
 #include <cstdio>

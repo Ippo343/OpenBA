@@ -204,7 +204,6 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"   // B3X W0: the stream is called by name
 

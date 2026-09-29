@@ -36,7 +36,6 @@
 #include <atomic>
 #include <new>          // placement new into the retslot doors
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/system/Value.h"
 

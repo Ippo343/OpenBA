@@ -71,7 +71,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Audio.h"
 #include "../../../engine/types/common.h"   // Vector3
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
@@ -1135,12 +1134,6 @@ void RtAudio_Configuration_Save(void* selfPtr) {
 }
 bool RtAudio_Configuration_Startup(void* selfPtr) {
     return reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::Startup();   // B.3.7 bridge
-}
-
-int RtAudioSceneRegister() {
-    // B3R W2-EZ: ??0Scene@Audio@@QEAA@XZ went: its one reader was EngineFuncsInit
-    // (deleted). This function registers nothing.
-    return 0;
 }
 
 // ---------------------------------------------------------------------------

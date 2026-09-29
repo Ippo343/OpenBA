@@ -43,7 +43,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/SpriteCapture.h"
 #include "../../types/ui/SpriteContext.h"

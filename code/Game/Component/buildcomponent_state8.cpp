@@ -43,7 +43,6 @@
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
-#include "resolve.h"
 #include "Component/controller_state_table.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>

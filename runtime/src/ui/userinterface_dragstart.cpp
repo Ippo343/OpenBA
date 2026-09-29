@@ -148,7 +148,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/Element.h"
 

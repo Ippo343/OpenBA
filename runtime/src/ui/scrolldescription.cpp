@@ -36,7 +36,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/ScrollDescription.h"
 #include "../../types/ui/ScrollElement.h"
 #include "../../types/io/Serializer.h"

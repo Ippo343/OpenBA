@@ -68,7 +68,6 @@
 #include <cstring>
 #include <new>          // the retslot doors placement-new the member's prvalue
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
@@ -922,25 +921,3 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// Registration
-// ============================================================================
-// Both doors for every port: the mangled name AND the retail address. See the
-// file header for why — engine/funcs/engine_funcs.cpp:2856 resolves one of these
-// twelve by address and the rest by name, and a name-only registration would
-// have split one live Camera between two implementations.
-//
-// Names are spelled as LITERALS here, not through the k* constants above, so
-// tools/runtime_census.py can see them.
-// ============================================================================
-int RtGraphicsRendererRegister() {
-    int count = 0;
-
-    // B3R W2-RT: the three address rows (0x1800fe960, 0x180105180,
-    // 0x1800180a0) and the ??1Renderer name row had no reader and went. B3R
-    // W2-EZ: so did the ??0Camera@ and ??0Renderer@ names, whose one reader was
-    // EngineFuncsInit (deleted). This function registers nothing.
-
-    return count;
-}

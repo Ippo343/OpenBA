@@ -25,7 +25,6 @@
 #include <cstdio>
 #include <cstring>
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2
 #include "../system/string.h"

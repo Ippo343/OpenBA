@@ -85,7 +85,6 @@
 #include "reference_set.h"
 #include "external_set.h"                 // rtresset::{Node,Set,Elem} — the
                                           //   0x38-byte ResourceEntry node
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../system/string.h"

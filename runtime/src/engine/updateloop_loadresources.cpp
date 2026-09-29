@@ -62,7 +62,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/engine/UpdateLoop.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"

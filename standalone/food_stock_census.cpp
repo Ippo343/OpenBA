@@ -19,7 +19,6 @@
 //
 // Value: 1/on = dump every 600 frames, or a frame count. Test-only, opt-in.
 
-#include "resolve.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include <cstdint>

@@ -99,7 +99,6 @@
 
 #include "external_set.h"
 
-#include "../../funcs/rt_port.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"

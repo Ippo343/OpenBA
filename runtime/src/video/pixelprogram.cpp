@@ -62,7 +62,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"

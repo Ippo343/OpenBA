@@ -78,7 +78,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Configuration::_singleton
 
 static const size_t kDeviceBackBufferWidth  = 0x04;

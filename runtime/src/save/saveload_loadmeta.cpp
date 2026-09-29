@@ -161,7 +161,6 @@
 #include <cstring>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
@@ -169,7 +168,6 @@
 #include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec — B.3.2 step 2
 #include "../system/string.h"
 #include "saveload_internal.h"
-#include "resolve.h"   // ResolveAddr / Module — the port-aware address door
 
 // ENDGAME B.3.2 step 2 — `kSpec_MetaEntry20` (runtime/src/collection/array.cpp)
 // has external linkage (namespace rtcoll there, non-static) but is declared

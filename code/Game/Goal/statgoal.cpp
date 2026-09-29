@@ -27,7 +27,6 @@
 #include "object/TypeInfo.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
-#include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include <new>

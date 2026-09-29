@@ -79,7 +79,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/system/String.h"
 #include "../../types/system/MemoryAllocator.h"

@@ -20,7 +20,6 @@
 #include "graphics/Camera.h"
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/EnvironmentDescription.h"   // caller batch CB6: TypeId()
 #include "Game/Toolbar.h"   // Toolbar::TypeId() (ENDGAME B.3.9 TR)

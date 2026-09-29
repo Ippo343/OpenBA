@@ -34,13 +34,13 @@
 //   (ENDGAME A.3: the DLL routing arm is gone; the ported MSVC CRT bodies in
 //   runtime/src/crt/msvc_libm.cpp are the only implementation.)
 //
-// Resolution happens once, in RtLibmInit(), called from RtMathPortInit() — i.e.
-// after ResolveInit() has mapped the DLL and before anything caches a pointer.
+// Resolution happens once, in RtLibmInit(), called from RuntimeInit()
+// (standalone/runtime_init.cpp) before anything caches a pointer.
 // The indirection is a plain function-pointer call with no branch, so the hot
 // path costs one indirect call and no per-call env or guard-variable check.
 // ============================================================================
 
-// Set from RtMathPortInit(). Defaults are installed at static-init time, so a
+// Set from RuntimeInit(). Defaults are installed at static-init time, so a
 // caller that runs before RtLibmInit() still gets our own libm rather than null.
 namespace RtLibm {
 

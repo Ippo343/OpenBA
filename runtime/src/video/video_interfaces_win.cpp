@@ -58,7 +58,6 @@
 #include <cstring>
 #include <new>       // ENDGAME B.3.5: the hidden-retslot door placement-news (RULE B5-12)
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"

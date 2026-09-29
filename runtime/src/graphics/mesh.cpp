@@ -128,7 +128,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
@@ -574,13 +573,8 @@ const uint8_t* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
 // used for Picking::Scene::SetTransform.
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED to
-// `Graphics::MeshInstance::UpdateHierarchy()` at the bottom of this file. The
-// door keeps its name and its registration and resolves nothing per call, which
-// is what the PERF paragraph above is about.
-static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
-    reinterpret_cast<::Graphics::MeshInstance*>(self)
-        ->::Graphics::MeshInstance::UpdateHierarchy();
-}
+// `Graphics::MeshInstance::UpdateHierarchy()` at the bottom of this file. (B3R
+// W2-RES: its C door, registered by name only and read by nothing, is deleted.)
 
 // ============================================================================
 // Graphics::MeshInstance::SetMaterialInstance(int, ExternalPtr<MaterialInstance>)
@@ -1823,57 +1817,6 @@ extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const void* self,
               *reinterpret_cast<::Graphics::Renderer*>(renderer));
 }
 
-// WAVE 27 LANE GFXMESH registration — by NAME and by ADDRESS, both.
-//
-// All four slots are RT_MINT_NAMED in standalone/rt_data_mint_tables.inc
-// (kVSlots23 and kVSlots40), so the NAME door is the one the two tables need to
-// count them. The ADDRESS door is registered as well so a by-address call site
-// reaches the same body (reference_resolveaddr_consults_port_registry_first.md).
-//
-// NONE OF THE FOUR ADDRESSES IS USED AS AN IDENTITY TOKEN IN THIS TREE —
-// grepped across runtime/ code/ standalone/ engine/ dx11/ before the address
-// doors were opened, because a registered identity token is the failure that
-// kept ?AddDrawItems@MeshInstance@ (0x180100f20) unregisterable. That one
-// address IS such a token, at standalone/scene_watch.cpp:401 — and this lane
-// REBUILT that token so it can no longer be blinded (the write-up is at the call
-// site and beside the retired tag at standalone/reg_mint_promoted.cpp:2257).
-// AddDrawItems is still not registered, because its body is not ported; see
-// WAVE27_LANE_GFXMESH.md §7.
-//
-// Every address below is a LITERAL, deliberately
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-int RtGraphicsMeshVtableRegister() {
-    int n = 0;
-
-    // ---- WAVE 28 LANE SLOTS ------------------------------------------------
-    // The two ?AddDrawItems@ overrides. BOTH mangled names were read out of the
-    // retail export directory at the VAs the two vtables hold, with objdump's
-    // export address table cross-checked against its name table -- NOT built by
-    // analogy with the four slots above, which is exactly how this file
-    // acquired a phantom `UEBA` in Wave 27.
-    //   ?AddDrawItems@MeshInstance@Graphics@@...      0x180100f20  ord 1550
-    //   ?AddDrawItems@EdgeMeshInstance@Graphics@@...  0x1800a2fd0  ord 1549
-    //
-    // *** THE `AddDrawItems` HARMFUL TAG WAS RE-CHECKED BEFORE THIS LINE WAS
-    // ADDED, AND IT IS STILL RETIRED. *** Wave 27 lane GFXMESH rebuilt
-    // standalone/scene_watch.cpp's `IsMeshInstance` on two registry-independent
-    // tokens precisely so a later lane could register this symbol, and required
-    // that lane to re-run the grep. Re-run on this tip:
-    //     grep -rn 0x180100f20 runtime/ code/ standalone/ engine/ dx11/
-    // returns scene_watch.cpp (the rebuilt two-token test, which
-    // ResolveAddr no longer feeds), rt_data_mint_tables.inc (which STAMPS the
-    // address, not compares it), and comments. NO NEW IDENTITY-TOKEN CONSUMER
-    // HAS APPEARED. The debt GFXMESH paid is still paid.
-    //
-    // B3R W2-RT: the NAME row had no reader and went. The address row stays
-    // while standalone/scene_watch.cpp's RtPortLookupAddr(0x180100f20) probe
-    // reads it (an identity token; W2-RES deletes the probe, then this row).
-    RegisterRuntimeAddr(0x180100f20ull, (void*)&RtGraphics_MeshInstance_AddDrawItems); ++n;
-
-    return n;
-}
-
 // ============================================================================
 // WAVE 28 LANE SLOTS — attendance, AND A CALLER FOR IT
 // ============================================================================
@@ -1899,26 +1842,6 @@ int RtGraphicsMeshVtableRegister() {
 extern "C" void RtGraphicsAddDrawItemsCounters(unsigned long long* out) {
     out[0] = g_addDrawItemsMesh;   out[1] = g_addDrawItemsMeshQ;
     out[2] = g_addDrawItemsEdge;   out[3] = g_addDrawItemsEdgeQ;
-}
-
-int RtGraphicsMeshRegister() {
-    int count = 0;
-
-    // ---- Graphics::MeshInstance ----
-    // ENDGAME B.3.9 GFX: the ??0 / copy ??0 / ??1 doors (and ??1's address row
-    // 0x180017060) are retired; the members are the only ctors and dtor.
-    RegisterRuntimeExport("?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ",
-                          (void*)&RtGraphics_MeshInstance_UpdateHierarchy); ++count;
-
-    // ---- Graphics::EdgeMesh ----
-    // B3R W2-EZ: the TriangleVertex / EdgeVertex ctor rows went: their one
-    // reader was EngineFuncsInit (deleted).
-
-    // ---- Graphics::EdgeMeshInstance ----
-    // ENDGAME B.3.9 GFX (W2): the EdgeMesh ??0 door and the EdgeMeshInstance
-    // ??0 / copy ??0 / ??1 doors are retired with their minted tables.
-
-    return count;
 }
 
 // ============================================================================

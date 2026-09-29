@@ -39,7 +39,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/ElementDescription.h"   // UI::ElementDescription (B.3.6)
 #include "../../types/ui/Dialog.h"               // UI::Dialog::CreateElement (fragment pass F2)
 #include "../../types/ui/SpriteSheet.h"          // UI::SpriteSheet::GetSpriteIndexFromName (F2)

@@ -110,7 +110,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
 #include "../../types/system/MemoryAllocator.h"

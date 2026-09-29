@@ -167,7 +167,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
 // ENDGAME B.3.5 block J: the eight real Video::*Data abstract bases (block A),
 // whose slots the seventeen backend dispatches below now go through.

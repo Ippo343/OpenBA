@@ -27,7 +27,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/graphics/GraphicsMesh.h"   // the real Graphics::GraphicsMesh
 #include "../../types/video/Device.h"            // ENDGAME B.3.9 SS1: Video::Device::_singleton

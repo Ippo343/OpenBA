@@ -74,7 +74,6 @@
 #include <new>          // placement new into raw node/array element bytes
 
 #include "external_set.h"
-#include "../../funcs/rt_port.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree / FreeLockedIgnoringSelf

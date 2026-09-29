@@ -55,7 +55,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/video/Buffers.h"   // ENDGAME B.3.5: Video::{Vertex,Index}Buffer
 #include "array_internal.h"

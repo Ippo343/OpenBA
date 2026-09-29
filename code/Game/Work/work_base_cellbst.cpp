@@ -21,7 +21,6 @@
 
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G

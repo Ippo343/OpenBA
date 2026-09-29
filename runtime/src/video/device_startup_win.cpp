@@ -35,7 +35,6 @@ static const size_t kConfigFullscreen   = 0x40;
 // The two exported DATA singletons. Declared through the same
 // `RtResolveCached`-backed slot accessor the portable half uses; spelled out
 // here because rt_port.h's RT_DATA_SLOT macro is available and mint-aware.
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 
 namespace {

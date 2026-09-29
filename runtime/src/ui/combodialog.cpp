@@ -118,7 +118,6 @@
 #include <cstdint>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/ComboDialog.h"
 #include "../../types/ui/ComboElement.h"
 #include "../../types/ui/UserInterface.h"

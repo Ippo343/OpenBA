@@ -67,7 +67,6 @@
 #include <cstring>
 #include <new>          // placement new of the two String members
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/pathfinding/PointList.h"

@@ -89,7 +89,6 @@
 
 #include <cstdint>
 #include <cstdlib>
-#include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"

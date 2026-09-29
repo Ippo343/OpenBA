@@ -32,7 +32,6 @@
 // the two FindElement overloads and String::operator!= all take String const&.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"           // RegisterExeAddr (the 0x1400e1870 row stays: engine_funcs reads it)
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

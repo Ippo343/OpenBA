@@ -35,7 +35,6 @@
 
 #include "object/External.h"
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include "Game/serialize_externals.h"
 #include "Component/ComponentDescription.h"
 #include <cstdint>

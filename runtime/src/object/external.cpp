@@ -66,7 +66,6 @@
 #include <new>          // placement new into the retail hidden return slots
 
 #include "../../types/object/External.h"
-#include "../../funcs/rt_port.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
@@ -504,48 +503,3 @@ ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-// ============================================================================
-//
-// BOTH the mangled name AND the retail address are registered for every
-// function, following Wave 2's string.cpp/filename.cpp. Name-only registration
-// would be inert at any site that resolved by address — and this lane has two
-// such sites: code/Game/Tutorial/tutorialgoaldialog.cpp reaches the External
-// ctor and dtor through ResolveAddr(Module::Runtime, 0x1800bc9c0 / 0x1800bc950),
-// never through their names. That is WAVE2 finding 4 seen from the other side.
-//
-// All 17 names in this lane's scope were checked against the shipped DLL's
-// export table with pefile: **all 17 exist**, so this lane has no phantom-name
-// defect of the WAVE1-defect-3 kind.
-//
-// THE TWO `_typeInfo` DATA SYMBOLS ARE DELIBERATELY NOT REGISTERED:
-//     ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A      0x1801f9b38
-//     ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A  0x1801f9be0
-// They are static BaseTypeInfo OBJECTS, not code, and the DLL has already
-// linked them into Object::Factory's `_firstTypeInfo` chain and assigned them
-// runtime type ids. Registering our own storage under those names would hand
-// every one of our call sites a SECOND, unregistered BaseTypeInfo whose type id
-// no DLL-built object would ever match — the type-id filter failure mode of
-// reference_unregistered_typeid_filter_zeroes_the_target.md, with a healthy
-// non-null pointer to reassure the reader. They stay on the DLL until the whole
-// reflection system moves (Lane A), which is the atomic-per-class rule of
-// PLAN.md §4.1 decision 5.
-// ============================================================================
-
-int RtObjectExternalRegister() {
-    using namespace RtObject;
-
-    // Object::Factory::_singleton is the class static (FactorySingletonSlot()
-    // above); nothing here resolves it.
-
-    // ENDGAME B.3.9 OBJ (B39_RULES D2): External's and CompiledExternal's
-    // factory pairs are the classes' own statics (external_class.cpp), not
-    // FACTREST rows.
-    // B3R W2-RT: the address row (0x180007650) had no reader and went. B3R W2-EZ:
-    // so did ?GetResourceCount@ExternalList@Object@@QEBAHXZ, whose one reader was
-    // EngineFuncsInit (deleted), and with it this function's "[RtPort]   External:
-    // N exports" line, which would print 0. This function registers nothing.
-    return 0;
-}

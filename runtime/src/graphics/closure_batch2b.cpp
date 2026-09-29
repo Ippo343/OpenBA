@@ -16,7 +16,6 @@
 #include <cstddef>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/io/Serializer.h"   // IO::ReaderWriter (B3X W0)
 #include "../../types/graphics/Camera.h"          // rtgfxd::RtGraphics_Camera_CopyCtor

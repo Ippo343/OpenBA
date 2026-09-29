@@ -29,7 +29,6 @@
 
 #include "object/TypeInfo.h"
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

@@ -31,7 +31,6 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "collection/Collection.h"
-#include "resolve.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "video/ImageBuffer.h"   // B.3.x W0: Game_ImageCaptureDtor deletes by name
 #include <cstdint>

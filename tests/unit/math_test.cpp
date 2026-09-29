@@ -17,8 +17,7 @@
 //     zeroes and not garbage.
 //   * Serialize's vtable-slot-0x28 protocol, driven by a fake encoding object.
 //
-// No game directory, no registry: tests/unit/rt_port_stub.cpp supplies the
-// three port-registry symbols and the bodies run directly.
+// No game directory, no registry: the bodies run directly.
 // ============================================================================
 
 #include "unit.h"

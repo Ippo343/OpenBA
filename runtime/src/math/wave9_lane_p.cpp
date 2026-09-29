@@ -24,7 +24,6 @@
 // ============================================================================
 
 #include "rt_libm.h"
-#include "rt_port.h"
 #include "../../types/math/Math.h"
 
 namespace {

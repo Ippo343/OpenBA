@@ -27,7 +27,6 @@
 #include "options.h"
 #include <new>
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>

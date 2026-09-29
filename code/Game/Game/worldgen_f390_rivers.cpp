@@ -52,7 +52,6 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"   // fn_Random_RandFloatTol
 #include "math/Math.h"
-#include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>

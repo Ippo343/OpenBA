@@ -43,10 +43,8 @@
 // ============================================================================
 
 #include "../../types/math/Math.h"
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
 #include "../../types/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
-#include "transform.h"
 
 #include <cstdint>
 #include <cstring>
@@ -922,31 +920,4 @@ void RtMath_Transform_Serialize(Transform* self, void* serializer /* io::Seriali
 }
 Vector3* RtMath_Transform_MulVector3(const Transform* self, Vector3* ret, const Vector3* v) {
     *ret = *self * *v; return ret;
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-void RtMathTransformRegister() {
-    int count = 0;
-
-    RegisterRuntimeExport("??0Transform@Math@@QEAA@AEBV01@@Z", (void*)&RtMath_Transform_CtorCopy); ++count;
-    RegisterRuntimeExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z", (void*)&RtMath_Transform_Assign); ++count;
-    RegisterRuntimeExport("??0Transform2@Math@@QEAA@AEBVScalar@1@AEBVVector2@1@@Z", (void*)&RtMath_Transform2_Ctor); ++count;
-    RegisterRuntimeExport("??DTransform2@Math@@QEBA?AV01@AEBV01@@Z", (void*)&RtMath_Transform2_MulTransform2); ++count;
-    RegisterRuntimeExport("??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z", (void*)&RtMath_Transform2_MulVector2); ++count;
-    RegisterRuntimeExport("?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z", (void*)&RtMath_Transform2_FromYawOffset); ++count;
-    RegisterRuntimeExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z", (void*)&RtMath_Transform_FromYawPitchOffset); ++count;
-    // Second door onto the SAME body. weather_particle_draw.cpp now asks by
-    // name, but the address stays registered so that any future by-address
-    // caller reaches the port instead of walking past it into the DLL --
-    // the defect tools/port_bypass_audit.py exists to catch.
-
-    // Bonus: dependencies of the above that are genuine Math:: exports in
-    // their own right (not on the assigned list, but required internally by
-    // Rotate/FromLookAt — see the comments on each definition).
-
-    fprintf(stderr, "[RtMathTransform] registered %d functions (Matrix/Quaternion/Transform/Transform2/Transform3)\n", count);
-
-    // AFTER the registrations, so the sweep drives the REGISTERED body.
 }

@@ -67,7 +67,6 @@
 #include <cstring>
 #include <new>          // ENDGAME B.3.1 step 2: placement new into the object body
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"

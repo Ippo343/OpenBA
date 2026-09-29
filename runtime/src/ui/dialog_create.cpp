@@ -120,7 +120,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/ui/Dialog.h"

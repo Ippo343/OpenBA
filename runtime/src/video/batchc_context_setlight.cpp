@@ -63,7 +63,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
 
 // ENDGAME B.3.5 block D1: the body MOVED onto `Video::Context::SetLight`; the

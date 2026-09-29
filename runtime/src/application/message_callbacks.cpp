@@ -41,7 +41,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"
 #include "../../types/system/MemoryAllocator.h"

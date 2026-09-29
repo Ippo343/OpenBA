@@ -96,7 +96,6 @@
 #include <cstdlib>
 #include <new>          // ENDGAME B.3.1 step 2: placement new into a POD member
 
-#include "../../funcs/rt_port.h"
 #include "../system/pod_bridge.h"          // the one transitional POD<->class cast
 #include "../../types/engine/UpdateLoop.h"
 #include "../../types/engine/MainLoop.h"   // lane B; for MainLoop::_currentLoop

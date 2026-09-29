@@ -62,7 +62,6 @@
 
 #include <new>
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

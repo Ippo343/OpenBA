@@ -117,7 +117,6 @@
 #include <cstring>
 #include <initializer_list>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
 #include "../collection/array_destroy_internal.h"
 #include "../collection/array_internal.h"

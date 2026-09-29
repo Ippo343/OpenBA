@@ -132,7 +132,6 @@
 
 #include "saveload_internal.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Modification.h"

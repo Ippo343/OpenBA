@@ -76,7 +76,6 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
-#include "resolve.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"

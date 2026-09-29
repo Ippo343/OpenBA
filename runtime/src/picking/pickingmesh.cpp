@@ -63,7 +63,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"

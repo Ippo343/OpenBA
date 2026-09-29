@@ -29,7 +29,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "resolve.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>

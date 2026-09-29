@@ -23,7 +23,6 @@
 #include "Component/wildanimalcomponent_funcs.h"
 #include "Component/HerdComponent.h"
 #include "object/TypeInfo.h"
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>

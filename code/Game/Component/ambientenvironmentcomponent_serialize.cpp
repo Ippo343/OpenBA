@@ -25,7 +25,6 @@
 // Standalone has no save/load driver yet (GameUpdateLoop::SaveRestore is a no-op
 // stub), so this is unreachable today; it brings the class to parity with the
 // rest of the save/load wave for when the driver lands.
-#include "resolve.h"
 #include "math/Math.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>

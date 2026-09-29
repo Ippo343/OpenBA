@@ -57,7 +57,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
 #include "../../types/system/Value.h"              // System::Time, ditto
@@ -492,8 +491,8 @@ extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
 }
 
 // Kickoff warning 10: a `*Summary()` nothing calls reports a zero that means
-// "never printed", not "never called". This one IS wired — see the call added
-// beside its siblings in runtime/src/graphics/rt_graphics_port.cpp.
+// "never printed", not "never called". This one IS wired: RuntimeInit()
+// (standalone/runtime_init.cpp) calls it once at boot.
 extern "C" void RtGraphicsWave29SlotsSummary() {
     // UNQUALIFIED `printf`, and the Makefile's check-log-strip gate is why:
     // standalone/log_strip.h does `#define printf(...) ((void)0)` and the

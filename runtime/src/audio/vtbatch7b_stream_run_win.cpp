@@ -151,7 +151,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/Filename.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"

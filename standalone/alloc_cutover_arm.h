@@ -12,3 +12,9 @@
 
 extern "C" void* RtAllocInstrument_MemAlloc(uint64_t size, int align);
 extern "C" void  RtAllocInstrument_MemFree(void* p);
+
+// The allocator's cutover armer (RtAllocCutoverArmer, runtime/types/system/
+// MemoryAllocator.h), handed to RtSystemAllocatorSetCutoverArmer() by
+// standalone/main.cpp before RuntimeInit(): arms BANISHED_ALLOC_STATS on the
+// instrument seat. Always returns true.
+extern "C" bool RtAllocSwapArmCutover();

@@ -200,7 +200,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/object/External.h"

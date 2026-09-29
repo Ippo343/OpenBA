@@ -37,7 +37,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/object/Internal.h"
 

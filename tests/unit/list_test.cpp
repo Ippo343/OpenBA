@@ -36,7 +36,7 @@
 //
 //   g++ -std=c++17 -DBANISHED_UNIT_TEST -DUNIT_DUMP_GOLDEN -I. -Iruntime/types
 //       -Iruntime/funcs -Itests/unit tests/unit/list_test.cpp
-//       tests/unit/rt_port_stub.cpp runtime/src/collection/introsort.cpp
+//       runtime/src/collection/introsort.cpp
 //       runtime/src/collection/linkedlist.cpp -o dump.exe && ./dump.exe
 // ============================================================================
 

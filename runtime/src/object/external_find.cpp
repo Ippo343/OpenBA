@@ -74,7 +74,6 @@
 #include "external_find.h"
 #include "external_set.h"
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge

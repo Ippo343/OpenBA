@@ -91,7 +91,6 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "Component/CitizenDescription.h"   // caller batch CB6: TypeId()
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>

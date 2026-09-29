@@ -22,7 +22,6 @@
 #include <cstring>
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"   // RtSystem::String, RtString_ReleaseInline (Wave 2, lane String)
 #include "../system/pod_bridge.h"

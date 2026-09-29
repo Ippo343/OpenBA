@@ -34,7 +34,6 @@
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
-#include "resolve.h"
 #include "system/String.h"
 #include <algorithm>
 #include <cstdint>

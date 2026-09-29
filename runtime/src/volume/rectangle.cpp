@@ -9,7 +9,6 @@
 // ============================================================================
 
 #include "../../types/volume/Volume.h"
-#include "../../funcs/rt_port.h"
 
 // ??0Rectangle@Volume@@QEAA@XZ   retail 0x18005ddd0
 // Default ctor: empty rectangle (min = +1.0e8f, max = -1.0e8f), the same

@@ -79,7 +79,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Particle.h"
 #include "../../types/graphics/ParticleInstance.h"

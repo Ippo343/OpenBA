@@ -118,7 +118,6 @@
 #include <cstdint>
 #include <cmath>
 
-#include "resolve.h"
 #include "options.h"
 // FULL PATHS ON PURPOSE. `engine/types/` also has a `ui/DialogInstance.h`,
 // and `-Iengine/types` precedes `-Iruntime/types` on the standalone command

@@ -19,7 +19,6 @@
 // HARNESS ONLY: reads published fields, writes nothing. Default off.
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"   // Object::IsDerivedFromNullSafe

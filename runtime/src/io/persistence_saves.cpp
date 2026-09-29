@@ -69,7 +69,6 @@
 #include <cstring>
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../system/string.h"

@@ -201,7 +201,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/Filename.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"

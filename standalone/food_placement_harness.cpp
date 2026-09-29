@@ -32,7 +32,6 @@
 // Test-only, opt-in, default off. Fires once at a settle frame
 // (BANISHED_FOOD_PLACE_FRAME, default 900).
 
-#include "resolve.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Object/factory_registration.h"

@@ -25,7 +25,6 @@
 // full differential oracle, three constructors, two destructors, and one
 // held-back function (SaveImageToFile — see its own comment).
 
-#include "../../funcs/rt_port.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Device.h"   // Wave 9 lane W: the lock and +0x100
@@ -999,19 +998,3 @@ bool Video_VertexBuffer_Set(VertexBuffer* self, int sizeBytes, int offsetBytes, 
 // leaving this on the DLL costs nothing beyond the census counting it as
 // "called, not ported."
 // ============================================================================
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtVideoBuffersRegister() {
-    // B3R W2-RT: the two address rows (0x1800f3490, 0x1800f55f0) had no
-    // reader and went. B3R W2-EZ: so did the ??0IndexBuffer@ / ??0VertexBuffer@
-    // names, whose one reader was EngineFuncsInit (deleted), and with them this
-    // function's "[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C):
-    // N exports registered" line, which would print 0. This function registers
-    // nothing.
-
-    // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z — HELD BACK, see above.
-
-    return 0;
-}

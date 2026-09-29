@@ -20,7 +20,6 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>

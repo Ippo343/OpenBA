@@ -78,7 +78,6 @@
 #include <cstdio>
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/system/String.h"

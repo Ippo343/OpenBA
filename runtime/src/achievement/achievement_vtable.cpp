@@ -163,7 +163,6 @@
 #include <cstdio>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"

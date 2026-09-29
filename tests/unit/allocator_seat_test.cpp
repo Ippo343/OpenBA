@@ -1,31 +1,24 @@
 // ============================================================================
-// tests/unit/alloc_door_test.cpp — `rtcoll::DoorAlloc` / `rtcoll::DoorFree`
-//   (runtime/src/collection/alloc_door.cpp) and the allocator's instrument seat
+// tests/unit/allocator_seat_test.cpp — the allocator's instrument seat, reached
+//   through `System::MemoryAllocator::MemAlloc` / `MemFree`
 // ============================================================================
 //
-// WHAT THESE TESTS PINNED BEFORE B3R W0-A0
-// ----------------------------------------
-// The door re-read the exe dispatch slot (0x140152b60 / 0x140152b68) on EVERY
-// call, answering through `g_unitResolveAddr`, because `RedzoneAlloc_Install()`
-// rewrote the slot's contents after the containers had already allocated: a
-// door that cached the pointer would have put every container allocation
-// outside BANISHED_REDZONE.
+// The diagnostic instruments (BANISHED_REDZONE's shim, BANISHED_ALLOC_STATS) sit
+// on ONE seat, `System::g_memoryAllocatorInstrument`
+// (runtime/types/system/MemoryAllocator.h), consulted at the entry of the two
+// statics. The property these tests pin — "an instrument armed AFTER a caller
+// first allocated still sees every later allocation of that caller, and alloc
+// and free move together" — is a property of the seat:
 //
-// WHAT THEY PIN NOW
-// -----------------
-// There is no slot to re-read: the door answers the allocator's own statics,
-// `System::MemoryAllocator::MemAlloc` / `MemFree`, and the instruments sit on
-// the ONE seat inside those statics (`System::g_memoryAllocatorInstrument`,
-// runtime/types/system/MemoryAllocator.h). So the property the old tests
-// protected — "an instrument armed AFTER the containers first allocated still
-// sees every later container allocation, and alloc and free move together" —
-// is now a property of the seat, and that is what is tested:
+//   1. a call reaches whichever hook is in the seat AT THE TIME OF THE CALL:
+//      arming, re-arming and disarming take effect on the next call, also for a
+//      caller that holds a pointer to the static taken before the arming;
+//   2. the armed hook receives the arguments unchanged and is called once.
 //
-//   1. the door answers exactly the static (the one allocator API, B3R R9);
-//   2. a call through the door reaches whichever hook is in the seat AT THE
-//      TIME OF THE CALL: arming, re-arming and disarming after the door has
-//      already answered all take effect on the next call;
-//   3. the armed hook receives the arguments unchanged and is called once.
+// (B3R W2-RES: until then these two tests reached the statics through
+// `rtcoll::DoorAlloc` / `DoorFree`, runtime/src/collection/alloc_door.cpp, a
+// function-pointer door with no product caller; it is deleted and the tests call
+// the statics directly.)
 //
 // The unit build links runtime/src/system/allocator.cpp (tests/unit/sources.mk)
 // so the real statics run; with a hook in the seat they never touch
@@ -37,7 +30,6 @@
 
 #include <cstdint>
 
-#include "collection/Collection.h"
 #include "system/MemoryAllocator.h"
 
 namespace {
@@ -62,25 +54,25 @@ void HookFreeB(void* p) { ++g_freeCallsB; g_lastFreed = p; }
 
 }  // namespace
 
-UNIT_TEST(alloc_door_is_memalloc_and_the_instrument_seat_is_read_per_call) {
+UNIT_TEST(memalloc_reads_the_instrument_seat_per_call) {
     System::MemoryAllocatorInstrument& seat = System::g_memoryAllocatorInstrument;
     CHECK(seat.memAlloc == nullptr);
 
-    // (1) The door answers the static itself — no cell, no resolver.
-    const rtcoll::DoorAllocFn_t door = rtcoll::DoorAlloc();
-    CHECK(door == &System::MemoryAllocator::MemAlloc);
+    // A pointer to the static, taken before anything is armed (a caller that
+    // cached it keeps it).
+    void* (*const memAlloc)(uint64_t, int) = &System::MemoryAllocator::MemAlloc;
 
-    // (2) Armed AFTER the door answered: the next call is instrumented.
+    // (1) Armed AFTER the pointer was taken: the next call is instrumented.
     g_allocCallsA = g_allocCallsB = 0;
     seat.memAlloc = &HookAllocA;
-    CHECK(door(0x30, 8) == g_blockA);
-    CHECK_EQ(g_allocCallsA, 1);                        // (3) once
-    CHECK_EQ(static_cast<int>(g_lastSize), 0x30);      // (3) unchanged
+    CHECK(memAlloc(0x30, 8) == g_blockA);
+    CHECK_EQ(g_allocCallsA, 1);                        // (2) once
+    CHECK_EQ(static_cast<int>(g_lastSize), 0x30);      // (2) unchanged
     CHECK_EQ(g_lastAlign, 8);
 
-    // (2) Re-armed: the door, asked again or not, reaches the new hook.
+    // (1) Re-armed: the static, through the pointer or by name, reaches the new hook.
     seat.memAlloc = &HookAllocB;
-    CHECK(rtcoll::DoorAlloc()(0x10, 4) == g_blockB);
+    CHECK(System::MemoryAllocator::MemAlloc(0x10, 4) == g_blockB);
     CHECK_EQ(g_allocCallsA, 1);
     CHECK_EQ(g_allocCallsB, 1);
     CHECK_EQ(g_lastAlign, 4);
@@ -88,16 +80,15 @@ UNIT_TEST(alloc_door_is_memalloc_and_the_instrument_seat_is_read_per_call) {
     seat.memAlloc = nullptr;
 }
 
-UNIT_TEST(free_door_is_memfree_and_the_instrument_seat_is_read_per_call) {
+UNIT_TEST(memfree_reads_the_instrument_seat_per_call) {
     System::MemoryAllocatorInstrument& seat = System::g_memoryAllocatorInstrument;
     CHECK(seat.memFree == nullptr);
 
-    const rtcoll::DoorFreeFn_t door = rtcoll::DoorFree();
-    CHECK(door == &System::MemoryAllocator::MemFree);
+    void (*const memFree)(void*) = &System::MemoryAllocator::MemFree;
 
     g_freeCallsA = g_freeCallsB = 0;
     seat.memFree = &HookFreeA;
-    door(g_blockA);
+    memFree(g_blockA);
     CHECK_EQ(g_freeCallsA, 1);
     CHECK(g_lastFreed == g_blockA);
 
@@ -106,14 +97,14 @@ UNIT_TEST(free_door_is_memfree_and_the_instrument_seat_is_read_per_call) {
     // scan then reports a phantom overflow (redzone_alloc.cpp's
     // `ShimAllocStatic` banner). One seat for both makes that structural.
     seat.memFree = &HookFreeB;
-    rtcoll::DoorFree()(g_blockB);
+    System::MemoryAllocator::MemFree(g_blockB);
     CHECK_EQ(g_freeCallsA, 1);
     CHECK_EQ(g_freeCallsB, 1);
     CHECK(g_lastFreed == g_blockB);
 
     // A null reaches the hook too: the seat is consulted before retail's own
     // null test, and every armed hook handles null (ShimFree, SwapFree).
-    door(nullptr);
+    memFree(nullptr);
     CHECK_EQ(g_freeCallsB, 2);
     CHECK(g_lastFreed == nullptr);
 

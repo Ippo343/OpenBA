@@ -23,7 +23,6 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
-#include "resolve.h"
 #include "math/Math.h"
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Component/FrustumOutlineElement.h"

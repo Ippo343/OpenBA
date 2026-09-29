@@ -140,7 +140,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Particle.h"

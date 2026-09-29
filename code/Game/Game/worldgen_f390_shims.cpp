@@ -9,7 +9,6 @@
 //   - fn_Random_RandFloatTol   advances the engine RNG -> must hit the real Runtime export
 
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
 #include <cstdint>
 #include <cmath>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)

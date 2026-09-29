@@ -111,7 +111,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteCapture.h"

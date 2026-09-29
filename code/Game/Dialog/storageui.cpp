@@ -24,7 +24,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include "resolve.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)

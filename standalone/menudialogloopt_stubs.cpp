@@ -26,7 +26,6 @@
 // (B38_RULES D5), plus the standalone resource-loading helpers they call.
 
 
-#include "resolve.h"
 #include "system/String.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/Internal.h"
@@ -40,12 +39,6 @@
 #include "common.h"
 #include "Object/factory_registration.h"
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_ticksPerSecond
-
-// WAVE 11 LANE OBJLIFE — the synthesised factory-dtor oracle, called from
-// Stub_Draw. Declared at FILE SCOPE on purpose: a block-scope `extern` inside
-// Stub_Draw is declared in the enclosing ANONYMOUS namespace, which links
-// against a symbol that does not exist rather than the real one.
-void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
 #include "Game/MenuDialogLoopT.h"   // ENDGAME B.3.8 LOOP
@@ -497,11 +490,6 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // The first-tick clamp below writes the caller's Time and restores it
     // before returning (MainLoop owns it); retail's slot takes it by const&.
     void* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
-    // Wave 10C lane ROUTES: install the DialogController inherited-slot route
-    // (BANISHED_DLGCTRL_ROUTE=1|probe, else a silent no-op). Same placement
-    // rationale as the line above -- Object::Factory::Startup has run, and no
-    // dialog has been opened yet.
-    DlgCtrlRoute_Arm();
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.

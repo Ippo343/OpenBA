@@ -139,7 +139,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"

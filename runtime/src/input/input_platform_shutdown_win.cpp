@@ -130,7 +130,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 #include "../../types/input/Input.h"
 #include "../collection/set_avl.h"

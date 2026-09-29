@@ -125,7 +125,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"
 #include "../../types/video/ImageBuffer.h"

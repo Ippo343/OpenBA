@@ -109,7 +109,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
 #include "../../types/system/Filename.h"

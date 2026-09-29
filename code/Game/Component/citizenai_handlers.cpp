@@ -29,7 +29,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
-#include "resolve.h"
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include <cstdio>

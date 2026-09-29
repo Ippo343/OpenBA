@@ -90,7 +90,6 @@
 // :124-142: all five must be published at the same moment or the IDIV-by-zero
 // it was written about comes back.
 #include <cstdint>
-#include "../../funcs/rt_port.h"
 #include "timer.h"
 #include "../../types/system/Timer.h"
 

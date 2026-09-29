@@ -163,7 +163,6 @@
 
 #include <new>        // placement new: the ??0 door builds into the caller's 8 bytes
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/Compression.h"   // ENDGAME B.3.4b SYSTEM (4b)
 #include "string.h"   // RtMemAlloc -- the lock-wrapped MemoryAllocator door
 

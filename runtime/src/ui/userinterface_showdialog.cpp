@@ -91,7 +91,6 @@
 #include <cstdio>
 
 
-#include "rt_port.h"
 #include "ui/UserInterface.h"
 #include "ui/DialogInstance.h"
 #include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K5): Engine::MainLoop::Frame

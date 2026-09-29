@@ -179,7 +179,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
 #include "../../types/audio/Audio.h"
 #include "../../types/audio/SoundEffect.h"

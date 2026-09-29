@@ -117,7 +117,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h"
 #include "array_internal.h"
 // B3R RT-Core: the element ops below call their bodies by name.

@@ -189,7 +189,6 @@
 #include <cstdio>
 #include <new>          // ENDGAME B.3.1 step 2: placement new into array storage
 
-#include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/engine/UpdateLoop.h"   // ENDGAME B.3.7: slots 8/9 as virtual calls
 #include "../../types/save/SaveLoad.h"       // ENDGAME B.3.7 callers (K5): Save::SaveLoad

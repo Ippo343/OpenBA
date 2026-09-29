@@ -32,8 +32,6 @@ calls. Wave 8 lane C landed 13; the Wave 8.5 close-out added the channel-teardow
 `ProbeAudioScene` in `standalone/rt_orphan_probe.cpp`, which steps two synthetic Scenes side by
 side -- see the block comment above those bodies for why that works without a Device fake.
 
-`rt_audio_port.cpp` -- the namespace aggregator (`RtAudioPortInit`).
-
 `Scene::Update`, `Device::Update` and `Device::FreeChannelPlatform`, once listed here as still on
 the DLL, are ported (`audio_scene_update.cpp`, `audio_device.cpp`). The file names have NOT been
 split to match the original tree above yet -- that is a mechanical follow-up, not a port.

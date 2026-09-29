@@ -25,7 +25,6 @@
 #include "Component/ConsumeProduceDescription.h"
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

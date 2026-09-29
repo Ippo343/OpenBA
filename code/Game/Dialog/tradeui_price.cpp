@@ -47,7 +47,6 @@
 // 0.75f. That agrees with the independently-derived constant already in the tree at
 // standalone/reg_citizenai_actionctors.cpp:51. Two sources, one value, and it is
 // below 1.0 as a discount must be.
-#include "resolve.h"
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "object/TypeInfo.h"
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()

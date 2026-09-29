@@ -191,7 +191,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton

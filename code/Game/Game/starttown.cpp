@@ -34,7 +34,6 @@
 #include "collection/Collection.h"
 #include "options.h"
 #include "perf_terrain.h"
-#include "resolve.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)

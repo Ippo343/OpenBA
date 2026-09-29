@@ -89,7 +89,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 // *** INCLUDE ORDER IS LOAD-BEARING AND THAT IS A TRAP, NOT A STYLE CHOICE. ***
 // runtime/types/object/External.h #includes TypeInfo.h at its line 322, which
 // is INSIDE its own `namespace RtObject { … }` block. So whichever of the two

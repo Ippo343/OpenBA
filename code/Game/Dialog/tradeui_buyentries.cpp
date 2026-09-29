@@ -54,7 +54,6 @@
 // IsDerivedFrom, both pure queries with no side effects, so omitting them is not
 // observable. They are the residue of an inlined "find" whose consumer was optimised
 // out. Noted here so the next reader does not go looking for the missing use.
-#include "resolve.h"
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "object/TypeInfo.h"
 #include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()

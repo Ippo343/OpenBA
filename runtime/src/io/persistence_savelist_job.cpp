@@ -110,7 +110,6 @@
 #include <cstdint>
 #include <new>        // placement new into a hidden-return-slot / a raw struct field
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/system/Filename.h"

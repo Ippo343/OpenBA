@@ -37,7 +37,6 @@
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "math/Math.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

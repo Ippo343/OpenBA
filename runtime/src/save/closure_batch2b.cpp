@@ -15,7 +15,6 @@
 #include <cstdint>
 #include <new>          // placement new into the raw destination bytes
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/video/Context.h"   // Rt_GuardedObjectFree (0x180006a10)

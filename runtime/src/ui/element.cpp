@@ -111,7 +111,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/ContainerElement.h"   // fragment pass F2: SetOffsets
@@ -1051,13 +1050,4 @@ Object::Base* UI::Element::CreateNewObject() { return nullptr; }
 
 void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
     self->UI::Element::AdjustUpperLeft(dx, dy);
-}
-
-int RtUiElementRegister() {
-    int count = 0;
-
-    // B3R W2-RT: the address row (0x180115ff0) had no reader and went.
-    RegisterRuntimeExport("?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z", (void*)&RtUi_Element_GetAlignedPosition); ++count;
-
-    return count;
 }

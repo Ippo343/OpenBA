@@ -72,7 +72,6 @@
 // of that exact address (runtime/src/crt/msvc_libm.cpp).
 // ============================================================================
 
-#include "rt_port.h"
 #include "rt_libm.h"
 #include "../../types/math/Math.h"
 

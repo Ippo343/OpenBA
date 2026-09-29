@@ -47,7 +47,6 @@
 #include "video/Buffers.h"   // Video::{Vertex,Index}Buffer
 #include "math/Math.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <new>               // ENDGAME B.3.4a closing: placement-new of IO::Serializer
 #include <cstdint>

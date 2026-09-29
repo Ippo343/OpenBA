@@ -22,7 +22,6 @@
 #include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "system/Filename.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B

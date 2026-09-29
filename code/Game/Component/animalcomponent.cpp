@@ -59,7 +59,6 @@
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "resolve.h"
 #include "math/Math.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include <cstdint>

@@ -124,7 +124,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/String.h"

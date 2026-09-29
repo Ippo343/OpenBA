@@ -78,7 +78,6 @@
 //   0x1801617c0 = 80000000 x4             the float sign-flip mask
 // ============================================================================
 
-#include "rt_port.h"
 #include "rt_libm.h"
 #include "../../types/math/Math.h"
 #include "../../types/volume/Volume.h"

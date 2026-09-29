@@ -45,7 +45,6 @@
 #include "Component/CitizenComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Game/Disease.h"                 // B.3.9 EXA: Disease::TypeId()
 #include "options.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "math/Math.h"

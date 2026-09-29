@@ -231,7 +231,6 @@
 
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "io/Stream.h"          // WAVE 10 LANE UIF — SaveAllSettings' MemoryStream
 #include "ui/UserInterface.h"
 // ENDGAME B.3.6 block E: the real classes the member bodies call, and

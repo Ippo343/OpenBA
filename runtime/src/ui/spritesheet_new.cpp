@@ -88,7 +88,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/SpriteSheet.h"   // ~SpriteSheet's body lives here
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"

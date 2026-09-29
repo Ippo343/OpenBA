@@ -34,7 +34,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/ui/CharacterSet.h"
 #include <new>

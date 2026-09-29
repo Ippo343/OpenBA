@@ -32,7 +32,6 @@
 // (OnCommand) with msg=0x12 and the button's element id -- the same two values
 // UI::UserInterface sends on a real click, which is how autostart.cpp already
 // drives the front-end menu.
-#include "resolve.h"
 #include <windows.h>
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/Internal.h"

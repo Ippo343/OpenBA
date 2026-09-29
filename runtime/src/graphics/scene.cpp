@@ -139,7 +139,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Scene.h"
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
@@ -1539,47 +1538,3 @@ void Scene::AddDrawItems(Renderer& renderer) const {
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// Registration.
-//
-// Both the mangled NAME and the retail ADDRESS are registered for every
-// function. The two registries are separate (standalone/resolve_standalone.cpp
-// keeps RtExportReg and RtAddrReg apart), and this lane's call sites use both
-// doors: almost everything resolves by name, but
-// code/Game/Action/showtool.cpp:171 resolves Attach by ADDRESS
-// (`ResolveAddr(Module::Runtime, 0x1800a3fa0)`) and
-// code/Game/Game/weather_particles.cpp:69 resolves ~Geometry by ADDRESS
-// (0x1800a41c0). A name-only registration would have left those two call sites
-// on the DLL while every other caller ran the port — two implementations taking
-// turns on one live object, and a diff oracle that under-counts.
-//
-// Every name below is a string LITERAL, not one of the `k*` constants above,
-// because tools/runtime_census.py cannot see through a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// `count` counts NAMES, one per distinct exported function.
-// ============================================================================
-int RtGraphicsSceneRegister() {
-    int count = 0;
-
-    // ---- Graphics::Geometry ----
-    // ENDGAME B.3.9 GFX: the ??0 (0x1800a4270) and ??1 (0x1800a41c0) doors are
-    // retired -- `Geometry()` / `~Geometry()` are the members below, and their
-    // one address reader (the RT_DELDTOR row 0x180015e90) is retired with them.
-
-    // B3R W2-RT: the five address rows (0x180015800, 0x180102730, 0x1801026c0,
-    // 0x180102670, 0x180102600) and the ??1Scene name row had no reader and
-    // went. The three names below stay while address_registry.cpp reads them
-    // (B3R W2-EZ: ??0Scene@Graphics@@QEAA@XZ went, its one reader was
-    // EngineFuncsInit).
-    RegisterRuntimeExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ", (void*)&RtGraphics_Geometry_GetTransform); ++count;
-
-    // ---- Graphics::Scene ----
-
-    RegisterRuntimeExport("?AddObject@Scene@Graphics@@QEAAIPEAVGeometry@2@@Z", (void*)&RtGraphics_Scene_AddObject); ++count;
-
-    RegisterRuntimeExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z", (void*)&RtGraphics_Scene_RemoveObject); ++count;
-
-    return count;
-}

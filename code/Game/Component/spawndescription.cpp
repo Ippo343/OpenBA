@@ -28,7 +28,6 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
-#include "resolve.h"
 #include <cstdint>
 #include <new>
 

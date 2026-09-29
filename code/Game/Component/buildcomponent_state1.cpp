@@ -30,7 +30,6 @@
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
-#include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>

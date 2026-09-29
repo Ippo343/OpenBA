@@ -42,7 +42,6 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "collection/Collection.h"
-#include "resolve.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>

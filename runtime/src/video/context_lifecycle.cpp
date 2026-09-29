@@ -62,7 +62,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Context.h"

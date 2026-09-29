@@ -65,7 +65,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/LayoutDescription.h"
 #include "../../types/ui/LayoutElement.h"
 #include "../../types/io/Serializer.h"

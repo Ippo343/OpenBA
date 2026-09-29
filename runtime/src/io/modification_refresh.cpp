@@ -179,7 +179,6 @@
 #include <cstring>
 #include <new>          // placement new -- see the AVL node key ctor below
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/io/FileSystem.h"    // ENDGAME B.3.9 IO: the class static

@@ -47,7 +47,6 @@
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
-#include "resolve.h"
 #include "stress_harness.h"   // BANISHED_STRESS Update/Draw brackets (standalone/)
 #include "perf_experimental.h" // PerfX non-retail perf knobs (standalone/)
 #include <cstdio>
@@ -105,7 +104,6 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 #include "scene_watch.h"
 #include "citizen_vitals.h"
 #include "mouse_inject.h"                 // BANISHED_MOUSE_INJECT hover/drag route (standalone/)
-#include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"          // kRdata_* (B3R)
@@ -535,24 +533,6 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // The body reads the Time through a raw pointer (unchanged from the
     // hand-built table's slot); retail's slot takes it by const&.
     void* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
-    // Unregistered-address census phase. Update also runs BEFORE the world is
-    // loaded (the Stage-C hold below no-op ticks until Load has run), so this
-    // must not simply fire on the first call or it would swallow the load. Only
-    // promote once the load itself has finished, i.e. out of "postload".
-    if (strcmp(UnregPhase(), "postload") == 0) SetUnregPhase("gameplay");
-    // ...and dump the census a fixed number of gameplay frames later, so an
-    // unattended run yields the table without needing a clean process exit
-    // (the crash handler ExitProcess()es, and quit-to-menu does not return
-    // from GameMain either). BANISHED_UNREG_CENSUS=<n> sets the frame count.
-    if (strcmp(UnregPhase(), "gameplay") == 0) {
-        static int s_unregFrames = 0;
-        static int s_unregDumpAt = -1;
-        if (s_unregDumpAt < 0) {
-            const int n = Opt().unregCensusFrames;
-            s_unregDumpAt = (n > 1) ? n : 600;
-        }
-        if (++s_unregFrames == s_unregDumpAt) DumpUnregCensus();
-    }
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
     // in-game world build) is not yet implemented, so on the new-game path
     // m_game (+0xF8) is still null when the loader chain transitions in. Every

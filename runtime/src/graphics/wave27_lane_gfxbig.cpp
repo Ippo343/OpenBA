@@ -105,7 +105,6 @@
 #include <cstddef>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/graphics/Animation.h"   // ENDGAME B.3.5 closing pass:

@@ -52,7 +52,6 @@
                                      // and rt::io::Stream, the POD the ported
                                      // entry point still takes. External.h only
                                      // forward-declares the class on purpose.
-#include "../../funcs/rt_port.h"
 #include "../system/string.h"       // RtSystem::RtMemFree (~ExternalList)
 #include "../system/pod_bridge.h"
 #include "external_compiled.h"

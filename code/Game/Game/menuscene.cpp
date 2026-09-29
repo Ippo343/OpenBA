@@ -28,7 +28,6 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <atomic>

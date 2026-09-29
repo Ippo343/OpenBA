@@ -79,7 +79,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"

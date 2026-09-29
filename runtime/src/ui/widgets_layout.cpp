@@ -39,7 +39,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/Element.h"

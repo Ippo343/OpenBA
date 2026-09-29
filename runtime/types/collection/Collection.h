@@ -377,28 +377,12 @@ namespace rtcoll {
 // byte cursor every body wants; sizeof(Array<T>) is T-independent.
 using ArrayHdr = Collection::Array<uint8_t>;
 
-// ---------------------------------------------------------------------------
-// THE ONE ALLOCATOR DOOR (ENDGAME B.3.2 closing pass, runtime/src/collection/
-// alloc_door.cpp — read its banner for the evidence).
-//
-// `MemAlloc`/`MemFree` below, the Set node pair and the LinkedList node pair
-// all ask these two for the function to call. Since B3R W0-A0 they answer
-// `System::MemoryAllocator::MemAlloc` / `MemFree` directly: the diagnostic
-// instruments (BANISHED_REDZONE, BANISHED_ALLOC_STATS) sit on the allocator's
-// instrument seat inside those two statics, so every container allocation and
-// free goes through the same channel (a HALF-shimmed heap is worse than an
-// unshimmed one: redzone_alloc.cpp's `ShimAllocStatic` banner). Before W0-A0
-// they re-read the exe dispatch slots 0x140152b60 / 0x140152b68 per call.
-//
-// They hand back a POINTER rather than performing the call so that each seam
-// keeps its own null handling: `MemAlloc` calls unguarded, the Set and
-// LinkedList seams keep their `fn ? fn(…) : nullptr` shape (never null now).
-// ---------------------------------------------------------------------------
-using DoorAllocFn_t = void* (*)(uint64_t bytes, int align);
-using DoorFreeFn_t  = void  (*)(void* p);
-DoorAllocFn_t DoorAlloc();
-DoorFreeFn_t  DoorFree();
-
+// The container allocator pair (array.cpp). Every container allocation and free
+// reaches `System::MemoryAllocator::MemAlloc` / `MemFree` by name, where the
+// diagnostic instruments (BANISHED_REDZONE, BANISHED_ALLOC_STATS) sit on the
+// allocator's instrument seat. (B3R W2-RES: `rtcoll::DoorAlloc` / `DoorFree`,
+// the function-pointer door runtime/src/collection/alloc_door.cpp that answered
+// the same two statics, had no caller left and is deleted.)
 void* MemAlloc(uint64_t bytes, int align);
 void  MemFree(void* p);
 

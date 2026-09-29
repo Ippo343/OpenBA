@@ -103,7 +103,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Device.h"
 #include "../../types/audio/SoundBuffer.h"
 

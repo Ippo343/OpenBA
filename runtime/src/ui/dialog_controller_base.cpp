@@ -132,7 +132,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/ui/DialogController.h"
 
 namespace RtUi {
@@ -149,9 +148,10 @@ namespace {
 // (runtime/types/ui/DialogController.h). ENDGAME B.3.9 block UI-D: the minted
 // `??_7DialogController@UI@@6B@` is retired, and with it the six slot doors
 // whose only reader it was and the `[DlgCtrl] ATTENDANCE` counters that
-// measured its promotion. Three doors STAY (below): OnOpened, OnClosed and
-// OnSerializeSettings are reached BY ADDRESS from standalone/dlgctrl_route.cpp
-// (block RF's, env-gated) — a door reached by address survives (B9-6).
+// measured its promotion. Three C bodies stay (below): OnOpened, OnClosed and
+// OnSerializeSettings were registered at 0x1800cd2a0 / 0x1800cd290 / 0x1800cd250
+// for standalone/dlgctrl_route.cpp; B3R W2-RES deleted that route and the rows,
+// and nothing references the three any more (listed for the close).
 // ============================================================================
 namespace UI {
 
@@ -206,29 +206,6 @@ extern "C" void RtUiDialogController_OnClosed(void* self) {
 extern "C" void RtUiDialogController_OnSerializeSettings(void* self, void* stream) {
     AsController(self)->UI::DialogController::OnSerializeSettings(stream);
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH doors for every row, which in this namespace is not decoration:
-//   * BY NAME    — what the exe-side vtable builders in code/Game/Dialog/ and
-//                  engine/funcs/engine_funcs.cpp ask for.
-//   * BY ADDRESS — what the minted `??_7DialogController@UI@@6B@` looks up
-//                  through RtPortLookupAddr when it fills its slots, and the
-//                  ONLY door the mint readiness screen consults. A body ported
-//                  but registered under one door only would still read TRAP.
-int RtUiDialogControllerRegister() {
-    int n = 0;
-
-    // B3R W2-RT: the three NAME rows had no reader and went. The address rows
-    // stay while standalone/dlgctrl_route.cpp's kSpecs reads them.
-    RegisterRuntimeAddr(0x1800cd2a0, (void*)&RtUiDialogController_OnOpened); ++n;
-    RegisterRuntimeAddr(0x1800cd290, (void*)&RtUiDialogController_OnClosed); ++n;
-    RegisterRuntimeAddr(0x1800cd250, (void*)&RtUiDialogController_OnSerializeSettings); ++n;
-
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::DialogController's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

@@ -104,7 +104,6 @@
 #include <cstring>
 #include <cstdint>
 
-#include "resolve.h"
 #include <windows.h>
 #include <new>
 #include "runtime/types/ui/DialogInstance.h"

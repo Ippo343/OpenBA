@@ -249,7 +249,6 @@
 #include <cstdlib>
 #include <new>          // placement new into the retail hidden return slot
 
-#include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/Serializer.h"

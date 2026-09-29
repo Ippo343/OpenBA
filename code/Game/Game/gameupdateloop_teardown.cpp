@@ -36,7 +36,6 @@
 // frees the outer block. Trees ({root,count} pairs, 4-byte count store),
 // node chains and IBP payloads are NOT arrays and are untouched.
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "resolve.h"           // RegisterExeAddr
 #include "Action/exe_bodies.h"          // ActHunt_MarkEntityRemoval_c2ea0
 #include "Entity/entitylist_funcs.h"     // EntityList_RemoveEntity
 #include "Player/exe_bodies.h"          // TradeWork_helper_14b00

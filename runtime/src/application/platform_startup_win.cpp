@@ -73,7 +73,6 @@
 #include <cstring>
 #include <cwchar>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 #include "../../types/engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
 #include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: AchievementManager::PlatformStartup
