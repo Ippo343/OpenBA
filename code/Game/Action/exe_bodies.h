@@ -79,6 +79,20 @@ bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng);  // 0x1400a9
 void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 
 // ---- action_base_rawmat.cpp
+class AutoPickupComponent;    // Component/AutoPickupComponent.h
+class CitizenBehavior;        // Entity/CitizenBehavior.h
+class Component;              // Component/Component.h
+class ComponentDescription;   // Component/ComponentDescription.h
+class ComponentEntity;        // Entity/ComponentEntity.h
+class StorageComponent;       // Component/StorageComponent.h
+class TrackerComponent;       // Component/TrackerComponent.h
+void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012d150
+void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count);  // 0x14012d000
+void AutoPickupAppend(AutoPickupComponent* self, uint32_t value);  // 0x140044810
+int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
+void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
+void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
+void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x140129760
 void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count);  // 0x14012d150
 void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count);  // 0x14012d000
 void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70

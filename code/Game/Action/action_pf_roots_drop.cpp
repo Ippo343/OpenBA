@@ -117,10 +117,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         }
         RawMaterialComponent* pile = created->FindComponent<RawMaterialComponent>();   // 0x1400223c0
         int randv = world->m_random ? world->m_random->RandTol(2) : 0;
-        // LEFT: 0x140129760's C declaration (action_base_rawmat.cpp) takes the component
-        // as an integer.
-        ActRm_PositionEntity_9760(reinterpret_cast<int64_t>(pile), cell,   // 0x140129760
-                                  static_cast<float>(randv) * kRdata_140172204);
+        PositionRawMaterial(pile, cell, static_cast<float>(randv) * kRdata_140172204);   // 0x140129760
         pile->quantity = count;
         pile->profession = nullptr;
         ComponentEntity* registered = created;
@@ -128,9 +125,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
                                        static_cast<int>(material->_category));   // 0x1400c48a0
     }
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    // LEFT: 0x14012d150's C declaration (action_base_rawmat.cpp) takes both as integers.
-    ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storage),
-                               reinterpret_cast<int64_t>(material), count);   // 0x14012d150
+    StorageSubtract(storage, material, count);   // 0x14012d150
 }
 
 // ============================================================
@@ -174,10 +169,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
     }
     if (0 < iVar9) {
         if (StorageCanAdd(*target, material, iVar9)) {   // 0x14012cd80
-            // LEFT: 0x14012d000's C declaration (action_base_rawmat.cpp) takes both as
-            // integers.
-            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(*target),
-                                  reinterpret_cast<int64_t>(material), iVar9);   // 0x14012d000
+            StorageAdd(*target, material, iVar9);   // 0x14012d000
             Pf_StorageDropOff_116760(citizen, material, iVar9);   // 0x140116760
             return 1;
         }

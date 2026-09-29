@@ -169,9 +169,7 @@ bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDesc
 // ============================================================
 void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count) {
     StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    // LEFT: 0x14012d150's C declaration (action_base_rawmat.cpp) takes both as integers.
-    ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storage),
-                               reinterpret_cast<int64_t>(material), count);   // 0x14012d150
+    StorageSubtract(storage, material, count);   // 0x14012d150
 }
 
 // ============================================================
