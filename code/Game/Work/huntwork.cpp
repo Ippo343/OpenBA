@@ -33,6 +33,20 @@
 #include <cstdlib>
 #include <new>
 #include "Component/HuntDescription.h"   // ENDGAME B.3.9 D5: HuntDescription::TypeId()
+#include "Component/HuntComponent.h"
+#include "Component/RadiusDescription.h"
+#include "Component/ComponentDescription.h"
+#include "Component/StatusIconComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
 
 // ── Slot4 destination census (BANISHED_CROPFIELD_TRACE, the hunt trace flag). ──
 // Retail's sub_bbc0 builds TWO different chains from this function's last argument:
@@ -43,18 +57,18 @@
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
 //   0x1400e3db0  WorkGrid_AutoPickup_e3db0
-//   0x140003050  WorkBase_FindComponent_3050
-//   0x140002f90  WorkBase_FindComponent_2f90
-//   0x14012c3f0  CitizenComp_FUN_14012c3f0
+//   0x140003050  ComponentEntity::FindComponent<WorkComponent>
+//   0x140002f90  ComponentEntity::FindComponent<StatusIconComponent>
+//   0x14012c3f0  StatusIconComponent::SetFlag
 //   0x14012e5c0  WorkComponent_CalcMaxWorkers
-//   0x140006270  WorkBase_FindComponent_6270
+//   0x140006270  ComponentEntity::FindComponent<StorageComponent>
 //   0x14012cf10  CitizenComp_StorageComponent_QueryCount
 //   0x14009f3e0  Reimpl_MapGetTerrainPos
 //   0x1400bbbc0  WorkAct_HuntWorkCtor_bbbc0
 //   0x140021a30  WorkBST_RegisterWork_1a30
-//   0x140115e60  CitizenAI_State_LongTermPlan
-//   0x14002a730  WorkLeaf_FindComp_a730
-//   0x1400063d0  WorkLeaf_FindComp_63d0
+//   0x140115e60  CitizenComponent::LongTermPlan
+//   0x14002a730  ComponentEntity::FindComponent<HuntComponent>
+//   0x1400063d0  the RadiusDescription scan (FindRadiusDescription below)
 //   0x140008830  WorkBase_CalcDistance_8830
 //   0x14009ccf0  WorkGrid_FindCell_9ccf0
 //   0x1400a00f0  WorkBase_ValidateCell_a00f0
@@ -64,7 +78,7 @@
 //   0x14001a6e0  WorkBST_BSTRemove_a6e0
 //   0x140025520  WorkBST_BSTFindRemove_25520
 //   0x1400c5400  WorkBase_TaskListCleanup_c5400
-//   0x140002e10  AttendanceComponent_GetJobHostComponent
+//   0x140002e10  ComponentEntity::FindComponent<WorkPlaceComponent>
 //   0x140014c30  WorkBase_TreeNodeFree_14c30
 //   0x140172114  kRdata_140172114 (.rdata)
 //
@@ -80,33 +94,55 @@
 
 
 // ============================================================
+// Helper: 0x1400063d0 -- the RadiusDescription among a ComponentDescription's
+// sub-descriptions (+0x28 data / +0x30 count), no CheckPtr; the first type-id match
+// decides (IsDerivedFrom recheck, else null).
+// ============================================================
+static RadiusDescription* FindRadiusDescription(ComponentDescription* subObj) {
+    const uint32_t typeId = RadiusDescription::TypeId();
+    int count = subObj->_subDescCount;
+    for (int i = 0; i < count; i++) {
+        Description* obj = subObj->_subDescs[i];
+        if (obj->Type() == typeId) {
+            Description* comp = subObj->_subDescs[i];
+            if (Object::IsDerivedFromNullSafe(comp, typeId)) {
+                return static_cast<RadiusDescription*>(comp);
+            }
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+
+// ============================================================
 // HuntWork::Slot4 -- Hunt target assignment (0x1400EEFF0)
 // ============================================================
 //
 // Algorithm:
 // 1. Check auto-pickup assignments
 // 2. If storage has items, replan citizen (LongTermPlan)
-// 3. Find material description and herd/pasture component
+// 3. Find the WorkComponent, the HuntComponent and the RadiusDescription
 // 4. Check if animal population allows hunting (resource tracker)
-// 5. Set mesh visibility based on capacity
+// 5. Set the status icon flag based on capacity
 // 6. Check max workers vs current count
 // 7. Random search for valid hunting cell within area radius
 // 8. Validate cell: distance, pathability, terrain
-// 9. Create PerformWork action at valid position
-// 10. On failure: idle animation or replan
+// 9. Create the hunt action at the cell, or the roaming fallback
 //
 int HuntWork::Execute(void* entityIBP, void* /*context*/) {
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
 
     // Save citizen ref
-    uintptr_t citizenRef = *(uintptr_t*)entityIBP;
-    void* citizenIBP = entityIBP;
+    CitizenComponent* citizenRef = *citizenIBP;
 
     // -------------------------------------------------------
-    // Step 1: Check auto-pickup assignments
+    // Step 1: Check auto-pickup assignments (0x1400e3db0 takes the work as an
+    // integer: LEFT)
     // -------------------------------------------------------
-    int checkResult = WorkGrid_AutoPickup_e3db0(selfAddr, &citizenRef);
+    int checkResult = WorkGrid_AutoPickup_e3db0(reinterpret_cast<uintptr_t>(this), &citizenRef);
     if (checkResult == 2) {
         return 2;
     }
@@ -114,86 +150,82 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
     // -------------------------------------------------------
     // Step 2: Check if citizen's storage has items -> replan
     // -------------------------------------------------------
-    uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
+    StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-    uintptr_t storageIBP[2] = {0};
-    WorkBase_FindComponent_6270(*(uintptr_t*)(citizenEntity + 0x10), storageIBP);
-
-    int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>((void*)*(uintptr_t*)storageIBP));
+    // (0x14012cf10 takes the storage as an integer: LEFT)
+    int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
     if (storageCount >= 1) {
-        CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)entityIBP));
+        (*citizenIBP)->LongTermPlan();
         return 2;
     }
 
     // -------------------------------------------------------
-    // Step 3: Find material description and herd component
+    // Step 3: Find the WorkComponent and the HuntComponent
     // -------------------------------------------------------
-    uintptr_t matDescIBP = 0;
-    WorkBase_FindComponent_3050(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
+    WorkComponent* matDesc = field_10->FindComponent<WorkComponent>();
 
-    uintptr_t herdIBP[2] = {0};
-    WorkLeaf_FindComp_a730(*(uintptr_t*)(selfAddr + 0x10), herdIBP);
+    HuntComponent* huntComp = field_10->FindComponent<HuntComponent>();
 
-    // Get the herd object, check if it's derived from HerdComponent
-    void* herdObj = *(void**)(*(uintptr_t*)herdIBP + 0x18);
+    // Its description, as a HuntDescription
+    Description* herdObj = huntComp->_description;
     // DAT_1401c78c8 = HuntDescription (ENDGAME B.3.9 D5: by cell, not the legacy
     // variable name "HerdComponent").
     bool isHerd = Object::IsDerivedFromNullSafe(herdObj, HuntDescription::TypeId());
-    void* herdComp = isHerd ? herdObj : nullptr;
+    HuntDescription* huntDesc = isHerd ? static_cast<HuntDescription*>(herdObj) : nullptr;
 
-    // Get area component from the workplace entity
-    uintptr_t areaIBP[2] = {0};
-    WorkLeaf_FindComp_63d0(*(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x28), reinterpret_cast<void**>(areaIBP));
+    // The RadiusDescription on the workplace's ComponentDescription (+0x28)
+    RadiusDescription* area = FindRadiusDescription(field_10->_description);
 
     // -------------------------------------------------------
     // Step 4: Check animal population via resource tracker
+    // (the town's per-resource counts, CitizenBehavior +0x170)
     // -------------------------------------------------------
-    int materialIdx = *(int*)((uintptr_t)herdComp + 0x24);
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
-    uintptr_t resourceTable = *(uintptr_t*)(resourceTracker + 0x170);
-    uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;
-    bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
+    int materialIdx = (int)huntDesc->_type;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    const ProfessionResourceEntry& resEntry = gameWorld->m_citizenList->professionResources[materialIdx];
+    bool atCapacity = resEntry.maxCount <= resEntry.currentCount;
 
     // -------------------------------------------------------
-    // Step 5: Set mesh visibility based on capacity (visGroup 2)
+    // Step 5: The status icon's flag 2 from the capacity (0x140002f90, 0x14012c3f0)
     // -------------------------------------------------------
-    uintptr_t meshIBP[2] = {0};
-    WorkBase_FindComponent_2f90(*(uintptr_t*)(selfAddr + 0x10), meshIBP);
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)(*(uintptr_t*)meshIBP)), 2, atCapacity ? 1 : 0);
+    StatusIconComponent* statusIcon = field_10->FindComponent<StatusIconComponent>();
+    statusIcon->SetFlag(2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
         return 1;
     }
 
     // -------------------------------------------------------
-    // Step 6: Check max workers vs current count
+    // Step 6: Check max workers vs current count (the tree's port of 0x14012e5c0
+    // called here takes the component as an integer: LEFT)
     // -------------------------------------------------------
-    int huntCount = (int)selfQ[10]; // self->_field50
+    int huntCount = _field50;
 
-    if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
-        *(int*)(matDescIBP + 0x30) = maxWorkers;
+    if (matDesc->workState == 0) {
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        matDesc->workState = maxWorkers;
     }
 
-    if (huntCount >= *(int*)(matDescIBP + 0x30)) {
+    if (huntCount >= matDesc->workState) {
         return 1;
     }
 
     // -------------------------------------------------------
     // Step 7: Random search for valid hunting cell
     // -------------------------------------------------------
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
-    void* rng = *(void**)(gameWorld + 0xd8);
+    Map* map = gameWorld->m_game;
+    // The map helpers (0x140008830, 0x1400a00f0) take the map as int*: LEFT.
+    int* mapGrid = reinterpret_cast<int*>(map);
+    System::Random* rng = gameWorld->m_random;
 
-    int areaRadius = *(int*)((uintptr_t)areaIBP[0] + 0x28);
+    int areaRadius = area->_radius;
     int radiusSq = areaRadius * areaRadius;
-    int mapSize = *mapGrid;
+    int mapSize = map->size;
 
     // Workplace grid cell position
-    uintptr_t workCell = selfQ[5]; // self->_field28
-    int cellCol = (int)workCell % mapSize;
-    int cellRow = (int)workCell / mapSize;
+    int workCell = field_28;
+    int cellCol = workCell % mapSize;
+    int cellRow = workCell / mapSize;
 
     // Generate random position within radius (rejection sampling)
     // Original only bounds-checks Y; we check both for safety but the
@@ -203,8 +235,8 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
 
     do {
         do {
-            randX = reinterpret_cast<System::Random*>(rng)->RandTol(areaRadius);   // B.3.4b bridge
-            randY = reinterpret_cast<System::Random*>(rng)->RandTol(areaRadius);   // B.3.4b bridge
+            randX = rng->RandTol(areaRadius);
+            randY = rng->RandTol(areaRadius);
             testCellX = cellCol + randX;
             testCellY = cellRow + randY;
         } while (radiusSq < randY * randY + randX * randX);
@@ -214,15 +246,13 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
 
     uint32_t testCell = (uint32_t)(mapSize * testCellY + testCellX);
 
-    // Get citizen's current position for pathfinding
-    uintptr_t citEnt = *(uintptr_t*)citizenIBP;
+    // Get citizen's current position for pathfinding: CharacterComponent (+0x278) ->
+    // ModelComponent (+0x68) -> the transform's translation
+    const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
 
-    uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
-    uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
-
-    int mapSz = *mapGrid;
-    int citizenCellX = (int)(*(float*)(posComp + 0x158) + (float)(mapSz >> 1));
-    int citizenCellY = (int)(*(float*)(posComp + 0x15c) + (float)(mapSz >> 1));
+    int mapSz = map->size;
+    int citizenCellX = (int)(citizenPos.x + (float)(mapSz >> 1));
+    int citizenCellY = (int)(citizenPos.y + (float)(mapSz >> 1));
 
     // Clamp citizen cell to map bounds
     if (citizenCellX < 0) citizenCellX = 0;
@@ -233,21 +263,21 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
     int citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
     // Get workplace entity's grid cell for distance check
-    uintptr_t entityIBPBuf[2] = { *(uintptr_t*)(selfAddr + 0x10), 0 };
+    ComponentEntity* entityIBPBuf[2] = { field_10, nullptr };
     uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
 
     // -------------------------------------------------------
     // Step 8: Validate cell — terrain, distance, entity, passability
     // Original checks all 4 conditions; if ANY fail, uses fallback action.
     // -------------------------------------------------------
-    uintptr_t gridData = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+    MapCell* gridData = map->cells;
     bool allChecksPass = false;
 
     // Only check if cell index is in bounds (negative X can produce bad index)
     if (testCellX < 0 || testCellX >= mapSize) {
     } else {
         // Check 1: terrain type — skip resource terrain (0x1e0 mask)
-        uint8_t terrainByte = *(uint8_t*)(gridData + (uintptr_t)testCell * 0x30 + 0x29);
+        uint8_t terrainByte = gridData[testCell].terrainType;
         uint32_t terrainBit = 1u << (terrainByte & 0x1f);
         bool terrainOk = (terrainBit & 0x1e0u) == 0;
 
@@ -255,9 +285,9 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
         int dist = WorkBase_CalcDistance_8830(mapGrid, entityGridCell, testCell);
         bool distOk = dist <= areaRadius * 2;
 
-        // Check 3: no entity at the cell
-        uintptr_t cellEntity = *(uintptr_t*)(gridData + (uintptr_t)testCell * 0x30 + 8);
-        bool emptyCell = (cellEntity == 0);
+        // Check 3: no entity at the cell (the cell's occupant, +8)
+        ComponentEntity* cellEntity = gridData[testCell].occupant;
+        bool emptyCell = (cellEntity == nullptr);
 
         // Attribute the failure to the FIRST failing check only, so the columns sum to
         // the fallback count instead of double-counting a cell that fails several.
@@ -270,29 +300,29 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
     }
 
 
+    // (0x1400bbbc0 takes the HuntComponent slot as int64_t*: LEFT)
     if (allChecksPass) {
         // -------------------------------------------------------
         // Valid hunt target — create hunt action at terrain position
         // -------------------------------------------------------
-        float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
+        float halfOffset = (float)(map->size >> 1) - kRdata_140172114;
         Math::Vector3 huntPos(
-            (float)((int)testCell % *mapGrid) - halfOffset,
-            (float)((int)testCell / *mapGrid) - halfOffset,
+            (float)((int)testCell % map->size) - halfOffset,
+            (float)((int)testCell / map->size) - halfOffset,
             0.0f);
 
         // Get terrain height
         float pathPos[3];
-        Reimpl_MapGetTerrainPos(mapGrid, pathPos, &huntPos.x, 0, nullptr);
+        Reimpl_MapGetTerrainPos(map, pathPos, &huntPos.x, 0, nullptr);
 
-        uintptr_t citizenEntRef = *(uintptr_t*)citizenIBP;
+        CitizenComponent* citizenEntRef = *citizenIBP;
 
-        uintptr_t huntCompIBP2 = 0;
-        WorkLeaf_FindComp_a730(*(uintptr_t*)(selfAddr + 0x10), &huntCompIBP2);
+        HuntComponent* huntComp2 = field_10->FindComponent<HuntComponent>();
 
         WorkAct_HuntWorkCtor_bbbc0(
             &citizenEntRef,        // citizen entity IBP
-            (int)selfQ[4],         // priority
-            reinterpret_cast<int64_t*>(&huntCompIBP2),         // hunt component IBP
+            field_20,              // priority
+            reinterpret_cast<int64_t*>(&huntComp2),         // hunt component IBP
             pathPos,               // terrain position
             0.0f,                  // float param
             1);                    // char param (specific location)
@@ -301,18 +331,16 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
         // Cell checks failed — create fallback hunt action
         // Position (0,0,0), g_pAgeMultiplier float, char=0 (roaming)
         // -------------------------------------------------------
-        uintptr_t citizenEntRef2 = *(uintptr_t*)citizenIBP;
+        CitizenComponent* citizenEntRef2 = *citizenIBP;
 
-        uintptr_t huntCompIBP3 = 0;
-        uintptr_t workplaceEnt = *(uintptr_t*)(selfAddr + 0x10);
-        WorkLeaf_FindComp_a730(workplaceEnt, &huntCompIBP3);
+        HuntComponent* huntComp3 = field_10->FindComponent<HuntComponent>();
 
         float fallbackPos[3] = { 0.0f, 0.0f, 0.0f };
 
         WorkAct_HuntWorkCtor_bbbc0(
             &citizenEntRef2,       // citizen entity IBP
-            (int)selfQ[4],         // priority
-            reinterpret_cast<int64_t*>(&huntCompIBP3),         // hunt component IBP
+            field_20,              // priority
+            reinterpret_cast<int64_t*>(&huntComp3),         // hunt component IBP
             fallbackPos,           // fallback position (0,0,0)
             kRdata_140172198,     // float param (roaming radius)
             0);                    // char param (roaming mode)
@@ -321,22 +349,22 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
     // -------------------------------------------------------
     // Both paths: assign work and return 2
     // -------------------------------------------------------
-    int priority = (int)selfQ[4];
-    uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
+    int priority = field_20;
+    CitizenComponent* citizenEnt = *citizenIBP;
 
-    uintptr_t workEntIBP[2] = {0};
-    uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
-    uintptr_t workEnt = *wResult;
+    Profession* workEnt = nullptr;
+    GetTarget(&workEnt);
 
-    *(uint32_t*)(citizenEnt + 0x54) |= 4;
-    *(uint32_t*)(citizenEnt + 0xb0) = 0;
-    *(int32_t*)(citizenEnt + 0x30) = priority;
+    citizenEnt->statusFlags |= 4;
+    citizenEnt->field_0xB0 = 0;
+    citizenEnt->field_0x30 = priority;
 
-    if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && priority >= 0) {
-        *(uint32_t*)(citizenEnt + 0x88) |= 0x20000;
+    if (workEnt == citizenEnt->profession && priority >= 0) {
+        citizenEnt->happinessFlags |= 0x20000;
     }
 
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), workEntIBP, citizenIBP);
+    // (the tree helper takes the container as uintptr_t*: LEFT)
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);
     return 2;
 }
 
@@ -345,9 +373,10 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/) {
 // HuntWork::Slot6 -- NOT HOOKABLE (RIP-relative CALL)
 // Thunk: sub rsp,0x28; add rcx,0x48; call CitizenAI_impl_5520; xor al,al; add rsp,0x28; ret
 // Calls BSTFindRemove on the BST at self+0x48, returns false.
+// (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int HuntWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return false;
 }
 
@@ -358,7 +387,7 @@ int HuntWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
 int HuntWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return 0;
 }
 
@@ -369,25 +398,22 @@ int HuntWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
 // For each leftmost node, cancels the work item via engine call.
 // ============================================================
 int HuntWork::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    int count = *(int*)(selfAddr + 0x50);
+    int count = _field50;
 
     while (count > 0) {
-        // Find leftmost node in BST (following +0x10 = left child)
-        void* node = *(void**)(selfAddr + 0x48);
-        void* leftmost = node;
+        // Find leftmost node in BST (following the left child, +0x10)
+        AssignmentNode* node = _field48;
+        AssignmentNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
-            node = *(void**)((uintptr_t)node + 0x10);
+            node = node->left;
         }
 
-        // Cancel the work item: get citizen entity from node key
-        uintptr_t citizenEntity = *(uintptr_t*)leftmost;
+        // Cancel the work item: the citizen's action list (CharacterComponent +0x48)
+        CitizenComponent* citizenEntity = leftmost->element;
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
-        // Navigate to citizen AI subsystem and cancel
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
-
-        count = *(int*)(selfAddr + 0x50);
+        count = _field50;
     }
     return 0;
 }
@@ -401,11 +427,8 @@ int HuntWork::Cleanup() {
 // Hook DISABLED (bug class 3 -- MOV RAX,RSP).
 // ============================================================
 int HuntWork::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
-
-    void* root = *bstRootPtr;
-    uintptr_t* removeArr = nullptr;
+    AssignmentNode* root = _field48;
+    CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
 
@@ -414,30 +437,30 @@ int HuntWork::Validate() {
     }
 
     // Find leftmost node (minimum)
-    void* node = root;
-    while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-        node = *(void**)((uintptr_t)node + 0x10);
+    AssignmentNode* node = root;
+    while (node->left != nullptr) {
+        node = node->left;
     }
 
     // In-order traversal
     while (node != nullptr) {
-        uintptr_t entityIBP = *(uintptr_t*)node;
+        CitizenComponent* entityIBP = node->element;
 
         // Validate this entity
-        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, (void*)&entityIBP, nullptr);
+        bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed
             uint32_t newCount = removeCount + 1;
             if (newCount != removeCount) {
-                uintptr_t* newArr = removeArr;
+                CitizenComponent** newArr = removeArr;
                 if ((int)removeCapacity < (int)newCount) {
                     uint32_t newCap = newCount;
                     if (removeCount != 0) {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
+                    newArr = static_cast<CitizenComponent**>(System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8));
                 }
 
                 // Copy existing entries if buffer changed
@@ -446,7 +469,7 @@ int HuntWork::Validate() {
                     copyStart = removeCount;
                 }
                 for (uint32_t i = copyStart; i < newCount; i++) {
-                    uintptr_t val;
+                    CitizenComponent* val;
                     if (i < removeCount) {
                         val = removeArr[i];
                     } else {
@@ -463,18 +486,18 @@ int HuntWork::Validate() {
         }
 
         // In-order successor: right child's leftmost descendant, or parent
-        void* rightChild = *(void**)((uintptr_t)node + 0x18);
+        AssignmentNode* rightChild = node->right;
         if (rightChild != nullptr) {
             node = rightChild;
-            while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-                node = *(void**)((uintptr_t)node + 0x10);
+            while (node->left != nullptr) {
+                node = node->left;
             }
         } else {
-            void* parent = *(void**)((uintptr_t)node + 0x08);
-            if (parent != nullptr && *(void**)((uintptr_t)parent + 0x10) != node) {
-                while (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) == node) {
+            AssignmentNode* parent = node->parent;
+            if (parent != nullptr && parent->left != node) {
+                while (parent != nullptr && parent->right == node) {
                     node = parent;
-                    parent = *(void**)((uintptr_t)parent + 0x08);
+                    parent = parent->parent;
                 }
                 node = parent;
             } else {
@@ -483,19 +506,20 @@ int HuntWork::Validate() {
         }
     }
 
-    // Remove all invalid entries from BST
+    // Remove all invalid entries from BST (keys compare unsigned; the tree helper takes
+    // the container as uintptr_t*: LEFT)
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            void* searchNode = *bstRootPtr;
+            AssignmentNode* searchNode = _field48;
             while (searchNode != nullptr) {
-                if (removeArr[i] < *(uintptr_t*)searchNode) {
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x10);
+                if (removeArr[i] < searchNode->element) {
+                    searchNode = searchNode->left;
                 } else {
-                    if (removeArr[i] <= *(uintptr_t*)searchNode) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRootPtr), searchNode);
+                    if (removeArr[i] <= searchNode->element) {
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);
                         break;
                     }
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x18);
+                    searchNode = searchNode->right;
                 }
             }
         }
@@ -508,23 +532,12 @@ int HuntWork::Validate() {
 
 // ============================================================
 // HuntWork::Slot10 / GetWorkEntity (0x1400EF5A0)
-// Returns entity from this->_field10's sub-object at +0x48.
+// The entity's (+0x10) WorkPlaceComponent (0x140002e10), its profession (+0x48) into
+// the return slot (void* in Work.h's slot: LEFT).
 // ============================================================
 void* HuntWork::GetTarget(void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
-
-    uintptr_t subIBP[2] = {0};
-    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
-    // so the returned pointer is the out buffer itself.
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
-    void* result = subIBP;
-
-
-    uintptr_t resolvedEntity = *(uintptr_t*)result;
-    *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
-
+    WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
+    *(Profession**)outPtr = workPlace->profession;
     return outPtr;
 }
 
@@ -536,7 +549,7 @@ void* HuntWork::GetTarget(void* outPtr) {
 // ============================================================
 int HuntWork::GetPriority() {
     // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
-    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
+    return _field50 > 0 ? 1 : 0;
 }
 
 
@@ -546,24 +559,20 @@ int HuntWork::GetPriority() {
 // Note: No extra int field (unlike HerbalistWork/ForesterWork).
 // ============================================================
 void HuntWork::Persist(void* stream) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create first serializer (version block, version=0)
-    alignas(8) uint8_t serializer1[24] = {0};
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
+    // Create first serializer (version block, version=0) (Persist's stream is void* in
+    // Work.h: LEFT)
+    {
+        IO::Serializer serializer1(*reinterpret_cast<IO::Stream*>(stream), 0);
+    }
 
     // Create second serializer (version=0) for BST
-    alignas(8) uint8_t serializer2[24] = {0};
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Serialize BST at self+0x48
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializer2);
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
+    // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
 }
 
 
@@ -574,15 +583,13 @@ void HuntWork::Persist(void* stream) {
 // ============================================================
 // HuntWork dtor (retail 0x1400ef680, called by slot 0 0x14002a700). The stamps and the `~Internal` call are the compiler's chain.
 HuntWork::~HuntWork() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Free BST nodes at +0x48
-    void* bstRoot = *(void**)(selfAddr + 0x48);
+    AssignmentNode* bstRoot = _field48;
     if (bstRoot != nullptr) {
         // Clean up left subtree
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
+        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->left);
         // Clean up right subtree
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->right);
         // Free root node
         {
             System::MemoryAllocator::MemFree(bstRoot);
@@ -590,14 +597,10 @@ HuntWork::~HuntWork() {
     }
 
     // Zero out BST root and count
-    *(void**)(selfAddr + 0x48) = nullptr;
-    *(uint32_t*)(selfAddr + 0x50) = 0;
+    _field48 = nullptr;
+    _field50 = 0;
 
 }
-
-
-
-
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
 HuntWork::HuntWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
