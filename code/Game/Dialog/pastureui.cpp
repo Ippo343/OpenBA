@@ -31,70 +31,7 @@
 #include "Component/PastureComponent.h"
 #include "Component/ComponentDescription.h"
 
-// ============================================================
-// File-local helper: PastureCalcMaxCount_Impl (FUN_140128570)
-// ============================================================
-// Calculates the maximum number of animals that can be grazed in the pasture.
-//
-// PastureComponent (param_1) fields used:
-//   +0x10: InternalBasePtr -> entity (for FindComponent_Build)
-//   +0x28: InternalBasePtr -> animal description entity
-//          (its component list is searched for AnimalDescription)
-//
-// BuildComponent fields used (found via entity at +0x10):
-//   +0x2c: int16 maxOccupants
-//   +0x2e: int16 currentOccupants
-//
-// AnimalDescription (found in +0x28 entity's components):
-//   +0x24: int slotsPerAnimal (how many pasture slots each animal uses)
-//
-// Formula: (maxOccupants * currentOccupants) / slotsPerAnimal
-// Returns 0 if the animal description entity is not set (null at +0x28).
-//
-// Original: FUN_140128570.
-//
-static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
-    // If no animal type set, return 0
-    if (*(uintptr_t*)(pastureComp + 0x28) == 0) return 0;
-
-    // Find BuildComponent on the entity at +0x10
-    uintptr_t entity = *(uintptr_t*)(pastureComp + 0x10);
-
-    uint64_t buildCompRet = 0;
-    fn_FindComponent_Build((void*)entity, &buildCompRet);
-    uintptr_t buildComp = buildCompRet;
-
-    int16_t maxOcc = buildComp ? *(int16_t*)(buildComp + 0x2c) : 0;
-    int16_t curOcc = buildComp ? *(int16_t*)(buildComp + 0x2e) : 0;
-
-    // Search animal description entity's components for AnimalDescription
-    uintptr_t animalEntity = *(uintptr_t*)(pastureComp + 0x28);
-
-    int compCount = *(int*)(animalEntity + 0x30);
-    uintptr_t* compArray = *(uintptr_t**)(animalEntity + 0x28);
-    uint32_t animalDescTypeId = AnimalDescription::TypeId();
-
-    void* animalDesc = nullptr;
-    for (int i = 0; i < compCount; i++) {
-        uintptr_t compIPtr = compArray[i];
-        void* comp = (void*)compIPtr;
-        if (!comp) continue;
-        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if (typeId == (int)animalDescTypeId) {
-            bool isAnimalDesc = ::Object::IsDerivedFromNullSafe(comp, animalDescTypeId);
-            if (isAnimalDesc) { animalDesc = comp; break; }
-        }
-    }
-
-    if (!animalDesc) return 0;
-    int slotsPerAnimal = *(int*)((uintptr_t)animalDesc + 0x24);
-    if (slotsPerAnimal == 0) return 0;
-    return (uint32_t)((int)(maxOcc * curOcc) / slotsPerAnimal);
-}
-
-// LEFT (B4 DLG-c): PastureCalcMaxCount_Impl (a second body of
-// PastureComponent::ComputeCapacity, retail 0x140128570, with two guards of the
-// tree's) stays raw; the citizen list's resource array (+0xF0 +0x120) is read
+// LEFT (B4 DLG-c): the citizen list's resource array (+0xF0 +0x120) is read
 // through GameUpdateLoop::m_citizenList (void*, GAME-a); the resource type
 // crosses SelectResourceUI's int64_t SetResource / void* GetResource (DLG-a).
 
@@ -104,7 +41,7 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
 // Finds PastureComponent on the data-source entity.
 // Updates the slider element (+0x38):
 //   _minimum = 0
-//   _maximum = (float)PastureCalcMaxCount
+//   _maximum = (float)PastureComponent::ComputeCapacity
 //   _value   = (float)pastureComp->currentAnimalCount (+0x40)
 //
 // Original: FUN_1400b4fa0.
@@ -128,8 +65,8 @@ void PastureUI::UpdateSlider() {
     // Set slider min to 0
     slider->_minimum = 0.0f;
 
-    // Set slider max = PastureCalcMaxCount
-    uint32_t maxCount = PastureCalcMaxCount_Impl((uintptr_t)pasture);
+    // Set slider max = PastureComponent::ComputeCapacity (0x140128570)
+    uint32_t maxCount = (uint32_t)pasture->ComputeCapacity();
     slider->_maximum = (float)(int)maxCount;
 
     // Set slider current = the pasture's capacity (+0x40)
@@ -269,7 +206,7 @@ void PastureUI::SetResource(int64_t param2) {
     pasture->livestockType = newType;
 
     // Recalculate max animal count from pasture dimensions
-    uint32_t maxCount = PastureCalcMaxCount_Impl((uintptr_t)pasture);
+    uint32_t maxCount = (uint32_t)pasture->ComputeCapacity();
     pasture->capacity = (int32_t)maxCount;
 
     // Update slider display
