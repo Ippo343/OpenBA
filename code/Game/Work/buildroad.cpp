@@ -24,6 +24,14 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/RawMaterialComponent.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/StorageComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/ProfessionList.h"
 
 // ============================================================
 // Helpers this file reaches (ENDGAME B.3.8, B38_RULES D7)
@@ -97,22 +105,21 @@ void BuildRoad::Persist(void* stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create IO::Serializer with version 1
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    // Create IO::Serializer with version 1 (destroyed at the end, as retail)
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge (Persist's stream is void*)
 
     // Serialize road type (+0x5c) through the UINT door. Serializer+0x08 is the
     // READERWRITER, not the stream (the Stream is at +0x00), and its vtable
     // +0x98 is rw_vtbl::kScalarUInt. The old two-argument call form left the
     // `const char* name` register unset; every retail body ignores it, so
     // passing nullptr is wire-identical.
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(&field_5c), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    serializer.Serialize(*reinterpret_cast<unsigned int*>(&field_5c), nullptr);   // an int through the uint door (0x98), as retail
 
     // Serialize cell index (+0x58) via IO::Serializer::Serialize
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_58), nullptr);   // B.3.4 bridge
+    serializer.Serialize(field_58, nullptr);
 
     // InternalBasePtr::Serialize for entity ref (+0x48)
-    reinterpret_cast<Object::InternalBasePtr*>(&field_48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&field_48)->Serialize(serializer);   // B.3.4 bridge
 
     // Validate entity ref type after deserialize
     if (field_48 != nullptr) {
@@ -124,10 +131,10 @@ void BuildRoad::Persist(void* stream) {
     }
 
     // ExternalPtr serialize for building description (+0x50)
-    Reimpl_ExternalPtr_Serialize_StringTable(&field_50, serializerBuf);
+    Reimpl_ExternalPtr_Serialize_StringTable(&field_50, &serializer);
 
     // Version-dependent fields
-    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    int version = serializer.GetVersion();
     if (version < 1) {
         // Default values for old save format
         field_60 = 0xff;
@@ -135,12 +142,10 @@ void BuildRoad::Persist(void* stream) {
         field_68 = 2;
     } else {
         // Serialize material fields
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_60), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_64), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_68), nullptr);   // B.3.4 bridge
+        serializer.Serialize(field_60, nullptr);
+        serializer.Serialize(field_64, nullptr);
+        serializer.Serialize(field_68, nullptr);
     }
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -148,10 +153,8 @@ void BuildRoad::Persist(void* stream) {
 // Clears target entity ref, returns (param4 == 1).
 // ============================================================
 int BuildRoad::OnComplete(void* /*citizen*/, void* /*arg2*/, int param4) {
-    // Clear entity ref: InternalBasePtr_Ctor(temp, NULL) then store to +0x48
-    uintptr_t temp = 0;
-    new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    field_48 = (void*)temp;
+    // Clear the citizen ref (the InternalBasePtr ctor with null)
+    field_48 = nullptr;
 
     return (param4 == 1) ? 1 : 0;
 }
@@ -161,9 +164,7 @@ int BuildRoad::OnComplete(void* /*citizen*/, void* /*arg2*/, int param4) {
 // Clears target entity ref.
 // ============================================================
 int BuildRoad::OnCancel(void*, void*, int) {
-    uintptr_t temp = 0;
-    new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    field_48 = (void*)temp;
+    field_48 = nullptr;   // the InternalBasePtr ctor with null
     return 0;
 }
 
@@ -175,12 +176,8 @@ int BuildRoad::OnCancel(void*, void*, int) {
 int BuildRoad::Cleanup() {
     if (field_48 == nullptr) return 0;
 
-    uintptr_t entity = (uintptr_t)field_48;
-
-    uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
-
-    // Call task list cleanup: FUN_1400c5400(smComp + 0x48)
-    WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
+    // The citizen's CharacterComponent (+0x278) action list (+0x48)
+    WorkBase_TaskListCleanup_c5400(&field_48->character->actions);
     return 0;
 }
 
@@ -190,17 +187,15 @@ int BuildRoad::Cleanup() {
 // Uses shared Work::ValidateTask helper (FUN_1400f7100).
 // ============================================================
 int BuildRoad::Validate() {
-    uintptr_t entityRef = (uintptr_t)field_48;
+    CitizenComponent* entityRef = field_48;
 
-    if (entityRef != 0) {
-        // Call shared validate helper with entity ref
-        uintptr_t ibpCopy[1] = { entityRef };
-        uint8_t result = WorkBase_ValidateTask_f7100(this, nullptr, ibpCopy, nullptr);
+    if (entityRef != nullptr) {
+        // Call shared validate helper with a copy of the citizen ref
+        CitizenComponent* ibpCopy = entityRef;
+        uint8_t result = WorkBase_ValidateTask_f7100(this, nullptr, &ibpCopy, nullptr);
         if (result == 0) {
-            // Task invalid — clear entity ref
-            uintptr_t temp = 0;
-            new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            field_48 = (void*)temp;
+            // Task invalid — clear the citizen ref
+            field_48 = nullptr;
             return 0;
         }
     }
@@ -214,9 +209,8 @@ int BuildRoad::Validate() {
 // NOT HOOKED — RIP-relative prologue (bug class 2).
 // ============================================================
 void* BuildRoad::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t roadMgr = *(uintptr_t*)(gameWorld + 0xb0);
-    *(uintptr_t*)retbuf = *(uintptr_t*)(roadMgr + 0x38);
+    // The profession list's +0x38 profession (GameUpdateLoop::m_professionList)
+    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x38;
     return retbuf;
 }
 
@@ -237,11 +231,10 @@ int BuildRoad::GetPriority() {
 // Returns: 1 = retry/not ready, 2 = action pushed
 // ============================================================
 
-// Helper: get position data from entity IBP chain
-static uintptr_t GetPositionData(void* entityIBP) {
-    uintptr_t entity = *(uintptr_t*)entityIBP;
-    uintptr_t comp278 = *(uintptr_t*)(entity + 0x278);
-    return *(uintptr_t*)(comp278 + 0x68);
+// Helper: the citizen's position data: CharacterComponent (+0x278) -> ModelComponent
+// (+0x68). The transform is raw storage (H5): its float reads are LEFT.
+static uintptr_t GetPositionData(CitizenComponent** entityIBP) {
+    return reinterpret_cast<uintptr_t>((*entityIBP)->character->modelComponent);
 }
 
 // Helper: convert position data to clamped map cell index
@@ -269,21 +262,20 @@ static Math::Vector3 CellToWorldVec3(int* mapGrid, int cellIndex) {
 }
 
 // Shared epilogue: finalize action on citizen entity
-static int FinalizeAction(BuildRoad* self, void* entityIBP, void* actionIBP, int priority) {
-    uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
+static int FinalizeAction(BuildRoad* self, CitizenComponent** entityIBP, void* actionIBP, int priority) {
+    CitizenComponent* citizenEntity = *entityIBP;
 
-    uint64_t* result = static_cast<uint64_t*>(self->GetTarget(actionIBP));
+    Profession* actionPtr = *static_cast<Profession**>(self->GetTarget(actionIBP));
 
-    uint64_t actionPtr = *result;
-    *(int32_t*)(citizenEntity + 0x30) = priority;
-    *(uint32_t*)(citizenEntity + 0x54) |= 4;
-    *(int32_t*)(citizenEntity + 0xb0) = 0;
+    citizenEntity->field_0x30 = priority;
+    citizenEntity->statusFlags |= 4;
+    citizenEntity->field_0xB0 = 0;
 
-    if (actionPtr == *(uint64_t*)(citizenEntity + 0x1f0) && priority >= 0) {
-        *(uint32_t*)(citizenEntity + 0x88) |= 0x20000;
+    if (actionPtr == citizenEntity->profession && priority >= 0) {
+        citizenEntity->happinessFlags |= 0x20000;
     }
 
-    self->field_48 = *(void**)entityIBP;
+    self->field_48 = *entityIBP;
     return 2;
 }
 
@@ -295,13 +287,18 @@ long long g_brExecNatResWait   = 0;   // blocked by a natural resource (tree/sto
 long long g_brExecClearPath    = 0;   // the plain "walk there and build it" branch
 }
 
-int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
+int BuildRoad::Execute(void* entityIBPArg, void* /*context*/) {
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** entityIBP = reinterpret_cast<CitizenComponent**>(entityIBPArg);
+
     if (field_48 != nullptr) {
         return 1;
     }
 
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
+    // (GameUpdateLoop m_game / m_citizenList / +0x118 are still void*: LEFT)
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    int* mapGrid = (int*)gameWorld->m_game;
 
     uintptr_t posData = GetPositionData(entityIBP);
     int mapSize = *mapGrid;
@@ -316,23 +313,21 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
     }
 
     uintptr_t structArrayBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
-    int64_t structEntity = *(int64_t*)(structArrayBase + 8 + (int64_t)targetCell * 0x30);
+    ComponentEntity* structEntity = *(ComponentEntity**)(structArrayBase + 8 + (int64_t)targetCell * 0x30);
 
-    if (structEntity != 0) {
+    if (structEntity != nullptr) {
         ++g_brExecStructOnCell;
-        uint64_t rawMatComp = 0;
-        ActRm_FindComponent_223c0(structEntity, &rawMatComp);
+        RawMaterialComponent* rawMatComp = structEntity->FindComponent<RawMaterialComponent>();
 
-        if (rawMatComp != 0) {
-            uint64_t workComp = 0;
-            WorkBase_FindComponent_3050(structEntity, &workComp);
+        if (rawMatComp != nullptr) {
+            WorkComponent* workComp = structEntity->FindComponent<WorkComponent>();
 
             // WorkComponent+0x28 = the scheduler work id for the pile blocking this
             // cell, NOT a worker count; it is what gets handed to the scheduler below.
-            int workId = *(int*)(*(uintptr_t*)&workComp + 0x28);
-            uint64_t citizenRef = *(uint64_t*)entityIBP;
+            int workId = workComp->workId;
+            CitizenComponent* citizenRef = *entityIBP;
 
-            uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
+            uintptr_t assignMgr = (uintptr_t)gameWorld->m_tutorial;
             uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;
@@ -340,17 +335,16 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
             return 1;
         }
 
-        uint64_t natResComp = 0;
-        WorkBase_FindComponent_52c0(structEntity, &natResComp);
+        NaturalResourceComponent* natResComp = structEntity->FindComponent<NaturalResourceComponent>();
 
-        if (natResComp == 0) {
+        if (natResComp == nullptr) {
             return 1;
         }
         ++g_brExecNatResWait;
 
-        WorkBase_FindComponent_52c0(structEntity, &natResComp);
+        natResComp = structEntity->FindComponent<NaturalResourceComponent>();
 
-        uint32_t bsFlags = *(uint32_t*)(*(uintptr_t*)&natResComp + 0x20);
+        uint32_t bsFlags = natResComp->_flags;
         if ((bsFlags >> 20) & 1) {
             return 1;
         }
@@ -375,8 +369,8 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         float terrainPos[4] = {};
         Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
-        uint64_t targetRef = natResComp;
-        uint64_t citizenRef = *(uint64_t*)entityIBP;
+        NaturalResourceComponent* targetRef = natResComp;
+        CitizenComponent* citizenRef = *entityIBP;
 
         WorkAct_PerformWorkCtor_c1eb0(
             &citizenRef, field_20, &targetRef, terrainPos, 0, 0);
@@ -387,8 +381,7 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
 
     if ((int64_t)field_50 == 0) {
         ++g_brExecClearPath;
-        uint64_t actionRef = 0;
-        new (&actionRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        int64_t actionRef = 0;   // a null InternalBasePtr
 
         float velocity[3] = { 0.0f, 0.0f, 0.0f };
         Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
@@ -396,28 +389,26 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
         float terrainPos[4] = {};
         Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
-        uint64_t citizenRef = *(uint64_t*)entityIBP;
+        CitizenComponent* citizenRef = *entityIBP;
 
         WorkAct_PerformWorkCtor_bffd0(
-            &citizenRef, field_20, reinterpret_cast<uint32_t*>((void*)terrainPos),
+            &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),
             (uint64_t)(uint32_t)targetCell,
-            *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1, 0, 0,
-            velocity, reinterpret_cast<int64_t*>(&actionRef));
+            (uint32_t)field_5c, 0xff, 1, 0, 0,
+            velocity, &actionRef);
 
         int priority = field_20;
         return FinalizeAction(this, entityIBP, &actionRef, priority);
 
     } else {
-        uint64_t homeEntity = *(uint64_t*)(*(uintptr_t*)entityIBP + 0x10);
+        // The citizen's entity (+0x10) storage, through the guarded finder
+        StorageComponent* storageComp = nullptr;
+        fn_FindComponent_Storage((*entityIBP)->_entity, &storageComp);
 
-        uint64_t storageComp = 0;
-        fn_FindComponent_Storage((void*)(uintptr_t)homeEntity, &storageComp);
-
-        int available = StorageComponent_QueryAvailable(reinterpret_cast<void*>(storageComp), (int64_t)field_50);
+        int available = StorageComponent_QueryAvailable(storageComp, (int64_t)field_50);
 
         if (available > 0) {
-            uint64_t actionRef = 0;
-            new (&actionRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            int64_t actionRef = 0;   // a null InternalBasePtr
 
             float velocity[3] = { 0.0f, 0.0f, 0.0f };
             Math::Vector3 worldPos = CellToWorldVec3(mapGrid, targetCell);
@@ -425,20 +416,20 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
             float terrainPos[4] = {};
             Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
-            uint64_t citizenRef = *(uint64_t*)entityIBP;
+            CitizenComponent* citizenRef = *entityIBP;
 
             WorkAct_PerformWorkCtor_bffd0(
-                &citizenRef, field_20, reinterpret_cast<uint32_t*>((void*)terrainPos),
+                &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),
                 (uint64_t)(uint32_t)targetCell,
-                *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1,
-                (int64_t)field_50, 0, velocity, reinterpret_cast<int64_t*>(&actionRef));
+                (uint32_t)field_5c, 0xff, 1,
+                (int64_t)field_50, 0, velocity, &actionRef);
 
             int priority = field_20;
             return FinalizeAction(this, entityIBP, &actionRef, priority);
 
         } else {
-            mapGrid = *(int**)(gameWorld + 0xf8);
-            void** citizenList = *(void***)(gameWorld + 0xf0);
+            mapGrid = (int*)gameWorld->m_game;
+            void** citizenList = (void**)gameWorld->m_citizenList;
 
             posData = GetPositionData(entityIBP);
             mapSize = *mapGrid;
@@ -463,10 +454,11 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
                 return 1;
             }
 
-            int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(*(uintptr_t*)entityIBP);
+            int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(*entityIBP));
 
+            // (0x140006330 returns a RawMaterialDescription whose +0x48 is the weight)
             if (remainingCapacity < *(int32_t*)(foundStorageIBP + 0x48)) {
-                CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)entityIBP));
+                CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*entityIBP));
                 return 2;
             }
 
@@ -477,12 +469,12 @@ int BuildRoad::Execute(void* entityIBP, void* /*context*/) {
             float terrainPos[4] = {};
             Reimpl_MapGetTerrainPos(mapGrid, terrainPos, &worldPos.x, '\0', nullptr);
 
-            uint64_t citizenRef = *(uint64_t*)entityIBP;
+            CitizenComponent* citizenRef = *entityIBP;
 
             WorkAct_PerformWorkCtor_bffd0(
-                &citizenRef, field_20, reinterpret_cast<uint32_t*>((void*)terrainPos),
+                &citizenRef, field_20, reinterpret_cast<uint32_t*>(terrainPos),
                 (uint64_t)(uint32_t)targetCell,
-                *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1,
+                (uint32_t)field_5c, 0xff, 1,
                 (int64_t)field_50, 1, velocity, reinterpret_cast<int64_t*>(&foundStorageIBP));
 
             int priority = field_20;

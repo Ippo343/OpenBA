@@ -24,6 +24,8 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class CitizenComponent;
+
 
 class BuildRoad final : public Work {
     DECLARE_EXE_TYPE(BuildRoad)
@@ -46,7 +48,8 @@ public:
     int   GetPriority() override;                                       // [11] 0x1400295a0
 
     // --- BuildRoad fields (+0x48) ---
-    void*    field_48;           // +0x48: InternalBasePtr — target entity (zeroed)
+    CitizenComponent* field_48;  // +0x48: InternalPtr<CitizenComponent> — the assigned citizen (zeroed;
+                                 //        Persist 0x1400e4980 validates it against CitizenComponent)
     void*    field_50;           // +0x50: ExternalPtr — building description (zeroed)
     int32_t  field_58;           // +0x58: map cell index (-1 sentinel)
     int32_t  field_5c;           // +0x5C: road type (2 = default)
