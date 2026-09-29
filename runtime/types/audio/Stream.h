@@ -29,10 +29,9 @@
 // inside `Audio::Device` by `Ctor_AudioDevice` (runtime/src/engine/
 // singleton_ctors.cpp) as `::new (dev + 0xa00) Audio::Stream()`, and torn down
 // by `Engine::Shutdown` with `~Stream()`. The `??0` / `??1` doors, the minted
-// `??_7Stream@Audio@@6B@` and the `?Run@` slot door are retired. The Device is a POD in this step
-// and holds the `RtAudio::Stream` POD below (B4b-3), cross-asserted field for
-// field against the class. The same shape as `Engine::Loader`
-// (runtime/types/engine/UpdateLoop.h).
+// `??_7Stream@Audio@@6B@` and the `?Run@` slot door are retired. B.4 R-ENG:
+// `Audio::Device::_stream` is this class; the `RtAudio::Stream` POD below is
+// kept only for tests/unit/audio_abi_test.cpp, which names it.
 //
 // THREADS (RULE B7-7): `Run` executes on the AUDIO STREAM WORKER (a
 // `_beginthreadex` thread); `Play` / `Stop` / `Lock` / `Unlock` run on the main
@@ -55,7 +54,8 @@
 namespace RtAudio {
 
 // ----------------------------------------------------------------------------
-// RtAudio::Stream — the POD (B4b-3): what `Audio::Device` embeds at +0xa00.
+// RtAudio::Stream — the POD (B4b-3), cross-asserted field for field against
+// the class. No product code names it (tests/unit/audio_abi_test.cpp does).
 // ----------------------------------------------------------------------------
 struct Stream {
     RtSystem::Thread _thread;           // +0x00 .. +0x2f (vtable, runFlags, 4 HANDLEs)

@@ -278,8 +278,7 @@ float Scene::GetAttenuatedVolume(const AttenutedEffect& effect, const Vector3& l
 
     // FAITHFUL UNGUARDED DEREF of the effect's SoundEffect (+0x10). B.3.7: the
     // two floats are `SoundEffect::GetRadius` / `GetInnerRadius` (+0x20/+0x24).
-    const SoundEffect* const def =
-        reinterpret_cast<const SoundEffect*>(eff->soundEffectRef);   // B.3.7 bridge
+    const SoundEffect* const def = eff->soundEffectRef.Get();
 
     const float f20 = def->_radius;               // maxDistanceBase
     const float f24 = def->_innerRadius;          // minDistance
@@ -295,8 +294,7 @@ float Scene::GetAttenuatedVolume(const AttenutedEffect& effect, const Vector3& l
         // TEST EAX,EAX / JNZ not taken: the effect's OWN position is used.
         ++g_attenSingle;
         // The slot's own position (+0x00..+0x0b) read as a Vector3.
-        best = GetVolumeForPosition(*reinterpret_cast<const Vector3*>(&eff->posX),   // B.3.7 bridge
-                                    maxDist, minDist, listenerPos);
+        best = GetVolumeForPosition(eff->pos, maxDist, minDist, listenerPos);
     } else if (count > 0) {
         // JLE after the JNZ: a NEGATIVE count skips the loop and leaves best=0.
         const EmitterInstance* e = eff->positions._data;
@@ -305,8 +303,7 @@ float Scene::GetAttenuatedVolume(const AttenutedEffect& effect, const Vector3& l
             // MULSS XMM0,[RDI] where RDI = element + 0xc -- the per-emitter
             // volume, applied to THIS candidate before the comparison.
             const float v =
-                GetVolumeForPosition(*reinterpret_cast<const Vector3*>(&e->x),       // B.3.7 bridge
-                                     maxDist, minDist, listenerPos) * e->volume;
+                GetVolumeForPosition(e->position, maxDist, minDist, listenerPos) * e->volume;
             // COMISS/JBE: strictly greater, and a NaN candidate is discarded.
             if (v > best) best = v;
         }
@@ -333,22 +330,17 @@ void Scene::OnSoundEnded(Device::AudioChannel* audioChannel, void* userData, uin
     // MOV EAX,R8D / SHR EAX,1 / MOVZX R11D,AL -- a BYTE, so the index is
     // (tag>>1)&0xff and nothing wider. IMUL by 0x70 = sizeof(Channel).
     const uint32_t index = static_cast<uint8_t>(tag >> 1);
-    uint8_t* const ch =
-        reinterpret_cast<uint8_t*>(scene->channels._data) +
-        static_cast<uint64_t>(index) * 0x70u;
+    Channel* const ch = &scene->channels._data[index];
 
     // MOV EAX,[R11+0x68] / XOR EAX,R8D / TEST EAX,0xfffffe00 / JNZ
-    uint32_t storedTag;
-    std::memcpy(&storedTag, ch + 0x68, sizeof(storedTag));
+    const uint32_t storedTag = ch->handleTag;
     if (((storedTag ^ tag) & 0xfffffe00u) != 0) { ++g_endedRejected; return; }
 
     // The 8-slot linear search over platformChannel[], +0x20 stride 8.
     // `CMP RCX,0x8 / JL` -- eight iterations, indices 0..7.
     int32_t found = -1;                                  // OR R8D,0xffffffff
     for (int32_t i = 0; i < 8; ++i) {
-        void* slot;
-        std::memcpy(&slot, ch + 0x20 + static_cast<size_t>(i) * 8, sizeof(slot));
-        if (slot == audioChannel) { found = i; break; }  // JZ found
+        if (ch->platformChannel[i] == audioChannel) { found = i; break; }  // JZ found
     }
 
     if (found >= 0) ++g_endedFound; else ++g_endedNotFound;
@@ -359,7 +351,7 @@ void Scene::OnSoundEnded(Device::AudioChannel* audioChannel, void* userData, uin
     // *** that is the MSB of platformChannel[7]. See the header. RETAIL DOES
     // *** THIS; it is transcribed, not guarded. The `int64_t` cast is the
     // *** MOVSXD -- an unsigned index here would address +0x60+0xFFFFFFFF.
-    uint8_t* const flagByte = ch + 0x60 + static_cast<int64_t>(found);
+    uint8_t* const flagByte = &ch->channelFlags[static_cast<int64_t>(found)];
     *flagByte = static_cast<uint8_t>(*flagByte | 0x02u);   // OR byte, NOT dword
 }
 // ---- registration ----------------------------------------------------------

@@ -54,7 +54,7 @@ bool RtLaneXEnsureAllocatorPlatform() {
 // Defined here, declared in singleton_ctors.cpp. Not a general seam: this lane
 // is the only caller and the two calls are one retail body's, verbatim.
 void RtLaneXPlatformLockInit(void* cs) {
-    InitializeCriticalSection(static_cast<CRITICAL_SECTION*>(cs));
-    SetCriticalSectionSpinCount(static_cast<CRITICAL_SECTION*>(cs), 0x1388);
+    InitializeCriticalSection(static_cast<CRITICAL_SECTION*>(cs));   // CAST-OK: win32
+    SetCriticalSectionSpinCount(static_cast<CRITICAL_SECTION*>(cs), 0x1388);   // CAST-OK: win32
 }
 

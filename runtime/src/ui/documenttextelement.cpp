@@ -150,7 +150,7 @@ void ReleaseString(char** slot) {
 // division is what the bytes do — and because `_secondsPerTick` being zero
 // would make it a NaN there too.
 void PlayInline(UI::UserInterface* ui, int soundIndex) {
-    void* sound = ui->_sounds[soundIndex];
+    ::Audio::SoundEffect* sound = ui->_sounds[soundIndex];
     if (sound == nullptr) return;
     // LEFT: UserInterface::_audioScene is void* (UserInterface.h, R-UI-b).
     ::Audio::Scene* scene = static_cast<::Audio::Scene*>(ui->_audioScene);
@@ -161,9 +161,8 @@ void PlayInline(UI::UserInterface* ui, int soundIndex) {
     for (int64_t i = 0; i < 0x100; ++i) {
         ::Audio::Scene::Channel& v = voices[i];
         if (v.handleTag != 0) continue;
-        // LEFT: Channel::soundEffectRef is a uint64_t (Audio.h, R-ENG).
-        v.soundEffectRef = reinterpret_cast<uint64_t>(sound);
-        v.startTime = start;
+        v.soundEffectRef = sound;
+        v.startTime._ticks = start;
         v.soundType = 1;
         scene->playGeneration += 1;
         v.handleTag = static_cast<uint32_t>(static_cast<int32_t>(i) * 2 | (scene->playGeneration << 9));

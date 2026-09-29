@@ -251,7 +251,7 @@ void ParticleComponent::Place(int index) {
     int64_t t0 = em.prewarm._ticks;
     if (t0 > 0 && ::Engine::MainLoop::_singleton) {
         System::Time step;
-        step._ticks = ::Engine::MainLoop::_singleton->_deltaTime;
+        step._ticks = ::Engine::MainLoop::_singleton->_deltaTime._ticks;
         if (step._ticks > 0) {
             for (int64_t acc = step._ticks; ; acc += step._ticks) {
                 static_cast<Graphics::Geometry*>(inst)->Update(step);   // slot 1

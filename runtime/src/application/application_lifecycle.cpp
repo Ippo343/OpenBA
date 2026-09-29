@@ -131,20 +131,18 @@ extern "C" Node* RtApp_SetAllocNode(void* unused, const void* src, Node* parent)
 // in all three bodies below; the offset is asserted against the header rather
 // than repeated as a literal.
 // ---------------------------------------------------------------------------
-static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, root)
+static_assert(offsetof(App, _messageCallbacks) + offsetof(Set, root)
                   == 0x18, "Application's Set::root must land at +0x18");
-static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, count)
+static_assert(offsetof(App, _messageCallbacks) + offsetof(Set, count)
                   == 0x20, "Application's Set::count must land at +0x20");
-static_assert(offsetof(App, _messageCallbackCount) == 0x20,
-              "...and the header's own name for that dword must be the same field");
 
 namespace {
 
 inline Set* SetOf(App* a) {
-    return reinterpret_cast<Set*>(reinterpret_cast<uint8_t*>(a) + 0x18);
+    return &a->_messageCallbacks;   // +0x18
 }
 inline const Set* SetOf(const App* a) {
-    return reinterpret_cast<const Set*>(reinterpret_cast<const uint8_t*>(a) + 0x18);
+    return &a->_messageCallbacks;
 }
 
 // ---------------------------------------------------------------------------

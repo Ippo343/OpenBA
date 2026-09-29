@@ -100,12 +100,9 @@
 
 #include "../../types/achievement/Goal.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
 #include "../../types/object/External.h"
 
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
 
 namespace {
 
@@ -118,46 +115,13 @@ RtObject::External** AsExt(void* p) {
     return reinterpret_cast<RtObject::External**>(p);   // B.3.x bridge
 }
 
-// The shared prologue of both bodies, transcribed once.
-//
-//   Serializer ser{ &stream, nullptr };
-//   Encoding* enc = stream.encoding;                       // [stream+0x10]
-//   ser.readerWriter = stream.direction == 0               // [stream+0x08]
-//        ? enc->vtable[+0x18](enc, &ser, 0)                // CreateReader
-//        : enc->vtable[+0x20](enc, &ser, 0);               // CreateWriter
-//
-// The third argument is the save-format VERSION and it is ZERO here: retail
-// zeroes R8D at 0x18009ee44 / 0x18009ef94 for the `CMP [stream+8],R8D` and
-// never reloads it before the factory call.
-// The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable (Serializer.h); the members are called by name on the class.
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-
-    Encoding* enc = stream->encoding;
-    void** encVt = enc->vtable;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-// The shared epilogue: `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING
-// destructor (flag 1), which is how retail frees the codec the factory just
-// allocated. Skipping it leaks 0x30 bytes per Serialize.
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    delete AsRw(rw);
-}
+// B.4 (R-ENG): the shared prologue (stream, null readerWriter,
+// `enc->vtable[+0x18 / +0x20](enc, &ser, 0)`) and epilogue (`if (rw) delete
+// rw`, the scalar deleting dtor with flag 1) of both bodies ARE
+// `IO::Serializer(Stream&, 0)` / `~Serializer` (serializer_class.cpp). The
+// version is ZERO: retail zeroes R8D at 0x18009ee44 / 0x18009ef94 and never
+// reloads it before the factory call. The ExternalPtr bodies still take the
+// `rt::io::Serializer` POD view of the same bytes (object/External.h).
 
 }  // namespace
 
@@ -178,15 +142,13 @@ namespace Achievement {
 // (External.h); the object behind it is retail's `IO::Stream`.
 // ============================================================================
 bool Goal::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
+    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 0);
 
-    RtObject_ExternalPtrSerialize_StringTable(AsExt(&_stringTable), &ser);   // 0x1800042a0, Goal+0x20
+    RtObject_ExternalPtrSerialize_StringTable(                      // 0x1800042a0, Goal+0x20
+        AsExt(&_stringTable), reinterpret_cast<rt::io::Serializer*>(&ser));
     _text.Serialize(&ser);                                          // Goal+0x28
 
-    DestroyCodec(rw);
-    return true;
+    return true;   // ~Serializer deletes the ReaderWriter
 }
 
 // ============================================================================
@@ -202,16 +164,13 @@ bool Goal::Serialize(void* streamv) {
 // from it). The record's NAME argument is NULL (`XOR R8D,R8D` at 0x18009efcc).
 // ============================================================================
 void GoalInstance::Persist(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
+    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 0);
 
-    RtObject_ExternalPtrSerialize_Goal(AsExt(&_goal), &ser);        // 0x180005dc0, GoalInstance+0x18
+    RtObject_ExternalPtrSerialize_Goal(                             // 0x180005dc0, GoalInstance+0x18
+        AsExt(&_goal), reinterpret_cast<rt::io::Serializer*>(&ser));
 
-    AsRw(rw)->SerializeUInt(_flags, nullptr);                       // GoalInstance+0x10, +0x98
-
-    DestroyCodec(rw);
-}
+    ser._readerWriter->SerializeUInt(_flags, nullptr);              // GoalInstance+0x10, +0x98
+}   // ~Serializer deletes the ReaderWriter
 
 }  // namespace Achievement
 

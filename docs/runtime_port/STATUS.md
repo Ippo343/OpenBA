@@ -20,6 +20,16 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.4 (THE CAST METRIC) IN PROGRESS — paused 2026-09-29.** Scope set by the user: the dangerous
+  casts go completely (any spelling of a read by offset or of a `void*` / integer receiver
+  reinterpreted as a class), only safe casts stay; the differences from retail found on the way are a
+  separate task (`docs/known_port_issues.md` 13, 14). Metric (`endgame_b/b4_session/castmetric.py`, every
+  spelling summed): **46,226 to remove at block 0 -> 24,792** at `c7ec34a1`; 26 gated merges, 0 problems;
+  invariants unchanged. First pass merged: W0, T, runtime UI / IO / Graphics / Video, Component a-f,
+  Dialog a-c and e, Work a, Game a. Running when paused: ACT-a, DLG-d, R-ENG, WORK-b, WORK-c. Not
+  started: ACT-b, GAME-b, GAME-c, PLAYER, TUT, R-CORE, STANDALONE, tests; then the second pass, the
+  closing wave (forwarders), the audit and the close. **How to resume: `endgame_b/NEXT_SESSION.md`.**
+  Rule sheet `endgame_b/B4_RULES.md`, kit and gate table `endgame_b/b4_session/`.
 - **REGISTRY TEARDOWN CLOSED (2026-09-28) — ENDGAME B.2 is finished:** nothing registers a body under a
   retail name or address and nothing resolves one. **Deleted:** `standalone/address_registry.{cpp,h}`, all
   127 `standalone/reg_*.cpp`, `resolve.h` / `resolve_standalone.cpp`, `runtime/funcs/rt_port.h` and

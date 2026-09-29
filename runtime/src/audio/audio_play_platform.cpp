@@ -199,6 +199,9 @@
 // this file does the same, for the same reason.
 // ============================================================================
 
+#include <windows.h>
+#include <xaudio2.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -213,22 +216,9 @@ namespace {
 
 // ENDGAME B.3.7 block B4: the `kOffXAudio2` / `kVoiceCallback*` /
 // `kDeviceStreamOffset` and `kSb*` byte offsets MOVED into
-// runtime/types/audio/Device.h and SoundBuffer.h (B6-8). What stays here is
-// the WAVEFORMATEX window inside `SoundBuffer::_format` (+0x54), read at the
-// standard WAVEFORMATEX offsets.
-constexpr int kWfChannels       = 0x02;   // WORD  nChannels
-constexpr int kWfSamplesPerSec  = 0x04;   // DWORD nSamplesPerSec
-constexpr int kWfBlockAlign     = 0x0c;   // WORD  nBlockAlign
-constexpr int kWfBitsPerSample  = 0x0e;   // WORD  wBitsPerSample
-
-// ---- XAudio2 (2.7) vtable byte offsets used by THIS body, each pinned by the
-// argument shapes in the banner (not by a header this project does not carry)
-constexpr int kEngineCreateSourceVoice = 0x40;
-constexpr int kVoiceSubmitSourceBuffer = 0xa8;
-constexpr int kVoiceSetVolume          = 0x60;
-constexpr int kVoiceSetFrequencyRatio  = 0xd0;
-constexpr int kVoiceStart              = 0x98;
-constexpr int kVoiceDestroy            = 0x90;
+// runtime/types/audio/Device.h and SoundBuffer.h (B6-8). B.4 R-ENG: the
+// WAVEFORMATEX inside `SoundBuffer::_format` (+0x54) and the XAudio2 2.7 calls
+// are read through `<xaudio2.h>`'s own types.
 
 constexpr uint32_t kXAudio2EndOfStream = 0x40;
 constexpr uint32_t kXAudio2LoopInfinite = 0xffffffffu;
@@ -252,8 +242,11 @@ struct PlayPlatformSummary {
 };
 PlayPlatformSummary g_summary;
 
-template <typename T> inline T Load(const void* p, int off) {
-    T v; std::memcpy(&v, static_cast<const uint8_t*>(p) + off, sizeof(T)); return v;
+// The WAVEFORMATEX a SoundBuffer embeds at +0x54 (`Format()` 0x18000bcb0 is
+// `LEA RAX,[RCX+0x54]`). SoundBuffer.h cannot include <windows.h>, so the
+// field is its raw bytes and this is the one view of them.
+const WAVEFORMATEX* FormatOf(const Audio::SoundBuffer* buf) {
+    return reinterpret_cast<const WAVEFORMATEX*>(buf->_format);  // CAST-OK: win32
 }
 
 double SecondsPerTick() {
@@ -266,33 +259,6 @@ double SecondsPerTick() {
 float PowF(float base, float exponent) {
     return RtCrt_Powf(base, exponent);
 }
-
-// The XAUDIO2_BUFFER shape this body builds, standard field order/sizes.
-struct Xa2Buffer {
-    uint32_t    flags;        // +0x00
-    uint32_t    audioBytes;   // +0x04
-    const void* audioData;    // +0x08
-    uint32_t    playBegin;    // +0x10
-    uint32_t    playLength;   // +0x14
-    uint32_t    loopBegin;    // +0x18
-    uint32_t    loopLength;   // +0x1c
-    uint32_t    loopCount;    // +0x20
-    void*       context;      // +0x28 -- retail leaves this stack slot
-                              //          uninitialised; nothing reads it (the
-                              //          voice-callback OnBufferEnd ignores its
-                              //          own pBufferContext, per
-                              //          audio_voice_callback_win.cpp), so it is
-                              //          zeroed here rather than left as C++ UB.
-};
-static_assert(sizeof(Xa2Buffer) == 0x30, "XAUDIO2_BUFFER-shaped local must be 0x30");
-
-// The XAUDIO2_BUFFER_WMA shape, passed as the SubmitSourceBuffer call's 3rd arg.
-struct Xa2BufferWma {
-    const uint32_t* cumulativeBytes;  // +0x00
-    uint32_t         packetCount;       // +0x08
-    uint32_t         _pad;              // +0x0c
-};
-static_assert(sizeof(Xa2BufferWma) == 0x10, "XAUDIO2_BUFFER_WMA-shaped local must be 0x10");
 
 // Computes bytePos (used unconditionally, including for Stream::Play) and
 // playBegin (used only when NOT streaming). See the banner for the exact
@@ -308,9 +274,10 @@ void ComputePlayPosition(const Audio::SoundBuffer* buf, int64_t nowTicks,
     const double secondsInLoopD = static_cast<double>(remainderTicks) * spt;
     const float secondsInLoop = static_cast<float>(secondsInLoopD);  // CVTPD2PS
 
-    const uint32_t nChannels      = Load<uint16_t>(buf->_format, kWfChannels);
-    const uint32_t wBitsPerSample = Load<uint16_t>(buf->_format, kWfBitsPerSample);
-    const uint32_t nSamplesPerSec = Load<uint32_t>(buf->_format, kWfSamplesPerSec);
+    const WAVEFORMATEX* const wf = FormatOf(buf);
+    const uint32_t nChannels      = wf->nChannels;
+    const uint32_t wBitsPerSample = wf->wBitsPerSample;
+    const uint32_t nSamplesPerSec = wf->nSamplesPerSec;
     uint32_t bitsPerSecondAllCh = nChannels * wBitsPerSample;    // 32-bit wraparound,
     bitsPerSecondAllCh = bitsPerSecondAllCh * nSamplesPerSec;    // reproduced as-is
     const uint32_t bytesPerSecond = bitsPerSecondAllCh >> 3;     // logical shift
@@ -325,7 +292,7 @@ void ComputePlayPosition(const Audio::SoundBuffer* buf, int64_t nowTicks,
                                                                        // logical-shift retail does
     if (segCount > 0) {
         const uint32_t* segTable = buf->_wmaData;
-        const uint16_t nBlockAlign = Load<uint16_t>(buf->_format, kWfBlockAlign);
+        const uint16_t nBlockAlign = wf->nBlockAlign;
         for (int64_t idx = 0; ; ) {
             if (segTable[idx] > static_cast<uint32_t>(bytePos)) {  // JA, unsigned
                 playBegin = static_cast<uint32_t>(nBlockAlign) * static_cast<uint32_t>(idx);
@@ -354,28 +321,27 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
 
     const SoundBuffer* const bufferRef = buffer.Get();
 
-    void* engine = _xaudio2;                                              // 1800de7b4
+    IXAudio27* const engine = _xaudio2;                                   // 1800de7b4
     if (!engine) {                                                        // 1800de7c4
         return false;
     }
 
     PlatformChannel* record = &_platformChannels[slot];                   // 1800de7ec
-    void** voiceSlot = &record->voice;                                    // 1800de809
+    IXAudio2SourceVoice** voiceSlot = &record->voice;                     // 1800de809
 
-    // ---- CreateSourceVoice ---------------------------------------------
-    using CreateSourceVoiceFn = int32_t (*)(void* engine, void** ppVoice, const void* pFormat,
-                                            uint32_t flags, float maxFreqRatio, void* pCallback,
-                                            void* pSendList, void* pEffectChain);
-    void** engineVtbl = *reinterpret_cast<void***>(engine);
-    auto createSourceVoice = reinterpret_cast<CreateSourceVoiceFn>(engineVtbl[kEngineCreateSourceVoice / 8]);
-    const void* pFormat = bufferRef->_format;                                   // 1800de817
-    int32_t hr = createSourceVoice(engine, voiceSlot, pFormat, 0, kMaxFrequencyRatio,
-                                   record, nullptr, nullptr);                    // 1800de827
-    if (hr != 0) {                                                              // 1800de82a
+    // ---- CreateSourceVoice (+0x40) -------------------------------------
+    // `pCallback` is the record itself: `PlatformChannel`'s vptr IS the
+    // IXAudio2VoiceCallback table (Device.h), and Device.h cannot include
+    // <xaudio2.h> to derive from the interface.
+    HRESULT hr = engine->CreateSourceVoice(
+        voiceSlot, FormatOf(bufferRef), 0, kMaxFrequencyRatio,
+        reinterpret_cast<IXAudio2VoiceCallback*>(record),  // CAST-OK: win32
+        nullptr, nullptr);                                                // 1800de827
+    if (hr != 0) {                                                        // 1800de82a
         return false;
     }
     ++g_voicesCreated;
-    void* voice = *voiceSlot;
+    IXAudio2SourceVoice* voice = *voiceSlot;
 
     // ---- byte position / PlayBegin -------------------------------------
     int32_t bytePos = 0;
@@ -386,62 +352,51 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
     const bool isStreaming = bufferRef->_streamed != 0;
     if (isStreaming) playBegin = 0;  // CMOVNZ, unconditional override
 
-    Xa2Buffer buf{};
-    buf.flags      = kXAudio2EndOfStream;
-    buf.audioBytes = static_cast<uint32_t>(bufferRef->_length);
-    buf.audioData  = bufferRef->_data;
-    buf.playBegin  = playBegin;
-    buf.playLength = 0;
-    buf.loopBegin  = 0;
-    buf.loopLength = 0;
-    buf.loopCount  = loopForever ? kXAudio2LoopInfinite : 0u;
-    buf.context    = nullptr;
+    // Retail leaves `pContext` uninitialised; nothing reads it (the voice
+    // callback's OnBufferEnd ignores its pBufferContext), so the `{}` zeroes it.
+    XAUDIO2_BUFFER buf{};
+    buf.Flags      = kXAudio2EndOfStream;
+    buf.AudioBytes = static_cast<uint32_t>(bufferRef->_length);
+    buf.pAudioData = static_cast<const BYTE*>(bufferRef->_data);
+    buf.PlayBegin  = playBegin;
+    buf.PlayLength = 0;
+    buf.LoopBegin  = 0;
+    buf.LoopLength = 0;
+    buf.LoopCount  = loopForever ? kXAudio2LoopInfinite : 0u;
+    buf.pContext   = nullptr;
 
-    Xa2BufferWma wma{};
-    wma.cumulativeBytes = bufferRef->_wmaData;
-    wma.packetCount     = static_cast<uint32_t>(
+    XAUDIO2_BUFFER_WMA wma{};
+    wma.pDecodedPacketCumulativeBytes = bufferRef->_wmaData;
+    wma.PacketCount = static_cast<uint32_t>(
         static_cast<uint64_t>(static_cast<int64_t>(bufferRef->_wmaLength)) >> 2);
 
-    void** voiceVtbl = *reinterpret_cast<void***>(voice);
-
-    using SubmitSourceBufferFn = int32_t (*)(void*, const void*, const void*);
-    using SetFloatOpFn         = int32_t (*)(void*, float, uint32_t);
-    using StartFn              = int32_t (*)(void*, uint32_t, uint32_t);
-    using DestroyVoiceFn       = void    (*)(void*);
-
     auto cleanup = [&]() {
-        auto destroy = reinterpret_cast<DestroyVoiceFn>(voiceVtbl[kVoiceDestroy / 8]);
-        destroy(voice);
+        voice->DestroyVoice();                                               // +0x90
         *voiceSlot = nullptr;
     };
 
     if (!isStreaming) {                                                      // 1800de933
-        auto submit = reinterpret_cast<SubmitSourceBufferFn>(
-            voiceVtbl[kVoiceSubmitSourceBuffer / 8]);
-        hr = submit(voice, &buf, &wma);                                      // 1800de948
+        hr = voice->SubmitSourceBuffer(&buf, &wma);                          // 1800de948 +0xa8
         if (hr != 0) {                                                       // 1800de950
             cleanup();
             return false;
         }
     }
 
-    auto setVolume = reinterpret_cast<SetFloatOpFn>(voiceVtbl[kVoiceSetVolume / 8]);
-    hr = setVolume(voice, vol, 0);                                           // 1800de964
+    hr = voice->SetVolume(vol, 0);                                           // 1800de964 +0x60
     if (hr != 0) {                                                           // 1800de967
         cleanup();
         return false;
     }
 
     const float ratio = PowF(kSemitoneRatio, pitch);                         // 1800de98a
-    auto setFreqRatio = reinterpret_cast<SetFloatOpFn>(voiceVtbl[kVoiceSetFrequencyRatio / 8]);
-    hr = setFreqRatio(voice, ratio, 0);                                      // 1800de998
+    hr = voice->SetFrequencyRatio(ratio, 0);                                 // 1800de998 +0xd0
     if (hr != 0) {                                                           // 1800de9ae
         cleanup();  // SetFrequencyRatio failure skips Start entirely
         return false;
     }
 
-    auto start = reinterpret_cast<StartFn>(voiceVtbl[kVoiceStart / 8]);
-    hr = start(voice, 0, 0);                                                 // 1800de9b5
+    hr = voice->Start(0, 0);                                                 // 1800de9b5 +0x98
     if (hr != 0) {                                                           // 1800de9bd
         cleanup();
         return false;
@@ -452,7 +407,7 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
         // `?Play@Stream@Audio@@QEAAXHH@Z` on the embedded Stream (+0xa00): a
         // direct member call now (the name lookup behind a function-local
         // cache that stood here is gone, B6-5 / B7-11).
-        StreamObject()->Play(slot, bytePos);                                 // 1800de9e4
+        _stream.Play(slot, bytePos);                                         // 1800de9e4
     }
 
     return true;                                                             // 1800de9e9
