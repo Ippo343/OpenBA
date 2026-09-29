@@ -81,43 +81,21 @@
 // B4b-2 for the ctor side). Both asserts are in runtime/types/video/Context.h
 // and ConstantBuffer.h.
 using Video::Context;
-using RtVideo::Device;
-using RtVideo::RenderBuffer;
-
-// The Win32 half of Video::Device's recursive render lock (buffers_win.cpp,
-// Wave 9 lane W). `RenderBuffer::PlatformDestruct` takes it by INLINE COPY of
-// the singleton-reading form — Enter, owner = GetCurrentThreadId(), depth++;
-// then depth--, owner = -1 at zero, Leave with the singleton RE-READ. Those are
-// exactly these two bodies, instruction for instruction (0x1800f4431..0x1800f4447
-// and 0x1800f44a9..0x1800f44d7), which is why they are reused rather than
-// transcribed a fifth time.
-void RtVideoDeviceLock(void** deviceSingleton);
-void RtVideoDeviceUnlock(void** deviceSingleton);
+using ConstantInfo = Video::ConstantBuffer::ConstantInfo;
 
 // The three `Platform*` siblings live in buffers.cpp (Wave 6 lane C / Wave 9
 // lanes W and GFX2). Retail's dtor reaches them by direct near CALL; ours reaches
 // the C++ MEMBERS — ENDGAME B.3.5 block VC — so no resolver and no free-function
-// door sits on the path at all, and the three `extern` declarations that used to
-// be here are gone.
+// door sits on the path at all.
 //
 // (Wave 20 Phase 0c's warning is kept because it is still the reason there is
 // exactly one body: this file used to carry its own copy of
-// `RenderBuffer::PlatformDestruct`, and because RtVideoContextLifecycleRegister
-// runs AFTER RtVideoBuffersRegister, the copy won both doors and lane C's
-// instrumented body was shadowed dead code the census still counted as ported.
-// The two were behaviourally equivalent, so nothing was ever observably wrong;
-// it was one edit away from being wrong.)
+// `RenderBuffer::PlatformDestruct`, which shadowed lane C's. The two were
+// behaviourally equivalent, so nothing was ever observably wrong; it was one
+// edit away from being wrong.) B.4 (R-VIDEO): the two `void**` Device-lock
+// declarations this file still carried had no caller here and are gone.
 
 namespace {
-
-// `DeviceSlot()` and `FirstRenderBufferSlot()` used to live here. They had
-// exactly one caller between them -- this file's duplicate copy of
-// RenderBuffer::PlatformDestruct -- and went unused when that copy was deleted
-// (Wave 20 Phase 0c), which -Wextra reported. buffers.cpp reaches the same two
-// data slots through its own `DeviceSingletonPtr()` and
-// `RenderBufferFirstRenderBuffer()`, so nothing is lost:
-//   ?_singleton@Device@Video@@0PEAV12@EA
-//   ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA
 
 // ---------------------------------------------------------------------------
 // The scalar-deleting-dtor call every one of these bodies makes.
@@ -126,14 +104,8 @@ namespace {
 //
 // i.e. vtable slot 0 with flag 1 — the MSVC "deleting destructor". Every
 // companion object (`ContextData`, `ImageBuffer`, `ConstantBufferData`) is
-// released this way. The deref is UNGUARDED past the null test retail already
-// makes, exactly as retail leaves it.
-// ---------------------------------------------------------------------------
-// ENDGAME B.3.5 block VC — the free-function `DeletingDtor(void*)` helper is
-// GONE. Its three call sites in `~Context` are virtual `DeletingDtor(1)` calls on
-// `Video::ContextData` and `Video::ImageBuffer`, both of which declare slot 0
-// under that exact name, and `~ConstantBuffer` makes the same call on
-// `Video::ConstantBufferData`.
+// released this way, as a virtual `DeletingDtor(1)` / `delete` on the typed
+// field. The deref is UNGUARDED past the null test retail already makes.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -157,15 +129,18 @@ namespace {
 //     object being dead.
 //   * the SHARED branch (refcount still non-zero) DOES null it.
 // Anything that "tidies" either of those changes what the next reader sees.
+//
+// The fields are `void*` String data pointers (ConstantBuffer.h, H5), so the
+// header at `data - 4` / `data - 8` is reached through marked views.
 // ---------------------------------------------------------------------------
-void ReleaseString(void** field) {
-    uint8_t* data = static_cast<uint8_t*>(*field);
+void ReleaseString(void*& field) {
+    uint8_t* data = static_cast<uint8_t*>(field);                  // CAST-OK: string_header
     if (!data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(data - 4);
+    int32_t* rc = reinterpret_cast<int32_t*>(data - 4);            // CAST-OK: string_header
     *rc -= 1;
-    if (*rc != 0) { *field = nullptr; return; }
-    *field = data - 8;
-    System::MemoryAllocator::MemFree(*field);
+    if (*rc != 0) { field = nullptr; return; }
+    field = data - 8;
+    System::MemoryAllocator::MemFree(field);
 }
 
 // The 0x18001cfc0 spelling of the same release differs in ONE respect and it is
@@ -175,73 +150,54 @@ void ReleaseString(void** field) {
 // 0x1800c7ad0 spelling used by ReleaseString has the null test INSIDE MemFree,
 // so the two agree on behaviour; they are written apart because the flag
 // dependency above is the kind of thing a later reader would "simplify".
-void ReleaseStringNoTidy(void** field) {
-    uint8_t* data = static_cast<uint8_t*>(*field);
+void ReleaseStringNoTidy(void*& field) {
+    uint8_t* data = static_cast<uint8_t*>(field);                  // CAST-OK: string_header
     if (!data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(data - 4);
+    int32_t* rc = reinterpret_cast<int32_t*>(data - 4);            // CAST-OK: string_header
     *rc -= 1;
-    if (*rc != 0) { *field = nullptr; return; }
-    *field = data - 8;
-    if (*field) System::MemoryAllocator::MemFree(*field);
-}
-
-// ---------------------------------------------------------------------------
-// 0x18001cfc0 — the per-element destroy loop for an array of 0x18-byte records
-// whose first two qwords are refcounted System::String data pointers. Retail
-// releases +0x08 FIRST and +0x00 second; order kept.
-//
-// The first parameter is the array object. The callee spills it at [RSP+8] and
-// NEVER READS IT (0x18001cfc9 is the only mention), which is why it is unnamed
-// here — the same reading `reference_read_the_callee_before_holding_back_on_an_arg.md`
-// records for FUN_180023060.
-// ---------------------------------------------------------------------------
-// *** NO LONGER FILE-LOCAL. *** Phase 1 said "nothing outside this file reaches
-// them", which was true only while this file was the tree's only
-// `Video::ConstantBuffer` code. Phase 3 found both under the class itself:
-// `?BeginConstants@` (0x1800eed10) TAIL-JUMPS to 0x18001cab0, and the
-// `Array<ConstantEntry>` resize at 0x180053510 calls 0x18001cfc0. So both now
-// have real callers and both are registered at their addresses — by
-// constant_buffer.cpp, which owns the registration because that is where the
-// callers live.
-void StringPairDestroy(void* /*unused*/, void* data, int32_t count) {
-    if (count <= 0) return;
-    uint8_t* e = static_cast<uint8_t*>(data);
-    for (int64_t i = count; i != 0; --i) {
-        ReleaseStringNoTidy(reinterpret_cast<void**>(e + 8));
-        ReleaseStringNoTidy(reinterpret_cast<void**>(e + 0));
-        e += 0x18;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 0x18001cab0 — Collection::Array<that record>::~Array.
-//   destroy the elements, free the block, then zero {_data} and {_size,_capacity}
-//   as two qword stores (0x18001cb18 / 0x18001cb1b).
-// Retail's `XOR EAX,EAX` at 0x18001cb16 supplies BOTH stores and the return
-// value, so the function returns 0, not the array. No caller reads it, so this
-// is written `void`.
-// ---------------------------------------------------------------------------
-void StringPairArrayDtor(void* arr) {
-    uint8_t* a = static_cast<uint8_t*>(arr);
-    void*   data  = *reinterpret_cast<void**>(a);
-    int32_t count = *reinterpret_cast<int32_t*>(a + 8);
-    StringPairDestroy(arr, data, count);
-    if (data) System::MemoryAllocator::MemFree(data);
-    *reinterpret_cast<void**>(a)     = nullptr;   // _data
-    *reinterpret_cast<uint64_t*>(a + 8) = 0;      // _size and _capacity together
+    if (*rc != 0) { field = nullptr; return; }
+    field = data - 8;
+    if (field) System::MemoryAllocator::MemFree(field);
 }
 
 }  // namespace
 
-// The two above, exported for constant_buffer.cpp to call and to register. Thin
-// forwarders rather than moved bodies, so this file keeps the transcription and
-// the commentary that goes with it, and there is exactly ONE implementation of
-// each (a second copy is how two ports of one address drift apart).
-extern "C" void RtVideo_ConstEntryArrayDestroy(void* unused, void* data, int32_t count) {
-    StringPairDestroy(unused, data, count);
+// ---------------------------------------------------------------------------
+// 0x18001cfc0 — the per-element destroy loop for `Array<ConstantInfo>`, whose
+// first two qwords are refcounted System::String data pointers. Retail releases
+// +0x08 (`typeName`) FIRST and +0x00 (`name`) second; order kept.
+//
+// Retail's first parameter is the array object. The callee spills it at
+// [RSP+8] and NEVER READS IT (0x18001cfc9 is the only mention), so it is not
+// passed here. `?BeginConstants@` (0x1800eed10) TAIL-JUMPS to 0x18001cab0 and
+// the resize at 0x180053510 calls 0x18001cfc0 — both in constant_buffer.cpp.
+// ---------------------------------------------------------------------------
+void RtVideo_ConstEntryArrayDestroy(ConstantInfo* data, int32_t count) {
+    if (count <= 0) return;
+    ConstantInfo* e = data;
+    for (int64_t i = count; i != 0; --i) {
+        ReleaseStringNoTidy(e->typeName);
+        ReleaseStringNoTidy(e->name);
+        ++e;
+    }
 }
-extern "C" void RtVideo_ConstEntryArrayDtor(void* arr) {
-    StringPairArrayDtor(arr);
+
+// ---------------------------------------------------------------------------
+// 0x18001cab0 — Collection::Array<ConstantInfo>::~Array.
+//   destroy the elements, free the block, then zero {_data} and {_size,_capacity}
+//   as two qword stores (0x18001cb18 / 0x18001cb1b) — the second written as the
+//   two named fields.
+// Retail's `XOR EAX,EAX` at 0x18001cb16 supplies BOTH stores and the return
+// value, so the function returns 0, not the array. No caller reads it, so this
+// is written `void`.
+// ---------------------------------------------------------------------------
+void RtVideo_ConstEntryArrayDtor(ConstantInfo*& data, int32_t& size, int32_t& capacity) {
+    ConstantInfo* d = data;
+    RtVideo_ConstEntryArrayDestroy(d, size);
+    if (d) System::MemoryAllocator::MemFree(d);
+    data     = nullptr;   // _data
+    size     = 0;         // _size \ one qword store
+    capacity = 0;         // _capacity /
 }
 
 // ============================================================================
@@ -258,23 +214,17 @@ extern "C" void RtVideo_ConstEntryArrayDtor(void* arr) {
 // STILL A FREE FUNCTION, NOT `~ConstantBuffer()` (ENDGAME B.3.5 block D1). A real
 // destructor here would make `Video::ConstantBuffer` non-trivially-copyable and
 // `Video::Context` — which holds seven by value — with it; RULE B5-4 and the
-// `static_assert`s in both headers forbid exactly that. The offsets are now the
-// real members, which is what the conversion bought.
+// `static_assert`s in both headers forbid exactly that.
 // ============================================================================
-extern "C" void Video_ConstantBuffer_Dtor(void* selfRaw) {
-    Video::ConstantBuffer* self = static_cast<Video::ConstantBuffer*>(selfRaw);
+void Video_ConstantBuffer_Dtor(Video::ConstantBuffer* self) {
+    if (Video::ConstantBufferData* companion = self->_platformData)
+        (void)companion->DeletingDtor(1);
 
-    // ENDGAME B.3.5 block VC: a virtual slot-0 call on block A's real
-    // `Video::ConstantBufferData`. `_platformData` is a pinned `void*` at +0x40
-    // (dx11 reads it), so the receiver takes one marked bridge cast.
-    if (void* companion = self->_platformData)
-        reinterpret_cast<Video::ConstantBufferData*>(companion)       // B.3.5 bridge
-            ->DeletingDtor(1);
+    RtVideo_ConstEntryArrayDtor(self->_constantData, self->_constantCount,
+                                self->_constantCapacity);
 
-    StringPairArrayDtor(&self->_constantData);
-
-    ReleaseString(&self->_typeName);
-    ReleaseString(&self->_prefix);
+    ReleaseString(self->_typeName);
+    ReleaseString(self->_prefix);
 }
 
 // ============================================================================
@@ -285,11 +235,6 @@ extern "C" void Video_ConstantBuffer_Dtor(void* selfRaw) {
 // operator delete) and 0x180006a10. Our 0x1800c7ad0 MemFree is that composition,
 // with the null test inside it, which is why the pointer is handed over
 // unguarded exactly as retail's `TEST RCX,RCX; JZ ret` allows.
-//
-// ENDGAME B.3.5 block VC: the body is `Video::RenderBuffer::operator delete`, a
-// STATIC member (which changes no triviality trait, so `Device.h`'s
-// `is_trivially_copyable<RenderBuffer>` assert still holds and still proves it).
-// The door keeps its name and both rows.
 // ============================================================================
 void Video::RenderBuffer::operator delete(void* p) {
     System::MemoryAllocator::MemFree(p);
@@ -297,59 +242,17 @@ void Video::RenderBuffer::operator delete(void* p) {
 
 // `??3Context@Video@@SAXPEAX@Z` (0x180018500) stays a FREE FUNCTION and not
 // `Video::Context::operator delete`: `Context.h` declares none of the eight
-// lifecycle spellings, on purpose, and that header — not this file — is where
-// the decision lives. It is a distinct function in the image from the one above.
+// lifecycle spellings, on purpose. It is a distinct function in the image from
+// the one above.
 extern "C" void Video_Context_OperatorDelete(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // ============================================================================
-// 0x180006a10 — ATTRIBUTION CORRECTED, ENDGAME B.3.5 block VC.
+// 0x180006a10 — the tree's shared guarded object free (UNEXPORTED; not a
+// `Video::` member). `~Context` frees its three buffer sub-objects through it,
+// which is retail — retail's ~Context calls 0x180006a10 and NOT 0x180018500 for
+// them — and IO / Save / Input / Object / Engine reach it by name.
 // ============================================================================
-// This was called `Video_Buffer_OperatorDelete` and described as "the buffers'"
-// third `operator delete` instantiation. IT IS NOT A `Video::` MEMBER AT ALL. It
-// is UNEXPORTED — there is no `??3{Index,Vertex,Image}Buffer@Video@@` in the
-// shipped export directory that resolves here — and it is the tree's shared
-// guarded object free, reached by `ResolveAddr(Module::Runtime, 0x180006a10)`
-// from at least eight files outside Video: `io/file_stream.cpp`,
-// `io/compressed_stream_release.cpp`, `io/binary_writer.cpp`,
-// `io/iobase_vtables.cpp`, `input/keymap_save.cpp`, `object/deleting_dtor.cpp`
-// (its scalar/array MemFree target), `engine/closure_batch2b.cpp` and
-// `engine/engine_platform.cpp`. b35-D1 measured about a hundred callers across
-// IO / Save / Graphics.
-//
-// ONLY THE NAME AND THIS COMMENT CHANGE. The registration below is untouched:
-// this remains the one body at that address, `~Context` still frees its three
-// buffer sub-objects through it (which is retail — retail's ~Context calls
-// 0x180006a10 and NOT 0x180018500 for them), and every other caller keeps
-// landing here through the registry-first address door.
 extern "C" void Rt_GuardedObjectFree(void* p) { System::MemoryAllocator::MemFree(p); }
-
-// ============================================================================
-// ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ — retail 0x1800f4400, ord 3369
-// ============================================================================
-// 1. release the RenderBufferData companion at +0x28 (deleting dtor, slot 0);
-// 2. take Video::Device's recursive render lock;
-// 3. if BOTH links are non-null, unlink `this` from the circular list whose
-//    head is `?_firstRenderBuffer@RenderBuffer@Video@@` and fix the head TWICE
-//    — once before the unlink (head = this->next when head == this) and once
-//    after (head = nullptr when head == this). The second fixup is what makes
-//    the LAST buffer leave an empty list rather than a self-referencing one;
-// 4. release the lock.
-//
-// The `if (prev && next)` guard is retail's and it is load-bearing: a buffer
-// that was never linked (PlatformConstruct not run) is skipped rather than
-// unlinked through null. Retail does NOT guard the head slot pointer itself.
-// ============================================================================
-// THE BODY THAT WAS HERE IS GONE -- it lives in buffers.cpp (Wave 6 lane C /
-// Wave 9 lane GFX2), declared at the top of this file with its two siblings.
-// The analysis above stands and was cross-checked against lane C's version
-// instruction by instruction before the deletion: `ListUnlink` with
-// kRenderLinks = {next 0x18, prev 0x20} performs the same head fixup twice
-// around the same unlink, and `PlatformDestructBody(..., /*null=*/false, ...)`
-// leaves +0x28 dangling exactly as retail does. Lane C's is kept rather than
-// this one because it is the version the RT_DIFF shadow oracle and the
-// list-emptied probe actually instrument, and because it is one arm of the
-// six-way BufferClass composition -- keeping a second spelling here is the
-// "two places to drift" this file warns about for `operator delete`.
 
 // ============================================================================
 // ?ClearResources@Context@Video@@QEAAXXZ — retail 0x1800f2090, ordinal 1712
@@ -377,14 +280,7 @@ extern "C" void Rt_GuardedObjectFree(void* p) { System::MemoryAllocator::MemFree
 //
 // The two rotating masks are SEPARATE REGISTERS (EAX and EDX) seeded from the
 // same 1 at 0x1800f2090/0x1800f209f, and EDX survives the first loop untouched.
-// Writing one shared mask would be wrong the moment either loop's length
-// changed; it is written as two.
-//
-// This function touches NOTHING ELSE. It does not clear the render buffer, the
-// index buffer, the vertex layout or the programs — which is exactly why the
-// oracle below can compare the full set of affected fields with no risk of
-// reading bytes neither side wrote
-// (reference_oracle_must_not_compare_unwritten_bytes.md).
+// This function touches NOTHING ELSE.
 // ============================================================================
 void Video::Context::ClearResources() {
 
@@ -432,49 +328,33 @@ void Video::Context::ClearResources() {
 //                                   declaration order, as MSVC emits)
 //
 // NOTE WHAT IS ABSENT. The dtor does NOT null any of the seven pointers after
-// releasing them, and it does not touch the bindings ClearResources clears. A
-// Context is dead after this and retail treats it as such — `CreateVideoContext`
-// calls the dtor and then immediately hands the block to `operator delete`.
+// releasing them, and it does not touch the bindings ClearResources clears.
 //
 // The three buffer sub-objects are freed through 0x180006a10, NOT through the
-// same `operator delete` the Context itself uses (0x180018500). The bodies are
-// identical, but the call is by address to a different function and is
-// registered as such.
+// same `operator delete` the Context itself uses (0x180018500).
 // ============================================================================
-// ENDGAME B.3.5 block VC: the seven sub-object releases are direct calls. The
-// three `Platform*` free functions became qualified member calls, `operator
-// delete` is `Video::RenderBuffer`'s member, and the three `DeletingDtor(p)`
-// hand-inlined slot-0 dispatches are VIRTUAL CALLS on block A's
-// `Video::ContextData` and on `Video::ImageBuffer` — which is what retail's
-// `MOV RAX,[RCX] / MOV EDX,1 / CALL [RAX]` is, slot 0 with the deleting flag. The
-// free-function `DeletingDtor` helper is kept for nothing else and is gone.
 extern "C" void RtVideo_Context_Dtor(Context* self) {
-    // B.3.5 bridge — `_contextData` is a pinned `void*` at +0x2160.
     if (self->_contextData)
-        reinterpret_cast<Video::ContextData*>(self->_contextData)->DeletingDtor(1);
+        (void)self->_contextData->DeletingDtor(1);
 
-    if (void* p = self->_dynamicVertexBuffer) {
-        reinterpret_cast<Video::VertexBuffer*>(p)                      // B.3.5 bridge
-            ->Video::VertexBuffer::PlatformDestruct();
+    if (Video::VertexBuffer* p = self->_dynamicVertexBuffer) {
+        p->Video::VertexBuffer::PlatformDestruct();
         Rt_GuardedObjectFree(p);
     }
-    if (void* p = self->_dynamicIndexBuffer) {
-        reinterpret_cast<Video::IndexBuffer*>(p)                       // B.3.5 bridge
-            ->Video::IndexBuffer::PlatformDestruct();
+    if (Video::IndexBuffer* p = self->_dynamicIndexBuffer) {
+        p->Video::IndexBuffer::PlatformDestruct();
         Rt_GuardedObjectFree(p);
     }
-    if (void* p = self->_defaultColorImage)
-        delete reinterpret_cast<Video::ImageBuffer*>(p);     // B.3.5 bridge
-    if (void* p = self->_defaultDepthImage)
-        delete reinterpret_cast<Video::ImageBuffer*>(p);     // B.3.5 bridge
-    if (void* p = self->_defaultRenderBuffer) {
-        reinterpret_cast<Video::RenderBuffer*>(p)                      // B.3.5 bridge
-            ->Video::RenderBuffer::PlatformDestruct();
+    if (Video::ImageBuffer* p = self->_defaultColorImage)
+        delete p;
+    if (Video::ImageBuffer* p = self->_defaultDepthImage)
+        delete p;
+    if (Video::RenderBuffer* p = self->_defaultRenderBuffer) {
+        p->Video::RenderBuffer::PlatformDestruct();
         Video::RenderBuffer::operator delete(p);
     }
-    if (void* p = self->_dynamicInstanceBuffer) {
-        reinterpret_cast<Video::VertexBuffer*>(p)                      // B.3.5 bridge
-            ->Video::VertexBuffer::PlatformDestruct();
+    if (Video::VertexBuffer* p = self->_dynamicInstanceBuffer) {
+        p->Video::VertexBuffer::PlatformDestruct();
         Rt_GuardedObjectFree(p);
     }
 
@@ -488,123 +368,7 @@ extern "C" void RtVideo_Context_Dtor(Context* self) {
 }
 
 // ============================================================================
-// THE PROBE — the caller ClearResources does not have
-// ============================================================================
-// `?ClearResources@Context@Video@@QEAAXXZ` has NO call site anywhere in code/,
-// engine/, runtime/, standalone/ or dx11/ (grep for fn_VideoCtx_ClearResources
-// returns the extern, the header, the assignment and one diagnostic printf —
-// lane VID established this and it is re-checked here). A registered port on a
-// path nothing executes reports `calls=0 divergences=0` forever, which is not a
-// verification (reference_uncalled_port_is_not_verified.md).
-//
-// So the probe supplies the callers. It is NOT a re-derivation of the port: it
-// drives the SAME `RtVideo_Context_ClearResources` the registry hands out, and
-// the reference side is the SHIPPED body reached through `the raw DLL door`
-// (reference_resolveaddr_consults_port_registry_first.md — ResolveExport would
-// hand back our own port once registered, and the comparison would be vacuous).
-//
-// METHOD, per case:
-//   1. build a scratch Context-sized buffer with a pattern
-//   2. copy it; run THEIRS on the copy
-//   3. run OURS on the original
-//   4. compare the 3 dirty words + 16 image slots + 16 vertex slots +
-//      16 offsets + 16 strides. Nothing else is compared, because nothing else
-//      is written by either side.
-//
-// TWO CONTROLS, because a sweep of agreeing cases proves nothing on its own
-// (reference_probe_needs_an_effectiveness_control.md):
-//   * EFFECTIVENESS: `cleared` counts the cases in which at least one binding
-//     was actually dropped. A run reporting cleared=0 has verified nothing and
-//     says so.
-//   * NEGATIVE: one case is run with a DELIBERATELY WRONG mask seed (bit 2
-//     instead of bit 1) fed to a local copy of the loop, and the comparison
-//     must FAIL. If it passes, the comparison is not looking at the mask and
-//     the whole sweep is worthless.
-// ============================================================================
-namespace {
-
-struct ClearSnapshot {
-    uint32_t dirty;
-    uint32_t imageDirty;
-    uint32_t vertexDirty;
-    void*    images[RtVideo::kImageBufferSlots];
-    void*    vertices[RtVideo::kVertexBufferSlots];
-    int32_t  offsets[RtVideo::kVertexBufferSlots];
-    int32_t  strides[RtVideo::kVertexBufferSlots];
-};
-
-// *** THE memset IS NOT TIDINESS. *** `ClearSnapshot` has four bytes of
-// padding after the three uint32s (the `void*` array that follows needs 8-byte
-// alignment), and `SameSnapshot` memcmps the whole struct. Without this the
-// comparison reads bytes NOTHING EVER WRITES, which is exactly
-// reference_oracle_must_not_compare_unwritten_bytes.md -- and it bit this probe
-// on its first run: `cleared` came back 512 out of 512 cases when seed 0 builds
-// an all-null Context that ClearResources provably cannot change, so the
-// EFFECTIVENESS CONTROL was reporting stack garbage rather than work. The
-// mismatch column was unaffected only by luck (the two long-lived snapshots
-// happened to share their padding), which is the whole reason a control that
-// can be satisfied by noise is worse than no control.
-void Capture(const Context* c, ClearSnapshot* s) {
-    std::memset(s, 0, sizeof(*s));
-    s->dirty       = c->_dirty;
-    s->imageDirty  = c->_imageBufferDirty;
-    s->vertexDirty = c->_vertexBufferDirty;
-    std::memcpy(s->images,   c->_imageBuffers,  sizeof(s->images));
-    std::memcpy(s->vertices, c->_vertexBuffers, sizeof(s->vertices));
-    std::memcpy(s->offsets,  c->_vertexOffsets, sizeof(s->offsets));
-    std::memcpy(s->strides,  c->_vertexStrides, sizeof(s->strides));
-}
-
-bool SameSnapshot(const ClearSnapshot& a, const ClearSnapshot& b) {
-    return std::memcmp(&a, &b, sizeof(ClearSnapshot)) == 0;
-}
-
-// The pattern generator. `seed` selects which slots hold a (fake, never
-// dereferenced — ClearResources only ever compares against zero and stores
-// zero) binding, and seeds the pre-existing dirty state so the |= is exercised
-// against a non-zero starting value rather than always against 0.
-void BuildCase(Context* c, unsigned seed) {
-    // `static_cast<void*>`: `Video::Context` is no longer trivially
-    // default-constructible (its `Math::Matrix` members have zeroing retail
-    // constructors), so `-Wclass-memaccess` objects to a bare memset. The probe
-    // wants bytes, which is what the cast says. Trivially COPYABLE — the
-    // property this and every other memcpy over a Context depends on — is
-    // asserted in Context.h and is unaffected.
-    std::memset(static_cast<void*>(c), 0, sizeof(Context));
-    c->_dirty             = (seed & 1u) ? 0x00000040u : 0u;   // kDirtyVertexProgram
-    c->_imageBufferDirty  = (seed & 2u) ? 0x00000080u : 0u;
-    c->_vertexBufferDirty = (seed & 4u) ? 0x00004000u : 0u;
-    for (int i = 0; i < RtVideo::kImageBufferSlots; ++i) {
-        c->_imageBuffers[i] = ((seed >> i) & 1u)
-            ? reinterpret_cast<void*>(static_cast<uintptr_t>(0x1000u + i)) : nullptr;
-    }
-    for (int i = 0; i < RtVideo::kVertexBufferSlots; ++i) {
-        const bool bound = ((seed >> (i + 3)) & 1u) != 0;
-        c->_vertexBuffers[i] = bound
-            ? reinterpret_cast<void*>(static_cast<uintptr_t>(0x2000u + i)) : nullptr;
-        c->_vertexOffsets[i] = bound ? (100 + i) : (300 + i);
-        c->_vertexStrides[i] = bound ? (200 + i) : (400 + i);
-    }
-}
-
-}  // namespace
-
-// ============================================================================
-// WHAT THIS FILE DOES NOT DO — stated so the gap is measured, not implied
-// ============================================================================
-// `??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z` (0x1800f1820)
-// is NOT ported. It is ~400 instructions that zero ~90 fields, construct seven
-// ConstantBuffer sub-objects inline (each one taking a companion from the
-// DeviceData vtable slot +0x58), run four memsets over the binding arrays, then
-// conditionally build a dynamic vertex buffer, a dynamic index buffer, a
-// dynamic instance buffer and — when the caller passes no render buffer — a
-// RenderBuffer plus two ImageBuffers through four separate class `operator new`
-// bodies (0x180011640, 0x18001f2e0, 0x18001e910) and
-// `?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ` (0x1800f4320), none of which
-// is ported.
-//
-// So `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` (0x1800dd500, ordinal 2139
-// — it IS exported, which lane VID recorded as "unported AND UNEXPORTED"; that
-// half is wrong and is corrected here) still cannot be closed by this lane: two
-// of its three calls now have ports, the ctor does not.
+// B.4 (R-VIDEO): the ClearResources probe helpers that followed here
+// (`ClearSnapshot`, `Capture`, `SameSnapshot`, `BuildCase`) had no caller —
+// -Wunused-function said so — and are deleted with their casts.
 // ============================================================================

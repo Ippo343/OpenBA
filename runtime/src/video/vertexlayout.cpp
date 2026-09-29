@@ -86,44 +86,26 @@
 #include <new>
 
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "../../types/video/CompanionData.h"   // the typed *Data companions
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Modification.h"   // RtIO::RtColl_ArrayU8Dtor_1800112a0
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"      // IO::Stream, IO::kReading
 #include "../../types/object/External.h"
 #include "../../types/video/VertexLayout.h"
 
 namespace {
 
-using rt::io::Serializer;
-using rt::io::Stream;
-using rt::io::ReaderWriter;
 using Video::VertexLayout;
-
-void* ActiveDeviceDataPtr() {
-    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    void* device = slot ? *slot : nullptr;
-    if (!device) return nullptr;
-    return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
-}
-constexpr size_t kDeviceDataCreateVertexLayoutData = 0x70;   // DeviceData vtable slot 14
-
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-}  // namespace
 
 // ============================================================================
 // 0x1800563c0 — the per-element loop: (Serializer*, int count, Element* data)
 //
 // UNEXPORTED in retail and registered BY ADDRESS only, so it is not a member of
-// anything: it stays a file-scope function, now typed with the real
-// `Video::VertexLayout::Element` instead of this file's deleted local struct.
-// `Serialize` below calls it DIRECTLY rather than through `ResolveAddr`.
+// anything: it stays a file-scope function, typed with the real
+// `Video::VertexLayout::Element`. `Serialize` below calls it DIRECTLY. B.4
+// (R-VIDEO): its one caller is this file, so it has internal linkage now.
 //
 // THE FIVE FIELDS AND THEIR READER/WRITER SLOTS, PAIRED EXPLICITLY. Retail walks
 // the element in ADDRESS order through a fixed slot sequence, and the slot is NOT
@@ -137,23 +119,33 @@ inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
 //     +0x10  usage       kScalarUInt    (…and this one `usageIndex`)
 //     +0x14  usageIndex  kScalarInt     (…and this one `format`)
 //     +0x18  format      kScalarUInt    (…and this one `offset`)
+//
+// B.4 (R-VIDEO): the two unsigned-slot fields go through a `uint32_t` local and back
+// (value-identical on both directions: the writer reads the local, the reader
+// fills it and the store puts the same four bytes in the field).
 // ============================================================================
-extern "C" void RtVideo_VertexLayout_SerializeElements(Serializer* ser, int count, void* data) {
-    ReaderWriter* rw = ser->readerWriter;
-    VertexLayout::Element* e = static_cast<VertexLayout::Element*>(data);
+void RtVideo_VertexLayout_SerializeElements(IO::Serializer& ser, int count,
+                                            VertexLayout::Element* e) {
+    IO::ReaderWriter* rw = ser._readerWriter;
     for (int i = 0; i < count; ++i, ++e) {
-        // B.3.1 bridge: `Element::name` is `void*` because a real `System::String`
-        // member would give Element a non-trivial destructor that runs IN ADDITION
-        // to the by-hand release the ported `Array<Element>::~Array` already
-        // performs (0x18004fa30); the eight bytes are a System::String.
-        reinterpret_cast<System::String&>(e->name).Serialize(ser);
-        AsRw(rw)->SerializeInt(e->stream, nullptr);
-        AsRw(rw)->SerializeInt(e->offset, nullptr);
-        AsRw(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->usage), nullptr);
-        AsRw(rw)->SerializeInt(e->usageIndex, nullptr);
-        AsRw(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->format), nullptr);
+        // LEFT (B.3.1 bridge): `Element::name` is `void*` because a real
+        // `System::String` member would give Element a non-trivial destructor that
+        // runs IN ADDITION to the by-hand release the ported `Array<Element>::~Array`
+        // already performs (0x18004fa30); the eight bytes are a System::String.
+        reinterpret_cast<System::String&>(e->name).Serialize(&ser);
+        rw->SerializeInt(e->stream, nullptr);
+        rw->SerializeInt(e->offset, nullptr);
+        uint32_t usage = static_cast<uint32_t>(e->usage);
+        rw->SerializeUInt(usage, nullptr);
+        e->usage = static_cast<VertexLayout::Usage>(usage);
+        rw->SerializeInt(e->usageIndex, nullptr);
+        uint32_t format = static_cast<uint32_t>(e->format);
+        rw->SerializeUInt(format, nullptr);
+        e->format = static_cast<VertexLayout::Format>(format);
     }
 }
+
+}  // namespace
 
 // ============================================================================
 // THE MEMBER BODIES — `Video::VertexLayout::*`. At `namespace Video` scope and
@@ -222,59 +214,48 @@ Object::Base* VertexLayout::CreateInPlaceObject(void* storage) {
 // ?PlatformConstruct@VertexLayout@Video@@AEAAXXZ (0x1800f5f90) — DeviceData slot
 // 14 (+0x70), CreateVertexLayoutData.
 void VertexLayout::PlatformConstruct() {
-    void* dd = ActiveDeviceDataPtr();
+    Device* device = Device::_singleton;
+    DeviceData* dd = device ? device->deviceData : nullptr;
     if (dd == nullptr) { _data = nullptr; return; }
-    using CreateFn = void* (*)(void*, void*);
-    void** vt = *reinterpret_cast<void***>(dd);
-    _data = reinterpret_cast<CreateFn>(vt[kDeviceDataCreateVertexLayoutData / 8])(dd, this);
+    _data = dd->CreateVertexLayoutData(this);
 }
-// ?PlatformCreate@VertexLayout@Video@@AEAAXXZ (0x1800f6060): _data->vtable[2](_data).
+// ?PlatformCreate@VertexLayout@Video@@AEAAXXZ (0x1800f6060): the companion's slot 2.
 // VOID, unlike VertexProgram's and PixelProgram's bool — VideoDX11's 0x180003ff0
 // falls off its end with no return value set.
 void VertexLayout::PlatformCreate() {
-    using Fn = void (*)(void*);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[2])(_data);
+    _data->PlatformCreate();
 }
 // ?PlatformDestruct@VertexLayout@Video@@AEAAXXZ (0x1800f5fd0)
 void VertexLayout::PlatformDestruct() {
     if (_data == nullptr) return;
-    using Fn = void (*)(void*, int);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[0])(_data, 1);
+    _data->DeletingDtor(1);
 }
 
 // slot 5 — ?Serialize@VertexLayout@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f5e70)
 bool VertexLayout::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                              : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
-    ser.readerWriter = rw;
+    // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
+    // keeps `External`'s `void*` parameter (R-OBJ's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(stream, 0);
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     int32_t n = _elements._size;
-    AsRw(rw)->SerializeInt(n, nullptr);
-    if (ser.stream->direction == 0) rtcoll::RtColl_ArraySetSize_180056240(&_elements, n);
+    rw->SerializeInt(n, nullptr);
+    if (ser._stream->GetDirection() == IO::kReading)
+        rtcoll::RtColl_ArraySetSize_180056240(&_elements, n);
     // Retail CALLs 0x1800563c0; this IS that function, in this file.
-    RtVideo_VertexLayout_SerializeElements(&ser, n, _elements._data);
+    RtVideo_VertexLayout_SerializeElements(ser, n, _elements._data);
 
     // PlatformSerialize (0x1800f5ff0), inlined by retail and inlined here.
     int32_t m = _signature._size;
-    AsRw(rw)->SerializeInt(m, nullptr);
-    if (ser.stream->direction == 0) rtcoll::RtColl_ArraySetSize_180029630(&_signature, m);
-    AsRw(rw)->SerializeUCharArray(
-        m, reinterpret_cast<unsigned char*>(_signature._data), nullptr);
+    rw->SerializeInt(m, nullptr);
+    if (ser._stream->GetDirection() == IO::kReading)
+        rtcoll::RtColl_ArraySetSize_180029630(&_signature, m);
+    rw->SerializeUCharArray(m, _signature._data, nullptr);
 
-    if (stream->direction == 0)
+    if (stream.GetDirection() == IO::kReading)
         this->Video::VertexLayout::PlatformCreate();   // retail derefs _data unguarded
-    if (rw != nullptr) {
-        delete AsRw(rw);
-    }
-    return true;
+    return true;   // ~Serializer: the ReaderWriter's slot 0, flags 1
 }
 
 }  // namespace Video

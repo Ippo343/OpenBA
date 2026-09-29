@@ -86,7 +86,7 @@ Object::External* VideoProgram::Reconstruct() { return this; }
 void              VideoProgram::Destruct() {}
 Object::External* VideoProgram::Construct() { return this; }
 VideoProgram::~VideoProgram() { NoteDtor(this); }
-void              VideoProgram::PlatformConstruct() { _data = kMarkerData; }
+void              VideoProgram::PlatformConstruct() { _data = static_cast<decltype(_data)>(kMarkerData); }
 void              VideoProgram::PlatformDestruct() {}
 
 int32_t           VertexLayout::GetFileVersion() const { return 3; }
@@ -95,7 +95,7 @@ Object::External* VertexLayout::Reconstruct() { return this; }
 void              VertexLayout::Destruct() {}
 Object::External* VertexLayout::Construct() { return this; }
 VertexLayout::~VertexLayout() { NoteDtor(this); }
-void              VertexLayout::PlatformConstruct() { _data = kMarkerData; }
+void              VertexLayout::PlatformConstruct() { _data = static_cast<decltype(_data)>(kMarkerData); }
 void              VertexLayout::PlatformDestruct() {}
 
 int32_t           RenderState::GetFileVersion() const { return 3; }
@@ -110,7 +110,7 @@ void              RenderState::PlatformDestruct() {}
 bool              ShaderProgram::Serialize(void*) { return true; }
 ShaderProgram::~ShaderProgram() { ++g_shaderBaseDtorCount; }
 
-#define B39_VID_SHADER_MARKERS(C, ID)                                                  int32_t           C::GetFileVersion() const { return 5; }                          bool              C::Serialize(void*) { return true; }                             Object::External* C::Reconstruct() { return this; }                                void              C::Destruct() {}                                                 Object::External* C::Construct() { return this; }                                 C::~C() { NoteDtor(this); }                                                        void              C::PlatformConstruct() { _data = kMarkerData; }                  void              C::PlatformDestruct() {}
+#define B39_VID_SHADER_MARKERS(C, ID)                                                  int32_t           C::GetFileVersion() const { return 5; }                          bool              C::Serialize(void*) { return true; }                             Object::External* C::Reconstruct() { return this; }                                void              C::Destruct() {}                                                 Object::External* C::Construct() { return this; }                                 C::~C() { NoteDtor(this); }                                                        void              C::PlatformConstruct() { _data = static_cast<decltype(_data)>(kMarkerData); }                  void              C::PlatformDestruct() {}
 B39_VID_SHADER_MARKERS(VertexProgram, 0x7075u)
 B39_VID_SHADER_MARKERS(PixelProgram,  0x7076u)
 #undef B39_VID_SHADER_MARKERS
