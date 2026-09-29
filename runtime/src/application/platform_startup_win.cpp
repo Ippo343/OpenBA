@@ -169,7 +169,7 @@ int64_t Application::Application::WindowProc(void* hwndArg, uint32_t msg,
     App*  app  = slot ? *slot : nullptr;
 
     if (app != nullptr) {                                   // 0x18009f95c
-        Node* n = static_cast<Node*>(app->_messageCallbackRoot);
+        Node* n = app->_messageCallbacks.root;
         if (n != nullptr) {                                 // 0x18009f965
             Node* found = nullptr;
             while (n != nullptr) {

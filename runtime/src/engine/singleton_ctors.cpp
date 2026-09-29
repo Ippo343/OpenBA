@@ -498,8 +498,8 @@ Video::Configuration* Ctor_VideoConfiguration(Video::Configuration* self) {
 // about what a concurrent reader can observe.
 // ===========================================================================
 ::Application::Application* Ctor_Application(::Application::Application* self, void* hinstance) {
-    self->_messageCallbackRoot  = nullptr;
-    self->_messageCallbackCount = 0;
+    self->_messageCallbacks.root  = nullptr;
+    self->_messageCallbacks.count = 0;
     self->_quitRequested        = 0;
     ::Application::Application::_singleton = self;
     self->_windowHandle         = nullptr;

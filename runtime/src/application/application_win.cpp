@@ -218,7 +218,7 @@ void EnableCursorBody(App* self, bool enabled, RtSink& out) {
            "Application._cursorEnabled");                        // 0x18009f809
 
     using rtsetavl::Node;
-    Node* n = static_cast<Node*>(self->_messageCallbackRoot);
+    Node* n = self->_messageCallbacks.root;
     const Node* found = nullptr;
     while (n != nullptr) {
         const unsigned key = reinterpret_cast<const CursorCallbackElement*>(n)->message;
