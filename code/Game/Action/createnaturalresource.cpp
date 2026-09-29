@@ -256,4 +256,20 @@ void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400c6a20 — CreateNaturalResource_Action_CopyCtor
+//   RCX=self, RDX=param_2 (raw u64 @ +0x20), R8=param_3, R9D=param_4 (int @ +0x30).
+//   +0x20 = param_2 ; +0x28 = *param_3 ; +0x30 = param_4.
+// ============================================================
+void* ActChild_CreateNRCopyCtor_c6a20(void* self, uint64_t param_2, uint64_t* param_3, uint32_t param_4) {
+    // ENDGAME B.3.8 ACT: the real ctor (CreateNaturalResource.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) CreateNaturalResource(param_2, param_3, param_4));
+}
+
+// 0x1400c6a20: +0x20 = param_2 (raw) ; +0x28 = *param_3 ; +0x30 = param_4.
+CreateNaturalResource::CreateNaturalResource(uint64_t desc, uint64_t* parent, uint32_t cell)
+    : descEntity(reinterpret_cast<void*>(desc)),
+      parentEntity(reinterpret_cast<void*>(*parent)),
+      cellIndex(static_cast<int32_t>(cell)) {}
+
 DEFINE_EXE_TYPE(CreateNaturalResource, "Action")

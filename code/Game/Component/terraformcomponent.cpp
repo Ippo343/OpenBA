@@ -46,17 +46,6 @@
 // DAT_140172230 == 256.0f, the heightmap scale.
 static float TF_RdataF32(uint32_t bits) { float f; memcpy(&f, &bits, sizeof f); return f; }
 
-// 0x140057500 door: registered by address (standalone/reg_terraform_live.cpp).
-void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
-    self->TerraformComponent::Persist(stream);
-}
-
-
-// 0x140057350 door: registered by address (standalone/reg_terraform_live.cpp).
-void TerraformComponent_OnRemove(TerraformComponent* self) {
-    self->TerraformComponent::OnRemove();
-}
-
 
 // ============================================================
 // Reimpl of FUN_1400ab150 (CitizenAI_impl_b150): mark the region cell(s) that
@@ -362,12 +351,6 @@ void TerraformComponent_FootprintPass(TerraformComponent* self) {
         }
     }
 
-}
-
-// 0x140057310 door: registered by address (standalone/reg_terraform_live.cpp).
-extern "C" void TerraformComponent_Slot12(void* selfV, int msgId) {
-    if (!selfV) return;
-    reinterpret_cast<TerraformComponent*>(selfV)->TerraformComponent::OnEvent(msgId);   // B.3.8 bridge
 }
 
 

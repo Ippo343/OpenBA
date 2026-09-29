@@ -450,4 +450,37 @@ void* CreateRawMaterial::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400c71a0 — CreateRawMaterial_Action CopyCtor
+// Base Internal ctor, Action -> CreateRawMaterial vtable; copies +0x20=param_2 (raw u64),
+// three IBP fields (+0x28 from param_4, +0x30 from param_5, +0x38 from param_10), three
+// int fields (+0x40=param_7, +0x44=param_8, +0x48=param_11), one FLOAT (+0x4c=param_3, the
+// XMM2 arg stored via MOVSS), and two bytes (+0x50=param_9, +0x51=1).
+// ============================================================
+void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float param_3,
+                                        uint64_t* param_4, uint64_t* param_5, uint64_t param_6,
+                                        uint32_t param_7, uint32_t param_8, uint8_t param_9,
+                                        uint64_t* param_10, uint32_t param_11) {
+    // ENDGAME B.3.8 ACT: the real ctor (CreateRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (param_1) CreateRawMaterial(
+        param_2, param_3, param_4, param_5, param_6, param_7, param_8, param_9, param_10, param_11));
+}
+
+// 0x1400c71a0: +0x20 = param_2 (raw) ; +0x28/+0x30/+0x38 = *param_4 / *param_5 /
+// *param_10 ; +0x40/+0x44/+0x48 = param_7/8/11 ; +0x4c = param_3 (MOVSS, the XMM2
+// float) ; +0x50 = param_9 ; +0x51 = 1. param_6 is not read.
+CreateRawMaterial::CreateRawMaterial(uint64_t desc, float yield, uint64_t* source, uint64_t* secondary,
+                                     uint64_t /*unused6*/, uint32_t quantity, uint32_t cellIdx,
+                                     uint8_t naturalRes, uint64_t* tertiary, uint32_t placement)
+    : descEntity(reinterpret_cast<void*>(desc)),
+      sourceBuilding(reinterpret_cast<void*>(*source)),
+      secondaryEntity(reinterpret_cast<void*>(*secondary)),
+      tertiaryEntity(reinterpret_cast<void*>(*tertiary)),
+      totalQuantity(static_cast<int32_t>(quantity)),
+      materialCellIdx(static_cast<int32_t>(cellIdx)),
+      placementFlags(placement),
+      yieldMultiplier(yield),
+      naturalResFlag(naturalRes),
+      placeNearFlag(1) {}
+
 DEFINE_EXE_TYPE(CreateRawMaterial, "Action")

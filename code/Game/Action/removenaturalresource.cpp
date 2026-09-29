@@ -234,4 +234,20 @@ void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400cadf0 — RemoveNaturalResource_Action_CopyCtor
+//   RCX=self, RDX=param_2, R8=param_3, R9B=param_4 (byte @ +0x30).
+//   +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
+// ============================================================
+void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* param_3, uint8_t param_4) {
+    // ENDGAME B.3.8 ACT: the real ctor (RemoveNaturalResource.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) RemoveNaturalResource(param_2, param_3, param_4));
+}
+
+// 0x1400cadf0: +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
+RemoveNaturalResource::RemoveNaturalResource(uint64_t* p2, uint64_t* p3, uint8_t flag)
+    : _field20(reinterpret_cast<void*>(*p3)),
+      _field28(reinterpret_cast<void*>(*p2)),
+      _field30(flag) {}
+
 DEFINE_EXE_TYPE(RemoveNaturalResource, "Action")

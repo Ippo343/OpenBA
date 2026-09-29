@@ -24,6 +24,7 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "graphics/Scene.h"
 #include "Dialog/ui_panels.h"
+#include "Dialog/debugui_funcs.h"
 #include "ui/UserInterface.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"

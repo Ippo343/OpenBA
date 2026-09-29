@@ -11,10 +11,4 @@
 // Size: 0x68 bytes
 // ============================================================
 
-// Shutdown (vtable slot [3], 0x140127f40): Complex entity ref serialization.
-// Component_Serialize + empty serializer + versioned block with IBP array at +0x28,
-// counted entity array at +0x30/+0x38, IsDerivedFrom validation,
-// int fields at +0x40 and +0x44.
-void PastureComponent_Shutdown(PastureComponent* self, void* stream);
-
 // Init: resolve all internal function pointers (called once at startup)

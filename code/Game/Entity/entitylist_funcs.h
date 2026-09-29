@@ -77,15 +77,6 @@ void EntityList_PostUpdateStaging(EntityList* self);
 void EntityList_RemoveEntity(EntityList* self, void* entityIBP);
 
 // ============================================================
-// EntityList::FlagAggregation (0x1400c3470)
-// ============================================================
-// Called per-entity after component changes. ORs all component flags
-// (from +0x20 of each component) into the entity's flags at +0x40.
-// If flag bit 2 or bit 4 changed, queues entity into the appropriate
-// staging array for tree insertion on next PreUpdate/PostUpdate.
-void EntityList_FlagAggregation(void* entity);
-
-// ============================================================
 // EntityList::Serialize (0x1400c44a0)
 // ============================================================
 // Save/load the entity list. Steps:

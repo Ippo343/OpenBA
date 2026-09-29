@@ -43,9 +43,6 @@
 static uint32_t EffTid_StorageDescription() {
     return StorageDescription::TypeId();
 }
-static uint32_t EffTid_RawMaterialDescription() {
-    return RawMaterialDescription::TypeId();
-}
 
 // ============================================================
 // Helper: Get StorageDescription sibling component
@@ -59,59 +56,6 @@ static void* GetStorageDescription(StorageComponent* self) {
 
     bool derived = Object::IsDerivedFromNullSafe(obj, tid);
     return derived ? obj : nullptr;
-}
-
-
-
-// ============================================================
-// Helper: find the RawMaterialDescription on a material TEMPLATE entity
-// (descriptions at +0x28 raw-pointer array / +0x30 count) — the inline
-// scan shared by QueryCount / Helper_c560 in the original.
-// ============================================================
-static void* FindRawMatDescription(uintptr_t materialEntity) {
-    uint32_t tid = EffTid_RawMaterialDescription();
-    if (!materialEntity || tid == 0) return nullptr;
-    int compCount = *(int*)(materialEntity + 0x30);
-    uintptr_t compArray = *(uintptr_t*)(materialEntity + 0x28);
-    for (int i = 0; i < compCount; i++) {
-        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-        if (typeId == tid) {
-            // Original: IsDerivedFrom-narrow, then break either way.
-            return Object::IsDerivedFromNullSafe(comp, tid) ? comp : nullptr;
-        }
-    }
-    return nullptr;
-}
-
-// ============================================================
-// StorageComponent::QueryCount (0x14012cf10) — faithful reimpl
-// ============================================================
-// VOLUME-weighted total (verified vs Ghidra): for each storage slot
-// (comp+0x28, stride 0x10: {materialEntity(8), count(4), reserved(4)}), find
-// the material's RawMaterialDescription and accumulate
-//   desc(+0x48 unit volume) * slot count(+0x08).
-// The previous port summed raw counts (UNFAITHFUL — capacity +0x38 is in
-// volume units, _volumeLimit * area). Standalone-inert guard: a slot whose
-// material has no RawMaterialDescription contributes 0 (retail reads
-// *(NULL+0x48)).
-
-int StorageComponent_QueryCount(void* storageComp) {
-    if (!storageComp) return 0;
-
-    uintptr_t sc = (uintptr_t)storageComp;
-    int slotCount = *(int*)(sc + 0x30);
-    uintptr_t slotArray = *(uintptr_t*)(sc + 0x28);
-    int total = 0;
-
-    for (int i = 0; i < slotCount; i++) {
-        uintptr_t slotEntry = slotArray + (uintptr_t)i * 0x10;
-        void* matDesc = FindRawMatDescription(*(uintptr_t*)slotEntry);
-        int unitVol = matDesc ? *(int*)((uintptr_t)matDesc + 0x48) : 0;
-        total += unitVol * *(int*)(slotEntry + 0x08);
-    }
-
-    return total;
 }
 
 // ============================================================
@@ -140,24 +84,6 @@ int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity) {
             return *(int*)(row + 0x08) - *(int*)(row + 0x0c);
     }
     return 0;
-}
-
-// ============================================================
-// StorageComponent::Helper_c560 (0x14012c560) — null-safe reimpl
-// ============================================================
-// Checks if (param_1[0x3C] & RawMaterialDescription[0x5C]) != 0.
-// Searches material type entity for RawMaterialDescription component,
-// guards against NULL.
-
-uint32_t StorageComponent_Helper_c560(void* param_1, void* param_2) {
-    // Type-id via EffTid (GetTypeIdByName in the standalone exe).
-    void* rawMatDesc = FindRawMatDescription((uintptr_t)param_2);
-
-    if (!rawMatDesc) return 0;
-
-    uint32_t flags1 = *(uint32_t*)((uintptr_t)param_1 + 0x3C);
-    uint32_t flags2 = *(uint32_t*)((uintptr_t)rawMatDesc + 0x5C);
-    return (flags1 & flags2) != 0 ? 1 : 0;
 }
 
 // ============================================================
