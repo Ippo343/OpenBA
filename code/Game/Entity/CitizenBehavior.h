@@ -259,6 +259,8 @@ public:
     void AddCellEntry(int x, int y, int value);                       // 0x140088a80
     void UnregisterWell(Object::InternalPtr<WellComponent>* well);    // 0x140091ba0
     void RegisterWell(Object::InternalPtr<WellComponent>* well);      // 0x140091cb0
+    // The zone registry (+0x160; body in Component/zonecomponent.cpp).
+    void AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity); // 0x140088e20
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

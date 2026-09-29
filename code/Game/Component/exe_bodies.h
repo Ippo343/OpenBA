@@ -273,7 +273,7 @@ void WorkPlaceComponent_OnCreateInit(void* selfP);  // 0x14012ee60 B4 FORWARD ->
 extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14012f670 B4 FORWARD -> WorkPlaceComponent::LeaveBuilderProfession (destroycomponent_states.cpp)
 
 // ---- zonecomponent.cpp
-void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV);  // 0x140088e20
+// B.4 COMP-f: 0x140088e20 is CitizenBehavior::AddZoneEntity.
 
 // ============================================================
 // Moved from engine/funcs/engine_funcs.h's "TO MOVE: Component" section (B3R G-CompD).
