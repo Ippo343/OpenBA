@@ -167,8 +167,8 @@
 // that stays the registered DOOR `RtEngine_Engine_Ctor`, engine_lifecycle.cpp).
 //
 // `?_singleton@Engine@1@0PEAV11@EA` (0x1801fe748) is the class static below; its
-// minted row is RETIRED (ENDGAME B.3.9 ENG W2). The subsystem fields keep the POD's `void*`
-// spelling; the sixteen exported accessors below give each its retail type.
+// minted row is RETIRED (ENDGAME B.3.9 ENG W2). B.4 R-ENG: each subsystem field
+// has the type its exported accessor returns (H4, layout-neutral).
 // ############################################################################
 
 namespace System      { class Configuration; class Time; }
@@ -199,21 +199,21 @@ public:
     // `MOV RAX,[RCX+off]; RET` (GetMemoryAllocator is `MOV RAX,RCX`).
     // Faithful inline bodies, NOT REGISTERED (nothing resolves them).
     rt::system::MemoryAllocator* GetMemoryAllocator() { return &_allocator; }  // 0x18000c8b0
-    IO::FileSystem*   GetFileSystem()   { return static_cast<IO::FileSystem*>(_fileSystem); }    // 0x18000c8c0
-    IO::Persistence*  GetPersistence()  { return static_cast<IO::Persistence*>(_persistence); }  // 0x18000c8d0
-    IO::Modification* GetModification() { return static_cast<IO::Modification*>(_modification); } // 0x18000c8e0
-    System::Configuration* GetConfiguration() { return static_cast<System::Configuration*>(_configuration); } // 0x18000c8f0
-    ::Application::Application* GetApplication() { return static_cast< ::Application::Application*>(_application); } // 0x18000c900
-    Object::InternalFactory* GetInternalFactory() { return static_cast<Object::InternalFactory*>(_internalFactory); } // 0x18000c910
-    Object::Factory*  GetFactory()      { return static_cast<Object::Factory*>(_factory); }        // 0x18000c920
-    Object::ExternalFactory* GetExternalFactory() { return static_cast<Object::ExternalFactory*>(_externalFactory); } // 0x18000c930
-    Video::Configuration* GetVideoConfiguration() { return static_cast<Video::Configuration*>(_videoConfiguration); } // 0x18000c940
-    Video::Device*    GetVideoDevice()  { return static_cast<Video::Device*>(_videoDevice); }      // 0x18000c950
-    Audio::Configuration* GetAudioConfiguration() { return static_cast<Audio::Configuration*>(_audioConfiguration); } // 0x18000c960
-    Audio::Device*    GetAudioDevice()  { return static_cast<Audio::Device*>(_audioDevice); }      // 0x18000c970
-    Input::Configuration* GetInputConfiguration() { return static_cast<Input::Configuration*>(_inputConfiguration); } // 0x18000c980
-    Input::Device*    GetInputDevice()  { return static_cast<Input::Device*>(_inputDevice); }      // 0x18000c990
-    Achievement::AchievementManager* GetAchievementManager() { return static_cast<Achievement::AchievementManager*>(_achievementManager); } // 0x18000c9a0
+    IO::FileSystem*   GetFileSystem()   { return _fileSystem; }                 // 0x18000c8c0
+    IO::Persistence*  GetPersistence()  { return _persistence; }                // 0x18000c8d0
+    IO::Modification* GetModification() { return _modification; }               // 0x18000c8e0
+    System::Configuration* GetConfiguration() { return _configuration; }        // 0x18000c8f0
+    ::Application::Application* GetApplication() { return _application; }       // 0x18000c900
+    Object::InternalFactory* GetInternalFactory() { return _internalFactory; }  // 0x18000c910
+    Object::Factory*  GetFactory()      { return _factory; }                    // 0x18000c920
+    Object::ExternalFactory* GetExternalFactory() { return _externalFactory; }  // 0x18000c930
+    Video::Configuration* GetVideoConfiguration() { return _videoConfiguration; } // 0x18000c940
+    Video::Device*    GetVideoDevice()  { return _videoDevice; }                // 0x18000c950
+    Audio::Configuration* GetAudioConfiguration() { return _audioConfiguration; } // 0x18000c960
+    Audio::Device*    GetAudioDevice()  { return _audioDevice; }                // 0x18000c970
+    Input::Configuration* GetInputConfiguration() { return _inputConfiguration; } // 0x18000c980
+    Input::Device*    GetInputDevice()  { return _inputDevice; }                // 0x18000c990
+    Achievement::AchievementManager* GetAchievementManager() { return _achievementManager; } // 0x18000c9a0
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static Engine* Get();                                         // 0x18000c7c0
@@ -239,22 +239,22 @@ public:
     // `this`, so `&engine->_allocator == (void*)engine`.
     rt::system::MemoryAllocator _allocator;  // +0x000 .. +0x66f
 
-    void*   _fileSystem;                     // +0x670  IO::FileSystem*
-    void*   _persistence;                    // +0x678  IO::Persistence*
-    void*   _modification;                   // +0x680  IO::Modification*
-    void*   _configuration;                  // +0x688  System::Configuration*
-    void*   _application;                    // +0x690  Application::Application*
-    void*   _platformHandle;                 // +0x698  ctor arg; HINSTANCE on Win32
-    void*   _factory;                        // +0x6a0  Object::Factory*
-    void*   _internalFactory;                // +0x6a8  Object::InternalFactory*
-    void*   _externalFactory;                // +0x6b0  Object::ExternalFactory*
-    void*   _videoConfiguration;             // +0x6b8  Video::Configuration*
-    void*   _videoDevice;                    // +0x6c0  Video::Device*
-    void*   _audioConfiguration;             // +0x6c8  Audio::Configuration*
-    void*   _audioDevice;                    // +0x6d0  Audio::Device*
-    void*   _inputConfiguration;             // +0x6d8  Input::Configuration*
-    void*   _inputDevice;                    // +0x6e0  Input::Device*
-    void*   _achievementManager;             // +0x6e8  Achievement::AchievementManager*
+    IO::FileSystem*          _fileSystem;          // +0x670
+    IO::Persistence*         _persistence;         // +0x678
+    IO::Modification*        _modification;        // +0x680
+    System::Configuration*   _configuration;       // +0x688
+    ::Application::Application* _application;     // +0x690
+    void*                    _platformHandle;      // +0x698  ctor arg; HINSTANCE on Win32
+    Object::Factory*         _factory;             // +0x6a0
+    Object::InternalFactory* _internalFactory;     // +0x6a8
+    Object::ExternalFactory* _externalFactory;     // +0x6b0
+    Video::Configuration*    _videoConfiguration;  // +0x6b8
+    Video::Device*           _videoDevice;         // +0x6c0
+    Audio::Configuration*    _audioConfiguration;  // +0x6c8
+    Audio::Device*           _audioDevice;         // +0x6d0
+    Input::Configuration*    _inputConfiguration;  // +0x6d8
+    Input::Device*           _inputDevice;         // +0x6e0
+    Achievement::AchievementManager* _achievementManager; // +0x6e8
 
     // Startup clears this at entry and sets it at the very end; Shutdown
     // copies `(_startupComplete == 0)` into Video::Configuration byte 0, which
@@ -301,24 +301,25 @@ namespace RtEngine { using Engine = ::Engine::Engine; }
 // ==== B3R RT-Core: the singleton constructor bodies ====
 // runtime/src/engine/singleton_ctors.cpp: retail's (inlined) constructor bodies
 // Engine::Engine and Engine::Startup run over freshly allocated storage. Each
-// takes the raw storage and returns it (MSVC's return-`this`), and each
-// publishes its class's `_singleton`. Called by name from engine_lifecycle.cpp.
+// takes that storage as its class and returns it (MSVC's return-`this`), and
+// each publishes its class's `_singleton`. Called by name from
+// engine_lifecycle.cpp.
 namespace rtengine {
-void* Ctor_MemoryAllocator(void* self);                  // 0x1800c79a0
-void  Dtor_MemoryAllocator(void* self);                  // 0x1800c7960
-void* Ctor_Modification(void* self);                     // 0x1800b04b0
-void* Ctor_Factory(void* self);                          // 0x1800c09d0
-void* Ctor_ExternalFactory(void* self);                  // 0x1800be7e0
-void* Ctor_InternalFactory(void* self);                  // 0x1800c0030
-void* Ctor_FileSystem(void* self);                       // 0x1800ac7c0
-void* Ctor_Persistence(void* self);                      // 0x1800b8020
-void* Ctor_VideoDevice(void* self, int32_t type);        // 0x1800f7160
-void* Ctor_VideoConfiguration(void* self);               // 0x1800f6f10
-void* Ctor_Application(void* self, void* hinstance);     // 0x18009f590
-void* Ctor_InputDevice(void* self);                      // 0x1800e13b0
-void* Ctor_InputConfiguration(void* self);               // 0x1800e0de0
-void* Ctor_AudioDevice(void* self);                      // 0x1800de3a0
-void* Ctor_AudioConfiguration(void* self);               // 0x1800ddeb0
+rt::system::MemoryAllocator* Ctor_MemoryAllocator(rt::system::MemoryAllocator* self);   // 0x1800c79a0
+void                   Dtor_MemoryAllocator(rt::system::MemoryAllocator* self);         // 0x1800c7960
+IO::Modification*      Ctor_Modification(IO::Modification* self);                       // 0x1800b04b0
+Object::Factory*       Ctor_Factory(Object::Factory* self);                             // 0x1800c09d0
+Object::ExternalFactory* Ctor_ExternalFactory(Object::ExternalFactory* self);           // 0x1800be7e0
+Object::InternalFactory* Ctor_InternalFactory(Object::InternalFactory* self);           // 0x1800c0030
+IO::FileSystem*        Ctor_FileSystem(IO::FileSystem* self);                           // 0x1800ac7c0
+IO::Persistence*       Ctor_Persistence(IO::Persistence* self);                         // 0x1800b8020
+Video::Device*         Ctor_VideoDevice(Video::Device* self, int32_t type);             // 0x1800f7160
+Video::Configuration*  Ctor_VideoConfiguration(Video::Configuration* self);             // 0x1800f6f10
+Application::Application* Ctor_Application(Application::Application* self, void* hinstance);  // 0x18009f590
+Input::Device*         Ctor_InputDevice(Input::Device* self);                           // 0x1800e13b0
+Input::Configuration*  Ctor_InputConfiguration(Input::Configuration* self);             // 0x1800e0de0
+Audio::Device*         Ctor_AudioDevice(Audio::Device* self);                           // 0x1800de3a0
+Audio::Configuration*  Ctor_AudioConfiguration(Audio::Configuration* self);             // 0x1800ddeb0
 }  // namespace rtengine
 // ==== end B3R RT-Core ====
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====

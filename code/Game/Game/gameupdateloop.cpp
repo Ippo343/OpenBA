@@ -1671,7 +1671,7 @@ void GameUpdateLoop::Startup() {
         static bool s_diag = false;
         if (!s_diag) {
             s_diag = true;
-            void* rl = _resourceList;
+            const ::Object::ExternalList* rl = _resourceList;
             fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p DialogTypeId=%u\n",
                     rl, UI::Dialog::TypeId());
             fflush(stderr);
@@ -1679,7 +1679,7 @@ void GameUpdateLoop::Startup() {
                 System::Filename fnbuf("Dialog/Toolbar.rsc");
                 void* foundBase = nullptr;
                 uint32_t typeInfo = UI::Dialog::TypeId();
-                foundBase = reinterpret_cast<const ::Object::ExternalList*>(rl)
+                foundBase = rl
                                 ->Find(fnbuf, typeInfo)._ptr;
                 fprintf(stderr, "[HUD-DIAG] ExternalList::Find(\"Dialog/Toolbar.rsc\") -> foundBase=%p\n",
                         foundBase);
@@ -1725,7 +1725,7 @@ void GameUpdateLoop::Startup() {
         void* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI] (0x140097c83)
         if (_resourceList)
-            foundBase = reinterpret_cast<const ::Object::ExternalList*>(_resourceList)
+            foundBase = _resourceList
                             ->Find(filename, typeInfo)._ptr;
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
@@ -1789,7 +1789,7 @@ void GameUpdateLoop::Startup() {
         void* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
         if (_resourceList)
-            foundBase = reinterpret_cast<const ::Object::ExternalList*>(_resourceList)
+            foundBase = _resourceList
                             ->Find(filename, typeInfo)._ptr;
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
@@ -1844,7 +1844,7 @@ void GameUpdateLoop::Startup() {
         void* foundBase = nullptr;
         uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
         if (_resourceList)
-            foundBase = reinterpret_cast<const ::Object::ExternalList*>(_resourceList)
+            foundBase = _resourceList
                             ->Find(filename, typeInfo)._ptr;
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {

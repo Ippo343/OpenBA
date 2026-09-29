@@ -52,16 +52,6 @@
 
 namespace {
 
-// `?_singleton@Device@Audio@@0PEAV12@EA` @ 0x1801fe760 — ordinal 4805, an
-// exported DATA symbol (carry-over 5: it stays a slot). Retail derefs it
-// UNGUARDED (`MOV RCX,[0x1801fe760]`) and hands the result to
-// OnSoundBufferDeleted as `this`; the null test below exists only because
-// RT_DATA_SLOT can return a slot the mint has not filled.
-void* AudioDeviceSingleton() {
-    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
-    return slot ? *slot : nullptr;
-}
-
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — PORTED. Retail's
 // four call sites here test for null OUTSIDE the call; MemFree tests again
 // inside, so the behaviour is identical. Called by name (B3R).
@@ -139,7 +129,9 @@ void Device::OnSoundBufferDeleted(const SoundBuffer* buffer) {
 // tail.
 // ############################################################################
 Audio::SoundBuffer::~SoundBuffer() {
-    reinterpret_cast<Audio::Device*>(AudioDeviceSingleton())->OnSoundBufferDeleted(this);   // B.3.7 bridge
+    // `?_singleton@Device@Audio@@` (0x1801fe760), dereferenced UNGUARDED
+    // (`MOV RCX,[0x1801fe760]`), as retail does.
+    Audio::Device::_singleton->OnSoundBufferDeleted(this);
 
     if (_data != nullptr)
         MemFree(_data);                                      // +0x38

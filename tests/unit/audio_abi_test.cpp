@@ -277,7 +277,7 @@ UNIT_TEST(audio_device_layout_holds_the_stream_pod) {
     CHECK_EQ((int)offsetof(Audio::Device, _masteringVoice),   0xa90);
     CHECK_EQ((int)offsetof(Audio::Device, _platformChannels), 0xa98);
     // B7-12: the Device holds the Stream POD, not the polymorphic class.
-    CHECK((std::is_same<decltype(Audio::Device::_stream), RtAudio::Stream>::value));
+    CHECK((std::is_same<decltype(Audio::Device::_stream), Audio::Stream>::value));
     // The three Stream fields the Device bodies reach by Device offset.
     CHECK_EQ((int)(offsetof(Audio::Device, _stream) + offsetof(RtAudio::Stream, _lock)),      0xa50);
     CHECK_EQ((int)(offsetof(Audio::Device, _stream) + offsetof(RtAudio::Stream, _wakeEvent)), 0xa40);
@@ -436,7 +436,7 @@ UNIT_TEST(audio_accessors_read_retails_offsets) {
     Audio::Device& dev = *reinterpret_cast<Audio::Device*>(devStorage);
     CHECK(reinterpret_cast<uint8_t*>(dev.GetChannel(3)) == devStorage + 3 * 0x28);            // 0x18000c710
     CHECK(reinterpret_cast<uint8_t*>(dev.GetPlatformChannel(2)) == devStorage + 0xa98 + 0x40); // 0x18000c720
-    CHECK(reinterpret_cast<uint8_t*>(dev.StreamObject()) == devStorage + 0xa00);
+    CHECK(reinterpret_cast<uint8_t*>(&dev._stream) == devStorage + 0xa00);
 
     alignas(8) uint8_t sceneStorage[sizeof(Audio::Scene)] = {};
     sceneStorage[0x30 + 4] = 1;

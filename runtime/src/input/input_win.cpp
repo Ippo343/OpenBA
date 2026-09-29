@@ -126,14 +126,12 @@ void Device::PlatformUpdate() {
         return;
     }
 
-    void** appSlot = reinterpret_cast<void**>(&::Application::Application::_singleton);
-    void*  app     = appSlot ? *appSlot : nullptr;
-    HWND   hwnd    = *reinterpret_cast<HWND*>(app);   // Application +0x00
+    HWND   hwnd    = static_cast<HWND>(::Application::Application::_singleton->_windowHandle);   // Application +0x00  CAST-OK: win32
 
     RECT rc;
     GetClientRect(hwnd, &rc);
-    ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.left));    // (left, top)
-    ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.right));   // (right, bottom)
+    ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.left));    // (left, top)  CAST-OK: win32
+    ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.right));   // (right, bottom)  CAST-OK: win32
     ClipCursor(&rc);
 }
 

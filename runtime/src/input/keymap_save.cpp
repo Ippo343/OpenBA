@@ -301,9 +301,12 @@ void KeyMap::Save() {
 // retail emitted it inline here and calling ClearAll would add a call the
 // original does not make.
 // ============================================================================
-void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
+Input::KeyMap* RtInput_KeyMap_DeletingDtor(Input::KeyMap* self) {
 
-    auto* set = reinterpret_cast<rtsetavl24::Set*>(static_cast<uint8_t*>(selfPtr) + 8);
+    // KeyMap's +0x08 {_root, _count, _pad14} seen as the rtsetavl24 core's Set,
+    // whose nodes are untyped (set_avl_e24.h); LEFT until the core takes a
+    // BindingNode.
+    auto* set = reinterpret_cast<rtsetavl24::Set*>(&self->_root);
     auto* root = set->root;
     const int countBefore = set->count;
     const unsigned visitsBefore = rtsetavl24::g_destroyVisits;
@@ -318,7 +321,7 @@ void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
 
     // 0x180006a10 — `if (p) { Enter; Free(_singleton, p); Leave; }`, one
     // argument (video/context_lifecycle.cpp).
-    Rt_GuardedObjectFree(selfPtr);
+    Rt_GuardedObjectFree(self);
 
     // No comparison is possible: the tree is freed, so there is nothing left to
     // compare against, and the shipped body reaches 0x180009c30 through a near
@@ -332,5 +335,5 @@ void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
     char a[128];
     std::snprintf(a, sizeof(a), "destroy walk visited %u of count-1 = %d",
                   visited, countBefore - 1);
-    return selfPtr;
+    return self;
 }

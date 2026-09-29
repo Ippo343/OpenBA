@@ -187,19 +187,18 @@ namespace {
 // freeze a pre-init answer (rt_resolve_cache.cpp §6). All three names are Wave
 // 15 rows. (`DataExport` went with its last users, the four `??_7` vtable reads
 // of the retired loop ctor / dtor doors, ENDGAME B.3.9 ENG W2.)
-using MainLoopSlot        = Engine::MainLoop**;
 // ENDGAME B.3.9 SS1 (B39_RULES D7): `?_singleton@ExternalFactory@Object@@` and
 // `?_singleton@Modification@IO@@` are class statics now (redirect in their
 // namespace's *PortInit) -- read fresh, no lazy RT_DATA_SLOT cache.
-RtObject::ExternalFactory* Factory() {
-    return reinterpret_cast<RtObject::ExternalFactory*>(::Object::ExternalFactory::_singleton);
+::Object::ExternalFactory* Factory() {
+    return ::Object::ExternalFactory::_singleton;
 }
 // IO::Modification::_singleton. Note the `2PEAV12@EA` spelling — a PUBLIC
 // static, where every neighbouring singleton is `0PEAV12@EA`; the other
 // spelling is a phantom that resolves NULL in silence
 // (reference_resolveexport_phantom_names.md).
-uint8_t* ModificationSingleton() {
-    return reinterpret_cast<uint8_t*>(::IO::Modification::_singleton);
+IO::Modification* ModificationSingleton() {
+    return ::IO::Modification::_singleton;
 }
 // Engine::MainLoop::_singleton — the DLL data symbol holding a MainLoop*.
 //     IsRunning:          MOV RAX,[0x1801fe750]; CMP RCX,[RAX+0x20]
@@ -214,8 +213,7 @@ uint8_t* ModificationSingleton() {
 // `RtEngine::UpdateLoop*`, the same type this lane's ports take, so the
 // comparison below is type-checked end to end.
 Engine::MainLoop* MainLoopSingleton() {
-    MainLoopSlot p = reinterpret_cast<MainLoopSlot>(&::Engine::MainLoop::_singleton);
-    return p ? *p : nullptr;
+    return ::Engine::MainLoop::_singleton;
 }
 // Both Load bodies read the FIRST DWORD of UI::Dialog's `_typeInfo` as the type
 // id (`MOV EDX,[0x1801faa88]`): `UI::Dialog::TypeId()` (ENDGAME B.3.9 TI-UI).
@@ -300,7 +298,7 @@ void Engine::UpdateLoop::InitFields() {
     _internalListB = nullptr;
     _loadProgress  = 0;
 
-    RtObject::ExternalFactory* factory = Factory();
+    ::Object::ExternalFactory* factory = Factory();
     // The allocation mask is the dword at factory + 0x04. Wave 3 declared that
     // word `_pad04`; this port is what named it, because the only two functions
     // that touch it are this ctor and ~UpdateLoop — see the correction note in
@@ -323,7 +321,7 @@ void Engine::UpdateLoop::InitFields() {
 void Engine::UpdateLoop::ReleaseFields() {
     const int32_t bit = _loadBit;
     if (bit >= 0) {
-        RtObject::ExternalFactory* factory = Factory();
+        ::Object::ExternalFactory* factory = Factory();
         // The dtor hands the slot back in three steps, in this order: publish
         // the index as the factory's _cleanBitIndex, sweep, THEN clear the bit.
         // Clean (0x1800be310) reads _cleanBitIndex and evicts every resource
@@ -331,7 +329,7 @@ void Engine::UpdateLoop::ReleaseFields() {
         // order is load bearing — clearing the mask first would sweep for the
         // wrong bit.
         factory->_cleanBitIndex = bit;
-        RtObject::RtObject_ExternalFactory_Clean(factory);   // 0x1800be310
+        factory->Clean();                                    // 0x1800be310
         // Retail re-reads this->_loadBit here rather than reusing the register
         // it tested; reproduced, because Clean could in principle reach code
         // that writes it.
@@ -405,21 +403,21 @@ void Engine::Loader::Load(UpdateLoop* loop) {
     // minted) table exactly as the hand-inlined `vtable[11]` did.
     const bool allowsModChanges = loop->AllowsModChanges();
 
-    uint8_t* mod = ModificationSingleton();
-    RtObject::ExternalFactory* factory = Factory();
+    IO::Modification* mod = ModificationSingleton();
+    ::Object::ExternalFactory* factory = Factory();
 
-    // IO::Modification +0x00 = _dirty, +0x01 = _savingEnabled
-    // (engine/types/Modification.h). Retail compares the stored byte against
-    // the bool it just got and only acts when they differ.
-    if (mod[1] != static_cast<uint8_t>(allowsModChanges)) {
+    // IO::Modification +0x00 = _dirty, +0x01 = _savingSettings. Retail compares
+    // the stored byte against the bool it just got and only acts when they
+    // differ.
+    if (mod->_savingSettings != static_cast<uint8_t>(allowsModChanges)) {
         if (allowsModChanges) {
-            mod[1] = static_cast<uint8_t>(allowsModChanges);
-            reinterpret_cast<IO::Modification*>(mod)->RefreshList();
-            mod[0] = 1;
+            mod->_savingSettings = static_cast<uint8_t>(allowsModChanges);
+            mod->RefreshList();
+            mod->_dirty = 1;
         } else {
-            mod[1] = 0;
+            mod->_savingSettings = 0;
             // Array<Mod>::operator=(&_savedMods, &_mods) — dst +0x18, src +0x08.
-            RtIO::RtColl_ArrayModAssign_180010110(mod + 0x18, mod + 0x08);
+            RtIO::RtColl_ArrayModAssign_180010110(&mod->_savedMods, &mod->_mods);
         }
     }
 
@@ -427,7 +425,7 @@ void Engine::Loader::Load(UpdateLoop* loop) {
     // FindOrLoad cache-hit path re-registers each resource against the current
     // clean bit (runtime/types/object/External.h documents +0x41).
     factory->_loadEnabled = true;
-    reinterpret_cast<IO::Modification*>(mod)->SetupFileSystem();   // 0x1800aebb0
+    mod->SetupFileSystem();                                        // 0x1800aebb0
     factory->_loadEnabled = false;
 
     // Retail inlines System::Thread::Start here:
@@ -456,14 +454,14 @@ void Engine::DialogLoopT::Load() {
     // and RAII is the release retail does at the bottom.
     System::Filename tmp(_dialogFilename);
 
-    const void* external = RtObject::RtObject_ExternalFactory_FindOrLoad(   // 0x1800bf320
-        Factory(), reinterpret_cast<const RtSystem::Filename*>(&tmp));
-    void* result = nullptr;
+    const ::Object::External* external = Factory()->FindOrLoad(tmp);   // 0x1800bf320
+    const UI::Dialog* result = nullptr;
     if (external) {
         // `? external : nullptr` is a CMOVNZ on the type test, not a branch
-        // that skips the store: the field is written either way.
-        if (static_cast<const ::Object::Base*>(external)->IsDerivedFrom(UI::Dialog::TypeId()))
-            result = const_cast<void*>(external);
+        // that skips the store: the field is written either way. The downcast
+        // follows the type test (B10).
+        if (external->IsDerivedFrom(UI::Dialog::TypeId()))
+            result = static_cast<const UI::Dialog*>(external);
     }
     _dialogExternal = result;
 }
@@ -480,17 +478,16 @@ void Engine::DialogLoopT::Startup() {
     // an fn_* typedef is the wild-write family this project has paid for twice:
     // reference_hidden_retslot_wild_write.md). ENDGAME B.3.7: the slot is
     // declared retslot-first on the class, so this is an ordinary virtual call.
-    void* ret = nullptr;
-    Object::InternalPtr<UI::DialogInstance>* retSlot = CreateLoopDialog(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&ret));
+    Object::InternalPtr<UI::DialogInstance> ret;
+    Object::InternalPtr<UI::DialogInstance>* retSlot = CreateLoopDialog(&ret);
 
-    void* dialog = *reinterpret_cast<void**>(retSlot);
+    UI::DialogInstance* dialog = retSlot->Get();
     _dialogInstance = dialog;
     ret = dialog;   // retail re-stores it into the same slot before passing it on
 
     // dialog->OnOpened() -- slot 4 of UI::DialogInstance (B.3.6), the virtual
     // retail calls before the instance is queued.
-    reinterpret_cast<UI::DialogInstance*>(dialog)->OnOpened();       // B.3.7 bridge
+    dialog->OnOpened();
 
     // _ui._addDialogs.SetSize(size + 1, ret) — the append. Update drains that
     // array back-to-front into the live dialog list next frame
@@ -532,12 +529,11 @@ void Engine::DialogLoaderLoopT::Load() {
     // Filename ctor 0x18000c780 and the release at the bottom is ~Filename.
     System::Filename tmp(_dialogFilename);
 
-    const void* external = RtObject::RtObject_ExternalFactory_FindOrLoad(   // 0x1800bf320
-        Factory(), reinterpret_cast<const RtSystem::Filename*>(&tmp));
-    void* result = nullptr;
+    const ::Object::External* external = Factory()->FindOrLoad(tmp);   // 0x1800bf320
+    const UI::Dialog* result = nullptr;
     if (external) {
-        if (static_cast<const ::Object::Base*>(external)->IsDerivedFrom(UI::Dialog::TypeId()))
-            result = const_cast<void*>(external);
+        if (external->IsDerivedFrom(UI::Dialog::TypeId()))
+            result = static_cast<const UI::Dialog*>(external);
     }
     _dialogExternal = result;
 }
@@ -555,15 +551,14 @@ namespace { Engine::Loader* LoaderLoopLoader(); }
 void Engine::DialogLoaderLoopT::Startup() {
 
     // The same slot-12 call as DialogLoopT::Startup (see there).
-    void* ret = nullptr;
-    Object::InternalPtr<UI::DialogInstance>* retSlot = CreateLoopDialog(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&ret));
+    Object::InternalPtr<UI::DialogInstance> ret;
+    Object::InternalPtr<UI::DialogInstance>* retSlot = CreateLoopDialog(&ret);
 
-    void* dialog = *reinterpret_cast<void**>(retSlot);
+    UI::DialogInstance* dialog = retSlot->Get();
     _dialogInstance = dialog;
     ret = dialog;
 
-    reinterpret_cast<UI::DialogInstance*>(dialog)->OnOpened();       // B.3.7 bridge
+    dialog->OnOpened();
 
     // retail 0x18007a0d0 — kSpec_Fill8Z; see the banner above.
     rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&_ui._addDialogs)
@@ -721,8 +716,8 @@ Engine::Loader* LoaderLoopLoader() {
 // `Video::Context::_contextData` (+0x2160), which the header types as
 // `ContextData*`. The CONCRETE `*Data` subclass and the dx11 seam stay as they
 // are (B35_RULES section 11); only the dispatch converts.
-inline Video::ContextData* CtxDataOf(RtVideo::Context* ctx) {
-    return reinterpret_cast<Video::ContextData*>(ctx->_contextData);   // B.3.5 bridge
+inline Video::ContextData* CtxDataOf(Video::Context* ctx) {
+    return ctx->_contextData;
 }
 
 // MainLoop::_singleton: NOT redefined here. `MainLoopSingleton()` already exists
@@ -832,7 +827,7 @@ bool Engine::LoaderLoop::Update(const System::Time& time) {
 void Engine::LoaderLoop::Draw(float /*interpolation*/) {
     MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
-    RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
+    Video::Context* ctx = ml->_context;
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0u, 1.0f, 0);
 }
@@ -848,8 +843,8 @@ void Engine::LoaderLoop::Draw(float /*interpolation*/) {
 // copy. Passing the field's own address instead would let the callee mutate the
 // member — hence the local.
 void Engine::DialogLoaderLoopT::Shutdown() {
-    void* byValue = _dialogInstance;
-    _ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> byValue(_dialogInstance);
+    _ui.CloseDialog(&byValue);
 
     // The Shutdown@LoaderLoop tail, INLINED by retail (not a call): the wait on
     // the one static loader.
@@ -898,7 +893,7 @@ bool Engine::DialogLoaderLoopT::Update(const System::Time& time) {
 void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
     MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
-    RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
+    Video::Context* ctx = ml->_context;
 
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0u, 1.0f, 0);
@@ -912,6 +907,7 @@ void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
     ctx->_unknown03b8.x = secs;  ctx->_unknown03b8.y = 0.0f;
     ctx->_unknown03b8.z = 0.0f;  ctx->_unknown03b8.w = 0.0f;
 
+    // LEFT: `_pixelConstantStaging` is raw bytes (Context.h, R-VIDEO).
     float* staging = reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);
     staging[0] = secs; staging[1] = 0.0f; staging[2] = 0.0f; staging[3] = 0.0f;
     ctx->_dirty |= 0x10800u;
@@ -924,8 +920,8 @@ void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
 // offsets (_dialogInstance +0x38, _ui +0x40 — thirty-two bytes lower than the
 // DialogLoaderLoopT pair, because there is no LoaderLoop subobject).
 void Engine::DialogLoopT::Shutdown() {
-    void* byValue = _dialogInstance;
-    _ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> byValue(_dialogInstance);
+    _ui.CloseDialog(&byValue);
 }
 
 // ---- ?Draw@DialogLoopT@Engine@@UEAAXM@Z  0x1800db210  ord 2239 --------------
@@ -937,7 +933,7 @@ void Engine::DialogLoopT::Shutdown() {
 void Engine::DialogLoopT::Draw(float /*interpolation*/) {
     MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
-    RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
+    Video::Context* ctx = ml->_context;
 
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0xff808080u, 1.0f, 0);
@@ -988,12 +984,10 @@ void Engine::Loader::Run() {
     // for a cell that might not exist, so removing it cannot be justified the
     // way the FileSystem/Configuration door guards elsewhere in this batch
     // could be (coordinator correction, ENDGAME B.3.9 SS1 round 2).
-    void** engineSlot = static_cast<void**>(static_cast<void*>(&::Engine::Engine::_singleton));
-    void** factorySlot = reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton);
-    if (!engineSlot || !factorySlot) return;
-
-    ::Engine::Engine* engine = static_cast< ::Engine::Engine*>(*engineSlot);
-    uint8_t* factory = reinterpret_cast<uint8_t*>(*factorySlot);
+    // (The `if (!engineSlot || !factorySlot) return;` that stood here tested
+    // the ADDRESSES of the two class statics, which are never null.)
+    ::Engine::Engine* engine = ::Engine::Engine::_singleton;
+    ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;
 
     // `mov 0x6c0(%rsi),%rax ; mov 0x100(%rax),%rcx` — two plain loads, no null
     // test in retail. Left unguarded: retail relies on both being live for the
@@ -1004,14 +998,13 @@ void Engine::Loader::Run() {
     // `Slot4(bool)` (runtime/types/video/CompanionData.h), retail's DL = 1
     // here (0x1800dbfe7) and 0 at the close (0x1800dc028). B3R owed 3: the
     // raw `[4]` call became a call by name, same arguments.
-    void* owner = engine->_videoDevice;
-    void* mode  = *reinterpret_cast<void**>(
-                      reinterpret_cast<uint8_t*>(owner) + 0x100);
-    static_cast< ::Video::DeviceData*>(mode)->Slot4(true);
+    ::Video::Device* owner = engine->_videoDevice;
+    ::Video::DeviceData* mode = owner->deviceData;                  // +0x100
+    mode->Slot4(true);
 
-    factory[0x41] = 1;
+    factory->_loadEnabled = true;                                   // +0x41
     UpdateLoop* loop = _loop;
-    *reinterpret_cast<int32_t*>(factory) = loop->_loadBit;
+    factory->_cleanBitIndex = loop->_loadBit;                       // +0x00
 
     // `CALL ?LoadResources@UpdateLoop@Engine@@QEAAXXZ` -- a near CALL in
     // retail, so no qualification question: it is non-virtual.
@@ -1022,12 +1015,11 @@ void Engine::Loader::Run() {
     // own. An ordinary virtual call.
     loop->Load();
 
-    factory[0x41] = 0;
+    factory->_loadEnabled = false;
 
-    void* owner2 = engine->_videoDevice;
-    void* mode2  = *reinterpret_cast<void**>(
-                       reinterpret_cast<uint8_t*>(owner2) + 0x100);
-    static_cast< ::Video::DeviceData*>(mode2)->Slot4(false);
+    ::Video::Device* owner2 = engine->_videoDevice;
+    ::Video::DeviceData* mode2 = owner2->deviceData;
+    mode2->Slot4(false);
 }
 
 // ---- ?_loader@LoaderLoop@Engine@@1VLoader@2@A  0x1801fe7b8 -------------------
@@ -1063,7 +1055,7 @@ Engine::Loader Engine::LoaderLoop::_loader;
 //     because Viewport::x and ::y are adjacent int32s and no observer can tell.
 void Engine::MainLoop::Draw(float dt) {
 
-    RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(_context);
+    Video::Context* ctx = _context;
     Video::ContextData* cd = CtxDataOf(ctx);
 
     if (!cd->BeginCommands()) {
@@ -1072,26 +1064,24 @@ void Engine::MainLoop::Draw(float dt) {
         // ENDGAME B.3.7: slot 5 as an ordinary virtual call.
         _currentLoop->DrawFailed();
 
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
+        Video::Context* c = _context;
         _contextDirty = 0;
-        reinterpret_cast<Video::Context*>(c)->Reset();        // B.3.5 bridge
+        c->Reset();
         return;
     }
 
     if (_contextDirty) {
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
+        Video::Context* c = _context;
         _contextDirty = 0;
-        reinterpret_cast<Video::Context*>(c)->ClearResources();  // B.3.5 bridge
+        c->ClearResources();
     }
 
     {
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
-        // RenderBuffer width/height at +0x10/+0x14. Read off this body's own
-        // loads; no RenderBuffer type is pulled in for two ints.
-        const uint8_t* rb =
-            reinterpret_cast<const uint8_t*>(c->_defaultRenderBuffer);
-        const int32_t w = *reinterpret_cast<const int32_t*>(rb + 0x10);
-        const int32_t h = *reinterpret_cast<const int32_t*>(rb + 0x14);
+        Video::Context* c = _context;
+        // The default RenderBuffer's width / height (+0x10 / +0x14).
+        const Video::RenderBuffer* rb = c->_defaultRenderBuffer;
+        const int32_t w = rb->width;
+        const int32_t h = rb->height;
         if (c->_viewport.x != 0 || c->_viewport.y != 0 ||
             c->_viewport.width != w || c->_viewport.height != h) {
             c->_dirty |= 0x200u;
@@ -1110,17 +1100,18 @@ void Engine::MainLoop::Draw(float dt) {
     // so a callback that appends is seen by this same loop. Reproduced.
     for (int32_t i = 0; i < _postDraw._size; ++i) {
         RtEngine::MainLoopCallback e = _postDraw._data[i];
-        using PostDrawFn = void (*)(void*, void*);
-        reinterpret_cast<PostDrawFn>(e._func)(_context, e._context);
+        // LEFT: MainLoopCallback::_func is `void*` for both arrays (UI's
+        // userinterface_showdialog.cpp appends through one element type).
+        reinterpret_cast<PostDrawFunc>(e._func)(*_context, e._context);
     }
 
     {
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
+        Video::Context* c = _context;
         Video::ContextData* cd2 = CtxDataOf(c);
         cd2->EndCommands();
     }
 
-    RtVideo::Context* last = reinterpret_cast<RtVideo::Context*>(_context);
+    Video::Context* last = _context;
 
     // See note 1 above: the GLOBAL singleton, deliberately.
     if (MainLoop* g = MainLoopSingleton())

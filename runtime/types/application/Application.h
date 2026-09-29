@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
+#include "../../src/collection/set_avl.h"   // B.4 R-ENG: rtsetavl::Set (_messageCallbacks), a POD header
 
 // ############################################################################
 // Application::Application -- THE REAL CLASS (ENDGAME B.3 step 7, block B1)
@@ -227,12 +228,10 @@ public:
     // ctor is zero-initialising an empty Set.
     //
     // The element is {unsigned message; int (*)(HWND, unsigned, WPARAM, LPARAM)}.
-    // Declared as raw storage rather than as `rtsetavl::Set` so this header
-    // stays free of runtime/src/ includes; the two layouts are asserted against
-    // each other in runtime/src/application/message_callbacks.cpp.
-    void*   _messageCallbackRoot;   // +0x18  Set::root
-    int32_t _messageCallbackCount;  // +0x20  Set::count
-    int32_t _unknown24;            // +0x24  unproven.
+    // B.4 (R-ENG): typed as the `rtsetavl::Set` every reader already walks
+    // (message_callbacks.cpp, application_win.cpp, platform_startup_win.cpp,
+    // video/device_startup.cpp); its +0x0c pad is the old `_unknown24`.
+    rtsetavl::Set _messageCallbacks;  // +0x18 root, +0x20 count, +0x24 pad
     uint8_t _quitRequested;        // +0x28  Quit() sets 1; PlatformUpdate() reads it.
 };
 static_assert(!std::is_polymorphic<Application>::value,
@@ -242,8 +241,8 @@ static_assert(offsetof(Application, _windowHandle)         == 0x00, "Application
 static_assert(offsetof(Application, _platformHandle)       == 0x08, "Application._platformHandle @ 0x08");
 static_assert(offsetof(Application, _cursorEnabled)        == 0x10, "Application._cursorEnabled @ 0x10");
 static_assert(offsetof(Application, _running)              == 0x11, "Application._running @ 0x11");
-static_assert(offsetof(Application, _messageCallbackRoot)  == 0x18, "Application._messageCallbackRoot @ 0x18");
-static_assert(offsetof(Application, _messageCallbackCount) == 0x20, "Application._messageCallbackCount @ 0x20");
+static_assert(offsetof(Application, _messageCallbacks)     == 0x18, "Application._messageCallbacks @ 0x18");
+static_assert(offsetof(Application, _messageCallbacks) + offsetof(rtsetavl::Set, count) == 0x20, "Application Set count @ 0x20");
 static_assert(offsetof(Application, _quitRequested)        == 0x28, "Application._quitRequested @ 0x28");
 // Wave 12 lane B. Pinned by retail's own allocation at Engine::Startup
 // 0x1800dbbb3 (`MemAlloc(0x30, 4)`), not by this struct's field list.

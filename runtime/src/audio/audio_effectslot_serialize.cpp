@@ -80,7 +80,9 @@
 #include <cstdint>
 
 #include "../../types/audio/Audio.h"
+#include "../../types/audio/SoundEffect.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: AsArray bridge
 
 // `kSpec_EmitterInstance` (0x180052330, BATCH 8b) is defined in
@@ -92,41 +94,21 @@ namespace rtcoll { extern const ArraySpec kSpec_EmitterInstance; }
 using RtAudio::EffectSlot;
 using RtAudio::EmitterInstance;
 
-// 0x180051790 — `Object::ExternalPtr<Audio::SoundEffect>::Serialize`, ported
-// and registered by runtime/src/object/external_ptr_serialize.cpp. Declared
-// here rather than by address so the call cannot silently walk past our port
-// (reference_resolveaddr_consults_port_registry_first.md is about the other
-// direction; a direct call needs no resolver at all).
-extern "C" void RtObject_ExternalPtrSerialize_SoundEffect(void** self,
-                                                          rt::io::Serializer* ser);
-
-namespace {
-
-// A ReaderWriter member call, by name on the real class. Retail loads the
-// ReaderWriter fresh from `ser->readerWriter` on EVERY field
-// (`MOV RCX,[RDI+8] / MOV RAX,[RCX]`), so the reload is transcribed rather
-// than hoisted. The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are
-// asserted interchangeable (Serializer.h).
-inline IO::ReaderWriter* Rw(rt::io::Serializer* ser) {
-    return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter);   // B.3.x bridge
-}
-
-}  // namespace
+// 0x180051790 — `Object::ExternalPtr<Audio::SoundEffect>::Serialize`: the
+// template's member (External.h) over SoundEffect's own type record.
 
 // ============================================================================
 // 0x180051e00 — serialize one `EffectSlot::positions`.
 //   void (Collection::Array<EmitterInstance>* arr /*RCX*/,
 //         IO::Serializer* ser /*RDX*/)
 // ============================================================================
-extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) {
-    auto* arr = static_cast<Collection::Array<EmitterInstance>*>(arrv);
-    auto* ser = static_cast<rt::io::Serializer*>(serv);
-
+extern "C" void RtAudio_Scene_SerializeEmitterInstances(Collection::Array<EmitterInstance>* arr,
+                                                        IO::Serializer* ser) {
     // The count lives in a STACK SLOT for the whole body; `arr->GetSize()` is
     // read once, into it, and never again (0x180051e0a).
     int32_t count = arr->GetSize();
 
-    Rw(ser)->SerializeInt(count, nullptr);                    // +0xa0
+    ser->_readerWriter->SerializeInt(count, nullptr);         // +0xa0
 
     // READING ONLY (0x180051e2f `CMP dword [stream+8],0 / JNE`).
     // ENDGAME B.3.2 step 2 — the 0x180052330 by-address forwarder is GONE:
@@ -134,7 +116,7 @@ extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) 
     // (`InitZero10`), which a trivially-constructible `EmitterInstance`'s trait
     // row would leave UNINITIALISED, so it stays a hand-derived bridge rather
     // than a plain `arr->SetSize(count)`.
-    if (ser->stream->direction == rt::io::kDirectionReading) {
+    if (ser->_stream->_direction == IO::kReading) {
         rtcoll::AsArray<&rtcoll::kSpec_EmitterInstance>(arr)->SetSize(count);  // 0x180051e3c
     }
 
@@ -142,8 +124,8 @@ extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) 
     EmitterInstance* e = arr->GetData();  // 0x180051e45
 
     for (int32_t i = 0; i < count; ++i, ++e) {                 // 0x180051e53
-        Rw(ser)->SerializeFloatArray(3, &e->x, nullptr);      // +0x28
-        Rw(ser)->SerializeFloat(e->volume, nullptr);          // +0x80
+        ser->_readerWriter->SerializeFloatArray(3, &e->position.x, nullptr);  // +0x28
+        ser->_readerWriter->SerializeFloat(e->volume, nullptr);               // +0x80
     }
 }
 
@@ -154,26 +136,26 @@ extern "C" void RtAudio_Scene_SerializeEmitterInstances(void* arrv, void* serv) 
 //
 // `count <= 0` returns before the prologue (`TEST EDX,EDX / JLE ret`).
 // ============================================================================
-extern "C" void RtAudio_Scene_SerializeEffectSlots(void* serv, int32_t count,
-                                                   void* datav) {
+extern "C" void RtAudio_Scene_SerializeEffectSlots(IO::Serializer* ser, int32_t count,
+                                                   EffectSlot* s) {
     if (count <= 0) return;                                    // 0x180052640
 
-    auto* ser = static_cast<rt::io::Serializer*>(serv);
-    EffectSlot* s = static_cast<EffectSlot*>(datav);
 
     do {
-        Rw(ser)->SerializeFloatArray(3, &s->posX, nullptr);   // 0x180052672 +0x28
-        Rw(ser)->SerializeUInt(s->soundType, nullptr);        // 0x180052683 +0x98
+        ser->_readerWriter->SerializeFloatArray(3, &s->pos.x, nullptr);  // 0x180052672 +0x28
+        ser->_readerWriter->SerializeUInt(s->soundType, nullptr);        // 0x180052683 +0x98
 
         // 0x18005268f — the ExternalPtr<SoundEffect> at +0x10, `(this, ser)`.
-        RtObject_ExternalPtrSerialize_SoundEffect(
-            reinterpret_cast<void**>(&s->soundEffectRef), ser);
+        // LEFT: the template's member takes the `rt::io::Serializer` POD
+        // (External.h, the object block's).
+        s->soundEffectRef.Serialize(*reinterpret_cast<rt::io::Serializer*>(ser),
+                                    &Audio::SoundEffect::GetTypeInfo());
 
-        Rw(ser)->SerializeInt64(s->startTime, nullptr);       // 0x1800526a2 +0x90
+        ser->_readerWriter->SerializeInt64(s->startTime._ticks, nullptr);  // 0x1800526a2 +0x90
 
         // +0x20 `channelHandle` is SKIPPED; see the banner.
-        Rw(ser)->SerializeUInt(s->idTag, nullptr);            // 0x1800526b6 +0x98
-        Rw(ser)->SerializeFloat(s->baseVolume, nullptr);      // 0x1800526ca +0x80
+        ser->_readerWriter->SerializeUInt(s->idTag, nullptr);            // 0x1800526b6 +0x98
+        ser->_readerWriter->SerializeFloat(s->baseVolume, nullptr);      // 0x1800526ca +0x80
 
         // 0x1800526d7 — the inner array at +0x30, `(arr, ser)`.
         RtAudio_Scene_SerializeEmitterInstances(&s->positions, ser);

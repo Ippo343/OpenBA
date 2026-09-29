@@ -203,6 +203,9 @@
 // want first.
 // ============================================================================
 
+#include <windows.h>
+#include <xaudio2.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -262,41 +265,16 @@ inline float RandUnitScale() {
     float f; std::memcpy(&f, &bits, sizeof f); return f;
 }
 
-// ---- byte-poking helpers, so the port reads like the listing --------------
-inline uint8_t*  B(void* p)                 { return static_cast<uint8_t*>(p); }
-inline float     F(const void* p, size_t o) { float v;    std::memcpy(&v, static_cast<const uint8_t*>(p) + o, 4); return v; }
-inline int32_t   I32(const void* p, size_t o){ int32_t v; std::memcpy(&v, static_cast<const uint8_t*>(p) + o, 4); return v; }
-inline int64_t   I64(const void* p, size_t o){ int64_t v; std::memcpy(&v, static_cast<const uint8_t*>(p) + o, 8); return v; }
-inline void*     PTR(const void* p, size_t o){ void* v;   std::memcpy(&v, static_cast<const uint8_t*>(p) + o, 8); return v; }
-
 // ---- doors -----------------------------------------------------------------
 // ENDGAME B.3.7 block B4 (B7-11 / B6-5): GetAttenuatedVolume, StopEffect,
 // StopEffect3D, PlayEffect (Scene), PlayPlatform (Device) and
 // Random::NextGroup were reached BY NAME behind function-local first-call
 // caches; they are direct member calls now. The one address door left
 // (0x180050d30, Collection code) resolves through a namespace-scope atomic slot.
-using ArrayAssignFn   = void  (*)(void* dst, const void* src);
-using SetVolumeFn     = void  (*)(void* platformChannel, float volume, void* zero);
-
 void ArrayAssign16(void* dst, const void* src) {
     // 0x180050d30 Array<T16>::operator= -- unexported, ported in
     // collection/introsort.cpp; called by name (B3R).
     rtsort::Array16Assign(dst, src);
-}
-
-void* DeviceSingleton() {
-    // DATA door, by NAME: ?_singleton@Device@Audio@@0PEAV12@EA (ord 4805). The
-    // export ADDRESS is the slot, so the object is the qword it holds -- the
-    // same read audio.cpp's AudioDeviceSingleton() already does, repeated here
-    // rather than shared so this file carries no dependency on audio.cpp's
-    // internal linkage.
-    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
-    return slot ? *slot : nullptr;
-}
-
-void* ConfigurationSingleton() {
-    void** slot = reinterpret_cast<void**>(&::Audio::Configuration::_singleton);
-    return slot ? *slot : nullptr;
 }
 
 double SecondsPerTick() {
@@ -307,32 +285,23 @@ double SecondsPerTick() {
     return ::System::Timer::_secondsPerTick;
 }
 
-// The static callback retail stamps into each device slot's +0x20:
-// ?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z (0x1800dffe0).
-// B.3.7: the static member itself (wave29_lane_avbody.cpp), not a name lookup.
-void* OnSoundEndedThunk() {
-    return reinterpret_cast<void*>(&Audio::Scene::OnSoundEnded);
-}
-
 // One MT19937 draw, exactly as retail inlines it at 0x1800df992 and 0x1800dfa0c
 // -- the two sequences were diffed against each other and are identical. The
 // index advance and the 0x270 wrap are part of the draw.
-uint32_t RngDraw(void* rngv) {
-    uint8_t* rng = B(rngv);
-    if (I32(rng, 0) == 0) {                                    // 1800df992
+uint32_t RngDraw(System::Random& rng) {
+    if (rng._index == 0) {                                     // 1800df992
         // `?NextGroup@Random@System@@AEAAXXZ` (0x1800c7dd0), the member.
-        reinterpret_cast<System::Random*>(rngv)->NextGroup();  // 1800df99b  B.3.7 bridge
+        rng.NextGroup();                                       // 1800df99b
     }
-    const int32_t index = I32(rng, 0);
-    uint32_t y = static_cast<uint32_t>(
-        I32(rng, 4 + static_cast<size_t>(static_cast<uint32_t>(index)) * 4));
+    const int32_t index = rng._index;
+    uint32_t y = rng._mt[static_cast<uint32_t>(index)];
     y ^= y >> 11;                                              // 1800df9b0
     y ^= (y & 0xff3a58adu) << 7;                               // 1800df9b9
     y ^= (y & 0xffffdf8cu) << 15;                              // 1800df9c7
     y ^= y >> 18;                                              // 1800df9d6
     int32_t next = index + 1;                                  // 1800df9dc
     if (next == 0x270) next = 0;                               // 1800df9df / CMOVE
-    std::memcpy(rng, &next, sizeof next);
+    rng._index = next;
     return y;
 }
 
@@ -346,85 +315,78 @@ namespace Audio {
 bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
                    const Vector3& listener, float m) {
     ++g_updates;
-    // The transcription below names the two Times by their tick counts and
-    // the RNG by its address, as the listing does.
+    // The two Times by their tick counts.
     const int64_t deltaTicks = delta._ticks;
     const int64_t nowTicks   = now._ticks;
-    void* const rngv = &rng;
 
-    void* device = DeviceSingleton();          // 1800df6ff, BEFORE `this` is loaded
+    Device* device = Device::_singleton;       // 1800df6ff, BEFORE `this` is loaded
     this->time = nowTicks;                     // 1800df712  MOV [R15],R8
 
     // ------------------------------------------------------------------
     // LOOP 1 -- the 4096 EffectSlots. 0x1800df730 .. 0x1800df819.
     // ------------------------------------------------------------------
     {
-        uint8_t* effects = reinterpret_cast<uint8_t*>(this->effects.GetData());
-        if (effects) {
-            for (size_t off = 0; off < 0x40000u; off += 0x40) {   // 1800df812
-                uint8_t* slot = effects + off;
-                if (I32(slot, 0x24) == 0) continue;               // idTag == 0
-                const int64_t soundType = I32(slot, 0x0c);
+        AttenutedEffect* const table = this->effects.GetData();
+        if (table) {
+            for (int32_t k = 0; k < 0x1000; ++k) {                // 1800df812  (0x40000 bytes)
+                AttenutedEffect* const slot = &table[k];
+                if (slot->idTag == 0) continue;
+                const int64_t soundType = static_cast<int32_t>(slot->soundType);
                 if (paused[soundType] != 0) continue;       // 1800df745
                 ++g_effectsSeen;
 
-                const float vol = GetAttenuatedVolume(                    // 1800df75d
-                    *reinterpret_cast<const AttenutedEffect*>(slot), listener, m);
+                const float vol = GetAttenuatedVolume(*slot, listener, m);   // 1800df75d
 
                 bool skipPlay = false;
                 // `ucomiss` + JP + JNE: an unordered (NaN) compare takes the
                 // NOT-equal path, which is what `!(vol == 0.0f)` gives.
                 if (vol == 0.0f) {                                // 1800df765
-                    const int32_t handle = I32(slot, 0x20);
+                    const uint32_t handle = slot->channelHandle;
                     if (handle != 0) {
                         ++g_effectStops;
-                        StopEffect(static_cast<uint32_t>(handle));     // 1800df777
-                        std::memset(slot + 0x20, 0, 4);                // channelHandle = 0
+                        StopEffect(handle);                            // 1800df777
+                        slot->channelHandle = 0;
                         skipPlay = true;                               // 1800df783 JMP
                     }
                 }
                 if (!skipPlay) {
                     // `comiss` + JBE: strictly greater, and NaN takes the JBE.
-                    if (vol > 0.0f && I32(slot, 0x20) == 0) {     // 1800df785 / 1800df78b
+                    if (vol > 0.0f && slot->channelHandle == 0) {     // 1800df785 / 1800df78b
                         ++g_effectPlays;
-                        void* ref = PTR(slot, 0x10);
-                        const int64_t* start = reinterpret_cast<const int64_t*>(slot + 0x18);
                         const uint32_t h = PlayEffect(
-                            Object::ExternalPtr<SoundEffect>(static_cast<SoundEffect*>(ref)),
+                            slot->soundEffectRef,
                             static_cast<SoundType>(soundType),
-                            *reinterpret_cast<const System::Time*>(start));
-                        std::memcpy(slot + 0x20, &h, 4);          // 1800df7a4
+                            slot->startTime);
+                        slot->channelHandle = h;                  // 1800df7a4
                     }
                 }
 
                 // ---- push the attenuated volume onto the live Channel ----
-                const uint32_t handle = static_cast<uint32_t>(I32(slot, 0x20));
+                const uint32_t handle = slot->channelHandle;
                 if (handle != 0) {                                // 1800df7ad
                     const uint32_t gen = handle >> 9;             // 1800df7b3
                     const uint32_t idx = (handle >> 1) & 0xffu;   // 1800df7b6 / MOVZX AL
-                    uint8_t* chans = reinterpret_cast<uint8_t*>(channels.GetData());
-                    uint8_t* ch = chans + static_cast<size_t>(idx) * 0x70;
-                    if (gen == (static_cast<uint32_t>(I32(ch, 0x68)) >> 9)) {   // 1800df7cb
-                        std::memcpy(ch + 0x18, &vol, 4);          // 1800df7cf  volume = vol
+                    Channel* const ch = &channels.GetData()[idx];
+                    if (gen == (ch->handleTag >> 9)) {            // 1800df7cb
+                        ch->volume = vol;                         // 1800df7cf
                     }
                 }
 
                 // ---- expiry, and the time advance ------------------------
-                if (I32(slot, 0x20) == 0) {                       // 1800df7d6
+                if (slot->channelHandle == 0) {                   // 1800df7d6
                     // FAITHFUL UNGUARDED DEREF. Retail loads the SoundEffect
                     // through slot+0x10 with no null test, because a slot with
                     // idTag != 0 always has one. Not guarded here -- a guard
                     // would skip the expiry rather than restore it.
-                    void* effect = PTR(slot, 0x10);
-                    const int64_t duration = I64(effect, 0x28);   // 1800df7e0
-                    if (duration != 0 && I64(slot, 0x18) >= duration) {   // 1800df7eb JL
+                    const SoundEffect* const effect = slot->soundEffectRef.Get();
+                    const int64_t duration = effect->_maxLength;  // 1800df7e0
+                    if (duration != 0 && slot->startTime._ticks >= duration) {   // 1800df7eb JL
                         ++g_effectExpired;
-                        StopEffect3D(static_cast<uint32_t>(I32(slot, 0x24)));  // 1800df7f7
+                        StopEffect3D(slot->idTag);                // 1800df7f7
                         continue;                                 // 1800df7fc JMP, NO advance
                     }
                 }
-                const int64_t t = I64(slot, 0x18) + deltaTicks;   // 1800df805
-                std::memcpy(slot + 0x18, &t, 8);
+                slot->startTime._ticks = slot->startTime._ticks + deltaTicks;   // 1800df805
             }
         }
     }
@@ -437,13 +399,13 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
     float volumes[5];
     volumes[0] = 0.0f;                                           // 1800df826
     {
-        const void* cfg = ConfigurationSingleton();
+        const Configuration* const cfg = Configuration::_singleton;
         const float div = ConfigVolumeDivisor();
         if (cfg) {
-            volumes[1] = static_cast<float>(I32(cfg, 0x0)) / div;   // 1800df82e
-            volumes[2] = static_cast<float>(I32(cfg, 0x4)) / div;   // 1800df847
-            volumes[3] = static_cast<float>(I32(cfg, 0x8)) / div;   // 1800df859
-            volumes[4] = static_cast<float>(I32(cfg, 0xc)) / div;   // 1800df86b
+            volumes[1] = static_cast<float>(cfg->uiVolume) / div;        // 1800df82e
+            volumes[2] = static_cast<float>(cfg->musicVolume) / div;     // 1800df847
+            volumes[3] = static_cast<float>(cfg->ambientVolume) / div;   // 1800df859
+            volumes[4] = static_cast<float>(cfg->effectVolume) / div;    // 1800df86b
         } else {
             volumes[1] = volumes[2] = volumes[3] = volumes[4] = 0.0f;
             std::fprintf(stderr, "[RtPort] Audio::Scene::Update: "
@@ -457,111 +419,103 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
     // ------------------------------------------------------------------
     {
         const double spt = SecondsPerTick();
-        uint8_t* chans = reinterpret_cast<uint8_t*>(channels.GetData());
+        Channel* const chans = channels.GetData();
         if (!chans) return true;
 
-        for (size_t coff = 0; coff < 0x7000u; coff += 0x70) {     // 1800dfd9f
-            uint8_t* ch = chans + coff;
-            if (I32(ch, 0x68) == 0) continue;                     // handleTag == 0
-            const int64_t soundType = I32(ch, 0x8);
+        for (int32_t c = 0; c < 0x100; ++c) {                     // 1800dfd9f  (0x7000 bytes)
+            Channel* const ch = &chans[c];
+            if (ch->handleTag == 0) continue;
+            const int64_t soundType = static_cast<int32_t>(ch->soundType);
             if (paused[soundType] != 0) continue;           // 1800df8b9
             ++g_channelsSeen;
 
-            int64_t* startTimeP = reinterpret_cast<int64_t*>(ch + 0x10);
-            const int64_t startTime = *startTimeP;                // 1800df8d1
+            const int64_t startTime = ch->startTime._ticks;       // 1800df8d1
             int64_t windowLo = startTime;
-            if (ch[0x6c] == 0) {                                  // !started
+            if (ch->started == 0) {
                 // Retail writes `0.0 / _secondsPerTick` and truncates, rather
                 // than storing a zero. Reproduced as the division because the
                 // two differ when _secondsPerTick is 0 (0.0/0.0 is NaN, and
                 // CVTTSD2SI of NaN is INT64_MIN, not 0).
                 const double z = 0.0 / spt;                       // 1800df8e2
                 windowLo = static_cast<int64_t>(z);               // 1800df8ea
-                ch[0x6c] = 1;                                     // 1800df8ef
+                ch->started = 1;                                  // 1800df8ef
             }
             const int64_t windowHi = deltaTicks + startTime;      // 1800df8fc
-            void* effect = PTR(ch, 0x0);                          // 1800df8ff
+            const SoundEffect* const effect = ch->soundEffectRef.Get();   // 1800df8ff
 
             // SoundType 0 does nothing but advance -- `TEST ECX,ECX / JE` at
             // 1800df904 lands directly on the time store.
-            if (soundType == 0) { *startTimeP = windowHi; continue; }
+            if (soundType == 0) { ch->startTime._ticks = windowHi; continue; }
 
             int32_t endedCount = 0;                               // [rsp+0x40]
             int32_t i          = 0;                               // [rsp+0x44]
-            const int32_t sampleCount = I32(effect, 0x38);        // 1800df91c
+            const int32_t sampleCount = effect->_samples._size;   // 1800df91c
 
             if (sampleCount > 0) {
                 // The loop bound is RE-READ from effect+0x38 every iteration in
                 // retail (1800dfc53 `CMP R10D,[RDI+0x38]`), not cached. Kept as
                 // a re-read: caching it is the kind of tidy that is invisible
                 // until something in the loop can change it.
-                for (i = 0; i < I32(effect, 0x38); ++i) {
-                    uint8_t* flag   = ch + 0x60 + i;              // channelFlags[i]
-                    void**   pchan  = reinterpret_cast<void**>(ch + 0x20) + i;
+                for (i = 0; i < effect->_samples._size; ++i) {
+                    uint8_t* flag = &ch->channelFlags[i];
+                    Device::AudioChannel** pchan = &ch->platformChannel[i];
 
                     // `samples` is re-read from effect+0x30 on EVERY iteration
                     // in retail (1800df950 and again at 1800df9f7). Kept.
-                    uint8_t* samples = reinterpret_cast<uint8_t*>(PTR(effect, 0x30));
-                    uint8_t* sample  = samples + static_cast<size_t>(i) * 0x18;
+                    const SoundEffect::Sample* const sample = &effect->_samples._data[i];
 
-                    const double sec = static_cast<double>(F(sample, 0x00));
+                    const double sec = static_cast<double>(sample->startSeconds);
                     const int64_t at = static_cast<int64_t>(sec / spt);   // 1800df965
 
                     if (at >= windowLo && at < windowHi) {
                         // ---- this sample starts in this frame's window ----
-                        const int32_t variantCount = I32(sample, 0x10);   // 1800df97c
+                        const int32_t variantCount = sample->variants._size;   // 1800df97c
                         uint32_t pick = 0;
                         if (variantCount != 0) {                          // 1800df988
-                            pick = RngDraw(rngv) % static_cast<uint32_t>(variantCount);
+                            pick = RngDraw(rng) % static_cast<uint32_t>(variantCount);
                         }
-                        uint8_t* variants = reinterpret_cast<uint8_t*>(PTR(sample, 0x08));
-                        uint8_t* v = variants + static_cast<size_t>(pick) * 0x18;
+                        const SoundEffect::Variant* const v = &sample->variants._data[pick];
 
                         // SECOND DRAW -- the pitch lerp. Two draws per started
                         // sample, and the ORDER matters: variant first, pitch
                         // second (1800df99b then 1800dfa15).
-                        const float t = static_cast<float>(RngDraw(rngv)) * RandUnitScale();
-                        const float lo = F(v, 0x08), hi = F(v, 0x0c);
+                        const float t = static_cast<float>(RngDraw(rng)) * RandUnitScale();
+                        const float lo = v->pitchLow, hi = v->pitchHigh;
                         const float pitch = (hi - lo) * t + lo;           // 1800dfa7e/82
 
-                        const float vVol   = F(v, 0x10);
-                        const float vThird = F(v, 0x14);
-                        void* bufferRef    = PTR(v, 0x00);
+                        const float vVol   = v->volume;
+                        const float vThird = v->unused14;
+                        SoundBuffer* const bufferRef = v->buffer.Get();
 
-                        std::memcpy(ch + 0x1c, &vVol, 4);                 // 1800dfa9b
-                        const uint32_t tag = static_cast<uint32_t>(I32(ch, 0x68));
-                        float mix = vVol * F(ch, 0x18);                   // 1800dfab0
+                        ch->sampleVolume = vVol;                          // 1800dfa9b
+                        const uint32_t tag = ch->handleTag;
+                        float mix = vVol * ch->volume;                    // 1800dfab0
                         mix *= volumes[soundType];                        // 1800dfab7
 
                         // ---- find a free Device slot, stride 0x28, 0x40 of them
                         ++g_samplesStarted;
-                        void* placed = nullptr;
+                        Device::AudioChannel* placed = nullptr;
                         int32_t freeSlot = -1;
                         if (device) {
-                            uint8_t* d = B(device);
                             int32_t k = 0;
                             for (; k < 0x40; ++k) {                       // 1800dfadf
-                                if ((d[k * 0x28] & 1) == 0) break;        // 1800dfad0
+                                if ((device->_channels[k].flags & 1) == 0) break;   // 1800dfad0
                             }
                             if (k < 0x40) freeSlot = k;
                         }
                         if (freeSlot >= 0) {
-                            const int64_t* st = reinterpret_cast<const int64_t*>(ch + 0x10);
-                            if (reinterpret_cast<Device*>(device)->PlayPlatform(   // B.3.7 bridge
+                            if (device->PlayPlatform(
                                     freeSlot,
-                                    Object::ExternalPtr<SoundBuffer>(static_cast<SoundBuffer*>(bufferRef)),
-                                    *reinterpret_cast<const System::Time*>(st),
+                                    Object::ExternalPtr<SoundBuffer>(bufferRef),
+                                    ch->startTime,
                                     mix, pitch, vThird)) {                // 1800dfb17
                                 ++g_samplesPlaced;
-                                uint8_t* s = B(device) + static_cast<size_t>(freeSlot) * 0x28;
-                                uint32_t f; std::memcpy(&f, s + 0x00, 4);
-                                f |= 1u; std::memcpy(s + 0x00, &f, 4);    // 1800dfb39
-                                std::memcpy(s + 0x08, &bufferRef, 8);     // 1800dfb3e
-                                void* cb = OnSoundEndedThunk();
-                                std::memcpy(s + 0x20, &cb, 8);            // 1800dfb4a
-                                void* scene = this;
-                                std::memcpy(s + 0x10, &scene, 8);         // 1800dfb4f
-                                std::memcpy(s + 0x18, &tag, 4);           // 1800dfb58
+                                Device::AudioChannel* const s = &device->_channels[freeSlot];
+                                s->flags |= 1u;                           // 1800dfb39
+                                s->source = bufferRef;                    // 1800dfb3e
+                                s->onComplete = &Scene::OnSoundEnded;     // 1800dfb4a
+                                s->userData = this;                       // 1800dfb4f
+                                s->userValue = tag;                       // 1800dfb58
                                 placed = s;                               // 1800dfb64
                             }
                             // PlayPlatform false -> placed stays null (1800dfb27)
@@ -575,22 +529,18 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
                         //      volume in step with the mix. 1800dfb90.
                         const uint8_t fl = *flag;
                         if ((fl & 1) && !(fl & 2) && *pchan != nullptr) {
-                            float mix = F(ch, 0x1c) * F(ch, 0x18);        // 1800dfbab/b2
+                            float mix = ch->sampleVolume * ch->volume;    // 1800dfbab/b2
                             mix *= volumes[soundType];                    // 1800dfbbe
                             if (device) {
-                                uint8_t* d = B(device);
                                 // (platformChannel - device) / 0x28 -- retail's
                                 // signed magic division, 1800dfbc7..1800dfbdf.
-                                const int64_t idx =
-                                    (reinterpret_cast<uint8_t*>(*pchan) - d) / 0x28;
-                                if (PTR(d, 0xa88) != nullptr) {           // 1800dfbe2
-                                    void* pc = PTR(d, 0xaa0 +
-                                        static_cast<size_t>(static_cast<int32_t>(idx)) * 0x20);
-                                    if (pc) {
-                                        void** vt = *reinterpret_cast<void***>(pc);
-                                        auto setVol = reinterpret_cast<SetVolumeFn>(vt[0x60 / 8]);
+                                const int64_t idx = *pchan - device->_channels;
+                                if (device->_xaudio2 != nullptr) {        // 1800dfbe2
+                                    IXAudio2SourceVoice* const voice =
+                                        device->_platformChannels[static_cast<int32_t>(idx)].voice;
+                                    if (voice) {
                                         ++g_volumeUpdates;
-                                        setVol(pc, mix, nullptr);         // 1800dfc06
+                                        voice->SetVolume(mix, 0);         // 1800dfc06  +0x60
                                     }
                                 }
                             }
@@ -609,58 +559,69 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
             // recycles its channel on the first Update. That is retail's
             // behaviour and it is reached through the `jle 1800dfc68` at
             // 1800df920, which skips the inner loop entirely.
-            if (endedCount == I32(effect, 0x38)) {                        // 1800dfc68
+            if (endedCount == effect->_samples._size) {                   // 1800dfc68
                 ++g_channelsFreed;
 
                 // Find the EffectSlot whose channelHandle equals this
                 // channel's handleTag and clear it. NOTE, and it is retail's:
                 // the scan compares Channel::handleTag (+0x68) against
                 // EffectSlot::channelHandle (+0x20), NOT against idTag.
-                uint8_t* effects = reinterpret_cast<uint8_t*>(this->effects.GetData());
-                const int32_t tag = I32(ch, 0x68);
-                if (effects) {
+                AttenutedEffect* const table = this->effects.GetData();
+                const uint32_t tag = ch->handleTag;
+                if (table) {
                     for (int64_t k = 0; k < 0x1000; ++k) {                // 1800dfc8d
-                        uint8_t* slot = effects + static_cast<size_t>(k) * 0x40;
-                        if (I32(slot, 0x20) != tag) continue;             // 1800dfc82
+                        AttenutedEffect* const slot = &table[k];
+                        if (slot->channelHandle != tag) continue;         // 1800dfc82
                         // A zeroed EffectSlot, field by field as retail stores
-                        // it. THE EXTENT IS 0x2c, NOT 0x30, and that is read
-                        // off the stores rather than off the struct: retail's
-                        // last one is `MOV DWORD PTR [RCX+0x28],0x3f800000`, a
-                        // FOUR-byte store, so bytes +0x2c..+0x2f (Audio.h's
-                        // `_pad2c`) are NEVER WRITTEN. Clearing them too would
-                        // be a write retail does not make.
-                        std::memset(slot, 0, 0x2c);                       // 1800dfcdc..1800dfcf9
-                        const float one = 1.0f;
-                        std::memcpy(slot + 0x28, &one, 4);                // 1800dfd01
+                        // it. THE EXTENT IS 0x2c, NOT 0x30: retail's last store
+                        // is `MOV DWORD PTR [RCX+0x28],0x3f800000`, so
+                        // `_pad2c` is NEVER WRITTEN.
+                        slot->pos.x = 0.0f;                               // 1800dfcdc..1800dfcf9
+                        slot->pos.y = 0.0f;
+                        slot->pos.z = 0.0f;
+                        slot->soundType = 0;
+                        slot->soundEffectRef = nullptr;
+                        slot->startTime._ticks = 0;
+                        slot->channelHandle = 0;
+                        slot->idTag = 0;
+                        slot->baseVolume = 1.0f;                          // 1800dfd01
                         // and the nested Array<EmitterInstance> gets an EMPTY
                         // array ASSIGNED to it -- which releases its storage --
                         // rather than being memset away.
-                        int64_t empty[2] = { 0, 0 };
-                        ArrayAssign16(slot + 0x30, empty);              // 1800dfd10
+                        // The empty source is a bare zeroed header on the
+                        // stack; nothing destroys it afterwards.
+                        const int64_t empty[2] = { 0, 0 };
+                        ArrayAssign16(&slot->positions, empty);           // 1800dfd10
                         break;
                     }
                 }
 
                 // A default-constructed Channel copied over this one. Retail
                 // builds it on the stack and stores it field by field; the
-                // fields that are NOT zero are volume and pitch, both 1.0f.
-                // The stores cover 0x00..0x6f with no hole, so a memset is the
-                // same bytes -- with ONE deliberate difference. Two of retail's
-                // loads are 8 bytes wide over 4-byte stack stores (`MOV DWORD
-                // PTR [RBP-0x18],R9D` then `MOV RAX,[RBP-0x18]` at 1800dfd28 /
-                // 1800dfd4b, and the same at 1800dfd3a / 1800dfd8f), so retail
-                // writes FOUR BYTES OF UNINITIALISED STACK into Channel+0x0c
-                // and +0x6c..+0x6f. audio.cpp:856 already records this exact
-                // read-8-write-4 quirk in this class. We write zeros there: the
-                // fields are `_pad0c` and the tail padding, nothing reads them,
-                // and reproducing uninitialised stack is not reproducible.
-                std::memset(ch, 0, 0x70);                                 // 1800dfd46..1800dfd93
-                const float one = 1.0f;
-                std::memcpy(ch + 0x18, &one, 4);                          // volume
-                std::memcpy(ch + 0x1c, &one, 4);                          // pitch
+                // fields that are NOT zero are volume and sampleVolume, both 1.0f.
+                // Two of retail's loads are 8 bytes wide over 4-byte stack
+                // stores (`MOV DWORD PTR [RBP-0x18],R9D` then `MOV RAX,[RBP-0x18]`
+                // at 1800dfd28 / 1800dfd4b, and the same at 1800dfd3a /
+                // 1800dfd8f), so retail writes FOUR BYTES OF UNINITIALISED STACK
+                // into Channel+0x0c and +0x6c..+0x6f. audio.cpp:856 already
+                // records this read-8-write-4 quirk in this class. We write
+                // zeros there: the fields are `_pad0c` and the tail padding,
+                // nothing reads them, and uninitialised stack is not
+                // reproducible.
+                ch->soundEffectRef = nullptr;                             // 1800dfd46..1800dfd93
+                ch->soundType = 0;
+                ch->_pad0c = 0;
+                ch->startTime._ticks = 0;
+                ch->volume = 1.0f;
+                ch->sampleVolume = 1.0f;
+                for (int b = 0; b < 8; ++b) ch->platformChannel[b] = nullptr;
+                for (int b = 0; b < 8; ++b) ch->channelFlags[b] = 0;
+                ch->handleTag = 0;
+                ch->started = 0;
+                ch->_pad6d[0] = ch->_pad6d[1] = ch->_pad6d[2] = 0;
             }
 
-            *startTimeP = windowHi;                                       // 1800dfd98
+            ch->startTime._ticks = windowHi;                              // 1800dfd98
         }
     }
 

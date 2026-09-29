@@ -222,17 +222,9 @@ using SecToTicksFn = int64_t (*)(float);
 // Data globals — resolved by exported name, never through the registry.
 // See "HOW THE DEPENDENCIES ARE RESOLVED" above.
 MainLoop** MainLoopSingletonSlot() {
-    MainLoop** p = reinterpret_cast<MainLoop**>(&::Engine::MainLoop::_singleton);
-    return p;
+    return &::Engine::MainLoop::_singleton;
 }
 
-// Video::Device::_singleton. The MainLoop ctor stores its two error callbacks
-// into the pointed-at Device at +0x50/+0x58 — the profile build calls that
-// setter `Video::Device::SetVideoErrorFuncs` (0x1800fd860); retail inlines it.
-void** VideoDeviceSingletonSlot() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
-}
 
 // System::Timer::_secondsPerTick — the divisor in the inlined SecondsToTicks.
 // Was a RAW-DOOR data read of the DLL's slot (WAVE9_LANE_V.md §4 names this
@@ -436,7 +428,7 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     self->_startTicks      = 0;
     self->_accumulator     = 0;
     self->_totalTime       = 0;
-    self->_deltaTime       = 0;
+    self->_deltaTime._ticks = 0;
     self->_maxAccumulator  = 0;
     self->_frameTime       = 0;
     self->_frameStartTicks = 0;
@@ -450,7 +442,7 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     self->_postUpdate._size     = 0;
     self->_postUpdate._capacity = 0;
 
-    self->_deltaTime      = SecondsToTicksInline(kFixedStepSeconds);
+    self->_deltaTime._ticks = SecondsToTicksInline(kFixedStepSeconds);
     self->_maxAccumulator = SecondsToTicksInline(kMaxAccumSeconds);
 
     *MainLoopSingletonSlot() = self;
@@ -486,11 +478,17 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
     // reaches the member through the PORT REGISTRY, so a later port of
     // `?OnVideoError@MainLoop@Engine@@QEAAXXZ` is picked up with no further
     // change here. See the two bodies above.
-    uint8_t* device = static_cast<uint8_t*>(*VideoDeviceSingletonSlot());
-    *reinterpret_cast<void**>(device + MainLoopAddr::DeviceErrorFuncSlot) =
-        reinterpret_cast<void*>(&RtEngine_MainLoop_OnVideoError_static);
-    *reinterpret_cast<void**>(device + MainLoopAddr::DeviceRestartFuncSlot) =
-        reinterpret_cast<void*>(&RtEngine_MainLoop_OnVideoRestart_static);
+    // Video::Device::_singleton's +0x50 / +0x58 -- the profile build's setter
+    // `Video::Device::SetVideoErrorFuncs` (0x1800fd860), inlined by retail.
+    // LEFT (B.4 R-ENG): Device.h (R-VIDEO) still declares +0x50..+0x5f as
+    // `gap50[0x10]`; the two callback slots are viewed over it until that
+    // header names them (known_port_issues 14f).
+    static_assert(MainLoopAddr::DeviceErrorFuncSlot   == offsetof(::Video::Device, gap50), "error callback @ +0x50");
+    static_assert(MainLoopAddr::DeviceRestartFuncSlot == offsetof(::Video::Device, gap50) + 8, "restart callback @ +0x58");
+    using VideoCallback = void (*)();
+    VideoCallback* const callbacks = reinterpret_cast<VideoCallback*>(::Video::Device::_singleton->gap50);
+    callbacks[0] = &RtEngine_MainLoop_OnVideoError_static;     // +0x50
+    callbacks[1] = &RtEngine_MainLoop_OnVideoRestart_static;   // +0x58
 
     // ⛔ KNOWN, UNFIXED CUTOVER NULL — but it now has a NAME. (Wave 9 lane VID2.)
     //
@@ -576,9 +574,9 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* en
 // all three counts are asserted, not just the pointers.
 extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
 
-    void* context = self->_context;
+    Video::Context* context = self->_context;
     if (context) {
-        RtVideo_Context_Dtor(static_cast<Video::Context*>(context));   // ~Context 0x1800f16e0
+        RtVideo_Context_Dtor(context);                                // ~Context 0x1800f16e0
         Video_Context_OperatorDelete(context);                        // operator delete 0x180018500
     }
     self->_context = nullptr;
@@ -592,13 +590,10 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
     self->_postDraw.~Array();
     // NOT CONVERTED (0x180033880): this is a J2 entry (array_destroy.cpp),
     // `ReleaseStringsCounted(..., kD_Str_18)` then `ArrayDtorImpl` — a
-    // per-element String RELEASE, not a trivial destroy. `VideoResourceEntry`
-    // (MainLoop.h) types its String field as a raw `char* _name` rather than a
-    // real refcounted String class, so `is_trivially_destructible
-    // <VideoResourceEntry>` is TRUE in this header and the trait-derived
-    // `Array<VideoResourceEntry>::~Array()` would SKIP the release entirely —
-    // silently leaking every resource name string on video-context teardown.
-    // Bridging this correctly needs an `ArraySpec` whose `destroy` calls
+    // per-element String RELEASE, not a trivial destroy (the element's
+    // `_path` Filename, MainLoop.h). Retail's instantiation is a hand-derived
+    // spec (kSpec_VideoResource / kD_Str_18, mainloop_video.cpp), not the
+    // trait-derived `Array<VideoResourceEntry>::~Array()`. Bridging it needs an `ArraySpec` whose `destroy` calls
     // `ReleaseStringsCounted` with `kD_Str_18` (a `DestroySpec`, a different
     // struct from `ArraySpec`, defined in array_destroy.cpp) — that is new
     // Collection-side plumbing this batch does not own (runtime/src/collection

@@ -342,11 +342,10 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
 
         // ---- Block H, 0x180121167..0x1801211f1 -----------------------------
         // `Play(1)` inlined: `_sounds[1]` (+0xa0).
-        void* sound = _sounds[1];
+        Audio::SoundEffect* sound = _sounds[1];
         if (!sound) return;
         // B.4 LEFT: `_audioScene` (+0x90) stays `void*` (code/Game assigns it a
-        // `void*`: gameupdateloop.cpp:1652, menudialogloopt.cpp:1158), and the
-        // Channel's `soundEffectRef` is a `uint64_t` in R-ENG's Audio.h.
+        // `void*`: gameupdateloop.cpp:1652, menudialogloopt.cpp:1158).
         Audio::Scene* const scene = reinterpret_cast<Audio::Scene*>(_audioScene);
         if (!scene) return;
         Audio::Scene::Channel* const table = scene->channels._data;       // +0x10
@@ -364,9 +363,9 @@ void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog)
 
         Audio::Scene::Channel& slot = table[index];
 
-        slot.soundEffectRef = reinterpret_cast<uint64_t>(sound);          // 0x1801211d0
+        slot.soundEffectRef = sound;                                      // 0x1801211d0
         slot.soundType      = 1;                                          // 0x1801211d3
-        slot.startTime      = ticks;                                      // 0x1801211d6
+        slot.startTime._ticks = ticks;                                    // 0x1801211d6
         const uint32_t counter = static_cast<uint32_t>(scene->playGeneration) + 1;  // 0x1801211da
         scene->playGeneration = static_cast<int32_t>(counter);            // +0x08
         slot.handleTag = static_cast<uint32_t>(index * 2) | (counter << 9);  // 0x1801211ee

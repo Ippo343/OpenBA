@@ -58,6 +58,7 @@
 
 #include <windows.h>
 #include <objbase.h>
+#include <xaudio2.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -76,15 +77,6 @@ const GUID kClsidXAudio2 =
 const GUID kIidIXAudio2 =
     { 0x8BCF1F58, 0x9FE7, 0x4583, { 0x8A, 0xC6, 0xE2, 0xAD, 0xC4, 0x65, 0xC8, 0xBB } };
 
-inline void* const* VtblOf(void* obj) {
-    return *reinterpret_cast<void* const* const*>(obj);
-}
-
-template <typename Fn>
-inline Fn Slot(void* obj, size_t byteOffset) {
-    return reinterpret_cast<Fn>(VtblOf(obj)[byteOffset / sizeof(void*)]);
-}
-
 // ---------------------------------------------------------------------------
 // 0x180050270 — the unexported helper. `CoCreateInstance` then `Initialize`,
 // storing the interface into `*out` ONLY when both succeed.
@@ -101,18 +93,17 @@ inline Fn Slot(void* obj, size_t byteOffset) {
 //     branch. Reproduced rather than normalised.
 }  // namespace
 
-extern "C" long RtAudio_CreateXAudio2(void** out) {
-    void* obj = nullptr;
+extern "C" long RtAudio_CreateXAudio2(IXAudio27** out) {
+    IXAudio27* obj = nullptr;
     const HRESULT hr = CoCreateInstance(kClsidXAudio2, nullptr, CLSCTX_INPROC_SERVER,
-                                        kIidIXAudio2, &obj);
+                                        kIidIXAudio2,
+                                        reinterpret_cast<void**>(&obj));  // CAST-OK: com_iid
     if (hr < 0) return hr;                                 // 0x18005029f
     if (obj == nullptr) return hr;                         // 0x1800502a1 loads it back
 
-    using InitFn = long (STDMETHODCALLTYPE*)(void*, unsigned, unsigned);
-    const long hr2 = Slot<InitFn>(obj, 0x28)(obj, 0, 0xFFFFFFFFu);  // 0x1800502b4
+    const long hr2 = obj->Initialize(0, XAUDIO2_DEFAULT_PROCESSOR);  // 0x1800502b4 +0x28
     if (hr2 < 0) {                                          // 0x1800502c0
-        using ReleaseFn = unsigned long (STDMETHODCALLTYPE*)(void*);
-        Slot<ReleaseFn>(obj, 0x10)(obj);                    // 0x1800502d3
+        obj->Release();                                     // 0x1800502d3 +0x10
         return hr2;
     }
     *out = obj;                                             // 0x1800502c2
@@ -129,8 +120,8 @@ namespace {
 namespace Audio {
 
 bool Device::PlatformStartup() {
-    void** xaSlot = &_xaudio2;
-    void** mvSlot = &_masteringVoice;
+    IXAudio27** xaSlot = &_xaudio2;
+    IXAudio2MasteringVoice** mvSlot = &_masteringVoice;
 
     const long hr = RtAudio_CreateXAudio2(xaSlot);          // 0x1800de617
     if (hr != 0) {                                          // 0x1800de61c, EQUALITY test
@@ -140,17 +131,12 @@ bool Device::PlatformStartup() {
         return true;                                        // 0x1800de622 MOV AL,1
     }
 
-    void* xa2 = *xaSlot;                                    // 0x1800de632, re-read
-    using CreateMasteringVoiceFn = long (STDMETHODCALLTYPE*)(
-        void* self, void** ppMasteringVoice, unsigned InputChannels,
-        unsigned InputSampleRate, unsigned Flags, unsigned DeviceIndex,
-        const void* pEffectChain);
-    const long hrMv = Slot<CreateMasteringVoiceFn>(xa2, 0x50)(
-        xa2, mvSlot, 0, 0, 0, 0, nullptr);                  // 0x1800de65c
+    IXAudio27* xa2 = *xaSlot;                               // 0x1800de632, re-read
+    const long hrMv = xa2->CreateMasteringVoice(
+        mvSlot, 0, 0, 0, 0, nullptr);                       // 0x1800de65c +0x50
 
     if (hrMv != 0) {                                        // 0x1800de65f, EQUALITY test
-        using ReleaseFn = unsigned long (STDMETHODCALLTYPE*)(void*);
-        Slot<ReleaseFn>(*xaSlot, 0x10)(*xaSlot);            // 0x1800de669, re-reads the slot
+        (*xaSlot)->Release();                               // 0x1800de669, re-reads the slot
         *xaSlot = nullptr;                                  // 0x1800de66c
         *mvSlot = nullptr;                                  // 0x1800de66f
     }
