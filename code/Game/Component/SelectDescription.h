@@ -22,6 +22,7 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 #include "system/String.h"
+namespace UI { class SpriteSheet; class StringTable; }   // B4 H4 (DLG-e)
 
 class SelectDescription final : public Description {
     DECLARE_EXE_TYPE(SelectDescription)
@@ -38,9 +39,9 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14000bc00
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
+    UI::SpriteSheet* _ref20;                    // +0x20 ExternalPtr (a raw pointer)
     System::String _s28;                        // +0x28 String
-    void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
+    UI::StringTable* _ref30;                    // +0x30 ExternalPtr (a raw pointer)
     System::String _s38;                        // +0x38 String
     uint32_t _u40;                              // +0x40 enum (serialized through the uint door)
     uint8_t _pad44[4];                          // +0x44 never written by the ctor

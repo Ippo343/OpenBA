@@ -144,24 +144,7 @@ extern "C" void TownHall_InventorySortDesc(void* items, int count, void*, void*)
 extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId);  // 0x140091180
 
 // ---- townhallui.cpp
-// --- Reimplemented TownHallUI functions (clean C++ in townhallui.cpp) ---
-// Forward-declared here; defined in code/Game/Dialog/townhallui.cpp.
-class TownHallUI;  // forward decl
-void TownHallUI_InitGeneral(TownHallUI* self);           // was FUN_1400807f0
-void TownHallUI_InitGraph(TownHallUI* self);             // was FUN_14007f0a0
-void TownHallUI_InitProfessions(TownHallUI* self);       // was FUN_140080160
-void TownHallUI_InitProduction(TownHallUI* self);        // was FUN_14007fc30
-void TownHallUI_InitInventory(TownHallUI* self);         // was FUN_14007f660
-void TownHallUI_InitAgriculture(TownHallUI* self);       // was FUN_14007ebf0
-void TownHallUI_UpdateGraph(TownHallUI* self);           // was FUN_14007e5b0
-void TownHallUI_UpdateGeneral(TownHallUI* self);         // was FUN_14007d030
-void TownHallUI_UpdateProfessions(TownHallUI* self);     // was FUN_14007ccb0
-void TownHallUI_UpdateProduction(TownHallUI* self);      // was FUN_14007c7f0
-void TownHallUI_UpdateAgriculture(TownHallUI* self);     // was FUN_14007c220
-void TownHallUI_UpdateInventory(TownHallUI* self);       // was FUN_14007def0
-void TownHallUI_UpdateAll(TownHallUI* self);             // was FUN_14007d590
-void TownHallUI_OnProfessionButton(TownHallUI* self, int index); // was FUN_14007dca0
-void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index); // was FUN_14007dd10
+// B.4 DLG-e: the fifteen TownHallUI bodies are members (Dialog/TownHallUI.h).
 
 // ---- tradeui_buyentries.cpp
 extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray);  // 0x140059670
