@@ -29,7 +29,9 @@
 #include "math/Math.h"   // Math::Vector3 (the saved camera view's position)
 
 class ComponentEntity;
+class ComponentDescription;
 namespace IO { class Stream; }
+namespace UI { class DialogInstance; }
 
 // B.4 GAME-a: one saved camera view of the +0x70 array (stride 0x1C, align 4;
 // resize 0x14002e000, Serialize 0x140102920: Vector3, three floats, a bool).
@@ -90,12 +92,12 @@ public:
 
     void*    field_0x00;         // +0x00 InternalBasePtr (ctor null)
     uint64_t field_0x08;         // +0x08 not written by the ctor
-    uint64_t field_0x10;         // +0x10 ctor 0
+    struct ToolRegistryNode* field_0x10; // +0x10 ctor 0; the tool registry root SelectTool 0x140102b60 walks (B4 H4: typed, DLG-d; node in Dialog/toolbardialog.cpp)
     int32_t  field_0x18;         // +0x18 ctor 0
     uint8_t  _pad1C[4];          // +0x1C
-    uint64_t field_0x20;         // +0x20 ctor 0
+    ComponentDescription* field_0x20; // +0x20 ctor 0; the active tool group SelectTool 0x140102b60 stores (B4 H4: typed, DLG-d)
     class Tool* currentTool;     // +0x28 InternalPtr<Tool> (ctor null; B4 H4: typed, DLG-a)
-    bool     field_0x30;         // +0x30 ctor 0 (the tree: paused)
+    bool     paused;             // +0x30 ctor 0; the toolbar pause / unpause buttons write it (0x1400b92a0 cases 7 / 8), their enable state (0x1400b8d40) and Draw read it (B4 DLG-d)
     uint8_t  _pad31[3];          // +0x31
     int32_t  field_0x34;         // +0x34 ctor 1 (the tree: game speed)
     bool     field_0x38;         // +0x38 ctor 0
@@ -115,7 +117,7 @@ public:
     int32_t  cameraViewCapacity; // +0x7C Array capacity
     bool     field_0x80;         // +0x80 pending-tool flag (ctor 0)
     uint8_t  _pad81[7];          // +0x81
-    void*    field_0x88;         // +0x88 pending tool (ctor 0)
+    ComponentDescription* field_0x88; // +0x88 pending tool (ctor 0): the group SelectTool 0x140102b60 forces while +0x80 is set (B4 H4: typed, DLG-d)
     void*    field_0x90;         // +0x90 ctor 0
     int32_t  field_0x98;         // +0x98 ctor -1 (one qword store with +0x9C)
     int32_t  field_0x9C;         // +0x9C ctor -1
@@ -135,6 +137,19 @@ public:
     void UpdateHotkeys(int inputFlag, int64_t timeTicks);   // 0x1400ff6e0
     void ApplyCameraView(int index);                        // 0x1400fe8d0 one saved view
     void OnEntityRemoved(ComponentEntity* const* entity);   // 0x140103480 (body: nomadcomponent.cpp)
+
+    // ---- members (B4 DLG-d; bodies in Dialog/toolbardialog.cpp) ----
+    // 0x140102b60: make `group`'s tool the current tool (null / 0 = the EditTool).
+    void SelectTool(ComponentDescription* group);
+    // 0x140101a80: close the open utility dialog of `description`, or open one;
+    // returns the opened dialog (retail: an InternalPtr through the hidden slot).
+    UI::DialogInstance* ToggleUtilityDialog(ComponentDescription* description);
+    // 0x140101ce0: open the in-game pause menu (retail returns nothing; the tree
+    // returns the dialog for the unattended menu driver).
+    UI::DialogInstance* OpenPauseMenu();
+    // 0x140103040: move the camera onto the entity, mark the dialog's EntityUI
+    // as following it, and select it with the EditTool.
+    void CenterOnEntity(UI::DialogInstance* const* dialog, ComponentEntity* const* entity);
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");
@@ -145,7 +160,7 @@ static_assert(offsetof(PlayerToolManager, field_0x18) == 0x18, "+0x18");
 static_assert(offsetof(PlayerToolManager, _pad1C) == 0x1C, "+0x1C");
 static_assert(offsetof(PlayerToolManager, field_0x20) == 0x20, "+0x20");
 static_assert(offsetof(PlayerToolManager, currentTool) == 0x28, "PlayerToolManager::currentTool @ +0x28 (0x1401026a0)");
-static_assert(offsetof(PlayerToolManager, field_0x30) == 0x30, "+0x30");
+static_assert(offsetof(PlayerToolManager, paused) == 0x30, "PlayerToolManager::paused @ +0x30 (0x1400b8d40)");
 static_assert(offsetof(PlayerToolManager, _pad31) == 0x31, "+0x31");
 static_assert(offsetof(PlayerToolManager, field_0x34) == 0x34, "+0x34");
 static_assert(offsetof(PlayerToolManager, field_0x38) == 0x38, "+0x38");

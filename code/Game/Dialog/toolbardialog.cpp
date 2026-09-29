@@ -44,14 +44,23 @@
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
-#include "Component/coll_bridge.h"
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
 #include "math/Math.h"
 #include "system/Value.h"
 #include "runtime/types/ui/DialogInstance.h"
-#include "Entity/exe_bodies.h"
+#include "runtime/types/ui/CheckElement.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"
+#include "Game/PlayerController.h"
+#include "Game/Map.h"
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Component/ModelComponent.h"
+#include "Component/MultiObjectComponent.h"
+#include "Component/MapComponent.h"
 #include "Player/EditTool.h"   // ENDGAME B.3.9 TR
 #include "Player/Tool.h"       // B.3.x W0: Tool::OnCancel by name
 #include "ui/DialogController.h"   // B.3.x W0: DialogController::OnCreated / OnOpened by name
@@ -94,69 +103,85 @@ extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
 // Closes the active sub-dialog if present, resets radio selection.
 // self+0xE8 = InternalBasePtr to sub-dialog, self+0xF0 = open sub index, self+0xB8 = radio.
 void ToolbarDialog::CloseSubDialog() {
-    uintptr_t s = (uintptr_t)this;
-    uint64_t subDialogPtr = *(uint64_t*)(s + 0xE8);
-    if (subDialogPtr != 0) {
-        void* ui = *(void**)(s + 0x10);
-        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>((void*)(s + 0xE8)));  // B.3.6 bridge
+    if (subDialog.Get() != nullptr) {
+        _ui->CloseDialog(&subDialog);
         // Null out the sub-dialog ptr
-        uint8_t nullBuf[8];
-        new (nullBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *(uint64_t*)(s + 0xE8) = *(uint64_t*)nullBuf;
+        subDialog = Object::InternalPtr<UI::DialogInstance>(nullptr);
         // Reset sub-dialog index to -1
-        *(int32_t*)(s + 0xF0) = -1;
+        openSubIndex = -1;
         // Reset radio selection
-        void* radioElem = *(void**)(s + 0xB8);
-        reinterpret_cast<UI::RadioElement*>(radioElem)->SetActiveRadio(-1);  // B.3.6 bridge
+        radioElement->SetActiveRadio(-1);
     }
 }
 
-// ToolbarDialog_ChangeSpeed (FUN_1400b91b0)
-// Changes game speed by direction (+1 or -1), updates speed singleton.
-// self+0xF8 = speed value array, self+0x100 = speed count, self+0xF4 = current index.
-// Speed singleton at gameWorld+0x120 (+0x34 = current speed value).
-static void ToolbarDialog_ChangeSpeed_Impl(void* self, int direction) {
-    uintptr_t s = (uintptr_t)self;
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
-    int32_t speedVal = *(int32_t*)(gameSys + 0x34);
-    int32_t count = *(int32_t*)(s + 0x100);
-    int32_t* speedArr = *(int32_t**)(s + 0xF8);
+// ToolbarDialog::ChangeSpeed (FUN_1400b91b0)
+// Changes game speed by direction (+1 or -1): the tool manager's +0x34 steps
+// through speedValues, clamped to its ends.
+void ToolbarDialog::ChangeSpeed(int direction) {
+    PlayerToolManager* toolManager = GameUpdateLoop::_singleton->m_toolManager;
+    int32_t speedVal = toolManager->field_0x34;
+    int32_t count = speedValues.GetSize();
     // Find current speed in array
     int32_t idx = 0;
     for (int i = 0; i < count; i++) {
-        if (speedArr[i] == speedVal) { idx = i; break; }
+        if (speedValues[i] == speedVal) { idx = i; break; }
     }
     // Apply direction, clamp to [0, count-1]
     idx += direction;
     if (idx < 0) idx = 0;
-    *(int32_t*)(s + 0xF4) = idx;
+    currentSpeedIndex = idx;
     if (count <= idx) {
-        *(int32_t*)(s + 0xF4) = count - 1;
+        currentSpeedIndex = count - 1;
     }
     // Write new speed value
-    *(int32_t*)(gameSys + 0x34) = speedArr[*(int32_t*)(s + 0xF4)];
+    toolManager->field_0x34 = speedValues[currentSpeedIndex];
+}
+
+// One node of the town's per-template entity tree (CitizenBehavior +0x160,
+// 0x38 bytes; the same tree citizenlist_serialize.cpp serializes as its
+// CompRefNode): the template, the entities built from it, the AVL links.
+// LEFT: CitizenBehavior::field_0x160 is void* (WORK-a's header).
+struct TemplateEntityNode {
+    ComponentDescription* key;         // +0x00 the entity's template (compared by address)
+    ComponentEntity**     entities;    // +0x08 Array<InternalPtr<ComponentEntity>> data
+    int32_t               count;       // +0x10 its count
+    int32_t               capacity;    // +0x14
+    TemplateEntityNode*   parent;      // +0x18
+    TemplateEntityNode*   left;        // +0x20
+    TemplateEntityNode*   right;       // +0x28
+    int32_t               balance;     // +0x30
+    uint8_t               _pad34[4];   // +0x34
+};
+static_assert(sizeof(TemplateEntityNode) == 0x38, "the +0x160 tree's node is 0x38");
+static_assert(offsetof(TemplateEntityNode, entities) == 0x08, "TemplateEntityNode +0x08");
+static_assert(offsetof(TemplateEntityNode, count) == 0x10, "TemplateEntityNode +0x10");
+static_assert(offsetof(TemplateEntityNode, left) == 0x20, "TemplateEntityNode +0x20");
+static_assert(offsetof(TemplateEntityNode, right) == 0x28, "TemplateEntityNode +0x28");
+
+// The +0x160 node of `key`, or null.
+static TemplateEntityNode* Toolbar_FindTemplateNode(const CitizenBehavior* town, const void* key) {
+    TemplateEntityNode* node = reinterpret_cast<TemplateEntityNode*>(town->field_0x160);
+    while (node != nullptr) {
+        const void* nodeKey = node->key;
+        if (nodeKey > key) {
+            node = node->left;
+        } else if (nodeKey < key) {
+            node = node->right;
+        } else {
+            return node;
+        }
+    }
+    return nullptr;
 }
 
 // Toolbar_FindEntity (FUN_140088d40)
-// BST search: walks tree at entityList+0x160 looking for typeId match.
-// Returns InternalBasePtr to found entity, or null.
-static void* Toolbar_FindEntity_Impl(void* entityList, void* retBuf, uint64_t typeId, int index) {
-    uintptr_t* node = *(uintptr_t**)((uintptr_t)entityList + 0x160);
-    while (node != nullptr) {
-        if (*node > typeId) {
-            node = (uintptr_t*)node[4];  // left child
-        } else if (*node < typeId) {
-            node = (uintptr_t*)node[5];  // right child
-        } else {
-            // Found matching typeId — fetch entity at index from node[1] array
-            uint64_t entityArray = node[1];
-            *(void**)retBuf = (void*)*(uint64_t*)(entityArray + (uint64_t)index * 8);
-            return *(void**)retBuf;
-        }
+// BST search: walks the town's +0x160 tree for the template, returns its
+// index-th entity, or null.
+static ComponentEntity* Toolbar_FindEntity_Impl(const CitizenBehavior* town, const void* key, int index) {
+    TemplateEntityNode* node = Toolbar_FindTemplateNode(town, key);
+    if (node != nullptr) {
+        return node->entities[index];
     }
-    // Not found: return null
-    new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     return nullptr;
 }
 
@@ -184,225 +209,170 @@ void ToolbarDialog::OnClosed() {
 //   - FocusEntity: enables button if entities of that type exist
 // Uses the same entity BST search as Toolbar_FindEntity_Impl.
 // ============================================================
-static void ToolbarDialog_UpdateButtons_Impl(void* self) {
-    uintptr_t s = (uintptr_t)self;
-    uintptr_t entityList = *(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
+void ToolbarDialog::UpdateButtons() {
+    const CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
 
-    int32_t itemCount = *(int32_t*)(s + 0xD8);
+    int32_t itemCount = toolbarItems.GetSize();
     if (itemCount <= 0) return;
 
-    int64_t* itemArray = *(int64_t**)(s + 0xD0);
-
     for (int i = 0; i < itemCount; i++) {
-        uintptr_t item = (uintptr_t)itemArray[i];
-        uint64_t typeId = *(uint64_t*)(item + 0x58);
+        const Toolbar* item = toolbarItems[i];
+        // The item's template
+        ComponentDescription* typeId = item->_field58;
 
-        if (typeId == 0) continue;
+        if (typeId == nullptr) continue;
 
-        // Search sub-items (item+0x58 -> data with +0x28 array, +0x30 count)
-        // to find the matching component type for this toolbar item.
-        // This traverses the toolbar item's typed sub-list.
-        int32_t subCount = 0;
-        uintptr_t subData = typeId;
-        if (subData != 0) {
-            subCount = *(int32_t*)(subData + 0x30);
-        }
-
-        // Find the component type matching ToolbarDescription (cell 0x1401c7f58)
-        void* matchedComponent = nullptr;
+        // Find the ToolbarDescription among the template's sub-descriptions.
+        ToolbarDescription* matchedComponent = nullptr;
+        int32_t subCount = typeId->_subDescCount;
         if (subCount > 0) {
             uint32_t targetType = ToolbarDescription::TypeId();
             for (int j = 0; j < subCount; j++) {
-                void* subItem = *(void**)(*(uintptr_t*)(subData + 0x28) + (int64_t)j * 8);
+                Description* subItem = typeId->_subDescs[j];
                 if (!subItem) continue;
-                // vtable[2] (offset 0x10) = GetTypeId, returns uint32_t
-                uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
+                uint32_t subType = subItem->Type();
                 if (subType == targetType) {
                     bool isDerived = ::Object::IsDerivedFromNullSafe(subItem, targetType);
-                    if (isDerived) matchedComponent = subItem;
+                    if (isDerived) matchedComponent = static_cast<ToolbarDescription*>(subItem);
                     break;
                 }
             }
         }
 
-        int32_t actionType = *(int32_t*)(item + 0x48);
+        int32_t actionType = item->_field48;
 
         if (actionType == 1) {
-            // ShowGroup: check if group count meets entity requirement
+            // ShowGroup: enabled while the town has fewer of the template than
+            // its ToolbarDescription's limit (_val0; negative = no limit)
             bool enabled;
-            if (matchedComponent == nullptr || *(int32_t*)((uintptr_t)matchedComponent + 0x60) < 0) {
+            if (matchedComponent == nullptr || matchedComponent->_val0 < 0) {
                 enabled = true;
             } else {
-                // Search entity BST for typeId count
+                // The town's count of the template
                 int entityCount = 0;
-                uintptr_t* node = *(uintptr_t**)(entityList + 0x160);
-                while (node != nullptr) {
-                    if (typeId < *node) {
-                        node = (uintptr_t*)node[4];
-                    } else if (typeId > *node) {
-                        node = (uintptr_t*)node[5];
-                    } else {
-                        entityCount = (int)node[2];
-                        break;
-                    }
-                }
-                enabled = entityCount < *(int32_t*)((uintptr_t)matchedComponent + 0x60);
+                TemplateEntityNode* node = Toolbar_FindTemplateNode(town, typeId);
+                if (node != nullptr) entityCount = node->count;
+                enabled = entityCount < matchedComponent->_val0;
             }
 
-            // Set button enabled via vtable[8] (offset 0x40)
-            void** buttonArray = *(void***)(s + 0xC0);
-            void* elem = buttonArray[i];
+            // Set button enabled (Element slot 8)
+            UI::Element* elem = buttonElements[i];
             if (!elem) continue;
-            reinterpret_cast<UI::Element*>(elem)->Enable(enabled);   // B.3.x bridge (slot 8)
+            elem->Enable(enabled);
         }
         else if (actionType == 4) {
             // FocusEntity: check if any entities of that type exist
-            void** buttonArray = *(void***)(s + 0xC0);
-            void* elem = buttonArray[i];
+            UI::Element* elem = buttonElements[i];
             if (!elem) continue;
 
-            // Search entity BST for typeId count
+            // The town's count of the template
             int entityCount = 0;
-            uintptr_t* node = *(uintptr_t**)(entityList + 0x160);
-            while (node != nullptr) {
-                if (typeId < *node) {
-                    node = (uintptr_t*)node[4];
-                } else if (typeId > *node) {
-                    node = (uintptr_t*)node[5];
-                } else {
-                    entityCount = (int)node[2];
-                    break;
-                }
-            }
+            TemplateEntityNode* node = Toolbar_FindTemplateNode(town, typeId);
+            if (node != nullptr) entityCount = node->count;
 
             bool enabled = entityCount > 0;
-            reinterpret_cast<UI::Element*>(elem)->Enable(enabled);   // B.3.x bridge (slot 8)
+            elem->Enable(enabled);
         }
     }
 }
 
 // ============================================================
-// Toolbar_ShowGroup_Impl (was fn_Toolbar_ShowGroup, FUN_140102b60)
+// PlayerToolManager::SelectTool (FUN_140102b60; the tree's Toolbar_ShowGroup_Impl /
+// EntityUI_SetEditMode_Impl, both B4 FORWARD forwarders now)
 //
-// THE single port of retail 0x140102b60. This function was independently ported
-// TWICE — the second copy was entityui.cpp's EntityUI_SetEditMode_Impl, which is
-// now a thin forwarder into this body. Both names, both signatures and every
-// existing call site are preserved; only the duplicate body is gone.
-//
-// Shows/hides a tool group dialog. Called with gameSubsys (PlayerController at
-// gameWorld+0x120) and a groupId (toolbar item type ID). The SetEditMode spelling
-// calls the same object "playerController" / "entityUI" and the same argument
-// "mode" — they are the same object and the same field set.
+// Makes the tool of a tool group (a template: the toolbar item's +0x58) the
+// current tool. Called by the toolbar's ShowGroup buttons, EntityUI, the tutorial,
+// NomadComponent and GameUpdateLoop.
 //
 // Logic:
-//   1. If lockToggle flag (+0x80) is set and groupId != 0, use locked group (+0x88)
-//   2. If same group already shown AND controller exists AND groupId != 0: early return
-//   3. Otherwise: store new groupId, close existing controller, find matching
-//      tool node in BST, create ToolController + ToolSetting, configure & start
+//   1. If the tutorial lock (+0x80) is set and group != 0, use the locked group (+0x88)
+//   2. If same group already active AND a tool exists AND group != 0: early return
+//   3. Otherwise: store the new group, shut down and delete the current tool, find
+//      the matching tool node in the registry, create the Tool + its ToolSetting,
+//      configure & start it
 //
-// PlayerController layout (relevant fields):
-//   +0x10: BST root node (tool registry, red-black tree of ToolNode)
-//   +0x20: int64_t activeGroupId (currently active tool group)
-//   +0x28: InternalBasePtr activeController (current ToolController)
-//   +0x80: uint8_t lockToggle (if set, forces locked group)
-//   +0x88: int64_t lockedGroupId (the locked group to use)
+// The tool registry (+0x10): an AVL tree of ToolRegistryNode (0x30 bytes), keyed
+// by the type id of a sub-description a group template carries.
 //
-// ToolNode (BST node, 0x30 bytes, red-black tree):
-//   +0x00: uint32_t typeId (key)
-//   +0x08: uint32_t factoryTypeId (passed to Factory::CreateObject)
-//   +0x10: InternalBasePtr toolSetting (cached ToolSetting, lazily created)
-//   +0x18: ToolNode* parent
-//   +0x20: ToolNode* left
-//   +0x28: ToolNode* right
-//
-// GroupData (pointed to by activeGroupId):
-//   +0x28: void** subItems (array of component pointers)
-//   +0x30: int32_t subItemCount
-//
-// ToolController vtable:
-//   +0x20: Start()      == vtbl[4]  (Startup, in the SetEditMode spelling)
-//   +0x28: Close()      == vtbl[5]  (Shutdown, in the SetEditMode spelling)
-//   +0x58: GetToolSettingTypeId(retBuf) -> int* (returns ptr to typeId, 0 = none)
-//                       == vtbl[11]
-// The two ports spelled the teardown slot differently — *(vtbl + 0x28) here and
-// vtbl[5] in the SetEditMode copy. 5*8 == 0x28: SAME SLOT. Byte offsets are used
-// throughout this body.
-//
-// ToolController instance fields (set before Start):
-//   +0x10: void* playerController (back-pointer)
-//   +0x18: InternalBasePtr toolSetting
-//   +0x20: int64_t groupId
-//
-// groupId == 0 IS A REAL LOOKUP, NOT A "CLEAR" NO-OP.
+// group == 0 IS A REAL LOOKUP, NOT A "CLEAR" NO-OP.
 // The tool registry always contains a node keyed 0 -> EditTool (see
-// BuildToolModeTree in tool_activation_standalone.cpp; the runtime log line
-// "node{0 -> EditTool=...}" shows it). With groupId 0 the component scan finds
-// nothing, foundTypeId stays 0, and the exact-match pass below then hits that
-// key-0 node and CREATES the EditTool. That is how the default EditTool gets
-// installed at all — retail EntityUI::Update relies on it via SetEditMode(pc, 0).
-// An earlier version of this body returned early on foundTypeId == 0 on the
-// premise that "no matching type exists"; the log disproves that premise, and
-// the early-out would have killed entity selection outright. Do not reinstate it.
+// BuildToolModeTree in tool_activation_standalone.cpp). With group 0 the
+// component scan finds nothing, foundTypeId stays 0, and the exact-match pass
+// below then hits that key-0 node and CREATES the EditTool. That is how the
+// default EditTool gets installed at all — retail EntityUI::Update relies on it
+// via SetEditMode(pc, 0). Do not add an early-out on foundTypeId == 0.
 // ============================================================
-void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
-    uintptr_t pc = (uintptr_t)gameSubsys;
-    // Step 1: If lockToggle is set and groupId is non-zero, override with locked group
-    // (this is the tutorial's TutorialSetupRestrictPlayer restriction — +0x80/+0x88 are
-    // written by TutorialSetupRestrictPlayer_Slot8. A step whose setup list contains
-    // `disableSelect` (an all-default instance) locks +0x88 to NULL, which turns EVERY
-    // toolbar selection into "no group". Trace both legs: during a tutorial this is the
-    // difference between "the build tool does nothing" and a real tool failure.)
-    if (*(uint8_t*)(pc + 0x80) != 0 && groupId != 0) {
-        int64_t forced = *(int64_t*)(pc + 0x88);
-        groupId = forced;
+
+// One node of the tool registry at PlayerToolManager +0x10 (0x30 bytes).
+struct ToolRegistryNode {
+    uint32_t          typeId;          // +0x00 the key: a sub-description's type id
+    uint32_t          _pad04;          // +0x04
+    uint32_t          factoryTypeId;   // +0x08 the Tool class Factory::CreateObject builds
+    uint32_t          _pad0C;          // +0x0C
+    ToolSetting*      toolSetting;     // +0x10 InternalPtr<ToolSetting>, created lazily
+    ToolRegistryNode* parent;          // +0x18
+    ToolRegistryNode* left;            // +0x20
+    ToolRegistryNode* right;           // +0x28
+};
+static_assert(sizeof(ToolRegistryNode) == 0x30, "the tool registry node is 0x30");
+static_assert(offsetof(ToolRegistryNode, factoryTypeId) == 0x08, "ToolRegistryNode +0x08");
+static_assert(offsetof(ToolRegistryNode, toolSetting) == 0x10, "ToolRegistryNode +0x10");
+static_assert(offsetof(ToolRegistryNode, parent) == 0x18, "ToolRegistryNode +0x18");
+static_assert(offsetof(ToolRegistryNode, left) == 0x20, "ToolRegistryNode +0x20");
+static_assert(offsetof(ToolRegistryNode, right) == 0x28, "ToolRegistryNode +0x28");
+
+void PlayerToolManager::SelectTool(ComponentDescription* group) {
+    // Step 1: If the lock is set and the group is non-zero, override with the
+    // locked group (the tutorial's TutorialSetupRestrictPlayer restriction —
+    // +0x80/+0x88 are written by TutorialSetupRestrictPlayer_Slot8. A step whose
+    // setup list contains `disableSelect` locks +0x88 to NULL, which turns EVERY
+    // toolbar selection into "no group".)
+    if (field_0x80 != 0 && group != nullptr) {
+        group = field_0x88;
     }
 
-    // Step 2: Early return if same group is already active with a live controller
-    int64_t activeGroup = *(int64_t*)(pc + 0x20);
-    if (activeGroup == groupId && *(int64_t*)(pc + 0x28) != 0 && groupId != 0) {
+    // Step 2: Early return if same group is already active with a live tool
+    if (field_0x20 == group && currentTool != nullptr && group != nullptr) {
         return;
     }
 
-    // Step 3: Store new group, close existing controller if any
-    *(int64_t*)(pc + 0x20) = groupId;
-    if (*(int64_t*)(pc + 0x28) != 0) {
-        // CheckPtr on the InternalBasePtr
-        // Call controller->Close() via vtable[5] (offset 0x28)
-        void* controller = *(void**)(pc + 0x28);
-        reinterpret_cast<Tool*>(controller)->Shutdown();   // slot 5; B.3.8 bridge
-        // DeletePtr releases the reference
-        reinterpret_cast< ::Object::InternalBasePtr*>((void*)(pc + 0x28))->DeletePtr();   // B.3.3 bridge
+    // Step 3: Store new group, shut down and delete the current tool if any
+    field_0x20 = group;
+    if (currentTool != nullptr) {
+        currentTool->Shutdown();   // slot 5
+        // InternalBasePtr::DeletePtr: the scalar deleting dtor, then null
+        delete currentTool;
+        currentTool = nullptr;
     }
 
+    // The registry root
+    ToolRegistryNode* const root = field_0x10;
 
-    // Step 4: In-order BST traversal to find the matching tool node typeId.
-    // The BST at pc+0x10 maps typeIds to tool factory/setting info.
-    // We scan all nodes, checking each node's typeId against the group data's
-    // sub-item component list. The first match sets foundTypeId.
+    // Step 4: In-order traversal to find the registry node whose typeId matches a
+    // sub-description of the group. The first match sets foundTypeId.
     uint32_t foundTypeId = 0;
 
     // Navigate to the in-order minimum (leftmost node)
-    uintptr_t node = *(uintptr_t*)(pc + 0x10);
-    if (node != 0) {
+    ToolRegistryNode* node = root;
+    if (node != nullptr) {
         // Go to leftmost
-        while (*(uintptr_t*)(node + 0x20) != 0) {
-            node = *(uintptr_t*)(node + 0x20);
+        while (node->left != nullptr) {
+            node = node->left;
         }
 
         // In-order traversal
-        while (node != 0) {
+        while (node != nullptr) {
             // Check if this node's typeId matches a sub-item in the group data
-            int64_t groupData = *(int64_t*)(pc + 0x20);
-            if (groupData != 0) {
-                uint32_t nodeTypeId = *(uint32_t*)node;
-                int32_t subCount = *(int32_t*)(groupData + 0x30);
+            ComponentDescription* groupData = field_0x20;
+            if (groupData != nullptr) {
+                uint32_t nodeTypeId = node->typeId;
+                int32_t subCount = groupData->_subDescCount;
                 for (int i = 0; i < subCount; i++) {
-                    void* subItem = *(void**)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8);
-                    // Call vtable[2] (GetTypeId) on the sub-item
-                    uint32_t subTypeId = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
+                    Description* subItem = groupData->_subDescs[i];
+                    uint32_t subTypeId = subItem->Type();
                     if (subTypeId == nodeTypeId) {
                         // Verify sub-item pointer is non-null (redundant but matches original)
-                        if (*(uintptr_t*)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8) != 0) {
+                        if (groupData->_subDescs[i] != nullptr) {
                             foundTypeId = nodeTypeId;
                         }
                         break;
@@ -411,260 +381,212 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             }
 
             // In-order successor: if right child exists, go to its leftmost descendant
-            uintptr_t right = *(uintptr_t*)(node + 0x28);
-            if (right != 0) {
+            ToolRegistryNode* right = node->right;
+            if (right != nullptr) {
                 node = right;
-                while (*(uintptr_t*)(node + 0x20) != 0) {
-                    node = *(uintptr_t*)(node + 0x20);
+                while (node->left != nullptr) {
+                    node = node->left;
                 }
             } else {
                 // Walk up to find ancestor where we came from the left
-                uintptr_t parent = *(uintptr_t*)(node + 0x18);
-                if (parent != 0) {
-                    if (*(uintptr_t*)(parent + 0x20) == node) {
+                ToolRegistryNode* parent = node->parent;
+                if (parent != nullptr) {
+                    if (parent->left == node) {
                         // We are the left child — parent is successor
                         node = parent;
                     } else {
                         // We are the right child — walk up
-                        while (parent != 0 && *(uintptr_t*)(parent + 0x28) == node) {
+                        while (parent != nullptr && parent->right == node) {
                             node = parent;
-                            parent = *(uintptr_t*)(parent + 0x18);
+                            parent = parent->parent;
                         }
-                        node = *(uintptr_t*)(node + 0x18);
+                        node = node->parent;
                     }
                 } else {
                     // No parent — we were at root, done
-                    node = 0;
+                    node = nullptr;
                 }
             }
         }
     }
 
-    // Step 5: BST search for the foundTypeId to get the matching ToolNode.
-    // Retail is exact-match-or-NULL here: its loop head re-zeroes the result
-    // register on EVERY iteration (`while (puVar14 = 0, puVar10 != 0)`), so a
-    // failed search yields 0, NOT a lower_bound node. An earlier version of this
-    // body had a second "lower_bound fallback" pass; retail has no such pass and
-    // it only ever fed the foundTypeId == 0 early-out that is documented above as
-    // a bug. Both are gone.
-    uintptr_t foundNode = 0;
-    uintptr_t searchNode = *(uintptr_t*)(pc + 0x10);
-    while (searchNode != 0) {
-        uint32_t key = *(uint32_t*)searchNode;
+    // Step 5: search the registry for foundTypeId. Retail is exact-match-or-NULL.
+    ToolRegistryNode* foundNode = nullptr;
+    ToolRegistryNode* searchNode = root;
+    while (searchNode != nullptr) {
+        uint32_t key = searchNode->typeId;
         if (foundTypeId < key) {
-            searchNode = *(uintptr_t*)(searchNode + 0x20); // left
+            searchNode = searchNode->left;
         } else if (foundTypeId > key) {
-            searchNode = *(uintptr_t*)(searchNode + 0x28); // right
+            searchNode = searchNode->right;
         } else {
             foundNode = searchNode;
             break;
         }
     }
 
-    // DELIBERATE DIVERGENCE FROM RETAIL (per CLAUDE.md: a guard is legitimate only
-    // where our standalone genuinely differs from retail). Retail does NOT test the
-    // search result — it goes straight to Factory::CreateObject(..., puVar14[2]) and
-    // null-derefs if the registry held no matching key, because retail's registry
-    // always does. Ours is built by BuildToolModeTree and can legitimately be empty
-    // or partial in a standalone run, so guard the deref rather than fault. Every
-    // other step below stays byte-faithful.
-    if (foundNode == 0) {
+    // DELIBERATE DIVERGENCE FROM RETAIL (a guard is legitimate only where our
+    // standalone genuinely differs from retail). Retail does NOT test the search
+    // result — it goes straight to Factory::CreateObject and null-derefs if the
+    // registry held no matching key, because retail's registry always does. Ours is
+    // built by BuildToolModeTree and can legitimately be empty or partial in a
+    // standalone run, so guard the deref rather than fault.
+    if (foundNode == nullptr) {
         return;
     }
 
-    // Step 6: Create ToolController via Factory::CreateObject
+    // Step 6: Create the Tool via Factory::CreateObject
     // Retail: **import slot 0x140152760 = Object::Factory::_singleton (the class static).
-    uint32_t factoryTypeId = *(uint32_t*)(foundNode + 0x08);
-    void* newObj = ::Object::Factory::_singleton->CreateObject(
-        factoryTypeId);   // B.3.3 bridge
-    // IsDerivedFrom check for ToolController type
-    bool isToolCtrl = ::Object::IsDerivedFromNullSafe(newObj, Tool::TypeId());   // cell 0x1401c6eb8 (ENDGAME B.3.9 RF)
-    void* toolController = isToolCtrl ? newObj : nullptr;
+    Object::Base* newObj = ::Object::Factory::_singleton->CreateObject(foundNode->factoryTypeId);
+    // IsDerivedFrom check for the Tool type
+    bool isTool = ::Object::IsDerivedFromNullSafe(newObj, Tool::TypeId());   // cell 0x1401c6eb8
+    currentTool = isTool ? static_cast<Tool*>(newObj) : nullptr;
 
-
-    // Store as InternalBasePtr at pc+0x28
-    uint64_t ctrlRef = 0;
-    new (&ctrlRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(toolController));   // B.3.3 bridge
-    *(uint64_t*)(pc + 0x28) = ctrlRef;
-
-    // Step 7: Create ToolSetting if needed (lazy init on the ToolNode)
-    if (*(int64_t*)(foundNode + 0x10) == 0) {
-        // Ask the controller for its tool setting type via vtable[11] (offset 0x58)
-        void* ctrl = *(void**)(pc + 0x28);
-
-        // slot 11 GetSettingType, retslot shape (RCX this, RDX ret); B.3.8 bridge
+    // Step 7: Create the ToolSetting if needed (lazy init on the registry node)
+    if (foundNode->toolSetting == nullptr) {
+        // Ask the tool for its setting type (slot 11, retslot shape)
         Object::Type settingBuf(0);
-        const Object::Type* settingTypePtr = reinterpret_cast<Tool*>(ctrl)->GetSettingType(&settingBuf);
+        const Object::Type* settingTypePtr = currentTool->GetSettingType(&settingBuf);
 
         if (settingTypePtr->_type != 0) {
             // Re-query (matches original's double-call pattern)
-            ctrl = *(void**)(pc + 0x28);
-            uint32_t settingFactoryId = reinterpret_cast<Tool*>(ctrl)->GetSettingType(&settingBuf)->_type;
+            uint32_t settingFactoryId = currentTool->GetSettingType(&settingBuf)->_type;
 
             // Create the ToolSetting object
-            void* settingObj = ::Object::Factory::_singleton->CreateObject(
-                settingFactoryId);   // B.3.3 bridge
+            Object::Base* settingObj = ::Object::Factory::_singleton->CreateObject(settingFactoryId);
             bool isToolSetting = ::Object::IsDerivedFromNullSafe(settingObj, ToolSetting::TypeId());   // cell 0x1401c6ef0
-            void* toolSetting = isToolSetting ? settingObj : nullptr;
-
-            uint64_t settingRef = 0;
-            new (&settingRef) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(toolSetting));   // B.3.3 bridge
-            *(uint64_t*)(foundNode + 0x10) = settingRef;
+            foundNode->toolSetting = isToolSetting ? static_cast<ToolSetting*>(settingObj) : nullptr;
         }
     }
 
-    // Step 8: Configure and start the controller
-    uint64_t toolSettingRef = *(uint64_t*)(foundNode + 0x10);
-    void* ctrl = *(void**)(pc + 0x28);
+    // Step 8: Configure and start the tool
+    ToolSetting* toolSettingRef = foundNode->toolSetting;
+    Tool* tool = currentTool;
+    tool->dialogPtr = this;                 // back-pointer to the manager
+    tool->descriptionPtr = field_0x20;      // the group
+    tool->toolSetting = toolSettingRef;     // ToolSetting ref
 
-    // Set controller fields
-    uintptr_t c = (uintptr_t)ctrl;
-    *(uintptr_t*)(c + 0x10) = pc;                             // back-pointer to PlayerController
-    *(int64_t*)(c + 0x20) = *(int64_t*)(pc + 0x20);          // groupId
-    *(uint64_t*)(c + 0x18) = toolSettingRef;                  // ToolSetting ref
+    // Start the tool (slot 4)
+    currentTool->Startup();
+}
 
-    // Call controller->Start() via vtable[4] (offset 0x20)
-    ctrl = *(void**)(pc + 0x28);
-    reinterpret_cast<Tool*>(ctrl)->Startup();   // slot 4; B.3.8 bridge
+// B4 FORWARD: 6 outside caller(s) (Component/nomadcomponent.cpp,
+// Dialog/entityui.cpp, Game/gameupdateloop.cpp, Tutorial/tutorialsetupdialog.cpp,
+// Tutorial/tutorialsetuprestrictplayer.cpp, via EntityUI_SetEditMode_Impl the
+// Player tools and standalone harnesses).
+void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
+    reinterpret_cast<PlayerToolManager*>(gameSubsys)->SelectTool(
+        reinterpret_cast<ComponentDescription*>(groupId));
 }
 
 // ============================================================
-// Toolbar_Utility_Impl (was fn_Toolbar_Utility, FUN_140101a80)
+// PlayerToolManager::ToggleUtilityDialog (FUN_140101a80; the tree's
+// Toolbar_Utility_Impl)
 //
-// Opens/closes a utility dialog (e.g., town hall, trade post UI).
+// Opens/closes a utility dialog (e.g., the map, the town hall panels) for a
+// template (`description`, the toolbar item's +0x58).
 //
-// gameSubsys = ToolController at gameWorld+0x120
-// retBuf     = output InternalBasePtr (hidden return ptr)
-// param      = pointer to Description object for this utility type
-//
-// The Description object (param) has:
-//   +0x28: pointer to array of sub-item ptrs (Description children)
-//   +0x30: int32 count of sub-items
-// One child will be a UIDescription (UIDescription::TypeId()),
-// which has the external resource ref at +0x28.
-//
-// The BST at gameSubsys+0x50 tracks utility dialog positions:
-//   Node layout (0x38 bytes):
-//     +0x00: uint64 key (= param, the Description ptr value)
-//     +0x08: int32 saved X position
-//     +0x0C: int32 saved Y position
-//     +0x10: uint8 isOpen flag
-//     +0x20: left child ptr
-//     +0x28: right child ptr
+// The template has a UIDescription among its sub-descriptions, whose +0x28 is
+// the dialog resource. The +0x50 set (TrackedEntityNode, keyed by the
+// template's address) keeps each utility dialog's position and open flag.
 //
 // Flow:
-//   1. FindDialogByControllerType — search open dialogs for one
-//      whose controller is a ToolUI with +0x30 == param
-//   2. If found: close the dialog, clear BST isOpen flag
-//   3. If not found: find UIDescription child, create DialogInstance,
-//      set ToolUI vtable, look up/insert in BST, position, add to UI
+//   1. FindDialogByControllerType — search open dialogs for one whose ToolUI
+//      shows `description`
+//   2. If found: close the dialog, clear the set's open flag
+//   3. If not found: find the UIDescription, create the DialogInstance, look
+//      up / insert the set node, position it, add it to the UI
 // ============================================================
-static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param) {
-    uintptr_t self = (uintptr_t)gameSubsys;
+UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription* description) {
+    // The UserInterface
+    UI::UserInterface* userInterface = GameUpdateLoop::_singleton->m_userInterface;
 
-    // Get the UserInterface singleton: *(gameWorld + 0x98)
-    void* gameWorld = GameUpdateLoop::_singleton;
-    void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
+    // The set's key: the template's address
+    const void* key = description;
 
     // Step 1: Check if a dialog with this controller type is already open
-    void* existingDialog = nullptr;
-    ToolbarUtility_FindDialogByControllerType_0270(gameSubsys, &existingDialog, param);   // 0x140100270
+    // LEFT: 0x140100270's declaration takes the key as uint64_t (1 outside caller).
+    UI::DialogInstance* existingDialog = nullptr;
+    ToolbarUtility_FindDialogByControllerType_0270(this, &existingDialog,
+                                                   reinterpret_cast<uint64_t>(description));   // 0x140100270
 
     if (existingDialog != nullptr) {
         // Dialog is already open — close it
-        uint64_t closeRef = (uint64_t)existingDialog;
-        reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
+        Object::InternalPtr<UI::DialogInstance> closeRef(existingDialog);
+        userInterface->CloseDialog(&closeRef);
 
-        // Search BST at self+0x50 and clear the isOpen flag
-        uintptr_t* node = *(uintptr_t**)(self + 0x50);
+        // Clear the set node's open flag
+        TrackedEntityNode* node = field_0x50;
         while (node != nullptr) {
-            uint64_t nodeKey = *(uint64_t*)node;
-            if (param < nodeKey) {
-                node = (uintptr_t*)node[4];  // left child (+0x20)
-            } else if (param > nodeKey) {
-                node = (uintptr_t*)node[5];  // right child (+0x28)
+            const void* nodeKey = node->key;
+            if (key < nodeKey) {
+                node = node->left;
+            } else if (key > nodeKey) {
+                node = node->right;
             } else {
-                // Found — clear the isOpen flag at +0x10
-                *(uint8_t*)(node + 2) = 0;
+                node->active = 0;
                 break;
             }
         }
 
-        // Return null InternalBasePtr
-        new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        return;
+        // Return null
+        return nullptr;
     }
 
-    // Step 2: No existing dialog — find the UIDescription sub-item
-    int32_t subCount = *(int32_t*)(param + 0x30);
-    void* uiDescItem = nullptr;
+    // Step 2: No existing dialog — find the UIDescription sub-description
+    int32_t subCount = description->_subDescCount;
+    UIDescription* uiDescItem = nullptr;
 
     for (int i = 0; i < subCount; i++) {
-        void* subItem = *(void**)(*(uintptr_t*)(param + 0x28) + (int64_t)i * 8);
+        Description* subItem = description->_subDescs[i];
         if (!subItem) continue;
 
-        // Call vtable[2] (+0x10) to get the type ID
-        uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
+        uint32_t subType = subItem->Type();
 
         if (subType == UIDescription::TypeId()) {
             bool isDerived = ::Object::IsDerivedFromNullSafe(subItem, UIDescription::TypeId());
             if (isDerived) {
-                uiDescItem = subItem;
+                uiDescItem = static_cast<UIDescription*>(subItem);
             }
             break;
         }
     }
 
     if (uiDescItem == nullptr) {
-        new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        return;
+        return nullptr;
     }
 
     // Step 3: Create a new DialogInstance from the UIDescription's resource
     void* newBuf = System::MemoryAllocator::MemAlloc(0xB8, 8);
-    void* dialogInst = nullptr;
+    UI::DialogInstance* dialogInst = nullptr;
 
     if (newBuf != nullptr) {
-        // External resource from uiDescItem+0x28
-        void* extRes = *(void**)((uintptr_t)uiDescItem + 0x28);
-
-        // DialogInstance ctor: (ui, extRes, parent = null, dataSource, 0, 0);
-        // param is passed as the data source (identifies the utility type).
-        // ENDGAME B.3.9 UI-D (B9-13 foreign site): the real 6-arg ctor
-        // (0x180114870); its compiler table is the one retail's copy at
-        // 0x14015f5a0 describes, so the hand stamp is gone.
+        // DialogInstance ctor: (ui, resource, parent = null, dataSource, 0, 0);
+        // the template is the data source (identifies the utility type).
+        // LEFT: UIDescription::_descRef is void* (COMP-f's header): the UI::Dialog.
         dialogInst = ::new (newBuf) UI::DialogInstance(
-            reinterpret_cast<UI::UserInterface*>(userInterface),     // B.3.8 bridge
-            reinterpret_cast<const UI::Dialog*>(extRes),             // B.3.8 bridge
+            userInterface,
+            static_cast<const UI::Dialog*>(uiDescItem->_descRef),
             Object::InternalPtr<UI::DialogInstance>(),               // parent: null
-            reinterpret_cast<Object::Base*>(param),                  // B.3.8 bridge
+            description,
             nullptr, 0);
         extern void* g_HarnessLastUtilityDialog;
         g_HarnessLastUtilityDialog = dialogInst;   // harness: drive its controllers
     }
 
-    // Wrap in InternalBasePtr
-    void* dialogRef = nullptr;
-    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
-
-    if (dialogRef == nullptr) {
-        new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        return;
+    if (dialogInst == nullptr) {
+        return nullptr;
     }
 
-    // Step 4: Look up position in BST at self+0x50
-    uintptr_t* bstNode = nullptr;
-    uintptr_t* bstRoot = (uintptr_t*)(self + 0x50);
-
-    // BST search: find existing node for this param key
-    uintptr_t* current = *(uintptr_t**)bstRoot;
+    // Step 4: Look up the position node in the +0x50 set
+    TrackedEntityNode* bstNode = nullptr;
+    TrackedEntityNode* current = field_0x50;
     while (current != nullptr) {
-        uint64_t nodeKey = *(uint64_t*)current;
-        if (param < nodeKey) {
-            current = (uintptr_t*)current[4];  // left child (+0x20)
-        } else if (param > nodeKey) {
-            current = (uintptr_t*)current[5];  // right child (+0x28)
+        const void* nodeKey = current->key;
+        if (key < nodeKey) {
+            current = current->left;
+        } else if (key > nodeKey) {
+            current = current->right;
         } else {
             bstNode = current;
             break;
@@ -672,85 +594,71 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     }
 
     if (bstNode == nullptr) {
-        // Not in BST — insert new node via fn_BST_Insert_0x14
-        // Insert data: key=param, position=(default 1,0), flags=0
-        uint8_t insertBuf[24];
-        *(uint64_t*)&insertBuf[0] = param;          // key
-        *(uint64_t*)&insertBuf[8] = 0;              // x=0, y=0
-        *(uint64_t*)&insertBuf[16] = 0;             // flags=0
+        // Not in the set — insert a new node (0x140014890): key, x = y = 0, flags 0.
+        // LEFT: 0x140014890 is a Collection::Set insert shared by three other
+        // trees; its declaration takes the root holder and the record raw.
+        uint64_t insertBuf[3];
+        insertBuf[0] = reinterpret_cast<uint64_t>(key);   // CAST-OK: ptr_int
+        insertBuf[1] = 0;                                  // x=0, y=0
+        insertBuf[2] = 0;                                  // flags=0
 
         void* retNode = nullptr;
-        ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(bstRoot), &retNode,
-                                      reinterpret_cast<uint64_t*>(insertBuf));   // 0x140014890
-        bstNode = (uintptr_t*)retNode;
+        ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&field_0x50), &retNode, insertBuf);   // 0x140014890
+        bstNode = reinterpret_cast<TrackedEntityNode*>(retNode);
     }
 
-    // Set the isOpen flag at +0x10 to 1
-    *(uint8_t*)((uintptr_t)bstNode + 0x10) = 1;
+    // Set the open flag
+    bstNode->active = 1;
 
-    // Position dialog at saved coordinates from the BST node
-    int32_t savedX = *(int32_t*)((uintptr_t)bstNode + 0x08);
-    int32_t savedY = *(int32_t*)((uintptr_t)bstNode + 0x0C);
-    reinterpret_cast<UI::DialogInstance*>((void*)(uintptr_t)dialogRef)->SetUpperLeft(savedX, savedY, false);  // B.3.6 bridge
+    // Position dialog at the saved coordinates
+    dialogInst->SetUpperLeft(bstNode->x, bstNode->y, false);
 
     // Add dialog to the UI
-    uint64_t addRef = (uint64_t)dialogRef;
-    reinterpret_cast<UI::UserInterface*>(userInterface)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addRef));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> addRef(dialogInst);
+    userInterface->AddDialog(&addRef);
 
     // Return the dialog reference
-    *(void**)retBuf = (void*)(uintptr_t)dialogRef;
+    return dialogInst;
 }
 
-// Retail entry point for FUN_140101a80, so callers that reach it BY ADDRESS resolve
-// to this same body instead of a null pointer.
-//
-// The address was resolved into two differently-named variables and the sweep filed
-// them as separate rows: fn_Toolbar_Utility (dead — this file calls the impl
-// directly) and fn_SetFollowBuilding (engine_funcs.h, described as "set player
-// follow-building"). That second name is a MISNOMER. The decompile is unambiguous:
-// it finds-or-creates the ToolUI child DialogInstance for a Description, tracks its
-// position in the BST at arg1+0x50, and AddDialog/CloseDialog's it — the utility
-// panel toggler, nothing to do with follow mode.
-//
-// The two call shapes are identical, which is why one body serves both:
-//   arg1 = EntityUI/ToolController at gameWorld+0x120
-//   arg2 = InternalBasePtr* retval (non-trivial return)
+// B4 FORWARD: 2 outside caller(s) (Player/tool_activation_standalone.cpp,
+// Tutorial/tutorialsetupdialog.cpp). Retail entry point for FUN_140101a80:
+//   arg1 = the tool manager at gameWorld+0x120
+//   arg2 = InternalPtr<DialogInstance>* retval (non-trivial return)
 //   arg3 = ComponentDescription*
-// tutorialsetupdialog.cpp:369 passes exactly that and called it UNGUARDED, so with
-// the address unregistered a tutorial step that targets a building was an EXEC-of-0.
 extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param) {
-    Toolbar_Utility_Impl(gameSubsys, retBuf, param);
+    UI::DialogInstance* dialog = reinterpret_cast<PlayerToolManager*>(gameSubsys)->ToggleUtilityDialog(
+        reinterpret_cast<ComponentDescription*>(param));
+    *reinterpret_cast<UI::DialogInstance**>(retBuf) = dialog;
     return retBuf;   // retail returns the retval pointer it was handed
 }
 
-// Captures the last DialogInstance created by Toolbar_Utility_Impl so the harness
+// Captures the last DialogInstance created by ToggleUtilityDialog so the harness
 // can reach its controllers (e.g. drive MapUI::SetupImage after open).
 void* g_HarnessLastUtilityDialog = nullptr;
 
-// Recursively dump a UI::Element tree. Element layout (Runtime RE):
-//   +0x10 name (System::String: *ptr = data, len at data-8) · +0xa0 children
-//   array (Element*[]) · +0xa8 child count · vtable[2] = GetTypeId.
-static void HarnessDumpElemTree(void* elem, int depth, int* counter) {
+// Recursively dump a UI::Element tree: its name, type id and children.
+static void HarnessDumpElemTree(UI::Element* elem, int depth, int* counter) {
     if (!elem || depth > 8 || *counter > 300) return;
     (*counter)++;
-    char* nameData = *reinterpret_cast<char**>(reinterpret_cast<uintptr_t>(elem) + 0x10);
-    int len = nameData ? *reinterpret_cast<int*>(nameData - 8) : 0;
-    uint32_t tid = 0;
-    tid = reinterpret_cast<Object::Base*>(elem)->Type();   // B.3.x bridge (slot 2)
+    const char* nameData = elem->_name;
+    int len = nameData ? *reinterpret_cast<const int*>(nameData - 8) : 0;  // CAST-OK: string_header
+    uint32_t tid = elem->Type();   // slot 2
     printf("[ElemTree] %*selem=%p tid=%u name='%.*s'\n", depth * 2, "",
-           elem, tid, len > 0 ? len : 0, nameData ? nameData : "");
-    void** kids = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(elem) + 0xa0);
-    int kc = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(elem) + 0xa8);
+           static_cast<void*>(elem), tid, len > 0 ? len : 0, nameData ? nameData : "");
+    UI::Element** kids = elem->_children.GetData();
+    int kc = elem->_children.GetSize();
     for (int i = 0; kids && i < kc; i++) HarnessDumpElemTree(kids[i], depth + 1, counter);
 }
 
 // GUI_PLAN Keystone F, Phase 4 — harness entry. Fires the utility-dialog open path
 // (toolbar case 2) headlessly: pass the utility item's Description ptr (item+0x58,
 // e.g. a resolved Template\Utility*.rsc) as `param`. Mirrors the case-2 dispatch.
+// B4 FORWARD: 1 outside caller (standalone/tool_harness.cpp).
 extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param) {
-    uint8_t retBuf[16] = {};
     g_HarnessLastUtilityDialog = nullptr;
-    Toolbar_Utility_Impl(gameSubsys, retBuf, param);
+    reinterpret_cast<PlayerToolManager*>(gameSubsys)->ToggleUtilityDialog(
+        reinterpret_cast<ComponentDescription*>(param));
 }
 
 // Harness: fetch a named controller from the just-opened utility dialog and
@@ -759,45 +667,40 @@ extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param) {
 // since AddDialog doesn't reach the setup through the standalone ToolUI child-dialog
 // vtable. slotIndex defaults to 4 for the existing map callers.
 extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName, int slotIndex) {
-    // (This harness never walks the dialog LIST — it enumerates the _addDialogs
-    // array at UI+0x28 below — so the old `!fn_UI_GetFirstDialog` half of this
-    // guard tested a pointer the body does not use, and is gone.)
-    void* gameWorld = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) { printf("[HarnessDrive] gameWorld null\n"); return; }
-    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
+    UI::UserInterface* ui = gameWorld->m_userInterface;
     if (!ui) { printf("[HarnessDrive] UserInterface null\n"); return; }
 
     uint32_t tid = ::Object::GetTypeIdByName(controllerName);
     printf("[HarnessDrive] searching open dialogs for '%s' (tid=%u)\n", controllerName, tid);
 
-    // The open-dialog collection is a DynArray at UserInterface+0x28 (data ptr) /
-    // +0x30 (count) — that's where UserInterface::AddDialog (Runtime 0x180120ee0)
-    // pushes. Each element is an InternalPtr<DialogInstance> (8 bytes). Enumerate
-    // it, dumping each dialog's controllers to locate the (nested) MapUI.
-    uintptr_t uiAddr = reinterpret_cast<uintptr_t>(ui);
-    uintptr_t* data = *reinterpret_cast<uintptr_t**>(uiAddr + 0x28);
-    int count = *reinterpret_cast<int*>(uiAddr + 0x30);
-    printf("[HarnessDrive] UI+0x28 dialog array=%p count=%d\n", data, count);
+    // The open-dialog collection is the _addDialogs array (+0x28) — that's where
+    // UserInterface::AddDialog (Runtime 0x180120ee0) pushes. Each element is an
+    // InternalPtr<DialogInstance>. Enumerate it, dumping each dialog's controllers
+    // to locate the (nested) MapUI.
+    UI::DialogInstancePtr* data = ui->_addDialogs.GetData();
+    int count = ui->_addDialogs.GetSize();
+    printf("[HarnessDrive] UI+0x28 dialog array=%p count=%d\n", static_cast<void*>(data), count);
     for (int idx = 0; data && idx < count && idx < 32; idx++) {
-        uintptr_t ip = data[idx];              // InternalPtr value
-        void* dialog = reinterpret_cast<void*>(ip);
+        // LEFT: UserInterface's DialogInstancePtr is void* (R-UI's header).
+        UI::DialogInstance* dialog = static_cast<UI::DialogInstance*>(data[idx]);
         if (!dialog) { printf("[HarnessDrive] dialog[%d]=null\n", idx); continue; }
-        void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
-        int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
-        uint32_t dlgTid = 0;
-        dlgTid = reinterpret_cast<Object::Base*>(dialog)->Type();   // B.3.x bridge (slot 2)
-        printf("[HarnessDrive] dialog[%d]=%p dlgTid=%u controllers=%d:", idx, dialog, dlgTid, cnt);
+        UI::DialogController** ctrlArr = dialog->_controllers.GetData();
+        int cnt = dialog->_controllers.GetSize();
+        uint32_t dlgTid = dialog->Type();   // slot 2
+        printf("[HarnessDrive] dialog[%d]=%p dlgTid=%u controllers=%d:", idx, static_cast<void*>(dialog), dlgTid, cnt);
         for (int i = 0; ctrlArr && i < cnt && i < 16; i++) {
-            void* c = ctrlArr[i]; uint32_t ctid = 0;
-            if (c) ctid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
+            UI::DialogController* c = ctrlArr[i]; uint32_t ctid = 0;
+            if (c) ctid = c->Type();   // slot 2
             printf(" [%d]tid=%u", i, ctid);
         }
         printf("\n");
-        // Dump the dialog's element tree (root = dialog+0x50) so we see exactly
-        // what content was built (names, types) and whether the minimap is there.
+        // Dump the dialog's element tree (its root) so we see exactly what content
+        // was built (names, types) and whether the minimap is there.
         {
-            void* root = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(dialog) + 0x50);
-            printf("[HarnessDrive] dialog[%d] root elem=%p — tree:\n", idx, root);
+            UI::Element* root = dialog->_root;
+            printf("[HarnessDrive] dialog[%d] root elem=%p — tree:\n", idx, static_cast<void*>(root));
             int counter = 0;
             HarnessDumpElemTree(root, 0, &counter);
             printf("[HarnessDrive] (tree had %d elements)\n", counter);
@@ -809,19 +712,16 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
             const char* names[] = { "imageMap", "imageOverlay", "buttonOk", "map", "image" };
             for (const char* nm : names) {
                 System::String nb(nm);
-                uint64_t r = 0; ::new (&r) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nb));  // B.3.6 bridge
-                printf("[HarnessDrive]   FindElement('%s')=%p\n", nm, reinterpret_cast<void*>(r));
+                UI::Element* r = dialog->FindElement(nb).Get();
+                printf("[HarnessDrive]   FindElement('%s')=%p\n", nm, static_cast<void*>(r));
             }
         }
-        uintptr_t ctrlBuf[2] = {0, 0};
-        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialog)->GetController(tid));  // B.3.6 bridge
-        if (ctrlBuf[0]) {
-            void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
+        UI::DialogController* dc = dialog->GetController(tid).Get();
+        if (dc) {
             printf("[HarnessDrive] FOUND '%s' ctrl=%p in dialog[%d] — driving Slot%d\n",
-                   controllerName, ctrl, idx, slotIndex);
+                   controllerName, static_cast<void*>(dc), idx, slotIndex);
             // The caller (standalone/tool_harness.cpp) names the member by its
             // RETAIL slot number: 4 = OnCreated, 5 = OnOpened (DialogController.h).
-            UI::DialogController* dc = reinterpret_cast<UI::DialogController*>(ctrl);   // B.3.x bridge
             switch (slotIndex) {
             case 4: dc->OnCreated(); break;
             case 5: dc->OnOpened();  break;
@@ -837,13 +737,12 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
 }
 
 // ============================================================
-// EntityUI_OpenPauseMenu (FUN_140101ce0)
+// PlayerToolManager::OpenPauseMenu (FUN_140101ce0; the tree's EntityUI_OpenPauseMenu)
 //
-// The IN-GAME pause menu opener. Previously misnamed "Toolbar_ToggleAll_Impl":
-// there is no toggle-all here. Retail has exactly two callers, and both mean
+// The IN-GAME pause menu opener. Retail has exactly two callers, and both mean
 // "bring up the in-game menu":
-//   - ToolbarDialog_OnRemove case 3 (0x1400b96ae) -- the toolbar's menu button
-//   - EntityUI::Update (0x1401026a0) -- Application::IsPaused() && the
+//   - ToolbarDialog::OnElementEvent case 3 (0x1400b96ae) -- the toolbar's menu button
+//   - the manager's Update (0x1401026a0) -- Application::IsPaused() && the
 //     pause-on-focus-loss setting, i.e. the game lost focus
 //
 // It builds the same MainMenuDialog class the front-end menu uses, but from
@@ -853,128 +752,97 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
 // makes OnCommand's Quit reach Application::Quit.
 //
 // Flow:
-//   1. If tool controller at +0x28 is active, call its Close (vtable[9])
-//   2. Call ShowGroup(gameSubsys, 0) to clear current group
-//   3. Recompute camera view transform and apply to camera
+//   1. If a tool is active, call its OnCancel (slot 9)
+//   2. SelectTool(0): back to the EditTool
+//   3. Recompute the camera transform and apply it to the camera
 //   4. Load "Dialog/Pause.rsc" via ExternalFactory::FindOrLoad
-//   5. IsDerivedFrom check on loaded resource (DialogInstance type)
-//   6. MemAlloc 0xC8 bytes for PauseDialog
-//   7. Construct DialogInstance base, set PauseDialog vtable, set gameWorld ptr
-//   8. Add dialog to UI
-//
-// gameSubsys layout (ToolController subsystem at gameWorld+0x120):
-//   +0x28: InternalBasePtr — current active tool controller
-//
-// PauseDialog layout (0xC8 bytes, extends DialogInstance 0xB8):
-//   +0x00: vtable (PTR_FUN_14015f550)
-//   +0xB8: gameWorld pointer (DAT_1401c3dd8)
-//   +0xC0: 0 (unused/flags)
+//   5. MemAlloc 0xC8 bytes, construct the MainMenuDialog with the game world
+//   6. Add the dialog to the UI
 // ============================================================
 // Returns the dialog it created. Retail is void -- nothing there needs the
 // pointer, because a real click arrives with the dialog as `this`. Handing it
 // back costs nothing and is the only way an unattended driver can address the
 // menu it just opened (standalone/pausemenu_harness.cpp).
-extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
-    uintptr_t gs = (uintptr_t)gameSubsys;
-    // Get UserInterface from gameWorld+0x98
-    void* gameWorld = GameUpdateLoop::_singleton;
-    void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
-    // Step 1: If there's an active tool controller at +0x28, close it via vtable[9]
-    if (*(uintptr_t*)(gs + 0x28) != 0) {
-        void* toolCtrl = *(void**)(gs + 0x28);
-        // The EntityUI's +0x28 active Tool (tool_activation_standalone.cpp reads
-        // the same slot as a Tool); result discarded.
-        reinterpret_cast<Tool*>(toolCtrl)->OnCancel();   // B.3.x bridge (slot 9)
+UI::DialogInstance* PlayerToolManager::OpenPauseMenu() {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    UI::UserInterface* userInterface = gameWorld->m_userInterface;
+    // Step 1: If there's an active tool, cancel it (slot 9; result discarded)
+    if (currentTool != nullptr) {
+        currentTool->OnCancel();
     }
 
-    // Step 2: Clear current tool group by calling ShowGroup(gameSubsys, 0)
-    Toolbar_ShowGroup_Impl(gameSubsys, 0);   // 0x140102b60 (the door was bound to it)
+    // Step 2: Back to the default tool
+    SelectTool(nullptr);   // 0x140102b60
 
     // Step 3: Recompute camera view transform
     // Time::Time(0.0f) — constructs a zero time value (unused, but matches original)
-    uint8_t timeVal[16];
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 0.0f);
+    System::Time timeVal;
+    RtSystem_Time_Ctor(&timeVal, 0.0f);
 
-    // Get camera system at gameWorld+0xE0
-    void* cameraSys = *(void**)((uintptr_t)gameWorld + 0xE0);
+    // The camera controller (gameWorld+0xE0)
+    PlayerController* cameraSys = gameWorld->m_playerController;
 
-    // CameraSys_ComputeViewTransform: computes look-at transform from camera params
-    // Returns a compact Transform (7 floats = 0x1C bytes) written to outBuf and cameraSys[0..6]
-    Math::Transform viewTransform;
+    // The look-at transform (0x1400983f0), then the camera's world transform
     {
-        void* result = Reimpl_FUN_1400983f0(cameraSys, &viewTransform);   // 0x1400983f0
+        Math::Transform viewTransform = cameraSys->CalcTransform();   // 0x1400983f0
 
-        // Convert compact Transform to Transform3 (48 bytes) and set on camera
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
-        Math::Transform3 transform3 =
-            reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
-        // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
-        // The Camera sits BY VALUE at cameraSys+0x34, and cameraSys is gameWorld+0xE0
-        // == GameUpdateLoop::m_playerController, whose ctor
-        // (Reimpl_FUN_1400985b0, gameupdateloop_load.cpp) runs
-        // `??0Camera@Graphics@@` on exactly `p + 0x34`. The readiness `if` went with
-        // the door pointer: it tested nothing but that pointer.
-        reinterpret_cast<Graphics::Camera*>((uintptr_t)cameraSys + 0x34)
-            ->SetCameraToWorld(transform3);   // B.3.5 bridge
+        Math::Transform3 transform3 = viewTransform.AsTransform3();
+        // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+        // LEFT: PlayerController::camera is raw storage (B.4 H5, the Game block's).
+        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);
     }
 
     // Step 4: Load "Dialog/Pause.rsc" resource
     System::Filename filename("Dialog/Pause.rsc");
 
-    void* externalRes = nullptr;
+    const ::Object::External* externalRes = nullptr;
     if (::Object::ExternalFactory::_singleton) {
-        externalRes = const_cast<::Object::External*>(
-            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-                ->FindOrLoad(filename));
+        externalRes = ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
     }
 
-    // Step 6: Allocate PauseDialog (0xC8 bytes)
+    // Step 5: Allocate the pause menu (0xC8 bytes)
     void* pauseDialog = System::MemoryAllocator::MemAlloc(0xC8, 8);
-    void* finalDialog = nullptr;
-
-    uintptr_t gameWorldPtr = (uintptr_t)gameWorld;
+    MainMenuDialog* finalDialog = nullptr;
 
     if (pauseDialog != nullptr) {
-        // Step 7: the pause menu IS a MainMenuDialog (retail stamps its table,
+        // The pause menu IS a MainMenuDialog (retail stamps its table,
         // 0x14015f550): DialogInstance(userInterface, externalRes, nullParent,
-        // 0, 0, 0), then +0xB8 = gameWorld, +0xC0 = 0. ENDGAME B.3.8 DLG: the
-        // real class's ctor (Dialog/MainMenuDialog.h).
+        // 0, 0, 0), then +0xB8 = gameWorld, +0xC0 = 0.
         finalDialog = ::new (pauseDialog) MainMenuDialog(
-            static_cast<UI::UserInterface*>(userInterface),
+            userInterface,
             static_cast<const UI::Dialog*>(externalRes),
             Object::InternalPtr<UI::DialogInstance>(),
-            reinterpret_cast<GameUpdateLoop*>(gameWorldPtr), nullptr);
+            gameWorld, nullptr);
     }
 
-    // Step 8: Wrap in InternalBasePtr and add to UI
-    uint64_t dialogRef;
-    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(finalDialog));   // B.3.3 bridge
-    uint64_t addRef = dialogRef;
-    reinterpret_cast<UI::UserInterface*>(userInterface)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addRef));  // B.3.6 bridge
+    // Step 6: add it to the UI
+    Object::InternalPtr<UI::DialogInstance> addRef(finalDialog);
+    userInterface->AddDialog(&addRef);
     return finalDialog;
 }
 
+// B4 FORWARD: 1 outside caller (standalone/pausemenu_harness.cpp).
+extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
+    return reinterpret_cast<PlayerToolManager*>(gameSubsys)->OpenPauseMenu();
+}
+
 // ============================================================
-// Helper: push_back for engine dynamic arrays (ptr, count at +0, capacity at +4)
-// Mimics the inlined vector growth pattern seen throughout the exe.
-//
-// B.3.2: the ToolbarDialog+0xC0/+0xD0 struct-field call sites below were
-// converted to the GameColl::ArrayAt bridge (Component/coll_bridge.h) in
-// place. This helper is KEPT because it still has one caller each
-// (itemList/itemListCount/itemListCap and shortcutIds/shortcutCount/shortcutCap)
-// that cannot go through the bridge: those are three independent locals, not a
-// contiguous Collection::Array<T> header, AND shortcutIds/shortcutCount are
-// later mutated directly (element-shift + count-- on consumption, see the
-// "Wire up radio button behavior" section) which Array<T> has no public API
-// for (only SetSize/Clear change _size).
+// Helper: push_back for the engine's inlined dynamic arrays (data, count,
+// capacity as three independent locals). Mimics the inlined vector growth
+// pattern seen throughout the exe. Kept for the constructor's two local lists
+// (the Toolbar item list and the shortcut id pool): they are three locals, not
+// an Array header, AND the shortcut pool is later mutated directly
+// (element-shift + count-- on consumption).
 // ============================================================
-static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, uint64_t value) {
+template <class T>
+static void DynArray_Push(T** pData, int32_t* pCount, int32_t* pCapacity, T value) {
     int32_t oldCount = *pCount;
     int32_t newCount = oldCount + 1;
     if (newCount == oldCount) return; // overflow guard (matches original)
 
     *pCount = newCount;
-    void* oldData = *pData;
+    T* oldData = *pData;
 
     if (*pCapacity < newCount) {
         int32_t newCap = newCount;
@@ -982,17 +850,15 @@ static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, ui
             newCap = newCount * 3;
         }
         *pCapacity = newCap;
-        void* newData = System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
-        *pData = newData;
+        *pData = static_cast<T*>(System::MemoryAllocator::MemAlloc((int64_t)newCap * sizeof(T), alignof(T)));
     }
 
     // Copy existing elements to new buffer (if buffer changed)
     int32_t copyStart = (oldData == *pData) ? oldCount : 0;
-    uint64_t* dst = (uint64_t*)*pData;
-    uint64_t* src = (uint64_t*)oldData;
+    T* dst = *pData;
     for (int32_t i = copyStart; i < newCount; i++) {
         if (i < oldCount) {
-            dst[i] = src[i];
+            dst[i] = oldData[i];
         } else {
             dst[i] = value; // new element
         }
@@ -1003,157 +869,87 @@ static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, ui
     }
 }
 
-static void DynArray4_Push(void** pData, int32_t* pCount, int32_t* pCapacity, int32_t value) {
-    int32_t oldCount = *pCount;
-    int32_t newCount = oldCount + 1;
-    if (newCount == oldCount) return;
-
-    *pCount = newCount;
-    void* oldData = *pData;
-
-    if (*pCapacity < newCount) {
-        int32_t newCap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            newCap = newCount * 3;
-        }
-        *pCapacity = newCap;
-        void* newData = System::MemoryAllocator::MemAlloc((int64_t)newCap * 4, 4);
-        *pData = newData;
-    }
-
-    int32_t copyStart = (oldData == *pData) ? oldCount : 0;
-    int32_t* dst = (int32_t*)*pData;
-    int32_t* src = (int32_t*)oldData;
-    for (int32_t i = copyStart; i < newCount; i++) {
-        if (i < oldCount) {
-            dst[i] = src[i];
-        } else {
-            dst[i] = value;
-        }
-    }
-
-    if (oldData != *pData && oldData != nullptr) {
-        System::MemoryAllocator::MemFree(oldData);
-    }
-}
-
 // ============================================================
-// ToolbarDialog_Ctor_Impl (was fn_ToolbarDialog_Ctor, FUN_1400b9910)
+// ToolbarDialog::ToolbarDialog (FUN_1400b9910)
 //
-// Constructs a ToolbarDialog instance. This is the main constructor that:
+// The main constructor:
 //   1. Calls base DialogInstance ctor
-//   2. Patches vtable to ToolbarDialog vtable
-//   3. Iterates all Toolbar externals matching the group ID
-//   4. Sorts them by priority (+0x50 field)
-//   5. Determines icon sizes based on nesting depth
+//   2. The compiler's vtable store
+//   3. Iterates all Toolbar externals whose parent group is `group`
+//   4. Sorts them by priority (_field50)
+//   5. Determines the keyboard shortcut range from the nesting depth
 //   6. For each toolbar item, clones a UI template element, sets up
 //      name, tooltip, sprite, keyboard shortcut, and adds to table
 //   7. Calls RadioElement::FindCheckBoxes to wire up radio behavior
 //   8. Populates the speed values array {1, 2, 5, 10, 20, 50} (retail: {1, 2, 5, 10})
 //   9. Finds current game speed index in the array
-//
-// Parameters:
-//   self          — uninitialized 0x108-byte allocation
-//   userInterface — UserInterface* (UI system)
-//   dialog        — Dialog* (dialog resource with templates)
-//   parentPtr     — InternalBasePtr* to parent dialog (deref'd to get Base*)
-//   toolbarData   — toolbar group ID (uint64_t cast to void*)
-//
-// Returns: self (constructed ToolbarDialog)
 // ============================================================
-// ENDGAME B.3.8 DLG: the real constructor. Steps 1-2 (the DialogInstance ctor, then
-// the table store) are the init list and the compiler's vtable store.
 ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog* dialog,
                              Object::InternalPtr<UI::DialogInstance> parent,
-                             uint64_t groupId)
+                             const Toolbar* group)
     : UI::DialogInstance(userInterface, dialog, parent, nullptr, nullptr, 0) {
-    uintptr_t s = (uintptr_t)this;
-
-    // --- Step 3: Initialize ToolbarDialog-specific fields ---
-    *(uint64_t*)(s + 0xB8) = 0;         // radioElement
-    *(uint64_t*)(s + 0xC0) = 0;         // buttonElements data
-    *(uint64_t*)(s + 0xC8) = 0;         // buttonCount + capacity (two int32s)
-    *(uint64_t*)(s + 0xD0) = 0;         // toolbarItems data
-    *(uint64_t*)(s + 0xD8) = 0;         // itemCount + capacity
-    *(uint64_t*)(s + 0xE0) = groupId;   // toolbar group ID
-    new ((void*)(s + 0xE8)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge // subDialog = null
-    *(int32_t*)(s + 0xF0) = -1;         // openSubIndex = -1
-    *(uint64_t*)(s + 0xF8) = 0;         // speedValues data
-    *(uint64_t*)(s + 0x100) = 0;        // speedValueCount + capacity
+    // --- Step 3: Initialize ToolbarDialog-specific fields (the three arrays
+    // are zeroed by their own constructors) ---
+    radioElement = nullptr;
+    toolbarGroup = group;                         // the parent toolbar item (null = the main bar)
+    subDialog = Object::InternalPtr<UI::DialogInstance>(nullptr);
+    openSubIndex = -1;
 
     // --- Step 4: Find key UI elements ---
     // Find "toolbarContent" table element
-    uint8_t elemBuf[16];
-
-    void* tableElement;
+    UI::TableElement* tableElement;
     {
         System::String strStr("toolbarContent");
-        void* retPtr = ::new (elemBuf) Object::InternalPtr<UI::Element>(
-            FindElement(strStr));
-        tableElement = *(void**)retPtr;
+        tableElement = static_cast<UI::TableElement*>(FindElement(strStr).Get());
     }
 
     // Find "toolBar" radio element
     {
         System::String strStr("toolBar");
-        void* retPtr = ::new (elemBuf) Object::InternalPtr<UI::Element>(
-            FindElement(strStr));
-        *(uint64_t*)(s + 0xB8) = *(uint64_t*)retPtr;
+        radioElement = static_cast<UI::RadioElement*>(FindElement(strStr).Get());
     }
 
     // Set radio element ID to 1000
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0xB8))->SetElementId(1000);  // B.3.6 bridge
+    radioElement->SetElementId(1000);
 
-    // --- Step 5: Collect all Toolbar items matching our group ID ---
+    // --- Step 5: Collect all Toolbar items of our group ---
     // Use ExternalFactory::FindNext to iterate all Toolbar externals
-    void* factory = ::Object::ExternalFactory::_singleton;
+    const ::Object::ExternalFactory* etbFactory = ::Object::ExternalFactory::_singleton;
     uint32_t toolbarTypeId = Toolbar::TypeId();
 
     // Temporary dynamic array for matching toolbar items
-    void* itemList = nullptr;
+    const Toolbar** itemList = nullptr;
     int32_t itemListCount = 0;
     int32_t itemListCap = 0;
 
-    const ::Object::ExternalFactory* etbFactory =
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-    void* ext = const_cast<::Object::External*>(
-        etbFactory->FindNext(toolbarTypeId, nullptr));                  // B.3.3 bridge
+    const ::Object::External* ext = etbFactory->FindNext(toolbarTypeId, nullptr);
     while (ext != nullptr) {
         // IsDerivedFrom check
         bool isDerived = ::Object::IsDerivedFromNullSafe(ext, toolbarTypeId);
-        void* toolbarItem = isDerived ? ext : nullptr;
+        const Toolbar* toolbarItem = isDerived ? static_cast<const Toolbar*>(ext) : nullptr;
 
-        // Check: item must have name (byte at +0x45 != 0) and group must match
+        // Check: item must be shown (_field45 != 0) and its group must match
         if (toolbarItem != nullptr) {
-            uint8_t hasName = *(uint8_t*)((uintptr_t)toolbarItem + 0x45);
-            uint64_t itemGroup = *(uint64_t*)((uintptr_t)toolbarItem + 0x60);
-            if (hasName != 0 && itemGroup == groupId) {
-                DynArray8_Push(&itemList, &itemListCount, &itemListCap,
-                               (uint64_t)toolbarItem);
+            if (toolbarItem->_field45 != 0 && toolbarItem->_field60 == group) {
+                DynArray_Push(&itemList, &itemListCount, &itemListCap, toolbarItem);
             }
         }
 
-        ext = const_cast<::Object::External*>(
-            etbFactory->FindNext(toolbarTypeId,
-                                 reinterpret_cast<const ::Object::External*>(ext)));  // B.3.3 bridge
+        ext = etbFactory->FindNext(toolbarTypeId, ext);
     }
 
-    // Sort the collected items by their priority field at +0x50, ascending.
+    // Sort the collected items by their priority field (_field50), ascending.
     // The original calls fn_ToolbarSort (exe-only introsort @0x140021790, keyed on
-    // *(int*)(*item + 0x50)); that address is unregistered in standalone, so the
-    // call resolved null and was skipped — leaving the buttons in raw load order.
-    // That is exactly the visible "wrong icon order" (main bar AND every sub-menu,
-    // e.g. Pasture landing last instead of 3rd in the food group). Port the sort
-    // directly so the buttons order correctly. itemListCount is small (~10) and
-    // a stable insertion sort matches the ascending-by-priority result; equal
-    // priorities keep their load order.
+    // the item's +0x50). Ported directly so the buttons order correctly.
+    // itemListCount is small (~10) and a stable insertion sort matches the
+    // ascending-by-priority result; equal priorities keep their load order.
     if (itemListCount > 1) {
-        uint64_t* items = (uint64_t*)itemList;
+        const Toolbar** items = itemList;
         for (int i = 1; i < itemListCount; i++) {
-            uint64_t key = items[i];
-            int32_t keyPri = *(int32_t*)(key + 0x50);
+            const Toolbar* key = items[i];
+            int32_t keyPri = key->_field50;
             int j = i - 1;
-            while (j >= 0 && *(int32_t*)(items[j] + 0x50) > keyPri) {
+            while (j >= 0 && items[j]->_field50 > keyPri) {
                 items[j + 1] = items[j];
                 j--;
             }
@@ -1161,15 +957,15 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
         }
     }
 
-    // --- Step 6: Determine icon sizes based on nesting depth ---
-    // Walk linked list at first item's +0x60 chain to count depth
+    // --- Step 6: Determine the nesting depth ---
+    // Walk the parent chain (_field60) of the first item
     int depth = 0;
     if (itemListCount > 0) {
-        uint64_t* items = (uint64_t*)itemList;
-        uint64_t firstItem = items[0];
-        for (uint64_t link = *(uint64_t*)(firstItem + 0x60);
-             link != 0;
-             link = *(uint64_t*)(link + 0x60)) {
+        const Toolbar* firstItem = itemList[0];
+        // (the parent chain, ExternalPtr<Toolbar>)
+        for (const Toolbar* link = firstItem->_field60;
+             link != nullptr;
+             link = link->_field60) {
             depth++;
         }
     }
@@ -1191,17 +987,19 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
     int32_t shortcutCount = 0;
     int32_t shortcutCap = 0;
     for (int id = shortcutStart; id <= shortcutEnd; id++) {
-        DynArray4_Push((void**)&shortcutIds, &shortcutCount, &shortcutCap, id);
+        DynArray_Push(&shortcutIds, &shortcutCount, &shortcutCap, (int32_t)id);
     }
 
     // --- Step 7: Create UI elements for each toolbar item ---
     int buttonIndex = 0;
     for (int i = 0; i < itemListCount; i++) {
-        uint64_t* items = (uint64_t*)itemList;
-        uintptr_t item = (uintptr_t)items[i];
+        const Toolbar* item = itemList[i];
+        // LEFT: Toolbar's +0x30 / +0x38 Strings are declared void* (GAME-c's header,
+        // H5): the button text and sprite names are read through a cast.
+        ComponentDescription* itemTemplate = item->_field58;
 
         // Determine template index based on action type
-        int32_t actionType = *(int32_t*)(item + 0x48);
+        int32_t actionType = item->_field48;
         int templateIndex;
         if (actionType == 10) {
             templateIndex = 0;  // SpeedDisplay: plain text template
@@ -1213,114 +1011,90 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
             templateIndex = 3;  // Other: utility button
         }
 
-        // Get template element from Dialog and clone it
-        uint8_t templateBuf[16];
-        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(templateIndex));  // B.3.6 bridge
-        void* templateElem = *(void**)templateBuf;
+        // Get template element from Dialog and clone it (ElementDescription
+        // slot 8, RETSLOT: RCX = this, RDX = the return buffer, R8 = the dialog).
+        const UI::ElementDescription* templateElem = dialog->GetTemplate(templateIndex).Get();
+        Object::InternalPtr<UI::Element> clone;
+        templateElem->CreateInstance(&clone, dialog);
+        UI::Element* newElement = clone.Get();
 
-        // Instantiate the template (ElementDescription slot 8, RETSLOT: RCX = this,
-        // RDX = the return buffer, R8 = the dialog).
-        uint8_t cloneBuf[16];
-        reinterpret_cast<const UI::ElementDescription*>(templateElem)->CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
-            reinterpret_cast<const UI::Dialog*>(dialog));   // B.3.x bridge (slot 8)
-        void* newElement = *(void**)cloneBuf;
-
-        // Push to buttonElements array at +0xC0.
-        // B.3.2 bridge: ToolbarDialog+0xC0 is Collection::Array<{Element*}>
-        // (stride 0x08, count +0xC8, capacity +0xCC).
-        auto& buttonRows = GameColl::ArrayAt<GameColl::Bytes<0x08, 8>>(s, 0xC0);
-        buttonRows.SetSize(buttonRows.GetSize() + 1,
-                            GameColl::Bytes<0x08, 8>((uint64_t)newElement));
-
-        // Push to toolbarItems array at +0xD0.
-        // B.3.2 bridge: ToolbarDialog+0xD0 is Collection::Array<{ToolbarItem*}>
-        // (stride 0x08, count +0xD8, capacity +0xDC).
-        auto& toolbarItemRows = GameColl::ArrayAt<GameColl::Bytes<0x08, 8>>(s, 0xD0);
-        toolbarItemRows.SetSize(toolbarItemRows.GetSize() + 1,
-                                 GameColl::Bytes<0x08, 8>((uint64_t)item));
+        // Push to the button and item arrays (Array<T>::SetSize with the fill)
+        buttonElements.SetSize(buttonElements.GetSize() + 1, newElement);
+        toolbarItems.SetSize(toolbarItems.GetSize() + 1, item);
 
         // Add element as child of table at current buttonIndex
-        void* elemPtr = newElement;
-        reinterpret_cast<UI::TableElement*>(tableElement)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemPtr), buttonIndex);  // B.3.6 bridge
+        Object::InternalPtr<UI::Element> elemPtr(newElement);
+        tableElement->SetChild(&elemPtr, buttonIndex);
 
         // Set element name from toolbar item's resource path.
         // `GetPath` returns by value through a hidden return slot and the callee
         // CONSTRUCTS into it; copy-initialising the local is the same store.
-        System::Filename pathObj =
-            reinterpret_cast<const ::Object::External*>(item)->GetPath();  // B.3.3 bridge
+        System::Filename pathObj = item->GetPath();
         System::Filename pathIdObj = pathObj.GetPathIdentifer();
-        reinterpret_cast<UI::Element*>(newElement)->SetName(*reinterpret_cast<const System::String*>(&pathIdObj));  // B.3.6 bridge
+        newElement->SetName(pathIdObj.AsString());
 
         // Get toolbar item's display string and sprite
-        uint8_t uiString[16];
-        uint8_t uiSprite[16];
-        ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(item + 0x20))), *reinterpret_cast<const System::String*>((void*)(item + 0x30)));  // B.3.6 bridge
+        UI::String uiString(Object::ExternalPtr<UI::StringTable>(item->_field20),
+                            *reinterpret_cast<const System::String*>(&item->_field30));
 #ifdef _DEBUG
-        Debug_Sprite_Ctor(uiSprite, *(uint64_t*)(item + 0x28), (void*)(item + 0x38));
+        UI::Sprite uiSprite;
+        Debug_Sprite_Ctor(&uiSprite, reinterpret_cast<uint64_t>(item->_field28), &item->_field38);
 #else
-        ::new (uiSprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(item + 0x28))), *reinterpret_cast<const System::String*>((void*)(item + 0x38)));  // B.3.6 bridge
+        UI::Sprite uiSprite(Object::ExternalPtr<UI::SpriteSheet>(item->_field28),
+                            *reinterpret_cast<const System::String*>(&item->_field38));
 #endif
 
         // --- Configure button element (skip for SpeedDisplay) ---
         if (templateIndex != 0) {
             // Cast element to ButtonElement via IsDerivedFrom
-            void* elemForCast = newElement;
-            bool isButton = ::Object::IsDerivedFromNullSafe(elemForCast, UI::ButtonElement::TypeId());
-            void* buttonElem = isButton ? elemForCast : nullptr;
-
-            uint64_t buttonRef;
-            new (&buttonRef) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(buttonElem));   // B.3.3 bridge
+            bool isButton = ::Object::IsDerivedFromNullSafe(newElement, UI::ButtonElement::TypeId());
+            UI::ButtonElement* button = isButton ? static_cast<UI::ButtonElement*>(newElement) : nullptr;
 
             // For ShowGroup (1) and Utility (2), override string/sprite from
-            // the item's entity description (ToolbarDescription)
+            // the item's template's ToolbarDescription
             if (actionType == 1 || actionType == 2) {
-                uint64_t entityDesc = *(uint64_t*)(item + 0x58);
-                void* buildReqComp = nullptr;
-                if (entityDesc != 0) {
-                    int32_t descCount = *(int32_t*)(entityDesc + 0x30);
+                ToolbarDescription* buildReqComp = nullptr;
+                if (itemTemplate != nullptr) {
+                    int32_t descCount = itemTemplate->_subDescCount;
                     for (int j = 0; j < descCount; j++) {
-                        void* subItem = *(void**)(*(uintptr_t*)(entityDesc + 0x28) + (int64_t)j * 8);
-                        // Virtual call to GetTypeId (vtable[2], offset 0x10)
-                        uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
+                        Description* subItem = itemTemplate->_subDescs[j];
+                        uint32_t subType = subItem->Type();
                         if (subType == ToolbarDescription::TypeId()) {
                             bool derived = ::Object::IsDerivedFromNullSafe(subItem, ToolbarDescription::TypeId());
                             if (derived) {
-                                buildReqComp = subItem;
+                                buildReqComp = static_cast<ToolbarDescription*>(subItem);
                             }
                             break;
                         }
                     }
                 }
 
-                // Override UI::String from buildReqComp+0x30/+0x48
+                // Override the UI::String (the description's table and _str3)
                 if (buildReqComp != nullptr) {
-                    uint8_t overrideStr[16];
-                    ::new (overrideStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)buildReqComp + 0x30))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)buildReqComp + 0x48)));  // B.3.6 bridge
-                    *(uint64_t*)&uiString[0] = *(uint64_t*)overrideStr;
-                    *(uint64_t*)&uiString[8] = *(uint64_t*)(overrideStr + 8);
+                    uiString = UI::String(Object::ExternalPtr<UI::StringTable>(buildReqComp->_stringTable),
+                                          buildReqComp->_str3);
 
-                    // Override sprite from ToolbarDescription: SpriteSheet at +0x20, name at +0x28
-                    uint8_t overrideSpr[16];
+                    // Override the sprite (the description's sheet and _name)
 #ifdef _DEBUG
-                    Debug_Sprite_Ctor(overrideSpr, *(uint64_t*)((uintptr_t)buildReqComp + 0x20),
-                                   (void*)((uintptr_t)buildReqComp + 0x28));
+                    // LEFT (debug arm): Debug_Sprite_Ctor takes the sheet as uint64_t.
+                    UI::Sprite overrideSpr;
+                    Debug_Sprite_Ctor(&overrideSpr, reinterpret_cast<uint64_t>(buildReqComp->_spriteSheet),
+                                      &buildReqComp->_name);
 #else
-                    ::new (overrideSpr) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)buildReqComp + 0x20))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)buildReqComp + 0x28)));  // B.3.6 bridge
+                    UI::Sprite overrideSpr(Object::ExternalPtr<UI::SpriteSheet>(buildReqComp->_spriteSheet),
+                                           buildReqComp->_name);
 #endif
-                    *(uint64_t*)&uiSprite[0] = *(uint64_t*)overrideSpr;
-                    *(uint64_t*)&uiSprite[8] = *(uint64_t*)(overrideSpr + 8);
+                    uiSprite = overrideSpr;
                 }
             }
 
             // Assign keyboard shortcut ID
-            if (*(uint8_t*)(item + 0x44) == 0) {
-                // Item has explicit shortcut override at +0x40
-                *(int32_t*)(buttonRef + 0xC0) = *(int32_t*)(item + 0x40);
+            if (item->_field44 == 0) {
+                // Item has explicit shortcut override (_field40)
+                button->_keyIndex = item->_field40;
 
                 // Remove this shortcut ID from the available pool
-                int32_t targetId = *(int32_t*)(item + 0x40);
+                int32_t targetId = item->_field40;
                 for (int j = 0; j < shortcutCount; j++) {
                     if (shortcutIds[j] == targetId) {
                         // Shift remaining elements left
@@ -1333,7 +1107,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                 }
             } else if (shortcutCount > 0) {
                 // Auto-assign first available shortcut
-                *(int32_t*)(buttonRef + 0xC0) = shortcutIds[0];
+                button->_keyIndex = shortcutIds[0];
 
                 // Remove first shortcut from pool
                 for (int k = 0; k < shortcutCount - 1; k++) {
@@ -1343,54 +1117,41 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
             }
 
             // Set element ID (button index within this toolbar)
-            // Set element ID (button index within this toolbar)
-            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetElementId(buttonIndex);  // B.3.6 bridge
+            button->SetElementId(buttonIndex);
 
-            void* userData = *(void**)(item + 0x58);
-            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetUserData(static_cast<Object::Base*>(userData));  // B.3.6 bridge
+            button->SetUserData(itemTemplate);
 
-            uint8_t tooltipData[16];
-            *(uint64_t*)tooltipData = *(uint64_t*)uiString;
-            *(uint64_t*)(tooltipData + 8) = *(uint64_t*)(uiString + 8);
-            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetToolTip(*reinterpret_cast<UI::String*>(tooltipData));  // B.3.6 bridge
+            button->SetToolTip(uiString);
 
-            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
+            button->SetFlagsOnOff(0x10000, 0);
 
             // Set sprite on all ImageElement children
             int childIdx = 0;
-            int childCount = reinterpret_cast<const UI::Element*>((void*)buttonRef)->ChildCount();  // B.3.6 bridge
+            int childCount = button->ChildCount();
             while (childIdx < childCount) {
-                uint8_t childBuf[16];
-                ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>((void*)buttonRef)->Child(childIdx));  // B.3.6 bridge
-                void* childElem = *(void**)childBuf;
+                UI::Element* childElem = button->Child(childIdx).Get();
 
                 // Cast to ImageElement
                 bool isImage = ::Object::IsDerivedFromNullSafe(childElem, UI::ImageElement::TypeId());
-                void* imageElem = isImage ? childElem : nullptr;
-
-                uint64_t imageRef;
-                new (&imageRef) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(imageElem));   // B.3.3 bridge
+                UI::ImageElement* imageElem = isImage ? static_cast<UI::ImageElement*>(childElem) : nullptr;
 
                 // Set sprite if valid and imageElem is non-null
 #ifdef _DEBUG
-                bool spriteValid = Debug_Sprite_IsValid(uiSprite);
+                bool spriteValid = Debug_Sprite_IsValid(&uiSprite);
 #else
-                bool spriteValid = reinterpret_cast<const UI::Sprite*>(uiSprite)->IsValid();  // B.3.6 bridge
+                bool spriteValid = uiSprite.IsValid();
 #endif
-                if (spriteValid && imageRef != 0) {
-                    uint8_t sprCopy[16];
-                    *(uint64_t*)sprCopy = *(uint64_t*)uiSprite;
-                    *(uint64_t*)(sprCopy + 8) = *(uint64_t*)(uiSprite + 8);
+                if (spriteValid && imageElem != nullptr) {
+                    UI::Sprite sprCopy = uiSprite;
 #ifdef _DEBUG
-                    Debug_ImageElement_SetSprite((void*)imageRef, sprCopy);
+                    Debug_ImageElement_SetSprite(imageElem, &sprCopy);
 #else
-                    reinterpret_cast<UI::ImageElement*>((void*)imageRef)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprCopy));  // B.3.6 bridge
+                    imageElem->SetSprite(&sprCopy);
 #endif
                 }
 
                 childIdx++;
-                childCount = reinterpret_cast<const UI::Element*>((void*)buttonRef)->ChildCount();  // B.3.6 bridge
+                childCount = button->ChildCount();
             }
         }
 
@@ -1398,33 +1159,29 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
     }
 
     // --- Step 8: Wire up radio button behavior ---
-    reinterpret_cast<UI::RadioElement*>(*(void**)(s + 0xB8))->FindCheckBoxes();  // B.3.6 bridge
+    radioElement->FindCheckBoxes();
 
     // --- Step 9: Populate speed values array {1, 2, 5, 10, 20, 50} ---
-    *(int32_t*)(s + 0xF4) = 0; // currentSpeedIndex = 0
+    currentSpeedIndex = 0;
 
-    // B.3.2 bridge: ToolbarDialog+0xF8 is Collection::Array<GameColl::I32>
-    // (stride 4, count +0x100, capacity +0x104).
-    auto& speedRows = GameColl::ArrayAt<GameColl::I32>(s, 0xF8);
-    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{1});
-    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{2});
-    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{5});
-    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{10});
+    speedValues.SetSize(speedValues.GetSize() + 1, 1);
+    speedValues.SetSize(speedValues.GetSize() + 1, 2);
+    speedValues.SetSize(speedValues.GetSize() + 1, 5);
+    speedValues.SetSize(speedValues.GetSize() + 1, 10);
     // [NON-RETAIL] retail stops at 10x. 20x and 50x extend the sequence so the perf
     // harness (BANISHED_STRESS_SPEED) and the in-game speed-up button can push the
     // sim harder than retail allows; the speed cascade below is table-driven.
-    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{20});
-    speedRows.SetSize(speedRows.GetSize() + 1, GameColl::I32{50});
+    speedValues.SetSize(speedValues.GetSize() + 1, 20);
+    speedValues.SetSize(speedValues.GetSize() + 1, 50);
 
     // --- Step 10: Find current game speed in speed array ---
     int32_t speedIndex = 0;
-    uint64_t gameWorldAddr = (uintptr_t)GameUpdateLoop::_singleton;
-    int32_t currentSpeed = *(int32_t*)(*(uintptr_t*)(gameWorldAddr + 0x120) + 0x34);
-    int32_t speedCount = *(int32_t*)(s + 0x100);
-    int32_t* speedArr = *(int32_t**)(s + 0xF8);
+    PlayerToolManager* toolManager = GameUpdateLoop::_singleton->m_toolManager;
+    int32_t currentSpeed = toolManager->field_0x34;
+    int32_t speedCount = speedValues.GetSize();
 
     for (int i = 0; i < speedCount; i++) {
-        if (speedArr[i] == currentSpeed) {
+        if (speedValues[i] == currentSpeed) {
             if (i >= 0) {
                 speedIndex = i;
                 goto found_speed;
@@ -1434,26 +1191,26 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
     }
     speedIndex = 0; // default to first speed
 found_speed:
-    *(int32_t*)(s + 0xF4) = speedIndex;
+    currentSpeedIndex = speedIndex;
     // Write the speed value back to the game system
-    *(int32_t*)(*(uintptr_t*)(gameWorldAddr + 0x120) + 0x34) = speedArr[speedIndex];
+    toolManager->field_0x34 = speedValues[speedIndex];
 
     // --- Cleanup ---
     System::MemoryAllocator::MemFree(shortcutIds);
     System::MemoryAllocator::MemFree(itemList);
 }
 
-// The door at 0x1400b9910 (address_registry.cpp; fn_ToolbarDialog_Ctor in
-// GameUpdateLoop::Startup): placement-news the class. parentPtr is an
-// InternalBasePtr* the ctor copies, as retail does.
-void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
-                              void* parentPtr, void* toolbarData) {
+// B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp). The door at 0x1400b9910
+// (fn_ToolbarDialog_Ctor in GameUpdateLoop::Startup): placement-news the class.
+// parentPtr is an InternalPtr* the ctor copies, as retail does.
+ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
+                                       void* parentPtr, void* toolbarData) {
     Object::InternalPtr<UI::DialogInstance> parent;
     if (parentPtr)
         parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentPtr);
     return ::new (self) ToolbarDialog(static_cast<UI::UserInterface*>(userInterface),
                                       static_cast<const UI::Dialog*>(dialog), parent,
-                                      reinterpret_cast<uint64_t>(toolbarData));
+                                      reinterpret_cast<const Toolbar*>(toolbarData));
 }
 
 // ============================================================
@@ -1466,123 +1223,97 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 // Original: 0x1400b8d40.
 
 void ToolbarDialog::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
-
-    // Get game subsystem at gameWorld->+0x120
-    void* gameWorld = GameUpdateLoop::_singleton;
+    // The game world (the tree's guard; retail reads it unguarded)
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
-    uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
+    PlayerToolManager* toolManager = gameWorld->m_toolManager;
 
-    // Current active dialog pointer at gameSys->+0x20
-    int64_t activeDialog = *(int64_t*)(gameSys + 0x20);
-    // Current game speed at gameSys->+0x34
-    uint32_t gameSpeed = *(uint32_t*)(gameSys + 0x34);
+    // The tool manager's active group (+0x20) and game speed (+0x34)
+    const ComponentDescription* activeDialog = toolManager->field_0x20;
+    uint32_t gameSpeed = (uint32_t)toolManager->field_0x34;
 
-    int32_t itemCount = *(int32_t*)(s + 0xD8);
-    int64_t* itemArray = *(int64_t**)(s + 0xD0);
-    int64_t* buttonArray = *(int64_t**)(s + 0xC0);
+    int32_t itemCount = toolbarItems.GetSize();
 
     for (int i = 0; i < itemCount; i++) {
-        uintptr_t item = (uintptr_t)itemArray[i];
-        int32_t actionType = *(int32_t*)(item + 0x48);
+        const Toolbar* item = toolbarItems[i];
+        int32_t actionType = item->_field48;
 
         if (actionType == 1) {
-            // ShowGroup: uncheck button if this group is not the active dialog
-            int64_t groupId = *(int64_t*)(item + 0x58);
-            if (activeDialog != groupId) {
-                // Get the button element from parallel array
-                uintptr_t elemPtr = (uintptr_t)&buttonArray[i];
-                // CheckPtr is a no-op in retail
-                void* elem = *(void**)elemPtr;
+            // ShowGroup: uncheck button if this group is not the active one
+            // (the address compare retail makes: +0x20 against the item's template)
+            if (activeDialog != item->_field58) {
+                // The button element from the parallel array (the tree's null skip)
+                UI::Element* elem = buttonElements[i];
                 if (!elem) continue;
 
                 // IsDerivedFrom check, then cast
                 bool isDerived = ::Object::IsDerivedFromNullSafe(elem, UI::CheckElement::TypeId());
-                void* typedElem = isDerived ? elem : nullptr;
+                UI::CheckElement* check = isDerived ? static_cast<UI::CheckElement*>(elem) : nullptr;
 
-                // InternalBasePtr::Ctor to create a local ref
-                int64_t localRef;
-                new (&localRef) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(typedElem));   // B.3.3 bridge
-
-                // If button is currently checked (+0xD8 != 0), uncheck it
-                if (localRef != 0 && *(uint8_t*)(localRef + 0xD8) != 0) {
-                    // Traced because this is the ONLY place a toolbar button is
-                    // silently unchecked from the per-frame update, which is what a
-                    // "the button un-clicks itself" report looks like from outside.
-                    // It fires only on the 1->0 transition, so it cannot flood.
-                    *(uint8_t*)(localRef + 0xD8) = 0;
+                // If button is currently checked, uncheck it
+                if (check != nullptr && check->_checked != 0) {
+                    // The ONLY place a toolbar button is silently unchecked from the
+                    // per-frame update; it fires only on the 1->0 transition.
+                    check->_checked = 0;
                 }
             }
         }
         else if (actionType == 9) {
             // SpeedUp: enable/disable based on whether current speed < max speed
-            void* elem = *(void**)&buttonArray[i];
+            UI::Element* elem = buttonElements[i];
             if (!elem) continue;
 
-            // Check if current speed index < max speed entry
-            int32_t speedCount = *(int32_t*)(s + 0x100);
-            int32_t* speedVals = *(int32_t**)(s + 0xF8);
-            bool canSpeedUp = (int32_t)gameSpeed < speedVals[speedCount - 1];
-            reinterpret_cast<UI::Element*>(elem)->Enable(canSpeedUp);   // B.3.x bridge (slot 8)
+            int32_t speedCount = speedValues.GetSize();
+            bool canSpeedUp = (int32_t)gameSpeed < speedValues[speedCount - 1];
+            elem->Enable(canSpeedUp);   // slot 8
         }
         else if (actionType == 6) {
             // SpeedDown: enable/disable based on whether current speed > min speed
-            void* elem = *(void**)&buttonArray[i];
+            UI::Element* elem = buttonElements[i];
             if (!elem) continue;
 
-            int32_t* speedVals = *(int32_t**)(s + 0xF8);
-            bool canSpeedDown = speedVals[0] < (int32_t)gameSpeed;
-            reinterpret_cast<UI::Element*>(elem)->Enable(canSpeedDown);   // B.3.x bridge (slot 8)
+            bool canSpeedDown = speedValues[0] < (int32_t)gameSpeed;
+            elem->Enable(canSpeedDown);   // slot 8
         }
         else if (actionType == 8) {
-            // Unpause button: checked state = isPaused flag at gameSys->+0x30
-            void* elem = *(void**)&buttonArray[i];
+            // Unpause button: enabled while paused
+            UI::Element* elem = buttonElements[i];
             if (!elem) continue;
 
-            uint8_t isPaused = *(uint8_t*)(gameSys + 0x30);
-            reinterpret_cast<UI::Element*>(elem)->Enable(isPaused);   // B.3.x bridge (slot 8)
+            uint8_t isPaused = toolManager->paused;
+            elem->Enable(isPaused);   // slot 8
         }
         else if (actionType == 7) {
-            // Pause button: checked state = NOT paused
-            void* elem = *(void**)&buttonArray[i];
+            // Pause button: enabled while NOT paused
+            UI::Element* elem = buttonElements[i];
             if (!elem) continue;
 
-            uint8_t isPaused = *(uint8_t*)(gameSys + 0x30);
-            reinterpret_cast<UI::Element*>(elem)->Enable(isPaused == 0);   // B.3.x bridge (slot 8)
+            uint8_t isPaused = toolManager->paused;
+            elem->Enable(isPaused == 0);   // slot 8
         }
         else if (actionType == 10) {
-            // SpeedDisplay: get first child (text element), format speed as "%ix"
-            void* elem = *(void**)&buttonArray[i];
+            // SpeedDisplay: the button's child 1 (a TextElement) shows "%ix"
+            UI::Element* elem = buttonElements[i];
             if (!elem) continue;
 
-            // Element::Child(elem, retBuf, 1) — child[1] is the text element
-            uint8_t childBuf[16];
-            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(elem)->Child(1));  // B.3.6 bridge
-
-            void* childElem = *(void**)childBuf;
+            UI::Element* childElem = elem->Child(1).Get();
 
             // IsDerivedFrom check for TextElement type (exref at 0x140151508)
             bool isDerived = ::Object::IsDerivedFromNullSafe(childElem, UI::TextElement::TypeId());
-            void* textElem = isDerived ? childElem : nullptr;
-
-            // Build local InternalPtr
-            int64_t textRef;
-            new (&textRef) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(textElem));   // B.3.3 bridge
+            UI::TextElement* textElem = isDerived ? static_cast<UI::TextElement*>(childElem) : nullptr;
 
             // Format speed string: "%ix" with gameSpeed value
             System::String fmtStr = System::String::Format("%ix", (uint64_t)gameSpeed);
 
-            // TextElement::SetParameter(textRef, 0, &fmtStr)
-            if (textRef != 0) {
-                reinterpret_cast<UI::TextElement*>((void*)textRef)->SetParameter(0, fmtStr);  // B.3.6 bridge
+            // (the tree's null guard on the text element)
+            if (textElem != nullptr) {
+                textElem->SetParameter(0, fmtStr);
             }
         }
     }
 
-    // Call secondary update helper — handles ShowGroup and FocusEntity button enable states
-    ToolbarDialog_UpdateButtons_Impl(this);
+    // Secondary update — the ShowGroup and FocusEntity button enable states
+    UpdateButtons();
 }
 
 // ============================================================
@@ -1600,209 +1331,176 @@ extern "C" int g_TutUndoDepth;
 extern "C" int g_TutUndoIndex;
 
 void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t p7, void* /*userData*/) {
-    uintptr_t s = (uintptr_t)this;
-
-    // Get game subsystem
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
+    // The game world and its tool manager
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    PlayerToolManager* gameSys = gameWorld->m_toolManager;
 
     if (eventType == 0x12) {
         // Button click: eventData = button index
         int32_t buttonIndex = eventData;
 
-        // Get toolbar item from array
-        int64_t* itemArray = *(int64_t**)(s + 0xD0);
-        uintptr_t item = (uintptr_t)itemArray[buttonIndex];
+        // The toolbar item of the button
+        const Toolbar* item = toolbarItems[buttonIndex];
 
-        // CheckPtr resolves lazy/weak InternalBasePtr before dereference
-        // IsDerivedFrom check on the element
-        void* elemObj = *(void**)element;
+        // The element as a CheckElement (IsDerivedFrom)
+        UI::Element* elemObj = element->Get();
         bool isDerived = ::Object::IsDerivedFromNullSafe(elemObj, UI::CheckElement::TypeId());
-        void* typedElem = isDerived ? elemObj : nullptr;
+        UI::CheckElement* checkElem = isDerived ? static_cast<UI::CheckElement*>(elemObj) : nullptr;
 
-        int64_t localElemRef;
-        new (&localElemRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(typedElem));   // B.3.3 bridge
-
-        int32_t actionType = *(int32_t*)(item + 0x48);
-
-        char pathBuf_trace[128];
+        int32_t actionType = item->_field48;
 
         switch (actionType) {
         case 0: {
             // Tool: open/close sub-toolbar dialog
-            int64_t* subDialogPtr = (int64_t*)(s + 0xE8);
 
             // If there's already a sub-dialog open, close it
-            if (*subDialogPtr != 0) {
-                uint64_t closeRef = (uint64_t)*subDialogPtr;
-                reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
+            if (subDialog.Get() != nullptr) {
+                Object::InternalPtr<UI::DialogInstance> closeRef = subDialog;
+                _ui->CloseDialog(&closeRef);
             }
 
-            if (buttonIndex == *(int32_t*)(s + 0xF0)) {
+            if (buttonIndex == openSubIndex) {
                 // Same button clicked again — toggle off
-                *(int32_t*)(s + 0xF0) = -1;
-                int64_t nullRef;
-                new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                *subDialogPtr = nullRef;
+                openSubIndex = -1;
+                subDialog = Object::InternalPtr<UI::DialogInstance>(nullptr);
             } else {
                 // Open new sub-toolbar
                 // Allocate new ToolbarDialog (0x108 bytes)
                 void* newDialog = System::MemoryAllocator::MemAlloc(0x108, 8);
-                void* childDialog = nullptr;
+                ToolbarDialog* childDialog = nullptr;
                 if (newDialog) {
-                    // Construct child ToolbarDialog (recursive), parented to this one.
+                    // Construct child ToolbarDialog (recursive), parented to this one;
+                    // its group is the clicked item.
                     childDialog = ::new (newDialog) ToolbarDialog(
-                        static_cast<UI::UserInterface*>(_ui), _dialog,
+                        _ui, _dialog,
                         Object::InternalPtr<UI::DialogInstance>(this),
-                        (uint64_t)item);        // toolbar item (group parent)
+                        item);
                 }
 
                 // Store child dialog reference
-                int64_t childRef;
-                new (&childRef) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(childDialog));   // B.3.3 bridge
-                *subDialogPtr = childRef;
+                subDialog = Object::InternalPtr<UI::DialogInstance>(childDialog);
 
                 // Position the sub-dialog relative to toolbar
-                // Get root element of sub-dialog
-                void* subDialogInst = *(void**)subDialogPtr;
-                void* subRoot = *(void**)((uintptr_t)subDialogInst + 0x50); // GetRoot inlined
+                // Root element of the sub-dialog (GetRoot inlined)
+                UI::Element* subRoot = subDialog.Get()->_root;
 
                 // Get padded size of sub-dialog
                 int subWidth, subHeight;
-                reinterpret_cast<UI::Element*>(subRoot)->GetPaddedSize(subWidth, subHeight);  // B.3.6 bridge
+                subRoot->GetPaddedSize(subWidth, subHeight);
 
-                // Get parent toolbar element position
-                void* parentRadio = *(void**)(s + 0xB8);
-                int parentBottom = *(int32_t*)((uintptr_t)parentRadio + 100); // +0x64
+                // The toolbar's own layout: the radio's layout height, the root's bottom pad
+                int parentBottom = radioElement->_layoutHeight;   // +0x64
+                int selfTop = _root->_bottomPad;                   // +0x24
 
-                void* selfRoot = *(void**)((uintptr_t)this + 0x50); // GetRoot inlined
-                int selfTop = *(int32_t*)((uintptr_t)selfRoot + 0x24);
-
-                // Get element position for centering
-                int elemX = *(int32_t*)(localElemRef + 0x68);
-                int elemWidth = *(int32_t*)(localElemRef + 0x70);
+                // The clicked element's layout span, for centering
+                int elemX = checkElem->_layoutLeft;       // +0x68
+                int elemWidth = checkElem->_layoutRight;  // +0x70
 
                 // Calculate horizontal position: center sub-dialog on button
-                void* videoDevice = ::Video::Device::_singleton;
-                float uiScale = *(float*)(*(uintptr_t*)(s + 0x10) + 0xDC);
-                int screenWidth = *(int32_t*)((uintptr_t)videoDevice + 4);
+                const Video::Device* videoDevice = ::Video::Device::_singleton;
+                float uiScale = _ui->_uiScale;
+                int screenWidth = videoDevice->backBufferWidth;
                 int xPos = (int)((float)screenWidth * uiScale) -
                            (elemWidth + elemX) / 2 - subWidth / 2;
                 if (xPos < 0) xPos = 0;
 
                 // Set padding on sub-dialog root to position it
-                void* subRoot2 = *(void**)((uintptr_t)*(void**)subDialogPtr + 0x50);
-                reinterpret_cast<UI::Element*>(subRoot2)->SetPadding(0, xPos, 0, parentBottom + selfTop);  // B.3.6 bridge
+                subDialog.Get()->_root->SetPadding(0, xPos, 0, parentBottom + selfTop);
 
                 // Record which button index is open
-                *(int32_t*)(s + 0xF0) = buttonIndex;
+                openSubIndex = buttonIndex;
 
                 // Add the sub-dialog to the UI
-                uint64_t addRef = (uint64_t)*subDialogPtr;
-                reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addRef));  // B.3.6 bridge
+                Object::InternalPtr<UI::DialogInstance> addRef = subDialog;
+                _ui->AddDialog(&addRef);
             }
             break;
         }
         case 1: {
-            // ShowGroup: toggle visibility of a game group
-            void* groupId = nullptr;
-            if (localElemRef != 0 && *(uint8_t*)(localElemRef + 0xD8) != 0) {
-                groupId = *(void**)(item + 0x58);
+            // ShowGroup: select the item's tool group (null when unchecked)
+            ComponentDescription* groupId = nullptr;
+            if (checkElem != nullptr && checkElem->_checked != 0) {
+                groupId = item->_field58;
             }
-            // Must call ORIGINAL exe function — 15+ other callers share PlayerController state
-            Toolbar_ShowGroup_Impl((void*)gameSys, (int64_t)groupId);   // 0x140102b60
+            gameSys->SelectTool(groupId);   // 0x140102b60
             break;
         }
         case 2: {
-            // Utility action
-            uint8_t retBuf[16];
-            Toolbar_Utility_Impl((void*)gameSys, retBuf, *(uint64_t*)(item + 0x58));
+            // Utility action: toggle the item's utility dialog
+            gameSys->ToggleUtilityDialog(item->_field58);   // 0x140101a80
             break;
         }
         case 3: {
             // Open the in-game pause menu (Resume / Save / Load / Options /
-            // Quit to Menu / Quit Game). gameSys is gameWorld+0x120 (EntityUI),
-            // exactly what retail passes at 0x1400b96ae.
-            EntityUI_OpenPauseMenu((void*)gameSys);
+            // Quit to Menu / Quit Game), exactly what retail does at 0x1400b96ae.
+            gameSys->OpenPauseMenu();   // 0x140101ce0
             break;
         }
         case 4: {
-            // Focus on entity
-            uintptr_t entityList = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
+            // Focus on entity: the first entity built from the item's template
+            const CitizenBehavior* town = gameWorld->m_citizenList;
 
-            // Create null InternalPtr for parent
-            int64_t parentRef;
-            new (&parentRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            // A null dialog: no panel to track
+            Object::InternalPtr<UI::DialogInstance> parentRef(nullptr);
 
-            // Find entity by type
-            uint8_t entityBuf[16];
-            void* entity = Toolbar_FindEntity_Impl(
-                (void*)entityList, entityBuf,
-                *(uint64_t*)(item + 0x58), 0
-            );
+            // Find entity by template
+            ComponentEntity* entity = Toolbar_FindEntity_Impl(town, item->_field58, 0);
 
-            // Center camera on entity
-            Toolbar_CenterOnEntity_Impl((void*)gameSys, &parentRef, entity);
+            // Center camera on entity. NOTE: the tree hands the ENTITY where
+            // CenterOnEntity reads an InternalPtr* (the tree's
+            // Toolbar_FindEntity_Impl returned the value it wrote); kept as the
+            // tree had it.
+            Toolbar_CenterOnEntity_Impl(gameSys, &parentRef, entity);
             break;
         }
         case 5: {
-            // CenterOnPoint: set camera position from predefined points
-            int32_t pointIndex = *(int32_t*)(item + 0x4C);
-            uintptr_t pointArray = *(uintptr_t*)(gameSys + 0x70);
-            uint32_t* point = (uint32_t*)(pointArray + (int64_t)pointIndex * 0x1C);
+            // CenterOnPoint: save the current view into the item's camera slot
+            int32_t pointIndex = item->selectedIndex;
+            PlayerCameraView* point = &gameSys->cameraViews[pointIndex];
 
-            uintptr_t cameraSys = *(uintptr_t*)((uintptr_t)gameWorld + 0xE0);
+            const PlayerController* cameraSys = gameWorld->m_playerController;
 
-            // Set point as active: flag at +0x18 = 1
-            *(uint8_t*)(point + 6) = 1;  // +0x18 as bytes
-            // Copy heading from gameSys
-            point[5] = *(uint32_t*)(gameSys + 0x3C);
-            point[4] = *(uint32_t*)(gameSys + 0x40);
-            // Copy camera position from cameraSys
-            point[3] = *(uint32_t*)(cameraSys + 0x28);
-            uint32_t camY = *(uint32_t*)(cameraSys + 0x20);
-            uint32_t camZ = *(uint32_t*)(cameraSys + 0x24);
-            point[0] = *(uint32_t*)(cameraSys + 0x1C);
-            point[1] = camY;
-            point[2] = camZ;
+            // Set point as active
+            point->used = 1;
+            // Copy the view angles from the tool manager
+            point->field_0x14 = gameSys->field_0x3C;
+            point->field_0x10 = gameSys->field_0x40;
+            // Copy the camera's yaw and look-at target
+            point->field_0x0C = cameraSys->yaw;
+            float camY = cameraSys->targetY;
+            float camZ = cameraSys->targetZ;
+            point->position.x = cameraSys->targetX;
+            point->position.y = camY;
+            point->position.z = camZ;
 
-            // Close sub-dialog and reset radio selection.
-            // Retail resolves the parent InternalBasePtr BEFORE reading it:
-            //   (*fn_InternalBasePtr_CheckPtr_slot)(param_1 + 0x28);
-            //   pDVar6 = *(DialogInstance **)(param_1 + 0x28);
-            // Our port had dropped that CheckPtr, so the read could see an
-            // unresolved lazy/weak handle instead of the parent dialog.
-            void* parentDialog = *(void**)(s + 0x28);
+            // Close sub-dialog and reset radio selection on the parent toolbar.
+            // Retail resolves the parent InternalBasePtr BEFORE reading it.
+            UI::DialogInstance* parentDialog = _parent.Get();
             bool isDerivedParent = ::Object::IsDerivedFromNullSafe(parentDialog, ToolbarDialog::TypeId());
-            void* typedParent = isDerivedParent ? parentDialog : nullptr;
-            // No null guard: retail's FUN_1400b9730 derefs param_1+0xe8 unguarded, so
-            // this cast is expected to always succeed. It used to fail because the
-            // hand-built ToolbarDialog table's Type slot forwarded to the DialogInstance
-            // base, making every ToolbarDialog report as its own base class. Since
-            // B.3.8 the compiler table's Type() answers ToolbarDialog's own id.
-            reinterpret_cast<ToolbarDialog*>(typedParent)->CloseSubDialog();   // B.3.8 bridge
+            // No null guard: retail's FUN_1400b9730 derefs +0xe8 unguarded, so this
+            // cast is expected to always succeed.
+            ToolbarDialog* typedParent = isDerivedParent ? static_cast<ToolbarDialog*>(parentDialog) : nullptr;
+            typedParent->CloseSubDialog();
             break;
         }
         case 6: {
             // SpeedDown
-            ToolbarDialog_ChangeSpeed_Impl(this, -1);
+            ChangeSpeed(-1);
             break;
         }
         case 7: {
             // Pause
-            *(uint8_t*)(gameSys + 0x30) = 1;
+            gameSys->paused = 1;
             break;
         }
         case 8: {
             // Unpause
-            *(uint8_t*)(gameSys + 0x30) = 0;
+            gameSys->paused = 0;
             break;
         }
         case 9: {
             // SpeedUp
-            ToolbarDialog_ChangeSpeed_Impl(this, 1);
+            ChangeSpeed(1);
             break;
         }
         }
@@ -1810,32 +1508,21 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
     else if (eventType == 0x16 && eventData == 1000 && p7 >= 0) {
         // Toolbar selection change: p7 = selected item index
         int32_t selIndex = p7;
-        int64_t* itemArray = *(int64_t**)(s + 0xD0);
-        uintptr_t item = (uintptr_t)itemArray[selIndex];
+        const Toolbar* item = toolbarItems[selIndex];
 
-        // CheckPtr resolves lazy/weak InternalBasePtr before dereference
-        // Dynamic cast the element to get toolbar controller
-        void* elemObj = *(void**)element;
-        void* castResult = nullptr;
-        // FUN_140010e70: IsDerivedFrom check + cast
-        bool isDerived = ::Object::IsDerivedFromNullSafe(elemObj, UI::CheckElement::TypeId());
-        if (isDerived) castResult = elemObj;
+        // FUN_140010e70: IsDerivedFrom check + cast (result unused)
+        UI::Element* elemObj = element->Get();
+        (void)::Object::IsDerivedFromNullSafe(elemObj, UI::CheckElement::TypeId());
 
-        int64_t localElemRef;
-        new (&localElemRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(castResult));   // B.3.3 bridge
-
-        int32_t actionType = *(int32_t*)(item + 0x48);
+        int32_t actionType = item->_field48;
 
         // If not a Tool (case 0) and we have an open sub-dialog, close it
-        if (actionType != 0 && *(int64_t*)(s + 0xE8) != 0) {
-            uint64_t closeRef = *(uint64_t*)(s + 0xE8);
-            reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
+        if (actionType != 0 && subDialog.Get() != nullptr) {
+            Object::InternalPtr<UI::DialogInstance> closeRef = subDialog;
+            _ui->CloseDialog(&closeRef);
 
-            int64_t nullRef;
-            new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            *(int64_t*)(s + 0xE8) = nullRef;
-            *(int32_t*)(s + 0xF0) = -1;
+            subDialog = Object::InternalPtr<UI::DialogInstance>(nullptr);
+            openSubIndex = -1;
         }
     }
 }
@@ -1848,29 +1535,17 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 // +0xB8..+0xE8 and +0xF8/+0x100 zeroed as qwords and +0xF4 as a dword. +0xF0
 // (openSubIndex) is left as allocated, as retail leaves it.
 ToolbarDialog::ToolbarDialog() {
-    radioElement = 0;
-    buttonElements = 0;
-    buttonCount = 0;
-    buttonCapacity = 0;
-    toolbarItems = 0;
-    itemCount = 0;
-    itemCapacity = 0;
-    toolbarGroupId = 0;
-    subDialog = 0;
+    // the three arrays are zeroed by their own constructors
+    radioElement = nullptr;
+    toolbarGroup = nullptr;
+    subDialog = Object::InternalPtr<UI::DialogInstance>(nullptr);
     currentSpeedIndex = 0;
-    speedValues = 0;
-    speedValueCount = 0;
-    speedValueCapacity = 0;
 }
 
-// The ~ToolbarDialog body [0] 0x140021760 calls: the three arrays, then ~DialogInstance.
+// [0] 0x140021760: the three arrays (the members' destructors, in reverse
+// order: +0xF8, +0xD0, +0xC0 -- MemFree the data, zero the header), then
+// ~DialogInstance.
 ToolbarDialog::~ToolbarDialog() {
-    uintptr_t s = (uintptr_t)this;
-    {
-        System::MemoryAllocator::MemFree(*(void**)(s + 0xF8)); *(uint64_t*)(s + 0xF8) = 0; *(uint64_t*)(s + 0x100) = 0;
-        System::MemoryAllocator::MemFree(*(void**)(s + 0xD0)); *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
-        System::MemoryAllocator::MemFree(*(void**)(s + 0xC0)); *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
-    }
 }
 
 // create 0x140021710: MemAlloc(0x108, 8), then the default ctor.
@@ -1888,19 +1563,19 @@ void* ToolbarDialog::CreateInPlaceObject(void* storage) {
 // The reflection record stays at the TU position of the UI_DIALOG_STUB row it
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
 
-// moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
-void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
-    uintptr_t tc = (uintptr_t)toolController;
-    uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
+// ============================================================
+// PlayerToolManager::CenterOnEntity (FUN_140103040; the tree's
+// Toolbar_CenterOnEntity_Impl, a B4 FORWARD forwarder now)
+// ============================================================
+void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, ComponentEntity* const* entityPtr) {
+    GameUpdateLoop* const game = GameUpdateLoop::_singleton;
 
-    // === Section 1: Enable tracking on EntityPanel controller ===
-    if (*(uintptr_t*)parentDialogPtr != 0) {
-
+    // === Section 1: Enable tracking on the dialog's EntityUI ===
+    if (*dialog != nullptr) {
         // Retail FUN_140103040 reads DWORD_1401c4f00 — whose registrar is
         // RegisterType_EntityUI — TWICE, and both reads matter. Disassembled at
         // 0x14010307a..0x1401030af (the decompiled C shows only the second; it drops
-        // GetController's third argument entirely and prints the retval buffer as a
-        // `uint` — reference_ghidra_c_output_vs_disassembly.md):
+        // GetController's third argument entirely):
         //
         //     MOV  R8D,[0x1401c4f00]   ; arg 3 = the EntityUI type-id FILTER
         //     MOV  RCX,[RBX]           ; this = DialogInstance*
@@ -1910,58 +1585,30 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
         //     MOV  EDX,[0x1401c4f00]   ; and again, for IsDerivedFrom
         //     CALL [0x140152a98]       ; fn_IsDerivedFrom
         //
-        // So the type id has to be resolved BEFORE the GetController call, not after.
-        //
         // GetController's third parameter is a TYPE-ID FILTER, not an index: retail
-        // 0x180113320 walks the controller array and compares the argument against each
-        // controller's own type id (Object::Internal vtable slot +0x10), returning null
-        // when nothing matches. Nothing has type id 0.
-        // (reference_getcontroller_third_arg_is_a_type_filter; the mangled name says so
-        // too — the trailing `I` in ...@Object@@I@Z is that uint32.)
-        //
-        // HISTORY, because this site has now been wrong twice in two different places and
-        // the second fix looked complete when it was not:
-        //   * Originally the downstream IsDerivedFrom used TypeId_PageToggleUI — a
-        //     different class (own slot 0x1401c5408, which nothing in this tree reads).
-        //     That was corrected to tidEntityUI, and the note left behind declared the
-        //     "camera centres but never FOLLOWS the entity" bug cured.
-        //   * IT WAS NOT. The UPSTREAM filter was left at literal 0, so GetController
-        //     returned null for every dialog, `controllerRaw` was null, the guard below
-        //     failed, panelController stayed null and entity+0xd8 was never set — the
-        //     identical symptom, for every caller ("go to entity" in workplace /
-        //     profession / residence / townhall / statusbar / toolbar / citizen panels),
-        //     now hidden behind a comment asserting it was fixed. Corrected 2026-09-07
-        //     (Wave 7 lane B; the port of GetController is what surfaced it).
+        // 0x180113320 walks the controller array and compares the argument against
+        // each controller's own type id, returning null when nothing matches.
+        // (reference_getcontroller_third_arg_is_a_type_filter.)
         // Guard the VALUE, not the pointer: a null-but-resolvable id is not a valid filter.
         const uint32_t tidEntityUI = EntityUI::TypeId();   // cell 0x1401c4f00
 
         // Get the EntityUI controller from the dialog instance.
-        uint8_t controllerBuf[16] = {};
-        ::new (static_cast<void*>(controllerBuf)) ::Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(*(void**)parentDialogPtr)->GetController(tidEntityUI));  // B.3.6 bridge
-
-        uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
-        void* panelController = nullptr;
-        if (controllerRaw != 0 && tidEntityUI) {
-            if (::Object::IsDerivedFromNullSafe((void*)controllerRaw, tidEntityUI)) {
-                panelController = (void*)controllerRaw;
+        UI::DialogController* controllerRaw = (*dialog)->GetController(tidEntityUI).Get();
+        EntityUI* panelController = nullptr;
+        if (controllerRaw != nullptr && tidEntityUI) {
+            if (::Object::IsDerivedFromNullSafe(controllerRaw, tidEntityUI)) {
+                panelController = static_cast<EntityUI*>(controllerRaw);
             }
         }
 
-        uint64_t ctrlRef = 0;
-        new (&ctrlRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(panelController));   // B.3.3 bridge
+        if (panelController != nullptr) {
+            // The panel's pin check box
+            if (panelController->checkPin->_checked == 0) {
+                // Pin the panel (it follows the entity)
+                panelController->checkPin->_checked = 1;
 
-        if (ctrlRef != 0) {
-            uintptr_t ctrl = (uintptr_t)ctrlRef;
-            uintptr_t trackedEntity = *(uintptr_t*)(ctrl + 0x38);
-
-            if (*(uint8_t*)(trackedEntity + 0xd8) == 0) {
-                // Enable tracking flag
-                ctrl = (uintptr_t)ctrlRef;
-                *(uint8_t*)(*(uintptr_t*)(ctrl + 0x38) + 0xd8) = 1;
-
-                PlayerTrade_EntityUI_66b0(static_cast<int64_t>(ctrl));   // 0x1400666b0
+                // LEFT: 0x1400666b0's declaration takes the EntityUI as int64_t (PLAYER's header).
+                PlayerTrade_EntityUI_66b0(reinterpret_cast<int64_t>(panelController));   // 0x1400666b0
             }
         }
     }
@@ -1969,47 +1616,40 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
     // === Section 2: Get entity world position ===
     float targetPos[3] = {0.0f, 0.0f, 0.0f};
 
-    uintptr_t entityRaw = *(uintptr_t*)entityPtr;
+    ComponentEntity* entityRaw = *entityPtr;
 
-    // Try ModelComponent (cell 0x1401c7a50)
-    uint64_t modelRef = 0;
-    fn_FindComponent_Character((void*)entityRaw, &modelRef);
+    // Try ModelComponent (cell 0x1401c7a50). The tree's finders returned null for
+    // a null entity: kept.
+    ModelComponent* modelRef = entityRaw ? entityRaw->FindComponent<ModelComponent>() : nullptr;
 
     bool gotPosition = false;
-    if (modelRef != 0) {
+    if (modelRef != nullptr) {
         // Has ModelComponent — check for MultiObjectComponent
-        uint64_t multiRef = 0;
-        fn_FindComponent_MultiObject((void*)entityRaw, &multiRef);
+        MultiObjectComponent* multiRef = entityRaw ? entityRaw->FindComponent<MultiObjectComponent>() : nullptr;
 
-        if (multiRef == 0) {
-            // Single object (citizen/animal/tree): use model's transform position
-            uint64_t modelRef2 = 0;
-            fn_FindComponent_Character((void*)entityRaw, &modelRef2);
-            uintptr_t model = (uintptr_t)modelRef2;
-
-            // Math::Transform at ModelComponent+0x148 is {quat(16 bytes), pos(12 bytes)}
-            // Position starts at +0x10 within the 0x1C-byte Transform = ModelComponent+0x158
-            targetPos[0] = *(float*)(model + 0x158);
-            targetPos[1] = *(float*)(model + 0x15C);
-            targetPos[2] = *(float*)(model + 0x160);
+        if (multiRef == nullptr) {
+            // Single object (citizen/animal/tree): the model's transform translation
+            ModelComponent* model = entityRaw ? entityRaw->FindComponent<ModelComponent>() : nullptr;
+            targetPos[0] = model->transform.translation.x;
+            targetPos[1] = model->transform.translation.y;
+            targetPos[2] = model->transform.translation.z;
             gotPosition = true;
         }
     }
 
     if (!gotPosition) {
-        // Building/multi-object: calculate center from BuildComponent grid footprint
-        uint64_t buildRef = 0;
-        fn_FindComponent_Build(*(void**)entityPtr, &buildRef);
-        uintptr_t build = (uintptr_t)buildRef;
+        // Building/multi-object: calculate center from the MapComponent's footprint
+        ComponentEntity* entity2 = *entityPtr;
+        MapComponent* build = entity2 ? entity2->FindComponent<MapComponent>() : nullptr;
 
-        int* mapGrid = *(int**)(game + 0xF8);
-        int gridSize = *mapGrid;
+        Map* mapGrid = game->m_game;
+        int gridSize = mapGrid->size;
         float halfGrid = (float)(gridSize >> 1);
 
-        int16_t posX = *(int16_t*)(build + 0x28);
-        int16_t posY = *(int16_t*)(build + 0x2a);
-        int16_t extX = *(int16_t*)(build + 0x2c);
-        int16_t extY = *(int16_t*)(build + 0x2e);
+        int16_t posX = build->tileX0;
+        int16_t posY = build->tileY0;
+        int16_t extX = build->tileX1;
+        int16_t extY = build->tileY1;
 
         // Far corner of footprint
         int idx1 = (int)extX + ((int)extY + (int)posY) * gridSize + (int)posX;
@@ -2038,73 +1678,64 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
     }
 
     // === Section 3: Snap camera to entity position ===
-    uintptr_t cameraSys = *(uintptr_t*)(game + 0xE0);
+    PlayerController* cameraSys = game->m_playerController;
 
     // Set camera target position
-    *(float*)(cameraSys + 0x1C) = targetPos[0];
-    *(float*)(cameraSys + 0x20) = targetPos[1];
-    *(float*)(cameraSys + 0x24) = targetPos[2];
+    cameraSys->targetX = targetPos[0];
+    cameraSys->targetY = targetPos[1];
+    cameraSys->targetZ = targetPos[2];
 
     // Zero-duration time for instant snap (matches original)
     {
-        uint64_t timeVal;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), 0.0f);
+        System::Time timeVal;
+        RtSystem_Time_Ctor(&timeVal, 0.0f);
     }
 
     // Compute camera view transform and apply
     {
-        Math::Transform viewTransform;   // 0x1C bytes = compact Math::Transform
-        void* result = Reimpl_FUN_1400983f0((void*)cameraSys, &viewTransform);   // 0x1400983f0
+        Math::Transform viewTransform = cameraSys->CalcTransform();   // 0x1400983f0
 
         // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
-        Math::Transform3 transform3 =
-            reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
-        // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
-        // The Camera is embedded BY VALUE at cameraSys + 0x34; the proof is the
-        // writer, not the name: Reimpl_FUN_1400985b0
-        // (code/Game/Game/gameupdateloop_load.cpp) constructs it there with
-        // `??0Camera@Graphics@@` on this same +0xE0 object. The readiness `if` went
-        // with the door pointer -- it tested nothing else.
-        reinterpret_cast<Graphics::Camera*>(cameraSys + 0x34)
-            ->SetCameraToWorld(transform3);   // B.3.5 bridge
+        Math::Transform3 transform3 = viewTransform.AsTransform3();
+        // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+        // LEFT: PlayerController::camera is raw storage (B.4 H5, the Game block's).
+        reinterpret_cast<Graphics::Camera*>(cameraSys->camera)->SetCameraToWorld(transform3);
     }
 
     // === Section 4: Select entity in EditTool ===
-    // EditTool::TypeId() (cell 0x1401c6dd8). ENDGAME B.3.9 TR: the three `&& TypeId_EditTool`
-    // pointer tests went with the pointer (the cell was registered: they never failed).
-    void* currentTool = *(void**)(tc + 0x28);
-    void* editTool = nullptr;
-
+    // EditTool::TypeId() (cell 0x1401c6dd8).
+    EditTool* editTool = nullptr;
     if (currentTool) {
         if (::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId())) {
-            editTool = currentTool;
+            editTool = static_cast<EditTool*>(currentTool);
         }
     }
 
-    uint64_t editToolRef = 0;
-    new (&editToolRef) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
-
-    if (editToolRef == 0) {
+    if (editTool == nullptr) {
         // Switch to EditTool mode
-        EntityUI_SetEditMode_Impl(toolController, 0);
+        SelectTool(nullptr);
 
         // Re-read current tool after mode switch
-        void* newTool = *(void**)(tc + 0x28);
         editTool = nullptr;
-        if (newTool) {
-            if (::Object::IsDerivedFromNullSafe(newTool, EditTool::TypeId())) {
-                editTool = newTool;
+        if (currentTool) {
+            if (::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId())) {
+                editTool = static_cast<EditTool*>(currentTool);
             }
         }
-        editToolRef = 0;
-        new (&editToolRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
     }
 
     // Select the entity in the EditTool
-    if (editToolRef != 0) {
-        void* entityRefCopy = *(void**)entityPtr;
-        EditTool_SelectEntity_Impl((void*)(uintptr_t)editToolRef, &entityRefCopy);   // 0x1400fd3b0
+    if (editTool != nullptr) {
+        Object::InternalPtr<ComponentEntity> entityRefCopy(*entityPtr);
+        editTool->SelectEntity(&entityRefCopy);   // 0x1400fd3b0
     }
+}
+
+// B4 FORWARD: 7 outside caller(s) (Dialog/citizenui.cpp, professionui.cpp,
+// residenceui.cpp, townhallui.cpp, workplaceui.cpp, statusbarui.cpp -- this
+// block's, converted below -- and toolbardialog.cpp's FocusEntity button).
+void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
+    reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(
+        reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),
+        reinterpret_cast<ComponentEntity* const*>(entityPtr));
 }

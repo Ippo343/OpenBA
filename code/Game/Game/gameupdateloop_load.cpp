@@ -545,13 +545,6 @@ Math::Transform PlayerController::CalcTransform() {
     return lookAt;
 }
 
-// B4 FORWARD: 1 outside caller file (Dialog/toolbardialog.cpp).
-extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform) {
-    *reinterpret_cast<Math::Transform*>(outTransform) =
-        reinterpret_cast<PlayerController*>(self)->CalcTransform();
-    return outTransform;
-}
-
 // 0x1400985b0 — the PlayerController ctor (+0xE0, 0x10c).
 PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float pitch_, float distance_) {
     // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
@@ -766,7 +759,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x18 = 0;
     field_0x20 = 0;
     currentTool = nullptr;
-    field_0x30 = false;
+    paused = false;
     field_0x34 = 1;
     field_0x38 = false;
     field_0x3C = 0.0f;                        // +0x3c / +0x40: one qword store (H7: two stores)

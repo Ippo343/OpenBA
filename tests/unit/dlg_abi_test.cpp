@@ -241,7 +241,7 @@ UNIT_TEST(dlg_toolbar_dialog) {
     CHECK_EQ(offsetof(ToolbarDialog, subDialog), (size_t)0xe8);
     CHECK_EQ(offsetof(ToolbarDialog, openSubIndex), (size_t)0xf0);
     CHECK_EQ(offsetof(ToolbarDialog, speedValues), (size_t)0xf8);
-    CHECK_EQ(offsetof(ToolbarDialog, speedValueCount), (size_t)0x100);
+    CHECK_EQ(offsetof(ToolbarDialog, speedValues) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x100);
     CheckShape<ToolbarDialog>();
     CheckDialogInstanceSlots<ToolbarDialog>();
 }

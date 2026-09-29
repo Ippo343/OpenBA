@@ -86,31 +86,14 @@ extern "C" void ToolbarUtility_FindDialogByControllerType_0270(void* , void* ret
 extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData);  // 0x140014890
 
 // ---- toolbardialog.cpp
-void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60
-extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param);  // 0x140101a80
-
-// ============================================================
-// Toolbar_CenterOnEntity_Impl — centers camera on entity and selects it in EditTool
-// ============================================================
-// Reimplemented from FUN_140103040 (fn_Toolbar_CenterOnEntity / fn_GoToEntity).
-//
-// toolController = PlayerController (gameWorld+0x120)
-// parentDialogPtr = InternalBasePtr* to parent dialog (may be null-ptr)
-// entityPtr = InternalBasePtr* to target entity
-//
-// Logic:
-// 1. If parent dialog has a PageToggleUI controller, enable entity tracking
-// 2. Get entity world position:
-//    - Entities with ModelComponent but no MultiObjectComponent: use model's
-//      Math::Transform position (offset +0x158 = +0x148 transform + 0x10 position)
-//    - Multi-object buildings: calculate center from BuildComponent grid footprint
-// 3. Set camera target and snap camera to new position
-// 4. Get/create EditTool and select entity in it
-//
-// NOTE: fn_FindComponent_Character keeps its historical name but finds ModelComponent
-// (DAT_1401c7a50). Body: code/Game/Dialog/toolbardialog.cpp.
-
-void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);
+// B.4 DLG-d: 0x140102b60 / 0x140101a80 / 0x140101ce0 / 0x140103040 are
+// PlayerToolManager members (SelectTool, ToggleUtilityDialog, OpenPauseMenu,
+// CenterOnEntity; Game/PlayerToolManager.h). These are their forwarders.
+void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60 B4 FORWARD: 6 outside caller files -> PlayerToolManager::SelectTool
+extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param);  // 0x140101a80 B4 FORWARD: 2 outside caller files -> PlayerToolManager::ToggleUtilityDialog
+// toolController = the tool manager; parentDialogPtr = InternalPtr<DialogInstance>*
+// (may hold null); entityPtr = InternalPtr<ComponentEntity>*.
+void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 6 outside caller files -> PlayerToolManager::CenterOnEntity
 
 // ---- toolui.cpp
 // FUN_14012e100: UIDescription_AddControllers — REIMPLEMENTED in code/Game/Dialog/toolui.cpp
