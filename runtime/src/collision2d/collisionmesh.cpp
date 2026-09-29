@@ -318,14 +318,6 @@ bool CollisionMesh::Serialize(void* streamv) {
 }  // namespace Collision2D
 
 // ---- CUTOVER CLOSURE BATCH D2: the two registered Serialize halves --------
-// Retail's signatures exactly (RCX = the Serializer, R8 = the element base),
-// so these can stand at 0x1800665c0 / 0x180066d50 for any caller.
-extern "C" void RtCollision2D_CollisionMesh_SerializeFaces(void* ser, int32_t count, void* base) {
-    SerializeFacesBody(static_cast<Serializer*>(ser), count, static_cast<Face*>(base));
-}
-extern "C" void RtCollision2D_CollisionMesh_SerializeQuads(void* ser, int32_t count, void* base) {
-    SerializeQuadsBody(static_cast<Serializer*>(ser), count, static_cast<Quad4*>(base));
-}
 
 // B3R (registry teardown, W1 RT-Core): every row this function registered had
 // no reader by name or by address, so they went. It registers nothing and
