@@ -130,6 +130,8 @@ void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType);  // 
 void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* param_3, uint8_t param_4);  // 0x1400cadf0
 void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t param_3, uint8_t param_4);  // 0x1400c57d0
 void* ActChild_CreateNRCopyCtor_c6a20(void* self, uint64_t param_2, uint64_t* param_3, uint32_t param_4);  // 0x1400c6a20
+class ComponentEntity;        // Entity/ComponentEntity.h
+float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP);  // 0x1400c29a0
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2);  // 0x1400c29a0
 
 // ---- action_child_ctors2.cpp
@@ -142,6 +144,8 @@ void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count);
 void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_t* param_3, int64_t param_4, int param_5, uint8_t param_6);  // 0x1400ca520
 void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2);  // 0x1400c6440
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x14000b6f0
+class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
+uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 uint64_t WeightedRandomIndex_119470(int64_t param_1);  // 0x140119470
 
 // ---- action_pf_astar.cpp

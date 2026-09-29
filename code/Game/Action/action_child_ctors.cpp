@@ -22,6 +22,10 @@
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "Game/exe_bodies.h"        // Reimpl_MapGetTerrainPos
 #include "math/Math.h"
+#include "Component/MapComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
 #include <cstdint>
 #include <new>
 
@@ -37,35 +41,29 @@
 // from its cell node (FUN_140004680 -> node) via the grid math + CharacterComponent
 // cell->world sampler. Then v = pos - worldPos; Normalize(v); return Heading(v).
 // ============================================================
-float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
+float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP) {
     float pos[3] = {0.0f, 0.0f, 0.0f};
 
-    uint8_t retbuf[8] = {0};  // local_res8 — IBP retval for the getters
-    int64_t inner = *reinterpret_cast<int64_t*>(param_2);
-    void* pathIbp = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(inner), retbuf);   // 0x140003f60
+    ModelComponent* model = (*entityIBP)->FindComponent<ModelComponent>();   // 0x140003f60
 
-    if (pathIbp && *reinterpret_cast<int64_t*>(pathIbp) != 0) {
-        // --- path node present: read its world pos directly ---
-        int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
-        void* ibp2 = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(inner2), retbuf);   // 0x140003f60
-        int64_t node = ibp2 ? *reinterpret_cast<int64_t*>(ibp2) : 0;
-        pos[0] = *reinterpret_cast<float*>(node + 0x158);
-        pos[1] = *reinterpret_cast<float*>(node + 0x15c);
-        pos[2] = *reinterpret_cast<float*>(node + 0x160);
+    if (model != nullptr) {
+        // --- a ModelComponent: read its world position directly ---
+        const Math::Vector3& at = (*entityIBP)->FindComponent<ModelComponent>()->transform.translation;   // 0x140003f60
+        pos[0] = at.x;
+        pos[1] = at.y;
+        pos[2] = at.z;
     } else {
-        // --- no path node: derive a world pos from the entity's cell node ---
-        int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
-        void* cellIbp = FloorComponent_FindResData(reinterpret_cast<void*>(inner2), retbuf);   // 0x140004680
-        int64_t node = cellIbp ? *reinterpret_cast<int64_t*>(cellIbp) : 0;
+        // --- none: derive a world pos from the entity's MapComponent tile ---
+        const MapComponent* node = (*entityIBP)->FindComponent<MapComponent>();   // 0x140004680
 
-        void* gw = GameUpdateLoop::_singleton;
-        int32_t* mapPtr = gw ? *reinterpret_cast<int32_t**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
-        int32_t width = mapPtr ? *mapPtr : 1;
+        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+        Map* mapPtr = gw ? gw->m_game : nullptr;
+        int32_t width = mapPtr ? mapPtr->size : 1;
 
-        int32_t s28 = *reinterpret_cast<int16_t*>(node + 0x28);
-        int32_t s2a = *reinterpret_cast<int16_t*>(node + 0x2a);
-        int32_t s2c = *reinterpret_cast<int16_t*>(node + 0x2c);
-        int32_t s2e = *reinterpret_cast<int16_t*>(node + 0x2e);
+        int32_t s28 = node->tileX0;
+        int32_t s2a = node->tileY0;
+        int32_t s2c = node->tileX1;
+        int32_t s2e = node->tileY1;
 
         int32_t cellIdx = (s2a + (s2e >> 1)) * width + (s2c >> 1) + s28;
         int32_t quot = (width != 0) ? cellIdx / width : 0;   // EAX after IDIV
@@ -90,4 +88,9 @@ float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
                     pos[2] - worldPos[2]);
     Math::Vector3 n = v.Normalize();
     return n.Heading();
+}
+
+// B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp; Work files)
+float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
+    return HeadingToward(worldPos, reinterpret_cast<ComponentEntity* const*>(param_2));
 }

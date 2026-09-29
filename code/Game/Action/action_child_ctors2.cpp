@@ -16,6 +16,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <cstdint>
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/ConsumeProduceComponent.h"
 
 // ============================================================
 // FUN_140119470 — weighted-random index over a float-weight array.
@@ -24,24 +25,24 @@
 // the running sum exceeds r*total. Otherwise (or no weights) returns 0.
 // (Returns ulonglong index; non-negative *(int*)(+0x50) returns that value.)
 // ============================================================
-uint64_t WeightedRandomIndex_119470(int64_t param_1) {
-    uint32_t sel = *reinterpret_cast<uint32_t*>(param_1 + 0x50);
+uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self) {
+    uint32_t sel = static_cast<uint32_t>(self->consumeResourceId);
     uint64_t result = sel;
     if ((int)sel < 0) {
         if (sel == 0xffffffff) {
-            int n = *reinterpret_cast<int*>(param_1 + 0x60);
+            int n = self->consumeCount;
             float total = 0.0f;
             if (0 < n) {
-                float* w = *reinterpret_cast<float**>(param_1 + 0x58);
+                const float* w = self->consumeRates;
                 for (int k = 0; k < n; ++k) total += w[k];
             }
-            void* random = GameUpdateLoop::_singleton
-                ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8)
+            System::Random* random = GameUpdateLoop::_singleton
+                ? GameUpdateLoop::_singleton->m_random
                 : nullptr;
-            float r = random ? reinterpret_cast<System::Random*>(random)->RandFloat() : 0.0f;   // B.3.4b bridge
+            float r = random ? random->RandFloat() : 0.0f;
             result = 0;
             if (0 < n) {
-                float* w = *reinterpret_cast<float**>(param_1 + 0x58);
+                const float* w = self->consumeRates;
                 float running = 0.0f;
                 for (int k = 0; k < n; ++k) {
                     running += w[k];
@@ -52,4 +53,9 @@ uint64_t WeightedRandomIndex_119470(int64_t param_1) {
         result = 0;
     }
     return result;
+}
+
+// B4 FORWARD: outside callers (Work/consumeproduce.cpp, Work/work_act_consume.cpp)
+uint64_t WeightedRandomIndex_119470(int64_t param_1) {
+    return PickConsumeRecipe(reinterpret_cast<const ConsumeProduceComponent*>(param_1));
 }
