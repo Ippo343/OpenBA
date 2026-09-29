@@ -18,6 +18,7 @@
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/CitizenBehavior.h"   // CitizenBehavior::field_0x00 (the storage-location list)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -56,8 +57,9 @@
 // TownRegistry_RegisterStorageLocation already expects.
 using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
 
+// LEFT: declared nowhere else (its body: Game/town_storage_seed.cpp).
 extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);
+// CemeteryListErase_Reimpl (0x140002cc0): Component/exe_bodies.h.
 
 // state-2 ENTER — port of StorageLocationDescription_helper_d230.
 //
@@ -83,12 +85,11 @@ static char StorageLoc_State2Enter(void* data, void* /*sm*/) {
 static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
     if (!data) return 0;
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    void* townMgr = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf0);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
-    uint64_t entityRef = *reinterpret_cast<uint64_t*>(
-        reinterpret_cast<uintptr_t>(data) + 0x10);
-    CemeteryListErase_Reimpl(townMgr, &entityRef);
+    StorageLocationComponent* self = reinterpret_cast<StorageLocationComponent*>(data);   // the dispatcher's void* component
+    ComponentEntity* entityRef = self->_entity;
+    CemeteryListErase_Reimpl(&townMgr->field_0x00, &entityRef);
     return 0;
 }
 
@@ -142,13 +143,9 @@ void* StorageLocationComponent::CreateInPlaceObject(void* storage) {
 void StorageLocationComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t serializerBuf1[24];
-    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();   // B.3.4 bridge
-
-    alignas(8) uint8_t serializerBuf2[24];
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
+    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream is void*
+    { IO::Serializer first(s, 0); }
+    { IO::Serializer second(s, 0); }
 }
 
 DEFINE_EXE_TYPE(StorageLocationComponent, "ControllerComponent")

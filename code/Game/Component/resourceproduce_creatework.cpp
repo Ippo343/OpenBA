@@ -38,8 +38,15 @@
 #include "Component/MarketComponent.h"
 #include <new>
 #include "Action/exe_bodies.h"   // Pf_RecursiveChildSum_123070
-#include "Work/exe_bodies.h"     // WorkBase_FindComponent_2ed0
-#include "Player/exe_bodies.h"   // PlayerPath_FindComponent_3ea0
+#include "Component/FishingComponent.h"
+#include "Component/HuntComponent.h"
+#include "Component/HerbalistComponent.h"
+#include "Component/ForesterComponent.h"
+#include "Component/ConsumeProduceComponent.h"
+#include "Component/InteractComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
 
 // ENDGAME B.3.8 MI-B: each work is now built as its REAL class (code/Game/Work/<X>.h):
 // `new (mem) X()` runs the base init and the leaf's field zeroing, calls the work's
@@ -51,104 +58,99 @@
 namespace {
 
 // The exe helpers:
-//   0x140002ed0 WorkBase_FindComponent_2ed0 — Entity_FindComponent_Position, the finder
-//               FishingWork_Ctor actually uses. (It is a known misnomer: it resolves the
-//               InteractComponent, not a "position" component. Kept faithful to retail's
-//               choice rather than "corrected".)
+//   0x140002ed0 FindComponent<InteractComponent> — Entity_FindComponent_Position, the
+//               finder FishingWork_Ctor actually uses. (It is a known misnomer: it
+//               resolves the InteractComponent, not a "position" component. Kept faithful
+//               to retail's choice rather than "corrected".)
 //   0x140123070 Pf_RecursiveChildSum_123070 — child attach-point count of a kind
-//   0x140003ea0 PlayerPath_FindComponent_3ea0 — Entity_FindComponent_StateMachine; only
-//               ForesterComponent's slot 18 needs it (to read the live state id before
-//               re-arming the two work flags).
+//   0x140003ea0 FindComponent<StateMachineComponent>; only ForesterComponent's slot 18
+//               needs it (to read the live state id before re-arming the two work flags).
 
-void* AllocWork(int size) {
-    return System::MemoryAllocator::MemAlloc(size, 8);
+template <typename W>
+W* AllocWork(int size) {
+    return static_cast<W*>(System::MemoryAllocator::MemAlloc(size, 8));
 }
 
-// The tail shared by all three: hand the raw object back as an InternalBasePtr.
-uintptr_t* WrapIBP(uintptr_t* out, void* obj) {
-    new (out) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
+// The tail shared by all of them: hand the object back as an InternalBasePtr.
+uintptr_t* WrapIBP(uintptr_t* out, Work* obj) {
+    ::new (out) ::Object::InternalPtr<Work>(obj);
     return out;
 }
 
 }  // namespace
 
+// The bodies below are the classes' slot-18 members' bodies; each class's
+// CreateWork (in its own file, another block's) calls its C name here. The receiver
+// casts are B4 FORWARD receivers: the C names take void*.
+
 // ── FishingComponent::CreateWork — retail 0x14011efe0 ─────────────────────────────
 // The work is 0x70 bytes and its ctor (0x1400eaac0) sizes TWO arrays off the dock's
-// child attach points: array at +0x48 grows to the count of kind-0 children, array at
-// +0x58 resizes to the count of kind-2 children and is then zero-filled. Those are the
+// child attach points: citizenRefs grows to the count of kind-0 children, spotStates
+// resizes to the count of kind-2 children and is then zero-filled. Those are the
 // fishing spots the citizen cycles through, so an unsized pair means a fisherman with
 // nowhere to stand.
-extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
-    void* mem = AllocWork(0x70);
-    if (!mem) return WrapIBP(out, nullptr);
+extern "C" uintptr_t* FishingComponent_CreateWork(void* selfV, uintptr_t* out) {
+    FishingComponent* self = reinterpret_cast<FishingComponent*>(selfV);   // B4 FORWARD receiver
+    FishingWork* work = AllocWork<FishingWork>(0x70);
+    if (!work) return WrapIBP(out, nullptr);
 
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(self) + 0x10);
+    ComponentEntity* entity = self->_entity;
 
     // +0x48..+0x68 zeroed by the ctor (citizenRefs / spotStates / retryCount).
-    new (mem) FishingWork();
-    static_cast<FishingWork*>(mem)->InitFromEntity(&entity);
-
-    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
+    new (work) FishingWork();
+    work->InitFromEntity(&entity);
 
     {
-        uintptr_t posIbp = 0;
-        WorkBase_FindComponent_2ed0(entity, &posIbp);
-        if (posIbp) {
-            // posIbp IS the component — the finder returns its out-param, so retail's
-            // `*pIVar3` and this local are the same value. Dereferencing again handed
-            // the component's VTABLE to the child-count helper, whose garbage result
-            // then sized the two arrays and blew up inside the Runtime allocator.
-            const uintptr_t pos = posIbp;
-            const int n0 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(pos), 0);
-            const int n2 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(pos), 2);
+        InteractComponent* pos = entity->FindComponent<InteractComponent>();   // 0x140002ed0
+        if (pos) {
+            const int n0 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 0);
+            const int n2 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
             // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). I32NoInit:
             // 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop right below
-            // (retail 1400eaba0) writes all +0x60 slots before any is read.
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(w + 0x48)).SetSize(n0);
-            GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(w + 0x58)).SetSize(n2);
+            // (retail 1400eaba0) writes all the spot slots before any is read.
+            GameColl::AsArray<GameColl::Ptr8>(&work->citizenRefs).SetSize(n0);
+            GameColl::AsArray<GameColl::I32NoInit>(&work->spotStates).SetSize(n2);
             // Zero the kind-2 slot array the ctor allocates (retail's trailing loop).
-            const int cnt = *reinterpret_cast<int32_t*>(w + 0x60);
-            uint32_t* slots = *reinterpret_cast<uint32_t**>(w + 0x58);
+            const int cnt = work->spotCount;
+            int32_t* slots = work->spotStates;
             if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;
         }
     }
-    return WrapIBP(out, mem);
+    return WrapIBP(out, work);
 }
 
 // ── HuntComponent::CreateWork — retail 0x1401226a0 ────────────────────────────────
 // Retail writes vtable_AutoPickupWork then immediately vtable_HuntWork over it (a
 // compiler artefact of the two-level ctor); only the final store is observable.
-extern "C" uintptr_t* HuntComponent_CreateWork(void* self, uintptr_t* out) {
-    void* mem = AllocWork(0x58);
-    if (!mem) return WrapIBP(out, nullptr);
+extern "C" uintptr_t* HuntComponent_CreateWork(void* selfV, uintptr_t* out) {
+    HuntComponent* self = reinterpret_cast<HuntComponent*>(selfV);   // B4 FORWARD receiver
+    HuntWork* work = AllocWork<HuntWork>(0x58);
+    if (!work) return WrapIBP(out, nullptr);
 
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(self) + 0x10);
+    ComponentEntity* entity = self->_entity;
 
     // The ctor zeroes the leaf fields (+0x48 onward) as retail's tail does.
-    new (mem) HuntWork();
-    static_cast<HuntWork*>(mem)->InitFromEntity(&entity);
+    new (work) HuntWork();
+    work->InitFromEntity(&entity);
 
-    return WrapIBP(out, mem);
+    return WrapIBP(out, work);
 }
 
 // ── HerbalistComponent::CreateWork — retail 0x14004b160 ───────────────────────────
 // This is the Gatherer's Hut work (GathererShelter.rsc carries HerbalistDescription).
-extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) {
-    void* mem = AllocWork(0x60);
-    if (!mem) return WrapIBP(out, nullptr);
+extern "C" uintptr_t* HerbalistComponent_CreateWork(void* selfV, uintptr_t* out) {
+    HerbalistComponent* self = reinterpret_cast<HerbalistComponent*>(selfV);   // B4 FORWARD receiver
+    HerbalistWork* work = AllocWork<HerbalistWork>(0x60);
+    if (!work) return WrapIBP(out, nullptr);
 
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(self) + 0x10);
+    ComponentEntity* entity = self->_entity;
 
     // The ctor zeroes the leaf fields (+0x48 onward) as retail's tail does.
-    new (mem) HerbalistWork();
-    static_cast<HerbalistWork*>(mem)->InitFromEntity(&entity);
+    new (work) HerbalistWork();
+    work->InitFromEntity(&entity);
 
-    return WrapIBP(out, mem);
+    return WrapIBP(out, work);
 }
 
 // ── ForesterComponent::CreateWork — retail 0x14011f780 ────────────────────────────
@@ -164,7 +166,7 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) 
 //
 //     sm = FindComponent_StateMachine(entity)
 //     st = sm[+0x52]; if (st < 0) st = sm[+0x50]
-//     if (st != 14 && comp[+0x50] == 0 && comp[+0x51] == 0) *(u16*)(comp+0x50) = 0x101
+//     if (st != 14 && !plantTrees && !cutTrees) plantTrees = cutTrees = true
 //
 // i.e. "if we are NOT in the paused state and the player has turned BOTH plant and
 // cut off, turn both back on". Retail relies on it because a lodge whose two flags
@@ -172,28 +174,29 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) 
 // this is the repair that keeps such a lodge from minting a work that can never run.
 // sm+0x52 is the pending state id and sm+0x50 the current one; the sign test is
 // retail's "no pending transition" check.
-extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
+extern "C" uintptr_t* ForesterComponent_CreateWork(void* selfV, uintptr_t* out) {
+    ForesterComponent* self = reinterpret_cast<ForesterComponent*>(selfV);   // B4 FORWARD receiver
+    ComponentEntity* entity = self->_entity;
 
     {
-        uintptr_t smIbp = 0;
-        PlayerPath_FindComponent_3ea0(entity, &smIbp);
-        char st = *reinterpret_cast<char*>(smIbp + 0x52);
-        if (st < 0) st = *reinterpret_cast<char*>(smIbp + 0x50);
-        if (st != 14 && *reinterpret_cast<char*>(comp + 0x50) == 0
-                     && *reinterpret_cast<char*>(comp + 0x51) == 0)
-            *reinterpret_cast<uint16_t*>(comp + 0x50) = 0x101;
+        StateMachineComponent* sm = entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+        char st = sm->stateMachine.pendingState;
+        if (st < 0) st = sm->stateMachine.currentInput;
+        if (st != 14 && !self->plantTrees && !self->cutTrees) {
+            // retail: one word store of 0x101 over +0x50 / +0x51
+            self->plantTrees = true;
+            self->cutTrees = true;
+        }
     }
 
-    void* mem = AllocWork(0x60);
-    if (!mem) return WrapIBP(out, nullptr);
+    ForesterWork* work = AllocWork<ForesterWork>(0x60);
+    if (!work) return WrapIBP(out, nullptr);
 
     // The ctor zeroes +0x48/+0x50/+0x58 and runs ForesterWork_ResolveFuncs.
-    new (mem) ForesterWork();
-    static_cast<ForesterWork*>(mem)->InitFromEntity(&entity);
+    new (work) ForesterWork();
+    work->InitFromEntity(&entity);
 
-    return WrapIBP(out, mem);
+    return WrapIBP(out, work);
 }
 
 // ── MarketComponent::CreateWork — retail 0x14004ea40 ─────────────────────────
@@ -203,7 +206,7 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
 // HerbalistComponent (0x14004b160 "HerbalistWork_Ctor").
 //
 // Byte-for-byte the same shape as HuntComponent's: MemAlloc(0x58) + Work_Ctor25 over
-// the entity at comp+0x10 + vtable_MarketWork + zero {+0x48 qword, +0x50 dword}.
+// the owner entity + vtable_MarketWork + zero {+0x48 qword, +0x50 dword}.
 // There is NO Forester-style prologue in the retail body — no state-machine read, no
 // flag re-arm — so none is added here.
 //
@@ -212,21 +215,16 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
 // it to the citizen reservation ledger, so a stubbed slot silently means "market never
 // offers a job".
 uintptr_t* MarketComponent::CreateWork(uintptr_t* out) {
-    void* mem = AllocWork(0x58);
-    if (!mem) return WrapIBP(out, nullptr);
+    MarketWork* work = AllocWork<MarketWork>(0x58);
+    if (!work) return WrapIBP(out, nullptr);
 
-    uintptr_t entity = reinterpret_cast<uintptr_t>(_entity);
+    ComponentEntity* entity = _entity;
 
     // The ctor zeroes +0x48/+0x50 and runs MarketWork_ResolveFuncs.
-    new (mem) MarketWork();
-    static_cast<MarketWork*>(mem)->InitFromEntity(&entity);
+    new (work) MarketWork();
+    work->InitFromEntity(&entity);
 
-    return WrapIBP(out, mem);
-}
-
-// 0x14004ea40 door: registered by address (standalone/reg_component_economy.cpp).
-extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
-    return reinterpret_cast<MarketComponent*>(self)->MarketComponent::CreateWork(out);   // B.3.8 bridge
+    return WrapIBP(out, work);
 }
 
 // ── ConsumeProduceComponent::CreateWork — retail 0x140118d00 ──────────────────
@@ -241,14 +239,13 @@ extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
 // the building's ConsumeProduceDescription and passes them to a purpose-built work
 // ctor (0x1400e9200), rather than zeroing a couple of fields inline:
 //
-//   entity   = *(self + 0x10)                    -- the owner IBP, CheckPtr'd first
-//   descRoot = *(entity + 0x28)                  -- ComponentEntity+0x28 is the entity
-//                                                   DESCRIPTION, not the component array
-//                                                   (that is +0x30). Retail searches the
-//                                                   description's CHILD list here.
+//   entity   = the owner, CheckPtr'd first
+//   descRoot = entity->_description             -- the entity DESCRIPTION, not the
+//                                                  component array. Retail searches the
+//                                                  description's CHILD list here.
 //   cpDesc   = first child whose GetTypeId == ConsumeProduceDescription (0x1401c7388)
 //   work     = ConsumeProduceAction_Ctor(MemAlloc(0x78,8), &entity,
-//                                        &cpDesc[+0x38], cpDesc[+0x3c])
+//                                        &cpDesc->_toolType, cpDesc->_i3c)
 //
 // ⚠ retail dereferences cpDesc UNGUARDED after the loop — with no matching child it
 // reads [0x38] off a null and faults. That deref is left faithful: a ConsumeProduce
@@ -258,8 +255,6 @@ extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
 // ⚠ the second int is genuinely an INT, not a float: retail loads it with
 // `MOV R9D,dword ptr [RBX+0x3c]` — the integer register, not XMM3. Checked
 // deliberately because a float arg declared int lands in the wrong register.
-extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
-                                           const int* productIdx, int second);
 
 // ── ConsumeProduceAction ctor — retail 0x1400e9200 ────────────────────────────
 // Not the plain 0x1400e9340 ctor the Work FACTORY uses: this is the 4-argument one
@@ -267,87 +262,82 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
 // building's child attach points. Same childSum(0)/childSum(2) shape as FishingWork's
 // ctor, but the arrays live at +0x58 (IBP array, grown) and +0x68 (int array, resized
 // then zero-filled with the count at +0x70).
-extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
-                                           const int* productIdx, int second) {
-    if (!mem) return nullptr;
-    const uintptr_t w = reinterpret_cast<uintptr_t>(mem);
+static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, ComponentEntity** entity,
+                                                 const int* productIdx, int second) {
+    if (!work) return nullptr;
 
     // The REAL ConsumeProduce (Work/ConsumeProduce.h): base init, its field zeroing
     // and ConsumeProduce_ResolveFuncs; then Work_Ctor25's body; then the 4-arg ctor's
     // own seeding below (the same stores the hand build wrote).
-    new (mem) ConsumeProduce();
-    static_cast<ConsumeProduce*>(mem)->InitFromEntity(entityIbp);
+    new (work) ConsumeProduce();
+    work->InitFromEntity(entity);
 
-    *reinterpret_cast<uint8_t*>(w + 0x48)  = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x4c) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x50) = productIdx ? *productIdx : 0;
-    *reinterpret_cast<uint32_t*>(w + 0x54) = static_cast<uint32_t>(second);
-    *reinterpret_cast<uint64_t*>(w + 0x58) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x60) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x68) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x70) = 0;
+    work->field_48 = 0;
+    work->field_4c = 0;
+    work->field_50 = productIdx ? *productIdx : 0;
+    work->field_54 = second;
+    work->field_58 = nullptr;
+    work->field_60 = 0;
+    work->field_64 = 0;
+    work->field_68 = nullptr;
+    work->field_70 = 0;
+    work->field_74 = 0;
 
     {
-        uintptr_t posIbp = 0;
-        WorkBase_FindComponent_2ed0(*entityIbp, &posIbp);
-        if (posIbp) {
-            // posIbp IS the component — the finder returns its own out-param. Retail's
-            // `*pIVar3` and this local are the same value; dereferencing again would
-            // hand the component's VTABLE to the child-count helper (the trap the
-            // fishing port hit).
-            const int n0 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIbp), 0);
-            const int n2 = Pf_RecursiveChildSum_123070(static_cast<int64_t>(posIbp), 2);
+        InteractComponent* pos = (*entity)->FindComponent<InteractComponent>();   // 0x140002ed0
+        if (pos) {
+            const int n0 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 0);
+            const int n2 = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(pos), 2);
             // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
             // (retail ConsumeProduceAction_Ctor calls them at 1400e92d8 / 1400e92e3).
             // I32NoInit: 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop
-            // right below (retail 1400e9300) writes all +0x70 slots before any is read.
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(w + 0x58)).SetSize(n0);
-            GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(w + 0x68)).SetSize(n2);
-            const int cnt = *reinterpret_cast<int32_t*>(w + 0x70);
-            uint32_t* slots = *reinterpret_cast<uint32_t**>(w + 0x68);
+            // right below (retail 1400e9300) writes all the slots before any is read.
+            GameColl::AsArray<GameColl::Ptr8>(&work->field_58).SetSize(n0);
+            GameColl::AsArray<GameColl::I32NoInit>(&work->field_68).SetSize(n2);
+            const int cnt = work->field_70;
+            int32_t* slots = work->field_68;
             if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;
         }
     }
-    return mem;
+    return work;
 }
 
+// LEFT: declared nowhere else (consumeproduce_recipe_dump.cpp, COMP-c).
 extern "C" void ConsumeProduce_DumpRecipes(void* cpDesc, int selected);
 
-extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* out) {
+extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* selfV, uintptr_t* out) {
+    ConsumeProduceComponent* self = reinterpret_cast<ConsumeProduceComponent*>(selfV);   // B4 FORWARD receiver
 
-
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(self) + 0x10);
+    ComponentEntity* entity = self->_entity;
     if (!entity) return WrapIBP(out, nullptr);
 
-    // ComponentEntity +0x28 = description (+0x30 is the component array — do not
-    // confuse the two; the search below is over DESCRIPTIONS).
-    const uintptr_t descRoot = *reinterpret_cast<uintptr_t*>(entity + 0x28);
-    void* cpDesc = nullptr;
+    // The entity's description (not the component array — the search below is over
+    // DESCRIPTIONS).
+    const ComponentDescription* descRoot = entity->_description;
+    ConsumeProduceDescription* cpDesc = nullptr;
     if (descRoot) {
         const uint32_t want = ConsumeProduceDescription::TypeId();   // cell 0x1401c7388 (D5);
                                                                       // TypeId_ConsumeProduceComponent
                                                                       // is a documented misnomer.
-        const int    n   = *reinterpret_cast<int32_t*>(descRoot + 0x30);
-        void** const arr = *reinterpret_cast<void***>(descRoot + 0x28);
+        const int    n   = descRoot->_subDescCount;
+        Description** const arr = descRoot->_subDescs;
         for (int i = 0; i < n && arr; ++i) {
-            void* c = arr[i];
+            Description* c = arr[i];
             if (!c) continue;
-            const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
-            if (tid == want) {
-                if (Object::IsDerivedFromNullSafe(c, want)) cpDesc = c;
+            if (c->Type() == want) {
+                if (Object::IsDerivedFromNullSafe(c, want))
+                    cpDesc = static_cast<ConsumeProduceDescription*>(c);
                 break;
             }
         }
     }
 
-    void* mem = AllocWork(0x78);
-    void* obj = nullptr;
+    ConsumeProduce* mem = AllocWork<ConsumeProduce>(0x78);
+    ConsumeProduce* obj = nullptr;
     if (mem) {
         // Faithful unguarded description read — see the note above.
-        const uintptr_t d = reinterpret_cast<uintptr_t>(cpDesc);
-        const int first  = *reinterpret_cast<int32_t*>(d + 0x38);
-        const int second = *reinterpret_cast<int32_t*>(d + 0x3c);
+        const int first  = static_cast<int32_t>(cpDesc->_toolType);
+        const int second = cpDesc->_i3c;
         obj = ConsumeProduceAction_Ctor(mem, &entity, &first, second);
     }
 
@@ -355,14 +345,13 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* 
     // Dump the recipe table once. "No materials" on the panel is ambiguous between
     // "the selected recipe eats something the town has none of" and "hauling never
     // delivers"; the table plus the live selection separates them.
-    ConsumeProduce_DumpRecipes(cpDesc,
-                               *reinterpret_cast<int*>(
-                                   reinterpret_cast<uintptr_t>(self) + 0x50));
+    ConsumeProduce_DumpRecipes(cpDesc, self->consumeResourceId);
 
     static int n = 0;
     if (n < 4) { ++n;
         fprintf(stderr, "[ConsumeProduce] CreateWork self=%p entity=%p cpDesc=%p "
-                        "work=%p\n", self, (void*)entity, cpDesc, obj);
+                        "work=%p\n", selfV, static_cast<void*>(entity),
+                        static_cast<void*>(cpDesc), static_cast<void*>(obj));
         fflush(stderr);
     }
     return WrapIBP(out, obj);

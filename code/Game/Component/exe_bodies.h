@@ -207,33 +207,20 @@ extern "C" int Pasture_FillAllPastures();  // 0x140060290
 // ---- pasturecomponent_states.cpp
 extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770
 
-// ---- populationcomponent.cpp
-void PopulationComponent_SmoothDensity_Reimpl(void* selfV);  // 0x1400538c0
-void PopulationComponent_ScanHabitability_Reimpl(void* selfV, void* terrainGridV, int cellIndex);  // 0x140053b50
-
 // ---- rawmaterialcomponent.cpp
 void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial
 
 // ---- residencecomponent.cpp
-void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP);  // 0x140007960
-void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);  // 0x140037ad0
+void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);  // 0x140037ad0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::SetFamilyCount
 void ResidenceComponent_ResidenceInit(void* selfP);  // 0x140129ef0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::EvictResidents
 bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0 B4 FORWARD: 1 outside caller (standalone/death_harness.cpp) -> ResidenceComponent::IsFamilyFull (moved from citizencomponent.cpp)
-
-// ---- spawncomponent.cpp
-void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag);  // 0x140055780
 
 // ---- statusiconcomponent.cpp
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0 B4 FORWARD: outside callers in 16 files -> StatusIconComponent::SetFlag (moved from citizencomponent.cpp)
 
 // ---- storagecomponent.cpp
-int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70
+int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount);  // 0x14000f090
-
-// ---- storagedisplaycomponent.cpp
-void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount);  // 0x14000ca10
-void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf);  // 0x14000cbd0
-void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction, uintptr_t materialType);  // 0x1400562b0
 
 // ---- toolbardescription.cpp
 extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount);  // 0x140028860
@@ -273,7 +260,7 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14
 //   [8..11] = item quantity count
 // For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
 // then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10
+int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10 B4 FORWARD: outside callers in ~25 files -> StorageComponent::QueryCount
 
 // ---- workcomponent.cpp
 // FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —

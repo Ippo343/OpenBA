@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace Picking { class PickingMesh; }   // picking/PickingMesh.h
+
 class TerraformDescription final : public Description {
     DECLARE_EXE_TYPE(TerraformDescription)
 
@@ -36,15 +38,16 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14000cd60
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
-    void* _ref28;                               // +0x28 ExternalPtr (a raw pointer)
-    uint32_t _u30;                              // +0x30 enum (serialized through the uint door)
-    uint32_t _u34;                              // +0x34 enum (serialized through the uint door)
+    // Names from Template/TunnelStart.rsc and TerraformComponent's passes (0x140056b50).
+    Picking::PickingMesh* _floorMesh;           // +0x20 ExternalPtr<Picking::PickingMesh>: lowers terrain above it
+    Picking::PickingMesh* _ceilingMesh;         // +0x28 ExternalPtr<Picking::PickingMesh>: raises terrain below it
+    uint32_t _floorModifyBits;                  // +0x30 terrain-type bits the floor pass may change (uint door)
+    uint32_t _ceilingModifyBits;                // +0x34 terrain-type bits the ceiling pass may change (uint door)
 };
 
 static_assert(sizeof(TerraformDescription) == 0x38, "TerraformDescription is 0x38 (create 0x14000ccf0 MemAlloc(0x38))");
 static_assert(alignof(TerraformDescription) == 8, "TerraformDescription alignment");
-static_assert(offsetof(TerraformDescription, _ref20) == 0x20, "TerraformDescription::_ref20 @ +0x20");
-static_assert(offsetof(TerraformDescription, _ref28) == 0x28, "TerraformDescription::_ref28 @ +0x28");
-static_assert(offsetof(TerraformDescription, _u30) == 0x30, "TerraformDescription::_u30 @ +0x30");
-static_assert(offsetof(TerraformDescription, _u34) == 0x34, "TerraformDescription::_u34 @ +0x34");
+static_assert(offsetof(TerraformDescription, _floorMesh) == 0x20, "TerraformDescription::_floorMesh @ +0x20");
+static_assert(offsetof(TerraformDescription, _ceilingMesh) == 0x28, "TerraformDescription::_ceilingMesh @ +0x28");
+static_assert(offsetof(TerraformDescription, _floorModifyBits) == 0x30, "TerraformDescription::_floorModifyBits @ +0x30");
+static_assert(offsetof(TerraformDescription, _ceilingModifyBits) == 0x34, "TerraformDescription::_ceilingModifyBits @ +0x34");

@@ -74,6 +74,7 @@ public:
     void StopEmitter(int index);                                  // 0x140052990
     void StartEmitter(int index);                                 // 0x140052a50
     void StartEmitterFade(int index);                             // 0x140053660
+    void FadeOutEmitter(int index);                               // 0x140053720 (defined in tornadocomponent.cpp, COMP-e)
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from
     // Persist 0x140053270 (int count, then that many bools: Array<bool>) and the
