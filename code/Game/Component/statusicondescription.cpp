@@ -5,7 +5,7 @@
 // Parent type name: "Description". Vtable @ 0x1401646a0.  GetVersion = 1.
 //
 // Field layout (from Factory + Serialize FUN_14012c180 + dtor FUN_140038a60):
-//   +0x20: void*  _descRef       ExternalPtr (Description) field (default 0)
+//   +0x20: SpriteSheet* _spriteSheet  ExternalPtr<UI::SpriteSheet> (default 0)
 //   +0x28: float  _scale         (default 1.0)
 //   +0x2c: float  _scale2        (default 1.0, not serialized — runtime/cached)
 //   +0x30: bool   _flag          (default 0; serialized)
@@ -37,7 +37,7 @@
 // the defaults.
 StatusIconDescription::StatusIconDescription()
     : Description(),
-      _descRef(nullptr),
+      _spriteSheet(nullptr),
       _scale(1.0f),
       _scale2(1.0f),
       _flag(false),
@@ -46,7 +46,7 @@ StatusIconDescription::StatusIconDescription()
 // [5] 0x14012c180: stream order as retail.
 bool StatusIconDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // 0x14000bd30
     ser.Serialize(_scale, nullptr);
     ser.Serialize(_flag, nullptr);
     return true;

@@ -357,14 +357,14 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     if (dest == nullptr) {
         StateMachineComponent* state = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
         if (!state) return;
-        void** ownerSlot = &state->controllerSelf;
-        void* owner = *ownerSlot;
+        StateMachine* ownerSlot = &state->stateMachine;
+        void* owner = ownerSlot->current;
         if (!owner) return;
         typedef void (*Release_t)(void*, void*, int, int);
         Release_t release = (*reinterpret_cast<Release_t**>(owner))[2];
         if (release)
             release(owner, ownerSlot,
-                    static_cast<int>(*(reinterpret_cast<int8_t*>(&state->stateFlags) + 1)), 1);
+                    static_cast<int>(state->stateMachine.activeState), 1);
         return;
     }
 

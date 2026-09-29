@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace UI { class SpriteSheet; }
+
 class StatusIconDescription final : public Description {
     DECLARE_EXE_TYPE(StatusIconDescription)
 
@@ -36,17 +38,17 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140038990
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _descRef;                             // +0x20 ExternalPtr (Description)
-    float _scale;                               // +0x28
-    float _scale2;                              // +0x2c not serialized
-    bool _flag;                                 // +0x30
+    UI::SpriteSheet* _spriteSheet;              // +0x20 ExternalPtr<UI::SpriteSheet> (Serialize 0x14000bd30, typeInfo 0x140151480)
+    float _scale;                               // +0x28 the icon size (Setup 0x1400aa440's size)
+    float _scale2;                              // +0x2c not serialized; the icon's height above its anchor (Tick 0x14012bbd0)
+    bool _flag;                                 // +0x30 the camera-constant screen size flag (Setup's `constant`)
     uint8_t _pad31[3];                          // +0x31 zeroed by the ctor's 4-byte store
     uint8_t _pad34[4];                          // +0x34 never written by the ctor
 };
 
 static_assert(sizeof(StatusIconDescription) == 0x38, "StatusIconDescription is 0x38 (create 0x140038920 MemAlloc(0x38))");
 static_assert(alignof(StatusIconDescription) == 8, "StatusIconDescription alignment");
-static_assert(offsetof(StatusIconDescription, _descRef) == 0x20, "StatusIconDescription::_descRef @ +0x20");
+static_assert(offsetof(StatusIconDescription, _spriteSheet) == 0x20, "StatusIconDescription::_spriteSheet @ +0x20");
 static_assert(offsetof(StatusIconDescription, _scale) == 0x28, "StatusIconDescription::_scale @ +0x28");
 static_assert(offsetof(StatusIconDescription, _scale2) == 0x2c, "StatusIconDescription::_scale2 @ +0x2c");
 static_assert(offsetof(StatusIconDescription, _flag) == 0x30, "StatusIconDescription::_flag @ +0x30");

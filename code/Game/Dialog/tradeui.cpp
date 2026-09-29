@@ -1632,14 +1632,13 @@ void TradeUI::OnDismissButton() {
     StateMachineComponent* buildState = entity->FindComponent<StateMachineComponent>();
 
     // Read merchant state byte from +0x51 (sign-extended, no fallback)
-    int8_t stateByte = *(int8_t*)((uintptr_t)buildState + 0x51);   // LEFT: COMP-e
+    int8_t stateByte = buildState->stateMachine.activeState;
 
     // Post event 10 to the current controller node (dismiss notification):
     // Controller slot 2, PostEvent(stateMachine, stateIndex, eventId), with the
     // state machine at +0x48 and the state byte at +0x51 (0x1400819a9..0x1400819c2).
-    ControllerComponent::Controller* node =
-        reinterpret_cast<ControllerComponent::Controller*>(buildState->controllerSelf);   // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e; boatcomponent_route.cpp takes its address as void**)
-    node->PostEvent(&buildState->controllerSelf, stateByte, 10);
+    ControllerComponent::Controller* node = buildState->stateMachine.current;
+    node->PostEvent(&buildState->stateMachine, stateByte, 10);
 
     // Refresh display and tables
     RefreshDisplay();

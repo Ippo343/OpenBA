@@ -88,12 +88,6 @@ void StatusIconGeometry::Update(const System::Time&) {}
 void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& cameraRef,
                               Graphics::ExternalPtrHandle /*material*/, float t,
                               int, int, int) const {
-    // B.3.8 CB1b fold: the body kept its untyped locals.
-    void* geometry = const_cast<StatusIconGeometry*>(this);
-    void* ctx = &context;
-    void* camera = const_cast<Graphics::Camera*>(&cameraRef);
-    uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
-
     // 1) Model transform = Lerp(state, t) -> AsMatrix -> Context::SetTransform(0, M).
     //    Keep the Lerp'd Transform around: its position (+0x10) is the billboard origin
     //    used by the cc!=0 camera-constant-screen-size projection below.
@@ -107,50 +101,46 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
     // storage the retbuf occupied. `haveXf` is gone with the readiness guard: the
     // transform is now unconditional, which is what the cc != 0 branch below always
     // wanted.
+    // LEFT: Graphics::Geometry declares the pair as two Transforms (+0x84 / +0xa0), not
+    // as the InterpolatedState<Transform> retail's Lerp reads (R-GFX's header).
     const Math::Transform xf =        // .translation is the billboard origin
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(g + 0x84)
-            ->Lerp(*reinterpret_cast<const Math::Scalar*>(&t));   // B.3.5 bridge
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)
+            ->Lerp(Math::Scalar(t));
     {
         Math::Matrix mat = xf.AsMatrix();
-        reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, mat);   // B.3.5 bridge
+        context.SetTransform(0, mat);
     }
 
     // 2) Color = (1,1,1, lerp(geom+0x80, geom+0x7c, t)). geom+0x7c/+0x80 hold the
     //    settings-derived scale written by OnRemove (used here as the alpha).
-    float alpha = (kUVScale - t) * *reinterpret_cast<float*>(g + 0x80)
-                + t           * *reinterpret_cast<float*>(g + 0x7c);
-    float color4[4] = { 1.0f, 1.0f, 1.0f, alpha };
-    reinterpret_cast<Video::Context*>(ctx)
-        ->SetColor(*reinterpret_cast<const Math::Vector4*>(color4));   // B.3.5 bridge
+    float alpha = (kUVScale - t) * _opacityPrev
+                + t           * _opacity;
+    const Math::Vector4 color4(1.0f, 1.0f, 1.0f, alpha);
+    context.SetColor(color4);
 
     // 3) Count active sprites; begin the indexed-vertex batch (n quads).
-    int      spriteCount = *reinterpret_cast<int*>(g + 0xc4);
-    uint32_t activeMask  = *reinterpret_cast<uint32_t*>(g + 0xc8);
     int n = 0;
     for (int i = 0; i < spriteCount && i < 32; ++i)
         if (activeMask & (1u << i)) ++n;
 
-    if (!reinterpret_cast<Video::Context*>(ctx)
-             ->BeginIndexedVertices(n * 4, 0x20, n * 6)) {   // B.3.5 bridge
+    if (!context.BeginIndexedVertices(n * 4, 0x20, n * 6)) {
         return;
     }
 
-    // 4) Camera basis (camera Transform3 at camera+0x64): row0 = right, row2 = up.
-    float* cam   = reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(camera) + 0x64);
-    float rightU[3] = { cam[0], cam[1], cam[2] };   // row0
-    float upU[3]    = { cam[6], cam[7], cam[8] };   // row2
+    // 4) Camera basis (the camera's Transform3 at +0x64): axisX = right, axisZ = up.
+    const Math::Transform3& cam = cameraRef._cameraToWorld;
+    float rightU[3] = { cam.axisX.x, cam.axisX.y, cam.axisX.z };   // row0
+    float upU[3]    = { cam.axisZ.x, cam.axisZ.y, cam.axisZ.z };   // row2
 
     // 5) Scale. fVar9 = iconSize. When cc!=0 the icon keeps a CONSTANT SCREEN SIZE:
     //    fVar9 /= |ndcB.x - ndcA.x|, where ndcA/ndcB are the NDC-x of the icon origin P
     //    and P+cameraRight, projected through (inverse-view * projection). Faithful port
     //    of the FUN_1400a9c10 cc!=0 block (AsVector3/Vector ctors inlined).
-    float    fVar9 = *reinterpret_cast<float*>(g + 0xc0);   // iconSize
-    uint8_t  cc    = *reinterpret_cast<uint8_t*>(g + 0xcc);
+    float    fVar9 = iconSize;
+    uint8_t  cc    = constantSize;
     if (cc != 0) {
-        const Math::Matrix& proj =
-            *reinterpret_cast<const Math::Matrix*>(reinterpret_cast<uint8_t*>(camera) + 0x94);   // B.3.1 bridge: 4x4 projection
-        Math::Transform3 invView =
-            reinterpret_cast<const Math::Transform3*>(reinterpret_cast<uint8_t*>(camera) + 0x64)->Inverse();   // B.3.1 bridge
+        const Math::Matrix& proj = cameraRef._projection;   // 4x4 projection
+        Math::Transform3 invView = cameraRef._cameraToWorld.Inverse();
         Math::Matrix invMat = invView.AsMatrix();                        // invView as Matrix
         Math::Matrix vpMat  = invMat * proj;                             // vp = invView * proj
 
@@ -167,8 +157,8 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
         }
     }
 
-    void*   settings  = g_gameSettings;
-    int32_t scaleSet  = settings ? reinterpret_cast<int32_t*>(settings)[4] : 0; // settings+0x10
+    GameSettings* settings = g_gameSettings;
+    int32_t scaleSet  = settings ? settings->statusIconScale : 0; // settings+0x10
     fVar9 = fVar9 * static_cast<float>(scaleSet) * kScale01;
     float halfsize = fVar9 * kHalf;
 
@@ -177,7 +167,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
     float advance[3] = { upU[0]    * fVar9,    upU[1]    * fVar9,    upU[2]    * fVar9 };
     float center[3]  = { 0.0f, 0.0f, halfsize };
 
-    void* sheet = *reinterpret_cast<void**>(g + 0xd0);
+    const UI::SpriteSheet* sheet = spriteSheet;
 
     // index pointer lives at ctx+0x20f0 (a short* that advances as we emit indices).
     int   emitted = 0;
@@ -186,7 +176,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
         if (!((activeMask >> i) & 1u)) continue;
 
         float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
-        if (sheet) reinterpret_cast<const UI::SpriteSheet*>(sheet)->GetUVs(i, u0, v0, u1, v1);  // B.3.6 bridge
+        if (sheet) sheet->GetUVs(i, u0, v0, u1, v1);
 
         SIVertex vtx[4];
         std::memset(vtx, 0, sizeof(vtx));
@@ -211,17 +201,18 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
         vtx[3].z = center[2] - right[2] - up[2];
         vtx[3].color = 0xffffffffu; vtx[3].u = u0; vtx[3].v = v1;
 
-        reinterpret_cast<Video::Context*>(ctx)->AddVertices(4, vtx);   // B.3.5 bridge
+        context.AddVertices(4, vtx);
 
         // 6 indices: base, base+1, base+2, base, base+2, base+3.
-        short* ip = *reinterpret_cast<short**>(reinterpret_cast<uint8_t*>(ctx) + 0x20f0);
+        // LEFT: Video::Context +0x20f0 (the index cursor) is declared uint64_t (R-VIDEO's header).
+        short* ip = reinterpret_cast<short*>(context._unknown20f0);
         ip[0] = base;
         ip[1] = static_cast<short>(base + 1);
         ip[2] = static_cast<short>(base + 2);
         ip[3] = base;
         ip[4] = static_cast<short>(base + 2);
         ip[5] = static_cast<short>(base + 3);
-        *reinterpret_cast<short**>(reinterpret_cast<uint8_t*>(ctx) + 0x20f0) = ip + 6;
+        context._unknown20f0 = reinterpret_cast<uint64_t>(ip + 6);   // LEFT: as above
 
         base = static_cast<short>(base + 4);
         center[0] += advance[0];
@@ -230,7 +221,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
         ++emitted;
     }
 
-    reinterpret_cast<Video::Context*>(ctx)->EndIndexedVertices(0);   // B.3.5 bridge
+    context.EndIndexedVertices(0);
 
 
 }
@@ -242,25 +233,18 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
 // the game-settings icon-visibility byte (settings+0xc) is set.
 void StatusIconGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
                                       Graphics::Renderer& rendererRef) const {
-    // B.3.8 CB1b fold: the body kept its untyped locals.
-    void* geometry = const_cast<StatusIconGeometry*>(this);
-    void* renderer = &rendererRef;
-    uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
+    if (static_cast<int32_t>(activeMask) == 0) return;
 
-    int32_t activeMask = *reinterpret_cast<int32_t*>(g + 0xc8);
-    if (activeMask == 0) return;
+    GameSettings* settings = g_gameSettings;
+    if (!settings || settings->statusIconEnable == 0) return;
 
-    void* settings = g_gameSettings;
-    if (!settings || reinterpret_cast<uint8_t*>(settings)[0xc] == 0) return;
-
-    void* sheet = *reinterpret_cast<void**>(g + 0xd0);
-    void* material = sheet ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(sheet) + 0x30)
-                           : nullptr;
+    const UI::SpriteSheet* sheet = spriteSheet;
+    // LEFT: UI::SpriteSheet +0x30 (its ExternalPtr<MaterialInstance>) is declared uint64_t
+    // (R-UI's header).
+    const Graphics::MaterialInstance* material =
+        sheet ? reinterpret_cast<const Graphics::MaterialInstance*>(sheet->m_field30) : nullptr;
     if (material) {
         // AddDrawItem(geom, material, 0x8000, 0, 0.0, uvScale, 1, null, 0)
-        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
-            reinterpret_cast<const Graphics::Geometry*>(geometry),
-            reinterpret_cast<const Graphics::MaterialInstance*>(material),
-            0x8000, 0, 0.0f, kUVScale, 1, nullptr, 0);   // B.3.5 bridge
+        rendererRef.AddDrawItem(this, material, 0x8000, 0, 0.0f, kUVScale, 1, nullptr, 0);
     }
 }

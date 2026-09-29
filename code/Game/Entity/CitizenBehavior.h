@@ -253,6 +253,7 @@ public:
     int64_t FindWater(uint32_t centreCell, int extent, float* outA, float* outB);  // 0x1400881d0
     void ScanWaterCell(Map* map, int coarseCell, int ringX, int ringY, uint32_t srcCell,
                        int* bestCost, int* bestId, WellComponent** bestWell);    // 0x140088730
+    void RegisterRawMaterial(ComponentDescription* material);  // 0x140091e60 (defined in Component/rawmaterialcomponent.cpp)
 
     // ---- the water-source register (B4 COMP-f; bodies in Component/wellcomponent.cpp) ----
     void RemoveCellEntry(int x, int y, int value);                    // 0x1400889e0

@@ -420,8 +420,7 @@ void TradeComponent::BuildMerchantManifest() {
 // array, and adding the purchases first would make the post pay for its new goods with
 // its new goods.
 //
-// LEFT: the storage items (StorageComponent::storageSlots is void*, COMP-e) stay by
-// offset; the town manager is one cast of GameUpdateLoop::m_citizenList (void*, GAME-a);
+// LEFT: the town manager is one cast of GameUpdateLoop::m_citizenList (void*, GAME-a);
 // the leaves
 // 0x14012cf10 / 0x14012d000 / 0x140088f90 take their operands as integers (their owners'
 // declarations).
@@ -456,11 +455,9 @@ void TradeComponent::AutoTrade() {
         {
             const int n = storage->slotCount;
             for (int j = 0; j < n; ++j) {
-                const uintptr_t e = reinterpret_cast<uintptr_t>(storage->storageSlots) +
-                                    static_cast<uintptr_t>(j) * 0x10;
-                const int have = *reinterpret_cast<int32_t*>(e + 0x08) -
-                                 *reinterpret_cast<int32_t*>(e + 0x0c);
-                const int unit = TradeUI_GetResourcePrice_a520(this, *reinterpret_cast<void**>(e));
+                const StorageComponent::Item& item = storage->storageSlots[j];
+                const int have = item._count - item._reserve;
+                const int unit = TradeUI_GetResourcePrice_a520(this, item._resource);
                 sellValue += unit * have;
             }
         }
@@ -516,13 +513,10 @@ void TradeComponent::AutoTrade() {
         {
             int paid = 0;
             for (int idx = 0; idx < storage->slotCount; ++idx) {
-                const uintptr_t e = reinterpret_cast<uintptr_t>(storage->storageSlots) +
-                                    static_cast<uintptr_t>(idx) * 0x10;
-                const int64_t resource = *reinterpret_cast<int64_t*>(e);
-                const int unit = TradeUI_GetResourcePrice_a520(
-                    this, reinterpret_cast<void*>(resource));
-                const int avail = *reinterpret_cast<int32_t*>(e + 0x08) -
-                                  *reinterpret_cast<int32_t*>(e + 0x0c);
+                const StorageComponent::Item& entry = storage->storageSlots[idx];
+                ComponentDescription* const resource = entry._resource;
+                const int unit = TradeUI_GetResourcePrice_a520(this, resource);
+                const int avail = entry._count - entry._reserve;
                 if (avail == 0) continue;
 
                 int sold = 0;
@@ -537,7 +531,7 @@ void TradeComponent::AutoTrade() {
                     // so this is harmless — passed through rather than "corrected".
                     const int cat = ActRm_GetResourceCategory_88f90(
                         reinterpret_cast<void*>(static_cast<uintptr_t>(unit)),
-                        static_cast<uintptr_t>(resource));
+                        reinterpret_cast<uintptr_t>(resource));
                     if (cat >= 0) {
                         townMgr->professionResources[cat].field_0x0C += 1;
                     }
@@ -545,21 +539,15 @@ void TradeComponent::AutoTrade() {
                     // Take the unit out of storage, by identity. An entry that reaches
                     // zero is erased and the tail shifted down.
                     const int n = storage->slotCount;
-                    const uintptr_t base = reinterpret_cast<uintptr_t>(storage->storageSlots);
                     for (int j = 0; j < n; ++j) {
-                        const uintptr_t slot = base + static_cast<uintptr_t>(j) * 0x10;
-                        if (*reinterpret_cast<int64_t*>(slot) != resource) continue;
-                        *reinterpret_cast<int32_t*>(slot + 0x08) -= 1;
-                        if (*reinterpret_cast<int32_t*>(
-                                reinterpret_cast<uintptr_t>(storage->storageSlots) +
-                                static_cast<uintptr_t>(j) * 0x10 + 0x08) == 0) {
+                        StorageComponent::Item& slot = storage->storageSlots[j];
+                        if (slot._resource != resource) continue;
+                        slot._count -= 1;
+                        if (storage->storageSlots[j]._count == 0) {
                             for (int m = j; m + 1 < storage->slotCount; ++m) {
-                                uint64_t* p = reinterpret_cast<uint64_t*>(
-                                    reinterpret_cast<uintptr_t>(storage->storageSlots) +
-                                    static_cast<uintptr_t>(m) * 0x10);
+                                StorageComponent::Item* p = &storage->storageSlots[m];
                                 if (!p) continue;
-                                p[0] = p[2];
-                                p[1] = p[3];
+                                p[0] = p[1];
                             }
                             storage->slotCount -= 1;
                         }
@@ -568,8 +556,7 @@ void TradeComponent::AutoTrade() {
 
                     // The volume freed by that unit. Same "cannot miss" reasoning as the
                     // purchase loop: the entry is in storage, so it is a raw material.
-                    const RawMaterialDescription* soldRaw = FindSubDescription<RawMaterialDescription>(
-                        reinterpret_cast<const ComponentDescription*>(resource));
+                    const RawMaterialDescription* soldRaw = FindSubDescription<RawMaterialDescription>(resource);
                     volume -= soldRaw->_weight;
                 }
 
@@ -651,16 +638,12 @@ char TradeComponent::LeaveDocked() {
     // StateMachineComponent. The guard is standalone-only and does NOT skip the teardown
     // that follows: if the boat is missing its machine we still have to release the
     // manifest, or the post keeps a merchant's stock list forever.
-    // LEFT: StateMachineComponent's embedded StateMachine (+0x48 current node) is void*
-    // (COMP-e's header).
-    void* const machine = smComp ? static_cast<void*>(&smComp->controllerSelf) : nullptr;
-    ControllerComponent::Controller* node = smComp
-        ? reinterpret_cast<ControllerComponent::Controller*>(smComp->controllerSelf) : nullptr;
+    ControllerComponent::Controller* node = smComp ? smComp->stateMachine.current : nullptr;
     if (node) {
         // Node vtable slot 2 (+0x10) is PostEvent(node, sm, curStateIdx, eventId); the
-        // current index is the machine's own byte at sm+9 (= smComp+0x51, byte 1 of
-        // stateFlags). Event 0 is "you are released".
-        node->PostEvent(machine, static_cast<int>(static_cast<int8_t>(smComp->stateFlags >> 8)), 0);
+        // current index is the machine's activeState (smComp+0x51). Event 0 is "you are
+        // released".
+        node->PostEvent(&smComp->stateMachine, smComp->stateMachine.activeState, 0);
     } else {
         std::fprintf(stderr, "[TradeDock] leaving merchant has NO StateMachineComponent — "
                              "the boat was not told to cast off; releasing the manifest anyway\n");

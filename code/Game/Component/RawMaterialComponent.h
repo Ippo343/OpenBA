@@ -23,6 +23,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
+
+class Profession;   // Game/Profession.h
 
 class RawMaterialComponent final : public Component {
     DECLARE_EXE_TYPE(RawMaterialComponent)
@@ -38,13 +41,16 @@ public:
     void Update(void* time) override;                             // [9] 0x140129130 PORT GAP
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 material type (set by Startup; retail ctor leaves it)
-    void*    field30;      // +0x30 (ctor 0)
-    void*    field38;      // +0x38 (ctor 0)
+    // Persist 0x140129330: Serialize(int&) +0x28, System::Time::Serialize +0x38, then
+    // (version >= 2) ExternalPtr<Profession>::Serialize 0x140018020 (type cell 0x1401c5a98) +0x30.
+    int32_t      quantity;    // +0x28 units in the pile (Startup: RawMaterialDescription::_lowCreateCount; 0x140105ac9 MOV EDI,[RAX+0x28])
+    uint8_t      _pad2c[4];   // +0x2C never written
+    Profession*  profession;  // +0x30 ExternalPtr<Profession> (ctor 0)
+    System::Time age;         // +0x38 time on the ground: Update 0x140129130 adds the frame time and expires the pile past 3600 s (ctor 0)
 };
 
 static_assert(sizeof(RawMaterialComponent) == 0x40, "RawMaterialComponent is 0x40 (create 0x140037270)");
 static_assert(alignof(RawMaterialComponent) == 8, "RawMaterialComponent alignment");
-static_assert(offsetof(RawMaterialComponent, field28) == 0x28, "");
-static_assert(offsetof(RawMaterialComponent, field30) == 0x30, "");
-static_assert(offsetof(RawMaterialComponent, field38) == 0x38, "");
+static_assert(offsetof(RawMaterialComponent, quantity) == 0x28, "RawMaterialComponent::quantity @ +0x28 (Persist 0x140129364)");
+static_assert(offsetof(RawMaterialComponent, profession) == 0x30, "RawMaterialComponent::profession @ +0x30 (Persist 0x140129395)");
+static_assert(offsetof(RawMaterialComponent, age) == 0x38, "RawMaterialComponent::age @ +0x38 (Update 0x140129144)");

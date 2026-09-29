@@ -39,10 +39,22 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class StorageComponent final : public Component {
     DECLARE_EXE_TYPE(StorageComponent)
 
 public:
+    // One `_items` element, 0x10 bytes (SetSize 0x14000f090 copies two qwords;
+    // Persist 0x14012c730 serializes _count, _reserve, then the ExternalPtr
+    // through ExternalPtr<ComponentDescription>::Serialize 0x140002340; the
+    // profile build's assertions name `_count` / `._reserve`).
+    struct Item {
+        ComponentDescription* _resource; // +0x00 ExternalPtr<ComponentDescription>: the stored material's template
+        int32_t               _count;    // +0x08 units stored
+        int32_t               _reserve;  // +0x0C units promised to a pickup
+    };
+
     StorageComponent();                                           // 0x14012c8d0
 
     // PORT GAP (retail 0x14012c870) — B38 D2: retail frees the +0x28 slot array;
@@ -53,7 +65,7 @@ public:
     void OnAdded() override;                                      // [6] 0x14012c640
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    storageSlots;      // +0x28 _items data (0x10-byte items; freed by the retail dtor)
+    Item*    storageSlots;      // +0x28 _items data (freed by the retail dtor; H5: kept a raw triple)
     int32_t  slotCount;         // +0x30 _items count
     int32_t  slotCapacity;      // +0x34 _items capacity
     int32_t  capacity;          // +0x38 total capacity (Serialize int&)
@@ -62,6 +74,10 @@ public:
 
 static_assert(sizeof(StorageComponent) == 0x40, "StorageComponent is 0x40 (create 0x140038b50)");
 static_assert(alignof(StorageComponent) == 8, "StorageComponent alignment");
+static_assert(sizeof(StorageComponent::Item) == 0x10, "StorageComponent item stride 0x10 (0x14000f090)");
+static_assert(offsetof(StorageComponent::Item, _resource) == 0x00, "item ExternalPtr +0x00 (Persist 0x14012c730)");
+static_assert(offsetof(StorageComponent::Item, _count) == 0x08, "item _count +0x08 (Persist 0x14012c730)");
+static_assert(offsetof(StorageComponent::Item, _reserve) == 0x0C, "item _reserve +0x0C (Persist 0x14012c730)");
 static_assert(offsetof(StorageComponent, storageSlots) == 0x28, "");
 static_assert(offsetof(StorageComponent, slotCount) == 0x30, "");
 static_assert(offsetof(StorageComponent, slotCapacity) == 0x34, "StorageComponent _items capacity @ +0x34 (0x14000f090)");
