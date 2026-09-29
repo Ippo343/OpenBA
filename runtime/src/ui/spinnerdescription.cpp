@@ -72,16 +72,14 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // One of CreateInstance's three identical child blocks (0x1800d874e,
 // 0x1800d87a6, 0x1800d87f6 — the same instructions with a different source
 // field each time).
-void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
+void AddChild(const UI::Dialog* dialog, Object::InternalPtr<UI::Element>* slot,
+              UI::Element* elem, UI::ElementDescription* childDesc) {
     // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
     // placed in the caller's slot.
-    void** made = slot;
-    new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-        static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                static_cast<UI::ElementDescription*>(childDesc))));
+    Object::InternalPtr<UI::Element>* made = slot;
+    *made = dialog->CreateElement(Object::ExternalPtr<UI::ElementDescription>(childDesc));
 
-    UI::Element* child = *reinterpret_cast<UI::Element**>(made);
+    UI::Element* child = made->Get();
     if (child != nullptr)
         child->_parent = elem;
 
@@ -154,17 +152,17 @@ Object::InternalPtr<Element>* SpinnerDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     void* raw = System::MemoryAllocator::MemAlloc(0xc8, 8);           // 1800d86f2 (inlined)
 
-    SpinnerElement* elem = static_cast<SpinnerElement*>(raw);
+    SpinnerElement* elem = nullptr;
     if (raw != nullptr)                                                 // 1800d871d
         // The SpinnerElement ctor, INLINED by retail (0x1800d8722 .. 0x1800d8732):
         // the real ctor.
         elem = ::new (raw) SpinnerElement();
 
-    void* slot = elem;                                                  // 1800d873c
+    Object::InternalPtr<Element> slot(elem);                                                  // 1800d873c
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
     UI::ElementDescription::CreateInstance(                   // 1800d8749
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     AddChild(dialog, &slot, elem, _editDescription);                    // 1800d874e
     AddChild(dialog, &slot, elem, _upDescription);                      // 1800d87a6

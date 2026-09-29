@@ -85,7 +85,7 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -199,9 +199,9 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
     if (raw != nullptr)                                        // 18011e3c3
         elem = ::new (raw) TableElement();                     // 18011e3c8 ??0 (out of line)
 
-    void* slot = elem;                                         // 18011e3d5
+    Object::InternalPtr<Element> slot(elem);                                         // 18011e3d5
     UI::ElementDescription::CreateInstance(                   // 18011e3e2
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     const int32_t columns = _columnCount;
     const int32_t rows    = _rowCount;
@@ -260,13 +260,11 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
 
             // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
             // placed in the caller's slot.                    // 18011e519
-            void** made = &slot;
-            new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-                static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-                    Object::ExternalPtr<UI::ElementDescription>(
-                        static_cast<UI::ElementDescription*>(cell->desc))));
+            Object::InternalPtr<Element>* made = &slot;
+            *made = dialog->CreateElement(
+                Object::ExternalPtr<UI::ElementDescription>(cell->desc));
 
-            *dst = static_cast<Element*>(*made);               // 18011e521
+            *dst = made->Get();                                // 18011e521
 
             // The flat index RECOMPUTED, and the array data pointer RE-READ,
             // before the parent write (0x18011e524..0x18011e53a). Retail does
@@ -278,7 +276,7 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
         }
     }
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 18011e562 / 18011e567
+    *ret = Object::InternalPtr<Element>(elem);                 // 18011e562 / 18011e567
     return ret;
 }
 

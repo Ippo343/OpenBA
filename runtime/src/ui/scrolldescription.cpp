@@ -72,7 +72,7 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -151,14 +151,13 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* /*dialog — never read*/) const {
     void* raw = System::MemoryAllocator::MemAlloc(0x178, 8);  // 18011ab00 (inlined)
 
-    void* obj = raw;
+    ScrollElement* elem = nullptr;
     if (raw != nullptr)                                        // 18011ab2a
-        obj = ::new (raw) ScrollElement();                     // 18011ab2f ??0 (out of line)
-    ScrollElement* elem = reinterpret_cast<ScrollElement*>(obj);   // B.3.6 bridge
+        elem = ::new (raw) ScrollElement();                    // 18011ab2f ??0 (out of line)
 
-    void* slot = elem;                                         // 18011ab37
+    Object::InternalPtr<Element> slot(elem);                                         // 18011ab37
     UI::ElementDescription::CreateInstance(                   // 18011ab42
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     ::Sprite* const sprites[9] = {
         &elem->_trackStart, &elem->_trackMiddle, &elem->_trackEnd,
@@ -167,9 +166,9 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
 
     uint64_t idxSlot;                                          // [RBP-0x10]
     for (int i = 0; i < 9; ++i) {
-        void* sheet = _spriteSheet;                            // RE-READ each time
+        SpriteSheet* sheet = _spriteSheet;                            // RE-READ each time
         if (sheet != nullptr) {
-            const int32_t idx = static_cast<const SpriteSheet*>(sheet)   // B.3.x bridge
+            const int32_t idx = sheet
                 ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteNames[i]));
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // DWORD store
         } else {
@@ -185,7 +184,7 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
     elem->_barColor   = _barColor;                             // 18011ad46
     elem->_unknown158 = _unknownC4;                            // 18011ad52
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 18011ad58
+    *ret = Object::InternalPtr<Element>(elem);                 // 18011ad58
     return ret;
 }
 

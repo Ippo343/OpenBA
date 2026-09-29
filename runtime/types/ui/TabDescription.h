@@ -52,6 +52,8 @@
 
 namespace UI {
 
+class SpriteSheet;
+
 class TabDescription : public ElementDescription {
 public:
     // ??0TabDescription@UI@@QEAA@XZ 0x1800daa00 -- the REAL ctor:
@@ -96,10 +98,10 @@ public:
 private:
 
 public:
-    void*    _stripBackdropDescription;  // +0x68  ExternalPtr<ElementDescription> -> children[0]
-    void*    _pageBackdropDescription;   // +0x70  -> children[1]
-    void*    _pageFrameDescription;      // +0x78  -> children[2]
-    void*    _spriteSheet;               // +0x80  ExternalPtr<UI::SpriteSheet>
+    ElementDescription* _stripBackdropDescription;  // +0x68  ExternalPtr<ElementDescription> -> children[0]
+    ElementDescription* _pageBackdropDescription;   // +0x70  -> children[1]
+    ElementDescription* _pageFrameDescription;      // +0x78  -> children[2]
+    SpriteSheet*        _spriteSheet;               // +0x80  ExternalPtr<UI::SpriteSheet>
     char*    _edgeLeftName;              // +0x88  System::String -> TabElement::_edgeLeft
     char*    _edgeMiddleName;            // +0x90  -> _edgeMiddle
     char*    _edgeRightName;             // +0x98  -> _edgeRight
@@ -108,7 +110,7 @@ public:
     // +0xa8 Collection::Array<{ExternalPtr<ElementDescription> button,
     // ExternalPtr<ElementDescription> container}>, 0x10 per tab. Raw header:
     // its SetSize / ~Array are addressed helpers (0x18004cdf0 / 0x18004cc90).
-    void**   _tabsData;                  // +0xa8  pairs: [2i] button, [2i+1] container
+    ElementDescription** _tabsData;      // +0xa8  pairs: [2i] button, [2i+1] container
     int32_t  _tabsCount;                 // +0xb0  -> TabElement::_tabCount
     int32_t  _tabsCapacity;              // +0xb4
 };
@@ -117,12 +119,16 @@ static_assert(sizeof(TabDescription) == 0xb8,
               "UI::TabDescription is 0xb8 (MOV EDX,0xb8 in 0x18004c640)");
 static_assert(alignof(TabDescription) == 8, "UI::TabDescription aligns to 8");
 static_assert(offsetof(TabDescription, _stripBackdropDescription) == sizeof(ElementDescription), "");
+static_assert(offsetof(TabDescription, _pageBackdropDescription) == 0x70, "");
 static_assert(offsetof(TabDescription, _pageFrameDescription) == 0x78, "");
 static_assert(offsetof(TabDescription, _spriteSheet)          == 0x80, "");
 static_assert(offsetof(TabDescription, _edgeLeftName)         == 0x88, "");
+static_assert(offsetof(TabDescription, _edgeMiddleName)       == 0x90, "");
 static_assert(offsetof(TabDescription, _edgeRightName)        == 0x98, "");
 static_assert(offsetof(TabDescription, _gap)                  == 0xa0, "");
 static_assert(offsetof(TabDescription, _tabsData)             == 0xa8, "");
+static_assert(offsetof(TabDescription, _padA4)                == 0xa4, "");
 static_assert(offsetof(TabDescription, _tabsCount)            == 0xb0, "");
+static_assert(offsetof(TabDescription, _tabsCapacity)         == 0xb4, "");
 
 }  // namespace UI

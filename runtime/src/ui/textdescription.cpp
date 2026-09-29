@@ -201,11 +201,10 @@ Object::InternalPtr<Element>* TextDescription::CreateInstance(
     if (raw != nullptr)                                        // 18011f43d
         elem = ::new (raw) TextElement();                      // ??0TextElement 0x18011eb80
 
-    void* slot = elem;                                         // 18011f44e
-    TextDescription::CreateInstance(                           // 18011f45e  0x18011ef70
-        reinterpret_cast<Object::InternalPtr<TextElement>*>(&slot), dialog);   // B.3.x bridge
+    Object::InternalPtr<TextElement> slot(elem);               // 18011f44e
+    TextDescription::CreateInstance(&slot, dialog);            // 18011f45e  0x18011ef70
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 18011f463
+    *ret = Object::InternalPtr<Element>(elem);                 // 18011f463
     return ret;
 }
 

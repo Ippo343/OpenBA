@@ -98,7 +98,7 @@ public:
     // +0x70 Collection::Array<ExternalPtr<UI::ElementDescription>>, one child
     // element per entry. Raw header: its SetSize / Serialize / ~Array are
     // addressed helpers (0x1800492d0 / 0x1800493d0 / 0x180039440).
-    void**   _itemsData;       // +0x70
+    ElementDescription** _itemsData;  // +0x70  ExternalPtr<ElementDescription>[]
     int32_t  _itemsCount;      // +0x78
     int32_t  _itemsCapacity;   // +0x7c
 };

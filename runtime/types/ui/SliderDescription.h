@@ -47,6 +47,8 @@
 
 namespace UI {
 
+class SpriteSheet;
+
 class SliderDescription : public ElementDescription {
 public:
     // ??0SliderDescription@UI@@QEAA@XZ 0x1800d7b60 -- the REAL ctor:
@@ -94,8 +96,8 @@ public:
 private:
 
 public:
-    void*    _childDescription;   // +0x68  ExternalPtr<UI::ElementDescription> -> children[0]
-    void*    _spriteSheet;        // +0x70  ExternalPtr<UI::SpriteSheet>
+    ElementDescription*    _childDescription;   // +0x68  ExternalPtr<UI::ElementDescription> -> children[0]
+    SpriteSheet*    _spriteSheet;        // +0x70  ExternalPtr<UI::SpriteSheet>
     char*    _trackStartName;     // +0x78  System::String -> SliderElement::_trackStart
     char*    _trackMiddleName;    // +0x80  -> _trackMiddle
     char*    _trackEndName;       // +0x88  -> _trackEnd

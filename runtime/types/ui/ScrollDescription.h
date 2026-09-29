@@ -49,6 +49,8 @@
 
 namespace UI {
 
+class SpriteSheet;
+
 class Dialog;
 class Element;
 
@@ -96,7 +98,7 @@ private:
 
 public:
     // ---- the 0x60 bytes after ElementDescription ---------------------------
-    void*    _spriteSheet;        // +0x68  ExternalPtr<UI::SpriteSheet>
+    SpriteSheet*    _spriteSheet;        // +0x68  ExternalPtr<UI::SpriteSheet>
     // System::String x9, in ScrollElement's sprite order: track start/middle/
     // end, thumb start/middle/end, hot start/middle/end (-> +0xc0 .. +0x140).
     char*    _spriteNames[9];     // +0x70 .. +0xb0

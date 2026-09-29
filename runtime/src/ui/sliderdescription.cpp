@@ -80,7 +80,7 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -97,9 +97,10 @@ void ReleaseStringField(char** field) {
 // ============================================================================
 namespace {
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
-int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    return static_cast<const UI::SpriteSheet*>(sheet)                       // B.3.x bridge
-        ->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
+// B.4 LEFT: the names are `System::String` fields spelt `char*` (their dtors
+// would start to run as the real type, B4_RULES H5).
+int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const void* nameStr) {
+    return sheet->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
 }
 // A raw 4-byte copy: retail moves the two floats through EAX, not an XMM register.
 template <typename D, typename S>
@@ -185,26 +186,24 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     void* raw = System::MemoryAllocator::MemAlloc(0x130, 8);          // 1800d7679 (inlined)
 
-    SliderElement* elem = static_cast<SliderElement*>(raw);
+    SliderElement* elem = nullptr;
     if (raw != nullptr)                                                 // 1800d76a3
         elem = ::new (raw) SliderElement();                             // 1800d76a8 ??0 (out of line)
 
-    void* slot = elem;                                                  // 1800d76b0
+    Object::InternalPtr<Element> slot(elem);                                                  // 1800d76b0
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
     UI::ElementDescription::CreateInstance(                   // 1800d76bb
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     {   // the single child, from +0x68. UI::Dialog::CreateElement — block B's door.
         // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
         // placed in the caller's slot.                          // 1800d76cb
-        void** made = &slot;
-        new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-            static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-                Object::ExternalPtr<UI::ElementDescription>(
-                    static_cast<UI::ElementDescription*>(_childDescription))));
+        Object::InternalPtr<Element>* made = &slot;
+        *made = dialog->CreateElement(
+            Object::ExternalPtr<UI::ElementDescription>(_childDescription));
 
-        Element* child = *reinterpret_cast<Element**>(made);            // 1800d76d0
+        Element* child = made->Get();            // 1800d76d0
         if (child != nullptr)
             child->_parent = elem;                                      // 1800d76d8
 
@@ -224,7 +223,7 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
     ::Sprite* const sprites[5] = { &elem->_trackStart, &elem->_trackMiddle, &elem->_trackEnd,
                                    &elem->_thumb, &elem->_thumbHot };
     for (int i = 0; i < 5; ++i) {
-        void* sheet = _spriteSheet;                                     // RE-READ each time
+        SpriteSheet* sheet = _spriteSheet;                                     // RE-READ each time
         if (sheet != nullptr) {
             const int32_t idx = GetSpriteIndexFromName(sheet, names[i]);
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);               // DWORD store
@@ -232,9 +231,11 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
             const int32_t minusOne = -1;
             __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);
         }
-        uint8_t* s = reinterpret_cast<uint8_t*>(sprites[i]);
-        *reinterpret_cast<void**>(s)        = sheet;
-        *reinterpret_cast<uint64_t*>(s + 8) = idxSlot;                  // QWORD store
+        // One QWORD store over `spriteIndex` and `pad0C`: the index in the low
+        // dword, the slot's never-written high dword above it.
+        sprites[i]->spriteSheet = sheet;
+        sprites[i]->spriteIndex = static_cast<int32_t>(idxSlot);
+        sprites[i]->pad0C       = static_cast<int32_t>(idxSlot >> 32);
     }
 
     elem->_trackOffsetY = _trackOffsetY;                                // 1800d7827
@@ -252,12 +253,11 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
 // 0x98 down to 0x78. The restamps, the base's _textName (+0x60) and the tail
 // JMP into ~External are the compiler's chain.
 SliderDescription::~SliderDescription() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 1800d7a25
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 1800d7a58
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 1800d7a8a
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x80));    // 1800d7abc
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x78));    // 1800d7aee
+    ReleaseStringField(&_thumbHotName);    // +0x98// 1800d7a25
+    ReleaseStringField(&_thumbName);    // +0x90// 1800d7a58
+    ReleaseStringField(&_trackEndName);    // +0x88// 1800d7a8a
+    ReleaseStringField(&_trackMiddleName);    // +0x80// 1800d7abc
+    ReleaseStringField(&_trackStartName);    // +0x78// 1800d7aee
 }
 
 // ?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ 0x180049840 --

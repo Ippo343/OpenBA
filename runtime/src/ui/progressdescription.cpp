@@ -65,7 +65,7 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -80,9 +80,10 @@ void ReleaseStringField(char** field) {
 // ============================================================================
 namespace {
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
-int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    return static_cast<const UI::SpriteSheet*>(sheet)                       // B.3.x bridge
-        ->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
+// B.4 LEFT: the names are `System::String` fields spelt `char*` (their dtors
+// would start to run as the real type, B4_RULES H5).
+int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const void* nameStr) {
+    return sheet->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
 }
 }  // namespace
 
@@ -156,15 +157,15 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     void* raw = System::MemoryAllocator::MemAlloc(0x130, 8);          // 180119d49 (inlined)
 
-    ProgressElement* elem = static_cast<ProgressElement*>(raw);
+    ProgressElement* elem = nullptr;
     if (raw != nullptr)                                                 // 180119d73
         elem = ::new (raw) ProgressElement();                           // 180119d78 ??0 (out of line)
 
-    void* slot = elem;                                                  // 180119d80
+    Object::InternalPtr<Element> slot(elem);                                                  // 180119d80
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
     UI::ElementDescription::CreateInstance(                   // 180119d8b
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     uint64_t idxSlot;                                                   // [RBP-0x10]
     char* const* const names[6] = { &_fillLeftName,  &_fillMiddleName,  &_fillRightName,
@@ -172,7 +173,7 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
     ::Sprite* const sprites[6] = { &elem->_fillLeft,  &elem->_fillMiddle,  &elem->_fillRight,
                                    &elem->_trackLeft, &elem->_trackMiddle, &elem->_trackRight };
     for (int i = 0; i < 6; ++i) {
-        void* sheet = _spriteSheet;                                     // RE-READ each time
+        SpriteSheet* sheet = _spriteSheet;                                     // RE-READ each time
         if (sheet != nullptr) {
             const int32_t idx = GetSpriteIndexFromName(sheet, names[i]);
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);               // DWORD store
@@ -180,21 +181,21 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
             const int32_t minusOne = -1;
             __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);
         }
-        uint8_t* s = reinterpret_cast<uint8_t*>(sprites[i]);
-        *reinterpret_cast<void**>(s)        = sheet;
-        *reinterpret_cast<uint64_t*>(s + 8) = idxSlot;                  // QWORD store
+        // One QWORD store over `spriteIndex` and `pad0C`: the index in the low
+        // dword, the slot's never-written high dword above it.
+        sprites[i]->spriteSheet = sheet;
+        sprites[i]->spriteIndex = static_cast<int32_t>(idxSlot);
+        sprites[i]->pad0C       = static_cast<int32_t>(idxSlot >> 32);
     }
 
     if (_childDescription != nullptr) {                                 // 180119ed1
         // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
         // placed in the caller's slot.                          // 180119ee9
-        void** made = &slot;
-        new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-            static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-                Object::ExternalPtr<UI::ElementDescription>(
-                    static_cast<UI::ElementDescription*>(_childDescription))));
+        Object::InternalPtr<Element>* made = &slot;
+        *made = dialog->CreateElement(
+            Object::ExternalPtr<UI::ElementDescription>(_childDescription));
 
-        Element* child = *reinterpret_cast<Element**>(made);            // 180119eee
+        Element* child = made->Get();            // 180119eee
         if (child != nullptr)
             child->_parent = elem;                                      // 180119ef6
 
@@ -215,13 +216,12 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
 // restamps, the base's _textName (+0x60) and the tail JMP into ~External are
 // the compiler's chain. Neither ExternalPtr is released.
 ProgressDescription::~ProgressDescription() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    ReleaseStringField(reinterpret_cast<char**>(p + 0xa0));    // 18011a0a5
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 18011a0d8
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 18011a10a
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 18011a13c
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x80));    // 18011a16e
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x78));    // 18011a1a0
+    ReleaseStringField(&_trackRightName);    // +0xa0// 18011a0a5
+    ReleaseStringField(&_trackMiddleName);    // +0x98// 18011a0d8
+    ReleaseStringField(&_trackLeftName);    // +0x90// 18011a10a
+    ReleaseStringField(&_fillRightName);    // +0x88// 18011a13c
+    ReleaseStringField(&_fillMiddleName);    // +0x80// 18011a16e
+    ReleaseStringField(&_fillLeftName);    // +0x78// 18011a1a0
 }
 
 // ?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ 0x180077860 --
