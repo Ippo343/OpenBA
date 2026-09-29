@@ -424,9 +424,12 @@ void CemeteryComponent::OnAdded() {
     CEM_TRACE("built plots=%d cap=%d", plotCount, plotCapacity);
 }
 
-// [7] 0x1400471c0.
+// [7] 0x1400471c0. The erase key is the component itself (0x1400471c4 MOV RDX,RCX
+// builds the InternalBasePtr from `this`): the list holds what EnterBuilt appended,
+// IBP(this). Keying it on the owner entity never matched, so a demolished graveyard
+// stayed in the town list.
 void CemeteryComponent::OnRemove() {
-    Object::InternalPtr<ComponentEntity> ptrBuf(_entity);
+    Object::InternalPtr<CemeteryComponent> ptrBuf(this);
 
     if (GameUpdateLoop::_singleton != nullptr) {
         // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the town list stays by offset.
