@@ -23,56 +23,30 @@
 // WITHOUT A WORD, `MemoryAllocator::Get()` returned null for the rest of the
 // process, and the first `MemAlloc` faulted on `null + 0x640` several frames
 // away from anything naming `_singleton`. Every singleton is now its class's
-// own static (no door can resolve null), and every port is still checked by
-// the probe at the bottom of this file, which asserts `*slot == our object`
-// after our body runs and reports it as its own comparison.
+// own static, and each body below stores it by name.
 //
 // EVIDENCE
 // --------
 // Every field store below is transcribed from `objdump -d -M intel` of the
-// SHIPPED Runtime-x64.dll at the address named in each section banner. The
-// stores are written through the `W8/W16/W32/W64/WP` helpers at byte offsets
-// rather than through struct members, for three reasons that are all
-// load-bearing here:
+// SHIPPED Runtime-x64.dll at the address named in each section banner.
 //
-//   1. Several of these constructors use UNALIGNED qword stores that span two
-//      named fields (`MOV qword ptr [RCX+0x4],1` in Video::Configuration writes
-//      `interfaceIndex = 1` AND `adapterIndex = 0` in one instruction). A
-//      member-by-member transcription silently invents an order and a width.
-//   2. Several leave GAPS. Input::Device's three loops write bytes +0x00..+0x07
-//      and +0x10..+0x17 of each 0x18-byte record and NEVER TOUCH +0x08..+0x0F.
+// B.4 (R-ENG): the stores are made through the classes' own fields (they were
+// byte-offset `W8/W16/W32/W64/WP` memcpy helpers). Two things the helpers
+// preserved are kept by hand:
+//
+//   1. WIDTHS. Several constructors use one qword store across two named
+//      fields (`MOV qword ptr [RCX+0x4],1` in Video::Configuration writes
+//      `interfaceIndex = 1` AND `adapterIndex = 0`). Each is written here as
+//      its two fields, same values, same order; the bytes are identical.
+//   2. GAPS. Input::Device's three loops write bytes +0x00..+0x07 and
+//      +0x10..+0x17 of each 0x18-byte record and NEVER TOUCH +0x08..+0x0F.
 //      Video::Device never writes +0x1c..+0x1f or +0x98 (which is why
 //      Device.h's `maxAnisotropy` comment says the ctor does not write it).
-//      Writing "the struct" would zero bytes retail leaves alone.
-//   3. Where a runtime/types header already pins the field, a `static_assert`
-//      below ties the byte offset to the header's `offsetof`, so the two cannot
-//      drift apart. Where no header exists (Object::Factory) the constructor is
-//      the ONLY evidence and this file says so instead of inventing a struct.
+//      Only the fields retail writes are assigned, so the gaps stay unwritten.
 //
-// UNWRITTEN BYTES AND THE ORACLE. Because retail leaves gaps, the probe fills
-// both scratch subjects with 0xCD first: a byte neither side writes stays 0xCD
-// in BOTH and compares equal, so a whole-object memcmp stays valid without an
-// exclusion list. That is the inverse of the Wave 6 trap
-// (reference_oracle_must_not_compare_unwritten_bytes.md) — there the fill was
-// one-sided, here it is symmetric, and the gaps are named above so a later
-// reader does not "fix" them.
-//
-// CALLS= ON A NORMAL RUN IS ZERO FOR ALL FOURTEEN, BY CONSTRUCTION. Nothing in
-// our tree calls any of these constructors — the callers are `Engine::Engine`
-// and `Engine::Startup` INSIDE the DLL, which we do not intercept. That is why
-// this lane ships its own probe: without it all fourteen would report the
-// classic clean-because-dead result
-// (reference_uncalled_port_is_not_verified.md). The probe is the effectiveness
-// control this lane is measured by, and it is the ONLY thing that executes
-// these bodies before cutover.
-//
-// TWO OF THE FOURTEEN ARE REGISTERED BUT NOT PROBED — see the PERSISTENCE and
-// AUDIO::DEVICE banners. Both constructors call a base at 0x1800ca4e0 that
-// `_beginthreadex`s a SUSPENDED worker and creates three kernel events. Running
-// the shipped body against a scratch buffer would start a thread bound to a
-// fake object, and the two runs would disagree on the handle values by
-// construction. They are ported, they publish their singleton, and their oracle
-// is named as deferred rather than left implied.
+// The callers are Engine::Engine and Engine::Startup (engine_lifecycle.cpp).
+// B.4 (R-ENG): the scratch-buffer probe that stood at the bottom of this
+// file had no caller left (its macro was never expanded) and is deleted.
 // ============================================================================
 
 #include <cstdio>
@@ -121,63 +95,6 @@ void Destruct(rt::system::MemoryAllocator* self);
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Byte-offset store helpers. std::memcpy, not cast-and-assign: several of these
-// stores are UNALIGNED in retail (Video::Configuration's `MOV qword ptr
-// [RCX+0x4]`), and `*(uint64_t*)(p+4) = v` is undefined behaviour that GCC is
-// entitled to compile into an aligned move.
-// ---------------------------------------------------------------------------
-inline void W8 (void* p, size_t o, uint8_t  v) { std::memcpy(static_cast<uint8_t*>(p) + o, &v, 1); }
-inline void W16(void* p, size_t o, uint16_t v) { std::memcpy(static_cast<uint8_t*>(p) + o, &v, 2); }
-inline void W32(void* p, size_t o, uint32_t v) { std::memcpy(static_cast<uint8_t*>(p) + o, &v, 4); }
-inline void W64(void* p, size_t o, uint64_t v) { std::memcpy(static_cast<uint8_t*>(p) + o, &v, 8); }
-inline void WP (void* p, size_t o, const void* v) { std::memcpy(static_cast<uint8_t*>(p) + o, &v, sizeof(void*)); }
-
-// ---------------------------------------------------------------------------
-// The thirteen singleton slots the probe below compares: each is its class's
-// own static (ENDGAME B.3.9 and B3R W0-SM M1 retired the mint's storage rows).
-// MemoryAllocator's (System::MemoryAllocator::_singleton) is written by
-// rtalloc::Construct / Destruct directly and had no slot accessor caller.
-// ---------------------------------------------------------------------------
-void** SlotModification()    { return reinterpret_cast<void**>(&::IO::Modification::_singleton); }   // B.3.9 IO: class static
-void** SlotFactory()         { return reinterpret_cast<void**>(&::Object::Factory::_singleton); }
-void** SlotExternalFactory() { return reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton); }
-void** SlotInternalFactory() { return reinterpret_cast<void**>(&::Object::InternalFactory::_singleton); }
-void** SlotFileSystem()      { return reinterpret_cast<void**>(&::IO::FileSystem::_singleton); }   // B.3.9 IO: class static
-void** SlotPersistence()     { return reinterpret_cast<void**>(&::IO::Persistence::_singleton); }   // B.3.9 IO: class static
-void** SlotVideoDevice()     { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
-void** SlotVideoConfig()     { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }
-void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
-void** SlotInputDevice()     { return reinterpret_cast<void**>(&::Input::Device::_singleton); }
-void** SlotInputConfig()     { return reinterpret_cast<void**>(&::Input::Configuration::_singleton); }
-void** SlotAudioDevice()     { return reinterpret_cast<void**>(&::Audio::Device::_singleton); }
-void** SlotAudioConfig()     { return reinterpret_cast<void**>(&::Audio::Configuration::_singleton); }
-
-// The one store this whole lane is about. Written once, called fourteen times,
-// so there is exactly one place to read to know how the criterion is met.
-inline void Publish(void** slot, void* self) { if (slot) *slot = self; }
-
-// ===========================================================================
-// Subject sizes. Each is the end of the last byte the constructor touches. The
-// probe uses them as its memcmp length: too SMALL under-tests, too LARGE
-// compares bytes neither body wrote (safe here only because both scratches are
-// pre-filled identically — see the banner).
-// ===========================================================================
-constexpr size_t kSizeMemoryAllocator = 0x670;   // MemoryAllocator.h sizeof static_assert
-constexpr size_t kSizeModification    = 0x28;    // ctor's last store is qword +0x20
-constexpr size_t kSizeFactory         = 0x10;    // ctor's last store is dword +0x08
-constexpr size_t kSizeExternalFactory = 0x48;    // ctor's last store is byte  +0x42
-constexpr size_t kSizeInternalFactory = 0x9e8;   // Internal.h sizeof static_assert
-constexpr size_t kSizeFileSystem      = 0x50;    // ctor's last store is dword +0x48
-constexpr size_t kSizePersistence     = 0x98;    // Persistence.h: _savePath at +0x90
-constexpr size_t kSizeVideoDevice     = 0x108;   // Device.h sizeof static_assert
-constexpr size_t kSizeVideoConfig     = 0x44;    // Device.h: last field +0x42, align 4
-constexpr size_t kSizeApplication     = 0x30;    // ctor's last store is byte  +0x28
-constexpr size_t kSizeInputDevice     = 0x1200;  // ctor's last store is dword +0x11fc
-constexpr size_t kSizeInputConfig     = 0x10;    // ctor's last store is byte  +0x0a
-constexpr size_t kSizeAudioDevice     = 0x1298;  // last record ends at 0xa98 + 64*0x20
-constexpr size_t kSizeAudioConfig     = 0x10;    // Audio.h sizeof static_assert
-
 // Offsets asserted against the headers that already pin them, so a header edit
 // cannot silently move a field out from under a transcribed byte-offset store.
 static_assert(offsetof(RtIO::Modification, mods) == 0x08,
@@ -208,13 +125,6 @@ static_assert(offsetof(RtAudio::Configuration, effectVolume) == 0x0C,
               "Audio::Configuration ctor 0x1800ddeb0: MOV dword [RCX+0xc],0x64");
 static_assert(offsetof(RtIo::Persistence, savePath) == 0x90,
               "Persistence ctor 0x1800b8020: MOV qword [RDI+0x90],RSI");
-// The two deferred subjects' sizes are recorded above but not used by the
-// probe. Asserted rather than deleted, so the number a later lane needs when it
-// arms them is here and is checked against the header that pins it.
-static_assert(kSizePersistence >= offsetof(RtIo::Persistence, savePath) + 8,
-              "Persistence subject must cover _savePath");
-static_assert(kSizeAudioDevice == 0xa98 + 64 * 0x20,
-              "Audio::Device subject must cover the whole of loop 2");
 
 }  // namespace
 
@@ -233,14 +143,14 @@ namespace rtengine {
 // Registering is the whole change, and it is what moves lane C2's row from (c)
 // "writer exists but is NOT ported" to (b).
 // ===========================================================================
-void* Ctor_MemoryAllocator(void* self) {
-    rtalloc::Construct(static_cast<rt::system::MemoryAllocator*>(self));
+rt::system::MemoryAllocator* Ctor_MemoryAllocator(rt::system::MemoryAllocator* self) {
+    rtalloc::Construct(self);
     return self;
 }
-void Dtor_MemoryAllocator(void* self) {
+void Dtor_MemoryAllocator(rt::system::MemoryAllocator* self) {
     // The dtor is a writer too: it stores nullptr into the same slot. Lane C2
     // lists it beside the ctor for that reason.
-    rtalloc::Destruct(static_cast<rt::system::MemoryAllocator*>(self));
+    rtalloc::Destruct(self);
 }
 
 // ===========================================================================
@@ -258,13 +168,16 @@ void Dtor_MemoryAllocator(void* self) {
 // `RtEngine_Loader_Load`, which is registered at 0x1800dc050 and runs on the
 // boot path.
 // ===========================================================================
-void* Ctor_Modification(void* self) {
-    W16(self, 0x00, 0x0101);
-    W64(self, 0x08, 0);
-    W64(self, 0x10, 0);
-    W64(self, 0x18, 0);
-    W64(self, 0x20, 0);
-    Publish(SlotModification(), self);
+IO::Modification* Ctor_Modification(IO::Modification* self) {
+    self->_dirty          = 1;
+    self->_savingSettings = 1;
+    self->_mods           = nullptr;
+    self->_count          = 0;
+    self->_capacity       = 0;
+    self->_savedMods      = nullptr;
+    self->_savedCount     = 0;
+    self->_savedCapacity  = 0;
+    IO::Modification::_singleton = self;
     return self;
 }
 
@@ -277,15 +190,12 @@ void* Ctor_Modification(void* self) {
 //   MOV qword ptr [0x1801fc6e8],RCX   ; _singleton
 //   MOV RAX,RCX
 //
-// NO TYPE HEADER EXISTS FOR Object::Factory and this constructor is the only
-// evidence about its layout, so none is invented here. The {qword, dword}
-// shape is what a Collection::Array<T> prefix looks like, but "looks like" is
-// not a pin and a struct asserting it would be a guess dressed as a layout.
+// Object::Factory IS its type Set's {root, count} header (TypeInfo.h).
 // ===========================================================================
-void* Ctor_Factory(void* self) {
-    W64(self, 0x00, 0);
-    W32(self, 0x08, 0);
-    Publish(SlotFactory(), self);
+::Object::Factory* Ctor_Factory(::Object::Factory* self) {
+    self->_types._root  = nullptr;
+    self->_types._count = 0;
+    ::Object::Factory::_singleton = self;
     return self;
 }
 
@@ -306,18 +216,21 @@ void* Ctor_Factory(void* self) {
 // which is why +0x0c, +0x1c and +0x2c stay unwritten. loops.cpp:257 reads this
 // slot for `_loadEnabled`, the flag `Loader::Run` holds across a load.
 // ===========================================================================
-void* Ctor_ExternalFactory(void* self) {
-    W64(self, 0x00, 0);
-    W32(self, 0x08, 0);
-    W64(self, 0x10, 0);
-    W32(self, 0x18, 0);
-    W64(self, 0x20, 0);
-    W32(self, 0x28, 0);
-    W64(self, 0x30, 0);
-    W64(self, 0x38, 0);
-    W16(self, 0x40, 0);
-    W8 (self, 0x42, 0);
-    Publish(SlotExternalFactory(), self);
+::Object::ExternalFactory* Ctor_ExternalFactory(::Object::ExternalFactory* self) {
+    self->_cleanBitIndex        = 0;
+    self->_cleanBitMask         = 0;
+    self->_generation           = 0;
+    self->_resources._root      = nullptr;
+    self->_resources._count     = 0;
+    self->_references._root     = nullptr;
+    self->_references._count    = 0;
+    self->_pathStack._data      = nullptr;
+    self->_pathStack._size      = 0;
+    self->_pathStack._capacity  = 0;
+    self->_referenceModeEnabled = false;
+    self->_loadEnabled          = false;
+    self->_simpleLoadEnabled    = false;
+    ::Object::ExternalFactory::_singleton = self;
     return self;
 }
 
@@ -346,14 +259,17 @@ void* Ctor_ExternalFactory(void* self) {
 // verifies the 623-word recurrence against our OWN mt[0]. Same rationale
 // value_types.cpp already records for ??0Random@System@@QEAA@XZ itself.
 // ===========================================================================
-void* Ctor_InternalFactory(void* self) {
-    W64(self, 0x00, 0);
-    W64(self, 0x08, 0);
-    W64(self, 0x10, 0);
-    W64(self, 0x18, 0);
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(          // 0x1800c7f20
-        static_cast<uint8_t*>(self) + offsetof(RtObject::InternalFactory, random)));
-    Publish(SlotInternalFactory(), self);
+::Object::InternalFactory* Ctor_InternalFactory(::Object::InternalFactory* self) {
+    self->_objects._data        = nullptr;
+    self->_objects._size        = 0;
+    self->_objects._capacity    = 0;
+    self->_persistIds._data     = nullptr;
+    self->_persistIds._size     = 0;
+    self->_persistIds._capacity = 0;
+    // `_random` is spelled with the `::Random` POD in Internal.h (not this
+    // block's); the ctor takes the System::Random class over the same bytes.
+    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(&self->_random));   // 0x1800c7f20
+    ::Object::InternalFactory::_singleton = self;
     return self;
 }
 
@@ -374,18 +290,21 @@ void* Ctor_InternalFactory(void* self) {
 // reason a "memset the struct" port would be wrong: `platformExistsGate` starts
 // ENABLED, and FileSystem::Exists reads it every lookup.
 // ===========================================================================
-void* Ctor_FileSystem(void* self) {
-    W64(self, 0x00, 0);
-    W64(self, 0x08, 0);
-    W64(self, 0x10, 0);
-    W16(self, 0x18, 0x0100);
-    W64(self, 0x20, 0);
-    W64(self, 0x28, 0);
-    W64(self, 0x30, 0);
-    W64(self, 0x38, 0);
-    W64(self, 0x40, 0);
-    W32(self, 0x48, 0);
-    Publish(SlotFileSystem(), self);
+IO::FileSystem* Ctor_FileSystem(IO::FileSystem* self) {
+    self->_sourceDirectory.data    = nullptr;
+    self->_dataDirectory.data      = nullptr;
+    self->_packDirectory.data      = nullptr;
+    self->_existsInPackfileGate    = 0;
+    self->_platformExistsGate      = 1;
+    self->_packfiles               = nullptr;
+    self->_packfileCount           = 0;
+    self->_packfileCapacity        = 0;
+    self->_userPackFilenames       = nullptr;
+    self->_userPackFilenameCount   = 0;
+    self->_unknown3C               = 0;
+    self->_packfileIndexRoot       = nullptr;
+    self->_packfileIndexCount      = 0;
+    IO::FileSystem::_singleton = self;
     return self;
 }
 
@@ -434,15 +353,16 @@ void* Ctor_FileSystem(void* self) {
 // (mint the vtable) or for whoever ports IO::Persistence's virtuals; it is not
 // something this body can fix, and a silent `if (v)` here would only hide it.
 // ===========================================================================
-void* Ctor_Persistence(void* self) {
-    W64(self, 0x00, 0);
-    W32(self, 0x08, 0);
+IO::Persistence* Ctor_Persistence(IO::Persistence* self) {
+    self->_settingsMapRoot  = nullptr;
+    self->_settingsMapCount = 0;
     // ENDGAME B.3.9 IO (W2, foreign site): the embedded worker is the REAL
     // class -- ??0Thread(0x10000), its vptr, the +0x40..+0x88 stores
     // (runtime/types/io/PersistenceWorker.h), the same steps in the same order.
-    ::new (static_cast<uint8_t*>(self) + 0x10) IO::PersistenceWorker();
-    W64(self, 0x90, 0);
-    Publish(SlotPersistence(), self);
+    // It starts at +0x10, the worker's vptr (`_workerVtable`, Persistence.h).
+    ::new (reinterpret_cast<uint8_t*>(self) + offsetof(IO::Persistence, _workerVtable)) IO::PersistenceWorker();
+    self->_savePath.data = nullptr;
+    IO::Persistence::_singleton = self;
     return self;
 }
 
@@ -476,26 +396,40 @@ void* Ctor_Persistence(void* self) {
 // +0x98 (`maxAnisotropy`) is NOT written by the constructor — Device.h already
 // says so, and adapter enumeration fills it. +0x1c..+0x1f likewise.
 // ===========================================================================
-void* Ctor_VideoDevice(void* self, int32_t type) {
-    W32(self, 0x00, static_cast<uint32_t>(type));
-    W64(self, 0x04, 0);
-    W64(self, 0x0c, 0);
-    W64(self, 0x14, 0);
-    for (size_t o = 0x20; o <= 0x58; o += 8) W64(self, o, 0);
-    RtLaneXPlatformLockInit(static_cast<uint8_t*>(self) + offsetof(RtVideo::Device, lock));
-    for (size_t o = 0xb0; o <= 0xf0; o += 8) W64(self, o, 0);
-    W64(self, 0x90, 0);
-    W16(self, 0x9c, 0);
-    W32(self, 0xf8, 0xffffffffu);
-    W64(self, 0x100, 0);
-    W64(self, 0xa0, 0);
-    W64(self, 0xa8, 0);
-
-    void** slot = SlotVideoDevice();
-    if (slot) {
-        void* keep = *slot;
-        *slot = (type == 0) ? self : keep;   // the CMOVE, then the store
+Video::Device* Ctor_VideoDevice(Video::Device* self, int32_t type) {
+    self->type               = type;
+    self->backBufferWidth    = 0;
+    self->backBufferHeight   = 0;
+    self->displayModeIndex   = 0;
+    self->refreshRateIndex   = 0;
+    self->dxgiAdapterIndex   = 0;
+    self->dxgiOutputIndex    = 0;
+    self->modeData           = nullptr;
+    self->modeCount          = 0;
+    self->modeCapacity       = 0;
+    self->multisampleData    = nullptr;
+    self->multisampleCount   = 0;
+    self->multisampleCap     = 0;
+    self->interfaceData      = nullptr;
+    self->interfaceCount     = 0;
+    self->interfaceCapacity  = 0;
+    std::memset(self->gap50, 0, sizeof(self->gap50));   // two qword stores in retail
+    RtLaneXPlatformLockInit(self->lock);
+    for (int i = 0; i < 3; ++i) {
+        self->dllSlots[i].module           = nullptr;
+        self->dllSlots[i].getDeviceName    = nullptr;
+        self->dllSlots[i].createDeviceData = nullptr;
     }
+    self->windowHandle       = nullptr;
+    self->settingsChanged    = 0;
+    self->field9D            = 0;
+    self->activeInterface    = -1;
+    self->deviceData         = nullptr;
+    self->monitor            = nullptr;
+    std::memset(self->gapA8, 0, sizeof(self->gapA8));   // one qword store in retail
+
+    Video::Device* const keep = Video::Device::_singleton;
+    Video::Device::_singleton = (type == 0) ? self : keep;   // the CMOVE, then the store
     return self;
 }
 
@@ -522,21 +456,27 @@ void* Ctor_VideoDevice(void* self, int32_t type) {
 // but it would lose the fact — and this is the class where a "cleanup" to
 // member assignment is most tempting, because every field has a name.
 // ===========================================================================
-void* Ctor_VideoConfiguration(void* self) {
-    W8 (self, 0x00, 1);
-    W64(self, 0x04, 1);
-    W64(self, 0x0c, 0xffffffffffffffffull);
-    W64(self, 0x14, 0xffffffffffffffffull);
-    W64(self, 0x1c, 0xffffffffffffffffull);
-    W64(self, 0x24, 1);
-    W32(self, 0x2c, 1);
-    W32(self, 0x30, 2);
-    W32(self, 0x34, 1);
-    W32(self, 0x38, 0x3c);
-    W32(self, 0x3c, 1);
-    W16(self, 0x40, 0x0101);
-    W8 (self, 0x42, 0);
-    Publish(SlotVideoConfig(), self);
+Video::Configuration* Ctor_VideoConfiguration(Video::Configuration* self) {
+    self->settingsValid      = 1;
+    self->interfaceIndex     = 1;
+    self->adapterIndex       = 0;
+    self->width              = -1;
+    self->height             = -1;
+    self->windowX            = -1;
+    self->windowY            = -1;
+    self->windowWidth        = -1;
+    self->windowHeight       = -1;
+    self->multisample        = 1;
+    self->textureFilter      = 0;
+    self->shadowScalar       = 1;
+    self->shaderDetail       = 2;
+    self->reflectionDetail   = 1;
+    self->refreshNumerator   = 0x3c;
+    self->refreshDenominator = 1;
+    self->fullscreen         = 1;
+    self->vsync              = 1;
+    self->field42            = 0;
+    Video::Configuration::_singleton = self;
     return self;
 }
 
@@ -557,14 +497,15 @@ void* Ctor_VideoConfiguration(void* self) {
 // because a reader who assumes "publish last" would draw the wrong conclusion
 // about what a concurrent reader can observe.
 // ===========================================================================
-void* Ctor_Application(void* self, void* hinstance) {
-    W64(self, 0x18, 0);
-    W32(self, 0x20, 0);
-    W8 (self, 0x28, 0);
-    Publish(SlotApplication(), self);
-    W64(self, 0x00, 0);
-    WP (self, 0x08, hinstance);
-    W16(self, 0x10, 0x0100);
+::Application::Application* Ctor_Application(::Application::Application* self, void* hinstance) {
+    self->_messageCallbackRoot  = nullptr;
+    self->_messageCallbackCount = 0;
+    self->_quitRequested        = 0;
+    ::Application::Application::_singleton = self;
+    self->_windowHandle         = nullptr;
+    self->_platformHandle       = hinstance;
+    self->_cursorEnabled        = 0;
+    self->_running              = 1;
     return self;
 }
 
@@ -597,30 +538,29 @@ void* Ctor_Application(void* self, void* hinstance) {
 //   MOV qword [RCX+0x11f4],R8         ; UNALIGNED
 //   MOV dword [RCX+0x11fc],R8D
 // ===========================================================================
-void* Ctor_InputDevice(void* self) {
-    for (int i = 0; i < 72; ++i) {                       // 4 joystick blocks
-        const size_t base = static_cast<size_t>(i) * 0x18;
-        W64(self, base + 0x00, 0);
-        W64(self, base + 0x10, 0);
-    }
-    for (int i = 0; i < 105; ++i) {                      // keyboard
-        const size_t base = RtInput::kKeyboardOffset + static_cast<size_t>(i) * 0x18;
-        W64(self, base + 0x00, 0);
-        W64(self, base + 0x10, 0);
-    }
-    for (int i = 0; i < 13; ++i) {                       // mouse
-        const size_t base = RtInput::kMouseOffset + static_cast<size_t>(i) * 0x18;
-        W64(self, base + 0x00, 0);
-        W64(self, base + 0x10, 0);
-    }
-    Publish(SlotInputDevice(), self);
-    W8 (self, 0x11d0, 0);
-    W64(self, 0x11d8, 0);
-    W64(self, 0x11e0, 0);
-    W64(self, 0x11e8, 0);
-    W8 (self, 0x11f0, 1);
-    W64(self, 0x11f4, 0);
-    W32(self, 0x11fc, 0);
+::Input::Device* Ctor_InputDevice(::Input::Device* self) {
+    // Each record: the qword at +0x00 (normalized, value, pressed, released)
+    // and the qword at +0x10 (holdTicks); +0x08..+0x0f untouched.
+    auto clearRecord = [](::Input::Device::State& s) {
+        s.normalized = 0.0f;
+        s.value      = 0;
+        s.pressed    = false;
+        s.released   = false;
+        s.holdTicks  = 0;
+    };
+    for (auto& block : self->_joystick)                  // 4 joystick blocks, 72 records
+        for (auto& s : block) clearRecord(s);
+    for (auto& s : self->_keyboard) clearRecord(s);      // keyboard, 105
+    for (auto& s : self->_mouse)    clearRecord(s);      // mouse, 13
+    ::Input::Device::_singleton = self;
+    self->_mouseClipping  = 0;
+    self->_directInput    = nullptr;
+    self->_keyboardDevice = nullptr;
+    self->_mouseDevice    = nullptr;
+    self->_hasFocus       = 1;
+    self->_wheelAccum     = 0;
+    self->_lastCursorX    = 0;
+    self->_lastCursorY    = 0;
     return self;
 }
 
@@ -632,11 +572,12 @@ void* Ctor_InputDevice(void* self) {
 //   MOV byte  [RCX+0xa],0             ; mouseDisplay
 //   MOV qword ptr [0x1801fe768],RCX   ; _singleton
 // ===========================================================================
-void* Ctor_InputConfiguration(void* self) {
-    W64(self, 0x00, 0);
-    W16(self, 0x08, 0);
-    W8 (self, 0x0a, 0);
-    Publish(SlotInputConfig(), self);
+::Input::Configuration* Ctor_InputConfiguration(::Input::Configuration* self) {
+    self->_keyMap        = nullptr;
+    self->_mouseClipping = false;
+    self->_legacy        = false;
+    self->_mouseDisplay  = false;
+    ::Input::Configuration::_singleton = self;
     return self;
 }
 
@@ -653,12 +594,12 @@ void* Ctor_InputConfiguration(void* self) {
 // full. A zeroed row at cutover would be a silent MUTE, not a crash, which is
 // the kind of tier-1 row that would have survived a first cutover boot.
 // ===========================================================================
-void* Ctor_AudioConfiguration(void* self) {
-    W32(self, 0x00, 0x64);
-    W32(self, 0x04, 0x32);
-    W32(self, 0x08, 0x64);
-    W32(self, 0x0c, 0x64);
-    Publish(SlotAudioConfig(), self);
+Audio::Configuration* Ctor_AudioConfiguration(Audio::Configuration* self) {
+    self->uiVolume      = 0x64;
+    self->musicVolume   = 0x32;
+    self->ambientVolume = 0x64;
+    self->effectVolume  = 0x64;
+    Audio::Configuration::_singleton = self;
     return self;
 }
 
@@ -739,162 +680,27 @@ void* Ctor_AudioConfiguration(void* self) {
 // record -- so every record wears the class's (COM-shaped) table, and the
 // by-address read of the minted unnamed row (a function-local lazy cache, B9-10)
 // is gone with that row.
-void* Ctor_AudioDevice(void* self) {
-    Audio::Device* const dev = static_cast<Audio::Device*>(self);
-
+Audio::Device* Ctor_AudioDevice(Audio::Device* self) {
     for (int i = 0; i < 64; ++i) {
-        const size_t base = static_cast<size_t>(i) * 0x28;
-        W32(self, base + 0x00, 0);
-        W64(self, base + 0x08, 0);
-        W64(self, base + 0x10, 0);
-        W32(self, base + 0x18, 0);
-        W64(self, base + 0x20, 0);
+        Audio::Device::AudioChannel& c = self->_channels[i];
+        c.flags      = 0;
+        c.source     = nullptr;
+        c.userData   = nullptr;
+        c.userValue  = 0;
+        c.onComplete = nullptr;
     }
     // ENDGAME B.3.9 ENG W2: `??0Stream` is the class's real ctor now (it was
     // the door, by name); built in place at +0xa00 as retail's LEA/CALL does.
-    ::new (static_cast<void*>(static_cast<uint8_t*>(self) + 0xa00)) Audio::Stream();
+    ::new (&self->_stream) Audio::Stream();
     for (int i = 0; i < 64; ++i)
-        ::new (static_cast<void*>(&dev->_platformChannels[i])) Audio::Device::PlatformChannel();
-    Publish(SlotAudioDevice(), self);
-    W64(self, 0xa88, 0);
-    W64(self, 0xa90, 0);
-    for (int i = 0; i < 64; ++i) {
-        WP(self, 0xaa8 + static_cast<size_t>(i) * 0x20,
-           static_cast<uint8_t*>(self) + static_cast<size_t>(i) * 0x28);
-    }
+        ::new (&self->_platformChannels[i]) Audio::Device::PlatformChannel();
+    Audio::Device::_singleton = self;
+    self->_xaudio2        = nullptr;
+    self->_masteringVoice = nullptr;
+    for (int i = 0; i < 64; ++i)
+        self->_platformChannels[i].channel = &self->_channels[i];
     return self;
 }
 
 }  // namespace rtengine
 
-namespace {
-
-// ===========================================================================
-// THE PROBE — this lane's only executor, and its effectiveness control
-// ===========================================================================
-// Nothing in our tree calls any of these constructors, so `calls=` would be 0
-// for all fourteen and every one would report clean-because-dead. The probe
-// runs each ported body ONCE against the shipped one and reports:
-//
-//   * a byte comparison of the whole subject (both scratches pre-filled 0xCD,
-//     so retail's unwritten gaps compare equal on both sides), and
-//   * a SHADOW comparison whose verdict is `*slot == our object` — the named
-//     acceptance criterion of this entire lane, checked per class rather than
-//     assumed from the presence of a `Publish()` call in the source.
-//
-// It runs only when the diff harness is on (`if (!the diff oracle()) return;`),
-// which is both the correct semantics — it IS an oracle — and what keeps its
-// `the raw DLL door` calls off a normal run's path for tools/rawdoor_audit.py.
-//
-// THE SINGLETON SLOTS ARE SAVED AND RESTORED. Both constructors publish, so
-// without the restore the probe would leave every live `_singleton` pointing at
-// a static scratch buffer — it would BREAK the run it is measuring.
-//
-// CRITICAL_SECTIONs ARE DELETED ON BOTH COPIES. MemoryAllocator's and
-// Video::Device's constructors each initialise one into the scratch bytes, and
-// the next subject overwrites those bytes; both are released explicitly rather
-// than leaked. They are also EXCLUDED from the byte comparison: an initialised
-// CRITICAL_SECTION carries a DebugInfo pointer the kernel allocates per call,
-// so the two copies legitimately differ there and comparing them would report a
-// permanent divergence that says nothing about the port.
-// ===========================================================================
-
-alignas(16) uint8_t g_ours[0x1300];
-alignas(16) uint8_t g_theirs[0x1300];
-
-int g_probed        = 0;   // subjects the probe actually executed
-int g_singletonOk   = 0;   // subjects where OUR body published the slot
-int g_controlRun    = 0;   // negative control: corruptions injected
-int g_controlCaught = 0;   // negative control: corruptions the comparison saw
-
-// Negative control. A probe that cannot fail proves nothing, and a memcmp over
-// a 0xCD-filled pair is exactly the shape that silently passes when a size or a
-// pointer is wrong. After each subject the control flips one byte of our copy
-// and asserts the SAME comparison the probe used reports a difference.
-void ControlMustDetect(size_t n) {
-    if (n == 0) return;
-    ++g_controlRun;
-    const uint8_t save = g_ours[n - 1];
-    g_ours[n - 1] = static_cast<uint8_t>(save ^ 0xFFu);
-    if (std::memcmp(g_ours, g_theirs, n) != 0) ++g_controlCaught;
-    g_ours[n - 1] = save;
-}
-
-// ---------------------------------------------------------------------------
-// THE SINGLETON WINDOW MUST BE ZERO INSTRUCTIONS WIDE.
-//
-// Both constructors publish, so between a ctor returning and our restore the
-// process-wide `?_singleton@X@` points at a 0xCD scratch buffer. For twelve of
-// the thirteen subjects that is merely wrong; for MemoryAllocator it means THE
-// PROCESS ALLOCATOR IS A SCRATCH BUFFER, and any MemAlloc/MemFree in that
-// window -- inside the diff oracle, inside a printf that touches the engine
-// heap, inside a lazy resolve -- lands on an allocator with `ranges == nullptr`
-// and frees a real pointer into a fake one.
-//
-// The first draft of this file held that window open across BOTH ctors and all
-// of the reporting. It never fired (the run died earlier, on the seam below),
-// which is exactly why it is closed now rather than after it does: read `*slot`
-// on the instruction after the ctor returns, restore on the one after that, and
-// report from the captured bool.
-// ---------------------------------------------------------------------------
-#define LANEX_PROBE(LABEL, SIZE, SLOTFN, CTORNAME, OURFN)                      \
-    do {                                                                       \
-                                                  \
-        using CtorFn = void* (*)(void*);                                       \
-        void** slot__ = SLOTFN();                                              \
-        void*  saved__ = slot__ ? *slot__ : nullptr;                           \
-        std::memset(g_ours,   0xCD, (SIZE));                                   \
-        std::memset(g_theirs, 0xCD, (SIZE));                                   \
-                                                                      \
-        OURFN(g_ours);                                                         \
-        const bool published__ = (slot__ != nullptr &&                         \
-                                  *slot__ == static_cast<void*>(g_ours));      \
-        if (slot__) *slot__ = saved__;                                         \
-        if (published__) ++g_singletonOk;                                      \
-                      \
-                               \
-                                                    \
-        ControlMustDetect((SIZE));                                             \
-        ++g_probed;                                                            \
-    } while (0)
-
-}  // namespace
-
-// ---------------------------------------------------------------------------
-// Registration.
-//
-// Registering redirects OUR call sites and nothing else, and our tree has NO
-// call site for any of these fourteen names — the callers are Engine::Engine
-// and Engine::Startup inside the DLL. So every registration here is inert on a
-// live run and load-bearing only at cutover, which is precisely the property
-// that makes it safe to land the two unprobed ones.
-//
-// ⚠ CORRECTED 2026-09-11 (Wave 22 lane ALLOC). **The paragraph above is no
-// longer true of `??0MemoryAllocator@System@@`, and it was the load-bearing
-// argument for this whole block.** We have since ported `Engine::Engine`, and
-// `runtime/src/engine/engine_lifecycle.cpp:390` is
-//
-//     RT_EXPORT_ONCE(CtorFn, "??0MemoryAllocator@System@@QEAA@XZ")(&self->_allocator);
-//
-// — a call site in OUR tree, reaching `Ctor_MemoryAllocator` -> `rtalloc::
-// Construct`, on EVERY default run, because the wave kill switch is a kill switch
-// (default ON). That registration is therefore NOT inert on a live run and is
-// not merely load-bearing at cutover.
-//
-// It is still SAFE, but for a different reason than the one stated above, and
-// the difference matters to anyone reasoning about the allocator gate:
-// `RtEngineLifecycleRegister()` (engine_lifecycle.cpp:1074) refuses to register
-// ANYTHING unless `RtLaneXEnsureAllocatorPlatform()` has filled `g_plat` first,
-// precisely so this path cannot be an EXEC-of-0 on a null `lockInit`. The body
-// is byte-faithful and publishes into `System::MemoryAllocator::_singleton`,
-// exactly as retail's ctor does.
-//
-// The consequence worth writing down: "the allocator port is off unless
-// RT_ALLOC is set" is a claim about the REGISTRATION DOOR for the five
-// MemoryAllocator statics, not about every line of `rtalloc::`. Two of its
-// functions run unarmed on every boot. Corrected in place rather than deleted —
-// the conclusion (safe to land) still holds; its justification did not.
-// Evidence and the full crossing list: docs/runtime_port/WAVE22_LANE_ALLOC.md §2.2.
-// ---------------------------------------------------------------------------
-
-#undef LANEX_PROBE

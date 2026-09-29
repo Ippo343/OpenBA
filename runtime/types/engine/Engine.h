@@ -301,24 +301,25 @@ namespace RtEngine { using Engine = ::Engine::Engine; }
 // ==== B3R RT-Core: the singleton constructor bodies ====
 // runtime/src/engine/singleton_ctors.cpp: retail's (inlined) constructor bodies
 // Engine::Engine and Engine::Startup run over freshly allocated storage. Each
-// takes the raw storage and returns it (MSVC's return-`this`), and each
-// publishes its class's `_singleton`. Called by name from engine_lifecycle.cpp.
+// takes that storage as its class and returns it (MSVC's return-`this`), and
+// each publishes its class's `_singleton`. Called by name from
+// engine_lifecycle.cpp.
 namespace rtengine {
-void* Ctor_MemoryAllocator(void* self);                  // 0x1800c79a0
-void  Dtor_MemoryAllocator(void* self);                  // 0x1800c7960
-void* Ctor_Modification(void* self);                     // 0x1800b04b0
-void* Ctor_Factory(void* self);                          // 0x1800c09d0
-void* Ctor_ExternalFactory(void* self);                  // 0x1800be7e0
-void* Ctor_InternalFactory(void* self);                  // 0x1800c0030
-void* Ctor_FileSystem(void* self);                       // 0x1800ac7c0
-void* Ctor_Persistence(void* self);                      // 0x1800b8020
-void* Ctor_VideoDevice(void* self, int32_t type);        // 0x1800f7160
-void* Ctor_VideoConfiguration(void* self);               // 0x1800f6f10
-void* Ctor_Application(void* self, void* hinstance);     // 0x18009f590
-void* Ctor_InputDevice(void* self);                      // 0x1800e13b0
-void* Ctor_InputConfiguration(void* self);               // 0x1800e0de0
-void* Ctor_AudioDevice(void* self);                      // 0x1800de3a0
-void* Ctor_AudioConfiguration(void* self);               // 0x1800ddeb0
+rt::system::MemoryAllocator* Ctor_MemoryAllocator(rt::system::MemoryAllocator* self);   // 0x1800c79a0
+void                   Dtor_MemoryAllocator(rt::system::MemoryAllocator* self);         // 0x1800c7960
+IO::Modification*      Ctor_Modification(IO::Modification* self);                       // 0x1800b04b0
+Object::Factory*       Ctor_Factory(Object::Factory* self);                             // 0x1800c09d0
+Object::ExternalFactory* Ctor_ExternalFactory(Object::ExternalFactory* self);           // 0x1800be7e0
+Object::InternalFactory* Ctor_InternalFactory(Object::InternalFactory* self);           // 0x1800c0030
+IO::FileSystem*        Ctor_FileSystem(IO::FileSystem* self);                           // 0x1800ac7c0
+IO::Persistence*       Ctor_Persistence(IO::Persistence* self);                         // 0x1800b8020
+Video::Device*         Ctor_VideoDevice(Video::Device* self, int32_t type);             // 0x1800f7160
+Video::Configuration*  Ctor_VideoConfiguration(Video::Configuration* self);             // 0x1800f6f10
+Application::Application* Ctor_Application(Application::Application* self, void* hinstance);  // 0x18009f590
+Input::Device*         Ctor_InputDevice(Input::Device* self);                           // 0x1800e13b0
+Input::Configuration*  Ctor_InputConfiguration(Input::Configuration* self);             // 0x1800e0de0
+Audio::Device*         Ctor_AudioDevice(Audio::Device* self);                           // 0x1800de3a0
+Audio::Configuration*  Ctor_AudioConfiguration(Audio::Configuration* self);             // 0x1800ddeb0
 }  // namespace rtengine
 // ==== end B3R RT-Core ====
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
