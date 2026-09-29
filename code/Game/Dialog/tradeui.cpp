@@ -1610,15 +1610,17 @@ void TradeUI::OnOrderSpinner(int idx, int idx2) {
 // OnDismissButton (0x140081950): Dismiss the merchant
 // ============================================================
 // Finds the state machine on the owning entity. Reads merchant
-// state byte from +0x51 (sign-extended). Calls vtable[2] on the
-// object at buildState+0x48 to trigger dismissal, then refreshes
+// state byte from +0x51 (sign-extended). Posts event 10 to the controller
+// node at buildState+0x48 to trigger dismissal, then refreshes
 // display and both sell/buy tables.
 //
-// Original asm register setup (interleaved for RefreshDisplay):
-//   RCX = *(buildState+0x48)        — object ptr (this for vtable call)
-//   R8D = MOVSX byte [buildState+0x51] — state byte (3rd arg to RefreshDisplay)
-//   RDX = buildState + 0x48         — address (2nd arg to RefreshDisplay)
-//   R9D = 10                        — constant (4th arg to RefreshDisplay)
+// Retail's register setup is the PostEvent call's, not RefreshDisplay's
+// (RefreshDisplay 0x1400846b0 reads only RCX):
+//   RCX = *(buildState+0x48)           — the controller node (`this`)
+//   RDX = buildState + 0x48            — the state machine
+//   R8D = MOVSX byte [buildState+0x51] — the state index
+//   R9D = 10                           — the event id
+//   CALL [RAX+0x10]                    — Controller slot 2, PostEvent
 
 void TradeUI::OnDismissButton() {
     ::Object::Base* source = _dataSource;
@@ -1630,14 +1632,11 @@ void TradeUI::OnDismissButton() {
 
     // Read merchant state byte from +0x51 (sign-extended, no fallback)
     int8_t stateByte = *(int8_t*)((uintptr_t)buildState + 0x51);   // LEFT: COMP-e
-    (void)stateByte;
 
-    // Call vtable[2] on object at buildState+0x48 (dismiss notification)
-    // Original: MOV RCX,[RDX+0x48]; MOV RAX,[RCX]; CALL [RAX+0x10]
-    void* obj = buildState->controllerSelf;
-    void** vtbl = *(void***)obj;
-    typedef void (*StateCall_t)(void* self);
-    ((StateCall_t)(vtbl[2]))(obj);
+    // Post event 10 to the current controller node (dismiss notification):
+    // Controller slot 2, PostEvent(stateMachine, stateIndex, eventId), with the
+    // state machine at +0x48 and the state byte at +0x51 (0x1400819a9..0x1400819c2).
+    buildState->controllerSelf->PostEvent(&buildState->controllerSelf, stateByte, 10);
 
     // Refresh display and tables
     RefreshDisplay();

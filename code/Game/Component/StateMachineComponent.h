@@ -79,7 +79,7 @@ public:
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     RootController _controller;   // +0x28 root node (vptr, +0x30 parent, +0x38 first child, +0x40 owner)
-    void*    controllerSelf;      // +0x48 StateMachine: current node (retail ctor this+0x28)
+    ControllerComponent::Controller* controllerSelf;   // +0x48 StateMachine: current node (retail ctor this+0x28) (B4 H4: typed, DLG-e)
     uint32_t stateFlags;          // +0x50 input/active/pending/transition (retail ctor 0xff00ffff)
     uint8_t  _pad54[4];           // +0x54
 };
