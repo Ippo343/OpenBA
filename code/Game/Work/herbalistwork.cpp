@@ -36,6 +36,19 @@
 #include "Component/HerbalistComponent.h"    // ENDGAME B.3.9 D5
 #include "Component/HerbalistDescription.h"  // ENDGAME B.3.9 D5
 #include "Component/RadiusDescription.h"     // ENDGAME B.3.9 D5
+#include "Component/NaturalResourceComponent.h"
+#include "Component/StatusIconComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
 
 // ============================================================
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
@@ -81,44 +94,18 @@
 
 
 // ============================================================
-// Helper: Find component by type ID in entity's component list
-// Iterates array at (entity+0x30), count at (entity+0x38).
-// Each entry is an InternalBasePtr; vtable+0x10 = GetTypeId().
-// Returns the component pointer, or nullptr if not found.
+// Helper: the RadiusDescription among a ComponentDescription's sub-descriptions (+0x28
+// data / +0x30 count) -- the inlined scan retail repeats (no CheckPtr).
 // ============================================================
-static void* FindComponentInList(uintptr_t entity, uint32_t typeId) {
-    int count = *(int*)(entity + 0x38);
-    uintptr_t arr = *(uintptr_t*)(entity + 0x30);
+static RadiusDescription* FindSubComponentInList(ComponentDescription* subObj) {
+    const uint32_t typeId = RadiusDescription::TypeId();
+    int count = subObj->_subDescCount;
     for (int i = 0; i < count; i++) {
-        uintptr_t* ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
-        uintptr_t obj = *ibpPtr;
-        // slot 2 Type() (the old no-argument typedef never passed `this`)
-        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
-            ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
-            void* comp = (void*)*ibpPtr;
+        Description* obj = subObj->_subDescs[i];
+        if (obj->Type() == typeId) {
+            Description* comp = subObj->_subDescs[i];
             if (Object::IsDerivedFromNullSafe(comp, typeId)) {
-                return comp;
-            }
-            return nullptr;
-        }
-    }
-    return nullptr;
-}
-
-// ============================================================
-// Helper: Find component by type ID in sub-object's component list
-// Uses the +0x28/+0x30 layout (different from entity main list).
-// ============================================================
-static void* FindSubComponentInList(uintptr_t subObj, uint32_t typeId) {
-    uintptr_t listBase = *(uintptr_t*)(subObj + 0x28);
-    int count = *(int*)(subObj + 0x30);
-    for (int i = 0; i < count; i++) {
-        uintptr_t obj = *(uintptr_t*)(listBase + (uintptr_t)i * 8);
-        // slot 2 Type() (the old no-argument typedef never passed `this`)
-        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
-            void* comp = *(void**)(listBase + (uintptr_t)i * 8);
-            if (Object::IsDerivedFromNullSafe(comp, typeId)) {
-                return comp;
+                return static_cast<RadiusDescription*>(comp);
             }
             return nullptr;
         }
@@ -130,28 +117,27 @@ static void* FindSubComponentInList(uintptr_t subObj, uint32_t typeId) {
 // ============================================================
 // Helper: Assign work and register with AI
 // ============================================================
-static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priority) {
-    uintptr_t citizen = *(uintptr_t*)citizenIBP;
+static void AssignWorkToEntity(HerbalistWork* self, CitizenComponent** citizenIBP, int priority) {
+    CitizenComponent* citizen = *citizenIBP;
 
-    // Call vtable slot +0x50 (GetWorkEntity) on self
-    uintptr_t workEntityIBP[2] = {0};
-    uintptr_t* result = static_cast<uintptr_t*>(self->GetTarget(workEntityIBP));
-    uintptr_t workEntity = *result;
+    // Call vtable slot +0x50 (GetTarget) on self
+    Profession* workEntity = nullptr;
+    self->GetTarget(&workEntity);
 
-    // Set entity flags
-    *(uint32_t*)(citizen + 0x54) |= 4;
-    *(uint32_t*)(citizen + 0xb0) = 0;
-    *(int32_t*)(citizen + 0x30) = priority;
+    // Set citizen flags
+    citizen->statusFlags |= 4;
+    citizen->field_0xB0 = 0;
+    citizen->field_0x30 = priority;
 
-    // If work entity matches citizen's home entity (+0x1f0) and priority >= 0,
+    // If the work's profession matches the citizen's (+0x1f0) and priority >= 0,
     // set the "owned work" flag
-    if (workEntity == *(uintptr_t*)(citizen + 0x1f0) && priority >= 0) {
-        *(uint32_t*)(citizen + 0x88) |= 0x20000;
+    if (workEntity == citizen->profession && priority >= 0) {
+        citizen->happinessFlags |= 0x20000;
     }
 
-    // Register work with citizen AI subsystem at self+0x48
-    uintptr_t citizenAISub = (uintptr_t)self + 0x48;
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)citizenAISub), workEntityIBP, citizenIBP);
+    // Register work with citizen AI subsystem at self+0x48 (the tree helper takes the
+    // container as uintptr_t*: LEFT)
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->_field48), &workEntity, citizenIBP);
 }
 
 
@@ -161,7 +147,7 @@ static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priori
 //
 // Algorithm (differs from ForesterWork — no plant/cut branching):
 // 1. Check if citizen already has auto-pickup assignments
-// 2. Find WorkplaceComponent, RadiusComponent, MaterialComponent
+// 2. Find WorkComponent, HerbalistComponent / HerbalistDescription, RadiusDescription
 // 3. Check if material count has reached capacity (return 1 = done if so)
 // 4. Calculate search radius from workplace radius
 // 5. Random iteration over grid cells in radius
@@ -178,17 +164,18 @@ static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priori
 // 7. If no work found, handle failure (idle animation or replan)
 //
 int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenIBP = static_cast<CitizenComponent**>(entityIBP);
 
     // Save citizen ref for later use
-    uintptr_t citizenRef = *(uintptr_t*)entityIBP;
-    void* citizenIBP = entityIBP;
+    CitizenComponent* citizenRef = *citizenIBP;
 
     // -------------------------------------------------------
-    // Step 1: Check auto-pickup assignments
+    // Step 1: Check auto-pickup assignments (0x1400e3db0 takes the work as an integer:
+    // LEFT)
     // -------------------------------------------------------
-    int checkResult = WorkGrid_AutoPickup_e3db0(selfAddr, &citizenRef);
+    int checkResult = WorkGrid_AutoPickup_e3db0(reinterpret_cast<uintptr_t>(this), &citizenRef);
     if (checkResult == 2) {
         return 2;
     }
@@ -197,92 +184,81 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     // Step 2: Find components on the workplace entity
     // -------------------------------------------------------
 
-    // Get material description from workplace entity (self+0x10)
-    uintptr_t* plVar14 = (uintptr_t*)(selfAddr + 0x10);
-    uintptr_t matDescIBP = 0;
-    WorkBase_FindComponent_3050(*plVar14, &matDescIBP);
+    // The WorkComponent of the workplace entity (self+0x10) (0x140003050)
+    WorkComponent* matDesc = field_10->FindComponent<WorkComponent>();
 
-    // Find WorkplaceComponent on workplace entity
-    uintptr_t entity = *plVar14;
     // DAT_1401c43a0 = HerbalistComponent (ENDGAME B.3.9 D5: by cell, not the legacy
     // variable name "WorkplaceComponent").
-    void* workplaceComp = FindComponentInList(entity, HerbalistComponent::TypeId());
+    HerbalistComponent* workplaceComp = field_10->FindComponent<HerbalistComponent>();
 
-    // Wrap in InternalBasePtr
-    uintptr_t workplaceIBP = 0;
-    new (&workplaceIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
-
-    // Get RadiusComponent from workplace description (+0x18)
-    void* workplaceDesc = *(void**)(workplaceIBP + 0x18);
-    void* radiusComp = nullptr;
+    // Its description (+0x18)
+    Description* workplaceDesc = workplaceComp->_description;
+    HerbalistDescription* radiusComp = nullptr;
     // DAT_1401c43d8 = HerbalistDescription (ENDGAME B.3.9 D5: by cell, not the
     // legacy variable name "RadiusComponent").
     if (Object::IsDerivedFromNullSafe(workplaceDesc, HerbalistDescription::TypeId())) {
-        radiusComp = workplaceDesc;
+        radiusComp = static_cast<HerbalistDescription*>(workplaceDesc);
     }
 
-    // Find MaterialComponent on workplace's sub-object (+0x28)
-    uintptr_t entitySub = *(uintptr_t*)(*plVar14 + 0x28);
-    // DAT_1401c4870 = RadiusDescription (ENDGAME B.3.9 D5: by cell, not the legacy
-    // variable name "MaterialComponent").
-    void* materialComp = FindSubComponentInList(entitySub, RadiusDescription::TypeId());
+    // DAT_1401c4870 = RadiusDescription on the workplace's ComponentDescription (+0x28)
+    // (ENDGAME B.3.9 D5: by cell, not the legacy variable name "MaterialComponent").
+    RadiusDescription* materialComp = FindSubComponentInList(field_10->_description);
 
     // -------------------------------------------------------
     // Step 3: Check capacity — is material count at limit?
+    // (the town's per-resource counts, CitizenBehavior +0x170)
     // -------------------------------------------------------
-    int materialIdx = *(int*)((uintptr_t)radiusComp + 0x30);
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
-    uintptr_t resourceTable = *(uintptr_t*)(resourceTracker + 0x170);
-    uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;
-    bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
+    int materialIdx = (int)radiusComp->_u30;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    const ProfessionResourceEntry& resEntry = gameWorld->m_citizenList->professionResources[materialIdx];
+    bool atCapacity = resEntry.maxCount <= resEntry.currentCount;
 
-    // Set mesh visibility based on capacity (visGroup 2)
-    uintptr_t meshIBP[2] = {0};
-    WorkBase_FindComponent_2f90(*plVar14, meshIBP);
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)(*(uintptr_t*)meshIBP)), 2, atCapacity ? 1 : 0);
+    // Set the status icon's flag 2 from the capacity (0x140002f90, 0x14012c3f0)
+    StatusIconComponent* statusIcon = field_10->FindComponent<StatusIconComponent>();
+    statusIcon->SetFlag(2, atCapacity ? 1 : 0);
 
-    // Get herb count (self->_field50 via qword index 10)
-    int herbCount = (int)selfQ[10]; // self->_field50
+    // Get herb count (the assigned count, self+0x50)
+    int herbCount = _field50;
 
-    // If material description count is 0, calculate it
-    if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
-        *(int*)(matDescIBP + 0x30) = maxWorkers;
+    // If the worker capacity cache is 0, calculate it (the tree's port of 0x14012e5c0
+    // called here takes the component as an integer: LEFT)
+    if (matDesc->workState == 0) {
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        matDesc->workState = maxWorkers;
     }
 
     // If herbCount exceeds max workers OR at capacity, we're done (return 1)
-    if (*(int*)(matDescIBP + 0x30) < herbCount || atCapacity) {
+    if (matDesc->workState < herbCount || atCapacity) {
         return 1;
     }
 
     // -------------------------------------------------------
     // Step 4: Calculate search parameters
     // -------------------------------------------------------
-    void* rng = *(void**)(gameWorld + 0xd8);
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
+    System::Random* rng = gameWorld->m_random;
+    Map* map = gameWorld->m_game;
+    // The map helpers (0x140008830, 0x14009ccf0, 0x1400a00f0, 0x14009f3e0) take the map
+    // as int* / void*: LEFT.
+    int* mapGrid = reinterpret_cast<int*>(map);
 
-    int workplaceRadius = *(int*)((uintptr_t)materialComp + 0x28);
+    int workplaceRadius = materialComp->_radius;
     int radiusSq = workplaceRadius * workplaceRadius;
     float searchArea = WorkImpl_Sqrtf_132010((float)radiusSq * (kRdata_140172184));
-    int mapSize = *mapGrid;
+    int mapSize = map->size;
     int maxAttempts = (int)searchArea;
 
     // Workplace grid cell position
-    int workplaceCell = (int)selfQ[5]; // self->_field28
+    int workplaceCell = field_28;
     int cellRow = workplaceCell / mapSize;
     int cellCol = workplaceCell % mapSize;
 
-    // Get citizen's current position
-    uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
+    // Get citizen's current position: CharacterComponent (+0x278) -> ModelComponent
+    // (+0x68) -> the transform's translation
+    const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
 
-    uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
-
-    int mapSz = *mapGrid;
-    int citizenCellX = (int)(*(float*)(posComp + 0x158) + (float)(mapSz >> 1));
-    int citizenCellY = (int)(*(float*)(posComp + 0x15c) + (float)(mapSz >> 1));
+    int mapSz = map->size;
+    int citizenCellX = (int)(citizenPos.x + (float)(mapSz >> 1));
+    int citizenCellY = (int)(citizenPos.y + (float)(mapSz >> 1));
 
     // Clamp citizen cell to map bounds
     if (citizenCellX < 0) citizenCellX = 0;
@@ -293,7 +269,7 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     int citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
     // Get entity's grid cell for distance calculations
-    uintptr_t entityIBPBuf[2] = { *plVar14, 0 };
+    ComponentEntity* entityIBPBuf[2] = { field_10, nullptr };
     uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
 
     float fGrowthVal = kRdata_14017214c;
@@ -311,19 +287,19 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
             // Generate random position within radius (rejection sampling)
             do {
                 do {
-                    randX = reinterpret_cast<System::Random*>(rng)->RandTol(workplaceRadius);   // B.3.4b bridge
-                    randY = reinterpret_cast<System::Random*>(rng)->RandTol(workplaceRadius);   // B.3.4b bridge
+                    randX = rng->RandTol(workplaceRadius);
+                    randY = rng->RandTol(workplaceRadius);
                     testCellX = cellCol + randX;
                     testCellY = cellRow + randY;
                 } while (randY * randY + randX * randX > radiusSq);
             } while (testCellX < 0 || testCellX >= mapSize ||
                      testCellY < 0 || testCellY >= mapSize);
 
-            uint32_t testCell = (uint32_t)(*mapGrid) * testCellY + testCellX;
-            uintptr_t gridData = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+            uint32_t testCell = (uint32_t)(map->size) * testCellY + testCellX;
+            MapCell* gridData = map->cells;
 
             // Check terrain type bitmask — skip "forest/resource" terrain (0x1e0 mask)
-            uint8_t terrainByte = *(uint8_t*)(gridData + (uintptr_t)testCell * 0x30 + 0x29);
+            uint8_t terrainByte = gridData[testCell].terrainType;
             uint32_t terrainBit = 1u << (terrainByte & 0x1f);
             if ((terrainBit & 0x1e0u) != 0) {
                 continue;
@@ -335,46 +311,44 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
                 continue;
             }
 
-            // Get resource entity at this cell (+8 in cell data)
-            uintptr_t resourceEntity = *(uintptr_t*)(gridData + (uintptr_t)testCell * 0x30 + 8);
-            if (resourceEntity == 0) {
+            // Get resource entity at this cell (the cell's occupant, +8)
+            ComponentEntity* resourceEntity = gridData[testCell].occupant;
+            if (resourceEntity == nullptr) {
                 continue;
             }
 
             // -------------------------------------------------------
-            // Found a resource entity — check if it's a valid herb
+            // Found a resource entity — check if it's a valid herb (0x1400052c0)
             // -------------------------------------------------------
-            uintptr_t natResCompIBP[2] = {0};
-            WorkBase_FindComponent_52c0(resourceEntity, natResCompIBP);
+            NaturalResourceComponent* natResComp = resourceEntity->FindComponent<NaturalResourceComponent>();
 
-            if (*(uintptr_t*)natResCompIBP == 0) {
+            if (natResComp == nullptr) {
                 continue;
             }
 
             // Check NatRes component against the description list
-            uintptr_t natResCompIBP2[2] = {0};
-            WorkBase_FindComponent_52c0(resourceEntity, natResCompIBP2);
+            NaturalResourceComponent* natResComp2 = resourceEntity->FindComponent<NaturalResourceComponent>();
 
             // Iterate through herb types in the description list
-            int herbTypeCount = *(int*)((uintptr_t)radiusComp + 0x28);
-            uintptr_t herbTypeList = *(uintptr_t*)((uintptr_t)radiusComp + 0x20);
+            int herbTypeCount = radiusComp->_herbCount;
+            Object::External** herbTypeList = radiusComp->_herbs;
 
             for (int herbIdx = 0; herbIdx < herbTypeCount; herbIdx++) {
                 // Check growth >= threshold
-                float growth = *(float*)(*(uintptr_t*)natResCompIBP2 + 0x28);
+                float growth = natResComp2->resourceScale;
                 if (growth < fGrowthVal) {
                     continue;
                 }
 
-                // Check resource description matches this herb type
-                uintptr_t resDescRef = *(uintptr_t*)(resourceEntity + 0x28);
-                uintptr_t herbTypeRef = *(uintptr_t*)(herbTypeList + (uintptr_t)herbIdx * 8);
+                // Check the resource entity's description matches this herb type
+                Object::External* resDescRef = resourceEntity->_description;
+                Object::External* herbTypeRef = herbTypeList[herbIdx];
                 if (resDescRef != herbTypeRef) {
                     continue;
                 }
 
-                // Check not flagged for removal (bit 20 of +0x20)
-                uint32_t flags20 = *(uint32_t*)(*(uintptr_t*)natResCompIBP2 + 0x20);
+                // Check not flagged for removal (bit 20 of the component flags, +0x20)
+                uint32_t flags20 = natResComp2->_flags;
                 if ((flags20 >> 20) & 1) {
                     continue;
                 }
@@ -396,29 +370,27 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
                 // -------------------------------------------------------
                 // Valid herb found — create PerformWork action
                 // -------------------------------------------------------
-                float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
+                float halfOffset = (float)(map->size >> 1) - kRdata_140172114;
                 Math::Vector3 cutPos(
-                    (float)(nearestCell % *mapGrid) - halfOffset,
-                    (float)(nearestCell / *mapGrid) - halfOffset,
+                    (float)(nearestCell % map->size) - halfOffset,
+                    (float)(nearestCell / map->size) - halfOffset,
                     0.0f);
 
                 float pathPos[3];
-                Reimpl_MapGetTerrainPos(mapGrid, pathPos, &cutPos.x, 0, nullptr);
+                Reimpl_MapGetTerrainPos(map, pathPos, &cutPos.x, 0, nullptr);
 
-                uintptr_t targetRef = *(uintptr_t*)natResCompIBP2;
-                uintptr_t harvestEntityRef = *(uintptr_t*)citizenIBP;
-                uintptr_t harvestBuf[2] = { harvestEntityRef, 0 };
-                uintptr_t harvestTargetBuf[2] = { targetRef, 0 };
+                CitizenComponent* harvestBuf[2] = { *citizenIBP, nullptr };
+                NaturalResourceComponent* harvestTargetBuf[2] = { natResComp2, nullptr };
                 WorkAct_PerformWorkCtor_c1eb0(
                     harvestBuf,
-                    (int)selfQ[4],
+                    field_20,
                     harvestTargetBuf,
                     pathPos,
                     0,
                     1);
 
-                *(uint32_t*)(selfAddr + 0x58) = 0;
-                AssignWorkToEntity(this, citizenIBP, (int)selfQ[4]);
+                _field58 = 0;
+                AssignWorkToEntity(this, citizenIBP, field_20);
                 return 2;
             }
         }
@@ -427,51 +399,47 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     // -------------------------------------------------------
     // Step 7: No work found — handle failure
     // -------------------------------------------------------
-    int failCount = (int)selfQ[0xb]; // self->_field58
+    int failCount = _field58;
 
     if (failCount > maxAttempts) {
         // Too many failures — check if citizen's storage has items, then replan
-        uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
+        StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-        uintptr_t storageIBP[2] = {0};
-        WorkBase_FindComponent_6270(*(uintptr_t*)(citizenEnt + 0x10), storageIBP);
-
-        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>((void*)*(uintptr_t*)storageIBP));
+        // (0x14012cf10 takes the storage as an integer: LEFT)
+        int storageCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
         if (storageCount < 1) {
             return 0;
         }
 
         // Citizen has items in storage — replan long term
-        CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenIBP));
+        (*citizenIBP)->LongTermPlan();
     }
     else {
         // Play idle animation and increment fail counter
-        uintptr_t idleEntityRef = *(uintptr_t*)citizenIBP;
-        uintptr_t idleBuf[2] = { idleEntityRef, 0 };
-        WorkAct_PlayAnimationCtor_c2490(idleBuf, (int)selfQ[4], 0);
+        CitizenComponent* idleBuf[2] = { *citizenIBP, nullptr };
+        WorkAct_PlayAnimationCtor_c2490(idleBuf, field_20, 0);
 
         // Assign work (idle animation) and register with AI
-        int priority = (int)selfQ[4];
-        uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
+        int priority = field_20;
+        CitizenComponent* citizenEnt2 = *citizenIBP;
 
-        // Call vtable slot +0x50 (GetWorkEntity)
-        uintptr_t workEntIBP[2] = {0};
-        uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
-        uintptr_t workEnt = *wResult;
+        // Call vtable slot +0x50 (GetTarget)
+        Profession* workEnt = nullptr;
+        GetTarget(&workEnt);
 
-        *(uint32_t*)(citizenEnt2 + 0x54) |= 4;
-        *(int32_t*)(citizenEnt2 + 0x30) = priority;
-        *(uint32_t*)(citizenEnt2 + 0xb0) = 0;
+        citizenEnt2->statusFlags |= 4;
+        citizenEnt2->field_0x30 = priority;
+        citizenEnt2->field_0xB0 = 0;
 
-        if (workEnt == *(uintptr_t*)(citizenEnt2 + 0x1f0) && priority >= 0) {
-            *(uint32_t*)(citizenEnt2 + 0x88) |= 0x20000;
+        if (workEnt == citizenEnt2->profession && priority >= 0) {
+            citizenEnt2->happinessFlags |= 0x20000;
         }
 
-        uintptr_t citizenAISub = (uintptr_t)this + 0x48;
-        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)citizenAISub), workEntIBP, citizenIBP);
+        // (the tree helper takes the container as uintptr_t*: LEFT)
+        WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field48), &workEnt, citizenIBP);
 
         // Increment fail counter
-        *(int32_t*)(selfAddr + 0x58) = failCount + 1;
+        _field58 = failCount + 1;
     }
 
     return 2;
@@ -482,9 +450,10 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
 // HerbalistWork::Slot6 — NOT HOOKABLE (RIP-relative CALL)
 // Thunk: sub rsp,0x28; add rcx,0x48; call CitizenAI_impl_5520; xor al,al; add rsp,0x28; ret
 // Calls BSTFindRemove on the BST at self+0x48, returns false.
+// (The tree helper takes the container as uintptr_t*: LEFT.)
 // ============================================================
 int HerbalistWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return false;
 }
 
@@ -495,7 +464,7 @@ int HerbalistWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
 int HerbalistWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
     return 0;
 }
 
@@ -503,29 +472,26 @@ int HerbalistWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
 // ============================================================
 // HerbalistWork::Slot8 / CancelAll
 // Loops through tree at +0x48 while count (+0x50) > 0.
-// For each rightmost node, cancels the work item via engine call.
+// For each leftmost node (the walk follows the LEFT child, +0x10; the old comments
+// here said "rightmost"), cancels the work item via engine call.
 // ============================================================
 int HerbalistWork::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    int count = *(int*)(selfAddr + 0x50);
+    int count = _field50;
 
     while (count > 0) {
-        // Find rightmost node in BST
-        void* node = *(void**)(selfAddr + 0x48);
-        void* rightmost = node;
+        // Find leftmost node in BST
+        AssignmentNode* node = _field48;
+        AssignmentNode* leftmost = node;
         while (node != nullptr) {
-            rightmost = node;
-            // Follow right child at +0x10 (descend to rightmost leaf)
-            node = *(void**)((uintptr_t)node + 0x10);
+            leftmost = node;
+            node = node->left;
         }
 
-        // Cancel the work item: get citizen entity from node key
-        uintptr_t citizenEntity = *(uintptr_t*)rightmost;
+        // Cancel the work item: the citizen's action list (CharacterComponent +0x48)
+        CitizenComponent* citizenEntity = leftmost->element;
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
-        // Navigate to citizen AI subsystem and cancel
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
-
-        count = *(int*)(selfAddr + 0x50);
+        count = _field50;
     }
     return 0;
 }
@@ -538,11 +504,8 @@ int HerbalistWork::Cleanup() {
 // Returns true if tree becomes empty, false otherwise.
 // ============================================================
 int HerbalistWork::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
-
-    void* root = *bstRootPtr;
-    uintptr_t* removeArr = nullptr;
+    AssignmentNode* root = _field48;
+    CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
 
@@ -551,30 +514,30 @@ int HerbalistWork::Validate() {
     }
 
     // Find leftmost node (minimum)
-    void* node = root;
-    while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-        node = *(void**)((uintptr_t)node + 0x10);
+    AssignmentNode* node = root;
+    while (node->left != nullptr) {
+        node = node->left;
     }
 
     // In-order traversal
     while (node != nullptr) {
-        uintptr_t entityIBP = *(uintptr_t*)node;
+        CitizenComponent* entityIBP = node->element;
 
         // Validate this entity
-        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, (void*)&entityIBP, nullptr);
+        bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list — grow array if needed
             uint32_t newCount = removeCount + 1;
             if (newCount != removeCount) {
-                uintptr_t* newArr = removeArr;
+                CitizenComponent** newArr = removeArr;
                 if ((int)removeCapacity < (int)newCount) {
                     uint32_t newCap = newCount;
                     if (removeCount != 0) {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
+                    newArr = static_cast<CitizenComponent**>(System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8));
                 }
 
                 // Copy existing entries if buffer changed
@@ -583,7 +546,7 @@ int HerbalistWork::Validate() {
                     copyStart = removeCount;
                 }
                 for (uint32_t i = copyStart; i < newCount; i++) {
-                    uintptr_t val;
+                    CitizenComponent* val;
                     if (i < removeCount) {
                         val = removeArr[i];
                     } else {
@@ -600,21 +563,21 @@ int HerbalistWork::Validate() {
         }
 
         // In-order successor: right child's leftmost descendant, or parent
-        void* rightChild = *(void**)((uintptr_t)node + 0x18);
+        AssignmentNode* rightChild = node->right;
         if (rightChild != nullptr) {
             // Go right, then all the way left
             node = rightChild;
-            while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-                node = *(void**)((uintptr_t)node + 0x10);
+            while (node->left != nullptr) {
+                node = node->left;
             }
         } else {
             // Go up until we come from a left child
-            void* parent = *(void**)((uintptr_t)node + 0x08);
-            if (parent != nullptr && *(void**)((uintptr_t)parent + 0x10) != node) {
+            AssignmentNode* parent = node->parent;
+            if (parent != nullptr && parent->left != node) {
                 // We came from the right — keep going up
-                while (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) == node) {
+                while (parent != nullptr && parent->right == node) {
                     node = parent;
-                    parent = *(void**)((uintptr_t)parent + 0x08);
+                    parent = parent->parent;
                 }
                 node = parent;
             } else {
@@ -623,20 +586,21 @@ int HerbalistWork::Validate() {
         }
     }
 
-    // Remove all invalid entries from BST
+    // Remove all invalid entries from BST (keys compare unsigned; the tree helper takes
+    // the container as uintptr_t*: LEFT)
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
             // Find and remove the node with this key from BST
-            void* searchNode = *bstRootPtr;
+            AssignmentNode* searchNode = _field48;
             while (searchNode != nullptr) {
-                if (removeArr[i] < *(uintptr_t*)searchNode) {
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x10);
+                if (removeArr[i] < searchNode->element) {
+                    searchNode = searchNode->left;
                 } else {
-                    if (removeArr[i] <= *(uintptr_t*)searchNode) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRootPtr), searchNode);
+                    if (removeArr[i] <= searchNode->element) {
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field48), searchNode);
                         break;
                     }
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x18);
+                    searchNode = searchNode->right;
                 }
             }
         }
@@ -649,27 +613,12 @@ int HerbalistWork::Validate() {
 
 // ============================================================
 // HerbalistWork::Slot10 / GetWorkEntity
-// Returns entity from this->_field10's sub-object at +0x48.
+// The entity's (+0x10) WorkPlaceComponent (FUN_140002e10), its profession (+0x48)
+// into the return slot (void* in Work.h's slot: LEFT).
 // ============================================================
 void* HerbalistWork::GetTarget(void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    // CheckPtr on self+0x10
-    uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
-
-    // Find sub-entity via FUN_140002e10
-    uintptr_t subIBP[2] = {0};
-    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
-    // so the returned pointer is the out buffer itself.
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
-    void* result = subIBP;
-
-    // CheckPtr on the result
-
-    // Read +0x48 from the resolved entity and store in output
-    uintptr_t resolvedEntity = *(uintptr_t*)result;
-    *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
-
+    WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
+    *static_cast<Profession**>(outPtr) = workPlace->profession;
     return outPtr;
 }
 
@@ -679,27 +628,23 @@ void* HerbalistWork::GetTarget(void* outPtr) {
 // Work::Serialize + Serializer(version=0) + BST serialize + int field
 // ============================================================
 void HerbalistWork::Persist(void* stream) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create first serializer (version block, version=0)
-    alignas(8) uint8_t serializer1[24] = {0};
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
+    // Create first serializer (version block, version=0) (Persist's stream is void* in
+    // Work.h: LEFT)
+    {
+        IO::Serializer serializer1(*reinterpret_cast<IO::Stream*>(stream), 0);
+    }
 
     // Create second serializer (version=0) for BST + int
-    alignas(8) uint8_t serializer2[24] = {0};
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Serialize BST at self+0x48
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializer2);
+    // Serialize BST at self+0x48 (the helper takes the container as uintptr_t*: LEFT)
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
 
     // Serialize int at self+0x58
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((selfAddr + 0x58)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
+    serializer2.Serialize(_field58, nullptr);
 }
 
 
@@ -710,15 +655,13 @@ void HerbalistWork::Persist(void* stream) {
 // ============================================================
 // HerbalistWork dtor (retail 0x1400eec40, called by slot 0 0x14002a640). The stamps and the `~Internal` call are the compiler's chain.
 HerbalistWork::~HerbalistWork() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Free BST nodes at +0x48
-    void* bstRoot = *(void**)(selfAddr + 0x48);
+    AssignmentNode* bstRoot = _field48;
     if (bstRoot != nullptr) {
         // Clean up left subtree
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
+        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->left);
         // Clean up right subtree
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_14c30(&_field48, bstRoot->right);
         // Free root node
         {
             System::MemoryAllocator::MemFree(bstRoot);
@@ -726,8 +669,8 @@ HerbalistWork::~HerbalistWork() {
     }
 
     // Zero out BST root and count
-    *(void**)(selfAddr + 0x48) = nullptr;
-    *(uint32_t*)(selfAddr + 0x50) = 0;
+    _field48 = nullptr;
+    _field50 = 0;
 
 }
 
@@ -737,9 +680,8 @@ HerbalistWork::~HerbalistWork() {
 // [11] 0x140029860 (shared by 13 tables): `XOR EAX,EAX; CMP [RCX+0x50],EAX; SETG AL`
 // — "is anyone assigned". The old table pointed at Work_Slot11_HasActiveTasks.
 int HerbalistWork::GetPriority() {
-    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
+    return _field50 > 0 ? 1 : 0;
 }
-
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
 HerbalistWork::HerbalistWork() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(0) {
