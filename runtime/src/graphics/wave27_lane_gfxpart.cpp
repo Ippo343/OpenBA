@@ -564,16 +564,16 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
 // Retail:
 //   ParticleInstance::SetParticle(this, p);           // CALL 0x180104a00
 //   res = this->_resource;
-//   if (res && !res->_active && this->_emitter) 0x180020d60(this->_emitter);
+//   if (res && !res->_active && this->_f_d8) 0x180020d60(this->_f_d8);
 //   sys = IsDerivedFrom(p, ParticleSystem::_typeInfo.typeId) ? p : nullptr;
 //   if (this->_resource->_active)
-//       this->_emitter = sys->_pool._data[this->_index];
+//       this->_f_d8 = sys->_pool._data[this->_index];
 //   else {
 //       void* m = operator new(...);                   // 0x1800205a0
 //       if (m) { *(u64*)m = 0; *(u64*)(m+8) = 0;
 //                *(u32*)(m+0x10) = sys->_f48 (raw bits);
 //                0x180020e90(m, sys->_subCount); }
-//       this->_emitter = m;
+//       this->_f_d8 = m;
 //   }
 //
 // TWO FAITHFUL DEREFS OF A POINTER RETAIL DOES NOT CHECK, left unguarded on
@@ -588,9 +588,9 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
 // `?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A` (0x1801f9a58)
 // is read for its FIRST DWORD only — the typeId.
 //
-// The 0x18-byte emitter record (`_f_d8`) has no retail name and no type in the
-// tree (the Emitter banner below); it stays `void*`, built through its own
-// zero stores. LEFT: those stores view the raw record once.
+// The 0x18-byte emitter record (`_f_d8`) has no retail name (the Emitter
+// banner below); B.4 names its fields as `RtGraphics::ParticleEmitter`
+// (Particle.h), built through its own stores into the raw block.
 // ============================================================================
 
 namespace Graphics {
@@ -621,20 +621,24 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
             ? static_cast<const ParticleSystem*>(asParticle) : nullptr;
 
     if (_resource->_active != 0) {
-        _f_d8 = reinterpret_cast<void* const*>(sys->_pool._data)[_index];
+        _f_d8 = sys->_pool._data[_index];
         return;
     }
 
     // The emitter allocator at retail 0x1800205a0, UNNAMED:
     // RtGraphics_Emitter_OperatorNew, by name. The inactive-resource path only;
     // retail tolerates a null result (it stores null).
-    void* m = RtGraphics_Emitter_OperatorNew();
+    // The raw block viewed once as the record the stores below build.
+    RtGraphics::ParticleEmitter* const m =
+        static_cast<RtGraphics::ParticleEmitter*>(RtGraphics_Emitter_OperatorNew());
     if (m) {
-        std::memset(m, 0, 16);                          // two zeroed qwords
-        std::memcpy(static_cast<uint8_t*>(m) + 0x10, &sys->_f48, 4);   // raw bits
+        m->_extra._data     = nullptr;                  // two zeroed qwords
+        m->_extra._size     = 0;
+        m->_extra._capacity = 0;
+        m->_rate = sys->_f48;                           // a dword move: the raw bits
         // The emitter initialiser at 0x180020e90, UNNAMED: the Array SetSize
         // rtcoll::RtColl_ArraySetSize_180020e90, by name.
-        rtcoll::RtColl_ArraySetSize_180020e90(m, sys->_subCount);
+        rtcoll::RtColl_ArraySetSize_180020e90(&m->_extra, sys->_subCount);
     }
     _f_d8 = m;
 }

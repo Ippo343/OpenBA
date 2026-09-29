@@ -629,12 +629,12 @@ void ParticleSystem::Destruct() { this->~ParticleSystem(); }
 // ~Array then sees the zeroed header: a no-op.
 ParticleSystem::~ParticleSystem() {
     for (int32_t i = 0; i < _pool._size; ++i) {
-        void** const data = reinterpret_cast<void**>(_pool._data);
-        void** const e = static_cast<void**>(data[i]);
+        RtGraphics::ParticleEmitter* const e = _pool._data[i];
         if (e == nullptr) continue;
-        if (e[0] != nullptr) rtcoll::MemFree(e[0]);
-        e[0] = nullptr;
-        e[1] = nullptr;
+        if (e->_extra._data != nullptr) rtcoll::MemFree(e->_extra._data);
+        e->_extra._data     = nullptr;
+        e->_extra._size     = 0;                          // e[1]: _size AND _capacity
+        e->_extra._capacity = 0;
         rtcoll::MemFree(e);
     }
     if (_pool._data != nullptr) rtcoll::MemFree(_pool._data);
@@ -763,13 +763,18 @@ bool ParticleSystem::Serialize(void* streamv) {
     // 0x1800c6e60 / 0x18014b388 that array.cpp already owns.
     if (IsReading(stream) && _active != 0) {
         rtcoll::RtColl_ArraySetSize_180021220(&_pool, _recordCount);    // 1800a507a
-        uint8_t** poolArr = reinterpret_cast<uint8_t**>(_pool._data);   // 1800a50f1
+        RtGraphics::ParticleEmitter** poolArr = _pool._data;            // 1800a50f1
         for (int32_t i = 0; i < _recordCount; ++i) {                    // 1800a5103
-            uint8_t* rec = static_cast<uint8_t*>(rtcoll::MemAlloc(0x18, 8));
+            // The raw 0x18-byte block viewed as the record the stores build
+            // (no C++ constructor runs: retail's are these stores).
+            RtGraphics::ParticleEmitter* rec =
+                static_cast<RtGraphics::ParticleEmitter*>(rtcoll::MemAlloc(0x18, 8));
             if (rec) {                                                  // 1800a50d4
-                std::memset(rec, 0, 0x10);                              // 1800a50d8/db
-                std::memcpy(rec + 0x10, &_f48, 4);                      // 1800a50df/e2
-                rtcoll::RtColl_ArraySetSize_180020e90(rec, _subCount);  // 1800a50eb
+                rec->_extra._data     = nullptr;                        // 1800a50d8/db
+                rec->_extra._size     = 0;
+                rec->_extra._capacity = 0;
+                rec->_rate = _f48;                                      // 1800a50df/e2 (a dword move)
+                rtcoll::RtColl_ArraySetSize_180020e90(&rec->_extra, _subCount);  // 1800a50eb
             }
             // Retail stores RDI unconditionally, so a failed allocation parks a
             // null in the slot rather than skipping the index.

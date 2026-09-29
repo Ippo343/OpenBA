@@ -315,7 +315,11 @@ public:
     ParticleSystemInstance() { _f_d8 = nullptr; }
 
 public:
-    void* _f_d8;     // +0xd8  UNVERIFIED beyond "zeroed by the ctor"
+    // +0xd8  B.4: typed -- the emitter record (Particle.h); the name stays,
+    // tests/unit/graphics_geometry_abi_test.cpp pins it. Borrowed from
+    // `ParticleSystem::_pool[_index]` when the resource is active, owned
+    // (built by SetParticle, freed by ~ParticleSystemInstance) when it is not.
+    RtGraphics::ParticleEmitter* _f_d8;
 };
 
 static_assert(sizeof(ParticleSystemInstance) == 0xe0,

@@ -156,10 +156,6 @@
 #include "../../types/system/Value.h"       // System::Random::NextGroup
 #include "../../types/system/Timer.h"       // System::Timer::TicksToSeconds / SecondsToTicks
 
-using RtGraphics::Geometry;
-using RtGraphics::Particle;
-using RtGraphics::ParticleInstance;
-using RtGraphics::ParticleSystemInstance;
 
 namespace {
 
@@ -212,17 +208,6 @@ inline float NegBits(float v) {
     return r;
 }
 
-inline uint8_t*       B(void* p)       { return static_cast<uint8_t*>(p); }
-inline const uint8_t* B(const void* p) { return static_cast<const uint8_t*>(p); }
-inline float   F(const void* p, size_t o) { float v;   std::memcpy(&v, B(p) + o, sizeof v); return v; }
-inline void    SetF(void* p, size_t o, float v)       { std::memcpy(B(p) + o, &v, sizeof v); }
-inline int32_t I32(const void* p, size_t o) { int32_t v; std::memcpy(&v, B(p) + o, sizeof v); return v; }
-inline void    SetI32(void* p, size_t o, int32_t v)   { std::memcpy(B(p) + o, &v, sizeof v); }
-inline int64_t I64(const void* p, size_t o) { int64_t v; std::memcpy(&v, B(p) + o, sizeof v); return v; }
-inline void    SetI64(void* p, size_t o, int64_t v)   { std::memcpy(B(p) + o, &v, sizeof v); }
-inline uint32_t U32(const void* p, size_t o) { uint32_t v; std::memcpy(&v, B(p) + o, sizeof v); return v; }
-inline void    SetU32(void* p, size_t o, uint32_t v)  { std::memcpy(B(p) + o, &v, sizeof v); }
-
 // ---------------------------------------------------------------------------
 // Graphics::Particle's static MT19937, and the draw retail inlines.
 // Identical in every respect to wave27_lane_gfxpart.cpp's private copy; it is
@@ -234,31 +219,31 @@ inline void    SetU32(void* p, size_t o, uint32_t v)  { std::memcpy(B(p) + o, &v
 // (`ParticleRng()`, the lazy name door onto ?_rng@Particle@Graphics@@, is gone:
 // ENDGAME B.3.9 GFX made it the class static `Graphics::Particle::_rng`.)
 
-// One draw, byte-for-byte retail's inlined sequence.
-uint32_t RngNext(void* rngv) {
-    uint8_t* rng = B(rngv);   // Particle::_rng: never null (B.3.9 GFX; the NULL-door guard is gone)
-    int32_t index = I32(rng, 0);
+// One draw, byte-for-byte retail's inlined sequence, on `System::Random`'s
+// fields (`_index` +0x00, `_mt[624]` +0x04).
+uint32_t RngNext(System::Random& rng) {
+    int32_t index = rng._index;
     if (index == 0) {
         // ?NextGroup@Random@System@@AEAAXXZ (0x1800c7dd0): System::Random::NextGroup,
-        // the member (B3R). B.3.x bridge: `rng` is the Random's storage.
-        reinterpret_cast<System::Random*>(rng)->NextGroup();
-        index = I32(rng, 0);
+        // the member (B3R).
+        rng.NextGroup();
+        index = rng._index;
     }
-    uint32_t y = U32(rng, 4 + static_cast<size_t>(static_cast<uint32_t>(index)) * 4);
+    uint32_t y = rng._mt[static_cast<uint32_t>(index)];
     y ^= y >> 11;
     y ^= (y & 0xff3a58adu) << 7;    // SHIPPED mask, lifted at 0x1800a589c et al
     y ^= (y & 0xffffdf8cu) << 15;   // SHIPPED mask, lifted at 0x1800a58a8 et al
     y ^= y >> 18;
     int32_t next = index + 1;
     if (next == 0x270) next = 0;    // CMP EDX,0x270 / CMOVE EDX,<zero reg>
-    SetI32(rng, 0, next);
+    rng._index = next;
     return y;
 }
 
 // `1.0f - (float)y * 2^-32 * 2.0f`, in retail's exact association: CVTSI2SS
 // from a 64-bit register holding the zero-extended word, then two separate
 // MULSS, then SUBSS from a register holding 1.0f.
-inline float RngSigned(void* rng) {
+inline float RngSigned(System::Random& rng) {
     const float t = static_cast<float>(static_cast<uint64_t>(RngNext(rng)));
     return kOne - ((t * kInv2p32) * kTwo);
 }
@@ -300,155 +285,12 @@ int32_t* FrameIndexPtr() {
 // (the function-local cache over the minted record is gone, B9-10).
 uint32_t ParticleSystemTypeId() { return Graphics::ParticleSystem::TypeId(); }
 
-using SetBoundsFn     = void (*)(void* geometry, const void* box);
-
-// ---------------------------------------------------------------------------
-// LAYOUTS THIS BODY READS
-// ---------------------------------------------------------------------------
-// `Graphics::Particle` fields — the base class Wave 6 lane G owns.
-constexpr size_t kParticle_Active = 0x20;   // bool
-constexpr size_t kParticle_Boxes  = 0x38;   // ParticleBoundsRecord** (the pool array)
-static_assert(offsetof(Particle, _active) == kParticle_Active, "Particle::_active");
-static_assert(offsetof(Particle, _f38)    == kParticle_Boxes,  "Particle pool array @ +0x38");
-
-// The 0x40-byte pool record (`ParticleInstance::_boundsPtr`, +0xc8). Wave 27
-// measured the whole of it; this body adds the two int64 accumulators at +0x30
-// and +0x38, which its ctor zeroes and which nothing had read until now.
-constexpr size_t kPool_BoxMin      = 0x00;  // 3 floats
-constexpr size_t kPool_BoxMax      = 0x0c;  // 3 floats
-constexpr size_t kPool_Records     = 0x18;  // uint8_t* — the 0x58-stride record array
-constexpr size_t kPool_Capacity    = 0x20;  // int32 — that array's size
-constexpr size_t kPool_LiveCount   = 0x28;  // int32
-constexpr size_t kPool_FrameTag    = 0x2c;  // int32
-constexpr size_t kPool_SpawnAccum  = 0x30;  // int64 ticks, MEASURED HERE
-constexpr size_t kPool_TotalTicks  = 0x38;  // int64 ticks, MEASURED HERE
-
-// The per-particle record, stride 0x58. Names corrected against Wave 27's — see
-// the banner. The offsets are identical; only two of the NAMES change.
-constexpr size_t kRec_Stride    = 0x58;
-constexpr size_t kRec_Lifetime  = 0x00;  // int64 ticks
-constexpr size_t kRec_Age       = 0x08;  // int64 ticks
-constexpr size_t kRec_Pos       = 0x10;  // 3 floats, current
-constexpr size_t kRec_PosPrev   = 0x1c;  // 3 floats
-constexpr size_t kRec_Color     = 0x28;  // 3 floats, current   (Wave 27: "PosB")
-constexpr size_t kRec_ColorPrev = 0x34;  // 3 floats            (Wave 27: "PosBPrev")
-constexpr size_t kRec_Alpha     = 0x40;  // float, current      (Wave 27: "ScrollCur")
-constexpr size_t kRec_AlphaPrev = 0x44;  // float               (Wave 27: "ScrollPrv")
-constexpr size_t kRec_Rot       = 0x48;  // float, DEGREES
-constexpr size_t kRec_RotPrev   = 0x4c;
-constexpr size_t kRec_Size      = 0x50;
-constexpr size_t kRec_SizePrev  = 0x54;
-
-// `ParticleSystemInstance::_emitter` (+0xd8). Built by
-// ?SetParticle@ParticleSystemInstance@ (Wave 27): a Collection::Array header
-// followed by one float.
-constexpr size_t kEmit_Data  = 0x00;   // uint8_t* — the 0x14-stride extra array
-constexpr size_t kEmit_Rate  = 0x10;   // float, the spawn-rate accumulator
-
-// The per-particle EXTRA record, stride 0x14, one per record, parallel array.
-constexpr size_t kExt_Stride  = 0x14;
-constexpr size_t kExt_Vel     = 0x00;  // 3 floats
-constexpr size_t kExt_RotRate = 0x0c;  // float, degrees/sec, random SIGN
-constexpr size_t kExt_SizeRate= 0x10;  // float
-
-// `Graphics::ParticleSystem` (a Particle subclass; Particle's base is 0x48).
-// This lane does NOT own this class's layout and does not declare a struct for
-// it — every field below is a MEASURED offset with the instruction that reads
-// it, exactly the shape Wave 27 used for kPool_*.
-//
-// *** ENDGAME B.3.5 block H2: THE CLASS NOW EXISTS, AND THESE CONSTANTS ARE
-// CHECKED AGAINST IT. *** `runtime/types/graphics/Particle.h` carries the real
-// `Graphics::ParticleSystem`, authored from the WRITER side (the disassembled
-// constructor 0x1800a5320 and `Serialize`'s emission order, in
-// `vtbatch7_animgroup_particlesystem.cpp`) and NAMED from this lane's reader
-// measurements. The `static_assert` block below turns "two independent witnesses
-// agreed" into a COMPILE-TIME check, so a later edit to either side fails the
-// build rather than drifting. The `kPS_*` constants themselves are LEFT IN PLACE
-// and this body still reads through them: `ParticleSystemInstance::Update` is
-// block E's converted member and its receiver here is a `void*` that may be any
-// `Particle` subclass (Tornado included), not necessarily a `ParticleSystem` —
-// the `isDerived` test below is what decides, at run time. Rewriting 400 lines of
-// offset reads into member reads is a CALLER conversion behind a run-time type
-// test, which belongs to the caller batches, not to this class block.
-constexpr size_t kPS_RateAccelA   = 0x4c;  // MULSS 0x4c(%rdi) @ 0x1800a5758
-constexpr size_t kPS_RateAccelB   = 0x50;  // MULSS 0x50(%rdi) @ 0x1800a5764
-constexpr size_t kPS_DurationTicks= 0x58;  // MOV 0x58(%rdi),%rcx @ 0x1800a5781 (int64)
-constexpr size_t kPS_EmitDir      = 0x60;  // 3 floats @ 0x1800a5f65/73/89
-constexpr size_t kPS_SpreadX      = 0x6c;  // MULSS @ 0x1800a5a68 group
-constexpr size_t kPS_SpreadY      = 0x70;
-constexpr size_t kPS_SpreadZ      = 0x74;
-constexpr size_t kPS_SpreadScale  = 0x78;  // MULSS 0x78(%rdi) @ 0x1800a5976/59f3/5a9c
-constexpr size_t kPS_AngleBRange  = 0x7c;  // MULSS 0x7c(%rdi) @ 0x1800a5ec2
-constexpr size_t kPS_AngleARange  = 0x80;  // MULSS 0x80(%rdi) @ 0x1800a5e48
-constexpr size_t kPS_SpeedBase    = 0x84;  // ADDSS 0x84(%rdi) @ 0x1800a5dc6
-constexpr size_t kPS_SpeedRange   = 0x88;  // MULSS 0x88(%rdi) @ 0x1800a5dbd
-constexpr size_t kPS_AccelScale   = 0x8c;  // MOVSS 0x8c(%rdi) @ 0x1800a62f1
-constexpr size_t kPS_Damping      = 0x90;  // MOVSS 0x90(%rdi) @ 0x1800a64ba
-constexpr size_t kPS_RotBase      = 0x94;  // ADDSS 0x94(%rdi) @ 0x1800a5b98
-constexpr size_t kPS_RotRange     = 0x98;  // MULSS 0x98(%rdi) @ 0x1800a5b90
-constexpr size_t kPS_SpinBase     = 0x9c;  // ADDSS 0x9c(%rdi) @ 0x1800a5cbc
-constexpr size_t kPS_SpinRange    = 0xa0;  // MULSS 0xa0(%rdi) @ 0x1800a5cb4
-constexpr size_t kPS_SpinAccel    = 0xa4;  // MULSS 0xa4(%rdi) @ 0x1800a65eb
-constexpr size_t kPS_SpinDamp     = 0xa8;  // MULSS 0xa8(%rdi) @ 0x1800a65fa
-constexpr size_t kPS_LifeBase     = 0xac;  // ADDSS 0xac(%rdi) @ 0x1800a58e3
-constexpr size_t kPS_LifeRange    = 0xb0;  // MULSS 0xb0(%rdi) @ 0x1800a58db
-constexpr size_t kPS_GravScale    = 0xb4;  // MOVSS 0xb4(%rdi) @ 0x1800a6300
-constexpr size_t kPS_GravX        = 0xb8;
-constexpr size_t kPS_GravY        = 0xbc;
-constexpr size_t kPS_GravZ        = 0xc0;
-constexpr size_t kPS_SizeBase     = 0xc4;  // ADDSS 0xc4(%rdi) @ 0x1800a5c2a
-constexpr size_t kPS_SizeRange    = 0xc8;  // MULSS 0xc8(%rdi) @ 0x1800a5c22
-constexpr size_t kPS_SizeAccel    = 0xcc;  // MULSS 0xcc(%rdi) @ 0x1800a6627
-constexpr size_t kPS_SizeDamp     = 0xd0;  // MULSS 0xd0(%rdi) @ 0x1800a6636
-constexpr size_t kPS_ColorT0      = 0xd4;  // SUBSS 0xd4(%rdi) @ 0x1800a63db / 0x1800a6692
-constexpr size_t kPS_ColorT1      = 0xd8;  // MOVSS 0xd8(%rdi) @ 0x1800a63d3
-constexpr size_t kPS_Color0       = 0xdc;  // bytes +0xdc,+0xdd,+0xde,+0xdf
-constexpr size_t kPS_Color1       = 0xe0;  // bytes +0xe0,+0xe1,+0xe2,+0xe3
-constexpr size_t kPS_FadeInTicks  = 0xe8;  // CVTSI2SDQ 0xe8(%rdi) @ 0x1800a675c (int64)
-constexpr size_t kPS_FadeOutTicks = 0xf0;  // MOV 0xf0(%rdi),%rcx @ 0x1800a672a (int64)
-
-// ENDGAME B.3.5 block H2 — the reader's offsets against the real class's fields.
-// One assert per named field; the two sides were measured independently and in
-// opposite directions, and nothing had to be reconciled.
-static_assert(offsetof(::Graphics::ParticleSystem, _rateAccelA)    == kPS_RateAccelA,    "+0x4c");
-static_assert(offsetof(::Graphics::ParticleSystem, _rateAccelB)    == kPS_RateAccelB,    "+0x50");
-static_assert(offsetof(::Graphics::ParticleSystem, _durationTicks) == kPS_DurationTicks, "+0x58");
-static_assert(offsetof(::Graphics::ParticleSystem, _emitDirX)      == kPS_EmitDir,       "+0x60");
-static_assert(offsetof(::Graphics::ParticleSystem, _spreadX)       == kPS_SpreadX,       "+0x6c");
-static_assert(offsetof(::Graphics::ParticleSystem, _spreadY)       == kPS_SpreadY,       "+0x70");
-static_assert(offsetof(::Graphics::ParticleSystem, _spreadZ)       == kPS_SpreadZ,       "+0x74");
-static_assert(offsetof(::Graphics::ParticleSystem, _spreadScale)   == kPS_SpreadScale,   "+0x78");
-static_assert(offsetof(::Graphics::ParticleSystem, _angleBRange)   == kPS_AngleBRange,   "+0x7c");
-static_assert(offsetof(::Graphics::ParticleSystem, _angleARange)   == kPS_AngleARange,   "+0x80");
-static_assert(offsetof(::Graphics::ParticleSystem, _speedBase)     == kPS_SpeedBase,     "+0x84");
-static_assert(offsetof(::Graphics::ParticleSystem, _speedRange)    == kPS_SpeedRange,    "+0x88");
-static_assert(offsetof(::Graphics::ParticleSystem, _accelScale)    == kPS_AccelScale,    "+0x8c");
-static_assert(offsetof(::Graphics::ParticleSystem, _damping)       == kPS_Damping,       "+0x90");
-static_assert(offsetof(::Graphics::ParticleSystem, _rotBase)       == kPS_RotBase,       "+0x94");
-static_assert(offsetof(::Graphics::ParticleSystem, _rotRange)      == kPS_RotRange,      "+0x98");
-static_assert(offsetof(::Graphics::ParticleSystem, _spinBase)      == kPS_SpinBase,      "+0x9c");
-static_assert(offsetof(::Graphics::ParticleSystem, _spinRange)     == kPS_SpinRange,     "+0xa0");
-static_assert(offsetof(::Graphics::ParticleSystem, _spinAccel)     == kPS_SpinAccel,     "+0xa4");
-static_assert(offsetof(::Graphics::ParticleSystem, _spinDamp)      == kPS_SpinDamp,      "+0xa8");
-static_assert(offsetof(::Graphics::ParticleSystem, _lifeBase)      == kPS_LifeBase,      "+0xac");
-static_assert(offsetof(::Graphics::ParticleSystem, _lifeRange)     == kPS_LifeRange,     "+0xb0");
-static_assert(offsetof(::Graphics::ParticleSystem, _gravScale)     == kPS_GravScale,     "+0xb4");
-static_assert(offsetof(::Graphics::ParticleSystem, _gravX)         == kPS_GravX,         "+0xb8");
-static_assert(offsetof(::Graphics::ParticleSystem, _gravY)         == kPS_GravY,         "+0xbc");
-static_assert(offsetof(::Graphics::ParticleSystem, _gravZ)         == kPS_GravZ,         "+0xc0");
-static_assert(offsetof(::Graphics::ParticleSystem, _sizeBase)      == kPS_SizeBase,      "+0xc4");
-static_assert(offsetof(::Graphics::ParticleSystem, _sizeRange)     == kPS_SizeRange,     "+0xc8");
-static_assert(offsetof(::Graphics::ParticleSystem, _sizeAccel)     == kPS_SizeAccel,     "+0xcc");
-static_assert(offsetof(::Graphics::ParticleSystem, _sizeDamp)      == kPS_SizeDamp,      "+0xd0");
-static_assert(offsetof(::Graphics::ParticleSystem, _colorT0)       == kPS_ColorT0,       "+0xd4");
-static_assert(offsetof(::Graphics::ParticleSystem, _colorT1)       == kPS_ColorT1,       "+0xd8");
-static_assert(offsetof(::Graphics::ParticleSystem, _color0)        == kPS_Color0,        "+0xdc");
-static_assert(offsetof(::Graphics::ParticleSystem, _color1)        == kPS_Color1,        "+0xe0");
-static_assert(offsetof(::Graphics::ParticleSystem, _fadeInTicks)   == kPS_FadeInTicks,   "+0xe8");
-static_assert(offsetof(::Graphics::ParticleSystem, _fadeOutTicks)  == kPS_FadeOutTicks,  "+0xf0");
-// And the two `Graphics::Particle` fields this body reads, against the real base.
-static_assert(offsetof(::Graphics::Particle, _active)  == kParticle_Active, "Particle::_active @ +0x20");
-static_assert(offsetof(::Graphics::Particle, _records) == kParticle_Boxes,  "Particle::_records @ +0x38");
+// B.4: the offset constants this body read through (kParticle_* / kPool_* /
+// kRec_* / kEmit_* / kExt_* / kPS_*) are gone with the reads: the pool record,
+// the live-particle record, the emitter and its extra record are named field by
+// field (ParticleInstance.h / Particle.h), and `Graphics::ParticleSystem`'s
+// tuning fields, which block H2 asserted against this lane's measurements, are
+// read by name. Particle.h keeps those offsets asserted.
 
 // ---------------------------------------------------------------------------
 // `q * (v,0) * conj(q)`, in retail's EXACT association order.
@@ -517,7 +359,7 @@ Vec3f QuatRotate(float qx, float qy, float qz, float qw, const Vec3f& v) {
 //     regardless (CMOVNE leaves EDI zero). Every retail caller hands a
 //     ParticleSystem; if our standalone ever reaches that arm, the fault IS the
 //     diagnosis.
-//   * `this->_emitter` is dereferenced with no test.
+//   * `this->_f_d8` is dereferenced with no test.
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED onto
 // `Graphics::ParticleSystemInstance::Update` (slot 1 — the class that finally
@@ -541,136 +383,107 @@ ParticleInstance* ParticleSystem::CreateSystem() const {
 void ParticleSystemInstance::Update(const System::Time& timeRef) {
     ++g_psiUpdate;
 
-    const void* const timev = reinterpret_cast<const void*>(&timeRef);   // B.3.5 bridge
-    uint8_t* self = B(static_cast<void*>(this));
-    const int64_t deltaTicks = I64(timev, 0);
+    const int64_t deltaTicks = timeRef._ticks;
 
     // --- A -----------------------------------------------------------------
-    uint8_t* res = *reinterpret_cast<uint8_t**>(self + 0xc0);     // _resource
-    const bool resActive = (res[kParticle_Active] != 0);
+    const bool resActive = (_resource->_active != 0);          // +0xc0 -> +0x20, unguarded
 
     if (resActive) {
-        uint8_t** boxes = *reinterpret_cast<uint8_t***>(res + kParticle_Boxes);
-        const int32_t index = I32(self, 0xd0);                    // MOVSXD 0xd0(%rsi)
-        *reinterpret_cast<uint8_t**>(self + 0xc8) = boxes[index];
+        _boundsPtr = _resource->_records._data[_index];         // MOVSXD 0xd0(%rsi)
     }
 
     int32_t* frameIndex = FrameIndexPtr();
     const int32_t frame = frameIndex ? *frameIndex : 0;
 
-    uint8_t* pool = *reinterpret_cast<uint8_t**>(self + 0xc8);    // _boundsPtr
+    RtGraphics::ParticleBoundsRecord* const pool = _boundsPtr;
 
-    if (resActive && I32(pool, kPool_FrameTag) == frame) {
-        // Retail TAIL-JUMPS to Geometry::SetBounds after unwinding its frame.
+    if (resActive && pool->frameTag == frame) {
+        // Retail TAIL-JUMPS to Geometry::SetBounds after unwinding its frame:
+        // a QUALIFIED non-virtual member call on this Geometry.
         ++g_psiUpdateEarly;
-        // ENDGAME B.3.5 block GC item 6: this was a `ResolveExport` name door onto
-        // `?SetBounds@Geometry@Graphics@@` (0x180015700) reaching OUR OWN ported
-        // body. `Graphics::Geometry` is a real class (block E) and `SetBounds` is a
-        // member, so retail's tail jump is a QUALIFIED non-virtual member call. The
-        // door in scene.cpp stays registered for callers outside this file.
-        reinterpret_cast<::Graphics::Geometry*>(self)                  // B.3.5 bridge
-            ->::Graphics::Geometry::SetBounds(
-                *reinterpret_cast<const ::Box*>(pool));               // B.3.5 bridge
+        this->::Graphics::Geometry::SetBounds(pool->_bounds);
         return;
     }
 
     // --- B -----------------------------------------------------------------
-    SetI32(pool, kPool_FrameTag, frame);
+    pool->frameTag = frame;
 
-    uint8_t* resource = *reinterpret_cast<uint8_t**>(self + 0xc0);
+    const Particle* const resource = _resource;
 
     const float dt  = TicksToSeconds(deltaTicks);   // CVTSI2SDQ/MULSD/CVTPD2PS
     const float dt2 = dt * dt;
 
-    // CMOVNE: `sys` is the resource when the test passes and NULL when it does
-    // not — and retail reads through it either way. ?IsDerivedFrom@Base@Object@@
-    // (0x1800c0390) is the member (B3R); B.3.x bridge on the receiver.
-    uint8_t* sys = nullptr;
-    if (reinterpret_cast<const Object::Base*>(resource)->IsDerivedFrom(ParticleSystemTypeId()))
-        sys = resource;
-
-    // ENDGAME B.3.5 block GC item 5. Past the run-time type test, `sys` is either a
-    // real `Graphics::ParticleSystem` or NULL, so the tuning reads below go through
-    // the class (block H2 authored it and `static_assert`ed every `kPS_*` constant
-    // in this file against it, which is what licenses the substitution) instead of
-    // through raw offsets.
+    // CMOVNE: `ps` is the resource when the test passes and NULL when it does
+    // not -- and retail reads through it either way. ?IsDerivedFrom@Base@Object@@
+    // (0x1800c0390) is the member (B3R); the test is what licenses the downcast.
     //
     // *** THE NULL CASE IS UNCHANGED AND STILL FAITHFUL. *** Retail's CMOVNE leaves
     // the register null when the test fails and then reads `sys + 0x4c` two
     // instructions later anyway; `ps->_rateAccelA` on a null `ps` is the SAME
     // unguarded deref, not a new one, and CLAUDE.md's rule is that a guard here
-    // would skip retail's behaviour rather than restore it.
-    //
-    // *** TORNADO'S EXE-SIDE `Particle` SUBCLASS IS UNAFFECTED. *** The
-    // NON-ParticleSystem arm is untouched: `sys`/`ps` is simply null for it and
-    // every branch that guards on `sys` still guards on `sys`. Only the reads that
-    // were already behind a successful `IsDerivedFrom(ParticleSystem)` moved.
-    //
-    // FOUR KINDS OF READ STAY ON THE RAW SPELLING, each for a reason:
-    //   * `kPS_EmitDir + 0/4/8` -- three ADJACENT floats read as a vector. The
-    //     class names them `_emitDirX/Y/Z`, and they are spelled that way below.
-    //   * `B(sys)[kPS_Color0 + n]` -- `_color0`/`_color1` are ONE uint32 each,
-    //     read ONE PACKED BYTE AT A TIME in retail (BGRA order, alpha last).
-    //     Byte-addressing a member needs a cast that is strictly less readable
-    //     than the offset form, so those eight reads keep `B(sys)[...]` and the
-    //     constants they use keep their comments.
+    // would skip retail's behaviour rather than restore it. Every retail caller
+    // hands a ParticleSystem.
     const ::Graphics::ParticleSystem* const ps =
-        reinterpret_cast<const ::Graphics::ParticleSystem*>(sys);   // B.3.5 bridge
+        resource->IsDerivedFrom(ParticleSystemTypeId())
+            ? static_cast<const ::Graphics::ParticleSystem*>(resource) : nullptr;
 
     // --- C -----------------------------------------------------------------
-    SetI64(pool, kPool_SpawnAccum, I64(pool, kPool_SpawnAccum) + deltaTicks);
-    SetI64(pool, kPool_TotalTicks, I64(pool, kPool_TotalTicks) + deltaTicks);
+    pool->_spawnAccum += deltaTicks;
+    pool->_totalTicks += deltaTicks;
 
-    uint8_t* emitter = *reinterpret_cast<uint8_t**>(self + 0xd8);
+    RtGraphics::ParticleEmitter* const emitter = _f_d8;     // +0xd8, unguarded
     {
-        // rate += dt² * kPS_RateAccelA * kPS_RateAccelB, in retail's order:
+        // rate += dt² * _rateAccelA * _rateAccelB, in retail's order:
         // the dt² register is multiplied by both fields, THEN added.
         float r = dt2;
         r *= ps->_rateAccelA;
         r *= ps->_rateAccelB;
-        r += F(emitter, kEmit_Rate);
-        SetF(emitter, kEmit_Rate, r);
+        r += emitter->_rate;
+        emitter->_rate = r;
     }
     {
         // COMISS 0.0, rate / JA -> zero;  else the duration test.
-        const float rate = F(emitter, kEmit_Rate);
+        const float rate = emitter->_rate;
         bool zeroIt = (0.0f > rate);
         if (!zeroIt) {
             const int64_t duration = ps->_durationTicks;
-            if (duration > 0 && I64(pool, kPool_TotalTicks) > duration) zeroIt = true;
+            if (duration > 0 && pool->_totalTicks > duration) zeroIt = true;
         }
-        if (zeroIt) SetF(emitter, kEmit_Rate, 0.0f);
+        if (zeroIt) emitter->_rate = 0.0f;
     }
 
     // interval = SecondsToTicks(1.0f / rate). Retail loads 1.0f from
     // [0x18016169c] and DIVSS by the rate — an infinity when the rate is 0,
     // whose CVTTSD2SI is 0x8000000000000000. Faithful.
-    const int64_t interval = SecondsToTicks(kOne / F(emitter, kEmit_Rate));
+    const int64_t interval = SecondsToTicks(kOne / emitter->_rate);
 
-    void* rng = &Graphics::Particle::_rng;   // ?_rng@Particle@Graphics@@ (0x1801fe7f0)
+    System::Random& rng = Graphics::Particle::_rng;   // ?_rng@Particle@Graphics@@ (0x1801fe7f0)
+
+    // The packed BGRA colour bytes, read one byte at a time by retail (MOVZX
+    // byte): byte n of the little-endian dword is `>> (8 * n)`.
+    const uint32_t color0 = ps->_color0;   // +0xdc
+    const uint32_t color1 = ps->_color1;   // +0xe0
 
     // --- D : the spawn loop ------------------------------------------------
     // `while (pool.spawnAccum > interval && pool.live < pool.capacity)`.
     // Retail tests the accumulator FIRST (JLE past the loop), then the capacity
     // at the head of every iteration (JGE out).
-    while (I64(pool, kPool_SpawnAccum) > interval) {
-        if (I32(pool, kPool_LiveCount) >= I32(pool, kPool_Capacity)) break;
+    while (pool->_spawnAccum > interval) {
+        if (pool->_liveCount >= pool->_records._size) break;
 
-        SetI64(pool, kPool_SpawnAccum, I64(pool, kPool_SpawnAccum) - interval);
+        pool->_spawnAccum -= interval;
 
-        const int32_t slot = I32(pool, kPool_LiveCount);
-        uint8_t* extBase = *reinterpret_cast<uint8_t**>(emitter + kEmit_Data);
-        uint8_t* rec = *reinterpret_cast<uint8_t**>(pool + kPool_Records)
-                       + static_cast<int64_t>(slot) * kRec_Stride;
-        uint8_t* ext = extBase + static_cast<int64_t>(slot) * kExt_Stride;
-        SetI32(pool, kPool_LiveCount, slot + 1);
-        SetI64(rec, kRec_Age, 0);
+        const int32_t slot = pool->_liveCount;
+        RtGraphics::ParticleRecord& rec = pool->_records._data[static_cast<int64_t>(slot)];
+        RtGraphics::ParticleExtra&  ext = emitter->_extra._data[static_cast<int64_t>(slot)];
+        pool->_liveCount = slot + 1;
+        rec._age = 0;
         ++g_psiSpawned;
 
         // DRAW 1 @ 0x1800a5865 — lifetime
         {
             const float life = (RngSigned(rng) * ps->_lifeRange) + ps->_lifeBase;
-            SetI64(rec, kRec_Lifetime, SecondsToTicks(life));
+            rec._lifetime = SecondsToTicks(life);
         }
         // DRAWS 2,3,4 @ 0x1800a58fe / 0x1800a5981 / 0x1800a59fe — the spawn
         // offset. Each is `r * spreadScale * 0.5f`, and the axis each one feeds
@@ -682,45 +495,37 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         const float py = ps->_spreadY * oY;
         const float pz = ps->_spreadZ * oZ;
 
-        const float c0 = static_cast<float>(B(sys)[kPS_Color0 + 2]) / k255;  // +0xde
-        const float c1 = static_cast<float>(B(sys)[kPS_Color0 + 1]) / k255;  // +0xdd
-        const float c2 = static_cast<float>(B(sys)[kPS_Color0 + 0]) / k255;  // +0xdc
+        const float c0 = static_cast<float>(static_cast<uint8_t>(color0 >> 16)) / k255;  // +0xde
+        const float c1 = static_cast<float>(static_cast<uint8_t>(color0 >> 8))  / k255;  // +0xdd
+        const float c2 = static_cast<float>(static_cast<uint8_t>(color0))       / k255;  // +0xdc
 
-        SetI64(rec, kRec_Alpha, 0);                 // MOV %r15,0x40(%r14): +0x40 AND +0x44
-        SetF(rec, kRec_Color + 0,     c0);
-        SetF(rec, kRec_Color + 4,     c1);
-        SetF(rec, kRec_Color + 8,     c2);
-        SetF(rec, kRec_ColorPrev + 0, c0);
-        SetF(rec, kRec_ColorPrev + 4, c1);
-        SetF(rec, kRec_ColorPrev + 8, c2);
-        SetF(rec, kRec_Pos + 0,     px);
-        SetF(rec, kRec_Pos + 4,     py);
-        SetF(rec, kRec_Pos + 8,     pz);
-        SetF(rec, kRec_PosPrev + 0, px);
-        SetF(rec, kRec_PosPrev + 4, py);
-        SetF(rec, kRec_PosPrev + 8, pz);
+        rec._alpha     = 0.0f;               // MOV %r15,0x40(%r14): +0x40 AND +0x44
+        rec._alphaPrev = 0.0f;
+        rec._color.x = c0;      rec._color.y = c1;      rec._color.z = c2;
+        rec._colorPrev.x = c0;  rec._colorPrev.y = c1;  rec._colorPrev.z = c2;
+        rec._pos.x = px;        rec._pos.y = py;        rec._pos.z = pz;
+        rec._posPrev.x = px;    rec._posPrev.y = py;    rec._posPrev.z = pz;
 
         // DRAW 5 @ 0x1800a5b1a — rotation (degrees), cur == prev
         {
             const float rot = (RngSigned(rng) * ps->_rotRange) + ps->_rotBase;
-            SetF(rec, kRec_Rot,     rot);
-            SetF(rec, kRec_RotPrev, rot);
+            rec._rot     = rot;
+            rec._rotPrev = rot;
         }
         // DRAW 6 @ 0x1800a5bac — size, cur == prev
         {
             const float size = (RngSigned(rng) * ps->_sizeRange) + ps->_sizeBase;
-            SetF(rec, kRec_Size,     size);
-            SetF(rec, kRec_SizePrev, size);
+            rec._size     = size;
+            rec._sizePrev = size;
         }
         // DRAW 7 @ 0x1800a5c3e — spin rate, into the EXTRA record
-        SetF(ext, kExt_RotRate,
-             (RngSigned(rng) * ps->_spinRange) + ps->_spinBase);
+        ext._rotRate = (RngSigned(rng) * ps->_spinRange) + ps->_spinBase;
         // DRAW 8 @ 0x1800a5ccb — a COIN FLIP on the spin direction. Retail
         // TESTs bit 0 of the tempered word and flips the sign bit when it is
         // CLEAR; it does not use the word for anything else.
         if ((RngNext(rng) & 1u) == 0u)
-            SetF(ext, kExt_RotRate, NegBits(F(ext, kExt_RotRate)));
-        SetF(ext, kExt_SizeRate, 0.0f);
+            ext._rotRate = NegBits(ext._rotRate);
+        ext._sizeRate = 0.0f;
 
         // DRAW 9 @ 0x1800a5d45 — speed
         const float speed = (RngSigned(rng) * ps->_speedRange) + ps->_speedBase;
@@ -739,17 +544,17 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         const float cosB = RtLibm::Cos(angleB);
         const float cosA = RtLibm::Cos(angleA);
 
-        SetF(ext, kExt_Vel + 0, (NegBits(cosA) * sinB) * speed);
-        SetF(ext, kExt_Vel + 4, (cosA * cosB) * speed);
-        SetF(ext, kExt_Vel + 8, sinA * speed);
+        ext._velX = (NegBits(cosA) * sinB) * speed;
+        ext._velY = (cosA * cosB) * speed;
+        ext._velZ = sinA * speed;
 
         // Rotate the system's emit direction by the instance's own orientation
         // (Geometry::_transform.rotation, +0x84..+0x90) and hand THAT to
         // FromDirection as the look direction — with a ZEROED Vector3 as the
         // second argument, the argument Ghidra dropped.
+        const Math::Quaternion& q = _transform.rotation;
         const Vec3f emitDir = { ps->_emitDirX, ps->_emitDirY, ps->_emitDirZ };
-        const Vec3f dir = QuatRotate(F(self, 0x84), F(self, 0x88),
-                                     F(self, 0x8c), F(self, 0x90), emitDir);
+        const Vec3f dir = QuatRotate(q.x, q.y, q.z, q.w, emitDir);
 
         Vector3 dirArg;  dirArg.x = dir.x; dirArg.y = dir.y; dirArg.z = dir.z;
         Vector3 zeroArg; zeroArg.x = 0.0f; zeroArg.y = 0.0f; zeroArg.z = 0.0f;
@@ -760,12 +565,12 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         const Transform basis = Transform::FromDirection(dirArg, zeroArg);
 
         // Rotate the freshly drawn velocity into that basis, in place.
-        const Vec3f v = { F(ext, kExt_Vel + 0), F(ext, kExt_Vel + 4), F(ext, kExt_Vel + 8) };
+        const Vec3f v = { ext._velX, ext._velY, ext._velZ };
         const Vec3f rv = QuatRotate(basis.rotation.x, basis.rotation.y,
                                     basis.rotation.z, basis.rotation.w, v);
-        SetF(ext, kExt_Vel + 0, rv.x);
-        SetF(ext, kExt_Vel + 4, rv.y);
-        SetF(ext, kExt_Vel + 8, rv.z);
+        ext._velX = rv.x;
+        ext._velY = rv.y;
+        ext._velZ = rv.z;
     }
 
     // --- E : the age loop --------------------------------------------------
@@ -777,19 +582,21 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     float aY = ps->_gravScale; aY *= ps->_gravY; aY *= accelScale; aY *= dt2;
     float aZ = ps->_gravScale; aZ *= ps->_gravZ; aZ *= accelScale; aZ *= dt2;
 
-    const float base0 = static_cast<float>(B(sys)[kPS_Color0 + 2]) / k255;  // +0xde
-    const float base1 = static_cast<float>(B(sys)[kPS_Color0 + 1]) / k255;  // +0xdd
-    const float base2 = static_cast<float>(B(sys)[kPS_Color0 + 0]) / k255;  // +0xdc
-    const float base3 = static_cast<float>(B(sys)[kPS_Color0 + 3]) / k255;  // +0xdf (alpha)
-    const float end0  = static_cast<float>(B(sys)[kPS_Color1 + 2]) / k255;  // +0xe2
-    const float end1  = static_cast<float>(B(sys)[kPS_Color1 + 1]) / k255;  // +0xe1
-    const float end2  = static_cast<float>(B(sys)[kPS_Color1 + 0]) / k255;  // +0xe0
-    const float end3  = static_cast<float>(B(sys)[kPS_Color1 + 3]) / k255;  // +0xe3
+    const float base0 = static_cast<float>(static_cast<uint8_t>(color0 >> 16)) / k255;  // +0xde
+    const float base1 = static_cast<float>(static_cast<uint8_t>(color0 >> 8))  / k255;  // +0xdd
+    const float base2 = static_cast<float>(static_cast<uint8_t>(color0))       / k255;  // +0xdc
+    const float base3 = static_cast<float>(static_cast<uint8_t>(color0 >> 24)) / k255;  // +0xdf (alpha)
+    const float end0  = static_cast<float>(static_cast<uint8_t>(color1 >> 16)) / k255;  // +0xe2
+    const float end1  = static_cast<float>(static_cast<uint8_t>(color1 >> 8))  / k255;  // +0xe1
+    const float end2  = static_cast<float>(static_cast<uint8_t>(color1))       / k255;  // +0xe0
+    const float end3  = static_cast<float>(static_cast<uint8_t>(color1 >> 24)) / k255;  // +0xe3
 
     // Six floats of the pool's Box, zeroed BEFORE the loop rebuilds it. Note
     // this is a ZERO fill, not the ctor's ±1e8 seeding — so an empty system
     // publishes an origin-centred degenerate box, which is retail's behaviour.
-    for (size_t i = 0; i < 6; ++i) SetF(pool, kPool_BoxMin + i * 4, 0.0f);
+    ::Box& box = pool->_bounds;
+    box.min.x = 0.0f; box.min.y = 0.0f; box.min.z = 0.0f;
+    box.max.x = 0.0f; box.max.y = 0.0f; box.max.z = 0.0f;
 
     const float colorSpan = ps->_colorT1 - ps->_colorT0;
     const float invColorSpan = kOne / colorSpan;
@@ -799,96 +606,90 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     const float delta2 = end2 - base2;
     const float delta3 = end3 - base3;
 
-    for (int64_t i = static_cast<int64_t>(I32(pool, kPool_LiveCount)) - 1; i >= 0; --i) {
-        uint8_t* rec = *reinterpret_cast<uint8_t**>(pool + kPool_Records)
-                       + i * kRec_Stride;
-        uint8_t* ext = *reinterpret_cast<uint8_t**>(emitter + kEmit_Data)
-                       + i * kExt_Stride;
+    for (int64_t i = static_cast<int64_t>(pool->_liveCount) - 1; i >= 0; --i) {
+        RtGraphics::ParticleRecord& rec = pool->_records._data[i];
+        RtGraphics::ParticleExtra&  ext = emitter->_extra._data[i];
         ++g_psiAged;
 
-        SetI64(rec, kRec_Age, I64(rec, kRec_Age) + deltaTicks);
+        rec._age += deltaTicks;
 
         const float damping = ps->_damping;
-        const float vx = (aX + F(ext, kExt_Vel + 0)) * damping;
-        const float vy = (aY + F(ext, kExt_Vel + 4)) * damping;
-        const float vz = (aZ + F(ext, kExt_Vel + 8)) * damping;
-        SetF(ext, kExt_Vel + 0, vx);
-        SetF(ext, kExt_Vel + 4, vy);
-        SetF(ext, kExt_Vel + 8, vz);
+        const float vx = (aX + ext._velX) * damping;
+        const float vy = (aY + ext._velY) * damping;
+        const float vz = (aZ + ext._velZ) * damping;
+        ext._velX = vx;
+        ext._velY = vy;
+        ext._velZ = vz;
 
-        const float nx = F(rec, kRec_Pos + 0) + dt * vx;
-        const float ny = F(rec, kRec_Pos + 4) + dt * vy;
-        const float nz = F(rec, kRec_Pos + 8) + dt * vz;
-        // prev <- the OLD current, copied as raw dwords before the new writes
-        SetU32(rec, kRec_PosPrev + 0, U32(rec, kRec_Pos + 0));
-        SetU32(rec, kRec_PosPrev + 4, U32(rec, kRec_Pos + 4));
-        SetU32(rec, kRec_PosPrev + 8, U32(rec, kRec_Pos + 8));
-        SetF(rec, kRec_Pos + 0, nx);
-        SetF(rec, kRec_Pos + 4, ny);
-        SetF(rec, kRec_Pos + 8, nz);
+        const float nx = rec._pos.x + dt * vx;
+        const float ny = rec._pos.y + dt * vy;
+        const float nz = rec._pos.z + dt * vz;
+        // prev <- the OLD current, copied before the new writes
+        rec._posPrev = rec._pos;
+        rec._pos.x = nx;
+        rec._pos.y = ny;
+        rec._pos.z = nz;
 
         // The bounding box. Retail's COMISS/JA idiom keeps the EXISTING value
         // when the comparison is unordered, which `a < b ? a : b` does not
         // reproduce — so each is written as retail's `if (existing <= new)
         // existing = new` / `if (new <= existing) existing = new`.
         {
-            float maxZ = F(pool, kPool_BoxMax + 8); if (maxZ <= nz) maxZ = nz;
-            float maxY = F(pool, kPool_BoxMax + 4); if (maxY <= ny) maxY = ny;
-            float maxX = F(pool, kPool_BoxMax + 0); if (maxX <= nx) maxX = nx;
-            float minZ = F(pool, kPool_BoxMin + 8); if (nz <= minZ) minZ = nz;
-            float minY = F(pool, kPool_BoxMin + 4); if (ny <= minY) minY = ny;
-            float minX = F(pool, kPool_BoxMin + 0); if (nx <= minX) minX = nx;
-            SetF(pool, kPool_BoxMin + 0, minX);
-            SetF(pool, kPool_BoxMin + 4, minY);
-            SetF(pool, kPool_BoxMin + 8, minZ);
-            SetF(pool, kPool_BoxMax + 0, maxX);
-            SetF(pool, kPool_BoxMax + 4, maxY);
-            SetF(pool, kPool_BoxMax + 8, maxZ);
+            float maxZ = box.max.z; if (maxZ <= nz) maxZ = nz;
+            float maxY = box.max.y; if (maxY <= ny) maxY = ny;
+            float maxX = box.max.x; if (maxX <= nx) maxX = nx;
+            float minZ = box.min.z; if (nz <= minZ) minZ = nz;
+            float minY = box.min.y; if (ny <= minY) minY = ny;
+            float minX = box.min.x; if (nx <= minX) minX = nx;
+            box.min.x = minX;
+            box.min.y = minY;
+            box.min.z = minZ;
+            box.max.x = maxX;
+            box.max.y = maxY;
+            box.max.z = maxZ;
         }
 
         // Spin: rate' = (dt² * spinAccel + rate) * spinDamp; rot += rate' * dt
         {
             float rate = dt2 * ps->_spinAccel;
-            rate += F(ext, kExt_RotRate);
+            rate += ext._rotRate;
             rate *= ps->_spinDamp;
-            SetF(ext, kExt_RotRate, rate);
-            const float prev = F(rec, kRec_Rot);
-            SetF(rec, kRec_RotPrev, prev);
-            SetF(rec, kRec_Rot, rate * dt + prev);
+            ext._rotRate = rate;
+            const float prev = rec._rot;
+            rec._rotPrev = prev;
+            rec._rot = rate * dt + prev;
         }
         // Size: identical shape on its own accel/damp pair
         {
             float rate = dt2 * ps->_sizeAccel;
-            rate += F(ext, kExt_SizeRate);
+            rate += ext._sizeRate;
             rate *= ps->_sizeDamp;
-            SetF(ext, kExt_SizeRate, rate);
-            const float prev = F(rec, kRec_Size);
-            SetF(rec, kRec_SizePrev, prev);
-            SetF(rec, kRec_Size, rate * dt + prev);
+            ext._sizeRate = rate;
+            const float prev = rec._size;
+            rec._sizePrev = prev;
+            rec._size = rate * dt + prev;
         }
 
         // The colour parameter: (age/lifetime - t0) / (t1 - t0), clamped to
         // [0,1] with retail's COMISS ordering (0 first, then 1).
-        float t = TicksToSeconds(I64(rec, kRec_Age)) / TicksToSeconds(I64(rec, kRec_Lifetime));
+        float t = TicksToSeconds(rec._age) / TicksToSeconds(rec._lifetime);
         t -= ps->_colorT0;
         t *= invColorSpan;
         if (0.0f > t) t = 0.0f;
         else if (t > kOne) t = kOne;
 
-        SetU32(rec, kRec_ColorPrev + 0, U32(rec, kRec_Color + 0));
-        SetU32(rec, kRec_ColorPrev + 4, U32(rec, kRec_Color + 4));
-        SetU32(rec, kRec_ColorPrev + 8, U32(rec, kRec_Color + 8));
-        SetF(rec, kRec_Color + 0, delta0 * t + base0);
-        SetF(rec, kRec_Color + 4, delta1 * t + base1);
-        SetF(rec, kRec_Color + 8, delta2 * t + base2);
+        rec._colorPrev = rec._color;
+        rec._color.x = delta0 * t + base0;
+        rec._color.y = delta1 * t + base1;
+        rec._color.z = delta2 * t + base2;
 
         // The fade. TWO independent ramps, and retail picks ONE of them with a
         // CMOVB on `1.0f < fadeIn` — the fade-in until it saturates, the
         // fade-out afterwards — then clamps the winner to [0,1] with the 1.0f
         // comparison FIRST this time.
         {
-            const int64_t age  = I64(rec, kRec_Age);
-            const int64_t life = I64(rec, kRec_Lifetime);
+            const int64_t age  = rec._age;
+            const int64_t life = rec._lifetime;
             const int64_t out  = ps->_fadeOutTicks;
 
             const float fadeIn  = TicksToSeconds(age) / TicksToSeconds(ps->_fadeInTicks);
@@ -900,50 +701,47 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
 
             const float alpha = ((delta3 * t) + base3) * fade;
             // ONE 8-byte store covering +0x40 AND +0x44 with the same float.
-            SetF(rec, kRec_Alpha,     alpha);
-            SetF(rec, kRec_AlphaPrev, alpha);
+            rec._alpha     = alpha;
+            rec._alphaPrev = alpha;
         }
     }
 
     // --- F : Geometry::SetBounds, inlined --------------------------------
     // Retail compares the six floats with UCOMISS and only writes (and sets
     // dirty bit 1) when one differs. UCOMISS's unordered case falls through to
-    // the write, which `!=` on a NaN also does.
+    // the write, which `==` failing on a NaN also does.
     {
-        bool same = true;
-        for (size_t k = 0; k < 6; ++k)
-            if (F(self, 0x34 + k * 4) != F(pool, kPool_BoxMin + k * 4)) { same = false; break; }
+        const ::Box& lb = _localBounds;
+        const bool same = lb.min.x == box.min.x && lb.min.y == box.min.y &&
+                          lb.min.z == box.min.z && lb.max.x == box.max.x &&
+                          lb.max.y == box.max.y && lb.max.z == box.max.z;
         if (!same) {
-            for (size_t k = 0; k < 6; ++k)
-                SetU32(self, 0x34 + k * 4, U32(pool, kPool_BoxMin + k * 4));
-            SetU32(self, 0x2c, U32(self, 0x2c) | 2u);   // Geometry::_dirtyFlags
+            _localBounds = box;                                    // six dwords
+            _dirtyFlags |= RtGraphics::kDirtyBounds;               // Geometry::_dirtyFlags |= 2
         }
     }
 
     // --- G : the compacting removal pass ----------------------------------
     // `if (rec.age >= rec.lifetime) { live--; shift every later record and its
     // extra record down one; DON'T advance i }`.
-    for (int32_t i = 0; i < I32(pool, kPool_LiveCount); ) {
-        uint8_t* records = *reinterpret_cast<uint8_t**>(pool + kPool_Records);
-        uint8_t* rec = records + static_cast<int64_t>(i) * kRec_Stride;
-        if (I64(rec, kRec_Age) < I64(rec, kRec_Lifetime)) { ++i; continue; }
+    for (int32_t i = 0; i < pool->_liveCount; ) {
+        const RtGraphics::ParticleRecord& rec = pool->_records._data[static_cast<int64_t>(i)];
+        if (rec._age < rec._lifetime) { ++i; continue; }
 
-        SetI32(pool, kPool_LiveCount, I32(pool, kPool_LiveCount) - 1);
+        pool->_liveCount = pool->_liveCount - 1;
         ++g_psiKilled;
 
-        // Retail re-reads pool->_records and emitter->_data on EVERY iteration
+        // Retail re-reads pool->_records and emitter->_extra on EVERY iteration
         // of this shift; reproduced, because a cached base would be a different
         // program if anything reallocated underneath (nothing does, today).
-        for (int32_t j = i; j < I32(pool, kPool_LiveCount); ++j) {
-            uint8_t* base = *reinterpret_cast<uint8_t**>(pool + kPool_Records);
+        for (int32_t j = i; j < pool->_liveCount; ++j) {
             // Retail copies the 0x58 bytes field by field (two qwords, twelve
             // dwords, three qwords). Source and destination are 0x58 apart and
-            // never overlap, so one memcpy is the same program.
-            std::memcpy(base + static_cast<int64_t>(j) * kRec_Stride,
-                        base + static_cast<int64_t>(j + 1) * kRec_Stride, kRec_Stride);
-            uint8_t* ebase = *reinterpret_cast<uint8_t**>(emitter + kEmit_Data);
-            std::memcpy(ebase + static_cast<int64_t>(j) * kExt_Stride,
-                        ebase + static_cast<int64_t>(j + 1) * kExt_Stride, kExt_Stride);
+            // never overlap, so one record copy is the same program.
+            RtGraphics::ParticleRecord* const base = pool->_records._data;
+            base[static_cast<int64_t>(j)] = base[static_cast<int64_t>(j + 1)];
+            RtGraphics::ParticleExtra* const ebase = emitter->_extra._data;
+            ebase[static_cast<int64_t>(j)] = ebase[static_cast<int64_t>(j + 1)];
         }
     }
 }
@@ -958,8 +756,8 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
 //   res = this->_resource;
 //   if (res && res->_active == 0) {
 //       pool = this->_boundsPtr;
-//       if (pool) { 0x180062320(&pool[0x18]);   // Array<T>::~Array
-//                   0x180061ae0(pool);          // per-TU operator delete
+//       if (pool) { 0x180062320(&pool->_records);   // Array<T>::~Array
+//                   0x180061ae0(pool);              // per-TU operator delete
 //                   this->_boundsPtr = 0; return; }
 //   }
 //   this->_boundsPtr = 0;
@@ -974,11 +772,10 @@ namespace Graphics {
 void ParticleInstance::RemoveState() {
     ++g_piRemoveState;
 
-    uint8_t* self = B(static_cast<void*>(this));
-    uint8_t* res  = *reinterpret_cast<uint8_t**>(self + 0xc0);
+    const Particle* const res = _resource;
 
-    if (res && res[kParticle_Active] == 0) {
-        uint8_t* pool = *reinterpret_cast<uint8_t**>(self + 0xc8);
+    if (res && res->_active == 0) {
+        RtGraphics::ParticleBoundsRecord* const pool = _boundsPtr;
         if (pool) {
             ++g_piRemoveStateFree;
             // Both are UNNAMED in the shipped export directory (checked with
@@ -987,13 +784,13 @@ void ParticleInstance::RemoveState() {
             //                rtcoll::RtColl_ArrayDtor_180062320 (array.cpp)
             //   0x180061ae0  the per-TU `operator delete` (locked MemFree) —
             //                RtGraphics_Material_OperatorDelete (system/closure_batch2b.cpp)
-            rtcoll::RtColl_ArrayDtor_180062320(pool + 0x18);
+            rtcoll::RtColl_ArrayDtor_180062320(&pool->_records);
             RtGraphics_Material_OperatorDelete(pool);
-            *reinterpret_cast<void**>(self + 0xc8) = nullptr;
+            _boundsPtr = nullptr;
             return;
         }
     }
-    *reinterpret_cast<void**>(self + 0xc8) = nullptr;
+    _boundsPtr = nullptr;
 }
 
 }  // namespace Graphics

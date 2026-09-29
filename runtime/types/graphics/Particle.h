@@ -178,6 +178,31 @@ static_assert(offsetof(Particle, _f40) == 0x40, "Particle::_f40 @ +0x40");
 // pointer.
 struct ParticleBoundsRecord;
 
+// B.4: the per-instance EMITTER record (`ParticleSystemInstance::_f_d8`,
+// element of `ParticleSystem::_pool`) and the per-particle EXTRA record its
+// array holds, parallel to the pool record's live particles. Named from
+// wave28_lane_partsys.cpp's kEmit_* / kExt_* measurements. Neither has a
+// retail name (Particle.h's H2 note: no `Emitter` symbol in the DLL); both are
+// built by stores into raw blocks, never by a C++ constructor:
+// ParticleSystem::Serialize / ParticleSystemInstance::SetParticle zero the
+// array header, copy `ParticleSystem::_f48`'s bits into `_rate`, and size the
+// array through the kSpec_Rec14 row (0x180020e90).
+struct ParticleExtra {
+    float _velX, _velY, _velZ;   // +0x00  velocity
+    float _rotRate;              // +0x0c  degrees/sec, random sign
+    float _sizeRate;             // +0x10
+};
+static_assert(sizeof(ParticleExtra) == 0x14, "the extra-record stride is 0x14 (kSpec_Rec14)");
+static_assert(offsetof(ParticleExtra, _rotRate)  == 0x0c, "ParticleExtra::_rotRate @ +0x0c");
+static_assert(offsetof(ParticleExtra, _sizeRate) == 0x10, "ParticleExtra::_sizeRate @ +0x10");
+
+struct ParticleEmitter {
+    Collection::Array<ParticleExtra> _extra;   // +0x00 {_data, _size@0x08, _capacity@0x0c}
+    float _rate;                               // +0x10  the spawn-rate accumulator
+};
+static_assert(sizeof(ParticleEmitter) == 0x18, "MemAlloc(0x18, 8) at both build sites");
+static_assert(offsetof(ParticleEmitter, _rate) == 0x10, "ParticleEmitter::_rate @ +0x10");
+
 // ============================================================================
 // The resource object a ParticleInstance references at +0xc0 (see below).
 // This is NOT this lane's class to own the full layout of -- it is some
@@ -707,10 +732,12 @@ public:
                               //        ctor `(int64)(0.25 / _secondsPerTick)`
     int64_t  _fadeOutTicks;   // +0xf0  MOV 0xf0(%rdi),%rcx @ 0x1800a672a. Same
                               //        ctor value, a SECOND DIVSD off one XMM1
-    // +0xf8  Array<void*> — the per-system pool-pointer array `Serialize`
+    // +0xf8  Array<ParticleEmitter*> — the per-system emitter array `Serialize`
     // rebuilds on the read side, `SetSize(&_pool, _recordCount)` through the
-    // registered `kSpec_Fill8` row. Raw 16-byte header, for `_records`' reason.
-    Collection::Array<uint8_t> _pool;   // +0xf8 {_data, _size@0x100, _capacity@0x104}
+    // registered `kSpec_Fill8` row. B.4: typed; a pointer element is trivially
+    // destructible and ~ParticleSystem empties the header before the member
+    // dtor runs, as for Particle::_records.
+    Collection::Array<RtGraphics::ParticleEmitter*> _pool;   // +0xf8 {_data, _size@0x100, _capacity@0x104}
 };
 
 static_assert(sizeof(ParticleSystem) == 0x108,

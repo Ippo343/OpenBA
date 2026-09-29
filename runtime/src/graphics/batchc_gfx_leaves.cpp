@@ -223,7 +223,7 @@ void ReleaseString(char** slot) {
 // ############################################################################
 //
 //   this->vtable = ??_7ParticleSystemInstance@
-//   if (this->_resource->[0x20] == 0 && this->_f_d8)      // UNGUARDED deref
+//   if (this->_resource->[0x20] == 0 && this->_f_d8)    // UNGUARDED deref
 //       { ArrayDtor(_f_d8); operator delete(_f_d8); }
 //   this->vtable = ??_7ParticleInstance@
 //   ParticleInstance::RemoveState(this)
@@ -241,13 +241,13 @@ void ReleaseString(char** slot) {
 // (~ParticleInstance) and the ~Geometry tail are the compiler's chain.
 Graphics::ParticleSystemInstance::~ParticleSystemInstance() {
     if (_resource->_active == 0) {                      // +0x20, UNGUARDED, as retail
-        void* const owned = _f_d8;
+        RtGraphics::ParticleEmitter* const owned = _f_d8;
         if (owned != nullptr) {
             // 0x180021490: ~Array<T> for a trivially destructible T — frees
             // [0] and zeroes [0]/[8]. 0x180020600: the matching class
             // operator delete. Both unexported template instantiations,
             // called by their body names.
-            rtcoll::RtColl_ArrayDtor_180021490(owned);
+            rtcoll::RtColl_ArrayDtor_180021490(&owned->_extra);
             RtGraphics_Emitter_OperatorDelete(owned);
         }
     }
