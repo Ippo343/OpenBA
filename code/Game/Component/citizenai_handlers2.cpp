@@ -272,7 +272,7 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                         changed = after ^ before;
                     } else {
                         // mask non-empty -> ensure in scene + run vtable+0x40 update
-                        int32_t* settings = g_gameSettings;
+                        GameSettings* settings = g_gameSettings;
                         if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
                             *reinterpret_cast<int32_t*>(mi + 0x100) < 0) {
                             uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))

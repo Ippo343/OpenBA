@@ -284,7 +284,7 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
     // Scale by (gameSettings UI value / 100.0) on both axes (in place operator*=).
     float uiScale = 1.0f;
     if (g_gameSettings != nullptr)
-        uiScale = static_cast<float>(g_gameSettings[0]) / scaleDiv;
+        uiScale = static_cast<float>(g_gameSettings->uiScale) / scaleDiv;
     {
         Math::Vector2 sv(uiScale, uiScale);
         reinterpret_cast<Math::Vector2*>(runMin)->operator*=(sv);

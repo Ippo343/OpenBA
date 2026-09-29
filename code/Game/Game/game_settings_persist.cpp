@@ -40,14 +40,20 @@ void* PersistenceSingleton() {
 
 // The 16 keys in retail's order. Order matters only for log readability, but
 // keeping it identical makes a diff against the decompile trivial.
-struct IntKey  { const char* key; int index; };
-struct BoolKey { const char* key; int byteOffset; };
+struct IntKey  { const char* key; int32_t GameSettings::* field; };
+struct BoolKey { const char* key; bool GameSettings::* field; };
 
 const IntKey  kIntKeys[] = {
-    { "UIScale", 0 }, { "AutosaveInterval", 1 }, { "StatusIconOpacity", 2 },
-    { "StatusIconScale", 4 }, { "LastOption", 7 }, { "LastTerrain", 8 },
-    { "LastMapSize", 9 }, { "LastClimate", 10 }, { "LastStart", 11 },
-    { "LastDisaster", 12 },
+    { "UIScale", &GameSettings::uiScale },
+    { "AutosaveInterval", &GameSettings::autosaveInterval },
+    { "StatusIconOpacity", &GameSettings::statusIconOpacity },
+    { "StatusIconScale", &GameSettings::statusIconScale },
+    { "LastOption", &GameSettings::lastOption },
+    { "LastTerrain", &GameSettings::lastTerrain },
+    { "LastMapSize", &GameSettings::lastMapSize },
+    { "LastClimate", &GameSettings::lastClimate },
+    { "LastStart", &GameSettings::lastStart },
+    { "LastDisaster", &GameSettings::lastDisaster },
 };
 // THREE of these were in kIntKeys until 2026-09-04 and are NOT ints. Retail
 // (0x140098b60 / 0x140098970) passes `(bool*)(param_1 + 3)`, `(bool*)(param_1 + 5)`
@@ -60,14 +66,18 @@ const IntKey  kIntKeys[] = {
 // wrong read there silently hides EVERY status icon in the game, citizen and
 // building alike, with nothing logged anywhere.
 const BoolKey kBoolKeys[] = {
-    { "StatusIconEnable", 0x0C }, { "EdgeScroll", 0x14 }, { "AutoPause", 0x18 },
-    { "ShowCelcius", 0x15 }, { "ShowWeather", 0x16 }, { "AutoSlow", 0x17 },
+    { "StatusIconEnable", &GameSettings::statusIconEnable },
+    { "EdgeScroll", &GameSettings::edgeScroll },
+    { "AutoPause", &GameSettings::autoPause },
+    { "ShowCelcius", &GameSettings::showCelsius },
+    { "ShowWeather", &GameSettings::showWeather },
+    { "AutoSlow", &GameSettings::autoSlow },
 };
 
 }  // namespace
 
 // GameSettings_Load — faithful port of 0x140098b60.
-extern "C" void GameSettings_Load(int32_t* settings) {
+extern "C" void GameSettings_Load(GameSettings* settings) {
     if (!settings) return;
     void* p = PersistenceSingleton();
     if (!p) {
@@ -78,26 +88,26 @@ extern "C" void GameSettings_Load(int32_t* settings) {
     // overload (int& / bool&), as §7.3 requires — the bool keys are one byte at
     // settings+0xC/+0x14/+0x18 and must not pick the int& overload.
     for (const auto& k : kIntKeys)
-        reinterpret_cast<const IO::Persistence*>(p)->Get("Game", k.key, settings[k.index]);   // B.3.4 bridge
+        reinterpret_cast<const IO::Persistence*>(p)->Get("Game", k.key, settings->*k.field);   // B.3.4 bridge
     for (const auto& k : kBoolKeys)
         reinterpret_cast<const IO::Persistence*>(p)->Get(
-            "Game", k.key,
-            *reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(settings) + k.byteOffset));   // B.3.4 bridge
+            "Game", k.key, settings->*k.field);   // B.3.4 bridge
 
     fprintf(stderr, "[GameSettings] Load: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
-            settings[8], settings[9], settings[10], settings[11], settings[12],
-            settings[0], settings[1]);
+            settings->lastTerrain, settings->lastMapSize, settings->lastClimate,
+            settings->lastStart, settings->lastDisaster,
+            settings->uiScale, settings->autosaveInterval);
     fprintf(stderr, "[GameSettings] Load: StatusIconEnable=%d (settings+0xC) -- 0 hides "
             "EVERY status icon (citizen health, building warnings); it is the Options "
             "checkbox, persisted as GameStatusIconEnable under "
             "HKCU/Software/Shining Rock Software LLC/Banished\n",
-            (int)*(reinterpret_cast<uint8_t*>(settings) + 0x0C));
+            (int)settings->statusIconEnable);
     fflush(stderr);
 }
 
 // GameSettings_Save — faithful port of 0x140098970.
-extern "C" void GameSettings_Save(int32_t* settings) {
+extern "C" void GameSettings_Save(GameSettings* settings) {
     if (!settings) return;
     void* p = PersistenceSingleton();
     if (!p) {
@@ -106,14 +116,14 @@ extern "C" void GameSettings_Save(int32_t* settings) {
     }
     // ENDGAME B.3.4a closing: onto IO::Persistence::Set, DOOR-typed as above.
     for (const auto& k : kIntKeys)
-        reinterpret_cast<IO::Persistence*>(p)->Set("Game", k.key, settings[k.index]);   // B.3.4 bridge
+        reinterpret_cast<IO::Persistence*>(p)->Set("Game", k.key, settings->*k.field);   // B.3.4 bridge
     for (const auto& k : kBoolKeys)
         reinterpret_cast<IO::Persistence*>(p)->Set(
-            "Game", k.key,
-            *(reinterpret_cast<uint8_t*>(settings) + k.byteOffset) != 0);   // B.3.4 bridge
+            "Game", k.key, settings->*k.field);   // B.3.4 bridge
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d\n",
-            settings[8], settings[9], settings[10], settings[11], settings[12]);
+            settings->lastTerrain, settings->lastMapSize, settings->lastClimate,
+            settings->lastStart, settings->lastDisaster);
     fflush(stderr);
 }

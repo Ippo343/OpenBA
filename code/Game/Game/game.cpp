@@ -30,16 +30,15 @@
 #include "Game/exe_bodies.h"
 #include "Action/exe_bodies.h"   // Pf_StorageCanAccept_cd80, ActRm_StorageAdd_d000
 
-extern "C" void* Game_Ctor(void* self) {
+extern "C" GameContainer* Game_Ctor(GameContainer* self) {
     // Zero the entire 0xe0-byte struct, including the regions where the
     // sprites will be initialized — Sprite default ctor is itself a 16-byte
     // zero-init in the engine, so this is safe.
     std::memset(self, 0, 0xe0);
 
-    // Two embedded UI::Sprite default ctors at slot 0x15 and slot 0x17.
-    auto base = reinterpret_cast<uint64_t*>(self);
-    ::new (&base[0x15]) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
-    ::new (&base[0x17]) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
+    // Two embedded UI::Sprite default ctors at +0xA8 and +0xB8.
+    ::new (&self->spriteWhite) UI::Sprite();           // B.3.6: value-type ctor in place (B6-10)
+    ::new (&self->spriteSaveLoadEmpty) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
 
     // Publish the container (DAT_1401c3de8, 0x1400010f1).
     g_gameContainer = self;
@@ -47,7 +46,7 @@ extern "C" void* Game_Ctor(void* self) {
 }
 
 // The exe cell 0x1401c3de8 (B3R STORAGE; game.h).
-void* g_gameContainer = nullptr;
+GameContainer* g_gameContainer = nullptr;
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void Game_TriggerDisasterByType_Impl(int disasterType) {
