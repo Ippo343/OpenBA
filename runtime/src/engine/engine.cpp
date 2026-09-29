@@ -591,13 +591,10 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
     self->_postDraw.~Array();
     // NOT CONVERTED (0x180033880): this is a J2 entry (array_destroy.cpp),
     // `ReleaseStringsCounted(..., kD_Str_18)` then `ArrayDtorImpl` — a
-    // per-element String RELEASE, not a trivial destroy. `VideoResourceEntry`
-    // (MainLoop.h) types its String field as a raw `char* _name` rather than a
-    // real refcounted String class, so `is_trivially_destructible
-    // <VideoResourceEntry>` is TRUE in this header and the trait-derived
-    // `Array<VideoResourceEntry>::~Array()` would SKIP the release entirely —
-    // silently leaking every resource name string on video-context teardown.
-    // Bridging this correctly needs an `ArraySpec` whose `destroy` calls
+    // per-element String RELEASE, not a trivial destroy (the element's
+    // `_path` Filename, MainLoop.h). Retail's instantiation is a hand-derived
+    // spec (kSpec_VideoResource / kD_Str_18, mainloop_video.cpp), not the
+    // trait-derived `Array<VideoResourceEntry>::~Array()`. Bridging it needs an `ArraySpec` whose `destroy` calls
     // `ReleaseStringsCounted` with `kD_Str_18` (a `DestroySpec`, a different
     // struct from `ArraySpec`, defined in array_destroy.cpp) — that is new
     // Collection-side plumbing this batch does not own (runtime/src/collection

@@ -208,6 +208,7 @@
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 #include "../system/string.h"
+#include "../system/pod_bridge.h"   // B.4 R-ENG: Sys(External::_path)
 #include "../object/external_compiled.h"   // B3R: GetCompiledPath by name
 #include "../../types/video/Context.h"     // B3R: RtVideo_Context_Dtor
 #include "../../types/collection/Collection.h"   // B3R: rtcoll::RtColl_ArrayDtorElem_180033880
@@ -227,25 +228,8 @@
 // directly, `AdjustDelimiters` through the transitional
 // `System::FilenamePrivateAccess` (it is PRIVATE in retail too, AEAA).
 
-// ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ           0x180006250
-// A member returning by value: RCX = this, RDX = the hidden return slot.
-// ?FindNext@ExternalFactory@Object@@ …                           0x1800be9d0
-//
-// These two live in `namespace RtObject` and take that namespace's OWN class
-// types. Declaring them here with `const void*` compiled and then failed to
-// LINK, which is the good outcome: a `void*` redeclaration that happened to
-// mangle the same way would have been an ODR violation nobody would ever see.
-// Both types are forward-declared and never completed -- this file passes the
-// pointers straight through and reads nothing out of either.
-namespace RtObject {
-struct External;
-struct ExternalFactory;
-RtSystem::Filename* RtObject_External_GetPath(const External* self,
-                                              RtSystem::Filename* ret);
-const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
-                                                  uint32_t typeId,
-                                                  const External* prev);
-}  // namespace RtObject
+// B.4 (R-ENG): External::GetPath (0x180006250) and ExternalFactory::FindNext
+// (0x1800be9d0) are reached as the members External.h declares.
 
 // ============================================================================
 // 0x180034440 — elem-destroy(String), stride 0x18, one String at +0x10
@@ -273,37 +257,16 @@ namespace {
 // forward-declares GLOBAL structs of both names, so an unqualified use here is
 // AMBIGUOUS rather than wrong. Everything below is spelled out.
 
-// ---------------------------------------------------------------------------
-// The element. `MainLoop::_videoResources` is a `Collection::Array<T>` with a
-// 0x18-byte T, which runtime/types/engine/MainLoop.h already pins at +0x00.
-// The fields are read off `OnVideoError`'s record construction
-// (0x1800dca4d..0x1800dcae4) and re-read off `OnVideoRestart`'s consumption
-// (0x1800dc416, 0x1800dc440, 0x1800dc477) — two independent readings of one
-// layout, which is why no guesswork went into it:
-//
-//     +0x00  int32     typeId   from the External's vtable slot 2
-//     +0x04  ---       NEVER WRITTEN BY ANYBODY (see kSpec_VideoResource)
-//     +0x08  void*     object   the Object::External*
-//     +0x10  Filename  path     refcounted System::String payload
-//
-// ENDGAME B.3.1 step 2: `path` is the real `System::Filename`. This struct is
-// file-local — it is this port's model of the array element, not a retail class
-// another batch forward-declares — and the array machinery that owns the
-// ELEMENTS still copies and destroys them by hand, byte-wise, through
-// `AssignVideoResource` and `kD_Str_18`. So no ctor or dtor is being skipped by
-// a bulk path: those two functions ARE the element's copy and destroy, spelled
-// out. The only object with automatic storage is `rec` in OnVideoError, and
-// there RAII lands its release exactly where retail's is (0x1800dcaf6).
-// ---------------------------------------------------------------------------
-struct VideoResource {
-    int32_t  typeId;
-    int32_t  pad_04;
-    void*    object;
-    System::Filename path;
-};
-static_assert(sizeof(VideoResource) == 0x18, "VideoResource must be 0x18 bytes");
-static_assert(offsetof(VideoResource, object) == 0x08, "object @ +0x08");
-static_assert(offsetof(VideoResource, path)   == 0x10, "path @ +0x10");
+// The element is `RtEngine::VideoResourceEntry` (runtime/types/engine/MainLoop.h):
+// +0x00 typeId (External vtable slot 2), +0x04 NEVER WRITTEN (see
+// kSpec_VideoResource), +0x08 the Object::External*, +0x10 its Filename. Read off
+// OnVideoError's record construction (0x1800dca4d..0x1800dcae4) and re-read off
+// OnVideoRestart's consumption (0x1800dc416, 0x1800dc440, 0x1800dc477). The
+// array machinery still copies and destroys ELEMENTS through
+// `AssignVideoResource` and `kD_Str_18`: those two ARE the element's copy and
+// destroy. The only object with automatic storage is `rec` in OnVideoError,
+// and RAII lands its release exactly where retail's is (0x1800dcaf6).
+using RtEngine::VideoResourceEntry;
 
 // ---------------------------------------------------------------------------
 // The ten type-id globals, IN RETAIL'S OWN PUSH ORDER.
@@ -353,30 +316,6 @@ uint32_t TypeIdExternal() {
     return ::Object::External::TypeId();   // ENDGAME B.3.9 OBJ: the class record
 }
 
-// The four singletons — all four class statics now (ENDGAME B.3.9 SS1,
-// B39_RULES D7): the address-of IS the redirected cell.
-void** ExternalFactorySlot() {
-    return reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton);
-}
-void** ObjectFactorySlot() {
-    return reinterpret_cast<void**>(&::Object::Factory::_singleton);
-}
-void** SaveLoadSlot() {
-    return reinterpret_cast<void**>(&::Save::SaveLoad::_singleton);
-}
-void** MainLoopSlot() {
-    return reinterpret_cast<void**>(&::Engine::MainLoop::_singleton);
-}
-
-// ---------------------------------------------------------------------------
-// The two virtuals the listing dispatches, by name on the real classes. The
-// walk hands out the `RtObject::External` POD spelling of retail's
-// `Object::External`; the bytes are the same object.
-// ---------------------------------------------------------------------------
-inline uint32_t CallGetTypeId(const RtObject::External* obj) {   // [[obj] + 0x10]
-    return reinterpret_cast<const ::Object::Base*>(obj)->Type();   // B.3.x bridge
-}
-
 }  // namespace
 
 namespace rtcoll {
@@ -400,11 +339,15 @@ namespace {
 // MemAlloc or a slot past `_size` — so a `new (…) System::Filename(…)` is the
 // exact instruction sequence, and it cannot be misread later as an assignment
 // the way a bare `CtorCopy(dst, src)` could.
+// B.4 (R-ENG): the spec's callback hands raw element storage; it is viewed as
+// the element once each side, then written field by field (the +0x04 window
+// stays unwritten).
 void AssignVideoResource(uint8_t* dst, const uint8_t* src) {
-    *reinterpret_cast<uint32_t*>(dst)     = *reinterpret_cast<const uint32_t*>(src);
-    *reinterpret_cast<uint64_t*>(dst + 8) = *reinterpret_cast<const uint64_t*>(src + 8);
-    new (dst + 0x10) System::Filename(
-        *reinterpret_cast<const System::Filename*>(src + 0x10));
+    VideoResourceEntry* const d = reinterpret_cast<VideoResourceEntry*>(dst);          // ArraySpec byte callback
+    const VideoResourceEntry* const e = reinterpret_cast<const VideoResourceEntry*>(src);
+    d->_typeId = e->_typeId;
+    d->_object = e->_object;
+    new (&d->_path) System::Filename(e->_path);
 }
 
 }  // namespace
@@ -516,12 +459,9 @@ void Engine::MainLoop::OnVideoError() {
     // ---- 2. clear _videoResources --------------------------------------------
     // NOT CONVERTED (0x180033880): a J2 entry (array_destroy.cpp),
     // `ReleaseStringsCounted(..., kD_Str_18)` then `ArrayDtorImpl` — a
-    // per-element String RELEASE. `VideoResourceEntry` (runtime/types/engine/
-    // MainLoop.h) types its String field as a raw `char* _name`, so it is
-    // trivially destructible in THIS header and the trait-derived
-    // `Array<VideoResourceEntry>::~Array()` would wrongly skip the release —
-    // see engine.cpp's identical banner on this same address/field. Stays the
-    // J2 body, called by name (B3R).
+    // per-element String RELEASE over the hand-derived kD_Str_18 destroy.
+    // Stays retail's own instantiation, the J2 body, called by name (B3R) —
+    // see engine.cpp's banner on this same address/field.
     rtcoll::RtColl_ArrayDtorElem_180033880(&_videoResources);
 
     // ENDGAME B.3.2 step 2 — `arr` is now the real `_videoResources` member
@@ -531,37 +471,32 @@ void Engine::MainLoop::OnVideoError() {
     auto* const arr = rtcoll::AsArray<&rtcoll::kSpec_VideoResource>(&_videoResources);
 
     // ---- 3. collect the live resources of those ten classes ------------------
-    const RtObject::ExternalFactory* const factory =
-        static_cast<const RtObject::ExternalFactory*>(*ExternalFactorySlot());
+    const ::Object::ExternalFactory* const factory = ::Object::ExternalFactory::_singleton;
     const uint32_t externalTypeId = TypeIdExternal();
 
     for (int i = 0; i < 10; ++i) {
         const uint32_t wanted = types[i];
 
-        const RtObject::External* e =
-            RtObject::RtObject_ExternalFactory_FindNext(factory, externalTypeId, nullptr);
+        const ::Object::External* e = factory->FindNext(externalTypeId, nullptr);
         while (e != nullptr) {
-            if (CallGetTypeId(e) == wanted) {
-                // `RtObject_External_GetPath` is a registered entry point in
-                // another translation unit and its POD signature is a boundary
-                // this batch must not move, so the class local is handed over
-                // as the POD it is byte-identical to. Its release is ~Filename.
-                System::Filename fromGetPath;
-                RtObject::RtObject_External_GetPath(
-                    e, reinterpret_cast<RtSystem::Filename*>(&fromGetPath));
+            if (e->Type() == wanted) {                       // [[obj] + 0x10]
+                // Its release is ~Filename.
+                System::Filename fromGetPath = e->GetPath();
 
-                VideoResource rec;
-                rec.typeId = static_cast<int32_t>(CallGetTypeId(e));
-                rec.object = const_cast<RtObject::External*>(e);
+                VideoResourceEntry rec;
+                rec._typeId = static_cast<int32_t>(e->Type());
+                // FindNext hands the walk out const; the record keeps the object
+                // it will Destruct and reload.
+                rec._object = const_cast< ::Object::External*>(e);
                 // 0x1800dcac0: retail zeroes the slot, adopts, and normalises —
                 // `operator=` (0x180006770) is release-adopt-normalise, and the
                 // release arm is a no-op on the null the default ctor just put
                 // there, so the two are the same instructions. That accounts for
                 // the FIRST of the two AdjustDelimiters.
-                rec.path = fromGetPath;
+                rec._path = fromGetPath;
                 // 0x1800dcadf: the SECOND one, kept — see the banner. Private in
                 // retail as well, so it comes through the transitional accessor.
-                System::FilenamePrivateAccess::AdjustDelimiters(rec.path);
+                System::FilenamePrivateAccess::AdjustDelimiters(rec._path);
 
                 // retail 0x18004f620 — kSpec_VideoResource; see the banner above.
                 arr->SetSizeFill(arr->GetSize() + 1, &rec);
@@ -569,16 +504,15 @@ void Engine::MainLoop::OnVideoError() {
                 // `rec.path` then `fromGetPath` release here (0x1800dcaf6 and
                 // 0x1800dcb02) — C++'s reverse declaration order.
             }
-            e = RtObject::RtObject_ExternalFactory_FindNext(factory, externalTypeId, e);
+            e = factory->FindNext(externalTypeId, e);
         }
     }
 
     // ---- 4. release every recorded object -------------------------------------
-    for (int i = 0; i < arr->_size; ++i) {
-        VideoResource* const r = reinterpret_cast<VideoResource*>(arr->_data) + i;
+    for (int i = 0; i < _videoResources._size; ++i) {
         // [[obj] + 0x38] = External::Destruct. Every recorded object came off
         // the ExternalFactory walk above, filtered by External's type id.
-        static_cast<::Object::External*>(r->object)->Destruct();   // unguarded in retail, kept; B.3.x bridge
+        _videoResources._data[i]._object->Destruct();   // unguarded in retail, kept
     }
 
     // ---- 5. drop each SaveLoad entry's +0x60 -----------------------------------
@@ -587,33 +521,30 @@ void Engine::MainLoop::OnVideoError() {
     // 0x1800dcc30..0x1800dcc5e, and they are corroborated by
     // `Save::SaveLoad::OnVideoRestart` (0x1800c0f10), which walks the identical
     // shape with the identical constants to REBUILD what this loop drops. Two
-    // readings of one layout, which is why no SaveLoad type header is invented
-    // here for four byte offsets.
+    // readings of one layout — SaveLoad::SaveInfo (runtime/types/save/SaveLoad.h)
+    // pins them: imageBuffer +0x18, saveIndex +0x40, ImageBuffer::_data +0x60.
     //
     // The base pointer is re-loaded EVERY iteration (0x1800dcc30 sits inside the
     // loop), which matters because the deleting destructor below can reallocate
     // it. Kept inside the loop for that reason and not hoisted.
     {
-        uint8_t* const sl = static_cast<uint8_t*>(*SaveLoadSlot());
+        ::Save::SaveLoad* const sl = ::Save::SaveLoad::_singleton;
         // The COUNT is re-read every iteration, not hoisted: 0x1800dcc62 is
         // `CMP EDI, dword ptr [R14+0x58]` INSIDE the loop, and so is the base
         // load at 0x1800dcc30. Both matter, because the scalar-deleting
         // destructor called below is arbitrary code that can shrink the array
         // or move its buffer. Hoisting either would be a port that is correct
         // only while that destructor happens to be well-behaved.
-        for (int i = 0; i < *reinterpret_cast<const int32_t*>(sl + 0x58); ++i) {
-            uint8_t* const base  = *reinterpret_cast<uint8_t**>(sl + 0x50);
-            uint8_t* const entry = base + static_cast<int64_t>(i) * 0x58;
-            uint8_t* const obj   = *reinterpret_cast<uint8_t**>(entry + 0x18);
+        for (int i = 0; i < sl->_saves._size; ++i) {
+            ::Save::SaveLoad::SaveInfo& entry = sl->_saves._data[i];
+            Video::ImageBuffer* const obj = entry.imageBuffer;
             if (obj == nullptr) continue;
-            if (*reinterpret_cast<const int32_t*>(entry + 0x40) < 0) continue;
-            void* const payload = *reinterpret_cast<void**>(obj + 0x60);
+            if (entry.saveIndex < 0) continue;
+            Video::ImageBufferData* const payload = obj->_data;
             if (payload != nullptr) {
-                void** const vt = *reinterpret_cast<void***>(payload);
-                // scalar-deleting destructor: (this, 1)
-                reinterpret_cast<void (*)(void*, int)>(vt[0])(payload, 1);
+                payload->DeletingDtor(1u);   // scalar-deleting destructor: (this, 1)
             }
-            *reinterpret_cast<void**>(obj + 0x60) = nullptr;
+            obj->_data = nullptr;
         }
     }
 
@@ -628,9 +559,9 @@ void Engine::MainLoop::OnVideoError() {
     // Two members of one class releasing one field two different ways is
     // surprising enough to be worth the sentence; both are transcribed as
     // written.
-    void* const context = _context;
+    Video::Context* const context = _context;
     if (context != nullptr) {
-        RtVideo_Context_Dtor(static_cast<Video::Context*>(context));   // ~Context 0x1800f16e0
+        RtVideo_Context_Dtor(context);   // ~Context 0x1800f16e0
         rtcoll::MemFree(context);
     }
     _context = nullptr;
@@ -707,42 +638,34 @@ void Engine::MainLoop::OnVideoError() {
 // second Video::Context and re-Load every resource.
 void Engine::MainLoop::OnVideoRestart() {
 
-    rtcoll::ArrayHdr* const arr =
-        reinterpret_cast<rtcoll::ArrayHdr*>(&_videoResources);
-    const int32_t sizeAtEntry = arr->_size;
+    Collection::Array<VideoResourceEntry>& arr = _videoResources;
 
     // ---- 1. recreate the context -----------------------------------------------
     // ENDGAME B.3.7: `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ`
     // (0x1800dd500) was reached BY ADDRESS; it is a member of the real class
     // now. Retail loads RCX from the singleton, not from `this`, and so does
     // this call.
-    static_cast<MainLoop*>(*MainLoopSlot())->CreateVideoContext();
+    MainLoop::_singleton->CreateVideoContext();
 
     // ---- 2 + 3 -------------------------------------------------------------------
     _currentLoop->OnVideoRestart();    // slot 9 (+0x48), ENDGAME B.3.7
 
-    reinterpret_cast< ::Save::SaveLoad*>(*SaveLoadSlot())->OnVideoRestart();  // B.3.7 bridge
+    ::Save::SaveLoad::_singleton->OnVideoRestart();
 
     // ---- 4 + 5: re-register each resource with its type, restore its path -------
     {
-        uint8_t* const factory = static_cast<uint8_t*>(*ObjectFactorySlot());
-        for (int i = 0; i < arr->_size; ++i) {
-            VideoResource* const r = reinterpret_cast<VideoResource*>(arr->_data) + i;
-            const uint32_t key = static_cast<uint32_t>(r->typeId);
+        const ::Object::Factory* const factory = ::Object::Factory::_singleton;
+        for (int i = 0; i < arr._size; ++i) {
+            VideoResourceEntry* const r = &arr._data[i];
+            const uint32_t key = static_cast<uint32_t>(r->_typeId);
 
-            uint8_t* node = *reinterpret_cast<uint8_t**>(factory);
-            while (node != nullptr) {
-                const uint32_t nodeKey = *reinterpret_cast<const uint32_t*>(node);
-                if (key < nodeKey)      node = *reinterpret_cast<uint8_t**>(node + 0x38);
-                else if (nodeKey < key) node = *reinterpret_cast<uint8_t**>(node + 0x40);
-                else break;
-            }
+            // B.4 (R-ENG): the walk is `Set::Find` over Factory's type tree —
+            // the same unsigned less-than descent, null on falling off.
+            const ::Object::Factory::TypeSet::Node* const node = factory->_types.Find(key);
             // Retail's unguarded load when the walk fell off the tree — see the
-            // banner. `node + 0x10` holds a table of function pointers, and
-            // retail calls through it DIRECTLY (`CALL [RDX+0x28]`), not through
-            // a vtable stored in it.
-            void** const typeFns = *reinterpret_cast<void***>(node + 0x10);
-            reinterpret_cast<void (*)(void*)>(typeFns[5])(r->object);
+            // banner. `node + 0x10` is the record's BaseTypeInfo, and retail
+            // calls its in-place factory DIRECTLY (`CALL [RDX+0x28]`).
+            reinterpret_cast<void (*)(void*)>(node->element.record.info->inPlaceFactoryFn)(r->_object);
 
             // `object->_path = entry.path`: the inlined String assign, then
             // AdjustDelimiters. +0x08 is Object::External's own Filename, read
@@ -755,17 +678,15 @@ void Engine::MainLoop::OnVideoRestart() {
             // the operator would normalise twice on the taken branch and the
             // release/adopt pair stays spelled out, in class terms, through the
             // transitional private accessors (cookbook, DELIMITERS, last case).
-            uint8_t* const obj = static_cast<uint8_t*>(r->object);
-            System::Filename& dst =
-                *reinterpret_cast<System::Filename*>(obj + 0x08);
-            if (dst._data != r->path._data) {
+            System::Filename& dst = RtSystem::Sys(r->_object->_path);
+            if (dst._data != r->_path._data) {
                 System::StringPrivateAccess::Release(dst.AsString());
                 // Release leaves `data - 8` in the slot on the FREEING arm
                 // (retail's documented asymmetry); retail overwrites it
                 // unconditionally at 0x1800dc47b, so zero it before adopting
                 // rather than relying on the adopt to run.
                 dst._data = nullptr;
-                System::StringPrivateAccess::Adopt(dst.AsString(), r->path._data);
+                System::StringPrivateAccess::Adopt(dst.AsString(), r->_path._data);
             }
             System::FilenamePrivateAccess::AdjustDelimiters(dst);
         }
@@ -775,22 +696,23 @@ void Engine::MainLoop::OnVideoRestart() {
     {
         // ExternalFactory::GetCompiledPath (0x1800bec10) and External::Load
         // (0x1800bc620), the bodies in runtime/src/object/, called by name (B3R).
-        for (int i = 0; i < arr->_size; ++i) {
-            VideoResource* const r = reinterpret_cast<VideoResource*>(arr->_data) + i;
-            System::Filename compiled;
-            RtSystem::Filename* const got = RtObject::RtObject_ExternalFactory_GetCompiledPath(
-                reinterpret_cast<RtSystem::Filename*>(&compiled),
-                reinterpret_cast<const RtSystem::Filename*>(&r->path));
-            RtObject::RtObject_External_Load(got, static_cast<RtObject::External*>(r->object));
+        for (int i = 0; i < arr._size; ++i) {
+            VideoResourceEntry* const r = &arr._data[i];
+            System::Filename compiled = ::Object::ExternalFactory::GetCompiledPath(r->_path);
+            // External::Load's entry point still takes the RtObject POD
+            // spellings (external_load.cpp; not this block's).
+            RtObject::RtObject_External_Load(reinterpret_cast<const RtSystem::Filename*>(&compiled),
+                                             reinterpret_cast<RtObject::External*>(r->_object));
             // `compiled` releases here — retail's 0x1800dc4fe, now ~Filename.
         }
     }
 
     // ---- 7: drop the record -------------------------------------------------------
-    RtEngine_VideoResourceDestroyRange_180034440(nullptr, arr->_data, arr->_size);
-    if (arr->_data != nullptr) rtcoll::MemFree(arr->_data);
-    arr->_data = nullptr;
-    arr->_size = 0;
+    // kSpec_VideoResource's destroy arm takes raw element storage.
+    RtEngine_VideoResourceDestroyRange_180034440(nullptr, reinterpret_cast<uint8_t*>(arr._data), arr._size);
+    if (arr._data != nullptr) rtcoll::MemFree(arr._data);
+    arr._data = nullptr;
+    arr._size = 0;
     // _capacity is DELIBERATELY not touched — see the banner.
 
     // ---- oracle ---------------------------------------------------------------------

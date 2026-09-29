@@ -114,6 +114,9 @@
 // video/context_ctor.cpp, which now defines MainLoop::CreateVideoContext.
 #include "../collection/Collection.h"
 #include "../system/Value.h"      // System::Time (_deltaTime)
+#include "../system/Filename.h"   // VideoResourceEntry::_path
+
+namespace Object { class External; }
 
 // Everything below lives in `RtEngine`, matching runtime/types/engine/UpdateLoop.h
 // (lane A) and the RtVideo / RtObject convention the earlier waves set. This is
@@ -146,18 +149,22 @@ namespace MainLoopAddr {
 //                 0x1800dca50: entry._object = obj
 //                 0x1800dcac6: entry._name   = <the object's resource name>
 //   OnVideoRestart 0x1800dc416: reads _typeId, 0x1800dc440: _object,
-//                 0x1800dc4b3: _name, and strides by 0x18.
+//                 0x1800dc4b3: _path, and strides by 0x18.
+// B.4 (R-ENG): `_object` is the Object::External* it holds and `_path` the
+// System::Filename (OnVideoError builds it from External::GetPath; OnVideoRestart
+// hands it to ExternalFactory::GetCompiledPath). The array's element copy and
+// destroy stay the hand-derived `kSpec_VideoResource` (mainloop_video.cpp) and
+// ~MainLoop is declared-undefined, so the Filename's dtor adds no release.
 struct VideoResourceEntry {
-    int32_t _typeId;     // +0x00
-    int32_t _pad04;      // +0x04  never written by either function
-    void*   _object;     // +0x08  Object::External*
-    char*   _name;       // +0x10  System::String (refcounted; data-8 = length,
-                         //        data-4 = refcount — see the String header)
+    int32_t              _typeId;   // +0x00
+    int32_t              _pad04;    // +0x04  never written by either function
+    ::Object::External*  _object;   // +0x08
+    ::System::Filename   _path;     // +0x10  refcounted
 };
 static_assert(sizeof(VideoResourceEntry) == 0x18, "VideoResourceEntry is 0x18 bytes");
 static_assert(offsetof(VideoResourceEntry, _typeId) == 0x00, "VideoResourceEntry::_typeId");
 static_assert(offsetof(VideoResourceEntry, _object) == 0x08, "VideoResourceEntry::_object");
-static_assert(offsetof(VideoResourceEntry, _name)   == 0x10, "VideoResourceEntry::_name");
+static_assert(offsetof(VideoResourceEntry, _path)   == 0x10, "VideoResourceEntry::_path");
 
 // One entry of _postUpdate / _postDraw. Both AddPostUpdate (0x1800dcf60) and
 // AddPostDraw (0x1800dd040) build the element from RDX and R8 in a 16-byte
