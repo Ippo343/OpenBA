@@ -111,7 +111,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 #include "Component/exe_bodies.h"        // CitizenComp_AssignHousing
 #include "Dialog/exe_bodies.h"           // ApplyKeyMapToUI_Impl, Toolbar_ShowGroup_Impl
 #include "Dialog/ToolbarDialog.h"        // ToolbarDialog_Ctor_Impl
-#include "Entity/citizenbehavior_funcs.h" // CitizenBehavior_Update
+#include "Entity/CitizenBehavior.h"      // m_citizenList's class: CitizenBehavior::Update
 #include "graphics/Animation.h"          // RtGraphics_AnimationManager_Dtor
 #include "picking/Scene.h"
                                 // `namespace Object { ... }` forward decl below
@@ -803,7 +803,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // hangs due to a spinlock issue in the hooked environment.
                 TRACE("[GameUpdateLoop::Update] calling EntityList::Update (entityList=%p)...\n", m_entityList);
                 { PhaseTimer pt(kPhEntityList);
-                EntityList_Update(reinterpret_cast<EntityList*>(m_entityList), time);
+                m_entityList->Update(time);
                 }
                 TRACE("[GameUpdateLoop::Update] EntityList::Update done\n");
 
@@ -830,8 +830,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                CitizenBehavior_Update(static_cast<CitizenBehaviorRaw*>(m_citizenList),
-                                       reinterpret_cast<int64_t*>(time));   // 0x14008c2b0
+                m_citizenList->Update(reinterpret_cast<int64_t*>(time));   // 0x14008c2b0
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
@@ -985,7 +984,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
         // Step 5: EntityList post-update cleanup
         TRACE("[GameUpdateLoop::Update] calling EntityList::PostUpdate...\n");
-        EntityList_PostUpdate(reinterpret_cast<EntityList*>(m_entityList));
+        m_entityList->PostUpdate();
         TRACE("[GameUpdateLoop::Update] EntityList::PostUpdate done\n");
 
         // Step 6: Camera transform update
@@ -2385,7 +2384,9 @@ GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t s
     // +0xD8..+0x148, in field order.
     m_random = nullptr;
     m_playerController = nullptr;
-    m_entityList = m_citizenList = m_game = nullptr;
+    m_game = nullptr;          // the chained store's order: +0xF8, +0xF0, +0xE8
+    m_citizenList = nullptr;
+    m_entityList = nullptr;
     m_sunLight      = nullptr;
     m_skyMesh       = nullptr;
     m_worldGeometry = nullptr;

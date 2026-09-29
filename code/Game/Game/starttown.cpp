@@ -679,7 +679,7 @@ static void StartTown_SeedAvailableAgriculture(uint8_t* sc, void* game,
                                                int spawnX, int spawnY) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-    uint8_t* townMgr = static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
+    uint8_t* townMgr = reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
     void*    rng     = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
     if (!townMgr) return;
 

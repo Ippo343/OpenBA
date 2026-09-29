@@ -37,6 +37,9 @@
 #include "PlayerController.h"   // m_playerController's class (B.4 W0-H2)
 #include "PlayerToolManager.h"  // m_toolManager's class (B.4 W0-H2)
 #include "Map.h"                // m_game's class (B.4 GAME-a)
+#include "Entity/EntityList.h"       // m_entityList's class (B.4 GAME-a)
+#include "Entity/CitizenBehavior.h"  // m_citizenList's class (B.4 GAME-a)
+#include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -547,46 +550,50 @@ static void* Reimpl_FUN_1400985b0(void* selfMem, void* frustum, float yaw, float
     return selfMem;
 }
 
-// FUN_1400c3f90 — EntityList ctor (+0xE8, 0xe8). memset + the 5 non-zero defaults.
-static void* Reimpl_FUN_1400c3f90(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    memset(p, 0, 0xe8);                       // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
-    *(int32_t*)(p + 0xa8) = 0x32;             // 50
-    *(int32_t*)(p + 0xac) = 0xf;              // 15
-    *(int32_t*)(p + 0xb0) = 8;
-    *(int32_t*)(p + 0xb4) = 5;
-    *(uint64_t*)(p + 0xb8) = 2;
-    return selfMem;
+// 0x1400c3f90 — the EntityList ctor's body (+0xE8, 0xe8): memset + the 5
+// non-zero defaults. EntityList is trivially constructible: Load begins its
+// lifetime with a placement new (no code) and runs this on it.
+static_assert(std::is_trivially_default_constructible<EntityList>::value,
+              "placement new of EntityList runs no code");
+static_assert(std::is_trivially_default_constructible<CitizenBehavior>::value,
+              "placement new of CitizenBehavior runs no code");
+static void EntityList_Construct(EntityList* list) {
+    memset(list, 0, sizeof(EntityList));      // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
+    list->processCount[0] = 0x32;             // +0xA8 50
+    list->processCount[1] = 0xf;              // +0xAC 15
+    list->processCount[2] = 8;                // +0xB0
+    list->processCount[3] = 5;                // +0xB4
+    list->processCount[4] = 2;                // +0xB8 retail's qword store of 2 (H7: two stores)
+    list->cursor[0] = 0;                      // +0xBC
 }
 
-// TradeComponent_impl_0a30 @ 0x140090a30 — town/trade manager ctor (+0xF0, 0x1c0).
-static void* Reimpl_TradeComponent_impl_0a30(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    for (int i = 0; i < 0x1b4; ++i) p[i] = 0;
-    Reimpl_TradeComponent_sub_77c0(p + 0x170, 0x15);
-    uint8_t* prices = *(uint8_t**)(p + 0x170);
+// 0x140090a30 — the CitizenBehavior (town manager) ctor's body (+0xF0, 0x1c0).
+// Trivially constructible, as EntityList above.
+static void CitizenBehavior_Construct(CitizenBehavior* cb) {
+    memset(cb, 0, offsetof(CitizenBehavior, _pad1B4));   // zero +0x00..+0x1B3
+    Reimpl_TradeComponent_sub_77c0(&cb->professionResources, 0x15);
+    ProfessionResourceEntry* prices = cb->professionResources;
     if (prices) {
         static const int32_t kDefaultPrices[21] = {
             200, 200, 200, 200, 50, 5000, 100, 50, 500, 200, 200,
             1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
         };
         for (int i = 0; i < 21; ++i)
-            *(int32_t*)(prices + (size_t)i * 0x20 + 0x8) = kDefaultPrices[i];
+            prices[i].maxCount = kDefaultPrices[i];
     }
-    Reimpl_FUN_14000f090(p + 0x180, 2);
-    Reimpl_FUN_140017640(p + 0x150, 0x47);
-    *(int32_t*)(p + 0x1a8) = 0;
-    void* sub = System::MemoryAllocator::MemAlloc(0x28, 4);
+    Reimpl_FUN_14000f090(&cb->notifyEntries, 2);
+    Reimpl_FUN_140017640(&cb->field_0x150, 0x47);
+    cb->field_0x1A8 = 0.0f;                   // retail's dword store of 0 (the same bits)
+    PathGraph* sub = static_cast<PathGraph*>(System::MemoryAllocator::MemAlloc(0x28, 4));
     if (sub) {
-        uint8_t* s = (uint8_t*)sub;
-        *(void**)(s + 0x00) = nullptr;
-        *(void**)(s + 0x08) = nullptr;
-        *(int32_t*)(s + 0x10) = -1;
-        *(void**)(s + 0x18) = nullptr;
-        *(int32_t*)(s + 0x20) = 0;
+        sub->m_pairs = nullptr;
+        sub->m_pairCount = 0;                 // +0x08 / +0x0C: one qword store (H7: two stores)
+        sub->m_pairCapacity = 0;
+        sub->m_pendingIdx = -1;
+        sub->m_bstRoot = nullptr;
+        sub->m_bstCount = 0;
     }
-    *(void**)(p + 0x1b8) = sub;
-    return selfMem;
+    cb->pathGraph = sub;
 }
 
 // 0x14009ee70 — the Map ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8
@@ -959,8 +966,9 @@ void GameUpdateLoop::Load() {
     // Step 8 — EntityList (+0xE8, 0xe8).
     {
         void* mem = AllocSub(0xe8, 4);
-        if (mem) Reimpl_FUN_1400c3f90(mem);
-        m_entityList = mem;
+        EntityList* list = mem ? new (mem) EntityList : nullptr;
+        if (list) EntityList_Construct(list);
+        m_entityList = list;
     }
 
     // Step 9 — UserInterface (+0x98, 0x128).
@@ -973,8 +981,9 @@ void GameUpdateLoop::Load() {
     // Step 10 — town/trade manager (+0xF0, 0x1c0) — exe ctor 0x140090a30.
     {
         void* mem = AllocSub(0x1c0, 4);
-        if (mem) Reimpl_TradeComponent_impl_0a30(mem);
-        m_citizenList = mem;
+        CitizenBehavior* cb = mem ? new (mem) CitizenBehavior : nullptr;
+        if (cb) CitizenBehavior_Construct(cb);
+        m_citizenList = cb;
     }
 
     // Step 11 — Game (+0xF8, 0xf8) — CRITICAL: clears the m_game==null Stage-C guards.
@@ -1312,15 +1321,15 @@ void GameUpdateLoop::Load() {
             // the first ring probe faulted reading 0x2510 (= coarse cell 593 * 0x10).
             // This was the "TradeComponent trade-map resize" deferred at Step 31.
             {
-                uint8_t* townMgr = static_cast<uint8_t*>(m_citizenList);
+                CitizenBehavior* townMgr = m_citizenList;
                 if (townMgr && dim > 0) {
                     const int coarse = (int)dim >> 3;
-                    Reimpl_FUN_140017640(townMgr + 0x140, coarse * coarse);
+                    Reimpl_FUN_140017640(&townMgr->field_0x140, coarse * coarse);
                     fprintf(stderr, "[TownMgr] coarse cell index sized: dim=%u coarse=%d "
                             "buckets=%d base=%p (FireWork water search indexes this; a "
                             "null base faults at coarseCell*0x10)\n",
                             dim, coarse, coarse * coarse,
-                            *(void**)(townMgr + 0x140));
+                            townMgr->field_0x140);
                     fflush(stderr);
                 }
             }
