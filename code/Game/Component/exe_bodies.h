@@ -136,12 +136,14 @@ void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* );  // 0x1400302
 void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
 
 // ---- cropfieldcomponent.cpp
-void CropFieldComponent_ValidateEntityRefs(uintptr_t self);  // 0x14011aa20
-void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize);  // 0x1400335b0
-void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr_t arrayPtr);  // 0x1400336c0
+struct CropSlot;
+struct CropSlotArray;
+namespace IO { class Serializer; }
+void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize
+void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0
 
 // ---- cropfieldcomponent_states.cpp
-extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410
+extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410  B4 FORWARD: CropFieldComponent::Maturity (cropui_promote.cpp)
 
 // ---- decalcomponent.cpp
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId);  // 0x1400b0d00

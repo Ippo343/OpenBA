@@ -190,8 +190,8 @@ UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
 }
 
 UNIT_TEST(mib_controller_member_fields) {
-    CHECK_EQ(offsetof(CropFieldComponent, cropFlags),  (size_t)0x48);
-    CHECK_EQ(offsetof(CropFieldComponent, field58),    (size_t)0x58);
+    CHECK_EQ(offsetof(CropFieldComponent, workEnabled), (size_t)0x48);
+    CHECK_EQ(offsetof(CropFieldComponent, slots),      (size_t)0x58);
     CHECK_EQ(offsetof(OrchardComponent, orchardId),    (size_t)0x4c);
     CHECK_EQ(offsetof(OrchardComponent, field50),      (size_t)0x50);
     CHECK_EQ(offsetof(PastureComponent, field28),      (size_t)0x28);
