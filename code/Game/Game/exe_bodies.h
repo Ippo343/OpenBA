@@ -38,8 +38,6 @@ extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng, int minL
 extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  // 0x1400a4c60
 
 // ---- citizenlist_serialize.cpp
-extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* , int* );  // 0x14008f760
-extern "C" void CitizenList_PostLoad_8f580(void* self);  // 0x14008f580
 
 // ---- eventlog.cpp
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580

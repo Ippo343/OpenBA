@@ -54,6 +54,7 @@ class WellComponent;
 class DiseaseComponent;
 class ComponentDescription;
 class Map;
+namespace IO { class Stream; }
 
 // ============================================================
 // ProfessionResourceEntry — one element of the +0x170 array (stride 0x20).
@@ -218,7 +219,7 @@ public:
                                            //        well, -1-id into +0xE0; >= 0: a +0x130 pair)
     int32_t  field_0x148;                  // +0x148 count
     int32_t  field_0x14C;                  // +0x14C capacity
-    void*    field_0x150;                  // +0x150 Array of 0x10-byte elements, each an inner int Array;
+    Collection::Array<int32_t>* field_0x150; // +0x150 Array of 0x10-byte elements, each an inner int Array;
                                            //        the ctor sizes it to 71 (0x140017640)
     int32_t  field_0x158;                  // +0x158 count
     int32_t  field_0x15C;                  // +0x15C capacity
@@ -252,6 +253,10 @@ public:
     int64_t FindWater(uint32_t centreCell, int extent, float* outA, float* outB);  // 0x1400881d0
     void ScanWaterCell(Map* map, int coarseCell, int ringX, int ringY, uint32_t srcCell,
                        int* bestCost, int* bestId, WellComponent** bestWell);    // 0x140088730
+
+    // ---- members (B4 GAME-a; bodies in Game/citizenlist_serialize.cpp) ----
+    void Serialize(IO::Stream& stream, int* outParam);   // 0x14008f760 (version 6)
+    void PostLoad();                       // 0x14008f580 rebuild the +0x140 coarse water index
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

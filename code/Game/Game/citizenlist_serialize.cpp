@@ -1,8 +1,8 @@
 // code/Game/Game/citizenlist_serialize.cpp
 //
 // CitizenBehavior::Serialize (exe 0x14008f760, Ghidra: TradeComponent_impl_f760)
-// and its post-load spatial-map rebuild pass (exe 0x14008f580, Ghidra:
-// TradeComponent_impl_f580). CitizenBehavior lives at GameUpdateLoop+0xF0
+// and its post-load spatial-map rebuild pass CitizenBehavior::PostLoad (exe
+// 0x14008f580, Ghidra: TradeComponent_impl_f580). CitizenBehavior lives at GameUpdateLoop+0xF0
 // (m_citizenList), 0x1C0 bytes — see code/Game/Entity/citizenbehavior.cpp for
 // the rest of the class (Update/CountResources/BuildPathGraph/...).
 //
@@ -101,6 +101,7 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Game/Map.h"   // m_game's class (B.4 GAME-a)
+#include "Entity/CitizenBehavior.h"         // B4 GAME-a: CitizenBehavior::Serialize / PostLoad
 #include <cstdio>
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
@@ -143,8 +144,8 @@ namespace {
 // ------------------------------------------------------------
 // Serializer mode helper
 // ------------------------------------------------------------
-inline bool SerializerLoading(void* serializer) {
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+inline bool SerializerLoading(IO::Serializer* serializer) {
+    return static_cast<int>(serializer->GetDirection()) == 0;   // IO::Serializer::GetDirection, retail 0x180006210
 }
 
 // The tree serializer's key resolver (TREE #1: 0x140018020, TREE #2: 0x140002340 --
@@ -160,16 +161,23 @@ typedef void (*fn_KeyResolve_t)(void* field, void* serializer);
 // restored already in state 2). So on the load leg these counts ARE the town:
 // if they come out zero, citizens have no homes, no jobs and no services, which
 // looks like "everyone froze, then starved".
-void RegistryCensus(uint8_t* base, const char* leg, const char* when) {
-    static const struct { int off; const char* name; } kReg[] = {
-        {0x08, "entA"},   {0x18, "entB"},   {0x28, "residence"}, {0x38, "entC"},
-        {0x48, "cemetery"}, {0x58, "happiness"}, {0x68, "attendance"}, {0x78, "healer"},
-        {0x88, "livestock"}, {0x98, "pasture"}, {0xa8, "citizen"}, {0xb8, "herd"},
-        {0xc8, "population"}, {0xd8, "build"}, {0xe8, "well"}, {0xf8, "disease"},
+void RegistryCensus(const CitizenBehavior* cb, const char* leg, const char* when) {
+    static const struct { int32_t CitizenBehavior::* count; const char* name; } kReg[] = {
+        {&CitizenBehavior::field_0x08, "entA"},   {&CitizenBehavior::field_0x18, "entB"},
+        {&CitizenBehavior::field_0x28, "residence"}, {&CitizenBehavior::field_0x38, "entC"},
+        {&CitizenBehavior::cemeteryCount, "cemetery"},
+        {&CitizenBehavior::happinessComponentCount, "happiness"},
+        {&CitizenBehavior::attendanceComponentCount, "attendance"},
+        {&CitizenBehavior::healerCount, "healer"},
+        {&CitizenBehavior::livestockCount, "livestock"}, {&CitizenBehavior::pastureCount, "pasture"},
+        {&CitizenBehavior::citizenCount, "citizen"}, {&CitizenBehavior::herdCount, "herd"},
+        {&CitizenBehavior::populationCount, "population"},
+        {&CitizenBehavior::buildComponentCount, "build"},
+        {&CitizenBehavior::wellCount, "well"}, {&CitizenBehavior::diseaseCount, "disease"},
     };
     std::fprintf(stderr, "[TownCensus] %s %s:", leg, when);
     for (const auto& r : kReg)
-        std::fprintf(stderr, " %s=%d", r.name, *reinterpret_cast<int32_t*>(base + r.off));
+        std::fprintf(stderr, " %s=%d", r.name, cb->*r.count);
     std::fprintf(stderr, "\n");
     std::fflush(stderr);
 }
@@ -178,29 +186,32 @@ void RegistryCensus(uint8_t* base, const char* leg, const char* when) {
 // IBP array serialize — the recurring 15-times pattern:
 //   count = hdr.count; Serialize(count); if(loading) resize(hdr,count);
 //   for each slot: InternalBasePtr::Serialize(slot); if (!IsDerivedFrom(typeId)) slot=null;
-// hdr points at a 0x10-byte {void* data, int32 count, int32 cap} header.
+// `data` is the first field of a 0x10-byte {T** data, int32 count, int32 cap}
+// header (a Collection::Array<InternalPtr<T>>, declared as three fields).
 // ------------------------------------------------------------
 // ENDGAME B.3.9 CB: takes the type id by VALUE (the class static of the cell retail
 // reads) and validates unconditionally, as retail does (0x14008f760: every array's
 // `if (p && !IsDerivedFrom(p, [cell])) p = 0`). The old pointer form skipped the check
 // whenever the cell read 0 -- which it always did for Healer (0x1401c4330), Well
 // (0x1401c4c28) and Happiness (0x1401c42c0), so those three arrays were never validated.
-void SerializeIBPArray(uint8_t* hdr, void* serializer, uint32_t typeId) {
-    int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+template <class T>
+void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serializer, uint32_t typeId) {
+    int32_t count = *countField;
+    serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte InternalBasePtr slot walked below.
-    if (loading) GameColl::AsArray<GameColl::Ptr8>(hdr).SetSize(count);
+    if (loading) GameColl::AsArray<GameColl::Ptr8>(data).SetSize(count);
 
-    uint8_t* arr = *reinterpret_cast<uint8_t**>(hdr);
+    T** arr = *data;
     for (int32_t i = 0; i < count; ++i) {
-        uint8_t* elem = arr + static_cast<size_t>(i) * 8;
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        void* val = *reinterpret_cast<void**>(elem);
+        T** elem = &arr[i];
+        // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge
+        T* val = *elem;
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
-                *reinterpret_cast<uint64_t*>(elem) = 0;
+                *elem = nullptr;
             }
         }
     }
@@ -210,26 +221,24 @@ void SerializeIBPArray(uint8_t* hdr, void* serializer, uint32_t typeId) {
 // FUN_14000f9e0 — deep-copy of an inner stride-4 (int32) array header
 // (16 bytes: {ptr,count,cap}) used when 140017640 grows the outer array.
 // ------------------------------------------------------------
-void DeepCopyInner04Array(void* dstElem, void* srcElem) {
-    if (dstElem == srcElem) return;
-    uint8_t* d = static_cast<uint8_t*>(dstElem);
-    uint8_t* s = static_cast<uint8_t*>(srcElem);
-    void* old = *reinterpret_cast<void**>(d + 0);
+void DeepCopyInner04Array(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
+    if (d == s) return;
+    void* old = d->_data;
     if (old) System::MemoryAllocator::MemFree(old);
-    *reinterpret_cast<int32_t*>(d + 8) = 0;
-    *reinterpret_cast<void**>(d + 0) = nullptr;
-    int32_t cnt = *reinterpret_cast<int32_t*>(s + 8);
-    *reinterpret_cast<int32_t*>(d + 8) = cnt;
+    d->_size = 0;
+    d->_data = nullptr;
+    int32_t cnt = s->_size;
+    d->_size = cnt;
     if (cnt > 0) {
-        *reinterpret_cast<int32_t*>(d + 0xC) = cnt;
+        d->_capacity = cnt;
         if (System::MemoryAllocator::_singleton)
-            *reinterpret_cast<void**>(d + 0) =
-                System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4);
+            d->_data =
+                static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4));
     }
-    int32_t newCnt = *reinterpret_cast<int32_t*>(d + 8);
+    int32_t newCnt = d->_size;
     if (newCnt > 0) {
-        int32_t* dp = *reinterpret_cast<int32_t**>(d + 0);
-        int32_t* sp = *reinterpret_cast<int32_t**>(s + 0);
+        int32_t* dp = d->_data;
+        int32_t* sp = s->_data;
         if (dp && sp) for (int32_t i = 0; i < newCnt; ++i) dp[i] = sp[i];
     }
 }
@@ -263,7 +272,9 @@ namespace {
 void AssignIntAssocOuter(uint8_t* d, const uint8_t* s) {
     *reinterpret_cast<uint64_t*>(d + 0) = 0;
     *reinterpret_cast<uint64_t*>(d + 8) = 0;
-    DeepCopyInner04Array(d, const_cast<uint8_t*>(s));
+    // The spec row's element is raw bytes; each element is one inner Array<int32>.
+    DeepCopyInner04Array(reinterpret_cast<Collection::Array<int32_t>*>(d),
+                         reinterpret_cast<const Collection::Array<int32_t>*>(s));
 }
 void InitIntAssocOuter(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0) = 0;
@@ -370,25 +381,27 @@ void ResizeStride08Pair(void* hdr, int newCount) {
 // IO::Serializer::Serialize(int count, int* data, name) — exe dispatch slot
 // 0x140151278. Distinct from fn_Serializer_SerializeBulk (slot 0x140152400),
 // which is the BYTE-width overload.
-void SerializeIntArray(void* serializer, int32_t count, void* data) {
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, reinterpret_cast<int*>(data), nullptr);   // B.3.4 bridge
+void SerializeIntArray(IO::Serializer* serializer, int32_t count, int32_t* data) {
+    serializer->Serialize(count, data, nullptr);
 }
 
-void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
-    int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+// `outer` is the first field of the {Array<int32>* data, count, cap} header.
+void SerializeIntAssocArray(Collection::Array<int32_t>** outer, int32_t* countField,
+                            IO::Serializer* serializer) {
+    int32_t count = *countField;
+    serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
-    if (loading) ResizeStride0x10(hdr, count);
+    if (loading) ResizeStride0x10(outer, count);
 
-    uint8_t* slot = *reinterpret_cast<uint8_t**>(hdr);
+    Collection::Array<int32_t>* slot = *outer;
     for (int32_t i = 0; i < count; ++i) {
-        int32_t innerCount = *reinterpret_cast<int32_t*>(slot + 8);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(innerCount, nullptr);   // B.3.4 bridge
+        int32_t innerCount = slot->_size;
+        serializer->Serialize(innerCount, nullptr);
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400021d0, stride 4 align 4,
         // grown tail left as the allocation found it (no init arm). The bulk int
         // serializer below overwrites all `innerCount` elements either way.
         if (loading) GameColl::AsArray<GameColl::I32NoInit>(slot).SetSize(innerCount);
-        void* innerPtr = *reinterpret_cast<void**>(slot + 0);
+        int32_t* innerPtr = slot->_data;
         // Retail (0x1400900e7 for +0x150, 0x1400903b8 for +0x140) dispatches
         // through slot 0x140151278 = IO::Serializer::Serialize(int count,
         // int* data, name) — the INT-array overload, 4 bytes per element. The
@@ -397,7 +410,7 @@ void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
         // read a quarter of the bytes and desynced everything after it. Retail
         // never calls 0x140152400 anywhere in this function.
         SerializeIntArray(serializer, innerCount, innerPtr);
-        slot += 0x10;
+        ++slot;
     }
 }
 
@@ -406,90 +419,116 @@ void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
 // Node (0x38 bytes): {uint64 key@0, valHdr[16]@8 (ptr,count,cap), parent@0x18,
 // left@0x20, right@0x28, int32 balance@0x30}. Rebalance via TradeWork_impl_4b40.
 // ------------------------------------------------------------
-uint64_t* AllocCompRefTreeNode(uint64_t key, uint64_t* parent, const uint8_t valBuf[16]) {
+struct IbpArrayHeader {             // a Collection::Array<InternalPtr<ComponentEntity>>
+    ComponentEntity** data;         // +0x00
+    int32_t           count;        // +0x08
+    int32_t           capacity;     // +0x0C
+};
+struct CompRefNode {
+    uint64_t       key;             // +0x00 the ExternalPtr key (serialized by the key resolver)
+    IbpArrayHeader values;          // +0x08
+    CompRefNode*   parent;          // +0x18
+    CompRefNode*   left;            // +0x20
+    CompRefNode*   right;           // +0x28
+    int32_t        balance;         // +0x30
+    uint8_t        _pad34[4];       // +0x34
+};
+static_assert(sizeof(CompRefNode) == 0x38, "CompRefNode is MemAlloc(0x38)");
+static_assert(offsetof(CompRefNode, values) == 0x08, "CompRefNode::values @ +0x08");
+static_assert(offsetof(CompRefNode, parent) == 0x18, "CompRefNode::parent @ +0x18");
+static_assert(offsetof(CompRefNode, left) == 0x20, "CompRefNode::left @ +0x20");
+static_assert(offsetof(CompRefNode, right) == 0x28, "CompRefNode::right @ +0x28");
+static_assert(offsetof(CompRefNode, balance) == 0x30, "CompRefNode::balance @ +0x30");
+
+CompRefNode* AllocCompRefTreeNode(uint64_t key, CompRefNode* parent, const IbpArrayHeader& val) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
-    uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    CompRefNode* n = static_cast<CompRefNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
-    n[0] = key;
-    std::memcpy(&n[1], valBuf, 16);          // +0x08..+0x18: value header (moved, not copied-then-freed)
-    n[3] = reinterpret_cast<uint64_t>(parent); // +0x18
-    n[4] = 0;                                 // +0x20 left
-    n[5] = 0;                                 // +0x28 right
-    *reinterpret_cast<int32_t*>(&n[6]) = 0;   // +0x30 balance
+    n->key = key;
+    n->values = val;                 // +0x08..+0x18: value header (moved, not copied-then-freed)
+    n->parent = parent;              // +0x18
+    n->left = nullptr;               // +0x20
+    n->right = nullptr;              // +0x28
+    n->balance = 0;                  // +0x30
     return n;
 }
 
-uint64_t* CompRefTreeMin(uint64_t* n) {
+CompRefNode* CompRefTreeMin(CompRefNode* n) {
     if (!n) return nullptr;
-    while (reinterpret_cast<uint64_t*>(n[4])) n = reinterpret_cast<uint64_t*>(n[4]);
+    while (n->left) n = n->left;
     return n;
 }
-uint64_t* CompRefTreeSucc(uint64_t* n) {
+CompRefNode* CompRefTreeSucc(CompRefNode* n) {
     if (!n) return nullptr;
-    if (n[5]) return CompRefTreeMin(reinterpret_cast<uint64_t*>(n[5]));
-    uint64_t* parent = reinterpret_cast<uint64_t*>(n[3]);
-    while (parent && reinterpret_cast<uint64_t*>(parent[5]) == n) {
+    if (n->right) return CompRefTreeMin(n->right);
+    CompRefNode* parent = n->parent;
+    while (parent && parent->right == n) {
         n = parent;
-        parent = reinterpret_cast<uint64_t*>(parent[3]);
+        parent = parent->parent;
     }
     return parent;
 }
 
-void SerializeCompRefTree(uint8_t* hdr, void* serializer, fn_KeyResolve_t keyFn) {
-    int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+// `rootField` is the tree header's root slot (CitizenBehavior +0x100 / +0x160,
+// declared void*), `countField` its count.
+void SerializeCompRefTree(void* rootField, int32_t* countField, IO::Serializer* serializer,
+                          fn_KeyResolve_t keyFn) {
+    // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
+    CompRefNode** rootPtr = static_cast<CompRefNode**>(rootField);
+    int32_t count = *countField;
+    serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
 
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             uint64_t key = 0;
             if (keyFn) keyFn(&key, serializer);
-            uint8_t valBuf[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-            SerializeIBPArray(valBuf, serializer, ComponentEntity::TypeId());
+            IbpArrayHeader val = {nullptr, 0, 0};
+            SerializeIBPArray(&val.data, &val.count, serializer, ComponentEntity::TypeId());
 
-            uint64_t** rootPtr = reinterpret_cast<uint64_t**>(hdr);
             if (*rootPtr == nullptr) {
-                *rootPtr = AllocCompRefTreeNode(key, nullptr, valBuf);
-                *reinterpret_cast<int32_t*>(hdr + 8) = *reinterpret_cast<int32_t*>(hdr + 8) + 1;
+                *rootPtr = AllocCompRefTreeNode(key, nullptr, val);
+                *countField = *countField + 1;
                 continue;
             }
-            uint64_t* cur = *rootPtr;
-            uint64_t* insertedNode = nullptr;
+            CompRefNode* cur = *rootPtr;
+            CompRefNode* insertedNode = nullptr;
             bool dup = false;
             for (;;) {
-                if (key < cur[0]) {
-                    uint64_t* left = reinterpret_cast<uint64_t*>(cur[4]);
+                if (key < cur->key) {
+                    CompRefNode* left = cur->left;
                     if (!left) {
-                        insertedNode = AllocCompRefTreeNode(key, cur, valBuf);
-                        cur[4] = reinterpret_cast<uint64_t>(insertedNode);
+                        insertedNode = AllocCompRefTreeNode(key, cur, val);
+                        cur->left = insertedNode;
                         break;
                     }
                     cur = left;
-                } else if (key <= cur[0]) {
+                } else if (key <= cur->key) {
                     dup = true;   // matches original: already present, skip insert + count++
                     break;
                 } else {
-                    uint64_t* right = reinterpret_cast<uint64_t*>(cur[5]);
+                    CompRefNode* right = cur->right;
                     if (!right) {
-                        insertedNode = AllocCompRefTreeNode(key, cur, valBuf);
-                        cur[5] = reinterpret_cast<uint64_t>(insertedNode);
+                        insertedNode = AllocCompRefTreeNode(key, cur, val);
+                        cur->right = insertedNode;
                         break;
                     }
                     cur = right;
                 }
             }
             if (!dup) {
-                *reinterpret_cast<int32_t*>(hdr + 8) = *reinterpret_cast<int32_t*>(hdr + 8) + 1;
-                TradeWork_impl_4b40(reinterpret_cast<int64_t*>(hdr),
+                *countField = *countField + 1;
+                // LEFT: the shared AVL retrace takes int64_t* (Player/exe_bodies.h).
+                TradeWork_impl_4b40(reinterpret_cast<int64_t*>(rootPtr),
                                      reinterpret_cast<int64_t*>(&insertedNode));
             }
         }
     } else {
-        uint64_t* root = *reinterpret_cast<uint64_t**>(hdr);
-        uint64_t* node = CompRefTreeMin(root);
+        CompRefNode* root = *rootPtr;
+        CompRefNode* node = CompRefTreeMin(root);
         while (node) {
-            if (keyFn) keyFn(node, serializer);
-            SerializeIBPArray(reinterpret_cast<uint8_t*>(node) + 8, serializer, ComponentEntity::TypeId());
+            if (keyFn) keyFn(&node->key, serializer);
+            SerializeIBPArray(&node->values.data, &node->values.count, serializer, ComponentEntity::TypeId());
             node = CompRefTreeSucc(node);
         }
     }
@@ -501,75 +540,95 @@ void SerializeCompRefTree(uint8_t* hdr, void* serializer, fn_KeyResolve_t keyFn)
 // left@0x18,right@0x20,balance@0x28}. Rebalance via TradeDescription_impl_e360.
 // Never reached at our fixed save version (6); ported for completeness only.
 // ------------------------------------------------------------
-uint64_t* AllocLegacyTreeNode(uint64_t key, uint64_t* parent, int32_t value) {
+struct LegacyNode {
+    uint64_t    key;         // +0x00
+    int32_t     value;       // +0x08 (the high dword is zeroed with it: one qword store)
+    uint32_t    valueHigh;   // +0x0C
+    LegacyNode* parent;      // +0x10
+    LegacyNode* left;        // +0x18
+    LegacyNode* right;       // +0x20
+    int32_t     balance;     // +0x28
+    uint8_t     _pad2C[4];   // +0x2C
+};
+static_assert(sizeof(LegacyNode) == 0x30, "LegacyNode is MemAlloc(0x30)");
+static_assert(offsetof(LegacyNode, value) == 0x08, "LegacyNode::value @ +0x08");
+static_assert(offsetof(LegacyNode, parent) == 0x10, "LegacyNode::parent @ +0x10");
+static_assert(offsetof(LegacyNode, left) == 0x18, "LegacyNode::left @ +0x18");
+static_assert(offsetof(LegacyNode, right) == 0x20, "LegacyNode::right @ +0x20");
+static_assert(offsetof(LegacyNode, balance) == 0x28, "LegacyNode::balance @ +0x28");
+
+LegacyNode* AllocLegacyTreeNode(uint64_t key, LegacyNode* parent, int32_t value) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
-    uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+    LegacyNode* n = static_cast<LegacyNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!n) return nullptr;
-    n[0] = key;
-    n[1] = static_cast<uint64_t>(static_cast<uint32_t>(value));
-    n[2] = reinterpret_cast<uint64_t>(parent);
-    n[3] = 0; n[4] = 0;
-    *reinterpret_cast<int32_t*>(&n[5]) = 0;
+    n->key = key;
+    n->value = value;          // +0x08 / +0x0C: the value zero-extended (H7: two stores)
+    n->valueHigh = 0;
+    n->parent = parent;
+    n->left = nullptr; n->right = nullptr;
+    n->balance = 0;
     return n;
 }
-uint64_t* LegacyTreeMin(uint64_t* n) {
+LegacyNode* LegacyTreeMin(LegacyNode* n) {
     if (!n) return nullptr;
-    while (reinterpret_cast<uint64_t*>(n[3])) n = reinterpret_cast<uint64_t*>(n[3]);
+    while (n->left) n = n->left;
     return n;
 }
-uint64_t* LegacyTreeSucc(uint64_t* n) {
+LegacyNode* LegacyTreeSucc(LegacyNode* n) {
     if (!n) return nullptr;
-    if (n[4]) return LegacyTreeMin(reinterpret_cast<uint64_t*>(n[4]));
-    uint64_t* parent = reinterpret_cast<uint64_t*>(n[2]);
-    while (parent && reinterpret_cast<uint64_t*>(parent[4]) == n) {
+    if (n->right) return LegacyTreeMin(n->right);
+    LegacyNode* parent = n->parent;
+    while (parent && parent->right == n) {
         n = parent;
-        parent = reinterpret_cast<uint64_t*>(parent[2]);
+        parent = parent->parent;
     }
     return parent;
 }
-void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
-    int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
+    // LEFT: the root slot is declared void* (CitizenBehavior.h, block WORK-a).
+    LegacyNode** rootPtr = static_cast<LegacyNode**>(rootField);
+    int32_t count = *countField;
+    serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             uint64_t key = 0;
             Reimpl_ExternalPtr_Serialize_StringTable(&key, serializer);
             int32_t value = 0;
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(value, nullptr);   // B.3.4 bridge
+            serializer->Serialize(value, nullptr);
 
-            uint64_t** rootPtr = reinterpret_cast<uint64_t**>(hdr);
             if (*rootPtr == nullptr) {
                 *rootPtr = AllocLegacyTreeNode(key, nullptr, value);
-                *reinterpret_cast<int32_t*>(hdr + 8) = *reinterpret_cast<int32_t*>(hdr + 8) + 1;
+                *countField = *countField + 1;
                 continue;
             }
-            uint64_t* cur = *rootPtr;
-            uint64_t* insertedNode = nullptr;
+            LegacyNode* cur = *rootPtr;
+            LegacyNode* insertedNode = nullptr;
             bool dup = false;
             for (;;) {
-                if (key < cur[0]) {
-                    uint64_t* left = reinterpret_cast<uint64_t*>(cur[3]);
-                    if (!left) { insertedNode = AllocLegacyTreeNode(key, cur, value); cur[3] = reinterpret_cast<uint64_t>(insertedNode); break; }
+                if (key < cur->key) {
+                    LegacyNode* left = cur->left;
+                    if (!left) { insertedNode = AllocLegacyTreeNode(key, cur, value); cur->left = insertedNode; break; }
                     cur = left;
-                } else if (key <= cur[0]) {
+                } else if (key <= cur->key) {
                     dup = true; break;
                 } else {
-                    uint64_t* right = reinterpret_cast<uint64_t*>(cur[4]);
-                    if (!right) { insertedNode = AllocLegacyTreeNode(key, cur, value); cur[4] = reinterpret_cast<uint64_t>(insertedNode); break; }
+                    LegacyNode* right = cur->right;
+                    if (!right) { insertedNode = AllocLegacyTreeNode(key, cur, value); cur->right = insertedNode; break; }
                     cur = right;
                 }
             }
             if (!dup) {
-                *reinterpret_cast<int32_t*>(hdr + 8) = *reinterpret_cast<int32_t*>(hdr + 8) + 1;
-                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(hdr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360
+                *countField = *countField + 1;
+                // LEFT: the shared AVL retrace takes int64_t* (Component/exe_bodies.h).
+                CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(rootPtr), reinterpret_cast<int64_t*>(&insertedNode));   // 0x14000e360
             }
         }
     } else {
-        uint64_t* node = LegacyTreeMin(*reinterpret_cast<uint64_t**>(hdr));
+        LegacyNode* node = LegacyTreeMin(*rootPtr);
         while (node) {
-            Reimpl_ExternalPtr_Serialize_StringTable(node, serializer);
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(&node[1]), nullptr);   // B.3.4 bridge
+            Reimpl_ExternalPtr_Serialize_StringTable(&node->key, serializer);
+            serializer->Serialize(node->value, nullptr);
             node = LegacyTreeSucc(node);
         }
     }
@@ -578,106 +637,107 @@ void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
 } // namespace
 
 // ============================================================
-// CitizenList_Serialize_8f760 — CitizenBehavior::Serialize
+// CitizenBehavior::Serialize (0x14008f760)
 // ============================================================
-extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3*/, int* /*outParam*/) {
-    if (!self || !stream) return;
-    uint8_t* base = static_cast<uint8_t*>(self);
-
-    alignas(8) uint8_t serBuf[0x18];
-    void* ser = serBuf;
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 6);   // B.3.4 bridge
+void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
+    IO::Serializer serializer(stream, 6);
+    IO::Serializer* ser = &serializer;
 
     const char* leg = SerializerLoading(ser) ? "LOAD" : "SAVE";
-    RegistryCensus(base, leg, "enter");
+    RegistryCensus(this, leg, "enter");
 
-    SerializeIBPArray(base + 0x00, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(base + 0x10, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(base + 0x30, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(base + 0x20, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(base + 0x70, ser, HealerComponent::TypeId());
-    SerializeIBPArray(base + 0xa0, ser, CitizenComponent::TypeId());
+    SerializeIBPArray(&field_0x00, &field_0x08, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&field_0x10, &field_0x18, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&field_0x30, &field_0x38, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&field_0x20, &field_0x28, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(&healers, &healerCount, ser, HealerComponent::TypeId());
+    SerializeIBPArray(&citizens, &citizenCount, ser, CitizenComponent::TypeId());
 
     // Unconditional TREE #1 (residence/path-graph style, string-table key).
-    SerializeCompRefTree(base + 0x100, ser, &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140018020
+    SerializeCompRefTree(&field_0x100, &field_0x108, ser, &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140018020
 
-    SerializeIBPArray(base + 0x90, ser, PastureComponent::TypeId());
-    SerializeIBPArray(base + 0x40, ser, CemeteryComponent::TypeId());
-    SerializeIBPArray(base + 0x50, ser, HappinessComponent::TypeId());
-    SerializeIBPArray(base + 0x60, ser, AttendanceComponent::TypeId());
-    SerializeIBPArray(base + 0x80, ser, LivestockComponent::TypeId());
-    SerializeIBPArray(base + 0xb0, ser, HerdComponent::TypeId());
+    SerializeIBPArray(&pastures, &pastureCount, ser, PastureComponent::TypeId());
+    SerializeIBPArray(&cemeteries, &cemeteryCount, ser, CemeteryComponent::TypeId());
+    SerializeIBPArray(&happinessComponents, &happinessComponentCount, ser, HappinessComponent::TypeId());
+    SerializeIBPArray(&attendanceComponents, &attendanceComponentCount, ser, AttendanceComponent::TypeId());
+    SerializeIBPArray(&livestock, &livestockCount, ser, LivestockComponent::TypeId());
+    SerializeIBPArray(&herds, &herdCount, ser, HerdComponent::TypeId());
 
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
-        SerializeIBPArray(base + 0xf0, ser, DiseaseComponent::TypeId());
+    if (ser->GetVersion() > 0) {
+        SerializeIBPArray(&diseases, &diseaseCount, ser, DiseaseComponent::TypeId());
     }
 
-    SerializeIBPArray(base + 0xc0, ser, PopulationComponent::TypeId());
-    SerializeIBPArray(base + 0xd0, ser, BuildComponent::TypeId());
+    SerializeIBPArray(&populations, &populationCount, ser, PopulationComponent::TypeId());
+    SerializeIBPArray(&buildComponents, &buildComponentCount, ser, BuildComponent::TypeId());
 
     // ExternalPtr<ComponentDescription>[] arrays, resized via Array<Ptr8>::SetSize
     // (FUN_140001bb0) then bulk-serialized via Reimpl_ExternalPtrArray_Serialize
     // (0x1400049c0), matching FUN_140001bb0(hdr,count) + FUN_1400049c0(ser,count,ptr,p4).
     {
-        int32_t count = *reinterpret_cast<int32_t*>(base + 0x118);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+        int32_t count = field_0x118;
+        ser->Serialize(count, nullptr);
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
-            GameColl::ArrayAt<GameColl::Ptr8>(base, 0x110).SetSize(count);
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x110)), nullptr);   // 0x1400049c0
+            GameColl::AsArray<GameColl::Ptr8>(&field_0x110).SetSize(count);
+        // LEFT: the array body takes the element base as long long (Game/exe_bodies.h,
+        // serialize_externals_array.cpp).
+        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x110), nullptr);   // 0x1400049c0
     }
     {
-        int32_t count = *reinterpret_cast<int32_t*>(base + 0x128);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+        int32_t count = field_0x128;
+        ser->Serialize(count, nullptr);
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
-            GameColl::ArrayAt<GameColl::Ptr8>(base, 0x120).SetSize(count);
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x120)), nullptr);   // 0x1400049c0
+            GameColl::AsArray<GameColl::Ptr8>(&field_0x120).SetSize(count);
+        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x120), nullptr);   // 0x1400049c0
     }
 
-    reinterpret_cast<System::Time*>(base + 0x190)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(base + 0x198)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    // LEFT: the three clocks are declared int64_t (CitizenBehavior.h, block WORK-a).
+    reinterpret_cast<System::Time*>(&field_0x190)->Serialize(*ser);   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&field_0x198)->Serialize(*ser);   // B.3.4b bridge
 
     // "Stats" int-assoc array at +0x150.
-    SerializeIntAssocArray(base + 0x150, ser);
+    SerializeIntAssocArray(&field_0x150, &field_0x158, ser);
 
     // TREE #2 (BuildComponentRef key) on the live path (version>=2, always true
     // at version 6); legacy key/int BST otherwise (DEAD — see file header).
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() < 2) {   // B.3.4 bridge
-        SerializeLegacyKeyIntTree(base + 0x160, ser);
+    if (ser->GetVersion() < 2) {
+        SerializeLegacyKeyIntTree(&field_0x160, &field_0x168, ser);
     } else {
-        SerializeCompRefTree(base + 0x160, ser,
-            reinterpret_cast<fn_KeyResolve_t>(&Reimpl_ExternalPtr_Serialize_StringTable));   // 0x140002340
+        SerializeCompRefTree(&field_0x160, &field_0x168, ser,
+            &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140002340
     }
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 5) {   // B.3.4 bridge
-        ResizeStride0x10(base + 0x160 /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
+    if (ser->GetVersion() == 5) {
+        // LEFT: resizes the +0x160 TREE header as an array of arrays (the tree's, dead
+        // at version 6; retail sizes +0x150 to 0x47 here on a load, 0x14008fe50).
+        ResizeStride0x10(&field_0x160 /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
     }
 
-    SerializeIBPArray(base + 0xe0, ser, WellComponent::TypeId());
+    SerializeIBPArray(&wells, &wellCount, ser, WellComponent::TypeId());
 
     // Stride-8 int-pair array at +0x130.
     {
-        int32_t count = *reinterpret_cast<int32_t*>(base + 0x138);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+        int32_t count = field_0x138;
+        ser->Serialize(count, nullptr);
         bool loading = SerializerLoading(ser);
-        if (loading) ResizeStride08Pair(base + 0x130, count);
-        int32_t* pairs = *reinterpret_cast<int32_t**>(base + 0x130);
+        if (loading) ResizeStride08Pair(&field_0x130, count);
+        int32_t* pairs = field_0x130;
         for (int32_t i = 0; i < count; ++i) {
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(pairs[i * 2 + 0], nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(pairs[i * 2 + 1], nullptr);   // B.3.4 bridge
+            ser->Serialize(pairs[i * 2 + 0], nullptr);
+            ser->Serialize(pairs[i * 2 + 1], nullptr);
         }
     }
 
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 4) {   // B.3.4 bridge
-        SerializeIntAssocArray(base + 0x140, ser);
+    if (ser->GetVersion() > 4) {
+        SerializeIntAssocArray(&field_0x140, &field_0x148, ser);
     }
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 5) {   // B.3.4 bridge
-        ResizeStride0x10(base + 0x140, 0);
+    if (ser->GetVersion() == 5) {
+        ResizeStride0x10(&field_0x140, 0);
     }
 
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() < 4) {   // B.3.4 bridge
+    if (ser->GetVersion() < 4) {
         // DEAD-PATH (version<4): legacy Time-array -> ProfessionResourceEntry /
         // SummaryEntry conversion. Never reached at our fixed version 6 — see file
         // header. Left unimplemented (no-op) rather than risk a wrong-stride write
@@ -685,63 +745,65 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         // a real pre-release save hitting this path needs a fresh Ghidra pass before
         // it can be trusted, so we intentionally stop short of guessing here.
     } else {
-        int32_t profCount = *reinterpret_cast<int32_t*>(base + 0x178);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(profCount, nullptr);   // B.3.4 bridge
+        int32_t profCount = professionResourceCount;
+        ser->Serialize(profCount, nullptr);
         bool loading = SerializerLoading(ser);
-        if (loading) ResizeStride0x20(base + 0x170, profCount);
+        if (loading) ResizeStride0x20(&professionResources, profCount);
         if (profCount > 0) {
-            uint8_t* entry = *reinterpret_cast<uint8_t**>(base + 0x170) + 8;
+            ProfessionResourceEntry* entry = professionResources;
             for (int32_t i = 0; i < profCount; ++i) {
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x08), nullptr);   // B.3.4 bridge
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x04), nullptr);   // B.3.4 bridge
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x00), nullptr);   // B.3.4 bridge
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x04), nullptr);   // B.3.4 bridge
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x08), nullptr);   // B.3.4 bridge
-                reinterpret_cast<System::Time*>(entry + 0x0C)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-                entry += 0x20;
+                ser->Serialize(entry->currentCount, nullptr);
+                ser->Serialize(entry->previousCount, nullptr);
+                ser->Serialize(entry->maxCount, nullptr);
+                ser->Serialize(entry->field_0x0C, nullptr);
+                ser->Serialize(entry->_field10, nullptr);
+                // LEFT (a defect, kept: the stream must stay byte-identical): retail
+                // serializes the entry's Time at +0x18 (0x14008ff9d, Time::Serialize(
+                // piVar7 + 4) with piVar7 = entry + 8); the tree has always used +0x14.
+                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // B.3.4b bridge
+                ++entry;
             }
         }
-        if (*reinterpret_cast<int32_t*>(base + 0x178) != 0x15) {
-            ResizeStride0x20(base + 0x170, 0x15);
+        if (professionResourceCount != 0x15) {
+            ResizeStride0x20(&professionResources, 0x15);
         }
 
-        int32_t sumCount = *reinterpret_cast<int32_t*>(base + 0x188);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(sumCount, nullptr);   // B.3.4 bridge
+        int32_t sumCount = notifyEntryCount;
+        ser->Serialize(sumCount, nullptr);
         if (loading) {
-            StorageComponent_DynArrayResize(base + 0x180, sumCount);   // FUN_14000f090
+            StorageComponent_DynArrayResize(&notifyEntries, sumCount);   // FUN_14000f090
         }
         if (sumCount > 0) {
-            uint8_t* entry = *reinterpret_cast<uint8_t**>(base + 0x180) + 8;
+            ResourceNotifyEntry* entry = notifyEntries;
             for (int32_t i = 0; i < sumCount; ++i) {
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x08), nullptr);   // B.3.4 bridge
-                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x04), nullptr);   // B.3.4 bridge
-                reinterpret_cast<System::Time*>(entry + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-                entry += 0x10;
+                ser->Serialize(entry->current, nullptr);
+                ser->Serialize(entry->maxCapacity, nullptr);
+                reinterpret_cast<System::Time*>(&entry->timer)->Serialize(*ser);   // B.3.4b bridge
+                ++entry;
             }
         }
     }
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(base + 0x1a8), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(base + 0x1a0)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    ser->Serialize(field_0x1A8, nullptr);
+    reinterpret_cast<System::Time*>(&field_0x1A0)->Serialize(*ser);   // B.3.4b bridge
 
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1) {   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(base + 0x1ac), nullptr);   // B.3.4 bridge
+    if (ser->GetVersion() > 1) {
+        ser->Serialize(field_0x1AC, nullptr);
     }
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2) {   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(base + 0x1b0), nullptr);   // B.3.4 bridge
+    if (ser->GetVersion() > 2) {
+        ser->Serialize(field_0x1B0, nullptr);
     }
 
-    RegistryCensus(base, leg, "exit ");
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    RegistryCensus(this, leg, "exit ");
 }
 
 // ============================================================
-// CitizenList_PostLoad_8f580 — CitizenBehavior post-load pass.
-// Rebuilds a spatial grid-cell map (townMgr+0x140, stride-0x10 outer array
+// CitizenBehavior::PostLoad (0x14008f580) — the post-load pass.
+// Rebuilds a spatial grid-cell map (+0x140, stride-0x10 outer array
 // sized (mapWidth/8)^2) from the residence array (+0x138/+0x130) and the
-// profession-BST-derived entity list (+0xe0/+0xe8), inserting each entity's
-// grid cell into the map via FUN_140088a80 (already ported+registered as
-// WellComp_AddCellEntry_88a80 — reused here as-is, same address/signature).
+// well list (+0xe0/+0xe8), inserting each entity's grid cell into the map via
+// FUN_140088a80 (already ported+registered as WellComp_AddCellEntry_88a80 —
+// reused here as-is, same address/signature).
 // ============================================================
 // DWORD_1401c79e0 — the component type-id validated inside PostLoad's inner
 // scan (the "position"-like component providing cell coords at +0x28/+0x2a).
@@ -750,27 +812,24 @@ static uint32_t DWORD_1401c79e0_TypeId() {
     return MapComponent::TypeId();
 }
 
-extern "C" void CitizenList_PostLoad_8f580(void* self) {
-    if (!self) return;
-    uint8_t* base = static_cast<uint8_t*>(self);
-
-    if (*reinterpret_cast<int32_t*>(base + 0x148) >= 1) return;   // already populated
+void CitizenBehavior::PostLoad() {
+    if (field_0x148 >= 1) return;   // already populated
 
     Map* mapGrid = GameUpdateLoop::_singleton->m_game;
     int side = mapGrid->size >> 3;
-    ResizeStride0x10(base + 0x140, side * side);
+    ResizeStride0x10(&field_0x140, side * side);
     std::fprintf(stderr, "[CitPostLoad] mapGrid=%p mapWidth=%d side=%d cells=%d "
             "cellMap=%p residence{ptr=%p count=%d} ent{ptr=%p count=%d}\n",
-            (void*)mapGrid, mapGrid->size, side, side * side,
-            *reinterpret_cast<void**>(base + 0x140),
-            *reinterpret_cast<void**>(base + 0x130),
-            *reinterpret_cast<int32_t*>(base + 0x138),
-            *reinterpret_cast<void**>(base + 0xe0),
-            *reinterpret_cast<int32_t*>(base + 0xe8));
+            static_cast<void*>(mapGrid), mapGrid->size, side, side * side,
+            static_cast<void*>(field_0x140),
+            static_cast<void*>(field_0x130),
+            field_0x138,
+            static_cast<void*>(wells),
+            wellCount);
     std::fflush(stderr);
 
     int idx = 0;
-    int32_t residenceCount = *reinterpret_cast<int32_t*>(base + 0x138);
+    int32_t residenceCount = field_0x138;
     if (residenceCount > 0) {
         // +0x130 is the STRIDE-8 int-pair array (ResizeStride08Pair in Serialize
         // above); retail walks it with `lVar11 += 8` and reads only the low int
@@ -778,7 +837,7 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
         // element from the pair's HIGH half, which is not a cell index at all —
         // the resulting x/y ran off the 32x32 cell map and AddCellEntry wrote
         // through a wild record pointer.
-        int32_t* residenceCells = *reinterpret_cast<int32_t**>(base + 0x130);
+        int32_t* residenceCells = field_0x130;
         int mapWidth = mapGrid->size;
         for (; idx < residenceCount; ++idx) {
             int cell = residenceCells[idx * 2];
@@ -791,42 +850,44 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
                         side * side);
                 std::fflush(stderr);
             }
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(base), cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80
+            // LEFT: the cell-map insert takes the town manager as int64_t
+            // (Component/wellcomponent_funcs.h).
+            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80
         }
     }
 
     idx = 0;
-    int32_t entCount = *reinterpret_cast<int32_t*>(base + 0xe8);
+    int32_t entCount = wellCount;
     if (entCount > 0) {
-        int64_t* entArr = *reinterpret_cast<int64_t**>(base + 0xe0);
+        WellComponent** entArr = wells;
         int slot = -1;
         for (; idx < entCount; ++idx, --slot) {
-            uint64_t entIBP = entArr[idx];
-            uint64_t comp = *reinterpret_cast<uint64_t*>(entIBP + 0x10);
+            WellComponent* entIBP = entArr[idx];
+            ComponentEntity* comp = entIBP->_entity;
 
-            void* chosen = nullptr;
-            int32_t compCount = *reinterpret_cast<int32_t*>(comp + 0x38);
+            MapComponent* chosen = nullptr;
+            int32_t compCount = comp->_componentCount;
             for (int32_t j = 0; j < compCount; ++j) {
-                void** slotPtr = reinterpret_cast<void**>(*reinterpret_cast<uint64_t*>(comp + 0x30) + static_cast<int64_t>(j) * 8);
-                void* cand = *slotPtr;
+                Object::InternalPtr<Component>* slotPtr = &comp->_components[j];
+                Component* cand = slotPtr->Get();
                 if (!cand) continue;
                 // Slot 2 on an entity component-array element (proved Object::Base).
-                uint32_t tid = reinterpret_cast<const Object::Base*>(cand)->Type();   // B.3.8 bridge
+                uint32_t tid = cand->Type();
                 if (tid == DWORD_1401c79e0_TypeId()) {
-                    slotPtr = reinterpret_cast<void**>(*reinterpret_cast<uint64_t*>(comp + 0x30) + static_cast<int64_t>(j) * 8);
-                    void* obj = *slotPtr;
-                    if (obj && ::Object::IsDerivedFromNullSafe(obj, DWORD_1401c79e0_TypeId())) chosen = obj;
+                    slotPtr = &comp->_components[j];
+                    Component* obj = slotPtr->Get();
+                    if (obj && ::Object::IsDerivedFromNullSafe(obj, DWORD_1401c79e0_TypeId()))
+                        chosen = static_cast<MapComponent*>(obj);   // validated just above
                     break;
                 }
             }
 
-            uint8_t chosenIBP[8] = {0};
-            new (chosenIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(chosen));   // B.3.3 bridge
-            uint64_t chosenVal = *reinterpret_cast<uint64_t*>(chosenIBP);
-            int16_t cx = chosenVal ? *reinterpret_cast<int16_t*>(chosenVal + 0x28) : 0;
-            int16_t cy = chosenVal ? *reinterpret_cast<int16_t*>(chosenVal + 0x2a) : 0;
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(base), cx, cy, slot);   // 0x140088a80
+            // Retail builds an InternalPtr<MapComponent> temporary from the find.
+            ::Object::InternalPtr<MapComponent> chosenRef(chosen);
+            MapComponent* chosenVal = chosenRef.Get();
+            int16_t cx = chosenVal ? static_cast<int16_t>(chosenVal->tileX0) : 0;
+            int16_t cy = chosenVal ? static_cast<int16_t>(chosenVal->tileY0) : 0;
+            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cx, cy, slot);   // 0x140088a80
         }
     }
 }

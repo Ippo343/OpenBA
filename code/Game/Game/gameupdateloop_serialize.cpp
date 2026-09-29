@@ -45,6 +45,7 @@
 
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestoreOut, the named fields
 #include "Game/Map.h"
+#include "Entity/CitizenBehavior.h"   // B4 GAME-a: m_citizenList->Serialize / PostLoad
 #include "Entity/EntityList.h"
 #include "Game/PlayerToolManager.h"
 #include "Game/Minimap.h"
@@ -102,7 +103,7 @@ namespace {
 //   0x1400988c0 Reimpl_Transform_SerializeWrapper (PlayerController, +0xE0)
 //   0x1400c44a0 EntityList_Serialize (+0xE8)                   (Entity/entitylist_funcs.h)
 //   0x1400b04d0 Reimpl_TradeWork_impl_04d0 (WorldGeometry, +0x110)
-//   0x14008f760 / 0x14008f580 CitizenList_Serialize_8f760 / _PostLoad_8f580 (+0xF0)
+//   0x14008f760 / 0x14008f580 CitizenBehavior::Serialize / PostLoad (+0xF0)
 //   0x14009f100 GameGrid_Serialize_9f100 (+0xF8), 0x1400f9240 Goals_Serialize_f9240 (+0x118)
 //   0x140003110 ActHunt_DynArraySetCount_3110                  (Action/exe_bodies.h)
 //   0x1400021d0 Reimpl_Array_Resize_Stride04, 0x140002340 Reimpl_ExternalPtr_Serialize_StringTable
@@ -757,7 +758,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     Reimpl_Transform_SerializeWrapper(m_playerController, &stream);                  // 0x1400988c0
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
     Reimpl_TradeWork_impl_04d0(m_worldGeometry, &stream);                            // 0x1400b04d0
-    CitizenList_Serialize_8f760(m_citizenList, &stream, nullptr, outParam);          // 0x14008f760
+    if (m_citizenList) m_citizenList->Serialize(stream, outParam);                   // 0x14008f760
     m_game->Serialize(stream);                                                       // 0x14009f100
     Goals_Serialize_f9240(m_tutorial, &stream, nullptr, outParam);                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
@@ -775,7 +776,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     m_weather->Serialize(stream);                    // 0x140093c90
     m_imageCapture->Serialize(stream);               // 0x1400a57f0
     EntityList_PostLoad_c4730(m_entityList, &stream);
-    CitizenList_PostLoad_8f580(m_citizenList);   // 0x14008f580
+    if (m_citizenList) m_citizenList->PostLoad();   // 0x14008f580
 
     if (intFactory) intFactory->ClearPersistState();
     extFactory->EnableReferenceMode(false);
