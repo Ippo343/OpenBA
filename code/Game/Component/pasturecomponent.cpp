@@ -160,10 +160,10 @@ void LivestockComponent::PenInPasture() {
 
     ComponentEntity* link = pasture->_entity;
     MapComponent* mapComp = link->FindComponent<MapComponent>();   // 0x140004680
-    uint16_t r0 = mapComp->tileX0;
-    uint16_t r1 = mapComp->tileY0;
-    uint16_t r2 = mapComp->tileX1;
-    uint16_t r3 = mapComp->tileY1;
+    int16_t r0 = mapComp->tileX0;
+    int16_t r1 = mapComp->tileY0;
+    int16_t r2 = mapComp->tileX1;
+    int16_t r3 = mapComp->tileY1;
 
     AnimalComponent* animal = _entity->FindComponent<AnimalComponent>();   // 0x140005500
 
@@ -173,10 +173,10 @@ void LivestockComponent::PenInPasture() {
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && animal->_entity != nullptr) {
         animal->_entity->RefreshEntityFlags();   // 0x1400c3470
     }
-    animal->wanderX      = static_cast<int16_t>(r0);
-    animal->wanderY      = static_cast<int16_t>(r1);
-    animal->wanderWidth  = static_cast<int16_t>(r2);
-    animal->wanderHeight = static_cast<int16_t>(r3);
+    animal->wanderX      = r0;
+    animal->wanderY      = r1;
+    animal->wanderWidth  = r2;
+    animal->wanderHeight = r3;
 }
 
 

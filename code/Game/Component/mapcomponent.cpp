@@ -320,12 +320,11 @@ void MapComponent::Persist(void* stream) {
     // LEFT: Component::Persist takes void* (COMP-c's header).
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Serialize the 4 tile coords as shorts. LEFT: the fields are uint16 until they
-    // take retail's int16 (Serialize(short&)).
-    ser.Serialize(*reinterpret_cast<short*>(&tileX0), nullptr);
-    ser.Serialize(*reinterpret_cast<short*>(&tileY0), nullptr);
-    ser.Serialize(*reinterpret_cast<short*>(&tileX1), nullptr);
-    ser.Serialize(*reinterpret_cast<short*>(&tileY1), nullptr);
+    // The 4 tile coords, Serialize(short&) as retail.
+    ser.Serialize(tileX0, nullptr);
+    ser.Serialize(tileY0, nullptr);
+    ser.Serialize(tileX1, nullptr);
+    ser.Serialize(tileY1, nullptr);
 
     // Serialize the rotation at +0x30
     ser.Serialize(extraField, nullptr);
