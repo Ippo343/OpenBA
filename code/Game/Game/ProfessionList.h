@@ -20,6 +20,8 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+class Profession;
+
 class ProfessionList final : public Object::External {
     DECLARE_EXE_TYPE(ProfessionList)
 
@@ -35,18 +37,28 @@ public:
     virtual Object::External* Construct();                        // [8] 0x14001e630
 
 public:
-    void*    arrayData;          // +0x20: Profession* array data (freed in dtor)
-    uint64_t arraySize;          // +0x28: count (low) | capacity (high)
-    void*    profRef1;           // +0x30: ExternalPtr<Profession> (serialized via FUN_140018020)
-    void*    profRef2;           // +0x38
-    void*    profRef3;           // +0x40
-    void*    profRef4;           // +0x48
+    // B.4 W0-H1: the ctor (inline in the factory 0x14001e5c0) zeroes +0x20..+0x4F
+    // with six qword stores; the serializer 0x1400a8e30 writes only the four
+    // ExternalPtr<Profession> at +0x30..+0x48 (0x140018020); the array at +0x20 is
+    // built at Startup (ProfessionList_Startup_Impl) and freed by the dtor
+    // 0x14001e760 (H5: kept as raw fields, the tree's dtor runs ~Array on them by
+    // hand). +0x40 / +0x48 are named from PostLifeEvent, which titles a child
+    // with +0x40's name and a student with +0x48's; +0x30 / +0x38 keep typed
+    // guess names.
+    void*    arrayData;          // +0x20: Collection::Array<Profession*> data (H5 raw)
+    int32_t  arrayCount;         // +0x28: Array count
+    int32_t  arrayCapacity;      // +0x2C: Array capacity
+    Profession* field_0x30;      // +0x30: ExternalPtr<Profession>
+    Profession* field_0x38;      // +0x38: ExternalPtr<Profession>
+    Profession* childProfession;   // +0x40: ExternalPtr<Profession>: a child's title (PostLifeEvent)
+    Profession* studentProfession; // +0x48: ExternalPtr<Profession>: a student's title (PostLifeEvent)
 };
 
 static_assert(sizeof(ProfessionList) == 0x50, "ProfessionList is 0x50");
 static_assert(offsetof(ProfessionList, arrayData) == 0x20, "+0x20");
-static_assert(offsetof(ProfessionList, arraySize) == 0x28, "+0x28");
-static_assert(offsetof(ProfessionList, profRef1) == 0x30, "+0x30");
-static_assert(offsetof(ProfessionList, profRef2) == 0x38, "+0x38");
-static_assert(offsetof(ProfessionList, profRef3) == 0x40, "+0x40");
-static_assert(offsetof(ProfessionList, profRef4) == 0x48, "+0x48");
+static_assert(offsetof(ProfessionList, arrayCount) == 0x28, "+0x28");
+static_assert(offsetof(ProfessionList, arrayCapacity) == 0x2C, "+0x2C");
+static_assert(offsetof(ProfessionList, field_0x30) == 0x30, "+0x30");
+static_assert(offsetof(ProfessionList, field_0x38) == 0x38, "+0x38");
+static_assert(offsetof(ProfessionList, childProfession) == 0x40, "+0x40");
+static_assert(offsetof(ProfessionList, studentProfession) == 0x48, "+0x48");
