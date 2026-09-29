@@ -19,6 +19,19 @@
 // ---- action_base_cnr.cpp
 void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP);  // 0x140003f60
 void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP);  // 0x14000c460
+class Map;                    // Game/Map.h
+class GrowthComponent;        // Component/GrowthComponent.h
+class ModelComponent;         // Component/ModelComponent.h
+class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
+class ComponentEntity;        // Entity/ComponentEntity.h
+uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
+void SetGrowthProgress(GrowthComponent* self, float progress);  // 0x140120db0
+uint32_t ModelMeshGroupCount(const ModelComponent* model);  // 0x1401252f0
+uint32_t ModelMeshCount(const ModelComponent* model, int group);  // 0x140125320
+void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant);  // 0x1401253d0
+void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animIdx);  // 0x140126440
+uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540
+void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
 uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex);  // 0x14009cb00
 void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // 0x140120db0
 uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp);  // 0x1401252f0
