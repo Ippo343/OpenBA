@@ -54,6 +54,7 @@ class WellComponent;
 class DiseaseComponent;
 class ComponentDescription;
 class Map;
+namespace Object { template <class T> class InternalPtr; }
 
 // ============================================================
 // ProfessionResourceEntry — one element of the +0x170 array (stride 0x20).
@@ -252,6 +253,12 @@ public:
     int64_t FindWater(uint32_t centreCell, int extent, float* outA, float* outB);  // 0x1400881d0
     void ScanWaterCell(Map* map, int coarseCell, int ringX, int ringY, uint32_t srcCell,
                        int* bestCost, int* bestId, WellComponent** bestWell);    // 0x140088730
+
+    // ---- the water-source register (B4 COMP-f; bodies in Component/wellcomponent.cpp) ----
+    void RemoveCellEntry(int x, int y, int value);                    // 0x1400889e0
+    void AddCellEntry(int x, int y, int value);                       // 0x140088a80
+    void UnregisterWell(Object::InternalPtr<WellComponent>* well);    // 0x140091ba0
+    void RegisterWell(Object::InternalPtr<WellComponent>* well);      // 0x140091cb0
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

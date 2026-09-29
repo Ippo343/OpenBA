@@ -259,7 +259,7 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty);  // 0x14005ace0 B4 FORWARD -> TradeComponent::SpawnPurchasedLivestock (Dialog/tradeui_checkout.cpp)
 
 // ---- wellcomponent.cpp
-void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2);  // 0x140091ba0
+// B.4 COMP-f: 0x140091ba0 is CitizenBehavior::UnregisterWell.
 
 // ---- workcomponent.cpp
 bool WorkComponent_CheckWorkSlot(void* selfP);  // 0x14012ead0 B4 FORWARD -> WorkComponent::IsWorkPosted (outside callers)

@@ -20,6 +20,8 @@
 #include "Component/wellcomponent_funcs.h"
 #include "Component/MapComponent.h"
 #include "Component/coll_bridge.h"
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"
@@ -34,96 +36,86 @@
 // ============================================================
 // Helpers
 // ============================================================
-// FUN_140091ba0 WellComp_UnregisterEntity_91ba0 (below) — on entity unregister, scan
-//   the manager's entity array for the matching IBP and, if found, clear its
-//   natural-resource grid mark + null the slot (a remove-by-IBP, not a push).
-// The GameWorld cell 0x1401c3dd8 is read through g_pGameWorldSingleton.
+// FUN_140091ba0 CitizenBehavior::UnregisterWell (below) — on unregister, scan the
+//   town's well array for the matching IBP and, if found, clear its coarse-cell mark
+//   and null the slot (a remove-by-IBP, not a push).
+// The GameWorld cell 0x1401c3dd8 is read through GameUpdateLoop::_singleton.
 // FUN_140003110 — dynamic 8-byte-element array set-count + insert (GameColl
 //   SetSizeFill). Used here for the IBP-array append.
 // System::MemoryAllocator::MemAlloc/MemFree, the STATIC (size, align) pair.
 // Import slot 0x140152a98 — Object::Base::IsDerivedFrom.
-// FUN_140004680 FloorComponent_FindResData — the MapComponent/resData finder used by
-//   the remove scan.
+// FUN_140004680 FindComponent<MapComponent> — the footprint finder of the remove scan.
+//
+// LEFT: the map width is the Map's first int (GameUpdateLoop::m_game is void*, GAME-a),
+// and the town manager comes from GameUpdateLoop::m_citizenList (void*, GAME-a).
 
 // ============================================================
 // Reimpl of FUN_1400889e0 (Component reg wave B — WELL cluster).
-// Pure leaf (no exe callees). Compacts the 4-byte-stride int array of one terrain
-// grid cell, deleting every entry equal to `value`. The cell is located from the
-// world map width (*(int*)(*(int**)(world+0xf8)) >> 3 = cells-per-row) and the
-// 8-px-quantised (x,y): cellIndex = (width>>3 ... already shifted)*(y>>3)+(x>>3);
-// cell record stride 0x10 lives at manager+0x140; record = {int* data@+0, int count@+8}.
-// Faithful 1:1 port of the Ghidra decompile (same quirky shift-and-overwrite compaction).
+// Pure leaf (no exe callees). Compacts the int array of one coarse terrain cell,
+// deleting every entry equal to `value`. The cell is located from the world map width
+// (*(int*)(*(int**)(world+0xf8)) >> 3 = cells-per-row) and the 8-px-quantised (x,y):
+// cellIndex = (width>>3)*(y>>3)+(x>>3); the cell record (+0x140, stride 0x10) is an
+// Array<int>. Faithful 1:1 port of the Ghidra decompile (same quirky shift-and-overwrite
+// compaction).
 // ============================================================
-void WellComp_RemoveCellEntry_889e0(int64_t manager, int x, int y, int value) {
-    void* world = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+void CitizenBehavior::RemoveCellEntry(int x, int y, int value) {
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    int width = *reinterpret_cast<int*>(*reinterpret_cast<int**>(
-                    reinterpret_cast<uint8_t*>(world) + 0xf8)) >> 3;
-    int64_t* cell = reinterpret_cast<int64_t*>(
-        (int64_t)((width * (y >> 3)) + (x >> 3)) * 0x10 +
-        *reinterpret_cast<int64_t*>(manager + 0x140));
-    int count = (int)cell[1];
+    int width = *reinterpret_cast<int*>(world->m_game) >> 3;
+    Collection::Array<int32_t>& cell = field_0x140[(width * (y >> 3)) + (x >> 3)];
+    int count = cell._size;
     if (count <= 0) return;
 
     int i = 0;
-    int64_t byteOff = 0;
+    int64_t idx = 0;
     do {
-        if (*reinterpret_cast<int*>(byteOff + cell[0]) == value) {
-            int64_t shiftOff = byteOff;
+        if (cell._data[idx] == value) {
+            int64_t shiftIdx = idx;
             int j = i;
             if (i < count) {
                 do {
                     j++;
-                    if (j < (int)cell[1]) {
-                        int* p = reinterpret_cast<int*>(cell[0] + shiftOff);
+                    if (j < cell._size) {
+                        int* p = cell._data + shiftIdx;
                         if (p) *p = p[1];
                     }
-                    shiftOff += 4;
-                } while (j < (int)cell[1]);
+                    shiftIdx += 1;
+                } while (j < cell._size);
             }
-            *reinterpret_cast<int*>(&cell[1]) = (int)cell[1] - 1;
+            cell._size = cell._size - 1;
             i--;
-            byteOff -= 4;
+            idx -= 1;
         }
-        count = (int)cell[1];
+        count = cell._size;
         i++;
-        byteOff += 4;
+        idx += 1;
     } while (i < count);
 }
 
 // ============================================================
 // Reimpl of FUN_140091ba0 (Component reg wave B — WELL cluster).
-// On (un)register, scan the manager's IBP array {ptr@+0xe0, count@+0xe8} for the entry
-// whose resolved value equals *param2 (the owner IBP). When found: resolve the entry's
-// MapComponent/resData (FUN_140004680, registered) for its tile (short x@+0x28, y@+0x2a),
-// clear the natural-resource grid mark via WellComp_RemoveCellEntry_889e0(manager, x, y,
-// -1-index), then null the slot with a fresh InternalBasePtr. Closure-safe: FUN_140004680
-// (reg) + FUN_1400889e0 (reg below) + CheckPtr/IBP-ctor (engine). 1:1 port.
+// On unregister, scan the town's well array {ptr +0xe0, count +0xe8} for the entry
+// equal to *well (the component's IBP). When found: find the entry's MapComponent
+// (FUN_140004680) for its tile (short x +0x28, y +0x2a), clear the coarse-cell mark
+// via RemoveCellEntry(x, y, -1-index), then null the slot with a fresh InternalBasePtr.
+// 1:1 port.
 // ============================================================
-void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
-    if (*reinterpret_cast<int*>(manager + 0xe8) <= 0) return;
-    int64_t off = 0;
+void CitizenBehavior::UnregisterWell(Object::InternalPtr<WellComponent>* well) {
+    if (wellCount <= 0) return;
     int idx = 0;
     do {
-        int64_t arr = *reinterpret_cast<int64_t*>(manager + 0xe0);
-        if (*reinterpret_cast<int64_t*>(arr + off) == *reinterpret_cast<int64_t*>(param2)) {
+        if (wells[idx] == well->Get()) {
             if (idx < 0) return;
-            int64_t* slot = reinterpret_cast<int64_t*>(
-                *reinterpret_cast<int64_t*>(manager + 0xe0) + (int64_t)idx * 8);
-            int64_t entry = *reinterpret_cast<int64_t*>(*slot + 0x10);
-            int64_t resData = 0;
-            FloorComponent_FindResData(reinterpret_cast<void*>(entry), &resData);   // 0x140004680
-            int rx = (int)*reinterpret_cast<int16_t*>(resData + 0x28);
-            int ry = (int)*reinterpret_cast<int16_t*>(resData + 0x2a);
-            WellComp_RemoveCellEntry_889e0(manager, rx, ry, -1 - idx);
-            int64_t cleared = 0;
-            new (&cleared) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            *reinterpret_cast<int64_t*>((int64_t)idx * 8 + *reinterpret_cast<int64_t*>(manager + 0xe0)) = cleared;
+            ComponentEntity* entry = wells[idx]->_entity;
+            MapComponent* resData = entry->FindComponent<MapComponent>();   // 0x140004680
+            int rx = (int)static_cast<int16_t>(resData->tileX0);
+            int ry = (int)static_cast<int16_t>(resData->tileY0);
+            RemoveCellEntry(rx, ry, -1 - idx);
+            wells[idx] = nullptr;   // a fresh InternalBasePtr(nullptr)
             return;
         }
         idx++;
-        off += 8;
-    } while (idx < *reinterpret_cast<int*>(manager + 0xe8));
+    } while (idx < wellCount);
 }
 
 // ============================================================
@@ -151,41 +143,39 @@ void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
 // bring-up below is the residence pattern with the two handlers swapped in.
 
 // ============================================================
-// Reimpl of FUN_140088a80 — TownManager coarse-cell index push_back.
-// The exact mirror of WellComp_RemoveCellEntry_889e0 above: same addressing
+// Reimpl of FUN_140088a80 — the coarse-cell index push_back.
+// The exact mirror of RemoveCellEntry above: same addressing
 //     cellIdx = (mapWidth >> 3) * (y >> 3) + (x >> 3)
-//     record  = *(townMgr + 0x140) + cellIdx * 0x10 = { int* data; int count; int cap }
+//     record  = field_0x140[cellIdx] = { int* data; int count; int cap }
 // but it APPENDS `value` instead of compacting it out. This is the array the FireWork
 // spiral search reads, so without this call the buckets stay empty however many wells
 // the town has.
 // ============================================================
-void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
+void CitizenBehavior::AddCellEntry(int x, int y, int value) {
     // This helper is shared: CitizenList_PostLoad_8f580 (0x14008f580) calls it for
     // every residence cell on a LOAD, long before any well reaches its state-2 enter.
-    void* world = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    const int mapW = *reinterpret_cast<int*>(*reinterpret_cast<int**>(
-                         reinterpret_cast<uint8_t*>(world) + 0xf8));
+    const int mapW = *reinterpret_cast<int*>(world->m_game);
     const int64_t cellIdx = static_cast<int64_t>((mapW >> 3) * (y >> 3) + (x >> 3));
-    uint8_t* rec = reinterpret_cast<uint8_t*>(
-        *reinterpret_cast<int64_t*>(townMgr + 0x140) + cellIdx * 0x10);
+    Collection::Array<int32_t>& rec = field_0x140[cellIdx];
 
-    int* oldData = *reinterpret_cast<int**>(rec);
-    const int count = *reinterpret_cast<int*>(rec + 0x08);
+    int* oldData = rec._data;
+    const int count = rec._size;
     const int newCount = count + 1;
-    *reinterpret_cast<int*>(rec + 0x08) = newCount;
+    rec._size = newCount;
 
     int* data = oldData;
-    if (newCount > *reinterpret_cast<int*>(rec + 0x0c)) {
+    if (newCount > rec._capacity) {
         // Retail's growth rule: first growth of an EMPTY array takes exactly one slot;
         // any later growth-by-one triples. (`count == 0` is the only way the second
         // test fails, since newCount is always count+1 here.)
         int newCap = newCount;
         if (count != 0) newCap = newCount * 3;
-        *reinterpret_cast<int*>(rec + 0x0c) = newCap;
-        data = reinterpret_cast<int*>(
+        rec._capacity = newCap;
+        data = static_cast<int*>(
             System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(newCap) * 4, 4));
-        *reinterpret_cast<int**>(rec) = data;
+        rec._data = data;
     }
     // Rows below the old count come from the OLD buffer; the new row takes `value`.
     // When the buffer did not move, retail starts at oldCount and writes only that one.
@@ -195,57 +185,57 @@ void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
     if (oldData != data) System::MemoryAllocator::MemFree(oldData);
 }
 
+// B4 FORWARD: 1 outside caller (Game/citizenlist_serialize.cpp) holds the town manager
+// as an integer; the closing wave rewires it.
+void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value) {
+    reinterpret_cast<CitizenBehavior*>(townMgr)->AddCellEntry(x, y, value);   // B4 FORWARD
+}
+
 // ============================================================
 // Reimpl of FUN_140091cb0 — TownManager::RegisterWaterSource.
-// 1. Park the water source's IBP in the array {ptr@+0xe0, count@+0xe8}, reusing the
+// 1. Park the water source's IBP in the array {ptr +0xe0, count +0xe8}, reusing the
 //    first NULLED slot (the unregister leaves holes) and appending only if none.
 // 2. Find the owner entity's MapComponent, and stamp its tile in the coarse cell index
-//    with `-1 - slotIndex`. The negative encoding is what WellComp_RemoveCellEntry_889e0
-//    searches for on removal, and what the FireWork search decodes back to a slot.
+//    with `-1 - slotIndex`. The negative encoding is what RemoveCellEntry searches for
+//    on removal, and what the FireWork search decodes back to a slot.
 // ============================================================
-void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
+void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
     int index = -1;
-    const int count = *reinterpret_cast<int*>(townMgr + 0xe8);
+    const int count = wellCount;
     if (count > 0) {
-        int64_t* arr = *reinterpret_cast<int64_t**>(townMgr + 0xe0);
+        WellComponent** arr = wells;
         for (int i = 0; i < count; ++i) {
-            if (arr[i] != 0) continue;
-            arr[i] = *reinterpret_cast<int64_t*>(ibp);
+            if (arr[i] != nullptr) continue;
+            arr[i] = well->Get();
             index = i;
             break;
         }
     }
     if (index < 0) {
-        index = *reinterpret_cast<int*>(townMgr + 0xe8);      // append at the current end
+        index = wellCount;      // append at the current end
         // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xe0))
-            .SetSizeFill(index + 1, ibp);
+        GameColl::AsArray<GameColl::Ptr8>(&wells).SetSizeFill(index + 1, well);
     }
 
-    int64_t held = *reinterpret_cast<int64_t*>(ibp);
-    int64_t entity = *reinterpret_cast<int64_t*>(held + 0x10);
+    ComponentEntity* entity = well->Get()->_entity;
 
-    // The tile-position component (ti cell 0x1401c79e0, labelled MapComponent /
-    // FootprintComponent / "NaturalResource entity-data" across the repo; the int16
-    // x/y at +0x28/+0x2a this reads are MapComponent's, as FUN_140004680 agrees).
+    // The tile-position component (ti cell 0x1401c79e0, MapComponent; the int16 x/y at
+    // +0x28/+0x2a this reads are MapComponent's, as FUN_140004680 agrees). The
+    // FindComponent<T> shape, inline; the null-slot test is the tree's.
     const uint32_t tidMap = MapComponent::TypeId();
-    void* mapComp = nullptr;
-    const int compCount = *reinterpret_cast<int*>(entity + 0x38);
-    const int64_t comps = *reinterpret_cast<int64_t*>(entity + 0x30);
+    MapComponent* mapComp = nullptr;
+    const int compCount = entity->_componentCount;
+    Object::InternalPtr<Component>* comps = entity->_components;
     for (int i = 0; i < compCount; ++i) {
-        void* slot = reinterpret_cast<void*>(comps + static_cast<int64_t>(i) * 8);
-        void* comp = *reinterpret_cast<void**>(slot);
+        Component* comp = comps[i].Get();
         if (!comp) continue;
-        if (reinterpret_cast<Object::Base*>(comp)->Type() != tidMap) continue;   // B.3.8 bridge
+        if (comp->Type() != tidMap) continue;
         // Retail re-reads the slot and confirms with IsDerivedFrom before accepting.
-        if (reinterpret_cast<const Object::Base*>(comp)->IsDerivedFrom(tidMap)) mapComp = comp;
+        if (comp->IsDerivedFrom(tidMap)) mapComp = static_cast<MapComponent*>(comp);
         break;
     }
 
-    int64_t pos = 0;
-    new (&pos) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(mapComp));   // B.3.3 bridge
-    if (pos == 0) {
+    if (mapComp == nullptr) {
         // Retail derefs this unguarded -- it relies on every registered water source
         // owning a MapComponent. Ours can legitimately reach here while the component
         // set is still being brought up, and a fault would take the whole boot with it,
@@ -257,17 +247,16 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
         fflush(stderr);
         return;
     }
-    const int tx = *reinterpret_cast<int16_t*>(pos + 0x28);
-    const int ty = *reinterpret_cast<int16_t*>(pos + 0x2a);
-    WellComp_AddCellEntry_88a80(townMgr, tx, ty, -1 - index);
+    const int tx = static_cast<int16_t>(mapComp->tileX0);
+    const int ty = static_cast<int16_t>(mapComp->tileY0);
+    AddCellEntry(tx, ty, -1 - index);
 
     {
         static int n = 0;
         if (n < 8) { ++n;
             fprintf(stderr, "[Well] water source REGISTERED: slot=%d tile=(%d,%d) "
                             "cellValue=%d townMgr=%p arrayCount=%d\n",
-                    index, tx, ty, -1 - index, reinterpret_cast<void*>(townMgr),
-                    *reinterpret_cast<int*>(townMgr + 0xe8));
+                    index, tx, ty, -1 - index, static_cast<void*>(this), wellCount);
             fflush(stderr);
         }
     }
@@ -279,21 +268,20 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
 // registrar with TownManager = *(GameWorld+0xf0). Retail returns 0 in AL so the SM's
 // Enter walk continues past this node.
 // ============================================================
-extern "C" char WellComponent_EnterBuilt(void* comp, void* /*sm*/) {
+char WellComponent::EnterBuilt() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    uint8_t ibp[24] = {};
-    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
-    void* gw = GameUpdateLoop::_singleton;
-    int64_t townMgr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(gw) + 0xf0);
+    Object::InternalPtr<WellComponent> ibp(this);
+    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
+    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
     if (!townMgr) return 0;
-    WellComp_RegisterEntity_91cb0(townMgr, ibp);
+    townMgr->RegisterWell(&ibp);   // 0x140091cb0
     return 0;
 }
 
 // WellComponent state-3 "demolish" enter — 0x14005cee0. Byte-identical to the slot-7
 // removal hook (0x14005cf60): wrap the component, call the unregister.
-extern "C" char WellComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    reinterpret_cast<WellComponent*>(comp)->WellComponent::OnRemove();   // B.3.8 bridge (retail: an identical body, not a dispatch)
+char WellComponent::EnterDemolish() {
+    WellComponent::OnRemove();   // retail: an identical body, not a dispatch
     return 0;
 }
 
@@ -312,6 +300,9 @@ extern "C" char WellComponent_EnterDemolish(void* comp, void* /*sm*/) {
 
 using WellCtrlDispatch = ::ControllerLive::Dispatcher<WellCtrlTag>;
 
+static char WellComponent_EnterBuiltState(WellComponent* c)    { return c->EnterBuilt(); }      // 0x14005cf20
+static char WellComponent_EnterDemolishState(WellComponent* c) { return c->EnterDemolish(); }   // 0x14005cee0
+
 // The retail table, transcribed from 0x14014bc20 call for call. Retail runs it
 // ONCE from a static initializer; the tree ran it (idempotently, unsynchronised)
 // on every create, from both the loader and the main thread. It now runs at
@@ -322,10 +313,10 @@ static void WellComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = WellCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&WellComponent_EnterBuilt),
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&WellComponent_EnterBuiltState),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&WellComponent_EnterDemolish),
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&WellComponent_EnterDemolishState),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);
@@ -342,7 +333,7 @@ WellComponent::WellComponent() : _controller(this) {
 }
 
 // ============================================================
-// WellComponent::Shutdown (vtable slot [3], 0x14005cfa0)
+// WellComponent::Persist (vtable slot [3], 0x14005cfa0)
 // ============================================================
 // Component_Serialize + two empty serializer blocks (controller compat).
 
@@ -350,21 +341,17 @@ void WellComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // First empty serializer block (component section)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
+    { IO::Serializer scope1(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
 
     // Second empty serializer block (controller section)
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
+    { IO::Serializer scope2(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
 }
 
 // ============================================================
 // WellComponent::OnRemove (vtable slot [7], 0x14005cf60)
 // ============================================================
-// UNregisters the owning entity from the TownManager water-source list. The
-// matching REGISTER is the state-2 enter at the bottom of this file.
+// UNregisters this component from the TownManager water-source list. The matching
+// REGISTER is the state-2 enter above.
 
 void WellComponent::OnRemove() {
     // ⚠ FIXED 2026-08-22 (fire lane): retail 0x14005cf60 is
@@ -375,16 +362,14 @@ void WellComponent::OnRemove() {
     // scan-for-matching-IBP could never hit. Latent while WellComponent was inert
     // (slot 7 was never installed); it matters now that the FireWork spiral search
     // depends on wells being findable in the gw+0xf0 entity index.
-    uint8_t basePtr[24];
-    new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    Object::InternalPtr<WellComponent> basePtr(this);
 
     // *(GameWorld + 0xF0) is the TownManager itself -- not a "water source array".
     // 0x140091ba0 takes the manager and indexes its own +0xe0/+0xe8 pair.
     if (GameUpdateLoop::_singleton != nullptr) {
-        void* gameWorld = GameUpdateLoop::_singleton;
-        void* townMgr = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
-        WellComp_UnregisterEntity_91ba0(reinterpret_cast<int64_t>(townMgr), basePtr);   // 0x140091ba0
+        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
+        CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+        townMgr->UnregisterWell(&basePtr);   // 0x140091ba0
     }
 }
 
