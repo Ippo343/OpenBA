@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
+#include "runtime/types/collection/Collection.h"
 #include "Object/exe_type.h"
 
 namespace UI { class Element; }
@@ -28,8 +29,7 @@ public:
 
     // 0x140014370 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String member at +0x30; the tree never did
-    // (leak kept).
+    // Retail frees the Array at +0x30 and zeroes its header: the `icons` Array's dtor.
     ~StatusIconUI() override = default;                           // [0] 0x140014370
     void OnCreated() override;   // [4] 0x14007b270
     void OnUpdateLayout() override;   // [7] 0x14007b0a0
@@ -39,16 +39,10 @@ public:
     // ---- fields ----------------------------------------------------------
     // +0x30 the "icons" group's children: a Collection::Array<InternalPtr<UI::Element>>
     // (OnCreated 0x14007b270 SetSize 0x1400032e0 + one Child() per slot; the dtor
-    // 0x140014370 MemFrees the data). B.4 H5: kept as raw storage of the Array's
-    // three words -- declaring the Array would make its dtor run, which the
-    // tree's never did (the leak above).
-    UI::Element** icons = nullptr;   // +0x30 Array data
-    int32_t iconCount = 0;           // +0x38 Array count
-    int32_t iconCapacity = 0;        // +0x3C Array capacity
+    // 0x140014370 MemFrees the data and zeroes the header: the Array's dtor).
+    Collection::Array<UI::Element*> icons;   // +0x30
 };
 
 static_assert(offsetof(StatusIconUI, icons) == 0x30, "StatusIconUI::icons @ +0x30 (0x14007b270)");
-static_assert(offsetof(StatusIconUI, iconCount) == 0x38, "StatusIconUI::iconCount @ +0x38 (0x14007b0a0)");
-static_assert(offsetof(StatusIconUI, iconCapacity) == 0x3C, "StatusIconUI::iconCapacity @ +0x3C");
 static_assert(sizeof(StatusIconUI) == 0x40, "StatusIconUI is 0x40 (create 0x140014180 MemAlloc(0x40))");
 static_assert(alignof(StatusIconUI) == 8, "qword-aligned (the vptr)");

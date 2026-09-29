@@ -60,13 +60,12 @@ void StatusIconUI::OnCreated() {
     // Get child count
     int childCount = iconsElem->ChildCount();
 
-    // Resize the array at +0x30 to hold childCount entries.
-    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
-    // new tail zeroed. LEFT: `icons` is the Array's raw storage (B.4 H5).
-    GameColl::ArrayAt<GameColl::Ptr8>(this, 0x30).SetSize(childCount);
+    // Resize the array to hold childCount entries: Collection::Array<T>::SetSize
+    // (retail 0x1400032e0, stride 8 align 8, new tail null).
+    icons.SetSize(childCount, nullptr);
 
     // Copy each child's InternalPtr into the array
-    for (int i = 0; i < iconCount; i++) {
+    for (int i = 0; i < icons.GetSize(); i++) {
         icons[i] = iconsElem->Child(i).Get();
     }
 }
@@ -83,7 +82,7 @@ void StatusIconUI::OnCreated() {
 // [7] 0x14007b0a0
 void StatusIconUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
-    if (icons == nullptr)
+    if (icons.GetData() == nullptr)
         StatusIconUI::OnCreated();
 
     // The entity from the data source (IsA ComponentEntity)
@@ -152,7 +151,7 @@ void StatusIconUI::OnUpdateLayout() {
     // Loop through icon elements, show/hide based on bitfield
     uint32_t bitMask = 1;
 
-    for (int i = 0; i < iconCount; i++) {
+    for (int i = 0; i < icons.GetSize(); i++) {
         UI::Element* iconElem = icons[i];
 
         // The status-icon active bitfield. Guard the read: if no StatusIconComponent
