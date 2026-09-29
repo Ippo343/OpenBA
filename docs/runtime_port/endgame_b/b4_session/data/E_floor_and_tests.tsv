@@ -1,0 +1,968 @@
+file	casts_total	legit_count	category	reason	area	reinterpret	cstyle	static_void	const_cast	deferred_4_1	falls	falls_by_kind
+code/Game/Action/action.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Action/action_base_cnr.cpp	165	0	none	no genuine reinterpretation found	code	151	0	14	0	0	165	offset_read:122 other:33 void_receiver:8 pod_shadow:2
+code/Game/Action/action_base_complete.cpp	138	0	none	no genuine reinterpretation found	code	128	0	10	0	0	138	offset_read:93 other:35 void_receiver:8 vtable_read:2
+code/Game/Action/action_base_hunt.cpp	50	0	none	no genuine reinterpretation found	code	50	0	0	0	0	50	offset_read:34 other:9 void_receiver:4 pod_shadow:3
+code/Game/Action/action_base_move.cpp	127	0	none	no genuine reinterpretation found	code	118	0	6	3	0	127	offset_read:71 other:45 void_receiver:5 serialize_signedness:3 untyped_param:2 pod_shadow:1
+code/Game/Action/action_base_movedeps.cpp	17	0	none	no genuine reinterpretation found	code	16	0	1	0	0	17	offset_read:9 other:8
+code/Game/Action/action_base_rawmat.cpp	161	2	print_addr	legit: print_addr 2	code	138	0	23	0	0	159	offset_read:96 other:54 void_receiver:4 type_confusion:3 pod_shadow:2
+code/Game/Action/action_child_ctors.cpp	24	0	none	no genuine reinterpretation found	code	21	0	3	0	0	24	other:14 offset_read:9 void_receiver:1
+code/Game/Action/action_child_ctors2.cpp	95	0	none	no genuine reinterpretation found	code	95	0	0	0	0	95	offset_read:65 other:24 void_receiver:3 type_confusion:2 pod_shadow:1
+code/Game/Action/action_pf_astar.cpp	288	1	alloc_result	legit: alloc_result 1	code	288	0	0	0	0	287	offset_read:240 other:46 void_receiver:1
+code/Game/Action/action_pf_avl.cpp	234	5	alloc_result	legit: alloc_result 5	code	64	170	0	0	0	229	other:194 offset_read:32 type_confusion:3
+code/Game/Action/action_pf_ctors.cpp	106	0	none	no genuine reinterpretation found	code	104	0	2	0	0	106	offset_read:71 other:29 void_receiver:5 type_confusion:1
+code/Game/Action/action_pf_geom.cpp	145	0	none	no genuine reinterpretation found	code	144	1	0	0	0	145	offset_read:139 other:6
+code/Game/Action/action_pf_pools.cpp	263	0	none	no genuine reinterpretation found	code	260	0	3	0	0	263	offset_read:192 other:71
+code/Game/Action/action_pf_region.cpp	290	0	none	no genuine reinterpretation found	code	1	289	0	0	0	290	offset_read:249 other:27 null_literal:12 type_confusion:2
+code/Game/Action/action_pf_road.cpp	178	1	value_pun	legit: value_pun 1	code	173	0	5	0	0	177	offset_read:136 other:37 void_receiver:4
+code/Game/Action/action_pf_roots_drop.cpp	98	0	none	no genuine reinterpretation found	code	92	0	6	0	0	98	offset_read:64 other:21 pod_shadow:8 type_confusion:5
+code/Game/Action/action_pf_roots_misc.cpp	102	2	value_pun	legit: value_pun 2	code	100	2	0	0	0	100	offset_read:85 other:12 type_confusion:2 pod_shadow:1
+code/Game/Action/action_pf_roots_road.cpp	46	1	value_pun	legit: value_pun 1	code	46	0	0	0	0	45	offset_read:38 other:6 type_confusion:1
+code/Game/Action/action_pf_roots_route.cpp	118	0	none	no genuine reinterpretation found	code	5	113	0	0	0	118	offset_read:72 null_literal:24 other:17 pod_shadow:4 void_receiver:1
+code/Game/Action/animatenaturalresource.cpp	20	0	none	no genuine reinterpretation found	code	16	2	2	0	0	20	other:13 serialize_signedness:3 offset_read:2 storage_local:2
+code/Game/Action/completeroad.cpp	18	0	none	no genuine reinterpretation found	code	13	3	2	0	0	18	other:8 offset_read:6 void_receiver:2 storage_local:2
+code/Game/Action/completetask.cpp	30	0	none	no genuine reinterpretation found	code	15	13	2	0	0	30	other:14 offset_read:11 serialize_signedness:3 storage_local:2
+code/Game/Action/consumerawmaterial.cpp	74	0	none	no genuine reinterpretation found	code	24	47	3	0	0	74	offset_read:36 other:30 void_receiver:4 serialize_signedness:2 storage_local:2
+code/Game/Action/createnaturalresource.cpp	50	0	none	no genuine reinterpretation found	code	16	27	7	0	0	50	other:23 offset_read:17 type_confusion:4 void_receiver:3 storage_local:2 pod_shadow:1
+code/Game/Action/createrawmaterial.cpp	97	0	none	no genuine reinterpretation found	code	37	57	3	0	0	97	offset_read:56 other:31 void_receiver:5 pod_shadow:2 storage_local:2 type_confusion:1
+code/Game/Action/dropoffrawmaterial.cpp	36	0	none	no genuine reinterpretation found	code	20	14	2	0	0	36	other:15 offset_read:12 void_receiver:7 storage_local:2
+code/Game/Action/huntanimal.cpp	68	0	none	no genuine reinterpretation found	code	19	47	2	0	0	68	offset_read:47 other:16 type_confusion:2 storage_local:2 void_receiver:1
+code/Game/Action/keystone_a_zone.cpp	63	1	alloc_result	legit: alloc_result 1	code	63	0	0	0	0	62	offset_read:36 other:14 untyped_param:11 void_receiver:1
+code/Game/Action/moveto.cpp	133	0	none	no genuine reinterpretation found	code	39	92	2	0	0	133	offset_read:89 other:31 void_receiver:7 type_confusion:4 storage_local:2
+code/Game/Action/performwork.cpp	40	0	none	no genuine reinterpretation found	code	20	18	2	0	0	40	offset_read:18 other:15 void_receiver:5 storage_local:2
+code/Game/Action/pickuprawmaterial.cpp	35	0	none	no genuine reinterpretation found	code	12	21	2	0	0	35	other:16 offset_read:15 void_receiver:2 storage_local:2
+code/Game/Action/pickupstoredrawmaterial.cpp	91	0	none	no genuine reinterpretation found	code	24	65	2	0	0	91	offset_read:47 other:33 void_receiver:6 pod_shadow:2 storage_local:2 serialize_signedness:1
+code/Game/Action/playanimation.cpp	30	0	none	no genuine reinterpretation found	code	22	6	2	0	0	30	other:13 offset_read:12 void_receiver:3 storage_local:2
+code/Game/Action/region_graph_build.cpp	82	0	none	no genuine reinterpretation found	code	0	82	0	0	0	82	offset_read:67 other:10 null_literal:5
+code/Game/Action/region_paircache.cpp	35	0	none	no genuine reinterpretation found	code	1	34	0	0	0	35	offset_read:24 other:11
+code/Game/Action/removeanimal.cpp	28	0	none	no genuine reinterpretation found	code	11	15	2	0	0	28	other:13 offset_read:12 storage_local:2 void_receiver:1
+code/Game/Action/removenaturalresource.cpp	48	0	none	no genuine reinterpretation found	code	16	30	2	0	0	48	offset_read:25 other:18 void_receiver:3 storage_local:2
+code/Game/Action/sendcomponentmessage.cpp	43	3	print_addr	legit: print_addr 3	code	29	12	2	0	0	40	other:20 offset_read:12 void_receiver:4 serialize_signedness:2 storage_local:2
+code/Game/Action/showtool.cpp	64	0	none	no genuine reinterpretation found	code	25	36	3	0	0	64	offset_read:41 other:18 void_receiver:3 storage_local:2
+code/Game/Component/absorbresourcecomponent.cpp	32	0	none	no genuine reinterpretation found	code	31	0	1	0	0	32	offset_read:18 other:8 void_receiver:4 pod_shadow:1 fnptr:1
+code/Game/Component/absorbresourcedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/ambient_externalptr_serialize.cpp	16	0	none	no genuine reinterpretation found	code	13	0	1	2	0	16	other:12 vtable_read:2 serialize_signedness:2
+code/Game/Component/ambientemittercomponent.cpp	73	0	none	no genuine reinterpretation found	code	24	48	1	0	0	73	offset_read:47 other:21 void_receiver:3 serialize_signedness:1 storage_local:1
+code/Game/Component/ambientemitterdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/ambientenvironmentcomponent.cpp	105	1	alloc_result	legit: alloc_result 1	code	99	6	0	0	0	104	offset_read:77 other:25 void_receiver:2
+code/Game/Component/ambientenvironmentcomponent_serialize.cpp	13	0	none	no genuine reinterpretation found	code	12	0	1	0	0	13	offset_read:6 other:6 storage_local:1
+code/Game/Component/ambientenvironmentdescription.cpp	29	2	placement_new	legit: placement_new 2	code	7	20	2	0	0	27	offset_read:20 other:5 serialize_signedness:2
+code/Game/Component/animalcomponent.cpp	72	8	print_addr	legit: print_addr 8	code	39	0	33	0	0	64	other:33 offset_read:22 void_receiver:8 pod_shadow:1
+code/Game/Component/animaldescription.cpp	7	2	placement_new	legit: placement_new 2	code	4	0	3	0	0	5	offset_read:3 other:1 void_receiver:1
+code/Game/Component/animalwave_serialize.cpp	82	0	none	no genuine reinterpretation found	code	78	0	4	0	0	82	other:44 offset_read:33 storage_local:4 void_receiver:1
+code/Game/Component/animaudioevent.cpp	6	2	placement_new	legit: placement_new 2	code	3	0	3	0	0	4	other:3 storage_local:1
+code/Game/Component/attendancecomponent.cpp	71	3	print_addr	legit: print_addr 3	code	47	20	4	0	0	68	offset_read:31 other:23 void_receiver:7 pod_shadow:5 storage_local:2
+code/Game/Component/attendancecomponent_states.cpp	30	0	none	no genuine reinterpretation found	code	29	0	1	0	0	30	offset_read:17 other:8 fnptr:3 pod_shadow:2
+code/Game/Component/attendancedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/autopickupcomponent.cpp	10	0	none	no genuine reinterpretation found	code	5	5	0	0	0	10	offset_read:4 void_receiver:2 other:2 serialize_signedness:1 type_confusion:1
+code/Game/Component/autopickupdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/boatcomponent.cpp	13	0	none	no genuine reinterpretation found	code	13	0	0	0	0	13	other:9 serialize_signedness:3 type_confusion:1
+code/Game/Component/boatcomponent_route.cpp	90	0	none	no genuine reinterpretation found	code	81	0	8	1	0	90	offset_read:52 other:30 pod_shadow:4 void_receiver:3 untyped_param:1
+code/Game/Component/boatcomponent_states.cpp	110	0	none	no genuine reinterpretation found	code	109	0	1	0	0	110	offset_read:72 fnptr:14 void_receiver:11 other:11 vtable_read:2
+code/Game/Component/boatdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/buildcomponent.cpp	109	0	none	no genuine reinterpretation found	code	35	67	7	0	0	109	offset_read:49 other:42 pod_shadow:6 fnptr:6 void_receiver:4 storage_local:2
+code/Game/Component/buildcomponent_state1.cpp	67	0	none	no genuine reinterpretation found	code	61	3	3	0	0	67	offset_read:50 other:13 void_receiver:2 pod_shadow:2
+code/Game/Component/buildcomponent_state8.cpp	111	0	none	no genuine reinterpretation found	code	103	8	0	0	0	111	offset_read:80 other:26 void_receiver:3 pod_shadow:2
+code/Game/Component/buildcomponent_sub8630.cpp	16	0	none	no genuine reinterpretation found	code	14	0	2	0	0	16	offset_read:9 other:6 void_receiver:1
+code/Game/Component/builddescription.cpp	10	3	placement_new,alloc_result	legit: placement_new 2, alloc_result 1	code	4	4	2	0	0	7	other:4 offset_read:3
+code/Game/Component/captureboxdescription.cpp	10	2	placement_new	legit: placement_new 2	code	7	0	3	0	0	8	other:6 pod_shadow:1 storage_local:1
+code/Game/Component/captureboxelement.cpp	13	0	none	no genuine reinterpretation found	code	13	0	0	0	0	13	offset_read:10 void_receiver:3
+code/Game/Component/cemeterycomponent.cpp	66	4	print_addr,alloc_result	legit: print_addr 3, alloc_result 1	code	53	10	3	0	0	62	offset_read:31 other:22 void_receiver:3 pod_shadow:2 untyped_param:2 fnptr:2
+code/Game/Component/cemeterydescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/charactercomponent.cpp	54	7	print_addr	legit: print_addr 7	code	47	7	0	0	0	47	offset_read:30 other:11 void_receiver:4 pod_shadow:1 vtable_read:1
+code/Game/Component/charactercomponent_serialize.cpp	29	0	none	no genuine reinterpretation found	code	28	0	1	0	0	29	offset_read:16 other:11 pod_shadow:1 storage_local:1
+code/Game/Component/characterdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/charmanager.cpp	105	0	none	no genuine reinterpretation found	code	105	0	0	0	0	105	offset_read:90 other:15
+code/Game/Component/citizen_assign_citizens.cpp	54	0	none	no genuine reinterpretation found	code	53	0	1	0	0	54	offset_read:40 other:13 void_receiver:1
+code/Game/Component/citizen_assignworkplace.cpp	74	1	print_addr	legit: print_addr 1	code	72	2	0	0	0	73	offset_read:43 other:27 pod_shadow:2 void_receiver:1
+code/Game/Component/citizen_employ_cascade.cpp	102	1	print_addr	legit: print_addr 1	code	102	0	0	0	0	101	offset_read:76 other:23 pod_shadow:1 void_receiver:1
+code/Game/Component/citizen_lifeevent.cpp	16	0	none	no genuine reinterpretation found	code	16	0	0	0	0	16	offset_read:14 void_receiver:1 pod_shadow:1
+code/Game/Component/citizen_lifeevent_handler.cpp	102	0	none	no genuine reinterpretation found	code	102	0	0	0	0	102	offset_read:73 other:20 void_receiver:4 pod_shadow:4 untyped_param:1
+code/Game/Component/citizen_needsupdate.cpp	45	0	none	no genuine reinterpretation found	code	45	0	0	0	0	45	offset_read:27 void_receiver:11 other:7
+code/Game/Component/citizen_onremove.cpp	31	2	print_addr	legit: print_addr 2	code	29	2	0	0	0	29	offset_read:21 other:6 pod_shadow:1 void_receiver:1
+code/Game/Component/citizen_reassign_workers.cpp	66	0	none	no genuine reinterpretation found	code	61	0	5	0	0	66	offset_read:41 other:23 void_receiver:2
+code/Game/Component/citizen_updatehealth.cpp	232	0	none	no genuine reinterpretation found	code	15	217	0	0	0	232	offset_read:167 other:58 void_receiver:7
+code/Game/Component/citizenai_actionctors.cpp	132	6	value_pun	legit: value_pun 6	code	131	0	1	0	0	126	other:41 offset_read:41 pod_shadow:30 type_confusion:14
+code/Game/Component/citizenai_candidatelist.cpp	156	0	none	no genuine reinterpretation found	code	155	1	0	0	0	156	offset_read:105 void_receiver:34 other:17
+code/Game/Component/citizenai_executor.cpp	109	2	print_addr	legit: print_addr 2	code	105	2	2	0	0	107	offset_read:74 other:31 storage_local:2
+code/Game/Component/citizenai_findhelpers.cpp	66	0	none	no genuine reinterpretation found	code	65	0	1	0	0	66	offset_read:37 other:20 pod_shadow:5 void_receiver:4
+code/Game/Component/citizenai_findtarget.cpp	58	0	none	no genuine reinterpretation found	code	58	0	0	0	0	58	offset_read:42 other:12 pod_shadow:3 void_receiver:1
+code/Game/Component/citizenai_gather.cpp	132	0	none	no genuine reinterpretation found	code	132	0	0	0	0	132	offset_read:104 other:26 type_confusion:2
+code/Game/Component/citizenai_growup.cpp	103	2	alloc_result	legit: alloc_result 2	code	101	0	2	0	0	101	offset_read:59 other:27 void_receiver:7 pod_shadow:4 struct_as_array:3 storage_local:1
+code/Game/Component/citizenai_handlers.cpp	41	0	none	no genuine reinterpretation found	code	40	0	1	0	0	41	offset_read:28 other:6 pod_shadow:4 type_confusion:3
+code/Game/Component/citizenai_handlers2.cpp	92	0	none	no genuine reinterpretation found	code	88	0	4	0	0	92	offset_read:79 other:13
+code/Game/Component/citizenai_handlers3.cpp	83	0	none	no genuine reinterpretation found	code	83	0	0	0	0	83	offset_read:64 other:18 type_confusion:1
+code/Game/Component/citizenai_housing_idle.cpp	211	0	none	no genuine reinterpretation found	code	211	0	0	0	0	211	offset_read:144 other:61 type_confusion:4 void_receiver:2
+code/Game/Component/citizenai_leisure.cpp	184	0	none	no genuine reinterpretation found	code	182	0	2	0	0	184	other:96 offset_read:74 type_confusion:8 pod_shadow:5 void_receiver:1
+code/Game/Component/citizenai_work_scheduler.cpp	220	0	none	no genuine reinterpretation found	code	219	1	0	0	0	220	offset_read:161 other:52 type_confusion:7
+code/Game/Component/citizenaicomponent.cpp	163	2	print_addr	legit: print_addr 2	code	161	2	0	0	0	161	offset_read:117 other:25 void_receiver:17 pod_shadow:2
+code/Game/Component/citizenaicomponent_serialize.cpp	31	0	none	no genuine reinterpretation found	code	30	0	1	0	0	31	other:18 offset_read:12 storage_local:1
+code/Game/Component/citizenaidescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/citizencomponent.cpp	707	12	print_addr,value_pun,alloc_result	legit: print_addr 10, value_pun 1, alloc_result 1	code	654	53	0	0	0	695	offset_read:506 other:128 void_receiver:31 pod_shadow:23 type_confusion:7
+code/Game/Component/citizencomponent_lifecycle.cpp	81	0	none	no genuine reinterpretation found	code	81	0	0	0	0	81	offset_read:61 other:11 void_receiver:7 pod_shadow:1 type_confusion:1
+code/Game/Component/citizencomponent_serialize.cpp	87	0	none	no genuine reinterpretation found	code	86	0	1	0	0	87	other:44 offset_read:42 storage_local:1
+code/Game/Component/citizendescription.cpp	4	2	placement_new	legit: placement_new 2	code	2	0	2	0	0	2	other:2
+code/Game/Component/clearareacomponent.cpp	37	0	none	no genuine reinterpretation found	code	35	0	2	0	0	37	offset_read:22 other:9 void_receiver:5 serialize_signedness:1
+code/Game/Component/clearareacomponent_states.cpp	123	0	none	no genuine reinterpretation found	code	108	0	15	0	0	123	offset_read:78 other:29 void_receiver:10 fnptr:5 pod_shadow:1
+code/Game/Component/clearareadescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/clearresourcecomponent.cpp	2	0	none	no genuine reinterpretation found	code	2	0	0	0	0	2	other:2
+code/Game/Component/clearresourcecomponent_states.cpp	9	0	none	no genuine reinterpretation found	code	9	0	0	0	0	9	offset_read:5 void_receiver:2 other:1 fnptr:1
+code/Game/Component/clearresourcedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/coll_bridge.h	8	0	none	no genuine reinterpretation found	code	8	0	0	0	0	8	other:3 offset_read:3 void_receiver:2
+code/Game/Component/component.cpp	5	0	none	no genuine reinterpretation found	code	5	0	0	0	0	5	other:4 void_receiver:1
+code/Game/Component/componentdescription.cpp	37	2	placement_new	legit: placement_new 2	code	20	6	7	4	0	35	other:19 offset_read:12 void_receiver:2 serialize_signedness:1 pod_shadow:1
+code/Game/Component/consumeproduce_recipe_dump.cpp	30	1	print_addr	legit: print_addr 1	code	26	0	4	0	0	29	offset_read:14 other:10 void_receiver:3 pod_shadow:2
+code/Game/Component/consumeproducecomponent.cpp	23	0	none	no genuine reinterpretation found	code	10	12	1	0	0	23	offset_read:10 other:9 void_receiver:3 storage_local:1
+code/Game/Component/consumeproducedescription.cpp	17	2	placement_new	legit: placement_new 2	code	9	6	2	0	0	15	offset_read:12 other:2 void_receiver:1
+code/Game/Component/controller_state_table.h	17	0	none	no genuine reinterpretation found	code	17	0	0	0	0	17	offset_read:9 fnptr:6 other:2
+code/Game/Component/createbridgedescription.cpp	4	2	placement_new	legit: placement_new 2	code	2	0	2	0	0	2	other:2
+code/Game/Component/createdragdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/createfenceddescription.cpp	4	2	placement_new	legit: placement_new 2	code	2	0	2	0	0	2	other:2
+code/Game/Component/createpathdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/createplaceddescription.cpp	7	3	placement_new,alloc_result	legit: placement_new 2, alloc_result 1	code	5	0	2	0	0	4	other:2 offset_read:1 void_receiver:1
+code/Game/Component/createremovaldescription.cpp	6	2	placement_new	legit: placement_new 2	code	4	0	2	0	0	4	other:4
+code/Game/Component/createroaddescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/cropfieldcomponent.cpp	118	0	none	no genuine reinterpretation found	code	52	64	2	0	0	118	offset_read:79 other:29 void_receiver:6 storage_local:2 vtable_read:1 fnptr:1
+code/Game/Component/cropfieldcomponent_states.cpp	91	1	alloc_result	legit: alloc_result 1	code	90	1	0	0	0	90	offset_read:57 void_receiver:12 fnptr:11 other:9 pod_shadow:1
+code/Game/Component/cropfielddescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/decalcomponent.cpp	72	4	value_pun	legit: value_pun 4	code	53	15	4	0	0	68	offset_read:37 other:21 void_receiver:8 serialize_signedness:1 storage_local:1
+code/Game/Component/decaldescription.cpp	15	2	placement_new	legit: placement_new 2	code	8	5	2	0	0	13	offset_read:8 other:5
+code/Game/Component/destroycomponent.cpp	10	0	none	no genuine reinterpretation found	code	10	0	0	0	0	10	offset_read:4 other:3 serialize_signedness:3
+code/Game/Component/destroycomponent_state6.cpp	85	0	none	no genuine reinterpretation found	code	83	0	2	0	0	85	offset_read:53 other:24 void_receiver:5 vtable_read:2 pod_shadow:1
+code/Game/Component/destroycomponent_states.cpp	173	0	none	no genuine reinterpretation found	code	159	0	14	0	0	173	offset_read:99 other:37 void_receiver:19 fnptr:13 pod_shadow:4 vtable_read:1
+code/Game/Component/destroycomponent_workerrelease.cpp	40	7	print_addr,ptr_int	legit: print_addr 6, ptr_int 1	code	39	0	1	0	0	33	offset_read:27 other:6
+code/Game/Component/destroydescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/diseasecomponent.cpp	202	12	print_addr	legit: print_addr 12	code	112	80	10	0	0	190	offset_read:119 other:58 void_receiver:8 pod_shadow:4 storage_local:1
+code/Game/Component/diseasedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/entity_finders_disaster.cpp	6	0	none	no genuine reinterpretation found	code	5	0	1	0	0	6	offset_read:2 other:2 void_receiver:1 pod_shadow:1
+code/Game/Component/environmentdescription.cpp	12	1	placement_new	legit: placement_new 1	code	10	0	2	0	0	11	serialize_signedness:9 other:2
+code/Game/Component/exe_bodies.h	7	0	none	no genuine reinterpretation found	code	6	0	1	0	0	7	offset_read:5 other:2
+code/Game/Component/firecomponent.cpp	25	0	none	no genuine reinterpretation found	code	24	0	1	0	0	25	offset_read:12 other:10 void_receiver:2 storage_local:1
+code/Game/Component/firecomponent_ignite.cpp	125	0	none	no genuine reinterpretation found	code	122	2	0	1	0	125	offset_read:68 other:51 void_receiver:4 pod_shadow:1 type_confusion:1
+code/Game/Component/firecomponent_smstate.cpp	15	0	none	no genuine reinterpretation found	code	15	0	0	0	0	15	other:9 offset_read:4 vtable_read:2
+code/Game/Component/firedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/fishingcomponent.cpp	6	0	none	no genuine reinterpretation found	code	5	0	1	0	0	6	other:4 type_confusion:1 storage_local:1
+code/Game/Component/fishingcomponent_produce.cpp	31	0	none	no genuine reinterpretation found	code	30	1	0	0	0	31	offset_read:26 void_receiver:4 other:1
+code/Game/Component/fishingdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/floorcomponent.cpp	65	0	none	no genuine reinterpretation found	code	48	16	1	0	0	65	offset_read:39 other:15 void_receiver:8 pod_shadow:1 serialize_signedness:1 storage_local:1
+code/Game/Component/floordescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/forestercomponent.cpp	15	0	none	no genuine reinterpretation found	code	14	0	1	0	0	15	offset_read:8 other:4 void_receiver:2 storage_local:1
+code/Game/Component/foresterdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/fruitcomponent.cpp	28	0	none	no genuine reinterpretation found	code	9	19	0	0	0	28	offset_read:19 other:5 void_receiver:3 type_confusion:1
+code/Game/Component/fruitcomponent_serialize.cpp	13	0	none	no genuine reinterpretation found	code	12	0	1	0	0	13	other:8 offset_read:3 void_receiver:1 storage_local:1
+code/Game/Component/fruitdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/frustumoutlinedescription.cpp	22	2	placement_new	legit: placement_new 2	code	19	0	3	0	0	20	other:8 offset_read:8 void_receiver:2 pod_shadow:1 storage_local:1
+code/Game/Component/frustumoutlineelement.cpp	35	0	none	no genuine reinterpretation found	code	33	0	1	1	0	35	offset_read:25 void_receiver:6 other:3 storage_local:1
+code/Game/Component/growthcomponent.cpp	171	0	none	no genuine reinterpretation found	code	159	9	3	0	0	171	offset_read:130 other:26 void_receiver:11 pod_shadow:2 type_confusion:1 storage_local:1
+code/Game/Component/growthcomponent_serialize.cpp	19	0	none	no genuine reinterpretation found	code	18	0	1	0	0	19	other:10 offset_read:7 void_receiver:1 storage_local:1
+code/Game/Component/growthdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/happinesscomponent.cpp	83	1	print_addr	legit: print_addr 1	code	62	19	2	0	0	82	offset_read:46 other:15 void_receiver:12 fnptr:5 pod_shadow:3 serialize_signedness:1
+code/Game/Component/happinessdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/healercomponent.cpp	16	1	print_addr	legit: print_addr 1	code	16	0	0	0	0	15	offset_read:8 pod_shadow:2 fnptr:2 other:2 void_receiver:1
+code/Game/Component/healerdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/herbalistcomponent.cpp	3	0	none	no genuine reinterpretation found	code	2	0	1	0	0	3	other:2 storage_local:1
+code/Game/Component/herbalistdescription.cpp	7	2	placement_new	legit: placement_new 2	code	4	0	3	0	0	5	offset_read:3 other:1 void_receiver:1
+code/Game/Component/herdcomponent.cpp	243	3	print_addr	legit: print_addr 3	code	82	153	8	0	0	240	offset_read:153 other:46 pod_shadow:16 type_confusion:13 void_receiver:6 storage_local:6
+code/Game/Component/herddescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/highlightcomponent.cpp	8	0	none	no genuine reinterpretation found	code	8	0	0	0	0	8	offset_read:5 other:2 void_receiver:1
+code/Game/Component/highlightdescription.cpp	16	2	placement_new	legit: placement_new 2	code	5	9	2	0	0	14	offset_read:8 other:5 void_receiver:1
+code/Game/Component/huntcomponent.cpp	18	0	none	no genuine reinterpretation found	code	15	0	3	0	0	18	other:9 offset_read:8 storage_local:1
+code/Game/Component/huntdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/immigrationcomponent.cpp	8	0	none	no genuine reinterpretation found	code	8	0	0	0	0	8	other:6 serialize_signedness:1 type_confusion:1
+code/Game/Component/immigrationcomponent_states.cpp	203	1	print_addr	legit: print_addr 1	code	185	1	17	0	0	202	offset_read:109 other:61 void_receiver:15 fnptr:13 vtable_read:2 pod_shadow:1 type_confusion:1
+code/Game/Component/immigrationdescription.cpp	7	2	placement_new	legit: placement_new 2	code	4	0	3	0	0	5	offset_read:3 other:1 void_receiver:1
+code/Game/Component/interactcomponent.cpp	51	0	none	no genuine reinterpretation found	code	20	30	1	0	0	51	offset_read:27 other:15 void_receiver:6 pod_shadow:2 storage_local:1
+code/Game/Component/interactdescription.cpp	24	2	placement_new	legit: placement_new 2	code	8	14	2	0	0	22	other:8 offset_read:8 pod_shadow:3 type_confusion:3
+code/Game/Component/keystone_a_map.cpp	72	0	none	no genuine reinterpretation found	code	72	0	0	0	0	72	offset_read:68 other:3 struct_as_array:1
+code/Game/Component/keystone_a_restree.cpp	31	1	alloc_result	legit: alloc_result 1	code	31	0	0	0	0	30	offset_read:16 other:13 type_confusion:1
+code/Game/Component/livestockcomponent.cpp	18	1	print_addr	legit: print_addr 1	code	16	1	1	0	0	17	offset_read:15 pod_shadow:2
+code/Game/Component/livestockdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/mapcomponent.cpp	84	0	none	no genuine reinterpretation found	code	20	63	1	0	0	84	offset_read:62 other:14 void_receiver:7 storage_local:1
+code/Game/Component/mapdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/marketcomponent.cpp	3	0	none	no genuine reinterpretation found	code	2	0	1	0	0	3	other:2 storage_local:1
+code/Game/Component/marketdescription.cpp	8	2	placement_new	legit: placement_new 2	code	6	0	2	0	0	6	offset_read:5 other:1
+code/Game/Component/marketlocationcomponent.cpp	19	0	none	no genuine reinterpretation found	code	13	4	2	0	0	19	offset_read:8 other:6 fnptr:2 storage_local:2 void_receiver:1
+code/Game/Component/marketlocationdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/minecomponent.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Component/minedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/modelcomponent.cpp	88	3	placement_new,print_addr	legit: placement_new 2, print_addr 1	code	40	45	3	0	0	85	offset_read:53 other:24 void_receiver:7 storage_local:1
+code/Game/Component/modeldescription.cpp	17	2	placement_new	legit: placement_new 2	code	5	10	2	0	0	15	offset_read:11 other:4
+code/Game/Component/multiobjectcomponent.cpp	76	0	none	no genuine reinterpretation found	code	39	31	6	0	0	76	offset_read:35 other:32 void_receiver:6 storage_local:2 fnptr:1
+code/Game/Component/multiobjectdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/naturalresourcecomponent.cpp	27	0	none	no genuine reinterpretation found	code	14	12	1	0	0	27	offset_read:13 other:9 void_receiver:3 pod_shadow:1 storage_local:1
+code/Game/Component/naturalresourcedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/nomadcomponent.cpp	40	1	print_addr	legit: print_addr 1	code	33	5	2	0	0	39	other:17 offset_read:17 storage_local:2 type_confusion:1 pod_shadow:1 void_receiver:1
+code/Game/Component/nomadcomponent_states.cpp	69	0	none	no genuine reinterpretation found	code	62	0	7	0	0	69	offset_read:34 other:17 fnptr:9 void_receiver:8 pod_shadow:1
+code/Game/Component/nomaddescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/orchardcomponent.cpp	185	3	print_addr	legit: print_addr 3	code	164	11	10	0	0	182	offset_read:112 other:54 void_receiver:13 storage_local:2 type_confusion:1
+code/Game/Component/orchardcomponent_states.cpp	163	5	print_addr	legit: print_addr 5	code	151	5	7	0	0	158	offset_read:87 other:27 fnptr:22 void_receiver:17 pod_shadow:5
+code/Game/Component/orcharddescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/particlecomponent.cpp	201	2	placement_new	legit: placement_new 2	code	43	155	3	0	0	199	offset_read:134 other:46 void_receiver:17 pod_shadow:1 storage_local:1
+code/Game/Component/particledescription.cpp	23	2	placement_new	legit: placement_new 2	code	12	8	3	0	0	21	offset_read:16 other:5
+code/Game/Component/pasturecomponent.cpp	110	0	none	no genuine reinterpretation found	code	37	71	2	0	0	110	offset_read:70 other:29 void_receiver:8 storage_local:2 serialize_signedness:1
+code/Game/Component/pasturecomponent_spawn.cpp	84	0	none	no genuine reinterpretation found	code	64	10	10	0	0	84	offset_read:49 other:29 void_receiver:4 pod_shadow:2
+code/Game/Component/pasturecomponent_states.cpp	174	1	print_addr	legit: print_addr 1	code	129	32	13	0	0	173	offset_read:101 other:59 void_receiver:9 fnptr:3 pod_shadow:1
+code/Game/Component/pasturedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/pickingcomponent.cpp	59	0	none	no genuine reinterpretation found	code	15	43	1	0	0	59	offset_read:28 other:22 void_receiver:8 storage_local:1
+code/Game/Component/pickingdescription.cpp	16	2	placement_new	legit: placement_new 2	code	5	9	2	0	0	14	offset_read:8 other:5 void_receiver:1
+code/Game/Component/populationcomponent.cpp	127	4	print_addr,alloc_result	legit: print_addr 3, alloc_result 1	code	118	9	0	0	0	123	offset_read:88 other:17 void_receiver:7 type_confusion:5 pod_shadow:5 null_literal:1
+code/Game/Component/populationdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/quarrycomponent.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Component/quarrycomponent_deform.cpp	73	0	none	no genuine reinterpretation found	code	67	0	4	2	0	73	offset_read:40 other:17 void_receiver:10 fnptr:4 untyped_param:2
+code/Game/Component/quarrydescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/radiusdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/rawmaterialcomponent.cpp	51	0	none	no genuine reinterpretation found	code	11	39	1	0	0	51	offset_read:29 other:16 type_confusion:2 serialize_signedness:1 void_receiver:1 pod_shadow:1 storage_local:1
+code/Game/Component/rawmaterialdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/residence_heattick.cpp	38	0	none	no genuine reinterpretation found	code	35	0	3	0	0	38	offset_read:24 other:12 void_receiver:2
+code/Game/Component/residencecomponent.cpp	93	1	print_addr	legit: print_addr 1	code	40	49	4	0	0	92	offset_read:46 other:36 void_receiver:5 fnptr:3 storage_local:2
+code/Game/Component/residencedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/resourceproduce_creatework.cpp	46	1	print_addr	legit: print_addr 1	code	45	1	0	0	0	45	offset_read:37 void_receiver:5 other:2 pod_shadow:1
+code/Game/Component/resourceproducecomponent_states.cpp	36	0	none	no genuine reinterpretation found	code	36	0	0	0	0	36	offset_read:13 other:8 void_receiver:7 fnptr:7 serialize_signedness:1
+code/Game/Component/selectdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/spawncomponent.cpp	111	0	none	no genuine reinterpretation found	code	34	72	5	0	0	111	offset_read:62 other:37 void_receiver:10 pod_shadow:1 storage_local:1
+code/Game/Component/spawndescription.cpp	8	2	placement_new	legit: placement_new 2	code	6	0	2	0	0	6	offset_read:5 other:1
+code/Game/Component/statemachinecomponent.cpp	158	0	none	no genuine reinterpretation found	code	100	57	1	0	0	158	offset_read:103 other:41 void_receiver:11 pod_shadow:2 storage_local:1
+code/Game/Component/statemachinedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/statusicon_geometry.cpp	40	0	none	no genuine reinterpretation found	code	37	0	0	3	0	40	offset_read:24 other:9 void_receiver:7
+code/Game/Component/statusiconcomponent.cpp	121	3	print_addr	legit: print_addr 3	code	32	87	2	0	0	118	offset_read:80 other:26 void_receiver:11 storage_local:1
+code/Game/Component/statusicondescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/storagecomponent.cpp	100	0	none	no genuine reinterpretation found	code	18	81	1	0	0	100	offset_read:60 other:33 void_receiver:6 storage_local:1
+code/Game/Component/storagedescription.cpp	11	2	placement_new	legit: placement_new 2	code	4	5	2	0	0	9	offset_read:5 other:4
+code/Game/Component/storagedisplaycomponent.cpp	110	3	print_addr,value_pun	legit: print_addr 2, value_pun 1	code	24	85	1	0	0	107	offset_read:62 other:34 void_receiver:10 storage_local:1
+code/Game/Component/storagedisplaydescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/storagelocationcomponent.cpp	12	0	none	no genuine reinterpretation found	code	10	0	2	0	0	12	offset_read:4 other:4 fnptr:2 storage_local:2
+code/Game/Component/storagelocationdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/terraformcomponent.cpp	102	2	gpu_mapped,print_addr	legit: gpu_mapped 1, print_addr 1	code	60	34	5	3	0	100	offset_read:57 other:26 void_receiver:7 untyped_param:4 fnptr:4 serialize_signedness:1 storage_local:1
+code/Game/Component/terraformdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/tombstonecomponent.cpp	39	0	none	no genuine reinterpretation found	code	11	27	1	0	0	39	offset_read:22 other:10 type_confusion:6 storage_local:1
+code/Game/Component/tombstonedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/toolbardescription.cpp	20	2	placement_new	legit: placement_new 2	code	17	0	3	0	0	18	other:6 offset_read:6 pod_shadow:5 storage_local:1
+code/Game/Component/tornadocomponent.cpp	219	6	value_pun,print_addr	legit: value_pun 3, print_addr 3	code	193	3	22	1	0	213	offset_read:142 other:62 void_receiver:7 struct_as_array:1 storage_local:1
+code/Game/Component/tornadodescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/trackercomponent.cpp	23	0	none	no genuine reinterpretation found	code	12	10	1	0	0	23	other:13 offset_read:8 void_receiver:1 storage_local:1
+code/Game/Component/trackerdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/tradecomponent.cpp	103	8	print_addr,placement_new	legit: print_addr 7, placement_new 1	code	16	85	2	0	0	95	offset_read:66 other:21 pod_shadow:5 void_receiver:2 type_confusion:1
+code/Game/Component/tradecomponent_dock.cpp	225	3	print_addr	legit: print_addr 3	code	175	0	50	0	0	222	offset_read:113 other:91 fnptr:9 void_receiver:9
+code/Game/Component/tradecomponent_livestock.cpp	34	0	none	no genuine reinterpretation found	code	31	0	2	1	0	34	offset_read:18 other:13 void_receiver:2 pod_shadow:1
+code/Game/Component/tradecomponent_serialize.cpp	131	0	none	no genuine reinterpretation found	code	129	0	2	0	0	131	offset_read:91 other:36 storage_local:2 void_receiver:1 serialize_signedness:1
+code/Game/Component/tradecomponent_states.cpp	102	7	print_addr	legit: print_addr 7	code	100	1	1	0	0	95	offset_read:53 fnptr:16 other:15 void_receiver:9 pod_shadow:2
+code/Game/Component/tradedescription.cpp	35	2	placement_new	legit: placement_new 2	code	23	10	2	0	0	33	offset_read:29 other:3 void_receiver:1
+code/Game/Component/uicomponent_serialize.cpp	3	0	none	no genuine reinterpretation found	code	3	0	0	0	0	3	other:1 type_confusion:1 void_receiver:1
+code/Game/Component/uidescription.cpp	12	3	placement_new,print_addr	legit: placement_new 2, print_addr 1	code	4	5	3	0	0	9	offset_read:7 other:1 void_receiver:1
+code/Game/Component/valuedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/wellcomponent.cpp	67	2	alloc_result,print_addr	legit: alloc_result 1, print_addr 1	code	65	0	2	0	0	65	offset_read:39 other:15 void_receiver:3 pod_shadow:3 fnptr:2 storage_local:2 type_confusion:1
+code/Game/Component/welldescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/wildanimalcomponent.cpp	13	1	print_addr	legit: print_addr 1	code	10	0	3	0	0	12	other:7 offset_read:3 pod_shadow:1 storage_local:1
+code/Game/Component/wildanimaldescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/workcomponent.cpp	52	0	none	no genuine reinterpretation found	code	11	40	1	0	0	52	offset_read:31 other:18 void_receiver:1 serialize_signedness:1 storage_local:1
+code/Game/Component/workdescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/workplacecomponent.cpp	190	4	print_addr	legit: print_addr 4	code	75	111	4	0	0	186	offset_read:125 other:42 void_receiver:8 pod_shadow:4 fnptr:3 storage_local:2 serialize_signedness:1 type_confusion:1
+code/Game/Component/workplacedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Component/zonecomponent.cpp	50	0	none	no genuine reinterpretation found	code	45	3	2	0	0	50	offset_read:32 other:15 void_receiver:2 storage_local:1
+code/Game/Component/zonedescription.cpp	3	2	placement_new	legit: placement_new 2	code	1	0	2	0	0	1	other:1
+code/Game/Dialog/achievementdialog.cpp	103	0	none	no genuine reinterpretation found	code	44	59	0	0	0	103	other:55 offset_read:35 void_receiver:7 pod_shadow:6
+code/Game/Dialog/attendanceui.cpp	27	0	none	no genuine reinterpretation found	code	5	22	0	0	0	27	offset_read:16 other:8 pod_shadow:3
+code/Game/Dialog/autosavedialog.cpp	15	0	none	no genuine reinterpretation found	code	7	8	0	0	0	15	other:8 offset_read:5 void_receiver:2
+code/Game/Dialog/buildrequirementui.cpp	98	0	none	no genuine reinterpretation found	code	28	70	0	0	0	98	offset_read:56 other:32 pod_shadow:6 void_receiver:3 vtable_read:1
+code/Game/Dialog/buildui.cpp	149	2	print_addr	legit: print_addr 2	code	38	111	0	0	0	147	offset_read:93 other:42 pod_shadow:8 void_receiver:4
+code/Game/Dialog/cemeteryui.cpp	39	0	none	no genuine reinterpretation found	code	7	32	0	0	0	39	offset_read:22 other:13 pod_shadow:3 void_receiver:1
+code/Game/Dialog/citizen_icon_helpers.h	27	0	none	no genuine reinterpretation found	code	10	17	0	0	0	27	other:20 offset_read:4 pod_shadow:2 vtable_read:1
+code/Game/Dialog/citizenui.cpp	217	0	none	no genuine reinterpretation found	code	53	163	0	1	0	217	offset_read:123 other:79 pod_shadow:10 void_receiver:5
+code/Game/Dialog/consumeproduceui.cpp	81	1	print_addr	legit: print_addr 1	code	20	61	0	0	0	80	offset_read:43 other:29 pod_shadow:7 void_receiver:1
+code/Game/Dialog/controlui.cpp	81	0	none	no genuine reinterpretation found	code	32	49	0	0	0	81	offset_read:57 other:18 void_receiver:5 pod_shadow:1
+code/Game/Dialog/controluiconfig.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Dialog/cropui.cpp	54	0	none	no genuine reinterpretation found	code	18	36	0	0	0	54	other:24 offset_read:24 pod_shadow:4 void_receiver:2
+code/Game/Dialog/cropui_promote.cpp	36	0	none	no genuine reinterpretation found	code	35	0	1	0	0	36	offset_read:22 void_receiver:7 other:5 pod_shadow:2
+code/Game/Dialog/debugui.cpp	428	0	none	no genuine reinterpretation found	code	76	348	0	4	0	428	offset_read:269 other:134 void_receiver:14 pod_shadow:9 type_confusion:2
+code/Game/Dialog/destroyui.cpp	136	1	ptr_int	legit: ptr_int 1	code	45	91	0	0	0	135	offset_read:71 other:51 void_receiver:5 pod_shadow:4 vtable_read:4
+code/Game/Dialog/dialog_exe_helpers.cpp	36	0	none	no genuine reinterpretation found	code	35	0	0	1	0	36	other:19 offset_read:13 void_receiver:2 pod_shadow:2
+code/Game/Dialog/edittool_select.cpp	48	0	none	no genuine reinterpretation found	code	48	0	0	0	0	48	offset_read:23 other:19 pod_shadow:4 void_receiver:2
+code/Game/Dialog/entityui.cpp	227	3	alloc_result	legit: alloc_result 3	code	26	201	0	0	0	224	offset_read:152 other:58 void_receiver:6 pod_shadow:6 type_confusion:2
+code/Game/Dialog/eventlogui.cpp	107	0	none	no genuine reinterpretation found	code	28	79	0	0	0	107	offset_read:62 other:36 pod_shadow:6 void_receiver:3
+code/Game/Dialog/eventnotifydialog.cpp	243	0	none	no genuine reinterpretation found	code	54	188	0	1	0	243	offset_read:153 other:78 void_receiver:7 pod_shadow:3 type_confusion:2
+code/Game/Dialog/eventpopupdialog.cpp	22	0	none	no genuine reinterpretation found	code	9	13	0	0	0	22	other:12 offset_read:8 pod_shadow:1 void_receiver:1
+code/Game/Dialog/exe_bodies.h	22	0	none	no genuine reinterpretation found	code	5	17	0	0	0	22	offset_read:11 other:11
+code/Game/Dialog/followdialog.cpp	98	0	none	no genuine reinterpretation found	code	18	80	0	0	0	98	offset_read:62 other:26 void_receiver:6 pod_shadow:4
+code/Game/Dialog/goaldialog.cpp	67	0	none	no genuine reinterpretation found	code	32	35	0	0	0	67	other:40 offset_read:22 pod_shadow:3 void_receiver:2
+code/Game/Dialog/helpui.cpp	185	0	none	no genuine reinterpretation found	code	61	124	0	0	0	185	offset_read:99 other:73 pod_shadow:9 void_receiver:4
+code/Game/Dialog/hotkeytooltipui.cpp	17	0	none	no genuine reinterpretation found	code	7	10	0	0	0	17	offset_read:8 other:7 pod_shadow:2
+code/Game/Dialog/immigrationui.cpp	62	0	none	no genuine reinterpretation found	code	19	43	0	0	0	62	offset_read:36 other:19 pod_shadow:3 void_receiver:2 type_confusion:1 vtable_read:1
+code/Game/Dialog/loaderdialog.cpp	6	0	none	no genuine reinterpretation found	code	6	0	0	0	0	6	offset_read:3 other:2 pod_shadow:1
+code/Game/Dialog/mainmenudialog.cpp	144	4	print_addr	legit: print_addr 4	code	76	66	0	2	0	140	other:59 offset_read:53 pod_shadow:16 void_receiver:12
+code/Game/Dialog/mapparamsdialog.cpp	102	1	print_addr	legit: print_addr 1	code	32	69	0	1	0	101	offset_read:59 other:32 pod_shadow:7 void_receiver:3
+code/Game/Dialog/mapui.cpp	67	3	print_addr	legit: print_addr 3	code	31	35	0	1	0	64	offset_read:33 other:24 pod_shadow:4 void_receiver:2 storage_local:1
+code/Game/Dialog/messagedialog.cpp	2	0	none	no genuine reinterpretation found	code	2	0	0	0	0	2	pod_shadow:1 other:1
+code/Game/Dialog/mod_dialog_vtables.cpp	31	0	none	no genuine reinterpretation found	code	28	0	2	1	0	31	offset_read:15 other:10 void_receiver:2 pod_shadow:2 untyped_param:2
+code/Game/Dialog/moddetailsdialog.cpp	108	1	print_addr	legit: print_addr 1	code	40	64	0	4	0	107	other:47 offset_read:47 pod_shadow:10 void_receiver:3
+code/Game/Dialog/moddialog.cpp	201	1	print_addr	legit: print_addr 1	code	86	109	0	6	0	200	other:113 offset_read:64 pod_shadow:13 void_receiver:10
+code/Game/Dialog/newgamedialog.cpp	174	6	print_addr	legit: print_addr 6	code	60	112	1	1	0	168	offset_read:86 other:75 pod_shadow:4 void_receiver:2 storage_local:1
+code/Game/Dialog/noiseui.cpp	74	2	alloc_result	legit: alloc_result 2	code	34	39	0	1	0	72	other:32 offset_read:28 pod_shadow:6 void_receiver:5 storage_local:1
+code/Game/Dialog/optioninputbinddialog.cpp	2	0	none	no genuine reinterpretation found	code	2	0	0	0	0	2	other:2
+code/Game/Dialog/optionsdialog.cpp	580	5	ptr_int,print_addr	legit: ptr_int 4, print_addr 1	code	149	428	0	3	0	575	offset_read:290 other:249 pod_shadow:14 type_confusion:10 void_receiver:5 fnptr:5 storage_local:2
+code/Game/Dialog/orchardui.cpp	50	0	none	no genuine reinterpretation found	code	18	32	0	0	0	50	offset_read:24 other:16 void_receiver:6 pod_shadow:4
+code/Game/Dialog/pagetoggleui.cpp	45	0	none	no genuine reinterpretation found	code	19	26	0	0	0	45	offset_read:37 other:4 void_receiver:3 pod_shadow:1
+code/Game/Dialog/pastureui.cpp	87	0	none	no genuine reinterpretation found	code	22	65	0	0	0	87	offset_read:50 other:22 void_receiver:9 pod_shadow:6
+code/Game/Dialog/productionui.cpp	90	0	none	no genuine reinterpretation found	code	41	49	0	0	0	90	other:48 offset_read:33 pod_shadow:7 void_receiver:2
+code/Game/Dialog/professionui.cpp	351	8	ptr_int,alloc_result	legit: ptr_int 6, alloc_result 2	code	73	278	0	0	0	343	offset_read:215 other:102 void_receiver:16 pod_shadow:6 type_confusion:4
+code/Game/Dialog/radiusui.cpp	20	0	none	no genuine reinterpretation found	code	3	17	0	0	0	20	offset_read:12 other:5 void_receiver:2 pod_shadow:1
+code/Game/Dialog/residenceui.cpp	124	1	print_addr	legit: print_addr 1	code	44	80	0	0	0	123	offset_read:68 other:42 pod_shadow:7 void_receiver:6
+code/Game/Dialog/resourcelimitui.cpp	72	0	none	no genuine reinterpretation found	code	22	50	0	0	0	72	offset_read:42 other:29 pod_shadow:1
+code/Game/Dialog/resourcelimituiconfig.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Dialog/saveloaddialog.cpp	405	0	none	no genuine reinterpretation found	code	149	245	0	11	0	405	other:200 offset_read:181 void_receiver:13 pod_shadow:11
+code/Game/Dialog/scenariodialog.cpp	142	2	print_addr	legit: print_addr 2	code	54	86	2	0	0	140	other:69 offset_read:60 void_receiver:7 pod_shadow:4
+code/Game/Dialog/selectresourceui.cpp	59	0	none	no genuine reinterpretation found	code	18	41	0	0	0	59	offset_read:31 other:19 void_receiver:6 pod_shadow:3
+code/Game/Dialog/spritecaptureui.cpp	51	0	none	no genuine reinterpretation found	code	22	29	0	0	0	51	offset_read:26 other:19 pod_shadow:5 void_receiver:1
+code/Game/Dialog/statusbarui.cpp	169	1	print_addr	legit: print_addr 1	code	44	125	0	0	0	168	offset_read:111 other:44 void_receiver:7 pod_shadow:6
+code/Game/Dialog/statusiconui.cpp	46	0	none	no genuine reinterpretation found	code	11	35	0	0	0	46	offset_read:28 other:13 pod_shadow:3 void_receiver:2
+code/Game/Dialog/statusiconuiconfig.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Dialog/storagecapacityui.cpp	23	0	none	no genuine reinterpretation found	code	8	15	0	0	0	23	offset_read:12 other:7 void_receiver:2 pod_shadow:2
+code/Game/Dialog/storageui.cpp	98	0	none	no genuine reinterpretation found	code	45	53	0	0	0	98	offset_read:47 other:39 pod_shadow:6 void_receiver:6
+code/Game/Dialog/titledesctooltipui.cpp	12	0	none	no genuine reinterpretation found	code	7	5	0	0	0	12	offset_read:6 other:5 pod_shadow:1
+code/Game/Dialog/toolbar_utility_helpers.cpp	22	2	alloc_result	legit: alloc_result 2	code	22	0	0	0	0	20	other:11 offset_read:7 pod_shadow:1 type_confusion:1
+code/Game/Dialog/toolbardialog.cpp	507	1	print_addr	legit: print_addr 1	code	124	379	1	3	0	506	offset_read:293 other:180 pod_shadow:16 void_receiver:8 type_confusion:7 storage_local:1 vtable_read:1
+code/Game/Dialog/toolui.cpp	211	3	print_addr	legit: print_addr 3	code	47	164	0	0	0	208	offset_read:144 other:54 void_receiver:6 pod_shadow:4
+code/Game/Dialog/townhall_helpers.cpp	185	0	none	no genuine reinterpretation found	code	16	162	7	0	0	185	offset_read:107 other:66 storage_local:7 pod_shadow:3 void_receiver:2
+code/Game/Dialog/townhallui.cpp	915	15	print_addr,alloc_result,ptr_int	legit: print_addr 7, alloc_result 6, ptr_int 2	code	228	629	52	6	0	900	offset_read:506 other:264 storage_local:52 pod_shadow:36 void_receiver:27 type_confusion:7 serialize_signedness:6 vtable_read:2
+code/Game/Dialog/tradeui.cpp	1003	0	none	no genuine reinterpretation found	code	246	702	51	4	0	1003	offset_read:574 other:278 void_receiver:51 storage_local:51 pod_shadow:46 serialize_signedness:2 vtable_read:1
+code/Game/Dialog/tradeui_buyentries.cpp	25	1	alloc_result	legit: alloc_result 1	code	21	0	2	2	0	24	offset_read:15 other:7 void_receiver:2
+code/Game/Dialog/tradeui_checkout.cpp	75	0	none	no genuine reinterpretation found	code	65	0	10	0	0	75	other:36 offset_read:35 void_receiver:3 pod_shadow:1
+code/Game/Dialog/tradeui_leaves.cpp	30	0	none	no genuine reinterpretation found	code	28	0	2	0	0	30	offset_read:15 other:14 pod_shadow:1
+code/Game/Dialog/tradeui_price.cpp	19	0	none	no genuine reinterpretation found	code	18	0	1	0	0	19	offset_read:14 other:3 void_receiver:2
+code/Game/Dialog/tradeui_sort.cpp	16	0	none	no genuine reinterpretation found	code	14	0	2	0	0	16	other:6 offset_read:6 storage_local:2 pod_shadow:1 void_receiver:1
+code/Game/Dialog/upgradeui.cpp	51	1	print_addr	legit: print_addr 1	code	18	33	0	0	0	50	offset_read:29 other:14 void_receiver:5 pod_shadow:2
+code/Game/Dialog/upgradeuiconfig.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Dialog/workplaceui.cpp	283	1	print_addr	legit: print_addr 1	code	127	145	11	0	0	282	offset_read:197 other:62 void_receiver:10 pod_shadow:9 type_confusion:4
+code/Game/Entity/citizenbehavior.cpp	367	4	alloc_result,print_addr	legit: alloc_result 2, print_addr 2	code	211	146	10	0	0	363	offset_read:207 other:139 type_confusion:9 pod_shadow:5 void_receiver:3
+code/Game/Entity/componententity.cpp	136	8	print_addr,placement_new	legit: print_addr 6, placement_new 2	code	36	98	2	0	0	128	other:66 offset_read:39 pod_shadow:9 storage_local:8 void_receiver:5 serialize_signedness:1
+code/Game/Entity/entity_findcomponent.cpp	6	0	none	no genuine reinterpretation found	code	1	5	0	0	0	6	offset_read:4 pod_shadow:1 other:1
+code/Game/Entity/entitylist.cpp	218	21	print_addr	legit: print_addr 21	code	68	149	1	0	0	197	offset_read:91 other:88 void_receiver:13 serialize_signedness:4 storage_local:1
+code/Game/Entity/exe_bodies.h	5	0	none	no genuine reinterpretation found	code	0	5	0	0	0	5	offset_read:2 other:2 void_receiver:1
+code/Game/Game/MenuDialogLoopT.h	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Game/camera_input.cpp	85	0	none	no genuine reinterpretation found	code	18	67	0	0	0	85	offset_read:56 other:29
+code/Game/Game/charmanager_seed.cpp	23	5	alloc_result,print_addr	legit: alloc_result 4, print_addr 1	code	22	0	1	0	0	18	offset_read:13 other:5
+code/Game/Game/citizen_names.cpp	27	0	none	no genuine reinterpretation found	code	3	23	0	1	0	27	other:18 offset_read:9
+code/Game/Game/citizenlist_serialize.cpp	181	3	alloc_result,print_addr	legit: alloc_result 2, print_addr 1	code	178	1	1	1	0	178	offset_read:82 other:81 void_receiver:7 type_confusion:4 serialize_signedness:1 fnptr:1 pod_shadow:1 storage_local:1
+code/Game/Game/climategenerator.cpp	9	2	placement_new	legit: placement_new 2	code	6	0	3	0	0	7	other:3 pod_shadow:2 serialize_signedness:1 storage_local:1
+code/Game/Game/construction_force_harness.cpp	14	0	none	no genuine reinterpretation found	code	14	0	0	0	0	14	offset_read:12 pod_shadow:2
+code/Game/Game/disease.cpp	7	2	placement_new	legit: placement_new 2	code	4	0	3	0	0	5	pod_shadow:2 other:2 storage_local:1
+code/Game/Game/eventlog.cpp	75	0	none	no genuine reinterpretation found	code	28	47	0	0	0	75	offset_read:50 other:25
+code/Game/Game/eventlog_achievement.cpp	7	0	none	no genuine reinterpretation found	code	5	2	0	0	0	7	other:3 offset_read:3 pod_shadow:1
+code/Game/Game/exe_bodies.h	21	0	none	no genuine reinterpretation found	code	7	14	0	0	0	21	offset_read:13 other:7 pod_shadow:1
+code/Game/Game/force_work.cpp	33	0	none	no genuine reinterpretation found	code	21	11	1	0	0	33	offset_read:20 other:8 void_receiver:3 vtable_read:1 pod_shadow:1
+code/Game/Game/forester_force_harness.cpp	19	0	none	no genuine reinterpretation found	code	12	7	0	0	0	19	offset_read:11 other:7 pod_shadow:1
+code/Game/Game/founding_spawn.cpp	38	0	none	no genuine reinterpretation found	code	36	2	0	0	0	38	other:21 offset_read:13 void_receiver:2 pod_shadow:2
+code/Game/Game/game.cpp	46	0	none	no genuine reinterpretation found	code	8	33	3	2	0	46	other:21 offset_read:20 void_receiver:4 pod_shadow:1
+code/Game/Game/game_leaf_helpers.cpp	67	0	none	no genuine reinterpretation found	code	66	0	0	1	0	67	offset_read:46 other:10 pod_shadow:6 void_receiver:5
+code/Game/Game/game_main.cpp	66	7	print_addr,alloc_result	legit: print_addr 6, alloc_result 1	code	60	6	0	0	0	59	other:26 offset_read:24 vtable_read:4 void_receiver:2 type_confusion:2 untyped_handle_field:1
+code/Game/Game/game_settings_persist.cpp	8	0	none	no genuine reinterpretation found	code	8	0	0	0	0	8	void_receiver:4 other:3 offset_read:1
+code/Game/Game/gamegrid_serialize.cpp	73	0	none	no genuine reinterpretation found	code	72	0	1	0	0	73	offset_read:41 other:31 storage_local:1
+code/Game/Game/gameupdateloop.cpp	249	11	print_addr,value_pun	legit: print_addr 10, value_pun 1	code	127	118	0	4	0	238	other:129 offset_read:102 pod_shadow:4 void_receiver:2 fnptr:1
+code/Game/Game/gameupdateloop_load.cpp	291	3	print_addr	legit: print_addr 3	code	95	188	0	8	0	288	offset_read:198 other:73 void_receiver:15 pod_shadow:2
+code/Game/Game/gameupdateloop_serialize.cpp	273	2	alloc_result,print_addr	legit: alloc_result 1, print_addr 1	code	148	116	9	0	0	271	other:131 offset_read:118 storage_local:9 void_receiver:5 serialize_signedness:3 pod_shadow:3 type_confusion:2
+code/Game/Game/gameupdateloop_teardown.cpp	20	0	none	no genuine reinterpretation found	code	20	0	0	0	0	20	offset_read:10 other:6 void_receiver:3 pod_shadow:1
+code/Game/Game/geometry_draw.cpp	119	0	none	no genuine reinterpretation found	code	116	0	1	2	0	119	offset_read:62 other:46 void_receiver:10 storage_local:1
+code/Game/Game/geometry_serialize.cpp	97	0	none	no genuine reinterpretation found	code	95	0	2	0	0	97	offset_read:64 other:30 void_receiver:3
+code/Game/Game/goals_serialize.cpp	265	13	alloc_result	legit: alloc_result 13	code	263	0	1	1	0	252	offset_read:165 other:78 void_receiver:7 pod_shadow:1 storage_local:1
+code/Game/Game/inputbindings.cpp	13	0	none	no genuine reinterpretation found	code	11	1	0	1	0	13	other:7 offset_read:6
+code/Game/Game/keystone_a_gamedtor.cpp	98	0	none	no genuine reinterpretation found	code	97	0	1	0	0	98	offset_read:70 other:27 void_receiver:1
+code/Game/Game/mapgenerator.cpp	80	2	placement_new	legit: placement_new 2	code	67	10	3	0	0	78	other:37 offset_read:18 pod_shadow:17 void_receiver:4 serialize_signedness:1 storage_local:1
+code/Game/Game/mapquery.cpp	24	1	print_addr	legit: print_addr 1	code	6	18	0	0	0	23	other:17 offset_read:6
+code/Game/Game/maptilegrid.cpp	7	1	alloc_result	legit: alloc_result 1	code	0	7	0	0	0	6	other:4 offset_read:2
+code/Game/Game/menudialogloopt.cpp	127	4	print_addr	legit: print_addr 4	code	121	4	0	2	0	123	other:67 offset_read:40 void_receiver:12 pod_shadow:3 vtable_read:1
+code/Game/Game/menuscene.cpp	71	7	ptr_int,placement_new,print_addr	legit: ptr_int 4, placement_new 2, print_addr 1	code	66	1	4	0	0	64	other:41 offset_read:18 pod_shadow:3 storage_local:2
+code/Game/Game/minimap_paint.cpp	73	0	none	no genuine reinterpretation found	code	73	0	0	0	0	73	other:45 offset_read:23 pod_shadow:5
+code/Game/Game/minimap_upload.cpp	8	1	print_addr	legit: print_addr 1	code	7	1	0	0	0	7	other:6 offset_read:1
+code/Game/Game/musiclist.cpp	38	2	placement_new	legit: placement_new 2	code	34	1	3	0	0	36	offset_read:21 other:14 storage_local:1
+code/Game/Game/namedatabase.cpp	27	2	placement_new	legit: placement_new 2	code	23	1	3	0	0	25	other:18 pod_shadow:4 offset_read:2 storage_local:1
+code/Game/Game/pathfinder_seed.cpp	53	0	none	no genuine reinterpretation found	code	52	0	1	0	0	53	offset_read:45 other:6 void_receiver:2
+code/Game/Game/profession.cpp	21	2	placement_new	legit: placement_new 2	code	18	0	3	0	0	19	other:9 pod_shadow:6 serialize_signedness:3 storage_local:1
+code/Game/Game/professionlist.cpp	12	2	placement_new	legit: placement_new 2	code	7	0	4	1	0	10	other:9 storage_local:1
+code/Game/Game/region_seed.cpp	9	0	none	no genuine reinterpretation found	code	9	0	0	0	0	9	offset_read:5 other:4
+code/Game/Game/scenario.cpp	13	2	placement_new	legit: placement_new 2	code	10	0	3	0	0	11	other:6 pod_shadow:4 storage_local:1
+code/Game/Game/serialize_arrays.cpp	50	0	none	no genuine reinterpretation found	code	41	4	1	4	0	50	other:29 offset_read:18 pod_shadow:2 storage_local:1
+code/Game/Game/serialize_externals.cpp	26	0	none	no genuine reinterpretation found	code	22	0	0	4	0	26	other:17 offset_read:9
+code/Game/Game/serialize_externals_array.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Game/serialize_externals_typed.cpp	25	0	none	no genuine reinterpretation found	code	21	0	0	4	0	25	other:16 offset_read:9
+code/Game/Game/serialize_heightmap_mesh.cpp	62	4	alloc_result,print_addr	legit: alloc_result 3, print_addr 1	code	57	5	0	0	0	58	offset_read:45 other:10 void_receiver:3
+code/Game/Game/serialize_image_upload.cpp	35	23	print_addr	legit: print_addr 23	code	12	23	0	0	0	12	other:8 offset_read:3 void_receiver:1
+code/Game/Game/serialize_resize_helpers.cpp	28	0	none	no genuine reinterpretation found	code	28	0	0	0	0	28	offset_read:18 other:10
+code/Game/Game/serialize_struct60b.cpp	54	0	none	no genuine reinterpretation found	code	54	0	0	0	0	54	offset_read:45 other:9
+code/Game/Game/serialize_struct60b_serialize.cpp	77	0	none	no genuine reinterpretation found	code	73	0	0	4	0	77	other:40 offset_read:37
+code/Game/Game/starttown.cpp	545	7	print_addr	legit: print_addr 7	code	157	386	0	2	0	538	offset_read:329 other:182 pod_shadow:19 void_receiver:8
+code/Game/Game/terraingenerator.cpp	19	2	placement_new	legit: placement_new 2	code	16	0	3	0	0	17	other:7 pod_shadow:6 serialize_signedness:2 type_confusion:1 storage_local:1
+code/Game/Game/toolbar.cpp	17	2	placement_new	legit: placement_new 2	code	14	0	3	0	0	15	other:8 pod_shadow:4 type_confusion:2 storage_local:1
+code/Game/Game/tornado.cpp	42	2	placement_new	legit: placement_new 2	code	39	0	3	0	0	40	other:34 type_confusion:4 void_receiver:1 storage_local:1
+code/Game/Game/town_storage_seed.cpp	69	0	none	no genuine reinterpretation found	code	69	0	0	0	0	69	offset_read:55 other:11 pod_shadow:2 void_receiver:1
+code/Game/Game/town_workplace_registry.cpp	43	0	none	no genuine reinterpretation found	code	42	0	1	0	0	43	offset_read:22 other:18 pod_shadow:2 void_receiver:1
+code/Game/Game/uifade.cpp	29	0	none	no genuine reinterpretation found	code	29	0	0	0	0	29	other:19 offset_read:8 type_confusion:2
+code/Game/Game/unreg_lane5_musicplayer.cpp	40	0	none	no genuine reinterpretation found	code	39	0	0	1	0	40	offset_read:26 other:14
+code/Game/Game/w2_takescreenshot.cpp	29	1	alloc_result	legit: alloc_result 1	code	29	0	0	0	0	28	pod_shadow:14 offset_read:8 other:6
+code/Game/Game/water_contour_mesh.cpp	61	1	byte_io	legit: byte_io 1	code	2	59	0	0	0	60	offset_read:29 other:28 type_confusion:2 void_receiver:1
+code/Game/Game/weather.cpp	28	2	placement_new	legit: placement_new 2	code	25	0	3	0	0	26	other:25 storage_local:1
+code/Game/Game/weather_particle_draw.cpp	38	1	alloc_result	legit: alloc_result 1	code	35	0	2	1	0	37	other:18 offset_read:10 void_receiver:6 storage_local:2 type_confusion:1
+code/Game/Game/weather_particles.cpp	35	0	none	no genuine reinterpretation found	code	35	0	0	0	0	35	other:19 offset_read:15 type_confusion:1
+code/Game/Game/weather_sim.cpp	91	0	none	no genuine reinterpretation found	code	91	0	0	0	0	91	offset_read:64 other:25 pod_shadow:2
+code/Game/Game/weather_sun.cpp	26	0	none	no genuine reinterpretation found	code	26	0	0	0	0	26	offset_read:16 other:9 void_receiver:1
+code/Game/Game/worldgen.cpp	89	3	print_addr	legit: print_addr 3	code	16	72	0	1	0	86	other:63 offset_read:14 pod_shadow:7 void_receiver:2
+code/Game/Game/worldgen_f390_coastline.cpp	71	0	none	no genuine reinterpretation found	code	15	55	0	1	0	71	other:40 offset_read:24 void_receiver:7
+code/Game/Game/worldgen_f390_erosion.cpp	41	0	none	no genuine reinterpretation found	code	2	39	0	0	0	41	other:27 offset_read:12 type_confusion:2
+code/Game/Game/worldgen_f390_ranges.cpp	108	0	none	no genuine reinterpretation found	code	14	93	0	1	0	108	other:65 offset_read:39 void_receiver:4
+code/Game/Game/worldgen_f390_rivers.cpp	41	0	none	no genuine reinterpretation found	code	3	38	0	0	0	41	offset_read:21 other:20
+code/Game/Game/worldgen_f390_shims.cpp	10	0	none	no genuine reinterpretation found	code	10	0	0	0	0	10	offset_read:9 void_receiver:1
+code/Game/Game/worldsetup_reload.cpp	11	3	print_addr,ptr_int	legit: print_addr 2, ptr_int 1	code	9	2	0	0	0	8	other:6 offset_read:2
+code/Game/Goal/buildinggoal.cpp	52	2	placement_new	legit: placement_new 2	code	31	17	4	0	0	50	offset_read:26 other:14 pod_shadow:6 void_receiver:2 serialize_signedness:1 storage_local:1
+code/Game/Goal/goal_exe_helpers.cpp	26	0	none	no genuine reinterpretation found	code	22	0	2	2	0	26	offset_read:14 other:7 pod_shadow:3 void_receiver:2
+code/Game/Goal/populationgoal.cpp	10	2	placement_new	legit: placement_new 2	code	4	3	3	0	0	8	other:4 offset_read:3 storage_local:1
+code/Game/Goal/statgoal.cpp	49	2	placement_new	legit: placement_new 2	code	27	18	3	1	0	47	offset_read:23 other:16 pod_shadow:4 void_receiver:3 storage_local:1
+code/Game/Goal/statvaluedispatch.cpp	372	9	ptr_int,alloc_result	legit: ptr_int 8, alloc_result 1	code	315	57	0	0	0	363	offset_read:267 other:78 pod_shadow:15 void_receiver:3
+code/Game/Goal/timegoal.cpp	8	2	placement_new	legit: placement_new 2	code	5	0	3	0	0	6	other:4 serialize_signedness:1 storage_local:1
+code/Game/Goal/timegoalinstance.cpp	11	0	none	no genuine reinterpretation found	code	9	0	2	0	0	11	other:7 storage_local:2 type_confusion:1 pod_shadow:1
+code/Game/Object/exe_type.h	2	0	none	no genuine reinterpretation found	code	2	0	0	0	0	2	fnptr:2
+code/Game/Object/internal_factory_audit.cpp	8	0	none	no genuine reinterpretation found	code	8	0	0	0	0	8	offset_read:4 other:2 vtable_read:2
+code/Game/Player/bridgetool.cpp	13	3	print_addr	legit: print_addr 3	code	1	12	0	0	0	10	offset_read:7 other:2 void_receiver:1
+code/Game/Player/bridgetool_calcpath.cpp	51	1	alloc_result	legit: alloc_result 1	code	50	0	1	0	0	50	offset_read:36 other:10 void_receiver:2 pod_shadow:2
+code/Game/Player/bridgetool_draw.cpp	25	1	print_addr	legit: print_addr 1	code	23	1	1	0	0	24	offset_read:17 other:4 type_confusion:2 void_receiver:1
+code/Game/Player/bridgetool_validate.cpp	24	0	none	no genuine reinterpretation found	code	23	0	1	0	0	24	offset_read:21 other:3
+code/Game/Player/dragplacementtool.cpp	67	0	none	no genuine reinterpretation found	code	6	61	0	0	0	67	offset_read:49 other:12 type_confusion:4 void_receiver:1 pod_shadow:1
+code/Game/Player/dragtool.cpp	22	0	none	no genuine reinterpretation found	code	10	12	0	0	0	22	other:15 offset_read:6 pod_shadow:1
+code/Game/Player/edittool.cpp	127	20	print_addr	legit: print_addr 20	code	26	100	1	0	0	107	other:46 offset_read:45 struct_as_array:10 void_receiver:3 pod_shadow:3
+code/Game/Player/fencedtool.cpp	115	1	print_addr	legit: print_addr 1	code	26	89	0	0	0	114	offset_read:64 other:44 void_receiver:4 pod_shadow:1 type_confusion:1
+code/Game/Player/fencedtool_calcpath.cpp	66	1	value_pun	legit: value_pun 1	code	64	0	2	0	0	65	offset_read:44 other:15 void_receiver:3 pod_shadow:3
+code/Game/Player/keystone_a_removalcalcpath.cpp	279	3	alloc_result	legit: alloc_result 3	code	263	13	3	0	0	276	offset_read:219 other:43 pod_shadow:9 void_receiver:4 type_confusion:1
+code/Game/Player/pathtool.cpp	36	0	none	no genuine reinterpretation found	code	15	21	0	0	0	36	other:22 offset_read:6 type_confusion:4 void_receiver:3 pod_shadow:1
+code/Game/Player/pathtool_setselected.cpp	146	0	none	no genuine reinterpretation found	code	9	137	0	0	0	146	offset_read:114 other:25 void_receiver:6 pod_shadow:1
+code/Game/Player/placementtool.cpp	148	4	print_addr	legit: print_addr 4	code	47	100	1	0	0	144	offset_read:65 other:63 void_receiver:11 pod_shadow:2 storage_local:1 type_confusion:1 fnptr:1
+code/Game/Player/removaltool.cpp	52	0	none	no genuine reinterpretation found	code	5	47	0	0	0	52	offset_read:33 other:11 void_receiver:4 type_confusion:4
+code/Game/Player/roadtool.cpp	45	0	none	no genuine reinterpretation found	code	6	39	0	0	0	45	offset_read:22 other:18 type_confusion:4 void_receiver:1
+code/Game/Player/roadtool_calcpath.cpp	64	0	none	no genuine reinterpretation found	code	2	62	0	0	0	64	offset_read:49 other:12 void_receiver:2 pod_shadow:1
+code/Game/Player/tool_activation_standalone.cpp	57	0	none	no genuine reinterpretation found	code	15	42	0	0	0	57	other:31 offset_read:25 type_confusion:1
+code/Game/Player/tool_base_createbar.cpp	96	0	none	no genuine reinterpretation found	code	96	0	0	0	0	96	other:47 offset_read:42 pod_shadow:6 void_receiver:1
+code/Game/Player/tool_base_drag.cpp	49	0	none	no genuine reinterpretation found	code	49	0	0	0	0	49	offset_read:26 other:22 void_receiver:1
+code/Game/Player/tool_base_edit.cpp	30	0	none	no genuine reinterpretation found	code	30	0	0	0	0	30	offset_read:25 other:5
+code/Game/Player/tool_base_highlight.cpp	109	3	alloc_result,ptr_int,value_pun	legit: alloc_result 1, ptr_int 1, value_pun 1	code	109	0	0	0	0	106	offset_read:83 other:12 void_receiver:11
+code/Game/Player/tool_base_highlight_tess.cpp	74	1	ptr_int	legit: ptr_int 1	code	72	2	0	0	0	73	offset_read:55 other:11 type_confusion:6 void_receiver:1
+code/Game/Player/tool_base_path.cpp	75	3	ptr_int	legit: ptr_int 3	code	72	3	0	0	0	72	offset_read:53 other:16 void_receiver:2 pod_shadow:1
+code/Game/Player/tool_base_place.cpp	19	0	none	no genuine reinterpretation found	code	19	0	0	0	0	19	offset_read:12 other:7
+code/Game/Player/tool_base_ray.cpp	37	0	none	no genuine reinterpretation found	code	36	0	1	0	0	37	offset_read:19 other:17 storage_local:1
+code/Game/Player/tool_base_render.cpp	173	4	print_addr	legit: print_addr 4	code	173	0	0	0	0	169	offset_read:115 other:35 void_receiver:16 pod_shadow:2 vtable_read:1
+code/Game/Player/tool_base_screenrect.cpp	52	0	none	no genuine reinterpretation found	code	52	0	0	0	0	52	other:30 offset_read:20 void_receiver:2
+code/Game/Player/tool_base_tile.cpp	80	0	none	no genuine reinterpretation found	code	78	0	2	0	0	80	offset_read:53 other:24 type_confusion:1 void_receiver:1 pod_shadow:1
+code/Game/Player/tool_base_tilerender.cpp	27	0	none	no genuine reinterpretation found	code	25	0	1	1	0	27	offset_read:11 other:10 void_receiver:6
+code/Game/Player/tool_base_toolui.cpp	25	0	none	no genuine reinterpretation found	code	23	0	1	1	0	25	other:13 offset_read:10 pod_shadow:1 void_receiver:1
+code/Game/Player/tool_base_trade.cpp	57	0	none	no genuine reinterpretation found	code	57	0	0	0	0	57	offset_read:45 other:10 void_receiver:1 pod_shadow:1
+code/Game/Tutorial/exe_bodies.h	25	0	none	no genuine reinterpretation found	code	5	19	1	0	0	25	other:20 offset_read:4 storage_local:1
+code/Game/Tutorial/find_ui_element_by_path.cpp	19	0	none	no genuine reinterpretation found	code	19	0	0	0	0	19	other:12 offset_read:5 pod_shadow:2
+code/Game/Tutorial/finishtutorialgoal.cpp	6	2	placement_new	legit: placement_new 2	code	2	0	4	0	0	4	other:3 storage_local:1
+code/Game/Tutorial/finishtutorialinstance.cpp	46	5	print_addr	legit: print_addr 5	code	12	29	3	2	0	41	offset_read:22 other:12 void_receiver:5 pod_shadow:1 storage_local:1
+code/Game/Tutorial/tutorial.cpp	15	2	placement_new	legit: placement_new 2	code	12	0	3	0	0	13	other:6 offset_read:4 void_receiver:1 serialize_signedness:1 storage_local:1
+code/Game/Tutorial/tutorial_base.cpp	34	0	none	no genuine reinterpretation found	code	30	0	2	2	0	34	offset_read:18 other:12 void_receiver:3 pod_shadow:1
+code/Game/Tutorial/tutorial_next_scenario.cpp	42	1	print_addr	legit: print_addr 1	code	40	1	1	0	0	41	other:22 offset_read:18 void_receiver:1
+code/Game/Tutorial/tutorial_wave.cpp	162	1	print_addr	legit: print_addr 1	code	154	0	8	0	0	161	other:75 offset_read:69 void_receiver:10 pod_shadow:6 type_confusion:1
+code/Game/Tutorial/tutorialgoal.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Tutorial/tutorialgoalbutton.cpp	14	2	placement_new	legit: placement_new 2	code	7	3	4	0	0	12	other:6 pod_shadow:3 serialize_signedness:1 storage_local:1 offset_read:1
+code/Game/Tutorial/tutorialgoalcount.cpp	103	2	placement_new	legit: placement_new 2	code	16	84	3	0	0	101	offset_read:64 other:32 pod_shadow:2 void_receiver:2 storage_local:1
+code/Game/Tutorial/tutorialgoaldialog.cpp	13	2	placement_new	legit: placement_new 2	code	10	0	3	0	0	11	pod_shadow:4 other:3 offset_read:3 storage_local:1
+code/Game/Tutorial/tutorialgoalgamespeed.cpp	9	2	placement_new	legit: placement_new 2	code	3	3	3	0	0	7	other:4 offset_read:2 storage_local:1
+code/Game/Tutorial/tutorialhighlightdialog.cpp	80	0	none	no genuine reinterpretation found	code	78	1	1	0	0	80	offset_read:46 other:27 void_receiver:7
+code/Game/Tutorial/tutorialimage.cpp	10	2	placement_new	legit: placement_new 2	code	6	0	4	0	0	8	other:7 storage_local:1
+code/Game/Tutorial/tutorialimagehotkey.cpp	36	2	placement_new	legit: placement_new 2	code	21	11	4	0	0	34	other:15 offset_read:12 pod_shadow:3 void_receiver:2 storage_local:2
+code/Game/Tutorial/tutorialimageinputkey.cpp	29	2	placement_new	legit: placement_new 2	code	20	5	4	0	0	27	other:15 offset_read:6 void_receiver:2 pod_shadow:2 storage_local:2
+code/Game/Tutorial/tutorialimagetoolbaricon.cpp	44	2	placement_new	legit: placement_new 2	code	21	19	4	0	0	42	offset_read:21 other:14 void_receiver:3 pod_shadow:2 storage_local:2
+code/Game/Tutorial/tutorialinstance.cpp	14	0	none	no genuine reinterpretation found	code	11	0	3	0	0	14	other:5 offset_read:5 storage_local:3 void_receiver:1
+code/Game/Tutorial/tutorialsetup.cpp	1	0	none	no genuine reinterpretation found	code	1	0	0	0	0	1	other:1
+code/Game/Tutorial/tutorialsetupcamera.cpp	16	2	placement_new	legit: placement_new 2	code	9	4	3	0	0	14	other:8 offset_read:5 storage_local:1
+code/Game/Tutorial/tutorialsetupdialog.cpp	42	2	placement_new	legit: placement_new 2	code	36	0	5	1	0	40	other:21 offset_read:9 pod_shadow:7 serialize_signedness:2 storage_local:1
+code/Game/Tutorial/tutorialsetupgamespeed.cpp	13	2	placement_new	legit: placement_new 2	code	5	5	3	0	0	11	other:5 offset_read:4 serialize_signedness:1 storage_local:1
+code/Game/Tutorial/tutorialsetuprestrictplayer.cpp	79	2	placement_new	legit: placement_new 2	code	27	47	4	1	0	77	offset_read:51 other:18 pod_shadow:4 void_receiver:3 storage_local:1
+code/Game/Tutorial/tutorialstep.cpp	22	2	placement_new	legit: placement_new 2	code	19	0	3	0	0	20	other:11 offset_read:4 pod_shadow:2 void_receiver:1 serialize_signedness:1 storage_local:1
+code/Game/Tutorial/tutorialui.cpp	28	0	none	no genuine reinterpretation found	code	16	12	0	0	0	28	other:17 offset_read:10 pod_shadow:1
+code/Game/Work/autopickupwork.cpp	9	0	none	no genuine reinterpretation found	code	8	1	0	0	0	9	offset_read:6 other:3
+code/Game/Work/build_actions.cpp	31	0	none	no genuine reinterpretation found	code	30	0	1	0	0	31	other:15 offset_read:9 type_confusion:6 pod_shadow:1
+code/Game/Work/buildroad.cpp	88	1	placement_new	legit: placement_new 1	code	27	59	2	0	0	87	other:41 offset_read:36 serialize_signedness:5 type_confusion:4 storage_local:1
+code/Game/Work/buildstructure.cpp	150	0	none	no genuine reinterpretation found	code	28	121	1	0	0	150	offset_read:87 other:52 void_receiver:4 serialize_signedness:3 fnptr:2 pod_shadow:1 storage_local:1
+code/Game/Work/cleararea.cpp	230	0	none	no genuine reinterpretation found	code	52	177	1	0	0	230	offset_read:145 other:70 void_receiver:7 serialize_signedness:3 type_confusion:2 pod_shadow:2 storage_local:1
+code/Game/Work/clearstorage.cpp	142	0	none	no genuine reinterpretation found	code	20	121	1	0	0	142	offset_read:74 other:52 void_receiver:9 type_confusion:5 pod_shadow:1 storage_local:1
+code/Game/Work/consumeproduce.cpp	262	5	print_addr	legit: print_addr 5	code	45	216	1	0	0	257	offset_read:134 other:97 pod_shadow:10 type_confusion:6 serialize_signedness:5 void_receiver:2 fnptr:2 storage_local:1
+code/Game/Work/firework.cpp	102	1	print_addr	legit: print_addr 1	code	14	87	1	0	0	101	offset_read:71 other:22 void_receiver:7 storage_local:1
+code/Game/Work/firework_search.cpp	42	0	none	no genuine reinterpretation found	code	41	0	1	0	0	42	offset_read:33 other:8 pod_shadow:1
+code/Game/Work/fishingwork.cpp	192	3	print_addr	legit: print_addr 3	code	28	163	1	0	0	189	offset_read:88 other:83 void_receiver:11 pod_shadow:3 serialize_signedness:2 type_confusion:1 storage_local:1
+code/Game/Work/foresterwork.cpp	199	2	print_addr	legit: print_addr 2	code	27	168	4	0	0	197	offset_read:117 other:66 void_receiver:10 storage_local:2 pod_shadow:1 type_confusion:1
+code/Game/Work/gatherrawmaterials.cpp	178	0	none	no genuine reinterpretation found	code	28	148	2	0	0	178	offset_read:88 other:71 void_receiver:14 serialize_signedness:2 type_confusion:2 storage_local:1
+code/Game/Work/gatherrawmaterials_ctor.cpp	31	0	none	no genuine reinterpretation found	code	27	0	4	0	0	31	offset_read:19 other:10 void_receiver:2
+code/Game/Work/harvestarea.cpp	141	0	none	no genuine reinterpretation found	code	18	120	3	0	0	141	offset_read:84 other:43 void_receiver:12 storage_local:2
+code/Game/Work/harvestorchard.cpp	136	0	none	no genuine reinterpretation found	code	18	115	3	0	0	136	offset_read:83 other:37 void_receiver:13 storage_local:2 type_confusion:1
+code/Game/Work/harvestorchard_ctor.cpp	14	0	none	no genuine reinterpretation found	code	12	0	2	0	0	14	offset_read:12 void_receiver:1 other:1
+code/Game/Work/herbalistwork.cpp	171	0	none	no genuine reinterpretation found	code	22	145	4	0	0	171	offset_read:102 other:57 void_receiver:9 storage_local:2 pod_shadow:1
+code/Game/Work/huntwork.cpp	137	0	none	no genuine reinterpretation found	code	19	115	3	0	0	137	offset_read:88 other:38 void_receiver:7 type_confusion:2 storage_local:2
+code/Game/Work/locationwork.cpp	51	0	none	no genuine reinterpretation found	code	9	40	2	0	0	51	other:23 offset_read:23 void_receiver:4 storage_local:1
+code/Game/Work/marketwork.cpp	372	0	none	no genuine reinterpretation found	code	282	88	2	0	0	372	offset_read:277 other:74 pod_shadow:10 void_receiver:7 type_confusion:3 storage_local:1
+code/Game/Work/marketwork_bst_a9f0.cpp	33	0	none	no genuine reinterpretation found	code	32	0	1	0	0	33	offset_read:17 other:15 void_receiver:1
+code/Game/Work/marketwork_bst_aaa0.cpp	17	0	none	no genuine reinterpretation found	code	17	0	0	0	0	17	offset_read:11 other:5 void_receiver:1
+code/Game/Work/marketwork_bst_afb0.cpp	7	0	none	no genuine reinterpretation found	code	7	0	0	0	0	7	offset_read:4 other:3
+code/Game/Work/marketwork_bst_b290.cpp	51	0	none	no genuine reinterpretation found	code	47	0	4	0	0	51	offset_read:26 other:19 serialize_signedness:3 void_receiver:3
+code/Game/Work/marketwork_bst_b680.cpp	2	0	none	no genuine reinterpretation found	code	2	0	0	0	0	2	offset_read:2
+code/Game/Work/pasturework.cpp	176	0	none	no genuine reinterpretation found	code	32	140	4	0	0	176	offset_read:116 other:49 void_receiver:9 storage_local:2
+code/Game/Work/pickup.cpp	127	2	alloc_result	legit: alloc_result 2	code	105	20	2	0	0	125	offset_read:76 other:39 void_receiver:4 type_confusion:2 pod_shadow:2 serialize_signedness:1 storage_local:1
+code/Game/Work/pickup_gate.cpp	36	0	none	no genuine reinterpretation found	code	29	0	7	0	0	36	offset_read:14 other:14 void_receiver:6 pod_shadow:2
+code/Game/Work/plantarea.cpp	134	1	value_pun	legit: value_pun 1	code	21	111	2	0	0	133	offset_read:85 other:33 void_receiver:13 type_confusion:1 storage_local:1
+code/Game/Work/plantorchard.cpp	114	0	none	no genuine reinterpretation found	code	16	96	2	0	0	114	offset_read:72 other:27 void_receiver:13 type_confusion:1 storage_local:1
+code/Game/Work/plantorchard_ctor.cpp	13	0	none	no genuine reinterpretation found	code	12	0	1	0	0	13	offset_read:11 void_receiver:1 other:1
+code/Game/Work/tendarea.cpp	105	0	none	no genuine reinterpretation found	code	13	90	2	0	0	105	offset_read:74 other:22 void_receiver:7 serialize_signedness:1 storage_local:1
+code/Game/Work/tendarea_ctor.cpp	4	0	none	no genuine reinterpretation found	code	4	0	0	0	0	4	offset_read:3 void_receiver:1
+code/Game/Work/tradework.cpp	197	1	alloc_result	legit: alloc_result 1	code	138	58	1	0	0	196	offset_read:128 other:57 void_receiver:9 type_confusion:1 storage_local:1
+code/Game/Work/tradework_serialize.cpp	58	2	alloc_result	legit: alloc_result 2	code	58	0	0	0	0	56	offset_read:32 other:22 serialize_signedness:2
+code/Game/Work/work_act_clear.cpp	70	0	none	no genuine reinterpretation found	code	70	0	0	0	0	70	offset_read:43 other:22 void_receiver:3 pod_shadow:1 type_confusion:1
+code/Game/Work/work_act_consume.cpp	83	0	none	no genuine reinterpretation found	code	70	0	13	0	0	83	other:41 offset_read:34 type_confusion:2 null_field_deref:2 untyped_param:2 pod_shadow:1 void_receiver:1
+code/Game/Work/work_act_hunt.cpp	53	1	ptr_int	legit: ptr_int 1	code	52	0	1	0	0	52	offset_read:30 other:18 type_confusion:3 pod_shadow:1
+code/Game/Work/work_act_path.cpp	34	0	none	no genuine reinterpretation found	code	34	0	0	0	0	34	void_receiver:12 offset_read:11 other:8 type_confusion:2 pod_shadow:1
+code/Game/Work/work_act_perform.cpp	64	0	none	no genuine reinterpretation found	code	62	0	2	0	0	64	other:35 offset_read:25 type_confusion:3 pod_shadow:1
+code/Game/Work/work_act_rawmat.cpp	50	0	none	no genuine reinterpretation found	code	48	0	2	0	0	50	offset_read:30 other:14 type_confusion:4 pod_shadow:1 void_receiver:1
+code/Game/Work/work_base_accessor.cpp	19	0	none	no genuine reinterpretation found	code	19	0	0	0	0	19	offset_read:11 other:5 void_receiver:2 pod_shadow:1
+code/Game/Work/work_base_actionctor.cpp	139	0	none	no genuine reinterpretation found	code	131	0	8	0	0	139	offset_read:81 other:50 type_confusion:7 pod_shadow:1
+code/Game/Work/work_base_bst.cpp	144	0	none	no genuine reinterpretation found	code	144	0	0	0	0	144	offset_read:110 other:33 serialize_signedness:1
+code/Game/Work/work_base_cellbst.cpp	144	0	none	no genuine reinterpretation found	code	144	0	0	0	0	144	offset_read:116 other:26 serialize_signedness:2
+code/Game/Work/work_base_grid.cpp	40	0	none	no genuine reinterpretation found	code	39	0	1	0	0	40	offset_read:32 other:8
+code/Game/Work/work_base_reimpl.cpp	77	0	none	no genuine reinterpretation found	code	71	0	6	0	0	77	other:39 offset_read:31 void_receiver:4 pod_shadow:2 storage_local:1
+code/Game/Work/work_base_walkpos.cpp	44	0	none	no genuine reinterpretation found	code	44	0	0	0	0	44	offset_read:33 other:11
+code/Game/Work/work_leaf_clear.cpp	98	2	alloc_result	legit: alloc_result 2	code	97	0	1	0	0	96	other:47 offset_read:46 type_confusion:1 serialize_signedness:1 void_receiver:1
+code/Game/Work/work_leaf_gather.cpp	22	0	none	no genuine reinterpretation found	code	21	0	1	0	0	22	offset_read:15 other:4 void_receiver:3
+code/Game/Work/work_leaf_hunt.cpp	74	0	none	no genuine reinterpretation found	code	74	0	0	0	0	74	offset_read:55 other:9 void_receiver:6 pod_shadow:4
+code/Game/Work/work_leaf_market.cpp	9	0	none	no genuine reinterpretation found	code	9	0	0	0	0	9	offset_read:7 other:2
+dx11/funcs/dx11_seam.cpp	2	2	print_addr	legit: print_addr 2	dx11	0	1	1	0	0	0	
+dx11/funcs/dx11_seam.h	1	0	dx11_seam	no genuine reinterpretation found	dx11	1	0	0	0	1	0	
+dx11/src/buffers.cpp	43	1	gpu_mapped	legit: gpu_mapped 1	dx11	43	0	0	0	3	39	other:18 untyped_com_field:17 offset_read:2 void_receiver:2
+dx11/src/contextdata.cpp	16	3	print_addr,com_iid	legit: print_addr 2, com_iid 1	dx11	13	2	1	0	2	11	other:6 offset_read:2 fnptr:2 vtable_read:1
+dx11/src/devicedata.cpp	40	3	win32,com_iid,placement_new	legit: win32 1, com_iid 1, placement_new 1	dx11	35	0	5	0	6	31	other:8 pod_shadow:7 fnptr:4 offset_read:4 untyped_com_field:4 storage_local:4
+dx11/src/dx11_backend_access.h	3	0	none	no genuine reinterpretation found	dx11	3	0	0	0	0	3	other:2 offset_read:1
+dx11/src/exports.cpp	1	1	placement_new	legit: placement_new 1	dx11	0	0	1	0	0	0	
+dx11/src/imagebufferdata.cpp	28	0	dx11_seam	no genuine reinterpretation found	dx11	23	0	5	0	1	27	offset_read:12 untyped_com_field:9 other:6
+dx11/src/renderstatedata.cpp	9	0	dx11_seam	no genuine reinterpretation found	dx11	9	0	0	0	3	6	untyped_com_field:3 offset_read:2 other:1
+dx11/src/shaderprograms.cpp	4	0	dx11_seam	no genuine reinterpretation found	dx11	4	0	0	0	2	2	untyped_com_field:2
+dx11/src/smallclasses.cpp	2	0	dx11_seam	no genuine reinterpretation found	dx11	2	0	0	0	2	0	
+dx11/src/vertexlayoutdata.cpp	2	0	dx11_seam	no genuine reinterpretation found	dx11	2	0	0	0	1	1	untyped_com_field:1
+engine/types/CitizenBehavior.h	5	0	none	no genuine reinterpretation found	engine	5	0	0	0	0	5	offset_read:5
+runtime/funcs/rt_sink.h	2	0	none	no genuine reinterpretation found	runtime	0	0	2	0	0	2	other:2
+runtime/src/achievement/achievement_manager.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	pod_shadow:1
+runtime/src/achievement/achievement_serialize.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	other:3 pod_shadow:2 fnptr:1
+runtime/src/achievement/achievement_state.cpp	2	1	placement_new	legit: placement_new 1	runtime	0	0	1	1	0	1	void_receiver:1
+runtime/src/achievement/achievement_vtable.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:2 pod_shadow:2 fnptr:1
+runtime/src/achievement/goal_serialize.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	pod_shadow:1 other:1 fnptr:1
+runtime/src/application/application.cpp	1	0	none	no genuine reinterpretation found	runtime	0	0	0	1	0	1	void_receiver:1
+runtime/src/application/application_accessors.cpp	2	0	none	no genuine reinterpretation found	runtime	1	0	0	1	0	2	other:1 void_receiver:1
+runtime/src/application/application_lifecycle.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	offset_read:4
+runtime/src/application/application_win.cpp	5	1	ptr_int	legit: ptr_int 1	runtime	5	0	0	0	0	4	other:4
+runtime/src/application/message_callbacks.cpp	9	0	none	no genuine reinterpretation found	runtime	9	0	0	0	0	9	other:4 offset_read:2 fnptr:2 type_confusion:1
+runtime/src/application/platform_startup_win.cpp	7	0	none	no genuine reinterpretation found	runtime	6	0	1	0	0	7	other:3 untyped_param:2 void_receiver:2
+runtime/src/audio/audio.cpp	31	4	byte_io	legit: byte_io 4	runtime	27	0	4	0	0	27	other:21 offset_read:3 vtable_read:1 fnptr:1 void_receiver:1
+runtime/src/audio/audio_device.cpp	11	1	win32	legit: win32 1	runtime	11	0	0	0	0	10	other:5 vtable_read:4 void_receiver:1
+runtime/src/audio/audio_effectslot_serialize.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	other:2
+runtime/src/audio/audio_platform_startup_win.cpp	7	0	none	no genuine reinterpretation found	runtime	3	4	0	0	0	7	other:4 vtable_read:1 fnptr:1 void_receiver:1
+runtime/src/audio/audio_play_platform.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	fnptr:6 vtable_read:2 other:2
+runtime/src/audio/audio_scene_update.cpp	22	0	none	no genuine reinterpretation found	runtime	22	0	0	0	0	22	other:14 offset_read:4 vtable_read:2 fnptr:1 void_receiver:1
+runtime/src/audio/audio_stream_play_win.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/src/audio/audio_stream_win.cpp	4	3	win32	legit: win32 3	runtime	4	0	0	0	0	1	pod_shadow:1
+runtime/src/audio/batchc_audio_leaves.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	other:2 void_receiver:1
+runtime/src/audio/vtbatch7_soundbuffer_soundeffect.cpp	13	0	none	no genuine reinterpretation found	runtime	13	0	0	0	0	13	offset_read:7 other:3 vtable_read:1 fnptr:1 void_receiver:1
+runtime/src/audio/vtbatch7b_stream_run_win.cpp	30	1	win32	legit: win32 1	runtime	27	0	3	0	0	29	other:13 fnptr:5 vtable_read:5 offset_read:3 void_receiver:1 untyped_handle_field:1 storage_local:1
+runtime/src/audio/wave29_lane_avbody.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	other:4 void_receiver:2
+runtime/src/collection/array.cpp	305	0	none	no genuine reinterpretation found	runtime	305	0	0	0	0	305	offset_read:230 void_receiver:66 other:5 pod_shadow:4
+runtime/src/collection/array_destroy.cpp	43	0	none	no genuine reinterpretation found	runtime	43	0	0	0	0	43	offset_read:29 other:7 void_receiver:7
+runtime/src/collection/array_graphics_anim.cpp	43	0	none	no genuine reinterpretation found	runtime	43	0	0	0	0	43	offset_read:39 void_receiver:4
+runtime/src/collection/array_graphics_mesh.cpp	34	2	string_header	legit: string_header 2	runtime	34	0	0	0	0	32	offset_read:21 void_receiver:8 other:3
+runtime/src/collection/array_internal.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/src/collection/avl_trees.cpp	51	4	string_header,container_storage	legit: string_header 2, container_storage 2	runtime	51	0	0	0	0	47	offset_read:37 other:6 void_receiver:3 pod_shadow:1
+runtime/src/collection/introsort.cpp	33	2	ptr_int	legit: ptr_int 2	runtime	33	0	0	0	0	31	offset_read:29 other:2
+runtime/src/collection/introsort_msvc.h	4	4	ptr_int	legit: ptr_int 4	runtime	4	0	0	0	0	0	
+runtime/src/collection/linkedlist.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	void_receiver:2
+runtime/src/collection/set_avl_e24.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/src/collection/set_avl_pathid.cpp	9	3	string_header	legit: string_header 3	runtime	9	0	0	0	0	6	other:4 offset_read:2
+runtime/src/collection/set_clear.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	offset_read:4 other:2
+runtime/src/collection/set_core.cpp	8	0	none	no genuine reinterpretation found	runtime	8	0	0	0	0	8	pod_shadow:8
+runtime/src/collision2d/collisionmesh.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	serialize_signedness:2 other:1 vtable_read:1 fnptr:1 pod_shadow:1
+runtime/src/collision2d/surface.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	vtable_read:1 fnptr:1 other:1
+runtime/src/crt/msvc_stricmp.cpp	2	2	crt	CRT port: _stricmp compares unsigned bytes, as MSVC's does	runtime	2	0	0	0	0	0	
+runtime/src/engine/closure_batch2b.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	offset_read:4 other:1
+runtime/src/engine/engine.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	other:4 fnptr:2
+runtime/src/engine/engine_lifecycle.cpp	38	0	none	no genuine reinterpretation found	runtime	37	0	1	0	0	38	offset_read:14 other:10 void_receiver:10 vtable_read:4
+runtime/src/engine/engine_platform.cpp	33	0	none	no genuine reinterpretation found	runtime	33	0	0	0	0	33	offset_read:19 other:10 void_receiver:3 pod_shadow:1
+runtime/src/engine/engine_platform_win.cpp	4	1	win32	legit: win32 1	runtime	4	0	0	0	0	3	other:3
+runtime/src/engine/loops.cpp	45	0	none	no genuine reinterpretation found	runtime	41	0	2	2	0	45	other:21 pod_shadow:12 offset_read:6 void_receiver:4 struct_as_array:1 fnptr:1
+runtime/src/engine/mainloop_frame.cpp	15	0	none	no genuine reinterpretation found	runtime	15	0	0	0	0	15	offset_read:9 other:5 void_receiver:1
+runtime/src/engine/mainloop_run.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	other:3
+runtime/src/engine/mainloop_video.cpp	34	0	none	no genuine reinterpretation found	runtime	33	0	0	1	0	34	offset_read:13 other:12 pod_shadow:5 vtable_read:2 void_receiver:1 fnptr:1
+runtime/src/engine/singleton_ctors.cpp	17	1	placement_new	legit: placement_new 1	runtime	14	0	3	0	0	16	other:14 offset_read:2
+runtime/src/engine/updateloop_loadresources.cpp	14	0	none	no genuine reinterpretation found	runtime	13	0	0	1	0	14	pod_shadow:6 other:4 offset_read:3 void_receiver:1
+runtime/src/graphics/animation.cpp	12	0	none	no genuine reinterpretation found	runtime	12	0	0	0	0	12	offset_read:8 void_receiver:3 other:1
+runtime/src/graphics/animationstate.cpp	88	0	none	no genuine reinterpretation found	runtime	88	0	0	0	0	88	offset_read:64 other:20 void_receiver:4
+runtime/src/graphics/animationstate_transforms.cpp	224	1	value_pun	legit: value_pun 1	runtime	224	0	0	0	0	223	offset_read:151 other:48 pod_shadow:12 void_receiver:9 type_confusion:3
+runtime/src/graphics/batchc_gfx_leaves.cpp	105	0	none	no genuine reinterpretation found	runtime	104	0	0	1	0	105	offset_read:59 other:23 void_receiver:14 vtable_read:4 pod_shadow:3 fnptr:2
+runtime/src/graphics/closure_batch2b.cpp	21	0	none	no genuine reinterpretation found	runtime	21	0	0	0	0	21	offset_read:12 other:5 void_receiver:3 type_confusion:1
+runtime/src/graphics/cull.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	void_receiver:1 other:1
+runtime/src/graphics/edgemesh_vtable.cpp	17	0	none	no genuine reinterpretation found	runtime	17	0	0	0	0	17	offset_read:8 pod_shadow:4 vtable_read:2 serialize_signedness:2 other:1
+runtime/src/graphics/graphicsmesh_vtable.cpp	17	1	string_header	legit: string_header 1	runtime	17	0	0	0	0	16	other:5 vtable_read:4 void_receiver:2 offset_read:2 pod_shadow:2 fnptr:1
+runtime/src/graphics/imagebuffer_derived.cpp	24	0	none	no genuine reinterpretation found	runtime	23	0	0	1	0	24	offset_read:14 other:7 void_receiver:3
+runtime/src/graphics/lights_vtable.cpp	67	0	none	no genuine reinterpretation found	runtime	66	0	0	1	0	67	other:31 offset_read:21 void_receiver:8 vtable_read:4 type_confusion:3
+runtime/src/graphics/material.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	vtable_read:1 fnptr:1 other:1 serialize_signedness:1 pod_shadow:1
+runtime/src/graphics/mesh.cpp	60	0	none	no genuine reinterpretation found	runtime	59	0	1	0	0	60	other:29 void_receiver:13 pod_shadow:6 offset_read:5 type_confusion:4 vtable_read:3
+runtime/src/graphics/meshinstance_draw.cpp	74	0	none	no genuine reinterpretation found	runtime	74	0	0	0	0	74	offset_read:49 other:13 void_receiver:10 vtable_read:2
+runtime/src/graphics/renderer.cpp	38	1	byte_io	legit: byte_io 1	runtime	37	0	1	0	0	37	void_receiver:25 other:6 offset_read:3 vtable_read:2 pod_shadow:1
+runtime/src/graphics/scene.cpp	30	0	none	no genuine reinterpretation found	runtime	30	0	0	0	0	30	void_receiver:16 other:7 pod_shadow:6 type_confusion:1
+runtime/src/graphics/scene_grid.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	offset_read:4 other:2
+runtime/src/graphics/sun_camera.cpp	11	0	none	no genuine reinterpretation found	runtime	11	0	0	0	0	11	other:7 offset_read:1 type_confusion:1 pod_shadow:1 void_receiver:1
+runtime/src/graphics/sunlight.cpp	15	0	none	no genuine reinterpretation found	runtime	15	0	0	0	0	15	other:10 pod_shadow:2 offset_read:2 void_receiver:1
+runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	11	0	none	no genuine reinterpretation found	runtime	10	0	1	0	0	11	other:8 vtable_read:1 fnptr:1 offset_read:1
+runtime/src/graphics/wave21_lane_gfxbody.cpp	7	0	none	no genuine reinterpretation found	runtime	6	0	1	0	0	7	void_receiver:3 other:2 offset_read:1 pod_shadow:1
+runtime/src/graphics/wave23_lane_gfxbody.cpp	37	0	none	no genuine reinterpretation found	runtime	36	0	0	1	0	37	offset_read:14 other:11 vtable_read:6 void_receiver:4 pod_shadow:2
+runtime/src/graphics/wave24_lane_gfxmat.cpp	18	0	none	no genuine reinterpretation found	runtime	18	0	0	0	0	18	other:9 pod_shadow:4 void_receiver:2 vtable_read:1 fnptr:1 offset_read:1
+runtime/src/graphics/wave27_lane_gfxbig.cpp	91	4	ptr_int	legit: ptr_int 4	runtime	91	0	0	0	0	87	other:38 offset_read:22 pod_shadow:15 void_receiver:6 type_confusion:4 vtable_read:1 fnptr:1
+runtime/src/graphics/wave27_lane_gfxpart.cpp	42	0	none	no genuine reinterpretation found	runtime	42	0	0	0	0	42	offset_read:21 other:14 vtable_read:2 fnptr:2 void_receiver:1 serialize_signedness:1 pod_shadow:1
+runtime/src/graphics/wave28_lane_gfxbody.cpp	59	0	none	no genuine reinterpretation found	runtime	59	0	0	0	0	59	other:26 offset_read:15 void_receiver:9 pod_shadow:8 type_confusion:1
+runtime/src/graphics/wave28_lane_partsys.cpp	39	0	none	no genuine reinterpretation found	runtime	37	0	2	0	0	39	offset_read:18 other:14 void_receiver:7
+runtime/src/graphics/wave29_lane_gfxbody.cpp	25	0	none	no genuine reinterpretation found	runtime	25	0	0	0	0	25	offset_read:16 void_receiver:5 other:4
+runtime/src/graphics/wave29_lane_slots.cpp	21	3	print_addr	legit: print_addr 3	runtime	16	3	2	0	0	18	other:8 void_receiver:7 offset_read:3
+runtime/src/graphics/wave9_lane_gfx.cpp	27	0	none	no genuine reinterpretation found	runtime	27	0	0	0	0	27	offset_read:14 other:6 void_receiver:5 pod_shadow:2
+runtime/src/graphics/wave9_lane_gfxd.cpp	16	0	none	no genuine reinterpretation found	runtime	16	0	0	0	0	16	void_receiver:5 offset_read:5 other:4 pod_shadow:2
+runtime/src/input/input.cpp	27	0	none	no genuine reinterpretation found	runtime	26	0	0	1	0	27	void_receiver:17 pod_shadow:7 other:3
+runtime/src/input/input_device_update.cpp	17	0	none	no genuine reinterpretation found	runtime	16	0	0	1	0	17	other:5 fnptr:4 untyped_handle_field:3 void_receiver:3 vtable_read:1 type_confusion:1
+runtime/src/input/input_platform_shutdown_win.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	offset_read:2 other:2 vtable_read:1 fnptr:1 void_receiver:1
+runtime/src/input/input_platform_startup_win.cpp	10	0	none	no genuine reinterpretation found	runtime	6	4	0	0	0	10	other:7 vtable_read:1 fnptr:1 void_receiver:1
+runtime/src/input/input_win.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:4 untyped_handle_field:1
+runtime/src/input/keymap_load.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	other:3 offset_read:3
+runtime/src/input/keymap_save.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	other:1 offset_read:1
+runtime/src/io/closure_batch2b_win.cpp	18	2	string_header	legit: string_header 2	runtime	15	0	3	0	0	16	other:8 offset_read:4 storage_local:2 void_receiver:1 untyped_handle_field:1
+runtime/src/io/compressed_stream_open.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	offset_read:3 void_receiver:2
+runtime/src/io/compressed_stream_read.cpp	3	0	none	no genuine reinterpretation found	runtime	2	0	1	0	0	3	void_receiver:1 pod_shadow:1 other:1
+runtime/src/io/compressed_stream_release.cpp	22	0	none	no genuine reinterpretation found	runtime	22	0	0	0	0	22	offset_read:19 void_receiver:2 pod_shadow:1
+runtime/src/io/compressed_stream_write.cpp	10	0	none	no genuine reinterpretation found	runtime	5	0	4	1	0	10	pod_shadow:4 other:4 void_receiver:2
+runtime/src/io/compressedstream.cpp	9	0	none	no genuine reinterpretation found	runtime	9	0	0	0	0	9	pod_shadow:8 other:1
+runtime/src/io/file_stream.cpp	13	2	string_header	legit: string_header 2	runtime	13	0	0	0	0	11	pod_shadow:8 other:3
+runtime/src/io/file_stream_win.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	untyped_handle_field:2
+runtime/src/io/filesystem.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/src/io/filesystem_createfile_win.cpp	14	3	string_header,placement_new	legit: string_header 2, placement_new 1	runtime	13	0	1	0	0	11	void_receiver:4 pod_shadow:4 other:2 untyped_handle_field:1
+runtime/src/io/filesystem_find_win.cpp	11	0	none	no genuine reinterpretation found	runtime	11	0	0	0	0	11	pod_shadow:10 other:1
+runtime/src/io/filesystem_openfile_win.cpp	10	0	none	no genuine reinterpretation found	runtime	9	0	1	0	0	10	void_receiver:3 pod_shadow:2 untyped_handle_field:2 other:1 offset_read:1 storage_local:1
+runtime/src/io/filesystem_packages.cpp	23	0	none	no genuine reinterpretation found	runtime	23	0	0	0	0	23	pod_shadow:14 other:5 void_receiver:2 offset_read:2
+runtime/src/io/filesystem_setupdirs_win.cpp	8	0	none	no genuine reinterpretation found	runtime	8	0	0	0	0	8	pod_shadow:6 offset_read:2
+runtime/src/io/filesystem_startup.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	void_receiver:1 offset_read:1 pod_shadow:1
+runtime/src/io/filesystem_timestamp_win.cpp	5	2	ptr_int,value_pun	legit: ptr_int 1, value_pun 1	runtime	4	0	1	0	0	3	pod_shadow:2 storage_local:1
+runtime/src/io/filesystem_win.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:2
+runtime/src/io/modification.cpp	15	0	none	no genuine reinterpretation found	runtime	15	0	0	0	0	15	other:10 pod_shadow:3 offset_read:1 void_receiver:1
+runtime/src/io/modification_refresh.cpp	31	0	none	no genuine reinterpretation found	runtime	30	0	1	0	0	31	offset_read:12 other:10 pod_shadow:5 void_receiver:3 storage_local:1
+runtime/src/io/modification_setupfilesystem.cpp	21	1	string_header	legit: string_header 1	runtime	19	0	1	1	0	20	pod_shadow:13 other:3 void_receiver:2 fnptr:1 storage_local:1
+runtime/src/io/modification_sort.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/src/io/package_file.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	void_receiver:1
+runtime/src/io/package_file_dtor.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	offset_read:4 void_receiver:1
+runtime/src/io/package_file_read_win.cpp	13	0	none	no genuine reinterpretation found	runtime	11	0	2	0	0	13	other:6 offset_read:4 untyped_handle_field:1 pod_shadow:1 storage_local:1
+runtime/src/io/package_file_serialize.cpp	9	0	none	no genuine reinterpretation found	runtime	9	0	0	0	0	9	pod_shadow:5 offset_read:2 vtable_read:1 other:1
+runtime/src/io/persistence.cpp	8	0	none	no genuine reinterpretation found	runtime	6	0	0	2	0	8	void_receiver:6 pod_shadow:2
+runtime/src/io/persistence_registry_win.cpp	22	2	win32	legit: win32 2	runtime	16	0	5	1	0	20	pod_shadow:7 other:5 storage_local:5 offset_read:1 untyped_handle_field:1 void_receiver:1
+runtime/src/io/persistence_saveinfo_job.cpp	8	0	none	no genuine reinterpretation found	runtime	7	0	1	0	0	8	other:4 pod_shadow:1 offset_read:1 untyped_handle_field:1 storage_local:1
+runtime/src/io/persistence_savelist_job.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	pod_shadow:4 offset_read:1 other:1
+runtime/src/io/persistence_saves.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	pod_shadow:3 void_receiver:1 other:1
+runtime/src/io/persistence_saves_win.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	other:2 pod_shadow:2
+runtime/src/io/persistence_startup.cpp	3	0	none	no genuine reinterpretation found	runtime	2	0	1	0	0	3	other:1 void_receiver:1 storage_local:1
+runtime/src/io/persistence_worker_win.cpp	32	1	hash	legit: hash 1	runtime	28	0	4	0	0	31	other:15 offset_read:7 untyped_handle_field:4 type_confusion:2 pod_shadow:1 void_receiver:1 storage_local:1
+runtime/src/io/serializer.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	void_receiver:1
+runtime/src/io/serializer_class.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	other:3 vtable_read:1
+runtime/src/io/text_codec.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:2 pod_shadow:2 offset_read:1
+runtime/src/io/text_file_stream_win.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	untyped_handle_field:5 pod_shadow:1
+runtime/src/math/transform.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	serialize_signedness:2 other:1
+runtime/src/math/vector.cpp	7	0	none	no genuine reinterpretation found	runtime	6	0	0	1	0	7	void_receiver:4 other:3
+runtime/src/object/external.cpp	11	0	none	no genuine reinterpretation found	runtime	11	0	0	0	0	11	other:11
+runtime/src/object/external_add.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	other:2 void_receiver:1 pod_shadow:1
+runtime/src/object/external_class_doors.cpp	14	0	none	no genuine reinterpretation found	runtime	13	0	1	0	0	14	pod_shadow:11 other:3
+runtime/src/object/external_compiled.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	other:6
+runtime/src/object/external_find.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:1 other:1
+runtime/src/object/external_forceunload.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:1 other:1
+runtime/src/object/external_list.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	other:2 pod_shadow:2 vtable_read:1 fnptr:1
+runtime/src/object/external_load.cpp	22	0	none	no genuine reinterpretation found	runtime	21	0	1	0	0	22	other:5 void_receiver:5 offset_read:4 pod_shadow:3 fnptr:2 vtable_read:1 serialize_signedness:1 storage_local:1
+runtime/src/object/external_path_stack.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	offset_read:5 pod_shadow:5
+runtime/src/object/external_path_win.cpp	11	0	none	no genuine reinterpretation found	runtime	11	0	0	0	0	11	other:8 pod_shadow:3
+runtime/src/object/external_ptr_serialize.cpp	13	0	none	no genuine reinterpretation found	runtime	12	0	0	1	0	13	other:9 void_receiver:2 vtable_read:1 pod_shadow:1
+runtime/src/object/external_reftable.cpp	13	0	none	no genuine reinterpretation found	runtime	13	0	0	0	0	13	offset_read:8 other:3 vtable_read:1 fnptr:1
+runtime/src/object/external_savetext_win.cpp	9	0	none	no genuine reinterpretation found	runtime	9	0	0	0	0	9	pod_shadow:5 void_receiver:2 other:1 untyped_handle_field:1
+runtime/src/object/external_set.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	other:2 pod_shadow:1
+runtime/src/object/external_set.h	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:2
+runtime/src/object/factory_dtors.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	offset_read:9 pod_shadow:1
+runtime/src/object/internal.cpp	6	0	none	no genuine reinterpretation found	runtime	5	0	0	1	0	6	void_receiver:3 serialize_signedness:1 pod_shadow:1 other:1
+runtime/src/object/internal_class.cpp	7	0	none	no genuine reinterpretation found	runtime	6	0	1	0	0	7	other:2 offset_read:2 pod_shadow:1 fnptr:1 storage_local:1
+runtime/src/object/internal_ptr_array_serialize.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/src/object/reference_set.h	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:2
+runtime/src/object/type_reflection.cpp	22	0	none	no genuine reinterpretation found	runtime	21	1	0	0	0	22	offset_read:16 other:2 fnptr:2 pod_shadow:1 untyped_param:1
+runtime/src/object/type_system.cpp	5	0	none	no genuine reinterpretation found	runtime	4	0	0	1	0	5	other:3 void_receiver:2
+runtime/src/pathfinding/pointlist.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	pod_shadow:2 other:2 offset_read:1 vtable_read:1 fnptr:1
+runtime/src/picking/closure_batch2b.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	void_receiver:1
+runtime/src/picking/pickingmesh.cpp	12	0	none	no genuine reinterpretation found	runtime	12	0	0	0	0	12	serialize_signedness:6 pod_shadow:3 other:1 vtable_read:1 fnptr:1
+runtime/src/picking/scene.cpp	13	0	none	no genuine reinterpretation found	runtime	12	0	0	1	0	13	void_receiver:9 other:2 type_confusion:2
+runtime/src/picking/scene_grid.cpp	12	0	none	no genuine reinterpretation found	runtime	11	0	0	1	0	12	other:10 type_confusion:1 offset_read:1
+runtime/src/save/savedstate_setupload.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	offset_read:2
+runtime/src/save/saveload.cpp	16	0	none	no genuine reinterpretation found	runtime	13	0	0	3	0	16	offset_read:10 other:4 type_confusion:1 pod_shadow:1
+runtime/src/save/saveload_draw.cpp	35	0	none	no genuine reinterpretation found	runtime	34	0	0	1	0	35	other:13 offset_read:10 pod_shadow:6 void_receiver:4 type_confusion:2
+runtime/src/save/saveload_internal.h	10	0	none	no genuine reinterpretation found	runtime	6	0	0	4	0	10	other:5 offset_read:3 void_receiver:2
+runtime/src/save/saveload_loadmeta.cpp	14	0	none	no genuine reinterpretation found	runtime	12	0	1	1	0	14	pod_shadow:5 other:4 type_confusion:2 vtable_read:1 fnptr:1 storage_local:1
+runtime/src/save/saveload_meta.cpp	24	0	none	no genuine reinterpretation found	runtime	17	0	2	5	0	24	other:12 pod_shadow:6 serialize_signedness:3 vtable_read:1 fnptr:1 storage_local:1
+runtime/src/save/saveload_saveinfo.cpp	13	0	none	no genuine reinterpretation found	runtime	13	0	0	0	0	13	offset_read:10 other:2 void_receiver:1
+runtime/src/save/saveload_update.cpp	118	1	placement_new	legit: placement_new 1	runtime	101	11	1	5	0	117	other:65 offset_read:30 pod_shadow:15 void_receiver:3 type_confusion:2 fnptr:1 vtable_read:1
+runtime/src/system/allocator.cpp	28	28	alloc_header	System::MemoryAllocator: boundary tags, free-list links stored in freed blocks, range page arithmetic, pointer hash -- the allocator IS raw memory	runtime	28	0	0	0	0	0	
+runtime/src/system/allocator_win.cpp	5	5	win32	the allocator keeps its CRITICAL_SECTION as opaque bytes (the type header cannot include <windows.h>); five Win32 lock calls	runtime	5	0	0	0	0	0	
+runtime/src/system/closure_batch2b.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	void_receiver:2 other:2
+runtime/src/system/compression.cpp	2	2	ptr_int	legit: ptr_int 2	runtime	2	0	0	0	0	0	
+runtime/src/system/configuration.cpp	7	0	none	no genuine reinterpretation found	runtime	4	0	2	1	0	7	other:4 pod_shadow:2 void_receiver:1
+runtime/src/system/error.cpp	6	0	none	no genuine reinterpretation found	runtime	6	0	0	0	0	6	other:5 fnptr:1
+runtime/src/system/filename.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	pod_shadow:3
+runtime/src/system/pod_bridge.h	14	0	none	no genuine reinterpretation found	runtime	14	0	0	0	0	14	pod_shadow:14
+runtime/src/system/string.cpp	6	1	string_header	legit: string_header 1	runtime	6	0	0	0	0	5	pod_shadow:2 other:1 void_receiver:1 offset_read:1
+runtime/src/system/thread_win.cpp	24	5	win32	legit: win32 5	runtime	22	0	2	0	0	19	untyped_handle_field:14 vtable_read:3 other:1 fnptr:1
+runtime/src/system/value_types.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	serialize_signedness:2 other:2 void_receiver:2 pod_shadow:1
+runtime/src/system/widestring.cpp	11	2	string_header	legit: string_header 2	runtime	11	0	0	0	0	9	other:7 pod_shadow:1 void_receiver:1
+runtime/src/ui/animatedimagedescription.cpp	3	1	placement_new	legit: placement_new 1	runtime	2	0	1	0	0	2	pod_shadow:1 offset_read:1
+runtime/src/ui/animatedimageelement.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	type_confusion:1
+runtime/src/ui/borderdescription.cpp	6	1	placement_new	legit: placement_new 1	runtime	5	0	1	0	0	5	offset_read:3 pod_shadow:1 other:1
+runtime/src/ui/buttondescription.cpp	10	1	placement_new	legit: placement_new 1	runtime	9	0	1	0	0	9	other:8 void_receiver:1
+runtime/src/ui/buttonelement.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	other:3
+runtime/src/ui/characterset.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	pod_shadow:2 vtable_read:1 fnptr:1
+runtime/src/ui/checkdescription.cpp	3	1	placement_new	legit: placement_new 1	runtime	2	0	1	0	0	2	other:2
+runtime/src/ui/checkelement.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/src/ui/clipregiondescription.cpp	3	1	placement_new	legit: placement_new 1	runtime	2	0	1	0	0	2	other:2
+runtime/src/ui/clipregionelement.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	other:2
+runtime/src/ui/combodescription.cpp	12	1	placement_new	legit: placement_new 1	runtime	10	0	2	0	0	11	offset_read:6 other:3 pod_shadow:1 storage_local:1
+runtime/src/ui/combodialog.cpp	16	0	none	no genuine reinterpretation found	runtime	16	0	0	0	0	16	offset_read:13 other:3
+runtime/src/ui/combodialog_ctor.cpp	7	1	placement_new	legit: placement_new 1	runtime	6	0	1	0	0	6	other:4 void_receiver:2
+runtime/src/ui/comboelement.cpp	15	0	none	no genuine reinterpretation found	runtime	14	0	1	0	0	15	other:11 pod_shadow:1 offset_read:1 void_receiver:1 storage_local:1
+runtime/src/ui/containerdescription.cpp	13	0	none	no genuine reinterpretation found	runtime	13	0	0	0	0	13	other:7 offset_read:6
+runtime/src/ui/containerelement.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	offset_read:6 void_receiver:3 other:1
+runtime/src/ui/cursor.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	pod_shadow:2 vtable_read:1 fnptr:1
+runtime/src/ui/description_common.h	20	0	none	no genuine reinterpretation found	runtime	19	0	0	1	0	20	offset_read:7 other:5 pod_shadow:3 vtable_read:2 void_receiver:2 fnptr:1
+runtime/src/ui/dialog.cpp	140	0	none	no genuine reinterpretation found	runtime	138	0	2	0	0	140	offset_read:108 void_receiver:15 other:14 type_confusion:1 pod_shadow:1 storage_local:1
+runtime/src/ui/dialog_controller_base.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	void_receiver:2
+runtime/src/ui/dialog_create.cpp	33	1	placement_new	legit: placement_new 1	runtime	28	0	4	1	0	32	other:17 offset_read:5 pod_shadow:4 void_receiver:3 fnptr:1 vtable_read:1 storage_local:1
+runtime/src/ui/dialog_ctor_dtor.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	offset_read:2 void_receiver:1 pod_shadow:1
+runtime/src/ui/dialog_settings.cpp	8	0	none	no genuine reinterpretation found	runtime	8	0	0	0	0	8	other:5 void_receiver:3
+runtime/src/ui/dialog_vtable.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	other:5 pod_shadow:2 void_receiver:2 vtable_read:1
+runtime/src/ui/documenttext.cpp	49	1	placement_new	legit: placement_new 1	runtime	44	0	5	0	0	48	other:21 offset_read:10 void_receiver:7 pod_shadow:6 storage_local:4
+runtime/src/ui/documenttextdescription.cpp	15	1	placement_new	legit: placement_new 1	runtime	12	0	3	0	0	14	other:8 offset_read:3 void_receiver:2 pod_shadow:1
+runtime/src/ui/documenttextelement.cpp	18	0	none	no genuine reinterpretation found	runtime	12	0	6	0	0	18	other:7 offset_read:6 pod_shadow:2 void_receiver:2 storage_local:1
+runtime/src/ui/editdescription.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	offset_read:6 other:3 void_receiver:1
+runtime/src/ui/editelement.cpp	22	0	none	no genuine reinterpretation found	runtime	18	0	4	0	0	22	other:9 offset_read:6 storage_local:4 pod_shadow:2 type_confusion:1
+runtime/src/ui/element.cpp	27	3	placement_new	legit: placement_new 3	runtime	23	0	4	0	0	24	offset_read:12 other:8 pod_shadow:4
+runtime/src/ui/element_bodies_b5.cpp	18	0	none	no genuine reinterpretation found	runtime	18	0	0	0	0	18	void_receiver:10 other:6 offset_read:1 pod_shadow:1
+runtime/src/ui/element_common.h	16	0	none	no genuine reinterpretation found	runtime	16	0	0	0	0	16	offset_read:12 other:2 void_receiver:2
+runtime/src/ui/element_sprite_debug.cpp	23	0	none	no genuine reinterpretation found	runtime	12	11	0	0	0	23	offset_read:10 other:7 void_receiver:5 pod_shadow:1
+runtime/src/ui/element_vtable.cpp	16	1	placement_new	legit: placement_new 1	runtime	15	0	1	0	0	15	offset_read:9 other:4 vtable_read:1 fnptr:1
+runtime/src/ui/elementdescription_serialize.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	other:3 pod_shadow:2 vtable_read:1 void_receiver:1
+runtime/src/ui/font.cpp	81	0	none	no genuine reinterpretation found	runtime	81	0	0	0	0	81	offset_read:42 other:19 void_receiver:9 pod_shadow:8 fnptr:2 vtable_read:1
+runtime/src/ui/graphdescription.cpp	6	1	placement_new	legit: placement_new 1	runtime	5	0	1	0	0	5	offset_read:2 other:1 type_confusion:1 void_receiver:1
+runtime/src/ui/graphelement.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:3 offset_read:2
+runtime/src/ui/groupdescription.cpp	3	1	placement_new	legit: placement_new 1	runtime	2	0	1	0	0	2	other:2
+runtime/src/ui/groupelement.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	type_confusion:1
+runtime/src/ui/imagedescription.cpp	7	1	placement_new	legit: placement_new 1	runtime	6	0	1	0	0	6	other:2 pod_shadow:2 offset_read:1 void_receiver:1
+runtime/src/ui/labeldescription.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	other:2 pod_shadow:2
+runtime/src/ui/labelelement.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	offset_read:2 pod_shadow:1
+runtime/src/ui/layoutdescription.cpp	18	1	placement_new	legit: placement_new 1	runtime	17	0	1	0	0	17	other:6 pod_shadow:5 offset_read:4 vtable_read:1 fnptr:1
+runtime/src/ui/listdescription.cpp	16	1	placement_new	legit: placement_new 1	runtime	15	0	1	0	0	15	pod_shadow:8 other:4 vtable_read:1 offset_read:1 fnptr:1
+runtime/src/ui/listelement.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	other:7
+runtime/src/ui/numberdescription.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	other:3 pod_shadow:2 vtable_read:1 fnptr:1
+runtime/src/ui/numbereditdescription.cpp	10	0	none	no genuine reinterpretation found	runtime	9	0	1	0	0	10	pod_shadow:3 other:3 vtable_read:1 offset_read:1 fnptr:1 storage_local:1
+runtime/src/ui/numbereditelement.cpp	4	0	none	no genuine reinterpretation found	runtime	3	0	1	0	0	4	offset_read:3 storage_local:1
+runtime/src/ui/numberelement.cpp	9	0	none	no genuine reinterpretation found	runtime	7	0	2	0	0	9	offset_read:5 storage_local:2 pod_shadow:1 void_receiver:1
+runtime/src/ui/pagedescription.cpp	3	1	placement_new	legit: placement_new 1	runtime	2	0	1	0	0	2	other:2
+runtime/src/ui/progressdescription.cpp	27	2	placement_new	legit: placement_new 2	runtime	25	0	2	0	0	25	pod_shadow:10 offset_read:8 other:3 void_receiver:2 vtable_read:1 fnptr:1
+runtime/src/ui/progresselement.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	other:2
+runtime/src/ui/radiodescription.cpp	5	1	placement_new	legit: placement_new 1	runtime	4	0	1	0	0	4	other:4
+runtime/src/ui/radioelement.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	offset_read:2
+runtime/src/ui/ribbondescription.cpp	11	2	placement_new	legit: placement_new 2	runtime	9	0	2	0	0	9	other:4 pod_shadow:2 vtable_read:1 fnptr:1 offset_read:1
+runtime/src/ui/ribbonelement.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	other:2
+runtime/src/ui/scrolldescription.cpp	11	0	none	no genuine reinterpretation found	runtime	11	0	0	0	0	11	pod_shadow:4 other:3 vtable_read:1 offset_read:1 fnptr:1 void_receiver:1
+runtime/src/ui/scrollelement.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:5
+runtime/src/ui/sliderdescription.cpp	25	2	placement_new	legit: placement_new 2	runtime	23	0	2	0	0	23	pod_shadow:9 offset_read:7 other:3 void_receiver:2 vtable_read:1 fnptr:1
+runtime/src/ui/sliderelement.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	other:2
+runtime/src/ui/spinnerdescription.cpp	12	2	placement_new	legit: placement_new 2	runtime	10	0	2	0	0	10	pod_shadow:6 other:2 vtable_read:1 fnptr:1
+runtime/src/ui/spinnerelement.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:5
+runtime/src/ui/sprite.cpp	21	0	none	no genuine reinterpretation found	runtime	21	0	0	0	0	21	other:17 pod_shadow:2 offset_read:2
+runtime/src/ui/sprite_debug.cpp	10	2	print_addr	legit: print_addr 2	runtime	3	7	0	0	0	8	other:8
+runtime/src/ui/spritecapture.cpp	13	2	string_header	legit: string_header 2	runtime	10	0	3	0	0	11	other:9 offset_read:1 pod_shadow:1
+runtime/src/ui/spritecapture_class.cpp	23	0	none	no genuine reinterpretation found	runtime	23	0	0	0	0	23	offset_read:11 other:5 void_receiver:3 pod_shadow:2 vtable_read:1 fnptr:1
+runtime/src/ui/spritecontext.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	other:6 offset_read:3 void_receiver:1
+runtime/src/ui/spritecontext_add.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	other:4
+runtime/src/ui/spritecontext_flush.cpp	8	0	none	no genuine reinterpretation found	runtime	8	0	0	0	0	8	other:5 offset_read:2 void_receiver:1
+runtime/src/ui/spritesheet_new.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:3 void_receiver:1 offset_read:1
+runtime/src/ui/spritesheet_vtable.cpp	11	2	placement_new	legit: placement_new 2	runtime	9	0	2	0	0	9	other:5 pod_shadow:2 vtable_read:1 void_receiver:1
+runtime/src/ui/stringtable_factory.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	offset_read:4 other:3 vtable_read:1 fnptr:1 pod_shadow:1
+runtime/src/ui/tabdescription.cpp	30	2	placement_new	legit: placement_new 2	runtime	28	0	2	0	0	28	pod_shadow:14 offset_read:6 other:4 void_receiver:2 vtable_read:1 fnptr:1
+runtime/src/ui/tabelement.cpp	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	other:2 void_receiver:1
+runtime/src/ui/tabelement_addtab.cpp	5	1	placement_new	legit: placement_new 1	runtime	3	0	2	0	0	4	other:2 void_receiver:1 storage_local:1
+runtime/src/ui/tabledescription.cpp	8	1	placement_new	legit: placement_new 1	runtime	7	0	1	0	0	7	pod_shadow:2 other:2 vtable_read:1 offset_read:1 fnptr:1
+runtime/src/ui/textdescription.cpp	13	0	none	no genuine reinterpretation found	runtime	13	0	0	0	0	13	pod_shadow:6 other:4 fnptr:2 vtable_read:1
+runtime/src/ui/textelement.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:2
+runtime/src/ui/textelement_cachetext.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	void_receiver:2 offset_read:1 other:1
+runtime/src/ui/tooltipdialog.cpp	6	1	placement_new	legit: placement_new 1	runtime	5	0	1	0	0	5	pod_shadow:2 offset_read:1 void_receiver:1 other:1
+runtime/src/ui/userinterface.cpp	166	0	none	no genuine reinterpretation found	runtime	165	0	1	0	0	166	offset_read:115 other:34 void_receiver:9 fnptr:4 vtable_read:3 storage_local:1
+runtime/src/ui/userinterface_close.cpp	44	0	none	no genuine reinterpretation found	runtime	44	0	0	0	0	44	offset_read:32 other:7 void_receiver:5
+runtime/src/ui/userinterface_dragstart.cpp	5	0	none	no genuine reinterpretation found	runtime	5	0	0	0	0	5	other:4 type_confusion:1
+runtime/src/ui/userinterface_draw.cpp	67	0	none	no genuine reinterpretation found	runtime	67	0	0	0	0	67	offset_read:56 other:7 void_receiver:3 type_confusion:1
+runtime/src/ui/userinterface_frame.cpp	48	0	none	no genuine reinterpretation found	runtime	46	0	2	0	0	48	offset_read:35 other:8 fnptr:3 void_receiver:1 type_confusion:1
+runtime/src/ui/userinterface_hover.cpp	13	0	none	no genuine reinterpretation found	runtime	13	0	0	0	0	13	other:9 offset_read:4
+runtime/src/ui/userinterface_showdialog.cpp	48	0	none	no genuine reinterpretation found	runtime	45	3	0	0	0	48	other:31 offset_read:14 fnptr:2 void_receiver:1
+runtime/src/ui/userinterface_standalone.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	other:5 offset_read:2
+runtime/src/ui/widget_common.h	16	0	none	no genuine reinterpretation found	runtime	16	0	0	0	0	16	other:10 offset_read:6
+runtime/src/ui/widgets_input.cpp	40	0	none	no genuine reinterpretation found	runtime	40	0	0	0	0	40	void_receiver:27 other:7 pod_shadow:3 offset_read:3
+runtime/src/ui/widgets_layout.cpp	23	0	none	no genuine reinterpretation found	runtime	23	0	0	0	0	23	offset_read:10 other:10 pod_shadow:3
+runtime/src/video/batchc_context_setlight.cpp	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	offset_read:1
+runtime/src/video/buffers.cpp	36	0	none	no genuine reinterpretation found	runtime	36	0	0	0	0	36	other:14 void_receiver:14 offset_read:8
+runtime/src/video/buffers_win.cpp	12	0	none	no genuine reinterpretation found	runtime	12	0	0	0	0	12	offset_read:12
+runtime/src/video/closure_batch2b.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	void_receiver:2
+runtime/src/video/companion_data.cpp	5	1	placement_new	legit: placement_new 1	runtime	4	0	1	0	0	4	other:4
+runtime/src/video/constant_buffer.cpp	8	0	none	no genuine reinterpretation found	runtime	8	0	0	0	0	8	offset_read:6 other:2
+runtime/src/video/context.cpp	8	1	byte_io	legit: byte_io 1	runtime	4	0	1	3	0	7	other:4 offset_read:3
+runtime/src/video/context_bind.cpp	11	0	none	no genuine reinterpretation found	runtime	11	0	0	0	0	11	void_receiver:9 offset_read:1 other:1
+runtime/src/video/context_ctor.cpp	7	0	none	no genuine reinterpretation found	runtime	7	0	0	0	0	7	other:4 void_receiver:2 offset_read:1
+runtime/src/video/context_lifecycle.cpp	21	1	byte_io	legit: byte_io 1	runtime	18	0	3	0	0	20	other:8 offset_read:6 void_receiver:6
+runtime/src/video/device.cpp	18	0	none	no genuine reinterpretation found	runtime	14	0	2	2	0	18	other:14 offset_read:3 void_receiver:1
+runtime/src/video/device_adjustdisplay_win.cpp	15	0	none	no genuine reinterpretation found	runtime	15	0	0	0	0	15	offset_read:14 other:1
+runtime/src/video/device_enum_types.cpp	29	0	none	no genuine reinterpretation found	runtime	29	0	0	0	0	29	offset_read:17 type_confusion:6 void_receiver:5 other:1
+runtime/src/video/device_startup.cpp	31	0	none	no genuine reinterpretation found	runtime	30	0	0	1	0	31	other:14 offset_read:7 void_receiver:6 type_confusion:3 fnptr:1
+runtime/src/video/device_startup_win.cpp	10	0	none	no genuine reinterpretation found	runtime	10	0	0	0	0	10	offset_read:7 other:3
+runtime/src/video/dynamic_resources.cpp	31	0	none	no genuine reinterpretation found	runtime	31	0	0	0	0	31	other:21 vtable_read:4 void_receiver:4 offset_read:2
+runtime/src/video/enumerate_video_modes.cpp	6	0	none	no genuine reinterpretation found	runtime	5	0	1	0	0	6	offset_read:2 void_receiver:2 fnptr:1 other:1
+runtime/src/video/imagebuffer_platform_serialize.cpp	4	0	none	no genuine reinterpretation found	runtime	4	0	0	0	0	4	other:3 pod_shadow:1
+runtime/src/video/imagebuffer_vtable.cpp	9	0	none	no genuine reinterpretation found	runtime	9	0	0	0	0	9	other:8 pod_shadow:1
+runtime/src/video/pixelprogram.cpp	23	0	none	no genuine reinterpretation found	runtime	23	0	0	0	0	23	vtable_read:9 void_receiver:7 other:2 offset_read:2 pod_shadow:2 fnptr:1
+runtime/src/video/renderstate.cpp	25	0	none	no genuine reinterpretation found	runtime	25	0	0	0	0	25	other:14 void_receiver:9 offset_read:2
+runtime/src/video/save_image_to_file.cpp	8	0	none	no genuine reinterpretation found	runtime	7	0	1	0	0	8	offset_read:5 pod_shadow:2 storage_local:1
+runtime/src/video/shader_program_names.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	void_receiver:2
+runtime/src/video/shaderprogram.cpp	19	0	none	no genuine reinterpretation found	runtime	19	0	0	0	0	19	void_receiver:10 other:3 vtable_read:2 fnptr:2 offset_read:1 pod_shadow:1
+runtime/src/video/vertexlayout.cpp	15	0	none	no genuine reinterpretation found	runtime	15	0	0	0	0	15	vtable_read:7 other:3 serialize_signedness:2 offset_read:1 pod_shadow:1 fnptr:1
+runtime/src/video/vertexprogram.cpp	29	0	none	no genuine reinterpretation found	runtime	29	0	0	0	0	29	vtable_read:9 offset_read:8 void_receiver:8 other:2 pod_shadow:1 fnptr:1
+runtime/src/video/video_interfaces_win.cpp	3	0	none	no genuine reinterpretation found	runtime	2	0	1	0	0	3	offset_read:2 other:1
+runtime/src/video/video_mode_sort.cpp	6	2	ptr_int	legit: ptr_int 2	runtime	6	0	0	0	0	4	other:4
+runtime/src/video/video_program.cpp	2	0	none	no genuine reinterpretation found	runtime	0	0	1	1	0	2	void_receiver:2
+runtime/src/video/video_resources.cpp	16	0	none	no genuine reinterpretation found	runtime	16	0	0	0	0	16	other:8 void_receiver:5 offset_read:3
+runtime/src/video/video_resources_win.cpp	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	offset_read:1 untyped_handle_field:1
+runtime/src/video/videoprogram.cpp	15	0	none	no genuine reinterpretation found	runtime	15	0	0	0	0	15	vtable_read:7 pod_shadow:4 other:2 offset_read:1 fnptr:1
+runtime/types/audio/Device.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/types/collection/Collection.h	18	6	container_storage,placement_new	legit: container_storage 3, placement_new 3	runtime	14	0	4	0	0	12	pod_shadow:6 other:5 type_confusion:1
+runtime/types/engine/UpdateLoop.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	type_confusion:1
+runtime/types/graphics/Material.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/types/io/FileSystem.h	3	0	none	no genuine reinterpretation found	runtime	0	3	0	0	0	3	offset_read:2 void_receiver:1
+runtime/types/io/Modification.h	1	0	none	no genuine reinterpretation found	runtime	0	1	0	0	0	1	offset_read:1
+runtime/types/io/Stream.h	1	0	none	no genuine reinterpretation found	runtime	0	1	0	0	0	1	offset_read:1
+runtime/types/object/External.h	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:2
+runtime/types/object/Internal.h	3	0	none	no genuine reinterpretation found	runtime	3	0	0	0	0	3	pod_shadow:1 other:1 void_receiver:1
+runtime/types/object/TypeInfo.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	void_receiver:1
+runtime/types/object/VSlot.h	1	1	vtable_diag	CompilerSlotOf / SlotAddressOf: the one sanctioned look into a compiler vtable (diagnostics, harness patches); dispatch never uses it	runtime	1	0	0	0	0	0	
+runtime/types/save/SaveLoad.h	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	other:2
+runtime/types/system/Filename.h	2	0	none	no genuine reinterpretation found	runtime	2	0	0	0	0	2	pod_shadow:2
+runtime/types/system/String.h	4	4	string_header	legit: string_header 4	runtime	4	0	0	0	0	0	
+runtime/types/ui/EditElement.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	pod_shadow:1
+runtime/types/ui/ToolTipDialog.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/types/ui/UserInterface.h	1	0	none	no genuine reinterpretation found	runtime	1	0	0	0	0	1	other:1
+runtime/types/video/CompanionData.h	48	0	none	no genuine reinterpretation found	runtime	48	0	0	0	0	48	offset_read:24 void_receiver:12 other:12
+standalone/ach_clock.cpp	3	0	none	no genuine reinterpretation found	standalone:instrument	3	0	0	0	0	3	offset_read:2 other:1
+standalone/alloc_cutover_arm.cpp	2	0	none	no genuine reinterpretation found	standalone:boot_glue	2	0	0	0	0	2	offset_read:2
+standalone/alloc_stats.cpp	5	5	alloc_result,print_addr,alloc_header	legit: alloc_result 2, print_addr 2, alloc_header 1	standalone:instrument	3	2	0	0	0	0	
+standalone/autostart.cpp	26	0	none	no genuine reinterpretation found	standalone:instrument	26	0	0	0	0	26	offset_read:23 other:3
+standalone/boot_state_watchdog.cpp	2	1	win32	legit: win32 1	standalone:instrument	2	0	0	0	0	1	other:1
+standalone/boot_window.cpp	3	2	print_addr	legit: print_addr 2	standalone:boot_glue	1	2	0	0	0	1	offset_read:1
+standalone/chunked_scene_loader.cpp	4	0	none	no genuine reinterpretation found	standalone:game_logic	4	0	0	0	0	4	offset_read:4
+standalone/citizen_vitals.cpp	21	0	none	no genuine reinterpretation found	standalone:instrument	21	0	0	0	0	21	offset_read:15 other:4 void_receiver:2
+standalone/cropfield_force_start.cpp	31	0	none	no genuine reinterpretation found	standalone:instrument	29	0	2	0	0	31	offset_read:19 other:8 void_receiver:2 vtable_read:2
+standalone/death_harness.cpp	96	10	print_addr	legit: print_addr 10	standalone:instrument	96	0	0	0	0	86	offset_read:80 other:4 void_receiver:2
+standalone/disaster_harness.cpp	26	2	print_addr	legit: print_addr 2	standalone:instrument	24	0	2	0	0	24	offset_read:13 other:8 void_receiver:2 vtable_read:1
+standalone/entity_comp_validator.cpp	17	0	none	no genuine reinterpretation found	standalone:instrument	17	0	0	0	0	17	offset_read:9 other:5 void_receiver:2 untyped_param:1
+standalone/finish_builds_harness.cpp	15	0	none	no genuine reinterpretation found	standalone:instrument	13	0	2	0	0	15	offset_read:10 other:4 void_receiver:1
+standalone/food_panel_harness.cpp	124	6	print_addr	legit: print_addr 6	standalone:instrument	115	0	9	0	0	118	offset_read:77 other:33 void_receiver:8
+standalone/food_placement_harness.cpp	23	0	none	no genuine reinterpretation found	standalone:instrument	21	0	2	0	0	23	offset_read:15 other:6 void_receiver:1 vtable_read:1
+standalone/food_production_diag.cpp	62	1	print_addr	legit: print_addr 1	standalone:instrument	57	0	5	0	0	61	offset_read:41 other:13 void_receiver:7
+standalone/food_stock_census.cpp	6	0	none	no genuine reinterpretation found	standalone:instrument	5	0	1	0	0	6	offset_read:3 other:2 void_receiver:1
+standalone/food_workers_harness.cpp	36	8	print_addr	legit: print_addr 8	standalone:instrument	24	10	2	0	0	28	offset_read:19 other:6 void_receiver:3
+standalone/hw_watch.cpp	11	11	crash_diag	hardware watchpoints: DR0-DR3 addresses as integers, EXCEPTION_POINTERS/CONTEXT from the VEH, the watched word read at a raw address	standalone:instrument	8	3	0	0	0	0	
+standalone/loader_loop_stubs.cpp	9	9	print_addr	legit: print_addr 9	standalone:game_logic	0	9	0	0	0	0	
+standalone/main.cpp	119	46	crash_diag,print_addr,win32,ptr_int	legit: crash_diag 20, print_addr 18, win32 6, ptr_int 2	standalone:boot_glue	46	71	2	0	0	73	offset_read:55 other:8 void_receiver:6 vtable_read:3 untyped_handle_field:1
+standalone/market_overstock_harness.cpp	53	3	print_addr	legit: print_addr 3	standalone:instrument	52	0	1	0	0	50	offset_read:33 other:13 void_receiver:4
+standalone/menudialogloopt_stubs.cpp	58	10	print_addr	legit: print_addr 10	standalone:game_logic	41	10	3	4	0	48	other:29 offset_read:15 type_confusion:3 vtable_read:1
+standalone/modal_driver.cpp	26	2	print_addr	legit: print_addr 2	standalone:instrument	24	2	0	0	0	24	other:14 offset_read:8 fnptr:1 pod_shadow:1
+standalone/mouse_inject.cpp	29	8	print_addr	legit: print_addr 8	standalone:instrument	20	9	0	0	0	21	offset_read:14 other:6 pod_shadow:1
+standalone/orchard_cut_harness.cpp	14	2	print_addr	legit: print_addr 2	standalone:instrument	11	0	3	0	0	12	offset_read:6 other:5 void_receiver:1
+standalone/orchard_diag.cpp	63	3	print_addr	legit: print_addr 3	standalone:instrument	55	0	8	0	0	60	offset_read:40 other:11 void_receiver:9
+standalone/orchard_force_start.cpp	37	3	print_addr	legit: print_addr 3	standalone:instrument	35	0	2	0	0	34	offset_read:21 other:10 void_receiver:3
+standalone/orchard_growth_harness.cpp	22	0	none	no genuine reinterpretation found	standalone:instrument	19	0	3	0	0	22	offset_read:14 other:5 void_receiver:3
+standalone/orchard_workers_harness.cpp	24	6	print_addr	legit: print_addr 6	standalone:instrument	22	0	2	0	0	18	offset_read:11 other:5 void_receiver:2
+standalone/panel_hold_harness.cpp	23	0	none	no genuine reinterpretation found	standalone:instrument	20	0	3	0	0	23	offset_read:10 other:10 void_receiver:3
+standalone/panel_staffing_driver.cpp	33	0	none	no genuine reinterpretation found	standalone:instrument	31	0	2	0	0	33	offset_read:23 other:7 void_receiver:3
+standalone/pasture_harness.cpp	19	0	none	no genuine reinterpretation found	standalone:instrument	14	5	0	0	0	19	offset_read:14 other:5
+standalone/pausemenu_harness.cpp	13	0	none	no genuine reinterpretation found	standalone:instrument	13	0	0	0	0	13	other:7 offset_read:6
+standalone/perf_experimental.cpp	37	5	ptr_int	legit: ptr_int 5	standalone:instrument	36	0	1	0	0	32	offset_read:23 other:8 storage_local:1
+standalone/perf_terrain.cpp	1	1	print_addr	legit: print_addr 1	standalone:instrument	0	1	0	0	0	0	
+standalone/redzone_alloc.cpp	133	80	alloc_header,print_addr,crash_diag	legit: alloc_header 45, print_addr 33, crash_diag 2	standalone:instrument	76	57	0	0	0	53	offset_read:38 other:14 void_receiver:1
+standalone/renderdoc_integration.cpp	2	1	win32	legit: win32 1	standalone:instrument	1	1	0	0	0	1	other:1
+standalone/sampler.cpp	16	16	pe_image	sampling profiler: walks the PE export directory of a loaded module and the suspended thread's stack (CONTEXT.Rsp)	standalone:instrument	13	3	0	0	0	0	
+standalone/saveload_harness.cpp	4	0	none	no genuine reinterpretation found	standalone:instrument	2	2	0	0	0	4	other:2 offset_read:2
+standalone/scene_watch.cpp	90	1	ptr_int	legit: ptr_int 1	standalone:instrument	90	0	0	0	0	89	offset_read:69 other:12 void_receiver:6 vtable_read:2
+standalone/splash_loop_stubs.cpp	33	15	print_addr	legit: print_addr 15	standalone:game_logic	15	16	1	1	0	18	other:11 offset_read:4 void_receiver:2 pod_shadow:1
+standalone/stress_harness.cpp	88	3	print_addr,ptr_int	legit: print_addr 2, ptr_int 1	standalone:instrument	72	16	0	0	0	85	offset_read:62 other:18 void_receiver:5
+standalone/tool_harness.cpp	456	18	print_addr	legit: print_addr 18	standalone:instrument	412	24	20	0	0	438	offset_read:303 other:96 void_receiver:29 type_confusion:9 storage_local:1
+standalone/trade_buy_harness.cpp	40	1	print_addr	legit: print_addr 1	standalone:instrument	37	0	3	0	0	39	offset_read:23 other:13 void_receiver:3
+standalone/video_interface.cpp	11	3	print_addr	legit: print_addr 3	standalone:boot_glue	10	1	0	0	6	2	other:2
+tests/unit/achievement_goal_abi_test.cpp	10	2	t_vtable_probe	legit: t_vtable_probe 2	tests	8	2	0	0	0	8	t_other:8
+tests/unit/array_test.cpp	3	3	t_layout_probe	legit: t_layout_probe 3	tests	3	0	0	0	0	0	
+tests/unit/audio_abi_test.cpp	31	27	t_vtable_probe,t_identity,t_placement_new,t_layout_probe,t_fixture	legit: t_vtable_probe 9, t_identity 8, t_placement_new 4, t_layout_probe 3, t_fixture 3	tests	17	0	14	0	0	4	t_other:3 t_door_thunk:1
+tests/unit/b39_eng_collision2d_test.cpp	6	6	t_identity,t_vtable_probe	legit: t_identity 5, t_vtable_probe 1	tests	1	0	5	0	0	0	
+tests/unit/b39_io_classes_test.cpp	15	9	t_identity,t_layout_probe,t_vtable_probe	legit: t_identity 5, t_layout_probe 3, t_vtable_probe 1	tests	10	0	5	0	0	6	t_minted_table:4 t_other:2
+tests/unit/b39_obj_externallist_test.cpp	4	4	t_identity,t_vtable_probe	legit: t_identity 3, t_vtable_probe 1	tests	1	0	3	0	0	0	
+tests/unit/b39_sys_thread_test.cpp	5	2	t_vtable_probe,t_identity	legit: t_vtable_probe 1, t_identity 1	tests	1	0	4	0	0	3	t_other:2 t_fnptr:1
+tests/unit/b39_ti_rest_test.cpp	2	0	none	no genuine reinterpretation found	tests	2	0	0	0	0	2	t_minted_table:2
+tests/unit/b39_ti_ui_test.cpp	1	0	none	no genuine reinterpretation found	tests	1	0	0	0	0	1	t_fnptr:1
+tests/unit/b39_uib_test_util.h	5	4	t_vtable_probe,t_placement_new,t_layout_probe	legit: t_vtable_probe 2, t_placement_new 1, t_layout_probe 1	tests	2	0	3	0	0	1	t_other:1
+tests/unit/b39_vid_data_test.cpp	8	6	t_identity	legit: t_identity 6	tests	2	0	6	0	0	2	t_other:2
+tests/unit/b39_vid_program_test.cpp	5	4	t_identity	legit: t_identity 4	tests	1	0	4	0	0	1	t_other:1
+tests/unit/dtor_check.h	4	1	t_vtable_probe	legit: t_vtable_probe 1	tests	1	0	3	0	0	3	t_void_receiver:3
+tests/unit/dtor_check_test.cpp	3	3	t_identity,t_placement_new	legit: t_identity 2, t_placement_new 1	tests	0	0	3	0	0	0	
+tests/unit/engine_loop_abi_test.cpp	3	2	t_vtable_probe	legit: t_vtable_probe 2	tests	3	0	0	0	0	1	t_other:1
+tests/unit/exe_class_abi_test.cpp	23	20	t_vtable_probe,t_identity,t_layout_probe	legit: t_vtable_probe 17, t_identity 2, t_layout_probe 1	tests	20	0	3	0	0	3	t_other:1 t_fnptr:1 t_void_receiver:1
+tests/unit/graphics_animation_abi_test.cpp	28	28	t_layout_probe,t_identity,t_vtable_probe,t_placement_new,t_fixture	legit: t_layout_probe 9, t_identity 8, t_vtable_probe 7, t_placement_new 3, t_fixture 1	tests	17	0	11	0	0	0	
+tests/unit/graphics_geometry_abi_test.cpp	29	23	t_vtable_probe,t_identity,t_layout_probe,t_placement_new	legit: t_vtable_probe 11, t_identity 9, t_layout_probe 2, t_placement_new 1	tests	15	11	3	0	0	6	t_other:4 t_minted_table:2
+tests/unit/graphics_interpolatedstate_abi_test.cpp	9	3	t_layout_probe	legit: t_layout_probe 3	tests	9	0	0	0	0	6	t_other:6
+tests/unit/graphics_material_abi_test.cpp	44	42	t_layout_probe,t_identity,t_vtable_probe,t_placement_new	legit: t_layout_probe 18, t_identity 14, t_vtable_probe 7, t_placement_new 3	tests	25	0	19	0	0	2	t_door_thunk:1 t_fnptr:1
+tests/unit/graphics_particle_abi_test.cpp	19	17	t_vtable_probe,t_identity,t_sentinel,t_placement_new	legit: t_vtable_probe 7, t_identity 6, t_sentinel 2, t_placement_new 2	tests	10	6	3	0	0	2	t_fnptr:2
+tests/unit/graphics_renderer_abi_test.cpp	5	4	t_layout_probe,t_fixture	legit: t_layout_probe 2, t_fixture 2	tests	5	0	0	0	0	1	t_door_thunk:1
+tests/unit/io_streams_abi_test.cpp	36	25	t_identity,t_vtable_probe,t_layout_probe,t_placement_new	legit: t_identity 12, t_vtable_probe 10, t_layout_probe 2, t_placement_new 1	tests	14	0	22	0	0	11	t_void_receiver:9 t_pod_shadow:2
+tests/unit/io_vtable_abi_test.cpp	159	63	t_vtable_probe,t_identity,t_placement_new,t_fixture,t_layout_probe	legit: t_vtable_probe 27, t_identity 24, t_placement_new 8, t_fixture 2, t_layout_probe 2	tests	33	80	46	0	0	96	t_minted_table:80 t_void_receiver:7 t_pod_shadow:5 t_other:3 t_fnptr:1
+tests/unit/list_test.cpp	3	0	none	no genuine reinterpretation found	tests	2	0	1	0	0	3	t_other:3
+tests/unit/loop_abi_test.cpp	9	9	t_fixture,t_identity	legit: t_fixture 6, t_identity 3	tests	9	0	0	0	0	0	
+tests/unit/math_test.cpp	1	0	none	no genuine reinterpretation found	tests	1	0	0	0	0	1	t_fnptr:1
+tests/unit/mia_abi_test.cpp	10	8	t_vtable_probe,t_identity	legit: t_vtable_probe 6, t_identity 2	tests	8	0	2	0	0	2	t_fnptr:1 t_void_receiver:1
+tests/unit/mib_abi_test.cpp	9	7	t_vtable_probe,t_identity	legit: t_vtable_probe 5, t_identity 2	tests	7	0	2	0	0	2	t_fnptr:1 t_void_receiver:1
+tests/unit/object_external_test.cpp	12	10	t_vtable_probe,t_identity	legit: t_vtable_probe 9, t_identity 1	tests	9	0	3	0	0	2	t_void_receiver:2
+tests/unit/object_internal_test.cpp	5	5	t_vtable_probe,t_identity	legit: t_vtable_probe 4, t_identity 1	tests	4	0	1	0	0	0	
+tests/unit/object_ptr_test.cpp	2	2	t_sentinel	legit: t_sentinel 2	tests	2	0	0	0	0	0	
+tests/unit/object_typeinfo_test.cpp	11	9	t_vtable_probe,t_identity,t_placement_new	legit: t_vtable_probe 6, t_identity 2, t_placement_new 1	tests	8	0	3	0	0	2	t_other:1 t_pod_shadow:1
+tests/unit/object_vtable_abi_test.cpp	38	29	t_vtable_probe,t_identity,t_layout_probe,t_placement_new	legit: t_vtable_probe 13, t_identity 7, t_layout_probe 6, t_placement_new 3	tests	28	0	10	0	0	9	t_other:5 t_minted_table:4
+tests/unit/pathfinding_picking_abi_test.cpp	34	30	t_identity,t_layout_probe,t_vtable_probe,t_fixture,t_placement_new	legit: t_identity 14, t_layout_probe 8, t_vtable_probe 6, t_fixture 1, t_placement_new 1	tests	19	0	15	0	0	4	t_other:2 t_door_thunk:1 t_fnptr:1
+tests/unit/rb_achievement_abi_test.cpp	21	21	t_vtable_probe,t_placement_new,t_identity	legit: t_vtable_probe 13, t_placement_new 7, t_identity 1	tests	11	0	8	2	0	0	
+tests/unit/rb_engine_abi_test.cpp	16	14	t_placement_new,t_vtable_probe,t_identity,t_layout_probe	legit: t_placement_new 8, t_vtable_probe 3, t_identity 2, t_layout_probe 1	tests	5	0	11	0	0	2	t_other:2
+tests/unit/rb_graphics_abi_test.cpp	28	24	t_vtable_probe,t_placement_new,t_identity	legit: t_vtable_probe 11, t_placement_new 11, t_identity 2	tests	4	0	20	4	0	4	t_other:2 t_void_receiver:2
+tests/unit/rb_ui_abi_test.cpp	23	19	t_vtable_probe,t_placement_new,t_layout_probe,t_identity	legit: t_vtable_probe 8, t_placement_new 6, t_layout_probe 3, t_identity 2	tests	10	0	10	3	0	4	t_other:3 t_void_receiver:1
+tests/unit/rb_video_abi_test.cpp	4	4	t_vtable_probe,t_placement_new	legit: t_vtable_probe 3, t_placement_new 1	tests	1	0	2	1	0	0	
+tests/unit/save_abi_test.cpp	6	2	t_fixture,t_layout_probe	legit: t_fixture 1, t_layout_probe 1	tests	6	0	0	0	0	4	t_other:3 t_fnptr:1
+tests/unit/set_test.cpp	1	0	none	no genuine reinterpretation found	tests	0	0	0	1	0	1	t_other:1
+tests/unit/slot_check.h	2	2	t_vtable_probe	legit: t_vtable_probe 2	tests	1	0	1	0	0	0	
+tests/unit/string_test.cpp	2	0	none	no genuine reinterpretation found	tests	2	0	0	0	0	2	t_other:2
+tests/unit/system_abi_stubs.cpp	2	2	t_vtable_probe	legit: t_vtable_probe 2	tests	2	0	0	0	0	0	
+tests/unit/system_abi_test.cpp	27	17	t_vtable_probe,t_sentinel,t_identity	legit: t_vtable_probe 8, t_sentinel 8, t_identity 1	tests	18	0	9	0	0	10	t_other:7 t_minted_table:2 t_void_receiver:1
+tests/unit/tool_abi_test.cpp	2	2	t_vtable_probe	legit: t_vtable_probe 2	tests	2	0	0	0	0	0	
+tests/unit/ui_dialog_abi_test.cpp	37	34	t_vtable_probe,t_identity,t_layout_probe,t_placement_new	legit: t_vtable_probe 17, t_identity 10, t_layout_probe 6, t_placement_new 1	tests	18	0	19	0	0	3	t_door_thunk:1 t_pod_shadow:1 t_void_receiver:1
+tests/unit/ui_element_abi_test.cpp	37	36	t_sentinel,t_identity,t_vtable_probe,t_print,t_placement_new	legit: t_sentinel 12, t_identity 10, t_vtable_probe 7, t_print 4, t_placement_new 3	tests	16	2	19	0	0	1	t_door_thunk:1
+tests/unit/ui_leaf_c1_abi_test.cpp	79	72	t_vtable_probe,t_sentinel,t_identity,t_print,t_placement_new	legit: t_vtable_probe 24, t_sentinel 19, t_identity 15, t_print 9, t_placement_new 5	tests	31	1	47	0	0	7	t_void_receiver:4 t_door_thunk:2 t_other:1
+tests/unit/ui_leaf_c2_abi_test.cpp	64	48	t_vtable_probe,t_print,t_sentinel,t_identity,t_placement_new	legit: t_vtable_probe 16, t_print 13, t_sentinel 12, t_identity 6, t_placement_new 1	tests	27	2	35	0	0	16	t_void_receiver:14 t_other:1 t_door_thunk:1
+tests/unit/ui_leaf_c3_abi_test.cpp	24	19	t_sentinel,t_vtable_probe,t_identity,t_print,t_placement_new	legit: t_sentinel 7, t_vtable_probe 4, t_identity 4, t_print 3, t_placement_new 1	tests	10	1	13	0	0	5	t_void_receiver:5
+tests/unit/ui_leaf_c4_abi_test.cpp	40	36	t_placement_new,t_identity,t_vtable_probe,t_sentinel,t_print	legit: t_placement_new 12, t_identity 10, t_vtable_probe 7, t_sentinel 5, t_print 2	tests	13	1	26	0	0	4	t_other:3 t_door_thunk:1
+tests/unit/ui_leaf_c5_abi_test.cpp	27	23	t_placement_new,t_sentinel,t_vtable_probe	legit: t_placement_new 15, t_sentinel 6, t_vtable_probe 2	tests	8	0	18	1	0	4	t_other:4
+tests/unit/ui_resources_abi_test.cpp	42	41	t_identity,t_vtable_probe,t_layout_probe,t_placement_new	legit: t_identity 18, t_vtable_probe 15, t_layout_probe 7, t_placement_new 1	tests	21	0	21	0	0	1	t_door_thunk:1
+tests/unit/ui_userinterface_abi_test.cpp	2	2	t_fixture	legit: t_fixture 2	tests	2	0	0	0	0	0	
+tests/unit/ui_value_types_abi_test.cpp	4	2	t_layout_probe	legit: t_layout_probe 2	tests	4	0	0	0	0	2	t_other:2
+tests/unit/video_context_abi_test.cpp	7	7	t_layout_probe,t_identity,t_fixture	legit: t_layout_probe 4, t_identity 2, t_fixture 1	tests	5	0	2	0	0	0	
+tests/unit/video_data_abi_test.cpp	8	8	t_vtable_probe,t_placement_new	legit: t_vtable_probe 7, t_placement_new 1	tests	7	0	1	0	0	0	
+tests/unit/video_device_abi_test.cpp	18	18	t_layout_probe,t_sentinel,t_identity,t_fixture	legit: t_layout_probe 6, t_sentinel 6, t_identity 5, t_fixture 1	tests	14	0	4	0	0	0	
+tests/unit/video_imagebuffer_abi_test.cpp	15	15	t_identity,t_vtable_probe,t_print,t_placement_new	legit: t_identity 9, t_vtable_probe 4, t_print 1, t_placement_new 1	tests	6	8	1	0	0	0	
+tests/unit/video_program_abi_test.cpp	12	10	t_vtable_probe,t_sentinel,t_placement_new	legit: t_vtable_probe 7, t_sentinel 2, t_placement_new 1	tests	11	0	1	0	0	2	t_other:2
+tests/unit/wrk_abi_test.cpp	3	2	t_vtable_probe	legit: t_vtable_probe 2	tests	3	0	0	0	0	1	t_other:1

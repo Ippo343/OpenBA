@@ -1,0 +1,263 @@
+object	offset	size	type	proposed_name	evidence	readers_in_tree	confidence	tree_lines	tree_widths	header_decl	header_asserted	width_check	modules
+GameUpdateLoop	0x00	0x28	Engine::UpdateLoop (base)	(base)	ctor 0x140098060 calls Engine::UpdateLoop::UpdateLoop; base fields +0x08 _resourceList, +0x10/+0x18 internal lists, +0x20 _loadBit, +0x24 _loadProgress (runtime/types/engine/UpdateLoop.h)	0 lines / 0 files	high	0		-	no		
+GameUpdateLoop	0x28	0x08	System::String	m_saveName	ctor: String(+0x28, p5); dtor [0] ~String(+0x28)	5 lines / 3 files	high	5	obj:System::String:5	System::String m_saveName	yes	ok	Dialog:5
+GameUpdateLoop	0x30	0x04	int32	m_seed	ctor: +0x30 = p6; Load seeds Random(+0xD8)	1 lines / 1 files	high	1	i32:1	int32_t m_seed	yes	ok	Dialog:1
+GameUpdateLoop	0x34	0x04	int32	m_mapSize	ctor: +0x34 = p7	2 lines / 2 files	high	2	u32:2	int32_t m_mapSize	yes	ok	Dialog:1, Goal:1
+GameUpdateLoop	0x38	0x08	System::Time (int64)	m_gameTime	ctor: qword 0	0 lines / 0 files	high	0		int64_t m_gameTime	yes		
+GameUpdateLoop	0x40	0x08	pointer (map config External)	m_mapConfig	ctor: +0x40 = p9	1 lines / 1 files	high	1	u64:1	void* m_mapConfig	yes	ok	Dialog:1
+GameUpdateLoop	0x48	0x08	pointer (terrain config External)	m_terrainConfig	ctor: +0x48 = p10	2 lines / 2 files	high	2	ptr:1, u64:1	void* m_terrainConfig	no	ok	Dialog:1, Goal:1
+GameUpdateLoop	0x50	0x08	pointer (climate config External)	m_climateConfig	ctor: +0x50 = p11	2 lines / 2 files	high	2	ptr:1, u64:1	void* m_climateConfig	yes	ok	Dialog:1, Goal:1
+GameUpdateLoop	0x58	0x08	Save::SavedState*	m_savedState	ctor: +0x58 = p2	0 lines / 0 files	high	0		void* m_savedState	yes		
+GameUpdateLoop	0x60	0x08	Graphics::Scene*	m_graphicsScene	ctor 0; Load allocates (GameUpdateLoop.h banner)	29 lines / 15 files	high	29	ptr:29	void* m_graphicsScene	yes	ok	Component:18, Player:7, Action:3, Dialog:1
+GameUpdateLoop	0x68	0x08	Graphics::AnimationManager*	m_animationManager	ctor 0; Load	0 lines / 0 files	high	0		void* m_animationManager	yes		
+GameUpdateLoop	0x70	0x08	Picking::Scene*	m_pickingScene	ctor 0; Load	8 lines / 5 files	high	8	ptr:8	void* m_pickingScene	yes	ok	Component:4, Player:4
+GameUpdateLoop	0x78	0x08	Audio::Scene*	m_audioScene	ctor 0; Load	10 lines / 7 files	high	10	ptr:10	void* m_audioScene	yes	ok	Component:4, Dialog:3, Player:3
+GameUpdateLoop	0x80	0x08	MusicPlayer* (0x18 bytes)	m_musicPlayer	ctor 0; Load MemAlloc(0x18,4), ticked by 0x1400a40e0; profile header MusicPlayer.h	0 lines / 0 files	high	0		void* m_musicPlayer	yes		
+GameUpdateLoop	0x88	0x08	LooseQuadTree* (character grid, 0x60 bytes)	m_characterGrid	ctor 0; Load MemAlloc(0x60,8) + ctor 0x1400182b0; profile source Runtime/Utility/LooseQuadTree	6 lines / 5 files	medium	6	i64:1, ptr:5	void* m_characterGrid	yes	ok	Component:4, Action:2
+GameUpdateLoop	0x90	0x08	Graphics::Renderer*	m_renderer	ctor 0; Load	0 lines / 0 files	high	0		void* m_renderer	yes		
+GameUpdateLoop	0x98	0x08	UI::UserInterface*	m_userInterface	ctor 0; Load	20 lines / 15 files	high	20	ptr:20	void* m_userInterface	yes	ok	Dialog:6, Player:6, Tutorial:5, standalone:2, Component:1
+GameUpdateLoop	0xA0	0x08	ExternalPtr (HelpTopics)	m_helpTopics	Load: Find("Game/Help/HelpTopics.rsc")	2 lines / 1 files	high	2	ptr:2	void* m_helpTopics	yes	ok	Dialog:2
+GameUpdateLoop	0xA8	0x08	ExternalPtr<DiseaseList>	m_diseaseList	Load: Find("Game/Disease/Diseases.rsc")	2 lines / 1 files	high	2	ptr:2	void* m_diseaseList	no	ok	Dialog:2
+GameUpdateLoop	0xB0	0x08	ExternalPtr<ProfessionList>	m_professionList	Load: Find("Game/Profession/Profession.rsc")	48 lines / 30 files	high	48	i64:7, ptr:6, u64:35	void* m_professionList	no	ok	Dialog:21, Component:13, Work:8, Entity:4, Action:1, standalone:1
+GameUpdateLoop	0xB8	0x08	ExternalPtr<Material>	m_uiMaterial	Load: Find("Material/UI/UIMaterialNoBlend.rsc")	0 lines / 0 files	high	0		void* m_uiMaterial	yes		
+GameUpdateLoop	0xC0	0x01	bool	m_quickSavePressed	ctor: word 0 at +0xC0; Update KeyMap::Pressed(0x21)	0 lines / 0 files	high	0		uint8_t m_quickSavePressed	yes		
+GameUpdateLoop	0xC1	0x01	bool	m_quickLoadPressed	ctor: word 0 at +0xC0; Update KeyMap::Pressed(0x22)	0 lines / 0 files	high	0		uint8_t m_quickLoadPressed	yes		
+GameUpdateLoop	0xC2	0x06	padding	_padC2	not written	0 lines / 0 files	high	0		uint8_t _padC2[6]	no		
+GameUpdateLoop	0xC8	0x08	Engine::UpdateLoop*	m_nextLoop	ctor 0	1 lines / 1 files	high	1	ptr:1	void* m_nextLoop	yes	ok	Tutorial:1
+GameUpdateLoop	0xD0	0x04	uint32 (bit flags)	m_gameFlags	ctor: p8 ? 0 : 0xF0; CitizenComponent::Update tests bits 1, 2, 9	17 lines / 15 files	high	17	addr:u32:1, u32:12, u8:4	uint32_t m_gameFlags	yes	DIFFERS: u8	Component:10, Dialog:5, Player:1, Tutorial:1
+GameUpdateLoop	0xD4	0x04	padding	_padD4	not written	0 lines / 0 files	high	0		uint32_t _padD4	no		
+GameUpdateLoop	0xD8	0x08	System::Random* (0x9C4 bytes)	m_random	ctor 0; Load	62 lines / 45 files	high	62	ptr:62	void* m_random	yes	ok	Component:29, Work:13, Action:11, Dialog:6, Entity:2, Player:1
+GameUpdateLoop	0xE0	0x08	PlayerController* (0x10C bytes)	m_playerController	ctor 0; Load	12 lines / 10 files	high	12	ptr:3, u64:9	void* m_playerController	yes	ok	Dialog:8, Player:3, Component:1
+GameUpdateLoop	0xE8	0x08	EntityList* (0xE8 bytes)	m_entityList	ctor 0; Load; profile source Entity/EntityList.cpp	59 lines / 45 files	high	59	i64:7, ptr:29, u64:23	void* m_entityList	yes	ok	standalone:20, Component:19, Player:10, Action:8, Dialog:2
+GameUpdateLoop	0xF0	0x08	CitizenBehavior* (0x1C0 bytes)	m_citizenList	ctor 0; Load; profile source Entity/CitizenBehavior.cpp	162 lines / 84 files	high	162	i64:20, ptr:43, u64:99	void* m_citizenList	yes	ok	Component:67, Dialog:44, Work:16, Tutorial:13, standalone:12, Action:4, Goal:3, Entity:2, Game:1
+GameUpdateLoop	0xF8	0x08	Map* (0xF8 bytes; tree says Game*)	m_game	ctor 0; Load MemAlloc(0xF8,8) + ctor 0x14009ee70; +0 read as world width (int*), serialized by 0x14009f100 (map grid); profile has Game/Map.cpp -- the class name is NOT settled	202 lines / 121 files	medium	202	addr:1, addr:ptr:1, i64:3, ptr:173, u64:24	void* m_game	yes	ok	Component:81, Player:50, Work:29, Action:23, Dialog:8, Entity:4, Tutorial:4, standalone:3
+GameUpdateLoop	0x100	0x08	Graphics::SunLight*	m_sunLight	ctor 0; Load	0 lines / 0 files	high	0		void* m_sunLight	yes		
+GameUpdateLoop	0x108	0x08	Graphics::MeshInstance* (sky)	m_skyMesh	ctor 0; Load	0 lines / 0 files	high	0		void* m_skyMesh	yes		
+GameUpdateLoop	0x110	0x08	Graphics::Geometry* / terrain (0x230 bytes)	m_worldGeometry	ctor 0; Load	21 lines / 15 files	high	21	i64:8, ptr:4, u64:9	void* m_worldGeometry	yes	ok	Player:9, Component:7, Action:3, Dialog:1, Game:1
+GameUpdateLoop	0x118	0x08	Tutorial* (0x138 bytes)	m_tutorial	ctor 0; Load; serialized by 0x1400f9240 (goals)	31 lines / 21 files	high	31	addr:1, i64:8, ptr:11, u64:11	void* m_tutorial	yes	ok	Component:12, Work:7, Action:5, Player:5, Dialog:2
+GameUpdateLoop	0x120	0x08	PlayerToolManager* (0xB0 bytes)	m_entityUI	ctor 0; Load	40 lines / 21 files	medium	40	i64:4, ptr:16, u64:20	void* m_entityUI	yes	ok	Dialog:23, Tutorial:11, Component:4, standalone:2
+GameUpdateLoop	0x128	0x08	DayCounter* (0x18 bytes)	m_dayCounter	ctor 0; Load	22 lines / 11 files	high	22	ptr:9, u64:13	void* m_dayCounter	yes	ok	Dialog:11, Component:7, Goal:2, Action:1, standalone:1
+GameUpdateLoop	0x130	0x08	Weather* (0x78 bytes)	m_weather	ctor 0; Load; CitizenComponent::Update reads +0x18 temperature; profile header Weather.h	18 lines / 11 files	high	18	i64:2, ptr:7, u64:9	void* m_weather	yes	ok	Component:9, Dialog:8, Work:1
+GameUpdateLoop	0x138	0x08	EventNotifier* (0x28 bytes)	m_eventNotifier	ctor 0; Load	11 lines / 5 files	high	11	ptr:4, u64:7	void* m_eventNotifier	yes	ok	Dialog:9, Component:1, Entity:1
+GameUpdateLoop	0x140	0x08	Save::SaveLoad* (0x90 bytes)	m_saveLoad	ctor 0; Load	2 lines / 1 files	high	2	ptr:2	void* m_saveLoad	yes	ok	Tutorial:2
+GameUpdateLoop	0x148	0x08	ImageCapture* (0x38 bytes)	m_imageCapture	ctor 0; Load	7 lines / 4 files	high	7	ptr:7	void* m_imageCapture	yes	ok	Component:3, Dialog:2, standalone:2
+GameUpdateLoop	0x150	0x08	InternalBasePtr<Achievement::AchievementInstance>	m_scenarioInstance	ctor: +0x150 = *p3	2 lines / 1 files	high	2	u64:2	void* m_scenarioInstance	yes	ok	Dialog:2
+GameUpdateLoop	0x158	0x01	bool	m_scenarioCompleted	ctor: byte 0	0 lines / 0 files	high	0		uint8_t m_scenarioCompleted	yes		
+GameUpdateLoop	0x159	0x03	padding	_pad159	not written	0 lines / 0 files	high	0		uint8_t _pad159[3]	no		
+GameUpdateLoop	0x15C	0x04	int32	m_scenarioIndex	ctor: +0x15C = p4	1 lines / 1 files	high	1	i32:1	int32_t m_scenarioIndex	yes	ok	Dialog:1
+CitizenComponent	0x00	0x28	Component (base)	(base)	ctor 0x140114770 calls Component ctor; +0x10 _entity, +0x18 _description, +0x20 _flags (|= 0xCB in ctor)	12 lines / 5 files	high	12	i64@+0x10:6, ptr@+0x10:2, ptr@+0x18:2, u64@+0x10:2	-	no		Component:12
+CitizenComponent	0x28	0x08	System::String	name	ctor qword 0; dtor 0x1401146f0 ~String(+0x28); Serialize 0x140114160 String::Serialize first (the header banner's 'InternalBasePtr dtor at +0x28' is wrong)	5 lines / 5 files	high	5	addr:1, addr:obj:System::String:1, obj:System::String:1, ptr:2	uint64_t data28	yes	ok	Component:5
+CitizenComponent	0x30	0x04	int32	field_30	ctor -1; Serialize int (after +0xB0)	3 lines / 2 files	low	3	i32:3	int32_t data30	yes	ok	Component:3
+CitizenComponent	0x34	0x04	int32	appearanceIndex	ctor 0; Serialize int (last field); SetupYoung 0x140115110 writes (float)+0x34 to the model's +0x140	2 lines / 2 files	medium	2	i32:1, u32:1	uint32_t data34	no	ok	Component:2
+CitizenComponent	0x38	0x04	int32	gender	ctor 0; Serialize int; CitizenUI reads 0 = female / nonzero = male; profile error 'males cannot create children'	4 lines / 3 files	medium	4	i32:4	uint32_t data38	no	ok	Component:4
+CitizenComponent	0x3C	0x04	float	age	Update 0x140112e70: += dt * desc+0x40 (_agingRate), compared with desc+0x44 (_adultAge); Serialize float	14 lines / 4 files	high	14	f32:14	uint32_t data3C	no	ok	Component:14
+CitizenComponent	0x40	0x04	float	maxAge	Update: maxAge <= age -> HandleLifeEvent(2); Serialize float	3 lines / 3 files	high	3	f32:3	uint32_t data40	no	ok	Component:3
+CitizenComponent	0x44	0x04	float	hunger	Update: += dt * desc+0xC0, capped at desc+0xD0 then life event 0; status icon 1; Serialize float	14 lines / 2 files	high	14	f32:10, i32:1, i64:1, u32:2	uint32_t data44	no	DIFFERS: i32,i64,u32	Component:14
+CitizenComponent	0x48	0x04	float	coldness	Update: += dt * desc+0xDC[clothing +0x1E4], zeroed when Weather+0x18 >= desc+0xF4; cap desc+0xF0 then life event 1; Serialize float	9 lines / 3 files	high	9	f32:6, u32:3	uint32_t data48	no	DIFFERS: u32	Component:9
+CitizenComponent	0x4C	0x04	float	childCreateTimer	Serialize float; tree reads it as a signed pregnancy / post-partum counter	10 lines / 2 files	low	10	addr:1, f32:6, u32:3	uint32_t data4C	no	DIFFERS: u32	Component:10
+CitizenComponent	0x50	0x04	float	health	Serialize float; CitizenUI hearts compare it with desc+0x70 (_maxHealth)	10 lines / 4 files	medium	10	addr:f32:1, f32:6, u32:3	uint32_t data50	no	DIFFERS: u32	Component:10
+CitizenComponent	0x54	0x04	uint32 (bit flags)	statusFlags	Update: |= 1 (hungry) / |= 2 (cold); Serialize uint	7 lines / 3 files	medium	7	addr:u32:1, u32:6	uint32_t data54	yes	ok	Component:7
+CitizenComponent	0x58	0x08	System::Time	foodTimer	Update: += dt; while > Time(desc+0x78 * k) ConsumeFood; Serialize Time	4 lines / 2 files	high	4	addr:obj:System::Time:1, i64:3	uint64_t data58	no	ok	Component:4
+CitizenComponent	0x60	0x08	System::Time	timer_60	Update: += dt; Serialize Time	5 lines / 3 files	low	5	addr:obj:System::Time:2, i64:3	uint64_t data60	no	ok	Component:5
+CitizenComponent	0x68	0x08	ExternalPtr<Disease>	disease	Serialize helper 0x140030790 validates type cell 0x1401c5948 (Disease); Update: != 0 -> FindCareBuilding, StringTable at +0x20	13 lines / 4 files	high	13	addr:ptr:1, i64:8, ptr:4	uint64_t data68	no	ok	Component:13
+CitizenComponent	0x70	0x08	System::Time	timer_70	ctor 0; Serialize Time	12 lines / 3 files	low	12	addr:obj:System::Time:1, i64:12	uint64_t data70	no	ok	Component:13
+CitizenComponent	0x78	0x08	System::Time	timer_78	ctor 0; Serialize Time	7 lines / 2 files	low	7	addr:obj:System::Time:1, i64:6	uint64_t data78	no	ok	Component:7
+CitizenComponent	0x80	0x04	float	happiness	0x140112ae0 adds/subtracts per +0x88 bit and clamps to [0, desc+0xA4 _maxHappiness]; CitizenUI stars; Serialize float	5 lines / 2 files	high	5	addr:f32:1, f32:1, u32:3	uint32_t data80	yes	DIFFERS: u32	Component:5
+CitizenComponent	0x84	0x04	int32	field_84	NOT a pad: 0x140112ae0 (labelled ConsumeFuel; it is the happiness update) compares *(int*)(+0x84) with desc+0xB0; not written by the ctor, not serialized	1 lines / 1 files	medium	1	i32:1	uint8_t _pad84[4]	no	ok	Component:1
+CitizenComponent	0x88	0x04	uint32 (bit flags)	dirtyFlags	Update: |= 1 on disease / hunger / cold; life events OR death flags; Serialize uint	13 lines / 3 files	medium	13	u32:13	uint32_t data88	yes	ok	Component:13
+CitizenComponent	0x8C	0x04	padding	_pad8C	not written	0 lines / 0 files	high	0		uint8_t _pad8C[4]	no		
+CitizenComponent	0x90	0x08	System::Time	happinessTimer	Update: += dt; while > Time(desc+0xA0 * k) call 0x140112ae0, which Ghidra labels ConsumeFuel but which recomputes +0x80 happiness (capped at desc+0xA4 _maxHappiness); Serialize Time	4 lines / 2 files	medium	4	addr:obj:System::Time:1, i64:3	uint64_t data90	no	ok	Component:4
+CitizenComponent	0x98	0x10	Collection::Array<ExternalPtr<ComponentDescription>> {T* data +0x98; int32 count +0xA0; int32 capacity +0xA4}	consumedTypes	0x140112ae0 compares the count +0xA0 with desc+0xA8/+0xAC (variety of goods -> happiness); dtor MemFree(+0x98) and zero +0x98/+0xA0; Serialize count = *(int*)(+0xA0), resize 0x140001bb0, elements 0x1400049c0 validated 0x1401c7318 (ComponentDescription)	14 lines / 2 files	high	14	addr:i64:1, i32@+0xA0:5, i32@+0xA4:3, i64:1, ptr:4	uint64_t data98	yes	ok	Component:14
+CitizenComponent	0xA8	0x04	int32	field_A8	ctor -1; Serialize int (version > 0)	2 lines / 2 files	low	2	i32:2	int32_t dataA8	yes	ok	Component:2
+CitizenComponent	0xAC	0x04	int32	field_AC	ctor 0; Serialize int	2 lines / 2 files	low	2	i32:2	uint32_t dataAC	yes	ok	Component:2
+CitizenComponent	0xB0	0x04	uint32	field_B0	ctor 0; Serialize via the Encoding slot 0x98 (Serialize(unsigned&)) -- NOT a MeshInstance	1 lines / 1 files	medium	1	u32:1	uint32_t dataB0	no	ok	Component:1
+CitizenComponent	0xB4	0x04	padding	_padB4	ctor's 8-byte store at +0xAC covers +0xB0 only	0 lines / 0 files	medium	0		uint8_t _padB4[4]	no		
+CitizenComponent	0xB8	0x120	Graphics::MeshInstance (embedded)	mesh	ctor MeshInstance::MeshInstance(+0xB8); dtor ~MeshInstance(+0xB8); next field at +0x1D8 gives 0x120	0 lines / 0 files	high	0		uint8_t meshInstance[0x120]	yes		
+CitizenComponent	0x1D8	0x04	int32	toolId	ctor qword -1 (+0x1D8 and +0x1DC); Serialize int	1 lines / 1 files	medium	1	i32:1	uint64_t data1D8	yes	ok	Component:1
+CitizenComponent	0x1DC	0x04	int32	toolSceneId	ctor -1 (same qword); NOT serialized; HideTool 0x1401176e0 guards >= 0	0 lines / 0 files	medium	0		-	no		
+CitizenComponent	0x1E0	0x04	int32	field_1E0	ctor qword 4 (+0x1E0 = 4, +0x1E4 = 0); Serialize int (version > 1)	3 lines / 2 files	low	3	i32:3	uint64_t data1E0	yes	ok	Component:3
+CitizenComponent	0x1E4	0x04	int32	clothingLevel	Update indexes desc+0xDC[+0x1E4]; set 0 when +0x1E8 < 0; Serialize int	5 lines / 3 files	high	5	i32:4, u32:1	-	no	ok	Component:5
+CitizenComponent	0x1E8	0x08	System::Time	clothingTimer	Update: -= dt; < 0 -> clothingLevel = 0 and 0 (the tree calls it 'education countdown')	5 lines / 3 files	high	5	addr:obj:System::Time:1, i64:3, u64:1	uint64_t data1E8	no	ok	Component:5
+CitizenComponent	0x1F0	0x08	ExternalPtr<Profession>	profession	Serialize 0x140018020 validates TypeInfo_Profession; Update reads byte +0x4C of it (unemployed icon)	12 lines / 6 files	high	12	addr:ptr:1, i64:6, u64:5	uint64_t data1F0	no	ok	Component:12
+CitizenComponent	0x1F8	0x08	ExternalPtr<Profession>	pendingProfession	Serialize 0x140018020; Update: != 0 -> HandleLifeEvent(7, profession name)	2 lines / 2 files	medium	2	addr:ptr:1, i64:1	uint64_t data1F8	no	ok	Component:2
+CitizenComponent	0x200	0x08	System::Time	timer_200	Update: += dt; ctor 0	1 lines / 1 files	low	1	i64:1	uint64_t data200	no	ok	Component:1
+CitizenComponent	0x208	0x08	InternalBasePtr<AttendanceComponent>	school	Serialize IBP validated 0x1401c3f40 (AttendanceComponent); Update: != 0 -> +0x218 += dt; TryEnrolInSchool 0x140111840	12 lines / 4 files	medium	12	addr:1, i64:11	uint64_t data208	no	ok	Component:12
+CitizenComponent	0x210	0x04	int32	education	Update: raised to desc+0x118 (_requiredEducation); Serialize int	6 lines / 4 files	high	6	addr:i32:1, i32:5	uint32_t data210	yes	ok	Component:6
+CitizenComponent	0x214	0x04	padding	_pad214	not written	0 lines / 0 files	high	0		uint8_t _pad214[4]	no		
+CitizenComponent	0x218	0x08	System::Time	schoolTime	Update: += dt while +0x208 != 0; Serialize Time (version > 2)	3 lines / 3 files	medium	3	addr:obj:System::Time:2, i64:1	uint64_t data218	yes	ok	Component:3
+CitizenComponent	0x220	0x01	bool	field_220	ctor byte 0; Serialize bool; Update: 0 -> TryEnrolInSchool	5 lines / 3 files	low	5	bool:1, u8:4	uint8_t data220	yes	ok	Component:5
+CitizenComponent	0x221	0x07	padding	_pad221	not written	0 lines / 0 files	high	0		uint8_t _pad221[7]	no		
+CitizenComponent	0x228	0x08	InternalBasePtr<AttendanceComponent>	careBuilding	Serialize IBP validated 0x1401c3f40; Update: disease && == 0 -> FindCareBuilding 0x140111590; != 0 zeroes hunger+coldness	7 lines / 3 files	medium	7	addr:1, i64:6	uint64_t data228	yes	ok	Component:7
+CitizenComponent	0x230	0x08	InternalBasePtr<AttendanceComponent>	storageTarget	Serialize IBP validated 0x1401c3f40; Update: == 0 -> FindStorage 0x1401116f0	4 lines / 2 files	low	4	addr:1, i64:3	uint64_t data230	no	ok	Component:4
+CitizenComponent	0x238	0x08	InternalBasePtr<ComponentEntity>	workplace	Serialize IBP validated ComponentEntity; AssignWorkplace 0x1401163d0; profile assert 'workPlaceComponent.IsPtrValid()'	12 lines / 4 files	high	12	addr:2, addr:i64:1, i64:7, ptr:1, u64:1	uint64_t data238	yes	ok	Component:12
+CitizenComponent	0x240	0x04	int32	workplaceSlot	Serialize int; NOT written by the ctor (header declares it as _pad240)	4 lines / 3 files	high	4	addr:i32:1, i32:3	uint8_t _pad240[8]	no	ok	Component:4
+CitizenComponent	0x244	0x04	padding	_pad244	not written	0 lines / 0 files	high	0		-	no		
+CitizenComponent	0x248	0x08	InternalBasePtr<ComponentEntity>	home	AssignHousing 0x140111ee0 replaces it; Serialize IBP validated ComponentEntity	12 lines / 5 files	high	12	addr:1, addr:i64:1, i64:5, ptr:1, u64:4	uint64_t data248	yes	ok	Component:12
+CitizenComponent	0x250	0x08	InternalBasePtr<CitizenComponent>	spouse	Serialize IBP validated 0x1401c7158; marriage scan requires it empty; OnRemove clears the back-reference	19 lines / 4 files	medium	19	addr:2, addr:i64:1, i64:13, ptr:3	uint64_t data250	no	ok	Component:19
+CitizenComponent	0x258	0x08	InternalBasePtr<CitizenComponent>	_parent	RemoveChild 0x140112040 clears child+0x258; profile assert 'child->_parent.IsPtrNull()'	12 lines / 4 files	high	12	addr:2, i64:10	uint64_t data258	no	ok	Component:12
+CitizenComponent	0x260	0x08	InternalBasePtr<CitizenComponent>	_child (ring head)	RemoveChild: parent+0x260 == child -> advance to child+0x268	12 lines / 4 files	high	12	addr:1, addr:i64:2, i64:9	uint64_t data260	no	ok	Component:12
+CitizenComponent	0x268	0x08	InternalBasePtr<CitizenComponent>	_nextSibling	RemoveChild: prev->+0x268 = child->+0x268; profile assert '_prevSibling / _nextSibling'	1 lines / 1 files	high	1	addr:1	uint64_t data268	no	ok	Component:1
+CitizenComponent	0x270	0x08	InternalBasePtr<CitizenComponent>	_prevSibling	RemoveChild: next->+0x270 = child->+0x270	1 lines / 1 files	high	1	addr:1	uint64_t data270	no	ok	Component:1
+CitizenComponent	0x278	0x08	InternalBasePtr<CharacterComponent>	character	Serialize IBP validated 0x1401c7078 (CharacterComponent); Update reads +0x60	14 lines / 6 files	high	14	addr:2, i64:7, ptr:4, u64:1	uint64_t data278	yes	ok	Component:14
+CitizenComponent	0x280	0x08	InternalBasePtr<StatusIconComponent>	statusIcon	Serialize IBP validated 0x1401c7e08; Update passes it to 0x14012c3f0 (SetFlag)	5 lines / 3 files	high	5	addr:2, ptr:3	uint64_t data280	no	ok	Component:5
+CitizenComponent	0x288	0x08	ExternalPtr<CitizenDescription>	description	Serialize 0x140030990 validates 0x1401c7190 (CitizenDescription); Update reads desc+0x40/0x44/0xC0...	22 lines / 7 files	high	22	addr:ptr:1, i64:15, ptr:6	uint64_t data288	yes	ok	Component:22
+GameSettings	0x00	0x04	int32	uiScale	GameMain 0x140041f00 init 100; Game_Register 0x140098b60 Persistence 'Game','UIScale'; OptionsDialog sliderUIScale	5 lines / 2 files	high	5	i32:5	no header	no	ok	Dialog:4, Player:1
+GameSettings	0x04	0x04	int32	autosaveInterval	init 1; 'AutosaveInterval'; comboAutosave clamp 0..8	4 lines / 2 files	high	4	i32:4	no header	no	ok	Dialog:4
+GameSettings	0x08	0x04	int32	statusIconOpacity	init 100; 'StatusIconOpacity'; sliderStatusIcon	3 lines / 2 files	high	3	i32:3	no header	no	ok	Dialog:2, Component:1
+GameSettings	0x0C	0x01	bool	statusIconEnable	init 1; 'StatusIconEnable'; checkStatusIcon	9 lines / 7 files	high	9	i32:1, u8:8	no header	no	DIFFERS: i32	Component:7, Dialog:2
+GameSettings	0x0D	0x03	padding	_pad0D	not written	0 lines / 0 files	high	0		no header	no		
+GameSettings	0x10	0x04	int32	statusIconScale	init 100; 'StatusIconScale'; sliderStatusIconScale	2 lines / 1 files	high	2	i32:2	no header	no	ok	Dialog:2
+GameSettings	0x14	0x01	bool	edgeScroll	init byte 1 (dword 0x01010001); 'EdgeScroll'; checkEdgeScroll	2 lines / 1 files	high	2	i32:1, u8:1	no header	no	DIFFERS: i32	Dialog:2
+GameSettings	0x15	0x01	bool	showCelsius	init 0; 'ShowCelcius' (retail spelling); checkShowCelsius	3 lines / 2 files	high	3	u8:3	no header	no	ok	Dialog:3
+GameSettings	0x16	0x01	bool	showWeather	init 1; 'ShowWeather'; checkShowWeather	4 lines / 3 files	high	4	u8:4	no header	no	ok	Dialog:2, Game:2
+GameSettings	0x17	0x01	bool	autoSlow	init 1; 'AutoSlow'; checkAutoslow; read by Disease/Fire/Tornado/EventLog	6 lines / 5 files	high	6	i8:2, u8:4	no header	no	ok	Component:3, Dialog:2, Game:1
+GameSettings	0x18	0x01	bool	autoPause	init 1; 'AutoPause'; checkAutopause	2 lines / 1 files	high	2	i32:1, u8:1	no header	no	DIFFERS: i32	Dialog:2
+GameSettings	0x19	0x03	padding	_pad19	not written	0 lines / 0 files	high	0		no header	no		
+GameSettings	0x1C	0x04	int32	lastOption	init 0; 'LastOption'; OptionsDialog tabOptions SetActiveTab	3 lines / 1 files	high	3	i32:3	no header	no	ok	Dialog:3
+GameSettings	0x20	0x04	int32	lastTerrain	init 0; 'LastTerrain'	4 lines / 1 files	high	4	i32:3, u32:1	no header	no	ok	Dialog:4
+GameSettings	0x24	0x04	int32	lastMapSize	init 0; 'LastMapSize'	4 lines / 1 files	high	4	i32:3, u32:1	no header	no	ok	Dialog:4
+GameSettings	0x28	0x04	int32	lastClimate	init 1; 'LastClimate'	4 lines / 1 files	high	4	i32:3, u32:1	no header	no	ok	Dialog:4
+GameSettings	0x2C	0x04	int32	lastStart	init 1; 'LastStart'	4 lines / 1 files	high	4	i32:3, u32:1	no header	no	ok	Dialog:4
+GameSettings	0x30	0x04	int32	lastDisaster	init 0; 'LastDisaster'	4 lines / 1 files	high	4	i32:3, u32:1	no header	no	ok	Dialog:4
+GameContainer	0x00	0x08	ExternalPtr (AchievementList)	achievementList	0x140099db0 Find("Game/Achievement/AchievementList.rsc"); AchievementManager::SetAchievements(*this)	1 lines / 1 files	high	1	ptr:1	no header	no	ok	Dialog:1
+GameContainer	0x08	0x08	ExternalPtr (ScenarioList)	scenarioList	0x140099db0 Find("Game/Scenario/ScenarioList.rsc")	3 lines / 3 files	high	3	ptr:3	no header	no	ok	Dialog:1, Game:1, Tutorial:1
+GameContainer	0x10	0x08	ExternalPtr (ClimateList)	climateList	Find("Game/Climate/ClimateList.rsc")	1 lines / 1 files	high	1	ptr:1	no header	no	ok	Dialog:1
+GameContainer	0x18	0x08	ExternalPtr (StartConditions)	startConditions	Find("Game/StartCondition/StartConditions.rsc")	1 lines / 1 files	high	1	ptr:1	no header	no	ok	Dialog:1
+GameContainer	0x20	0x08	ExternalPtr (TerrainList)	terrainList	Find("Game/Terrain/TerrainList.rsc")	1 lines / 1 files	high	1	ptr:1	no header	no	ok	Dialog:1
+GameContainer	0x28	0x08	ExternalPtr<Cursor>	cursorArrow	Find("Cursor/Arrow.rsc:cursor")	3 lines / 2 files	high	3	ptr:2, u64:1	no header	no	ok	standalone:2, Game:1
+GameContainer	0x30	0x08	ExternalPtr<Cursor>	cursorHand	Find("Cursor/Hand.rsc:cursor")	1 lines / 1 files	high	1	u64:1	no header	no	ok	Game:1
+GameContainer	0x38	0x08	ExternalPtr<Cursor>	cursorHourglass	Find("Cursor/Hourglass.rsc:cursor")	3 lines / 3 files	high	3	u64:3	no header	no	ok	Dialog:1, Game:1, Tutorial:1
+GameContainer	0x40	0x08	ExternalPtr<Cursor>	cursorMove	Find("Cursor/Move.rsc:cursor")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0x48	0x08	ExternalPtr<Cursor>	cursorQuery	Find("Cursor/Query.rsc:cursor")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0x50	0x08	ExternalPtr<Cursor>	cursorPlace	Find("Cursor/Place.rsc:cursor")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0x58	0x08	ExternalPtr<SoundEffect>	alertEffect	Find("Audio/UI/AlertEffect.rsc")	1 lines / 1 files	high	1	ptr:1	no header	no	ok	standalone:1
+GameContainer	0x60	0x08	ExternalPtr<SoundEffect>	buttonDownEffect	Find("Audio/UI/ButtonDownEffect.rsc")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0x68	0x08	ExternalPtr<SoundEffect>	buttonUpEffect	Find("Audio/UI/ButtonUpEffect.rsc")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0x70	0x08	ExternalPtr<SoundEffect>	beginDragEffect	Find("Audio/UI/BeginDragEffect.rsc")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0x78	0x08	ExternalPtr<SoundEffect>	endDragEffect	Find("Audio/UI/EndDragEffect.rsc")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0x80	0x08	ExternalPtr<SoundEffect>	placementMoveEffect	Find("Audio/UI/PlacementMoveEffect.rsc")	1 lines / 1 files	high	1	u64:1	no header	no	ok	Player:1
+GameContainer	0x88	0x08	ExternalPtr<SoundEffect>	placementThunkEffect	Find("Audio/UI/PlacementThunkEffect.rsc")	1 lines / 1 files	high	1	u64:1	no header	no	ok	Player:1
+GameContainer	0x90	0x08	ExternalPtr<SoundEffect>	placementErrorEffect	Find("Audio/UI/PlacementErrorEffect.rsc")	1 lines / 1 files	high	1	u64:1	no header	no	ok	Player:1
+GameContainer	0x98	0x08	ExternalPtr<SoundEffect>	warningEffect	Find("Audio/UI/WarningEffect.rsc")	1 lines / 1 files	high	1	u64:1	no header	no	ok	Dialog:1
+GameContainer	0xA0	0x08	ExternalPtr<UI::SpriteSheet>	spriteSheet	Find("Dialog/SpriteSheet.rsc")	2 lines / 1 files	high	2	ptr:2	no header	no	ok	standalone:2
+GameContainer	0xA8	0x10	UI::Sprite (embedded)	spriteWhite	ctor 0x140001050 Sprite::Sprite(+0xA8); Init: Sprite(sheet, "White")	0 lines / 0 files	high	0		no header	no		
+GameContainer	0xB8	0x10	UI::Sprite (embedded)	spriteSaveLoadEmpty	ctor Sprite::Sprite(+0xB8); Init: Sprite(sheet, "SaveLoadEmpty")	6 lines / 2 files	high	6	u32:1, u32@+0xBC:1, u32@+0xC0:1, u32@+0xC4:1, u64:1, u64@+0xC0:1	no header	no		Dialog:6
+GameContainer	0xC8	0x08	ExternalPtr<UI::StringTable>	gameKeys	Find("Dialog/StringTable.rsc:gameKeys")	2 lines / 1 files	high	2	ptr:2	no header	no	ok	Game:2
+GameContainer	0xD0	0x08	ExternalPtr<UI::StringTable>	keyNames	Find("Dialog/StringTable.rsc:keyNames")	2 lines / 1 files	high	2	ptr:2	no header	no	ok	Game:2
+GameContainer	0xD8	0x08	ExternalPtr<UI::StringTable>	globalNames	Find("Dialog/StringTable.rsc:globalNames")	3 lines / 2 files	high	3	ptr:2, u64:1	no header	no	ok	Game:2, Dialog:1
+GameUpdateLoop.m_mapConfig->	0x20		pointer (map config External)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_mapConfig->	0x28		pointer (map config External)		tree-only (pointee field)	1 lines		1	obj:addr:void:1				Dialog:1
+GameUpdateLoop.m_terrainConfig->	0x20		pointer (terrain config External)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_terrainConfig->	0x28		pointer (terrain config External)		tree-only (pointee field)	1 lines		1	obj:addr:void:1				Dialog:1
+GameUpdateLoop.m_climateConfig->	0x20		pointer (climate config External)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_climateConfig->	0x28		pointer (climate config External)		tree-only (pointee field)	1 lines		1	obj:addr:void:1				Dialog:1
+GameUpdateLoop.m_diseaseList->	0x20		ExternalPtr<DiseaseList>		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_professionList->	0x20		ExternalPtr<ProfessionList>		tree-only (pointee field)	10 lines		10	i64:1, ptr:2, u64:7				Dialog:8, Component:1, Entity:1
+GameUpdateLoop.m_professionList->	0x28		ExternalPtr<ProfessionList>		tree-only (pointee field)	8 lines		8	i32:8				Dialog:6, Component:1, Entity:1
+GameUpdateLoop.m_professionList->	0x30		ExternalPtr<ProfessionList>		tree-only (pointee field)	21 lines		21	?:1, i64:9, ptr:2, u64:9				Component:8, Work:6, Dialog:3, Entity:3, Action:1
+GameUpdateLoop.m_professionList->	0x38		ExternalPtr<ProfessionList>		tree-only (pointee field)	7 lines		7	i64:1, u64:6				Component:5, Work:2
+GameUpdateLoop.m_professionList->	0x40		ExternalPtr<ProfessionList>		tree-only (pointee field)	1 lines		1	u64:1				Component:1
+GameUpdateLoop.m_professionList->	0x48		ExternalPtr<ProfessionList>		tree-only (pointee field)	1 lines		1	u64:1				Component:1
+GameUpdateLoop.m_playerController->	0x1C		PlayerController* (0x10C bytes)		tree-only (pointee field)	5 lines		5	f32:4, u32:1				Dialog:5
+GameUpdateLoop.m_playerController->	0x20		PlayerController* (0x10C bytes)		tree-only (pointee field)	5 lines		5	f32:4, u32:1				Dialog:5
+GameUpdateLoop.m_playerController->	0x24		PlayerController* (0x10C bytes)		tree-only (pointee field)	5 lines		5	f32:4, u32:1				Dialog:5
+GameUpdateLoop.m_playerController->	0x28		PlayerController* (0x10C bytes)		tree-only (pointee field)	1 lines		1	u32:1				Dialog:1
+GameUpdateLoop.m_playerController->	0x34		PlayerController* (0x10C bytes)		tree-only (pointee field)	3 lines		3	obj:addr: Graphics::Camera:1, obj:addr:Graphics::Camera:2				Dialog:2, Component:1
+GameUpdateLoop.m_playerController->	0x98		PlayerController* (0x10C bytes)		tree-only (pointee field)	1 lines		1	obj:Math::Transform3:1				Component:1
+GameUpdateLoop.m_playerController->	0xBC		PlayerController* (0x10C bytes)		tree-only (pointee field)	1 lines		1	f32:1				Component:1
+GameUpdateLoop.m_playerController->	0xC0		PlayerController* (0x10C bytes)		tree-only (pointee field)	1 lines		1	f32:1				Component:1
+GameUpdateLoop.m_playerController->	0xC4		PlayerController* (0x10C bytes)		tree-only (pointee field)	1 lines		1	f32:1				Component:1
+GameUpdateLoop.m_entityList->	0x8		EntityList* (0xE8 bytes)		tree-only (pointee field)	16 lines		16	u64:16				standalone:16
+GameUpdateLoop.m_entityList->	0x10		EntityList* (0xE8 bytes)		tree-only (pointee field)	16 lines		16	i32:16				standalone:16
+GameUpdateLoop.m_entityList->	0xD0		EntityList* (0xE8 bytes)		tree-only (pointee field)	12 lines		12	?:3, obj:addr:void:9				Component:7, Action:4, Player:1
+GameUpdateLoop.m_entityList->	0xD8		EntityList* (0xE8 bytes)		tree-only (pointee field)	11 lines		11	i32:11				Component:6, Action:4, Player:1
+GameUpdateLoop.m_entityList->	0xE0		EntityList* (0xE8 bytes)		tree-only (pointee field)	1 lines		1	i8:1				Component:1
+GameUpdateLoop.m_citizenList->	0x0		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	?:1				Dialog:1
+GameUpdateLoop.m_citizenList->	0x8		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	3 lines		3	?:2, i32:1				Dialog:2, Tutorial:1
+GameUpdateLoop.m_citizenList->	0x10		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	obj:addr:void:1				Component:1
+GameUpdateLoop.m_citizenList->	0x20		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	5 lines		5	i64:1, obj:addr:void:1, ptr:1, u64:2				Component:3, Dialog:1, Entity:1
+GameUpdateLoop.m_citizenList->	0x28		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	6 lines		6	i32:5, u32:1				Component:2, Dialog:2, Entity:1, Tutorial:1
+GameUpdateLoop.m_citizenList->	0x30		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	5 lines		5	?:1, obj:addr:void:2, u64:2				Component:3, Tutorial:2
+GameUpdateLoop.m_citizenList->	0x38		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	3 lines		3	i32:3				Tutorial:2, Component:1
+GameUpdateLoop.m_citizenList->	0x40		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	2 lines		2	obj:addr:void:2				Component:2
+GameUpdateLoop.m_citizenList->	0x48		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	3 lines		3	i32:3				Component:3
+GameUpdateLoop.m_citizenList->	0x50		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	?:1				Component:1
+GameUpdateLoop.m_citizenList->	0x60		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	i64:1				Component:1
+GameUpdateLoop.m_citizenList->	0x68		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	i32:1				Component:1
+GameUpdateLoop.m_citizenList->	0x90		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_citizenList->	0x98		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	i32:1				Dialog:1
+GameUpdateLoop.m_citizenList->	0xA0		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	13 lines		13	i64:3, obj:addr:int64_t:1, ptr:1, u64:8				Dialog:6, Component:5, Tutorial:1, standalone:1
+GameUpdateLoop.m_citizenList->	0xA8		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	13 lines		13	i32:12, u32:1				Dialog:5, Component:4, Goal:1, Tutorial:1, Work:1, standalone:1
+GameUpdateLoop.m_citizenList->	0xB0		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	2 lines		2	obj:addr:void:2				Component:2
+GameUpdateLoop.m_citizenList->	0xB8		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	i32:1				Component:1
+GameUpdateLoop.m_citizenList->	0xC0		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_citizenList->	0xC8		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	i32:1				Dialog:1
+GameUpdateLoop.m_citizenList->	0xD0		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	6 lines		6	obj:addr:void:4, u64:2				Component:6
+GameUpdateLoop.m_citizenList->	0xD8		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	5 lines		5	i32:5				Component:5
+GameUpdateLoop.m_citizenList->	0xF0		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_citizenList->	0xF8		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	u32:1				Dialog:1
+GameUpdateLoop.m_citizenList->	0x100		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	10 lines		10	ptr:8, u64:2				Component:5, Dialog:2, Entity:2, Tutorial:1
+GameUpdateLoop.m_citizenList->	0x110		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	2 lines		2	ptr:1, u64:1				Dialog:1, standalone:1
+GameUpdateLoop.m_citizenList->	0x118		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	2 lines		2	i32:2				Dialog:1, standalone:1
+GameUpdateLoop.m_citizenList->	0x120		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	4 lines		4	u64:4				Dialog:4
+GameUpdateLoop.m_citizenList->	0x128		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	2 lines		2	i32:2				Dialog:2
+GameUpdateLoop.m_citizenList->	0x140		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	1 lines		1	ptr:1				Work:1
+GameUpdateLoop.m_citizenList->	0x150		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	4 lines		4	u64:4				Dialog:4
+GameUpdateLoop.m_citizenList->	0x160		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	7 lines		7	obj:addr:void:1, ptr:5, u64:1				Goal:3, Dialog:2, Component:1, Tutorial:1
+GameUpdateLoop.m_citizenList->	0x170		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	24 lines		24	?:2, i64:1, ptr:2, u64:19				Dialog:10, Work:9, Component:3, Action:1, standalone:1
+GameUpdateLoop.m_citizenList->	0x1AC		CitizenBehavior* (0x1C0 bytes)		tree-only (pointee field)	5 lines		5	i32:5				Dialog:3, standalone:2
+GameUpdateLoop.m_game->	0x0		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	4 lines		4	i32:4				Component:4
+GameUpdateLoop.m_game->	0x8		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	1 lines		1	obj:addr:Picking::Scene:1				Component:1
+GameUpdateLoop.m_game->	0x20		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_game->	0x68		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	5 lines		5	i64:2, ptr:1, u64:2				Component:3, Action:1, Player:1
+GameUpdateLoop.m_game->	0x70		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	4 lines		4	i64:1, ptr:2, u64:1				Component:3, Work:1
+GameUpdateLoop.m_game->	0x78		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	2 lines		2	ptr:1, u64:1				Work:2
+GameUpdateLoop.m_game->	0x80		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	54 lines		54	?:1, i64:16, ptr:2, u64:35				Component:20, Work:20, Action:6, Player:6, Dialog:1, Entity:1
+GameUpdateLoop.m_game->	0x88		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	2 lines		2	i32:2				Action:1, Component:1
+GameUpdateLoop.m_game->	0xA2		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	3 lines		3	u8:3				Component:3
+GameUpdateLoop.m_game->	0xE8		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	1 lines		1	ptr:1				Player:1
+GameUpdateLoop.m_game->	0xF0		Map* (0xF8 bytes; tree says Game*)		tree-only (pointee field)	1 lines		1	i32:1				Tutorial:1
+GameUpdateLoop.m_worldGeometry->	0xC0		Graphics::Geometry* / terrain (0x230 bytes)		tree-only (pointee field)	5 lines		5	i32:5				Component:4, Action:1
+GameUpdateLoop.m_worldGeometry->	0xD0		Graphics::Geometry* / terrain (0x230 bytes)		tree-only (pointee field)	4 lines		4	i32:4				Component:3, Action:1
+GameUpdateLoop.m_worldGeometry->	0xD8		Graphics::Geometry* / terrain (0x230 bytes)		tree-only (pointee field)	4 lines		4	i64:1, u64:3				Component:3, Action:1
+GameUpdateLoop.m_worldGeometry->	0x1E0		Graphics::Geometry* / terrain (0x230 bytes)		tree-only (pointee field)	1 lines		1	u64:1				Component:1
+GameUpdateLoop.m_tutorial->	0x30		Tutorial* (0x138 bytes)		tree-only (pointee field)	5 lines		5	ptr:5				Component:3, Player:1, Work:1
+GameUpdateLoop.m_entityUI->	0x20		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	i64:1				Dialog:1
+GameUpdateLoop.m_entityUI->	0x28		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	ptr:1				Dialog:1
+GameUpdateLoop.m_entityUI->	0x30		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	5 lines		5	u8:5				Dialog:4, Tutorial:1
+GameUpdateLoop.m_entityUI->	0x34		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	7 lines		7	i32:6, u32:1				Dialog:5, Tutorial:2
+GameUpdateLoop.m_entityUI->	0x38		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	u8:1				Dialog:1
+GameUpdateLoop.m_entityUI->	0x3C		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	u32:1				Dialog:1
+GameUpdateLoop.m_entityUI->	0x40		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	u32:1				Dialog:1
+GameUpdateLoop.m_entityUI->	0x60		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	obj:addr:void:1				Dialog:1
+GameUpdateLoop.m_entityUI->	0x70		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	u64:1				Dialog:1
+GameUpdateLoop.m_entityUI->	0x80		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	u8:2				Tutorial:2
+GameUpdateLoop.m_entityUI->	0x88		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	u64:2				Tutorial:2
+GameUpdateLoop.m_entityUI->	0x90		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	u64:2				Tutorial:2
+GameUpdateLoop.m_entityUI->	0x98		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	i32:1, u64:1				Tutorial:2
+GameUpdateLoop.m_entityUI->	0x9C		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	1 lines		1	i32:1				Tutorial:1
+GameUpdateLoop.m_entityUI->	0xA0		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	i32:2				Tutorial:2
+GameUpdateLoop.m_entityUI->	0xA4		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	u8:2				Tutorial:2
+GameUpdateLoop.m_entityUI->	0xA8		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	i32:2				Tutorial:2
+GameUpdateLoop.m_entityUI->	0xAC		PlayerToolManager* (0xB0 bytes)		tree-only (pointee field)	2 lines		2	i32:2				Tutorial:2
+GameUpdateLoop.m_dayCounter->	0x0		DayCounter* (0x18 bytes)		tree-only (pointee field)	2 lines		2	i32:2				Goal:2
+GameUpdateLoop.m_dayCounter->	0x8		DayCounter* (0x18 bytes)		tree-only (pointee field)	8 lines		8	i64:1, obj:addr:void:5, void?:2				Dialog:4, Component:3, Goal:1
+GameUpdateLoop.m_weather->	0x10		Weather* (0x78 bytes)		tree-only (pointee field)	3 lines		3	i32:3				Dialog:3
+GameUpdateLoop.m_weather->	0x18		Weather* (0x78 bytes)		tree-only (pointee field)	10 lines		10	f32:10				Component:8, Dialog:1, Work:1
+GameUpdateLoop.m_weather->	0x50		Weather* (0x78 bytes)		tree-only (pointee field)	2 lines		2	?:2				Dialog:2
+GameUpdateLoop.m_eventNotifier->	0x18		EventNotifier* (0x28 bytes)		tree-only (pointee field)	3 lines		3	ptr:1, u64:2				Dialog:3
+GameUpdateLoop.m_eventNotifier->	0x20		EventNotifier* (0x28 bytes)		tree-only (pointee field)	1 lines		1	u32:1				Dialog:1
+GameUpdateLoop.m_imageCapture->	0x4		ImageCapture* (0x38 bytes)		tree-only (pointee field)	1 lines		1	i32:1				Component:1
+GameUpdateLoop.m_imageCapture->	0x8		ImageCapture* (0x38 bytes)		tree-only (pointee field)	1 lines		1	ptr:1				Dialog:1
+GameUpdateLoop.m_imageCapture->	0x10		ImageCapture* (0x38 bytes)		tree-only (pointee field)	1 lines		1	ptr:1				Dialog:1
+GameUpdateLoop.m_imageCapture->	0x28		ImageCapture* (0x38 bytes)		tree-only (pointee field)	1 lines		1	ptr:1				Component:1
+GameUpdateLoop.m_scenarioInstance->	0x10		InternalBasePtr<Achievement::AchievementInstance>		tree-only (pointee field)	1 lines		1	obj:addr:void:1				Dialog:1
+GameUpdateLoop	named			_loadProgress	already read by name (GameUpdateLoop::_singleton->member)	1 lines		1					
+GameUpdateLoop	named			m_citizenList	already read by name (GameUpdateLoop::_singleton->member)	6 lines		6					
+GameUpdateLoop	named			m_game	already read by name (GameUpdateLoop::_singleton->member)	9 lines		9					
+GameUpdateLoop	named			m_gameFlags	already read by name (GameUpdateLoop::_singleton->member)	2 lines		2					
+GameUpdateLoop	named			m_graphicsScene	already read by name (GameUpdateLoop::_singleton->member)	1 lines		1					
+GameUpdateLoop	named			m_playerController	already read by name (GameUpdateLoop::_singleton->member)	2 lines		2					
+GameUpdateLoop	named			m_professionList	already read by name (GameUpdateLoop::_singleton->member)	2 lines		2					
+GameUpdateLoop	named			m_random	already read by name (GameUpdateLoop::_singleton->member)	5 lines		5					
+GameUpdateLoop	named			m_worldGeometry	already read by name (GameUpdateLoop::_singleton->member)	1 lines		1					
