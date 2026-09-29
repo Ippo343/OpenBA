@@ -38,6 +38,35 @@
 #include "Component/ControllerComponent.h"
 #include "Object/exe_type.h"
 
+// The StateMachine StateMachine::Tick (0x1400a9660) runs, embedded in
+// StateMachineComponent at +0x48 (H6). Its address is what every Controller slot
+// receives as `stateMachine`. The four state bytes are signed (Tick's MOVSX / JS
+// tests; Persist 0x14012b940 serializes each through Serialize(signed char&),
+// import 0x140152418); the component's retail ctor writes them as one dword
+// 0xff00ffff (input, active, transition = -1, pending = 0).
+class StateMachine {
+public:
+    // 0x1400a9660: runs the pending transition (Update / OnTransition, walk to the
+    // chain's tail, FindState, Enter) while one is pending, then, when `run`, the
+    // per-frame column (Tick when `useAlt` is 0, TickAlt when 1) with `time`.
+    // Retail passes `const System::Time&` (RDX = &time, 0x14012b67b); the node slots
+    // take it as the opaque `void* time` they forward.
+    void Tick(void* time, char useAlt, char run);
+
+    ControllerComponent::Controller* current;   // +0x00 current node (component +0x48; retail ctor this+0x28)
+    int8_t   currentInput;        // +0x08 the state the machine was asked for last (component +0x50)
+    int8_t   activeState;         // +0x09 the running state's table index (-1: none)
+    int8_t   pendingState;        // +0x0A the requested state (-1: nothing pending)
+    int8_t   transitionState;     // +0x0B the transition being run (-1: none)
+    uint8_t  _pad0C[4];           // +0x0C (component +0x54)
+};
+
+static_assert(sizeof(StateMachine) == 0x10, "StateMachine spans component +0x48..+0x57");
+static_assert(offsetof(StateMachine, currentInput) == 0x08, "input byte (component +0x50, 0x14012ba8a)");
+static_assert(offsetof(StateMachine, activeState) == 0x09, "active state (component +0x51, Persist 0x14012b983)");
+static_assert(offsetof(StateMachine, pendingState) == 0x0A, "pending state (component +0x52, Persist 0x14012b995)");
+static_assert(offsetof(StateMachine, transitionState) == 0x0B, "transition state (component +0x53, Persist 0x14012b9a7)");
+
 class StateMachineComponent final : public Component {
     DECLARE_EXE_TYPE(StateMachineComponent)
 
@@ -79,14 +108,25 @@ public:
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     RootController _controller;   // +0x28 root node (vptr, +0x30 parent, +0x38 first child, +0x40 owner)
-    void*    controllerSelf;      // +0x48 StateMachine: current node (retail ctor this+0x28)
-    uint32_t stateFlags;          // +0x50 input/active/pending/transition (retail ctor 0xff00ffff)
-    uint8_t  _pad54[4];           // +0x54
+    StateMachine   stateMachine;  // +0x48 the StateMachine Tick runs (H6)
+
+private:
+    // The body retail's Startup (slot 4, 0x14012b6a0) runs, ported faithfully: link
+    // every ControllerComponent's node, the FIRST one's default state into pendingState.
+    // NOT called: Startup keeps the standalone linker (LinkControllersStandalone), which
+    // links lazily and keeps a stream-restored or pre-stamped state (see its comments).
+    void LinkControllers();                                       // 0x14012b6a0
+    // The body of slot 11 (0x14012b7d0): relink, then walk the chain to its tail and
+    // back up to the node owning the input state. NOT installed (Slot11 stays the tree's
+    // stub): on a loaded world it would walk a null `current` (the tree's ctor leaves
+    // +0x48 null; BodyInit sets it lazily).
+    void RelinkAndResume();                                       // 0x14012b7d0
+    void BodyInit();
+    void LinkControllersStandalone();
 };
 
 static_assert(sizeof(StateMachineComponent) == 0x58, "StateMachineComponent is 0x58 (create 0x1400382d0)");
 static_assert(alignof(StateMachineComponent) == 8, "StateMachineComponent alignment");
 static_assert(sizeof(StateMachineComponent::RootController) == 0x20, "the root node is 0x20 bytes");
 static_assert(offsetof(StateMachineComponent, _controller) == 0x28, "member root node at +0x28 (0x14012ba5b)");
-static_assert(offsetof(StateMachineComponent, controllerSelf) == 0x48, "StateMachine current node +0x48 (0x14012ba86)");
-static_assert(offsetof(StateMachineComponent, stateFlags) == 0x50, "state bytes +0x50 (0x14012ba8a)");
+static_assert(offsetof(StateMachineComponent, stateMachine) == 0x48, "StateMachine at +0x48 (0x14012ba86; slot 9 0x14012b623 ADD RCX,0x48)");

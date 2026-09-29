@@ -43,6 +43,7 @@
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Game/EventLog.h"         // m_eventNotifier's class: EventLog::AddEventWithName
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -54,14 +55,10 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 #include <new>
 
-// eventlog.cpp — the shared AddEvent family core, exposed for this sibling.
-extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
-                                          void* entityIBP, void* nameStr);
-
 extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
-    void* gameWorld = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
-    void* eventLog = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_eventNotifier;   // B.3.8 bridge
+    EventLog* eventLog = gameWorld->m_eventNotifier;
     if (!eventLog) return;
 
     // AchievementManager singleton — exe import slot 0x1401514f0 holds the address
@@ -69,41 +66,35 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     // manager is ::Achievement::AchievementManager::_singleton. Retail derefs it unguarded; we only ever
     // reach here from Runtime's own handler call, so it is always live — the guard
     // below only covers the case where the slot never resolved at all.
-    void* mgr = ::Achievement::AchievementManager::_singleton;
+    const Achievement::AchievementManager* mgr = ::Achievement::AchievementManager::_singleton;
     if (!mgr) return;
 
-    uint64_t achievement = 0;   // ExternalPtr<Achievement> (8 bytes, trivially destructible)
-    // B.3.7 bridge: GetAchievement returns ExternalPtr<Achievement> BY VALUE (a
-    // retslot in retail); the prvalue is constructed straight into the slot the
-    // door was handed — one construction, as before.
-    ::new (&achievement) Object::ExternalPtr<Achievement::Achievement>(
-        reinterpret_cast<const Achievement::AchievementManager*>(mgr)->GetAchievement(achievementId));   // B.3.7 bridge
-    if (achievement == 0) {
+    // GetAchievement returns ExternalPtr<Achievement> BY VALUE (a retslot in
+    // retail); the ExternalPtr is one raw pointer and holds no reference.
+    const Object::ExternalPtr<Achievement::Achievement> achievementPtr =
+        mgr->GetAchievement(achievementId);   // B.3.7 bridge
+    Achievement::Achievement* achievement = achievementPtr.Get();
+    if (achievement == nullptr) {
         return;
     }
 
     System::String titleKey;  // the achievement's title KEY
     // B.3.7 bridge: GetTitle returns System::String BY VALUE; constructed
     // straight into titleKey's storage (one AddRef, as the door did).
-    ::new (&titleKey) System::String(
-        reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());   // B.3.7 bridge
+    ::new (&titleKey) System::String(achievement->GetTitle());   // B.3.7 bridge
 
     // UI::String(ExternalPtr<StringTable> = *(achievement+0x20), key), then
     // operator System::String() — the LOOKED-UP display text. This is the
     // NAME-LOOKUP UI::String ctor (0x140151300), not the index one.
     uint8_t uiName[24] = {0};
     System::String titleText;
-    ::new (uiName) UI::String(
-        Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
-            reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))),
-        titleKey);
+    ::new (uiName) UI::String(achievement->_stringTable, titleKey);   // Achievement+0x20
     titleKey = System::String();   // retail releases the key here
     ::new (&titleText) System::String(
         reinterpret_cast<const UI::String*>(uiName)->operator System::String());  // B.3.6 bridge
 
-    int64_t nullEntity[1] = {0};
-    new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    ::Object::InternalBasePtr nullEntity(nullptr);
 
-    EventLog_AddEventWithName(eventLog, /*eventType*/ 0x19, /*severity*/ 4,
-                              nullEntity, &titleText);
+    eventLog->AddEventWithName(/*eventType*/ 0x19, /*severity*/ 4,
+                               &nullEntity, &titleText);   // 0x140095750
 }

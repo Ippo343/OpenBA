@@ -228,13 +228,12 @@ void BuildRequirementUI::OnCreated() {
 
         if (imagePtr && buildReqComp) {
             // The icon: sprite sheet (+0x20) and sprite name (+0x28)
-            // LEFT: ToolbarDescription's +0x20 is void* (COMP-e's header).
 #ifdef _DEBUG
             uint8_t sprite[16];
-            Debug_Sprite_Ctor(sprite, (uint64_t)buildReqComp->_descRef, &buildReqComp->_name);
+            Debug_Sprite_Ctor(sprite, (uint64_t)buildReqComp->_spriteSheet, &buildReqComp->_name);
             Debug_ImageElement_SetSprite(imagePtr, sprite);
 #else
-            UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>((UI::SpriteSheet*)buildReqComp->_descRef),
+            UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(buildReqComp->_spriteSheet),
                               buildReqComp->_name);
             imagePtr->SetSprite(&sprite);
 #endif
@@ -248,8 +247,7 @@ void BuildRequirementUI::OnCreated() {
 
         if (textPtr && buildReqComp) {
             // The title: string table (+0x30) and key (+0x38)
-            // LEFT: ToolbarDescription's +0x30 is void* (COMP-e's header).
-            UI::String uiStr(Object::ExternalPtr<UI::StringTable>((UI::StringTable*)buildReqComp->_iconRef),
+            UI::String uiStr(Object::ExternalPtr<UI::StringTable>(buildReqComp->_stringTable),
                              buildReqComp->_str1);
             textPtr->SetText(&uiStr);
         }

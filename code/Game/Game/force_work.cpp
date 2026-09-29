@@ -11,6 +11,10 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Component/MapComponent.h"   // caller batch CB6: TypeId()
+#include "Component/CitizenComponent.h"     // CitizenStackIdle (B.4 GAME-a)
+#include "Component/CharacterComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
 #include <cstdio>
 #include <cstdlib>
 #include <climits>
@@ -102,13 +106,14 @@ uint32_t SafeGetTypeId(void* obj) {
 
 void* FindComp(void* entity, uint32_t tid) {
     if (!entity || !tid || !Readable(entity, 0x40)) return nullptr;
-    int count = *reinterpret_cast<int*>((uintptr_t)entity + kEntCompCnt);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>((uintptr_t)entity + kEntCompArr);
-    if (count <= 0 || count > 512 || !Readable(reinterpret_cast<void*>(arr), (size_t)count * 8))
+    // LEFT: the harnesses hand the entity as void* (it is probed before it is read).
+    const ComponentEntity* e = reinterpret_cast<const ComponentEntity*>(entity);
+    int count = e->_componentCount;                              // +0x38
+    const Object::InternalPtr<Component>* arr = e->_components;  // +0x30
+    if (count <= 0 || count > 512 || !Readable(arr, (size_t)count * 8))
         return nullptr;
     for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        void* comp = *slot;
+        void* comp = arr[i].Get();
         if (SafeGetTypeId(comp) == tid) return comp;
     }
     return nullptr;
@@ -117,16 +122,19 @@ void* FindComp(void* entity, uint32_t tid) {
 int WorkAreaCenterCell(void* area) {
     if (GameUpdateLoop::_singleton == nullptr) return -1;
     const uint32_t tidMap = MapComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
-    void* mc = FindComp(area, tidMap);
-    if (!mc || !Readable(mc, 0x30)) return -1;
-    uintptr_t game = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
+    void* found = FindComp(area, tidMap);
+    if (!found || !Readable(found, 0x30)) return -1;
+    // LEFT: FindComp returns the matched component as void*.
+    const MapComponent* mc = reinterpret_cast<const MapComponent*>(found);
+    const Map* game = GameUpdateLoop::_singleton->m_game;
     if (!game) return -1;
-    int dim = *reinterpret_cast<int*>(game);
+    int dim = game->size;
     if (dim <= 0) return -1;
-    int16_t tileX = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x28);
-    int16_t tileY = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x2a);
-    int16_t fpW   = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x2c);
-    int16_t fpH   = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x2e);
+    // The footprint words, read signed.
+    int16_t tileX = static_cast<int16_t>(mc->tileX0);   // +0x28
+    int16_t tileY = static_cast<int16_t>(mc->tileY0);   // +0x2a
+    int16_t fpW   = static_cast<int16_t>(mc->tileX1);   // +0x2c
+    int16_t fpH   = static_cast<int16_t>(mc->tileY1);   // +0x2e
     int cell = (((int)fpH >> 1) + (int)tileY) * dim + (((int)fpW >> 1) + (int)tileX);
     if (cell < 0 || cell >= dim * dim) return -1;
     return cell;
@@ -134,9 +142,11 @@ int WorkAreaCenterCell(void* area) {
 
 bool CitizenStackIdle(void* citizen) {
     if (!citizen || !Readable(citizen, kCharCompOff + 8)) return false;
-    void* charComp = *reinterpret_cast<void**>((uintptr_t)citizen + kCharCompOff);
+    // LEFT: the harnesses hand the citizen component as void* (probed first).
+    const CitizenComponent* c = reinterpret_cast<const CitizenComponent*>(citizen);
+    const CharacterComponent* charComp = c->character;   // +0x278
     if (!charComp || !Readable(charComp, kActionTopOff + 8)) return false;
-    return *reinterpret_cast<int*>((uintptr_t)charComp + kActionTopOff) < 0;
+    return charComp->currentAction < 0;                 // +0x60
 }
 
 int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
@@ -144,14 +154,15 @@ int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
     if (!work || !driveFn) return INT_MIN;
     if (!CitizenStackIdle(citizen)) return INT_MIN;
 
-    int64_t citizenIBP = 0;
-    new (&citizenIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(citizen));   // B.3.3 bridge
+    // CitizenStackIdle proved it readable as a CitizenComponent.
+    CitizenComponent* c = reinterpret_cast<CitizenComponent*>(citizen);
+    ::Object::InternalPtr<CitizenComponent> citizenIBP(c);
     int rc = driveFn(work, &citizenIBP);
 
     if (driveCount && *driveCount < traceMax) {
         ++*driveCount;
-        void* charComp = *reinterpret_cast<void**>((uintptr_t)citizen + kCharCompOff);
-        int top = charComp ? *reinterpret_cast<int*>((uintptr_t)charComp + kActionTopOff) : -999;
+        const CharacterComponent* charComp = c->character;               // +0x278
+        int top = charComp ? charComp->currentAction : -999;             // +0x60
         std::fprintf(stderr, "[%s] DRIVE#%d citizen=%p ret=%d newTop+0x60=%d\n",
                      tag ? tag : "ForceWork", *driveCount, citizen, rc, top);
         std::fflush(stderr);

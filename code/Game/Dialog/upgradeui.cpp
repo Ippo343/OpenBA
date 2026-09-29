@@ -93,8 +93,7 @@ void UpgradeUI::OnCreated() {
     // target template; skip the icon when the standalone template lacks one.
     if (!toolbar) return;
 
-    UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(
-                          reinterpret_cast<UI::SpriteSheet*>(toolbar->_descRef)),   // LEFT: ToolbarDescription::_descRef is void* (COMP-e)
+    UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(toolbar->_spriteSheet),
                       toolbar->_name);
     image->SetSprite(&sprite);
 

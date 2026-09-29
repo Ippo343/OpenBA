@@ -31,6 +31,8 @@
 #include "object/External.h"    // Object::ExternalPtr<UI::Cursor>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameSettings.h"   // g_gameSettings's struct
+class Minimap;             // Game/Minimap.h (Game_ImageCaptureDtor)
+class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 // ---- citizen_names.cpp
@@ -38,13 +40,10 @@ extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng, int minL
 extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  // 0x1400a4c60
 
 // ---- citizenlist_serialize.cpp
-extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* , int* );  // 0x14008f760
-extern "C" void CitizenList_PostLoad_8f580(void* self);  // 0x14008f580
 
 // ---- eventlog.cpp
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580
-extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr);  // 0x140095750
-extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr, void* titleStr, void* extraStr);  // 0x140094e00
+extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);  // 0x140095580 B4 FORWARD -> EventLog::AddEvent
+extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity, void* entityIBP, void* nameStr, void* titleStr, void* extraStr);  // 0x140094e00 B4 FORWARD -> EventLog::AddCitizenEvent
 
 // ---- game.cpp
 // --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
@@ -76,8 +75,8 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 void Game_DestroyStringArray18(void* arrayHeader);  // 0x14001b030
 void Game_EventNotifierCleanup(void* arrayHeader);  // 0x14000a8a0
 void Game_MusicPlayerDtor(void* self);  // 0x140018220
-void Game_ImageCaptureDtor(void* self);  // 0x1400a4fc0
-void Game_WeatherDtor(void* self);  // 0x140093eb0
+void Game_ImageCaptureDtor(Minimap* self);  // 0x1400a4fc0
+void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
 // ---- game_settings_persist.cpp
 extern "C" void GameSettings_Load(GameSettings* settings);  // 0x140098b60
@@ -91,18 +90,16 @@ extern "C" void GameSettings_Save(GameSettings* settings);  // 0x140098970
 // g_pNewGameSettings. Null outside RunGameMain's settings lifetime.
 extern GameSettings* g_gameSettings;
 
-// ---- gamegrid_serialize.cpp
-extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream);  // 0x14009f100
-
 // ---- gameupdateloop.cpp
 extern "C" float CalcWindFactor_Reg(void* time);  // 0x1401027c0
 
 // ---- gameupdateloop_load.cpp
-extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform);  // 0x1400983f0
-extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, float farZ);  // 0x140098660
+extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform);  // 0x1400983f0 B4 FORWARD: 1 outside caller (Dialog/toolbardialog.cpp) -> PlayerController::CalcTransform
 
 // ---- gameupdateloop_serialize.cpp
-extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* , void* bucketsPtr);  // 0x140021ba0
+struct UpdateBucket;   // Entity/EntityList.h
+namespace IO { class Serializer; }
+extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* , UpdateBucket* buckets);  // 0x140021ba0
 
 // ---- gameupdateloop_teardown.cpp
 extern "C" void EntityList_Shutdown_c3d30(void* selfV);  // 0x1400c3d30
@@ -253,50 +250,6 @@ inline void* GetLoadingSoundString(void* retStr) {
     *reinterpret_cast<System::String*>(retStr) =
         System::String::Format("Dialog/Loading.rsc:gameLoad%i", variant);
     return retStr;
-}
-
-// --- Game_RemoveEntity (0x140091a20) — adds entity to pending-removal list ---
-// Adds an entity pointer to the game's removal queue at gameWorld+0x120/0x128/0x12c.
-// Uses standard dynamic array grow pattern (triple capacity on first realloc).
-// param_1 = gameWorld ptr (from g_pGameWorldSingleton + offset), param_2 = entity ptr
-// REIMPLEMENTED inline from Ghidra decompilation.
-inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
-    uintptr_t gw = (uintptr_t)gameWorldPtr;
-    uintptr_t entity = (uintptr_t)entityPtr;
-
-    // Check if entity is already in the removal queue
-    int count = *(int*)(gw + 0x128);
-    uintptr_t* arr = *(uintptr_t**)(gw + 0x120);
-    for (int i = 0; i < count; i++) {
-        if (arr[i] == entity) return;  // already queued
-    }
-
-    // Dynamic array push
-    int newCount = count + 1;
-    if (newCount != count) {
-        uintptr_t* oldArr = arr;
-        *(int*)(gw + 0x128) = newCount;
-        int capacity = *(int*)(gw + 0x12c);
-        if (capacity < newCount) {
-            // Grow: triple capacity if non-empty, else use newCount
-            capacity = (count != 0) ? newCount * 3 : newCount;
-            *(int*)(gw + 0x12c) = capacity;
-            void* newBuf = System::MemoryAllocator::MemAlloc((uint64_t)capacity * 8, 8);
-            *(void**)(gw + 0x120) = newBuf;
-        }
-        uintptr_t* newArr = *(uintptr_t**)(gw + 0x120);
-        int copyStart = (oldArr == newArr) ? count : 0;
-        for (int i = copyStart; i < newCount; i++) {
-            if (i < count) {
-                newArr[i] = oldArr[i];  // copy existing
-            } else {
-                newArr[i] = entity;     // append new
-            }
-        }
-        if (oldArr != newArr) {
-            System::MemoryAllocator::MemFree(oldArr);
-        }
-    }
 }
 
 // ---- citizenlist_serialize.cpp (B3R G-Game: external linkage given; read by citizenbehavior.cpp)

@@ -512,10 +512,8 @@ void PastureProduce(PastureComponent* self) {
         // We were skipping it, so every pile we dropped carried quantity 0 — found
         // while porting the tracker tail below, NOT a pre-existing known gap.
         if (rawComp) {
-            // LEFT: RawMaterialComponent keeps +0x28 as a void* (COMP-e's header); the
-            // quantity is its low int.
-            *reinterpret_cast<int*>(&rawComp->field28) = perUnit;
-            rawComp->field30 = nullptr;
+            rawComp->quantity = perUnit;
+            rawComp->profession = nullptr;
         }
 
         // ---- retail tail: TrackerComponent upsert, BEFORE the town stock bump ----

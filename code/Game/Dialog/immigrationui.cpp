@@ -142,9 +142,9 @@ void ImmigrationUI::OnUpdateLayout() {
     // Guard the sub-entity's BuildState too (unbuilt/absent nomad camp in SA).
     bool buildComplete = false;
     if (buildState != nullptr) {
-        int8_t state = (int8_t)(buildState->stateFlags >> 16);
+        int8_t state = buildState->stateMachine.pendingState;
         if (state < 0) {
-            state = (int8_t)buildState->stateFlags;
+            state = buildState->stateMachine.currentInput;
         }
         buildComplete = (state == 0x11);
     }
@@ -204,9 +204,8 @@ void ImmigrationUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/
     if (buildState == nullptr) return;
 
     // The current node's Controller::PostEvent (slot 2) (&SMC[0x48], active byte, mode)
-    if (!buildState->controllerSelf) return;
-    int currentState = (int)(int8_t)(buildState->stateFlags >> 8);
-    // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e's header).
-    ControllerComponent::Controller* node = (ControllerComponent::Controller*)buildState->controllerSelf;
-    node->PostEvent(&buildState->controllerSelf, currentState, mode);
+    if (!buildState->stateMachine.current) return;
+    int currentState = (int)buildState->stateMachine.activeState;
+    ControllerComponent::Controller* node = buildState->stateMachine.current;
+    node->PostEvent(&buildState->stateMachine, currentState, mode);
 }

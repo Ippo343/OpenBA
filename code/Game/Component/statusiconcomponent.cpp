@@ -6,10 +6,11 @@
 // (0xC0 bytes, with overridden vtable at 0x14015f0c0).
 //
 // Vtable at 0x140164620. Non-trivial overrides:
-//   Shutdown  (0x14012bff0) — Serializes iconId field (+0xF0 as uint)
-//   Serialize (0x14012bed0) — Reads sprite data from building description
-//   OnRemove  (0x14012bbd0) — Manages Scene add/remove, positions icon (very complex)
-//   OnUpdate2 (0x14012bf40) — Updates icon visibility, adds to Scene
+//   Persist  (0x14012bff0) — Serializes the billboard's activeMask (+0xF0 as uint)
+//   Startup  (0x14012bed0) — Reads sprite data from building description
+//   Tick     (0x14012bbd0) — Manages Scene add/remove, positions icon (very complex)
+//   Slot11   (0x14012bf40) — Updates icon visibility, adds to Scene (ShowAfterLoad; PORT GAP)
+// and the non-virtual SetFlag (0x14012c3f0).
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
@@ -22,6 +23,8 @@
 #include "Component/StatusIconDescription.h"
 #include "Component/ModelComponent.h"
 #include "Component/MultiObjectComponent.h"
+#include "Component/MapComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "scene_watch.h"
 #include "math/Math.h"
 #include "system/Value.h"
@@ -40,98 +43,76 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 
-// Exe helpers, by retail address: 0x1400aa440 StatusIconComponent_GeometrySetup (below),
+// Exe helpers, by retail address: 0x1400aa440 StatusIconGeometry::Setup (below),
 // 0x1400c3470 ActHunt_NotifyEntityChanged_c3470 (entity notification), 0x140152b00
-// ??0Time@System@@QEAA@M@Z (RtSystem_Time_Ctor), 0x140004680 FloorComponent_FindResData
-// (MapComponent), 0x14009f3e0 Reimpl_MapGetTerrainPos (grid cell -> world position).
+// ??0Time@System@@QEAA@M@Z (RtSystem_Time_Ctor), 0x140004680 FindComponent<MapComponent>,
+// 0x14009f3e0 Reimpl_MapGetTerrainPos (grid cell -> world position).
 
-// ============================================================
-// Reimpl of FUN_1400aa440 (StatusIcon geometry-bounds setup)
-// ============================================================
-// Stores sprite parameters into the embedded Graphics::Geometry sub-object
-// and computes its axis-aligned bounds. half = param2 * 0.5; bounds box is
-// min(-half,-half,0) .. max(half,half, spriteCount*param2). 1:1 port; the
-// only callee is Graphics::Geometry::SetBounds (Runtime export).
-void StatusIconComponent_GeometrySetup(void* geometry, float param2, int spriteCount,
-                                       void* param4, void* spriteSheet) {
-    uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
-    float half = param2 * 0.5f;
+// A StatusIconComponent that never ran StatusIconComponent_StartupInit still carries the
+// inert factory's zero-fill: the embedded geometry's vtable (+0x28) is 0 AND the scene
+// object id (+0x100) is 0. That 0 is "never initialised", NOT scene object 0 � feeding it
+// to Graphics::Scene::RemoveObject spins forever (in-world freeze, see
+// reference_inert_component_sentinel_fields), and AddObject-ing a geometry whose vtable is
+// null faults in the renderer's draw pass. The geometry vtable is the in-band marker: the
+// real ctor and StartupInit both always write it, and nothing ever clears it.
+// [STANDALONE GUARD D4] (a guard of the tree's; retail has none).
+// LEFT: the test reads the billboard's vptr (a guard the real ctor makes always-true;
+// removing it is NEXT_SESSION �0.2's).
+static inline bool SI_Initialised(const StatusIconComponent* c) {
+    return *reinterpret_cast<void* const*>(&c->_geometry) != nullptr;
+}
 
-    *(float*)(g + 0xC0) = param2;
-    *(uint32_t*)(g + 0x30) = 2;
-    *(int*)(g + 0xC4) = spriteCount;
-    *(void**)(g + 0xD0) = spriteSheet;
-    *(uint32_t*)(g + 0xC8) = 0;
-    g[0xCC] = (uint8_t)(uintptr_t)param4;   // original stores low byte of param4
-
-    // Box = { min.x, min.y, min.z, max.x, max.y, max.z } (6 contiguous floats)
-    float box[6];
-    uint32_t negHalf;
-    { uint32_t bits; __builtin_memcpy(&bits, &half, 4); bits ^= 0x80000000u;
-      __builtin_memcpy(&negHalf, &bits, 4); }
-    __builtin_memcpy(&box[0], &negHalf, 4);   // min.x = -half
-    __builtin_memcpy(&box[1], &negHalf, 4);   // min.y = -half
-    box[2] = 0.0f;                            // min.z
-    box[3] = half;                            // max.x
-    box[4] = half;                            // max.y
-    box[5] = (float)spriteCount * param2;     // max.z
-
-    reinterpret_cast<Graphics::Geometry*>(geometry)
-        ->SetBounds(*reinterpret_cast<const ::Box*>(box));   // B.3.5 bridge
+// The graphics scene the icons register with: GameUpdateLoop +0x60.
+// LEFT: GameUpdateLoop::m_graphicsScene is void* (GAME-a).
+static Graphics::Scene* StatusIcon_Scene() {
+    return reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
 }
 
 // ============================================================
-// Helper: Get StatusIconDescription sibling component
+// StatusIconGeometry::Setup (0x1400aa440): the geometry-bounds setup
 // ============================================================
-static void* GetStatusIconDescription(uintptr_t self) {
+// Stores the sprite parameters into the billboard and computes its axis-aligned
+// bounds. half = size * 0.5; bounds box is min(-half,-half,0) .. max(half,half,
+// count*size). 1:1 port; the only callee is Graphics::Geometry::SetBounds.
+void StatusIconGeometry::Setup(float size, int count, uint8_t constant, UI::SpriteSheet* sheet) {
+    float half = size * 0.5f;
 
-    void* obj = *(void**)(self + 0x18);
+    iconSize = size;
+    _materialTypeFlags = 2;
+    spriteCount = count;
+    spriteSheet = sheet;
+    activeMask = 0;
+    constantSize = constant;   // the original stores the low byte of its fourth argument
+
+    ::Box box;
+    box.min.x = -half;
+    box.min.y = -half;
+    box.min.z = 0.0f;
+    box.max.x = half;
+    box.max.y = half;
+    box.max.z = (float)count * size;
+
+    SetBounds(box);
+}
+
+// ============================================================
+// Helper: the StatusIconDescription (the component's +0x18, IsDerivedFrom checked)
+// ============================================================
+static StatusIconDescription* GetStatusIconDescription(const StatusIconComponent* self) {
+    Description* obj = self->_description;
     if (!obj) return nullptr;
 
     bool derived = Object::IsDerivedFromNullSafe(obj, StatusIconDescription::TypeId());
-    return derived ? obj : nullptr;
-}
-
-
-// ============================================================
-// StatusIconComponent::Serialize (vtable slot [4], 0x14012bed0)
-// ============================================================
-// Reads sprite data from StatusIconDescription, initializes geometry.
-// Gets description, reads SpriteSheet::GetSpriteCount, calls helper
-// to set up the geometry with sprite dimensions and sheet reference.
-
-void StatusIconComponent_Serialize(StatusIconComponent* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    void* desc = GetStatusIconDescription(s);
-    if (!desc) return;
-    uintptr_t d = (uintptr_t)desc;
-
-    // Get sprite count from the SpriteSheet at description +0x20
-    void* spriteSheet = *(void**)(d + 0x20);
-    if (!spriteSheet) return;
-
-    int spriteCount = reinterpret_cast<const UI::SpriteSheet*>(spriteSheet)->GetSpriteCount();  // B.3.6 bridge
-
-    // Call geometry setup helper with:
-    //   geometry (+0x28), float from desc +0x28, sprite count,
-    //   value from desc +0x30 (Geometry data), SpriteSheet ptr from desc +0x20
-    {
-        float iconSize = *(float*)(d + 0x28);
-        // desc +0x30 is passed as a Geometry-like value (copied by value in original)
-        void* geomData = *(void**)(d + 0x30);
-        StatusIconComponent_GeometrySetup(
-            (void*)(s + 0x28), iconSize, spriteCount, geomData, spriteSheet);
-    }
+    return derived ? static_cast<StatusIconDescription*>(obj) : nullptr;
 }
 
 
 // ============================================================
 // StatusIcon_EnsureSprite — retail's lazy sprite setup (component vtable slot 4)
 // ============================================================
-// Slot 4 (0x14012bed0, StatusIconComponent_Serialize below) is the ONLY thing that
+// Slot 4 (0x14012bed0, StatusIconComponent::Startup) is the ONLY thing that
 // ever writes the embedded Geometry's sprite/material from the StatusIconDescription
-// — `StatusIconComponent_helper_a440` has exactly one caller in the whole exe.
+// — StatusIconGeometry::Setup has exactly one caller in the whole exe.
 //
 // Retail dispatches slot 4 from TWO places:
 //   * ComponentEntity creation (FUN_1400c30a0, called only from CreateEntity), and
@@ -145,12 +126,12 @@ void StatusIconComponent_Serialize(StatusIconComponent* self) {
 //
 // Retail brackets the call with a save/restore of +0xF0 because slot 4 clobbers it.
 //
-// ⚠ CALL THE PORT DIRECTLY, NEVER DISPATCH VTABLE SLOT 4 HERE.
-// Retail's slot 4 is exactly StatusIconComponent_Serialize (0x14012bed0) — the sprite
-// setup and nothing else. Until ENDGAME B.3.8 VIS OUR slot 4 ALSO re-ran the
-// construction half (the Geometry ctor door on +0x28 and the scene-object id at
-// +0x100 = -1), so dispatching it mid-life reset a live component. The real class's
-// slot 4 no longer does, but the rule stands: call the port.
+// ⚠ CALL THE BODY NON-VIRTUALLY, NEVER DISPATCH VTABLE SLOT 4 HERE.
+// Retail's slot 4 is exactly the sprite setup and nothing else. Until ENDGAME B.3.8
+// VIS OUR slot 4 ALSO re-ran the construction half (the Geometry ctor door on +0x28
+// and the scene-object id at +0x100 = -1), so dispatching it mid-life reset a live
+// component. The real class's slot 4 no longer does, but the rule stands: the call
+// is qualified.
 //
 // This function is called from StatusIcon_Toggle — itself a standalone deviation,
 // since retail's 0x14012c3f0 never touches slot 4 — immediately before Toggle's
@@ -163,25 +144,24 @@ void StatusIconComponent_Serialize(StatusIconComponent* self) {
 // decayed from 60 fps to 8 over about two minutes.
 //   [SceneAdd] StatusIconComponent::Show  calls=119143  distinct-geoms=16
 //   [IconTrace] slot4 CLOBBERED sceneId comp=...  4849 -> -1
-static void StatusIcon_EnsureSprite(uintptr_t c) {
-    int32_t saved = *(int32_t*)(c + 0xF0);
-    StatusIconComponent_Serialize(reinterpret_cast<StatusIconComponent*>(c));
-    *(int32_t*)(c + 0xF0) = saved;
+static void StatusIcon_EnsureSprite(StatusIconComponent* c) {
+    uint32_t saved = c->_geometry.activeMask;
+    c->StatusIconComponent::Startup();
+    c->_geometry.activeMask = saved;
 }
 
 // ============================================================
-// StatusIconComponent::OnUpdate2 (vtable slot [11], 0x14012bf40)
+// StatusIconComponent::ShowAfterLoad — the body of vtable slot [11] (0x14012bf40)
 // ============================================================
-// Updates icon visibility. Calls Geometry vtable +0x20, saves/restores
-// fieldF0 value. If iconId < 0 and fieldF0 != 0: adds geometry to Scene,
-// sets flag bit 2, notifies owner entity, then calls vtable +0x40 (OnRemove)
-// with Time(0) to trigger positioning.
+// Updates icon visibility. Re-runs the sprite setup (slot 4), restoring the +0xF0
+// mask it clobbers. If the icon is not in the scene and bits are set: adds the
+// geometry to the Scene, sets flag bit 2, notifies the owner entity, then calls
+// vtable +0x40 (Tick) with Time(0) to position it.
+// PORT GAP (retail 0x14012bf40): Slot11 does not call this yet (see the header).
 
-void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Save fieldF0 (fieldE8 in longlong* terms = offset 0xF0)
-    int32_t savedFieldF0 = *(int32_t*)(s + 0xF0);
+void StatusIconComponent::ShowAfterLoad() {
+    // Save the mask (+0xF0)
+    uint32_t savedMask = _geometry.activeMask;
 
     // Retail is
     //     lVar2 = param_1[0x1e];                    // +0xF0
@@ -190,45 +170,135 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
     // `*param_1` is the COMPONENT's own vtable pointer (offset 0), not the embedded
     // Geometry's at +0x28 — this copy read +0x28 and called the geometry's slot 4
     // instead, which is why nothing ever re-ran the sprite setup.
-    StatusIcon_EnsureSprite(s);
+    StatusIcon_EnsureSprite(this);
 
-    // Restore fieldF0 to saved value (original: *(int*)(param_1 + 0x1e) cast)
-    *(int32_t*)(s + 0xF0) = savedFieldF0;
+    // Restore the mask to the saved value (original: *(int*)(param_1 + 0x1e) cast)
+    _geometry.activeMask = savedMask;
 
-    // If iconId < 0 and fieldF0 != 0: add to scene and notify
-    int32_t iconId = *(int32_t*)(s + 0x100);
-    if (iconId < 0 && savedFieldF0 != 0) {
+    // If iconId < 0 and the mask != 0: add to scene and notify
+    if (iconId < 0 && savedMask != 0) {
         // Add geometry to scene
         if (GameUpdateLoop::_singleton) {
-            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
+            Graphics::Scene* scene = StatusIcon_Scene();
             if (scene) {
-                uint32_t newId = reinterpret_cast<Graphics::Scene*>(scene)
-                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(s + 0x28));   // B.3.5 bridge
-                SceneWatch_Note(newId, (void*)(s + 0x28), "StatusIconComponent::OnAdded");
+                uint32_t newId = scene->AddObject(&_geometry);
+                SceneWatch_Note(newId, &_geometry, "StatusIconComponent::OnAdded");
 
                 // Set flags: OR bit 2 (0x04) into flags at +0x20
-                uint32_t oldFlags = *(uint32_t*)(s + 0x20);
-                *(uint32_t*)(s + 0x100) = newId;
+                uint32_t oldFlags = _flags;
+                iconId = static_cast<int32_t>(newId);
                 uint32_t newFlags = oldFlags | 0x04u;
-                *(uint32_t*)(s + 0x20) = newFlags;
+                _flags = newFlags;
 
                 // If flags changed (low 16 bits) and owner non-null, notify entity
                 if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
-                    void* ownerEntity = *(void**)(s + 0x10);
-                    if (ownerEntity != nullptr) {
-                        ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));
+                    if (_entity != nullptr) {
+                        ActHunt_NotifyEntityChanged_c3470(_entity);
                     }
                 }
 
-                // Call vtable +0x40 (OnRemove) with Time(0) to position the icon
+                // Call vtable +0x40 (Tick) with Time(0) to position the icon
                 {
-                    uint8_t timeObj[8];
-                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), 0.0f);
-                    self->Tick(timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
+                    System::Time timeObj;
+                    RtSystem_Time_Ctor(&timeObj, 0.0f);
+                    Tick(&timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
                 }
             }
         }
     }
+}
+
+// ============================================================
+// StatusIconComponent::SetFlag (0x14012c3f0; the tree's CitizenComp_FUN_14012c3f0,
+// moved from citizencomponent.cpp)
+// ============================================================
+// Set/clear bit `flagIndex` in the status mask (+0xF0); when the mask becomes
+// empty/non-empty, add/remove the geometry from the scene and toggle the +0x100
+// scene id and the +0x20 flag bit 4, then notify the owning entity.
+void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
+    if ((((_entity->_entityFlags >> 10) & 1) == 0) || (value == '\0')) {
+        uint32_t bit = 1u << (flagIndex & 0x1f);
+        if (value == '\0') {
+            _geometry.activeMask &= ~bit;
+        } else {
+            _geometry.activeMask |= bit;
+        }
+        uint32_t changed;
+        // [STANDALONE GUARD D4] geometry (+0x28) vtable installed?
+        // See the long note in the clear-branch below: both scene calls depend on it.
+        const bool inited = SI_Initialised(this);
+
+        // [diag] BANISHED_SI_CENSUS - report BOTH arms. "No bad scene nodes" is only a
+        // fix if the icons still REGISTER; if `inited` were false the guard would suppress
+        // every AddObject and the SceneWatch silence would mean the feature is off, not
+        // healthy. So count uninitialised components separately from suppressed adds.
+        // See [[reference_diagnostics_must_report_outcomes]].
+        if (static_cast<int32_t>(_geometry.activeMask) == 0) {
+            // [STANDALONE GUARD] A StatusIconComponent that never ran StartupInit still
+            // carries the inert factory's zero-fill: the embedded geometry's vtable
+            // (+0x28) is 0 and the scene id (+0x100) is 0. That 0 means "never
+            // registered", NOT scene object 0 — and Scene::RemoveObject(scene, 0)
+            // removes whichever object genuinely owns id 0, after which the engine's list
+            // walk spins: an in-world FREEZE, not a crash (the failure mode fixed at source
+            // for HighlightComponent in 0f97d16). Repair the sentinel instead of removing.
+            // Reachable on the default path since the pause port graduated: SetAccepting's
+            // accepting=false branch CLEARS icon flags 2/3/4, and clearing the last flag on
+            // an uninitialised icon lands exactly here.
+            //
+            // WARNING: the old note here claimed "the AddObject side below needs no guard -
+            // an uninitialised +0x100 == 0 fails its `< 0` test". That was FALSE, and it was
+            // falsified BY THE LINE BELOW: repairing the sentinel to -1 is exactly what makes
+            // `+0x100 < 0` true, so the next time a flag is SET this function registered a
+            // geometry whose vtable is still 0 into the Graphics::Scene.
+            // `[SceneWatch] BAD=1 ... vtable=0000000000000000` on a 21-minute load soak
+            // (2026-08-29) is that node, and it is the `EXEC of <heap>` in Scene::Clean.
+            // The upstream fix is the real ctor (StatusIconComponent::StatusIconComponent),
+            // which builds the geometry at CONSTRUCTION where retail's ctor 0x14012c0c0
+            // has it, so `inited` below is true for loaded icons too. The gate stays as the
+            // same [STANDALONE GUARD D4] its twin StatusIcon_Toggle carries.
+            //
+            // WARNING: THIS FUNCTION IS PORTED TWICE - see
+            // [[reference_one_retail_fn_ported_twice_diverges]]. The other copy is
+            // StatusIcon_Toggle (below), which HAD the guard; THIS copy is the one the
+            // building-side callers reach for 0x14012c3f0. Change both or neither.
+            if (!inited) {
+                if (iconId == 0)
+                    iconId = -1;
+            } else if (-1 < iconId) {
+                StatusIcon_Scene()->RemoveObject(static_cast<uint32_t>(iconId));
+                iconId = -1;
+            }
+            uint32_t before = _flags;
+            uint32_t after = before & 0xfffffffb;
+            _flags = after;
+            changed = after ^ before;
+        } else {
+            GameSettings* settings = g_gameSettings;
+            if (inited && settings && settings->statusIconEnable != '\0' && iconId < 0) {
+                uint32_t id = StatusIcon_Scene()->AddObject(&_geometry);
+                iconId = static_cast<int32_t>(id);
+                SceneWatch_Note(id, &_geometry, "StatusIcon(12c3f0)::Add");
+            }
+            System::Time timeVal{0};
+            RtSystem_Time_Ctor(&timeVal, 0.0f);
+            Tick(&timeVal);   // vtable +0x40 (slot 8), a virtual dispatch in retail
+            uint32_t before = _flags;
+            uint32_t after = before | 4;
+            _flags = after;
+            changed = after ^ before;
+        }
+        if ((changed & 0xffff) != 0 && _entity != nullptr) {
+            ActHunt_NotifyEntityChanged_c3470(_entity);
+        }
+    }
+}
+
+// B4 FORWARD: outside callers in 16 files (Component: attendancecomponent*, buildcomponent_state8,
+// citizenai_gather, citizen_needsupdate, destroycomponent_states, workcomponent,
+// workplacecomponent; Work: consumeproduce, fishingwork, foresterwork, harvestarea,
+// harvestorchard, herbalistwork, huntwork, pasturework)
+void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
+    reinterpret_cast<StatusIconComponent*>(param_1)->SetFlag(flagIndex, value);
 }
 
 // ============================================================
@@ -244,11 +314,11 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
 // copy it replaced are gone, and with them the Geometry ctor door this file
 // resolved.
 
-// Graphics::Geometry::SetTransform (Runtime export) — used by OnRemove positioning.
+// Graphics::Geometry::SetTransform (Runtime export) — used by Tick positioning.
 
 // Entity component finders: 0x140003f60 ModelComponent (type 0x1401c7a50) and
 // 0x140004740 MultiObjectComponent (type 0x1401c7ac0) are replaced by the by-name
-// lookup below; 0x140004680 FloorComponent_FindResData -> MapComponent (type 0x1401c79e0).
+// lookup below; 0x140004680 -> MapComponent (type 0x1401c79e0).
 // CharacterComponent_impl_f3e0 (0x14009f3e0, Reimpl_MapGetTerrainPos) — grid cell ->
 // world position.
 
@@ -290,7 +360,7 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
 // of them defends nothing systemically — if that corruption returns it will fault
 // elsewhere first, and the fix belongs in the removal lifecycle, not here.
 static inline bool SI_Plausible(const void* p) {
-    uintptr_t v = reinterpret_cast<uintptr_t>(p);
+    uintptr_t v = reinterpret_cast<uintptr_t>(p);  // CAST-OK: ptr_int
     return v >= 0x10000 && v < 0x00007fffffffffffull && (v & 7) == 0;
 }
 
@@ -307,26 +377,16 @@ static bool SI_LogOnce(int* budget) {
 // THROUGH the array base, so `arr`/`count` have to be sane for it to mean anything. Retail
 // reads both fields unguarded and so do we — this only rejects the values, it does not add
 // a check the original lacks anywhere the original would have proceeded safely.
-static bool SI_ComponentArray(uintptr_t entity, int* outCount, int64_t* outArr) {
-    if (!SI_Plausible(reinterpret_cast<void*>(entity))) return false;
-    int count = *(int*)(entity + 0x38);
-    int64_t arr = *(int64_t*)(entity + 0x30);
+static bool SI_ComponentArray(const ComponentEntity* entity, int* outCount,
+                              Object::InternalPtr<Component>** outArr) {
+    if (!SI_Plausible(entity)) return false;
+    int count = entity->_componentCount;
+    Object::InternalPtr<Component>* arr = entity->_components;
     if (count < 0 || count > 4096) return false;
-    if (count > 0 && !SI_Plausible(reinterpret_cast<void*>(arr))) return false;
+    if (count > 0 && !SI_Plausible(arr)) return false;
     if (outCount) *outCount = count;
     if (outArr) *outArr = arr;
     return true;
-}
-
-// A StatusIconComponent that never ran StatusIconComponent_StartupInit still carries the
-// inert factory's zero-fill: the embedded geometry's vtable (+0x28) is 0 AND the scene
-// object id (+0x100) is 0. That 0 is "never initialised", NOT scene object 0 — feeding it
-// to Graphics::Scene::RemoveObject spins forever (in-world freeze, see
-// reference_inert_component_sentinel_fields), and AddObject-ing a geometry whose vtable is
-// null faults in the renderer's draw pass. The geometry vtable is the in-band marker: the
-// real ctor and StartupInit both always write it, and nothing ever clears it.
-static inline bool SI_Initialised(uintptr_t c) {
-    return *(void**)(c + 0x28) != nullptr;
 }
 
 
@@ -339,20 +399,19 @@ static inline bool SI_Initialised(uintptr_t c) {
 // additionally strips icons at demolition start (state-3 enter → helper_c2a0);
 // this teardown-time removal is the safety net that must always run.
 void StatusIconComponent::OnRemove() {
-    uintptr_t c = (uintptr_t)this;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
-    int32_t sceneId = *(int32_t*)(c + 0x100);
+    Graphics::Scene* scene = StatusIcon_Scene();
+    int32_t sceneId = iconId;
     // [STANDALONE GUARD D4] a component that never ran StartupInit still has the inert
     // zero-fill, so sceneId 0 means "never registered" rather than scene object 0 —
     // RemoveObject on it spins forever (in-world freeze). Repair the sentinel instead.
-    if (!SI_Initialised(c)) {
-        if (sceneId == 0) *(int32_t*)(c + 0x100) = -1;
+    if (!SI_Initialised(this)) {
+        if (sceneId == 0) iconId = -1;
         return;
     }
     if (sceneId >= 0 && scene) {
-        reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sceneId);   // B.3.5 bridge
-        *(int32_t*)(c + 0x100) = -1;
+        scene->RemoveObject((uint32_t)sceneId);
+        iconId = -1;
     }
 }
 
@@ -385,17 +444,16 @@ static int s_siUninitBudget = 4;
 // B.3.8 CB1b: the caller passes the class's TypeId() (a plain read), which replaces
 // the per-name first-use cache this helper used to keep (B6-5); `typeName` is only
 // for the guard trace.
-static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const char* typeName) {
+static Component* StatusIcon_FindCompByName(const ComponentEntity* entity, uint32_t want, const char* typeName) {
     if (!entity) return nullptr;
     if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
 
     int count = 0;
-    int64_t arr = 0;
+    Object::InternalPtr<Component>* arr = nullptr;
     if (!SI_ComponentArray(entity, &count, &arr)) return nullptr;
 
     for (int i = 0; i < count; i++) {
-        void** ibp = (void**)(arr + (int64_t)i * 8);
-        void* comp = *ibp;
+        Component* comp = arr[i].Get();
         if (!comp) continue;
         // [STANDALONE GUARD D2] the entry must look like a heap pointer before it is
         // dereferenced. This is the read that faulted on 0xa. A line here now means a
@@ -405,12 +463,13 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const ch
             if (SI_LogOnce(&s_siBadEntryBudget)) {
                 fprintf(stderr, "[StatusIcon] GUARD: entity=%p component[%d/%d]=%p is not a "
                         "plausible pointer (arr=%p) — skipping it during the %s lookup\n",
-                        (void*)entity, i, count, comp, (void*)arr, typeName);
+                        static_cast<const void*>(entity), i, count, static_cast<void*>(comp),
+                        static_cast<void*>(arr), typeName);
                 fflush(stderr);
             }
             continue;
         }
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
+        uint32_t tid = comp->Type();
         if (tid == want)
             return Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
     }
@@ -419,76 +478,74 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const ch
 
 
 // ============================================================
-// StatusIcon_Toggle — faithful standalone port of FUN_14012c3f0 (0x14012c3f0)
+// StatusIcon_Toggle — the second port of FUN_14012c3f0 (0x14012c3f0)
 // ============================================================
 // The authentic status-icon flag SETTER: OR/AND (1<<bit) into the icon active-bits word
 // (+0xF0). If the word becomes 0 → RemoveObject (hide). Otherwise, if the global icon-
 // visibility setting (settings+0xc) is on and the icon is not yet in the scene, AddObject
-// the embedded geometry (+0x28), then call component vtable+0x40 (OnRemove = positioning),
+// the embedded geometry (+0x28), then call component vtable+0x40 (Tick = positioning),
 // and OR the +0x20 dirty bit; on a low-16 change, notify the owner entity (FUN_1400c3470).
-// Verified line-by-line against the disassembly. This is the function WorkPlace attach/
-// detach (0x14012fa20 / 0x14012f7e0) and SetAccepting (0x14012fc00) drive to show/clear the
-// "no occupants / no workers" warning (bit 4 = 0x10). The real exe fn is unmapped in
-// standalone, so the occupancy driver below calls this port instead.
+// Verified line-by-line against the disassembly. The citizen's own icons
+// (CitizenComponent's CitizenStatusIcon_SetFlag) reach this copy; the building-side
+// callers reach StatusIconComponent::SetFlag. It DIFFERS from SetFlag (B3): it re-runs
+// the sprite setup before the scene test (StatusIcon_EnsureSprite) and skips the scene
+// calls on an uninitialised icon. LEFT free: unifying the two is a `behaviour:` commit.
 void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
-    uintptr_t c = (uintptr_t)selfC;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
-    void* scene = *(void**)(gw + 0x60);
+    Graphics::Scene* scene = StatusIcon_Scene();
 
     // [STANDALONE GUARD D4] see SI_Initialised: with no StartupInit the geometry has no
     // vtable and +0x100 == 0 is "never registered", so neither scene call below may run.
-    const bool inited = SI_Initialised(c);
+    const bool inited = SI_Initialised(selfC);
 
     // Culled-entity guard: if the owner entity is culled (entity+0x40 bit 10) the original
     // skips the SET path (only clears are honoured while culled).
-    uintptr_t entity = *(uintptr_t*)(c + 0x10);
-    if (entity && ((*(uint32_t*)(entity + 0x40) >> 10) & 1) != 0 && setFlag) return;
+    ComponentEntity* entity = selfC->_entity;
+    if (entity && ((entity->_entityFlags >> 10) & 1) != 0 && setFlag) return;
 
     uint32_t mask = 1u << (bit & 0x1f);
-    uint32_t* pFlags = (uint32_t*)(c + 0xF0);
+    uint32_t* pFlags = &selfC->_geometry.activeMask;
     if (!setFlag) *pFlags &= ~mask; else *pFlags |= mask;
 
-    uint32_t old20 = *(uint32_t*)(c + 0x20);
+    uint32_t old20 = selfC->_flags;
     uint32_t new20;
     if ((int32_t)*pFlags == 0) {
         // All status bits cleared → remove the icon from the scene.
-        int32_t sid = *(int32_t*)(c + 0x100);
+        int32_t sid = selfC->iconId;
         if (!inited) {
-            if (sid == 0) *(int32_t*)(c + 0x100) = -1;   // repair the zero-fill sentinel
+            if (sid == 0) selfC->iconId = -1;   // repair the zero-fill sentinel
         } else if (sid >= 0 && scene) {
-            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sid);   // B.3.5 bridge
-            *(int32_t*)(c + 0x100) = -1;
+            scene->RemoveObject((uint32_t)sid);
+            selfC->iconId = -1;
         }
         new20 = old20 & 0xfffffffbu;
     } else {
         // At least one status bit set → ensure the icon is in the scene (visibility on)
-        // and position it via component vtable+0x40 (OnRemove).
-        void* settings = g_gameSettings;
-        uint8_t vis = settings ? reinterpret_cast<uint8_t*>(settings)[0xc] : 0;
+        // and position it via component vtable+0x40 (Tick).
+        GameSettings* settings = g_gameSettings;
+        uint8_t vis = settings ? settings->statusIconEnable : 0;
         // Retail guarantees the geometry has its sprite before it can be added to the
         // Scene, because slot 11 (0x14012bf40) re-runs slot 4 on every call and slot 11
         // is retail's only scene-add path. Standalone drives show/hide from THIS function
         // instead (slot 11 has no dispatcher here), so the guarantee has to be restored
         // at the same point: a stream-restored component has never run slot 4, and adding
         // its sprite-less geometry is a silent no-draw. See StatusIcon_EnsureSprite.
-        if (inited) StatusIcon_EnsureSprite(c);
-        if (inited && vis != 0 && *(int32_t*)(c + 0x100) < 0 && scene) {
-            uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
-                ->AddObject(reinterpret_cast<Graphics::Geometry*>(c + 0x28));   // B.3.5 bridge
-            *(int32_t*)(c + 0x100) = (int32_t)id;
-            SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Show");
+        if (inited) StatusIcon_EnsureSprite(selfC);
+        if (inited && vis != 0 && selfC->iconId < 0 && scene) {
+            uint32_t id = scene->AddObject(&selfC->_geometry);
+            selfC->iconId = (int32_t)id;
+            SceneWatch_Note(id, &selfC->_geometry, "StatusIconComponent::Show");
         }
         {
-            uint8_t timeObj[8];
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), 0.0f);
-            selfC->Tick(timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
+            System::Time timeObj;
+            RtSystem_Time_Ctor(&timeObj, 0.0f);
+            selfC->Tick(&timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
         }
         new20 = old20 | 4u;
     }
-    *(uint32_t*)(c + 0x20) = new20;
-    if (((new20 ^ old20) & 0xffff) != 0 && *(uintptr_t*)(c + 0x10) != 0) {
-        ActHunt_NotifyEntityChanged_c3470(*(void**)(c + 0x10));
+    selfC->_flags = new20;
+    if (((new20 ^ old20) & 0xffff) != 0 && selfC->_entity != nullptr) {
+        ActHunt_NotifyEntityChanged_c3470(selfC->_entity);
     }
 }
 
@@ -523,118 +580,113 @@ StatusIconComponent::StatusIconComponent() : _geometry(), iconId(-1), _pad104{} 
 // ============================================================
 // StatusIconComponent::Persist (vtable slot [3], 0x14012bff0)
 // ============================================================
-// Serializes the fieldF0 icon state. Simple: Component_Serialize base,
+// Serializes the activeMask icon state. Simple: Component_Serialize base,
 // then one uint via IO::Serializer(version 0). On load, writes back to +0xF0.
 
 void StatusIconComponent::Persist(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     // Base class serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // Create IO::Serializer (version 0)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
 
-    // Serialize fieldF0 as uint (copy to local, serialize, write back on load)
-    uint32_t iconVal = *(uint32_t*)(s + 0xF0);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(iconVal, nullptr);   // B.3.4 bridge
+    // Serialize the mask as uint (copy to local, serialize, write back on load)
+    uint32_t iconVal = _geometry.activeMask;
+    ser.Serialize(iconVal, nullptr);
 
-    // On load: write value back to field
-    // Check serializer direction: *(int*)(serializer[0] + 8) == 0 means loading
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        *(uint32_t*)(s + 0xF0) = iconVal;
+    // On load (direction 0): write the value back to the field
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        _geometry.activeMask = iconVal;
     }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
-// StatusIconComponent_StartupInit — the STARTUP half: the description-driven geometry
-// sprite setup the inert factory skips. Routed to the component's Startup slot
-// (vtable +0x20 / index 4) so it runs during ComponentEntity::StartupComponents, exactly
-// where the original dispatches the real Serialize.
+
+// ============================================================
+// StatusIconComponent::Startup (vtable slot [4], 0x14012bed0; the tree's
+// StatusIconComponent_Serialize)
+// ============================================================
+// Reads sprite data from the StatusIconDescription, initializes the geometry:
+// the SpriteSheet's sprite count, then Setup (0x1400aa440) with the icon size,
+// the count, the constant-size flag and the sheet.
 // ⚠ A LOAD never dispatches this slot — anything that must hold for a stream-restored
 // component belongs in the ctor (StatusIconComponent::StatusIconComponent), not here.
+// The icon's warning bits are raised/cleared by genuine events
+// (WorkPlaceComponent_SetAccepting / _Attach for building warnings; CitizenComponent
+// Update for citizen health icons) — no per-frame occupancy poll.
 void StatusIconComponent::Startup() {
-    // The ctor half runs at CONSTRUCTION (the real ctor). It used to be re-run here
-    // too (Geometry door + the table stamp + sceneObjId = -1 a second time, on a
-    // component nothing had touched since construction); a C++ member cannot be
-    // re-constructed in place, and retail's slot 4 is the sprite setup alone.
+    StatusIconDescription* desc = GetStatusIconDescription(this);
+    if (!desc) return;
 
-    // Real geometry-sprite setup from the StatusIconDescription's SpriteSheet (guarded
-    // — no-ops if desc/spriteSheet absent). The icon's warning bit is now raised/cleared
-    // by genuine events (WorkPlaceComponent_SetAccepting / _Attach for building warnings;
-    // CitizenComponent Update for citizen health icons) — no per-frame occupancy poll.
-    StatusIconComponent_Serialize(this);
+    // The sprite count of the SpriteSheet at description +0x20
+    UI::SpriteSheet* spriteSheet = desc->_spriteSheet;
+    if (!spriteSheet) return;
 
+    int spriteCount = spriteSheet->GetSpriteCount();
+
+    // Setup(size = desc +0x28, count, constant = desc +0x30's low byte, sheet = desc +0x20)
+    _geometry.Setup(desc->_scale, spriteCount, static_cast<uint8_t>(desc->_flag), spriteSheet);
 }
 // [7] TREE DIVERGENCE (retail 0x14012beb0, 15 B): the removed-from-world handler
 // above (StatusIconComponent::OnRemove) — MarkForRemoval (0x1400c2ea0) dispatches
 // it for capability bit 1 (0xc2 has it); it removes the icon's scene object so
 // the renderer never holds freed geometry.
 // ============================================================
-// Standalone faithful port of StatusIconComponent::OnRemove (0x14012bbd0)
+// Standalone faithful port of StatusIconComponent::Tick (0x14012bbd0)
 // ============================================================
 // Manages Scene add/remove on the game-settings icon-visibility byte (settings+0xc),
 // then positions the icon. Buildings take the MODEL-BOUNDS path (icon centred above
 // the model's bounding box); the map-cell fallback mirrors the original for entities
 // without a model. Verified line-by-line against the disassembly.
 void StatusIconComponent::Tick(void* /*time*/) {
-    uintptr_t c = reinterpret_cast<uintptr_t>(this);
-
     // [STANDALONE GUARD D4] never-initialised component: the inert factory's zero-fill left
     // the geometry vtable (+0x28) null, so +0x100 == 0 is "not registered", not scene
     // object 0. Touching the scene from here would either add a null-vtable geometry to
     // the draw list or RemoveObject an id that was never handed out (which spins forever).
-    if (!SI_Initialised(c)) {
+    if (!SI_Initialised(this)) {
         if (SI_LogOnce(&s_siUninitBudget)) {
             fprintf(stderr, "[StatusIcon] GUARD: comp=%p never ran StartupInit "
                     "(geom vtable +0x28 == 0, sceneId=%d) — icon refresh skipped\n",
-                    static_cast<void*>(this), *(int32_t*)(c + 0x100));
+                    static_cast<void*>(this), iconId);
             fflush(stderr);
         }
         return;
     }
 
-    void* settings = g_gameSettings;
+    GameSettings* settings = g_gameSettings;
     if (!settings || GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
-    void* scene = *(void**)(gw + 0x60);
-    uint8_t iconVisible = reinterpret_cast<uint8_t*>(settings)[0xc];
+    Graphics::Scene* scene = StatusIcon_Scene();
+    uint8_t iconVisible = settings->statusIconEnable;
 
-    int32_t sceneId = *(int32_t*)(c + 0x100);
+    int32_t sceneId = iconId;
     if (iconVisible == 0) {
         if (sceneId >= 0 && scene) {
-            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sceneId);   // B.3.5 bridge
-            *(int32_t*)(c + 0x100) = -1;
+            scene->RemoveObject((uint32_t)sceneId);
+            iconId = -1;
         }
     } else if (sceneId < 0) {
         if (scene) {
-            uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
-                ->AddObject(reinterpret_cast<Graphics::Geometry*>(c + 0x28));   // B.3.5 bridge
-            *(int32_t*)(c + 0x100) = (int32_t)id;
-            SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Update");
+            uint32_t id = scene->AddObject(&_geometry);
+            iconId = (int32_t)id;
+            SceneWatch_Note(id, &_geometry, "StatusIconComponent::Update");
         }
     }
-    if (*(int32_t*)(c + 0x100) < 0) return;
+    if (iconId < 0) return;
 
-    // Icon scale (settings+8 / 100) cached at +0xa4/+0xa8; flag bit 2 on change.
-    float scaleVal = (float)(*(int32_t*)((uint8_t*)settings + 8)) / 100.0f;
-    if (scaleVal != *(float*)(c + 0xa4)) {
-        *(uint32_t*)(c + 0x54) |= 4u;
-        *(float*)(c + 0xa4) = scaleVal;
-        *(float*)(c + 0xa8) = scaleVal;
+    // Icon opacity (settings+8 / 100) cached in the geometry's _opacity/_opacityPrev
+    // (+0xa4/+0xa8); dirty bit 2 on change.
+    float scaleVal = (float)(settings->statusIconOpacity) / 100.0f;
+    if (scaleVal != _geometry._opacity) {
+        _geometry._dirtyFlags |= 4u;
+        _geometry._opacity = scaleVal;
+        _geometry._opacityPrev = scaleVal;
     }
 
-    void* descObj = *(void**)(c + 0x18);
-    void* desc = (Object::IsDerivedFromNullSafe(descObj, StatusIconDescription::TypeId())) ? descObj : nullptr;
+    StatusIconDescription* desc = GetStatusIconDescription(this);
 
     float pos[3];
     pos[0] = 0.0f;
     pos[1] = 0.0f;
-    pos[2] = desc ? *(float*)((uintptr_t)desc + 0x2c) : 0.0f;   // base height offset
+    pos[2] = desc ? desc->_scale2 : 0.0f;   // base height offset
 
-    uintptr_t entity = *(uintptr_t*)(c + 0x10);
+    ComponentEntity* entity = _entity;
 
     // Resolve Model + MultiObject by NAME (the exe finders key off unfilled .rdata globals
     // c7a50/c7ac0 → null for every entity in standalone; see StatusIcon_FindCompByName).
@@ -649,37 +701,37 @@ void StatusIconComponent::Tick(void* /*time*/) {
         PerfX::Count(PerfX::kCntIconSkipped);
         return;
     }
-    void* modelIBP[2] = { nullptr, nullptr };
-    void* multiIBP[2] = { nullptr, nullptr };
-    modelIBP[0] = StatusIcon_FindCompByName(entity, ModelComponent::TypeId(), "ModelComponent");
+    Component* model = StatusIcon_FindCompByName(entity, ModelComponent::TypeId(), "ModelComponent");
     // [PerfX ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
     // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
-    if (modelIBP[0] && PerfX::IconCull() && PerfX::ModelCulled(modelIBP[0])) {
+    if (model && PerfX::IconCull() && PerfX::ModelCulled(model)) {
         PerfX::Count(PerfX::kCntIconCulled);
         PerfX::NoteDeferred(this, [](void* o) {
             reinterpret_cast<StatusIconComponent*>(o)->StatusIconComponent::Tick(nullptr);   // B.3.8 bridge
         });
         return;
     }
-    multiIBP[0] = StatusIcon_FindCompByName(entity, MultiObjectComponent::TypeId(), "MultiObjectComponent");
+    Component* multi = StatusIcon_FindCompByName(entity, MultiObjectComponent::TypeId(), "MultiObjectComponent");
 
-    if (multiIBP[0] == nullptr && modelIBP[0] != nullptr) {
+    if (multi == nullptr && model != nullptr) {
         // MODEL-BOUNDS path: Box at model+0x5c = {min(3), max(3)}; size.z = max.z-min.z.
-        uintptr_t model = (uintptr_t)modelIBP[0];
-        float sizeZ = *(float*)(model + 0x5c + 0x14) - *(float*)(model + 0x5c + 0x08);
-        pos[0] = *(float*)(model + 0x158);
-        pos[1] = *(float*)(model + 0x15c);
-        pos[2] = *(float*)(model + 0x160) + sizeZ;
+        // LEFT: ModelComponent's MeshInstance / transform are raw storage (COMP-d's header).
+        uintptr_t modelAddr = reinterpret_cast<uintptr_t>(model);
+        float sizeZ = *(float*)(modelAddr + 0x5c + 0x14) - *(float*)(modelAddr + 0x5c + 0x08);
+        pos[0] = *(float*)(modelAddr + 0x158);
+        pos[1] = *(float*)(modelAddr + 0x15c);
+        pos[2] = *(float*)(modelAddr + 0x160) + sizeZ;
     } else {
         // MAP-CELL fallback.
-        void* mapIBP[2] = { nullptr, nullptr };
-        FloorComponent_FindResData(reinterpret_cast<void*>(entity), mapIBP);   // 0x140004680
-        if (mapIBP[0]) {
-            uintptr_t mc = (uintptr_t)mapIBP[0];
-            int* widthPtr = *(int**)(gw + 0xf8);
+        MapComponent* mc = entity->FindComponent<MapComponent>();   // 0x140004680
+        if (mc) {
+            // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map width stays a raw read.
+            int* widthPtr = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
             int w = *widthPtr;
-            int idx = ((int)*(int16_t*)(mc + 0x2a) + ((int)*(int16_t*)(mc + 0x2e) >> 1)) * w
-                      + ((int)*(int16_t*)(mc + 0x2c) >> 1) + (int)*(int16_t*)(mc + 0x28);
+            // The footprint is read as int16 (the tree's width; MapComponent.h declares
+            // uint16 -- COMP-d's header, LISTED).
+            int idx = ((int)static_cast<int16_t>(mc->tileY0) + ((int)static_cast<int16_t>(mc->tileY1) >> 1)) * w
+                      + ((int)static_cast<int16_t>(mc->tileX1) >> 1) + (int)static_cast<int16_t>(mc->tileX0);
             float f = (float)(w >> 1) - 0.5f;
             float in[3]  = { (float)(idx % w) - f, (float)(idx / w) - f, 0.0f };
             float out[3] = { 0.0f, 0.0f, 0.0f };
@@ -690,14 +742,14 @@ void StatusIconComponent::Tick(void* /*time*/) {
         }
     }
 
-    // Transform (0x1C bytes): {0,0,0, 1.0(cos), pos.x, pos.y, pos.z} — pure translation.
-    float xf[7] = { 0.0f, 0.0f, 0.0f, 1.0f, pos[0], pos[1], pos[2] };
-    reinterpret_cast<Graphics::Geometry*>(c + 0x28)
-        ->SetTransform(*reinterpret_cast<const Math::Transform*>(xf));   // B.3.5 bridge
+    // Transform: {rotation (0,0,0,1), translation pos} — pure translation.
+    Math::Transform xf;
+    xf.translation = Math::Vector3(pos[0], pos[1], pos[2]);
+    _geometry.SetTransform(xf);
 }
 // [11] 0x14012bf40. PORT GAP (retail 0x14012bf40) — B38 D9: the body is ported
-// above (StatusIconComponent_OnUpdate2) but the tree's table never installed it;
-// the inert stub is kept here.
+// above (ShowAfterLoad) but the tree's table never installed it; the inert stub
+// is kept here.
 void StatusIconComponent::Slot11() {}
 
 // create 0x1400388c0: MemAlloc(0x108, 8), then the ctor.

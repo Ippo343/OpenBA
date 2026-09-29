@@ -82,7 +82,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
         // '\0' at this call site, so retail writes 0xF0 at +0xD0 (NOT 0).
         const System::String emptyName;
         pGameLoop = ::new (gameLoop) GameUpdateLoop(
-            savedState, ibpCopy,
+            static_cast<Save::SavedState*>(savedState), ibpCopy,
             static_cast<int32_t>(reinterpret_cast<uintptr_t>(scenarioIdx) & 0xFFFFFFFFu),
             emptyName, 0, 0, /*disasters (p8)=*/false, nullptr, nullptr, nullptr);
     }

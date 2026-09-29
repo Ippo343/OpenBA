@@ -1,10 +1,11 @@
 // code/Game/Game/camera_input.cpp
 // In-game camera controller — keyboard/mouse driven view movement.
 //
-// Clean reimplementation of two helpers that live inside EntityUI::Update
-// (the in-game player/tool UI controller, GameUpdateLoop+0x120):
-//   FUN_1400feec0  EntityUI::UpdateCamera   — WASD pan, Q/E rotate, wheel zoom, pitch
-//   FUN_1400ff6e0  EntityUI::UpdateHotkeys   — TogglePause + camera presets (0..4)
+// Clean reimplementation of two helpers that live inside the tool manager's
+// Update (0x1401026a0; the object at GameUpdateLoop+0x120, PlayerToolManager):
+//   FUN_1400feec0  PlayerToolManager::UpdateCamera  — WASD pan, Q/E rotate, wheel zoom, pitch
+//   FUN_1400ff6e0  PlayerToolManager::UpdateHotkeys — TogglePause + camera presets (0..4)
+//   FUN_1400fe8d0  PlayerToolManager::ApplyCameraView — one preset
 //
 // EntityUI::Update (0x1401026a0) is not registered, so the camera would never
 // move on its own. This file is invoked directly from GameUpdateLoop::Update
@@ -33,6 +34,9 @@
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Game/Map.h"   // m_game's class (B.4 GAME-a)
+#include "Game/PlayerToolManager.h"   // the camera bodies' class (B.4 GAME-a)
+#include "Game/PlayerController.h"    // m_playerController's class
 #include "options.h"
 #include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos
 #include <cstdint>
@@ -78,12 +82,11 @@ inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-// KeyMap accessors (the triple-deref exref pattern, same as inputbindings.cpp).
-inline void* CamKeyMap() {
+// KeyMap accessor (the triple-deref exref pattern, same as inputbindings.cpp):
+// Input::Configuration's first field.
+inline const Input::KeyMap* CamKeyMap() {
     if (Input::Configuration::_singleton == nullptr) return nullptr;
-    void* l2 = Input::Configuration::_singleton;
-    if (!l2) return nullptr;
-    return *(void**)l2;
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // f3e0 = 0x14009f3e0 grid->world: Reimpl_MapGetTerrainPos (Game/exe_bodies.h).
@@ -92,110 +95,107 @@ inline void* CamKeyMap() {
 // is that cell (ENDGAME B.3.9 SS2). +4=W, +8=H.
 inline bool ScreenSize(int& w, int& h) {
     w = h = 0;
-    void* dev = ::Video::Device::_singleton;
+    const ::Video::Device* dev = ::Video::Device::_singleton;
     if (!dev) return false;
-    w = *(int*)((uintptr_t)dev + 4);
-    h = *(int*)((uintptr_t)dev + 8);
+    w = dev->backBufferWidth;    // +0x04
+    h = dev->backBufferHeight;   // +0x08
     return true;
-}
-
-// Game-settings byte at a given offset (DAT_1401c3de0 -> settings base).
-inline char SettingByte(int byteOffset) {
-    if (g_gameSettings == nullptr) return 0;
-    return *((char*)g_gameSettings + byteOffset);
 }
 
 } // namespace
 
+} // namespace Game
+
 // ============================================================
 // UpdateCamera — port of FUN_1400feec0
 // ============================================================
-//   entityUI  = GameUpdateLoop::m_toolManager (+0x120 controller)
+//   this      = GameUpdateLoop::m_toolManager (+0x120 controller)
 //   inputFlag = "no UI input focus" (1 = gameplay has input)
 //   timeTicks = frame delta as System::Time ticks (int64)
-void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
-    if (!entityUI) return;
+void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
+    using namespace Game;
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    void* keyMap = CamKeyMap();
+    const Input::KeyMap* keyMap = CamKeyMap();
     if (!keyMap) return;
 
-    uint8_t* ui = (uint8_t*)entityUI;
-    uint8_t* pc = (uint8_t*)GameUpdateLoop::_singleton->m_playerController; // PlayerController
+    PlayerController* pc = GameUpdateLoop::_singleton->m_playerController;
     if (!pc) return;
 
-    int64_t timeObj = timeTicks;
-    const float dt = reinterpret_cast<const System::Time*>(&timeObj)->AsSeconds();   // B.3.4b bridge
+    System::Time timeObj;
+    timeObj._ticks = timeTicks;
+    const float dt = timeObj.AsSeconds();
 
     // ── yaw: keyboard rotate (ids 9/10) + middle-mouse drag (id 7 + mouseDeltaX id 2) ──
-    float yaw = *(float*)(pc + 0x28);
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 9))  yaw -= dt * kRotSpeed;   // RotateLeft  // B.3.7 bridge
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 10)) yaw += dt * kRotSpeed;   // RotateRight  // B.3.7 bridge
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 7)) {                          // MouseMiddle drag  // B.3.7 bridge
-        short ddx = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 2);  // B.3.7 bridge
+    float yaw = pc->yaw;
+    if (keyMap->GetValue(0, 9))  yaw -= dt * kRotSpeed;   // RotateLeft  // B.3.7 bridge
+    if (keyMap->GetValue(0, 10)) yaw += dt * kRotSpeed;   // RotateRight  // B.3.7 bridge
+    if (keyMap->GetValue(0, 7)) {                          // MouseMiddle drag  // B.3.7 bridge
+        short ddx = keyMap->GetValue(0, 2);  // B.3.7 bridge
         yaw -= (float)ddx * kMidDragScale;
     }
 
     // ── pan input axes: edge-scroll (optional) then keyboard overrides ──
     float panX = 0.0f; // left/right axis
     float panY = 0.0f; // forward/back axis
-    if (SettingByte(0x14)) { // edge-scroll enabled in game settings
+    // Game-settings byte +0x14 (DAT_1401c3de0 -> settings base): edge-scroll enabled.
+    if (g_gameSettings != nullptr && g_gameSettings->edgeScroll != 0) {
         int sw, sh; ScreenSize(sw, sh);
-        unsigned mx = (unsigned)(uint16_t)reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
-        unsigned my = (unsigned)(uint16_t)reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
+        unsigned mx = (unsigned)(uint16_t)keyMap->GetValue(0, 0);  // B.3.7 bridge
+        unsigned my = (unsigned)(uint16_t)keyMap->GetValue(0, 1);  // B.3.7 bridge
         if (mx < 4)                               panX = -1.0f;
         if ((int)mx > sw - 5 && (int)mx < sw)     panX =  1.0f;
         if (my < 4)                               panY = -1.0f;
         if ((int)my > sh - 5 && (int)my < sh)     panY =  1.0f;
     }
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xd)) panX = -1.0f; // Left  // B.3.7 bridge
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xe)) panX =  1.0f; // Right  // B.3.7 bridge
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xb)) panY = -1.0f; // Forward  // B.3.7 bridge
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xc)) panY =  1.0f; // Back  // B.3.7 bridge
+    if (keyMap->GetValue(0, 0xd)) panX = -1.0f; // Left  // B.3.7 bridge
+    if (keyMap->GetValue(0, 0xe)) panX =  1.0f; // Right  // B.3.7 bridge
+    if (keyMap->GetValue(0, 0xb)) panY = -1.0f; // Forward  // B.3.7 bridge
+    if (keyMap->GetValue(0, 0xc)) panY =  1.0f; // Back  // B.3.7 bridge
 
-    // ── zoom target init + wheel/key input ──
-    if (*(float*)(ui + 0x3c) == 0.0f)
-        *(float*)(ui + 0x3c) = *(float*)(pc + 0x30); // seed from current distance
+    // ── zoom target (+0x3c) init + wheel/key input ──
+    if (field_0x3C == 0.0f)
+        field_0x3C = pc->distance; // seed from current distance
 
-    short wheel = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 4);  // B.3.7 bridge
-    if (inputFlag == 0 && *(char*)(ui + 0x38) == 0) wheel = 0; // no wheel zoom if UI focused
+    short wheel = keyMap->GetValue(0, 4);  // B.3.7 bridge
+    if (inputFlag == 0 && !field_0x38) wheel = 0; // no wheel zoom if UI focused (+0x38)
     int zoomDir;
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0xf)) {          // ZoomIn  // B.3.7 bridge
+    if (keyMap->Pressed(0, 0xf)) {          // ZoomIn  // B.3.7 bridge
         zoomDir = 1;
-    } else if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x10)) {  // ZoomOut  // B.3.7 bridge
+    } else if (keyMap->Pressed(0, 0x10)) {  // ZoomOut  // B.3.7 bridge
         zoomDir = -1;
     } else {
         zoomDir = wheel;
     }
 
-    // ── manual pitch accumulator (0..1) from PitchUp/PitchDown (ids 0x11/0x12) ──
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x11))  // B.3.7 bridge
-        *(float*)(ui + 0x44) += kPitchStep;
-    else if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x12))  // B.3.7 bridge
-        *(float*)(ui + 0x44) -= kPitchStep;
-    *(float*)(ui + 0x44) = clampf(*(float*)(ui + 0x44), 0.0f, 1.0f);
+    // ── manual pitch accumulator +0x44 (0..1) from PitchUp/PitchDown (ids 0x11/0x12) ──
+    if (keyMap->Pressed(0, 0x11))  // B.3.7 bridge
+        field_0x44 += kPitchStep;
+    else if (keyMap->Pressed(0, 0x12))  // B.3.7 bridge
+        field_0x44 -= kPitchStep;
+    field_0x44 = clampf(field_0x44, 0.0f, 1.0f);
 
     // ── apply zoom step to the zoom target, clamp 20..130 ──
     if (zoomDir != 0) {
-        float z = *(float*)(ui + 0x3c) + (zoomDir < 1 ? kZoomStep : -kZoomStep);
-        *(float*)(ui + 0x3c) = clampf(z, kZoomMin, kZoomMax);
+        float z = field_0x3C + (zoomDir < 1 ? kZoomStep : -kZoomStep);
+        field_0x3C = clampf(z, kZoomMin, kZoomMax);
     }
 
     // ── pitch/distance coupling ──
-    const float manual  = *(float*)(ui + 0x44);                       // 0..1
-    const float normZ   = (*(float*)(ui + 0x3c) - kZoomMin) / kZoomSpan; // 0..1
+    const float manual  = field_0x44;                        // 0..1
+    const float normZ   = (field_0x3C - kZoomMin) / kZoomSpan; // 0..1
     const float pitchTarget =
         (manual * kPitchFarMan  - (1.0f - manual) * kPitchFarFlat) * normZ +
         (manual * kPitchNearMan - (1.0f - manual) * kPitchNearFlt) * (1.0f - normZ);
-    *(float*)(ui + 0x40) = pitchTarget;
+    field_0x40 = pitchTarget;                                // +0x40
 
     // pan speed scales with zoom (near=12, far=70)
     const float panSpeed = normZ * kPanSpeedFar + (1.0f - normZ) * kPanSpeedNear;
 
     // commit yaw; smooth pitch and distance toward their targets
-    *(float*)(pc + 0x28) = yaw;
-    *(float*)(pc + 0x2c) = pitchTarget * kSmoothNew + *(float*)(pc + 0x2c) * kSmoothOld;
-    *(float*)(pc + 0x30) = *(float*)(pc + 0x30) * kSmoothOld + *(float*)(ui + 0x3c) * kSmoothNew;
+    pc->yaw = yaw;
+    pc->pitch = pitchTarget * kSmoothNew + pc->pitch * kSmoothOld;
+    pc->distance = pc->distance * kSmoothOld + field_0x3C * kSmoothNew;
 
     // ── pan: move focus along the camera's ground-plane basis ──
     // Original reads the camera right-vector from PlayerController+0x98; that field is
@@ -211,46 +211,46 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
         const float fwdX   =  sy, fwdY   = -cy;   // cross(right, up=(0,0,1))
         const float aR = panSpeed * nx; // along right
         const float aF = panSpeed * ny; // along forward
-        *(float*)(pc + 0x1c) += (rightX * aR + fwdX * aF) * dt;
-        *(float*)(pc + 0x20) += (rightY * aR + fwdY * aF) * dt;
+        pc->targetX += (rightX * aR + fwdX * aF) * dt;
+        pc->targetY += (rightY * aR + fwdY * aF) * dt;
         // z basis is 0 for both vectors, so focus.z is unaffected by panning.
     }
 
     // ── clamp focus to the (zoom-scaled) map bounds ──
     {
-        int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
+        Map* grid = GameUpdateLoop::_singleton->m_game;
         if (grid) {
-            float factor = clampf(1.0f - (*(float*)(pc + 0x30) - kClampBase) / kClampSpan, 0.0f, 1.0f);
-            float halfExtent = (float)grid[0] * kHalf * factor;
-            *(float*)(pc + 0x1c) = clampf(*(float*)(pc + 0x1c), -halfExtent, halfExtent);
-            *(float*)(pc + 0x20) = clampf(*(float*)(pc + 0x20), -halfExtent, halfExtent);
+            float factor = clampf(1.0f - (pc->distance - kClampBase) / kClampSpan, 0.0f, 1.0f);
+            float halfExtent = (float)grid->size * kHalf * factor;
+            pc->targetX = clampf(pc->targetX, -halfExtent, halfExtent);
+            pc->targetY = clampf(pc->targetY, -halfExtent, halfExtent);
         }
     }
 
-    // ── follow/center-on-entity smooth move (only when +0xa4 flag set) ──
-    if (*(char*)(ui + 0xa4) != 0) {
-        int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    // ── follow/center-on-entity smooth move (only when the +0xa4 flag is set) ──
+    if (field_0xA4) {
+        Map* grid = GameUpdateLoop::_singleton->m_game;
         if (grid) {
-            const int gw = grid[0];
+            const int gw = grid->size;
             const float halfCell = (float)(gw >> 1) - kHalf;
             float worldA[3] = {0,0,0}, worldB[3] = {0,0,0};
-            int cellA = *(int*)(ui + 0xac);
-            int cellB = *(int*)(ui + 0xa8);
+            int cellA = field_0xAC;
+            int cellB = field_0xA8;
             float inA[3] = { (float)(cellA % gw) - halfCell, (float)(cellA / gw) - halfCell, 0.0f };
             float inB[3] = { (float)(cellB % gw) - halfCell, (float)(cellB / gw) - halfCell, 0.0f };
             Reimpl_MapGetTerrainPos(grid, worldA, inA, '\0', nullptr);   // 0x14009f3e0
             Reimpl_MapGetTerrainPos(grid, worldB, inB, '\0', nullptr);
             float midX = (worldA[0] + worldB[0]) * kHalf;
             float midY = (worldA[1] + worldB[1]) * kHalf;
-            float* fx = (float*)(pc + 0x1c);
-            float* fy = (float*)(pc + 0x20);
-            float* fz = (float*)(pc + 0x24);
+            float* fx = &pc->targetX;
+            float* fy = &pc->targetY;
+            float* fz = &pc->targetZ;
             *fx = midX * kFollowLerp + *fx * kFollowKeep;
             *fy = midY * kFollowLerp + *fy * kFollowKeep;
             *fz = 0.0f * kFollowLerp + *fz * kFollowKeep;
             float dx = *fx - midX, dy = *fy - midY, dz = *fz;
             if (std::sqrt(dx*dx + dy*dy + dz*dz) < kFollowSnap)
-                *(char*)(ui + 0xa4) = 0;
+                field_0xA4 = false;
         }
     }
 
@@ -274,8 +274,8 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
             else if (std::strncmp(e, "town", 4) == 0) {
                 int tx = 0, ty = 0;
                 if (StartTown_GetSpawnTile(&tx, &ty) && GameUpdateLoop::_singleton != nullptr) {
-                    void* game = GameUpdateLoop::_singleton->m_game;
-                    const int dim = game ? *(int32_t*)game : 0;
+                    const Map* game = GameUpdateLoop::_singleton->m_game;
+                    const int dim = game ? game->size : 0;
                     if (dim > 0) {
                         s_pinX = (float)tx - ((float)(dim >> 1) - 0.5f);
                         s_pinY = (float)ty - ((float)(dim >> 1) - 0.5f);
@@ -290,16 +290,16 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
         }
     }
     if (s_pin) {
-        *(float*)(pc + 0x1c) = s_pinX;
-        *(float*)(pc + 0x20) = s_pinY;
-        *(float*)(pc + 0x24) = 0.0f;
-        *(float*)(pc + 0x30) = s_pinDist;
-        *(float*)(ui + 0x3c) = s_pinDist;   // zoom target, so smoothing doesn't fight it
+        pc->targetX = s_pinX;
+        pc->targetY = s_pinY;
+        pc->targetZ = 0.0f;
+        pc->distance = s_pinDist;
+        field_0x3C = s_pinDist;   // zoom target, so smoothing doesn't fight it
     }
 
 
     // ── decrement the controller's input timer (+0x48) ──
-    int64_t* tmr = (int64_t*)(ui + 0x48);
+    int64_t* tmr = &field_0x48;
     *tmr -= timeTicks;
     if (*tmr < 0) *tmr = 0;
 
@@ -308,49 +308,46 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
 // ============================================================
 // Apply one camera preset (port of FUN_1400fe8d0)
 // ============================================================
-static void Camera_ApplyPreset(void* entityUI, int index, int64_t /*unused*/) {
-    uint8_t* ui = (uint8_t*)entityUI;
-    void* table = *(void**)(ui + 0x70);
+void PlayerToolManager::ApplyCameraView(int index) {
+    PlayerCameraView* table = cameraViews;
     if (!table) return; // no preset table in standalone yet
-    float* p = (float*)((uintptr_t)table + (uintptr_t)index * 0x1c);
-    if (*(char*)(p + 6) == 0) return; // preset slot not set
+    const PlayerCameraView* p = &table[index];
+    if (!p->used) return; // preset slot not set
 
-    uint8_t* pc = (uint8_t*)GameUpdateLoop::_singleton->m_playerController;
+    PlayerController* pc = GameUpdateLoop::_singleton->m_playerController;
     if (!pc) return;
-    *(float*)(pc + 0x30) = p[5]; // distance
-    *(float*)(pc + 0x28) = p[3]; // yaw
-    *(float*)(pc + 0x1c) = p[0]; // focus x
-    *(float*)(pc + 0x20) = p[1]; // focus y
-    *(float*)(pc + 0x24) = p[2]; // focus z
-    *(float*)(pc + 0x2c) = p[4]; // pitch
-    *(float*)(ui + 0x3c) = p[5]; // zoom target
-    *(float*)(ui + 0x40) = p[4]; // pitch target
+    pc->distance = p->field_0x14; // distance
+    pc->yaw = p->field_0x0C;      // yaw
+    pc->targetX = p->position.x;  // focus x
+    pc->targetY = p->position.y;  // focus y
+    pc->targetZ = p->position.z;  // focus z
+    pc->pitch = p->field_0x10;    // pitch
+    field_0x3C = p->field_0x14;   // zoom target
+    field_0x40 = p->field_0x10;   // pitch target
     // Re-run movement with dt=0 to settle smoothing onto the preset immediately.
-    Camera_UpdateMovement(entityUI, 0, 0);
+    UpdateCamera(0, 0);
 }
 
 // ============================================================
 // UpdateHotkeys — port of FUN_1400ff6e0 (pause toggle + camera presets)
 // ============================================================
-void Camera_UpdateHotkeys(void* entityUI, int /*inputFlag*/, int64_t timeTicks) {
-    if (!entityUI || GameUpdateLoop::_singleton == nullptr) return;
-    void* keyMap = CamKeyMap();
+void PlayerToolManager::UpdateHotkeys(int /*inputFlag*/, int64_t /*timeTicks*/) {
+    using namespace Game;
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    const Input::KeyMap* keyMap = CamKeyMap();
     if (!keyMap) return;
-    uint8_t* ui = (uint8_t*)entityUI;
 
     // TogglePause (id 0x17) — unless the pause is locked (GameWorld+0xd0 bit 10).
-    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x17)) {  // B.3.7 bridge
+    if (keyMap->Pressed(0, 0x17)) {  // B.3.7 bridge
         uint32_t worldFlags = GameUpdateLoop::_singleton->m_gameFlags;
         if (((worldFlags >> 10) & 1) == 0)
-            *(char*)(ui + 0x30) = (*(char*)(ui + 0x30) == 0) ? 1 : 0;
+            field_0x30 = !field_0x30;
     }
 
     // Camera presets 0..4 (ids 0x2d..0x31). The original gates these on the active
     // tool allowing camera control; in standalone no tool is wired, so allow them.
     for (int i = 0; i < 5; ++i) {
-        if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, i + 0x2d))  // B.3.7 bridge
-            Camera_ApplyPreset(entityUI, i, timeTicks);
+        if (keyMap->Pressed(0, i + 0x2d))  // B.3.7 bridge
+            ApplyCameraView(i);
     }
 }
-
-} // namespace Game

@@ -100,15 +100,14 @@ char AbsorbResourceComponent::State0Tick() {
             if (rawMaterial == nullptr) continue;
 
             ComponentDescription* item = cellEntity->_description;
-            // LEFT: RawMaterialComponent::field28 is typed void* in ACT-b's header; retail
-            // reads it as the int32 quantity (0x140105ac9 MOV EDI,dword ptr [RAX+0x28]).
-            const int quantity = *reinterpret_cast<int*>(&rawMaterial->field28);
+            // Retail reads the int32 quantity (0x140105ac9 MOV EDI,dword ptr [RAX+0x28]).
+            const int quantity = rawMaterial->quantity;
             // LEFT: Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000 take the storage and
             // the item as integers (Action/exe_bodies.h, ACT-b's declarations).
             if (!(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(storage),
                                            reinterpret_cast<int64_t>(item), quantity) & 0xff)) continue;
             ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage), reinterpret_cast<int64_t>(item),
-                                  *reinterpret_cast<int*>(&rawMaterial->field28));
+                                  rawMaterial->quantity);
 
             // LEFT: GameUpdateLoop::m_entityList is void* (W0 header): the removal list stays by offset.
             const uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
