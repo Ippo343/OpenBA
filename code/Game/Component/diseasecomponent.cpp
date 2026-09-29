@@ -104,6 +104,8 @@
 #include "Game/exe_bodies.h"
 #include "Game/exe_constants.h"
 #include <cstring>
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Component/MapComponent.h"
 
 namespace {
 
@@ -333,8 +335,7 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
     void* gw = GameWorld();
     void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
 
-    int64_t mapIBP = 0;
-    FloorComponent_FindResData(self->_entity, &mapIBP);
+    void* mapIBP = self->_entity->FindComponent<MapComponent>();   // 0x140004680
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
     struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
@@ -520,8 +521,7 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
     void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
     void* rng = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xD8) : nullptr;
 
-    int64_t mapIBP = 0;
-    FloorComponent_FindResData(self->_entity, &mapIBP);
+    void* mapIBP = self->_entity->FindComponent<MapComponent>();   // 0x140004680
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
     struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
@@ -634,8 +634,7 @@ extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* delta
     void* map = *reinterpret_cast<void**>((uintptr_t)gw + 0xF8);
     void* rng = *reinterpret_cast<void**>((uintptr_t)gw + 0xD8);
 
-    int64_t mapIBP = 0;
-    FloorComponent_FindResData(self->_entity, &mapIBP);
+    void* mapIBP = self->_entity->FindComponent<MapComponent>();   // 0x140004680
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
     int16_t fx = *(const int16_t*)(mc + 0x28), fy = *(const int16_t*)(mc + 0x2a);
     int16_t fw = *(const int16_t*)(mc + 0x2c), fh = *(const int16_t*)(mc + 0x2e);
@@ -709,8 +708,7 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
     for (;;) {
         self->spreadAccum -= spreadPeriod;
 
-        int64_t mapIBP = 0;
-        FloorComponent_FindResData(self->_entity, &mapIBP);
+        void* mapIBP = self->_entity->FindComponent<MapComponent>();   // 0x140004680
         const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
         int width = *mapInts;
