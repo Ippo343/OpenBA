@@ -128,7 +128,7 @@ UNIT_TEST(dlg_loader_autosave_dialogs) {
     CHECK_EQ(sizeof(AutoSaveDialog), (size_t)0xd0);
     CHECK_EQ(offsetof(LoaderDialog, loadingImage), (size_t)0xb8);
     CHECK_EQ(offsetof(LoaderDialog, rotation),     (size_t)0xc0);
-    CHECK_EQ(offsetof(AutoSaveDialog, dataC0),     (size_t)0xc0);
+    CHECK_EQ(offsetof(AutoSaveDialog, animatedImage), (size_t)0xc0);
     CHECK_EQ(offsetof(AutoSaveDialog, angle),      (size_t)0xc8);
     CheckShape<LoaderDialog>();
     CheckShape<AutoSaveDialog>();
