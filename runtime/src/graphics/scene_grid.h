@@ -21,26 +21,6 @@ using RtGraphics::Scene;
 using RtGraphics::SceneNode;
 using RtGraphics::Geometry;
 
-// The Scene's `_globals` LinkedList<Geometry*> node, the only thing
-// FreeGlobals (0x18005f1f0) walks. Layout is Collection::LinkedList's, and the
-// only field that body READS is `next` at +0x10 — `prev` is never touched by
-// it, which is why the walk is single-linked even though the list is not.
-struct GlobalNode {
-    void*       element;   // +0x00
-    GlobalNode* prev;      // +0x08  never read by 0x18005f1f0
-    GlobalNode* next;      // +0x10
-};
-static_assert(sizeof(GlobalNode) == 0x18, "LinkedList::Node(T=8) is 0x18 bytes");
-
-// The list header the same body clears: {head, tail, count}.
-struct GlobalList {
-    GlobalNode* head;    // +0x00
-    GlobalNode* tail;    // +0x08
-    int32_t     count;   // +0x10
-    int32_t     pad14;   // +0x14  never read or written
-};
-static_assert(sizeof(GlobalList) == 0x18, "Collection::LinkedList is 0x18 bytes");
-
 // ---------------------------------------------------------------------------
 // The six bodies. Signatures are the retail raw ABI, argument for argument.
 // ---------------------------------------------------------------------------
@@ -68,8 +48,9 @@ void GridUnthread(Scene* self, int32_t id);
 // one unregistered door for another.
 void GridThread(Scene* self, int32_t id);
 
-// 0x18005f1f0 — walk the global list freeing every node under the allocator
-// lock, then clear {head, tail, count}. Scene::~Scene's first call.
-void FreeGlobals(GlobalList* list);
+// 0x18005f1f0 (walk the global list freeing every node, then clear {head,
+// tail, count}) IS `Collection::LinkedList<T>::Clear()`, which Scene::~Scene
+// calls on `_globals`. B.4: its uncalled bridge and the GlobalList / GlobalNode
+// mirrors it took are gone.
 
 }  // namespace rtgfxgrid

@@ -56,6 +56,7 @@
 
 #include "../collection/Collection.h"
 #include "../object/External.h"   // Object::ExternalPtr<T>, for GetInstanceId
+#include "AnimationState.h"        // B.4: Array<AnimationState>, Array<GraphicsMesh::Node>
 
 // Forward declarations only. Tags match the real declarations (RULE B4b-5).
 namespace System { class Time; }
@@ -246,13 +247,18 @@ public:
     // `Array<AnimationManager::Instance>::Serialize` is 0x18005c660.
     // Field for field the same record as `RtGraphics::AnimInstanceRec` above.
     // ------------------------------------------------------------------------
+    //
+    // B.4: the Arrays carry their element type. Nothing builds or destroys an
+    // Instance through a C++ ctor / dtor (the copy ctor 0x18005b700 and the
+    // element destroy are the registered rows in array_graphics_anim.cpp), so no
+    // Array member ctor / dtor is instantiated through this struct.
     struct Instance {
-        void*   _group;                            // +0x00  ExternalPtr<AnimationGroup>,
+        AnimationGroup* _group;                    // +0x00  ExternalPtr<AnimationGroup>,
                                                    //        copied as a RAW qword
         int32_t _animIndex;                        // +0x08  -1 on a blanked slot
         int32_t _refCount;                         // +0x0c
-        Collection::Array<uint8_t> _nodes;         // +0x10  Array<GraphicsMesh::Node>, 0x48
-        Collection::Array<uint8_t> _states;        // +0x20  Array<AnimationState>, 0x48
+        Collection::Array<GraphicsMesh::Node> _nodes;  // +0x10  stride 0x48
+        Collection::Array<AnimationState> _states;     // +0x20  stride 0x48
     };
 
     // ---- the members retail exports -----------------------------------------
@@ -331,7 +337,7 @@ public:
     //   `nodes` is retail's `const Array<GraphicsMesh::Node>&`, stride 0x48.
     //   `GraphicsMesh` is block G's class and is deliberately not named here.
     int32_t GetInstanceId(Object::ExternalPtr<AnimationGroup> group, int animIndex,
-                          const Collection::Array<uint8_t>& nodes);
+                          const Collection::Array<GraphicsMesh::Node>& nodes);
 
     // ?FreeInstanceId@AnimationManager@Graphics@@QEAAXH@Z 0x1800fb970 NOT PORTED
     void FreeInstanceId(int handle);
@@ -351,7 +357,7 @@ public:
     //        see the CORRECTION banner in Animation.h: 0x1800fc268 reads +0x08
     //        as a LOOP BOUND and 0x1800fc2a0 reads +0x00 as an ARRAY BASE, and a
     //        LockCount is not a loop bound.
-    Collection::Array<uint8_t> _instances;
+    Collection::Array<Instance> _instances;   // B.4: typed; see Instance's note
 
     // +0x10  UNVERIFIED — no reader in the ctor, the dtor, `Update` or
     //        `Serialize`. The DO-NOT-DELETE note in Animation.h owns this field's
@@ -390,3 +396,8 @@ static_assert(std::is_standard_layout<AnimationManager>::value,
 
 }  // namespace Graphics
 
+
+// graphics/animationstate.cpp: `Array<AnimationManager::Instance>::Serialize`
+// (0x18005c660), typed by its element (B.4).
+void RtGraphics_SerializeAnimInstances(IO::Serializer& ser, int count,
+                                       Graphics::AnimationManager::Instance* base);

@@ -18,6 +18,8 @@
 
 #include "../../types/graphics/Geometry.h"
 #include "../../types/io/Serializer.h"   // IO::ReaderWriter (B3X W0)
+#include "../../types/graphics/GraphicsMesh.h"   // B.4: GraphicsMesh::TriangleList
+#include "../../types/graphics/Mesh.h"           // B.4: RtGraphics_EdgeMesh_SerializeTriangleListArray
 #include "../../types/graphics/Camera.h"          // rtgfxd::RtGraphics_Camera_CopyCtor
 #include "../../types/collection/Collection.h"    // rtcoll:: the array instantiations
 
@@ -38,12 +40,8 @@ void ArrayGeometryPtrAssign(void* dst, const void* src) {
 }
 
 // `Graphics::Camera::Camera(const Camera&)` — retail 0x180017a70, read from
-// 0x18001be7e / 0x18001be91 rather than resolved by a mangled name this file
-// would have had to guess (reference_resolveexport_phantom_names.md).
-void CameraCopyCtor(void* dst, const void* src) {
-    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<RtGraphics::Camera*>(dst),
-                                       static_cast<const RtGraphics::Camera*>(src));
-}
+// 0x18001be7e / 0x18001be91: rtgfxd::RtGraphics_Camera_CopyCtor, called by name
+// in the draw-group copy below.
 
 // The per-element copy constructor the eh_vector iterator is handed at
 // 0x18001bece: `Collection::Array<T>::Array(const Array&)`, retail 0x18001c620
@@ -99,26 +97,34 @@ static_assert(offsetof(RtGraphics::Geometry, _attached) == 0x18,
 // registrations (name + 0x180015b60) and `GeometryVtable()` are retired.
 // `_attached` is default-initialised first (Array()'s three zero stores), which
 // the body then repeats before the deep assign, so the final bytes are retail's.
+//
+// B.4: on the named fields, in retail's store order; the same bytes are written
+// (+0x14 and +0xbc stay unwritten).
 namespace Graphics {
 Geometry::Geometry(const Geometry& src) {
-    uint8_t* d = reinterpret_cast<uint8_t*>(this);
-    const uint8_t* s = reinterpret_cast<const uint8_t*>(&src);
+    _attachParent = src._attachParent;             // +0x08 qword
+    _attachNode   = src._attachNode;               // +0x10 dword
 
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    _attached._data     = nullptr;                 // +0x18 \ two zero qwords
+    _attached._size     = 0;                       // +0x20 /
+    _attached._capacity = 0;
+    ArrayGeometryPtrAssign(&_attached, &src._attached);
 
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
-    ArrayGeometryPtrAssign(d + 0x18, s + 0x18);
+    // +0x28 .. +0x7b, twenty-one dwords.
+    _detailId          = src._detailId;
+    _dirtyFlags        = src._dirtyFlags;
+    _materialTypeFlags = src._materialTypeFlags;
+    _localBounds       = src._localBounds;
+    _worldBounds       = src._worldBounds;
+    _prevWorldBounds   = src._prevWorldBounds;
 
-    for (uint32_t o = 0x28; o <= 0x78; o += 4)
-        *reinterpret_cast<uint32_t*>(d + o) = *reinterpret_cast<const uint32_t*>(s + o);
+    // +0x7c / +0x80: retail moves the two together as ONE unaligned qword.
+    _opacity     = src._opacity;
+    _opacityPrev = src._opacityPrev;
 
-    // ONE unaligned qword, deliberately: retail moves +0x7c and +0x80 together.
-    std::memcpy(d + 0x7c, s + 0x7c, 8);
-
-    for (uint32_t o = 0x84; o <= 0xb8; o += 4)
-        *reinterpret_cast<uint32_t*>(d + o) = *reinterpret_cast<const uint32_t*>(s + o);
+    // +0x84 .. +0xbb, fourteen dwords.
+    _transform     = src._transform;
+    _prevTransform = src._prevTransform;
 }
 }  // namespace Graphics
 
@@ -239,17 +245,20 @@ namespace Graphics {
 // dependency at cutover (array_destroy.cpp's J2b row made the same call for the
 // destroy side).
 // ============================================================================
+// B.4: the two element pointers (the door's `void*` signature, declared in
+// Scene.h and handed raw element storage by the array row) are each viewed
+// once as the `Graphics::RendererDrawGroup` they are.
 extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
-    uint8_t* d = static_cast<uint8_t*>(self);
-    const uint8_t* s = static_cast<const uint8_t*>(src);
+    Graphics::RendererDrawGroup* const d = static_cast<Graphics::RendererDrawGroup*>(self);
+    const Graphics::RendererDrawGroup* const s = static_cast<const Graphics::RendererDrawGroup*>(src);
 
-    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
-    CameraCopyCtor(d + 0x008, s + 0x008);
-    CameraCopyCtor(d + 0x0e0, s + 0x0e0);
-    *reinterpret_cast<uint32_t*>(d + 0x1b8) = *reinterpret_cast<const uint32_t*>(s + 0x1b8);
-    *reinterpret_cast<uint32_t*>(d + 0x1bc) = *reinterpret_cast<const uint32_t*>(s + 0x1bc);
+    d->_renderBuffer = s->_renderBuffer;                               // +0x000
+    rtgfxd::RtGraphics_Camera_CopyCtor(&d->_camera, &s->_camera);          // +0x008
+    rtgfxd::RtGraphics_Camera_CopyCtor(&d->_cullCamera, &s->_cullCamera);  // +0x0e0
+    d->_shader            = s->_shader;                                // +0x1b8
+    d->_materialTypeFlags = s->_materialTypeFlags;                     // +0x1bc
     for (int k = 0; k < 3; ++k)                       // ASCENDING
-        InnerArrayCopyCtor(d + 0x1c0 + k * 0x10, s + 0x1c0 + k * 0x10);
+        InnerArrayCopyCtor(&d->_items[k], &s->_items[k]);
     return self;
 }
 
@@ -271,29 +280,25 @@ extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
 // virtual call. `MOV ESI,EDX` then `DEC RSI`: the counter is the zero-extended
 // 32-bit argument, so a negative count is impossible rather than huge.
 // ============================================================================
-namespace {
-// `ctx` is the `IO::Serializer`; `[ctx+8]` is its ReaderWriter and +0xa0 is
-// `SerializeInt` (Serializer.h). B3X W0: by name on the real class.
-IO::ReaderWriter* CtxRw(void* ctx) {
-    return *reinterpret_cast<IO::ReaderWriter**>(static_cast<uint8_t*>(ctx) + 8);  // B.3.x bridge
-}
-}
-
-extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int count,
-                                                               void* data) {
+// `ser._readerWriter` is [ctx+8] and +0xa0 is `SerializeInt` (Serializer.h).
+// B.4: typed -- the six DWORDs are the TriangleList's six fields, stride 0x18.
+void RtGraphics_EdgeMesh_SerializeTriangleListArray(IO::Serializer& ser, int count,
+                                                    Graphics::GraphicsMesh::TriangleList* data) {
     if (count <= 0) return;                                  // TEST/JLE
-    uint8_t* e = static_cast<uint8_t*>(data);
+    Graphics::GraphicsMesh::TriangleList* e = data;
     uint64_t n = static_cast<uint32_t>(count);               // MOV ESI,EDX
     do {
-        CtxRw(ctx)->SerializeInt(*reinterpret_cast<int32_t*>(e + 0x00), nullptr);
-        // Retail re-loads `ctx->readerWriter` and the slot before EVERY call; a
+        // Retail re-loads `ser._readerWriter` and the slot before EVERY call; a
         // hoisted load would be one less indirection than retail performs and
-        // would miss a reader/writer swapped mid-element. Kept literal: the
-        // receiver is re-read here and the virtual call re-reads the vptr.
-        for (uint32_t o = 0x04; o <= 0x14; o += 4) {
-            CtxRw(ctx)->SerializeInt(*reinterpret_cast<int32_t*>(e + o), nullptr);
-        }
-        e += 0x18;
+        // would miss a reader/writer swapped mid-element. `ser` is a reference,
+        // so each `ser._readerWriter` below is a fresh load.
+        ser._readerWriter->SerializeInt(e->_f00, nullptr);
+        ser._readerWriter->SerializeInt(e->_f04, nullptr);
+        ser._readerWriter->SerializeInt(e->_f08, nullptr);
+        ser._readerWriter->SerializeInt(e->_f0c, nullptr);
+        ser._readerWriter->SerializeInt(e->_f10, nullptr);
+        ser._readerWriter->SerializeInt(e->_f14, nullptr);
+        ++e;
     } while (--n);
 }
 

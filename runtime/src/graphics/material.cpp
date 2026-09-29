@@ -52,6 +52,7 @@
 
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"                  // B.4: IO::Stream::_direction
 #include "../../types/object/External.h"
 #include "../../types/graphics/Material.h"   // the real Graphics::Material
 
@@ -112,34 +113,31 @@ Object::External* Material::Reconstruct() {
 void Material::Destruct() { this->~Material(); }
 
 // [5] ?Serialize@Material@Graphics@@UEAA_NAEAVStream@IO@@@Z  0x180102a50
+//
+// B.4: the `{ stream, nullptr }` pair, the encoding's CreateReader /
+// CreateWriter (version 0) and the closing `if (rw) delete rw` are
+// `IO::Serializer`'s ctor and dtor, inlined by retail.
 bool Material::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(stream, 0);                       // [RSP+0x20], [RSP+0x28]
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
-    Serializer ser = { stream, nullptr };                // [RSP+0x20], [RSP+0x28]
-    void**  encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                              : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void* enc, Serializer* ser, int version);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
-    ser.readerWriter = rw;
-
-    // B3X W0: by name on the real class. `_type` goes through +0x98
-    // `SerializeUInt` (retail's slot), so it is viewed as the uint32 it is.
-    IO::ReaderWriter* const irw = reinterpret_cast<IO::ReaderWriter*>(rw);  // B.3.x bridge
-    irw->SerializeUInt(*reinterpret_cast<uint32_t*>(&_type), nullptr);
+    // `_type` goes through +0x98 `SerializeUInt` (retail's slot). LEFT: the
+    // field is the int32 `GetType` returns, viewed as the uint32 the slot takes.
+    rw->SerializeUInt(*reinterpret_cast<uint32_t*>(&_type), nullptr);
     int32_t n = _passes._size;
-    irw->SerializeInt(n, nullptr);
+    rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->direction == 0) {
+    if (ser._stream->_direction == IO::kReading) {
         rtcoll::RtColl_ArraySetSize_1800604e0(&_passes, n);             // 0x1800604e0
     }
+    // LEFT: External.h's POD spellings (the serializer and the element array).
     RtObject_ExternalPtrArraySerialize_VideoProgram(                     // 0x1800605e0
-        &ser, n, reinterpret_cast<RtObject::External**>(_passes._data));
+        reinterpret_cast<rt::io::Serializer*>(&ser), n,
+        reinterpret_cast<RtObject::External**>(_passes._data));
 
-    if (rw != nullptr) {
-        delete irw;
-    }
-    return true;
+    return true;                                         // ~Serializer: `if (rw) delete rw`
 }
 
 // ??1Material@Graphics@@UEAA@XZ  0x180102a00 — retail's body, moved here from

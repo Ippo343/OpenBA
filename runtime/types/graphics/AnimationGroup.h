@@ -148,9 +148,16 @@ public:
 
     // ---- the non-slot exported members -------------------------------------
     // ?GetAnimation@AnimationGroup@Graphics@@QEBAAEBVAnimation@2@H@Z 0x180016660
-    //   NOT PORTED. `imul $0x70` over `_clips`; it is the body that names the
-    //   element type and therefore pins `Graphics::Animation`'s size.
-    const Animation& GetAnimation(int index) const;
+    //   `imul $0x70` over `_clips`; it is the body that names the element type
+    //   and therefore pins `Graphics::Animation`'s size. B.4: PORTED, inline
+    //   (four instructions: MOVSXD / IMUL 0x70 / ADD [RCX+0x20] / RET). The one
+    //   view of `_clips`' raw storage as its element type: `_clips` stays the raw
+    //   header because this class's real destructor runs its members' dtors, and
+    //   an `Array<Animation>` member would instantiate the element destroy of an
+    //   `Animation` whose destructor has no C++ body (LEFT, H5).
+    const Animation& GetAnimation(int index) const {
+        return reinterpret_cast<const Animation*>(_clips._data)[index];
+    }
 
     // ?GetAnimationFromName@…QEBAHPEBD@Z 0x1800fb340 — NOT PORTED
     int32_t GetAnimationFromName(const char* name) const;
@@ -199,7 +206,9 @@ public:
     float    _defaultBlend;                  // +0x30  seconds; ctor default 0.1f
     uint32_t _pad34;                         // +0x34  never written by any body read
     Collection::Array<uint8_t> _tags;        // +0x38  Array<{String,String,float}>, stride 0x18
-    Collection::Array<uint8_t> _blendTimes;  // +0x48  Array<float>, the fade table
+    // B.4: typed. `float` is trivially destructible, so the member dtor
+    // ~AnimationGroup runs is the same Clear-then-J1 as the raw header's.
+    Collection::Array<float> _blendTimes;    // +0x48  the fade table
 };
 static_assert(sizeof(AnimationGroup) == 0x58,
               "Graphics::AnimationGroup is 0x58 bytes -- the deleting dtor 0x1800167f0's "

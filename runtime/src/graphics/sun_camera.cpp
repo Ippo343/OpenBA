@@ -83,7 +83,7 @@
 #include "../../types/volume/Volume.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/SunLight.h"
-#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device/Configuration::_singleton
+#include "../../types/video/ImageBuffer.h"   // B.4: Video::ImageBuffer::Width
 #include "../crt/msvc_libm.h"
 
 #include <cstddef>
@@ -92,10 +92,6 @@
 #include <new>
 
 namespace {
-
-using RtGraphics::Camera;
-using RtGraphics::Renderer;
-using RtGraphics::SunLight;
 
 constexpr float kZero      =     0.0f;
 constexpr float kOne       =     1.0f;
@@ -117,10 +113,6 @@ inline float AbsF(float v) {
     uint32_t b; std::memcpy(&b, &v, 4); b &= 0x7fffffffu;
     float r; std::memcpy(&r, &b, 4); return r;
 }
-
-// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now.
-void** SlotVideoDevice() { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
-void** SlotVideoConfig() { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }
 
 }  // namespace
 
@@ -168,17 +160,14 @@ void** SlotVideoConfig() { return reinterpret_cast<void**>(&::Video::Configurati
 namespace Graphics {
 
 Camera SunLight::GetSunCamera(Renderer& renderer) const {
-    const SunLight* const self     = this;
-    Renderer* const       renderer_ = &renderer;
+    const SunLight* const self = this;
 
     // Draw group ZERO's camera at group+0x08 — `_drawGroups[0]._camera`. See
     // the banner: there is no `* 0x1f0`, so it is always group zero.
-    const uint8_t* const group =
-        reinterpret_cast<const uint8_t*>(renderer_->_drawGroups.GetData());
+    const Camera& viewCamera = renderer._drawGroups._data[0]._camera;
 
-    Frustum viewFrustum;
-    std::memcpy(&viewFrustum, group + 0x08, sizeof(Frustum));
-    const float* const m = reinterpret_cast<const float*>(group + 0x6c);  // cameraToWorld
+    Frustum viewFrustum = viewCamera._frustum;
+    const float* const m = &viewCamera._cameraToWorld.axisX.x;   // group + 0x6c
     //   m[0..2] axisX   m[3..5] axisY   m[6..8] axisZ   m[9..11] translation
 
     // corners[0..3] are the frustum's near corners; retail OVERWRITES
@@ -188,11 +177,11 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
 
     // The shadow basis: look from the origin towards the sun direction vector.
     const Vector3    origin = { kZero, kZero, kZero };
-    // B.3.1 bridge: `self->_dirX` is the first of three consecutive floats on
-    // Graphics::SunCamera, which is not a converted class yet.
-    const Transform3 look = Transform3::FromLookAt(
-        origin, *reinterpret_cast<const Vector3*>(&self->_dirX));
-    const float* const p = reinterpret_cast<const float*>(&look);
+    // `_dirX/_dirY/_dirZ` are three consecutive floats (+0xc0); FromLookAt
+    // takes them as the Vector3 they are.
+    const Vector3    sunDir(self->_dirX, self->_dirY, self->_dirZ);
+    const Transform3 look = Transform3::FromLookAt(origin, sunDir);
+    const float* const p = &look.axisX.x;
 
     // ---- pass 1: extrude each near corner, and rotate its direction into world
     Vector3 dir[4];
@@ -307,29 +296,15 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     const float skew   = RtLibm::Sqrt(AbsF((m[4] * kZero + m[3] * kZero) - m[5] * kOne));
     const float radius = RtLibm::Sqrt(r2);
 
-    const uint8_t* const depthTarget = static_cast<const uint8_t*>(self->_depthTarget);
-    uint32_t flags;
-    std::memcpy(&flags, depthTarget + 0x34, 4);
-
     cz = self->_dirZ * kEyePull + cz;
     cx = self->_dirX * kEyePull + cx;
     cy = self->_dirY * kEyePull + cy;
 
-    int32_t dim;
-    if ((flags >> 8) & 1u) {
-        std::memcpy(&dim, static_cast<const uint8_t*>(*SlotVideoDevice()) + 4, 4);
-    } else if ((flags >> 9) & 1u) {
-        int32_t w;
-        std::memcpy(&w, static_cast<const uint8_t*>(*SlotVideoDevice()) + 4, 4);
-        dim = w / 2;                                 // CDQ/SUB/SAR: signed /2
-    } else {
-        std::memcpy(&dim, depthTarget + 0x20, 4);
-        if ((flags >> 6) & 1u) {
-            uint32_t shift;
-            std::memcpy(&shift, static_cast<const uint8_t*>(*SlotVideoConfig()) + 0x2c, 4);
-            dim = dim >> (shift & 31u);
-        }
-    }
+    // `Video::ImageBuffer::Width()` (0x1800f2530) INLINED by retail: the flags
+    // word at +0x34, the device's back-buffer width for bits 8 / 9 (signed /2),
+    // else the image's own width shifted by `Configuration::shadowScalar` for
+    // bit 6. The ported member is that ladder (buffers.cpp).
+    const int32_t dim = self->_depthTarget->Width();
 
     // One shadow-map texel, in world units. The snap below is what stops the
     // shadow edges crawling as the view camera pans.
@@ -364,9 +339,10 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     // The constructor DOOR, into zeroed local storage — see the banner's "one
     // place this member is not a straight move". The zero-fill is deliberate:
     // it makes `_pad_d5` deterministic instead of an indeterminate read.
-    alignas(Camera) unsigned char slot[sizeof(Camera)] = {};
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(slot), &f, &xf, true);   // B.3.5 bridge, 0x1800fe960
-    return *reinterpret_cast<const Camera*>(slot);
+    // LEFT: the door builds the POD; the one view of it as the class is here.
+    RtGraphics::Camera slot = {};
+    RtGraphics_Camera_Ctor(&slot, &f, &xf, true);   // 0x1800fe960
+    return *reinterpret_cast<const Camera*>(&slot);
 }
 
 }  // namespace Graphics

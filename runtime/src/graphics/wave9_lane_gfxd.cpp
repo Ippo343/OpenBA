@@ -176,12 +176,16 @@ void RtArrayAssignI32(void* dst, const void* src) {
 // FIFTY-THREE dword copies covering +0x00..+0xd3, then ONE byte at +0xd4
 // (`MOVZX EAX,byte ptr [RDX+0xd4]` / `MOV byte ptr [RCX+0xd4],AL`). sizeof is
 // 0xd8, so +0xd5..+0xd7 is a hole retail does not touch — see the banner.
-Camera* RtGraphics_Camera_CopyCtor(Camera* self, const Camera* src) {
-    uint32_t*       d = reinterpret_cast<uint32_t*>(self);
-    const uint32_t* s = reinterpret_cast<const uint32_t*>(src);
-    for (int i = 0; i < 0xd4 / 4; ++i) d[i] = s[i];        // 53 dwords
-    reinterpret_cast<uint8_t*>(self)[0xd4] =
-        reinterpret_cast<const uint8_t*>(src)[0xd4];
+// B.4: on the real class -- the 53 dwords are the frustum (incl. its pad), the
+// Transform3 and the projection, then the `_zUp` byte.
+Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
+                                             const Graphics::Camera* src) {
+    // 53 dwords, +0x00..+0xd3: the whole frustum (its +0x61..+0x63 pad
+    // included, as the dword run includes it), the Transform3, the projection.
+    std::memcpy(&self->_frustum, &src->_frustum, sizeof self->_frustum);
+    self->_cameraToWorld = src->_cameraToWorld;
+    self->_projection    = src->_projection;
+    self->_zUp = src->_zUp;                                     // +0xd4
     return self;
 }
 
@@ -201,18 +205,18 @@ Camera* RtGraphics_Camera_CopyCtor(Camera* self, const Camera* src) {
 // to DISJOINT addresses; no float arithmetic is reassociated anywhere in this
 // function, so the "moved term" hazard does not arise
 // (reference_moved_term_hides_where_terms_cancel.md).
-Camera* RtGraphics_Camera_DefaultCtor(Camera* self) {
-    uint8_t* const p = reinterpret_cast<uint8_t*>(self);
-
+//
+// B.4: on the real class's fields. The twelve zero qwords over +0x00..+0x5f are
+// dead stores retail overwrites with the 24 plane floats, so the planes are
+// written once; the two pad windows stay unwritten either way.
+Graphics::Camera* RtGraphics_Camera_DefaultCtor(Graphics::Camera* self) {
     float kOne, kNegOne, kZero;
     const uint32_t bOne = 0x3f800000u, bNegOne = 0xbf800000u, bZero = 0x00000000u;
     std::memcpy(&kOne, &bOne, 4);
     std::memcpy(&kNegOne, &bNegOne, 4);
     std::memcpy(&kZero, &bZero, 4);
 
-    for (int i = 0; i < 12; ++i)                       // +0x00..+0x5f
-        std::memset(p + i * 8, 0, 8);
-    p[0x60] = 1;                                       // MOV byte [RCX+0x60],1
+    self->_frustum.isOrthographic = true;              // MOV byte [RCX+0x60],1
 
     // Volume::Frustum's 24 floats, in retail's store order and with retail's
     // exact constants. XMM2 is XORPS'd (+0.0f), XMM1 is 1.0f, XMM0 is -1.0f.
@@ -224,18 +228,26 @@ Camera* RtGraphics_Camera_DefaultCtor(Camera* self) {
              1,    0,    0,   -1,   -1,    0,    0,   -1,
         //  0x40  0x44  0x48  0x4c  0x50  0x54  0x58  0x5c
              0,    0,   -1,   -1,    0,    0,    1,   -1 };
-    for (int i = 0; i < 24; ++i) {
-        const float v = (kFrustum[i] == 0) ? kZero : (kFrustum[i] > 0 ? kOne : kNegOne);
-        std::memcpy(p + i * 4, &v, 4);
+    for (int k = 0; k < 6; ++k) {
+        float c[4];
+        for (int j = 0; j < 4; ++j) {
+            const signed char s = kFrustum[k * 4 + j];
+            c[j] = (s == 0) ? kZero : (s > 0 ? kOne : kNegOne);
+        }
+        Math::Vector4& plane = self->_frustum.planes[k];
+        plane.x = c[0]; plane.y = c[1]; plane.z = c[2]; plane.w = c[3];
     }
 
-    for (int i = 0; i < 6; ++i)                        // Transform3, +0x64..+0x93
-        std::memset(p + 0x64 + i * 8, 0, 8);
+    Math::Transform3& t = self->_cameraToWorld;        // +0x64..+0x93, zero
+    t.axisX.x = kZero; t.axisX.y = kZero; t.axisX.z = kZero;
+    t.axisY.x = kZero; t.axisY.y = kZero; t.axisY.z = kZero;
+    t.axisZ.x = kZero; t.axisZ.y = kZero; t.axisZ.z = kZero;
+    t.translation.x = kZero; t.translation.y = kZero; t.translation.z = kZero;
 
     for (int i = 0; i < 16; ++i)                       // Matrix, +0x94..+0xd3
-        std::memcpy(p + 0x94 + i * 4, &kZero, 4);
+        self->_projection.m[i] = kZero;
 
-    p[0xd4] = 0;                                       // MOV byte [RCX+0xd4],DL
+    self->_zUp = 0;                                    // MOV byte [RCX+0xd4],DL
     return self;
 }
 
@@ -250,33 +262,44 @@ Camera* RtGraphics_Camera_DefaultCtor(Camera* self) {
 // defensive addition: 0x18001be3c..0x18001be41 stores two zero qwords over the
 // triple and only then calls the array's operator=, which is what makes the
 // assignment safe against a destination holding a foreign pointer.
-uint8_t* SceneEntryAssign(uint8_t* dst, const uint8_t* src) {
-    std::memcpy(dst + 0x00, src + 0x00, 8);
-    std::memcpy(dst + 0x08, src + 0x08, 8);
-    RtGraphics_Camera_CopyCtor(reinterpret_cast<Camera*>(dst + 0x10),
-                               reinterpret_cast<const Camera*>(src + 0x10));
-    for (uint32_t off : {0xe8u, 0xecu, 0xf0u, 0xf4u, 0xf8u})   // +0xfc SKIPPED
-        std::memcpy(dst + off, src + off, 4);
-    std::memset(dst + 0x100, 0, 8);
-    std::memset(dst + 0x108, 0, 8);
-    RtArrayAssignI32(dst + 0x100, src + 0x100);
-    return dst;
+//
+// B.4: the element views, once each, as the `Graphics::RendererSceneEntry` it is
+// (LEFT: the ArraySpec callback hands bytes, array_internal.h), then its fields.
+uint8_t* SceneEntryAssign(uint8_t* dstv, const uint8_t* srcv) {
+    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);
+    const Graphics::RendererSceneEntry* const src =
+        reinterpret_cast<const Graphics::RendererSceneEntry*>(srcv);
+    dst->_scene        = src->_scene;                  // +0x00
+    dst->_renderBuffer = src->_renderBuffer;           // +0x08
+    RtGraphics_Camera_CopyCtor(&dst->_camera, &src->_camera);
+    dst->_shaderDetail      = src->_shaderDetail;      // +0xe8
+    dst->_shader            = src->_shader;            // +0xec
+    dst->_materialTypeFlags = src->_materialTypeFlags; // +0xf0
+    dst->_drawGroupIndex    = src->_drawGroupIndex;    // +0xf4
+    dst->_detailId          = src->_detailId;          // +0xf8   +0xfc SKIPPED
+    dst->_drawableIds._data     = nullptr;             // two zero qwords
+    dst->_drawableIds._size     = 0;
+    dst->_drawableIds._capacity = 0;
+    RtArrayAssignI32(&dst->_drawableIds, &src->_drawableIds);
+    return dstv;
 }
 
 // Retail 0x180062860 — default construct. Returns `dst` (`MOV RAX,RBX`).
 // +0xf8 is 0x40 and +0xf4 is -1; +0xfc is not written.
-uint8_t* SceneEntryInit(uint8_t* dst) {
-    std::memset(dst + 0x00, 0, 8);
-    std::memset(dst + 0x08, 0, 8);
-    RtGraphics_Camera_DefaultCtor(reinterpret_cast<Camera*>(dst + 0x10));
-    std::memset(dst + 0xe8, 0, 8);                     // MOV qword [RBX+0xe8],RDI
-    const uint32_t zero = 0u, neg1 = 0xffffffffu, x40 = 0x40u;
-    std::memcpy(dst + 0xf0, &zero, 4);
-    std::memcpy(dst + 0xf4, &neg1, 4);
-    std::memcpy(dst + 0xf8, &x40, 4);                  // +0xfc SKIPPED
-    std::memset(dst + 0x100, 0, 8);
-    std::memset(dst + 0x108, 0, 8);
-    return dst;
+uint8_t* SceneEntryInit(uint8_t* dstv) {
+    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);
+    dst->_scene        = nullptr;
+    dst->_renderBuffer = nullptr;
+    RtGraphics_Camera_DefaultCtor(&dst->_camera);
+    dst->_shaderDetail      = 0;                       // MOV qword [RBX+0xe8],RDI
+    dst->_shader            = 0;
+    dst->_materialTypeFlags = 0;
+    dst->_drawGroupIndex    = -1;
+    dst->_detailId          = 0x40;                    // +0xfc SKIPPED
+    dst->_drawableIds._data     = nullptr;
+    dst->_drawableIds._size     = 0;
+    dst->_drawableIds._capacity = 0;
+    return dstv;
 }
 
 // Retail 0x18001ce90 — destroy a RANGE of SceneEntries: free each element's
@@ -307,14 +330,15 @@ void SceneEntryInitSpec(uint8_t* dst) { SceneEntryInit(dst); }
 // 0 at +0x18, the dword **1** at +0x20 and a dword 0 at +0x30, leaving +0x1c,
 // +0x24..+0x2f and +0x34..+0x37 alone.
 void DrawItemAssign(uint8_t* dst, const uint8_t* src) { std::memcpy(dst, src, 0x38); }
-void DrawItemInit(uint8_t* dst) {
-    const uint32_t zero = 0u, one = 1u;
-    std::memset(dst + 0x00, 0, 8);
-    std::memset(dst + 0x08, 0, 8);
-    std::memset(dst + 0x10, 0, 8);
-    std::memcpy(dst + 0x18, &zero, 4);
-    std::memcpy(dst + 0x20, &one, 4);
-    std::memcpy(dst + 0x30, &zero, 4);
+void DrawItemInit(uint8_t* dstv) {
+    Graphics::RendererDrawItem* const dst = reinterpret_cast<Graphics::RendererDrawItem*>(dstv);
+    dst->_geometry = nullptr;                          // +0x00
+    dst->_material = nullptr;                          // +0x08
+    dst->_instance = nullptr;                          // +0x10
+    dst->_flags    = 0;                                // +0x18 \ one dword
+    dst->_arg5     = 0;                                // +0x1a /
+    dst->_arg8     = 1;                                // +0x20
+    dst->_arg10    = 0;                                // +0x30
 }
 
 // Renderer::Drawable, stride 0x10. ASSIGN copies two qwords; INIT writes a zero
@@ -403,11 +427,10 @@ extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill) {
 // R13 still the zero it was XOR'd to at entry). The three arrays sit at
 // group+0x1c0 with stride 0x10, which is what RendererDrawGroup::items already
 // records.
-extern "C" void RtGfxd_DrawGroupClearPasses(void* group) {
-    uint8_t* const g = static_cast<uint8_t*>(group);
+extern "C" void RtGfxd_DrawGroupClearPasses(Graphics::RendererDrawGroup* group) {
     for (int i = 0; i < 3; ++i)
-        rtcoll::AsArray<&kSpec_DrawItem>(g + 0x1c0 + i * 0x10)->SetSize(0);
-    std::memset(g, 0, 8);
+        rtcoll::AsArray<&kSpec_DrawItem>(&group->_items[i])->SetSize(0);
+    group->_renderBuffer = nullptr;                    // the first qword
 }
 
 // ============================================================================
@@ -559,9 +582,7 @@ void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuf
 
     rec->_scene        = scene;
     rec->_renderBuffer = renderBuffer;
-    rtgfxd::RtGraphics_Camera_CopyCtor(                                  // B.3.5 bridge
-        reinterpret_cast<RtGraphics::Camera*>(&rec->_camera),
-        reinterpret_cast<const RtGraphics::Camera*>(&camera));
+    rtgfxd::RtGraphics_Camera_CopyCtor(&rec->_camera, &camera);
 
     rec->_shaderDetail      = shaderDetail;   // +0xe8
     rec->_shader            = shader;         // +0xec
