@@ -64,18 +64,26 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // Math::Vector4::Vector4(const Scalar&) (import slot 0x140152958) broadcasts one float
 // into all four lanes.
 
+#include "Object/factory_registration.h"
+#include "Component/GrowthComponent.h"
+#include "Component/GrowthDescription.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/MapComponent.h"
+#include "Game/Map.h"
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
+
 // ============================================================
 // Helper: do harvest/reset sequence
 // ============================================================
 // Shared by both negative-growth and threshold-harvest paths.
-static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAmount) {
+static void DoHarvestReset(GrowthComponent* comp, const Map* resourceMgr, float harvestAmount) {
     // Set resource amount
-    GrowthComponent_SetResourceAmount(comp, harvestAmount);   // 0x140120470
+    comp->SetResourceAmount(harvestAmount);   // 0x140120470
 
     // Update resource manager entry with owner position
-    uint64_t ownerPos = *reinterpret_cast<uint64_t*>(
-        *reinterpret_cast<uintptr_t*>(comp + 0x10) + 0x28);
-    int resIdx = GrowthComponent_GetResourceIndex(comp);   // 0x140120410
+    ComponentDescription* ownerPos = comp->_entity->_description;
+    int resIdx = comp->GetResourceIndex();   // 0x140120410
     // grid base = *(resourceMgr+0x80) = the Map cell grid (game+0x80, built in
     // standalone by MapTileGrid_Build: dim*dim records, stride 0x30). Write the
     // owner position 8-byte handle into this tile's record at +0x10. The original
@@ -85,18 +93,22 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
     // had an extra deref (*(uintptr_t*)gridBase), which read the zeroed first qword
     // of tile-record 0 and wrote to ~0x10 → access violation (misattributed to a
     // "missing resourceMgr grid"; the grid exists — see maptilegrid.cpp).
-    uintptr_t gridBase = *reinterpret_cast<uintptr_t*>(resourceMgr + 0x80);
-    *reinterpret_cast<uint64_t*>(
+    // The Map's cells are untyped (GAME-b's header): LEFT.
+    uintptr_t gridBase = reinterpret_cast<uintptr_t>(resourceMgr->cells);   // Map +0x80
+    *reinterpret_cast<ComponentDescription**>(
         gridBase + 0x10 + (int64_t)resIdx * 0x30) = ownerPos;
 
-    // Reset growth to 0
-    *reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x28) = 0;
+    NaturalResourceComponent* resource = comp->resource.Get();
 
-    // Clear growth flag byte
-    *reinterpret_cast<uint8_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x2D) = 0;
+    // Reset growth to 0 (a dword 0 store: resourceScale = 0.0f, the same bits)
+    resource->resourceScale = 0.0f;
+
+    // Clear growth flag byte (+0x2D, the high byte of NaturalResourceComponent's
+    // resourceFlags in COMP-d's header: LEFT)
+    *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(resource) + 0x2D) = 0;
 
     // Reset growth state
-    GrowthComponent_ResetGrowthState(*reinterpret_cast<void**>(comp + 0x28));   // 0x140126780
+    resource->ResetGrowthState();   // 0x140126780
 }
 
 // ============================================================
@@ -115,14 +127,13 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
 // calls in GrowthComponent_Update / DoHarvestReset actually fire.
 
 // Sub-helpers used by the bodies below, called by name (B3R):
-//   0x140004680 FloorComponent_FindResData -- find NaturalResource entity-data component on
-//               owner (returns IBP)
+//   0x140004680 FindComponent<MapComponent> -- the footprint (tile x / y)
 //   0x140120c30 WorkLeaf_FootprintOwnerCheck_120c30 -- spawn-site validity check
 //               (growthComp/config, x, y) -> bool(low byte)
-//   0x140005200 NaturalResourceComponent_FindComponentByType -- IBP accessor (component fetch)
+//   0x140005200 FindComponent<ParticleComponent>'s neighbour: see SpawnSubResource
 //   0x1400c3720 ComponentEntity_CtorFromDescription -- ComponentEntity copy-ctor
-//   0x1400052c0 WorkBase_FindComponent_52c0 / 0x14000c460 ActCNR_FindComponent_c460 -- IBP
-//               component accessors
+//   0x1400052c0 FindComponent<NaturalResourceComponent> / 0x14000c460
+//               FindComponent<GrowthComponent>
 //   0x140126540 ActCNR_SetupModelAtCell_126540 (Entity_impl_6540) -- place a freshly-spawned
 //               sub-resource entity: records its tile (+0x28/+0x2a), builds a yaw transform
 //               via FromYawPitchOffset and writes it to the entity transform
@@ -131,51 +142,50 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
 //   0x140120db0 ActCNR_SetGrowthProgress_120db0 -- set growth value (float) on entity
 //   0x140125320 / 0x1401253d0 ActCNR_NR_GetSubVariantCount_125320 / ActCNR_NR_SetVariant_1253d0
 //   0x1400c48a0 EntityList_RegisterEntity_Impl -- register new entity into world entity list
-//   0x140003f60 ActCNR_FindComponent_3f60 -- find sibling component of type DAT_1401c7a50 on
-//               the owner entity (the GrowthComponent::Startup +0x30 accessor)
+//   0x140003f60 FindComponent<ModelComponent> (the GrowthComponent::Startup +0x30 accessor)
 //   0x140126440 ActCNR_SetAnimIndex_126440 (AnimateNaturalResource_helper_6440) -- anim kick
 // Random on world singleton (+0xd8); world resource manager (+0xf8); world flags (+0xd0).
 
-static uintptr_t WorldSingleton() {
-    return GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
-}
-
-// Reimpl of FUN_140118950 (GrowthComponent flag modify: comp+0x20 = (f|or)&~andNot; notify)
-void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask) {
-    uint8_t* c = reinterpret_cast<uint8_t*>(comp);
-    uint32_t oldF = *reinterpret_cast<uint32_t*>(c + 0x20);
+// Reimpl of FUN_140118950 — Component::ModifyFlags: +0x20 = (f|or)&~andNot; notify the
+// entity when the low word changed. Every component class reaches it (Animal, Growth).
+void Component::ModifyFlags(uint32_t orMask, uint32_t andNotMask) {
+    uint32_t oldF = _flags;
     uint32_t newF = (oldF | orMask) & ~andNotMask;
-    *reinterpret_cast<uint32_t*>(c + 0x20) = newF;
-    if (((newF ^ oldF) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10) != nullptr) {
-        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(c + 0x10));
+    _flags = newF;
+    if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
+        ActHunt_NotifyEntityChanged_c3470(_entity);
     }
 }
+// B4 FORWARD: 1 outside caller file (Component/animalcomponent.cpp); the closing
+// wave rewires it.
+void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask) {
+    reinterpret_cast<Component*>(comp)->ModifyFlags(orMask, andNotMask);
+}
 
-// Reimpl of FUN_140120410 (GrowthComponent get tile index = y*mapW + x from NatResource data)
-int GrowthComponent_GetResourceIndex(void* comp) {
-    uintptr_t world = WorldSingleton();
+// Reimpl of FUN_140120410 (GrowthComponent get tile index = y*mapW + x from the footprint).
+// Retail loads the shorts with MOVSX.
+int GrowthComponent::GetResourceIndex() {
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return 0;
-    int* mapW = *reinterpret_cast<int**>(world + 0xF8);
-    uint8_t* c = reinterpret_cast<uint8_t*>(comp);
-    int64_t resIBP = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
-    int16_t x = *reinterpret_cast<int16_t*>(resIBP + 0x28);
-    int16_t y = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
-    return (int)y * (*mapW) + (int)x;
+    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): the one bridge is LEFT.
+    const Map* map = reinterpret_cast<const Map*>(world->m_game);
+    MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680
+    int16_t x = static_cast<int16_t>(res->tileX0);
+    int16_t y = static_cast<int16_t>(res->tileY0);
+    return (int)y * map->size + (int)x;
 }
 
 // Reimpl of FUN_140120470 (GrowthComponent set per-tile growth byte at grid +0x2c)
-void GrowthComponent_SetResourceAmount(void* comp, float amount) {
-    uintptr_t world = WorldSingleton();
+void GrowthComponent::SetResourceAmount(float amount) {
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    int* mapW = *reinterpret_cast<int**>(world + 0xF8);
-    uint8_t* c = reinterpret_cast<uint8_t*>(comp);
-    int64_t resIBP = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
-    uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapW) + 0x80);
-    int16_t x = *reinterpret_cast<int16_t*>(resIBP + 0x28);
-    int16_t y = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
-    int64_t cell = (int64_t)((int)x + (int)y * (*mapW));
+    // m_game void* (GAME-a) and Map's cells untyped: the grid reads are LEFT.
+    const Map* map = reinterpret_cast<const Map*>(world->m_game);
+    MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680
+    uintptr_t grid = reinterpret_cast<uintptr_t>(map->cells);   // Map +0x80
+    int16_t x = static_cast<int16_t>(res->tileX0);
+    int16_t y = static_cast<int16_t>(res->tileY0);
+    int64_t cell = (int64_t)((int)x + (int)y * map->size);
     // DAT_14017222c is the byte<->float scale (255.0)
     const float divisor = RdataF(kRdata_14017222c);
     uint8_t* cellByte = reinterpret_cast<uint8_t*>(grid + 0x2c + cell * 0x30);
@@ -187,43 +197,44 @@ void GrowthComponent_SetResourceAmount(void* comp, float amount) {
     *cellByte = (iv > 0xFF) ? 0xFF : (uint8_t)iv;
 }
 
-// Reimpl of FUN_140126780 (GrowthComponent reset growth: set bit 0x200000, notify, animate)
-void GrowthComponent_ResetGrowthState(void* entityPtr) {
-    uint8_t* c = reinterpret_cast<uint8_t*>(entityPtr);
-    uint32_t oldF = *reinterpret_cast<uint32_t*>(c + 0x20);
+// Reimpl of FUN_140126780 — NaturalResourceComponent::ResetGrowthState: set bit
+// 0x200000, notify, animate (RCX = the natural-resource component).
+void NaturalResourceComponent::ResetGrowthState() {
+    uint32_t oldF = _flags;
     uint32_t newF = oldF | 0x200000;
-    *reinterpret_cast<uint32_t*>(c + 0x20) = newF;
-    if (((newF ^ oldF) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10) != nullptr) {
-        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(c + 0x10));
+    _flags = newF;
+    if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
+        ActHunt_NotifyEntityChanged_c3470(_entity);
     }
-    ActCNR_SetAnimIndex_126440(reinterpret_cast<int64_t>(c), 2);   // 0x140126440
+    ActCNR_SetAnimIndex_126440(reinterpret_cast<int64_t>(this), 2);   // 0x140126440
+}
+// B4 FORWARD: 1 outside caller file (Component/tornadocomponent.cpp).
+void GrowthComponent_ResetGrowthState(void* entityPtr) {
+    reinterpret_cast<NaturalResourceComponent*>(entityPtr)->ResetGrowthState();
 }
 
 // Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)
-void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
-    uintptr_t world = WorldSingleton();
+void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    uint8_t* cfg = reinterpret_cast<uint8_t*>(config);
-    int* mapW = *reinterpret_cast<int**>(world + 0xF8);
-    void* rng = *reinterpret_cast<void**>(world + 0xD8);
+    int* mapW = reinterpret_cast<int*>(world->m_game);   // m_game void* (GAME-a): LEFT
+    System::Random* rng = world->m_random;
     // world flag bit 10 must be clear
-    if ((*reinterpret_cast<uint32_t*>(world + 0xD0) >> 10 & 1) != 0) return;
+    if ((world->m_gameFlags >> 10 & 1) != 0) return;
 
-    float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+    float roll = rng->RandFloat();
     const float uvScale = RdataF(kRdata_140172140);   // 0x140172140
-    int spawnChanceDenom = *reinterpret_cast<int*>(cfg + 0x48);
+    int spawnChanceDenom = cfg->_i48;
     if (spawnChanceDenom == 0) return;
     if (roll > uvScale / (float)spawnChanceDenom) return;
 
-    uint8_t* gc = reinterpret_cast<uint8_t*>(growthComp);
-    int64_t resIBP = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(gc + 0x10), &resIBP);
-    int16_t baseX = *reinterpret_cast<int16_t*>(resIBP + 0x28);
-    int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
+    MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680
+    int16_t baseX = static_cast<int16_t>(res->tileX0);
+    int16_t baseY = static_cast<int16_t>(res->tileY0);
 
-    int tol = *reinterpret_cast<int*>(cfg + 0x4c);
-    int x = (int)baseX + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
-    int y = (int)baseY + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
+    int tol = cfg->_i4c;
+    int x = (int)baseX + rng->RandTol(static_cast<int32_t>(tol));
+    int y = (int)baseY + rng->RandTol(static_cast<int32_t>(tol));
     if (!(x >= 0 && y >= 0 && x < *mapW && y < *mapW)) return;
 
     // PORT GAP 0x14009f5d0 CharacterComponent_impl_f5d0: not ported here; retail calls it
@@ -235,53 +246,47 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     if (!placed) return;
 
     int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
-        reinterpret_cast<intptr_t>(config), x, y);   // 0x140120c30
+        reinterpret_cast<intptr_t>(cfg), x, y);   // 0x140120c30
     if ((char)valid == '\0') return;
 
     int mapWv = *mapW;
     int64_t parentIBP = 0;
-    NaturalResourceComponent_FindComponentByType(*reinterpret_cast<void**>(gc + 0x10), &parentIBP);   // 0x140005200
+    NaturalResourceComponent_FindComponentByType(_entity, &parentIBP);   // 0x140005200
     int16_t variantSeed = *reinterpret_cast<int16_t*>(*reinterpret_cast<uintptr_t*>(&parentIBP) + 0x164);
 
     // Allocate + copy-construct the new ComponentEntity from this entity's description.
-    void* mem = (System::MemoryAllocator::_singleton)
-                    ? System::MemoryAllocator::MemAlloc(0x48, 8) : nullptr;
-    void* newEnt = nullptr;
+    ComponentEntity* mem = (System::MemoryAllocator::_singleton)
+                    ? static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8)) : nullptr;
+    ComponentEntity* newEnt = nullptr;
     if (mem) {
-        void* srcDesc = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28);
-        newEnt = ComponentEntity_CtorFromDescription(
-            reinterpret_cast<ComponentEntity*>(mem), srcDesc);   // 0x1400c3720, B.3.x bridge
+        newEnt = ComponentEntity_CtorFromDescription(mem, _entity->_description);   // 0x1400c3720
     }
-    int64_t newIBP = 0;
-    new (&newIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(newEnt));   // B.3.3 bridge
+    ::Object::InternalPtr<ComponentEntity> newIBP(newEnt);
 
-    int64_t acc1 = 0;
-    WorkBase_FindComponent_52c0(static_cast<uintptr_t>(newIBP), &acc1);   // 0x1400052c0
-    ActCNR_SetupModelAtCell_126540(acc1, mapWv * y + x);                  // 0x140126540
+    NaturalResourceComponent* acc1 = newEnt->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
+    ActCNR_SetupModelAtCell_126540(reinterpret_cast<int64_t>(acc1), mapWv * y + x);   // 0x140126540
 
-    int64_t acc2 = 0;
-    ActCNR_FindComponent_c460(static_cast<uintptr_t>(newIBP), &acc2);   // 0x14000c460
-    ActCNR_SetGrowthProgress_120db0(acc2, 0.0f);                        // 0x140120db0
+    GrowthComponent* acc2 = newEnt->FindComponent<GrowthComponent>();   // 0x14000c460
+    ActCNR_SetGrowthProgress_120db0(reinterpret_cast<int64_t>(acc2), 0.0f);   // 0x140120db0
 
     int64_t acc3 = 0;
-    NaturalResourceComponent_FindComponentByType(reinterpret_cast<void*>(newIBP), &acc3);   // 0x140005200
-    int64_t variantTarget = *reinterpret_cast<int64_t*>(&acc3);
+    NaturalResourceComponent_FindComponentByType(newEnt, &acc3);   // 0x140005200
+    int64_t variantTarget = acc3;
 
     int64_t acc4 = 0;
-    NaturalResourceComponent_FindComponentByType(reinterpret_cast<void*>(newIBP), &acc4);   // 0x140005200
-    void* variantWrite = *reinterpret_cast<void**>(&acc4);
+    NaturalResourceComponent_FindComponentByType(newEnt, &acc4);   // 0x140005200
+    int64_t* variantWrite = reinterpret_cast<int64_t*>(acc4);
 
     uint32_t range = ActCNR_NR_GetSubVariantCount_125320(variantTarget, (int)variantSeed);   // 0x140125320
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
-    uint32_t roll2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
-    ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(variantWrite),   // 0x1401253d0
+    uint32_t roll2 = rng->Rand(static_cast<uint32_t>(range));
+    ActCNR_NR_SetVariant_1253d0(variantWrite,   // 0x1401253d0
                                 static_cast<uint16_t>(variantSeed), (short)roll2);
 
-    int64_t regArg = newIBP;
-    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(world + 0xE8), &regArg,   // 0x1400c48a0
-        *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28 + 0x20));
+    ::Object::InternalPtr<ComponentEntity> regArg = newIBP;
+    EntityList_RegisterEntity_Impl(world->m_entityList, &regArg,   // 0x1400c48a0
+        _entity->_description->_category);
 }
 
 // ===== ENDGAME B.3.8 CIT — GrowthComponent as a REAL class (GrowthComponent.h) =====
@@ -289,16 +294,14 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
 // (slots 3 Serialize, 4 Startup, 9 Update, 10 PostUpdate), Inert_ScalarDtor in
 // slot 0. After: the compiler's 16-slot vtable and a real ctor/dtor chain
 // (B38_RULES D1, D2).
-#include "Object/factory_registration.h"
-#include "Component/GrowthComponent.h"
 
 
 // 0x1401208f0. Component() is the CALL 0x1401188b0; the 0x140163590 stamp is
 // the compiler's; +0x28..+0x40 = 0; +0x48 (the smoothed displayed scale) =
 // +0x4c (growthScale) = 1.0f (0x14012092d / 0x140120934); flags |= 0xcb.
 GrowthComponent::GrowthComponent()
-    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr),
-      growthRate(1.0f), growthScale(1.0f) {
+    : resource(), model(), config(nullptr), spawnTimer{0},
+      displayScale(1.0f), growthScale(1.0f) {
     OrFlagsInCtor(0xcb);
 }
 
@@ -322,15 +325,11 @@ GrowthComponent::GrowthComponent()
 //   growthScale@+0x4c = config+0x20 <= 0 ? -1.0 (never harvest)
 //                       : RandFloatTol(rng) * config+0x24 + config+0x20.
 void GrowthComponent::Startup() {
-    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
-
-    void* owner = *reinterpret_cast<void**>(comp + 0x10);
+    ComponentEntity* owner = _entity;
     if (!owner) return;   // not yet wired into an entity
 
     // resource@+0x28 — sibling natural-resource component.
-    int64_t resIBP = 0;
-    WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(owner), &resIBP);   // 0x1400052c0
-    *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(resIBP);
+    resource = owner->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
 
     // +0x30 — sibling ModelComponent (type DAT_1401c7a50), used by FUN_140120db0 to
     // write the growth-staged mesh scale. The shared FUN_140003f60 reimpl finds it via
@@ -340,44 +339,39 @@ void GrowthComponent::Startup() {
     // null, fall back to a
     // SELF-CONTAINED ModelComponent scan via GetTypeIdByName. Scoped here so it cannot
     // change the shared produce/animation callers of 3f60 (verified paths).
-    int64_t res30IBP = 0;
-    ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(owner), &res30IBP);   // 0x140003f60
-    if (res30IBP == 0) {
+    ModelComponent* res30 = owner->FindComponent<ModelComponent>();   // 0x140003f60
+    if (res30 == nullptr) {
         const uint32_t s_tidModel = ModelComponent::TypeId();   // B.3.8: was a lazy by-name cache (B6-5)
         if (s_tidModel) {
-            int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
-            uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
+            int n = owner->_componentCount;
+            Object::InternalPtr<Component>* arr = owner->_components;
             for (int i = 0; i < n && arr; ++i) {
-                void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
-                void* c = *slot;
+                Component* c = arr[i].Get();
                 if (!c) continue;
-                uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-                if (t == s_tidModel) { new (&res30IBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(c)); break; }   // B.3.3 bridge
+                uint32_t t = c->Type();   // slot 2
+                if (t == s_tidModel) { res30 = static_cast<ModelComponent*>(c); break; }
             }
         }
     }
-    *reinterpret_cast<void**>(comp + 0x30) = reinterpret_cast<void*>(res30IBP);
+    model = res30;
 
     // config@+0x38 — trust the description the copy-ctor stored at +0x18.
-    void* config = *reinterpret_cast<void**>(comp + 0x18);
-    *reinterpret_cast<void**>(comp + 0x38) = config;
+    Description* desc0 = _description;
+    GrowthDescription* cfg = static_cast<GrowthDescription*>(desc0);
+    config = cfg;
 
     // growthScale@+0x4c.
-    float minScale = config
-        ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x20)
-        : -1.0f;
+    float minScale = cfg ? cfg->_f20 : -1.0f;
     if (minScale <= 0.0f) {
-        *reinterpret_cast<float*>(comp + 0x4c) = -1.0f;   // 0xbf800000
+        growthScale = -1.0f;   // 0xbf800000
     } else {
-        float range = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x24);
+        float range = cfg->_f24;
         float r = 0.0f;
-        uintptr_t world = WorldSingleton();
+        GameUpdateLoop* world = GameUpdateLoop::_singleton;
         if (world) {
-            void* rng = *reinterpret_cast<void**>(world + 0xd8);
-            r = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
+            r = world->m_random->RandFloatTol();
         }
-        *reinterpret_cast<float*>(comp + 0x4c) = r * range + minScale;
+        growthScale = r * range + minScale;
     }
 }
 void GrowthComponent::OnAdded() {}                                  // [6] 0x140120690: retail's own `RET`
@@ -389,9 +383,7 @@ void GrowthComponent::OnRemove() {}
 // [9] 0x140120050. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void GrowthComponent::Update(void* time) {
-    int64_t* deltaTime = static_cast<int64_t*>(time);
-
-    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+    System::Time* deltaTime = static_cast<System::Time*>(time);
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless Startup ran. config(+0x38) and the resource
@@ -415,42 +407,42 @@ void GrowthComponent::Update(void* time) {
     //
     // A non-null +0x28 is the tell: only the stream puts a resource IBP there before
     // Startup has ever run. Fill +0x38 and leave every restored field alone.
-    if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0) {
-        if (*(uintptr_t*)(comp + 0x38) == 0 && *(uintptr_t*)(comp + 0x28) != 0) {
-            *(uintptr_t*)(comp + 0x38) = *(uintptr_t*)(comp + 0x18);
-        } else if (*(uintptr_t*)(comp + 0x18) != 0) {
+    Description* desc0 = _description;
+    if (config == nullptr || resource.Get() == nullptr) {
+        if (config == nullptr && resource.Get() != nullptr) {
+            config = static_cast<GrowthDescription*>(desc0);
+        } else if (_description != nullptr) {
             GrowthComponent::Startup();
         }
-        if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0)
+        if (config == nullptr || resource.Get() == nullptr)
             return;
     }
 
     const float fOne = kRdata_14017214c;             // 1.0f
     const float fGrowthTimeScale = kRdata_140172234; // 300.0f (this read was labelled "60.0f")
 
-    // config = comp->field38 (component config/description pointer)
-    uintptr_t config = *reinterpret_cast<uintptr_t*>(comp + 0x38);
+    GrowthDescription* cfg = config;
 
-    // Base growth rate: 1.0 / (config+0x28 * 60.0)
-    float configGrowthTime = *reinterpret_cast<float*>(config + 0x28);
+    // Base growth rate: 1.0 / (config+0x28 * 300.0)
+    float configGrowthTime = cfg->_f28;
     float growthRate = fOne / (configGrowthTime * fGrowthTimeScale);
 
     // Get current growth value from resource component at +0x28
-    uintptr_t resourceComp = *reinterpret_cast<uintptr_t*>(comp + 0x28);
-    float currentGrowth = *reinterpret_cast<float*>(resourceComp + 0x28);
+    NaturalResourceComponent* resourceComp = resource.Get();
+    float currentGrowth = resourceComp->resourceScale;
 
     // Apply seasonal temperature modulation
     float tempModifier = fOne;
-    if (*reinterpret_cast<char*>(config + 0x2C) != '\0') {
+    if (cfg->_b2c) {
         // Get current temperature from world singleton
-        // world->weather(+0x130)->temp(+0x18)
-        uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-        uintptr_t weatherPtr = *reinterpret_cast<uintptr_t*>(world + 0x130);
+        // world->weather(+0x130)->temp(+0x18). GameUpdateLoop::m_weather is still
+        // void* (GAME-a): the temperature read is LEFT.
+        uintptr_t weatherPtr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_weather);
         float currentTemp = *reinterpret_cast<float*>(weatherPtr + 0x18);
 
         // Compute temperature distance from optimal
-        float optimalTemp = *reinterpret_cast<float*>(config + 0x30);
-        float tempRange = *reinterpret_cast<float*>(config + 0x34);
+        float optimalTemp = cfg->_f30;
+        float tempRange = cfg->_f34;
 
         // fabsf via double abs with bitmask (matches original bitwise pattern)
         double diff = static_cast<double>(currentTemp - optimalTemp);
@@ -472,93 +464,88 @@ void GrowthComponent::Update(void* time) {
         }
     }
 
-    // Get resource manager from world
-    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    uintptr_t resourceMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
+    // Get resource manager from world (m_game void*, GAME-a: LEFT)
+    const Map* resourceMgr = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);
 
     // Compute time delta in seconds
-    float dtSeconds = reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds();   // B.3.4b bridge
+    float dtSeconds = deltaTime->AsSeconds();
 
     // Accumulate growth
     float newGrowth = currentGrowth + dtSeconds * growthRate * tempModifier;
 
     if (newGrowth >= 0.0f ||
-        ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) != 0)) {
+        ((resource.Get()->_flags >> 0x14 & 1) != 0)) {
         // Growth is positive OR entity has special flag (bit 20)
 
         // Store new growth value
-        *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x28) = newGrowth;
+        resource.Get()->resourceScale = newGrowth;
 
         // Set flag bit 0x10 (growth active)
-        uint32_t oldFlags = *reinterpret_cast<uint32_t*>(comp + 0x20);
+        uint32_t oldFlags = _flags;
         uint32_t newFlags = oldFlags | 0x10;
-        *reinterpret_cast<uint32_t*>(comp + 0x20) = newFlags;
+        _flags = newFlags;
 
         // Notify entity if flags changed
-        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
-            *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
-            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(comp + 0x10));
+        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+            ActHunt_NotifyEntityChanged_c3470(_entity);
         }
 
         // Sub-resource spawning check
-        if (*reinterpret_cast<char*>(config + 0x44) != '\0') {
-            float spawnThreshold = *reinterpret_cast<float*>(config + 0x54);
+        if (cfg->_b44) {
+            float spawnThreshold = cfg->_f54;
             if (spawnThreshold <= newGrowth && newGrowth != spawnThreshold) {
                 // Accumulate spawn timer at comp+0x40
-                *reinterpret_cast<int64_t*>(comp + 0x40) += *deltaTime;
+                spawnTimer._ticks += deltaTime->_ticks;
 
-                float spawnTimerSec = reinterpret_cast<const System::Time*>(reinterpret_cast<int64_t*>(comp + 0x40))->AsSeconds();   // B.3.4b bridge
-                float spawnInterval = static_cast<float>(
-                    *reinterpret_cast<int32_t*>(config + 0x50)) * fGrowthTimeScale;
+                float spawnTimerSec = spawnTimer.AsSeconds();
+                float spawnInterval = static_cast<float>(cfg->_i50) * fGrowthTimeScale;
 
                 if (spawnInterval < spawnTimerSec) {
                     do {
-                        GrowthComponent_SpawnSubResource(comp, reinterpret_cast<void*>(config));   // 0x14011fba0
+                        SpawnSubResource(cfg);   // 0x14011fba0
                         spawnTimerSec -= spawnInterval;
                     } while (spawnInterval < spawnTimerSec);
 
                     // Reset spawn timer to remainder
-                    int64_t remainderTime;
-                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&remainderTime), spawnTimerSec);
-                    *reinterpret_cast<int64_t*>(comp + 0x40) = remainderTime;
+                    System::Time remainderTime;
+                    RtSystem_Time_Ctor(&remainderTime, spawnTimerSec);
+                    spawnTimer._ticks = remainderTime._ticks;
                 }
             }
         }
 
         // Harvest check: growthScale threshold
-        float growthScale = *reinterpret_cast<float*>(comp + 0x4C);
-        if (growthScale > 0.0f && growthScale < newGrowth) {
+        float harvestAt = growthScale;
+        if (harvestAt > 0.0f && harvestAt < newGrowth) {
             // Check entity doesn't have bit 20 set
-            if ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) == 0) {
+            if ((resource.Get()->_flags >> 0x14 & 1) == 0) {
                 // Check world flag (bit 10 of world+0xD0)
-                if ((*reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xD0) >> 10 & 1) == 0) {
+                if ((GameUpdateLoop::_singleton->m_gameFlags >> 10 & 1) == 0) {
                     // Clamp growth to 1.0
                     float harvestAmount = (newGrowth <= fOne) ? newGrowth : fOne;
 
                     // Set resource amount scaled by config+0x40
-                    float configResourceScale = *reinterpret_cast<float*>(config + 0x40);
-                    DoHarvestReset(comp, resourceMgr, harvestAmount * configResourceScale);
+                    float configResourceScale = cfg->_f40;
+                    DoHarvestReset(this, resourceMgr, harvestAmount * configResourceScale);
 
                     // Clear flags bits 3,4 via ModifyFlags(this, 0, 0x18)
-                    GrowthComponent_ModifyFlags(comp, 0, 0x18);   // 0x140118950
+                    ModifyFlags(0, 0x18);   // 0x140118950
                 }
             }
         }
     } else {
         // Growth went negative -- do full harvest/reset
-        float configResourceScale = *reinterpret_cast<float*>(config + 0x40);
-        DoHarvestReset(comp, resourceMgr, configResourceScale);
+        float configResourceScale = cfg->_f40;
+        DoHarvestReset(this, resourceMgr, configResourceScale);
 
         // Clear flags bits 3,4 directly
-        uint32_t oldFlags = *reinterpret_cast<uint32_t*>(comp + 0x20);
+        uint32_t oldFlags = _flags;
         uint32_t newFlags = oldFlags & 0xFFFFFFE7;
-        *reinterpret_cast<uint32_t*>(comp + 0x20) = newFlags;
+        _flags = newFlags;
 
         // Notify entity if flags changed
-        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
-            *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
-            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(comp + 0x10));
+        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+            ActHunt_NotifyEntityChanged_c3470(_entity);
         }
     }
 }
@@ -589,14 +576,11 @@ void GrowthComponent::Update(void* time) {
 //   The flag-4 clear only happens once the scale has CONVERGED, which is what keeps the
 //   component in the post-update list across the whole ramp.
 void GrowthComponent::PostUpdate() {
-    uintptr_t c = reinterpret_cast<uintptr_t>(this);
-
     // Retail derefs +0x28/+0x38/+0x30 unguarded — they are populated by
     // GrowthComponent::Startup, which runs on every spawned resource before the first
     // post-update pass. A null here means Startup did not run, which is the bug to fix.
-    const bool gated = (*reinterpret_cast<uintptr_t*>(c + 0x28) == 0 ||
-                        *reinterpret_cast<uintptr_t*>(c + 0x38) == 0 ||
-                        *reinterpret_cast<uintptr_t*>(c + 0x30) == 0);
+    const bool gated = (resource.Get() == nullptr || config == nullptr ||
+                        model.Get() == nullptr);
     if (gated) return;
 
     const float kOne          = kRdata_14017214c;          // 0x14017214c
@@ -605,36 +589,37 @@ void GrowthComponent::PostUpdate() {
     const float kSmoothNew    = RdataF(kRdata_1401720c0);  // 0x1401720c0
     const float kCropSpreadDiv = RdataF(kRdata_1401720f4); // 0x1401720f4
 
-    uintptr_t resource = *reinterpret_cast<uintptr_t*>(c + 0x28);
-    float target = *reinterpret_cast<float*>(resource + 0x28);   // growth 0..n
+    float target = resource.Get()->resourceScale;   // growth 0..n
     if (target > kOne) target = kOne;
 
-    uintptr_t desc = *reinterpret_cast<uintptr_t*>(c + 0x38);
-    float descFloor = *reinterpret_cast<float*>(desc + 0x60);
+    GrowthDescription* desc = config;
+    float descFloor = desc->_f60;
     if (descFloor > target) target = descFloor;
 
-    float cur = *reinterpret_cast<float*>(c + 0x48);
+    float cur = displayScale;
     const float diff = std::fabs(target - cur);
     const bool converged = (kEpsilon > diff);
     if (converged) {
-        *reinterpret_cast<float*>(c + 0x48) = target;
+        displayScale = target;
     } else {
-        *reinterpret_cast<float*>(c + 0x48) = cur * kSmoothOld + target * kSmoothNew;
+        displayScale = cur * kSmoothOld + target * kSmoothNew;
     }
 
-    const float scale = *reinterpret_cast<float*>(c + 0x48);
+    const float scale = displayScale;
 
-    uintptr_t model = *reinterpret_cast<uintptr_t*>(c + 0x30);
+    // The scale lanes live inside ModelComponent::meshInstance (+0x28, raw storage,
+    // H5, COMP-d's header): model+0x134..+0x140 are meshInstance+0x10c..+0x118. LEFT.
+    uint8_t* mi = model.Get()->meshInstance;
 
-    if (*reinterpret_cast<int8_t*>(desc + 0x64) != 0) {
+    if (desc->_b64) {
         // Crop form: spread (x,y) reaches full early, height (z) tracks growth.
         float spread = scale / kCropSpreadDiv;
         if (spread < 0.0f)      spread = 0.0f;
         else if (spread > kOne) spread = kOne;
-        *reinterpret_cast<float*>(model + 0x134) = spread;
-        *reinterpret_cast<float*>(model + 0x138) = spread;
-        *reinterpret_cast<float*>(model + 0x13c) = scale;
-        *reinterpret_cast<float*>(model + 0x140) = kOne;
+        *reinterpret_cast<float*>(mi + 0x10c) = spread;
+        *reinterpret_cast<float*>(mi + 0x110) = spread;
+        *reinterpret_cast<float*>(mi + 0x114) = scale;
+        *reinterpret_cast<float*>(mi + 0x118) = kOne;
     } else {
         // Uniform form: Math::Vector4(const Scalar&) broadcasts the scale into 4 lanes.
         float scalar = scale;
@@ -643,21 +628,20 @@ void GrowthComponent::PostUpdate() {
             *reinterpret_cast<const Math::Scalar*>(&scalar));   // slot 0x140152958, B.3.x bridge
         {
             const uint32_t* v = reinterpret_cast<const uint32_t*>(vec4);
-            *reinterpret_cast<uint32_t*>(model + 0x134) = v[0];
-            *reinterpret_cast<uint32_t*>(model + 0x138) = v[1];
-            *reinterpret_cast<uint32_t*>(model + 0x13c) = v[2];
-            *reinterpret_cast<uint32_t*>(model + 0x140) = v[3];
+            *reinterpret_cast<uint32_t*>(mi + 0x10c) = v[0];
+            *reinterpret_cast<uint32_t*>(mi + 0x110) = v[1];
+            *reinterpret_cast<uint32_t*>(mi + 0x114) = v[2];
+            *reinterpret_cast<uint32_t*>(mi + 0x118) = v[3];
         }
     }
 
     if (!converged) return;   // stay registered until the ease-in finishes
 
-    uint32_t oldFlags = *reinterpret_cast<uint32_t*>(c + 0x20);
+    uint32_t oldFlags = _flags;
     uint32_t newFlags = oldFlags & ~0x10u;
-    *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
-    if (((newFlags ^ oldFlags) & 0xffff) != 0 &&
-        *reinterpret_cast<uintptr_t*>(c + 0x10) != 0) {
-        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(c + 0x10));
+    _flags = newFlags;
+    if (((newFlags ^ oldFlags) & 0xffff) != 0 && _entity != nullptr) {
+        ActHunt_NotifyEntityChanged_c3470(_entity);
     }
 }
 

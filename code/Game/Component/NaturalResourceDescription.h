@@ -23,6 +23,7 @@
 #include "Object/exe_type.h"
 #include "system/Value.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
 class NaturalResourceDescription final : public Description {
     DECLARE_EXE_TYPE(NaturalResourceDescription)
 
@@ -38,7 +39,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140036610
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _building;                            // +0x20 ExternalPtr<BuildingDescription> (0x140002340 serialize)
+    ComponentDescription* _building;            // +0x20 ExternalPtr<ComponentDescription> (0x140002340 serialize: IsDerivedFrom 0x1401c7318)
     float _f28;                                 // +0x28
     float _f2c;                                 // +0x2c
     float _f30;                                 // +0x30

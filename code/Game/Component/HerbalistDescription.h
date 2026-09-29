@@ -36,7 +36,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140006c20
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _herbs;                               // +0x20 External* array data (herb material refs)
+    Object::External** _herbs;                  // +0x20 External* array data (herb material refs, 0x1400049c0)
     int32_t _herbCount;                         // +0x28
     int32_t _herbCap;                           // +0x2c
     uint32_t _u30;                              // +0x30 enum (serialized through the uint door)

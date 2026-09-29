@@ -35,13 +35,13 @@ FishingDescription::FishingDescription()
     : Description(),
       _fish(nullptr),
       _u28(5),
-      _u2c(0x180) {}
+      _terrainMask(0x180) {}
 
 // [5] 0x14011f170: stream order as retail.
 bool FishingDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
     Reimpl_ExternalPtr_Serialize_StringTable(&_fish, &ser);
-    ser.Serialize(_u2c, nullptr);
+    ser.Serialize(_terrainMask, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_u28, nullptr);   // version-gated, as retail
     return true;
 }

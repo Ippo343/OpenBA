@@ -36,16 +36,16 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x1400059f0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    float _f20;                                 // +0x20
-    float _f24;                                 // +0x24 ctor stores int 0
-    float _f28;                                 // +0x28 ctor stores int 0
+    float _ripenSeasons;                        // +0x20 seasons to ripen (Update 0x140049de0: 0.98 / (x * 300))
+    float _optimalTemp;                         // +0x24 ctor stores int 0
+    float _tempRange;                           // +0x28 ctor stores int 0; |temp - optimal| / range
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
     void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
 };
 
 static_assert(sizeof(FruitDescription) == 0x38, "FruitDescription is 0x38 (create 0x140005980 MemAlloc(0x38))");
 static_assert(alignof(FruitDescription) == 8, "FruitDescription alignment");
-static_assert(offsetof(FruitDescription, _f20) == 0x20, "FruitDescription::_f20 @ +0x20");
-static_assert(offsetof(FruitDescription, _f24) == 0x24, "FruitDescription::_f24 @ +0x24");
-static_assert(offsetof(FruitDescription, _f28) == 0x28, "FruitDescription::_f28 @ +0x28");
+static_assert(offsetof(FruitDescription, _ripenSeasons) == 0x20, "FruitDescription::_ripenSeasons @ +0x20");
+static_assert(offsetof(FruitDescription, _optimalTemp) == 0x24, "FruitDescription::_optimalTemp @ +0x24");
+static_assert(offsetof(FruitDescription, _tempRange) == 0x28, "FruitDescription::_tempRange @ +0x28");
 static_assert(offsetof(FruitDescription, _ref30) == 0x30, "FruitDescription::_ref30 @ +0x30");

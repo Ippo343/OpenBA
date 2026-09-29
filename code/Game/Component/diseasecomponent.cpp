@@ -106,6 +106,22 @@
 #include <cstring>
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Component/MapComponent.h"
+#include "Component/coll_bridge.h"
+#include "Game/Map.h"
+#include "Entity/CitizenBehavior.h"
+#include "Component/DiseaseComponent.h"
+#include "Component/DiseaseDescription.h"
+#include "Component/PastureComponent.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/ParticleComponent.h"
+#include "Component/ParticleDescription.h"
+#include "Component/AnimalComponent.h"
+#include "Component/CropFieldComponent.h"
+#include "Component/OrchardComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Game/PlayerToolManager.h"
+#include "Game/GameSettings.h"
 
 namespace {
 
@@ -145,14 +161,36 @@ static inline float SecsPerMonth()  { return kRdata_140172234; }          // 300
 static inline float SecsPerYear()   { return BitsF(kRdata_14017225c); }   // 3600.0f
 static inline float OneF()          { return kRdata_14017214c; }          // 1.0f (g_fUVScale)
 
-static inline void* GameWorld() {
+// GameUpdateLoop::m_citizenList (+0xF0) is still void* (GAME-a); the town manager it
+// points at is the CitizenBehavior (WORK-a), whose disease registry is read by name. The
+// one bridge from the untyped member is LEFT.
+static inline CitizenBehavior* TownManager(GameUpdateLoop* gw) {
+    return reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);
+}
+
+static inline GameUpdateLoop* GameWorld() {
     return GameUpdateLoop::_singleton;
 }
 static inline int64_t TimeFromSeconds(float secs) {
-    int64_t t = 0;                              // Time ctor writes 8 BYTES
-    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t), secs);
-    return t;
+    ::System::Time t = {0};                     // Time ctor writes 8 BYTES
+    RtSystem_Time_Ctor(&t, secs);
+    return t._ticks;
 }
+
+// One entry of the tile list 0x14009fc00 fills (16 bytes: the cell index, a
+// zero dword, the entity on the cell), and the list itself (data / count /
+// capacity), freed by the caller.
+struct TileInfo {
+    int32_t          cell;     // +0x00
+    int32_t          pad04;    // +0x04
+    ComponentEntity* entity;   // +0x08
+};
+static_assert(sizeof(TileInfo) == 0x10, "TileInfo is 16 bytes");
+struct TileInfoList {
+    TileInfo* data;    // +0x00
+    int32_t   count;   // +0x08
+    int32_t   cap;     // +0x0C
+};
 
 bool CDTrace() {
     if (s_trace < 0) {
@@ -178,17 +216,18 @@ static const int kRollBudget = 400;
 // field is cell+0x10, the grown-resource identity raster (cell+0x00 is the zone
 // raster and cell+0x08 the entity raster — a different thing entirely).
 // Outer loop walks x across `w`, inner loop steps whole rows down `h`.
-extern "C" bool DiseaseComp_SameCropProbe(void* map, int x, int y, int w, int h,
-                                          int64_t wantIdentity) {
-    const uint8_t* m = reinterpret_cast<const uint8_t*>(map);
-    int32_t width = *reinterpret_cast<const int32_t*>(m + 0x00);
-    uintptr_t cells = *reinterpret_cast<const uintptr_t*>(m + 0x80);
+// Its receiver is the Map (GameUpdateLoop +0xf8): Map::HasIdentityInRect. The 0x30-byte
+// cells are raw storage (GAME-b): the two reads through them are LEFT.
+bool Map::HasIdentityInRect(int x, int y, int w, int h,
+                            const ComponentDescription* wantIdentity) const {
+    const int32_t width = size;
+    const uintptr_t base = reinterpret_cast<uintptr_t>(cells);
 
     for (int64_t dx = 0; dx < w; ++dx) {
-        uintptr_t cell = cells + 0x10 +
+        uintptr_t cell = base + 0x10 +
             (uintptr_t)(((int64_t)width * y) + dx + x) * 0x30;
         for (int64_t dy = 0; dy < h; ++dy) {
-            if (*reinterpret_cast<const int64_t*>(cell) == wantIdentity) return true;
+            if (*reinterpret_cast<ComponentDescription* const*>(cell) == wantIdentity) return true;
             cell += (uintptr_t)width * 0x30;
         }
     }
@@ -203,66 +242,65 @@ extern "C" bool DiseaseComp_SameCropProbe(void* map, int x, int y, int w, int h,
 //                  whose +0x28 is the resource identity.
 // Empty footprint -> the CropFieldComponent's +0x50, else the OrchardComponent's
 //                  +0x60 (the crop the field is *set* to, before anything sprouts).
-// Returns through an out-slot: `entityIBPSlot` points at a slot holding the entity.
-extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
-    int64_t entity = *reinterpret_cast<int64_t*>(entityIBPSlot);
-    if (entity == 0) { *out = 0; return out; }
+// Retail returns an ExternalPtr<ComponentDescription> by value (RCX = the return
+// slot) from an InternalPtr<ComponentEntity> (RDX): it reads no DiseaseComponent
+// field, so it stays a free function (B1).
+extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription** out,
+                                                           ComponentEntity* const* entitySlot) {
+    ComponentEntity* entity = *entitySlot;
+    if (entity == nullptr) { *out = nullptr; return out; }
 
-    int64_t pastureIBP = 0;
-    WorkLeaf_FindComp_4fe0(static_cast<uintptr_t>(entity), &pastureIBP);
-    if (pastureIBP != 0) {
-        *out = *reinterpret_cast<uint64_t*>(pastureIBP + 0x28);
+    PastureComponent* pasture = entity->FindComponent<PastureComponent>();   // 0x140004fe0
+    if (pasture != nullptr) {
+        // PastureComponent +0x28 is `void* field28` (COMP-d's header): LEFT.
+        *out = reinterpret_cast<ComponentDescription*>(pasture->field28);
         return out;
     }
 
-    void* gw = GameWorld();
-    void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
+    GameUpdateLoop* gw = GameWorld();
+    void* map = gw ? gw->m_game : nullptr;
 
-    int64_t mapIBP = 0;
-    FloorComponent_FindResData(reinterpret_cast<void*>(entity), &mapIBP);
-    const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
+    MapComponent* mc = entity->FindComponent<MapComponent>();   // 0x140004680
 
-    struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
+    // Retail loads the footprint with MOVSX (0x140048031..3f): signed shorts.
+    TileInfoList list = {nullptr, 0, 0};
     if (map && mc) {
         WorkLeaf_GetTilesInArea_9fc00(static_cast<int*>(map),
-                        *(const int16_t*)(mc + 0x28), *(const int16_t*)(mc + 0x2a),
-                        *(const int16_t*)(mc + 0x2c), *(const int16_t*)(mc + 0x2e),
+                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+                        static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
-    const int64_t listData  = list.data;
-    const int32_t listCount = list.count;
+    TileInfo* const listData  = list.data;
+    const int32_t   listCount = list.count;
 
     if (listCount > 0) {
         for (int i = 0; i < listCount; ++i) {
-            int64_t* slot = reinterpret_cast<int64_t*>(listData + (int64_t)i * 0x10 + 8);
-            int64_t natResIBP = 0;
-            WorkBase_FindComponent_52c0(static_cast<uintptr_t>(*slot), &natResIBP);
-            if (natResIBP != 0) {
-                *out = *reinterpret_cast<uint64_t*>(*slot + 0x28);
-                ::System::MemoryAllocator::MemFree((void*)listData);
+            ComponentEntity* tileEntity = listData[i].entity;
+            if (tileEntity->FindComponent<NaturalResourceComponent>() != nullptr) {   // 0x1400052c0
+                *out = tileEntity->_description;
+                ::System::MemoryAllocator::MemFree(listData);
                 return out;
             }
         }
     } else {
         // Nothing sprouted: fall back to what the field/orchard is SET to grow.
-        int64_t cropIBP = 0;
-        WorkAcc_FindComponent_5380(static_cast<uintptr_t>(entity), &cropIBP);   // CropFieldComponent finder
-        if (cropIBP != 0) {
-            *out = *reinterpret_cast<uint64_t*>(cropIBP + 0x50);
-            ::System::MemoryAllocator::MemFree((void*)listData);
+        CropFieldComponent* crop = entity->FindComponent<CropFieldComponent>();   // 0x140005380
+        if (crop != nullptr) {
+            *out = crop->cropDescription;
+            ::System::MemoryAllocator::MemFree(listData);
             return out;
         }
-        int64_t orchardIBP = 0;
-        WorkAcc_FindComponent_5440(static_cast<uintptr_t>(entity), &orchardIBP);  // OrchardComponent finder
-        if (orchardIBP != 0) {
-            *out = *reinterpret_cast<uint64_t*>(orchardIBP + 0x60);
-            ::System::MemoryAllocator::MemFree((void*)listData);
+        OrchardComponent* orchard = entity->FindComponent<OrchardComponent>();   // 0x140005440
+        if (orchard != nullptr) {
+            // OrchardComponent +0x60 is `void* field60` (COMP-d's header): LEFT.
+            *out = reinterpret_cast<ComponentDescription*>(orchard->field60);
+            ::System::MemoryAllocator::MemFree(listData);
             return out;
         }
     }
 
-    ::System::MemoryAllocator::MemFree((void*)listData);
-    *out = 0;
+    ::System::MemoryAllocator::MemFree(listData);
+    *out = nullptr;
     return out;
 }
 
@@ -273,13 +311,16 @@ extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot) {
 // per-emitter fade-rate field (geoArray + i*0x18 + 0x10) but XORs the float's BIT
 // PATTERN with 0x80000000 (the .rdata sign mask at 0x1401722c0) to negate it —
 // a *bit* operation, not a numeric cast, whatever the decompiler's `(uint)` says.
-extern "C" void ParticleComponent_StopEmitterFade(void* self) {
-    uintptr_t s = (uintptr_t)self;
-    void* desc = *reinterpret_cast<void**>(s + 0x18);
-    int count = *reinterpret_cast<int32_t*>(s + 0x40);
-    uintptr_t geoArr = *reinterpret_cast<uintptr_t*>(s + 0x38);
+// A ParticleComponent member (RCX = the component; declared in ParticleComponent.h).
+// Its +0x38 / +0x40 are `void*` in COMP-d's header and the description's emitter
+// array is `void*` in ParticleDescription.h: those reads are LEFT.
+void ParticleComponent::StopEmitterFade() {
+    Description* base = _description;
+    ParticleDescription* desc = static_cast<ParticleDescription*>(base);
+    int count = *reinterpret_cast<int32_t*>(&field40);
+    uintptr_t geoArr = reinterpret_cast<uintptr_t>(field38);
     if (!desc || !geoArr) return;
-    uintptr_t elems = *reinterpret_cast<uintptr_t*>((uintptr_t)desc + 0x28);
+    uintptr_t elems = reinterpret_cast<uintptr_t>(desc->_emitters);
     if (!elems) return;
 
     for (int i = 0; i < count; ++i) {
@@ -294,94 +335,65 @@ extern "C" void ParticleComponent_StopEmitterFade(void* self) {
 }
 
 // ============================================================
-// 0x1400050a0 — DiseaseComponent sibling finder
-// ============================================================
-// The only exe caller is the spread block below. No registered equivalent existed.
-extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP) {
-    void* found = nullptr;
-    uint32_t want = DiseaseComponent::TypeId();
-    int count = *reinterpret_cast<int32_t*>(entity + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        void* comp = *slot;
-        uint32_t id = 0;
-        if (comp) id = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-        if (id == want) {
-            void** ms = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-            if (*ms && ::Object::IsDerivedFromNullSafe(*ms, want)) found = *ms;
-            break;
-        }
-    }
-    new (outIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return outIBP;
-}
-
-// ============================================================
 // 0x1400481b0 — CheckCure
 // ============================================================
-extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
+bool DiseaseComponent::CheckCure() {
 
-    if (self->isPasture == 1) {
-        int64_t pastureIBP = 0;
-        WorkLeaf_FindComp_4fe0(reinterpret_cast<uintptr_t>(self->_entity), &pastureIBP);
+    if (isPasture == 1) {
+        PastureComponent* pasture = _entity->FindComponent<PastureComponent>();   // 0x140004fe0
         // Faithful: retail derefs unguarded — isPasture==1 means the finder
-        // already located a PastureComponent at Startup.
-        if (*reinterpret_cast<int32_t*>(pastureIBP + 0x38) != 0) return false;
+        // already located a PastureComponent at Startup. The herd count is
+        // PastureComponent +0x38, `void* field38` in COMP-d's header: LEFT.
+        if (*reinterpret_cast<int32_t*>(&pasture->field38) != 0) return false;
         return true;
     }
 
-    void* gw = GameWorld();
-    void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
+    GameUpdateLoop* gw = GameWorld();
+    void* map = gw ? gw->m_game : nullptr;
 
-    void* mapFound = self->_entity->FindComponent<MapComponent>();   // 0x140004680
-    const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapFound);
+    MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 
-    struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
+    // Retail loads the footprint with MOVSX (0x14004824d..5b): signed shorts.
+    TileInfoList list = {nullptr, 0, 0};
     if (map && mc) {
         WorkLeaf_GetTilesInArea_9fc00(static_cast<int*>(map),
-                        *(const int16_t*)(mc + 0x28), *(const int16_t*)(mc + 0x2a),
-                        *(const int16_t*)(mc + 0x2c), *(const int16_t*)(mc + 0x2e),
+                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+                        static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
 
     int living = 0;
     for (int i = 0; i < list.count; ++i) {
-        int64_t* slot = reinterpret_cast<int64_t*>(list.data + (int64_t)i * 0x10 + 8);
-        int64_t natResIBP = 0;
-        WorkBase_FindComponent_52c0(static_cast<uintptr_t>(*slot), &natResIBP);
-        if (natResIBP != 0) ++living;
+        if (list.data[i].entity->FindComponent<NaturalResourceComponent>() != nullptr)   // 0x1400052c0
+            ++living;
     }
-    ::System::MemoryAllocator::MemFree((void*)list.data);
+    ::System::MemoryAllocator::MemFree(list.data);
     return living == 0;
 }
 
 // ============================================================
 // 0x140048320 — Cure
 // ============================================================
-extern "C" void DiseaseComp_Cure(DiseaseComponent* self) {
-    int64_t particleIBP = 0;
-    NaturalResourceComponent_FindComponentByType(self->_entity, &particleIBP);
-    if (particleIBP) ParticleComponent_StopEmitterFade((void*)particleIBP);
+void DiseaseComponent::Cure() {
+    ParticleComponent* particle = _entity->FindComponent<ParticleComponent>();   // 0x140005200
+    if (particle) particle->StopEmitterFade();
 
-    bool wasInfested = (self->duration != 0);
+    bool wasInfested = (duration._ticks != 0);
 
-    self->duration    = 0;
-    self->killAccum   = 0;
-    self->spreadAccum = 0;
-    self->rollAccum   = 0;
+    duration._ticks    = 0;
+    killAccum._ticks   = 0;
+    spreadAccum._ticks = 0;
+    rollAccum._ticks   = 0;
 
     // Record what is growing NOW. The next infection roll compares the field's
     // tiles against this: unchanged => the (shorter) yearsIfSame mean applies.
-    int64_t entitySlot = (int64_t)self->_entity;
-    uint64_t identity = 0;
-    DiseaseComp_GrownIdentity(&identity, &entitySlot);
-    self->curedIdentity = identity;
+    ComponentDescription* identity = nullptr;
+    DiseaseComp_GrownIdentity(&identity, &_entity);
+    curedIdentity = identity;
 
     if (wasInfested && CDTrace()) {
         printf("[CropDisease] CURE self=%p pasture=%d newIdentity=%p\n",
-               (void*)self, (int)self->isPasture, (void*)identity);
+               (void*)this, (int)isPasture, (void*)identity);
         fflush(stdout);
     }
 }
@@ -389,32 +401,33 @@ extern "C" void DiseaseComp_Cure(DiseaseComponent* self) {
 // ============================================================
 // 0x1400483a0 — Infect
 // ============================================================
-extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
-    if (DiseaseComp_CheckCure(self)) {
+void DiseaseComponent::Infect() {
+    if (CheckCure()) {
         if (CDTrace()) {
             printf("[CropDisease] INFECT-SKIPPED self=%p reason=already-cureable "
-                   "(no plants / empty herd)\n", (void*)self);
+                   "(no plants / empty herd)\n", (void*)this);
             fflush(stdout);
         }
         return;
     }
 
-    int64_t smcIBP = 0;
-    PlayerPath_FindComponent_3ea0(reinterpret_cast<uintptr_t>(self->_entity), &smcIBP);
+    uintptr_t smcIBP = reinterpret_cast<uintptr_t>(
+        _entity->FindComponent<StateMachineComponent>());   // 0x140003ea0
     // State gate: the field must be past stage 1. +0x52 is the override, used
-    // unless negative, in which case +0x50 (the live state) is read.
+    // unless negative, in which case +0x50 (the live state) is read. The two
+    // bytes are inside StateMachineComponent::stateFlags (COMP-e's header): LEFT.
     int8_t stage = *reinterpret_cast<int8_t*>(smcIBP + 0x52);
     if (stage < 0) stage = *reinterpret_cast<int8_t*>(smcIBP + 0x50);
     if (stage <= 1) {
         if (CDTrace()) {
             printf("[CropDisease] INFECT-SKIPPED self=%p reason=stage=%d (<=1)\n",
-                   (void*)self, (int)stage);
+                   (void*)this, (int)stage);
             fflush(stdout);
         }
         return;
     }
 
-    void* gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
 
     // ---- Event-log post: type 0xC severity 3, colour 0xFFFF6060, icon 2, no popup.
     // A third entry-append variant next to AddEvent/AddCitizenEvent: three format
@@ -422,10 +435,9 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
     System::String cropName;
     bool haveName = false;
     {
-        uint64_t entityDesc = self->_entity
-            ? *reinterpret_cast<uint64_t*>((uintptr_t)self->_entity + 0x28) : 0;
+        ComponentDescription* entityDesc = _entity ? _entity->_description : nullptr;
         int64_t found = 0;
-        if (entityDesc) DragTool_FindDescription_5160(static_cast<uintptr_t>(entityDesc), &found);
+        if (entityDesc) DragTool_FindDescription_5160(reinterpret_cast<uintptr_t>(entityDesc), &found);
         if (found) {
             uint8_t uiStr[16] = {0};
             ::new (uiStr) UI::String(
@@ -438,7 +450,9 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
         }
     }
 
-    void* eventLog = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0x138) : nullptr;
+    // GameUpdateLoop::m_eventNotifier (+0x138) is still void* (GAME-a): the
+    // notifier's table and entry array below are LEFT.
+    void* eventLog = gw ? gw->m_eventNotifier : nullptr;
     if (eventLog && gw) {
         System::String yearStr, seasonStr;
         System::String templateStr;
@@ -456,7 +470,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
                                     seasonStr._data, yearStr._data,
                                     haveName ? cropName._data : "");
 
-        void* entityIBP = &self->_entity;
+        void* entityIBP = &_entity;
         int tileIdx = EventLog_TileIndex_Reg(nullptr, entityIBP);
 
         uint8_t entry[0x28] = {0};
@@ -477,34 +491,36 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
     // Drop to 1x speed if the settings' auto-slow byte (+0x17) is on. Retail
     // 0x140048542: MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of
     // the settings BLOCK (this read indexed the cell pointer, 0xb8 bytes past it).
-    if (g_gameSettings != nullptr &&
-        reinterpret_cast<const uint8_t*>(g_gameSettings)[0x17] != 0 && gw) {
-        void* speedObj = *reinterpret_cast<void**>((uintptr_t)gw + 0x120);
-        if (speedObj) *reinterpret_cast<int32_t*>((uintptr_t)speedObj + 0x34) = 1;
+    if (g_gameSettings != nullptr && g_gameSettings->autoSlow != 0 && gw) {
+        PlayerToolManager* speedObj = gw->m_toolManager;   // +0x120
+        if (speedObj) speedObj->field_0x34 = 1;            // 0x14004854f MOV dword [RCX+0x34],1
     }
 
     // ---- Start every emitter on the entity's ParticleComponent (the swarm VFX).
-    int64_t particleIBP = 0;
-    NaturalResourceComponent_FindComponentByType(self->_entity, &particleIBP);
+    ParticleComponent* particle = _entity->FindComponent<ParticleComponent>();   // 0x140005200
     int emitters = 0;
-    if (particleIBP) {
-        emitters = *reinterpret_cast<int32_t*>(particleIBP + 0x40);
+    if (particle) {
+        // ParticleComponent +0x40 (the emitter count) is `void* field40` in
+        // COMP-d's header: LEFT.
+        emitters = *reinterpret_cast<int32_t*>(&particle->field40);
         for (int i = 0; i < emitters; ++i)
-            ParticleComponent_StartEmitterFade(reinterpret_cast<ParticleComponent*>(particleIBP), i);
+            ParticleComponent_StartEmitterFade(particle, i);
     }
 
-    // ---- Arm the timers.
-    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->_description);
-    self->duration    = TimeFromSeconds(desc->durationMonths * SecsPerMonth());
-    self->killAccum   = 0;
-    self->spreadAccum = 0;
+    // ---- Arm the timers. Retail takes the description through IsDerivedFrom
+    // DiseaseDescription (0x1400485be) and reads +0x3c unguarded.
+    Description* base = _description;
+    DiseaseDescription* desc = static_cast<DiseaseDescription*>(base);
+    duration._ticks    = TimeFromSeconds(desc->durationMonths * SecsPerMonth());
+    killAccum._ticks   = 0;
+    spreadAccum._ticks = 0;
 
     if (CDTrace()) {
         printf("[CropDisease] INFECT self=%p pasture=%d stage=%d durationMonths=%.2f "
                "emitters=%d tile=%d\n",
-               (void*)self, (int)self->isPasture, (int)stage,
+               (void*)this, (int)isPasture, (int)stage,
                (double)desc->durationMonths, emitters,
-               EventLog_TileIndex_Reg(nullptr, &self->_entity));
+               EventLog_TileIndex_Reg(nullptr, &_entity));
         fflush(stdout);
     }
 }
@@ -513,22 +529,23 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
 // 0x140047b40 — KillOnePlant  (Ghidra: AnimateNaturalResource_impl_7b40)
 // ============================================================
 // Up to 50 random tries over the field footprint for a NaturalResourceComponent
-// that is not already dead (flag bit 0x100000). The kill zeroes +0x28 — the yield
-// identity, so the plant produces NOTHING — clears +0x2d, sets the dead bit
+// that is not already dead (flag bit 0x100000). The kill zeroes +0x28 (retail
+// 0x140047cd6 `MOV dword [RAX+0x28],R14D`, R14 = 0: resourceScale = 0.0f, the
+// same bits), so the plant produces NOTHING, clears +0x2d, sets the dead bit
 // 0x200000 and switches the model to animation index 2 (withered).
-extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
-    void* gw = GameWorld();
-    void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
-    void* rng = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xD8) : nullptr;
+void DiseaseComponent::KillOnePlant() {
+    GameUpdateLoop* gw = GameWorld();
+    void* map = gw ? gw->m_game : nullptr;
+    System::Random* rng = gw ? gw->m_random : nullptr;
 
-    void* mapFound = self->_entity->FindComponent<MapComponent>();   // 0x140004680
-    const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapFound);
+    MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 
-    struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
+    // Retail loads the footprint with MOVSX: signed shorts.
+    TileInfoList list = {nullptr, 0, 0};
     if (map && mc) {
         WorkLeaf_GetTilesInArea_9fc00(static_cast<int*>(map),
-                        *(const int16_t*)(mc + 0x28), *(const int16_t*)(mc + 0x2a),
-                        *(const int16_t*)(mc + 0x2c), *(const int16_t*)(mc + 0x2e),
+                        static_cast<int16_t>(mc->tileX0), static_cast<int16_t>(mc->tileY0),
+                        static_cast<int16_t>(mc->tileX1), static_cast<int16_t>(mc->tileY1),
                         &list, 0);
     }
 
@@ -536,28 +553,30 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
     int attempts = 0;
     bool killed = false;
     for (;;) {
-        uint32_t idx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(tileCount));   // B.3.4b bridge
-        int64_t entity = *reinterpret_cast<int64_t*>(list.data + (int64_t)idx * 0x10 + 8);
-        int64_t natResIBP = 0;
-        WorkBase_FindComponent_52c0(static_cast<uintptr_t>(entity), &natResIBP);
+        uint32_t idx = rng->Rand(static_cast<uint32_t>(tileCount));
+        ComponentEntity* entity = list.data[idx].entity;
+        NaturalResourceComponent* natRes =
+            entity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0 (inlined)
 
-        if (natResIBP != 0) {
-            if (((*reinterpret_cast<uint32_t*>(natResIBP + 0x20) >> 0x14) & 1) == 0) {
-                *reinterpret_cast<uint32_t*>(natResIBP + 0x28) = 0;   // yield -> nothing
-                *reinterpret_cast<uint8_t*>(natResIBP + 0x2d) = 0;
-                *reinterpret_cast<uint32_t*>(natResIBP + 0x20) |= 0x200000u;  // dead
-                ActCNR_SetAnimIndex_126440(natResIBP, 2);
+        if (natRes != nullptr) {
+            if (((natRes->_flags >> 0x14) & 1) == 0) {
+                natRes->resourceScale = 0.0f;   // yield -> nothing
+                // +0x2d is the high byte of NaturalResourceComponent::resourceFlags
+                // (COMP-d's header): LEFT.
+                *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(natRes) + 0x2d) = 0;
+                natRes->_flags |= 0x200000u;  // dead
+                ActCNR_SetAnimIndex_126440(reinterpret_cast<int64_t>(natRes), 2);
                 killed = true;
                 break;
             }
         }
         if (++attempts > 0x31) break;
     }
-    ::System::MemoryAllocator::MemFree((void*)list.data);
+    ::System::MemoryAllocator::MemFree(list.data);
 
     if (CDTrace()) {
         printf("[CropDisease] KILL-PLANT self=%p killed=%s tiles=%u attempts=%d\n",
-               (void*)self, killed ? "yes" : "NO-all-already-dead",
+               (void*)this, killed ? "yes" : "NO-all-already-dead",
                tileCount, attempts);
         fflush(stdout);
     }
@@ -566,33 +585,32 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
 // ============================================================
 // 0x140047d70 — KillOneAnimal
 // ============================================================
-extern "C" void DiseaseComp_KillOneAnimal(DiseaseComponent* self) {
-    void* gw = GameWorld();
-    void* rng = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xD8) : nullptr;
-    void* entityMgr = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xE8) : nullptr;
+void DiseaseComponent::KillOneAnimal() {
+    GameUpdateLoop* gw = GameWorld();
+    System::Random* rng = gw ? gw->m_random : nullptr;
+    // GameUpdateLoop::m_entityList (+0xE8) is still void* (GAME-a): the destroy
+    // queue at +0xD0 / +0xD8 below is LEFT.
+    void* entityMgr = gw ? gw->m_entityList : nullptr;
 
-    int64_t pastureIBP = 0;
-    WorkLeaf_FindComp_4fe0(reinterpret_cast<uintptr_t>(self->_entity), &pastureIBP);
-    if (*reinterpret_cast<int32_t*>(pastureIBP + 0x38) == 0) return;
+    PastureComponent* pasture = _entity->FindComponent<PastureComponent>();   // 0x140004fe0
+    // The herd (+0x30 data, +0x38 count) is `void*` in COMP-d's header: LEFT.
+    if (*reinterpret_cast<int32_t*>(&pasture->field38) == 0) return;
 
     int attempts = 0;
     bool killed = false;
     do {
-        uint32_t herd = *reinterpret_cast<uint32_t*>(pastureIBP + 0x38);
-        uint32_t idx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(herd));   // B.3.4b bridge
-        int64_t member = *reinterpret_cast<int64_t*>(
-            *reinterpret_cast<int64_t*>(pastureIBP + 0x30) + (int64_t)idx * 8);
-        int64_t entity = *reinterpret_cast<int64_t*>(member + 0x10);
+        uint32_t herd = *reinterpret_cast<uint32_t*>(&pasture->field38);
+        uint32_t idx = rng->Rand(static_cast<uint32_t>(herd));
+        Component* member = reinterpret_cast<Component**>(pasture->field30)[idx];
 
         // Retail inlines this scan; 0x140005500 is the same scan on the same type id.
-        int64_t animalIBP = 0;
-        ActHunt_FindComponent_5500(static_cast<uintptr_t>(entity), &animalIBP);
+        AnimalComponent* animal = member->_entity->FindComponent<AnimalComponent>();
 
-        if (((*reinterpret_cast<uint32_t*>(animalIBP + 0x20) >> 0x14) & 1) == 0) {
-            int64_t victim = *reinterpret_cast<int64_t*>(member + 0x10);
-            if (victim == 0) break;
-            if (((*reinterpret_cast<uint32_t*>(victim + 0x40) >> 10) & 1) != 0) break;
-            ActHunt_MarkEntityRemoval_c2ea0((void*)victim);
+        if (((animal->_flags >> 0x14) & 1) == 0) {
+            ComponentEntity* victim = member->_entity;
+            if (victim == nullptr) break;
+            if (((victim->_entityFlags >> 10) & 1) != 0) break;
+            ActHunt_MarkEntityRemoval_c2ea0(victim);
             if (entityMgr) {
                 ActHunt_DynArraySetCount_3110(
                     reinterpret_cast<int64_t*>((uintptr_t)entityMgr + 0xD0),
@@ -607,7 +625,7 @@ extern "C" void DiseaseComp_KillOneAnimal(DiseaseComponent* self) {
 
     if (CDTrace()) {
         printf("[CropDisease] KILL-ANIMAL self=%p killed=%s attempts=%d\n",
-               (void*)self, killed ? "yes" : "NO-none-eligible", attempts);
+               (void*)this, killed ? "yes" : "NO-none-eligible", attempts);
         fflush(stdout);
     }
 }
@@ -615,137 +633,136 @@ extern "C" void DiseaseComp_KillOneAnimal(DiseaseComponent* self) {
 // ============================================================
 // 0x140048610 — InfectionTick (healthy path)
 // ============================================================
-extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* deltaTime) {
-    void* gw = GameWorld();
+void DiseaseComponent::InfectionTick(System::Time* deltaTime) {
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
 
     // The noCropDisease debug flag (GameWorld+0xD0 bit 5) — retail's own kill switch.
-    if (((*reinterpret_cast<uint32_t*>((uintptr_t)gw + 0xD0) >> 5) & 1) != 0) return;
+    if (((gw->m_gameFlags >> 5) & 1) != 0) return;
 
-    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->_description);
+    Description* base = _description;
+    DiseaseDescription* desc = static_cast<DiseaseDescription*>(base);
 
-    void* clock = *reinterpret_cast<void**>((uintptr_t)gw + 0x128);
+    // GameUpdateLoop::m_dayCounter (+0x128) is still void* (GAME-a): LEFT.
+    void* clock = gw->m_dayCounter;
     float secs = clock ? reinterpret_cast<const System::Time*>((char*)clock + 8)->AsSeconds() : 0.0f;   // B.3.4b bridge
     int month = (int)((secs / SecsPerYear()) * MonthsPerYear());
     if (month > 0xB) month = 0;
 
     if (month < desc->firstMonth || month > desc->lastMonth) return;
 
-    void* map = *reinterpret_cast<void**>((uintptr_t)gw + 0xF8);
-    void* rng = *reinterpret_cast<void**>((uintptr_t)gw + 0xD8);
+    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): the one bridge is LEFT.
+    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
+    System::Random* rng = gw->m_random;
 
-    void* mapFound = self->_entity->FindComponent<MapComponent>();   // 0x140004680
-    const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapFound);
-    int16_t fx = *(const int16_t*)(mc + 0x28), fy = *(const int16_t*)(mc + 0x2a);
-    int16_t fw = *(const int16_t*)(mc + 0x2c), fh = *(const int16_t*)(mc + 0x2e);
+    MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
+    // Retail loads the footprint with MOVSX: signed shorts.
+    int16_t fx = static_cast<int16_t>(mc->tileX0), fy = static_cast<int16_t>(mc->tileY0);
+    int16_t fw = static_cast<int16_t>(mc->tileX1), fh = static_cast<int16_t>(mc->tileY1);
 
-    self->rollAccum += *deltaTime;
+    rollAccum._ticks += deltaTime->_ticks;
     int64_t period = TimeFromSeconds(desc->rollMonths * SecsPerMonth());
 
-    while (period < self->rollAccum) {
-        self->rollAccum -= period;
+    while (period < rollAccum._ticks) {
+        rollAccum._ticks -= period;
 
         // Probe TRUE == the crop recorded at the last Cure is still planted, which
         // retail answers with +0x2c (the SHORTER mean interval). Polarity verified
         // against 0x140048610's `if (probe == 0) +0x28 else +0x2c`; see the warning
         // on DiseaseDescription about the inverted _low/_highSpawnChance names.
-        bool sameCrop = DiseaseComp_SameCropProbe(map, fx, fy, fw, fh,
-                                                  (int64_t)self->curedIdentity);
+        bool sameCrop = map->HasIdentityInRect(fx, fy, fw, fh, curedIdentity);   // 0x14009fb60
         float years = sameCrop ? desc->yearsIfSame : desc->yearsIfChanged;
         float chance = OneF() / ((MonthsPerYear() / desc->rollMonths) * years);
-        float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+        float roll = rng->RandFloat();
         bool passed = (roll < chance);
 
         if (CDTrace() && s_rollBudget < kRollBudget) {
             ++s_rollBudget;
             printf("[CropDisease] ROLL self=%p month=%d sameCrop=%s years=%.2f "
                    "chance=%.6f roll=%.6f -> %s\n",
-                   (void*)self, month, sameCrop ? "HIT" : "miss", (double)years,
+                   (void*)this, month, sameCrop ? "HIT" : "miss", (double)years,
                    (double)chance, (double)roll, passed ? "INFECT" : "no");
             fflush(stdout);
         }
-        if (passed) DiseaseComp_Infect(self);
+        if (passed) Infect();
     }
 }
 
 // ============================================================
 // 0x140048840 — ActiveDisease (infested path): kill tick + spread tick
 // ============================================================
-extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* deltaTime) {
-    void* gw = GameWorld();
+void DiseaseComponent::ActiveDisease(System::Time* deltaTime) {
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->_description);
+    Description* base = _description;
+    DiseaseDescription* desc = static_cast<DiseaseDescription*>(base);
 
-    self->duration    -= *deltaTime;
-    self->killAccum   += *deltaTime;
-    self->spreadAccum += *deltaTime;
+    duration._ticks    -= deltaTime->_ticks;
+    killAccum._ticks   += deltaTime->_ticks;
+    spreadAccum._ticks += deltaTime->_ticks;
 
-    if (self->duration < 0 || DiseaseComp_CheckCure(self)) {
+    if (duration._ticks < 0 || CheckCure()) {
         if (CDTrace()) {
-            printf("[CropDisease] RUN-OUT self=%p reason=%s\n", (void*)self,
-                   (self->duration < 0) ? "duration-expired" : "no-plants-left");
+            printf("[CropDisease] RUN-OUT self=%p reason=%s\n", (void*)this,
+                   (duration._ticks < 0) ? "duration-expired" : "no-plants-left");
             fflush(stdout);
         }
-        DiseaseComp_Cure(self);
+        Cure();
         return;
     }
 
     // ---- Kill tick.
     int64_t killPeriod = TimeFromSeconds(desc->killMonths * SecsPerMonth());
-    while (killPeriod < self->killAccum) {
-        self->killAccum -= killPeriod;
-        if (self->isPasture == 1) DiseaseComp_KillOneAnimal(self);
-        else                      DiseaseComp_KillOnePlant(self);
+    while (killPeriod < killAccum._ticks) {
+        killAccum._ticks -= killPeriod;
+        if (isPasture == 1) KillOneAnimal();
+        else                KillOnePlant();
     }
 
     // ---- Spread tick.
     int64_t spreadPeriod = TimeFromSeconds(desc->spreadMonths * SecsPerMonth());
-    if (spreadPeriod >= self->spreadAccum) return;
+    if (spreadPeriod >= spreadAccum._ticks) return;
 
-    void* rng = *reinterpret_cast<void**>((uintptr_t)gw + 0xD8);
-    int* mapInts = *reinterpret_cast<int**>((uintptr_t)gw + 0xF8);
+    System::Random* rng = gw->m_random;
+    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a) and Map's cells are
+    // untyped: the width and the cell reads below are LEFT.
+    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
 
     for (;;) {
-        self->spreadAccum -= spreadPeriod;
+        spreadAccum._ticks -= spreadPeriod;
 
-        void* mapFound = self->_entity->FindComponent<MapComponent>();   // 0x140004680
-        const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapFound);
+        MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 
-        int width = *mapInts;
-        int centre = ((*(const int16_t*)(mc + 0x2e) >> 1) + *(const int16_t*)(mc + 0x2a))
+        // Retail loads the footprint with MOVSX: signed shorts.
+        int width = map->size;
+        int centre = ((static_cast<int16_t>(mc->tileY1) >> 1) + static_cast<int16_t>(mc->tileY0))
                      * width
-                   + (*(const int16_t*)(mc + 0x2c) >> 1) + *(const int16_t*)(mc + 0x28);
+                   + (static_cast<int16_t>(mc->tileX1) >> 1) + static_cast<int16_t>(mc->tileX0);
 
-        int tx = centre % width + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(desc->spreadRadius));   // B.3.4b bridge
-        int ty = centre / width + reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(desc->spreadRadius));   // B.3.4b bridge
+        int tx = centre % width + rng->RandTol(static_cast<int32_t>(desc->spreadRadius));
+        int ty = centre / width + rng->RandTol(static_cast<int32_t>(desc->spreadRadius));
         if (tx < 0) tx = 0;
         if (ty < 0) ty = 0;
         if (tx >= width) tx = width - 1;
         if (ty >= width) ty = width - 1;
 
-        // Cell array base is at map+0x80 (`piVar4 + 0x20` on an int* = 0x80 bytes).
-        uintptr_t cells = *reinterpret_cast<uintptr_t*>((uintptr_t)mapInts + 0x80);
-        int64_t* cell = reinterpret_cast<int64_t*>(
-            cells + (uintptr_t)(width * ty + tx) * 0x30);
+        // Map::cells (+0x80) are raw 0x30-byte records (GAME-b): LEFT.
+        ComponentEntity* const* cell = reinterpret_cast<ComponentEntity* const*>(
+            reinterpret_cast<uintptr_t>(map->cells) + (uintptr_t)(width * ty + tx) * 0x30);
 
-        int64_t target = 0;
-        if (cell[0] != 0)      target = cell[0];           // zone raster wins
-        else if (cell[1] != 0) target = cell[1];           // else entity raster
+        ComponentEntity* target = nullptr;
+        if (cell[0] != nullptr)      target = cell[0];     // zone raster wins
+        else if (cell[1] != nullptr) target = cell[1];     // else entity raster
 
         const char* outcome = "empty-cell";
-        if (target != (int64_t)self->_entity && target != 0) {
-            int64_t sibIBP = 0;
-            DiseaseComp_FindSibling(target, &sibIBP);
-            if (sibIBP != 0) {
-                int64_t targetSlot = target;
-                uint64_t theirId = 0, myId = 0;
-                DiseaseComp_GrownIdentity(&theirId, &targetSlot);
-                int64_t mySlot = (int64_t)self->_entity;
-                DiseaseComp_GrownIdentity(&myId, &mySlot);
+        if (target != _entity && target != nullptr) {
+            if (target->FindComponent<DiseaseComponent>() != nullptr) {   // 0x1400050a0
+                ComponentDescription* theirId = nullptr;
+                ComponentDescription* myId = nullptr;
+                DiseaseComp_GrownIdentity(&theirId, &target);
+                DiseaseComp_GrownIdentity(&myId, &_entity);
                 if (theirId == myId) {
-                    int64_t victimIBP = 0;
-                    DiseaseComp_FindSibling(target, &victimIBP);
-                    DiseaseComp_Infect(reinterpret_cast<DiseaseComponent*>(victimIBP));
+                    target->FindComponent<DiseaseComponent>()->Infect();   // 0x1400050a0, 0x1400483a0
                     outcome = "SPREAD";
                 } else {
                     outcome = "different-crop";
@@ -753,17 +770,17 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
             } else {
                 outcome = "not-infestable";
             }
-        } else if (target != 0) {
+        } else if (target != nullptr) {
             outcome = "self";
         }
 
         if (CDTrace()) {
             printf("[CropDisease] SPREAD-TRY self=%p tile=(%d,%d) radius=%d -> %s\n",
-                   (void*)self, tx, ty, (int)desc->spreadRadius, outcome);
+                   (void*)this, tx, ty, (int)desc->spreadRadius, outcome);
             fflush(stdout);
         }
 
-        if (self->spreadAccum <= spreadPeriod) return;
+        if (spreadAccum._ticks <= spreadPeriod) return;
     }
 }
 
@@ -807,32 +824,29 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
 // 0x140048db0. Component() is the CALL 0x1401188b0; the 0x140159290 stamp is
 // the compiler's; +0x28..+0x40 (4 qwords), +0x48 (dword), +0x50 = 0; flags |= 0x8b.
 DiseaseComponent::DiseaseComponent()
-    : rollAccum(0), duration(0), killAccum(0), spreadAccum(0),
-      isPasture(0), _pad4C{}, curedIdentity(0) {
+    : rollAccum{0}, duration{0}, killAccum{0}, spreadAccum{0},
+      isPasture(0), _pad4C{}, curedIdentity(nullptr) {
     OrFlagsInCtor(0x8b);
 }
 
 void DiseaseComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24] = {0};
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    Reimpl_ExternalPtr_Serialize_StringTable(&curedIdentity, ser);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(isPasture, nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(&rollAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(&duration)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(&killAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(&spreadAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(s, 1);
+    Reimpl_ExternalPtr_Serialize_StringTable(&curedIdentity, &ser);   // 0x140002340 ExternalPtr<ComponentDescription>
+    ser.Serialize(isPasture, nullptr);
+    rollAccum.Serialize(ser);     // 0x140152aa8 Time::Serialize
+    duration.Serialize(ser);
+    killAccum.Serialize(ser);
+    spreadAccum.Serialize(ser);
     // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+    if (ser.GetVersion() == 0 && static_cast<int>(s.GetDirection()) == 0) {   // (IO::Stream::GetDirection, retail 0x180006200)
         OnAdded();   // slot 6, dispatched virtually as retail does
     }
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 void DiseaseComponent::Startup() {
-    int64_t pastureIBP = 0;
-    WorkLeaf_FindComp_4fe0(reinterpret_cast<uintptr_t>(_entity), &pastureIBP);
-    isPasture = (pastureIBP != 0) ? 1 : 0;
+    isPasture = (_entity->FindComponent<PastureComponent>() != nullptr) ? 1 : 0;   // 0x140004fe0
 
     if (CDTrace()) {
         printf("[CropDisease] STARTUP this=%p pasture=%d desc=%p entity=%p\n",
@@ -841,17 +855,15 @@ void DiseaseComponent::Startup() {
     }
 }
 void DiseaseComponent::OnAdded() {
-    void* gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
+    CitizenBehavior* town = TownManager(gw);
     if (!town) return;
-    int64_t* reg = reinterpret_cast<int64_t*>(town + 0xF0);
 
-    uint8_t ibp[16] = {0};
-    new (ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    int count = *reinterpret_cast<int32_t*>((uintptr_t)reg + 8);
-    ActHunt_DynArraySetCount_3110(reg, count + 1, ibp);
+    ::Object::InternalPtr<DiseaseComponent> ibp(this);
+    int count = town->diseaseCount;
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(&town->diseases).SetSizeFill(count + 1, &ibp);
 
     if (CDTrace()) {
         printf("[CropDisease] REGISTER this=%p registry-count=%d\n",
@@ -860,25 +872,23 @@ void DiseaseComponent::OnAdded() {
     }
 }
 void DiseaseComponent::OnRemove() {
-    void* gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (gw) {
-        uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
+        CitizenBehavior* town = TownManager(gw);
         if (town) {
-            uint8_t ibp[16] = {0};
-            new (ibp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            CemeteryListErase_Reimpl(reinterpret_cast<int64_t*>(town + 0xF0), ibp);
+            ::Object::InternalPtr<DiseaseComponent> ibp(this);
+            CemeteryListErase_Reimpl(&town->diseases, &ibp);   // 0x140002cc0
         }
     }
-    DiseaseComp_Cure(this);
+    Cure();
 }
 
 // [9] 0x140048b90. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void DiseaseComponent::Update(void* time) {
-    int64_t* deltaTime = static_cast<int64_t*>(time);
-    if (duration > 0) DiseaseComp_ActiveDisease(this, deltaTime);
-    else                    DiseaseComp_InfectionTick(this, deltaTime);
+    System::Time* deltaTime = static_cast<System::Time*>(time);
+    if (duration._ticks > 0) ActiveDisease(deltaTime);
+    else                     InfectionTick(deltaTime);
 }
 
 // create 0x140004db0: MemAlloc(0x58, 8), then the ctor.
@@ -895,3 +905,8 @@ void* DiseaseComponent::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_TYPE(DiseaseComponent, "Component")
+
+// ---- B4 FORWARD: 2 outside caller files (Dialog/debugui.cpp,
+// standalone/disaster_harness.cpp); the closing wave rewires them.
+extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) { return self->CheckCure(); }
+extern "C" void DiseaseComp_Infect(DiseaseComponent* self) { self->Infect(); }

@@ -108,7 +108,7 @@ static UIDescription* GetDescPage_Impl(const ComponentDescription* entityDesc)
     if (!entityDesc) return result;
 
     int count = entityDesc->_subDescCount;
-    void** compArray = entityDesc->_subDescs;
+    Description** compArray = entityDesc->_subDescs;   // COMP-c typed _subDescs (merge fix)
 
     for (int i = 0; i < count; i++) {
         // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).

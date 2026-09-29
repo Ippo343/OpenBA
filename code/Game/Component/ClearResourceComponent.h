@@ -46,6 +46,9 @@ public:
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
 
+    // state handler (the controller hands it its owner, node+0x18)
+    char  State2Enter();                                          // 0x140118560
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
 };
