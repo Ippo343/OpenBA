@@ -261,6 +261,7 @@ in the code carries a comment.
 | 34 | `StatusBarUI::OnOpened` element finds | stores every FindElement result unchecked, the hearts / stars groups and labelTitleParam included | 0x14007a3d0 narrows with IsDerivedFrom; the tree's comment says the group check's id was read as ButtonElement and rejected the element | SUSPECTED (DLG-d; not re-read) |
 | 35 | `CitizenUI_BuildIconArray_Impl` (`citizen_icon_helpers.h`; CitizenUI and StatusBarUI call it) | a second body of 0x14006abf0: pushes the "whole" / "half" find results without narrowing and returns on a null group | 0x14006abf0 narrows each to ImageElement (null when not one) and reads the group unguarded; `TownHall_GroupRatingInit` (`townhall_helpers.cpp`) is the faithful copy | CONFIRMED (DLG-d) |
 | 36 | `TownHall_InventorySortAsc` / `Desc` (`townhall_helpers.cpp`) | a stable insertion sort | 0x140015200 / 0x140015500 are an introsort: rows with equal keys may come out in another order | SUSPECTED (DLG-d; the tree's note, not re-read) |
+| 37 | `TitleDescToolTipUI::OnCreated` (`titledesctooltipui.cpp`) | takes "textTitle" / "textDesc" and the data source as found | 0x14007b730 narrows both texts with IsDerivedFrom (the id Ghidra labels LabelElement's, read through a mislabelled import) and the data source to UI::Element | CONFIRMED (DLG-d) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -319,6 +320,8 @@ stated condition.
   (retail goes straight to Factory::CreateObject) and the game-world / text-element tests in
   `toolbardialog.cpp`; SpriteCaptureUI's Input::Device, capture-box, FileSystem and edit-element
   tests; StatusIconUI's EntityUI-pages test. CONFIRMED where the site quotes retail.
+- KEPT (DLG-d): `TitleDescToolTipUI::OnCreated`'s unbound-controller return and its null tests of
+  the two texts (0x14007b730 has none).
 
 ### 14e. Stores that may normalise where retail copies
 
