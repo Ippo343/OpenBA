@@ -33,10 +33,9 @@
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
 TendArea::TendArea(void** entityIBP, int kind) : Work(entityIBP) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x50) = 0;
-    *reinterpret_cast<int32_t*> (s + 0x58) = kind;
+    bstRoot = nullptr;
+    workerCount = 0;
+    tendMode = kind;
 }
 
 // The door OrchardComponent's state 10 calls (orchardcomponent_states.cpp, block MI-B):

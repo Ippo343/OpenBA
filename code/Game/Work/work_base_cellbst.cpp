@@ -2,124 +2,135 @@
 // Shared Work "cell BST" (AVL) family — ClearArea / cell-keyed work tree.
 //
 // Structurally identical to the simple BST in work_base_bst.cpp, but with a wider node
-// (0x30 bytes) carrying an int cell key + an Object IBP, and shifted child/metadata
+// (0x30 bytes) carrying an int cell key + an Object pointer: the exe's inlined
+// Collection::Set instance over WorkCellAssignment (Work/Work.h), used by the area
+// works (PlantArea, PlantOrchard, ClearArea, HarvestArea ...) and, with a Work in
+// the pointer slot, by the scheduler's id map.
 #include "Work/exe_bodies.h"
-// offsets. Resolved via ResolveAddr(Module::Exe, 0xADDR) from clear-area / harvest /
-// plant Work classes; registered via RegisterWorkCellBstBatch in reg_work_cellbst.cpp.
 //
 // Faithful 1:1 ports (Ghidra-verified).
 //
-// Node layout (0x30 bytes):
-//   +0x00  int     key (cell index)
-//   +0x08  ptr     value IBP
+// Node (WorkCellSetNode = Collection::Set<WorkCellAssignment>::Node, 0x30 bytes):
+//   +0x00  int     element.cell (the key)
+//   +0x08  ptr     element.citizen (the value pointer)
 //   +0x10  ptr     parent
 //   +0x18  ptr     left child
 //   +0x20  ptr     right child
 //   +0x28  int16   balance   (= rightHeight - leftHeight)
 //   +0x2a  int16   height
-// Root struct: root[0] = root node ptr, root[+0x8] = node count (int).
+// Tree: the Set's header, _root (+0x00) and _count (+0x08).
+//
+// LEFT (every entry point): the callers in other blocks hand the set as a
+// uintptr_t* and the record / node as void*; each body views them as the Set and
+// its node once, at the top.
 
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Work/Work.h"         // WorkCellAssignment / WorkCellSetNode
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+
+namespace {
+using CellSet = Collection::Set<WorkCellAssignment>;
+using Node    = WorkCellSetNode;
+}  // namespace
 
 // ============================================================
 // Internal AVL primitives (static; not registered)
 // ============================================================
 
-static void CellBST_UpdateHB(uintptr_t n) {
-    if (n == 0) return;
-    uintptr_t l = *reinterpret_cast<uintptr_t*>(n + 0x18);
-    uintptr_t r = *reinterpret_cast<uintptr_t*>(n + 0x20);
-    int16_t lh = (l == 0) ? 0 : static_cast<int16_t>(*reinterpret_cast<int16_t*>(l + 0x2a) + 1);
-    int16_t rh = (r == 0) ? 0 : static_cast<int16_t>(*reinterpret_cast<int16_t*>(r + 0x2a) + 1);
-    *reinterpret_cast<int16_t*>(n + 0x28) = static_cast<int16_t>(rh - lh);
-    *reinterpret_cast<int16_t*>(n + 0x2a) = (rh < lh) ? lh : rh;
+static void CellBST_UpdateHB(Node* n) {
+    if (n == nullptr) return;
+    Node* l = n->left;
+    Node* r = n->right;
+    int16_t lh = (l == nullptr) ? 0 : static_cast<int16_t>(l->height + 1);
+    int16_t rh = (r == nullptr) ? 0 : static_cast<int16_t>(r->height + 1);
+    n->balance = static_cast<int16_t>(rh - lh);
+    n->height = (rh < lh) ? lh : rh;
 }
 
 // Reimpl of FUN_14000e450 — left rotation (pivot = node->right @+0x20).
-static uintptr_t CellBST_RotateLeft(uintptr_t* root, uintptr_t node) {
-    if (node == *root) *root = *reinterpret_cast<uintptr_t*>(node + 0x20);
-    uintptr_t parent = *reinterpret_cast<uintptr_t*>(node + 0x10);
-    if (parent != 0) {
-        if (*reinterpret_cast<uintptr_t*>(parent + 0x18) == node)
-            *reinterpret_cast<uintptr_t*>(parent + 0x18) = *reinterpret_cast<uintptr_t*>(node + 0x20);
+static Node* CellBST_RotateLeft(Node** root, Node* node) {
+    if (node == *root) *root = node->right;
+    Node* parent = node->parent;
+    if (parent != nullptr) {
+        if (parent->left == node)
+            parent->left = node->right;
         else
-            *reinterpret_cast<uintptr_t*>(parent + 0x20) = *reinterpret_cast<uintptr_t*>(node + 0x20);
+            parent->right = node->right;
     }
-    uintptr_t pivot = *reinterpret_cast<uintptr_t*>(node + 0x20);
-    *reinterpret_cast<uintptr_t*>(pivot + 0x10) = *reinterpret_cast<uintptr_t*>(node + 0x10);
-    uintptr_t tmp = *reinterpret_cast<uintptr_t*>(pivot + 0x18);
-    *reinterpret_cast<uintptr_t*>(node + 0x20) = tmp;
-    if (tmp != 0) *reinterpret_cast<uintptr_t*>(tmp + 0x10) = node;
-    *reinterpret_cast<uintptr_t*>(pivot + 0x18) = node;
-    *reinterpret_cast<uintptr_t*>(node + 0x10) = pivot;
-    CellBST_UpdateHB(*reinterpret_cast<uintptr_t*>(pivot + 0x18));
-    CellBST_UpdateHB(*reinterpret_cast<uintptr_t*>(pivot + 0x20));
+    Node* pivot = node->right;
+    pivot->parent = node->parent;
+    Node* tmp = pivot->left;
+    node->right = tmp;
+    if (tmp != nullptr) tmp->parent = node;
+    pivot->left = node;
+    node->parent = pivot;
+    CellBST_UpdateHB(pivot->left);
+    CellBST_UpdateHB(pivot->right);
     CellBST_UpdateHB(pivot);
     return pivot;
 }
 
 // Reimpl of FUN_14000e580 — right rotation (pivot = node->left @+0x18).
-static uintptr_t CellBST_RotateRight(uintptr_t* root, uintptr_t node) {
-    if (node == *root) *root = *reinterpret_cast<uintptr_t*>(node + 0x18);
-    uintptr_t parent = *reinterpret_cast<uintptr_t*>(node + 0x10);
-    if (parent != 0) {
-        if (*reinterpret_cast<uintptr_t*>(parent + 0x18) == node)
-            *reinterpret_cast<uintptr_t*>(parent + 0x18) = *reinterpret_cast<uintptr_t*>(node + 0x18);
+static Node* CellBST_RotateRight(Node** root, Node* node) {
+    if (node == *root) *root = node->left;
+    Node* parent = node->parent;
+    if (parent != nullptr) {
+        if (parent->left == node)
+            parent->left = node->left;
         else
-            *reinterpret_cast<uintptr_t*>(parent + 0x20) = *reinterpret_cast<uintptr_t*>(node + 0x18);
+            parent->right = node->left;
     }
-    uintptr_t pivot = *reinterpret_cast<uintptr_t*>(node + 0x18);
-    *reinterpret_cast<uintptr_t*>(pivot + 0x10) = *reinterpret_cast<uintptr_t*>(node + 0x10);
-    uintptr_t tmp = *reinterpret_cast<uintptr_t*>(pivot + 0x20);
-    *reinterpret_cast<uintptr_t*>(node + 0x18) = tmp;
-    if (tmp != 0) *reinterpret_cast<uintptr_t*>(tmp + 0x10) = node;
-    *reinterpret_cast<uintptr_t*>(pivot + 0x20) = node;
-    *reinterpret_cast<uintptr_t*>(node + 0x10) = pivot;
-    CellBST_UpdateHB(*reinterpret_cast<uintptr_t*>(pivot + 0x18));
-    CellBST_UpdateHB(*reinterpret_cast<uintptr_t*>(pivot + 0x20));
+    Node* pivot = node->left;
+    pivot->parent = node->parent;
+    Node* tmp = pivot->right;
+    node->left = tmp;
+    if (tmp != nullptr) tmp->parent = node;
+    pivot->right = node;
+    node->parent = pivot;
+    CellBST_UpdateHB(pivot->left);
+    CellBST_UpdateHB(pivot->right);
     CellBST_UpdateHB(pivot);
     return pivot;
 }
 
 // Reimpl of FUN_140013480 (TradeDescription_impl_3480) — AVL retrace.
-static void CellBST_Retrace(uintptr_t* root, uintptr_t* pWalk) {
-    while (*pWalk != 0) {
-        uintptr_t node = *pWalk;
-        uintptr_t next = *reinterpret_cast<uintptr_t*>(node + 0x10);   // parent, pre-rotation
+static void CellBST_Retrace(Node** root, Node** pWalk) {
+    while (*pWalk != nullptr) {
+        Node* node = *pWalk;
+        Node* next = node->parent;   // parent, pre-rotation
         CellBST_UpdateHB(node);
         node = *pWalk;
-        if (*reinterpret_cast<int16_t*>(node + 0x28) > 1 && *reinterpret_cast<uintptr_t*>(node + 0x20) != 0) {
-            uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x20);
-            if (*reinterpret_cast<int16_t*>(rc + 0x28) < 0) { CellBST_RotateRight(root, rc); node = *pWalk; }
+        if (node->balance > 1 && node->right != nullptr) {
+            Node* rc = node->right;
+            if (rc->balance < 0) { CellBST_RotateRight(root, rc); node = *pWalk; }
             CellBST_RotateLeft(root, node);
         }
         node = *pWalk;
-        if (*reinterpret_cast<int16_t*>(node + 0x28) < -1 && *reinterpret_cast<uintptr_t*>(node + 0x18) != 0) {
-            uintptr_t lc = *reinterpret_cast<uintptr_t*>(node + 0x18);
-            if (*reinterpret_cast<int16_t*>(lc + 0x28) > 0) { CellBST_RotateLeft(root, lc); node = *pWalk; }
+        if (node->balance < -1 && node->left != nullptr) {
+            Node* lc = node->left;
+            if (lc->balance > 0) { CellBST_RotateLeft(root, lc); node = *pWalk; }
             CellBST_RotateRight(root, node);
         }
         *pWalk = next;
     }
 }
 
-// Reimpl of FUN_140029bb0 — allocate + init a 0x30-byte node. keyRec is {int key@+0;
-// ptr IBP@+8} (the int key and the value IBP to copy in).
-static void* CellBST_AllocNode(const void* keyRec, void* parent) {
-    void* node = System::MemoryAllocator::MemAlloc(0x30, 8);
+// Reimpl of FUN_140029bb0 — allocate + init a 0x30-byte node. `rec` is {int key@+0;
+// ptr @+8} (the int key and the value pointer to copy in; +0x04 is not copied).
+static Node* CellBST_AllocNode(const WorkCellAssignment* rec, Node* parent) {
+    Node* node = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!node) return nullptr;
-    uintptr_t n = reinterpret_cast<uintptr_t>(node);
-    *reinterpret_cast<int*>(n + 0x00) = *reinterpret_cast<const int*>(keyRec);
-    *reinterpret_cast<uint64_t*>(n + 0x08) = *reinterpret_cast<const uint64_t*>(reinterpret_cast<uintptr_t>(keyRec) + 8);
-    *reinterpret_cast<uintptr_t*>(n + 0x10) = reinterpret_cast<uintptr_t>(parent);
-    *reinterpret_cast<uintptr_t*>(n + 0x18) = 0;
-    *reinterpret_cast<uintptr_t*>(n + 0x20) = 0;
-    *reinterpret_cast<uint32_t*>(n + 0x28) = 0;
+    node->element.cell = rec->cell;
+    node->element.citizen = rec->citizen;
+    node->parent = parent;
+    node->left = nullptr;
+    node->right = nullptr;
+    node->balance = 0;   // balance + height: one dword store in retail
+    node->height = 0;
     return node;
 }
 
@@ -131,41 +142,41 @@ static void* CellBST_AllocNode(const void* keyRec, void* parent) {
 // cell index. Prototype: void* fn(longlong* root, void* outResult, uint* keyRec).
 // keyRec = {int key@+0; ptr IBP@+8}; key = *keyRec; the node is written to *outResult.
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
-    uint64_t* pOut = reinterpret_cast<uint64_t*>(outResult);
-    int key = *reinterpret_cast<const int*>(keyRec);
-    if (*root == 0) {
-        void* node = CellBST_AllocNode(keyRec, nullptr);
-        *root = reinterpret_cast<uintptr_t>(node);
-        *pOut = reinterpret_cast<uint64_t>(node);
+    CellSet* set = reinterpret_cast<CellSet*>(root);
+    const WorkCellAssignment* rec = reinterpret_cast<const WorkCellAssignment*>(keyRec);
+    Node** pOut = reinterpret_cast<Node**>(outResult);
+    int key = rec->cell;
+    if (set->_root == nullptr) {
+        Node* node = CellBST_AllocNode(rec, nullptr);
+        set->_root = node;
+        *pOut = node;
     } else {
-        uintptr_t cur = *root;
-        void* newLeaf = nullptr;
+        Node* cur = set->_root;
+        Node* newLeaf = nullptr;
         for (;;) {
             // descend right while node->key <= key
-            while (*reinterpret_cast<int*>(cur) <= key) {
-                if (key <= *reinterpret_cast<int*>(cur)) { *pOut = static_cast<uint64_t>(cur); return outResult; }
-                uintptr_t* rightPtr = reinterpret_cast<uintptr_t*>(cur + 0x20);
-                if (*rightPtr == 0) {
-                    newLeaf = CellBST_AllocNode(keyRec, reinterpret_cast<void*>(cur));
-                    *rightPtr = reinterpret_cast<uintptr_t>(newLeaf);
+            while (cur->element.cell <= key) {
+                if (key <= cur->element.cell) { *pOut = cur; return outResult; }
+                if (cur->right == nullptr) {
+                    newLeaf = CellBST_AllocNode(rec, cur);
+                    cur->right = newLeaf;
                     goto done;
                 }
-                cur = *rightPtr;
+                cur = cur->right;
             }
-            uintptr_t* leftPtr = reinterpret_cast<uintptr_t*>(cur + 0x18);
-            if (*leftPtr == 0) {
-                newLeaf = CellBST_AllocNode(keyRec, reinterpret_cast<void*>(cur));
-                *leftPtr = reinterpret_cast<uintptr_t>(newLeaf);
+            if (cur->left == nullptr) {
+                newLeaf = CellBST_AllocNode(rec, cur);
+                cur->left = newLeaf;
                 goto done;
             }
-            cur = *leftPtr;
+            cur = cur->left;
         }
     done:
-        uintptr_t retraceFrom = cur;
-        CellBST_Retrace(root, &retraceFrom);
-        *pOut = reinterpret_cast<uint64_t>(newLeaf);
+        Node* retraceFrom = cur;
+        CellBST_Retrace(&set->_root, &retraceFrom);
+        *pOut = newLeaf;
     }
-    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8) += 1;
+    set->_count += 1;
     return outResult;
 }
 
@@ -173,72 +184,73 @@ void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
 // Same three-case structure as the simple-BST delete, cell offsets.
 // Caller: void fn(void* bstRoot, void* node).
 void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
-    uintptr_t node = reinterpret_cast<uintptr_t>(nodeArg);
-    uintptr_t local_res8 = *reinterpret_cast<uintptr_t*>(node + 0x10);   // node->parent
-    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8) -= 1; // count--
-    uintptr_t lVar5 = *reinterpret_cast<uintptr_t*>(node + 0x20);        // node->right
+    CellSet* set = reinterpret_cast<CellSet*>(root);
+    Node* node = reinterpret_cast<Node*>(nodeArg);
+    Node* local_res8 = node->parent;
+    set->_count -= 1; // count--
+    Node* lVar5 = node->right;
 
-    if (lVar5 == 0) {
-        uintptr_t parent = *reinterpret_cast<uintptr_t*>(node + 0x10);
-        uintptr_t left   = *reinterpret_cast<uintptr_t*>(node + 0x18);
-        if (parent == 0) *root = left;
-        else if (*reinterpret_cast<uintptr_t*>(parent + 0x18) == node) *reinterpret_cast<uintptr_t*>(parent + 0x18) = left;
-        else *reinterpret_cast<uintptr_t*>(parent + 0x20) = left;
-        lVar5 = *reinterpret_cast<uintptr_t*>(node + 0x18);             // surviving child = left
+    if (lVar5 == nullptr) {
+        Node* parent = node->parent;
+        Node* left   = node->left;
+        if (parent == nullptr) set->_root = left;
+        else if (parent->left == node) parent->left = left;
+        else parent->right = left;
+        lVar5 = node->left;             // surviving child = left
     } else {
-        uintptr_t lVar1 = *reinterpret_cast<uintptr_t*>(node + 0x18);   // node->left
-        if (lVar1 != 0) {
-            uintptr_t pred = lVar1;
-            uintptr_t walk = lVar1;
-            do { pred = walk; walk = *reinterpret_cast<uintptr_t*>(pred + 0x20); } while (*reinterpret_cast<uintptr_t*>(pred + 0x20) != 0);
+        Node* lVar1 = node->left;
+        if (lVar1 != nullptr) {
+            Node* pred = lVar1;
+            Node* walk = lVar1;
+            do { pred = walk; walk = pred->right; } while (pred->right != nullptr);
 
-            local_res8 = 0;
+            local_res8 = nullptr;
             if (pred != lVar1) {
-                lVar5 = *reinterpret_cast<uintptr_t*>(pred + 0x18);     // pred->left
-                local_res8 = *reinterpret_cast<uintptr_t*>(pred + 0x10);// pred->parent
-                *reinterpret_cast<uintptr_t*>(local_res8 + 0x20) = lVar5;          // pred->parent->right = pred->left
-                if (lVar5 != 0) *reinterpret_cast<uintptr_t*>(lVar5 + 0x10) = local_res8;
-                *reinterpret_cast<uintptr_t*>(pred + 0x18) = *reinterpret_cast<uintptr_t*>(node + 0x18);  // pred->left = node->left
+                lVar5 = pred->left;
+                local_res8 = pred->parent;
+                local_res8->right = lVar5;          // pred->parent->right = pred->left
+                if (lVar5 != nullptr) lVar5->parent = local_res8;
+                pred->left = node->left;
                 CellBST_UpdateHB(local_res8);
             }
             lVar5 = local_res8;
-            *reinterpret_cast<uintptr_t*>(pred + 0x20) = *reinterpret_cast<uintptr_t*>(node + 0x20);  // pred->right = node->right
-            if (*reinterpret_cast<uintptr_t*>(pred + 0x18) != 0)
-                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(pred + 0x18) + 0x10) = pred;
-            if (*reinterpret_cast<uintptr_t*>(pred + 0x20) != 0)
-                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(pred + 0x20) + 0x10) = pred;
-            uintptr_t nodeParent = *reinterpret_cast<uintptr_t*>(node + 0x10);
-            *reinterpret_cast<uintptr_t*>(pred + 0x10) = nodeParent;
-            uintptr_t local_res10;
-            if (nodeParent == 0) {
-                *root = pred;
-                *reinterpret_cast<uintptr_t*>(pred + 0x10) = 0;
-                local_res10 = *root;
+            pred->right = node->right;
+            if (pred->left != nullptr)
+                pred->left->parent = pred;
+            if (pred->right != nullptr)
+                pred->right->parent = pred;
+            Node* nodeParent = node->parent;
+            pred->parent = nodeParent;
+            Node* local_res10;
+            if (nodeParent == nullptr) {
+                set->_root = pred;
+                pred->parent = nullptr;
+                local_res10 = set->_root;
             } else {
-                if (*reinterpret_cast<uintptr_t*>(nodeParent + 0x18) == node)
-                    *reinterpret_cast<uintptr_t*>(nodeParent + 0x18) = pred;
+                if (nodeParent->left == node)
+                    nodeParent->left = pred;
                 else
-                    *reinterpret_cast<uintptr_t*>(nodeParent + 0x20) = pred;
+                    nodeParent->right = pred;
                 local_res10 = pred;
             }
-            System::MemoryAllocator::MemFree(reinterpret_cast<void*>(node));
-            if (lVar5 == 0) CellBST_Retrace(root, &local_res10);
-            else CellBST_Retrace(root, &local_res8);
+            System::MemoryAllocator::MemFree(node);
+            if (lVar5 == nullptr) CellBST_Retrace(&set->_root, &local_res10);
+            else CellBST_Retrace(&set->_root, &local_res8);
             return;
         }
         // node->left == 0, node->right != 0
-        uintptr_t parent = *reinterpret_cast<uintptr_t*>(node + 0x10);
-        if (parent == 0) *root = lVar5;
-        else if (*reinterpret_cast<uintptr_t*>(parent + 0x18) == node) *reinterpret_cast<uintptr_t*>(parent + 0x18) = lVar5;
-        else *reinterpret_cast<uintptr_t*>(parent + 0x20) = lVar5;
-        lVar5 = *reinterpret_cast<uintptr_t*>(node + 0x20);            // surviving child = right
+        Node* parent = node->parent;
+        if (parent == nullptr) set->_root = lVar5;
+        else if (parent->left == node) parent->left = lVar5;
+        else parent->right = lVar5;
+        lVar5 = node->right;            // surviving child = right
     }
 
-    if (lVar5 != 0) *reinterpret_cast<uintptr_t*>(lVar5 + 0x10) = *reinterpret_cast<uintptr_t*>(node + 0x10);
-    uintptr_t local_res10 = lVar5;
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(node));
-    if (lVar5 == 0) CellBST_Retrace(root, &local_res8);
-    else CellBST_Retrace(root, &local_res10);
+    if (lVar5 != nullptr) lVar5->parent = node->parent;
+    Node* local_res10 = lVar5;
+    System::MemoryAllocator::MemFree(node);
+    if (lVar5 == nullptr) CellBST_Retrace(&set->_root, &local_res8);
+    else CellBST_Retrace(&set->_root, &local_res10);
 }
 
 // Reimpl of FUN_140029de0 (TradeDescription_impl_9de0) — serialize the cell BST.
@@ -246,58 +258,62 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
 // (IBP type-checked vs CitizenComponent 0x1401c7158). SAVE is an iterative in-order
 // parent-walk writing each node's key(int @+0) then IBP(@+8). Caller: void fn(root, ser).
 void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer) {
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    CellSet* set = reinterpret_cast<CellSet*>(root);
+    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);
+    int count = set->_count;
+    ser->Serialize(count, nullptr);
+    bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     uint32_t citTid = CitizenComponent::TypeId();  // DAT_1401c7158
 
     if (loading) {
-        struct CellKeyRec { int key; int pad; uint64_t ibp; };
         for (int i = 0; i < count; i++) {
-            CellKeyRec rec; rec.key = 0; rec.pad = 0; rec.ibp = 0;
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&rec.key), nullptr);   // B.3.4 bridge
-            uintptr_t keyIBP = 0;
-            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (keyIBP != 0 && citTid &&
-                !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(keyIBP), citTid))
-                keyIBP = 0;
-            rec.ibp = keyIBP;
-            uintptr_t out = 0;
+            WorkCellAssignment rec; rec.cell = 0; rec._pad04 = 0; rec.citizen = nullptr;
+            ser->Serialize(rec.cell, nullptr);
+            CitizenComponent* keyIBP = nullptr;
+            // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
+            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*ser);
+            if (keyIBP != nullptr && citTid &&
+                !Object::IsDerivedFromNullSafe(keyIBP, citTid))
+                keyIBP = nullptr;
+            rec.citizen = keyIBP;
+            Node* out = nullptr;
             WorkCellBST_Insert_9a40(root, &out, &rec);
         }
         return;
     }
 
     // SAVE: iterative in-order traversal via parent links (cell offsets).
-    uintptr_t pIVar5 = *root;
-    if (pIVar5 == 0) return;
-    uintptr_t pIVar7, pIVar3;
-    do { pIVar7 = pIVar5; pIVar5 = *reinterpret_cast<uintptr_t*>(pIVar7 + 0x18); } while (pIVar5 != 0);  // leftmost
+    Node* pIVar5 = set->_root;
+    if (pIVar5 == nullptr) return;
+    Node* pIVar7;
+    Node* pIVar3;
+    do { pIVar7 = pIVar5; pIVar5 = pIVar7->left; } while (pIVar5 != nullptr);  // leftmost
 joined:
-    while ((pIVar5 = pIVar7) != 0) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pIVar5), nullptr);   // key @+0   (B.3.4 bridge)
-        reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(pIVar5 + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));  // IBP @+8   // B.3.4 bridge
-        if (*reinterpret_cast<uintptr_t*>(pIVar5 + 8) != 0 && citTid &&
-            !Object::IsDerivedFromNullSafe(*reinterpret_cast<void**>(pIVar5 + 8), citTid))
-            *reinterpret_cast<uint64_t*>(pIVar5 + 8) = 0;
-        pIVar3 = *reinterpret_cast<uintptr_t*>(pIVar5 + 0x20);   // right child
-        if (pIVar3 == 0) {
-            pIVar7 = *reinterpret_cast<uintptr_t*>(pIVar5 + 0x10);   // parent
-            if (pIVar7 != 0) goto succ;
+    while ((pIVar5 = pIVar7) != nullptr) {
+        ser->Serialize(pIVar5->element.cell, nullptr);   // key @+0
+        // The value is an InternalPtr retail serializes through InternalBasePtr::Serialize.
+        reinterpret_cast<Object::InternalBasePtr*>(&pIVar5->element.citizen)->Serialize(*ser);  // IBP @+8
+        if (pIVar5->element.citizen != nullptr && citTid &&
+            !Object::IsDerivedFromNullSafe(pIVar5->element.citizen, citTid))
+            pIVar5->element.citizen = nullptr;
+        pIVar3 = pIVar5->right;   // right child
+        if (pIVar3 == nullptr) {
+            pIVar7 = pIVar5->parent;   // parent
+            if (pIVar7 != nullptr) goto succ;
             goto joined;                                            // root reached -> terminate
         }
-        do { pIVar7 = pIVar3; pIVar3 = *reinterpret_cast<uintptr_t*>(pIVar7 + 0x18); } while (pIVar3 != 0);  // leftmost of right subtree
+        do { pIVar7 = pIVar3; pIVar3 = pIVar7->left; } while (pIVar3 != nullptr);  // leftmost of right subtree
     }
     return;
 succ:
-    if (*reinterpret_cast<uintptr_t*>(pIVar7 + 0x18) != pIVar5) {
+    if (pIVar7->left != pIVar5) {
         for (;;) {
             pIVar3 = pIVar7;
-            if (pIVar3 == 0 || *reinterpret_cast<uintptr_t*>(pIVar3 + 0x20) != pIVar5) break;
+            if (pIVar3 == nullptr || pIVar3->right != pIVar5) break;
             pIVar5 = pIVar3;
-            pIVar7 = *reinterpret_cast<uintptr_t*>(pIVar3 + 0x10);
+            pIVar7 = pIVar3->parent;
         }
-        pIVar7 = *reinterpret_cast<uintptr_t*>(pIVar5 + 0x10);
+        pIVar7 = pIVar5->parent;
     }
     goto joined;
 }

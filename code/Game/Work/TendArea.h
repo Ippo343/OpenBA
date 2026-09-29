@@ -50,10 +50,10 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- TendArea fields (+0x48) ---
-    void*    bstRoot;            // +0x48: BST root for assigned workers
-    uint32_t workerCount;        // +0x50: number of workers in BST
+    WorkCitizenSetNode* bstRoot; // +0x48: the set of citizens tending (0x1400296b0 serializes it)
+    int32_t  workerCount;        // +0x50: its count (0x140029860 `CMP [RCX+0x50]; SETG`: signed)
     uint8_t  _pad54[4];          // +0x54: padding
-    uint32_t tendMode;           // +0x58: 0=crop/area, nonzero=orchard mode (serialized int)
+    int32_t  tendMode;           // +0x58: 0=crop/area, nonzero=orchard mode (Persist Serialize(int&))
 };
 
 static_assert(sizeof(TendArea) == 0x60, "TendArea is 0x60 (retail create MemAlloc)");

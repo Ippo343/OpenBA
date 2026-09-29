@@ -23,6 +23,8 @@
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
 #include "Component/AutoPickupComponent.h"      // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
 
 // ============================================================
 // FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
@@ -59,66 +61,23 @@ void* WorkAcc_FindComponent_22520(uintptr_t entity, void* retIBP) {
 // NO InternalBasePtr_CheckPtr calls; the match is written straight into *retOut
 // (a plain undefined8* slot, not an IBP ctor). Type-ID global DWORD_1401c7cb8.
 // Caller signature: void* fn(uintptr_t compList, void* retOut)
+// RCX is a ComponentDescription: the list is its sub-descriptions (+0x28 / +0x30).
+// LEFT: the six outside callers hand it as an integer and the out slot as void*.
 void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
+    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(compList);
     const uint32_t typeId = RawMaterialDescription::TypeId();  // 0x1401c7cb8
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(compList + 0x30);
-    uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(compList + 0x28);
+    RawMaterialDescription* found = nullptr;
+    int n = desc->_subDescCount;
+    Description** arrBase = desc->_subDescs;
     for (int i = 0; i < n; i++) {
-        void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+        Description* comp = arrBase[i];
+        uint32_t t = comp->Type();
         if (t == typeId) {
-            void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
+            Description* c = arrBase[i];
+            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? static_cast<RawMaterialDescription*>(c) : nullptr;
             break;
         }
     }
-    *reinterpret_cast<void**>(retOut) = found;
+    *reinterpret_cast<RawMaterialDescription**>(retOut) = found;
     return retOut;
-}
-
-// ============================================================
-// Connectivity / zone refresh
-// ============================================================
-// Reimpl of FUN_14009c480 — region/zone refresh pass. When the dirty flag at
-// mapGrid+0xa2 is set, clears the per-cell region word (+0x26) across all cells
-// (count at mapGrid[0x22], cell stride 0x30, cell array at mapGrid[0x20]), then
-// flood-assigns region ids by calling FUN_14009c170 for every cell whose pass
-// byte (+0x29) has a bit in mask 0xe1f AND whose region word is still 0.
-//
-// FUN_14009c170(mapGrid, cellIndex, regionCounter) is
-// Pf_FloodFillRegion_9c170 (Action/exe_bodies.h), called directly (B3R).
-// This body has no caller (the registered 0x14009c480 is Pf_ZoneRefresh_9c480).
-// One parameter, as retail (docs/known_port_issues.md 7).
-void WorkAcc_ZoneRefresh_9c480(int* mapGrid) {
-    uintptr_t base = reinterpret_cast<uintptr_t>(mapGrid);
-    // dirty flag at +0xa2
-    if (*reinterpret_cast<char*>(base + 0xa2) == '\0') return;
-    *reinterpret_cast<uint8_t*>(base + 0xa2) = 0;
-
-    // int* index: param_1[0x22] == byte +0x88 (cell count), param_1[0x20] == byte +0x80 (cell array)
-    int cellCount = *reinterpret_cast<int*>(base + 0x88);
-    uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(base + 0x80);
-
-    // Pass 1: clear every cell's region word (+0x26), stride 0x30.
-    {
-        uintptr_t off = 0;
-        for (int i = 0; i < cellCount; i++) {
-            *reinterpret_cast<uint16_t*>(cellArr + off + 0x26) = 0;
-            off += 0x30;
-        }
-    }
-
-    // Pass 2: flood-assign region ids.
-    short regionCounter = 1;
-    uintptr_t off = 0;
-    for (int i = 0; i < cellCount; i++) {
-        uint8_t passByte = *reinterpret_cast<uint8_t*>(cellArr + off + 0x29);
-        if (((1u << (passByte & 0x1f)) & 0xe1fu) != 0 &&
-            *reinterpret_cast<int16_t*>(cellArr + off + 0x26) == 0) {
-            Pf_FloodFillRegion_9c170(mapGrid, static_cast<uint32_t>(i), static_cast<uint16_t>(regionCounter));
-            regionCounter = static_cast<short>(regionCounter + 1);
-        }
-        off += 0x30;
-    }
 }

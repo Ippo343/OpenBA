@@ -233,6 +233,29 @@ question for the fix is which retail path removes a dying / leaving citizen from
 (the citizen's `OnRemove` 0x140113ca0 and the workplace release 0x140116540 / 0x140115a50 are the
 candidates) and whether the tree's port of it reaches TradeWork. The route is not part of any gate.
 
+WORK-c, 2026-09-29: the removal path, read against retail. Retail removes a citizen from the
+post's tree only through the citizen's action stack: `CharacterComponent::OnRemove` 0x140109980
+clears the stack through 0x1400c5400, which calls slot 8 of every chained action; the
+`CompleteTask` that `TradeWork::Execute` queued (through 0x1400bf790, its +0x20 = the citizen,
++0x30 = the work id `Work+0x20`) answers with `CheckEntity` 0x1400c5ac0 -> 0x1400f8800, which
+finds the work in the scheduler's id map (`WorkScheduler::trees[0]`, +0x30) and calls its slot 7,
+`TradeWork::OnCancel` 0x1400f5d10 = 0x14002c690 find-and-remove keyed on the citizen. Slot 6
+(0x1400f5d20, the CompleteTask's own completion through 0x1400f8760) removes it the same way.
+The tree's port of each link was read and matches retail: `TradeWork::Validate` (0x1400f5ae0),
+`Work::ValidateTask` (0x1400f7100), `CharacterComponent::OnRemove`, the stack clear (it re-reads
+the array and its size every iteration, as retail), `ActCt_TaskReassign_8800`, `FindTaskNode`
+(the same +0x30 tree the scheduler posts into), `TradeWork::OnCancel` / `OnComplete`, and the
+chain `Execute` builds (twoWay = 1: the CompleteTask follows the pickup). The ONE difference on
+the path: the tree's `CompleteTask::CheckEntity` (`completetask.cpp`) returns early when
+`GameUpdateLoop::_singleton` or its +0x118 scheduler is null; retail 0x1400c5ac0 has no such test
+(14d). It cannot drop a removal while a town is running. NOT FOUND: where the stale entry comes
+from. Two open questions for the fix, neither read: whether the tree's death path (the
+`[Burial]` handler in `citizen_lifeevent_handler.cpp` and what destroys the citizen entity after
+it) reaches `CharacterComponent::OnRemove` at all, and whether a citizen can hold a post
+assignment with no CompleteTask left on its stack (a builder that pushes without clearing first,
+e.g. 0x1400c0ad0 with its cancel flag 0, runs on top of the old chain). SUSPECTED, not CONFIRMED.
+No `behaviour:` commit; no check added.
+
 ## 14. Differences from retail found by the B.4 blocks and left — a list (2026-09-29)
 
 Each was found by a B.4 block while it converted the body, read against retail by that block, and
@@ -259,6 +282,7 @@ in the code carries a comment.
 | 12 | `TerraformComponent_RegionRecalc` | a second copy of `Pf_RegionDirty4_b150` with the tree's zero-chunk guard | one body | CONFIRMED (COMP-e) |
 | 33 | `Audio::Stream::Run` (`vtbatch7b_stream_run_win.cpp`), `IXAudio2SourceVoice::GetState` | mingw's `<xaudio2.h>` is the 2.8 interface, so the call passes a second argument (`Flags = 0` in R8) | XAudio2 2.7's `GetState(pVoiceState)` takes one; slot +0xc8 is the same and 2.7 ignores R8 | SUSPECTED harmless (R-ENG) |
 | 34 | `Engine::PlatformConfigure`'s launcher (`engine_platform_win.cpp`) | reads the two launcher check-box bytes and calls the dialog proc 0x1800a1ae0 at module-relative addresses of a LOADED `Runtime-x64.dll` (`GetModuleHandleW`); the standalone never loads it, so the launcher dialog is never shown and both bytes read 0 | retail runs its own dialog proc 0x1800a1ae0 over resource 0x66 | CONFIRMED from the code, not from retail (R-ENG); a door into the retail binary, LEFT |
+| 35 | the worker-count callers in `tradework.cpp`, `plantarea.cpp`, `plantorchard.cpp`, `tendarea.cpp` | call `WorkComponent_CalcMaxWorkers` (`tutorial_base.cpp`) | one body, 0x14012e5c0; the tree has a second port of it, `WorkComponent::CalcMaxWorkers` (COMP-f), and the two were not compared, so which one differs from retail is unknown | SUSPECTED (WORK-c) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -320,6 +344,14 @@ stated condition.
   every `T` is registered. PastureUI's second copy of ComputeCapacity went with its two guards
   (`behaviour:` 0x140128570).
 - DROPPED WITHOUT READING RETAIL: the MemAlloc-failure path of `TickIdle` (COMP-f). SUSPECTED.
+- KEPT (WORK-c): `Work::InitFromEntity`'s null MapComponent / map tests; `Work::TryAutoPickup`'s
+  null AutoPickupComponent and null-singleton returns (0x1400e3db0); the action-chain builders'
+  `derivedTarget` arms (0x1400c1eb0: PerformWork / MoveTo / ShowTool are built empty when the
+  target has no NaturalResourceDescription) and `derived` arms (0x1400c1530), the `targetIBP` and
+  singleton tests of 0x1400c0ad0, the `condPtr8` / `msgIdPtr9` null arms of 0x1400be6e0 and the
+  `param_9` null arm of 0x1400bef70; `CompleteTask::CheckEntity`'s null singleton / scheduler
+  return (retail 0x1400c5ac0 has none; see entry 13). All SUSPECTED except the last (CONFIRMED).
+  0x1400bef70's two reads through the null receiver ([0+0x50], [0+0x28]) stay unguarded, as retail.
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -359,6 +391,16 @@ stated condition.
   and video-restart callbacks there (the profile build's `Video::Device::SetVideoErrorFuncs`,
   0x1800fd860, inlined); `engine.cpp` still writes them as raw bytes because the header (R-VIDEO)
   has no named fields.
+- `Action::_entity` (+0x10, ACT) is the NEXT action of a chain wherever the action stack is walked
+  (0x1400c5400, the inlined appends of 0x1400c1530 / 0x1400bef70, 0x1400c4f10). (WORK-c)
+- The Work action-chain builders are not constructors: `WorkAct_*Ctor_*` (0x1400c1eb0, 0x1400c0ad0,
+  0x1400c2490, 0x1400bb0a0, 0x1400be6e0, 0x1400ba9f0, 0x1400bffd0, 0x1400bb7b0, 0x1400beae0,
+  0x1400bef70) each clear the citizen's stack and push a chain; Ghidra's `ShowTool_Action_Ctor4`
+  (0x1400c1530) and `Pathfinding_FindPath` (0x1400bf790) are two more.
+  `WorkBase_TaskListCleanup_c5400` is CharacterComponent's action-stack clear, `WorkBase_FindComponent_6270`
+  is FindComponent<StorageComponent>, and `Entity_FindConsumeProduce_b6f0`'s old label
+  "Entity_FindStateMachine" is wrong. `Work::field_20` is the work id the scheduler keys on,
+  `field_28` the target cell. (WORK-c)
 
 ### 14g. Commit messages that state something nobody verified
 
