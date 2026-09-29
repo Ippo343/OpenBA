@@ -194,3 +194,19 @@ call would have jumped to 0. Fixed 2026-09-28 (`behaviour:` commit `638c4b3a`, t
 teardown's RT-UI block): direct calls of `System::String::ToInteger` and `std::memmove`.
 No gate route types into a number field or edits text, so the fix is compiled and unit-built but
 has NOT been seen running. A route that types into the New Game seed field would exercise it.
+
+## 12. `AttendanceComponent_GetJobHostComponent` was `void`; `FindAvailableBuilding` read its return — FIXED
+
+**Where.** `code/Game/Component/attendancecomponent.cpp` (retail `0x140002e10`, a by-value
+`InternalBasePtr` return: RAX is the return buffer), read by `FindAvailableBuilding`
+(`code/Game/Game/town_workplace_registry.cpp`, retail `0x14008d100`).
+
+**What happened.** The body was declared `void`. The reader called it through a function pointer
+typed `void* (*)(…)` and dereferenced RAX. Through the registry's pointer RAX happened to hold the
+buffer; when the registry teardown made it a direct call, the -O2 build left `1` in RAX and the
+stress town crashed (`READ of 0000000000000001`, `town_workplace_registry.cpp:286`, reached from
+`CitizenEmploy_SeatWorkers`). No gate route seats workers through this path; only `sa-stress` does.
+
+**Fix.** The body returns `outPtr`; the reader calls it by name. Entry 9 lists the same class of
+defect. **The lesson for B.4:** a cast of a function to another signature is never "keeping today's
+bits" — what RAX holds after a `void` function is not defined, and changes with the call form.

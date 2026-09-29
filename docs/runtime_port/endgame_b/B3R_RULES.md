@@ -279,6 +279,34 @@ The table is `b3r_session/GATE_TABLE.md` (one row per gated merge).
 - W0: P0b, P0a, SM, P0c, A0 — five gated merges, 0 problems; two re-cuts of the `[RtPort]` line
   (1347 / 1817 -> 1338 / 1537 -> 1247 / 1444), unit 919 -> 918.
 
+- W1: fourteen reader blocks by file (G-CompA-D, G-Work, G-Action, G-Dialog, G-Game, G-Player,
+  S-Harness, RT-UI, RT-VG, RT-IO, RT-Core, DX), then a leftovers block. `[RtPort]` 1247 / 1444 ->
+  135 / 97; `[AddressRegistry]` 759 -> 737; the `NOT IMPLEMENTED` set 10 / 8 / 1 -> 1 / 1 / 1.
+- AUDIT (independent, read-only; `b3r_session/W1_AUDIT.md`): 0 deleted rows still read, 0 missed
+  readers, ONE defect (E1: a false PORT GAP arm stopped the KeyMap deleting destructor freeing its
+  object; fixed `3e079cfb`), ~260 dead constants owed, 14 init functions that do more than register.
+- STORAGE: `GameUpdateLoop::_singleton`, `g_gameSettings`, `g_gameContainer`,
+  `Input::Configuration::_singleton->_keyMap`; the allocator snapshot gone.
+- W2, serial: RT (166 rows, 40 functions), the coordinator's 15 empty inits, EZ (`engine/funcs/`
+  dissolved, 514 includers), EXE (`address_registry.*`, 127 `reg_*.cpp`, 51 slot cells), RES (the
+  machinery; `RuntimeInit()` keeps five init calls). Every registry boot line is gone.
+- CLOSE: `b3r_session/acceptance.sh` 17 lines at target; `CLOSE_NUMBERS.md`; `stepclose.sh`.
+
+## 7b. What stays (by name, with its reason)
+Of the registry: NOTHING. No row, no resolver, no printer, no generated file.
+- `standalone/runtime_init.cpp` `RuntimeInit()`: `RtLibm::Init()`, `RtSystemAllocatorArm()` (platform
+  seam, armer, `[RtAlloc] ARMED`), `RtObjectExternalLoadInstallCounters()` (`[ExtLoad]`),
+  `RtVideoDeviceStartupIdentity()`, `RtGraphicsWave29SlotsSummary()`; and `RuntimeDllNotMapped()`.
+  These are initialisation, not registration.
+- `code/Game/<Module>/exe_bodies.h` and `code/Game/Game/exe_constants.h`: the C bodies' declarations
+  and the `.rdata` constants, each with its retail address. B.4 turns them into members.
+- 189 `// PORT GAP 0x…` markers: call sites of things with no body (or an unwired one). Behaviour is
+  today's null arm.
+- 99 `Ensure*` latches: type-id caches and resource loads.
+- Bodies with no reference, kept as provenance: NEXT_SESSION §0.3.
+- dx11's 84-slot `*Data` seam and the twelve `Video::*Data` `DeletingDtor`s (B5-8; not this step).
+
+
 ## 8. Corrections
 (dated, as the blocks find them)
 
@@ -319,3 +347,22 @@ The table is `b3r_session/GATE_TABLE.md` (one row per gated merge).
    LEFT and listed, not given a value. A MISSING argument that retail does set is still a
    `behaviour:` commit with the call-site address.
 
+8. **2026-09-28, RT-Core / the audit — a PORT GAP arm needs its premise CHECKED.** R4 applies to a
+   key that resolves to nothing. `18c4c429` wrote the arm for 0x180006a10, which was registered
+   (`Rt_GuardedObjectFree`): the KeyMap was no longer freed. A block that writes a PORT GAP arm proves
+   the key unregistered at the base commit and says so in the hand-in.
+9. **2026-09-28 — a register function is not only rows.** R3 ("a register function left empty is
+   deleted") cost the `[ExtLoad]` gate line (`85a40178`). `W2_BRIEF.md` rule 2: read the whole body,
+   move what is not a row.
+10. **2026-09-28, STORAGE — decision 4 of `STORAGE_BRIEF.md` can hide a fault.** A test of the cell
+   followed by an unguarded read of the object became a test of the object: a null object returns
+   where it would have faulted. Owed: NEXT_SESSION §0.2.
+11. **2026-09-28 — R8 expected CALLBACK rows and R6e's R2 / R5 a STUB list to remain. None did:**
+   every slot cell had 0 readers after W1, and every STUB reader is a PORT GAP arm. The acceptance
+   targets are 0.
+12. **2026-09-28, the step close — a cast of a body to another signature is not "today's bits".**
+   G-Game left `FindAvailableBuilding` reading RAX after the `void` body 0x140002e10 through a cast
+   ("a behaviour: candidate"). As a direct call the -O2 build returned 1 and `sa-stress` crashed.
+   Fixed from retail (the body returns its return buffer); `known_port_issues` 12. R2's "LEAVE the
+   site" never means a cast that reads an undefined register. The stress run is the only route
+   that seats workers: it stays in the step close.

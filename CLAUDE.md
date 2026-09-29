@@ -9,8 +9,8 @@ Reverse engineer Banished (Shining Rock Software) and replace it with clean, rea
 that mirrors the game's logic and compiles to a replacement exe — like OpenRCT2, re3 and
 devilution. `reimpl-x64.exe` is fully standalone: it loads no retail binary.
 Runtime-x64.dll is ported (`runtime/`), VideoDX11-x64.dll is replaced (`dx11/`), game
-logic lives in `code/Game/`. Exe functions not yet reimplemented are stubbed or
-registered individually in the address registry.
+logic lives in `code/Game/`. There is no address registry: a call is a C++ call, and a
+function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call site.
 
 ## Current work — read these, don't restate them here
 - **Where things stand / what is next:** `docs/runtime_port/STATUS.md`
@@ -19,7 +19,6 @@ registered individually in the address registry.
 - **How work is chosen and measured:** `docs/runtime_port/DIRECTION.md`;
   facts and the per-function recipe: `docs/runtime_port/PLAN.md` §2, §3, §6
 - No waves, lanes, new instruments or new `BANISHED_RT_*` flags (DIRECTION.md §2).
-  A port registers unconditionally.
 
 ## Build, run, gates
 Use `mingw32-make` (`/c/msys64/ucrt64/bin/mingw32-make.exe`).
@@ -37,11 +36,13 @@ tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README al
 
 ## Reimplementation workflow (per function)
 1. **Decompile** in Ghidra: rename, annotate, document the struct layout (`ghidra` skill)
-2. **Type header**: binary-compatible struct in `engine/types/`, `static_assert` on every offset
-3. **Resolve deps**: add needed engine functions to `engine/funcs/engine_funcs.h`
-4. **Write clean C++** in `code/Game/<Module>/` — the tree mirrors the original source layout
-5. **Register** the exe address in `standalone/address_registry.cpp` or a `standalone/reg_*.cpp`
-6. **Test**: `mingw32-make sa-run`, then check boot state and logs (below)
+2. **Type header**: binary-compatible class, `static_assert` on every offset
+   (`runtime/types/<ns>/` for engine classes, the module's header in `code/Game/`)
+3. **Write clean C++** in `code/Game/<Module>/` — the tree mirrors the original source layout;
+   declare it in the class's header (or the module's `exe_bodies.h`, with its retail address)
+4. **Call it by name** from its callers: include the declaring header, never a local `extern`.
+   Replace the caller's `// PORT GAP` arm in a commit titled `behaviour:`
+5. **Test**: `mingw32-make sa-run`, then check boot state and logs (below)
 
 ## Hard rules
 - **Don't "fix" a faithful crash with a null check.** When a byte-faithful function
@@ -62,8 +63,9 @@ tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README al
   `standalone_hang.log` means it froze.
 - **A pixel diff between two runs measures nothing** (frames are not reproducible, even
   with seed + camera pin). Compare with `tools/trace_oracle/`.
-- **Dispatch slots:** `tools/dispatch_slot_map.py --check` must stay at zero mismatches,
-  and some slots are null on purpose — read the consumers before registering one.
+- **No doors.** Nothing registers or resolves a body by retail name or address
+  (`docs/runtime_port/endgame_b/b3r_session/acceptance.sh` must stay at target). Wiring a
+  body into a `PORT GAP` arm changes behaviour: read the consumer first, title it `behaviour:`.
 - **Never run `find /`** or any unscoped filesystem search; it has contaminated perf A/Bs.
   Use Grep/Glob scoped to the worktree. Memory lives at
   `~/.claude/projects/C--code-GIT-untitled-rev-eng-project/memory/` (index `MEMORY.md`;
@@ -90,7 +92,6 @@ see this file's context — put the relevant hard rules in the prompt.
 | Perf runs, stress test, profilers | skill `stress-test`, `perf/README.md` |
 | Framing a screenshot, rendering verification | skill `camera-pin`, `tools/trace_oracle/README.md` |
 | Ghidra setup and naming conventions | skill `ghidra`, `HOW_TO_START_GHIDRA.md` |
-| Registering addresses / dispatch slots | `.claude/rules/address-registry.md` (auto-loads on those files) |
 | Type header ABI rules | `.claude/rules/type-headers.md` (auto-loads on `*/types/`) |
 | Retail binary facts, import table, modding toolkit | `docs/reference/binaries.md` |
 | Main loop, launcher dialog, threading, address resolution | `docs/reference/engine_architecture.md` |

@@ -9,8 +9,8 @@ Keep this to one screen. Update the closure block after every batch; never copy 
 | reachable functions from our call surface | 2,871 |
 | unported | 128, all C runtime (our CRT covers them) |
 | **engine functions to port (static lower bound)** | **0** (206 → 856 → 145 → 0 in one day) |
-| minted vtables | 0 (ENDGAME B.3.9 retired all 152: every class has its compiler vtable; the mint keeps 2 storage rows) |
-| registry doors | name and address are ONE door (`standalone/rt_export_addrs.inc`) |
+| minted vtables | 0 (ENDGAME B.3.9 retired all 152: every class has its compiler vtable); the mint is deleted (2026-09-28) |
+| registry doors | NONE (2026-09-28, the registry teardown): nothing registers or resolves a body by retail name or address |
 
 Worklist: `docs/runtime_port/closure/WORKLIST.md` (empty). Every function the DLL's call graph
 reaches from our call surface OR from any minted vtable slot is ported, and every port is
@@ -20,6 +20,46 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **REGISTRY TEARDOWN CLOSED (2026-09-28) — ENDGAME B.2 is finished:** nothing registers a body under a
+  retail name or address and nothing resolves one. **Deleted:** `standalone/address_registry.{cpp,h}`, all
+  127 `standalone/reg_*.cpp`, `resolve.h` / `resolve_standalone.cpp`, `runtime/funcs/rt_port.h` and
+  `rt_resolve_cache.cpp`, `rt_export_addrs.inc` (4,926 rows), the mint and its generator, `engine/funcs/`
+  (227 externs, `EngineFuncsInit`), the 51 dispatch slot cells, every `X_ResolveFuncs`, the registry
+  instruments and their three flags, ten registry-only tools. A call is a C++ call through the declaring
+  header (`code/Game/<Module>/exe_bodies.h` for the C bodies, with their retail address); a thing with no
+  body is a `// PORT GAP 0x…` comment at its call site (189); the singleton cells are named objects
+  (`GameUpdateLoop::_singleton`, `g_gameSettings`, `g_gameContainer`,
+  `Input::Configuration::_singleton->_keyMap`); `System::MemoryAllocator` is a real class with one API and
+  one instrument seat. What is left of boot init is `standalone/runtime_init.cpp` `RuntimeInit()` (five
+  calls). Rule sheet `endgame_b/B3R_RULES.md` (R1-R11, run §7, what stays §7b, corrections §8), kit and
+  documents `endgame_b/b3r_session/` (six INVENTORY files, BLOCK / W1 / STORAGE / W2 briefs, W1_AUDIT,
+  GATE_TABLE, CLOSE_NUMBERS, `acceptance.sh`, the gate scripts). **Plan for the next step (B.4, the cast
+  metric): `endgame_b/NEXT_SESSION.md`.** Known defects of our port, not yet fixed:
+  `docs/known_port_issues.md`.
+  **Shape.** Block 0 (six read-only inventories) → the rule sheet → W0 prerequisites (the mirror, the
+  mint, one allocator API, declarations) → W1 "readers first": fourteen blocks by FILE plus a leftovers
+  block converted every reader while the rows still existed → an independent read-only AUDIT → STORAGE →
+  W2 "rows last", serial (runtime rows, `engine_funcs`, exe rows, the machinery) → close. **31 gate rows.**
+  On every merge: new game `calls=5683 openFileFail=0`, tutorial `5773/12`, typetable == baseline
+  (`b983f144`), resave == golden, 0 new warnings.
+  **Numbers** (`b3r_session/CLOSE_NUMBERS.md`): 1,267 files, +25,701 / −85,391 lines; every door spelling
+  → 0 (`RegisterRuntime*` 2,711, `RegisterExeAddr` 696, `ResolveAddr` 2,460, `ResolveExport` 205,
+  `RT_EXPORT_ONCE` 242, `RtAddr<` 430); `NOT IMPLEMENTED` addresses 10 / 8 / 1 → **0** on every route;
+  unit 919 → **918**, 0 failures; B.4 cast metric **29,064 → 26,488**; bridge markers 6,698 → 6,859;
+  PORT GAP 149 → 189 (null arms made explicit; behaviour unchanged).
+  **Behaviour changes, each titled** (list in CLOSE_NUMBERS): the largest visible one is that fire and
+  disease now read the settings' auto-slow byte as retail does (they indexed the cell pointer), so an
+  outbreak drops the game to 1x speed.
+  **Found on the way, all fixed:** a deleted register function carried the `[ExtLoad]` exit hook (the
+  gate now fails on a MISSING line); the audit found a false PORT GAP arm that stopped the KeyMap
+  deleting destructor freeing its object; the step close's stress run crashed in
+  `FindAvailableBuilding`, which read RAX after a `void` body through a cast (`known_port_issues` 12).
+  **Step close:** RUN 2026-09-28: Mods / Quit / Options / Achievements exit 0; GoalDialog opens; tool
+  routes exit 0; in-game save `SAVE OPERATION COMPLETE`; true release compile exit 0 (942 files) then
+  `make clean`; clean rebuild exit 0, 0 new warnings, unit 918 / 0; gate on the clean-built exe 0
+  problems; stub set 0; tutorial census citizen=16 herd=16; `sa-stress` CRASHED on the first run (above),
+  exit 0 after the fix (update 1.81 ms/frame, recorded, not chased); `acceptance.sh` at target on all 17
+  lines. Owed items: NEXT_SESSION §0.
 - **NORMAL-VIRTUAL CUTOVER CLOSED (2026-09-28) — ENDGAME B.1 decision 2 is finished:** every class whose
   retail slot 0 is a deleting destructor declares `virtual ~T()` — **449 classes** under five roots
   (`Object::Base` 414, `Graphics::Geometry` 13, `IO::Stream` 9, `Engine::UpdateLoop` 9, `IO::ReaderWriter`
@@ -34,8 +74,7 @@ built them wrong, and callbacks stored in data.
   interface, `PlatformChannel`, `IPathInfo`. Rule sheet `endgame_b/B3X_RULES.md` (X1-X6, run §7,
   corrections §8, left §9), kit and documents `endgame_b/b3x_session/` (five INVENTORY files, W0_AUDIT,
   W1_TESTS_DONE, GATE_TABLE, CLOSE_NUMBERS, ACCEPTANCE, `classes.py`, `flip.py`, `partc.py`,
-  `acceptance.sh`, the gate scripts). Plan for the next step (the registry teardown):
-  `endgame_b/NEXT_SESSION.md`.
+  `acceptance.sh`, the gate scripts).
   **Shape.** Block 0 (five read-only inventories) → the rule sheet → W0 "by name first": seven blocks
   converted every slot-index read while nothing had shifted, then an independent audit (five reads no
   inventory had; 1,114 remaining sites classified; 0 wrong-root casts) → W1: one scripted flip, gated alone

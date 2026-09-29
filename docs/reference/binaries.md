@@ -13,12 +13,12 @@ reimplemented and as Ghidra programs. Per-binary decompilation inventories are i
 - PE timestamp `2017-09-10 16:34:27`
 - Inventory: [decomp/application.md](../../decomp/application.md)
 
-### Its import table = our "dispatch slots"
+### Its import table
 The exe imports Runtime-x64.dll through a normal PE import table: 833 imports in slots
 `0x140151218`-`0x140152c18`, plus 66 from KERNEL32.dll in `0x140151000`-`0x140151208`.
-The `.rdata` dispatch slots we register with `RegisterDispatchSlot` ARE that table, so
-every slot has a name readable from the binary (`tools/dispatch_slot_map.py`). Rules
-for registering them: `.claude/rules/address-registry.md`.
+Every slot has a name readable from the binary (Ghidra: `list_imports`). Our code does not
+model the table: since the registry teardown (2026-09-28) a call through a slot is a direct
+C++ call of the named function. A slot address in a comment is a retail reference only.
 
 ## Runtime-x64.dll (engine core) — fully ported, no longer loaded
 - 2.7 MB, 15,290 functions, image base `0x180000000`, PE timestamp `2017-09-10 16:34:14`
