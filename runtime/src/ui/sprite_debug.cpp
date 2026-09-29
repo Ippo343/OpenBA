@@ -23,26 +23,26 @@
 // Resolves sprite name to index via SpriteSheet::GetSpriteIndexFromName
 // ============================================================
 void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName) {
+    // The code/Game callers pass the ExternalPtr<SpriteSheet> as the raw word
+    // and the System::String const& untyped (their local extern declarations).
+    UI::SpriteSheet* const sheet = reinterpret_cast<UI::SpriteSheet*>(spriteSheet);  // B.3.6 bridge
+    const System::String* const name = static_cast<const System::String*>(spriteName);
 #ifdef _DEBUG
-    // spriteName is System::String const& — dereference to get char*
     const char* nameStr = "(null)";
-    if (spriteName) {
-        const char* dataPtr = *(const char**)spriteName;
+    if (name) {
+        const char* dataPtr = name->_data;
         if (dataPtr) nameStr = dataPtr;
     }
     printf("[Sprite::Ctor] sheet=%p name=\"%s\" retval=%p\n",
-           (void*)(uintptr_t)spriteSheet, nameStr, retval);
+           static_cast<void*>(sheet), nameStr, retval);
 #endif
-    new (retval) UI::Sprite(
-        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
-        *static_cast<const System::String*>(spriteName));
-    void* result = retval;
+    UI::Sprite* const s = new (retval) UI::Sprite(
+        Object::ExternalPtr<UI::SpriteSheet>(sheet), *name);
 #ifdef _DEBUG
-    Sprite* s = (Sprite*)retval;
     printf("[Sprite::Ctor] done -> sheet=%p index=%d valid=%s\n",
            s->spriteSheet, s->spriteIndex, s->IsValid() ? "true" : "false");
 #endif
-    return result;
+    return s;
 }
 
 // ============================================================
@@ -54,14 +54,12 @@ void* Debug_Sprite_DefaultCtor(void* retval) {
 #ifdef _DEBUG
     printf("[Sprite::DefaultCtor] retval=%p\n", retval);
 #endif
-    new (retval) UI::Sprite();
-    void* result = retval;
+    UI::Sprite* const s = new (retval) UI::Sprite();
 #ifdef _DEBUG
-    Sprite* s = (Sprite*)retval;
     printf("[Sprite::DefaultCtor] done -> sheet=%p index=%d\n",
            s->spriteSheet, s->spriteIndex);
 #endif
-    return result;
+    return s;
 }
 
 // ============================================================
@@ -76,13 +74,13 @@ void* Debug_Sprite_DefaultCtor(void* retval) {
 // Returns true if index >= 0 AND sheet != null
 // ============================================================
 bool Debug_Sprite_IsValid(void* sprite) {
+    const UI::Sprite* const s = reinterpret_cast<const UI::Sprite*>(sprite);  // B.3.6 bridge
 #ifdef _DEBUG
-    Sprite* s = (Sprite*)sprite;
     bool result = s->IsValid();
     printf("[Sprite::IsValid] sprite=%p sheet=%p index=%d -> %s\n",
            sprite, s->spriteSheet, s->spriteIndex, result ? "true" : "false");
     return result;
 #else
-    return reinterpret_cast<const UI::Sprite*>(sprite)->IsValid();  // B.3.6 bridge
+    return s->IsValid();
 #endif
 }

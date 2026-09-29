@@ -54,30 +54,17 @@
 
 #include <new>
 
+#include "../../types/io/Stream.h"
+
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 
 
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -90,16 +77,14 @@ void ReleaseStringField(char** field) {
 // times in CreateInstance (three fixed children plus two per tab); `slot` is
 // the caller's InternalPtr local, and WHICH local matters — see the note in
 // CreateInstance.
-void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
+void AddChild(const UI::Dialog* dialog, Object::InternalPtr<UI::Element>* slot,
+              UI::Element* elem, UI::ElementDescription* childDesc) {
     // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
     // placed in the caller's slot.
-    void** made = slot;
-    new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-        static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                static_cast<UI::ElementDescription*>(childDesc))));
+    Object::InternalPtr<UI::Element>* made = slot;
+    *made = dialog->CreateElement(Object::ExternalPtr<UI::ElementDescription>(childDesc));
 
-    UI::Element* child = *reinterpret_cast<UI::Element**>(made);
+    UI::Element* child = made->Get();
     if (child != nullptr)
         child->_parent = elem;
 
@@ -119,9 +104,10 @@ void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDes
 // ============================================================================
 namespace {
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@ (0x1800031f0), called directly.
-int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    return static_cast<const UI::SpriteSheet*>(sheet)                       // B.3.x bridge
-        ->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
+// B.4 LEFT: the three names are `System::String` fields spelt `char*` (their
+// dtors would start to run as the real type, B4_RULES H5).
+int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, const void* nameStr) {
+    return sheet->GetSpriteIndexFromName(*static_cast<const System::String*>(nameStr));
 }
 }  // namespace
 
@@ -150,19 +136,15 @@ void TabDescription::Destruct() { this->~TabDescription(); }
 // read-path SetSize and the element loop then use — not `_tabs._size`, which
 // SetSize is in the middle of changing.
 bool TabDescription::Serialize(void* streamArg) {
-    Stream* stream = static_cast<Stream*>(streamArg);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
     ElementDescription::Serialize(stream);                              // 1800da77a
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                              // 1800da7aa
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_stripBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));   // 1800da7b8
     RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_pageBackdropDescription), reinterpret_cast<rt::io::Serializer*>(&ser));    // 1800da7c6
@@ -177,22 +159,20 @@ bool TabDescription::Serialize(void* streamArg) {
     int32_t n = _tabsCount;                                             // 1800da835
     rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->mode == 0) {                                        // 1800da85a (re-read)
+    if (ser._stream->_direction == 0) {                                        // 1800da85a (re-read)
         rtcoll::RtColl_ArraySetSize_18004cdf0(&_tabsData, n);               // 1800da86b
     }
 
     // The pair loop: BOTH halves of every element, through ONE array-data
     // pointer read BEFORE the loop (0x1800da870) — retail does not re-read it,
     // which is safe here only because SetSize has already finished.
-    uint8_t* tab = reinterpret_cast<uint8_t*>(_tabsData);
-    for (int32_t i = 0; i < n; ++i, tab += 0x10) {                      // 1800da87d / 1800da8a3
+    ElementDescription** tab = _tabsData;
+    for (int32_t i = 0; i < n; ++i, tab += 2) {                         // 1800da87d / 1800da8a3, 0x10 per pair
         RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da889
-        RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab + 8), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da897
+        RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(tab + 1), reinterpret_cast<rt::io::Serializer*>(&ser));            // 1800da897
     }
 
-    if (rw != nullptr) {                                                // 1800da8ad
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (1800da8ad).
     return true;
 }
 
@@ -224,13 +204,12 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
     if (raw != nullptr)                                                 // 1800da481
         elem = ::new (raw) TabElement();                                // 1800da486 ??0 (out of line)
 
-    void* slotA = elem;                                                 // [RSP+0x70]
-    void* slotB = nullptr;                                              // [RSP+0x78]
+    Object::InternalPtr<Element> slotA(elem);                           // [RSP+0x70]
+    Object::InternalPtr<Element> slotB;                                 // [RSP+0x78]
 
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
-    UI::ElementDescription::CreateInstance(                   // 1800da4a0
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slotA));  // B.3.6 bridge
+    UI::ElementDescription::CreateInstance(&slotA);                     // 1800da4a0
 
     AddChild(dialog, &slotA, elem, _stripBackdropDescription);          // 1800da4b1
     AddChild(dialog, &slotA, elem, _pageBackdropDescription);           // 1800da502
@@ -238,10 +217,10 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
 
     const int32_t tabs = _tabsCount;
     for (int32_t i = 0; i < tabs; ++i) {                                // 1800da596 / 1800da658
-        void* const* row = _tabsData + i * 2;                           // 1800da5a8
+        ElementDescription* const* row = _tabsData + i * 2;             // 1800da5a8
         AddChild(dialog, &slotA, elem, row[0]);                         // 1800da5bb
         // THE OTHER SLOT — see the banner.
-        void* const* row2 = _tabsData + i * 2;                          // 1800da5f8 (re-read)
+        ElementDescription* const* row2 = _tabsData + i * 2;            // 1800da5f8 (re-read)
         AddChild(dialog, &slotB, elem, row2[1]);                        // 1800da60c
     }
 
@@ -251,7 +230,7 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
     char* const* const names[3] = { &_edgeLeftName, &_edgeMiddleName, &_edgeRightName };
     ::Sprite* const sprites[3] = { &elem->_edgeLeft, &elem->_edgeMiddle, &elem->_edgeRight };
     for (int i = 0; i < 3; ++i) {
-        void* sheet = _spriteSheet;                                     // RE-READ each time
+        SpriteSheet* sheet = _spriteSheet;                              // RE-READ each time
         if (sheet != nullptr) {
             const int32_t idx = GetSpriteIndexFromName(sheet, names[i]);
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);               // DWORD store
@@ -259,9 +238,11 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
             const int32_t minusOne = -1;
             __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);
         }
-        uint8_t* s = reinterpret_cast<uint8_t*>(sprites[i]);
-        *reinterpret_cast<void**>(s)        = sheet;
-        *reinterpret_cast<uint64_t*>(s + 8) = idxSlot;                  // QWORD store
+        // One QWORD store over `spriteIndex` and `pad0C`: the index in the low
+        // dword, the slot's never-written high dword above it.
+        sprites[i]->spriteSheet = sheet;
+        sprites[i]->spriteIndex = static_cast<int32_t>(idxSlot);
+        sprites[i]->pad0C       = static_cast<int32_t>(idxSlot >> 32);
     }
 
     elem->_tabCount = _tabsCount;                                       // 1800da71e
@@ -280,11 +261,10 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
 // (+0x60) and the tail JMP into ~External are the compiler's chain. The four
 // ExternalPtrs at +0x68..+0x80 are not released.
 TabDescription::~TabDescription() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    rtcoll::RtColl_ArrayDtor_18004cc90(p + 0xa8);             // 1800da90c
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 1800da912
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 1800da945
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 1800da977
+    rtcoll::RtColl_ArrayDtor_18004cc90(&_tabsData);           // 1800da90c, +0xa8
+    ReleaseStringField(&_edgeRightName);                        // 1800da912, +0x98
+    ReleaseStringField(&_edgeMiddleName);                       // 1800da945, +0x90
+    ReleaseStringField(&_edgeLeftName);                         // 1800da977, +0x88
 }
 
 // ?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ 0x18004c2e0 --

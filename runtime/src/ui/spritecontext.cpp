@@ -173,7 +173,7 @@ namespace UI {
 // own clear, SpriteCapture.h); push an identity Matrix through
 // `Video::Context::SetTransform`; and finally store `_scale`.
 void SpriteContext::Begin(float scale, SpriteCapture* capture, Video::Viewport* clipRegion) {
-    RtVideo::Context* ctx = static_cast<RtVideo::Context*>(_context);
+    Video::Context* const ctx = _context;
     const auto* rb = static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
     const int32_t w = rb->width;
     const int32_t h = rb->height;
@@ -201,7 +201,7 @@ void SpriteContext::Begin(float scale, SpriteCapture* capture, Video::Viewport* 
     identity.m[0] = 1.0f; identity.m[5] = 1.0f; identity.m[10] = 1.0f; identity.m[15] = 1.0f;
     // THE DOOR DECIDES THE OVERLOAD: `?SetTransform@…QEAAXHAEBVMatrix@Math@@@Z`
     // (0x18001a6b0) — the (slot, Matrix&) pair, not `SetTransformScale`.
-    reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, identity);  // B.3.5 bridge
+    ctx->SetTransform(0, identity);
 
     _scale = scale;
 }
@@ -368,10 +368,10 @@ Video::Viewport SpriteContext::SetScissor(const Video::Viewport& v) {
     // its +0x10/+0x14 are the target's width and height, and the flag says the
     // new scissor covers the whole target.
     if (SpriteCapture* capture = _spriteCapture) {
-        auto* target = *reinterpret_cast<uint8_t**>(
-            static_cast<uint8_t*>(_context) + 0x28);
-        const int tw = *reinterpret_cast<const int32_t*>(target + 0x10);
-        const int th = *reinterpret_cast<const int32_t*>(target + 0x14);
+        const auto* target =
+            static_cast<const RtVideo::RenderBufferPrefix*>(_context->_renderBuffer);
+        const int tw = target->width;
+        const int th = target->height;
         const bool fullScreen = (nw == tw && nh == th);
         capture->AddScissor(v.x, v.y, v.width + v.x, v.height + v.y, fullScreen);
     }

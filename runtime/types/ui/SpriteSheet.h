@@ -245,7 +245,7 @@ public:
         m_groupName = nullptr;                // +0x40
         m_field48 = 0;                        // +0x48 } one qword
         m_field4C = 0;                        //       }
-        m_field50 = 0;                        // +0x50 (BYTE)
+        m_field50 = false;                    // +0x50 (BYTE)
     }
 
 public:
@@ -258,7 +258,7 @@ public:
     char*       m_groupName;        // +0x40  System::String data ptr — Set's p4
     int32_t     m_field48;          // +0x48  Set's p1
     int32_t     m_field4C;          // +0x4C  Set's p2
-    uint8_t     m_field50;          // +0x50  Set's p5 (bool)
+    bool        m_field50;          // +0x50  Set's p5; Serialize(bool&) 0x18011d7ba
     uint8_t     _pad51[7];          // +0x51  NEVER WRITTEN by the ctor (its last
                                     //        store is `MOV byte ptr [RCX+0x50],DL`,
                                     //        0x18011d65d) — kSpriteSheetWrittenBytes
@@ -298,8 +298,8 @@ using SpriteInfo  = UI::SpriteInfo;
 // address in its trailing comment and read through the registry today. It is
 // declared here, copied from its definition (linkage, namespace, types), so the
 // reader can call it by name. Nothing calls it through this declaration yet.
-namespace rt { namespace io { struct Serializer; } }   // io/Serializer.h
+namespace IO { class Serializer; }   // io/Serializer.h
 
 // ---- ui/spritesheet_vtable.cpp
-extern "C" void RtUi_SpriteSheet_SerializeEntries(rt::io::Serializer* ser, int32_t count, UI::SpriteInfo* entries);  // 0x180078ad0
+extern "C" void RtUi_SpriteSheet_SerializeEntries(IO::Serializer* ser, int32_t count, UI::SpriteInfo* entries);  // 0x180078ad0
 // ==== end B3R W0-P0c ====

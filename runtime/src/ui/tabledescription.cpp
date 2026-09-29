@@ -43,6 +43,8 @@
 // ??0TableElement@UI@@ (0x18011e2f0) is already ported (ui_factory_wave28.cpp).
 // ============================================================================
 #include <new>
+
+#include "../../types/io/Stream.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -66,26 +68,11 @@ namespace {
 
 
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -122,18 +109,14 @@ void TableDescription::Destruct() { this->~TableDescription(); }
 // per-cell loop that emits {int, int, ExternalPtr}. The String at +0x90 is NOT
 // serialized — the destructor is the only body in the class that touches it.
 bool TableDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
 
     UI::ElementDescription::Serialize(stream);                 // 18011e5aa (qualified)
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 18011e5da
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     rw->SerializeInt(_columnCount, nullptr);
     rw->SerializeInt(_rowCount, nullptr);
@@ -142,7 +125,7 @@ bool TableDescription::Serialize(void* streamv) {
     int32_t n = _cells._size;                                  // 18011e61e
     rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->mode == 0) {                               // 18011e643 (re-read)
+    if (ser._stream->_direction == 0) {                               // 18011e643 (re-read)
         rtcoll::RtColl_ArraySetSize_1800799a0(&_cells, n);         // 18011e651
     }
 
@@ -155,9 +138,7 @@ bool TableDescription::Serialize(void* streamv) {
             reinterpret_cast<rt::io::Serializer*>(&ser));               // B.3.x bridge
     }
 
-    if (rw != nullptr) {                                       // 18011e6b8
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (18011e6b8).
     return true;
 }
 
@@ -199,9 +180,9 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
     if (raw != nullptr)                                        // 18011e3c3
         elem = ::new (raw) TableElement();                     // 18011e3c8 ??0 (out of line)
 
-    void* slot = elem;                                         // 18011e3d5
+    Object::InternalPtr<Element> slot(elem);                                         // 18011e3d5
     UI::ElementDescription::CreateInstance(                   // 18011e3e2
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     const int32_t columns = _columnCount;
     const int32_t rows    = _rowCount;
@@ -260,13 +241,11 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
 
             // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
             // placed in the caller's slot.                    // 18011e519
-            void** made = &slot;
-            new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-                static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-                    Object::ExternalPtr<UI::ElementDescription>(
-                        static_cast<UI::ElementDescription*>(cell->desc))));
+            Object::InternalPtr<Element>* made = &slot;
+            *made = dialog->CreateElement(
+                Object::ExternalPtr<UI::ElementDescription>(cell->desc));
 
-            *dst = static_cast<Element*>(*made);               // 18011e521
+            *dst = made->Get();                                // 18011e521
 
             // The flat index RECOMPUTED, and the array data pointer RE-READ,
             // before the parent write (0x18011e524..0x18011e53a). Retail does
@@ -278,7 +257,7 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
         }
     }
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 18011e562 / 18011e567
+    *ret = Object::InternalPtr<Element>(elem);                 // 18011e562 / 18011e567
     return ret;
 }
 
