@@ -300,10 +300,9 @@ void CitizenUI::OnUpdateLayout() {
     if (!ai) return;
 
     // Get CitizenDescription from Component::_description (+0x18), check IsDerivedFrom
-    void* descBase = ai->_description;
+    Description* descBase = ai->_description;
     bool isDesc = ::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId());
-    // LEFT: Component::_description is void* (COMP-a's header).
-    CitizenDescription* citizenDesc = isDesc ? (CitizenDescription*)descBase : nullptr;
+    CitizenDescription* citizenDesc = isDesc ? static_cast<CitizenDescription*>(descBase) : nullptr;
     if (!CitUI_OkPtr(citizenDesc)) citizenDesc = nullptr;
 
     // CitizenComponent::description (+0x288) caches the CitizenDescription pointer; the

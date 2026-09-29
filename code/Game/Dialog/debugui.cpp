@@ -408,10 +408,9 @@ static void Game_SpawnCitizens_Impl() {
                         int spawnedHere = 0; // R12D — per-building spawn counter
                         while (true) {
                             // Get the InteractDescription from Component::_description (+0x18)
-                            void* desc = resComp->_description;
+                            Description* desc = resComp->_description;
                             bool isResDesc = ::Object::IsDerivedFromNullSafe(desc, InteractDescription::TypeId());
-                            // LEFT: Component::_description is void* (COMP-a's header).
-                            InteractDescription* resDesc = isResDesc ? (InteractDescription*)desc : nullptr;
+                            InteractDescription* resDesc = isResDesc ? static_cast<InteractDescription*>(desc) : nullptr;
 
                             // Capacity: the use-node count (+0x30)
                             // GetOccupantCount returns values that add to this
@@ -490,10 +489,9 @@ static void Game_SpawnCitizens_Impl() {
                             CitizenComponent* citizen = newEntity->FindComponent<CitizenComponent>();
 
                             // Get CitizenDescription (DAT_1401c7190) from Component::_description
-                            void* citDescRaw = citizen->_description;
+                            Description* citDescRaw = citizen->_description;
                             bool isCitDesc = ::Object::IsDerivedFromNullSafe(citDescRaw, CitizenDescription::TypeId());
-                            // LEFT: Component::_description is void* (COMP-a's header).
-                            CitizenDescription* citDesc = isCitDesc ? (CitizenDescription*)citDescRaw : nullptr;
+                            CitizenDescription* citDesc = isCitDesc ? static_cast<CitizenDescription*>(citDescRaw) : nullptr;
 
                             // Get profession list from game (re-read global)
                             Profession* profList = GameUpdateLoop::_singleton->m_professionList->field_0x30;
@@ -1086,10 +1084,9 @@ void DebugUI::OnCreated() {
             for (int i = 0; i < drawCount; i++) {
                 Component* entry = *(Component**)((uintptr_t)i * 8 +
                     *(uintptr_t*)(drawableList + 0xC0));
-                void* inner = entry->_description;
+                Description* inner = entry->_description;
                 bool isDrawable = ::Object::IsDerivedFromNullSafe(inner, PopulationDescription::TypeId());
-                // LEFT: Component::_description is void* (COMP-a's header).
-                PopulationDescription* drawableDesc = isDrawable ? (PopulationDescription*)inner : nullptr;
+                PopulationDescription* drawableDesc = isDrawable ? static_cast<PopulationDescription*>(inner) : nullptr;
 
                 UI::Sprite sprite;
                 this->drawCombo->AddItem(sprite, drawableDesc->_name, entry);

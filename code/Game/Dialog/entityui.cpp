@@ -124,10 +124,9 @@ static UIDescription* GetDescPage_Impl(const ComponentDescription* entityDesc)
 // unguarded (`CMOVNZ RDX,RBX ; MOV EDX,[RDX+0x30]`).
 bool BuildComponent::IsBuildComplete() const
 {
-    void* desc = _description;
+    Description* desc = _description;
     bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
-    // LEFT: Component::_description is void* (COMP-a's header).
-    BuildDescription* resourceComp = isResource ? (BuildDescription*)desc : nullptr;
+    BuildDescription* resourceComp = isResource ? static_cast<BuildDescription*>(desc) : nullptr;
 
     if (!resourceComp) return false;
 

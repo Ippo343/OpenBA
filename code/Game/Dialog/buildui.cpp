@@ -118,10 +118,9 @@ static ComponentEntity* BuildUI_Entity(Object::Base* dataSource) {
 // checked (retail's IsDerivedFrom BuildDescription).
 static BuildDescription* BuildUI_Description(BuildComponent* posComp) {
     if (posComp == nullptr) return nullptr;
-    void* desc = posComp->_description;
+    Description* desc = posComp->_description;
     bool isResource = ::Object::IsDerivedFromNullSafe(desc, BuildDescription::TypeId());
-    // LEFT: Component::_description is void* (COMP-a's header).
-    return isResource ? (BuildDescription*)desc : nullptr;
+    return isResource ? static_cast<BuildDescription*>(desc) : nullptr;
 }
 
 // ---- BuildUI: PROMOTED to the real reimpl (2026-07-13) -----------------------

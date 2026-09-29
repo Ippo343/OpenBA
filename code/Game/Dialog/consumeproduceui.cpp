@@ -63,10 +63,9 @@ static ConsumeProduceComponent* CPUI_FindComponent(Object::Base* entity) {
 
 // The component's ConsumeProduceDescription (Component::_description, checked).
 static ConsumeProduceDescription* CPUI_Description(ConsumeProduceComponent* component) {
-    void* desc = component->_description;
+    Description* desc = component->_description;
     bool isCPComp = ::Object::IsDerivedFromNullSafe(desc, ConsumeProduceDescription::TypeId());
-    // LEFT: Component::_description is void* (COMP-a's header).
-    return isCPComp ? (ConsumeProduceDescription*)desc : nullptr;
+    return isCPComp ? static_cast<ConsumeProduceDescription*>(desc) : nullptr;
 }
 
 // ============================================================

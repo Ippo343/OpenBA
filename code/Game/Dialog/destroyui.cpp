@@ -90,10 +90,9 @@ static bool DestroyComponent_CanRebuild_Impl(DestroyComponent* destroyComp)
     if (!destroyComp) return false;
 
     // Check if the description is the DestroyDescription
-    void* desc = destroyComp->_description;
+    Description* desc = destroyComp->_description;
     bool isType = ::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId());
-    // LEFT: Component::_description is void* (COMP-a's header).
-    DestroyDescription* typedDesc = isType ? (DestroyDescription*)desc : nullptr;
+    DestroyDescription* typedDesc = isType ? static_cast<DestroyDescription*>(desc) : nullptr;
 
     // Also check separately (decompile does it twice)
     ::Object::IsDerivedFromNullSafe(destroyComp->_description, DestroyDescription::TypeId());
