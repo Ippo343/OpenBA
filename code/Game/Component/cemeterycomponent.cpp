@@ -171,47 +171,43 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
 //
 // The cell record is 0x30 bytes: +0x08 entity IBP, +0x29 zone byte. Retail returns 0 in
 // AL so the state machine's Enter walk continues past this node.
-extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
-    CemeteryComponent* self = reinterpret_cast<CemeteryComponent*>(compV);
+char CemeteryComponent::EnterBuilt() {
     if (GameUpdateLoop::_singleton == nullptr)
         return 0;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xF0);
+    // LEFT: GameUpdateLoop::m_citizenList / m_game are void* (W0 header): the town list
+    // and the map cells stay by offset.
+    const uintptr_t townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
     if (!townMgr) return 0;
 
-    uint8_t ibp[24] = {};
-    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+    Object::InternalPtr<CemeteryComponent> ibp(this);
     const int count = *reinterpret_cast<int*>(townMgr + 0x48);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x40))
-        .SetSizeFill(count + 1, ibp);
+        .SetSizeFill(count + 1, &ibp);
 
-    const uintptr_t world = *reinterpret_cast<uintptr_t*>(gw + 0xF8);
+    const uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
     if (!world) return 0;
 
     int claimed = 0;
-    for (int i = 0; i < self->plotCount; ++i) {
-        const int cellIdx = self->plots[i];
+    for (int i = 0; i < plotCount; ++i) {
+        const int cellIdx = plots[i];
         const uintptr_t cells = *reinterpret_cast<uintptr_t*>(world + 0x80);
         if (!cells) break;
         const uintptr_t cell = cells + static_cast<uintptr_t>(cellIdx) * 0x30;
 
         // Already occupied by a grave? Leave the plot as it stands.
-        void* occupant = *reinterpret_cast<void**>(cell + 0x08);
+        ComponentEntity* occupant = *reinterpret_cast<ComponentEntity**>(cell + 0x08);
         if (occupant) {
-            void* probe = occupant;
+            ComponentEntity* probe = occupant;
             bool hasTombstone = false;
             if (probe) {
                 const uint32_t tidTombstone = TombstoneComponent::TypeId();
-                const uintptr_t ent = reinterpret_cast<uintptr_t>(probe);
-                const int       n   = *reinterpret_cast<int*>(ent + 0x38);
-                const uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
+                const int n = probe->_componentCount;
                 for (int j = 0; j < n; ++j) {
-                    void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
-                    void* c = *slot;
+                    Component* c = probe->_components[j].Get();
                     if (!c) continue;
-                    const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
+                    const uint32_t tid = c->Type();   // slot 2
                     if (tid == tidTombstone) { hasTombstone = true; break; }
                 }
             }
@@ -241,9 +237,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
                                          reinterpret_cast<void*>(static_cast<uintptr_t>(2)), nullptr);
         }
 
-        uint8_t nullIbp[24] = {};
-        new (nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<void**>(cell + 0x08) = *reinterpret_cast<void**>(nullIbp);
+        *reinterpret_cast<ComponentEntity**>(cell + 0x08) = nullptr;   // a null InternalBasePtr
         ++claimed;
     }
 
@@ -252,8 +246,8 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
         if (n < 8) { ++n;
             fprintf(stderr, "[Cemetery] graveyard REGISTERED: comp=%p townMgr=%p "
                             "cemeteryCount=%d plots=%d claimed=%d\n",
-                    compV, reinterpret_cast<void*>(townMgr),
-                    *reinterpret_cast<int*>(townMgr + 0x48), self->plotCount, claimed);
+                    static_cast<void*>(this), reinterpret_cast<void*>(townMgr),
+                    *reinterpret_cast<int*>(townMgr + 0x48), plotCount, claimed);
             fflush(stderr);
         }
     }
@@ -262,8 +256,8 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
 
 // CemeteryComponent state-3 "demolish" enter -- 0x140046f80. Byte-identical to the
 // slot-7 removal hook (0x1400471c0): wrap the component, call the erase.
-extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    reinterpret_cast<CemeteryComponent*>(comp)->CemeteryComponent::OnRemove();   // B.3.8 bridge (state enters take void*)
+char CemeteryComponent::EnterDemolish() {
+    CemeteryComponent::OnRemove();
     return 0;
 }
 
@@ -282,6 +276,12 @@ extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* /*sm*/) {
 
 using CemeteryCtrlDispatch = ::ControllerLive::Dispatcher<CemeteryCtrlTag>;
 
+// The table (controller_state_table.h) holds plain handler addresses called as
+// handler([node+0x18], sm): [node+0x18] is the controller's back-pointer, this
+// component, so each entry is a one-line adapter that calls the member.
+static char CemeteryEnterBuilt(CemeteryComponent* c)    { return c->EnterBuilt(); }      // 0x140046fc0
+static char CemeteryEnterDemolish(CemeteryComponent* c) { return c->EnterDemolish(); }   // 0x140046f80
+
 // The retail table, transcribed from 0x1400477a0 call for call. Its RegisterState
 // instantiation (0x140004250) zero-fills the trans30/trans38/update columns, so every
 // handler but Enter is null -- verified in the callee, not assumed from the call site.
@@ -290,10 +290,10 @@ static void CemeteryComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = CemeteryCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&CemeteryComponent_EnterBuilt),
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&CemeteryEnterBuilt),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&CemeteryComponent_EnterDemolish),
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&CemeteryEnterDemolish),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);
@@ -361,51 +361,44 @@ void CemeteryComponent::OnAdded() {
         return;
     }
 
-    void* mapIbp = _entity->FindComponent<MapComponent>();   // 0x140004680
-    if (!mapIbp) { CEM_TRACE("BAIL no MapComponent"); return; }
-    const uintptr_t map = reinterpret_cast<uintptr_t>(mapIbp);
+    MapComponent* map = _entity->FindComponent<MapComponent>();   // 0x140004680
+    if (!map) { CEM_TRACE("BAIL no MapComponent"); return; }
 
-    int x0  = *reinterpret_cast<int16_t*>(map + 0x28);
-    int y0  = *reinterpret_cast<int16_t*>(map + 0x2a);
-    int w   = *reinterpret_cast<int16_t*>(map + 0x2c);
-    int h   = *reinterpret_cast<int16_t*>(map + 0x2e);
-    const int rot = *reinterpret_cast<int*>(map + 0x30);
+    int x0  = static_cast<int16_t>(map->tileX0);
+    int y0  = static_cast<int16_t>(map->tileY0);
+    int w   = static_cast<int16_t>(map->tileX1);
+    int h   = static_cast<int16_t>(map->tileY1);
+    const int rot = map->extraField;
 
-    const uintptr_t world = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF8);
+    // LEFT: GameUpdateLoop::m_game is void* (W0 header): the map width stays by offset.
+    const uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
     if (!world) { CEM_TRACE("BAIL no world"); return; }
     const int mapWidth = *reinterpret_cast<int*>(world);
 
     // The gate child: multi->children[0], then that entity's MapComponent.
-    void* multiFound = _entity->FindComponent<MultiObjectComponent>();   // 0x140004740
-    const uintptr_t multi = reinterpret_cast<uintptr_t>(multiFound);
+    MultiObjectComponent* multi = _entity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
-    const uintptr_t childArr = *reinterpret_cast<uintptr_t*>(multi + 0x48);
+    Object::InternalPtr<ComponentEntity>* childArr = multi->field48;
     if (!childArr) { CEM_TRACE("BAIL no child array"); return; }
     // Retail copies children[0] into a local and calls CheckPtr on THAT COPY
     // (0x1400472a7..0x1400472af) before using it -- the child slot holds a lazy/weak
     // InternalBasePtr, and reading it raw yields an unresolved value. Skipping this
     // step produced a gate 37 tiles outside a 12-wide footprint (door=38), so the two
     // path-in columns were never excluded and every tile became a plot.
-    void* gateEnt = *reinterpret_cast<void**>(childArr);
+    ComponentEntity* gateEnt = childArr[0].Get();
     if (!gateEnt) { CEM_TRACE("BAIL no child[0]"); return; }
 
-    void* gateIbp = nullptr;
-    FloorComponent_FindResData(gateEnt, &gateIbp);   // 0x140004680
-    if (!gateIbp) { CEM_TRACE("BAIL gate has no MapComponent"); return; }
-    // NOT `*(uintptr_t*)gateIbp`. Retail's RBX is the ADDRESS of the out buffer, so its
-    // `mov rax,[rbx]` yields the component pointer; `gateIbp` here IS that pointer
-    // already. Dereferencing it once more hands back the component's VTABLE, and
-    // [vtable+0x28] is a slice of a function pointer -- which read as door=38 on a
-    // 12-wide footprint and door=383 on a 6-wide one, so the two path-in columns were
-    // never excluded and every tile became a grave plot.
-    const uintptr_t gateMap = reinterpret_cast<uintptr_t>(gateIbp);
-    if (!gateMap) { CEM_TRACE("BAIL gate map null"); return; }
+    // 0x140004680 FindComponent<MapComponent> on the gate entity. Retail's RBX is the
+    // ADDRESS of the out buffer, so its `mov rax,[rbx]` yields the component pointer;
+    // dereferencing that once more (as an earlier port did) handed back the component's
+    // VTABLE, and [vtable+0x28] read as door=38 on a 12-wide footprint.
+    MapComponent* gateMap = gateEnt->FindComponent<MapComponent>();
+    if (!gateMap) { CEM_TRACE("BAIL gate has no MapComponent"); return; }
 
     // Door offset along the axis the footprint runs on for this rotation.
     const bool rotated = (rot != 0 && rot != 180);
-    int door = rotated ? (*reinterpret_cast<int16_t*>(gateMap + 0x2a) - y0)
-                       : (*reinterpret_cast<int16_t*>(gateMap + 0x28) - x0);
+    int door = rotated ? (static_cast<int16_t>(gateMap->tileY0) - y0)
+                       : (static_cast<int16_t>(gateMap->tileX0) - x0);
 
     // Inset by one tile all round; the door pair moves with it.
     ++door; ++x0; ++y0; w -= 2; h -= 2;
@@ -431,16 +424,18 @@ void CemeteryComponent::OnAdded() {
     CEM_TRACE("built plots=%d cap=%d", plotCount, plotCapacity);
 }
 
-// [7] 0x1400471c0.
+// [7] 0x1400471c0. The erase key is the component itself (0x1400471c4 MOV RDX,RCX
+// builds the InternalBasePtr from `this`): the list holds what EnterBuilt appended,
+// IBP(this). Keying it on the owner entity never matched, so a demolished graveyard
+// stayed in the town list.
 void CemeteryComponent::OnRemove() {
-    uint8_t ptrBuf[8];
-    new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(_entity));   // B.3.3 bridge
+    Object::InternalPtr<CemeteryComponent> ptrBuf(this);
 
     if (GameUpdateLoop::_singleton != nullptr) {
-        void* gameState = GameUpdateLoop::_singleton;
-        void* subObj = *(void**)((uintptr_t)gameState + 0xF0);
-        void* cemeteryListBase = (void*)((uintptr_t)subObj + 0x40);
-        CemeteryListErase_Reimpl(cemeteryListBase, ptrBuf);   // 0x140002cc0
+        // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the town list stays by offset.
+        void* subObj = GameUpdateLoop::_singleton->m_citizenList;
+        void* cemeteryListBase = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(subObj) + 0x40);
+        CemeteryListErase_Reimpl(cemeteryListBase, &ptrBuf);   // 0x140002cc0
     }
 }
 

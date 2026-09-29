@@ -50,6 +50,10 @@ public:
     void Tick(void* time) override;                               // [8] 0x1401094c0
     void Update(void* time) override;                             // [9] 0x140109480
 
+    // ---- non-virtual members (retail addresses) ----
+    // 0x14010a0e0: steer toward `target` under mover control (+0x28 = 1).
+    void DriveToward(const Math::Vector3* target, float heading, float speed);
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
     // Fields (B.4 W0-H1) from ctor 0x140109d20, Persist 0x140109ab0 and the
     // action-list release 0x1400c5150 the dtor runs on +0x48. Persist's import

@@ -25,62 +25,42 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "audio/SoundEffect.h"
 #include <cstdint>
 #include "Component/exe_bodies.h"
 
-namespace {
+// field = &ExternalPtr<SoundEffect> (the pointer stored in place), serializer = the
+// caller's IO::Serializer.
+extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer) {
+    if (!field || !serializer) return;
 
-inline int SerializerMode(void* serializer) {
-    // *(int*)(*(Serializer**)serializer + 8): 0 = loading, 1 = saving.
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-}
-
-inline int EncodingType(void* serializer) {
-    void* enc = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
-    if (!enc) return 0;
-    void** vt = *reinterpret_cast<void***>(enc);           // Encoding vtable
-    return reinterpret_cast<int(*)(void*)>(vt[2])(enc);    // +0x10 GetType
-}
-
-}  // namespace
-
-// param_1 = &field (External** stored in place), param_2 = IO::Serializer*.
-extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* serializer) {
-    if (!fieldPtr || !serializer) return;
-    void** field = reinterpret_cast<void**>(fieldPtr);
-
-    void* factory = ::Object::ExternalFactory::_singleton;
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
 
     // Encoding mode 3 — re-resolve from the existing pointer's path (no stream I/O).
-    if (EncodingType(serializer) == 3) {
+    if (serializer->GetEncoding().GetKind() == 3) {   // Encoding slot 2 (+0x10)
         if (*field == nullptr) return;
-        if (factory) {
-            System::Filename path =
-                reinterpret_cast<const ::Object::External*>(*field)->GetPath();  // B.3.3 bridge
+        if (efactory) {
+            System::Filename path = (*field)->GetPath();
             (void)efactory->FindOrLoad(path);   // touch/refcount (result unused)
         }
         return;
     }
 
-    int mode = SerializerMode(serializer);
-    bool loading = (mode == 0);
+    // IO::Serializer::GetDirection, retail 0x180006210: 0 = loading, 1 = saving.
+    const bool loading = static_cast<int>(serializer->GetDirection()) == 0;
 
     System::Filename pathBuf;
 
-    bool refMode = factory &&
-                   efactory->IsReferenceModeEnabled();
+    bool refMode = efactory && efactory->IsReferenceModeEnabled();
 
     bool doLoad = false;
 
     if (refMode) {
         uint32_t refId = 0xffffffffu;
         if (*field != nullptr)
-            refId = efactory->GetReferenceId(
-                reinterpret_cast<const ::Object::External*>(*field));  // B.3.3 bridge
+            refId = efactory->GetReferenceId(*field);
         // Serialize the reference id (matches the exe's guarded Serialize(uint)).
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
+        serializer->Serialize(refId, nullptr);
         if ((int)refId != -1) {
             if (loading) {
                 pathBuf = efactory->GetPathForReferenceId(refId);
@@ -89,21 +69,21 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
         }
     } else {
         // Non-reference mode: bool "present" flag, then the path string.
-        uint8_t present = (*field != nullptr) ? 1 : 0;
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
+        bool present = (*field != nullptr);
+        serializer->Serialize(present, nullptr);
         if (present) {
             if (*field != nullptr)
-                pathBuf = reinterpret_cast<const ::Object::External*>(*field)->GetPath();  // B.3.3 bridge — save: fill path from object
+                pathBuf = (*field)->GetPath();                // save: fill path from object
             pathBuf.AsString().Serialize(serializer);        // read/write the path string
             doLoad = true;
         }
     }
 
     if (doLoad && loading) {
-        void* loaded = nullptr;
-        if (factory)
-            loaded = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(pathBuf)));
+        const ::Object::External* loaded = nullptr;
+        if (efactory)
+            loaded = efactory->FindOrLoad(pathBuf);
         // RELAXED type check (see file header): keep the loaded External.
-        *field = loaded;
+        *field = static_cast<Audio::SoundEffect*>(const_cast<::Object::External*>(loaded));
     }
 }

@@ -2324,8 +2324,8 @@ char CitizenComponent::FindCareBuilding() {
         CitizenComponent* keyIBP = this;
         if (CitizenComp_sub_40f0(found, this)) {
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&found->field28)
-                .SetSizeFill(*reinterpret_cast<int*>(&found->field30) + 1, &keyIBP);
+            GameColl::AsArray<GameColl::Ptr8>(&found->queue)
+                .SetSizeFill(found->queueCount + 1, &keyIBP);
             careBuilding = found;
             // [Plague] outcome: linked. Only reached for a sick citizen (the two call
             // sites both gate on +0x68 != 0), so this is inherently low volume.
@@ -2374,8 +2374,8 @@ void CitizenComponent::FindStorage() {
         CitizenComponent* keyIBP = this;
         if (CitizenComp_sub_40f0(found, this)) {
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&found->field28)
-                .SetSizeFill(*reinterpret_cast<int*>(&found->field30) + 1, &keyIBP);
+            GameColl::AsArray<GameColl::Ptr8>(&found->queue)
+                .SetSizeFill(found->queueCount + 1, &keyIBP);
             field_0x230 = found;
         }
     }
@@ -2412,8 +2412,8 @@ char CitizenComponent::TryEnrolInSchool(AttendanceComponent* exclude) {
         CitizenComponent* keyIBP = this;
         if (CitizenComp_sub_40f0(found, this)) {
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&found->field28)
-                .SetSizeFill(*reinterpret_cast<int*>(&found->field30) + 1, &keyIBP);
+            GameColl::AsArray<GameColl::Ptr8>(&found->queue)
+                .SetSizeFill(found->queueCount + 1, &keyIBP);
             school = found;
             field_0x220 = true;
             return 1;

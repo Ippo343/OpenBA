@@ -44,7 +44,8 @@ int AutoPickupWork::Cleanup() {
     System::MemoryAllocator::MemFree(component->field30);
 
     component->field30 = nullptr;
-    component->field38 = nullptr;
+    component->field30Count = 0;      // H7: retail zeroes +0x38 with one qword store
+    component->field30Capacity = 0;
     return 0;
 }
 

@@ -14,9 +14,6 @@
 
 
 
-// Private helpers of Update (also registered so exe callers reach them).
-int  AnimalComponent_FindHabitat(AnimalComponent* self);            // 0x140106020
+// B4 FORWARD to AnimalComponent::UpdateBehavior: 2 outside callers
+// (pasturecomponent_spawn.cpp, tradecomponent_livestock.cpp).
 void AnimalComponent_UpdateBehavior(AnimalComponent* self);         // 0x140107320
-void AnimalComponent_SetWanderTimer(AnimalComponent* self,
-                                    uint32_t animId, float seconds); // 0x140106250
-

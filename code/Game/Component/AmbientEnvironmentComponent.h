@@ -22,6 +22,7 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"
 
 class AmbientEnvironmentComponent final : public Component {
     DECLARE_EXE_TYPE(AmbientEnvironmentComponent)
@@ -34,16 +35,25 @@ public:
     void Persist(void* stream) override;                          // [3] 0x1400437e0
     void Update(void* time) override;                             // [9] 0x140043690
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 not written by the retail ctor
-    void*    field30;      // +0x30 not written by the retail ctor
-    void*    field38;      // +0x38
-    uint32_t field40;      // +0x40
-    uint8_t  _pad44[4];    // +0x44
+    // ---- non-virtual members (retail addresses) ----
+    // The region/position half of 0x1400436a0: the grid region the biome is
+    // sampled over, the region's centre, pushed onto the sibling emitter.
+    void InitRegion(int gridX, int gridY, int width, int height);
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Persist
+    // 0x1400437e0: Vector3::Serialize(+0x38), then four ints +0x28..+0x34.
+    int32_t       regionX;        // +0x28 not written by the retail ctor
+    int32_t       regionY;        // +0x2C
+    int32_t       regionWidth;    // +0x30 not written by the retail ctor
+    int32_t       regionHeight;   // +0x34
+    Math::Vector3 position;       // +0x38 the region's centre
+    uint8_t       _pad44[4];      // +0x44
 };
 
 static_assert(sizeof(AmbientEnvironmentComponent) == 0x48, "AmbientEnvironmentComponent is 0x48 (create 0x140001ee0)");
 static_assert(alignof(AmbientEnvironmentComponent) == 8, "AmbientEnvironmentComponent alignment");
-static_assert(offsetof(AmbientEnvironmentComponent, field28) == 0x28, "");
-static_assert(offsetof(AmbientEnvironmentComponent, field38) == 0x38, "");
-static_assert(offsetof(AmbientEnvironmentComponent, field40) == 0x40, "");
+static_assert(offsetof(AmbientEnvironmentComponent, regionX) == 0x28, "AmbientEnvironmentComponent::regionX @ +0x28 (Serialize int&)");
+static_assert(offsetof(AmbientEnvironmentComponent, regionY) == 0x2C, "AmbientEnvironmentComponent::regionY @ +0x2C (Serialize int&)");
+static_assert(offsetof(AmbientEnvironmentComponent, regionWidth) == 0x30, "AmbientEnvironmentComponent::regionWidth @ +0x30 (Serialize int&)");
+static_assert(offsetof(AmbientEnvironmentComponent, regionHeight) == 0x34, "AmbientEnvironmentComponent::regionHeight @ +0x34 (Serialize int&)");
+static_assert(offsetof(AmbientEnvironmentComponent, position) == 0x38, "AmbientEnvironmentComponent::position @ +0x38 (Vector3::Serialize)");

@@ -8,9 +8,5 @@
 
 
 
-// Controller state-machine enters (retail table 0x1400477a0):
-//   state 2 "built"    0x140046fc0 -- register + claim the plot cells
-//   state 3 "demolish" 0x140046f80 -- unregister
-extern "C" char CemeteryComponent_EnterBuilt(void* comp, void* sm);
-extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* sm);
-
+// Controller state-machine enters (retail table 0x1400477a0) are CemeteryComponent
+// members: EnterBuilt (0x140046fc0) and EnterDemolish (0x140046f80).

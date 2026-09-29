@@ -6,7 +6,7 @@
 //
 // Vtable at 0x140158df0. Non-trivial overrides:
 //   Shutdown  (0x1400449d0) -- Serializes isEnabled bool + int array
-//   Serialize (0x140044990) -- IsDerivedFrom check to init isEnabled from config
+//   Startup   (0x140044990) -- isEnabled from the AutoPickupDescription
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
@@ -25,29 +25,6 @@
 // resolved pointer is gone and the member call takes its place.
 // The IsDerivedFrom import slot 0x140152a98 is Object::Base::IsDerivedFrom.
 
-// ============================================================
-// AutoPickupComponent::Serialize (vtable slot [4], 0x140044990)
-// ============================================================
-// Checks IsDerivedFrom on +0x18 with type DAT_1401c3fe8 (AutoPickupDescription::TypeId();
-// ENDGAME B.3.9 CB -- the cell is unregistered, so the old pointer read made this a no-op),
-// reads byte at +0x20 from the derived object and stores in isEnabled (+0x28).
-void AutoPickupComponent_Serialize(AutoPickupComponent* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    void* obj = *(void**)(selfAddr + 0x18);
-    void* config = nullptr;
-
-    if (obj) {
-        bool derived = reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(
-            AutoPickupDescription::TypeId());   // B.3.x bridge
-        if (derived) config = obj;
-    }
-
-    if (config) {
-        *(uint8_t*)(selfAddr + 0x28) = *(uint8_t*)((uintptr_t)config + 0x20);
-    }
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — AutoPickupComponent as a REAL class (AutoPickupComponent.h).
 //
@@ -64,7 +41,7 @@ void AutoPickupComponent_Serialize(AutoPickupComponent* self) {
 // 0x140044ae0) — B38 D1: retail writes isEnabled (+0x28) = 1; the tree's
 // zero-fill is kept here and the retail value is its own titled commit.
 AutoPickupComponent::AutoPickupComponent()
-    : isEnabled(0), _pad29{}, field30(nullptr), field38(nullptr) {
+    : isEnabled(false), _pad29{}, field30(nullptr), field30Count(0), field30Capacity(0) {
     OrFlagsInCtor(0x80);
 }
 
@@ -74,8 +51,8 @@ AutoPickupComponent::AutoPickupComponent()
 void AutoPickupComponent::Persist(void* stream) {
     Component::Persist(stream);
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
-    ser.Serialize(*reinterpret_cast<bool*>(&isEnabled), nullptr);
-    int count = *reinterpret_cast<int*>(&field38);
+    ser.Serialize(isEnabled, nullptr);
+    int count = field30Count;
     ser.Serialize(count, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // B.3.2 bridge: +0x30 is the { int32* data; int32 size; int32 capacity }
@@ -85,13 +62,25 @@ void AutoPickupComponent::Persist(void* stream) {
         // from the stream before any of them is read.
         GameColl::AsArray<GameColl::I32NoInit>(&field30).SetSize(count);
     }
-    ser.Serialize(count, *reinterpret_cast<int**>(&field30), nullptr);
+    ser.Serialize(count, field30, nullptr);
 }
 
-// [4] 0x140044990. PORT GAP (retail 0x140044990) — B38 D9: the body is ported
-// above (AutoPickupComponent_Serialize: isEnabled from the description) but the
-// tree's table never installed it; the inert stub is kept here.
-void AutoPickupComponent::Startup() {}
+// [4] 0x140044990: isEnabled = the description's _enabled (+0x20), the description
+// taken through IsDerivedFrom AutoPickupDescription (0x1401c3fe8). Retail derefs the
+// IsDerivedFrom result unguarded; the tree's guard on it is kept as it was.
+void AutoPickupComponent::Startup() {
+    Description* obj = _description;
+    AutoPickupDescription* config = nullptr;
+
+    if (obj) {
+        if (obj->IsDerivedFrom(AutoPickupDescription::TypeId()))
+            config = static_cast<AutoPickupDescription*>(obj);
+    }
+
+    if (config) {
+        isEnabled = config->_enabled;
+    }
+}
 // [13] 0x140044970 / [14] 0x140044930. PORT GAP — B38 D9: never ported; the
 // tree's table left them inert (13 answered 0); kept inert here.
 uint32_t AutoPickupComponent::CommandMask(int) { return 0; }

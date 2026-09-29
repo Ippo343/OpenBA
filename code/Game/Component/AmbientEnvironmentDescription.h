@@ -21,6 +21,28 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;             // Component/ComponentDescription.h
+namespace Audio { class SoundEffect; }
+
+// One biome entry (0x28; Serialize 0x140043950: the enum through the uint door,
+// the ExternalPtr<ComponentDescription> (0x140002340), two ExternalPtr<SoundEffect>
+// (0x1400019a0), the int; resize 0x140002540 defaults the int to 1). No key
+// names: the names say what AmbientEnvironmentComponent::Update does with them.
+struct AmbientEnvironmentBiome {
+    uint32_t              terrainMask;   // +0x00 bit per terrain type the biome covers
+    uint8_t               _pad04[4];     // +0x04
+    ComponentDescription* entityFilter;  // +0x08 the occupant's description to match (null = any)
+    Audio::SoundEffect*   daySound;      // +0x10
+    Audio::SoundEffect*   nightSound;    // +0x18
+    int32_t               weight;        // +0x20
+    uint8_t               _pad24[4];     // +0x24
+};
+static_assert(sizeof(AmbientEnvironmentBiome) == 0x28, "AmbientEnvironmentBiome stride 0x28 (0x140002540)");
+static_assert(offsetof(AmbientEnvironmentBiome, entityFilter) == 0x08, "AmbientEnvironmentBiome::entityFilter @ +0x08");
+static_assert(offsetof(AmbientEnvironmentBiome, daySound) == 0x10, "AmbientEnvironmentBiome::daySound @ +0x10");
+static_assert(offsetof(AmbientEnvironmentBiome, nightSound) == 0x18, "AmbientEnvironmentBiome::nightSound @ +0x18");
+static_assert(offsetof(AmbientEnvironmentBiome, weight) == 0x20, "AmbientEnvironmentBiome::weight @ +0x20");
+
 class AmbientEnvironmentDescription final : public Description {
     DECLARE_EXE_TYPE(AmbientEnvironmentDescription)
 
@@ -36,7 +58,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140001fb0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _entries;                             // +0x20 entry array data (0x28-byte elements: enum, 3 ExternalPtr, int)
+    AmbientEnvironmentBiome* _entries;          // +0x20 entry array data
     int32_t _entryCount;                        // +0x28
     int32_t _entryCap;                          // +0x2c
     float _f30;                                 // +0x30
