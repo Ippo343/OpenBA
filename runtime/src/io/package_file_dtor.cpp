@@ -202,17 +202,6 @@
 #include "../system/string.h"
 #include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_PkgEntry, AsArray
 
-using RtSystem::String;
-
-namespace {
-
-// The five String slots, in RETAIL'S RELEASE ORDER (descending). Reproduced,
-// not sorted — see §2(i).
-constexpr uint32_t kStringOffsets[5] = { 0x60, 0x58, 0x50, 0x48, 0x40 };
-
-inline uint8_t* Bytes(void* p) { return reinterpret_cast<uint8_t*>(p); }
-
-}  // namespace
 
 // ============================================================================
 // ??1PackageFile@IO@@UEAA@XZ   retail 0x1800b4540  ord 639
@@ -223,31 +212,35 @@ inline uint8_t* Bytes(void* p) { return reinterpret_cast<uint8_t*>(p); }
 // (0x1800b4679) is the compiler's base-destructor call. The order in between is
 // retail's, unchanged.
 IO::PackageFile::~PackageFile() {
-    uint8_t* p = Bytes(this);
 
-    RtIO::RtIo_FileInfo_Dtor(reinterpret_cast<RtIO::FileInfo*>(p + 0xC0));  // 0x1800b456c  ~FileInfo 0x18000c180
+    RtIO::RtIo_FileInfo_Dtor(&_file);                  // 0x1800b456c  ~FileInfo 0x18000c180, +0xC0
 
     // retail 0x1800269a0 — `~Array<IO::PackageFile::Entry>` at +0xB0.
     // array_destroy.cpp's kD_Str_10 / array.cpp's kSpec_PkgEntry: stride 0x10,
     // an assign that calls Filename::AdjustDelimiters and a destroy that
     // releases the embedded String — neither is trait-expressible (Collection.h's
     // Array banner), so this stays the hand-derived spec, reached with `AsArray`.
-    rtcoll::AsArray<&rtcoll::kSpec_PkgEntry>(p + 0xB0)->~Array();
+    // Each Array door is handed its {data, size, capacity} header.
+    rtcoll::AsArray<&rtcoll::kSpec_PkgEntry>(&_entries)->~Array();   // +0xB0
 
-    RtIO::RtColl_ArrayU8Dtor_1800112a0(p + 0x98);   // 0x1800b4586  ~Array<uint8> 0x1800112a0
-    RtIO::RtColl_ArrayI32Dtor_1800111a0(p + 0x80);  // 0x1800b4593  ~Array<int32> 0x1800111a0
+    RtIO::RtColl_ArrayU8Dtor_1800112a0(&_previewData);   // 0x1800b4586  ~Array<uint8> 0x1800112a0, +0x98
+    RtIO::RtColl_ArrayI32Dtor_1800111a0(&_iconData);     // 0x1800b4593  ~Array<int32> 0x1800111a0, +0x80
 
-    // 0x1800b4599..0x1800b4658 — five copies of the release idiom, descending.
-    for (int i = 0; i < 5; ++i) {
-        String* s = reinterpret_cast<String*>(p + kStringOffsets[i]);
-        RtSystem::RtString_ReleaseInline(s);
-    }
+    // 0x1800b4599..0x1800b4658 — five copies of the release idiom, in RETAIL'S
+    // RELEASE ORDER (descending offsets). Reproduced, not sorted — see §2(i).
+    RtSystem::RtString_ReleaseInline(&_string60);        // +0x60
+    RtSystem::RtString_ReleaseInline(&_string58);        // +0x58
+    RtSystem::RtString_ReleaseInline(&_description);     // +0x50
+    RtSystem::RtString_ReleaseInline(&_author);          // +0x48
+    RtSystem::RtString_ReleaseInline(&_name);            // +0x40
 
     // retail 0x180010ab0 — `~Array<System::String>` at +0x30 and +0x20 (stride
     // 8, array_destroy.cpp's kD_Str_08): the trait-derived
     // `Collection::Array<System::String>` over the two POD headers.
-    reinterpret_cast<Collection::Array<System::String>*>(p + 0x30)->~Array();  // B.3.2 bridge
-    reinterpret_cast<Collection::Array<System::String>*>(p + 0x20)->~Array();  // B.3.2 bridge
+    // LEFT: the two headers stay loose {data, size, capacity} fields
+    // (tests/unit/b39_io_classes_test.cpp pins `_stringArray30Count`).
+    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray30)->~Array();  // B.3.2 bridge
+    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray20)->~Array();  // B.3.2 bridge
 
     // 0x1800b4679 — the tail into ~External is the compiler's.
 }

@@ -419,17 +419,6 @@ bool ReadStringRaw(IO::CompressedStream* cs, uint8_t* buf60, String* tmp) {
     return deterministic;
 }
 
-// ---- the oracle's field-by-field comparison -------------------------------
-int32_t ArrSize(const void* obj, size_t off) {
-    int32_t v; std::memcpy(&v, static_cast<const uint8_t*>(obj) + off, 4); return v;
-}
-void* ArrData(const void* obj, size_t off) {
-    void* v; std::memcpy(&v, static_cast<const uint8_t*>(obj) + off, 8); return v;
-}
-bool TextEqual(const char* a, const char* b) {
-    if (a == nullptr || b == nullptr) return a == b;
-    return std::strcmp(a, b) == 0;
-}
 
 }  // namespace
 
@@ -565,20 +554,19 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         // reads `array._size * 4` bytes — the array's OWN size, not the product
         // it just passed. Identical unless SetSize clamped; transcribed as
         // spelled.
-        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
-        rtcoll::RtColl_ArraySetSize_180029510(iconArr,
+        // Array<uint32>::SetSize, handed the {data, size, capacity} header.
+        rtcoll::RtColl_ArraySetSize_180029510(&_iconData,
                      _iconHeight * _iconWidth);      // 1800b4d27/d37
         cs->IO::CompressedStream::Read(
-            ArrSize(this, 0x88) * 4, ArrData(this, 0x80));     // 1800b4d56  REAL CALL
+            _iconCount * 4, _iconData);                        // 1800b4d56  REAL CALL
 
         if (formatVersion >= 2) {                              // 1800b4d62  CMP 2 / JL
             int32_t* const n90 =
                 &_previewByteCount;   /* +0x90 -- see PackageFile.h */
             cs->IO::CompressedStream::Read(4, n90);            // 1800b4d6c  +0x90
-            uint8_t* const flagArr = reinterpret_cast<uint8_t*>(this) + 0x98;
-            rtcoll::RtColl_ArraySetSize_180029630(flagArr, *n90);   // 1800b4dea/df1
+            rtcoll::RtColl_ArraySetSize_180029630(&_previewData, *n90);   // 1800b4dea/df1
             // NOTE the bound: retail reads `*n90` bytes, not the ARRAY's size.
-            cs->IO::CompressedStream::Read(*n90, ArrData(this, 0x98));  // 1800b4e09
+            cs->IO::CompressedStream::Read(*n90, _previewData);  // 1800b4e09
         }
 
         String tmp;
@@ -621,15 +609,13 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         _overridable = 1;                                 // 1800b5b3c
         _iconWidth  = 1;                                  // 1800b5b49
         _iconHeight = 1;                                  // 1800b5b4d
-        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
-        rtcoll::RtColl_ArraySetSize_180029510(iconArr, 1);     // 1800b5b5a
-        *static_cast<uint32_t*>(ArrData(this, 0x80)) = 0xff000000u;   // 1800b5b66
+        rtcoll::RtColl_ArraySetSize_180029510(&_iconData, 1);  // 1800b5b5a
+        _iconData[0] = 0xff000000u;                            // 1800b5b66
         // falls into 0x1800b5b6c, which reloads formatVersion — still 0 here.
     }
 
     // ---- the entry directory (0x1800b5b73) ---------------------------------
     if (fileCount > 0) {                                       // 1800b5b73  TEST/JLE
-        uint8_t* const entriesArr = reinterpret_cast<uint8_t*>(this) + 0xb0;  // 1800b5b86
 
         for (int32_t i = fileCount; i != 0; --i) {             // 1800b5b99 / 601a
 
@@ -694,8 +680,8 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
             entry.offset = static_cast<uint32_t>(entryOffset); // 1800b5fa4  §91
             entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91
 
-            rtcoll::RtColl_ArraySetSizeFill_1800298f0(entriesArr,
-                             ArrSize(this, 0xb8) + 1, &entry); // 1800b5fb1..fbe
+            rtcoll::RtColl_ArraySetSizeFill_1800298f0(&_entries,  // 1800b5b86
+                             _entryCount + 1, &entry);         // 1800b5fb1..fbe
 
             RtString_ReleaseInline(&entry.name);               // 1800b5fc4..5fe9
             RtString_ReleaseInline(&tmp);                      // 1800b5fed..6015

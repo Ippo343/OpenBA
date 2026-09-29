@@ -983,8 +983,7 @@ namespace IO {
 // used to be spelled here as `self + 0x80` / `self + 0x98` are now the named
 // members `_iconData` / `_previewData`, each pinned by a static_assert in
 // runtime/types/io/PackageFile.h.
-void* PackageFile::GetIconData(void* retv) const {
-    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+void* PackageFile::GetIconData(RtIO::ModArray* ret) const {
     const void* const member = &_iconData;              // LEA RDX,[RCX+0x80]
     ret->data = nullptr;                                // MOV [RBX],RAX
     ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
@@ -993,8 +992,7 @@ void* PackageFile::GetIconData(void* retv) const {
     return ret;
 }
 
-void* PackageFile::GetPreviewData(void* retv) const {
-    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+void* PackageFile::GetPreviewData(RtIO::ModArray* ret) const {
     const void* const member = &_previewData;           // LEA RDX,[RCX+0x98]
     ret->data = nullptr;
     ret->size = 0;

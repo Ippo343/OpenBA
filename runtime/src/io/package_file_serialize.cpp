@@ -175,8 +175,8 @@ void DestroyCodec(ReaderWriter* rw) {
     delete Rw(rw);                                     // slot 0, flags 1
 }
 
-void RecInt(ReaderWriter* rw, void* v) {
-    Rw(rw)->SerializeInt(*static_cast<int32_t*>(v), nullptr);    // +0xa0
+void RecInt(ReaderWriter* rw, int32_t* v) {
+    Rw(rw)->SerializeInt(*v, nullptr);                           // +0xa0
 }
 
 void RecBool(ReaderWriter* rw, void* v) {
@@ -184,8 +184,8 @@ void RecBool(ReaderWriter* rw, void* v) {
 }
 
 // `SerializeUIntArray` is (count, uint*, name) — EDX, R8, R9 at 0x1800b624c-0x1800b6259.
-void RecArrayUInt(ReaderWriter* rw, int32_t n, void* data) {
-    Rw(rw)->SerializeUIntArray(n, static_cast<uint32_t*>(data), nullptr);   // +0x40
+void RecArrayUInt(ReaderWriter* rw, int32_t n, uint32_t* data) {
+    Rw(rw)->SerializeUIntArray(n, data, nullptr);                // +0x40
 }
 
 }  // namespace
