@@ -1,10 +1,17 @@
 // code/Game/Action/action_pf_ctors.cpp
-// Action-ctor + entity/storage leaf sub-helpers (pathfinding/action closure batch).
+// Action-stack and entity/storage leaf sub-helpers (pathfinding/action closure batch).
 //
-// Faithful 1:1 ports of 12 small exe helpers referenced from the Action closure.
+// Faithful 1:1 ports of small exe helpers referenced from the Action closure.
 // Each is transcribed literally from the Ghidra decompile (cross-checked against disassembly
 // for intricate index/field math). Do NOT "improve" — none of this is exercised on the
 // autostart path, so a wrong port is undetectable latent corruption.
+//
+// B.4 R0-EXE: the five action ctors that lived here and their by-address doors moved,
+// text unchanged, to the classes' files: CompleteTask (c5da0) completetask.cpp,
+// CreateRawMaterial (c71a0) createrawmaterial.cpp, MoveTo (c9170, with the file-local
+// RdataF it alone used) moveto.cpp, PerformWork (c9720) performwork.cpp,
+// SendComponentMessage (cb1d0) sendcomponentmessage.cpp. What stays has no settled
+// class (B.4 inventory A: unattributed, or low confidence from the retail caller's class).
 //
 // Registration: RegisterPfCtorsBatch() in standalone/reg_pf_ctors.cpp.
 //
@@ -19,19 +26,9 @@
 //   0x14012d150  StorageComponent::SubtractItem (rawmat)     — 116760
 //
 // Engine helpers: Object::IsDerivedFromNullSafe, RtSystem_Time_Ctor
-//   (??0Time@System@@QEAA@M@Z). Constants: kRdata_1401720e4 / kRdata_14017214c.
-// Runtime export: System::Random::RandFloatTol (MoveTo speed default).
-//
-// ENDGAME B.3.8 ACT: the five action ctors (c5da0 CompleteTask, c71a0
-// CreateRawMaterial, c9170 MoveTo, c9720 PerformWork, cb1d0 SendComponentMessage)
-// are the classes' REAL constructors now, defined below next to their by-address
-// doors; the compiler stamps the vtables (no ResolveAddr'd table remains here).
+//   (??0Time@System@@QEAA@M@Z).
 
-#include "Action/CompleteTask.h"
-#include "Action/CreateRawMaterial.h"
-#include "Action/MoveTo.h"
-#include "Action/PerformWork.h"
-#include "Action/SendComponentMessage.h"
+#include "Action/Action.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/coll_bridge.h"
@@ -50,15 +47,6 @@
 // For the BANISHED_LIVE_STORAGE eat-message typeid heal in the
 // SendComponentMessage copy-ctor (see Pf_SendComponentMessageCopyCtor_b1d0).
 #include "Object/factory_registration.h"           // ::Object::GetTypeIdByName
-
-namespace {
-// The .rdata float constants (Game/exe_constants.h) that are stored as bit patterns.
-inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
-// 0x1400032e0 (Array<Ptr8>::SetSize) is the exe-side Collection::Array<T>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
-// is gone.
-} // namespace
 
 // ============================================================
 // FUN_1400c4f10 — action-stack: walk the linked entry list, clear an in-use flag
@@ -109,206 +97,6 @@ LAB_550e:
     *reinterpret_cast<int*>(param_1 + 3) = static_cast<int>(param_1[3]) + 1;
     *reinterpret_cast<uint64_t*>(
         param_1[0] + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8) = *param_2;
-}
-
-// ============================================================
-// FUN_1400c5da0 — CompleteTask_Action CopyCtor
-// Base Internal ctor, then Action vtable -> CompleteTask vtable; copies two IBP fields
-// (+0x20 from param_3, +0x28 from param_4) and two int fields (+0x30=param_2, +0x34=param_5).
-// ============================================================
-void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3,
-                                   uint64_t* param_4, uint32_t param_5) {
-    // ENDGAME B.3.8 ACT: the real ctor (CompleteTask.h). A by-address door.
-    return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2, param_3, param_4, param_5));
-}
-
-// 0x1400c5da0: +0x20 = *param_3 ; +0x28 = *param_4 ; +0x30 = param_2 ; +0x34 = param_5.
-CompleteTask::CompleteTask(uint32_t taskIndexArg, uint64_t* workEntityArg, uint64_t* targetEntityArg,
-                           uint32_t taskParamArg)
-    : workEntity(reinterpret_cast<void*>(*workEntityArg)),
-      targetEntity(reinterpret_cast<void*>(*targetEntityArg)),
-      taskIndex(static_cast<int32_t>(taskIndexArg)),
-      taskParam(static_cast<int32_t>(taskParamArg)) {}
-
-// ============================================================
-// FUN_1400c71a0 — CreateRawMaterial_Action CopyCtor
-// Base Internal ctor, Action -> CreateRawMaterial vtable; copies +0x20=param_2 (raw u64),
-// three IBP fields (+0x28 from param_4, +0x30 from param_5, +0x38 from param_10), three
-// int fields (+0x40=param_7, +0x44=param_8, +0x48=param_11), one FLOAT (+0x4c=param_3, the
-// XMM2 arg stored via MOVSS), and two bytes (+0x50=param_9, +0x51=1).
-// ============================================================
-void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float param_3,
-                                        uint64_t* param_4, uint64_t* param_5, uint64_t param_6,
-                                        uint32_t param_7, uint32_t param_8, uint8_t param_9,
-                                        uint64_t* param_10, uint32_t param_11) {
-    // ENDGAME B.3.8 ACT: the real ctor (CreateRawMaterial.h). A by-address door.
-    return static_cast<Object::Base*>(new (param_1) CreateRawMaterial(
-        param_2, param_3, param_4, param_5, param_6, param_7, param_8, param_9, param_10, param_11));
-}
-
-// 0x1400c71a0: +0x20 = param_2 (raw) ; +0x28/+0x30/+0x38 = *param_4 / *param_5 /
-// *param_10 ; +0x40/+0x44/+0x48 = param_7/8/11 ; +0x4c = param_3 (MOVSS, the XMM2
-// float) ; +0x50 = param_9 ; +0x51 = 1. param_6 is not read.
-CreateRawMaterial::CreateRawMaterial(uint64_t desc, float yield, uint64_t* source, uint64_t* secondary,
-                                     uint64_t /*unused6*/, uint32_t quantity, uint32_t cellIdx,
-                                     uint8_t naturalRes, uint64_t* tertiary, uint32_t placement)
-    : descEntity(reinterpret_cast<void*>(desc)),
-      sourceBuilding(reinterpret_cast<void*>(*source)),
-      secondaryEntity(reinterpret_cast<void*>(*secondary)),
-      tertiaryEntity(reinterpret_cast<void*>(*tertiary)),
-      totalQuantity(static_cast<int32_t>(quantity)),
-      materialCellIdx(static_cast<int32_t>(cellIdx)),
-      placementFlags(placement),
-      yieldMultiplier(yield),
-      naturalResFlag(naturalRes),
-      placeNearFlag(1) {}
-
-// ============================================================
-// FUN_1400c9170 — MoveTo_Action Ctor
-// Base Internal ctor, Action -> MoveTo vtable; inits fields, copies destination vec3
-// (+0x38..+0x40), the entity IBP (+0x28 from param_2), resolves a derived component at
-// +0x30 (IsDerivedFrom obj, DAT_1401c70b0). Speed: if >=0 use it, else a randomised
-// default = RandFloatTol(world.random) * DAT_1401720e4 + DAT_14017214c.
-// Note: hidden float arg `speed` arrives in XMM (XMM2 per the prologue), param order
-// matches Ghidra (pathType, param_4, destination, param_6, param_7, speed).
-// ============================================================
-void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4,
-                         float* destination, int param_6, int param_7, float speed) {
-    // ENDGAME B.3.8 ACT: the real ctor (MoveTo.h). A by-address door.
-    return static_cast<Object::Base*>(
-        new (self) MoveTo(param_2, pathType, param_4, destination, param_6, param_7, speed));
-}
-
-// 0x1400c9170 — the ctor body, moved from the door above; after Action() the
-// retail stores are kept verbatim at their raw offsets (the destination and the
-// path block have no named members yet).
-MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination, int param_6,
-               int param_7, float speed) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    *reinterpret_cast<uint32_t*>(s + 0x20) = 0xffffffff;
-    *reinterpret_cast<uint32_t*>(s + 0x24) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = *reinterpret_cast<uint64_t*>(param_2);
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<float*>(s + 0x38) = destination[0];
-    *reinterpret_cast<float*>(s + 0x3c) = destination[1];
-    *reinterpret_cast<float*>(s + 0x40) = destination[2];
-    *reinterpret_cast<uint64_t*>(s + 0x44) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x4c) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x54) = 0;
-    *reinterpret_cast<int*>(s + 0x5c) = param_6;
-    *reinterpret_cast<uint32_t*>(s + 0x60) = 0xffffffff;
-    *reinterpret_cast<uint32_t*>(s + 0x64) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x468) = pathType;
-    *reinterpret_cast<int*>(s + 0x46c) = param_4;
-    *reinterpret_cast<int*>(s + 0x470) = param_7;
-    s[0x474] = 0;
-    void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x18);
-    // DAT_1401c70b0 is CharacterDescription's type-id cell (Table 1).
-    uint32_t charDescTid = CharacterDescription::TypeId();
-    bool derived = charDescTid && ::Object::IsDerivedFromNullSafe(obj, charDescTid);
-    *reinterpret_cast<void**>(s + 0x30) = derived ? obj : nullptr;
-    if (0.0f <= speed) {
-        *reinterpret_cast<float*>(s + 0x478) = speed;
-    } else {
-        void* random = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
-        float r = random ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
-        *reinterpret_cast<float*>(s + 0x478) =
-            r * RdataF(kRdata_1401720e4) + kRdata_14017214c;   // 0x1401720e4 / 0x14017214c
-    }
-}
-
-// ============================================================
-// FUN_1400c9720 — PerformWork_Action Ctor (7-field variant)
-// Base Internal ctor, Action -> PerformWork vtable; copies entity IBP (+0x20), anim
-// index (+0x28, float arg XMM2), action type (+0x2c), Time (+0x30), flag (+0x40), int
-// (+0x44). If the flag is set and the entity's +0xac < 1, scales the Time by the
-// component's +0x114 seconds (Time::Time(comp.f114); self.time = AsSeconds * AsSeconds).
-// animIndex arrives in XMM2 (a float); keep it as a 32-bit store at +0x28.
-// ============================================================
-void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType,
-                               int64_t time, uint8_t param_6, int param_7) {
-    // ENDGAME B.3.8 ACT: the real ctor (PerformWork.h). A by-address door.
-    return static_cast<Object::Base*>(
-        new (self) PerformWork(entity, animIndex, actionType, time, param_6, param_7));
-}
-
-// 0x1400c9720 — the ctor body, moved from the door above; after Action() the
-// retail stores are kept verbatim at their raw offsets.
-PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int64_t time,
-                         uint8_t param_6, int param_7) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = *reinterpret_cast<uint64_t*>(entity);
-    *reinterpret_cast<float*>(s + 0x28) = animIndex;
-    *reinterpret_cast<uint32_t*>(s + 0x2c) = actionType;
-    *reinterpret_cast<int64_t*>(s + 0x30) = time;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    s[0x40] = param_6;
-    *reinterpret_cast<int*>(s + 0x44) = param_7;
-    if (param_6 != 0) {
-        if (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(entity) + 0xac) < 1) {
-            void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x20) + 0x18);
-            // IsDerivedFromOrTrust: the original gates `comp = IsDerivedFrom(obj,c7190) ? obj
-            // : null` then UNCONDITIONALLY reads comp+0x114 — i.e. it ASSUMES obj is the type
-            // (it would crash too if not). In standalone IsDerivedFrom returns false on the
-            // partial factory tree, so we TRUST obj (it IS the linked +0x18 desc) and only
-            // guard the genuinely-null case (skip the work-duration scaling -> base time).
-            void* comp = obj;
-            if (comp) {
-                // Time scaleTime(comp.f114); self.time = AsSeconds(self.time) * AsSeconds(scaleTime)
-                float compSecs = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(comp) + 0x114);
-                uint64_t scaleTimeStore = 0;
-                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&scaleTimeStore), compSecs);
-                float selfSecs  = *reinterpret_cast<float*>(s + 0x30);
-                float scaleSecs = *reinterpret_cast<float*>(&scaleTimeStore);
-                uint64_t prod = 0;
-                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&prod), selfSecs * scaleSecs);
-                *reinterpret_cast<uint64_t*>(s + 0x30) = prod;
-            }
-        }
-    }
-}
-
-// ============================================================
-// FUN_1400cb1d0 — SendComponentMessage_Action CopyCtor
-// Base Internal ctor, Action -> SendComponentMessage vtable; copies IBP +0x20 (param_2),
-// IBP +0x28 (param_5), int +0x30 (*param_3), +0x34 (param_4), +0x38 (param_6), +0x3c=0.
-// ============================================================
-void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3,
-                                           uint32_t param_4, uint64_t* param_5, uint32_t param_6) {
-    // ENDGAME B.3.8 ACT: the real ctor (SendComponentMessage.h). A by-address door.
-    return static_cast<Object::Base*>(
-        new (param_1) SendComponentMessage(param_2, param_3, param_4, param_5, param_6));
-}
-
-// 0x1400cb1d0 — the ctor body, moved from the door above: +0x20 = *param_2,
-// +0x28 = *param_5, then the retail stores (and the tree's typeid heal) verbatim.
-SendComponentMessage::SendComponentMessage(uint64_t* param_2, uint32_t* param_3, uint32_t param_4,
-                                           uint64_t* param_5, uint32_t param_6)
-    : _field20(reinterpret_cast<void*>(*param_2)),
-      _field28(reinterpret_cast<void*>(*param_5)) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    uint32_t compTypeId = *param_3;
-    // [ECONOMY M-D — BANISHED_LIVE_STORAGE typeid heal]
-    // The eat push (PerformWork_Action_Ctor6, citizenai_actionctors.cpp) reads the
-    // component-typeid from .rdata DWORD_1401c7158 (CitizenComponent) — deliberately
-    // NOT registered in standalone (see reg_work_tail_trade.cpp), so it arrives here
-    // as 0 and SendComponentMessage::AbstractImpl can never match a component
-    // (returns 2, message silently dropped). Under BANISHED_LIVE_STORAGE, heal the
-    // msg==2 (EAT) case only — msg 2 with a zero typeid is uniquely the ctor6
-    // eat-delivery message — substituting the live GetTypeIdByName CRC that our
-    // CitizenComponent live vtable's GetTypeId (slot 2) returns. msg 0 stays
-    // unhealed: a zero-typeid msg 0 is ambiguous (CitizenAIComponent 0x1401c70e8
-    // completion lead vs CitizenComponent warm-house), deferred.
-    if (compTypeId == 0 && param_4 == 2) {
-        compTypeId = CitizenComponent::TypeId();
-    }
-    *reinterpret_cast<uint32_t*>(s + 0x30) = compTypeId;
-    *reinterpret_cast<uint32_t*>(s + 0x34) = param_4;
-    *reinterpret_cast<uint32_t*>(s + 0x38) = param_6;
-    *reinterpret_cast<uint32_t*>(s + 0x3c) = 0;
 }
 
 // ============================================================

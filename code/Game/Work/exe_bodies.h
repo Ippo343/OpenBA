@@ -21,7 +21,6 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
 
 // ---- buildstructure.cpp
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim);  // 0x1400e59c0 (local extern in buildcomponent_state8.cpp, destroycomponent_states.cpp)
-extern "C" void* BuildStructure_CreateInPlace(void* mem);  // 0x1400e5a90 (local extern in buildcomponent_state8.cpp)
 extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP);  // no retail address (standalone harness entry)
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)

@@ -302,25 +302,7 @@ void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
 //   per cell of the (+0x48)^2 grid: instantiate the template, find its
 //   HerdComponent, point it back at us (+0x28) and at its cell (+0x30), roll
 //   a size in [herdDesc+0x2c, herdDesc+0x28), seed it via Populate, register.
-// 0x140054220 door: called by name from standalone/reg_herd_live.cpp.
-void PopulationComponent_Startup(PopulationComponent* selfC) {
-    selfC->PopulationComponent::Startup();
-}
-
-
-// 0x1400541c0 door: called by name from standalone/reg_herd_live.cpp.
-void PopulationComponent_OnAdd(void* selfV) {
-    if (!selfV) return;
-    reinterpret_cast<PopulationComponent*>(selfV)->PopulationComponent::OnAdded();   // B.3.8 bridge
-}
-
-
-// 0x140054180 door: called by name from standalone/reg_herd_live.cpp.
-void PopulationComponent_OnRemove(void* selfV) {
-    if (!selfV) return;
-    reinterpret_cast<PopulationComponent*>(selfV)->PopulationComponent::OnRemove();   // B.3.8 bridge
-}
-
+// The body is PopulationComponent::Startup, below.
 
 // ============================================================
 // ENDGAME B.3.8 CIT — PopulationComponent as a REAL class (PopulationComponent.h)

@@ -172,12 +172,6 @@ void PastureComponent_ReassignEntityRef(uintptr_t entityPtr) {
     *(uint16_t*)(model + 0x3e) = r3;
 }
 
-// 0x140127f40 door: registered by address (standalone/reg_animal_serialize.cpp).
-void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
-    self->PastureComponent::Persist(stream);
-}
-
-
 
 // ============================================================
 // PastureComponent vtable slot [7] (0x1401277e0) — RELEASE, not "OnCreate"

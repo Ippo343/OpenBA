@@ -825,10 +825,6 @@ void* BuildStructure::CreateInPlaceObject(void* storage) {
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim) {
     return static_cast<Object::Base*>(new (mem) BuildStructure(entityIBP, altAnim));
 }
-// The default ctor on caller memory (buildcomponent_state8.cpp names it).
-extern "C" void* BuildStructure_CreateInPlace(void* mem) {
-    return BuildStructure::CreateInPlaceObject(mem);
-}
 
 DEFINE_EXE_TYPE(BuildStructure, "Work")
 

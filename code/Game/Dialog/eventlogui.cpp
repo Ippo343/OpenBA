@@ -308,7 +308,7 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32
     if (*scrollOffset < 0) *scrollOffset = 0;
 }
 
-// EventLogUI_Slot6 — inline in ui_panels.h (3-byte no-op, 0x140067630)
+// [6] 0x140067630 (3-byte no-op) is EventLogUI::OnClosed, inline in EventLogUI.h.
 
 // ============================================================
 // STANDALONE EXE: real EventLogUI vtable + registration

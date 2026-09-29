@@ -33,6 +33,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // ActRm_* helpers
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
+#include "Work/exe_bodies.h"     // WorkBase_FindComponent_6270 (moved consume-list append)
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -316,5 +318,118 @@ void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ConsumeRawMaterial());
 }
 
+
+// ============================================================
+// FUN_1400c6440 — ConsumeRawMaterial_Action_Ctor3 (2-arg variant)
+//   RCX=self, RDX=param_2.  vtable ConsumeRawMaterial; +0x20=*param_2, +0x28=0, +0x30=0.
+// ============================================================
+void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
+    // ENDGAME B.3.8 ACT: the real ctor (ConsumeRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(param_2));
+}
+
+// 0x1400c6440: +0x20 = *param_2 ; +0x28 = 0 ; +0x30 = 0 (+0x38 untouched).
+ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage)
+    : _field20(reinterpret_cast<void*>(*storage)),
+      _field28(nullptr),
+      _field30(nullptr) {}
+
+// ============================================================
+// FUN_1400c64b0 — Entity_impl_64b0 — ConsumeRawMaterial consume-list append.
+// Adds a (resType, count) entry to the action's consume list (self+0x28 array,
+// +0x30 count, +0x34 capacity, stride 0x10: [+0]=resType u64, [+8]=count int,
+// [+0xc]=reserved int). If self+0x38 (the "reserve" flag) is set, first bumps the
+// matching Storage-component inventory's reserved field (+0xc) by `count`.
+//   param_1 = self (the ConsumeRawMaterial action), param_2 = resType, param_3 = count.
+// ============================================================
+void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
+    int64_t storageIbp = 0;
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x20), &storageIbp);
+
+    if (*reinterpret_cast<char*>(self + 0x38) != '\0') {
+        int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
+        if (0 < invCount) {
+            int64_t* arr = *reinterpret_cast<int64_t**>(storageIbp + 0x28);
+            int idx = 0;
+            int64_t* p = arr;
+            while (true) {
+                if (*p == resType) {
+                    if (idx >= 0) {
+                        int64_t base = *reinterpret_cast<int64_t*>(storageIbp + 0x28);
+                        int* reserved = reinterpret_cast<int*>(base + (int64_t)idx * 0x10 + 0xc);
+                        *reserved += count;
+                    }
+                    break;
+                }
+                idx++;
+                p += 2;
+                if ((int64_t)idx >= invCount) break;
+            }
+        }
+    }
+
+    // append {resType, count} to self+0x28 (count +0x30, cap +0x34, stride 0x10)
+    uint32_t oldCount = *reinterpret_cast<uint32_t*>(self + 0x30);
+    uint32_t newCount = oldCount + 1;
+    if (newCount == oldCount) return;  // overflow guard (never)
+
+    // The new entry: [0]=resType, [8]=count, [0xc]=reserved(0).
+    int64_t newEntry[2];
+    newEntry[0] = resType;
+    reinterpret_cast<int*>(&newEntry[1])[0] = count;
+    reinterpret_cast<int*>(&newEntry[1])[1] = 0;
+
+    void* oldArr = *reinterpret_cast<void**>(self + 0x28);
+    *reinterpret_cast<uint32_t*>(self + 0x30) = newCount;
+    if (*reinterpret_cast<int*>(self + 0x34) < (int)newCount) {
+        *reinterpret_cast<uint32_t*>(self + 0x34) = newCount;
+        if (oldCount != 0) *reinterpret_cast<uint32_t*>(self + 0x34) = newCount * 3;
+        void* na = System::MemoryAllocator::_singleton
+            ? System::MemoryAllocator::MemAlloc(
+                          (uint64_t)((int64_t)*reinterpret_cast<int*>(self + 0x34) << 4), 8)
+            : nullptr;
+        *reinterpret_cast<void**>(self + 0x28) = na;
+    }
+    int copyStart = 0;
+    if (oldArr == *reinterpret_cast<void**>(self + 0x28)) copyStart = (int)oldCount;
+    int64_t i = copyStart;
+    if (i < (int)newCount) {
+        int64_t byteOff = i << 4;
+        do {
+            int64_t* dst = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self + 0x28) + byteOff);
+            if (dst != nullptr) {
+                int64_t* src = (i < (int)oldCount)
+                    ? reinterpret_cast<int64_t*>((int64_t)i * 0x10 + reinterpret_cast<int64_t>(oldArr))
+                    : newEntry;
+                dst[0] = src[0];
+                dst[1] = src[1];
+            }
+            i++;
+            byteOff += 0x10;
+        } while (i < (int)newCount);
+    }
+    if (oldArr != *reinterpret_cast<void**>(self + 0x28) ) System::MemoryAllocator::MemFree(oldArr);
+}
+
+// ============================================================
+// FUN_1400c63b0 — ConsumeRawMaterial_Action_CopyCtor
+//   RCX=self, RDX=p2, R8=p3(resType), R9=p4(u64, unused), [stack]=p5(byte).
+//   +0x20=*p2 ; +0x28=0 ; +0x30=0 ; +0x38=p5(byte); then 64b0(self, p3, 1).
+// ============================================================
+void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3,
+                                        uint64_t /*p4*/, uint8_t p5) {
+    // ENDGAME B.3.8 ACT: the real ctor (ConsumeRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(p2, p3, p5));
+}
+
+// 0x1400c63b0: +0x20 = *p2 ; +0x28 = 0 ; +0x30 = 0 ; +0x38 = p5 (byte); then
+// the consume-list append 0x1400c64b0(this, resType, 1).
+ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage, int64_t resType, uint8_t reserve)
+    : _field20(reinterpret_cast<void*>(*storage)),
+      _field28(nullptr),
+      _field30(nullptr),
+      _field38(reserve) {
+    Entity_ConsumeListAppend_64b0(reinterpret_cast<int64_t>(this), resType, 1);
+}
 
 DEFINE_EXE_TYPE(ConsumeRawMaterial, "Action")

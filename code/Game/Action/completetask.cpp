@@ -193,4 +193,23 @@ void* CompleteTask::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400c5da0 — CompleteTask_Action CopyCtor
+// Base Internal ctor, then Action vtable -> CompleteTask vtable; copies two IBP fields
+// (+0x20 from param_3, +0x28 from param_4) and two int fields (+0x30=param_2, +0x34=param_5).
+// ============================================================
+void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3,
+                                   uint64_t* param_4, uint32_t param_5) {
+    // ENDGAME B.3.8 ACT: the real ctor (CompleteTask.h). A by-address door.
+    return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2, param_3, param_4, param_5));
+}
+
+// 0x1400c5da0: +0x20 = *param_3 ; +0x28 = *param_4 ; +0x30 = param_2 ; +0x34 = param_5.
+CompleteTask::CompleteTask(uint32_t taskIndexArg, uint64_t* workEntityArg, uint64_t* targetEntityArg,
+                           uint32_t taskParamArg)
+    : workEntity(reinterpret_cast<void*>(*workEntityArg)),
+      targetEntity(reinterpret_cast<void*>(*targetEntityArg)),
+      taskIndex(static_cast<int32_t>(taskIndexArg)),
+      taskParam(static_cast<int32_t>(taskParamArg)) {}
+
 DEFINE_EXE_TYPE(CompleteTask, "Action")

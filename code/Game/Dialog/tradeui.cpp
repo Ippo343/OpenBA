@@ -32,6 +32,7 @@
 //   +0x140: sortCombo element
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/tradeui_funcs.h"
 #include "Component/coll_bridge.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"

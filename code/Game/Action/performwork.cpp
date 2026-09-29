@@ -276,4 +276,56 @@ void* PerformWork::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400c9720 — PerformWork_Action Ctor (7-field variant)
+// Base Internal ctor, Action -> PerformWork vtable; copies entity IBP (+0x20), anim
+// index (+0x28, float arg XMM2), action type (+0x2c), Time (+0x30), flag (+0x40), int
+// (+0x44). If the flag is set and the entity's +0xac < 1, scales the Time by the
+// component's +0x114 seconds (Time::Time(comp.f114); self.time = AsSeconds * AsSeconds).
+// animIndex arrives in XMM2 (a float); keep it as a 32-bit store at +0x28.
+// ============================================================
+void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType,
+                               int64_t time, uint8_t param_6, int param_7) {
+    // ENDGAME B.3.8 ACT: the real ctor (PerformWork.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (self) PerformWork(entity, animIndex, actionType, time, param_6, param_7));
+}
+
+// 0x1400c9720 — the ctor body, moved from the door above; after Action() the
+// retail stores are kept verbatim at their raw offsets.
+PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int64_t time,
+                         uint8_t param_6, int param_7) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x20) = *reinterpret_cast<uint64_t*>(entity);
+    *reinterpret_cast<float*>(s + 0x28) = animIndex;
+    *reinterpret_cast<uint32_t*>(s + 0x2c) = actionType;
+    *reinterpret_cast<int64_t*>(s + 0x30) = time;
+    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
+    s[0x40] = param_6;
+    *reinterpret_cast<int*>(s + 0x44) = param_7;
+    if (param_6 != 0) {
+        if (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(entity) + 0xac) < 1) {
+            void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x20) + 0x18);
+            // IsDerivedFromOrTrust: the original gates `comp = IsDerivedFrom(obj,c7190) ? obj
+            // : null` then UNCONDITIONALLY reads comp+0x114 — i.e. it ASSUMES obj is the type
+            // (it would crash too if not). In standalone IsDerivedFrom returns false on the
+            // partial factory tree, so we TRUST obj (it IS the linked +0x18 desc) and only
+            // guard the genuinely-null case (skip the work-duration scaling -> base time).
+            void* comp = obj;
+            if (comp) {
+                // Time scaleTime(comp.f114); self.time = AsSeconds(self.time) * AsSeconds(scaleTime)
+                float compSecs = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(comp) + 0x114);
+                uint64_t scaleTimeStore = 0;
+                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&scaleTimeStore), compSecs);
+                float selfSecs  = *reinterpret_cast<float*>(s + 0x30);
+                float scaleSecs = *reinterpret_cast<float*>(&scaleTimeStore);
+                uint64_t prod = 0;
+                RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&prod), selfSecs * scaleSecs);
+                *reinterpret_cast<uint64_t*>(s + 0x30) = prod;
+            }
+        }
+    }
+}
+
 DEFINE_EXE_TYPE(PerformWork, "Action")
