@@ -28,8 +28,9 @@
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/ProfessionList.h"
 #include "system/String.h"
-#include "Component/coll_bridge.h"
+#include "runtime/types/collection/Collection.h"
 #include <cstdint>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -38,38 +39,32 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/ImageElement.h"  // X::TypeId() (B.3.9 CG2)
 #include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/RawMaterialDescription.h"
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"
 #include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
-// AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
-// citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.
-class CitizenComponent;
-extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingIBPptr);
+// B4 DLG-d: every entry point below keeps its `void*` signature (B4 FORWARD):
+// the callers are townhallui.cpp / workplaceui.cpp (DLG-e, running) and
+// professionui.cpp. Each names its argument once, as the retail object below.
 
 namespace {
 
-inline void IbpCtor(void* slot, void* obj) { new (slot) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
+// 0x14006abf0 / 0x14006aed0's argument: a rating group, the whole and the
+// half icon of each child row (two Collection::Array<InternalPtr<ImageElement>>).
+struct RatingGroup {
+    Collection::Array<UI::Element*> whole;   // +0x00
+    Collection::Array<UI::Element*> half;    // +0x10
+};
+static_assert(sizeof(RatingGroup) == 0x20, "rating group 0x20");
 
-// ---------------------------------------------------------------------------
-// Growable ptr-array push, 8-byte elements (shared shape of the exe's inline
-// pushes): base[0]=buf, base[8]=count(int), base[0xc]=cap(int) — exactly
-// Collection::Array<uint64_t>'s {data,size,capacity} layout, so `base` is
-// reached through the B.3.2 bridge rather than by hand.
-// ---------------------------------------------------------------------------
-void PushPtr(uint64_t* base, uint64_t value) {
-    auto& arr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>((void*)base, 0);
-    arr.SetSize(arr.GetSize() + 1, GameColl::Bytes<8, 8>(value));
-}
-
-// Find a named child element under `parent` and cast it via IsDerivedFrom(typeId).
-// Returns the raw element ptr (or null). Mirrors the exe's FindElement+cast idiom.
-void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
-    System::String strBuf(name);
-    uint64_t foundBuf[2] = {0, 0};
-    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parent)->FindElement(strBuf));  // B.3.6 bridge
-    void* elem = *(void**)foundBuf;
-    if (elem && ::Object::IsDerivedFromNullSafe(elem, typeId)) return elem;
+// The row's element of that name, narrowed to an ImageElement (null if not one).
+UI::Element* FindImage(UI::Element* row, const char* name) {
+    UI::Element* elem = row->FindElement(System::String(name)).Get();
+    if (elem && ::Object::IsDerivedFromNullSafe(elem, UI::ImageElement::TypeId())) return elem;
     return nullptr;
 }
 
@@ -77,31 +72,24 @@ void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
 
 // ===========================================================================
 // 0x14006abf0 — GroupRating::Init(rating, groupElemIBP*)
-// rating (0x20 bytes): +0x00 whole buf/+0x08 cnt/+0x0c cap, +0x10 half buf/
-// +0x18 cnt/+0x1c cap. For each child row of the group element, cache the
-// "whole" and "half" ImageElements (heart/star icons) as InternalBasePtrs.
+// For each child row of the group element, cache the "whole" and "half"
+// ImageElements (heart/star icons) as InternalPtrs.
 // ===========================================================================
 extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
-    uint64_t* r = (uint64_t*)rating;
-    int childCount = reinterpret_cast<const UI::Element*>(*(void**)groupIBPPtr)->ChildCount();  // B.3.6 bridge
+    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);
+    const Object::InternalPtr<UI::Element>* groupElem =
+        reinterpret_cast<const Object::InternalPtr<UI::Element>*>(groupIBPPtr);
+    int childCount = groupElem->Get()->ChildCount();
     for (int i = 0; i < childCount; i++) {
         // child(i) -> FindElement("whole") -> cast ImageElement -> push
-        uint64_t childBuf[2] = {0, 0};
-        ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)groupIBPPtr)->Child(i));  // B.3.6 bridge
-        void* whole = FindCastElem(*(void**)childBuf, "whole", UI::ImageElement::TypeId());
-        uint64_t wholeIBP = 0;
-        IbpCtor(&wholeIBP, whole);
-        PushPtr(r, wholeIBP);
+        UI::Element* whole = FindImage(groupElem->Get()->Child(i).Get(), "whole");
+        group->whole.SetSize(group->whole.GetSize() + 1, whole);
 
         // child(i) -> FindElement("half") -> cast ImageElement -> push
-        uint64_t childBuf2[2] = {0, 0};
-        ::new (static_cast<void*>(childBuf2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)groupIBPPtr)->Child(i));  // B.3.6 bridge
-        void* half = FindCastElem(*(void**)childBuf2, "half", UI::ImageElement::TypeId());
-        uint64_t halfIBP = 0;
-        IbpCtor(&halfIBP, half);
-        PushPtr(r + 2, halfIBP);
+        UI::Element* half = FindImage(groupElem->Get()->Child(i).Get(), "half");
+        group->half.SetSize(group->half.GetSize() + 1, half);
 
-        childCount = reinterpret_cast<const UI::Element*>(*(void**)groupIBPPtr)->ChildCount();  // B.3.6 bridge — faithful re-read
+        childCount = groupElem->Get()->ChildCount();   // faithful re-read
     }
 }
 
@@ -111,44 +99,72 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
 // the half icon shows only at 2i+1 == halfSteps. (DAT_140172114 = 0.5f.)
 // ===========================================================================
 extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxValue) {
-    uint64_t* r = (uint64_t*)rating;
-    int wholeCount = *(int*)((uintptr_t)r + 8);
+    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);
+    int wholeCount = group->whole.GetSize();
     int halfSteps = (int)((value / maxValue) * (float)(wholeCount * 2) + 0.5f);
     int odd = 1;
     for (int i = 0; i < wholeCount; i++, odd += 2) {
-        uint64_t* wholeSlot = (uint64_t*)(r[0] + (uintptr_t)i * 8);
-        reinterpret_cast<UI::Element*>(*(void**)wholeSlot)->SetFlagsOnOff((odd >= halfSteps) ? 1u : 0u, (odd < halfSteps) ? 1u : 0u);  // B.3.6 bridge
-        uint64_t* halfSlot = (uint64_t*)(r[2] + (uintptr_t)i * 8);
-        reinterpret_cast<UI::Element*>(*(void**)halfSlot)->SetFlagsOnOff((odd != halfSteps) ? 1u : 0u, (odd == halfSteps) ? 1u : 0u);  // B.3.6 bridge
+        group->whole[i]->SetFlagsOnOff((odd >= halfSteps) ? 1u : 0u, (odd < halfSteps) ? 1u : 0u);
+        group->half[i]->SetFlagsOnOff((odd != halfSteps) ? 1u : 0u, (odd == halfSteps) ? 1u : 0u);
     }
 }
 
 // ===========================================================================
 // 0x140015800 — profession-row array push (0x40-byte rows).
-// Row: +0x00 counts, +0x08..+0x28 five element IBPs, +0x30 entity-list buf,
-// +0x38 entity-list cnt/cap. Row copy (0x140015dd0) deep-copies the entity
-// list (0x140015ec0-style ptr-array clone); realloc frees every old row's
-// list; shrink (0x140015e50) frees the removed rows' lists.
+// Row: +0x00 counts, +0x08..+0x28 five element InternalPtrs, +0x30 the
+// entity list. Row copy (0x140015dd0) deep-copies the entity list
+// (0x140015ec0-style ptr-array clone); realloc frees every old row's list;
+// shrink (0x140015e50) frees the removed rows' lists.
 // ===========================================================================
-static void ProfRow_Copy(uint64_t* dst, const uint64_t* src) {
-    *(uint32_t*)dst = *(const uint32_t*)src;
-    *((uint32_t*)dst + 1) = *((const uint32_t*)src + 1);
-    for (int q = 1; q <= 5; q++) { dst[q] = 0; dst[q] = src[q]; }
-    dst[6] = 0;   // entity list buf
-    dst[7] = 0;   // entity list cnt/cap
+namespace {
+
+// TownHallUI's profession row (stride 0x40; TownHallUI.h, DLG-e's, names it
+// ProfessionRow), as this copy reads it.
+struct ProfRow {
+    uint32_t          workers;          // +0x00
+    uint32_t          slots;            // +0x04
+    void*             elements[5];      // +0x08..+0x28 the row's element InternalPtrs
+    ComponentEntity** entities;         // +0x30 Collection::Array<InternalPtr<ComponentEntity>>
+    int32_t           entityCount;      // +0x38
+    int32_t           entityCapacity;   // +0x3C
+};
+static_assert(sizeof(ProfRow) == 0x40, "profession row stride 0x40");
+static_assert(offsetof(ProfRow, entities) == 0x30, "");
+
+// The array header the caller hands over (TownHallUI +0x40).
+struct ProfRowArray {
+    ProfRow* data;       // +0x00
+    int32_t  size;       // +0x08
+    int32_t  capacity;   // +0x0C
+};
+
+void ProfRow_Copy(ProfRow* dst, const ProfRow* src) {
+    dst->workers = src->workers;
+    dst->slots = src->slots;
+    for (int q = 0; q < 5; q++) dst->elements[q] = src->elements[q];
+    dst->entities = nullptr;
+    dst->entityCount = 0;
+    dst->entityCapacity = 0;
     // deep-copy entity list (ResidenceComponent_helper_5ec0)
-    int cnt = (int)*(const uint32_t*)((uintptr_t)src + 0x38);
-    *(uint32_t*)((uintptr_t)dst + 0x38) = (uint32_t)cnt;
+    int cnt = src->entityCount;
+    dst->entityCount = cnt;
     if (cnt > 0) {
-        *(uint32_t*)((uintptr_t)dst + 0x3c) = (uint32_t)cnt;
-        dst[6] = (uint64_t)System::MemoryAllocator::MemAlloc((uint64_t)cnt << 3, 8);
-        for (int i = 0; i < cnt; i++) {
-            uint64_t* d = (uint64_t*)(dst[6] + (uintptr_t)i * 8);
-            *d = 0;
-            *d = *(const uint64_t*)(src[6] + (uintptr_t)i * 8);
-        }
+        dst->entityCapacity = cnt;
+        dst->entities = static_cast<ComponentEntity**>(
+            System::MemoryAllocator::MemAlloc((uint64_t)cnt << 3, 8));
+        for (int i = 0; i < cnt; i++) dst->entities[i] = src->entities[i];
     }
 }
+
+// The removed row's entity list goes (0x140015e50)
+void ProfRow_Free(ProfRow* row) {
+    System::MemoryAllocator::MemFree(row->entities);
+    row->entities = nullptr;
+    row->entityCount = 0;
+    row->entityCapacity = 0;
+}
+
+} // namespace
 
 // B.3.2 NOT CONVERTED to Collection::Array<T>::SetSize. This row is byteCopy in
 // the copy direction (ProfRow_Copy deep-copies the +0x30 entity list) but ALSO
@@ -160,56 +176,55 @@ static void ProfRow_Copy(uint64_t* dst, const uint64_t* src) {
 // examples) rather than the trait-derived blob. It stays hand-rolled until this
 // array gets its own spec or its owning struct becomes a real class (§B.2).
 extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, void* entry) {
-    uint64_t* base = (uint64_t*)arrayBase;
-    int oldCount = *(int*)((uintptr_t)base + 8);
+    ProfRowArray* rows = reinterpret_cast<ProfRowArray*>(arrayBase);
+    const ProfRow* fill = reinterpret_cast<const ProfRow*>(entry);
+    int oldCount = rows->size;
     if (newCount == oldCount) return;
-    void* oldBuf = (void*)base[0];
-    *(int*)((uintptr_t)base + 8) = newCount;
-    if (*(int*)((uintptr_t)base + 0xc) < newCount) {
+    ProfRow* oldBuf = rows->data;
+    rows->size = newCount;
+    if (rows->capacity < newCount) {
         int newCap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) newCap = newCount * 3;
-        *(int*)((uintptr_t)base + 0xc) = newCap;
-        base[0] = (uint64_t)System::MemoryAllocator::MemAlloc((uint64_t)newCap << 6, 8);
+        rows->capacity = newCap;
+        rows->data = static_cast<ProfRow*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)newCap << 6, 8));
     }
-    int copyStart = (oldBuf == (void*)base[0]) ? oldCount : 0;
+    int copyStart = (oldBuf == rows->data) ? oldCount : 0;
     for (int i = copyStart; i < newCount; i++) {
-        uint64_t* dst = (uint64_t*)(base[0] + (uintptr_t)i * 0x40);
+        ProfRow* dst = &rows->data[i];
         if (!dst) continue;
-        const uint64_t* src = (i < oldCount)
-            ? (const uint64_t*)((uintptr_t)oldBuf + (uintptr_t)i * 0x40)
-            : (const uint64_t*)entry;
+        const ProfRow* src = (i < oldCount) ? &oldBuf[i] : fill;
         ProfRow_Copy(dst, src);
     }
-    if (oldBuf == (void*)base[0]) {
+    if (oldBuf == rows->data) {
         if (newCount < oldCount) {
             // shrink in place — free removed rows' entity lists (0x140015e50)
-            for (int i = newCount; i < oldCount; i++) {
-                uint64_t* row = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)i * 0x40);
-                System::MemoryAllocator::MemFree((void*)row[6]);
-                row[6] = 0; row[7] = 0;
-            }
+            for (int i = newCount; i < oldCount; i++) ProfRow_Free(&oldBuf[i]);
         }
     } else {
         // realloc'd — every old row was deep-copied; free old lists + buffer
-        for (int i = 0; i < oldCount; i++) {
-            uint64_t* row = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)i * 0x40);
-            System::MemoryAllocator::MemFree((void*)row[6]);
-            row[6] = 0; row[7] = 0;
-        }
+        for (int i = 0; i < oldCount; i++) ProfRow_Free(&oldBuf[i]);
         System::MemoryAllocator::MemFree(oldBuf);
     }
 }
 
 // ===========================================================================
 // 0x1400159b0 — production-limits array push (0x28-byte rows, plain copy).
-// B.3.2 bridge: this is literally retail's Collection::Array<T>::SetSize(n,
-// fill) (stride 0x28, plain byte-copy rows, no per-element destroy) — every
-// newly-added row [oldCount, newCount) is filled from the same `entry`, not
-// just the tail, which is exactly rtcoll::SetSizeCore's fill loop.
+// This is literally retail's Collection::Array<T>::SetSize(n, fill) (stride
+// 0x28, plain copy rows, no per-element destroy) — every newly-added row
+// [oldCount, newCount) is filled from the same `entry`, not just the tail,
+// which is exactly rtcoll::SetSizeCore's fill loop.
 // ===========================================================================
+namespace {
+// TownHallUI's production row (stride 0x28; TownHallUI.h's ProductionRow): five
+// NumberElement InternalPtrs.
+struct ProdRow { void* elements[5]; };
+static_assert(sizeof(ProdRow) == 0x28, "production row stride 0x28");
+} // namespace
+
 extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entry) {
-    auto& arr = GameColl::ArrayAt<GameColl::Bytes<0x28, 8>>(arrayBase, 0);
-    arr.SetSize(newCount, *reinterpret_cast<const GameColl::Bytes<0x28, 8>*>(entry));
+    Collection::Array<ProdRow>* rows = reinterpret_cast<Collection::Array<ProdRow>*>(arrayBase);
+    rows->SetSize(newCount, *reinterpret_cast<const ProdRow*>(entry));
 }
 
 // ===========================================================================
@@ -219,54 +234,67 @@ extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, void* entr
 // ===========================================================================
 namespace {
 
-inline int16_t NodeH(uintptr_t n) { return n ? (int16_t)(*(int16_t*)(n + 0x22) + 1) : 0; }
+struct Avl28Node {
+    uint64_t   key;       // +0x00
+    Avl28Node* parent;    // +0x08
+    Avl28Node* left;      // +0x10
+    Avl28Node* right;     // +0x18
+    int16_t    balance;   // +0x20
+    int16_t    height;    // +0x22
+    int32_t    _pad24;    // +0x24
+};
+static_assert(sizeof(Avl28Node) == 0x28, "AVL node 0x28");
+static_assert(offsetof(Avl28Node, balance) == 0x20, "");
+static_assert(offsetof(Avl28Node, height) == 0x22, "");
 
-void Avl28_Refresh(uintptr_t n) {
+inline int16_t NodeH(const Avl28Node* n) { return n ? (int16_t)(n->height + 1) : 0; }
+
+void Avl28_Refresh(Avl28Node* n) {
     if (!n) return;
-    int16_t hl = NodeH(*(uintptr_t*)(n + 0x10));
-    int16_t hr = NodeH(*(uintptr_t*)(n + 0x18));
-    *(int16_t*)(n + 0x22) = (hr < hl) ? hl : hr;
-    *(int16_t*)(n + 0x20) = (int16_t)(hr - hl);
+    int16_t hl = NodeH(n->left);
+    int16_t hr = NodeH(n->right);
+    n->height = (hr < hl) ? hl : hr;
+    n->balance = (int16_t)(hr - hl);
 }
 
 // 0x140014c70 — rotate-left around `n` (right child rises).
-uintptr_t Avl28_RotL(uintptr_t* root, uintptr_t n) {
-    uintptr_t r = *(uintptr_t*)(n + 0x18);
+Avl28Node* Avl28_RotL(Avl28Node** root, Avl28Node* n) {
+    Avl28Node* r = n->right;
     if (n == *root) *root = r;
-    uintptr_t p = *(uintptr_t*)(n + 0x08);
+    Avl28Node* p = n->parent;
     if (p) {
-        if (*(uintptr_t*)(p + 0x10) == n) *(uintptr_t*)(p + 0x10) = r;
-        else                              *(uintptr_t*)(p + 0x18) = r;
+        if (p->left == n) p->left = r;
+        else              p->right = r;
     }
-    *(uintptr_t*)(r + 0x08) = p;
-    uintptr_t rl = *(uintptr_t*)(r + 0x10);
-    *(uintptr_t*)(n + 0x18) = rl;
-    if (rl) *(uintptr_t*)(rl + 0x08) = n;
-    *(uintptr_t*)(r + 0x10) = n;
-    *(uintptr_t*)(n + 0x08) = r;
-    Avl28_Refresh(*(uintptr_t*)(r + 0x10));
-    Avl28_Refresh(*(uintptr_t*)(r + 0x18));
+    r->parent = p;
+    Avl28Node* rl = r->left;
+    n->right = rl;
+    if (rl) rl->parent = n;
+    r->left = n;
+    n->parent = r;
+    Avl28_Refresh(r->left);
+    Avl28_Refresh(r->right);
     Avl28_Refresh(r);
     return r;
 }
 
 // 0x140014da0 — rotate-right around `n` (left child rises).
-uintptr_t Avl28_RotR(uintptr_t* root, uintptr_t n) {
-    uintptr_t l = *(uintptr_t*)(n + 0x10);
+Avl28Node* Avl28_RotR(Avl28Node** root, Avl28Node* n) {
+    Avl28Node* l = n->left;
     if (n == *root) *root = l;
-    uintptr_t p = *(uintptr_t*)(n + 0x08);
+    Avl28Node* p = n->parent;
     if (p) {
-        if (*(uintptr_t*)(p + 0x10) == n) *(uintptr_t*)(p + 0x10) = l;
-        else                              *(uintptr_t*)(p + 0x18) = l;
+        if (p->left == n) p->left = l;
+        else              p->right = l;
     }
-    *(uintptr_t*)(l + 0x08) = p;
-    uintptr_t lr = *(uintptr_t*)(l + 0x18);
-    *(uintptr_t*)(n + 0x10) = lr;
-    if (lr) *(uintptr_t*)(lr + 0x08) = n;
-    *(uintptr_t*)(l + 0x18) = n;
-    *(uintptr_t*)(n + 0x08) = l;
-    Avl28_Refresh(*(uintptr_t*)(l + 0x10));
-    Avl28_Refresh(*(uintptr_t*)(l + 0x18));
+    l->parent = p;
+    Avl28Node* lr = l->right;
+    n->left = lr;
+    if (lr) lr->parent = n;
+    l->right = n;
+    n->parent = l;
+    Avl28_Refresh(l->left);
+    Avl28_Refresh(l->right);
     Avl28_Refresh(l);
     return l;
 }
@@ -274,27 +302,27 @@ uintptr_t Avl28_RotR(uintptr_t* root, uintptr_t n) {
 } // namespace
 
 extern "C" void TownHall_AvlRebalance28(void* treeRoot, void* nodePtr) {
-    uintptr_t* root = (uintptr_t*)treeRoot;
-    uintptr_t* cur = (uintptr_t*)nodePtr;
-    while (*cur != 0) {
-        uintptr_t n = *cur;
-        uintptr_t parent = *(uintptr_t*)(n + 0x08);
-        int16_t hl = NodeH(*(uintptr_t*)(n + 0x10));
-        int16_t hr = NodeH(*(uintptr_t*)(n + 0x18));
-        *(int16_t*)(n + 0x22) = (hr < hl) ? hl : hr;
-        *(int16_t*)(n + 0x20) = (int16_t)(hr - hl);
+    Avl28Node** root = reinterpret_cast<Avl28Node**>(treeRoot);
+    Avl28Node** cur = reinterpret_cast<Avl28Node**>(nodePtr);
+    while (*cur != nullptr) {
+        Avl28Node* n = *cur;
+        Avl28Node* parent = n->parent;
+        int16_t hl = NodeH(n->left);
+        int16_t hr = NodeH(n->right);
+        n->height = (hr < hl) ? hl : hr;
+        n->balance = (int16_t)(hr - hl);
         if ((int16_t)(hr - hl) > 1) {
-            uintptr_t r = *(uintptr_t*)(n + 0x18);
+            Avl28Node* r = n->right;
             if (r) {
-                if (*(int16_t*)(r + 0x20) < 0) { Avl28_RotR(root, r); n = *cur; }
+                if (r->balance < 0) { Avl28_RotR(root, r); n = *cur; }
                 Avl28_RotL(root, n);
             }
         }
         n = *cur;
-        if (*(int16_t*)(n + 0x20) < -1) {
-            uintptr_t l = *(uintptr_t*)(n + 0x10);
+        if (n->balance < -1) {
+            Avl28Node* l = n->left;
             if (l) {
-                if (*(int16_t*)(l + 0x20) > 0) { Avl28_RotL(root, l); n = *cur; }
+                if (l->balance > 0) { Avl28_RotL(root, l); n = *cur; }
                 Avl28_RotR(root, n);
             }
         }
@@ -303,15 +331,16 @@ extern "C" void TownHall_AvlRebalance28(void* treeRoot, void* nodePtr) {
 }
 
 // ===========================================================================
-// 0x140090f20 — sum a townMgr+0x150 history series over [startTick, endTick]
-// (clamped to [0, count-1]). Series i: +0x00 data (int*), +0x08 count.
+// 0x140090f20 — sum a town history series (CitizenBehavior +0x150) over
+// [startTick, endTick] (clamped to [0, count-1]).
 // ===========================================================================
 extern "C" int TownHall_QueryProductionStat(void* townMgr, int seriesIdx, int startTick, int endTick) {
-    uintptr_t seriesBase = *(uintptr_t*)((uintptr_t)townMgr + 0x150);
+    const CitizenBehavior* town = reinterpret_cast<const CitizenBehavior*>(townMgr);
+    const Collection::Array<int32_t>* seriesBase = town->field_0x150;
     if (!seriesBase) return 0;
-    uintptr_t series = seriesBase + (uintptr_t)seriesIdx * 0x10;
-    int* data = *(int**)series;
-    int count = (int)*(int64_t*)(series + 8);
+    const Collection::Array<int32_t>& series = seriesBase[seriesIdx];
+    const int32_t* data = series.GetData();
+    int count = series.GetSize();
     if (startTick < 0) startTick = 0;
     if (endTick >= count) endTick = count - 1;
     if (!data || startTick > endTick) return 0;
@@ -331,32 +360,38 @@ extern "C" int TownHall_QueryProductionStat(void* townMgr, int seriesIdx, int st
 // ===========================================================================
 namespace {
 
-struct InvEntry { uint64_t entity; uintptr_t desc; int value; int pad; };
+struct InvEntry {
+    uint64_t                entity;   // +0x00
+    RawMaterialDescription* desc;     // +0x08
+    int                     value;    // +0x10
+    int                     pad;      // +0x14
+};
+static_assert(sizeof(InvEntry) == 0x18, "inventory entry 0x18");
 
 // System::String is a char* with the length stored as int at ptr-8.
-bool SysStrLess(void* a, void* b) {
-    const char* sa = *(const char**)a;
-    const char* sb = *(const char**)b;
-    int la = sa ? *(const int*)(sa - 8) : 0;
-    int lb = sb ? *(const int*)(sb - 8) : 0;
+bool SysStrLess(const System::String& a, const System::String& b) {
+    const char* sa = a._data;
+    const char* sb = b._data;
+    int la = sa ? RtSystem::StringLength(sa) : 0;
+    int lb = sb ? RtSystem::StringLength(sb) : 0;
     int n = (la < lb) ? la : lb;
     int c = (n > 0) ? memcmp(sa, sb, (size_t)n) : 0;
     if (c != 0) return c < 0;
     return la < lb;
 }
 
-// Localized display-name compare of two RawMaterialDescription components:
-// UIString(desc+0x28 stringTable, desc+0x30 nameKey) -> System::String -> less.
+// The raw material's localized name: UIString(desc +0x28 table, +0x30 key).
+System::String LocalizedName(const RawMaterialDescription* desc) {
+    UI::String text(::Object::ExternalPtr<UI::StringTable>(desc->_stringTable), desc->_name);
+    return text.operator System::String();
+}
+
+// Localized display-name compare of two RawMaterialDescription components.
 bool InvNameLess(const InvEntry* a, const InvEntry* b) {
     if (!a->desc || !b->desc) return a->desc && !b->desc ? true : false;
-    uint8_t uiA[16], uiB[16];
-    System::String sysA, sysB;
-    ::new (static_cast<void*>(uiA)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(a->desc + 0x28))), *reinterpret_cast<const System::String*>(a->desc + 0x30));  // B.3.6 bridge
-    ::new (static_cast<void*>(&sysA)) System::String(reinterpret_cast<const UI::String*>(uiA)->operator System::String());  // B.3.6 bridge
-    ::new (static_cast<void*>(uiB)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(b->desc + 0x28))), *reinterpret_cast<const System::String*>(b->desc + 0x30));  // B.3.6 bridge
-    ::new (static_cast<void*>(&sysB)) System::String(reinterpret_cast<const UI::String*>(uiB)->operator System::String());  // B.3.6 bridge
-    bool less = SysStrLess(&sysA, &sysB);
-    return less;
+    System::String sysA = LocalizedName(a->desc);
+    System::String sysB = LocalizedName(b->desc);
+    return SysStrLess(sysA, sysB);
 }
 
 typedef bool (*InvLess_t)(const InvEntry*, const InvEntry*);
@@ -379,124 +414,120 @@ bool InvDescLess(const InvEntry* a, const InvEntry* b) {
 } // namespace
 
 extern "C" void TownHall_InventorySortAsc(void* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort((InvEntry*)items, count, &InvNameLess);
+    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvNameLess);
 }
 extern "C" void TownHall_InventorySortDesc(void* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort((InvEntry*)items, count, &InvDescLess);
+    if (count > 1) InvInsertionSort(reinterpret_cast<InvEntry*>(items), count, &InvDescLess);
 }
 
 // ===========================================================================
 // 0x140091180 — CitizenList::RemoveWorker(townMgr, professionKey): demote one
 // worker of the profession back to laborer. Faithful three-pass order:
 //   1. an adult, non-student citizen of the profession with NO workplace
-//      (+0x248 == 0) — the cheapest demotion;
-//   2. else the profession's workplace (profession-AVL at townMgr+0x100) with
-//      the most rostered workers (WorkPlaceComponent+0x60) — pull its first
-//      rostered worker (comp+0x58[0]);
+//      — the cheapest demotion;
+//   2. else the profession's workplace (the town's profession tree, +0x100)
+//      with the most rostered workers — pull its first rostered worker;
 //   3. else any adult, non-student citizen of the profession.
-// Demotion = AssignHousing(citizen, null) then citizen+0x1f0 = laborer
-// (profList+0x30). Already-laborer-and-unassigned citizens return unchanged.
+// Demotion = SetWorkplace(null) then profession = laborer (ProfessionList +0x30).
+// Already-laborer-and-unassigned citizens return unchanged.
 // ===========================================================================
 namespace {
 
-typedef uint32_t (*GetTypeId_t)(void*);
+// The town's profession tree node (0x38; CitizenBehavior +0x100): the key is
+// the ExternalPtr<Profession>, compared as an unsigned qword; the value the
+// profession's workplaces.
+struct ProfessionTreeNode {
+    uint64_t             key;              // +0x00
+    ComponentEntity**    workplaces;       // +0x08 Array<InternalPtr<ComponentEntity>> data
+    int32_t              workplaceCount;   // +0x10
+    int32_t              _pad14;           // +0x14
+    ProfessionTreeNode*  parent;           // +0x18
+    ProfessionTreeNode*  left;             // +0x20
+    ProfessionTreeNode*  right;            // +0x28
+    int32_t              balance;          // +0x30
+    int32_t              _pad34;           // +0x34
+};
+static_assert(sizeof(ProfessionTreeNode) == 0x38, "profession tree node 0x38");
+static_assert(offsetof(ProfessionTreeNode, left) == 0x20, "");
 
-// Find the WorkPlaceComponent (c80e0) on a ComponentEntity (+0x30 IBP array,
-// +0x38 count) — the exe's inline GetTypeId scan + IsDerivedFrom cast.
-void* FindWorkPlaceComp(uintptr_t entity) {
+// The workplace's WorkPlaceComponent (the tree's null entity test kept).
+WorkPlaceComponent* FindWorkPlaceComp(ComponentEntity* entity) {
     if (!entity) return nullptr;
-    // ENDGAME B.3.9 CG2: TypeId_WorkplaceComponent binds cell 0x1401c80e0, whose
-    // retail class is WorkPlaceComponent -> WorkPlaceComponent::TypeId().
-    uint32_t tid = WorkPlaceComponent::TypeId();
-    uintptr_t arr = *(uintptr_t*)(entity + 0x30);
-    int cnt = *(int*)(entity + 0x38);
-    for (int i = 0; i < cnt; i++) {
-        void* slot = (void*)(arr + (uintptr_t)i * 8);
-        void* comp = *(void**)slot;
-        if (!comp) continue;
-        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if (id == tid) {
-            void* c = *(void**)slot;
-            return ::Object::IsDerivedFromNullSafe(c, tid) ? c : nullptr;
-        }
-    }
-    return nullptr;
+    return entity->FindComponent<WorkPlaceComponent>();
 }
 
-// AssignHousing(citizen, null) + citizen+0x1f0 = laborer. Returns without
-// touching the citizen if it is already an unassigned laborer.
-void DemoteToLaborer(uintptr_t citizen, uintptr_t laborerKey) {
-    int64_t nullIBP = 0;
-    IbpCtor(&nullIBP, nullptr);
-    if (*(uintptr_t*)(citizen + 0x1f0) == laborerKey &&
-        (*(int64_t*)(citizen + 0x248) == nullIBP)) {
+// An adult (age >= adultAge), not at school
+bool IsWorkingAge(const CitizenComponent* cz) {
+    return cz->description->adultAge <= cz->age && cz->school == nullptr;
+}
+
+// SetWorkplace(null) + profession = laborer. Returns without touching the
+// citizen if it is already an unassigned laborer.
+void DemoteToLaborer(CitizenComponent* citizen, Profession* laborer) {
+    if (citizen->profession == laborer && citizen->workplace == nullptr) {
         return;
     }
-    int64_t local = nullIBP;
-    CitizenComp_AssignHousing((CitizenComponent*)citizen, &local);
-    *(uintptr_t*)(citizen + 0x1f0) = laborerKey;
+    citizen->SetWorkplace(nullptr);   // 0x140111ee0
+    citizen->profession = laborer;
 }
 
 } // namespace
 
 extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId) {
-    uintptr_t townMgr = (uintptr_t)citizenList;
-    if (!townMgr || GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t profList = *(uintptr_t*)(gw + 0xb0);
-    if (!profList) return;
-    uintptr_t laborer = *(uintptr_t*)(profList + 0x30);
+    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(citizenList);
+    if (!town || GameUpdateLoop::_singleton == nullptr) return;
+    const ProfessionList* professions = GameUpdateLoop::_singleton->m_professionList;
+    if (!professions) return;
+    Profession* laborer = professions->field_0x30;
+    // The key the callers pass: the ExternalPtr<Profession> as a qword.
+    const Profession* profession = reinterpret_cast<const Profession*>(professionId);  // CAST-OK: ptr_int
 
     // Pass 1: idle (no-workplace) adult worker of this profession.
-    int cnt = *(int*)(townMgr + 0xa8);
+    int cnt = town->citizenCount;
     for (int i = 0; i < cnt; i++) {
-        uintptr_t cz = *(uintptr_t*)(*(uintptr_t*)(townMgr + 0xa0) + (uintptr_t)i * 8);
-        if (*(float*)(*(uintptr_t*)(cz + 0x288) + 0x44) <= *(float*)(cz + 0x3c) &&
-            *(uintptr_t*)(cz + 0x208) == 0 &&
-            (*(uint64_t*)(cz + 0x1f0) == professionId) &&
-            (*(uintptr_t*)(cz + 0x248) == 0)) {
+        CitizenComponent* cz = town->citizens[i];
+        if (IsWorkingAge(cz) && cz->profession == profession && cz->workplace == nullptr) {
             DemoteToLaborer(cz, laborer);
             return;
         }
     }
 
-    // Pass 2: profession-AVL node (townMgr+0x100: key@0 arr@8 cnt@0x10
-    // left@0x20 right@0x28) — the workplace with the most rostered workers.
-    uintptr_t node = *(uintptr_t*)(townMgr + 0x100);
-    uintptr_t found = 0;
+    // Pass 2: the profession's tree node — the workplace with the most
+    // rostered workers.
+    // LEFT: CitizenBehavior::field_0x100 is `void*` (GAME-a's header; its node type is not declared there).
+    ProfessionTreeNode* node = reinterpret_cast<ProfessionTreeNode*>(town->field_0x100);
+    ProfessionTreeNode* found = nullptr;
     while (node) {
-        uint64_t k = *(uint64_t*)node;
-        if (professionId < k)      node = *(uintptr_t*)(node + 0x20);
-        else if (professionId > k) node = *(uintptr_t*)(node + 0x28);
+        uint64_t k = node->key;
+        if (professionId < k)      node = node->left;
+        else if (professionId > k) node = node->right;
         else { found = node; break; }
     }
-    if (found && *(int*)(found + 0x10) > 0) {
-        int wpCount = *(int*)(found + 0x10);
-        uintptr_t bestEntity = 0;
+    if (found && found->workplaceCount > 0) {
+        int wpCount = found->workplaceCount;
+        ComponentEntity* bestEntity = nullptr;
         int bestWorkers = 0;
         for (int i = 0; i < wpCount; i++) {
-            uintptr_t ent = *(uintptr_t*)(*(uintptr_t*)(found + 8) + (uintptr_t)i * 8);
-            void* comp = FindWorkPlaceComp(ent);
+            ComponentEntity* ent = found->workplaces[i];
+            WorkPlaceComponent* comp = FindWorkPlaceComp(ent);
             if (!comp) continue;
-            int workers = *(int*)((uintptr_t)comp + 0x60);
+            int workers = comp->workerCount;
             if (bestWorkers < workers) { bestEntity = ent; bestWorkers = workers; }
         }
         if (bestEntity) {
-            void* comp = FindWorkPlaceComp(bestEntity);
-            if (comp && *(uintptr_t*)((uintptr_t)comp + 0x58) != 0) {
-                uintptr_t worker = **(uintptr_t**)((uintptr_t)comp + 0x58);
+            WorkPlaceComponent* comp = FindWorkPlaceComp(bestEntity);
+            if (comp && comp->workers != nullptr) {
+                CitizenComponent* worker = comp->workers[0].Get();
                 if (worker) { DemoteToLaborer(worker, laborer); return; }
             }
         }
     }
 
     // Pass 3: any adult, non-student citizen of the profession.
-    cnt = *(int*)(townMgr + 0xa8);
+    cnt = town->citizenCount;
     for (int i = 0; i < cnt; i++) {
-        uintptr_t cz = *(uintptr_t*)(*(uintptr_t*)(townMgr + 0xa0) + (uintptr_t)i * 8);
-        if (*(float*)(*(uintptr_t*)(cz + 0x288) + 0x44) <= *(float*)(cz + 0x3c) &&
-            *(uintptr_t*)(cz + 0x208) == 0 &&
-            (*(uint64_t*)(cz + 0x1f0) == professionId)) {
+        CitizenComponent* cz = town->citizens[i];
+        if (IsWorkingAge(cz) && cz->profession == profession) {
             DemoteToLaborer(cz, laborer);
             return;
         }
