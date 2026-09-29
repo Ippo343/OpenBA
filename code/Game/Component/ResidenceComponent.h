@@ -73,6 +73,7 @@ public:
     uint32_t CountResidents() const;                                  // 0x140129ff0
     void     EvictResidents();                                        // 0x140129ef0
     static void SerializeFamilies(IO::Serializer& ser, int count, Family* families);  // 0x140037c50
+    void SetFamilyCount(int newCount);                     // 0x140037ad0 Array<Family>::SetSize on residentSlots
 
     // State handlers (the controller's table, 0x14012a350).
     char     EnterBuilt();                                            // 0x140129de0 state 2 enter

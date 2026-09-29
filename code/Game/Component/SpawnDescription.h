@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class SpawnDescription final : public Description {
     DECLARE_EXE_TYPE(SpawnDescription)
 
@@ -35,14 +37,23 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x14000c2d0
     virtual Object::External* Construct();                                 // [9] 0x14000c230
 
-    // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _entries;                             // +0x20 array data: 16-byte {ExternalPtr, float, float} entries
+    // One spawn-table entry, 0x10 bytes (Serialize 0x1400560b0; the array's element
+    // init 0x14000c520 sets the ages to 0 / 10).
+    struct Entry {
+        ComponentDescription* _template;        // +0x00 ExternalPtr<ComponentDescription> (0x140002340): the entity spawned
+        float _minSpawnAge;                     // +0x08 the owner's resource age window
+        float _maxSpawnAge;                     // +0x0c
+    };
+
+    // ---- fields (PUBLIC while the components read them) ----
+    Entry* _entries;                            // +0x20 Array<Entry> data
     int32_t _entryCount;                        // +0x28
     int32_t _entryCap;                          // +0x2c
 };
 
 static_assert(sizeof(SpawnDescription) == 0x30, "SpawnDescription is 0x30 (create 0x14000c1d0 MemAlloc(0x30))");
 static_assert(alignof(SpawnDescription) == 8, "SpawnDescription alignment");
+static_assert(sizeof(SpawnDescription::Entry) == 0x10, "SpawnDescription::Entry stride 0x10 (0x14000c520)");
 static_assert(offsetof(SpawnDescription, _entries) == 0x20, "SpawnDescription::_entries @ +0x20");
 static_assert(offsetof(SpawnDescription, _entryCount) == 0x28, "SpawnDescription::_entryCount @ +0x28");
 static_assert(offsetof(SpawnDescription, _entryCap) == 0x2c, "SpawnDescription::_entryCap @ +0x2c");

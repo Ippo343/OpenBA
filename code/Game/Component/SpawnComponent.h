@@ -24,6 +24,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
+
+class SpawnDescription;   // Component/SpawnDescription.h
 
 class SpawnComponent final : public Component {
     DECLARE_EXE_TYPE(SpawnComponent)
@@ -38,12 +41,20 @@ public:
     void Startup() override;                                      // [4] 0x140055e90
     void Update(void* time) override;                             // [9] 0x140055ad0
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 per-entry timer array data (freed by the retail dtor)
-    void*    field30;      // +0x30 its count / capacity
+    // 0x140055cc0: the worldgen seed (one DoSpawn per entry in age, repeated by age).
+    void InitialSpawn();
+    // 0x140055780: roll one spawn of `desc->_entries[entryIndex]` near the owner;
+    // `randomGrowth` sets the new entity's growth to a random value.
+    void DoSpawn(SpawnDescription* desc, int entryIndex, char randomGrowth);
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x140055ee0.
+    System::Time* timers;  // +0x28 Array<Time> data, one per spawn entry (freed by the retail dtor)
+    int32_t  timerCount;   // +0x30
+    int32_t  timerCapacity; // +0x34
 };
 
 static_assert(sizeof(SpawnComponent) == 0x38, "SpawnComponent is 0x38 (create 0x14000c170)");
 static_assert(alignof(SpawnComponent) == 8, "SpawnComponent alignment");
-static_assert(offsetof(SpawnComponent, field28) == 0x28, "");
-static_assert(offsetof(SpawnComponent, field30) == 0x30, "");
+static_assert(offsetof(SpawnComponent, timers) == 0x28, "");
+static_assert(offsetof(SpawnComponent, timerCount) == 0x30, "");
+static_assert(offsetof(SpawnComponent, timerCapacity) == 0x34, "");

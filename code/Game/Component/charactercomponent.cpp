@@ -240,7 +240,7 @@ void CharacterComponent::Startup() {
             // and returned verbatim by GetUserData when the citizen is clicked. The inert
             // standalone factory never runs slot +0x20, so do the copy here so the citizen
             // pick mesh carries a non-null owner (else the click resolves to a null entity).
-            pickComp->field30 = pickComp->_entity;
+            pickComp->userData = pickComp->_entity;
         }
 
         ModelComponent* model = modelComponent;

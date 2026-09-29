@@ -22,6 +22,7 @@
 #include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
+#include "Entity/EntityList.h"   // EntityList::removalList
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -64,8 +65,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
         ComponentEntity* entity = self->_entity;
 
         if (GameUpdateLoop::_singleton == nullptr) return;
-        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): the removal list stays by offset.
-        uintptr_t worldMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
+        EntityList* worldMgr = GameUpdateLoop::_singleton->m_entityList;
 
         if (entity != nullptr) {
 
@@ -77,8 +77,8 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
                 // Add to world pending list
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 {
-                    int currentCount = *(int*)(worldMgr + 0xd8);
-                    GameColl::AsArray<GameColl::Ptr8>((void*)(worldMgr + 0xd0))
+                    int currentCount = worldMgr->removalList.count;
+                    GameColl::AsArray<GameColl::Ptr8>(&worldMgr->removalList)
                         .SetSizeFill(currentCount + 1, &self->_entity);
                 }
             }
@@ -228,9 +228,7 @@ void RawMaterialComponent::Startup() {
 
     // Register the entity's template with the town manager.
     if (GameUpdateLoop::_singleton != nullptr) {
-        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): the B4 FORWARD takes it.
-        RawMaterialComponent_RegisterRawMaterial(GameUpdateLoop::_singleton->m_citizenList,
-                                                 _entity->_description);
+        GameUpdateLoop::_singleton->m_citizenList->RegisterRawMaterial(_entity->_description);   // 0x140091e60
     }
 }
 

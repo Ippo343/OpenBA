@@ -39,30 +39,30 @@
 // the defaults.
 PopulationDescription::PopulationDescription()
     : Description(),
-      _i28(8),
-      _i2c(0x20),
-      _u30(0xe1f),
-      _u34(0),
-      _b38(true),
-      _i3c(4),
-      _i40(1),
+      _habitatBlock(8),
+      _herdBlock(0x20),
+      _habitatTerrain(0xe1f),
+      _blockingTerrain(0),
+      _blockedByEntity(true),
+      _habitatDensity(4),
+      _densityGrowth(1),
       _i44(1),
-      _b48(false),
-      _ref50(nullptr) {}
+      _rescan(false),
+      _herdTemplate(nullptr) {}
 
 // [5] 0x1400547e0: stream order as retail.
 bool PopulationDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_i28, nullptr);
-    ser.Serialize(_i2c, nullptr);
-    ser.Serialize(_u30, nullptr);
-    ser.Serialize(_u34, nullptr);
-    ser.Serialize(_b38, nullptr);
-    ser.Serialize(_i3c, nullptr);
-    ser.Serialize(_i40, nullptr);
+    ser.Serialize(_habitatBlock, nullptr);
+    ser.Serialize(_herdBlock, nullptr);
+    ser.Serialize(_habitatTerrain, nullptr);
+    ser.Serialize(_blockingTerrain, nullptr);
+    ser.Serialize(_blockedByEntity, nullptr);
+    ser.Serialize(_habitatDensity, nullptr);
+    ser.Serialize(_densityGrowth, nullptr);
     ser.Serialize(_i44, nullptr);
-    ser.Serialize(_b48, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref50, &ser);
+    ser.Serialize(_rescan, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_herdTemplate, &ser);   // 0x140002340
     _name.Serialize(&ser);
     return true;
 }

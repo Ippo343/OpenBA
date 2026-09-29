@@ -66,11 +66,11 @@ bool SpawnDescription::Serialize(void* stream) {
         Reimpl_Array_Resize_Stride10_Spawn(&_entries, count);   // header at +0x20 {ptr, count, cap}
     }
     if (count > 0) {
-        uint8_t* elem = static_cast<uint8_t*>(_entries);
-        for (int i = 0; i < count && elem; ++i, elem += 0x10) {
-            Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x00, &ser);
-            ser.Serialize(*reinterpret_cast<float*>(elem + 0x08), nullptr);
-            ser.Serialize(*reinterpret_cast<float*>(elem + 0x0c), nullptr);
+        Entry* elem = _entries;
+        for (int i = 0; i < count && elem; ++i, ++elem) {
+            Reimpl_ExternalPtr_Serialize_StringTable(&elem->_template, &ser);   // 0x140002340
+            ser.Serialize(elem->_minSpawnAge, nullptr);
+            ser.Serialize(elem->_maxSpawnAge, nullptr);
         }
     }
     return true;

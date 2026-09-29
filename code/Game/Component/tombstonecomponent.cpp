@@ -10,7 +10,9 @@
 //   Update    (0x1400577D0) — Timer countdown + entity removal
 //
 
-#include "Component/tombstonecomponent_funcs.h"
+#include "Component/TombstoneComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"   // EntityList::removalList
 #include "Component/TombstoneDescription.h"
 #include "Component/coll_bridge.h"
 #include "object/Internal.h"
@@ -36,54 +38,21 @@
 // The GameWorld cell 0x1401c3dd8 is g_pGameWorldSingleton.
 
 
-// ============================================================
-// TombstoneComponent::Serialize (0x140057860) — actually OnCreate
-// ============================================================
-void TombstoneComponent_Serialize(TombstoneComponent* self) {
-    void* baseObj = self->_description;
-
-    // IsDerivedFrom check for tombstone data type
-    void* buildingData = nullptr;
-    {
-        bool isDerived = reinterpret_cast<const Object::Base*>(baseObj)
-                             ->IsDerivedFrom(TombstoneDescription::TypeId());   // B.3.x bridge
-        if (isDerived) buildingData = baseObj;
-    }
-
-    if (!buildingData || GameUpdateLoop::_singleton == nullptr) return;
-
-    // Random float in [0, 1)
-    void* rng = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xD8);
-    float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-
-    // Compute lifetime: (randVal * max + min) * tickMultiplier
-    float minTime = *(float*)((uintptr_t)buildingData + 0x20);
-    float maxTime = *(float*)((uintptr_t)buildingData + 0x24);
-    float seconds = (randVal * maxTime + minTime) * kRdata_140172234;
-
-    // Construct Time from seconds, store at +0x28
-    int64_t timeVal;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), seconds);
-    *(int64_t*)&self->field28 = timeVal;
-}
-
-
-
 // ============================================================================
 // ENDGAME B.3.8 CIT — TombstoneComponent as a REAL class (TombstoneComponent.h).
 //
 // Before: a 48-slot hand-built TombstoneComponent_LiveVtable filled at every
 // create (FillTypedVtable + FinishLiveVtable), Inert_ScalarDtor in slot 0 (only
 // ~Internal). After: the compiler's 16-slot vtable and a real ctor/dtor chain
-// (B38_RULES D1, D2). Slot 4 keeps the tree's standalone-robust Startup body
-// (TombstoneComponent_Startup above), which is what the table installed.
+// (B38_RULES D1, D2). Slot 4 keeps the tree's standalone-robust Startup body,
+// which is what the table installed.
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/TombstoneComponent.h"
 
 // 0x1400579a0. Component() is the CALL 0x1401188b0; the 0x14015a980 stamp is
 // the compiler's; +0x28 = 0; flags |= 0x88 (0x88 with Component's 0x80).
-TombstoneComponent::TombstoneComponent() : field28(nullptr) {
+TombstoneComponent::TombstoneComponent() : lifetime{0} {
     OrFlagsInCtor(0x88);
 }
 
@@ -93,57 +62,53 @@ TombstoneComponent::TombstoneComponent() : field28(nullptr) {
 void TombstoneComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 2);   // Persist's stream is void*
 
-    int64_t* pTime = (int64_t*)&field28;
-    reinterpret_cast<System::Time*>(pTime)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
+    lifetime.Serialize(ser);
 
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
     if (version < 2) {
-        *pTime = *pTime / 2;
+        lifetime._ticks = lifetime._ticks / 2;
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
 // TombstoneComponent::Startup (vtable slot [4], +0x20, original OnCreate 0x140057860)
 // ============================================================
 // Body-init dispatched at spawn by ComponentEntity_StartupComponents (vtable +0x20).
-// Populates the +0x28 countdown timer from the TombstoneDescription's [min,max]
-// lifetime * secondsPerTick. _unk18 (+0x18) is already the TombstoneDescription
+// Populates the countdown from the TombstoneDescription's [min, min+range] lifetime *
+// secondsPerTick. _description is already the TombstoneDescription
 // (ComponentEntity_CtorFromDescription's copy-ctor stores it there) — we TRUST it
 // directly rather than going through IsDerivedFrom, which is unreliable in standalone
 // (the factory tree is incomplete — see growthcomponent.cpp's note). Without this the
-// inert factory leaves +0x28 == 0, so Update's `timer < 1` test fires on the FIRST
+// inert factory leaves the countdown 0, so Update's `timer < 1` test fires on the FIRST
 // tick and marks the tombstone for instant removal. Idempotent (only inits a 0 timer).
 //
-// This is the standalone-robust form of the OnCreate (TombstoneComponent_Serialize
-// above): identical arithmetic, but it trusts _unk18 instead of gating on
-// IsDerivedFrom so the timer is reliably populated.
+// Listed: retail 0x140057860 gates the description on IsDerivedFrom(DAT_1401c4a68) and
+// always writes; this is the tree's form (its unreferenced faithful twin, the C function
+// TombstoneComponent_Serialize, is deleted).
 void TombstoneComponent::Startup() {
 
     // Already initialized (a live tombstone carries a positive lifetime) — leave it.
-    if (*(int64_t*)&field28 != 0) return;
+    if (lifetime._ticks != 0) return;
 
-    void* buildingData = _description;  // +0x18 = the TombstoneDescription
-    if (!buildingData) return;
+    Description* descRaw = _description;
+    if (!descRaw) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
+    TombstoneDescription* desc = static_cast<TombstoneDescription*>(descRaw);
 
-    // Random float in [0,1) from the world RNG (world+0xD8).
-    void* rng = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xD8);
-    float randVal = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+    // Random float in [0,1) from the world RNG.
+    float randVal = GameUpdateLoop::_singleton->m_random->RandFloat();
 
-    // lifetime seconds = (rand * maxTime + minTime) * secondsPerTickMul  (DAT_140172234).
-    float minTime = *(float*)((uintptr_t)buildingData + 0x20);
-    float maxTime = *(float*)((uintptr_t)buildingData + 0x24);
+    // lifetime seconds = (rand * range + minimum) * secondsPerTickMul  (DAT_140172234).
+    float minTime = desc->_minLifetime;
+    float range = desc->_lifetimeRange;
     float tickMul = kRdata_140172234;
-    float seconds = (randVal * maxTime + minTime) * tickMul;
+    float seconds = (randVal * range + minTime) * tickMul;
 
-    int64_t timeVal = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), seconds);
-    *(int64_t*)&field28 = timeVal;
+    System::Time timeVal;
+    RtSystem_Time_Ctor(&timeVal, seconds);
+    lifetime = timeVal;
 }
 
 // [9] 0x1400577d0 — RDX is a pointer to the elapsed System::Time (EntityList
@@ -152,39 +117,38 @@ void TombstoneComponent::Startup() {
 // TombstoneComponent::Update (0x1400577D0)
 // ============================================================
 void TombstoneComponent::Update(void* timeV) {
-    int64_t* pDeltaTime = static_cast<int64_t*>(timeV);
+    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
-    // +0x28 countdown timer is zero unless Startup (slot +0x20) ran. If it is still
-    // zero but the description (+0x18) is present, run the body-init now so the
-    // countdown starts from the real random lifetime — otherwise the `timer < 1`
-    // test below fires on tick 1 and marks the tombstone for instant removal.
-    if (*(int64_t*)&field28 == 0 && _description != nullptr) {
+    // countdown is zero unless Startup (slot +0x20) ran. If it is still zero but the
+    // description is present, run the body-init now so the countdown starts from the
+    // real random lifetime — otherwise the `timer < 1` test below fires on tick 1 and
+    // marks the tombstone for instant removal.
+    if (lifetime._ticks == 0 && _description != nullptr) {
         TombstoneComponent::Startup();
     }
 
-    int64_t* pTimer = (int64_t*)&field28;
-    *pTimer -= *pDeltaTime;
+    lifetime._ticks -= pDeltaTime->_ticks;
 
 
-    if (*pTimer < 1) {
-        void* entityPtr = _entity;
+    if (lifetime._ticks < 1) {
+        ComponentEntity* entityPtr = _entity;
         if (GameUpdateLoop::_singleton == nullptr) return;
-        void* gameWorld = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xE8);
+        EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
 
         if (entityPtr != nullptr) {
 
-            // Check bit 10 of entity flags at +0x40
-            uint32_t entityFlags = *(uint32_t*)((uintptr_t)entityPtr + 0x40);
+            // Check bit 10 of the entity flags
+            uint32_t entityFlags = entityPtr->_entityFlags;
             if (((entityFlags >> 10) & 1) == 0) {
                 ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
 
                 // Add to removal queue
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                if (gameWorld) {
-                    int count = *(int*)((uintptr_t)gameWorld + 0xD8);
-                    GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)gameWorld + 0xD0))
-                        .SetSizeFill(count + 1, (void*)(reinterpret_cast<uintptr_t>(this) + 0x10));
+                if (entityList) {
+                    int count = entityList->removalList.count;
+                    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
+                        .SetSizeFill(count + 1, &_entity);
                 }
             }
         }
