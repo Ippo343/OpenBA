@@ -93,13 +93,13 @@ struct StringBlock {
 static_assert(offsetof(StringBlock, chars) == 8, "String chars @ block+8");
 
 // Header accessors, spelled the way the DLL spells them.
-inline int32_t& StringLength(char* data)   { return reinterpret_cast<int32_t*>(data)[-2]; }
-inline int32_t& StringRefCount(char* data) { return reinterpret_cast<int32_t*>(data)[-1]; }
+inline int32_t& StringLength(char* data)   { return reinterpret_cast<int32_t*>(data)[-2]; }  // CAST-OK: string_header
+inline int32_t& StringRefCount(char* data) { return reinterpret_cast<int32_t*>(data)[-1]; }  // CAST-OK: string_header
 inline int32_t  StringLength(const char* data) {
-    return reinterpret_cast<const int32_t*>(data)[-2];
+    return reinterpret_cast<const int32_t*>(data)[-2];  // CAST-OK: string_header
 }
 inline int32_t  StringRefCount(const char* data) {
-    return reinterpret_cast<const int32_t*>(data)[-1];
+    return reinterpret_cast<const int32_t*>(data)[-1];  // CAST-OK: string_header
 }
 
 // The MemAlloc alignment argument SetLength passes (0x1800c8220).

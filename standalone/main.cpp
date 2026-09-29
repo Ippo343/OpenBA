@@ -304,11 +304,11 @@ extern "C" void StandaloneWalkStack(CONTEXT* origCtx, StackLineSink sink, void* 
         HMODULE mod = nullptr;
         if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCSTR)(uintptr_t)ctx.Rip, &mod) && mod) {
+                               (LPCSTR)(uintptr_t)ctx.Rip, &mod) && mod) {  // CAST-OK: crash_walk
             char path[MAX_PATH] = {0};
             GetModuleFileNameA(mod, path, MAX_PATH);
             const char* nm = strrchr(path, '\\');
-            uintptr_t off = (uintptr_t)ctx.Rip - (uintptr_t)mod;
+            uintptr_t off = (uintptr_t)ctx.Rip - (uintptr_t)mod;  // CAST-OK: crash_walk
             snprintf(line, sizeof(line),
                      "  #%-2d %-22s + 0x%-8llX  (RIP=%016llX RSP=%016llX)\n",
                      frame, nm ? nm + 1 : path, (unsigned long long)off,
@@ -325,7 +325,7 @@ extern "C" void StandaloneWalkStack(CONTEXT* origCtx, StackLineSink sink, void* 
         if (!fn) {
             // Leaf or no unwind data — try one manual pop of the return address.
             // Many leaves have no .pdata entry; the return value lives at [RSP].
-            uintptr_t* sp = reinterpret_cast<uintptr_t*>(ctx.Rsp);
+            uintptr_t* sp = reinterpret_cast<uintptr_t*>(ctx.Rsp);  // CAST-OK: crash_walk
             if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
             ctx.Rip = *sp;
             ctx.Rsp += 8;
@@ -432,9 +432,9 @@ static void CrashLogSink(const char* s) {
 static void FlushLogsToDisk() {
     fflush(stderr);
     fflush(stdout);
-    HANDLE he = (HANDLE)_get_osfhandle(_fileno(stderr));
+    HANDLE he = (HANDLE)_get_osfhandle(_fileno(stderr));  // CAST-OK: win32
     if (he != INVALID_HANDLE_VALUE) FlushFileBuffers(he);
-    HANDLE ho = (HANDLE)_get_osfhandle(_fileno(stdout));
+    HANDLE ho = (HANDLE)_get_osfhandle(_fileno(stdout));  // CAST-OK: win32
     if (ho != INVALID_HANDLE_VALUE) FlushFileBuffers(ho);
 }
 
@@ -480,10 +480,10 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
         HMODULE mod = nullptr;
         if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCSTR)(uintptr_t)ctx->Rip, &mod) && mod) {
+                               (LPCSTR)(uintptr_t)ctx->Rip, &mod) && mod) {  // CAST-OK: crash_walk
             char path[MAX_PATH] = {0};
             GetModuleFileNameA(mod, path, MAX_PATH);
-            uintptr_t off = (uintptr_t)ctx->Rip - (uintptr_t)mod;
+            uintptr_t off = (uintptr_t)ctx->Rip - (uintptr_t)mod;  // CAST-OK: crash_walk
             const char* nm = strrchr(path, '\\');
             CrashLogf("Module:    %s + 0x%llX  (base=%p)\n",
                       nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
@@ -507,19 +507,19 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     if (code == EXCEPTION_ACCESS_VIOLATION &&
         ep->ExceptionRecord->ExceptionInformation[0] == 8 /*EXEC*/ &&
         ep->ExceptionRecord->ExceptionInformation[1] == 0 &&
-        ctx->Rcx && !IsBadReadPtr((void*)ctx->Rcx, 8)) {
-        void* target = (void*)ctx->Rcx;
-        uintptr_t vt = *(uintptr_t*)target;
+        ctx->Rcx && !IsBadReadPtr((void*)ctx->Rcx, 8)) {  // CAST-OK: crash_walk
+        void* target = (void*)ctx->Rcx;  // CAST-OK: crash_walk
+        uintptr_t vt = *(uintptr_t*)target;  // CAST-OK: crash_walk
         CrashLogf("VCALL-of-0: this=%p vtable=%p\n", target, (void*)vt);
         HMODULE vmod = nullptr;
         if (vt && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                      GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                     (LPCSTR)vt, &vmod) && vmod) {
+                                     (LPCSTR)vt, &vmod) && vmod) {  // CAST-OK: crash_walk
             char path[MAX_PATH] = {0};
             GetModuleFileNameA(vmod, path, MAX_PATH);
             const char* nm = strrchr(path, '\\');
             CrashLogf("  vtable in %s + 0x%llX  (base=%p)\n",
-                      nm ? nm + 1 : path, (unsigned long long)(vt - (uintptr_t)vmod),
+                      nm ? nm + 1 : path, (unsigned long long)(vt - (uintptr_t)vmod),  // CAST-OK: crash_walk
                       (void*)vmod);
         } else {
             CrashLogf("  vtable in UNKNOWN module (heap? bad ptr?)\n");
@@ -527,15 +527,15 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
         // A raw dump of the table's first 13 words, in COMPILER slot order (a
         // class with `virtual ~T()` has two destructor words where retail has
         // one, so compiler slot N >= 1 is retail slot N - 1 there).
-        if (vt && !IsBadReadPtr((void*)vt, 13 * 8)) {
+        if (vt && !IsBadReadPtr((void*)vt, 13 * 8)) {  // CAST-OK: crash_walk
             for (int i = 0; i < 13; i++)
                 CrashLogf("  vtable compiler slot %2d [+0x%02X] = %p\n", i, i * 8,
-                          *((void**)vt + i));
+                          *((void**)vt + i));  // CAST-OK: crash_walk
         }
         if (!IsBadReadPtr(target, 0x40)) {
             for (int i = 0; i < 8; i++)
                 CrashLogf("  this[+0x%02X] = 0x%016llX\n", i * 8,
-                          (unsigned long long)*((uint64_t*)target + i));
+                          (unsigned long long)*((uint64_t*)target + i));  // CAST-OK: crash_walk
         }
     }
 
@@ -597,11 +597,11 @@ static void LogPureVirtualCall(const char* tag, void* retAddr) {
     HMODULE mod = nullptr;
     if (retAddr && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                       (LPCSTR)retAddr, &mod) && mod) {
+                                       (LPCSTR)retAddr, &mod) && mod) {  // CAST-OK: crash_walk
         char path[MAX_PATH] = {0};
         GetModuleFileNameA(mod, path, MAX_PATH);
         const char* nm = strrchr(path, '\\');
-        uintptr_t off = (uintptr_t)retAddr - (uintptr_t)mod;
+        uintptr_t off = (uintptr_t)retAddr - (uintptr_t)mod;  // CAST-OK: crash_walk
         CrashLogf("Module:         %s + 0x%llX  (base=%p)\n",
                   nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
     }
@@ -1184,25 +1184,25 @@ static void InstallWndMsgHook() {
 static void HwWatch_LogStack(void* ctx) {
     if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
     CrashLogRaw("\n=== HWWATCH HIT (data breakpoint) ===\n");
-    PrintStackTrace(reinterpret_cast<CONTEXT*>(ctx));
+    PrintStackTrace(reinterpret_cast<CONTEXT*>(ctx));  // CAST-OK: crash_walk
     CrashLogf("=== END HWWATCH ===\n");
     FlushLogsToDisk();
     // Mirror the frames to stderr too (the run harness keeps stderr per run).
-    CONTEXT c = *reinterpret_cast<CONTEXT*>(ctx);
+    CONTEXT c = *reinterpret_cast<CONTEXT*>(ctx);  // CAST-OK: crash_walk
     for (int frame = 0; frame < 24; frame++) {
         HMODULE mod = nullptr;
         if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCSTR)(uintptr_t)c.Rip, &mod) && mod) {
+                               (LPCSTR)(uintptr_t)c.Rip, &mod) && mod) {  // CAST-OK: crash_walk
             char path[MAX_PATH] = {0};
             GetModuleFileNameA(mod, path, MAX_PATH);
             const char* nm = strrchr(path, '\\');
             fprintf(stderr, "[HWWATCH]   #%-2d %-18s + 0x%llX\n", frame, nm ? nm + 1 : path,
-                    (unsigned long long)((uintptr_t)c.Rip - (uintptr_t)mod));
+                    (unsigned long long)((uintptr_t)c.Rip - (uintptr_t)mod));  // CAST-OK: crash_walk
         } else fprintf(stderr, "[HWWATCH]   #%-2d ??? @ %p\n", frame, (void*)c.Rip);
         DWORD64 imageBase = 0;
         PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(c.Rip, &imageBase, nullptr);
         if (!fn) {
-            uintptr_t* sp = reinterpret_cast<uintptr_t*>(c.Rsp);
+            uintptr_t* sp = reinterpret_cast<uintptr_t*>(c.Rsp);  // CAST-OK: crash_walk
             if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
             c.Rip = *sp; c.Rsp += 8;
             if (!c.Rip) break;
@@ -1230,12 +1230,12 @@ static LONG WINAPI FirstChanceFailFast(EXCEPTION_POINTERS* ep) {
         void* addr = ep->ExceptionRecord->ExceptionAddress;
         if (addr && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                       (LPCSTR)addr, &mod) && mod) {
+                                       (LPCSTR)addr, &mod) && mod) {  // CAST-OK: crash_walk
             char path[MAX_PATH] = {0};
             GetModuleFileNameA(mod, path, MAX_PATH);
             const char* nm = strrchr(path, '\\');
             CrashLogf("Module: %s + 0x%llX  (base=%p)\n", nm ? nm + 1 : path,
-                      (unsigned long long)((uintptr_t)addr - (uintptr_t)mod), (void*)mod);
+                      (unsigned long long)((uintptr_t)addr - (uintptr_t)mod), (void*)mod);  // CAST-OK: crash_walk
         }
         PrintStackTrace(ep->ContextRecord);
         CrashLogf("=== END FAIL-FAST ===\n");

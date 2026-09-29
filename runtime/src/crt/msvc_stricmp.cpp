@@ -142,8 +142,8 @@ namespace rtcrt {
 // off-by-one is not "corrected" by a later reader.
 // ---------------------------------------------------------------------------
 int AsciiStrICmp(const char* a, const char* b) {
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(a);
-    const unsigned char* q = reinterpret_cast<const unsigned char*>(b);
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(a);  // CAST-OK: crt
+    const unsigned char* q = reinterpret_cast<const unsigned char*>(b);  // CAST-OK: crt
     for (;;) {
         uint32_t c1 = *p++;
         if (static_cast<uint32_t>(c1 - 0x41u) <= 0x19u) c1 += 0x20u;

@@ -263,7 +263,7 @@ void Thread::InitFields(unsigned int stackSize) {
     unsigned int threadId = 0;
     uintptr_t h = _beginthreadex(nullptr, stackSize, &Thread::ThreadFunc, this,
                                  CREATE_SUSPENDED, &threadId);
-    _hThread = reinterpret_cast<void*>(h);
+    _hThread = reinterpret_cast<void*>(h);  // CAST-OK: win32
     SetThreadPriority(reinterpret_cast<HANDLE>(_hThread), THREAD_PRIORITY_NORMAL);
 
     _hStart    = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -318,7 +318,7 @@ unsigned int __stdcall Thread::ThreadFunc(void* param) {
     // thing the class deliberately does not expose (+0x00 belongs to the
     // compiler there). Same bytes either way -- the cross-asserts in Thread.h
     // are what say so.
-    RtSystem::Thread* self = static_cast<RtSystem::Thread*>(param);
+    RtSystem::Thread* self = static_cast<RtSystem::Thread*>(param);  // CAST-OK: win32
 
     HANDLE handles[2] = { reinterpret_cast<HANDLE>(self->hStart),
                           reinterpret_cast<HANDLE>(self->hStop) };
