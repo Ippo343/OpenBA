@@ -42,6 +42,13 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex);  // 0x1401
 void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag);  // 0x1401260f0
 
 // ---- action_base_complete.cpp
+class CitizenComponent;       // Component/CitizenComponent.h
+class WorkScheduler;          // Game/WorkScheduler.h
+bool TryCompleteTask(const WorkScheduler* sched, void* const* entityRef, int taskIdx, void* const* targetRef, uint32_t taskParam);  // 0x1400f8760
+void TaskReassign(const WorkScheduler* sched, void* const* entityRef, int taskIdx, void* const* targetRef, uint32_t taskParam);  // 0x1400f8800
+void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
+void HideCitizenTool(CitizenComponent* citizen);  // 0x1401176e0
+void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
 bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam);  // 0x1400f8760
 void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam);  // 0x1400f8800
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx);  // 0x1400f8e30
