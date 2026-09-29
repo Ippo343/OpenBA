@@ -139,10 +139,10 @@ static_assert(offsetof(App, _messageCallbacks) + offsetof(Set, count)
 namespace {
 
 inline Set* SetOf(App* a) {
-    return reinterpret_cast<Set*>(reinterpret_cast<uint8_t*>(a) + 0x18);
+    return &a->_messageCallbacks;   // +0x18
 }
 inline const Set* SetOf(const App* a) {
-    return reinterpret_cast<const Set*>(reinterpret_cast<const uint8_t*>(a) + 0x18);
+    return &a->_messageCallbacks;
 }
 
 // ---------------------------------------------------------------------------
