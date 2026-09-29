@@ -50,6 +50,7 @@
 #include "Component/exe_bodies.h"   // Destroy_FindDecalComponent_b630, FloorComponent_FindResData
 #include "Action/exe_bodies.h"      // ActCNR_FindComponent_3f60, Entity_FindConsumeProduce_b6f0
 #include "Game/exe_constants.h"
+#include "Component/terraformcomponent_funcs.h"   // TerraformComponent_RegionRecalc
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -58,7 +59,6 @@
 // ------------------------------------------------------------
 // Ported elsewhere; linked by name.
 // ------------------------------------------------------------
-void  TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y);            // 0x1400ab150
 void  Pf_FineCellDirty_a8c90(int64_t self, int x, int y);                           // 0x1400a8c90
 void  Pf_EnqueueCmd2_a6fe0(int64_t self, uint32_t idx, void* type, void* p4);       // 0x1400a6fe0
 int   Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6,
@@ -226,7 +226,7 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
             (static_cast<int64_t>(stride) * mapY + mapX) * 2) =
             static_cast<int16_t>(static_cast<int>(z * s_heightScale));
 
-        TerraformComponent_RegionRecalc(reinterpret_cast<void*>(terrainGrid), mapX, mapY);
+        TerraformComponent_RegionRecalc(reinterpret_cast<WorldGeometry*>(terrainGrid), mapX, mapY);
     }
 
 }
