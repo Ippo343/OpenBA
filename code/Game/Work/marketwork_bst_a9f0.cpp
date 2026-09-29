@@ -68,7 +68,7 @@
 // ============================================================================
 // 0x14002ae50 — create one market BST node
 // ============================================================================
-// __fastcall void* MarketWork_BstNewNode(void* unusedRCX, int64_t* src [RDX], void* parent [R8])
+// __fastcall Node* MarketWork_BstNewNode(void* unusedRCX, Claim* src [RDX], Node* parent [R8])
 //
 // Disassembly walk (0x14002ae50 - 0x14002aed3):
 //   ae50  MOV [RSP+8],RCX            ; RCX homed and NEVER read again -> dead parameter
@@ -86,43 +86,43 @@
 //   aeb5  MOV [RBX+0x18],RSI         ; node+0x18 = parent
 //   aeb9  MOV [RBX+0x20],RBP         ; node+0x20 = 0   (left)
 //   aebd  MOV [RBX+0x28],RBP         ; node+0x28 = 0   (right)
-//   aec1  MOV dword [RBX+0x30],EBP   ; node+0x30 = 0   (AVL balance, 32-bit — NOT 64)
+//   aec1  MOV dword [RBX+0x30],EBP   ; node+0x30 = 0   (AVL balance + height, one dword)
 //   aec4  MOV RAX,RBX                ; return node
 //
 // The redundant `node+0x00 = 0` immediately followed by `node+0x00 = key` is the inlined
 // InternalBasePtr default-ctor followed by the copy-assign; kept verbatim.
-extern "C" void* MarketBst_ae50(void* unused, int64_t* src, void* parent) {
+extern "C" MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim* src,
+                                                 MarketWork::ClaimNode* parent) {
     (void)unused;   // homed at [RSP+8] by retail and never loaded — genuinely dead.
 
-    void* mem = System::MemoryAllocator::MemAlloc(0x38, 8);
-    if (mem == nullptr) return nullptr;   // faithful: retail's JZ skips ALL initialisation
+    MarketWork::ClaimNode* n = static_cast<MarketWork::ClaimNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    if (n == nullptr) return nullptr;   // faithful: retail's JZ skips ALL initialisation
 
-    uintptr_t n = reinterpret_cast<uintptr_t>(mem);
+    n->element.citizen = nullptr;                     // ae92
+    n->element.citizen = src->citizen;                // ae95/ae98
 
-    *reinterpret_cast<uint64_t*>(n + 0x00) = 0;                                  // ae92
-    *reinterpret_cast<uint64_t*>(n + 0x00) = *reinterpret_cast<uint64_t*>(src);  // ae95/ae98
-
-    *reinterpret_cast<uint64_t*>(n + 0x08) = 0;   // aea4 — array ptr
-    *reinterpret_cast<uint64_t*>(n + 0x10) = 0;   // aea7 — count(+0x10) AND cap(+0x14) in one
-                                                  // 8-byte store; narrowing this to 4 bytes
-                                                  // would leave a stale capacity behind.
+    n->element.carries.data = nullptr;                // aea4 — array ptr
+    n->element.carries.count = 0;                     // aea7 — count(+0x10) AND cap(+0x14):
+    n->element.carries.capacity = 0;                  // one 8-byte store in retail
 
     // 0x14000d9d0 — deep-copy the 16-byte-element dynamic array from src+0x08.
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(n + 0x08), src + 1);  // src + 1 == src+0x08
+    // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries),
+                           reinterpret_cast<int64_t*>(&src->carries));
 
-    *reinterpret_cast<void**>(n + 0x18)   = parent;   // aeb5
-    *reinterpret_cast<uint64_t*>(n + 0x20) = 0;       // aeb9 — left
-    *reinterpret_cast<uint64_t*>(n + 0x28) = 0;       // aebd — right
-    *reinterpret_cast<int32_t*>(n + 0x30)  = 0;       // aec1 — AVL balance (dword)
+    n->parent  = parent;    // aeb5
+    n->left    = nullptr;   // aeb9 — left
+    n->right   = nullptr;   // aebd — right
+    n->balance = 0;         // aec1 — AVL balance and height (one dword)
+    n->height  = 0;
 
-    return mem;
+    return n;
 }
 
 // ============================================================================
 // 0x14002ab60 — ordered insert-if-absent + AVL retrace
 // ============================================================================
-// __fastcall int64_t* MarketWork_BstInsert(int64_t* tree [RCX], int64_t* out [RDX],
-//                                          int64_t* src [R8])
+// __fastcall Node** MarketWork_BstInsert(Set* tree [RCX], Node** out [RDX], Claim* src [R8])
 //
 // Disassembly walk (0x14002ab60 - 0x14002ac3d):
 //   ab75  MOV RDI,[RCX]              ; cur = tree->root
@@ -158,74 +158,79 @@ extern "C" void* MarketBst_ae50(void* unused, int64_t* src, void* parent) {
 // Note both CheckPtr calls are unconditional in retail and are made on the tree node
 // itself (its first 8 bytes ARE the InternalBasePtr) and on the source key.  They are
 // kept; CheckPtr is a no-op in retail but the call is part of the shape.
-extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
+// (The Set container is two raw fields of MarketWork: `tree` is the root field and the
+// count is the int32 8 bytes on: LEFT.)
+extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
+                                                  MarketWork::ClaimNode** out,
+                                                  MarketWork::Claim* src) {
 
-    uintptr_t cur = static_cast<uintptr_t>(tree[0]);   // tree->root
+    MarketWork::ClaimNode* cur = *tree;   // tree->root
 
-    if (cur == 0) {
-        void* node = MarketBst_ae50(tree, src, nullptr);   // ab86: parent = NULL
-        tree[0] = reinterpret_cast<int64_t>(node);         // ab91
-        out[0]  = reinterpret_cast<int64_t>(node);         // ab94
-        *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(tree) + 8) += 1;  // ac21
+    if (cur == nullptr) {
+        MarketWork::ClaimNode* node = MarketBst_ae50(tree, src, nullptr);   // ab86: parent = NULL
+        *tree = node;                                      // ab91
+        *out  = node;                                      // ab94
+        *reinterpret_cast<int32_t*>(tree + 1) += 1;        // ac21
         return out;
     }
 
     // `retraceSlot` is retail's [RSP+0x30]: a stack local holding the node we last
     // descended to.  0x140025920 takes its ADDRESS (and may write through it), so it
     // has to be a real local, not a value.
-    int64_t retraceSlot = static_cast<int64_t>(cur);       // ab9c
+    MarketWork::ClaimNode* retraceSlot = cur;              // ab9c
 
-    void* newNode = nullptr;
+    MarketWork::ClaimNode* newNode = nullptr;
 
     for (;;) {
-        retraceSlot = static_cast<int64_t>(cur);
+        retraceSlot = cur;
 
-        uint64_t curKey = *reinterpret_cast<uint64_t*>(cur);           // abaa
-        uint64_t srcKey = *reinterpret_cast<uint64_t*>(src);           // abad (CMP [RBX],RAX)
+        CitizenComponent* curKey = cur->element.citizen;   // abaa
+        CitizenComponent* srcKey = src->citizen;           // abad (CMP [RBX],RAX)
 
-        if (srcKey < curKey) {                                         // abb0 JC — UNSIGNED
-            uintptr_t left = *reinterpret_cast<uintptr_t*>(cur + 0x20);   // abd6
-            if (left == 0) {
-                newNode = MarketBst_ae50(reinterpret_cast<void*>(cur), src, reinterpret_cast<void*>(cur));
-                *reinterpret_cast<void**>(cur + 0x20) = newNode;        // ac0a
+        if (srcKey < curKey) {                             // abb0 JC — UNSIGNED
+            MarketWork::ClaimNode* left = cur->left;       // abd6
+            if (left == nullptr) {
+                newNode = MarketBst_ae50(cur, src, cur);
+                cur->left = newNode;                       // ac0a
                 break;
             }
             cur = left;
             continue;
         }
 
-        srcKey = *reinterpret_cast<uint64_t*>(src);                    // abbb — re-read AFTER
-                                                                       // CheckPtr, which may
-                                                                       // have resolved the ref
-        curKey = *reinterpret_cast<uint64_t*>(cur);                    // abbe (CMP [RDI],RAX)
+        srcKey = src->citizen;                             // abbb — re-read AFTER
+                                                           // CheckPtr, which may
+                                                           // have resolved the ref
+        curKey = cur->element.citizen;                     // abbe (CMP [RDI],RAX)
 
-        if (curKey >= srcKey) {                                        // abc1 JNC — key present
-            out[0] = static_cast<int64_t>(cur);                        // abfa
-            return out;                                                // no retrace, no count++
+        if (curKey >= srcKey) {                            // abc1 JNC — key present
+            *out = cur;                                    // abfa
+            return out;                                    // no retrace, no count++
         }
 
-        uintptr_t right = *reinterpret_cast<uintptr_t*>(cur + 0x28);   // abc3
-        if (right == 0) {
-            newNode = MarketBst_ae50(reinterpret_cast<void*>(cur), src, reinterpret_cast<void*>(cur));
-            *reinterpret_cast<void**>(cur + 0x28) = newNode;           // abf4
+        MarketWork::ClaimNode* right = cur->right;         // abc3
+        if (right == nullptr) {
+            newNode = MarketBst_ae50(cur, src, cur);
+            cur->right = newNode;                          // abf4
             break;
         }
         cur = right;
     }
 
-    // ac0e — AVL retrace/rebalance starting from the PARENT (retraceSlot), not the new node.
-    PlayerTrade_Retrace_25920(tree, &retraceSlot);
+    // ac0e — AVL retrace/rebalance starting from the PARENT (retraceSlot), not the new
+    // node. (The retrace takes the header and the cursor slot as int64_t*: LEFT.)
+    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&retraceSlot));
 
-    out[0] = reinterpret_cast<int64_t>(newNode);                       // ac1e
-    *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(tree) + 8) += 1;  // ac21
-    return out;                                                        // ac2f
+    *out = newNode;                                        // ac1e
+    *reinterpret_cast<int32_t*>(tree + 1) += 1;            // ac21
+    return out;                                            // ac2f
 }
 
 // ============================================================================
 // 0x14002a9f0 — insert (key, cloned payload array)
 // ============================================================================
-// __fastcall int64_t* MarketWork_BstInsertWithData(int64_t* tree [RCX], int64_t* out [RDX],
-//                                                  int64_t* key [R8], int64_t* vec [R9])
+// __fastcall Node** MarketWork_BstInsertWithData(Set* tree [RCX], Node** out [RDX],
+//                                                InternalPtr* key [R8], Array* vec [R9])
 //
 // Ghidra's `MarketWork_sub_a9f0(longlong*, undefined8*, undefined8*, longlong*)` is the
 // correct arity; the `MW_MarketBST_InsertData_t` typedef in marketwork.cpp is not.
@@ -234,7 +239,7 @@ extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
 //   [R11-0x20] == [RSP+0x28]  tmp.key
 //   [R11-0x18] == [RSP+0x30]  tmp.array.ptr
 //   [R11-0x10] == [RSP+0x38]  tmp.array.count/cap
-// i.e. a temporary {key, array} pair laid out EXACTLY like a node's first 0x18 bytes,
+// i.e. a temporary Claim {key, array} laid out EXACTLY like a node's first 0x18 bytes,
 // which is why it can be handed straight to 0x14002ab60 -> 0x14002ae50.
 //
 //   aa10  MOV [R11-0x20],RSI        ; tmp.key = 0
@@ -253,22 +258,27 @@ extern "C" int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src) {
 // by 0x14002ae50 from the temp into the node — after which the temp's buffer is freed.
 // Wasteful, and faithful; do not "optimise" it away, the temp's buffer is a distinct
 // allocation from the node's and freeing it here is what keeps the node's copy valid.
-extern "C" int64_t* MarketBst_a9f0(int64_t* tree, int64_t* out, int64_t* key, int64_t* vec) {
+extern "C" MarketWork::ClaimNode** MarketBst_a9f0(MarketWork::ClaimNode** tree,
+                                                  MarketWork::ClaimNode** out,
+                                                  CitizenComponent** key,
+                                                  MarketWork::CarryList* vec) {
 
-    // tmp[0] = key, tmp[1] = array.ptr, tmp[2] = array.count(int32)+cap(int32)
-    int64_t tmp[3];
-    tmp[0] = 0;                                     // aa10
-    tmp[0] = *reinterpret_cast<int64_t*>(key);      // aa14/aa17 — raw 8-byte copy
-    tmp[1] = 0;                                     // aa23
-    tmp[2] = 0;                                     // aa27 — 8-byte zero covers count AND cap
+    MarketWork::Claim tmp;
+    tmp.citizen = nullptr;                          // aa10
+    tmp.citizen = *key;                             // aa14/aa17 — raw 8-byte copy
+    tmp.carries.data = nullptr;                     // aa23
+    tmp.carries.count = 0;                          // aa27 — one 8-byte zero covers count
+    tmp.carries.capacity = 0;                       //        AND cap in retail
 
-    ActRm_VectorClone_d9d0(&tmp[1], vec); // aa32
+    // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&tmp.carries), reinterpret_cast<int64_t*>(vec)); // aa32
 
-    MarketBst_ab60(tree, out, &tmp[0]);             // aa43 (return value discarded here)
+    MarketBst_ab60(tree, out, &tmp);                // aa43 (return value discarded here)
 
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(tmp[1]));  // aa58 — free the temp buffer
-    tmp[1] = 0;                                     // aa5e
-    tmp[2] = 0;                                     // aa63
+    System::MemoryAllocator::MemFree(tmp.carries.data);  // aa58 — free the temp buffer
+    tmp.carries.data = nullptr;                     // aa5e
+    tmp.carries.count = 0;                          // aa63
+    tmp.carries.capacity = 0;
 
     return out;                                     // aa68
 }

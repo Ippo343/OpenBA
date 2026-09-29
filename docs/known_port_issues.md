@@ -289,6 +289,8 @@ in the code carries a comment.
 | 39 | `TownHall_InventorySortAsc` / `Desc` (`townhall_helpers.cpp`) | a stable insertion sort | 0x140015200 / 0x140015500 are an introsort: rows with equal keys may come out in another order | SUSPECTED (DLG-d; the tree's note, not re-read) |
 | 40 | `TitleDescToolTipUI::OnCreated` (`titledesctooltipui.cpp`) | takes "textTitle" / "textDesc" and the data source as found | 0x14007b730 narrows both texts with IsDerivedFrom (the id Ghidra labels LabelElement's, read through a mislabelled import) and the data source to UI::Element | CONFIRMED (DLG-d) |
 | 41 | `SpriteCaptureUI::OnElementEvent` (`ui_dialog_stub_factories.cpp`) | a no-op (PORT GAP): the capture button starts nothing, so OnUpdate's save arm is never reached | 0x140079620 (not ported) | CONFIRMED (DLG-d; the gap, not the body) |
+| 43 | the Work bodies' worker cap (Forester, GatherRawMaterials, HarvestArea, HarvestOrchard, Herbalist, Hunt, MarketWork, Pasture Execute) | call `WorkComponent_CalcMaxWorkers` (`tutorial_base.cpp`), a second port of 0x14012e5c0 that differs from the member `WorkComponent::CalcMaxWorkers` (which footprint component it reads, FloorComponent vs MapComponent, and its guards) | one body, 0x14012e5c0 | SUSPECTED (WORK-b; the two ports compared, retail not re-read; row 35 is the same pair seen from WORK-c's callers) |
+| 44 | `PastureWork::OnCancel` (`pasturework.cpp`) | tests the entity's description IsDerivedFrom AnimalDescription and returns when it is not; calls `ActHunt_NotifyEntityChanged` when bit 20 changed. Net: the tree never clears bit 20 of the AnimalComponent's flags | 0x1400f22c0 checks against ComponentEntity (cell 0x1401c5d70) and passes null on failure, finds the AnimalComponent with no null test, always clears bit 20 (`BTR`), and tests `(old ^ new) & 0xFFFF`, always 0 for bit 20, so it never notifies | CONFIRMED (WORK-b, disassembly read) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -369,6 +371,15 @@ stated condition.
   tests; StatusIconUI's EntityUI-pages test. CONFIRMED where the site quotes retail.
 - KEPT (DLG-d): `TitleDescToolTipUI::OnCreated`'s unbound-controller return and its null tests of
   the two texts (0x14007b730 has none).
+- KEPT (WORK-b): `HarvestArea::Execute` skips a cell whose occupant has no NaturalResourceComponent,
+  where retail 0x1400eccd0 reads its +0x20 unguarded (0x1400ed082), CONFIRMED; `HarvestArea::Cleanup`
+  breaks when a cancel does not drop the count, where retail 0x1400ed270 loops on `+0x50 > 0`
+  (0x1400ed2cb), CONFIRMED; the null-slot and null-entry skips of `PG_FindComp` /
+  `PG_FindRawMaterialDesc` and `CitizenBehavior::HasStorageFor` (`pickup_gate.cpp`, 0x14008d3c0 /
+  0x14012d990); PastureWork's guarded finder 0x1400012d0; `Pickup` slot 5's freed-self vptr test;
+  the GatherRawMaterials site-ctor guards; the HarvestOrchard ctor's orchard / array / slots guards;
+  `CitizenComp_StorageComponent_QueryCount`'s null test. SUSPECTED for the last five (retail not
+  re-read in B.4).
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -422,6 +433,12 @@ stated condition.
   0x14015f5a0); `fn_FindComponent_MeshInstance` finds the StatusIconComponent (cell 0x1401c7e08);
   Ghidra's `Entity_impl_a120` is StatusBarUI's status-icon handler 0x14007a120 and
   `ToolUI_helper_e100` is `UIDescription::AddControllers` 0x14012e100 (DLG-d).
+- Work (WORK-b): `Pickup::candidateList` is an `ExternalPtr<Profession>`, not a list; the
+  `citizenEntity` locals of `Pickup` slot 5 and the pickup gate hold a Profession; the finder
+  forwarders `WorkBase_FindComponent_2f90` ("MeshInstance") and `WorkBase_FindComponent_2ed0`
+  ("Position") find the StatusIconComponent and the InteractComponent; `WorkAct_HarvestAreaCtor_c1530`
+  is named for its caller. HarvestArea / HarvestOrchard / Herbalist `Cleanup` walks the LEFT child
+  (the tree's comments said "rightmost"; corrected in the converted files).
 
 ### 14g. Commit messages that state something nobody verified
 

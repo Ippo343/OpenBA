@@ -114,43 +114,32 @@
 
 namespace {
 
-// The 0x10-byte descriptor retail passes in RCX. Laid out to match the loads
-// listed in the header comment; count/capacity are 4-byte ints and MUST stay
-// 4-byte (retail writes both with MOV dword) -- narrowing or widening either
-// one desyncs the count/capacity pair and strands the buffer.
-struct ArrayDesc {
-    uint8_t* data;      // +0x00
-    int32_t  count;     // +0x08
-    int32_t  capacity;  // +0x0C
-};
-static_assert(sizeof(ArrayDesc) == 0x10, "ArrayDesc must be 0x10 bytes");
-static_assert(offsetof(ArrayDesc, data) == 0x00, "data at +0x00");
-static_assert(offsetof(ArrayDesc, count) == 0x08, "count at +0x08");
-static_assert(offsetof(ArrayDesc, capacity) == 0x0C, "capacity at +0x0C");
+// The 0x10-byte descriptor retail passes in RCX is MarketWork::DemandList: count and
+// capacity are 4-byte ints and MUST stay 4-byte (retail writes both with MOV dword).
+using ArrayDesc = MarketWork::DemandList;
+using Demand = MarketWork::Demand;
 
-constexpr int64_t kElemSize = 0x20;  // SHL RCX,0x5 / ADD RCX,0x20
-
-// Element copy as retail does it: eight dword moves, 0x00..0x1C.
-inline void CopyElement(uint8_t* dst, const uint8_t* src) {
-    uint32_t*       d = reinterpret_cast<uint32_t*>(dst);
-    const uint32_t* s = reinterpret_cast<const uint32_t*>(src);
-    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
-    d[4] = s[4]; d[5] = s[5]; d[6] = s[6]; d[7] = s[7];
+// Element copy as retail does it: eight dword moves, 0x00..0x1C (a whole-record copy).
+inline void CopyElement(Demand* dst, const Demand* src) {
+    *dst = *src;
 }
 
 // Default-init as retail does it: 28 bytes from +0x04, leaving +0x00..+0x03
-// untouched (see the header comment -- this asymmetry is intentional).
-inline void ClearElement(uint8_t* dst) {
-    *reinterpret_cast<uint64_t*>(dst + 0x04) = 0;
-    *reinterpret_cast<uint64_t*>(dst + 0x0c) = 0;
-    *reinterpret_cast<uint64_t*>(dst + 0x14) = 0;
-    *reinterpret_cast<uint32_t*>(dst + 0x1c) = 0;
+// untouched (see the header comment -- this asymmetry is intentional). Retail's three
+// qword stores and one dword store are the seven named fields, in address order.
+inline void ClearElement(Demand* dst) {
+    dst->inMarket = 0;
+    dst->inTransit = 0;
+    dst->inTown = 0;
+    dst->stockedFrac = 0.0f;
+    dst->satisfaction = 0.0f;
+    dst->stage4Scratch = 0;
+    dst->shortfall = 0;
 }
 
 }  // namespace
 
-extern "C" void MarketBst_afb0(int64_t* arrRaw, int32_t newCount) {
-    ArrayDesc* arr = reinterpret_cast<ArrayDesc*>(arrRaw);
+extern "C" void MarketBst_afb0(MarketWork::DemandList* arr, int32_t newCount) {
 
     // 14002afb8 / 14002afc2: nothing to do when the count is already right.
     // Note this is an exact-equality test, so a "resize" to the current count
@@ -158,7 +147,7 @@ extern "C" void MarketBst_afb0(int64_t* arrRaw, int32_t newCount) {
     const int32_t oldCount = arr->count;
     if (newCount == oldCount) return;
 
-    uint8_t* const oldData = arr->data;  // 14002afcf, saved before any realloc
+    Demand* const oldData = arr->data;  // 14002afcf, saved before any realloc
 
     arr->count = newCount;  // 14002afd2 -- MOV dword, written before the grow
 
@@ -170,7 +159,7 @@ extern "C" void MarketBst_afb0(int64_t* arrRaw, int32_t newCount) {
         // 14002aff3-14002b006: MemAlloc(capacity << 5, align 4). The shift runs
         // on the sign-extended 64-bit capacity, matching MOVSXD + SHL RCX,0x5.
         const int64_t bytes = static_cast<int64_t>(arr->capacity) << 5;
-        arr->data = static_cast<uint8_t*>(
+        arr->data = static_cast<Demand*>(
             System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(bytes), 4));
     }
 
@@ -185,10 +174,10 @@ extern "C" void MarketBst_afb0(int64_t* arrRaw, int32_t newCount) {
     int64_t i = (oldData == arr->data) ? static_cast<int64_t>(oldCount) : 0;
 
     for (; i < static_cast<int64_t>(newCount); ++i) {
-        uint8_t* dst = arr->data + i * kElemSize;
+        Demand* dst = arr->data + i;
         if (i < static_cast<int64_t>(oldCount)) {
             // 14002b213: carried over from the old buffer.
-            if (dst != nullptr) CopyElement(dst, oldData + i * kElemSize);
+            if (dst != nullptr) CopyElement(dst, oldData + i);
         } else {
             // 14002b250: brand-new element, default-constructed.
             if (dst != nullptr) ClearElement(dst);

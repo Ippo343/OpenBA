@@ -24,14 +24,20 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CitizenComponent.h"     // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 #include "Component/InteractDescription.h"  // ENDGAME B.3.9 D5: InteractDescription::TypeId()
+#include "Component/InteractComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
 // ============================================================
-//   0x140006270 Entity_FindComponent_Storage       WorkBase_FindComponent_6270
+//   0x140006270 Entity_FindComponent_Storage       ComponentEntity::FindComponent<StorageComponent>
 //   0x14012cf10 StorageComponent_QueryCount        CitizenComp_StorageComponent_QueryCount
-//   0x140115e60 CitizenAI_State_LongTermPlan       CitizenAI_State_LongTermPlan
-//   0x140002ed0 Entity_FindComponent_Position      WorkBase_FindComponent_2ed0
+//   0x140115e60 CitizenAI_State_LongTermPlan       CitizenComponent::LongTermPlan
+//   0x140002ed0 Entity_FindComponent_Interact      ComponentEntity::FindComponent<InteractComponent>
 //   0x140122be0 FindWalkablePosition               WorkImpl_WalkablePos_122be0
 //   0x140122b00 FindWalkablePosition (sub)         WorkImpl_WalkablePosRecursive_122b00
 //   0x1400bb490 Pathfinding_WalkTowards ctor       CitizenAI_Pathfinding_WalkTowards_bb490
@@ -39,9 +45,9 @@
 //     ⚠ This read 0x1400f8620 until 2026-08-15 — a DIFFERENT function entirely
 //     (WorkGrid_TryAssignWorkplace). It never fired before because nothing had ever
 //     CONSTRUCTED a LocationWork (see reference_registered_but_never_executed).
-//   0x1400f7100 ValidateEntity                     WorkBase_ValidateTask_f7100
+//   0x1400f7100 ValidateEntity                     Work::ValidateTask
 //   0x1400c5400 CancelAllWork                      WorkBase_TaskListCleanup_c5400
-//   0x140002e10 FindSubEntity                      AttendanceComponent_GetJobHostComponent
+//   0x140002e10 FindWorkPlace                      ComponentEntity::FindComponent<WorkPlaceComponent>
 //   0x14017214c g_fUVScale (.rdata, 1.0f)          kRdata_14017214c
 //
 // The Work BASE vtable is 0x140161a80, byte-verified in retail: LocationWork_Ctor
@@ -58,12 +64,11 @@ void LocationWork::Persist(void* stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create serializer (version=0)
-    alignas(8) uint8_t serializerBuf[24] = {0};
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // Create serializer (version=0) (Persist's stream is void* in Work.h: LEFT)
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Serialize InternalBasePtr at +0x48
-    reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
+    // Serialize InternalBasePtr at +0x48 (the member is raw storage, H5: LEFT)
+    reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(serializer);   // B.3.4 bridge
 
     // Validate: if _field48 is non-null, check IsDerivedFrom
     if (_field48 != nullptr) {
@@ -71,8 +76,6 @@ void LocationWork::Persist(void* stream) {
             _field48 = nullptr;
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 
@@ -82,75 +85,71 @@ void LocationWork::Persist(void* stream) {
 // Algorithm:
 // 1. If already has target (+0x48 != 0), return 1 (already assigned)
 // 2. Check citizen's storage — if carrying items, call LongTermPlan
-// 3. Find position component on workplace entity
+// 3. Find the InteractComponent on the workplace entity
 // 4. Get citizen's current position
 // 5. Find walkable position near workplace (main + sub-positions)
 // 6. If found, create WalkTowards action and assign work
 // 7. Store citizen ref at +0x48
 // ============================================================
-int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
-    uintptr_t* selfQ = (uintptr_t*)this;
+int LocationWork::Execute(void* citizenIBPArg, void* /*context*/) {
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenIBP = (CitizenComponent**)citizenIBPArg;
 
     // Step 1: Already has target?
-    if (selfQ[9] != 0) {  // field +0x48
+    if (_field48 != nullptr) {
         return 1;
     }
 
     // Step 2: Check citizen's storage — if carrying items, replan
-    uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
+    StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-    uintptr_t storageIBP = 0;
-    WorkBase_FindComponent_6270(*(uintptr_t*)(citizenEntity + 0x10), &storageIBP);
-
-    int itemCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>((void*)storageIBP));
+    // (0x14012cf10 takes the storage as an integer: LEFT)
+    int itemCount = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage));
     if (itemCount > 0) {
-        CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)citizenIBP));
+        (*citizenIBP)->LongTermPlan();
     }
 
-    // Step 3: Find position component on workplace entity (self+0x10)
-    uintptr_t posCompIBP = 0;
-    WorkBase_FindComponent_2ed0(selfQ[2], &posCompIBP);  // self->_field10
+    // Step 3: The InteractComponent of the workplace entity (self+0x10)
+    InteractComponent* interact = field_10->FindComponent<InteractComponent>();
 
-    // Step 4: Get citizen's current position
-    uintptr_t citEnt = *(uintptr_t*)citizenIBP;
+    // Step 4: Get citizen's current position: CharacterComponent (+0x278) ->
+    // ModelComponent (+0x68) -> the transform's translation
+    const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
 
-    uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
-
-    uintptr_t posObj = *(uintptr_t*)(aiComp + 0x68);
-
-    float srcX = *(float*)(posObj + 0x158);
-    float srcY = *(float*)(posObj + 0x15c);
-    float srcZ = *(float*)(posObj + 0x160);
+    float srcX = citizenPos.x;
+    float srcY = citizenPos.y;
+    float srcZ = citizenPos.z;
 
     // Step 5: Find walkable positions
-    // Get description from position component, check if RadiusDescription
-    void* descObj = *(void**)(posCompIBP + 0x18);
+    // Its description, as an InteractDescription
+    Description* descObj = interact->_description;
     int bestDist = 0x7fffffff;
 
     // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell, not the legacy
     // variable name "RadiusDesc").
     bool isDerivedRadius = Object::IsDerivedFromNullSafe(descObj, InteractDescription::TypeId());
-    void* radiusDesc = nullptr;
+    InteractDescription* interactDesc = nullptr;
     if (isDerivedRadius) {
-        radiusDesc = descObj;
+        interactDesc = static_cast<InteractDescription*>(descObj);
     }
 
     float bestPos[3] = {0.0f, 0.0f, 0.0f};
     float srcPosArr[3] = {srcX, srcY, srcZ};
 
-    // Check main position (via posComp + description offset +0x28)
+    // Check main position (the component and the description's use nodes, +0x28;
+    // 0x140122be0 / 0x140122b00 take them as integers: LEFT)
     uint8_t found = WorkImpl_WalkablePos_122be0(
-        posCompIBP, (uintptr_t)radiusDesc + 0x28,
+        reinterpret_cast<uintptr_t>(interact), reinterpret_cast<uintptr_t>(&interactDesc->_useNodes),
         srcPosArr, bestPos, &bestDist);
 
-    // Also check sub-positions
-    int subCount = *(int*)(posCompIBP + 0x30);
+    // Also check the parts' use locations
+    int subCount = interact->useLocationCount;
     if (subCount > 0) {
-        uintptr_t subArray = *(uintptr_t*)(posCompIBP + 0x28);
+        InteractComponent** subArray = interact->useLocations;
         for (int i = 0; i < subCount; i++) {
-            uintptr_t* subPtr = (uintptr_t*)(subArray + (uintptr_t)i * 8);
             uint8_t subFound = WorkImpl_WalkablePosRecursive_122b00(
-                *subPtr, 0, srcPosArr, bestPos, &bestDist);
+                reinterpret_cast<uintptr_t>(subArray[i]), 0, srcPosArr, bestPos, &bestDist);
             found = found | subFound;
         }
     }
@@ -160,40 +159,40 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
     }
 
     // Step 6: Create WalkTowards action and assign work
-    uintptr_t citizenRef = *(uintptr_t*)citizenIBP;
-    uintptr_t citizenIBPLocal = citizenRef;
+    CitizenComponent* citizenIBPLocal = *citizenIBP;
 
     // The Ghidra decompilation shows the last two params come from stack;
     // the pattern is: (citizenIBP, priority, position, 0, g_fUVScale, flag&0xffffff00)
+    // (0x1400bb490 takes the position as uint32_t*: LEFT)
     CitizenAI_Pathfinding_WalkTowards_bb490(
         &citizenIBPLocal,
-        (int)selfQ[4],          // priority from self+0x20
+        field_20,                // priority from self+0x20
         reinterpret_cast<uint32_t*>(bestPos),
         0,                       // flag1
         kRdata_14017214c,            // UV scale constant
         0);                      // flag2 (cleared upper bits)
 
-    int priority = (int)selfQ[4];
+    int priority = field_20;
 
     // Get work entity via vtable slot +0x50 (Slot10)
-    uintptr_t citEntPost = *(uintptr_t*)citizenIBP;
+    CitizenComponent* citEntPost = *citizenIBP;
 
-    uintptr_t workEntIBP[2] = {0};
-    uintptr_t* result = static_cast<uintptr_t*>(GetTarget(workEntIBP));
-    uintptr_t workEntity = *result;
+    Profession* workEntity = nullptr;
+    GetTarget(&workEntity);
 
     // Set citizen flags
-    *(uint32_t*)(citEntPost + 0x54) |= 4;
-    *(int32_t*)(citEntPost + 0x30) = priority;
-    *(uint32_t*)(citEntPost + 0xb0) = 0;
+    citEntPost->statusFlags |= 4;
+    citEntPost->field_0x30 = priority;
+    citEntPost->field_0xB0 = 0;
 
-    // If work entity matches citizen's home entity and priority >= 0, set owned flag
-    if (workEntity == *(uintptr_t*)(citEntPost + 0x1f0) && priority >= 0) {
-        *(uint32_t*)(citEntPost + 0x88) |= 0x20000;
+    // If the work's profession matches the citizen's (+0x1f0) and priority >= 0, set
+    // the owned flag
+    if (workEntity == citEntPost->profession && priority >= 0) {
+        citEntPost->happinessFlags |= 0x20000;
     }
 
     // Store citizen as target at +0x48
-    selfQ[9] = *(uintptr_t*)citizenIBP;
+    _field48 = *citizenIBP;
 
     return 2;
 }
@@ -201,45 +200,35 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/) {
 
 // ============================================================
 // LocationWork::Slot6 (0x1400ef850) — clear target, return false
-// Constructs null InternalBasePtr into +0x48.
+// Constructs null InternalBasePtr into +0x48 (a plain null store).
 // ============================================================
 int LocationWork::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
-    uintptr_t nullIBP = 0;
-    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    _field48 = (void*)nullIBP;
+    _field48 = nullptr;
     return false;
 }
 
 
 // ============================================================
 // LocationWork::Slot7 (0x1400ef820) — clear target, void return
-// Constructs null InternalBasePtr into +0x48.
+// Constructs null InternalBasePtr into +0x48 (a plain null store).
 // ============================================================
 int LocationWork::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
-    uintptr_t nullIBP = 0;
-    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    _field48 = (void*)nullIBP;
+    _field48 = nullptr;
     return 0;
 }
 
 
 // ============================================================
 // LocationWork::Slot8 (0x1400efaf0) — cancel single target's work
-// If target at +0x48 exists, navigates to its AI subsystem and
-// cancels all work items.
+// If the target at +0x48 exists, cancels its action list (CharacterComponent +0x48).
 // ============================================================
 int LocationWork::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    if (*(uintptr_t*)(selfAddr + 0x48) == 0) {
+    if (_field48 == nullptr) {
         return 0;
     }
 
-    // CheckPtr on the target entity at +0x48
-    uintptr_t targetEntity = *(uintptr_t*)(selfAddr + 0x48);
-
-    // Navigate to citizen AI component (+0x278) then cancel work (+0x48)
-    WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(targetEntity + 0x278) + 0x48));
+    CitizenComponent* targetEntity = _field48;
+    WorkBase_TaskListCleanup_c5400(&targetEntity->character->actions);
     return 0;
 }
 
@@ -251,21 +240,18 @@ int LocationWork::Cleanup() {
 // Returns true if valid (or no target).
 // ============================================================
 int LocationWork::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t targetIBP = *(uintptr_t*)(selfAddr + 0x48);
+    CitizenComponent* targetIBP = _field48;
 
-    if (targetIBP == 0) {
+    if (targetIBP == nullptr) {
         return true;  // No target — considered valid (nothing to invalidate)
     }
 
     // Validate the entity
-    bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, &targetIBP, nullptr);
+    bool stillValid = ValidateTask(nullptr, &targetIBP, nullptr);
 
     if (!stillValid) {
-        // Clear the target — construct null InternalBasePtr
-        uintptr_t nullIBP = 0;
-        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *(uintptr_t*)(selfAddr + 0x48) = nullIBP;
+        // Clear the target (a null InternalBasePtr)
+        _field48 = nullptr;
         return false;
     }
 
@@ -274,29 +260,13 @@ int LocationWork::Validate() {
 
 
 // ============================================================
-// LocationWork::Slot10 (0x1400efb40) — get work entity sub-object
-// Returns entity from self->_field10's sub-object at +0x48.
-// IDENTICAL to HuntWork/PastureWork Slot10.
+// LocationWork::Slot10 (0x1400efb40) — the entity's (+0x10) WorkPlaceComponent
+// (0x140002e10), its profession (+0x48) into the return slot (void* in Work.h's
+// slot: LEFT). IDENTICAL to HuntWork/PastureWork Slot10.
 // ============================================================
 void* LocationWork::GetTarget(void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    // CheckPtr on self+0x10
-    uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
-
-    // Find sub-entity via FUN_140002e10
-    uintptr_t subIBP[2] = {0};
-    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
-    // so the returned pointer is the out buffer itself.
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
-    void* result = subIBP;
-
-    // CheckPtr on the result
-
-    // Read +0x48 from the resolved entity and store in output
-    uintptr_t resolvedEntity = *(uintptr_t*)result;
-    *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
-
+    WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
+    *(Profession**)outPtr = workPlace->profession;
     return outPtr;
 }
 
@@ -318,8 +288,6 @@ void LocationWork::Slot12(int /*version*/) {}
 int LocationWork::GetPriority() {
     return _field48 != nullptr ? 1 : 0;
 }
-
-
 // ~LocationWork is defaulted: the LocationWork then Work stamps and `~Internal` are the
 // compiler's chain — all retail's 0x14002a850 does before the free.
 

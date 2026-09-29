@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include "Work/MarketWork.h"   // MarketWork::DemandList
 
 // __fastcall void MarketBst_afb0(ArrayDesc* arr [RCX], int newCount [EDX])
 //
@@ -21,4 +22,4 @@
 // Declared as int64_t* to match the retail signature Ghidra recovered
 // (undefined __fastcall MarketWork_helper_afb0(longlong*, int)); the true
 // return type is void (RAX is never set on purpose -- verified in disasm).
-extern "C" void MarketBst_afb0(int64_t* arr, int32_t newCount);
+extern "C" void MarketBst_afb0(MarketWork::DemandList* arr, int32_t newCount);

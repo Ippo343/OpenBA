@@ -46,6 +46,10 @@ public:
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080
 
+    // B4 WORK-b; body in Work/pickup_gate.cpp: the description's accept mask, else the
+    // entity's StorageComponent's.
+    int AcceptMask();                                                   // 0x14012d560
+
     StateController _controller;   // +0x28 the embedded controller (D6)
 };
 

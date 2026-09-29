@@ -79,13 +79,11 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // (0 = loading, non-zero = saving). Same idiom as decaldescription.cpp et al.
 // Retail re-reads it from memory at every use site; we do the same rather than
 // caching, because the read is what the original does.
-static inline bool SerIsLoading(void* serializer) {
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+static inline bool SerIsLoading(IO::Serializer* serializer) {
+    return static_cast<int>(serializer->GetDirection()) == 0;   // IO::Serializer::GetDirection, retail 0x180006210
 }
 
-// Payload element = 0x10 bytes: { ExternalPtr ref @+0x00, int32 value @+0x08 }.
-// Stride confirmed by `ADD RBX,0x10` at 14002b65b and `ADD RSI,0x10` at 14002b57b.
-static const int kPayloadStride = 0x10;
+using ClaimNode = MarketWork::ClaimNode;
 
 // ============================================================
 // 0x14002b5f0 — MarketBst_b5f0: serialize one payload dynamic array
@@ -94,70 +92,62 @@ static const int kPayloadStride = 0x10;
 // correct for once — 2 args, void return, confirmed: only RCX/RDX are read and RAX is
 // dead at RET 14002b673).
 //
-//   arr [RCX] : { void* ptr @+0x00, int32 count @+0x08, int32 cap @+0x0C }
+//   arr [RCX] : the Array<Carry> header { data @+0x00, int32 count @+0x08, int32 cap @+0x0C }
 //               (`MOV EAX,dword ptr [RCX+0x8]` at 14002b5fa reads the count as a DWORD)
 //   serializer [RDX]
 //
-// Wire format: int32 count, then `count` records of { ExternalPtr ref, int32 value }.
+// Wire format: int32 count, then `count` records of { ExternalPtr ref, int32 value }
+// (stride 0x10: `ADD RBX,0x10` at 14002b65b and `ADD RSI,0x10` at 14002b57b).
 // On LOAD the array is resized to the stored count BEFORE the element loop; on SAVE
 // the resize is skipped and the existing buffer is written out.
-void MarketBst_b5f0(int64_t* arr, void* serializer) {
+void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
 
     // 14002b5fa..b612: copy the count into a stack slot and serialize it in place.
     // The stack slot is what gets read back on load — the array's own count field is
     // NOT the serialize target; the resize below is what commits it.
-    int count = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(arr) + 0x08);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
+    int count = arr->count;
+    serializer->Serialize(count, nullptr);
 
-    // 14002b618..b628
+    // 14002b618..b628 (0x14000da70 takes the array header as int64_t*: LEFT)
     if (SerIsLoading(serializer)) {
-        ActRm_ArrayResize16_da70(arr, count);
+        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);
     }
 
     // 14002b62d..b662: element loop. Note retail reloads the buffer pointer AFTER the
     // resize (MOV RBX,qword ptr [RBX]) — reading it earlier would use the freed buffer.
-    uintptr_t p = static_cast<uintptr_t>(static_cast<uint64_t>(arr[0]));
+    MarketWork::Carry* p = arr->data;
     for (int i = 0; i < count; ++i) {
-        Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(p), serializer);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x08), nullptr);   // B.3.4 bridge
-        p += kPayloadStride;
+        Reimpl_ExternalPtr_Serialize_StringTable(&p->resource, serializer);
+        serializer->Serialize(p->count, nullptr);
+        ++p;
     }
 }
 
-// ------------------------------------------------------------
-// Node field accessors — byte offsets, verified above.
-// ------------------------------------------------------------
-static inline uintptr_t NodeKey(uintptr_t n)    { return *reinterpret_cast<uintptr_t*>(n + 0x00); }
-static inline uintptr_t NodeParent(uintptr_t n) { return *reinterpret_cast<uintptr_t*>(n + 0x18); }
-static inline uintptr_t NodeLeft(uintptr_t n)   { return *reinterpret_cast<uintptr_t*>(n + 0x20); }
-static inline uintptr_t NodeRight(uintptr_t n)  { return *reinterpret_cast<uintptr_t*>(n + 0x28); }
-
 // 14002b35a..b391 / b408..b43f / b463..b49a — three byte-identical copies of the node
 // constructor emitted by the compiler (empty-tree, right-child, left-child). Folded
-// into one helper here; the stores and their WIDTHS are exact:
-//   [n+0x00] = 0 (8 bytes) then = key (8 bytes)   -- retail really does write it twice
-//   [n+0x08] = 0 (8 bytes), [n+0x10] = 0 (8 bytes) -- the *8-byte* zero clears BOTH the
-//                                                     int32 count and the int32 cap.
-//                                                     Narrowing this to 4 bytes would
-//                                                     leave a stale capacity behind and
-//                                                     silently strand the array.
-//   ActRm_VectorClone_d9d0(n+0x08, srcArray)
-//   [n+0x18] = parent (8), [n+0x20] = 0 (8), [n+0x28] = 0 (8), [n+0x30] = 0 (4)
-// Returns 0 when MemAlloc fails — retail then links the NULL in anyway (see callers).
-static uintptr_t MarketBst_MakeNode(uintptr_t key, int64_t* srcArray, uintptr_t parent) {
+// into one helper here; the stores are exact (retail's merged stores are the named
+// fields in address order):
+//   key = 0 then = key        -- retail really does write it twice
+//   carries.data = 0, count = cap = 0 (one 8-byte zero in retail)
+//   ActRm_VectorClone_d9d0(&carries, srcArray)
+//   parent, left = 0, right = 0, balance + height = 0 (one dword)
+// Returns null when MemAlloc fails — retail then links the NULL in anyway (see callers).
+static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryList* srcArray, ClaimNode* parent) {
     // 14002b3ed: MOV EDX,0x8 / LEA ECX,[RDX+0x30] -> MemAlloc(size=0x38, align=8)
-    void* mem = System::MemoryAllocator::MemAlloc(0x38, 8);
-    if (mem == nullptr) return 0;
-    uintptr_t n = reinterpret_cast<uintptr_t>(mem);
-    *reinterpret_cast<uintptr_t*>(n + 0x00) = 0;
-    *reinterpret_cast<uintptr_t*>(n + 0x00) = key;
-    *reinterpret_cast<uintptr_t*>(n + 0x08) = 0;
-    *reinterpret_cast<uintptr_t*>(n + 0x10) = 0;   // 8-byte zero: count AND cap
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(n + 0x08), srcArray);
-    *reinterpret_cast<uintptr_t*>(n + 0x18) = parent;
-    *reinterpret_cast<uintptr_t*>(n + 0x20) = 0;
-    *reinterpret_cast<uintptr_t*>(n + 0x28) = 0;
-    *reinterpret_cast<int32_t*>(n + 0x30)   = 0;
+    ClaimNode* n = static_cast<ClaimNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    if (n == nullptr) return nullptr;
+    n->element.citizen = nullptr;
+    n->element.citizen = key;
+    n->element.carries.data = nullptr;
+    n->element.carries.count = 0;      // with capacity: one 8-byte zero
+    n->element.carries.capacity = 0;
+    // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
+    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));
+    n->parent  = parent;
+    n->left    = nullptr;
+    n->right   = nullptr;
+    n->balance = 0;
+    n->height  = 0;
     return n;
 }
 
@@ -169,15 +159,17 @@ static uintptr_t MarketBst_MakeNode(uintptr_t key, int64_t* srcArray, uintptr_t 
 // genuinely 2 (R8/R9 are only ever used as scratch). This is NOT one of the family's
 // under-counted prototypes — 0x14002a9f0 is (it takes 4).
 //
-//   tree [RCX] : { node* root @+0x00, int32 count @+0x08 }  == MarketWork+0x48
+//   tree [RCX] : the Set { node* root @+0x00, int32 count @+0x08 }  == MarketWork+0x48
+//                (the container is two raw fields: the count is reached from the root
+//                field's address: LEFT)
 //   serializer [RDX]
-void MarketBst_b290(int64_t* tree, void* serializer) {
+void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
 
-    uintptr_t hdr = reinterpret_cast<uintptr_t>(tree);
+    int32_t* const treeCount = reinterpret_cast<int32_t*>(tree + 1);
 
     // 14002b2b0..b2c0: node count in/out.
-    int nodeCount = *reinterpret_cast<int32_t*>(hdr + 0x08);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&nodeCount), nullptr);   // B.3.4 bridge
+    int nodeCount = *treeCount;
+    serializer->Serialize(nodeCount, nullptr);
 
     if (SerIsLoading(serializer)) {
         // ---------------- LOAD: rebuild the tree, node by node ----------------
@@ -187,62 +179,63 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
         // omitted behaviour.
         for (int i = 0; i < nodeCount; ++i) {
             // 14002b2f1..b2f9: key + payload header cleared every iteration (3 qwords).
-            uintptr_t key = 0;
-            int64_t   payload[2] = { 0, 0 };   // { ptr, count|cap } — 16 bytes, the exact
-                                               // size ActRm_VectorClone_d9d0 reads.
+            CitizenComponent* key = nullptr;
+            MarketWork::CarryList payload = { nullptr, 0, 0 };   // 16 bytes, the exact
+                                                                 // size ActRm_VectorClone_d9d0 reads.
 
             // 14002b2fd..b329: read the key, then drop it unless it derives from the
             // expected type. Retail overwrites the key with 0 on a type mismatch and
             // still inserts the node — a null-keyed node, not a skipped one.
-            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (key != 0 && !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
-                key = 0;
+            // (InternalBasePtr::Serialize on the typed slot: the tree's InternalPtr is
+            // the bare pointer; the slot is serialized through its base: LEFT.)
+            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);
+            if (key != nullptr && !Object::IsDerivedFromNullSafe(key, CitizenComponent::TypeId())) {
+                key = nullptr;
             }
 
             // 14002b334: the per-node payload block.
-            MarketBst_b5f0(payload, serializer);
+            MarketBst_b5f0(&payload, serializer);
 
-            uintptr_t root = static_cast<uintptr_t>(static_cast<uint64_t>(tree[0]));
-            if (root == 0) {
+            ClaimNode* root = *tree;
+            if (root == nullptr) {
                 // 14002b341..b397: empty tree. NOTE the faithful oddity — when MemAlloc
                 // fails retail stores the NULL straight into the root (MOV [R14],RBX
                 // with RBX=0 at 14002b394) and still bumps the count. No retrace here.
-                tree[0] = static_cast<int64_t>(MarketBst_MakeNode(key, payload, 0));
-                *reinterpret_cast<int32_t*>(hdr + 0x08) += 1;   // 14002b4ad
+                *tree = MarketBst_MakeNode(key, &payload, nullptr);
+                *treeCount += 1;   // 14002b4ad
             } else {
                 // 14002b39c..b4ad: unsigned-key descent, insert-if-absent, then retrace.
-                uintptr_t cur = root;
+                ClaimNode* cur = root;
                 bool inserted = false;
                 for (;;) {
                     // 14002b3a3: CheckPtr on the CURRENT NODE (the node pointer itself,
                     // which doubles as the address of its key field).
                     // 14002b3ac/b3b0: CMP [RBP-0x20],RAX / JC -> unsigned "key < node->key".
-                    if (key < NodeKey(cur)) {
-                        uintptr_t left = NodeLeft(cur);
-                        if (left != 0) { cur = left; continue; }
+                    if (key < cur->element.citizen) {
+                        ClaimNode* left = cur->left;
+                        if (left != nullptr) { cur = left; continue; }
                         // 14002b448..b49d: link a new LEFT child (null on alloc failure).
-                        *reinterpret_cast<uintptr_t*>(cur + 0x20) =
-                            MarketBst_MakeNode(key, payload, cur);
+                        cur->left = MarketBst_MakeNode(key, &payload, cur);
                         inserted = true;
                         break;
                     }
                     // 14002b3b2: CheckPtr on the KEY slot this time (&local key), not the node.
                     // 14002b3c0/b3c3: JNC when node->key >= key -> duplicate, nothing to do.
-                    if (NodeKey(cur) >= key) break;
-                    uintptr_t right = NodeRight(cur);
-                    if (right != 0) { cur = right; continue; }
+                    if (cur->element.citizen >= key) break;
+                    ClaimNode* right = cur->right;
+                    if (right != nullptr) { cur = right; continue; }
                     // 14002b3ed..b442: link a new RIGHT child.
-                    *reinterpret_cast<uintptr_t*>(cur + 0x28) =
-                        MarketBst_MakeNode(key, payload, cur);
+                    cur->right = MarketBst_MakeNode(key, &payload, cur);
                     inserted = true;
                     break;
                 }
                 if (inserted) {
                     // 14002b4a1: retrace from the PARENT slot (RBP+0x48 still holds the
-                    // node we linked under), NOT from the new child.
-                    int64_t parentSlot = static_cast<int64_t>(cur);
-                    PlayerTrade_Retrace_25920(tree, &parentSlot);
-                    *reinterpret_cast<int32_t*>(hdr + 0x08) += 1;   // 14002b4ad
+                    // node we linked under), NOT from the new child. (The retrace takes
+                    // the header and the cursor slot as int64_t*: LEFT.)
+                    ClaimNode* parentSlot = cur;
+                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&parentSlot));
+                    *treeCount += 1;   // 14002b4ad
                 }
                 // Duplicate key falls through to 14002b4b1 WITHOUT bumping the count and
                 // without taking ownership of the payload — it is freed just below.
@@ -251,60 +244,60 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // 14002b4b1..b4bf: the loaded payload buffer is always freed here. On the
             // insert paths the node owns a CLONE (d9d0), so this frees the temporary;
             // on the duplicate path it drops the record entirely. Both zero stores are
-            // 8 bytes wide.
-            System::MemoryAllocator::MemFree(reinterpret_cast<void*>(static_cast<uintptr_t>(
-                static_cast<uint64_t>(payload[0]))));
-            payload[0] = 0;
-            payload[1] = 0;
+            // 8 bytes wide (the three named fields).
+            System::MemoryAllocator::MemFree(payload.data);
+            payload.data = nullptr;
+            payload.count = 0;
+            payload.capacity = 0;
         }
     } else {
         // ---------------- SAVE: in-order walk, write each node ----------------
         // 14002b4d5..b5cd.
-        uintptr_t node = static_cast<uintptr_t>(static_cast<uint64_t>(tree[0]));
-        if (node == 0) return;
-        while (NodeLeft(node) != 0) node = NodeLeft(node);   // 14002b4e1: leftmost
+        ClaimNode* node = *tree;
+        if (node == nullptr) return;
+        while (node->left != nullptr) node = node->left;   // 14002b4e1: leftmost
 
-        while (node != 0) {
+        while (node != nullptr) {
             // 14002b506..b524: write the key, and null it out in memory if it no longer
             // derives from the expected type. This MUTATES the live tree on save —
             // faithful, and deliberate in retail (it is how stale refs get culled).
-            reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            uintptr_t key = NodeKey(node);
-            if (key != 0 && !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
-                *reinterpret_cast<uintptr_t*>(node + 0x00) = 0;
+            reinterpret_cast<Object::InternalBasePtr*>(&node->element.citizen)->Serialize(*serializer);
+            CitizenComponent* key = node->element.citizen;
+            if (key != nullptr && !Object::IsDerivedFromNullSafe(key, CitizenComponent::TypeId())) {
+                node->element.citizen = nullptr;
             }
 
             // 14002b527..b582: the payload block, written INLINE rather than by calling
             // 0x14002b5f0 — same wire format, the compiler just duplicated the body.
-            int count = *reinterpret_cast<int32_t*>(node + 0x10);
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
+            int count = node->element.carries.count;
+            serializer->Serialize(count, nullptr);
             if (SerIsLoading(serializer)) {
                 // 14002b540..b54c. Dead in this arm (we only get here when NOT loading),
                 // but present in retail, so it is kept rather than "cleaned up".
-                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(node + 0x08), count);
+                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);
             }
-            uintptr_t p = *reinterpret_cast<uintptr_t*>(node + 0x08);
+            MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {
-                Reimpl_ExternalPtr_Serialize_StringTable(reinterpret_cast<void*>(p), serializer);
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x08), nullptr);   // B.3.4 bridge
-                p += kPayloadStride;
+                Reimpl_ExternalPtr_Serialize_StringTable(&p->resource, serializer);
+                serializer->Serialize(p->count, nullptr);
+                ++p;
             }
 
             // 14002b584..b5cd: in-order successor.
-            uintptr_t right = NodeRight(node);
-            if (right != 0) {
+            ClaimNode* right = node->right;
+            if (right != nullptr) {
                 node = right;
-                while (NodeLeft(node) != 0) node = NodeLeft(node);
+                while (node->left != nullptr) node = node->left;
             } else {
-                uintptr_t parent = NodeParent(node);
-                if (parent != 0 && NodeLeft(parent) == node) {
+                ClaimNode* parent = node->parent;
+                if (parent != nullptr && parent->left == node) {
                     node = parent;                       // 14002b5aa
                 } else {
-                    while (parent != 0 && NodeRight(parent) == node) {
+                    while (parent != nullptr && parent->right == node) {
                         node = parent;                   // 14002b5ba
-                        parent = NodeParent(parent);
+                        parent = parent->parent;
                     }
-                    node = NodeParent(node);             // 14002b5c6
+                    node = node->parent;                 // 14002b5c6
                 }
             }
         }

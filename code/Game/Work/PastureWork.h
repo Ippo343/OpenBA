@@ -28,6 +28,9 @@
 #include <cstddef>
 #include "Work/AutoPickupWork.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Set<T>::Node
+
+class CitizenComponent;
 
 
 class PastureWork final : public AutoPickupWork {
@@ -49,8 +52,11 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- PastureWork fields (+0x48) ---
-    void*    _field48;           // +0x48: zeroed
-    uint32_t _field50;           // +0x50: zeroed
+    // +0x48: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
+    // Cleanup 0x1400f2b90 reads the element's +0x278). The container stays raw (H5).
+    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
+    AssignmentNode* _field48;    // +0x48: zeroed
+    int32_t  _field50;           // +0x50: assigned count (0x140029860 `CMP [RCX+0x50],EAX; SETG`)
     uint8_t  _pad54[4];          // +0x54: padding
 };
 

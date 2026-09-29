@@ -33,11 +33,24 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/RawMaterialComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
+#include "Game/WorkScheduler.h"
+#include "Game/ProfessionList.h"
+#include "collection/Collection.h"
 
 
 // ============================================================
 // Sub-functions, called by name (B3R): 0x140018020 Reimpl_ExternalPtr_Serialize_StringTable,
-// 0x1400f7100 WorkBase_ValidateTask_f7100, 0x1400c5400 WorkBase_TaskListCleanup_c5400.
+// 0x1400f7100 Work::ValidateTask, 0x1400c5400 WorkBase_TaskListCleanup_c5400.
 // ============================================================
 
 
@@ -46,21 +59,21 @@
 // Pattern: Work_Serialize + Serializer(v2)
 //   + Serializer::Serialize(status at +0x48)
 //   + InternalBasePtr::Serialize(citizenIBP at +0x50) + IsDerivedFrom validate
-//   + if version > 0: ArraySerialize(candidateList at +0x58)
+//   + if version > 0: the ExternalPtr<Profession> at +0x58 (0x140018020)
 // ============================================================
 void Pickup::Persist(void* stream) {
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create serializer (version=2)
-    alignas(8) uint8_t serializerBuf[24] = {0};
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
+    // Create serializer (version=2) (Persist's stream is void* in Work.h: LEFT)
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 2);
 
-    // Serialize uint32 status at +0x48
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&status), nullptr);   // B.3.4 bridge
+    // Serialize the int status at +0x48
+    serializer.Serialize(status, nullptr);
 
-    // Serialize InternalBasePtr at +0x50
-    reinterpret_cast<Object::InternalBasePtr*>(&citizenIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
+    // Serialize InternalBasePtr at +0x50 (the typed slot serialized through its base:
+    // LEFT)
+    reinterpret_cast<Object::InternalBasePtr*>(&citizenIBP)->Serialize(serializer);
 
     // Validate the deserialized ptr against Pickup type
     if (citizenIBP != nullptr) {
@@ -71,13 +84,11 @@ void Pickup::Persist(void* stream) {
         }
     }
 
-    // Version >= 1: serialize candidate list at +0x58
-    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    // Version >= 1: serialize the ExternalPtr at +0x58
+    int version = serializer.GetVersion();
     if (version > 0) {
-        Reimpl_ExternalPtr_Serialize_StringTable(&candidateList, serializerBuf);
+        Reimpl_ExternalPtr_Serialize_StringTable(&candidateList, &serializer);
     }
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 
@@ -120,7 +131,7 @@ void Pickup::Persist(void* stream) {
 //   +0x00 int   cell        (pile cell index)
 //   +0x04 int   accessCell  (walkable cell the citizen stands on; 0x14009ccf0)
 //   +0x08 int   distance    (0x140008830) <- the sort key used by 0x14002c070
-//   +0x0c int   typeId      (resource type id; BST key into gw+0x118)
+//   +0x0c int   typeId      (resource type id; BST key into the WorkScheduler)
 //   +0x10 IBP   entity      (the pile entity)
 //   +0x18 IBP   rawMat      (its RawMaterialComponent)
 // ============================================================
@@ -130,10 +141,22 @@ struct PickupCandidate {
     int32_t accessCell;  // +0x04
     int32_t distance;    // +0x08
     int32_t typeId;      // +0x0c
-    void*   entity;      // +0x10
-    void*   rawMat;      // +0x18
+    ComponentEntity*      entity;   // +0x10
+    RawMaterialComponent* rawMat;   // +0x18
 };
 static_assert(sizeof(PickupCandidate) == 0x20, "PickupCandidate must be 32 bytes");
+
+// One element of the WorkScheduler's per-type work trees (+0x30, 0x10 stride): the
+// work type id and the posted Work (node 0x30: left +0x18, right +0x20, read by the
+// descent at 0x1400f33b0).
+struct PickupWorkEntry {
+    int32_t typeId;      // +0x00 the key
+    int32_t _pad04;
+    Work*   work;        // +0x08
+};
+using PickupWorkNode = Collection::Set<PickupWorkEntry>::Node;
+static_assert(offsetof(PickupWorkNode, left) == 0x18, "work tree node left @ +0x18");
+static_assert(offsetof(PickupWorkNode, right) == 0x20, "work tree node right @ +0x20");
 
 // 0x14002c070 is MSVC's inlined std::sort over these 32-byte records, ordering
 // ascending on the int32 at +0x08 (distance): median-of-3 introsort with an
@@ -152,12 +175,13 @@ static void Pickup_SortByDistance(PickupCandidate* buf, int count) {
 // ---- sub-callees of the Execute port, called by name (B3R) ----
 //   0x1400223c0 ActRm_FindComponent_223c0      0x140006270 WorkBase_FindComponent_6270
 //   0x14012cf10 StorageComponent_QueryCount    0x140115e60 CitizenAI_State_LongTermPlan
-//   0x14008d3c0 PickupGate_TownWants_8d3c0     0x14009ccf0 WorkGrid_FindCell_9ccf0
+//   0x14008d3c0 CitizenBehavior::HasStorageFor 0x14009ccf0 WorkGrid_FindCell_9ccf0
 //   0x1400a00f0 WorkBase_ValidateCell_a00f0    0x1400f6ef0 WorkImpl_BuildStructureStep_6ef0
 //   0x14008d590 Pf_PickBestDropTarget_8d590    0x140008830 WorkBase_CalcDistance_8830
 //   0x14012cd80 Pf_StorageCanAccept_cd80       0x140003050 WorkBase_FindComponent_3050
 //   0x14009f3e0 Reimpl_MapGetTerrainPos        0x1400c0ad0 WorkAct_PerformWorkCtor9_c0ad0
 //   slots 0x140152b60 / 0x140152b68: System::MemoryAllocator::MemAlloc / MemFree
+// (the finders are ComponentEntity::FindComponent<T>())
 
 // DAT_140172114 = 0x3f000000 = 0.5f.
 static float Pickup_CellCenterHalf() {
@@ -178,7 +202,7 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
     if (newCount > capacity) {
         capacity = newCount;
         if (oldCount != 0) capacity = newCount * 3;
-        buf = reinterpret_cast<PickupCandidate*>(
+        buf = static_cast<PickupCandidate*>(
             System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(capacity) * 0x20, 8));
     }
     if (!buf) { buf = oldBuf; count = oldCount; return; }  // alloc failed -> no-op
@@ -189,13 +213,30 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
     if (oldBuf != buf && oldBuf) System::MemoryAllocator::MemFree(oldBuf);
 }
 
+// The per-type Pickup work in the WorkScheduler's first tree (+0x30), by type id
+// (the descent retail inlines twice). (WorkSchedulerTree::root is void* in
+// WorkScheduler.h: LEFT.)
+static Work* Pickup_FindTypeWork(WorkScheduler* scheduler, int typeId) {
+    PickupWorkNode* node = (PickupWorkNode*)scheduler->trees[0].root;
+    while (node != nullptr) {
+        if (typeId < node->element.typeId) {
+            node = node->left;
+        } else if (typeId > node->element.typeId) {
+            node = node->right;
+        } else {
+            return node->element.work;
+        }
+    }
+    return nullptr;
+}
+
 // ============================================================
 // Pickup::Execute [4] 0x1400f2f00. (It used to be a dispatcher that first
 // tried `ResolveAddr(Exe, 0x1400f2f00)` -- this very slot, never registered, so
 // always null -- and fell back to this body; CALLER_SURFACE section 9 defect 3.)
 // Retail reads RCX/RDX/R8 only.
 // ============================================================
-int Pickup::Execute(void* citizenIBP, void* time) {
+int Pickup::Execute(void* citizenSlot, void* time) {
     // 0x1400f2f37: CMP [RCX+0x48],0 -> anything but "unassigned" means no work.
     if (status != 0) return 1;
 
@@ -204,60 +245,57 @@ int Pickup::Execute(void* citizenIBP, void* time) {
         return 1;
     }
 
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenRef = (CitizenComponent**)citizenSlot;
+
     const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
     // 0x1401c6be0 (Pickup's own cell) is UNREGISTERED -- Pickup_Tid's raw-.rdata read
     // always failed and fell through to this same Pickup::TypeId() call, so calling
     // it directly is not a behaviour change (ENDGAME B.3.9 D5 note).
     const uint32_t tidPickup     = Pickup::TypeId();
 
-    const uintptr_t S = reinterpret_cast<uintptr_t>(this);
-    void* targetIBP = reinterpret_cast<void*>(S + 0x10);  // RSI: Work's target entity IBP
-
     // --- pile's RawMaterialComponent + its RawMaterialDescription ---------------
-    void* rawMatIBP = nullptr;
-    ActRm_FindComponent_223c0(*reinterpret_cast<int64_t*>(targetIBP), &rawMatIBP);
-    void* descRaw = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(rawMatIBP) + 0x18);
-    void* desc = Object::IsDerivedFromNullSafe(descRaw, tidRawMatDesc) ? descRaw : nullptr;
+    RawMaterialComponent* rawMatIBP = field_10->FindComponent<RawMaterialComponent>();
+    Description* descRaw = rawMatIBP->_description;
+    RawMaterialDescription* desc = Object::IsDerivedFromNullSafe(descRaw, tidRawMatDesc)
+        ? static_cast<RawMaterialDescription*>(descRaw) : nullptr;
 
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    void* townMgr = *reinterpret_cast<void**>(gw + 0xf0);
-    int*  grid    = *reinterpret_cast<int**>(gw + 0xf8);
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    CitizenBehavior* townMgr = gw->m_citizenList;
+    Map* map = gw->m_game;
+    // The map helpers (0x14009ccf0, 0x1400a00f0, 0x140008830) take the map as int*: LEFT.
+    int* grid = reinterpret_cast<int*>(map);
 
     // --- citizen's free carry capacity -----------------------------------------
-    uintptr_t citizen = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    void* storageIBP = nullptr;
-    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(citizen + 0x10), &storageIBP);
-    int cap = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(storageIBP) + 0x38);
+    CitizenComponent* citizen = *citizenRef;
+    StorageComponent* storageIBP = citizen->_entity->FindComponent<StorageComponent>();
+    int cap = storageIBP->capacity;
+    // (0x14012cf10 takes the storage as an integer: LEFT)
     int freeCap = cap - static_cast<int>(CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storageIBP)));
 
     // desc+0x48 = per-unit size, rawMat+0x28 = amount in the pile. (The original
     // dereferences desc unguarded here; kept faithful -- desc is non-null whenever
     // 0x1400223c0 found a RawMaterialComponent, which is the only way to get here.)
-    const int needed = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x48) *
-                       *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
+    const int needed = desc->_weight * rawMatIBP->quantity;
     if (freeCap < needed) {
-        CitizenAI_State_LongTermPlan(*reinterpret_cast<int64_t*>(citizenIBP));
+        (*citizenRef)->LongTermPlan();
         return 2;  // citizen is full -> re-plan
     }
 
     // --- citizen's cell, from its ModelComponent transform ----------------------
-    uintptr_t c = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    uintptr_t sm = *reinterpret_cast<uintptr_t*>(c + 0x278);
-    uintptr_t model = *reinterpret_cast<uintptr_t*>(sm + 0x68);
+    const Math::Vector3& citizenPos = (*citizenRef)->character->modelComponent->transform.translation;
 
     // Scratch Vector3 shared by 0x14008d590's out-position and the later
     // Vector3 ctor (both write all three floats). The exe pre-seeds only .z from
     // model+0x160 at 0x1400f3070 and never reads it back -- 0x14008d590 writes
     // param_7[0..2] unconditionally at its return. Kept for fidelity; it is dead.
     Math::Vector3 scratch(0.0f, 0.0f, 0.0f);
-    scratch.z = *reinterpret_cast<float*>(model + 0x160);
+    scratch.z = citizenPos.z;
 
-    const int dim = *grid;
-    int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) +
-                             static_cast<float>(dim >> 1));
-    int cz = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) +
-                             static_cast<float>(dim >> 1));
+    const int dim = map->size;
+    int cx = static_cast<int>(citizenPos.x + static_cast<float>(dim >> 1));
+    int cz = static_cast<int>(citizenPos.y + static_cast<float>(dim >> 1));
     if (cx < 0)    cx = 0;
     if (cx >= dim) cx = dim - 1;
     if (cz < 0)    cz = 0;
@@ -265,15 +303,13 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     const int citizenCell = cz * dim + cx;
 
     // Work+0x28 = this work's target cell (32-bit; the decompiler widens it to 64).
-    const int selfCell = *reinterpret_cast<int*>(S + 0x28);
+    const int selfCell = field_28;
     const int pileCol  = selfCell % dim;
     const int pileRow  = selfCell / dim;
 
     // --- gate: does the town still want this resource? --------------------------
-    int amount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
-    if (!static_cast<char>(PickupGate_TownWants_8d3c0(reinterpret_cast<int64_t>(townMgr),
-                      *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x28),
-                      amount)))   // the door read AL
+    int amount = rawMatIBP->quantity;
+    if (!townMgr->HasStorageFor(field_10->_description, amount))
         return 1;
 
     const int selfAccess = WorkGrid_FindCell_9ccf0(grid, selfCell, citizenCell, 0xe07);
@@ -282,23 +318,25 @@ int Pickup::Execute(void* citizenIBP, void* time) {
                           static_cast<uint32_t>(citizenCell)))
         return 1;
 
-    void* assignIBP = *reinterpret_cast<void**>(citizenIBP);
+    // (0x1400f6ef0 takes the work as an integer: LEFT)
+    CitizenComponent* assignIBP = *citizenRef;
     if (!static_cast<char>(WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &assignIBP, static_cast<uint32_t>(selfAccess),
                          static_cast<uint32_t>(citizenCell), time)))   // the door read AL
         return 0;
 
     // --- is there anywhere to drop it off? --------------------------------------
-    void* dropIBP = nullptr;
-    void* storeOut = nullptr;
-    amount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatIBP) + 0x28);
+    // (0x14008d590 takes the town, the out slot, the resource and the position as
+    // integers: LEFT)
+    ComponentEntity* dropIBP = nullptr;
+    ComponentEntity* storeOut = nullptr;
+    amount = rawMatIBP->quantity;
     Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(townMgr), reinterpret_cast<int64_t*>(&storeOut), static_cast<uint32_t>(selfAccess),
-                     *reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x28),
+                     reinterpret_cast<uint64_t>(field_10->_description),
                      amount, 1, reinterpret_cast<uint32_t*>(&scratch.x), &dropIBP);
     if (storeOut == nullptr) return 1;
 
     // Storage we will haul into -- used to test each candidate for acceptance.
-    void* dstStorageIBP = nullptr;
-    WorkBase_FindComponent_6270(reinterpret_cast<int64_t>(storeOut), &dstStorageIBP);
+    StorageComponent* dstStorageIBP = storeOut->FindComponent<StorageComponent>();
 
     // --- seed the candidate array with this Pickup's own target -----------------
     PickupCandidate cand;
@@ -306,14 +344,14 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     cand.accessCell = selfAccess;
     cand.distance   = WorkBase_CalcDistance_8830(grid, static_cast<uint32_t>(citizenCell),
                                    static_cast<uint32_t>(selfCell));
-    cand.typeId     = *reinterpret_cast<int32_t*>(S + 0x20);
-    cand.entity     = *reinterpret_cast<void**>(targetIBP);
+    cand.typeId     = field_20;
+    cand.entity     = field_10;
     cand.rawMat     = rawMatIBP;
 
     int count = 1;
     int capacity = 1;
     PickupCandidate* buf =
-        reinterpret_cast<PickupCandidate*>(System::MemoryAllocator::MemAlloc(0x20, 8));
+        static_cast<PickupCandidate*>(System::MemoryAllocator::MemAlloc(0x20, 8));
     if (!buf) return 1;
     buf[0] = cand;
     // 0x1400f32cd: the exe frees the *previous* (null) buffer here -- a literal
@@ -321,7 +359,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     System::MemoryAllocator::MemFree(nullptr);
 
     // --- sweep the 11x11 neighbourhood around the pile --------------------------
-    const uintptr_t bstRoot = gw + 0x118;  // work/task registry; BST at +0x30
+    WorkScheduler* scheduler = gw->m_tutorial;  // work/task registry; its per-type trees at +0x30
 
     int row = pileRow - 5;
     for (int dy = -5; dy <= 5; ++dy, ++row) {
@@ -332,28 +370,26 @@ int Pickup::Execute(void* citizenIBP, void* time) {
             if (row < 0 || row >= dim) continue;
 
             const int nCell = row * dim + col;
-            uintptr_t cellPtr =
-                *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80) +
-                static_cast<uintptr_t>(static_cast<int64_t>(nCell)) * 0x30;
+            const MapCell& cellPtr = map->cells[static_cast<int64_t>(nCell)];
 
-            // Occupant: prefer cell+0x00, else cell+0x08, else a null IBP.
-            void* occIBP = nullptr;
-            if (*reinterpret_cast<uintptr_t*>(cellPtr) != 0) {
-                occIBP = *reinterpret_cast<void**>(cellPtr);
-            } else if (*reinterpret_cast<uintptr_t*>(cellPtr + 8) != 0) {
-                occIBP = *reinterpret_cast<void**>(cellPtr + 8);
+            // Occupant: prefer the blocker (+0x00), else the occupant (+0x08), else null.
+            ComponentEntity* occIBP = nullptr;
+            if (cellPtr.blocker != nullptr) {
+                occIBP = cellPtr.blocker;
+            } else if (cellPtr.occupant != nullptr) {
+                occIBP = cellPtr.occupant;
             } else {
-                new (&occIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                occIBP = nullptr;   // ??0InternalBasePtr(nullptr)
             }
             if (occIBP == nullptr) continue;
 
-            void* nRawMatIBP = nullptr;
-            ActRm_FindComponent_223c0(reinterpret_cast<int64_t>(occIBP), &nRawMatIBP);
+            RawMaterialComponent* nRawMatIBP = occIBP->FindComponent<RawMaterialComponent>();
             if (nRawMatIBP == nullptr) continue;
 
-            int64_t nDesc = *reinterpret_cast<int64_t*>(
-                reinterpret_cast<uintptr_t>(occIBP) + 0x28);
-            if (!static_cast<char>(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(dstStorageIBP), nDesc, 1))) continue;   // the door read AL
+            // (0x14012cd80 takes the storage and the description as integers: LEFT)
+            ComponentDescription* nDesc = occIBP->_description;
+            if (!static_cast<char>(Pf_StorageCanAccept_cd80(reinterpret_cast<int64_t>(dstStorageIBP),
+                                                            reinterpret_cast<int64_t>(nDesc), 1))) continue;   // the door read AL
 
             const int nAccess = WorkGrid_FindCell_9ccf0(grid, nCell, citizenCell, 0xe07);
             if (nAccess < 0) continue;
@@ -362,41 +398,20 @@ int Pickup::Execute(void* citizenIBP, void* time) {
                                   static_cast<uint32_t>(citizenCell)))
                 continue;
 
-            void* compOut = nullptr;
-            void* compIBP = WorkBase_FindComponent_3050(reinterpret_cast<int64_t>(occIBP), &compOut);
-            const int nTypeId = *reinterpret_cast<int*>(
-                *reinterpret_cast<uintptr_t*>(compIBP) + 0x28);
+            WorkComponent* compIBP = occIBP->FindComponent<WorkComponent>();
+            const int nTypeId = compIBP->workId;
 
-            // Walk the type-id-keyed BST at gw+0x118 -> +0x30 for this resource's
-            // Pickup work. Node: key @+0x00, value @+0x08, left @+0x18, right @+0x20.
-            void* workIBP = nullptr;
-            {
-                int* node = *reinterpret_cast<int**>(*reinterpret_cast<uintptr_t*>(bstRoot) + 0x30);
-                bool found = false;
-                while (node != nullptr) {
-                    if (nTypeId < *node) {
-                        node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);
-                    } else if (nTypeId > *node) {
-                        node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x20);
-                    } else {
-                        workIBP = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x08);
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) new (&workIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            }
+            // Walk the type-id-keyed tree for this resource's Pickup work.
+            Work* workIBP = Pickup_FindTypeWork(scheduler, nTypeId);
 
-            void* pickupRaw = workIBP;
-            void* pickupWork = Object::IsDerivedFromNullSafe(pickupRaw, tidPickup) ? pickupRaw : nullptr;
-            void* pickupIBP = nullptr;
-            new (&pickupIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(pickupWork));   // B.3.3 bridge
+            Work* pickupRaw = workIBP;
+            Pickup* pickupIBP = Object::IsDerivedFromNullSafe(pickupRaw, tidPickup)
+                ? static_cast<Pickup*>(pickupRaw) : nullptr;
             if (pickupIBP == nullptr) continue;
 
             // vtable slot 11 (+0x58) = "already has a worker" -> skip this pile.
             // The caller reads AL only (hence the char).
-            if (static_cast<char>(reinterpret_cast<Work*>(pickupIBP)->GetPriority())) continue;   // B.3.x bridge (slot 11)
+            if (static_cast<char>(pickupIBP->GetPriority())) continue;
 
             PickupCandidate n;
             n.cell       = nCell;
@@ -421,18 +436,16 @@ int Pickup::Execute(void* citizenIBP, void* time) {
     for (int i = 0; i < count; ++i) {
         PickupCandidate* p = &buf[i];
 
-        void* dRaw = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(p->rawMat) + 0x18);
-        void* d = Object::IsDerivedFromNullSafe(dRaw, tidRawMatDesc) ? dRaw : nullptr;
+        Description* dRaw = p->rawMat->_description;
+        RawMaterialDescription* d = Object::IsDerivedFromNullSafe(dRaw, tidRawMatDesc)
+            ? static_cast<RawMaterialDescription*>(dRaw) : nullptr;
 
-        const int need = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(d) + 0x48) *
-                         *reinterpret_cast<int*>(
-                             reinterpret_cast<uintptr_t>(p->rawMat) + 0x28);
+        const int need = d->_weight * p->rawMat->quantity;
         if (need > freeCap) continue;
         freeCap -= need;
 
         // Access cell -> world position. off = (dim>>1) - 0.5
-        const int gdim = *grid;
+        const int gdim = map->size;
         const float off = static_cast<float>(gdim >> 1) - half;
         scratch = Math::Vector3(
                    static_cast<float>(p->accessCell % gdim) - off,
@@ -440,60 +453,37 @@ int Pickup::Execute(void* citizenIBP, void* time) {
                    0.0f);
 
         float worldPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(grid, worldPos, &scratch.x, 0, nullptr);
+        Reimpl_MapGetTerrainPos(map, worldPos, &scratch.x, 0, nullptr);
 
-        void* entIBP = p->entity;
-        void* citIBP = *reinterpret_cast<void**>(citizenIBP);
+        ComponentEntity* entIBP = p->entity;
+        CitizenComponent* citIBP = *citizenRef;
         WorkAct_PerformWorkCtor9_c0ad0(&citIBP, static_cast<uint32_t>(p->typeId), &entIBP,
                         worldPos, p->cell, first);
         first = 0;
 
 
         // Mark this resource type's Pickup work as claimed by our citizen.
-        void* wIBP = nullptr;
-        {
-            int* node = *reinterpret_cast<int**>(*reinterpret_cast<uintptr_t*>(bstRoot) + 0x30);
-            bool found = false;
-            while (node != nullptr) {
-                if (p->typeId < *node) {
-                    node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);
-                } else if (p->typeId > *node) {
-                    node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x20);
-                } else {
-                    wIBP = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x08);
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) new (&wIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        }
-
-        void* wRaw = wIBP;
-        void* wPickup = Object::IsDerivedFromNullSafe(wRaw, tidPickup) ? wRaw : nullptr;
-        void* claimed = nullptr;
-        new (&claimed) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(wPickup));   // B.3.3 bridge
-        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(claimed) + 0x48) = 1;
-        void* citEnt = *reinterpret_cast<void**>(citizenIBP);
-        *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(claimed) + 0x50) = citEnt;
+        Work* wRaw = Pickup_FindTypeWork(scheduler, p->typeId);
+        Pickup* claimed = Object::IsDerivedFromNullSafe(wRaw, tidPickup)
+            ? static_cast<Pickup*>(wRaw) : nullptr;
+        claimed->status = 1;
+        claimed->citizenIBP = *citizenRef;
     }
 
     // --- stamp the citizen ------------------------------------------------------
-    const int32_t workTypeId = *reinterpret_cast<int32_t*>(S + 0x20);
-    uintptr_t citEntity = *reinterpret_cast<uintptr_t*>(citizenIBP);
+    const int32_t workTypeId = field_20;
+    CitizenComponent* citEntity = *citizenRef;
 
     // vtable slot 10 (+0x50) GetTarget: member value-return ABI -- RCX=this,
     // RDX=hidden retbuf (the exe reuses its own `self` home slot as the buffer).
-    void* targetOut = nullptr;
-    {
-        void* ret = GetTarget(&targetOut);   // slot 10, virtual in retail
-        targetOut = ret ? *reinterpret_cast<void**>(ret) : nullptr;
-    }
+    Profession* targetOut = nullptr;
+    GetTarget(&targetOut);   // slot 10, virtual in retail
 
-    *reinterpret_cast<int32_t*>(citEntity + 0x30) = workTypeId;
-    *reinterpret_cast<uint32_t*>(citEntity + 0x54) |= 4;
-    *reinterpret_cast<uint32_t*>(citEntity + 0xb0) = 0;
-    if (targetOut == *reinterpret_cast<void**>(citEntity + 0x1f0) && workTypeId >= 0) {
-        *reinterpret_cast<uint32_t*>(citEntity + 0x88) |= 0x20000;
+    citEntity->field_0x30 = workTypeId;
+    citEntity->statusFlags |= 4;
+    citEntity->field_0xB0 = 0;
+    if (targetOut == citEntity->profession && workTypeId >= 0) {
+        citEntity->happinessFlags |= 0x20000;
     }
 
     // first still set => nothing was dispatched => 0; else 2.
@@ -510,7 +500,7 @@ int Pickup::Execute(void* citizenIBP, void* time) {
 // Algorithm:
 // 1. If status == 0, return false (no active work)
 // 2. If citizenIBP is null, return false
-// 3. Check if citizen's current workplace matches citizenIBP's workplace
+// 3. Check if citizen's current profession matches citizenIBP's
 // 4. If different: cancel old work, re-run Slot4 for both entities
 // 5. Return false (keep executing)
 // ============================================================
@@ -520,24 +510,24 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
         return 0;
     }
 
-    // Check citizenIBP (+0x50)
-    uintptr_t citizenEntity = *(uintptr_t*)(*(uintptr_t*)entityIBP + 0x1f0);
+    // The citizen slot (void* in Work.h's slot: LEFT); its profession (+0x1f0)
+    CitizenComponent** citizenSlot = (CitizenComponent**)entityIBP;
+    Profession* citizenProfession = (*citizenSlot)->profession;
 
-    uintptr_t storedCitizen = (uintptr_t)citizenIBP;
+    CitizenComponent* storedCitizen = citizenIBP;
 
-    if (citizenEntity != *(uintptr_t*)(storedCitizen + 0x1f0)) {
+    if (citizenProfession != storedCitizen->profession) {
         // Citizen changed workplace -- cancel old work and re-target
-        uintptr_t oldCitizen = (uintptr_t)citizenIBP;
+        CitizenComponent* oldCitizen = citizenIBP;
 
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(oldCitizen + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400(&oldCitizen->character->actions);
 
         // Re-run Slot4 with the new citizen
-        uintptr_t newCitizenRef = *(uintptr_t*)entityIBP;
-        uintptr_t local_buf[1] = { newCitizenRef };
+        CitizenComponent* local_buf[1] = { *citizenSlot };
 
         // Call Slot4 via vtable (guard against freed self after CancelAllWork)
         // (port guard, not retail: a zeroed vptr means self was freed during
-        // CancelAllWork)
+        // CancelAllWork; the object's first word read as its vptr: LEFT)
         if (*reinterpret_cast<uintptr_t*>(this) == 0) {
             return 0;
         }
@@ -550,7 +540,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
         }
 
         // Try again with stored citizen
-        uintptr_t storedBuf[1] = { storedCitizen };
+        CitizenComponent* storedBuf[1] = { storedCitizen };
         Execute(storedBuf, param3);
     }
 
@@ -564,9 +554,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
 // Returns false.
 // ============================================================
 int Pickup::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
-    uintptr_t nullIBP = 0;
-    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    citizenIBP = (void*)nullIBP;
+    citizenIBP = nullptr;   // ??0InternalBasePtr(nullptr)
     status = 2;
     return false;
 }
@@ -577,9 +565,7 @@ int Pickup::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
 // Resets citizenIBP to null, sets status to 0 (unassigned).
 // ============================================================
 int Pickup::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
-    uintptr_t nullIBP = 0;
-    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    citizenIBP = (void*)nullIBP;
+    citizenIBP = nullptr;   // ??0InternalBasePtr(nullptr)
     status = 0;
     return 0;
 }
@@ -591,9 +577,9 @@ int Pickup::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
 // ============================================================
 int Pickup::Cleanup() {
     if (status == 1) {
-        uintptr_t citizenEntity = (uintptr_t)citizenIBP;
+        CitizenComponent* citizenEntity = citizenIBP;
 
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
     }
     return 0;
 }
@@ -606,22 +592,19 @@ int Pickup::Cleanup() {
 // Returns true if valid (or no citizen assigned).
 // ============================================================
 int Pickup::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t citizenRef = (uintptr_t)citizenIBP;
+    CitizenComponent* citizenRef = citizenIBP;
 
-    if (citizenRef == 0) {
+    if (citizenRef == nullptr) {
         return true;  // No citizen assigned -- nothing to validate
     }
 
     // Validate entity via FUN_1400f7100
-    uintptr_t entityIBP[1] = { citizenRef };
-    bool valid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, entityIBP, nullptr);
+    CitizenComponent* entityIBP[1] = { citizenRef };
+    bool valid = ValidateTask(nullptr, entityIBP, nullptr);
 
     if (!valid) {
         // Entity no longer valid -- reset
-        uintptr_t nullIBP = 0;
-        new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        citizenIBP = (void*)nullIBP;
+        citizenIBP = nullptr;   // ??0InternalBasePtr(nullptr)
         status = 0;
         return false;
     }
@@ -632,13 +615,12 @@ int Pickup::Validate() {
 
 // ============================================================
 // Pickup::Slot10 / GetTarget (0x1400f3a50)
-// Returns the global entity from GameWorld+0xb0+0x30.
-// This is a global target, not per-instance.
+// The ProfessionList's +0x30 profession (GameWorld+0xb0).
+// This is a global target, not per-instance. (The return slot is void* in Work.h's
+// slot: LEFT.)
 // ============================================================
 void* Pickup::GetTarget(void* outPtr) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xb0);
-    *(uintptr_t*)outPtr = *(uintptr_t*)(entityList + 0x30);
+    *(Profession**)outPtr = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return outPtr;
 }
 

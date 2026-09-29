@@ -16,20 +16,21 @@
 #pragma once
 
 #include <cstdint>
+#include "Work/MarketWork.h"   // MarketWork::ClaimNode
 
 extern "C" {
 
 // 0x14002aaa0 -- __fastcall void(int64_t* tree [RCX], void* keyIBP [RDX])
 // Finds the node whose key equals *keyIBP and erases it.  No-op if absent.
-void MarketBst_aaa0(int64_t* tree, void* keyIBP);
+void MarketBst_aaa0(MarketWork::ClaimNode** tree, CitizenComponent** key);
 
 // 0x14002ac40 -- __fastcall void(int64_t* tree [RCX], void* node [RDX])
 // Erases an already-located node: decrements the count, unlinks, frees, rebalances.
-void MarketBst_ac40(int64_t* tree, void* node);
+void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNode* node);
 
 // 0x14002aee0 -- __fastcall void(void* unusedRcx [RCX], void* node [RDX])
 // Destroys one node.  RCX is a genuinely DEAD parameter in retail (homed, never read);
 // it is kept in the signature so the address registry binds an ABI-identical function.
-void MarketBst_aee0(void* unusedRcx, void* node);
+void MarketBst_aee0(void* unusedRcx, MarketWork::ClaimNode* node);
 
 } // extern "C"
