@@ -191,6 +191,9 @@
 //     `RT_ALLOC_SHADOW=1` must also set `RT_ENGINELIFE=0`.
 // ============================================================================
 
+#include <windows.h>
+#include <xaudio2.h>      // the two XAudio2 releases Shutdown inlines
+
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -245,8 +248,6 @@ namespace {
 // or the body (rtengine::Ctor_* in singleton_ctors.cpp, the ??1 bodies that
 // are free functions) -- where these bodies used to go through RT_EXPORT_ONCE.
 // ---------------------------------------------------------------------------
-typedef void     (*VoidThisFn)(void*);   // the Audio::Device owned objects' slots
-
 // The two allocator statics every `new`/`delete` in these bodies goes through.
 // Retail's unexported per-class `operator new` at 0x180011640 is
 // `MemAlloc(size, 4)` and nothing else — 20 instructions, read in full; the
@@ -258,17 +259,6 @@ void* MemAlloc(uint64_t size, int align) {
 }
 void MemFree(void* p) {
     System::MemoryAllocator::MemFree(p);                     // 0x1800c7ad0
-}
-
-// ---- the exported DATA slots, all through the port-aware door ---------------
-// See engine.cpp's "HOW THE DEPENDENCIES ARE RESOLVED" banner for why data is
-// special. It concluded that data must go through the raw DLL door so a ported
-// body writes the storage the DLL's own code reads. That was right FOR WAVE 8,
-// and it is wrong at cutover, where there is no DLL code and the storage is
-// lane C2's mint. RT_DATA_SLOT is the door that gets both: registry first
-// (the mint, at cutover), the DLL's .data second (today).
-EngineT** EngineSingletonSlot() {
-    return reinterpret_cast<EngineT**>(&::Engine::Engine::_singleton);
 }
 
 // Effectiveness counters. Read by RtEngineLifecycleSummary(); the four bodies
@@ -300,15 +290,16 @@ unsigned g_startupFailAt = 0;   // 0 == reached the end
 // at +0x1c and +0x2c are NOT touched — retail leaves whatever the allocator
 // left there. A `memset(self, 0, 0x30)` would be wrong and no oracle in this
 // project could see it (reference_oracle_must_not_compare_unwritten_bytes.md).
-extern "C" void* RtSystem_Configuration_Ctor(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
-    *reinterpret_cast<void**>(p + 0x00)    = nullptr;
-    *reinterpret_cast<void**>(p + 0x08)    = nullptr;
-    *reinterpret_cast<void**>(p + 0x10)    = nullptr;
-    *reinterpret_cast<int32_t*>(p + 0x18)  = 0;
-    *reinterpret_cast<void**>(p + 0x20)    = nullptr;
-    *reinterpret_cast<int32_t*>(p + 0x28)  = 0;
-    System::Configuration::_singleton = static_cast<System::Configuration*>(self);   // class static (B.3.9 SYS)
+// The qword zero at +0x08 covers `_entryCount` and `_pad0c`: two named stores.
+extern "C" System::Configuration* RtSystem_Configuration_Ctor(System::Configuration* self) {
+    self->_entries     = nullptr;   // +0x00
+    self->_entryCount  = 0;         // +0x08
+    self->_pad0c       = 0;         // +0x0c
+    self->_mapRoot     = nullptr;   // +0x10
+    self->_mapCount    = 0;         // +0x18
+    self->_unusedData  = nullptr;   // +0x20
+    self->_unusedCount = 0;         // +0x28
+    System::Configuration::_singleton = self;   // class static (B.3.9 SYS)
     return self;
 }
 
@@ -325,8 +316,9 @@ extern "C" void* RtSystem_Configuration_Ctor(void* self) {
 // ENDGAME B.3.7 fragment: the stores name the class's fields (same bytes:
 // +0x00..+0x3f and the dword at +0x40; `_pad44` stays untouched, as retail
 // leaves it). The door stays a door (B36_RULES 7 / B7-13).
-extern "C" void* RtAchievement_AchievementManager_Ctor(void* self) {
-    auto* m = reinterpret_cast<Achievement::AchievementManager*>(self);  // B.3.7 bridge
+extern "C" Achievement::AchievementManager*
+RtAchievement_AchievementManager_Ctor(Achievement::AchievementManager* self) {
+    Achievement::AchievementManager* const m = self;
     m->_achievements          = nullptr;   // +0x00
     m->_completed._data       = nullptr;   // +0x08
     m->_completed._size       = 0;         // +0x10
@@ -405,7 +397,7 @@ extern "C" EngineT* RtEngine_Engine_Ctor(EngineT* self, void* platformHandle) {
     // +0x6f2..+0x6f7: retail's 16-bit store at +0x6f0 does not reach them and
     // neither do we.
 
-    if (EngineT** slot = EngineSingletonSlot()) *slot = self;
+    ::Engine::Engine::_singleton = self;                    // MOV [0x1801fe748],RDI
 
     ++g_ctorRuns;
 
@@ -435,7 +427,7 @@ extern "C" EngineT* RtEngine_Engine_Ctor(EngineT* self, void* platformHandle) {
 // (a 0x700-byte stack object), exactly as retail's caller did.
 extern "C" void RtEngine_Engine_Dtor(EngineT* self) {
 
-    if (EngineT** slot = EngineSingletonSlot()) *slot = nullptr;
+    ::Engine::Engine::_singleton = nullptr;                 // MOV [0x1801fe748],0
 
     rtengine::Dtor_MemoryAllocator(&self->_allocator);      // 0x1800c7960
 
@@ -490,7 +482,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     }
 
     // --- 0x1800db923: System::Configuration ---------------------------------
-    void* configuration = MemAlloc(0x30, 4);
+    System::Configuration* configuration = static_cast<System::Configuration*>(MemAlloc(0x30, 4));
     if (configuration) RtSystem_Configuration_Ctor(configuration);
     _configuration = configuration;
 
@@ -502,7 +494,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // destructor, so the whole block is one declaration and its scope.
     {
         System::String tmp(cmdLine);
-        static_cast<System::Configuration*>(_configuration)->SetCommandLine(tmp);   // 0x1800c47a0
+        _configuration->SetCommandLine(tmp);                        // 0x1800c47a0
     }
 
     // --- 0x1800db9aa .. 0x1800db9d9: System::Timer::Startup, inlined --------
@@ -519,21 +511,21 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     }
 
     // --- 0x1800db9df: IO::FileSystem ----------------------------------------
-    void* fileSystem = MemAlloc(0x50, 4);
+    IO::FileSystem* fileSystem = static_cast<IO::FileSystem*>(MemAlloc(0x50, 4));
     if (fileSystem)
         rtengine::Ctor_FileSystem(fileSystem);                      // 0x1800ac7c0
     _fileSystem = fileSystem;
-    if (!static_cast<IO::FileSystem*>(fileSystem)->Startup()) {       // 0x1800abc50
+    if (!fileSystem->Startup()) {                                   // 0x1800abc50
         g_startupFailAt = 3;
         return 0;
     }
 
     // --- 0x1800dba5e: IO::Persistence ---------------------------------------
-    void* persistence = MemAlloc(0x98, 4);
+    IO::Persistence* persistence = static_cast<IO::Persistence*>(MemAlloc(0x98, 4));
     if (persistence)
         rtengine::Ctor_Persistence(persistence);                    // 0x1800b8020
     _persistence = persistence;
-    if (!static_cast<IO::Persistence*>(persistence)->Startup()) {
+    if (!persistence->Startup()) {
         g_startupFailAt = 4;
         return 0;
     }
@@ -541,30 +533,32 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // --- 0x1800dba95: IO::Modification --------------------------------------
     // RefreshList returns void and its result is not tested; a failure here
     // cannot stop Startup, by retail's design.
-    void* modification = MemAlloc(0x28, 4);
+    IO::Modification* modification = static_cast<IO::Modification*>(MemAlloc(0x28, 4));
     if (modification)
         rtengine::Ctor_Modification(modification);                  // 0x1800b04b0
     _modification = modification;
-    static_cast<IO::Modification*>(modification)->RefreshList();
+    modification->RefreshList();
 
     // --- 0x1800dbae0: Object::Factory ---------------------------------------
-    void* factory = MemAlloc(0x10, 4);
+    ::Object::Factory* factory = static_cast< ::Object::Factory*>(MemAlloc(0x10, 4));
     if (factory)
         rtengine::Ctor_Factory(factory);                            // 0x1800c09d0
     _factory = factory;
-    if (!static_cast< ::Object::Factory*>(factory)->Startup()) {     // 0x1800c0630
+    if (!factory->Startup()) {                                      // 0x1800c0630
         g_startupFailAt = 5;
         return 0;
     }
 
     // --- 0x1800dbb20: Object::InternalFactory (no Startup) -------------------
-    void* internalFactory = MemAlloc(0x9e8, 4);
+    ::Object::InternalFactory* internalFactory =
+        static_cast< ::Object::InternalFactory*>(MemAlloc(0x9e8, 4));
     if (internalFactory)
         rtengine::Ctor_InternalFactory(internalFactory);            // 0x1800c0030
     _internalFactory = internalFactory;
 
     // --- 0x1800dbb47: Object::ExternalFactory (no Startup) -------------------
-    void* externalFactory = MemAlloc(0x48, 4);
+    ::Object::ExternalFactory* externalFactory =
+        static_cast< ::Object::ExternalFactory*>(MemAlloc(0x48, 4));
     if (externalFactory)
         rtengine::Ctor_ExternalFactory(externalFactory);            // 0x1800be7e0
     _externalFactory = externalFactory;
@@ -573,14 +567,15 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // The ctor takes the platform handle, read back out of the Engine field at
     // 0x1800dbbc9 rather than from the register — so an Engine whose +0x698 was
     // changed since the ctor would see the new value. Kept.
-    void* application = MemAlloc(0x30, 4);
+    ::Application::Application* application =
+        static_cast< ::Application::Application*>(MemAlloc(0x30, 4));
     if (application)
         rtengine::Ctor_Application(application, _platformHandle);   // 0x18009f590
     _application = application;
     // ENDGAME B.3.7: `?PlatformStartup@Application@1@AEAA_NXZ` was a name
     // door; a member call on the real class now (the ctor above is the
     // `Ctor_Application` body, B7-10).
-    if (!static_cast< ::Application::Application*>(application)->PlatformStartup()) {
+    if (!application->PlatformStartup()) {
         g_startupFailAt = 6;
         return 0;
     }
@@ -590,12 +585,12 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     (void)RtEngineLifecyclePlatformCoInit();
 
     // --- 0x1800dbc1c: Video::Configuration ----------------------------------
-    void* videoConfiguration = MemAlloc(0x44, 4);
+    Video::Configuration* videoConfiguration =
+        static_cast<Video::Configuration*>(MemAlloc(0x44, 4));
     if (videoConfiguration)
         rtengine::Ctor_VideoConfiguration(videoConfiguration);      // 0x1800f6f10
     _videoConfiguration = videoConfiguration;
-    if (!reinterpret_cast<Video::Configuration*>(videoConfiguration)
-             ->Startup()) {                                  // B.3.5 bridge
+    if (!videoConfiguration->Startup()) {
         g_startupFailAt = 7;
         return 0;
     }
@@ -605,8 +600,8 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // dereference it unguarded. If the allocation above failed this faults, in
     // retail exactly as here.
     if (_noConfigure)
-        *(static_cast<uint8_t*>(_videoConfiguration) + 0x40) = 0;
-    *(static_cast<uint8_t*>(_videoConfiguration) + 0x42) = _noConfigure;
+        _videoConfiguration->fullscreen = 0;                        // +0x40
+    _videoConfiguration->field42 = _noConfigure;                    // +0x42
 
     // --- 0x1800dbccf: Video::Device -----------------------------------------
     // Allocated through Video::Device's own class operator new (align 8, not 4)
@@ -614,31 +609,32 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     // ctor's CMOVE publishes `?_singleton@Device@Video@@` only for type 0, so
     // this argument is load-bearing.
     // EnumerateVideoModes returns bool and retail does NOT test it.
-    void* videoDevice = RtVideo_Device_OperatorNew(0x108);
+    // LEFT: `??2Device@Video@@` (0x18000c9b0) is not declared in Video::Device
+    // (R-VIDEO's header); its body is RtVideo_Device_OperatorNew.
+    Video::Device* videoDevice = static_cast<Video::Device*>(RtVideo_Device_OperatorNew(0x108));
     if (videoDevice)
         rtengine::Ctor_VideoDevice(videoDevice, 0);                 // 0x1800f7160
     _videoDevice = videoDevice;
-    (void)reinterpret_cast<Video::Device*>(videoDevice)
-        ->EnumerateVideoModes();                             // B.3.5 bridge
+    (void)videoDevice->EnumerateVideoModes();
 
     // --- 0x1800dbd00: Audio::Configuration ----------------------------------
-    void* audioConfiguration = MemAlloc(0x10, 4);
+    Audio::Configuration* audioConfiguration =
+        static_cast<Audio::Configuration*>(MemAlloc(0x10, 4));
     if (audioConfiguration)
         rtengine::Ctor_AudioConfiguration(audioConfiguration);      // 0x1800ddeb0
     _audioConfiguration = audioConfiguration;
-    if (!reinterpret_cast<Audio::Configuration*>(audioConfiguration)
-             ->Startup()) {                                  // B.3.7 bridge
+    if (!audioConfiguration->Startup()) {
         g_startupFailAt = 8;
         return 0;
     }
 
     // --- 0x1800dbd51: Input::Configuration ----------------------------------
-    void* inputConfiguration = MemAlloc(0x10, 4);
+    ::Input::Configuration* inputConfiguration =
+        static_cast< ::Input::Configuration*>(MemAlloc(0x10, 4));
     if (inputConfiguration)
         rtengine::Ctor_InputConfiguration(inputConfiguration);      // 0x1800e0de0
     _inputConfiguration = inputConfiguration;
-    if (!reinterpret_cast< ::Input::Configuration*>(inputConfiguration)
-             ->Startup()) {                                  // B.3.7 bridge
+    if (!inputConfiguration->Startup()) {
         g_startupFailAt = 9;
         return 0;
     }
@@ -659,36 +655,34 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     }
 
     // --- 0x1800dbdc0: Video::Device::PlatformStartup ------------------------
-    if (!reinterpret_cast<Video::Device*>(_videoDevice)
-             ->PlatformStartup()) {                          // B.3.5 bridge
+    if (!_videoDevice->PlatformStartup()) {
         g_startupFailAt = 11;
         return 0;
     }
 
     // --- 0x1800dbdd4: Audio::Device -----------------------------------------
-    void* audioDevice = MemAlloc(0x1298, 4);
+    Audio::Device* audioDevice = static_cast<Audio::Device*>(MemAlloc(0x1298, 4));
     if (audioDevice)
         rtengine::Ctor_AudioDevice(audioDevice);                    // 0x1800de3a0
     _audioDevice = audioDevice;
-    if (!reinterpret_cast<Audio::Device*>(audioDevice)
-             ->PlatformStartup()) {                          // B.3.7 bridge
+    if (!audioDevice->PlatformStartup()) {
         g_startupFailAt = 12;
         return 0;
     }
 
     // --- 0x1800dbe0b: Input::Device -----------------------------------------
-    void* inputDevice = MemAlloc(0x1200, 4);
+    ::Input::Device* inputDevice = static_cast< ::Input::Device*>(MemAlloc(0x1200, 4));
     if (inputDevice)
         rtengine::Ctor_InputDevice(inputDevice);                    // 0x1800e13b0
     _inputDevice = inputDevice;
-    if (!reinterpret_cast< ::Input::Device*>(inputDevice)
-             ->PlatformStartup()) {                          // B.3.7 bridge
+    if (!inputDevice->PlatformStartup()) {
         g_startupFailAt = 13;
         return 0;
     }
 
     // --- 0x1800dbe42: Achievement::AchievementManager (no Startup) ----------
-    void* achievementManager = MemAlloc(0x48, 4);
+    Achievement::AchievementManager* achievementManager =
+        static_cast<Achievement::AchievementManager*>(MemAlloc(0x48, 4));
     if (achievementManager)
         RtAchievement_AchievementManager_Ctor(achievementManager);
     _achievementManager = achievementManager;
@@ -733,17 +727,17 @@ void Engine::Engine::Shutdown() {
     // 0x1800db50f. The launcher-dialog arming bit: byte 0 of Video::Configuration
     // becomes `_startupComplete == 0`, and Video::Configuration::Save (below)
     // writes it to the registry. Engine.h documents the whole chain.
-    if (void* videoCfg = _videoConfiguration)
-        *static_cast<uint8_t*>(videoCfg) = (_startupComplete == 0) ? 1 : 0;
+    if (Video::Configuration* videoCfg = _videoConfiguration)
+        videoCfg->settingsValid = (_startupComplete == 0) ? 1 : 0;
 
-    if (void* p = _achievementManager) {
-        reinterpret_cast< ::Achievement::AchievementManager*>(p)->RemoveAll(); ++steps;  // B.3.7 bridge
+    if (::Achievement::AchievementManager* p = _achievementManager) {
+        p->RemoveAll(); ++steps;
     }
-    if (void* p = _inputDevice) {
-        reinterpret_cast< ::Input::Device*>(p)->PlatformShutdown(); ++steps;  // B.3.7 bridge
+    if (::Input::Device* p = _inputDevice) {
+        p->PlatformShutdown(); ++steps;
     }
-    if (void* p = _inputConfiguration) {
-        reinterpret_cast< ::Input::Configuration*>(p)->Save();  // B.3.7 bridge
+    if (::Input::Configuration* p = _inputConfiguration) {
+        p->Save();
         // 0x1800db55d: destroy the object hanging off the config's first field.
         // 0x180053440 is an unnamed scalar deleting destructor (a two-node BST
         // teardown plus MemFree) with NO export in either build, so it can only
@@ -752,51 +746,48 @@ void Engine::Engine::Shutdown() {
         // runtime/src/input/keymap_save.cpp and registered there BY ADDRESS, so
         // it is a direct call now — the same conversion block B5 made in
         // Input::Configuration::Startup's re-entry arm.
-        if (void* inner = *static_cast<void**>(p)) {
+        if (::Input::KeyMap* inner = p->_keyMap) {
             RtInput_KeyMap_DeletingDtor(inner);
         }
         ++steps;
     }
-    if (void* p = _audioDevice) {
-        // 0x1800db576: two virtual calls on objects the device owns, each
-        // followed by an unconditional null store. Slot 0x90 on the first,
-        // slot 0x10 on the second.
-        uint8_t* dev = static_cast<uint8_t*>(p);
-        if (void* a = *reinterpret_cast<void**>(dev + 0xa90)) {
-            void** vt = *reinterpret_cast<void***>(a);
-            reinterpret_cast<VoidThisFn>(vt[0x90 / 8])(a);
+    if (Audio::Device* dev = _audioDevice) {
+        // 0x1800db576: the mastering voice's DestroyVoice (+0x90) and the
+        // engine's Release (+0x10), each followed by an unconditional null
+        // store.
+        if (IXAudio2MasteringVoice* a = dev->_masteringVoice) {
+            a->DestroyVoice();
         }
-        *reinterpret_cast<void**>(dev + 0xa90) = nullptr;
-        if (void* b = *reinterpret_cast<void**>(dev + 0xa88)) {
-            void** vt = *reinterpret_cast<void***>(b);
-            reinterpret_cast<VoidThisFn>(vt[0x10 / 8])(b);
+        dev->_masteringVoice = nullptr;
+        if (IXAudio27* b = dev->_xaudio2) {
+            b->Release();
         }
-        *reinterpret_cast<void**>(dev + 0xa88) = nullptr;
+        dev->_xaudio2 = nullptr;
         ++steps;
     }
-    if (void* p = _audioConfiguration) {
-        reinterpret_cast<Audio::Configuration*>(p)->Save(); ++steps;   // B.3.7 bridge
+    if (Audio::Configuration* p = _audioConfiguration) {
+        p->Save(); ++steps;
     }
-    if (void* p = _videoDevice) {
-        reinterpret_cast<Video::Device*>(p)->PlatformShutdown();  // B.3.5 bridge
-        // 0x1800db5cd: three 0x18-byte plugin slots at device+0xb0; FreeLibrary
-        // each non-null module and clear all three qwords of every slot,
-        // whether or not it held one.
-        uint8_t* slot = static_cast<uint8_t*>(p) + 0xb0;
-        for (int i = 0; i < 3; ++i, slot += 0x18) {
-            if (void* mod = *reinterpret_cast<void**>(slot))
+    if (Video::Device* p = _videoDevice) {
+        p->PlatformShutdown();
+        // 0x1800db5cd: the three 0x18-byte plugin slots at device+0xb0;
+        // FreeLibrary each non-null module and clear all three qwords of every
+        // slot, whether or not it held one.
+        for (int i = 0; i < 3; ++i) {
+            Video::Device::InterfaceSlot& slot = p->dllSlots[i];
+            if (void* mod = slot.module)
                 RtEngineLifecyclePlatformFreeLibrary(mod);
-            *reinterpret_cast<void**>(slot + 0x00) = nullptr;
-            *reinterpret_cast<void**>(slot + 0x08) = nullptr;
-            *reinterpret_cast<void**>(slot + 0x10) = nullptr;
+            slot.module           = nullptr;
+            slot.getDeviceName    = nullptr;
+            slot.createDeviceData = nullptr;
         }
         ++steps;
     }
-    if (void* p = _videoConfiguration) {
-        reinterpret_cast<Video::Configuration*>(p)->Save(); ++steps;  // B.3.5 bridge
+    if (Video::Configuration* p = _videoConfiguration) {
+        p->Save(); ++steps;
     }
-    if (void* p = _application) {
-        static_cast< ::Application::Application*>(p)->PlatformShutdown(); ++steps;  // ENDGAME B.3.7: member call
+    if (::Application::Application* p = _application) {
+        p->PlatformShutdown(); ++steps;
     }
     if (_factory != nullptr) {
         // 0x1800db62d: FreeLibrary on a module held in an UNEXPORTED global at
@@ -807,19 +798,19 @@ void Engine::Engine::Shutdown() {
         // comment described is closed); the value stays null unless something
         // in this tree ever ports LoadCompilers, so `*slot` is unguarded here
         // exactly as retail's own deref of its always-live global is.
-        void** slot = reinterpret_cast<void**>(&::Object::Factory::_compilerModule);
-        if (*slot) RtEngineLifecyclePlatformFreeLibrary(*slot);
-        *slot = nullptr;
+        if (::Object::Factory::_compilerModule)
+            RtEngineLifecyclePlatformFreeLibrary(::Object::Factory::_compilerModule);
+        ::Object::Factory::_compilerModule = nullptr;
         ++steps;
     }
-    if (void* p = _modification) {
-        static_cast<IO::Modification*>(p)->SaveList(); ++steps;
+    if (IO::Modification* p = _modification) {
+        p->SaveList(); ++steps;
     }
     if (_persistence != nullptr && _noConfigure == 0) {
-        static_cast<const IO::Persistence*>(_persistence)->WriteSettings(); ++steps;
+        _persistence->WriteSettings(); ++steps;
     }
-    if (void* p = _fileSystem) {
-        static_cast<IO::FileSystem*>(p)->ClosePackages(); ++steps;
+    if (IO::FileSystem* p = _fileSystem) {
+        p->ClosePackages(); ++steps;
     }
 
     // ---- phase 2: destroy and free -----------------------------------------
@@ -829,82 +820,80 @@ void Engine::Engine::Shutdown() {
     // System::Configuration, Factory, InternalFactory, ExternalFactory,
     // Modification, Persistence, FileSystem, in that order. Kept as written.
 
-    if (void* p = _achievementManager) {
+    if (::Achievement::AchievementManager* p = _achievementManager) {
         // ~AchievementManager is a REAL non-virtual member (the null store at
         // 0x1801fc670, then the three Array dtors); the door was its export.
-        reinterpret_cast< ::Achievement::AchievementManager*>(p)
-            ->Achievement::AchievementManager::~AchievementManager();  // B.3.7 bridge
+        p->Achievement::AchievementManager::~AchievementManager();
         MemFree(p);
     }
-    if (void* p = _inputDevice) {
+    if (::Input::Device* p = _inputDevice) {
         // 0x1800db6c4: retail calls NO destructor here — just the free. Input::
         // Device's dtor exists (??1Device@Input@@, 0x1800e1480) and Shutdown
         // does not call it. Faithful, and worth flagging as a retail leak
         // rather than a transcription slip.
         MemFree(p);
     }
-    if (void* p = _inputConfiguration) {
+    if (::Input::Configuration* p = _inputConfiguration) {
         RtInput_Configuration_Dtor(p);                      // 0x1800e0e10
         MemFree(p);
     }
-    if (void* p = _audioDevice) {
+    if (Audio::Device* p = _audioDevice) {
         // 0x1800db6fe: only the Audio::Stream sub-object at +0xa00 is destroyed;
         // ??1Device@Audio@@ (0x1800de4f0) is NOT called. Faithful.
         // ENDGAME B.3.9 ENG W2: the class's real (public, QEAA) ~Stream.
-        reinterpret_cast< ::Audio::Stream*>(static_cast<uint8_t*>(p) + 0xa00)
-            ->~Stream();                                         // B.3.9 bridge
+        p->_stream.~Stream();
         MemFree(p);
     }
-    if (void* p = _audioConfiguration) {
+    if (Audio::Configuration* p = _audioConfiguration) {
         // ~Configuration is a REAL non-virtual member (audio.cpp: the null store
         // to _singleton); ??1Configuration@Audio@@ is its door. B.3.7 close.
-        reinterpret_cast< ::Audio::Configuration*>(p)
-            ->Audio::Configuration::~Configuration();  // B.3.7 bridge
+        p->Audio::Configuration::~Configuration();
         MemFree(p);
     }
-    if (void* p = _videoDevice) {
-        Video_Device_Dtor(static_cast<RtVideo::Device*>(p));   // 0x1800f7290
+    if (Video::Device* p = _videoDevice) {
+        Video_Device_Dtor(p);                               // 0x1800f7290
         RtVideo_Device_OperatorDelete(p);     // ??3Device@Video@@, == MemFree
     }
-    if (void* p = _videoConfiguration) {
+    if (Video::Configuration* p = _videoConfiguration) {
         Video_Configuration_Dtor(p);                        // 0x1800f6f80
         MemFree(p);
     }
-    if (void* p = _application) {
+    if (::Application::Application* p = _application) {
         // 0x18004da00 is ~Application immediately followed by MemFree(this) —
         // a scalar deleting destructor. Split into its two halves here. The
         // exported ??1Application@0@ writes the two adjacent zeroes in the
         // opposite order to the inlined copy; both are zero stores to fields
         // nothing reads between them.
-        RtApp_Dtor(static_cast< ::Application::Application*>(p));   // 0x18009f520
+        RtApp_Dtor(p);                                      // 0x18009f520
         MemFree(p);
     }
-    if (void* p = _configuration) {
-        static_cast<System::Configuration*>(p)->~Configuration();   // 0x1800c5170
+    if (System::Configuration* p = _configuration) {
+        p->~Configuration();                                // 0x1800c5170
         MemFree(p);
     }
-    if (void* p = _factory) {
+    if (::Object::Factory* p = _factory) {
         RtObjFactoryDtor::RtObject_Factory_Dtor(p);                           // 0x1800071a0
         MemFree(p);
     }
-    if (void* p = _internalFactory) {
+    if (::Object::InternalFactory* p = _internalFactory) {
         RtObjFactoryDtor::RtObject_InternalFactory_Dtor(p);                   // 0x18002f860
         MemFree(p);
     }
-    if (void* p = _externalFactory) {
+    if (::Object::ExternalFactory* p = _externalFactory) {
         RtObjFactoryDtor::RtObject_ExternalFactory_Dtor(p);                   // 0x1800be760
         MemFree(p);
     }
-    if (void* p = _modification) {
-        RtIo::RtIo_Modification_Dtor(static_cast<RtIO::Modification*>(p));   // 0x1800b0470
+    if (IO::Modification* p = _modification) {
+        // LEFT: the ??1 body takes the RtIO::Modification POD (Modification.h, R-IO).
+        RtIo::RtIo_Modification_Dtor(reinterpret_cast<RtIO::Modification*>(p));   // 0x1800b0470
         MemFree(p);
     }
-    if (void* p = _persistence) {
-        static_cast<IO::Persistence*>(p)->~Persistence();   // 0x1800b7fb0
+    if (IO::Persistence* p = _persistence) {
+        p->~Persistence();                                  // 0x1800b7fb0
         MemFree(p);
     }
-    if (void* p = _fileSystem) {
-        static_cast<IO::FileSystem*>(p)->~FileSystem();     // 0x1800ac6d0
+    if (IO::FileSystem* p = _fileSystem) {
+        p->~FileSystem();                                   // 0x1800ac6d0
         MemFree(p);
     }
 
