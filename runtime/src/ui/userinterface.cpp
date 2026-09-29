@@ -239,6 +239,10 @@
 #include "ui/DialogInstance.h"
 #include "ui/DialogController.h"
 #include "ui/Element.h"
+#include "ui/Cursor.h"
+#include "ui/SpriteSheet.h"
+#include "ui/Sprite.h"
+#include "audio/Audio.h"
 #include "element_common.h"
 #include "../../types/video/Device.h"        // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../../types/application/Application.h"  // ENDGAME B.3.9 SS1: Application::_singleton
@@ -284,15 +288,6 @@ static_assert(kUiSize == 0x128, "layout header and this file must agree");
 inline const double* TimerSecondsPerTick() {
     return &::System::Timer::_secondsPerTick;
 }
-inline void** VideoDeviceSingleton() {
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
-}
-inline void** ApplicationSingleton() {
-    return reinterpret_cast<void**>(&::Application::Application::_singleton);
-}
-inline void** InputConfigSingleton() {
-    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
-}
 
 } // namespace
 
@@ -309,45 +304,59 @@ inline void** InputConfigSingleton() {
 // non-zero constants are `_uiScale = 1.0f` (0x3f800000 at +0xdc) and the pair
 // `_fadeSpriteIndex = -1` (+0xe8) / `_fadeColor = 0xffffffff` (+0xf8).
 //
-// FAITHFULNESS DETAIL: retail writes these as raw-width stores, not as typed
-// field assignments, and two of them straddle field boundaries — the WORD at
-// +0xd8 clears `_cursorEnabled` and `_mouseCaptured` together and stops (so
-// +0xda..+0xdb stay poison), and the QWORDs at +0xfc and +0x104 cover the four
-// ints of `_clipRegion` in two pairs and stop (so +0x10c..+0x10f stay poison).
-// The port reproduces the WIDTHS, not just the values, because the twin oracle
-// compares the bytes in between.
-//
-// The body is factored into CtorBody() so the twin oracle can run OUR
-// implementation a second time on a scratch buffer without recursing into the
-// diff wrapper.
+// Retail writes these as raw-width stores, and several straddle field
+// boundaries — the WORD at +0xd8 clears `_cursorEnabled` and `_mouseCaptured`
+// together and stops (so +0xda..+0xdb stay unwritten), the QWORD at +0x20
+// covers `_removedDialogs._size` / `_capacity`, the QWORDs at +0xfc and +0x104
+// cover the four ints of `_clipRegion` in two pairs and stop (so
+// +0x10c..+0x10f stay unwritten). The tree writes the NAMED fields in address
+// order (B4_RULES H7): the same values into the same bytes, and the padding
+// retail leaves alone (+0x14, +0x74, +0x89, +0xda, +0xec, +0x10c) is left
+// alone here too.
 static void CtorBody(UserInterface* self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    auto q64 = [p](size_t off, uint64_t v) { std::memcpy(p + off, &v, 8); };
-    auto q32 = [p](size_t off, uint32_t v) { std::memcpy(p + off, &v, 4); };
-    auto q16 = [p](size_t off, uint16_t v) { std::memcpy(p + off, &v, 2); };
-    auto q8  = [p](size_t off, uint8_t  v) { std::memcpy(p + off, &v, 1); };
-
-    q64(0x00, 0);  q64(0x08, 0);  q32(0x10, 0);
-    q64(0x18, 0);  q64(0x20, 0);  q64(0x28, 0);  q64(0x30, 0);
-    q64(0x38, 0);  q64(0x40, 0);  q64(0x48, 0);  q64(0x50, 0);
-    q64(0x58, 0);  q64(0x60, 0);  q64(0x68, 0);  q32(0x70, 0);
-    q64(0x78, 0);  q64(0x80, 0);  q8 (0x88, 0);
-    q64(0x90, 0);  q64(0x98, 0);  q64(0xa0, 0);  q64(0xa8, 0);
-    q64(0xb0, 0);  q64(0xb8, 0);  q64(0xc0, 0);  q64(0xc8, 0);
-    q64(0xd0, 0);
-    q16(0xd8, 0);                       // _cursorEnabled + _mouseCaptured
-    q32(0xdc, 0x3f800000u);             // _uiScale = 1.0f
-    q64(0xe0, 0);                       // _fadeSpriteSheet
-    q32(0xe8, 0xffffffffu);             // _fadeSpriteIndex = -1 (empty sprite)
-    q64(0xf0, 0);                       // _fadeVelocity + _fadeAmount
-    q32(0xf8, 0xffffffffu);             // _fadeColor
-    q64(0xfc, 0);                       // _clipRegion.left + .top
-    q64(0x104, 0);                      // _clipRegion.right + .bottom
-    q64(0x110, 0);                      // _spriteCapture
-    q64(0x118, 0);  q64(0x120, 0);      // _captureViewport
+    self->_dialogs._head  = nullptr;                    // +0x00
+    self->_dialogs._tail  = nullptr;                    // +0x08
+    self->_dialogs._count = 0;                          // +0x10 (DWORD)
+    self->_removedDialogs._data     = nullptr;          // +0x18
+    self->_removedDialogs._size     = 0;                // +0x20 } one QWORD
+    self->_removedDialogs._capacity = 0;                // +0x24 }
+    self->_addDialogs._data     = nullptr;              // +0x28
+    self->_addDialogs._size     = 0;                    // +0x30 } one QWORD
+    self->_addDialogs._capacity = 0;                    // +0x34 }
+    self->_toolTipOwner  = nullptr;                     // +0x38
+    self->_toolTipDialog = nullptr;                     // +0x40
+    self->_events._data     = nullptr;                  // +0x48
+    self->_events._size     = 0;                        // +0x50 } one QWORD
+    self->_events._capacity = 0;                        // +0x54 }
+    self->_mouseDownX = 0;                              // +0x58 } one QWORD
+    self->_mouseDownY = 0;                              // +0x5c }
+    self->_dragDropDialog  = nullptr;                   // +0x60
+    self->_dragDropElement = nullptr;                   // +0x68
+    self->_dragDropId      = 0;                         // +0x70 (DWORD)
+    self->_dragDropData    = nullptr;                   // +0x78
+    self->_dragDropGrabX   = 0;                         // +0x80 } one QWORD
+    self->_dragDropGrabY   = 0;                         // +0x84 }
+    self->_dragDropActive  = 0;                         // +0x88 (BYTE)
+    self->_audioScene = nullptr;                        // +0x90
+    for (void*& sound : self->_sounds) sound = nullptr; // +0x98..+0xc8
+    self->_cursor = nullptr;                            // +0xd0
+    self->_cursorEnabled = 0;                           // +0xd8 } one WORD
+    self->_mouseCaptured = 0;                           // +0xd9 }
+    self->_uiScale = 1.0f;                              // +0xdc
+    self->_fadeSpriteSheet = nullptr;                   // +0xe0
+    self->_fadeSpriteIndex = -1;                        // +0xe8 (empty sprite)
+    self->_fadeVelocity = 0.0f;                         // +0xf0 } one QWORD
+    self->_fadeAmount   = 0.0f;                         // +0xf4 }
+    self->_fadeColor = 0xffffffffu;                     // +0xf8
+    self->_clipRegion.left   = 0;                       // +0xfc  } one QWORD
+    self->_clipRegion.top    = 0;                       // +0x100 }
+    self->_clipRegion.right  = 0;                       // +0x104 } one QWORD
+    self->_clipRegion.bottom = 0;                       // +0x108 }
+    self->_spriteCapture = nullptr;                     // +0x110
+    std::memset(self->_captureViewport, 0, sizeof self->_captureViewport);  // +0x118, two QWORDs
 }
 
-extern "C" void* RtUi_UserInterface_Ctor(UserInterface* self) {
+extern "C" UserInterface* RtUi_UserInterface_Ctor(UserInterface* self) {
 
     CtorBody(self);
 
@@ -435,10 +444,11 @@ UI::UserInterface::GetFirstContainedDialog(int32_t x, int32_t y) const {
         if (flags & 0x8u) {
             // Element vtable slot 9 (+0x48), `Contains(x, y, ui)` — a VIRTUAL
             // call dispatches through the element's own (minted) table.
-            const auto* element = static_cast<const UI::Element*>(dlg->_root);   // +0x50
-            hit = element->Contains(x, y, static_cast<UserInterface*>(dlg->_ui)); // +0x10
+            // `_root` (+0x50) through the dialog's own one-load accessor
+            // (0x180045580): DialogInstance.h still spells the field `void*`.
+            hit = dlg->GetRoot()->Contains(x, y, static_cast<UserInterface*>(dlg->_ui)); // +0x10
         } else {
-            const auto* e = static_cast<const UI::Element*>(dlg->_root);
+            const Object::InternalPtr<UI::Element> e = dlg->GetRoot();
             hit = (x >= e->_layoutLeft) && (x <= e->_layoutRight) &&
                   (y >= e->_layoutTop)  && (y <= e->_layoutBottom);
         }
@@ -501,7 +511,9 @@ void UI::UserInterface::SetFullscreenFade(bool fadeIn, uint32_t color, bool imme
 // exactly how our tree already calls it — see the 16-byte `uint8_t sprite[16]`
 // that code/Game/Dialog/optionsdialog.cpp's ApplyKeyMapToUI_Impl builds.
 void UI::UserInterface::SetFullscreenFadeSprite(const Sprite* sprite) {
-    std::memcpy(&_fadeSpriteSheet, sprite, 0x10);
+    _fadeSpriteSheet = sprite->spriteSheet;   // +0xe0 <- +0x00 } one QWORD
+    _fadeSpriteIndex = sprite->spriteIndex;   // +0xe8 <- +0x08 } one QWORD
+    _pad0ec          = sprite->pad0C;         // +0xec <- +0x0c }
 }
 
 // ============================================================================
@@ -609,10 +621,11 @@ void UI::UserInterface::AddDialog(Object::InternalPtr<DialogInstance>* dialog) {
 
     // retail 0x18007a0d0 — kSpec_Fill8Z, trait-equivalent for
     // `DialogInstancePtr` (a pointer): `_addDialogs` is that trait-derived
-    // `Array<DialogInstancePtr>` instantiation already. The fill source is the
-    // caller's InternalPtr itself (retail hands the same RDX to the push).
-    _addDialogs.SetSizeFill(_addDialogs._size + 1,
-                            reinterpret_cast<const DialogInstancePtr*>(dialog));
+    // `Array<DialogInstancePtr>` instantiation already. Retail hands the
+    // caller's InternalPtr (RDX) to the push as the fill source; the fill is
+    // its one pointer, copied here by name into the new tail slot.
+    const DialogInstancePtr fill = dialog->Get();
+    _addDialogs.SetSize(_addDialogs._size + 1, fill);
     // no early-out: every call does the whole body
 }
 
@@ -628,55 +641,59 @@ void UI::UserInterface::Play(int32_t id) {
     void* sound = _sounds[id];
     if (!sound) {  return; }
 
-    uint8_t* scene = reinterpret_cast<uint8_t*>(_audioScene);
+    // B.4 LEFT: `_audioScene` (+0x90) stays `void*` (code/Game assigns it a
+    // `void*`: gameupdateloop.cpp:1652, menudialogloopt.cpp:1158), and the
+    // Channel's `soundEffectRef` is a `uint64_t` in R-ENG's Audio.h. The body
+    // is Audio::Scene::PlayEffect inlined (0x1801223ec..0x180122458).
+    Audio::Scene* const scene = reinterpret_cast<Audio::Scene*>(_audioScene);
     if (!scene) {  return; }
 
-    uint8_t* table = *reinterpret_cast<uint8_t**>(scene + 0x10);
+    Audio::Scene::Channel* const table = scene->channels._data;   // +0x10
 
     const double secondsPerTick = *TimerSecondsPerTick();
     const int64_t ticks = static_cast<int64_t>(0.0 / secondsPerTick);
 
     int index = -1;
     for (int i = 0; i < 0x100; ++i) {
-        if (*reinterpret_cast<const int32_t*>(table + i * 0x70 + 0x68) == 0) {
+        if (table[i].handleTag == 0) {                            // +0x68
             index = i;
             break;
         }
     }
     if (index < 0) {  return; }   // table full: retail drops it
 
-    uint8_t* slot = table + static_cast<int64_t>(index) * 0x70;
-    *reinterpret_cast<void**>(slot)          = sound;
-    *reinterpret_cast<int64_t*>(slot + 0x10) = ticks;
-    *reinterpret_cast<int32_t*>(slot + 0x08) = 1;
+    Audio::Scene::Channel& slot = table[index];
+    slot.soundEffectRef = reinterpret_cast<uint64_t>(sound);      // +0x00
+    slot.startTime      = ticks;                                  // +0x10
+    slot.soundType      = 1;                                      // +0x08
 
-    const int32_t counter = ++*reinterpret_cast<int32_t*>(scene + 0x08);
-    *reinterpret_cast<int32_t*>(slot + 0x68) = (index * 2) | (counter << 9);
+    const int32_t counter = ++scene->playGeneration;              // +0x08
+    slot.handleTag = static_cast<uint32_t>((index * 2) | (counter << 9));   // +0x68
 
 }
 
 void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
     // `ExternalPtr` by value is the bare pointer in RDX (banner, B6-11).
-    void* const cursor = cursorPtr.Get();
+    Cursor* const cursor = cursorPtr.Get();
 
     _cursor = cursor;
     if (!cursor) {  return; }
 
-    uint8_t* cur     = reinterpret_cast<uint8_t*>(cursor);
-    uint8_t* device  = reinterpret_cast<uint8_t*>(*VideoDeviceSingleton());
-    uint8_t* backend = *reinterpret_cast<uint8_t**>(device + 0x100);
+    // B.4 LEFT: `Video::Device::deviceData` (+0x100) is `void*` in R-VIDEO's
+    // header and `SpriteSheet::m_field30` (+0x30) is a `uint64_t` another block
+    // writes as an integer (saveload_draw.cpp); the chain below them stays a
+    // raw read until both are typed. `DeviceData` slot 8 (+0x40) is
+    // `SetImageBuffer(image, hotX, hotY)` (CompanionData.h).
+    uint8_t* backend = reinterpret_cast<uint8_t*>(Video::Device::_singleton->deviceData);
     void**   vtbl    = *reinterpret_cast<void***>(backend);
 
-    uint8_t* sheet  = *reinterpret_cast<uint8_t**>(cur + 0x28);
-    uint8_t* sheetA = *reinterpret_cast<uint8_t**>(sheet + 0x30);
+    const SpriteSheet* sheet = cursor->_spriteSheet.Get();
+    uint8_t* sheetA = reinterpret_cast<uint8_t*>(sheet->m_field30);  // MaterialInstance*
     uint8_t* entry  = *reinterpret_cast<uint8_t**>(sheetA + 0x50);
     void*    image  = *reinterpret_cast<void**>(entry + 0x08);
 
-    const int32_t hotX = *reinterpret_cast<const int32_t*>(cur + 0x20);
-    const int32_t hotY = *reinterpret_cast<const int32_t*>(cur + 0x24);
-
     reinterpret_cast<void (*)(void*, void*, int32_t, int32_t)>(vtbl[8])(
-        backend, image, hotX, hotY);
+        backend, image, cursor->_hotSpotX, cursor->_hotSpotY);
 
 }
 
@@ -686,32 +703,15 @@ void UI::UserInterface::EnableCursor(bool enable) {
 
     _cursorEnabled = static_cast<uint8_t>(enable);
 
-    uint8_t* config = *reinterpret_cast<uint8_t**>(InputConfigSingleton());
-    uint8_t* app    = *reinterpret_cast<uint8_t**>(ApplicationSingleton());
+    // `Input::Configuration::_mouseDisplay` (+0x0a) forces the OS cursor off.
+    // CMOVNZ at 0x18012259c.
+    const bool wanted = enable && !::Input::Configuration::_singleton->_mouseDisplay;
 
-    uint8_t wanted = static_cast<uint8_t>(enable);
-    if (*reinterpret_cast<const uint8_t*>(config + 0x0a) != 0) wanted = 0;
-
-    if (*reinterpret_cast<const uint8_t*>(app + 0x10) == wanted) {
-        return;
-    }
-
-    uint8_t* node = *reinterpret_cast<uint8_t**>(app + 0x18);
-    *reinterpret_cast<uint8_t*>(app + 0x10) = wanted;
-
-    while (node) {
-        const uint32_t key = *reinterpret_cast<const uint32_t*>(node);
-        if (key > 0x20u)      node = *reinterpret_cast<uint8_t**>(node + 0x18);
-        else if (key < 0x20u) node = *reinterpret_cast<uint8_t**>(node + 0x20);
-        else                  break;
-    }
-    if (!node) {  return; }
-
-    void* window  = *reinterpret_cast<void**>(app);
-    void* handler = *reinterpret_cast<void**>(node + 0x08);
-    reinterpret_cast<void (*)(void*, uint32_t, uint64_t, uint64_t)>(handler)(
-        window, 0x20u, 0, 0);
-
+    // 0x18012259f..0x1801225d9 is `Application::EnableCursor` (0x18009f800)
+    // INLINED: compare +0x10, early-out, store, descend the message-callback
+    // set for WM_SETCURSOR (0x20) and tail-call it with (hwnd, 0x20, 0, 0).
+    // The member is that body (application_win.cpp), called by name.
+    ::Application::Application::_singleton->EnableCursor(wanted);
 }
 
 // ============================================================================
@@ -832,11 +832,8 @@ inline void UiMemFree(void* p) {
 
 // Slot 0 of any Object::Base-derived vtable is the scalar deleting destructor;
 // retail calls it with EDX = 1 ("destruct AND free"). ENDGAME B.3.6: that is
-// `Object::Base::DeletingDtor(unsigned)`, slot 0 of the real `UI::DialogInstance`
-// — a VIRTUAL call, dispatched through the dialog's own (minted or exe) table.
-inline void UiDeleteDialog(void* dlg) {
-    delete reinterpret_cast<UI::DialogInstance*>(dlg);   // B.3.6 bridge
-}
+// `delete dlg` on the real `UI::DialogInstance` — a VIRTUAL call, dispatched
+// through the dialog's own (minted or exe) table.
 
 // ---- the NEGATIVE CONTROL knob ---------------------------------------------
 // `BANISHED_UIF_NEGCTRL=<n>` deliberately breaks ONE thing in one of this
@@ -863,83 +860,75 @@ inline void UiDeleteDialog(void* dlg) {
 // The body, factored out so the twin oracle can run OUR implementation on a
 // synthetic subject without re-entering the diff wrapper.
 void UiDtorBody(UserInterface* self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+    using Node = Collection::LinkedList<UI::DialogInstancePtr>::Node;
+    auto& list = self->_dialogs;
 
     // ---- phase 1 ----------------------------------------------------------
-    if (*reinterpret_cast<int32_t*>(p + 0x20) > 0) {
-        int32_t  i   = 0;
-        uint64_t off = 0;
+    if (self->_removedDialogs._size > 0) {
+        int32_t i = 0;
         do {
-            uint8_t* removed = *reinterpret_cast<uint8_t**>(p + 0x18);
-            uint8_t* head    = *reinterpret_cast<uint8_t**>(p + 0x00);
-            uint8_t* node    = head;
+            Node* const head = list._head;
+            Node* node = head;
             if (node) {
-                void* want = *reinterpret_cast<void**>(removed + off);
+                void* want = self->_removedDialogs._data[i];
                 for (;;) {
-                    if (*reinterpret_cast<void**>(node) == want) {
-                        if (node == head)
-                            *reinterpret_cast<void**>(p + 0x00) =
-                                *reinterpret_cast<void**>(node + 0x10);
-                        if (node == *reinterpret_cast<uint8_t**>(p + 0x08))
-                            *reinterpret_cast<void**>(p + 0x08) =
-                                *reinterpret_cast<void**>(node + 0x08);
-                        if (uint8_t* prev = *reinterpret_cast<uint8_t**>(node + 0x08))
-                            *reinterpret_cast<void**>(prev + 0x10) =
-                                *reinterpret_cast<void**>(node + 0x10);
-                        if (uint8_t* next = *reinterpret_cast<uint8_t**>(node + 0x10))
-                            *reinterpret_cast<void**>(next + 0x08) =
-                                *reinterpret_cast<void**>(node + 0x08);
-                        *reinterpret_cast<void**>(node + 0x08) = nullptr;
-                        *reinterpret_cast<void**>(node + 0x10) = nullptr;
-                        --*reinterpret_cast<int32_t*>(p + 0x10);
+                    if (node->element == want) {
+                        if (node == head)        list._head = node->next;
+                        if (node == list._tail)  list._tail = node->prev;
+                        if (Node* prev = node->prev) prev->next = node->next;
+                        if (Node* next = node->next) next->prev = node->prev;
+                        node->prev = nullptr;
+                        node->next = nullptr;
+                        --list._count;
                         UiMemFree(node);
                         break;
                     }
-                    node = *reinterpret_cast<uint8_t**>(node + 0x10);
+                    node = node->next;
                     if (!node) break;
                 }
             }
 
             // RE-READ, at 0x180120c74, after the free. See trap (b).
-            uint8_t* rd  = *reinterpret_cast<uint8_t**>(p + 0x18);
-            uint8_t* dlg = *reinterpret_cast<uint8_t**>(rd + off);
+            void*& slot = self->_removedDialogs._data[i];
+            UI::DialogInstance* const dlg = reinterpret_cast<UI::DialogInstance*>(slot);
             // Trap (a): the flag word is read BEFORE the null test, as retail
             // does. Kept in that order deliberately.
-            const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);
+            const uint32_t flags = dlg->_flags;
             if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
-                UiDeleteDialog(dlg);
-                *reinterpret_cast<void**>(rd + off) = nullptr;
+                delete dlg;
+                slot = nullptr;
             }
 
             ++i;
-            off += 8;
-        } while (i < *reinterpret_cast<int32_t*>(p + 0x20));
+        } while (i < self->_removedDialogs._size);
     }
 
     // ---- phase 2 ----------------------------------------------------------
-    for (uint8_t* node = *reinterpret_cast<uint8_t**>(p + 0x00); node;
-         node = *reinterpret_cast<uint8_t**>(node + 0x10)) {
-        uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
-        const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);
+    for (Node* node = list._head; node; node = node->next) {
+        UI::DialogInstance* const dlg = reinterpret_cast<UI::DialogInstance*>(node->element);
+        const uint32_t flags = dlg->_flags;
         if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
-            UiDeleteDialog(dlg);
-            *reinterpret_cast<void**>(node) = nullptr;
+            delete dlg;
+            node->element = nullptr;
         }
     }
     // ---- phase 3 ----------------------------------------------------------
     // Retail's order is events, addDialogs, removedDialogs, and each pair of
     // stores is two QWORDs — the second covers `_size` AND `_capacity`.
-    if (void* ev = *reinterpret_cast<void**>(p + 0x48)) UiMemFree(ev);
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;
+    if (void* ev = self->_events._data) UiMemFree(ev);
+    self->_events._data     = nullptr;
+    self->_events._size     = 0;
+    self->_events._capacity = 0;
 
-    if (void* ad = *reinterpret_cast<void**>(p + 0x28)) UiMemFree(ad);
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;
+    if (void* ad = self->_addDialogs._data) UiMemFree(ad);
+    self->_addDialogs._data     = nullptr;
+    self->_addDialogs._size     = 0;
+    self->_addDialogs._capacity = 0;
 
-    if (void* rm = *reinterpret_cast<void**>(p + 0x18)) UiMemFree(rm);
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
+    if (void* rm = self->_removedDialogs._data) UiMemFree(rm);
+    self->_removedDialogs._data     = nullptr;
+    self->_removedDialogs._size     = 0;
+    self->_removedDialogs._capacity = 0;
 
     // ---- phase 4: the tail JMP -------------------------------------------
     // retail 0x1800325f0 — `self->_dialogs` is the real
@@ -961,15 +950,13 @@ void UiDtorBody(UserInterface* self) {
 // over the whole run is identical to erasing every match and closing the gap,
 // so it is written as one for clarity — the field layout it copies is exactly
 // AssignEvent30's (array.cpp), which is the byte-level cross-check.
-void RemoveEventsForDialog(uint8_t* p, void* dlg) {
-    uint8_t* data = *reinterpret_cast<uint8_t**>(p + 0x48);
-    int32_t* size = reinterpret_cast<int32_t*>(p + 0x50);
-    for (int32_t i = 0; i < *size; ) {
-        if (*reinterpret_cast<void**>(data + static_cast<size_t>(i) * 0x30) == dlg) {
-            std::memmove(data + static_cast<size_t>(i) * 0x30,
-                         data + static_cast<size_t>(i + 1) * 0x30,
-                         static_cast<size_t>(*size - i - 1) * 0x30);
-            --*size;
+void RemoveEventsForDialog(Collection::Array<UI::Event>& events, void* dlg) {
+    UI::Event* const data = events._data;
+    int32_t& size = events._size;
+    for (int32_t i = 0; i < size; ) {
+        if (data[i].dialog == dlg) {
+            for (int32_t j = i; j < size - 1; ++j) data[j] = data[j + 1];
+            --size;
             // do not advance i -- re-check the slot the shift just filled
         } else {
             ++i;
@@ -993,45 +980,41 @@ void RemoveEventsForDialog(uint8_t* p, void* dlg) {
 } // namespace
 
 void UI::UserInterface::CleanRemovedDialogs() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    const int32_t removedCount = *reinterpret_cast<int32_t*>(p + 0x20);
+    using Node = Collection::LinkedList<DialogInstancePtr>::Node;
+    const int32_t removedCount = _removedDialogs._size;
     for (int32_t i = 0; i < removedCount; ++i) {
-        uint8_t* removed = *reinterpret_cast<uint8_t**>(p + 0x18);
-        void* want = *reinterpret_cast<void**>(removed + static_cast<size_t>(i) * 8);
+        void* want = _removedDialogs._data[i];
 
-        for (uint8_t* node = *reinterpret_cast<uint8_t**>(p + 0x00); node;
-             node = *reinterpret_cast<uint8_t**>(node + 0x10)) {
-            if (*reinterpret_cast<void**>(node) != want) continue;
-            if (node == *reinterpret_cast<uint8_t**>(p + 0x00))
-                *reinterpret_cast<void**>(p + 0x00) = *reinterpret_cast<void**>(node + 0x10);
-            if (node == *reinterpret_cast<uint8_t**>(p + 0x08))
-                *reinterpret_cast<void**>(p + 0x08) = *reinterpret_cast<void**>(node + 0x08);
-            if (uint8_t* prev = *reinterpret_cast<uint8_t**>(node + 0x08))
-                *reinterpret_cast<void**>(prev + 0x10) = *reinterpret_cast<void**>(node + 0x10);
-            if (uint8_t* next = *reinterpret_cast<uint8_t**>(node + 0x10))
-                *reinterpret_cast<void**>(next + 0x08) = *reinterpret_cast<void**>(node + 0x08);
-            *reinterpret_cast<void**>(node + 0x08) = nullptr;
-            *reinterpret_cast<void**>(node + 0x10) = nullptr;
-            --*reinterpret_cast<int32_t*>(p + 0x10);
+        for (Node* node = _dialogs._head; node; node = node->next) {
+            if (node->element != want) continue;
+            if (node == _dialogs._head) _dialogs._head = node->next;
+            if (node == _dialogs._tail) _dialogs._tail = node->prev;
+            if (Node* prev = node->prev) prev->next = node->next;
+            if (Node* next = node->next) next->prev = node->prev;
+            node->prev = nullptr;
+            node->next = nullptr;
+            --_dialogs._count;
             UiMemFree(node);
             break;
         }
 
-        RemoveEventsForDialog(p, want);
+        RemoveEventsForDialog(_events, want);
 
         // RE-READ, exactly as UiDtorBody's own phase 1 does, in case any of
         // the above moved the array (it does not, but the re-read is free and
         // keeps this body honest against retail's own instruction order).
-        uint8_t* dlg = *reinterpret_cast<uint8_t**>(
-            *reinterpret_cast<uint8_t**>(p + 0x18) ? *reinterpret_cast<uint8_t**>(p + 0x18) + static_cast<size_t>(i) * 8 : nullptr);
-        const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);   // trap (a): read before the null test
+        // (A null `_data` here faults on the element load exactly as the
+        // tree's `*(nullptr)` read did.)
+        void*& slot = _removedDialogs._data[i];
+        DialogInstance* const dlg = reinterpret_cast<DialogInstance*>(slot);
+        const uint32_t flags = dlg->_flags;   // trap (a): read before the null test
         if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
-            UiDeleteDialog(dlg);
-            *reinterpret_cast<void**>(*reinterpret_cast<uint8_t**>(p + 0x18) + static_cast<size_t>(i) * 8) = nullptr;
+            delete dlg;
+            _removedDialogs._data[i] = nullptr;
         }
     }
 
-    *reinterpret_cast<int32_t*>(p + 0x20) = 0;   // FUN_180079c90 -- see banner
+    _removedDialogs._size = 0;   // FUN_180079c90 -- see banner
 }
 
 // ?UpdateEvents@UserInterface@UI@@QEAAXXZ — retail 0x18011fc60, ord 4515.
@@ -1046,29 +1029,25 @@ void UI::UserInterface::CleanRemovedDialogs() {
 // same way `FUN_180079c90` is above: the dead-branch reasoning is identical,
 // just at stride 0x30 instead of 8.
 void UI::UserInterface::UpdateEvents() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    if (p[0x88] != 0) return;
-    p[0x88] = 1;
+    if (_dragDropActive != 0) return;
+    _dragDropActive = 1;
 
-    const int32_t count = *reinterpret_cast<int32_t*>(p + 0x50);
-    uint8_t* data = *reinterpret_cast<uint8_t**>(p + 0x48);
+    const int32_t count = _events._size;
+    Event* const data = _events._data;
     for (int32_t i = 0; i < count; ++i) {
-        uint8_t* ev = data + static_cast<size_t>(i) * 0x30;
-        void* dlg = *reinterpret_cast<void**>(ev);
+        const Event& ev = data[i];
         // The fresh stack copy of the event's element, passed BY ADDRESS
         // (RULE B6-11: slot 8's InternalPtr<Element> argument is a hidden
         // pointer to the caller's temporary).
-        Object::InternalPtr<UI::Element> elem(*reinterpret_cast<UI::Element**>(ev + 0x08));
+        Object::InternalPtr<UI::Element> elem(ev.element);
         // DialogInstance vtable slot 8 (+0x40) `OnElementEvent` — VIRTUAL, so
         // an exe dialog's hand-built slot 8 is what runs.
-        reinterpret_cast<UI::DialogInstance*>(dlg)->OnElementEvent(&elem,   // B.3.6 bridge
-            *reinterpret_cast<int32_t*>(ev + 0x10), *reinterpret_cast<int32_t*>(ev + 0x14),
-            *reinterpret_cast<int32_t*>(ev + 0x18), *reinterpret_cast<int32_t*>(ev + 0x1c),
-            *reinterpret_cast<int32_t*>(ev + 0x20), *reinterpret_cast<void**>(ev + 0x28));
+        reinterpret_cast<UI::DialogInstance*>(ev.dialog)->OnElementEvent(&elem,
+            ev.eventId, ev.arg14, ev.arg18, ev.arg1C, ev.arg20, ev.userData);
     }
 
-    *reinterpret_cast<int32_t*>(p + 0x50) = 0;   // FUN_180079df0 -- see banner
-    p[0x88] = 0;
+    _events._size = 0;   // FUN_180079df0 -- see banner
+    _dragDropActive = 0;
 }
 
 // ?GetMouseCursorIndex@UserInterface@UI@@QEBAHHH@Z — retail 0x18011fa40, ord
@@ -1078,50 +1057,36 @@ void UI::UserInterface::UpdateEvents() {
 // none contains (x,y), otherwise defers to that dialog's OWN
 // GetMouseCursorIndex starting from its root Element.
 int32_t UI::UserInterface::GetMouseCursorIndex(int32_t x, int32_t y) const {
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(this);
-    for (const uint8_t* node = *reinterpret_cast<uint8_t* const*>(p + 0x08); node;
-         node = *reinterpret_cast<uint8_t* const*>(node + 0x08)) {
-        void* dlg = *reinterpret_cast<void* const*>(node);
-        const uint8_t* d = static_cast<const uint8_t*>(dlg);
-        const uint32_t flags = *reinterpret_cast<const uint32_t*>(d + 0x20);
+    for (const auto* node = _dialogs._tail; node; node = node->prev) {
+        DialogInstance* const dlg = reinterpret_cast<DialogInstance*>(node->element);
+        const uint32_t flags = dlg->_flags;
         if ((flags >> 2) & 1) continue;
-        const uint8_t* root = *reinterpret_cast<uint8_t* const*>(d + 0x50);
+        // `_root` (+0x50) through the dialog's own accessor (0x180045580, one
+        // load): DialogInstance.h still spells the field `void*`.
+        const Object::InternalPtr<UI::Element> root = dlg->GetRoot();
         bool hit;
         if ((flags >> 3) & 1) {
             // Element vtable slot 9 (+0x48) `Contains` — VIRTUAL.
-            hit = reinterpret_cast<const UI::Element*>(root)->Contains(      // B.3.6 bridge
-                x, y, *reinterpret_cast<UserInterface* const*>(d + 0x10));
+            // B.4 LEFT: `DialogInstance::_ui` (+0x10) is `void*` (R-UI-a).
+            hit = root->Contains(x, y, reinterpret_cast<UserInterface*>(dlg->_ui));
         } else {
-            const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
-            const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
-            const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
-            const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
+            const int32_t left   = root->_layoutLeft;     // +0x68
+            const int32_t right  = root->_layoutRight;    // +0x70
+            const int32_t top    = root->_layoutTop;      // +0x6c
+            const int32_t bottom = root->_layoutBottom;   // +0x74
             hit = left <= x && x <= right && top <= y && y <= bottom;
         }
         if (hit) {
             if (!dlg) return 0;
             // The dialog's own `GetMouseCursorIndex(InternalPtr<Element>, x, y)`
             // (0x180114010), a non-virtual member of the real class now.
-            Object::InternalPtr<UI::Element> element(
-                *reinterpret_cast<UI::Element* const*>(d + 0x50));
-            return reinterpret_cast<const UI::DialogInstance*>(d)                // B.3.6 bridge
-                ->GetMouseCursorIndex(element, x, y);
+            return dlg->GetMouseCursorIndex(dlg->GetRoot(), x, y);
         }
     }
     return 0;
 }
 
 extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
-    // `worked` is the only thing a LIVE call can report: there is no comparison
-    // to make against a destructor that runs once, so `calls=` stays 0 here on
-    // purpose and the CORRECTNESS evidence is the twin oracle below, which runs
-    // from RtUiManagerRegister. reference_calls_zero_can_mean_always_took_the_
-    // uncovered_branch.md: this is the "no comparison exists" cause of calls=0,
-    // and it is named here rather than left for a reader to guess.
-    const bool didWork = (*reinterpret_cast<int32_t*>(
-                              reinterpret_cast<uint8_t*>(self) + 0x20) > 0) ||
-                         (*reinterpret_cast<void**>(self) != nullptr);
-    (void)didWork;   // the reporting that read it is gone; kept as the banner's statement
     UiDtorBody(self);
 }
 
@@ -1220,19 +1185,19 @@ namespace {
 
 // `IO::Serializer` — {Stream*, ReaderWriter*}, 0x10 bytes
 // (runtime/types/io/Serializer.h). Built on the stack twice per controller.
-struct UiSerializer { void* stream; void* rw; };
+struct UiSerializer { void* stream; IO::ReaderWriter* rw; };
 
-using UiCreateRwFn   = void* (*)(void* enc, UiSerializer* out, const char* name);
+using UiCreateRwFn   = IO::ReaderWriter* (*)(void* enc, UiSerializer* out, const char* name);
 
 } // namespace
 
 void UI::UserInterface::SaveAllSettings() {
-    uint8_t* node = *reinterpret_cast<uint8_t**>(this);   // _dialogs._head
+    auto* node = _dialogs._head;
     if (!node) return;
 
     do {
-        uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
-        if (*reinterpret_cast<void**>(dlg + 0xa8) != nullptr) {
+        DialogInstance* const dlg = reinterpret_cast<DialogInstance*>(node->element);
+        if (dlg->_userData != nullptr) {
             // ---- 1+2. the inlined IO::MemoryStream and its 8-byte encoding -
             // ENDGAME B.3.9 IO (foreign site, IO's class): retail's inlined
             // ??0MemoryStream is the class's real constructor -- the Stream
@@ -1243,20 +1208,20 @@ void UI::UserInterface::SaveAllSettings() {
             void* enc = st->_encoding;
 
             // ---- 3. point the stream at the dialog's settings buffer ------
-            const int32_t size = *reinterpret_cast<int32_t*>(dlg + 0xb0);
-            void*         buf  = *reinterpret_cast<void**>(dlg + 0xa8);
+            const int32_t size = dlg->_userFlags;   // +0xb0, read here as the byte count
+            void*         buf  = dlg->_userData;    // +0xa8, the settings buffer
             st->_data      = buf;
             st->_size      = static_cast<uint32_t>(size);
             st->_cursor    = 0;
             st->_direction = 1;
             if (size >= 4) {
-                *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
+                *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;  // CAST-OK: byte_io
                 st->_cursor += 4;
             }
 
             // ---- 4. the top-level ReaderWriter ----------------------------
             UiSerializer ser{ st, nullptr };
-            void* rw = nullptr;
+            IO::ReaderWriter* rw = nullptr;
             if (enc) {
                 void** encVt = *reinterpret_cast<void***>(enc);
                 UiCreateRwFn make = reinterpret_cast<UiCreateRwFn>(
@@ -1268,27 +1233,23 @@ void UI::UserInterface::SaveAllSettings() {
 
             // ---- 5. the dialog's own OnSerializeSettings ------------------
             // DialogInstance vtable slot 9 (+0x48) — VIRTUAL.
-            reinterpret_cast<UI::DialogInstance*>(dlg)->OnSerializeSettings(st);   // B.3.6 bridge
+            dlg->OnSerializeSettings(st);
 
             // ---- 6. the controller loop -----------------------------------
-            int32_t count = *reinterpret_cast<int32_t*>(dlg + 0x80);
+            int32_t count = dlg->_controllers._size;
             if (rw) {
-                reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(        // B.3.x bridge
-                    count, nullptr);                                           // +0xa0
+                rw->SerializeInt(count, nullptr);                              // +0xa0
             }
             for (int32_t i = 0; i < count; ++i) {
-                uint8_t* arr = *reinterpret_cast<uint8_t**>(dlg + 0x78);
-                void*    ctl = *reinterpret_cast<void**>(arr + i * 8);
+                DialogController* ctl = dlg->_controllers._data[i];
                 // DialogController vtable slot 2 (+0x10) `Type()` — VIRTUAL.
-                int32_t  id  = static_cast<int32_t>(
-                    reinterpret_cast<UI::DialogController*>(ctl)->Type());      // B.3.6 bridge
+                uint32_t id  = ctl->Type();
                 if (rw) {
-                    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeUInt(   // B.3.x bridge
-                        reinterpret_cast<uint32_t&>(id), nullptr);             // +0x98
+                    rw->SerializeUInt(id, nullptr);                            // +0x98
                 }
 
                 UiSerializer ser2{ st, nullptr };
-                void* rw2 = nullptr;
+                IO::ReaderWriter* rw2 = nullptr;
                 if (enc) {
                     void** encVt = *reinterpret_cast<void***>(enc);
                     UiCreateRwFn make2 = reinterpret_cast<UiCreateRwFn>(
@@ -1298,25 +1259,24 @@ void UI::UserInterface::SaveAllSettings() {
                 ser2.rw = rw2;
 
                 // RE-READ at 0x1801206a1, not cached across the CreateWriter.
-                arr = *reinterpret_cast<uint8_t**>(dlg + 0x78);
-                ctl = *reinterpret_cast<void**>(arr + i * 8);
+                ctl = dlg->_controllers._data[i];
                 // DialogController vtable slot 10 (+0x50) `OnSerializeSettings`
                 // (B6-1.2: one slot LATER than DialogInstance's) — VIRTUAL.
-                reinterpret_cast<UI::DialogController*>(ctl)->OnSerializeSettings(st); // B.3.6 bridge
+                ctl->OnSerializeSettings(st);
 
                 if (rw2) {
-                    delete reinterpret_cast<IO::ReaderWriter*>(rw2); // B.3.x bridge
+                    delete rw2;
                 }
             }
 
             // ---- 7. teardown ----------------------------------------------
             if (rw) {
-                delete reinterpret_cast<IO::ReaderWriter*>(rw);      // B.3.x bridge
+                delete rw;
             }
             // ~MemoryStream (dead buffer free: never owns) then ~Stream (the
             // encoding): the class's destructor chain, no free of the storage.
             st->IO::MemoryStream::~MemoryStream();
         }
-        node = *reinterpret_cast<uint8_t**>(node + 0x10);
+        node = node->next;
     } while (node);
 }

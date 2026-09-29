@@ -168,8 +168,10 @@ struct ClipRegion {
 };
 static_assert(sizeof(ClipRegion) == 0x10, "ClipRegion is 4 ints");
 
+class Element;
+
 // ============================================================
-// One queued UI event, 0x30 bytes. INTERIOR DELIBERATELY OPAQUE.
+// One queued UI event, 0x30 bytes.
 //
 // The SIZE is proven — CleanRemovedDialogs (0x18011f790) compacts the +0x48
 // array by copying element[i+1] down onto element[i] field by field with a
@@ -177,17 +179,37 @@ static_assert(sizeof(ClipRegion) == 0x10, "ClipRegion is 4 ints");
 // 0x180120f20) build a 0x30-byte stack record before calling the array grow
 // helper at 0x180033690.
 //
-// The INTERIOR is not modelled, because nothing this lane ports reads a field
-// of one, and inventing a layout we have not proven is how a shared struct
-// corrupts silently (PLAN §4.3 risk 1). What the two push sites do show, for
-// whoever lands `UpdateEvents`: +0x00 is the target dialog pointer, +0x10 is
-// an event id (0xd = drag-drop end, 0xe = drag-drop cancel), +0x14 is -1,
-// +0x20 copies _dragDropId and +0x28 copies _dragDropData.
+// The FIELDS (B.4 W1 R-UI-b) are what UpdateEvents (0x18011fc60) hands to the
+// target dialog's `OnElementEvent(InternalPtr<Element>, int, int, int, int,
+// int, void*)` (the mangled `HHHHHPEAX` of slot 8): +0x00 the dialog, +0x08
+// the element (copied into a fresh InternalPtr), the five dwords +0x10..+0x20
+// and the pointer at +0x28. The grow helper's assign copies exactly those
+// eight fields and never +0x24 (array.cpp AssignEvent30). The push sites:
+// +0x10 is an event id (0xd = drag-drop end, 0xe = drag-drop cancel), +0x14
+// is -1, +0x20 copies _dragDropId and +0x28 copies _dragDropData. No retail
+// string names the dwords, so they keep typed guess names.
 // ============================================================
 struct Event {
-    uint8_t _opaque[0x30];
+    void*    dialog;     // +0x00  DialogInstance* (the list's element type)
+    Element* element;    // +0x08
+    int32_t  eventId;    // +0x10
+    int32_t  arg14;      // +0x14
+    int32_t  arg18;      // +0x18
+    int32_t  arg1C;      // +0x1c
+    int32_t  arg20;      // +0x20
+    int32_t  _pad24;     // +0x24  never written, never copied
+    void*    userData;   // +0x28
 };
 static_assert(sizeof(Event) == 0x30, "UI event record stride, from CleanRemovedDialogs");
+static_assert(offsetof(Event, dialog)   == 0x00, "Event::dialog @ +0x00");
+static_assert(offsetof(Event, element)  == 0x08, "Event::element @ +0x08");
+static_assert(offsetof(Event, eventId)  == 0x10, "Event::eventId @ +0x10");
+static_assert(offsetof(Event, arg14)    == 0x14, "Event::arg14 @ +0x14");
+static_assert(offsetof(Event, arg18)    == 0x18, "Event::arg18 @ +0x18");
+static_assert(offsetof(Event, arg1C)    == 0x1c, "Event::arg1C @ +0x1c");
+static_assert(offsetof(Event, arg20)    == 0x20, "Event::arg20 @ +0x20");
+static_assert(offsetof(Event, _pad24)   == 0x24, "Event::_pad24 @ +0x24");
+static_assert(offsetof(Event, userData) == 0x28, "Event::userData @ +0x28");
 
 
 } // namespace UI
@@ -281,6 +303,7 @@ class Cursor;
 class Sprite;
 class SpriteCapture;
 class SpriteContext;
+class ToolTipDialog;
 
 class UserInterface {
 public:
@@ -333,6 +356,9 @@ public:
     // / JZ false — the argument is NOT read on an empty list — then
     // MOV RCX,[RDX] (the dialog, through the caller's InternalPtr) and a walk
     // through `next` (+0x10). Not registered (nothing in the tree calls it).
+    // B.4 LEFT: the header only forward-declares `Object::InternalPtr`, and
+    // tests/unit/ui_userinterface_abi_test.cpp links this inline body without
+    // userinterface.cpp, so the InternalPtr's one pointer is read through it.
     bool IsDialogOpen(Object::InternalPtr<DialogInstance>* dialog) const {
         auto* node = _dialogs._head;
         if (node == nullptr) return false;
@@ -417,7 +443,7 @@ public:
     // The element the tooltip belongs to, and the ToolTipDialog built for it.
     // Always cleared as a pair (BeginToolTip, CloseDialog, Update).
     DialogInstancePtr _toolTipOwner;                             // +0x038
-    void*             _toolTipDialog;                            // +0x040  UI::ToolTipDialog*
+    ToolTipDialog*    _toolTipDialog;                            // +0x040
 
     Collection::Array<Event> _events;                            // +0x048, 0x10
 
@@ -425,17 +451,17 @@ public:
     int32_t _mouseDownY;                                         // +0x05c
 
     DialogInstancePtr _dragDropDialog;                           // +0x060
-    void*             _dragDropElement;                          // +0x068  UI::Element*
+    Element*          _dragDropElement;                          // +0x068
     uint32_t          _dragDropId;                               // +0x070
     uint32_t          _pad74;                                    // +0x074 never written
     void*             _dragDropData;                             // +0x078
-    // TWO READINGS, BOTH CORRECT (Wave 10E lane DRAG). The two sites that
-    // CLEAR this (EndDragDrop, Update) zero the whole qword, so `void*` is the
-    // right shape for them and the declaration stays. But the WRITER,
-    // BeginDragDrop (0x18011f5f0), fills it as a PAIR OF int32 GRAB OFFSETS:
-    // +0x080 = x - element->_layoutLeft and +0x084 = y - element->_layoutTop.
-    // The pair covers all eight bytes, so a qword clear zeroes both halves.
-    void*             _dragDropUserData;                         // +0x080
+    // The WRITER, BeginDragDrop (0x18011f5f0), fills +0x080 as a PAIR OF int32
+    // GRAB OFFSETS: +0x080 = x - element->_layoutLeft and +0x084 = y -
+    // element->_layoutTop. The two sites that CLEAR them (EndDragDrop, Update)
+    // zero both with one qword store; the tree writes the two named fields in
+    // address order (B4_RULES H7).
+    int32_t           _dragDropGrabX;                            // +0x080
+    int32_t           _dragDropGrabY;                            // +0x084
     // Also UpdateEvents' re-entrancy guard (set for the whole drain).
     uint8_t           _dragDropActive;                           // +0x088
     uint8_t           _pad89[7];                                 // +0x089 never written
@@ -446,7 +472,7 @@ public:
     // it drained a non-empty _addDialogs, which is the "dialog opened" sound.
     void* _sounds[7];                                            // +0x098..+0x0c8
 
-    void*   _cursor;                                             // +0x0d0 ExternalPtr<UI::Cursor>
+    Cursor* _cursor;                                             // +0x0d0 ExternalPtr<UI::Cursor>
     uint8_t _cursorEnabled;                                      // +0x0d8
     uint8_t _mouseCaptured;                                      // +0x0d9
     uint8_t _pad0da[2];                                          // +0x0da never written
@@ -466,7 +492,7 @@ public:
     ClipRegion _clipRegion;                                      // +0x0fc
     uint32_t   _pad10c;                                          // +0x10c never written
 
-    void*   _spriteCapture;                                      // +0x110 UI::SpriteCapture*
+    SpriteCapture* _spriteCapture;                               // +0x110
     // Video::Viewport, 0x10 bytes; handed to SpriteContext::Begin by Draw and
     // written dword by dword by BeginSpriteCapture. Kept as bytes so this
     // header does not pull Video/Context.h into the exe tree's includers.
@@ -495,7 +521,13 @@ static_assert(offsetof(UserInterface, _dragDropDialog)   == 0x060, "_dragDropDia
 static_assert(offsetof(UserInterface, _dragDropElement)  == 0x068, "_dragDropElement at +0x068");
 static_assert(offsetof(UserInterface, _dragDropId)       == 0x070, "_dragDropId at +0x070");
 static_assert(offsetof(UserInterface, _dragDropData)     == 0x078, "_dragDropData at +0x078");
-static_assert(offsetof(UserInterface, _dragDropUserData) == 0x080, "_dragDropUserData at +0x080");
+static_assert(offsetof(UserInterface, _dragDropGrabX)    == 0x080, "_dragDropGrabX at +0x080");
+static_assert(offsetof(UserInterface, _dragDropGrabY)    == 0x084, "_dragDropGrabY at +0x084");
+static_assert(offsetof(UserInterface, _pad74)            == 0x074, "_pad74 at +0x074");
+static_assert(offsetof(UserInterface, _pad89)            == 0x089, "_pad89 at +0x089");
+static_assert(offsetof(UserInterface, _pad0da)           == 0x0da, "_pad0da at +0x0da");
+static_assert(offsetof(UserInterface, _pad0ec)           == 0x0ec, "_pad0ec at +0x0ec");
+static_assert(offsetof(UserInterface, _pad10c)           == 0x10c, "_pad10c at +0x10c");
 static_assert(offsetof(UserInterface, _dragDropActive)   == 0x088, "_dragDropActive at +0x088");
 static_assert(offsetof(UserInterface, _audioScene)       == 0x090, "_audioScene at +0x090");
 static_assert(offsetof(UserInterface, _sounds)           == 0x098, "_sounds at +0x098");
@@ -532,7 +564,7 @@ static_assert(sizeof(UserInterface::Iterator) == 0x08,
 // ---- ui/userinterface.cpp
 extern "C" void RtUi_UserInterface_Dtor(UI::UserInterface* self);  // 0x180120b90
 // B3R RT-Core: the ctor body the Engine dialog loops call by name.
-extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
+extern "C" UI::UserInterface* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
 // ==== end B3R W0-P0c ====
 
 // ==== B3R S-Harness (R5: a declaration P0 did not write) ====
@@ -541,5 +573,5 @@ extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui
 // ==== end B3R S-Harness ====
 
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
-extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
+extern "C" UI::UserInterface* RtUi_UserInterface_Ctor(UI::UserInterface* self);  // 0x180120de0
 // ==== end B3R G-Game ====

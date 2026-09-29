@@ -347,6 +347,14 @@ System::String Element::GetToolTipString() const {
 // is retired with the minted table). EMPTY, retail's body.
 ToolTipDialog::~ToolTipDialog() {}
 
+// 0x1800daca0 — the 6-argument DialogInstance ctor with dataSource = the
+// element (an `Object::Internal`, so an `Object::Base`), userData = 0,
+// flags = 0; then the stamp (ToolTipDialog.h).
+ToolTipDialog::ToolTipDialog(UserInterface* ui, const Dialog* dialog,
+                             Object::InternalPtr<DialogInstance> parent,
+                             Object::InternalPtr<Element> element)
+    : DialogInstance(ui, dialog, parent, element.Get(), nullptr, 0) {}
+
 // ?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z   0x1800dab00 — the
 // six steps are the banner above the door.
 void ToolTipDialog::SetText(const System::String& text) {
