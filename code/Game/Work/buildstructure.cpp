@@ -39,6 +39,13 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 #include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 D5: ComponentEntity::TypeId()
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/InteractComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/WorkComponent.h"
+#include "Game/ProfessionList.h"
 
 // ============================================================
 // Ctor (0x1400e5a90)
@@ -71,14 +78,14 @@ BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
       field_60(nullptr), field_68(0) {
     // Allocate the build-position byte array from the site's PositionComponent count.
     if (entityIBP) {
-        uintptr_t posCompIBP = 0;
-        WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(entityIBP), &posCompIBP);
-        int count = Pf_RecursiveChildSum_123070(posCompIBP, 1);
+        // The site's InteractComponent (Work(entityIBP) stored *entityIBP in field_10)
+        InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
+        int count = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(posComp), 1);
         // FUN_14000a590(&field_50, count): resizes the {data,count,cap} array in place,
         // writing field_58 = count. New bytes are uninitialised, so zero-fill below.
         Reimpl_Array_Resize_Byte(&field_50, count);
         int n = field_58;
-        uint8_t* arr = reinterpret_cast<uint8_t*>(field_50);
+        uint8_t* arr = field_50;
         for (int i = 0; i < n && arr; i++) arr[i] = 0;
     }
 }
@@ -88,10 +95,10 @@ BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
 // ============================================================
 // The stamps (BuildStructure, then Work) and `~Internal` are the compiler's.
 BuildStructure::~BuildStructure() {
-    void* treeRoot = field_60;
+    AssignmentNode* treeRoot = field_60;
     if (treeRoot != nullptr) {
-        WorkBase_TreeNodeFree_14c30(&field_60, *(void**)((uintptr_t)treeRoot + 0x10));
-        WorkBase_TreeNodeFree_14c30(&field_60, *(void**)((uintptr_t)treeRoot + 0x18));
+        WorkBase_TreeNodeFree_14c30(&field_60, treeRoot->left);
+        WorkBase_TreeNodeFree_14c30(&field_60, treeRoot->right);
         System::MemoryAllocator::MemFree(treeRoot);
     }
     field_60 = nullptr;
@@ -106,9 +113,8 @@ BuildStructure::~BuildStructure() {
 // OnComplete (0x1400e4f80)
 // ============================================================
 int BuildStructure::OnComplete(void* citizenIBP, void* /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)&field_60), citizenIBP);
-    uint8_t* slots = (uint8_t*)field_50;
-    slots[slotIndex] = 0;
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
+    field_50[slotIndex] = 0;
     return 0;
 }
 
@@ -116,9 +122,8 @@ int BuildStructure::OnComplete(void* citizenIBP, void* /*unused*/, int slotIndex
 // OnCancel (0x1400e4f40)
 // ============================================================
 int BuildStructure::OnCancel(void* citizenIBP, void* /*unused*/, int slotIndex) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)&field_60), citizenIBP);
-    uint8_t* slots = (uint8_t*)field_50;
-    slots[slotIndex] = 0;
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_60), citizenIBP);
+    field_50[slotIndex] = 0;
     return 0;
 }
 
@@ -127,32 +132,31 @@ int BuildStructure::OnCancel(void* citizenIBP, void* /*unused*/, int slotIndex) 
 // ============================================================
 int BuildStructure::Cleanup() {
     while (true) {
-        void* root = field_60;
+        AssignmentNode* root = field_60;
         if (root == nullptr) return 0;
 
-        void* node = root;
-        void* leftChild = *(void**)((uintptr_t)node + 0x10);
+        AssignmentNode* node = root;
+        AssignmentNode* leftChild = node->left;
         while (leftChild != nullptr) {
             node = leftChild;
-            leftChild = *(void**)((uintptr_t)node + 0x10);
+            leftChild = node->left;
         }
 
         if (node == nullptr) return 0;
 
-        void* node2 = root;
+        AssignmentNode* node2 = root;
         if (node2 != nullptr) {
-            void* left2 = *(void**)((uintptr_t)node2 + 0x10);
+            AssignmentNode* left2 = node2->left;
             while (left2 != nullptr) {
                 node2 = left2;
-                left2 = *(void**)((uintptr_t)node2 + 0x10);
+                left2 = node2->left;
             }
         }
 
-        uintptr_t entityPtr = *(uintptr_t*)node2;
+        // The node's citizen; its CharacterComponent's action list (+0x48)
+        CitizenComponent* citizen = node2->element;
 
-        uintptr_t smComp = *(uintptr_t*)(entityPtr + 0x278);
-
-        WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
     }
 }
 
@@ -171,31 +175,30 @@ void BuildStructure::Persist(void* stream) {
     Work::Persist(stream);
 
     // IO::Serializer block (version 0)
-    alignas(8) uint8_t serBuf[24];
-    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
 
-    // Serialize bool at +0x48
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // B.3.4 bridge
+    // Serialize bool at +0x48 (the field is uint8_t storage)
+    ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), serBuf);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_60), &ser);
 
     // Serialize count (+0x58), resize array on load
     int count = field_58;
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
+    ser.Serialize(count, nullptr);
 
-    // Check if loading: first qword of serializer -> *(int*)(ptr + 8) == 0 means loading
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    // Check if loading (direction 0)
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         Reimpl_Array_Resize_Byte(&field_50, count);
     }
 
     // Bulk serialize the byte array (one byte per build position)
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(count, reinterpret_cast<unsigned char*>(field_50), nullptr);   // B.3.4 bridge
+    ser.Serialize(count, field_50, nullptr);
 
     // Serialize rotating scan index at +0x4C
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&field_4c), nullptr);   // B.3.4 bridge
+    ser.Serialize(field_4c, nullptr);
 
-    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
+    // The serializer's destructor runs here
 }
 
 // ============================================================
@@ -239,74 +242,62 @@ static int WorldToCell(int gridSize, float x, float z) {
 }
 
 
-int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
-    uintptr_t s = (uintptr_t)this;
+int BuildStructure::Execute(void* citizenPtrArg, void* /*context*/) {
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenPtr = reinterpret_cast<CitizenComponent**>(citizenPtrArg);
 
     // --- Phase 1: Validate building is enabled ---
-    uintptr_t entity = *(uintptr_t*)(s + 0x10);
+    // Find InteractComponent (the build positions) on the building entity
+    InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
-    // Find PositionComponent on the building entity
-    uintptr_t posCompIBP = 0;
-    WorkBase_FindComponent_2ed0(entity, &posCompIBP);
+    // Find the BuildComponent (type DWORD_1401c7008)
+    BuildComponent* buildMgmt = field_10->FindComponent<BuildComponent>();
 
-    // Find the build-management component (type DWORD_1401c7008)
-    entity = *(uintptr_t*)(s + 0x10);
-    uintptr_t buildMgmtIBP = 0;
-    Dialog_FindComponent_d6c0(reinterpret_cast<void*>(entity), &buildMgmtIBP);
-
-    // Traverse: buildMgmt -> +0x10 child -> find the WorkPlaceComponent (DWORD_1401c80e0).
+    // Traverse: buildMgmt -> its entity (+0x10) -> the WorkPlaceComponent (DWORD_1401c80e0).
     // (Was documented as "build description"; corrected 2026-08-09 — the +0x50 read below
     // is the workplace accepting flag, not a description field. Behaviour unchanged.)
-    uintptr_t buildMgmt = buildMgmtIBP;
-    uintptr_t buildDescIBP = 0;
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(*(uintptr_t*)(buildMgmt + 0x10)), &buildDescIBP);
+    WorkPlaceComponent* buildDesc = buildMgmt->_entity->FindComponent<WorkPlaceComponent>();
 
-    // Check if building is enabled (byte at +0x50 of description)
-    if (*(uint8_t*)(buildDescIBP + 0x50) == 0) {
+    // Check if building is enabled (byte at +0x50 of the workplace)
+    if (!buildDesc->isAccepting) {
         return 1;
     }
 
     // --- Phase 2: Check if we have positions left to build ---
-    int totalPositions = Pf_RecursiveChildSum_123070(posCompIBP, 1);
+    int totalPositions = Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(posComp), 1);
     if (field_68 >= totalPositions) {
         return 1;
     }
 
     // --- Phase 3: Check builder count vs max, verify citizen authorization ---
-    uintptr_t bcIBP = 0;
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(*(uintptr_t*)(s + 0x10)), &bcIBP);
-    int currentBuilders = *(int32_t*)(bcIBP + 0x60);
+    WorkPlaceComponent* bc = field_10->FindComponent<WorkPlaceComponent>();
+    int currentBuilders = bc->workerCount;
 
-    uintptr_t bc2 = bcIBP;
-    uintptr_t matDescIBP = 0;
-    WorkBase_FindComponent_3050(*(uintptr_t*)(bc2 + 0x10), &matDescIBP);
-    uintptr_t matDesc = matDescIBP;
+    WorkComponent* matDesc = bc->_entity->FindComponent<WorkComponent>();
 
-    // Calculate max builders if not yet done
-    if (*(int32_t*)(matDesc + 0x30) == 0) {
-        *(int32_t*)(matDesc + 0x30) = WorkComponent_CalcMaxWorkers(matDesc);
+    // Calculate max builders if not yet done (WorkComponent +0x30)
+    if (matDesc->workState == 0) {
+        matDesc->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
     }
 
     // If at max builders, verify this citizen is on the builder list
-    if (currentBuilders == *(int32_t*)(matDesc + 0x30)) {
+    if (currentBuilders == matDesc->workState) {
         bool found = false;
-        if (*(int32_t*)(bcIBP + 0x60) < 1) {
+        if (bc->workerCount < 1) {
             return 1;
         }
 
         int i = 0;
-        uintptr_t byteOff = 0;
         do {
-            uintptr_t bcVal = bcIBP;
-            uintptr_t builderId = *(uintptr_t*)(byteOff + *(uintptr_t*)(bcVal + 0x58));
+            CitizenComponent* builderId = bc->workers[i].Get();
 
-            if (builderId == *(uintptr_t*)citizenPtr) {
+            if (builderId == *citizenPtr) {
                 found = true;
             }
-            byteOff += 8;
             i++;
 
-        } while (i < *(int32_t*)(bcIBP + 0x60));
+        } while (i < bc->workerCount);
 
         if (!found) {
             return 1;
@@ -317,19 +308,19 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
     int unbuiltCount = 0;
     int posCount = field_58;
     if (posCount > 0) {
-        uint8_t* arr = (uint8_t*)field_50;
+        uint8_t* arr = field_50;
         for (int i = 0; i < posCount; i++) {
             if (arr[i] == 0) unbuiltCount++;
         }
     }
 
     // --- Phase 5: Get map grid and building center cell ---
-    int* mapGrid = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
+    // The world map (GameUpdateLoop::m_game is still void*: LEFT)
+    int* mapGrid = (int*)GameUpdateLoop::_singleton->m_game;
 
-    uintptr_t citizenEntity = *(uintptr_t*)citizenPtr;
-
-    uintptr_t comp278 = *(uintptr_t*)(citizenEntity + 0x278);
-    uintptr_t posData = *(uintptr_t*)(comp278 + 0x68);
+    // The citizen's position: CharacterComponent (+0x278) -> ModelComponent (+0x68);
+    // the transform is raw storage (H5): the float reads are LEFT.
+    uintptr_t posData = reinterpret_cast<uintptr_t>((*citizenPtr)->character->modelComponent);
 
     (void)*(float*)(posData + 0x160);  // centerY: available for future use
     int gridSize = *mapGrid;
@@ -350,7 +341,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
         if (scanTotal > 0) {
             for (int scan = 0; scan < scanTotal; scan++) {
                 int idx = field_4c;
-                if (((uint8_t*)field_50)[idx] == 0) {
+                if (field_50[idx] == 0) {
                     chosenIndex = idx;
                 }
                 int next = idx + 1;
@@ -363,7 +354,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
         // Get world position for this build point
         float candidatePos[3];
         Pf_EntityResolvePos_2e20(
-            reinterpret_cast<void*>(posCompIBP), candidatePos, 1, chosenIndex, nullptr);
+            posComp, candidatePos, 1, chosenIndex, nullptr);
 
         gridSize = *mapGrid;
         int candidateCell = WorldToCell(gridSize, candidatePos[0], candidatePos[1]);
@@ -376,7 +367,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
                 // Found accessible point -- get exact position
                 float bestPos[3];
                 Pf_EntityResolvePos_2e20(
-                    reinterpret_cast<void*>(posCompIBP), bestPos, 1, chosenIndex, nullptr);
+                    posComp, bestPos, 1, chosenIndex, nullptr);
 
                 gridSize = *mapGrid;
                 int exactCell = WorldToCell(gridSize, bestPos[0], bestPos[1]);
@@ -395,7 +386,7 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
 
                     float testPos[3];
                     Pf_EntityResolvePos_2e20(
-                        reinterpret_cast<void*>(posCompIBP), testPos, 1, posIdx, nullptr);
+                        posComp, testPos, 1, posIdx, nullptr);
 
                     gridSize = *mapGrid;
                     int testCell = WorldToCell(gridSize, testPos[0], testPos[1]);
@@ -495,14 +486,14 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
                 // --- Phase 7: Setup action queue ---
                 {
                     // Prepare IBP values for action setup
-                    uintptr_t citizenEntityVal = *(uintptr_t*)citizenPtr;
+                    CitizenComponent* citizenEntityVal = *citizenPtr;
 
                     // FUN_1400c0690: sets up MoveTo, ShowTool, PerformWork, CompleteTask actions
                     // Args: citizenEntityIBP, priority, buildingEntityIBPptr, position, index, altAnim
                     BuildStructure_SetupBuildActions(
                         &citizenEntityVal,
                         field_20,
-                        reinterpret_cast<int64_t*>((void*)(s + 0x10)),
+                        reinterpret_cast<int64_t*>(&field_10),
                         bestPos,
                         chosenIndex,
                         (uint8_t)field_48
@@ -510,26 +501,25 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
 
                     // Update building entity state
                     int priority = field_20;
-                    uintptr_t bldgEntity = *(uintptr_t*)citizenPtr;
+                    CitizenComponent* bldgEntity = *citizenPtr;
 
                     // Get target via vtable slot 10 (GetTarget, +0x50)
                     uintptr_t targetIBP = 0;
-                    void* targetResult = GetTarget(&targetIBP);
-                    uintptr_t targetVal = *(uintptr_t*)targetResult;
+                    Profession* targetVal = *(Profession**)GetTarget(&targetIBP);
 
-                    *(uint32_t*)(bldgEntity + 0x54) |= 4;
-                    *(int32_t*)(bldgEntity + 0x30) = priority;
-                    *(int32_t*)(bldgEntity + 0xb0) = 0;
+                    bldgEntity->statusFlags |= 4;
+                    bldgEntity->field_0x30 = priority;
+                    bldgEntity->field_0xB0 = 0;
 
-                    if (targetVal == *(uintptr_t*)(bldgEntity + 0x1f0) && priority >= 0) {
-                        *(uint32_t*)(bldgEntity + 0x88) |= 0x20000;
+                    if (targetVal == bldgEntity->profession && priority >= 0) {
+                        bldgEntity->happinessFlags |= 0x20000;
                     }
 
                     // Insert claimed position into BST at +0x60
-                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(s + 0x60)), &targetIBP, citizenPtr);
+                    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_60), &targetIBP, citizenPtr);
 
                     // Mark build position as claimed
-                    ((uint8_t*)field_50)[chosenIndex] = 1;
+                    field_50[chosenIndex] = 1;
 
                     return 2;
                 }
@@ -545,13 +535,10 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/) {
 // ============================================================
 // GetTarget (vtable +0x50, 0x1400E5830)
 // ============================================================
-// Returns the world's current build target entity via InternalBasePtr.
-// Reads: gameWorld+0xB0 -> +0x38 (build target entity IBP)
+// Returns the profession list's +0x38 profession (GameUpdateLoop::m_professionList).
 // Uses hidden return pointer ABI: RCX=self, RDX=retBuf
 void* BuildStructure::GetTarget(void* retBuf) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t buildMgr = *(uintptr_t*)(gameWorld + 0xB0);
-    *(uint64_t*)retBuf = *(uint64_t*)(buildMgr + 0x38);
+    *(Profession**)retBuf = GameUpdateLoop::_singleton->m_professionList->field_0x38;
     return retBuf;
 }
 
@@ -635,7 +622,6 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
 //          1 = BST is empty (no assigned citizens)
 
 int BuildStructure::Validate() {
-    uintptr_t s = (uintptr_t)this;
 
     // Dynamic arrays for citizens to remove and their slot indices
     void* removeList = nullptr;     // array of IBP keys (8 bytes each)
@@ -646,22 +632,23 @@ int BuildStructure::Validate() {
     int slotCount = 0;
     int slotCap = 0;
 
-    uintptr_t* treeRootPtr = (uintptr_t*)(s + 0x60);
+    // (the tree-helper signatures take the root slot as uintptr_t*: LEFT)
+    uintptr_t* treeRootPtr = reinterpret_cast<uintptr_t*>(&field_60);
 
     // BST in-order traversal: find leftmost node first
-    uintptr_t root = *treeRootPtr;
-    if (root == 0) goto done_empty;
+    AssignmentNode* root = field_60;
+    if (root == nullptr) goto done_empty;
 
     {
         // Find leftmost (minimum) node
-        uintptr_t node = root;
-        while (*(uintptr_t*)(node + 0x10) != 0) {  // left child at +0x10
-            node = *(uintptr_t*)(node + 0x10);
+        AssignmentNode* node = root;
+        while (node->left != nullptr) {  // left child at +0x10
+            node = node->left;
         }
 
         // In-order traversal
-        while (node != 0) {
-            uintptr_t citizenKey = *(uintptr_t*)node;
+        while (node != nullptr) {
+            uintptr_t citizenKey = (uintptr_t)node->element;
             uintptr_t taskResult = 0;
 
             bool hasTask = CheckCitizenHasTask(this, &citizenKey, &taskResult);
@@ -717,25 +704,25 @@ int BuildStructure::Validate() {
             }
 
             // Move to next node (in-order successor)
-            uintptr_t right = *(uintptr_t*)(node + 0x18);  // right child
-            if (right != 0) {
+            AssignmentNode* right = node->right;  // right child
+            if (right != nullptr) {
                 // Go right, then find leftmost
                 node = right;
-                while (*(uintptr_t*)(node + 0x10) != 0) {
-                    node = *(uintptr_t*)(node + 0x10);
+                while (node->left != nullptr) {
+                    node = node->left;
                 }
             } else {
                 // Go up until we come from a left child
-                uintptr_t parent = *(uintptr_t*)(node + 0x08);  // parent at +0x08
-                if (parent != 0 && *(uintptr_t*)(parent + 0x10) == node) {
+                AssignmentNode* parent = node->parent;  // parent at +0x08
+                if (parent != nullptr && parent->left == node) {
                     // We are the left child — parent is next
                     node = parent;
                 } else {
                     // We are the right child — go up until we find a left-child relationship
-                    uintptr_t prev = node;
-                    while (parent != 0 && *(uintptr_t*)(parent + 0x18) == prev) {
+                    AssignmentNode* prev = node;
+                    while (parent != nullptr && parent->right == prev) {
                         prev = parent;
-                        parent = *(uintptr_t*)(parent + 0x08);
+                        parent = parent->parent;
                     }
                     node = parent;
                 }
@@ -747,18 +734,17 @@ int BuildStructure::Validate() {
             uint64_t* rList = (uint64_t*)removeList;
             for (int i = 0; i < removeCount; i++) {
                 // BST lookup to find the node
-                uintptr_t bstRoot = *treeRootPtr;
-                uintptr_t* searchNode = (uintptr_t*)bstRoot;
+                AssignmentNode* searchNode = field_60;
                 while (searchNode != nullptr) {
-                    if (rList[i] < *searchNode) {
-                        searchNode = (uintptr_t*)searchNode[2];  // left at +0x10
+                    if (rList[i] < (uint64_t)searchNode->element) {
+                        searchNode = searchNode->left;  // left at +0x10
                     } else {
-                        if (rList[i] <= *searchNode) {
+                        if (rList[i] <= (uint64_t)searchNode->element) {
                             // Found — remove from BST
                             WorkBST_BSTFindRemove_25520(treeRootPtr, searchNode);
                             break;
                         }
-                        searchNode = (uintptr_t*)searchNode[3];  // right at +0x18
+                        searchNode = searchNode->right;  // right at +0x18
                     }
                 }
             }
@@ -774,7 +760,7 @@ int BuildStructure::Validate() {
                         break;
                     }
                 }
-                ((uint8_t*)field_50)[si] = found ? 1 : 0;
+                field_50[si] = found ? 1 : 0;
             }
 
             System::MemoryAllocator::MemFree(slotList);

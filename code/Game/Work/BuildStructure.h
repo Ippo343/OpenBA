@@ -23,6 +23,9 @@
 #include <cstddef>
 #include "Work/Work.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Set<T>::Node
+
+class CitizenComponent;
 
 
 class BuildStructure final : public Work {
@@ -48,10 +51,15 @@ public:
     uint8_t  field_48;           // +0x48: bool — serialized flag (has initial setup?)
     uint8_t  _pad49[3];          // +0x49: padding
     int32_t  field_4c;           // +0x4C: current slot index (round-robin for assignment)
-    void*    field_50;           // +0x50: slot availability array (byte per build point, 0=free 1=busy)
+    uint8_t* field_50;           // +0x50: slot availability array (byte per build point, 0=free 1=busy;
+                                 //        Persist 0x1400e5850 uses the unsigned-char array overload)
     int32_t  field_58;           // +0x58: slot count (number of build points)
     int32_t  field_5c;           // +0x5C: capacity of the +0x50 array (the ctors zero it)
-    void*    field_60;           // +0x60: binary tree root (citizen assignment tree, nodes 0x20 bytes)
+    // +0x60: the citizen assignment tree's root: Collection::Set<InternalPtr<CitizenComponent>>
+    // (node 0x28: element, parent +0x08, left +0x10, right +0x18; Cleanup 0x1400e57a0 reads
+    // the element's +0x278). The container itself stays two raw fields (H5: Set has a dtor).
+    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
+    AssignmentNode* field_60;
     int32_t  field_68;           // +0x68: priority counter (GetPriority returns field_68 > 0)
     uint8_t  _pad6c[4];          // +0x6C: padding
 };
