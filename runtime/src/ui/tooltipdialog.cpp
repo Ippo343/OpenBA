@@ -98,7 +98,6 @@
 namespace {
 
 using UI::Element;
-namespace TE = UI::TextElementOffsets;
 
 // ---------------------------------------------------------------------------
 // ENTRY COUNTERS — attendance, and NOT a verification of anything.
@@ -161,20 +160,8 @@ void* MemAlloc(uint64_t bytes, int align) {
     return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
-// `?CacheText@TextElement@UI@@AEAAXXZ` (0x18011ec10) — private but EXPORTED
-// (AEAA means PRIVATE, not unexported; this DLL exports its private members —
-// reference_aeaa_means_private_not_unexported.md). It owns the
-// cached-formatted-text pointer at +0xF8 and its refcount. The member, by name.
-void CacheText(void* self) {
-    static_cast<UI::TextElement*>(self)->CacheText();                    // B.3.x bridge
-}
-
 // (ENDGAME B.3.9 TI-UI: slots 1/2 and TypeId -- 0x18004cfc0 / 0x18004cfa0 /
 // 0x18004cfb0 -- are DECLARE_TYPE's, over the class's own record.)
-
-template <typename T> inline T& Field(void* p, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
 
 }  // namespace
 
@@ -295,17 +282,6 @@ extern "C" void* RtUi_ToolTipDialog_OperatorNew(uint64_t bytes) {
 // is the attendance counter, which reports what actually ran.
 // ============================================================================
 
-// ============================================================================
-namespace {
-// ?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z
-// (0x180115650): RETSLOT, the member's prvalue placed in the caller's slot.
-inline void ElementFindElement(void* child, void** hit, char* const* name) {
-    new (static_cast<void*>(hit)) Object::InternalPtr<UI::Element>(          // 0x1800daba2
-        static_cast<UI::Element*>(child)->FindElement(                       // B.3.x bridge
-            *reinterpret_cast<const System::String*>(name)));
-}
-}  // namespace
-
 // ############################################################################
 // ENDGAME B.3.6 block B — UI::ToolTipDialog's members
 // (runtime/types/ui/ToolTipDialog.h). Bodies unchanged except `self` became
@@ -363,8 +339,8 @@ void ToolTipDialog::SetText(const System::String& text) {
     name.Set("textToolTip");                                   // 0x1800dab37
 
     // ---- STEP 2: unguarded, deliberately ------------------------------------
-    void* found = _root;                                       // 0x1800dab3d, +0x50
-    Element* const root = static_cast<Element*>(found);
+    Element* const root = GetRoot().Get();                     // 0x1800dab3d, +0x50
+    Element* found = root;
 
     // ---- STEP 3: the inlined self-match on the root --------------------------
     bool matched = false;
@@ -391,8 +367,8 @@ void ToolTipDialog::SetText(const System::String& text) {
         for (int32_t i = 0; i < count; ++i) {                  // signed (JLE/JL)
             Element* const child = root->_children._data[i];   // 0x1800dab90, +0xa0
             if (child == nullptr) continue;                    // 0x1800dab93
-            void* hit = nullptr;
-            ElementFindElement(child, &hit, &name._data);      // 0x1800daba2
+            // ?FindElement@Element@UI@@ (0x180115650), RETSLOT.
+            Element* const hit = child->FindElement(name).Get();   // 0x1800daba2
             if (hit != nullptr) { found = hit; break; }        // 0x1800dabaf
         }
     }
@@ -401,17 +377,15 @@ void ToolTipDialog::SetText(const System::String& text) {
     // ---- STEP 5: `name`'s release is its destructor at the end of the body --
 
     // ---- STEP 6: the SetParameter(0, text) tail ------------------------------
-    if (found != nullptr &&                                    // 0x1800dabee
-        *reinterpret_cast<const int32_t*>(
-            static_cast<const uint8_t*>(found) + TE::kParamCount) > 0) {  // 0x1800dabf3
+    // "textToolTip" is the dialog's TextElement (the tooltip asset names it).
+    TextElement* const te = static_cast<TextElement*>(found);
+    if (te != nullptr && te->_params._size > 0) {              // 0x1800dabee / 0x1800dabf3
         ++g_setTextWrote;
-        for (void* node = found; node != nullptr;              // 0x1800dac00
-             node = Field<void*>(node, TE::kParent))           // +0x98
-            Field<uint32_t>(node, TE::kDirtyFlags) |= TE::kDirtyBit;   // +0x34, 0x8000000
-        void* const params = Field<void*>(found, TE::kParamArrayData); // 0x1800dac19, +0xc8
-        // B.3.1 bridge: the TextElement parameter array is untyped storage.
-        *reinterpret_cast<System::String*>(params) = text;     // 0x1800dac20
-        CacheText(found);                                      // 0x1800dac28
+        // ?SetParameter@TextElement@UI@@ (0x18011e9b0) with the index 0, which
+        // retail inlines here: the dirty walk up `_parent` (0x1800dac00), the
+        // String assignment into `_params[0]` (0x1800dac20), CacheText
+        // (0x1800dac28).
+        te->SetParameter(0, text);
     }
 }
 
