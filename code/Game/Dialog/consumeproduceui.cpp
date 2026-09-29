@@ -152,7 +152,7 @@ void ConsumeProduceUI::OnCreated() {
 
             // Search its sub-descriptions for the RawMaterialDescription
             int subCount = entryPtr->_subDescCount;
-            void** subArray = entryPtr->_subDescs;
+            Description** subArray = entryPtr->_subDescs;   // COMP-c typed _subDescs (merge fix)
             RawMaterialDescription* resourceDesc = nullptr;
 
             for (int j = 0; j < subCount; j++) {
