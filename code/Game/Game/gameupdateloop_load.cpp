@@ -41,6 +41,7 @@
 #include "Entity/CitizenBehavior.h"  // m_citizenList's class (B.4 GAME-a)
 #include "Component/CharacterGrid.h"  // m_characterGrid's class (B.4 GAME-a)
 #include "Calendar.h"                // m_dayCounter's class (B.4 GAME-a)
+#include "WeatherSimulation.h"       // m_weather's class (B.4 GAME-a)
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -618,16 +619,20 @@ static void* Reimpl_FUN_1400f9180(void* selfMem) {
 }
 
 // FUN_140093f60 — in-game Weather SIMULATION ctor (+0x130, 0x78). PerlinNoise-driven.
-static void* Reimpl_FUN_140093f60(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    *(uint64_t*)(p + 0x00) = 0;
-    *(uint64_t*)(p + 0x08) = 0;
-    *(uint32_t*)(p + 0x10) = 0;
-    *(uint32_t*)(p + 0x14) = 4;               // default count = 4
-    *(uint32_t*)(p + 0x18) = 0;
-    *(uint64_t*)(p + 0x1c) = 0;
-    *(uint64_t*)(p + 0x24) = 0;
-    *(uint64_t*)(p + 0x2c) = 0;
+static_assert(std::is_trivially_default_constructible<WeatherSimulation>::value,
+              "placement new of WeatherSimulation runs no code");
+static void WeatherSimulation_Construct(WeatherSimulation* w) {
+    w->environment = nullptr;
+    w->climate = nullptr;
+    w->field_0x10 = 0;
+    w->field_0x14 = 4;                        // default count = 4
+    w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
+    w->field_0x1C[0] = 0.0f;                  // +0x1C..+0x2B: two qword stores (H7: named stores)
+    w->field_0x1C[1] = 0.0f;
+    w->field_0x1C[2] = 0.0f;
+    w->field_0x1C[3] = 0.0f;
+    w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
+    w->field_0x30 = 0.0f;
     uint8_t rng1[2520];
     uint8_t rng2[2520];
     uint32_t seed1 = 0, seed2 = 0;
@@ -635,16 +640,17 @@ static void* Reimpl_FUN_140093f60(void* selfMem) {
     seed1 = reinterpret_cast<System::Random*>(rng1)->Rand();   // B.3.4b bridge
     RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(rng2));
     seed2 = reinterpret_cast<System::Random*>(rng2)->Rand();   // B.3.4b bridge
-    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(p + 0x34),
-                               0.25f, 4.0f, (int)seed2, (int)seed1);
-    *(uint64_t*)(p + 0x44) = 0;
-    *(uint32_t*)(p + 0x4c) = 0xffffffffu;
-    *(uint64_t*)(p + 0x50) = 0;
-    *(uint64_t*)(p + 0x58) = 0;
-    *(uint64_t*)(p + 0x60) = 0;
-    *(uint64_t*)(p + 0x68) = 0;
-    *(uint64_t*)(p + 0x70) = 0;
-    return selfMem;
+    RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
+    w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
+    w->field_0x48 = 0.0f;
+    w->seasonStep = -1;
+    w->effects = nullptr;
+    w->effectCount = 0;                       // +0x58 / +0x5C: one qword store
+    w->effectCapacity = 0;
+    w->emitters = nullptr;
+    w->emitterCount = 0;                      // +0x68 / +0x6C: one qword store
+    w->emitterCapacity = 0;
+    w->disasterTime._ticks = 0;
 }
 
 // FUN_140093e30 — weather env-config helper. (envRes may be null on the deferred path.)
@@ -1029,8 +1035,9 @@ void GameUpdateLoop::Load() {
     // Step 15 — Weather sim (+0x130, 0x78).
     {
         void* mem = AllocSub(0x78, 8);
-        if (mem) Reimpl_FUN_140093f60(mem);
-        m_weather = mem;
+        WeatherSimulation* weather = mem ? new (mem) WeatherSimulation : nullptr;
+        if (weather) WeatherSimulation_Construct(weather);
+        m_weather = weather;
     }
 
     // Step 16 — env config: bind (envRes, climateGen) into the weather sim.

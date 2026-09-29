@@ -53,6 +53,7 @@ class EntityList;         // Entity/EntityList.h (block WORK-a)
 class CitizenBehavior;    // Entity/CitizenBehavior.h (block WORK-a)
 class CharacterGrid;      // Component/CharacterGrid.h (block COMP-a)
 class Calendar;           // Game/Calendar.h (B4 GAME-a)
+class WeatherSimulation;  // Game/WeatherSimulation.h (B4 GAME-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -162,7 +163,7 @@ public:
     //   (ctor 1), a 5-entry Array at +0x70). Renamed from m_entityUI (B.4 W0-H2).
     PlayerToolManager* m_toolManager; // +0x120 player tool manager (0xB0 bytes)
     Calendar* m_dayCounter;         // +0x128 the year clock (0x18 bytes: {year, yearTime, yearLength})
-    void*    m_weather;             // +0x130 Weather* (0x78 bytes)
+    WeatherSimulation* m_weather;   // +0x130 the weather simulation (0x78 bytes; not the Weather resource)
     void*    m_eventNotifier;       // +0x138 EventNotifier* (0x28 bytes)
     Save::SaveLoad* m_saveLoad;     // +0x140 MemAlloc(0x90) in Load
     void*    m_imageCapture;        // +0x148 ImageCapture* (0x38 bytes)
