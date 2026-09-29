@@ -1650,13 +1650,10 @@ uint64_t g_addDrawItemsEdgeQ  = 0;
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED to
 // `Graphics::MeshInstance::AddDrawItems`.
-extern "C" void RtGraphics_MeshInstance_AddDrawItems(const void* self,
-                                                     const void* scene,
-                                                     void* renderer) {
-    reinterpret_cast<const ::Graphics::MeshInstance*>(self)
-        ->::Graphics::MeshInstance::AddDrawItems(
-              *reinterpret_cast<const ::Graphics::Scene*>(scene),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer));
+extern "C" void RtGraphics_MeshInstance_AddDrawItems(const ::Graphics::MeshInstance* self,
+                                                     const ::Graphics::Scene* scene,
+                                                     ::Graphics::Renderer* renderer) {
+    self->::Graphics::MeshInstance::AddDrawItems(*scene, *renderer);
 }
 
 // ============================================================================
