@@ -27,6 +27,9 @@
 #include <cstddef>
 #include "Work/Work.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Set<T>::Node
+
+class CitizenComponent;
 
 
 class GatherRawMaterials final : public Work {
@@ -48,14 +51,20 @@ public:
     int   GetPriority() override;                                   // [11] 0x14002a400
 
     // --- GatherRawMaterials fields (+0x48) ---
-    void*    field_48;           // +0x48: int array (zeroed)
+    // +0x48 / +0x58: two Collection::Array<int32> {data, count, capacity}, one element per
+    // BuildDescription cost (the site ctor 0x1400ec710 sizes both through 0x1400021d0;
+    // Persist 0x1400ec560 bulk-serializes them as int). The containers stay raw (H5).
+    int32_t* field_48;           // +0x48: per material, the amount present
     int32_t  field_50;           // +0x50: count (zeroed)
     int32_t  field_54;           // +0x54: capacity of the +0x48 array
-    void*    field_58;           // +0x58: int array (zeroed)
+    int32_t* field_58;           // +0x58: per material, the amount in flight
     int32_t  field_60;           // +0x60: count (zeroed)
     int32_t  field_64;           // +0x64: capacity of the +0x58 array
-    void*    field_68;           // +0x68: tree node ptr (zeroed)
-    int32_t  field_70;           // +0x70: count (zeroed)
+    // +0x68: the root of Collection::Set<InternalPtr<CitizenComponent>> (the T = 8 node;
+    // Cleanup 0x1400ec480 reads the element's +0x278). The container stays raw (H5).
+    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
+    AssignmentNode* field_68;    // +0x68: tree root (zeroed)
+    int32_t  field_70;           // +0x70: count (zeroed; GetPriority 0x14002a400 `> 0`)
     uint8_t  _pad74[4];          // +0x74: padding
 };
 

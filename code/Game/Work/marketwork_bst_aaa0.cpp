@@ -92,33 +92,27 @@
 
 namespace {
 
-// --- node field accessors (byte offsets, see header comment) -----------------
-inline uint64_t& NodeKey(int64_t n)    { return *reinterpret_cast<uint64_t*>(n + 0x00); }
-inline int64_t&  NodeParent(int64_t n) { return *reinterpret_cast<int64_t*>(n + 0x18); }
-inline int64_t&  NodeLeft(int64_t n)   { return *reinterpret_cast<int64_t*>(n + 0x20); }
-inline int64_t&  NodeRight(int64_t n)  { return *reinterpret_cast<int64_t*>(n + 0x28); }
-inline int16_t&  NodeBal(int64_t n)    { return *reinterpret_cast<int16_t*>(n + 0x30); }
-inline int16_t&  NodeHeight(int64_t n) { return *reinterpret_cast<int16_t*>(n + 0x32); }
+using ClaimNode = MarketWork::ClaimNode;
 
 // height-of-child: null -> 0, else child.height + 1
 // (ad87 MOVZX R9D,[RAX+0x32] / INC R9W, with the null arm taking EDX, which is 0 there.)
-inline int16_t ChildH(int64_t child) {
-    return (child == 0) ? (int16_t)0 : (int16_t)(NodeHeight(child) + 1);
+inline int16_t ChildH(ClaimNode* child) {
+    return (child == nullptr) ? (int16_t)0 : (int16_t)(child->height + 1);
 }
 
 // The body of 0x14002aee0, minus its null test.  Retail emits these exact four steps
 // twice: once inlined at 0x14002acbc-acd1, once as the standalone callee.
 //   free(node->payload); node->payload = 0; node->count/cap = 0; free(node);
 // The two zero stores are 8 BYTES EACH (MOV qword ptr [RBX],RDX / [RBX+8],RDX with
-// RBX = node+8).  Narrowing either to 4 bytes would leave the array capacity stale --
-// exactly the desync trap #2 warns about.  The block is freed immediately afterwards, but
-// the redzone allocator inspects freed blocks, so keep the stores faithful.
-void DestroyNodeBody(int64_t node) {
-    void* payload = *reinterpret_cast<void**>(node + 0x08);
-    System::MemoryAllocator::MemFree(payload);
-    *reinterpret_cast<int64_t*>(node + 0x08) = 0;
-    *reinterpret_cast<int64_t*>(node + 0x10) = 0;
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(node));
+// RBX = node+8): here the three named fields, in address order.  The block is freed
+// immediately afterwards, but the redzone allocator inspects freed blocks, so keep the
+// stores faithful.
+void DestroyNodeBody(ClaimNode* node) {
+    System::MemoryAllocator::MemFree(node->element.carries.data);
+    node->element.carries.data = nullptr;
+    node->element.carries.count = 0;
+    node->element.carries.capacity = 0;
+    System::MemoryAllocator::MemFree(node);
 }
 
 } // namespace
@@ -136,129 +130,132 @@ void DestroyNodeBody(int64_t node) {
 //
 // The null test is RETAIL's, not a defensive addition -- 0x14002ac40 only ever reaches
 // this with a value it has already proven non-null, so retail is being generous, not us.
-extern "C" void MarketBst_aee0(void* /*unusedRcx*/, void* node) {
+extern "C" void MarketBst_aee0(void* /*unusedRcx*/, MarketWork::ClaimNode* node) {
     if (node == nullptr) return;
-    DestroyNodeBody(reinterpret_cast<int64_t>(node));
+    DestroyNodeBody(node);
 }
 
 // ============================================================================
 // 0x14002ac40 -- erase one KNOWN node from the tree, then AVL-retrace
 // ============================================================================
-// __fastcall void MarketWork_sub_ac40(int64_t* tree [RCX], void* node [RDX])
+// __fastcall void MarketWork_sub_ac40(Set* tree [RCX], Node* node [RDX])
 //
-// tree points at the header {root:int64, count:int32} living at MarketWork+0x48.
+// tree points at the Set header {root, count:int32} living at MarketWork+0x48 (the
+// root field; the count is the int32 8 bytes on).
 //
 // Two stack slots carry the retrace start point; the tail picks one of them BY ADDRESS
 // because 0x140025920 takes a pointer to a cursor it walks upward (and writes through):
 //   [RSP+0x50] "cursorA" -- the parent of whatever left the tree
 //   [RSP+0x58] "cursorB" -- the node that took the erased node's place
-extern "C" void MarketBst_ac40(int64_t* tree, void* nodeArg) {
-    const int64_t z = reinterpret_cast<int64_t>(nodeArg);
-
-    int64_t cursorA = NodeParent(z);   // ac61: MOV RAX,[RDX+0x18] -> [RSP+0x50]
-    int64_t cursorB = 0;               // [RSP+0x58]
+extern "C" void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNode* z) {
+    ClaimNode* cursorA = z->parent;    // ac61: MOV RAX,[RDX+0x18] -> [RSP+0x50]
+    ClaimNode* cursorB = nullptr;      // [RSP+0x58]
     bool    useB    = false;
 
     // ac6a: DEC dword ptr [RCX+8].  The count really is a 32-bit field sharing the
     // header's second 8-byte slot -- this is a 4-byte RMW in retail, NOT a narrowed
     // 8-byte store (trap #2 cuts both ways: widening it would smash the upper half).
-    *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(tree) + 8) -= 1;
+    // (The Set container is two raw fields of MarketWork: the count is reached from
+    // the root field's address: LEFT.)
+    *reinterpret_cast<int32_t*>(tree + 1) -= 1;
 
-    const int64_t right = NodeRight(z);
-    if (right == 0) {
+    ClaimNode* const right = z->right;
+    if (right == nullptr) {
         // ---- Case 1: no right child -- splice the left child into z's place --------
-        const int64_t parent = NodeParent(z);
-        const int64_t leftAtSplice = NodeLeft(z);            // ac7a
-        if (parent == 0) {
+        ClaimNode* const parent = z->parent;
+        ClaimNode* const leftAtSplice = z->left;             // ac7a
+        if (parent == nullptr) {
             *tree = leftAtSplice;                            // ac95: MOV [RSI],RAX
-        } else if (NodeLeft(parent) == z) {
-            NodeLeft(parent) = leftAtSplice;                 // ac89
+        } else if (parent->left == z) {
+            parent->left = leftAtSplice;                     // ac89
         } else {
-            NodeRight(parent) = leftAtSplice;                // ac8f
+            parent->right = leftAtSplice;                    // ac8f
         }
         // ac98 re-reads z->left after the parent fixup (same value; kept literal).
-        const int64_t left = NodeLeft(z);
+        ClaimNode* const left = z->left;
         cursorB = left;
-        if (left != 0) NodeParent(left) = NodeParent(z);     // acaa
+        if (left != nullptr) left->parent = z->parent;       // acaa
         DestroyNodeBody(z);                                  // inlined 0x14002aee0
-        useB = (left != 0);                                  // acd7: TEST RBP,RBP
+        useB = (left != nullptr);                            // acd7: TEST RBP,RBP
     } else {
-        const int64_t left = NodeLeft(z);
-        if (left == 0) {
+        ClaimNode* const left = z->left;
+        if (left == nullptr) {
             // ---- Case 2: right child only -- splice it in -------------------------
-            const int64_t parent = NodeParent(z);            // acfc
-            if (parent == 0) {
+            ClaimNode* const parent = z->parent;             // acfc
+            if (parent == nullptr) {
                 *tree = right;                               // ad17
-            } else if (NodeLeft(parent) == z) {
-                NodeLeft(parent) = right;                    // ad0b
+            } else if (parent->left == z) {
+                parent->left = right;                        // ad0b
             } else {
-                NodeRight(parent) = right;                   // ad11
+                parent->right = right;                       // ad11
             }
-            const int64_t r = NodeRight(z);                  // ad1a (re-read, same value)
+            ClaimNode* const r = z->right;                   // ad1a (re-read, same value)
             cursorB = r;
-            if (r != 0) NodeParent(r) = NodeParent(z);       // ad2c
+            if (r != nullptr) r->parent = z->parent;         // ad2c
             // ad30: CALL 0x14002aee0 with RCX still holding `right` -- a dead argument,
             // passed here only to keep the call ABI-identical.
-            MarketBst_aee0(reinterpret_cast<void*>(right), nodeArg);
-            useB = (r != 0);                                 // ad35: TEST RBX,RBX
+            MarketBst_aee0(right, z);
+            useB = (r != nullptr);                           // ad35: TEST RBX,RBX
         } else {
             // ---- Case 3: two children ---------------------------------------------
             // Replacement = in-order PREDECESSOR: rightmost node of the LEFT subtree.
             // ad40: RAX=[RCX+0x28]; while (RAX) { RCX=RAX; ... }
-            int64_t s = left;
-            for (int64_t nxt = NodeRight(s); nxt != 0; nxt = NodeRight(s)) s = nxt;
+            ClaimNode* s = left;
+            for (ClaimNode* nxt = s->right; nxt != nullptr; nxt = s->right) s = nxt;
 
-            int64_t detachParent = 0;   // RBX -- 0 means "s WAS z->left, nothing detached"
-            cursorA = 0;                // ad52: [RSP+0x50] = 0
+            ClaimNode* detachParent = nullptr;   // RBX -- 0 means "s WAS z->left, nothing detached"
+            cursorA = nullptr;                   // ad52: [RSP+0x50] = 0
 
             if (s != left) {            // ad57: CMP RCX,R8
                 // Lift s out of its current spot: its parent adopts s's left subtree.
-                detachParent = NodeParent(s);                      // ad5c
-                const int64_t sLeft = NodeLeft(s);                 // ad60
-                NodeRight(detachParent) = sLeft;                   // ad64
-                if (sLeft != 0) NodeParent(sLeft) = detachParent;  // ad6d
-                NodeLeft(s) = NodeLeft(z);                         // ad71/ad75
+                detachParent = s->parent;                          // ad5c
+                ClaimNode* const sLeft = s->left;                  // ad60
+                detachParent->right = sLeft;                       // ad64
+                if (sLeft != nullptr) sLeft->parent = detachParent;  // ad6d
+                s->left = z->left;                                 // ad71/ad75
                 cursorA = detachParent;                            // ad79
 
                 // Fix detachParent's own metrics before the retrace walks past it.
                 // Order is literal: height (+0x32) first, then balance (+0x30).
-                const int16_t lh = ChildH(NodeLeft(detachParent));
-                const int16_t rh = ChildH(NodeRight(detachParent));
-                NodeHeight(detachParent) = (lh < rh) ? rh : lh;    // adb9, CMOVG (signed)
-                NodeBal(detachParent) = (int16_t)(rh - lh);        // adc1, SUB R8W,R9W
+                const int16_t lh = ChildH(detachParent->left);
+                const int16_t rh = ChildH(detachParent->right);
+                detachParent->height = (lh < rh) ? rh : lh;        // adb9, CMOVG (signed)
+                detachParent->balance = (int16_t)(rh - lh);        // adc1, SUB R8W,R9W
             }
 
-            NodeRight(s) = NodeRight(z);                           // adc6/adca
-            if (NodeLeft(s)  != 0) NodeParent(NodeLeft(s))  = s;   // add7
-            if (NodeRight(s) != 0) NodeParent(NodeRight(s)) = s;   // ade4
+            s->right = z->right;                                   // adc6/adca
+            if (s->left  != nullptr) s->left->parent  = s;         // add7
+            if (s->right != nullptr) s->right->parent = s;         // ade4
 
-            const int64_t parent = NodeParent(z);                  // ade8
-            NodeParent(s) = parent;                                // adec
-            if (parent == 0) {
+            ClaimNode* const parent = z->parent;                   // ade8
+            s->parent = parent;                                    // adec
+            if (parent == nullptr) {
                 *tree = s;                                         // adf6
-                NodeParent(s) = 0;                                 // adf9
+                s->parent = nullptr;                               // adf9
                 cursorB = *tree;                                   // adfd/ae00
             } else {
                 cursorB = s;                                       // ae07
-                if (NodeLeft(parent) == z) NodeLeft(parent) = s;   // ae12
-                else                       NodeRight(parent) = s;  // ae18
+                if (parent->left == z) parent->left = s;           // ae12
+                else                   parent->right = s;          // ae18
             }
             // ae1f: CALL 0x14002aee0 with RCX = s (dead argument again).
             // NOTE: s keeps its OWN balance/height here -- retail does not copy z's.
             // The retrace is what re-derives them.
-            MarketBst_aee0(reinterpret_cast<void*>(s), nodeArg);
-            useB = (detachParent == 0);                            // ae2e/ae31: TEST/CMOVZ
+            MarketBst_aee0(s, z);
+            useB = (detachParent == nullptr);                      // ae2e/ae31: TEST/CMOVZ
         }
     }
 
-    // ae38: CALL 0x140025920(tree, &cursor).
-    PlayerTrade_Retrace_25920(tree, useB ? &cursorB : &cursorA);
+    // ae38: CALL 0x140025920(tree, &cursor). (The retrace takes the header and the
+    // cursor slot as int64_t*: LEFT.)
+    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree),
+                              reinterpret_cast<int64_t*>(useB ? &cursorB : &cursorA));
 }
 
 // ============================================================================
 // 0x14002aaa0 -- erase BY KEY (MarketWork vtable Slot6 / Slot7 helper)
 // ============================================================================
-// __fastcall void MarketWork_sub_aaa0(int64_t* tree [RCX], void* keyIBP [RDX])
+// __fastcall void MarketWork_sub_aaa0(Set* tree [RCX], InternalPtr* key [RDX])
 //
 // Plain unbalanced descent -- all balancing happens inside 0x14002ac40.  Keys compare
 // UNSIGNED: aacf is JC (below) and aae0 is JNC (above-or-equal), not JL/JGE.
@@ -276,20 +273,20 @@ extern "C" void MarketBst_ac40(int64_t* tree, void* nodeArg) {
 // the >= arm) is retail's, and is preserved.
 //
 // Reaching the hit arm means key >= node.key AND node.key >= key, i.e. equality.
-extern "C" void MarketBst_aaa0(int64_t* tree, void* keyIBP) {
+extern "C" void MarketBst_aaa0(MarketWork::ClaimNode** tree, CitizenComponent** key) {
 
-    int64_t node = *tree;
-    if (node == 0) return;
+    ClaimNode* node = *tree;
+    if (node == nullptr) return;
 
     do {
-        if (*static_cast<uint64_t*>(keyIBP) < NodeKey(node)) {
-            node = NodeLeft(node);
+        if (*key < node->element.citizen) {
+            node = node->left;
         } else {
-            if (NodeKey(node) >= *static_cast<uint64_t*>(keyIBP)) {
-                MarketBst_ac40(tree, reinterpret_cast<void*>(node));   // ab07
+            if (node->element.citizen >= *key) {
+                MarketBst_ac40(tree, node);   // ab07
                 return;
             }
-            node = NodeRight(node);
+            node = node->right;
         }
-    } while (node != 0);
+    } while (node != nullptr);
 }

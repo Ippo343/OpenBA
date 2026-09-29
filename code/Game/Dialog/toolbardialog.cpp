@@ -639,7 +639,7 @@ static void HarnessDumpElemTree(UI::Element* elem, int depth, int* counter) {
     (*counter)++;
     const char* nameData = elem->_name;
     int len = nameData ? *reinterpret_cast<const int*>(nameData - 8) : 0;  // CAST-OK: string_header
-    uint32_t tid = elem->Type();   // slot 2
+    [[maybe_unused]] uint32_t tid = elem->Type();   // slot 2
     printf("[ElemTree] %*selem=%p tid=%u name='%.*s'\n", depth * 2, "",
            static_cast<void*>(elem), tid, len > 0 ? len : 0, nameData ? nameData : "");
     UI::Element** kids = elem->_children.GetData();
@@ -684,7 +684,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
         if (!dialog) { printf("[HarnessDrive] dialog[%d]=null\n", idx); continue; }
         UI::DialogController** ctrlArr = dialog->_controllers.GetData();
         int cnt = dialog->_controllers.GetSize();
-        uint32_t dlgTid = dialog->Type();   // slot 2
+        [[maybe_unused]] uint32_t dlgTid = dialog->Type();   // slot 2
         printf("[HarnessDrive] dialog[%d]=%p dlgTid=%u controllers=%d:", idx, static_cast<void*>(dialog), dlgTid, cnt);
         for (int i = 0; ctrlArr && i < cnt && i < 16; i++) {
             UI::DialogController* c = ctrlArr[i]; uint32_t ctid = 0;
@@ -708,7 +708,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
             const char* names[] = { "imageMap", "imageOverlay", "buttonOk", "map", "image" };
             for (const char* nm : names) {
                 System::String nb(nm);
-                UI::Element* r = dialog->FindElement(nb).Get();
+                [[maybe_unused]] UI::Element* r = dialog->FindElement(nb).Get();
                 printf("[HarnessDrive]   FindElement('%s')=%p\n", nm, static_cast<void*>(r));
             }
         }

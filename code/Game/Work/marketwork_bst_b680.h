@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstdint>
+#include "Work/MarketWork.h"   // MarketWork::Demand
 
 extern "C" {
 
@@ -19,11 +20,11 @@ extern "C" {
 // Sorts `count` records of 0x20 bytes at `base` ASCENDING by the float at +0x14.
 // Retail returns nothing meaningful in RAX; the sole caller (0x1400f0e82 inside
 // MarketWork_Serialize) discards it and pre-guards with `if (count > 1)`.
-void MarketBst_b680(void* base, int count);
+void MarketBst_b680(MarketWork::Demand* base, int count);
 
 // 0x14002bd80 — void __fastcall(void* first [RCX], void* last [RDX])
 // Selection sort of the INCLUSIVE range [first, last] (last points AT the final
 // record, not one past it).  Returns immediately when last <= first.
-void MarketBst_bd80(void* first, void* last);
+void MarketBst_bd80(MarketWork::Demand* first, MarketWork::Demand* last);
 
 } // extern "C"

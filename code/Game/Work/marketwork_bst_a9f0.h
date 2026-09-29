@@ -20,6 +20,7 @@
 #pragma once
 
 #include <cstdint>
+#include "Work/MarketWork.h"   // MarketWork::Claim / ClaimNode / CarryList
 
 extern "C" {
 
@@ -28,14 +29,14 @@ extern "C" {
 //   src    [RDX]  : {key@+0x00, payloadArray@+0x08} source pair.
 //   parent [R8]   : node stored at +0x18.
 // Returns the new node, or nullptr if MemAlloc failed.
-void* MarketBst_ae50(void* unused, int64_t* src, void* parent);
+MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim* src, MarketWork::ClaimNode* parent);
 
 // 0x14002ab60 — ordered insert-if-absent into the market BST, then AVL retrace.
 //   tree [RCX] : tree header {root@+0x00, count@+0x08(int32)}
 //   out  [RDX] : out-param; receives the node (existing or newly created)
 //   src  [R8]  : {key@+0x00, payloadArray@+0x08}; *src is the unsigned sort key
 // Returns `out`.
-int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src);
+MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree, MarketWork::ClaimNode** out, MarketWork::Claim* src);
 
 // 0x14002a9f0 — insert (key, cloned payload array) into the market BST.
 //   tree [RCX] : tree header
@@ -43,6 +44,6 @@ int64_t* MarketBst_ab60(int64_t* tree, int64_t* out, int64_t* src);
 //   key  [R8]  : pointer to the 8-byte InternalBasePtr key to insert
 //   vec  [R9]  : pointer to the payload dynamic array to deep-copy
 // Returns `out`.
-int64_t* MarketBst_a9f0(int64_t* tree, int64_t* out, int64_t* key, int64_t* vec);
+MarketWork::ClaimNode** MarketBst_a9f0(MarketWork::ClaimNode** tree, MarketWork::ClaimNode** out, CitizenComponent** key, MarketWork::CarryList* vec);
 
 } // extern "C"

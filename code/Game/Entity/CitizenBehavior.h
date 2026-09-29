@@ -268,6 +268,9 @@ public:
     void RegisterWell(Object::InternalPtr<WellComponent>* well);      // 0x140091cb0
     // The zone registry (+0x160; body in Component/zonecomponent.cpp).
     void AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity); // 0x140088e20
+    // B4 WORK-b; body in Work/pickup_gate.cpp: does a storage location in the +0x00 list
+    // accept `amount` of `resource`? (Pickup::Execute's gate)
+    bool HasStorageFor(ComponentDescription* resource, int amount);  // 0x14008d3c0
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

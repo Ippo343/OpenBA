@@ -35,6 +35,8 @@
 #pragma once
 
 #include <cstdint>
+#include "Work/MarketWork.h"   // MarketWork::ClaimNode / CarryList
+namespace IO { class Serializer; }
 
 extern "C" {
 
@@ -42,13 +44,13 @@ extern "C" {
 //   arr        [RCX] : { ptr@+0x00, count@+0x08 (int32), cap@+0x0C (int32) }
 //   serializer [RDX] : IO::Serializer*
 // On load, resizes `arr` to the stored count before reading elements.
-void MarketBst_b5f0(int64_t* arr, void* serializer);
+void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer);
 
 // 0x14002b290 — serialize the whole market BST (v1 format).
 //   tree       [RCX] : tree header { root@+0x00, count@+0x08 (int32) }
 //   serializer [RDX] : IO::Serializer*
 // Load: reads nodeCount, then inserts each (key, payload) pair, AVL-retracing via
 //       0x140025920. Save: in-order walk, writing each node's key + payload block.
-void MarketBst_b290(int64_t* tree, void* serializer);
+void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer);
 
 } // extern "C"

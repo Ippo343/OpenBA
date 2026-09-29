@@ -216,7 +216,8 @@ Work* CF_MakeHarvestArea(CropFieldComponent* comp) {
     work->_field48 = nullptr;
     work->_field50 = 0;
     work->_field58 = nullptr;
-    work->_field60 = nullptr;
+    work->_field60 = 0;
+    work->_field64 = 0;
     CF_FillPerSlotArray(&work->_field58, work->field_10);
     return work;
 }

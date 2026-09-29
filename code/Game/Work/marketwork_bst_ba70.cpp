@@ -53,7 +53,7 @@
 //
 // POINTER COMPARISONS: retail uses UNSIGNED forms (JA/JBE/JC/JNC) throughout.
 // All pointers live inside one array, so unsigned and signed orderings agree;
-// this port uses ordinary C++ pointer relationals on uint8_t*.
+// this port uses ordinary C++ pointer relationals on Take*.
 //
 // NO DEFENSIVE GUARDS ADDED.  Every read is inside the array the caller supplied,
 // and the count <= 1 case is the caller's contract (see header).  Per CLAUDE.md, a
@@ -67,9 +67,7 @@
 
 namespace {
 
-// One record is 0x18 bytes; the sort key is the int32 at +0x08.
-constexpr ptrdiff_t kElem   = 0x18;
-constexpr ptrdiff_t kKeyOff = 0x08;
+using Take = MarketWork::Take;   // one 0x18-byte record; the sort key is the int32 at +0x08
 
 // Selection-sort cutoff, 0x14002bacc: `CMP EDX,0x8 / JG quicksort`.
 constexpr int kSmallRange = 8;
@@ -78,28 +76,20 @@ constexpr int kSmallRange = 8;
 // Retail performs NO overflow check; neither do we.
 constexpr int kStackDepth = 62;
 
-inline int32_t Key(const uint8_t* rec)
+inline int32_t Key(const Take* rec)
 {
     // MOV EAX,dword ptr [rec + 0x8] -- 4-byte signed key.
-    int32_t k;
-    std::memcpy(&k, rec + kKeyOff, sizeof(k));
-    return k;
+    return rec->rank;
 }
 
 // The three-qword record swap emitted at 0x14002bb04 / 0x14002bb6b / 0x14002bb9f /
 // 0x14002bbd4 / 0x14002bc58.  Retail loads one side's three qwords before storing,
-// so a self-swap (a == b) is a no-op; a plain element-wise swap behaves identically.
-// All three moves are QWORD -- none is narrowed to 4 bytes.
-inline void SwapRec(uint8_t* a, uint8_t* b)
+// so a self-swap (a == b) is a no-op; a whole-record swap behaves identically.
+inline void SwapRec(Take* a, Take* b)
 {
-    for (int i = 0; i < 3; ++i)
-    {
-        uint64_t ta, tb;
-        std::memcpy(&ta, a + i * 8, 8);
-        std::memcpy(&tb, b + i * 8, 8);
-        std::memcpy(a + i * 8, &tb, 8);
-        std::memcpy(b + i * 8, &ta, 8);
-    }
+    Take t = *a;
+    *a = *b;
+    *b = t;
 }
 
 } // namespace
@@ -107,28 +97,28 @@ inline void SwapRec(uint8_t* a, uint8_t* b)
 // ============================================================
 // 0x14002ba70 -- in-place quicksort of 24-byte records by int32 key at +0x08
 // ============================================================
-extern "C" void MarketBst_ba70(void* base, int count)
+extern "C" void MarketBst_ba70(MarketWork::Take* base, int count)
 {
     // Register map used in the comments below, taken from the disassembly:
     //   RDI = first   RBX = last (INCLUSIVE)   RSI = depth
     //   R11 = mid/pivot   RCX = up cursor   R10 = down cursor
-    uint8_t* first = static_cast<uint8_t*>(base);
-    uint8_t* last  = first + static_cast<ptrdiff_t>(count - 1) * kElem;  // 0x14002ba87..ba9d
+    Take* first = base;
+    Take* last  = first + static_cast<ptrdiff_t>(count - 1);             // 0x14002ba87..ba9d
     intptr_t depth = 0;                                                  // XOR ESI,ESI
 
-    uint8_t* loStack[kStackDepth];
-    uint8_t* hiStack[kStackDepth];
+    Take* loStack[kStackDepth];
+    Take* hiStack[kStackDepth];
 
     // Declared up front so the address-labelled gotos below never jump across an
     // initialisation, and so the control flow can mirror the retail CFG exactly.
-    uint8_t* mid  = nullptr;
-    uint8_t* down = nullptr;
-    uint8_t* up   = nullptr;
+    Take* mid  = nullptr;
+    Take* down = nullptr;
+    Take* up   = nullptr;
     int      n    = 0;
 
 LAB_bab0:
     // 0x14002bab0: n = (last - first)/0x18 + 1   (signed magic-multiply by 24)
-    n = static_cast<int>((last - first) / kElem) + 1;
+    n = static_cast<int>(last - first) + 1;
     if (n > kSmallRange) goto LAB_bb54;              // 0x14002bacc CMP EDX,8 / JG
 
     // ---- selection sort for <= 8 elements (0x14002bad5 .. 0x14002bb38) ----
@@ -136,22 +126,22 @@ LAB_bab0:
     {
         // R10 = first + 0x18, hoisted OUT of the outer loop by retail (0x14002bada)
         // and never updated: every pass rescans from first+1 up to the shrinking end.
-        uint8_t* const scanStart = first + kElem;
+        Take* const scanStart = first + 1;
         do
         {
-            uint8_t* maxp = first;                   // 0x14002bae0 MOV R9,RDI
-            uint8_t* p    = scanStart;               // 0x14002bae3 MOV RCX,R10
+            Take* maxp = first;                   // 0x14002bae0 MOV R9,RDI
+            Take* p    = scanStart;               // 0x14002bae3 MOV RCX,R10
             if (p <= last)                           // 0x14002bae6 CMP R10,RBX / JA
             {
                 do
                 {
                     // 0x14002baf0: CMP [maxp+8],[p+8] / CMOVL R9,RCX
                     if (Key(maxp) < Key(p)) maxp = p;
-                    p += kElem;
+                    p += 1;
                 } while (p <= last);                 // 0x14002bb02 JBE
             }
             SwapRec(maxp, last);                     // 0x14002bb04 (3 qword moves)
-            last -= kElem;                           // 0x14002bb21 SUB RBX,0x18
+            last -= 1;                           // 0x14002bb21 SUB RBX,0x18
         } while (last > first);                      // 0x14002bb38 JA
     }
     goto LAB_bb3a;
@@ -169,7 +159,7 @@ LAB_bb54:
     // MOVSXD RAX,EDX / SAR RAX,1 / LEA RAX,[RAX+RAX*2] / LEA R11,[RDI+RAX*8]
     // i.e. mid = first + (n >> 1) * 0x18.  n > 8 here, so the arithmetic shift is
     // an ordinary halving.
-    mid = first + static_cast<ptrdiff_t>(n >> 1) * kElem;
+    mid = first + static_cast<ptrdiff_t>(n >> 1);
 
     if (Key(mid)  < Key(first)) SwapRec(first, mid);   // 0x14002bb62 JGE skips
     if (Key(last) < Key(first)) SwapRec(first, last);  // 0x14002bb97 JGE skips
@@ -186,7 +176,7 @@ LAB_bc06:
     {
         for (;;)
         {
-            up += kElem;                              // 0x14002bc10 ADD RCX,0x18
+            up += 1;                              // 0x14002bc10 ADD RCX,0x18
             if (up >= mid) goto LAB_bc27;             // 0x14002bc14 JNC
             if (Key(mid) < Key(up)) break;            // 0x14002bc1c JGE -> keep scanning
         }
@@ -198,7 +188,7 @@ LAB_bc27:
     // Continue the upward scan, now bounded by `last` instead of by `mid`.
     for (;;)
     {
-        up += kElem;                                  // 0x14002bc27
+        up += 1;                                  // 0x14002bc27
         if (up > last) break;                         // 0x14002bc2b JA
         if (Key(mid) < Key(up)) break;                // 0x14002bc33 JGE -> keep scanning
     }
@@ -207,7 +197,7 @@ LAB_bc40:
     // Downward scan: walk back while the pivot key is strictly less than *down.
     for (;;)
     {
-        down -= kElem;                                // 0x14002bc40 SUB R10,0x18
+        down -= 1;                                // 0x14002bc40 SUB R10,0x18
         if (down <= mid) break;                       // 0x14002bc44 JBE
         if (!(Key(mid) < Key(down))) break;           // 0x14002bc51 JL -> keep scanning
     }
@@ -223,11 +213,11 @@ LAB_bc40:
 
 LAB_bc95:
     // ---- pivot-equal skip-back (0x14002bc95 .. 0x14002bcd7) ----
-    down += kElem;                                    // 0x14002bc95 ADD R10,0x18
+    down += 1;                                    // 0x14002bc95 ADD R10,0x18
     if (mid >= down) goto LAB_bcc0;                   // 0x14002bc99 CMP R11,R10 / JNC
     for (;;)
     {
-        down -= kElem;                                // 0x14002bca0
+        down -= 1;                                // 0x14002bca0
         if (down <= mid) goto LAB_bcc0;               // 0x14002bca4 JBE
         {
             const int32_t a = Key(down);              // 0x14002bca9 EAX
@@ -245,7 +235,7 @@ LAB_bcc0:
     // Same skip-back loop, now bounded by `first` rather than by `mid`.
     for (;;)
     {
-        down -= kElem;                                // 0x14002bcc0
+        down -= 1;                                // 0x14002bcc0
         if (down <= first) break;                     // 0x14002bcc4 CMP R10,RDI / JBE
         {
             const int32_t a = Key(down);
@@ -260,8 +250,8 @@ LAB_bcd9:
     // ---- push the larger half, iterate the smaller (0x14002bcd9 .. 0x14002bd57) ----
     {
         // Both divisions are the RBP=0x2AAAAAAAAAAAAAAB magic-multiply => /0x18 signed.
-        const ptrdiff_t rightCount = (last - up)    / kElem;   // R9  @ 0x14002bce8
-        const ptrdiff_t leftCount  = (down - first) / kElem;   // RDX @ 0x14002bcff
+        const ptrdiff_t rightCount = (last - up);      // R9  @ 0x14002bce8
+        const ptrdiff_t leftCount  = (down - first);   // RDX @ 0x14002bcff
 
         if (leftCount < rightCount) goto LAB_bd37;             // 0x14002bd13 JL (signed)
 
