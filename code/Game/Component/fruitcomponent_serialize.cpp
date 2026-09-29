@@ -32,23 +32,6 @@
 #include "Component/FruitComponent.h"
 #include "Component/NaturalResourceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7b30 cell class
 
-namespace {
-
-// (The base serialize 0x1401189b0 is Component::Persist, called qualified; the
-// IsDerivedFrom import slot 0x140152a98 is Object::Base::IsDerivedFrom.)
-
-inline void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
-    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && tid && !reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(tid))   // B.3.x bridge
-        *reinterpret_cast<uint64_t*>(ibp) = 0;
-}
-
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
-}
-
-} // namespace
 
 // ============================================================
 // FruitComponent::Serialize (vtable slot [3], 0x14004a070)
@@ -58,12 +41,11 @@ void FruitComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
 
-    SerializeValidatedIBP(At(this, 0x28), ser, NaturalResourceComponent::TypeId());
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x34)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    // InternalPtr<T>::Serialize: InternalBasePtr::Serialize, then the IsDerivedFrom
+    // null-out (0x1401c7b30).
+    resource.Serialize(ser, NaturalResourceComponent::TypeId());
+    ser.Serialize(ripeness, nullptr);
+    ser.Serialize(fruitFlag, nullptr);
 }

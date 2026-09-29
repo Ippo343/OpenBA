@@ -26,6 +26,9 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+class Weather;                // Game/Weather.h
+
 class EnvironmentDescription final : public Object::External {
     DECLARE_EXE_TYPE(EnvironmentDescription)
 
@@ -42,6 +45,13 @@ public:
         float    sunSpread;      // +0x1c default 65.0f
     };
 
+    // One weather choice (0x10 bytes; Serialize 0x140094040: ExternalPtr<Weather>
+    // 0x1400196a0, then ExternalPtr<ComponentDescription> 0x140002340).
+    struct WeatherChoice {
+        Weather*              weather;       // +0x00
+        ComponentDescription* description;   // +0x08
+    };
+
     EnvironmentDescription();
 
     ~EnvironmentDescription() override;                                    // [0] 0x140019190
@@ -52,14 +62,15 @@ public:
     virtual Object::External* Construct();                                 // [8] 0x140019160
 
     // ---- fields ----
-    void*        _environmentRef;   // +0x20 ExternalPtr (environment name/path ref)
-    void*        _weatherArray;     // +0x28 dynamic array, 16-byte elements {WeatherExternal, ExternalPtr}
-    uint32_t     _weatherCount;     // +0x30
-    uint32_t     _weatherCap;       // +0x34
+    ComponentDescription* _environmentRef;   // +0x20 ExternalPtr<ComponentDescription> (0x140002340)
+    WeatherChoice* _weatherArray;   // +0x28 Array<WeatherChoice> data (resize 0x1400198a0)
+    int32_t      _weatherCount;     // +0x30 Serialize(int&) through a local
+    int32_t      _weatherCap;       // +0x34
     WeatherEntry _months[12];       // +0x38..+0x1b8
 };
 
 static_assert(sizeof(EnvironmentDescription::WeatherEntry) == 0x20, "EnvironmentDescription::WeatherEntry is 0x20");
+static_assert(sizeof(EnvironmentDescription::WeatherChoice) == 0x10, "EnvironmentDescription::WeatherChoice is 0x10");
 static_assert(sizeof(EnvironmentDescription) == 0x1b8, "EnvironmentDescription is 0x1b8 (create 0x140019120 MemAlloc(0x1b8))");
 static_assert(alignof(EnvironmentDescription) == 8, "EnvironmentDescription alignment");
 static_assert(offsetof(EnvironmentDescription, _environmentRef) == 0x20, "EnvironmentDescription::_environmentRef @ +0x20");

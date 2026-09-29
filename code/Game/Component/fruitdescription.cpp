@@ -34,17 +34,17 @@
 // the defaults.
 FruitDescription::FruitDescription()
     : Description(),
-      _f20(1.0f),
-      _f24(0.0f),
-      _f28(0.0f),
+      _ripenSeasons(1.0f),
+      _optimalTemp(0.0f),
+      _tempRange(0.0f),
       _ref30(nullptr) {}
 
 // [5] 0x14004a1e0: stream order as retail.
 bool FruitDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_f20, nullptr);
-    ser.Serialize(_f24, nullptr);
-    ser.Serialize(_f28, nullptr);
+    ser.Serialize(_ripenSeasons, nullptr);
+    ser.Serialize(_optimalTemp, nullptr);
+    ser.Serialize(_tempRange, nullptr);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
     return true;
 }

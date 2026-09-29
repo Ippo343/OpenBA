@@ -313,7 +313,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
 
         // Search entity's sub-descriptions for RawMaterialDescription
         int compCount = buildEntity->_subDescCount;
-        void** compArray = buildEntity->_subDescs;
+        Description** compArray = buildEntity->_subDescs;   // COMP-c typed _subDescs (merge fix)
 
         for (int i = 0; i < compCount; i++) {
             void* comp = compArray[i];

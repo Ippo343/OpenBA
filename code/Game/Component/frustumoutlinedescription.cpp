@@ -59,13 +59,11 @@ int32_t FrustumOutlineDescription::GetFileVersion() const {
 // was whatever the Serializer dtor left there.)
 bool FrustumOutlineDescription::Serialize(void* stream) {
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, serializer);                          // ExternalPtr +0x68
-    _spriteName.Serialize(serializer);                                            // String      +0x70
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_width, nullptr);    // int +0x78   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_height, nullptr);   // int +0x7c   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                 // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // ExternalPtr +0x68
+    _spriteName.Serialize(&ser);                                     // String      +0x70
+    ser.Serialize(_width, nullptr);                                  // int +0x78
+    ser.Serialize(_height, nullptr);                                 // int +0x7c
     return true;
 }
 
@@ -98,40 +96,26 @@ void FrustumOutlineDescription::Destruct() { this->~FrustumOutlineDescription();
 //   5. Return the element pointer through param_2 (RDX out-buffer).
 Object::InternalPtr<UI::Element>* FrustumOutlineDescription::CreateInstance(
         Object::InternalPtr<UI::Element>* ret, const UI::Dialog* /*dialog*/) const {
-    const void* self = this;
-    void** param_2 = reinterpret_cast<void**>(ret);
-    void* elem = FrustumOutlineElement::CreateNewObject();
+    void* mem = Object::detail::InternalMemAlloc(sizeof(FrustumOutlineElement), 8);
+    FrustumOutlineElement* elem = mem ? ::new (mem) FrustumOutlineElement() : nullptr;
 
-    uint8_t ibp[16] = {};
-    new (ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
+    ::Object::InternalPtr<UI::Element> ibp(elem);
     // Non-virtual applier; QUALIFIED (the slot-8 override hides the base overload).
-    UI::ElementDescription::CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ibp));
-    void* e = *reinterpret_cast<void**>(ibp);
+    UI::ElementDescription::CreateInstance(&ibp);
 
-    if (e) {
-        const uint8_t* d = reinterpret_cast<const uint8_t*>(self);
-        uint8_t* el = reinterpret_cast<uint8_t*>(e);
-        // Build the outline's line Sprite from the description's spriteSheet
-        // (+0x68 ExternalPtr) + name (+0x70 String) and store at element+0xc0.
-        // The factory installed a default (spriteless) Sprite, and
-        // SpriteContext::AddLine no-ops when the sprite's spritesheet is null —
-        // so without this the frustum outline never draws. Guard on a non-null
+    if (elem) {
+        // Build the outline's line Sprite from the description's spriteSheet + name
+        // and store it in the element. The ctor installed a default (spriteless)
+        // Sprite, and SpriteContext::AddLine no-ops when the sprite's spritesheet is
+        // null — so without this the frustum outline never draws. Guard on a non-null
         // spriteSheet so a Map.rsc that omits the sprite stays crash-safe.
-        uint64_t spriteSheet = *reinterpret_cast<const uint64_t*>(d + 0x68);
-        if (spriteSheet) {
-            uint64_t spriteRet[2] = {0, 0};
-            ::new (spriteRet) UI::Sprite(
-                Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
-                *reinterpret_cast<const System::String*>(d + 0x70));
-            *reinterpret_cast<uint64_t*>(el + 0xc0) = spriteRet[0];
-            *reinterpret_cast<uint64_t*>(el + 0xc8) = spriteRet[1];
+        if (_spriteSheet) {
+            elem->_lineSprite = UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(_spriteSheet), _spriteName);
         }
-        *reinterpret_cast<int*>(el + 0xd0) = *reinterpret_cast<const int*>(d + 0x78);  // width
-        *reinterpret_cast<int*>(el + 0xd4) = *reinterpret_cast<const int*>(d + 0x7c);  // height
+        elem->_width  = _width;    // width
+        elem->_height = _height;   // height
     }
-    if (param_2) *param_2 = e;
+    if (ret) *ret = ibp;
     return ret;
 }
 

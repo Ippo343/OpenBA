@@ -5,13 +5,13 @@
 // Parent type name: "Description". Vtable @ 0x140162760.  GetVersion = 6.
 //
 // Field layout (from Factory + Serialize FUN_1401180f0 + dtor FUN_140031060):
-//   +0x20: void* _descRef        ExternalPtr (Description) field (default 0)
-//   +0x28: bool  _flag0          (default 1)
-//   +0x29: bool  _flag1          (default 0)
-//   +0x2a: bool  _flag2          (default 1)
-//   +0x2b: bool  _flag3          (default 0)
-//   +0x2c: bool  _flag4          (default 1)
-//   +0x2d: bool  _flag5          (default 0)
+//   +0x20: ComponentDescription* _target  ExternalPtr<ComponentDescription> (default 0)
+//   +0x28: bool  _clearTrees          (default 1)
+//   +0x29: bool  _clearGround          (default 0)
+//   +0x2a: bool  _clearBuildings          (default 1)
+//   +0x2b: bool  _priority          (default 0)
+//   +0x2c: bool  _regrowTerrain          (default 1)
+//   +0x2d: bool  _instant          (default 0)
 //   +0x30: int32 _value          (default -1)
 //
 // Serialize (FUN_1401180f0) stream order:
@@ -41,13 +41,13 @@
 // the defaults.
 ClearAreaDescription::ClearAreaDescription()
     : Description(),
-      _descRef(nullptr),
-      _flag0(true),
-      _flag1(false),
-      _flag2(true),
-      _flag3(false),
-      _flag4(true),
-      _flag5(false),
+      _target(nullptr),
+      _clearTrees(true),
+      _clearGround(false),
+      _clearBuildings(true),
+      _priority(false),
+      _regrowTerrain(true),
+      _instant(false),
       _value(-1) {}
 
 // [5] 0x1401180f0: stream order as retail.
@@ -56,13 +56,13 @@ bool ClearAreaDescription::Serialize(void* stream) {
     // 1. ExternalPtr (+0x20). Same stream layout as the StringTable ExternalPtr
     //    helper (FUN_14000bf40); only the validated typeId differs (trusted in
     //    standalone via IsDerivedFromOrTrust).
-    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
-    ser.Serialize(_flag0, nullptr);
-    ser.Serialize(_flag1, nullptr);
-    ser.Serialize(_flag2, nullptr);
-    ser.Serialize(_flag3, nullptr);
-    ser.Serialize(_flag4, nullptr);
-    ser.Serialize(_flag5, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_target, &ser);
+    ser.Serialize(_clearTrees, nullptr);
+    ser.Serialize(_clearGround, nullptr);
+    ser.Serialize(_clearBuildings, nullptr);
+    ser.Serialize(_priority, nullptr);
+    ser.Serialize(_regrowTerrain, nullptr);
+    ser.Serialize(_instant, nullptr);
     ser.Serialize(_value, nullptr);
     return true;
 }

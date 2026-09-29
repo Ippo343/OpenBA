@@ -78,7 +78,7 @@ extern "C" void  TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplace
 static RawMaterialDescription* BCS1_FindRawMatDesc(ComponentDescription* matEntity, uint32_t tid) {
     if (!matEntity || !tid) return nullptr;
     int count = matEntity->_subDescCount;
-    void** arr = matEntity->_subDescs;
+    Description** arr = matEntity->_subDescs;
     if (!arr) return nullptr;
     for (int i = 0; i < count; i++) {
         // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header)

@@ -67,6 +67,10 @@ public:
     virtual void     OnMessage(int message, void* data,
                                uint32_t arg0, uint32_t arg1);     // [15] 0x140118ae0 RET
 
+    // 0x140118950: _flags = (_flags | orMask) & ~andNotMask, then the entity's flag
+    // refresh (0x1400c3470) when the low word changed (defined in growthcomponent.cpp).
+    void ModifyFlags(uint32_t orMask, uint32_t andNotMask);
+
     // ---- the 0x18 bytes Component adds, retail order ------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
     ComponentEntity* _entity; // +0x10 owning ComponentEntity (InternalPtr<ComponentEntity> in

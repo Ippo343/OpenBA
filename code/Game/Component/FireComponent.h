@@ -23,6 +23,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
+
+class FireDescription;   // Component/FireDescription.h
 
 class FireComponent final : public Component {
     DECLARE_EXE_TYPE(FireComponent)
@@ -37,12 +40,19 @@ public:
     void OnMessage(int message, void* data,
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x140049090
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    void Ignite();                                                // 0x140049610
+    void SpreadToNeighbors();                                     // 0x140049130
+    void Extinguish();                                            // 0x1400494c0
+    void MarkDanger(short delta);                                 // 0x1400499c0
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x140049a90:
+    // Time::Serialize +0x30 / +0x38, Serialize(int&) +0x28 and (version > 0) +0x2c.
     int32_t  bucketsApplied;    // +0x28 water buckets delivered since ignition
     int32_t  bucketsAtSpread;   // +0x2c snapshot of +0x28 at the last spread pass
-    int64_t  fireTimer;         // +0x30 System::Time — burning while > 0
-    int64_t  spreadTimer;       // +0x38 System::Time — next spread pass when <= 0
-    int64_t  igniteAccum;       // +0x40 System::Time — idle accumulator for the roll
+    System::Time fireTimer;     // +0x30 burning while > 0
+    System::Time spreadTimer;   // +0x38 next spread pass when <= 0
+    System::Time igniteAccum;   // +0x40 idle accumulator for the roll
 };
 
 static_assert(sizeof(FireComponent) == 0x48, "FireComponent is 0x48 (create 0x1400055e0)");

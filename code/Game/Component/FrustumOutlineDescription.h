@@ -31,6 +31,8 @@
 #include "ui/ElementDescription.h"
 #include "Object/exe_type.h"
 
+namespace UI { class SpriteSheet; }   // ui/SpriteSheet.h
+
 class FrustumOutlineDescription final : public UI::ElementDescription {
     DECLARE_EXE_TYPE(FrustumOutlineDescription)
 
@@ -52,7 +54,7 @@ public:
     using UI::ElementDescription::CreateInstance;
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*          _spriteSheet;   // +0x68 ExternalPtr<UI::SpriteSheet>
+    UI::SpriteSheet* _spriteSheet; // +0x68 ExternalPtr<UI::SpriteSheet>
     System::String _spriteName;    // +0x70
     int32_t        _width;         // +0x78 (ctor -1)
     int32_t        _height;        // +0x7c (ctor -1)

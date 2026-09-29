@@ -40,7 +40,7 @@ public:
     uint32_t _category;                         // +0x20 enum: placement category
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
     System::String _name;                       // +0x28 String (empty)
-    void* _placeArray;                          // +0x30 int[] (enum elements, stride 4): `_placeBitArray`
+    uint32_t* _placeArray;                      // +0x30 enum[] (stride 4, the uint door): `_placeBitArray`
     int32_t _placeCount;                        // +0x38
     int32_t _placeCap;                          // +0x3c
     int32_t _i40;                               // +0x40

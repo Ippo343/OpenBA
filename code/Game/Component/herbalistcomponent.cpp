@@ -63,9 +63,7 @@ void       HerbalistComponent::Persist(void* stream) {
     ResourceProduceComponent::Persist(stream);
 
     // Empty serializer block (subclass compat)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (Persist takes void*)
 }
 uintptr_t* HerbalistComponent::CreateWork(uintptr_t* out) { return HerbalistComponent_CreateWork(this, out); } // [18] 0x14004b160
 

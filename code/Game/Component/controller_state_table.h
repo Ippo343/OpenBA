@@ -53,6 +53,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/ControllerComponent.h"   // ControllerComponent::Controller (the node)
 
 // Our port of StateMachine::Tick (retail 0x1400a9660), defined in
 // statemachinecomponent.cpp and registered for that address. RequestStateTransition
@@ -155,15 +156,15 @@ struct Dispatcher {
         int idx = TableFindIndex(table, input);
         return idx;
     }
-    // node+0x18 holds the controller-data pointer the handler expects.
-    static void* NodeData(void* node) {
-        return *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x18);
+    // node+0x18 (Controller::_owner) holds the component the handler expects.
+    static void* NodeData(::ControllerComponent::Controller* node) {
+        return node->_owner;
     }
     // slot 3 (+0x18): Enter — dispatch table[idx].enterHandler(node+0x18, sm)
     // The exe enter dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`, so a real
     // handler receives RCX=controller-data AND RDX=sm (preserved through the tail-JMP,
     // bug-class #6). Forward sm as the 2nd arg; 1-arg handlers ignore the extra RDX.
-    static char Enter(void* node, void* sm, int idx) {
+    static char Enter(::ControllerComponent::Controller* node, void* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].enterHandler;
         if (!h) return 0;
@@ -194,14 +195,14 @@ struct Dispatcher {
     // Like Enter, the exe update dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`
     // preserving RDX=sm (bug-class #6), so real update handlers (e.g. sub_81e0/sub_76e0)
     // receive (controller-data, sm) and use sm to request state transitions.
-    static char Update(void* node, void* sm, int idx) {
+    static char Update(::ControllerComponent::Controller* node, void* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].updateHandler;
         if (!h) return 0;
         return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
     }
     // slot 5 (+0x28): OnState — table[actIdx].transitions[trIdx].handler(node+0x18)
-    static void OnState(void* node, void* /*sm*/, int actIdx, int trIdx) {
+    static void OnState(::ControllerComponent::Controller* node, void* /*sm*/, int actIdx, int trIdx) {
         if (actIdx < 0 || actIdx >= table.count) return;
         if (trIdx < 0 || trIdx >= 8) return;
         void* h = table.entries[actIdx].transitions[trIdx].handler;
@@ -223,7 +224,7 @@ struct Dispatcher {
     // Forwarding them is required, not cosmetic — 0x140045250 and 0x140044ff0 both read
     // sm to request their state transition. Handlers that take fewer arguments simply
     // ignore the extra registers.
-    static char Trans30(void* node, void* sm, void* time, int idx) {
+    static char Trans30(::ControllerComponent::Controller* node, void* sm, void* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].trans30Handler;
         if (!h) return 0;
@@ -241,7 +242,7 @@ struct Dispatcher {
     // (data, sm, Time* dt). Handlers that don't need dt (2-arg ports like the
     // BuildComponent state work) simply ignore R8; the ResidenceComponent heat
     // tick (0x140129970) dereferences it for its heat countdown.
-    static char Trans38(void* node, void* sm, void* time, int idx) {
+    static char Trans38(::ControllerComponent::Controller* node, void* sm, void* time, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].trans38Handler;
         if (!h) return 0;
@@ -259,7 +260,7 @@ struct Dispatcher {
     //     miss: XOR AL,AL ; RET
     // So a handler is called as handler(NodeData(node), sm) and returns char — the
     // same shape as Enter/Update. A miss is a graceful 0, exactly as retail.
-    static char PostEvent(void* node, void* sm, int curIdx, int eventId) {
+    static char PostEvent(::ControllerComponent::Controller* node, void* sm, int curIdx, int eventId) {
         if (curIdx < 0 || curIdx >= table.count) return 0;
         const StateEntry& e = table.entries[curIdx];
         for (int i = 0; i < e.eventCount; ++i) {
@@ -295,16 +296,14 @@ inline void RequestStateTransition(void* sm, int desiredStateId) {
     uint8_t* s = reinterpret_cast<uint8_t*>(sm);
     if (*reinterpret_cast<int8_t*>(s + 0x09) < 0)
         ::StateMachine_TickReimpl(sm, 0, 0, 0);
-    void* node = *reinterpret_cast<void**>(s + 0x00);   // re-read after the nested tick
+    // The SM's current node (+0x00) is a ControllerComponent::Controller; the StateMachine
+    // bytes are untyped (COMP-e): LEFT.
+    ::ControllerComponent::Controller* node =
+        *reinterpret_cast<::ControllerComponent::Controller**>(s + 0x00);   // re-read after the nested tick
     if (!node) return;
-    void* vt = *reinterpret_cast<void**>(node);
-    if (!vt) return;
-    typedef int (*RT_t)(void*, int, int*);
-    RT_t rt = *reinterpret_cast<RT_t*>(reinterpret_cast<uint8_t*>(vt) + 0x08);
-    if (!rt) return;
     int curIdx = *reinterpret_cast<int8_t*>(s + 0x09);  // re-read after the nested tick
     int desired = desiredStateId;
-    int idx = rt(node, curIdx, &desired);
+    int idx = node->FindTransition(curIdx, &desired);   // node slot 1 (+0x08)
     if (idx >= 0) {
         *reinterpret_cast<int8_t*>(s + 0x0b) = static_cast<int8_t>(idx);
         *reinterpret_cast<int8_t*>(s + 0x0a) = static_cast<int8_t>(desired);
@@ -322,8 +321,6 @@ inline void RequestStateTransition(void* sm, int desiredStateId) {
 // have). Every override forwards to the SAME Dispatcher<Tag> static the old
 // table held, so the behaviour is byte-for-byte the old table's.
 // ============================================================================
-#include "Component/ControllerComponent.h"
-
 namespace ControllerLive {
 
 template <class Tag>

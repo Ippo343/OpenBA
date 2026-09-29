@@ -41,10 +41,10 @@
 // ============================================================
 //   retail DestroyDescription_helper_cfd0 (0x14011cfd0, state-4 enter) -> f520 at 0x14011d02f
 //     on FUN_140002e10(ownerEntity) — ported at destroycomponent_states.cpp
-//     Destroy_State4Enter_cfd0.
+//     DestroyComponent::State4Enter.
 //   retail DestroyDescription_helper_dd00_sub_bcc0 / _sub_c120 (state-5 tick, the
 //     replacement spawn) -> f670 — ported at destroycomponent_states.cpp
-//     Destroy_State5Tick_c120.
+//     DestroyComponent::State5Tick.
 //   (retail also reaches them from the WorkPlaceComponent controller's own state table,
 //   WorkPlaceDescription_helper_ee40 / _edf0 — our WorkPlaceComponent has no live
 //   controller node, so those two run from BuildComponent_State8Finalize instead.)
@@ -66,6 +66,13 @@
 #include "Tutorial/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Game/exe_bodies.h"
+#include "Game/ProfessionList.h"
+#include "Game/Profession.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Closure, called directly
@@ -112,59 +119,58 @@ static bool Plausible(const void* p) {
 // In the f520 flow the loop is dead by construction: ee60 has already drained the roster to
 // zero, so `newMax < count` is false on entry. The guards below are for the UI path, where
 // the roster is live.
-extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
-    int64_t workComp = 0;
-    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(wpc + 0x10), &workComp);
-    if (workComp) *reinterpret_cast<int32_t*>(workComp + 0x30) = newMax;
+void WorkPlaceComponent::SetMaxWorkers(int newMax) {
+    WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
+    if (workComp) workComp->workState = newMax;   // +0x30 the work capacity
 
-    if (newMax >= *reinterpret_cast<int32_t*>(wpc + 0x60)) return;
+    if (newMax >= workerCount) return;
 
     std::fprintf(stderr, "[WorkPlaceComponent] SetMaxWorkers: evicting wpc=%p from roster %d down to %d\n",
-                 reinterpret_cast<void*>(wpc), *reinterpret_cast<int32_t*>(wpc + 0x60), newMax);
+                 (void*)this, workerCount, newMax);
     std::fflush(stderr);
 
     const bool savedRosterOnly = g_wpcRosterOnly;
     g_wpcRosterOnly = true;
 
     int guard = 0;
-    while (newMax < *reinterpret_cast<int32_t*>(wpc + 0x60)) {
-        const int before = *reinterpret_cast<int32_t*>(wpc + 0x60);
+    while (newMax < workerCount) {
+        const int before = workerCount;
 
         // [STANDALONE GUARD] Retail walks +0x58 unchecked because its roster is always
         // consistent; ours can be caught mid-teardown (live crash 2026-07-25 read base == 8
         // with count > 0). Bail instead of faulting.
-        int64_t* roster = *reinterpret_cast<int64_t**>(wpc + 0x58);
+        Object::InternalPtr<CitizenComponent>* roster = workers;
         if (!Plausible(roster)) break;
-        int64_t citizen = *roster;
-        if (!Plausible(reinterpret_cast<void*>(citizen))) break;
+        CitizenComponent* citizen = roster[0].Get();
+        if (!Plausible(citizen)) break;
 
         // [STANDALONE GUARD] Retail derefs citizen+0x1f0 (the profession record) unguarded;
         // a standalone worker can still be professionless, which reads through null+0x4c.
-        int64_t profession = *reinterpret_cast<int64_t*>(citizen + 0x1f0);
+        Profession* profession = citizen->profession;
         int64_t targetIBP = 0;
         if (profession) {
-            if (*reinterpret_cast<char*>(profession + 0x4c) == '\0') {
-                CitizenComp_sub_ffc0(citizen, &targetIBP);
+            if (!profession->field4C) {
+                CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(citizen), &targetIBP);
             } else {
-                CitizenComp_sub_0470(citizen, &targetIBP);
+                CitizenComp_sub_0470(reinterpret_cast<int64_t>(citizen), &targetIBP);
             }
         }
 
         // Re-read the roster base — the finders above can reallocate it (faithful: retail
         // re-reads *(wpc+0x58) too, right before the AssignHousing call).
-        int64_t* rosterNow = *reinterpret_cast<int64_t**>(wpc + 0x58);
+        Object::InternalPtr<CitizenComponent>* rosterNow = workers;
         if (!Plausible(rosterNow)) break;
-        if (!Plausible(reinterpret_cast<void*>(*rosterNow))) break;
+        if (!Plausible(rosterNow[0].Get())) break;
 
-        CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(*rosterNow), &targetIBP);
+        CitizenComp_AssignHousing(rosterNow[0].Get(), &targetIBP);
 
         // [STANDALONE GUARD] Retail's `while` assumes the finder never hands back THIS
         // workplace. If it did, an unterminated loop here is an in-world FREEZE rather than
         // a crash, which is far harder to diagnose. Break out loudly.
-        if (*reinterpret_cast<int32_t*>(wpc + 0x60) >= before || ++guard > 4096) {
+        if (workerCount >= before || ++guard > 4096) {
             std::fprintf(stderr, "[WorkPlaceComponent] SetMaxWorkers: no progress on wpc=%p (roster %d -> %d, "
-                         "citizen=%p) — breaking to avoid a spin\n", reinterpret_cast<void*>(wpc),
-                         before, *reinterpret_cast<int32_t*>(wpc + 0x60), reinterpret_cast<void*>(citizen));
+                         "citizen=%p) — breaking to avoid a spin\n", (void*)this,
+                         before, workerCount, (void*)citizen);
             std::fflush(stderr);
             break;
         }
@@ -177,76 +183,87 @@ extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
 // FUN_14012f520 — ENTER the builder profession (the DestroySM state-4 re-seat)
 // ============================================================
 // Faithful 1:1 port; every deviation is marked [STANDALONE GUARD].
-extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
+void WorkPlaceComponent::EnterBuilderProfession() {
     // [STANDALONE GUARD] Retail is called only from a live state machine with a real world
     // singleton; ours can be driven from a harness before the world exists.
-    if (!wpc || GameUpdateLoop::_singleton == nullptr) return;
-    const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
+    if (GameUpdateLoop::_singleton == nullptr) return;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
     // 1. Release every seated worker (ee60). This is the piece whose absence left the
     //    roster half-torn-down: +0x60 non-zero over a clobbered +0x58.
-    WorkPlaceComponent_OnCreateInit(reinterpret_cast<void*>(wpc));
+    WorkPlaceComponent_OnCreateInit(this);
 
     // 2. The owner entity's WorkComponent.
-    int64_t workComp = 0;
-    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(wpc + 0x10), &workComp);
+    WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
 
-    const uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
-    const uint64_t builderKey = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
+    ProfessionList* profReg = gw->m_professionList;   // +0xb0
+    Profession* const builderKey = profReg ? profReg->field_0x38 : nullptr;
 
     // 3. Re-key a pending work item from the OLD profession (+0x48, still unmodified here)
     //    to Builder, so a task already in flight when demolition starts is offered to
     //    builders rather than to the building's former profession.
-    if (workComp && *reinterpret_cast<int32_t*>(workComp + 0x28) >= 0) {
-        const uintptr_t sched = *reinterpret_cast<uintptr_t*>(gw + 0x118);
+    if (workComp && workComp->workId >= 0) {
+        // GameUpdateLoop +0x118 is still void* (GAME-a): the scheduler handle is LEFT.
+        const uintptr_t sched = reinterpret_cast<uintptr_t>(gw->m_tutorial);
         if (sched) {
-            CitizenAI_WorkScheduler_Rekey(sched, *reinterpret_cast<uint32_t*>(workComp + 0x28),
-                    *reinterpret_cast<uint64_t*>(wpc + 0x48), builderKey);
+            CitizenAI_WorkScheduler_Rekey(sched, static_cast<uint32_t>(workComp->workId),
+                    reinterpret_cast<uint64_t>(profession), reinterpret_cast<uint64_t>(builderKey));
         }
     }
 
     // 4/5. Seat the Builder key and register the owner into the Builder bucket. Retail
     //      writes +0x48 BEFORE the bucket insert (the insert reads the key from its own
     //      argument, so the order only matters for anything re-entering meanwhile).
-    const int64_t ownerRef = *reinterpret_cast<int64_t*>(wpc + 0x10);
-    *reinterpret_cast<uint64_t*>(wpc + 0x48) = builderKey;
-    const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(gw + 0xf0);
+    ComponentEntity* const ownerRef = _entity;
+    profession = builderKey;
+    // GameUpdateLoop +0xf0 is still void* (GAME-a): the town manager handle is LEFT.
+    const uintptr_t townMgr = reinterpret_cast<uintptr_t>(gw->m_citizenList);
     if (townMgr) {
-        int64_t ownerLocal = ownerRef;      // the insert takes an InternalBasePtr*
-        ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerLocal, builderKey);
+        ComponentEntity* ownerLocal = ownerRef;      // the insert takes an InternalBasePtr*
+        ResidenceComponent_impl_95a0(static_cast<int64_t>(townMgr), &ownerLocal,
+                                     reinterpret_cast<uint64_t>(builderKey));
     }
 
     // 6. Worker capacity for the demolition site. No BuildComponent on the owner entity ->
     //    the WorkComponent's own description-derived capacity; with one -> the position
     //    child count (a construction/demolition site is sized by its footprint tiles).
-    int64_t buildComp = 0;
-    Dialog_FindComponent_d6c0(*reinterpret_cast<void**>(wpc + 0x10), &buildComp);
+    BuildComponent* buildComp = _entity->FindComponent<BuildComponent>();   // 0x14000d6c0
 
     int capacity = 0;
-    if (buildComp == 0) {
-        if (workComp) capacity = WorkComponent_CalcMaxWorkers(static_cast<uintptr_t>(workComp));
+    if (buildComp == nullptr) {
+        if (workComp) capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));
     } else {
+        // 0x140002ed0's component class is not settled here: the finder stays (LEFT).
         int64_t posComp = 0;
-        WorkBase_FindComponent_2ed0(*reinterpret_cast<uintptr_t*>(wpc + 0x10), &posComp);
+        WorkBase_FindComponent_2ed0(reinterpret_cast<uintptr_t>(_entity), &posComp);
         // [STANDALONE GUARD] Retail derefs the finder's out-IBP unconditionally; a partial
         // entity can lack the component, and 0x140123070 walks node+0x18/+0x30 from it.
         if (posComp) capacity = Pf_RecursiveChildSum_123070(posComp, 1);
     }
 
     // 7. Publish the capacity + evict the excess (dead after step 1, see fb00's note).
-    WorkPlaceComponent_SetMaxWorkers(wpc, capacity);
+    SetMaxWorkers(capacity);
 
     // 8. SetAccepting(true) — the site now takes builders.
-    WorkPlaceComponent_SetAccepting(wpc, true);
+    WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(this), true);
 
-    std::fprintf(stderr, "[DestroyWorkers] f520 re-seat wpc=%p: builderKey=%llx capacity=%d "
+    std::fprintf(stderr, "[DestroyWorkers] f520 re-seat wpc=%p: builderKey=%p capacity=%d "
                  "roster=%d (buildComp=%p) workComp=%p workId(+0x28)=%d%s\n",
-                 reinterpret_cast<void*>(wpc),
-                 static_cast<unsigned long long>(builderKey), capacity,
-                 *reinterpret_cast<int32_t*>(wpc + 0x60), reinterpret_cast<void*>(buildComp),
-                 reinterpret_cast<void*>(workComp),
-                 workComp ? *reinterpret_cast<int32_t*>(workComp + 0x28) : -1,
-                 (workComp && *reinterpret_cast<int32_t*>(workComp + 0x28) >= 0)
+                 (void*)this, (void*)builderKey, capacity,
+                 workerCount, (void*)buildComp, (void*)workComp,
+                 workComp ? workComp->workId : -1,
+                 (workComp && workComp->workId >= 0)
                      ? " -> re-keyed" : " -> nothing in flight to re-key");
     std::fflush(stderr);
+}
+
+// ---- B4 FORWARD: outside callers in Dialog/workplaceui.cpp (SetMaxWorkers),
+// Component/workplacecomponent.cpp and standalone/tool_harness.cpp
+// (EnterBuilderProfession); the closing wave rewires them. The null test is the tree's.
+extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
+    reinterpret_cast<WorkPlaceComponent*>(wpc)->SetMaxWorkers(newMax);
+}
+extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
+    if (!wpc) return;
+    reinterpret_cast<WorkPlaceComponent*>(wpc)->EnterBuilderProfession();
 }

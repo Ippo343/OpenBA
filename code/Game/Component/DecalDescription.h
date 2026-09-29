@@ -21,6 +21,14 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+// One per-variant UV rect of the decal's atlas (Serialize 0x14011b980: four floats,
+// default {0, 0, 1, 1}); DecalComponent::OnAdded 0x14011b560 picks it by the
+// ModelComponent's mesh group.
+struct DecalUVRect {
+    float u0, v0, u1, v1;
+};
+static_assert(sizeof(DecalUVRect) == 0x10, "DecalUVRect stride 0x10");
+
 class DecalDescription final : public Description {
     DECLARE_EXE_TYPE(DecalDescription)
 
@@ -35,30 +43,31 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140033890
     virtual Object::External* Construct();                                 // [9] 0x140033860
 
-    // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    float _sizeA;                               // +0x20
-    bool _flagA;                                // +0x24
-    bool _flagB;                                // +0x25
+    // ---- fields (PUBLIC: DecalComponent reads them by name) ----
+    float _initialAlpha;                        // +0x20 DecalComponent::decalScale seed (Startup 0x14011b7d0)
+    bool _tiled;                                // +0x24 AddDecal's tiled flag
+    bool _flagB;                                // +0x25 AddDecal's last argument
     uint8_t _pad26[2];                          // +0x26 never written by the ctor
-    void* _refs;                                // +0x28 External* array data
-    int32_t _refCount;                          // +0x30
-    int32_t _refCap;                            // +0x34
-    void* _quads;                               // +0x38 quad array data (4 floats, 0x10 stride)
-    int32_t _quadCount;                         // +0x40
-    int32_t _quadCap;                           // +0x44
-    float _sizeB;                               // +0x48
+    void** _materials;                          // +0x28 ExternalPtr array (0x14001bcc0, typeInfo import
+                                                //       0x140151f20), indexed by DecalComponent::decalState
+    int32_t _materialCount;                     // +0x30
+    int32_t _materialCap;                       // +0x34
+    DecalUVRect* _uvRects;                      // +0x38 per-variant UV rects (0x10 stride)
+    int32_t _uvRectCount;                       // +0x40
+    int32_t _uvRectCap;                         // +0x44
+    float _sizeB;                               // +0x48 AddDecal's 10th argument
     uint8_t _pad4c[4];                          // +0x4c never written by the ctor
 };
 
 static_assert(sizeof(DecalDescription) == 0x50, "DecalDescription is 0x50 (create 0x140033820 MemAlloc(0x50))");
 static_assert(alignof(DecalDescription) == 8, "DecalDescription alignment");
-static_assert(offsetof(DecalDescription, _sizeA) == 0x20, "DecalDescription::_sizeA @ +0x20");
-static_assert(offsetof(DecalDescription, _flagA) == 0x24, "DecalDescription::_flagA @ +0x24");
+static_assert(offsetof(DecalDescription, _initialAlpha) == 0x20, "DecalDescription::_initialAlpha @ +0x20");
+static_assert(offsetof(DecalDescription, _tiled) == 0x24, "DecalDescription::_tiled @ +0x24");
 static_assert(offsetof(DecalDescription, _flagB) == 0x25, "DecalDescription::_flagB @ +0x25");
-static_assert(offsetof(DecalDescription, _refs) == 0x28, "DecalDescription::_refs @ +0x28");
-static_assert(offsetof(DecalDescription, _refCount) == 0x30, "DecalDescription::_refCount @ +0x30");
-static_assert(offsetof(DecalDescription, _refCap) == 0x34, "DecalDescription::_refCap @ +0x34");
-static_assert(offsetof(DecalDescription, _quads) == 0x38, "DecalDescription::_quads @ +0x38");
-static_assert(offsetof(DecalDescription, _quadCount) == 0x40, "DecalDescription::_quadCount @ +0x40");
-static_assert(offsetof(DecalDescription, _quadCap) == 0x44, "DecalDescription::_quadCap @ +0x44");
+static_assert(offsetof(DecalDescription, _materials) == 0x28, "DecalDescription::_materials @ +0x28");
+static_assert(offsetof(DecalDescription, _materialCount) == 0x30, "DecalDescription::_materialCount @ +0x30");
+static_assert(offsetof(DecalDescription, _materialCap) == 0x34, "DecalDescription::_materialCap @ +0x34");
+static_assert(offsetof(DecalDescription, _uvRects) == 0x38, "DecalDescription::_uvRects @ +0x38");
+static_assert(offsetof(DecalDescription, _uvRectCount) == 0x40, "DecalDescription::_uvRectCount @ +0x40");
+static_assert(offsetof(DecalDescription, _uvRectCap) == 0x44, "DecalDescription::_uvRectCap @ +0x44");
 static_assert(offsetof(DecalDescription, _sizeB) == 0x48, "DecalDescription::_sizeB @ +0x48");

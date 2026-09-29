@@ -52,8 +52,18 @@ public:
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x140005be0
 
-    // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
-    uint8_t         happinessFlag; // +0x28
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    void  UpdateInfluence(int16_t delta);                         // 0x14004a300
+    bool  IsActive();                                             // 0x14004a550
+    void  Register();                                             // 0x14004a4f0
+    void  Unregister();                                           // 0x14004a4a0
+    // state handlers (the controller hands them its owner, node+0x18)
+    char  StateBuiltEnter();                                      // 0x14004a9f0 (states 2, 13)
+    char  StateBuiltPerFrame();                                   // 0x14004a9a0 (states 2, 13)
+    char  StateDemolishEnter();                                   // 0x14004a940 (state 3)
+
+    // PUBLIC while the ported bodies read them by name (B38 decision 1).
+    bool            registered;    // +0x28 on the town's happiness list (Persist 0x14004aa80: Serialize(bool&))
     uint8_t         _pad29[7];     // +0x29
     StateController _controller;   // +0x30 the embedded controller (D6)
 };
@@ -73,4 +83,4 @@ static_assert(offsetof(HappinessComponent, _controller) == 0x30,
               "HappinessComponent's controller member at +0x30 (slot 17 0x140005be0: LEA RAX,[RCX+0x30])");
 static_assert(offsetof(HappinessComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x48,
               "controller back-pointer at +0x48 (ctor 0x14004ab60)");
-static_assert(offsetof(HappinessComponent, happinessFlag) == 0x28, "HappinessComponent +0x28");
+static_assert(offsetof(HappinessComponent, registered) == 0x28, "HappinessComponent +0x28");
