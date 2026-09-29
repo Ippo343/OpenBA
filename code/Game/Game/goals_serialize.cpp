@@ -707,7 +707,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                 if (ibp != nullptr) {
                     int32_t workId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(ibp) + 0x28);
 
-                    uint8_t* slotRoot = static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_tutorial);   // B.3.8 bridge
+                    uint8_t* slotRoot = reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_tutorial);   // B.3.8 bridge
                     slotRoot = *reinterpret_cast<uint8_t**>(slotRoot + 0x30);
                     int32_t* slotNode = LayoutB_Find(reinterpret_cast<int32_t*>(slotRoot), workId);
 

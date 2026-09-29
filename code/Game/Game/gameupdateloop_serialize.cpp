@@ -44,6 +44,14 @@
 //   0x1400b04d0 (WorldGeometry).
 
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestoreOut, the named fields
+#include "Game/Map.h"
+#include "Entity/CitizenBehavior.h"   // B4 GAME-a: m_citizenList->Serialize / PostLoad
+#include "Entity/EntityList.h"
+#include "Game/PlayerToolManager.h"
+#include "Game/Minimap.h"
+#include "Game/WeatherSimulation.h"
+#include "Game/EventLog.h"            // B4 GAME-a: the pointees the serializer reads by name
+#include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
 #include "Entity/ComponentEntity.h"   // caller batch CB6: TypeId()
 #include "Component/Component.h"      // caller batch CB6: slot 11
 #include "math/Math.h"
@@ -95,7 +103,7 @@ namespace {
 //   0x1400988c0 Reimpl_Transform_SerializeWrapper (PlayerController, +0xE0)
 //   0x1400c44a0 EntityList_Serialize (+0xE8)                   (Entity/entitylist_funcs.h)
 //   0x1400b04d0 Reimpl_TradeWork_impl_04d0 (WorldGeometry, +0x110)
-//   0x14008f760 / 0x14008f580 CitizenList_Serialize_8f760 / _PostLoad_8f580 (+0xF0)
+//   0x14008f760 / 0x14008f580 CitizenBehavior::Serialize / PostLoad (+0xF0)
 //   0x14009f100 GameGrid_Serialize_9f100 (+0xF8), 0x1400f9240 Goals_Serialize_f9240 (+0x118)
 //   0x140003110 ActHunt_DynArraySetCount_3110                  (Action/exe_bodies.h)
 //   0x1400021d0 Reimpl_Array_Resize_Stride04, 0x140002340 Reimpl_ExternalPtr_Serialize_StringTable
@@ -107,8 +115,8 @@ namespace {
 // their resolved statics are gone -- SaveRestoreOut and the roundtrip check
 // build the real class (runtime/types/io/Stream.h) and call its members.
 
-inline bool IsSaving(void* stream) {
-    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(stream) + 8) == 1;
+inline bool IsSaving(const IO::Stream* stream) {
+    return stream->GetDirection() == IO::kWriting;   // Stream +0x08 == 1
 }
 
 } // namespace
@@ -201,33 +209,31 @@ extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
 // ============================================================
 // Layout: +0x10 bool[6] filter flags; +0x18 {data,count,cap} entry array
 // (stride 0x28). Version-1 section; entries capped at the LAST 200.
-extern "C" void EventLog_Serialize_952c0(void* selfVoid, void* stream) {
-    uintptr_t self = (uintptr_t)selfVoid;
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(6, reinterpret_cast<bool*>(self + 0x10), nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
-        uint32_t total = *(uint32_t*)(self + 0x20);
-        uint32_t capped = (int)total > 200 ? 200u : total;
-        int skip = (int)(total - capped);
+void EventLog::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 1);
+    ser.Serialize(6, field_0x10, nullptr);
+    if (ser.GetVersion() > 0) {
+        int total = entryCount;
+        int capped = total > 200 ? 200 : total;
+        int skip = total - capped;
         if (skip < 0) skip = 0;
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(&capped), nullptr);   // B.3.4 bridge
-        if (!IsSaving(stream)) {
-            EventLog_Resize_199a0((void*)(self + 0x18), (int)capped);
+        ser.Serialize(capped, nullptr);
+        if (!IsSaving(&stream)) {
+            EventLog_Resize_199a0(&entries, capped);
         }
-        for (int i = skip; i < *(int*)(self + 0x20); i++) {
-            uint8_t* e = *(uint8_t**)(self + 0x18) + (size_t)i * 0x28;
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e), nullptr);   // B.3.4 bridge
-            reinterpret_cast<System::String*>(e + 0x8)->Serialize(ser);
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x10), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x14), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x18), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x1c), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x20), nullptr);   // B.3.4 bridge
+        for (int i = skip; i < entryCount; i++) {
+            EventLogEntry& e = entries[i];
+            // LEFT: retail serializes the colour through the uint overload
+            // (0x1400952c0); the tree's int overload is kept (an H8 question).
+            ser.Serialize(reinterpret_cast<int&>(e.color), nullptr);
+            e.text.Serialize(&ser);
+            ser.Serialize(e.eventType, nullptr);
+            ser.Serialize(e.severity, nullptr);
+            ser.Serialize(e.tileIndex, nullptr);
+            ser.Serialize(e.iconIndex, nullptr);
+            ser.Serialize(e.popup, nullptr);
         }
     }
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -241,41 +247,41 @@ extern "C" void EventLog_Serialize_952c0(void* selfVoid, void* stream) {
 // retail create (FUN_1400942c0) also spawns the effect's ambient-audio entity;
 // that half is not in the port yet (audio ambience will be silent after load).
 // Then each active geo's +0xc4 (intensity) and +0xc0 floats round-trip.
-extern "C" void WeatherSim_Serialize_93c90(void* selfVoid, void* stream) {
-    uintptr_t self = (uintptr_t)selfVoid;
+void WeatherSimulation::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    Reimpl_ExternalPtr_Serialize_EnvironmentDesc(&environment, &ser);   // 0x1400192a0
+    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climate, &ser);      // 0x1400194a0
 
-    Reimpl_ExternalPtr_Serialize_EnvironmentDesc((void*)(self + 0x00), ser);   // 0x1400192a0
-    Reimpl_ExternalPtr_Serialize_ClimateGenerator((void*)(self + 0x08), ser);  // 0x1400194a0
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x10), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x14), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x18), nullptr);   // B.3.4 bridge
+    ser.Serialize(field_0x10, nullptr);
+    ser.Serialize(field_0x14, nullptr);
+    ser.Serialize(temperature, nullptr);
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
-    reinterpret_cast<Math::Vector4*>(self + 0x1c)->Serialize(ser);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x44), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x4c), nullptr);   // B.3.4 bridge
+    // LEFT (H5): +0x1C is a Math::Vector4, declared as float[4]: a Vector4
+    // member would give the class a constructor that runs in Load.
+    reinterpret_cast<Math::Vector4*>(field_0x1C)->Serialize(&ser);
+    ser.Serialize(field_0x2C, nullptr);
+    ser.Serialize(field_0x30, nullptr);
+    ser.Serialize(field_0x44, nullptr);
+    ser.Serialize(field_0x48, nullptr);
+    ser.Serialize(seasonStep, nullptr);
 
-    int slotCount = *(int*)(self + 0x58);
+    int slotCount = effectCount;
     for (int i = 0; i < slotCount; i++) {
-        void** slot = (void**)(*(uintptr_t*)(self + 0x50) + (size_t)i * 8);
+        Graphics::Geometry** slot = &effects[i];
         bool active = (*slot != nullptr);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(active, nullptr);   // B.3.4 bridge
+        ser.Serialize(active, nullptr);
         if (active) {
-            if (!IsSaving(stream)) {
-                WeatherEffect_SetEnabled(selfVoid, i, 1);
+            if (!IsSaving(&stream)) {
+                WeatherEffect_SetEnabled(this, i, 1);
             }
-            uint8_t* geo = (uint8_t*)*slot;
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(geo + 0xc4), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(geo + 0xc0), nullptr);   // B.3.4 bridge
+            // LEFT: the effect's two floats (+0xC4 / +0xC0) are the weather
+            // particle geometry's (weather_particles.cpp, GAME-c): read raw.
+            uint8_t* geo = reinterpret_cast<uint8_t*>(*slot);
+            ser.Serialize(*(float*)(geo + 0xc4), nullptr);
+            ser.Serialize(*(float*)(geo + 0xc0), nullptr);
         }
     }
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -298,46 +304,49 @@ extern "C" void CamViewArray_Resize_e000(void* hdrVoid, int newCount) {
 // +0x20 left, +0x28 right. Count at tree hdr +0x8. On save: in-order walk
 // serializing each node. On load: read count entries and insert via the
 // ported 0x140014890.
-extern "C" void GoalRefTree_Serialize_e2e0(void* treeVoid, void* serializer) {
-    uintptr_t tree = (uintptr_t)treeVoid;
+// The set is PlayerToolManager's {root +0x50, count +0x58}: `root` is its
+// header (the count is the int at root + 8, read as the header's).
+static void GoalRefTree_Serialize_e2e0(TrackedEntityNode** root, int32_t* countField,
+                                       IO::Serializer* serializer) {
+    int count = *countField;
+    serializer->Serialize(count, nullptr);
 
-    int count = *(int*)(tree + 0x8);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    if (static_cast<int>(serializer->GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // LOAD: read `count` records, insert each
         for (int i = 0; i < count; i++) {
             struct { void* ref; int a; int b; bool used; } rec;
             rec.ref = nullptr; rec.a = 0; rec.b = 0; rec.used = false;
             Reimpl_ExternalPtr_Serialize_StringTable(&rec.ref, serializer);   // 0x140002340
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(rec.a, nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(rec.b, nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(rec.used, nullptr);   // B.3.4 bridge
+            serializer->Serialize(rec.a, nullptr);
+            serializer->Serialize(rec.b, nullptr);
+            serializer->Serialize(rec.used, nullptr);
             void* outNode = nullptr;
-            ToolbarUtility_BstInsert_4890(static_cast<int64_t*>(treeVoid), &outNode,
+            // LEFT: the shared set insert takes the header as int64_t* and the
+            // record as uint64_t* (Dialog/exe_bodies.h, not GAME-a's).
+            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(root), &outNode,
                                           reinterpret_cast<uint64_t*>(&rec.ref));   // 0x140014890
         }
     } else {
         // SAVE: leftmost-first in-order walk
-        uintptr_t node = *(uintptr_t*)tree;
+        TrackedEntityNode* node = *root;
         if (!node) { return; }
-        uintptr_t cur = node;
-        while (*(uintptr_t*)(cur + 0x20)) cur = *(uintptr_t*)(cur + 0x20);
+        TrackedEntityNode* cur = node;
+        while (cur->left) cur = cur->left;
         while (cur) {
-            Reimpl_ExternalPtr_Serialize_StringTable((void*)cur, serializer);   // 0x140002340
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0x8), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0xc), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(cur + 0x10), nullptr);   // B.3.4 bridge
+            Reimpl_ExternalPtr_Serialize_StringTable(&cur->key, serializer);   // 0x140002340
+            serializer->Serialize(cur->x, nullptr);
+            serializer->Serialize(cur->y, nullptr);
+            serializer->Serialize(cur->active, nullptr);
             // in-order successor
-            uintptr_t next = *(uintptr_t*)(cur + 0x28);
+            TrackedEntityNode* next = cur->right;
             if (next) {
-                while (*(uintptr_t*)(next + 0x20)) next = *(uintptr_t*)(next + 0x20);
+                while (next->left) next = next->left;
                 cur = next;
             } else {
-                uintptr_t parent = *(uintptr_t*)(cur + 0x18);
-                while (parent && *(uintptr_t*)(parent + 0x28) == cur) {
+                TrackedEntityNode* parent = cur->parent;
+                while (parent && parent->right == cur) {
                     cur = parent;
-                    parent = *(uintptr_t*)(parent + 0x18);
+                    parent = parent->parent;
                 }
                 cur = parent;
             }
@@ -352,94 +361,100 @@ extern "C" void GoalRefTree_Serialize_e2e0(void* treeVoid, void* serializer) {
 // +0x0c int, +0x10 bool, +0x18 parent, +0x20 left, +0x28 right, +0x30 balance.
 // Count at hdr +0x8. Load inserts by raw pointer order (CheckPtr'd), then
 // rebalances via the ported 0x140025920.
-extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
-    uintptr_t tree = (uintptr_t)treeVoid;
+// The set is PlayerToolManager's {root +0x60, count +0x68} (see above).
+static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField,
+                                   IO::Serializer* serializer) {
     const uint32_t s_tidCompEnt = ComponentEntity::TypeId();   // caller batch CB6: was a lazy by-name cache
 
-    int count = *(int*)(tree + 0x8);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+    int count = *countField;
+    serializer->Serialize(count, nullptr);
 
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    if (static_cast<int>(serializer->GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // LOAD
         for (int i = 0; i < count; i++) {
-            void* key = nullptr;
+            ComponentEntity* key = nullptr;
             int a = 0, b = 0;
             bool used = false;
-            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            // LEFT: the key is an InternalPtr's raw slot (Object::InternalBasePtr has
+            // no typed slot accessor here).
+            reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*serializer);   // B.3.4 bridge
             if (key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(key, s_tidCompEnt)) key = nullptr;
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(a, nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(b, nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(used, nullptr);   // B.3.4 bridge
+            serializer->Serialize(a, nullptr);
+            serializer->Serialize(b, nullptr);
+            serializer->Serialize(used, nullptr);
 
-            auto makeNode = [&](uintptr_t parent) -> uintptr_t {
-                uint8_t* n = (uint8_t*)System::MemoryAllocator::MemAlloc(0x38, 8);
-                if (!n) return 0;
-                *(void**)n = key;
-                *(int*)(n + 0x8) = a;
-                *(int*)(n + 0xc) = b;
-                *(uint8_t*)(n + 0x10) = used ? 1 : 0;
-                *(uintptr_t*)(n + 0x18) = parent;
-                *(uintptr_t*)(n + 0x20) = 0;
-                *(uintptr_t*)(n + 0x28) = 0;
-                *(uint32_t*)(n + 0x30) = 0;
-                return (uintptr_t)n;
+            auto makeNode = [&](TrackedEntityNode* parent) -> TrackedEntityNode* {
+                TrackedEntityNode* n = static_cast<TrackedEntityNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+                if (!n) return nullptr;
+                n->key = key;
+                n->x = a;
+                n->y = b;
+                n->active = used ? 1 : 0;
+                n->parent = parent;
+                n->left = nullptr;
+                n->right = nullptr;
+                n->balance = 0;               // +0x30 / +0x32: one dword store of 0
+                n->height = 0;
+                return n;
             };
 
-            uintptr_t root = *(uintptr_t*)tree;
-            if (!root) {
-                *(uintptr_t*)tree = makeNode(0);
-                *(int*)(tree + 0x8) += 1;
+            TrackedEntityNode* rootNode = *root;
+            if (!rootNode) {
+                *root = makeNode(nullptr);
+                *countField += 1;
                 continue;
             }
-            uintptr_t cur = root;
+            TrackedEntityNode* cur = rootNode;
             bool inserted = false;
             bool duplicate = false;
-            uintptr_t newNode = 0;
+            TrackedEntityNode* newNode = nullptr;
             while (!inserted) {
-                void* curKey = *(void**)cur;
+                ComponentEntity* curKey = cur->key;
                 if (key < curKey) {
-                    uintptr_t l = *(uintptr_t*)(cur + 0x20);
+                    TrackedEntityNode* l = cur->left;
                     if (!l) {
                         newNode = makeNode(cur);
-                        *(uintptr_t*)(cur + 0x20) = newNode;
+                        cur->left = newNode;
                         inserted = true;
                     } else cur = l;
                 } else if (key > curKey) {
-                    uintptr_t r = *(uintptr_t*)(cur + 0x28);
+                    TrackedEntityNode* r = cur->right;
                     if (!r) {
                         newNode = makeNode(cur);
-                        *(uintptr_t*)(cur + 0x28) = newNode;
+                        cur->right = newNode;
                         inserted = true;
                     } else cur = r;
                 } else { duplicate = true; break; }
             }
             if (duplicate) continue;
-            uintptr_t fixupNode = newNode;
-            PlayerTrade_Retrace_25920(static_cast<int64_t*>(treeVoid),
+            TrackedEntityNode* fixupNode = newNode;
+            // LEFT: the shared AVL retrace takes the header and the node slot as
+            // int64_t* (Player/exe_bodies.h, not GAME-a's).
+            PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(root),
                                       reinterpret_cast<int64_t*>(&fixupNode));   // 0x140025920
-            *(int*)(tree + 0x8) += 1;
+            *countField += 1;
         }
     } else {
         // SAVE: in-order walk
-        uintptr_t cur = *(uintptr_t*)tree;
+        TrackedEntityNode* cur = *root;
         if (!cur) return;
-        while (*(uintptr_t*)(cur + 0x20)) cur = *(uintptr_t*)(cur + 0x20);
+        while (cur->left) cur = cur->left;
         while (cur) {
-            reinterpret_cast<Object::InternalBasePtr*>((void*)cur)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (*(void**)cur && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(*(void**)cur, s_tidCompEnt))
-                *(void**)cur = nullptr;
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0x8), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0xc), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(cur + 0x10), nullptr);   // B.3.4 bridge
-            uintptr_t next = *(uintptr_t*)(cur + 0x28);
+            reinterpret_cast<Object::InternalBasePtr*>(&cur->key)->Serialize(*serializer);   // B.3.4 bridge
+            if (cur->key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(cur->key, s_tidCompEnt))
+                cur->key = nullptr;
+            serializer->Serialize(cur->x, nullptr);
+            serializer->Serialize(cur->y, nullptr);
+            serializer->Serialize(cur->active, nullptr);
+            TrackedEntityNode* next = cur->right;
             if (next) {
-                while (*(uintptr_t*)(next + 0x20)) next = *(uintptr_t*)(next + 0x20);
+                while (next->left) next = next->left;
                 cur = next;
             } else {
-                uintptr_t parent = *(uintptr_t*)(cur + 0x18);
-                while (parent && *(uintptr_t*)(parent + 0x28) == cur) {
+                TrackedEntityNode* parent = cur->parent;
+                while (parent && parent->right == cur) {
                     cur = parent;
-                    parent = *(uintptr_t*)(parent + 0x18);
+                    parent = parent->parent;
                 }
                 cur = parent;
             }
@@ -454,37 +469,33 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
 // +0x50 goal-ref tree; +0x60 IBP tree (v>0); +0x70 {data,count,cap} saved
 // camera views, stride 0x1c: { Vector3 pos; float a; float b; float c;
 // bool used } (v>1).
-extern "C" void EntityUI_Serialize_102920(void* selfVoid, void* stream) {
-    uintptr_t self = (uintptr_t)selfVoid;
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(self + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x34), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x3c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x44), nullptr);   // B.3.4 bridge
-    GoalRefTree_Serialize_e2e0((void*)(self + 0x50), ser);
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
-        IbpTree_Serialize_e470((void*)(self + 0x60), ser);
+void PlayerToolManager::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 2);
+    ser.Serialize(field_0x30, nullptr);
+    ser.Serialize(field_0x34, nullptr);
+    ser.Serialize(field_0x3C, nullptr);
+    ser.Serialize(field_0x40, nullptr);
+    ser.Serialize(field_0x44, nullptr);
+    GoalRefTree_Serialize_e2e0(&field_0x50, &field_0x58, &ser);
+    if (ser.GetVersion() > 0) {
+        IbpTree_Serialize_e470(&field_0x60, &field_0x68, &ser);
     }
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1) {   // B.3.4 bridge
-        uint32_t count = *(uint32_t*)(self + 0x78);
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
-        if (!IsSaving(stream)) {
-            CamViewArray_Resize_e000((void*)(self + 0x70), (int)count);
+    if (ser.GetVersion() > 1) {
+        int count = cameraViewCount;
+        ser.Serialize(count, nullptr);
+        if (!IsSaving(&stream)) {
+            CamViewArray_Resize_e000(&cameraViews, count);
         }
-        for (uint32_t i = 0; i < count; i++) {
-            uint8_t* e = *(uint8_t**)(self + 0x70) + (size_t)i * 0x1c;
+        for (uint32_t i = 0; i < (uint32_t)count; i++) {
+            PlayerCameraView& e = cameraViews[i];
             // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
-            reinterpret_cast<Math::Vector3*>(e)->Serialize(ser);
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(e + 0xc), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(e + 0x10), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(e + 0x14), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x18), nullptr);   // B.3.4 bridge
+            e.position.Serialize(&ser);
+            ser.Serialize(e.field_0x0C, nullptr);
+            ser.Serialize(e.field_0x10, nullptr);
+            ser.Serialize(e.field_0x14, nullptr);
+            ser.Serialize(e.used, nullptr);
         }
     }
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -494,30 +505,26 @@ extern "C" void EntityUI_Serialize_102920(void* selfVoid, void* stream) {
 // terrain pixels; +0x28 {data,count,cap} overlay pixels. Version 0. On load,
 // the GPU buffers are (re)created and both arrays uploaded — that tail is the
 // already-ported Minimap_CreateAndUpload (FUN_1400a4e80 + Lock/Copy/Unlock).
-extern "C" void Minimap_Serialize_a57f0(void* selfVoid, void* stream) {
-    uintptr_t self = (uintptr_t)selfVoid;
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+void Minimap::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
 
     // overlay array (+0x28) first — matches the retail order
-    int n = *(int*)(self + 0x30);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, nullptr);   // B.3.4 bridge
-    if (!IsSaving(stream)) Reimpl_Array_Resize_Stride04((void*)(self + 0x28), n);   // 0x1400021d0
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x28)), nullptr);   // B.3.4 bridge
+    int n = overlayPixelCount;
+    ser.Serialize(n, nullptr);
+    if (!IsSaving(&stream)) Reimpl_Array_Resize_Stride04(&overlayPixels, n);   // 0x1400021d0
+    ser.Serialize(n, overlayPixels, nullptr);
 
     // terrain array (+0x18)
-    n = *(int*)(self + 0x20);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, nullptr);   // B.3.4 bridge
-    if (!IsSaving(stream)) Reimpl_Array_Resize_Stride04((void*)(self + 0x18), n);   // 0x1400021d0
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x18)), nullptr);   // B.3.4 bridge
+    n = terrainPixelCount;
+    ser.Serialize(n, nullptr);
+    if (!IsSaving(&stream)) Reimpl_Array_Resize_Stride04(&terrainPixels, n);   // 0x1400021d0
+    ser.Serialize(n, terrainPixels, nullptr);
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x4), nullptr);   // B.3.4 bridge
+    ser.Serialize(size, nullptr);
 
-    if (!IsSaving(stream)) {
-        Minimap_CreateAndUpload(selfVoid);
+    if (!IsSaving(&stream)) {
+        Minimap_CreateAndUpload(this);
     }
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -527,43 +534,43 @@ extern "C" void Minimap_Serialize_a57f0(void* selfVoid, void* stream) {
 // component, write the EntityList backptr at entity+0x10, then enrol the
 // entity in the two update lists (+0x88 per-frame, +0x98 per-tick) when its
 // flag word +0x40 has bit 2 / bit 4 set (DynArray8_ResizeFill append).
-extern "C" void EntityList_PostLoad_c4730(void* elVoid, void* stream) {
-    uintptr_t el = (uintptr_t)elVoid;
-    if (*(int*)((uintptr_t)stream + 8) != 0) return;   // save direction: no-op
+static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
+    if (stream->GetDirection() != IO::kReading) return;   // save direction: no-op
 
-    int count = *(int*)(el + 0x10);
+    int count = el->masterArray.count;
     for (int i = 0; i < count; i++) {
-        void** entSlot = (void**)(*(uintptr_t*)(el + 0x8) + (size_t)i * 8);
-        uintptr_t ent = (uintptr_t)*entSlot;
+        ComponentEntity** entSlot = &el->masterArray.data[i];
+        ComponentEntity* ent = *entSlot;
 
-        int compCount = *(int*)(ent + 0x38);
+        int compCount = ent->_componentCount;
         for (int j = 0; j < compCount; j++) {
-            void** compSlot = (void**)(*(uintptr_t*)(ent + 0x30) + (size_t)j * 8);
-            uintptr_t comp = (uintptr_t)*compSlot;
+            Component* comp = ent->_components[j].Get();
             // Caller batch CB6: slot 11 (vtable +0x58) of an entity component-array
             // element (a proved Component).
-            reinterpret_cast<Component*>(comp)->Slot11();   // B.3.8 bridge
+            comp->Slot11();
         }
 
-        *(void**)((uintptr_t)*entSlot + 0x10) = elVoid;
+        (*entSlot)->_entityList = el;
 
-        uintptr_t e = (uintptr_t)*entSlot;
-        if (*(uintptr_t*)(e + 0x10) != 0) {
-            uintptr_t owner = *(uintptr_t*)(e + 0x10);
-            uint32_t flags = *(uint32_t*)(e + 0x40);
+        ComponentEntity* e = *entSlot;
+        if (e->_entityList != nullptr) {
+            // LEFT: ComponentEntity::_entityList is void* (Entity/ComponentEntity.h):
+            // retail re-reads the owner it has just stored.
+            EntityList* owner = static_cast<EntityList*>(e->_entityList);
+            uint32_t flags = e->_entityFlags;
             if (flags & 4) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>((void*)e));   // B.3.3 bridge
-                ActHunt_DynArraySetCount_3110((void*)(owner + 0x88),
-                                              *(int*)(owner + 0x90) + 1, &ibp);   // 0x140003110
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge
+                ActHunt_DynArraySetCount_3110(&owner->stagingUpdate,
+                                              owner->stagingUpdate.count + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
                 void* ibp = nullptr;
                 new (&ibp) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>((void*)e));   // B.3.3 bridge
-                ActHunt_DynArraySetCount_3110((void*)(owner + 0x98),
-                                              *(int*)(owner + 0xa0) + 1, &ibp);   // 0x140003110
+                    reinterpret_cast<RtObject::Internal*>(e));   // B.3.3 bridge
+                ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate,
+                                              owner->stagingPostUpdate.count + 1, &ibp);   // 0x140003110
             }
         }
     }
@@ -577,25 +584,26 @@ extern "C" void EntityList_PostLoad_c4730(void* elVoid, void* stream) {
 // {IBP* data; int count/cap}): serialize count, resize on load
 // (Collection::Array<Ptr8>::SetSize = 0x1400032e0), then per-element InternalBasePtr
 // serialize with a ComponentEntity IsDerivedFrom filter.
-extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
-                                           void* bucketsPtr) {
+extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*unused*/,
+                                           UpdateBucket* buckets) {
     const uint32_t s_tidCompEnt = ComponentEntity::TypeId();   // caller batch CB6: was a lazy by-name cache
 
-    uintptr_t hdr = (uintptr_t)bucketsPtr;
-    for (int b = 0; b < 5; b++, hdr += 0x10) {
-        int count = *(int*)(hdr + 0x8);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-        if (*(int*)((uintptr_t)*(void**)serializer + 8) == 0) {
+    UpdateBucket* hdr = buckets;
+    for (int b = 0; b < 5; b++, hdr++) {
+        int count = hdr->count;
+        serializer->Serialize(count, nullptr);
+        if (serializer->_stream->GetDirection() == IO::kReading) {   // the stream's +0x08, read inline
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
             // align 8, new tail zeroed. Element is the 8-byte InternalBasePtr slot.
             GameColl::AsArray<GameColl::Ptr8>(hdr).SetSize(count);
         }
-        uint8_t* slot = *(uint8_t**)hdr;
-        for (int i = 0; i < count; i++, slot += 8) {
-            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (*(void**)slot != nullptr && s_tidCompEnt &&
-                !::Object::IsDerivedFromNullSafe(*(void**)slot, s_tidCompEnt)) {
-                *(void**)slot = nullptr;
+        ComponentEntity** slot = hdr->data;
+        for (int i = 0; i < count; i++, slot++) {
+            // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
+            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge
+            if (*slot != nullptr && s_tidCompEnt &&
+                !::Object::IsDerivedFromNullSafe(*slot, s_tidCompEnt)) {
+                *slot = nullptr;
             }
         }
     }
@@ -613,21 +621,22 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
 // could report the same thing by detouring PersistObject itself, which does not
 // require standing in for any retail code.
 
-// Caller batch CB6: `self` is the real class; its fields are read by name.
-extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* stream,
-                                               void* p3, int* outParam) {
+// B4 GAME-a: a private member (retail's non-virtual 0x140095a90, called by
+// SaveRestore 0x1400959c0 with this, the stream, the SavedState and the out int).
+void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int* outParam) {
     (void)p3;
     ::Object::ExternalFactory* extFactory = ::Object::ExternalFactory::_singleton;
     ::Object::InternalFactory* intFactory = ::Object::InternalFactory::_singleton;
 
     fprintf(stderr, "[GUL::Serialize] %s ENTER self=%p stream=%p\n",
-            IsSaving(stream) ? "SAVE" : "LOAD", (void*)self, stream);
+            IsSaving(&stream) ? "SAVE" : "LOAD", static_cast<void*>(this), static_cast<void*>(&stream));
     fflush(stderr);
 
     extFactory->EnableReferenceMode(true);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
-    extFactory->SerializeReferenceTable(*reinterpret_cast<IO::Stream*>(stream));
+    {   // the Serializer's scope ends right after reference mode is switched off, where
+        // the tree called ~Serializer by hand
+    IO::Serializer ser(stream, 3);
+    extFactory->SerializeReferenceTable(stream);
     // --- Preload every external the save references, with reference mode OFF ---
     //
     // Object::ExternalPtr's serializer (Runtime 0x180052a50) branches on
@@ -650,13 +659,12 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     // to be loaded anyway as the stream resolves its references.
     //
     {
-        if (!IsSaving(stream) && extFactory) {
+        if (!IsSaving(&stream) && extFactory) {
             // B3R: GetPathForReferenceId / FindOrLoad are members (their door
             // caches and the "[PreloadRefs] SKIPPED ... unresolved" arm are gone).
             // +0x28 is the reference map's entry count (SerializeReferenceTable zeroes
             // it at entry and the insert helper bumps it per row).
-            const int refCount = *reinterpret_cast<int*>(
-                reinterpret_cast<uint8_t*>(extFactory) + 0x28);
+            const int refCount = extFactory->_references.GetCount();
             if (refCount > 0 && refCount < (1 << 20)) {
                 extFactory->EnableReferenceMode(false);
                 int loaded = 0, missing = 0;
@@ -691,26 +699,26 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
             }
         }
     }
-    intFactory->ResetPersistState(stream);
+    intFactory->ResetPersistState(&stream);
 
-    if (IsSaving(stream)) {
-        self->m_userInterface->SaveAllSettings();  // B.3.6 bridge
+    if (IsSaving(&stream)) {
+        m_userInterface->SaveAllSettings();
     }
 
-    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&self->m_climateConfig, ser);   // 0x1400194a0
-    Reimpl_ExternalPtr_Serialize_MapGenerator(&self->m_mapConfig, ser);           // 0x140019ec0
-    Reimpl_ExternalPtr_Serialize_TerrainGenerator(&self->m_terrainConfig, ser);   // 0x14001a0c0
+    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&m_climateConfig, &ser);   // 0x1400194a0
+    Reimpl_ExternalPtr_Serialize_MapGenerator(&m_mapConfig, &ser);           // 0x140019ec0
+    Reimpl_ExternalPtr_Serialize_TerrainGenerator(&m_terrainConfig, &ser);   // 0x14001a0c0
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_seed, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_mapSize, nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_gameFlags, nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2)   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_scenarioIndex, nullptr);   // B.3.4 bridge
+    ser.Serialize(m_seed, nullptr);
+    ser.Serialize(m_mapSize, nullptr);
+    if (ser.GetVersion() > 0)
+        ser.Serialize(m_gameFlags, nullptr);
+    if (ser.GetVersion() > 2)
+        ser.Serialize(m_scenarioIndex, nullptr);
 
-    self->m_random->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    self->m_saveName.Serialize(ser);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(&self->m_scenarioCompleted), nullptr);   // B.3.4 bridge
+    m_random->Serialize(ser);
+    m_saveName.Serialize(&ser);
+    ser.Serialize(m_scenarioCompleted, nullptr);
 
 
     // NB: a diagnostic stand-in for this call (AchIbpPeek, below) established
@@ -718,11 +726,11 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     // retail returns early here and this IBP is NOT the one that faults. Kept
     // out of the live path — the PersistObject probe reports the same thing
     // without replacing any retail code.
-    reinterpret_cast<Object::InternalBasePtr*>(&self->m_scenarioInstance)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (self->m_scenarioInstance != nullptr) {
+    reinterpret_cast<Object::InternalBasePtr*>(&m_scenarioInstance)->Serialize(ser);   // B.3.4 bridge
+    if (m_scenarioInstance != nullptr) {
         uint32_t achTid = Achievement::AchievementInstance::TypeId();   // ENDGAME B.3.9 TR (was ResolveExport of its ?_typeInfo@)
-        if (!achTid || !::Object::IsDerivedFromNullSafe(self->m_scenarioInstance, achTid))
-            self->m_scenarioInstance = nullptr;
+        if (!achTid || !::Object::IsDerivedFromNullSafe(m_scenarioInstance, achTid))
+            m_scenarioInstance = nullptr;
     }
 
     // Retail calls AchievementManager::Persist UNCONDITIONALLY (0x140095a90).
@@ -736,49 +744,45 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     // perfectly. That false reading cost a full detour of this investigation;
     // the PersistObject probe measures the real arguments instead.
     if (::Achievement::AchievementManager::_singleton) {
-        ::Achievement::AchievementManager::_singleton->Persist(
-            *reinterpret_cast<IO::Stream*>(stream));
+        ::Achievement::AchievementManager::_singleton->Persist(stream);
     }
     // B.3.5 bridge — ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z.
     // The `s_fn_AnimMgr_Serialize` cache, its typedef, its resolver and the
     // `anim=%p` it fed the [GUL::Serialize] fprintf all went in the closing pass:
     // a diagnostic that prints the address of a door nobody calls reports nothing.
-    reinterpret_cast<Graphics::AnimationManager*>(self->m_animationManager)->Serialize(
-        *reinterpret_cast<IO::Serializer*>(ser));   // B.3.5 bridge
-    reinterpret_cast<Audio::Scene*>(self->m_audioScene)->Serialize(ser);   // B.3.7 bridge
+    m_animationManager->Serialize(ser);
+    m_audioScene->Serialize(&ser);
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
-    Reimpl_Transform_SerializeWrapper(self->m_playerController, stream);                  // 0x1400988c0
-    EntityList_Serialize(static_cast<EntityList*>(self->m_entityList), stream);           // 0x1400c44a0
-    Reimpl_TradeWork_impl_04d0(self->m_worldGeometry, stream);                            // 0x1400b04d0
-    CitizenList_Serialize_8f760(self->m_citizenList, stream, nullptr, outParam);          // 0x14008f760
-    GameGrid_Serialize_9f100(self->m_game, stream);                                       // 0x14009f100
-    Goals_Serialize_f9240(self->m_tutorial, stream, nullptr, outParam);                   // 0x1400f9240
-    EntityUI_Serialize_102920(self->m_toolManager, stream);
+    Reimpl_Transform_SerializeWrapper(m_playerController, &stream);                  // 0x1400988c0
+    m_entityList->Serialize(stream);                                                 // 0x1400c44a0
+    Reimpl_TradeWork_impl_04d0(m_worldGeometry, &stream);                            // 0x1400b04d0
+    if (m_citizenList) m_citizenList->Serialize(stream, outParam);                   // 0x14008f760
+    m_game->Serialize(stream);                                                       // 0x14009f100
+    Goals_Serialize_f9240(m_tutorial, &stream, nullptr, outParam);                   // 0x1400f9240
+    m_toolManager->Serialize(stream);                                                // 0x140102920
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.
     {
-        uint8_t* dc = static_cast<uint8_t*>(self->m_dayCounter);
-        alignas(8) uint8_t ser0[24];
-        ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser0)->Serialize(*reinterpret_cast<int*>(dc), nullptr);   // B.3.4 bridge
-        reinterpret_cast<System::Time*>(dc + 0x8)->Serialize(*reinterpret_cast<IO::Serializer*>(ser0));   // B.3.4b bridge
-        reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
+        Calendar* dc = m_dayCounter;
+        IO::Serializer ser0(stream, 0);
+        ser0.Serialize(dc->year, nullptr);
+        dc->yearTime.Serialize(ser0);
     }
 
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1)   // B.3.4 bridge
-        EventLog_Serialize_952c0(self->m_eventNotifier, stream);
-    WeatherSim_Serialize_93c90(self->m_weather, stream);
-    Minimap_Serialize_a57f0(self->m_imageCapture, stream);
-    EntityList_PostLoad_c4730(self->m_entityList, stream);
-    CitizenList_PostLoad_8f580(self->m_citizenList);   // 0x14008f580
+    if (ser.GetVersion() > 1)
+        m_eventNotifier->Serialize(stream);          // 0x1400952c0
+    m_weather->Serialize(stream);                    // 0x140093c90
+    m_imageCapture->Serialize(stream);               // 0x1400a57f0
+    EntityList_PostLoad_c4730(m_entityList, &stream);
+    if (m_citizenList) m_citizenList->PostLoad();   // 0x14008f580
 
     if (intFactory) intFactory->ClearPersistState();
     extFactory->EnableReferenceMode(false);
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    }   // ~Serializer
 
-    fprintf(stderr, "[GUL::Serialize] %s DONE\n", IsSaving(stream) ? "SAVE" : "LOAD");
+    fprintf(stderr, "[GUL::Serialize] %s DONE\n", IsSaving(&stream) ? "SAVE" : "LOAD");
     fflush(stderr);
 }
 
@@ -806,11 +810,11 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
     if (!save) {
         savedState->Retrieve(cms->GetMemoryStream());
         cms->Open();
-        GameUpdateLoop_Serialize_95a90(this, cms, savedState, outParam);
+        SerializeAll(*cms, savedState, outParam);
         cms->IO::CompressedMemoryStream::Close();
     } else {
         cms->Create();
-        GameUpdateLoop_Serialize_95a90(this, cms, savedState, outParam);
+        SerializeAll(*cms, savedState, outParam);
         cms->IO::CompressedMemoryStream::Close();
         savedState->Store(cms->GetMemoryStream());
     }
@@ -831,12 +835,11 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
 // so a difference can be diffed offline.
 // ENDGAME B.3.9 IO (W2): the ?Read / ?GetSize@CompressedStream doors it
 // resolved by name are the class's own members now, called non-virtually.
-static bool RoundtripDecompress(void* savedState, uint8_t** outData, uint32_t* outSize) {
+static bool RoundtripDecompress(Save::SavedState* savedState, uint8_t** outData, uint32_t* outSize) {
     alignas(16) uint8_t cmsStorage[sizeof(IO::CompressedMemoryStream)];
     IO::CompressedMemoryStream* const cms =
         ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
-    reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
-        cms->GetMemoryStream());
+    savedState->Retrieve(cms->GetMemoryStream());
     if (!cms->Open()) { cms->IO::CompressedMemoryStream::~CompressedMemoryStream(); return false; }
     const uint32_t size = cms->IO::CompressedStream::GetSize();
     uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));
@@ -854,23 +857,25 @@ static void RoundtripDump(const char* name, const uint8_t* data, uint32_t size) 
     std::fclose(f);
 }
 
-extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* loadedState) {
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::SavedState* loadedState) {
     const char* e = Opt().saveTest;
     if (!e || _stricmp(e, "roundtrip") != 0) return;
 
+    // The fresh image is a SavedState's three fields on the stack, WITHOUT its
+    // destructor (freed by hand below, on the success path only, as before).
     struct SS { uint32_t id; uint32_t size; void* data; };
-    const SS* loaded = static_cast<const SS*>(loadedState);
-    SS fresh = { loaded->id, 0, nullptr };
+    const Save::SavedState* loaded = loadedState;
+    SS fresh = { loaded->_id, 0, nullptr };
     int out = 0;
     fprintf(stderr, "[Roundtrip] SaveRestore(save) into a fresh SavedState (loaded image %u bytes)\n",
-            loaded->size);
+            loaded->_size);
     fflush(stderr);
     self->SaveRestoreOut(true, reinterpret_cast<Save::SavedState*>(&fresh), &out);   // B.3.8 bridge
 
     uint8_t* a = nullptr; uint32_t an = 0;
     uint8_t* b = nullptr; uint32_t bn = 0;
     const bool okA = RoundtripDecompress(loadedState, &a, &an);
-    const bool okB = RoundtripDecompress(&fresh, &b, &bn);
+    const bool okB = RoundtripDecompress(reinterpret_cast<Save::SavedState*>(&fresh), &b, &bn);   // LEFT: the destructor-less stack twin
     if (!okA || !okB) {
         fprintf(stderr, "[Roundtrip] RESULT=ERROR decompress loaded=%d resaved=%d\n", okA, okB);
         fflush(stderr);
@@ -887,7 +892,7 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* lo
     const bool equal = (an == bn) && diffs == 0;
     fprintf(stderr, "[Roundtrip] RESULT=%s raw loaded=%u resaved=%u compressed loaded=%u resaved=%u"
                     " firstDiff=%u diffBytes=%u tail=%u\n",
-            equal ? "PASS" : "DIFF", an, bn, loaded->size, fresh.size,
+            equal ? "PASS" : "DIFF", an, bn, loaded->_size, fresh.size,
             first, diffs, an > bn ? an - bn : bn - an);
     fflush(stderr);
     std::free(a); std::free(b);

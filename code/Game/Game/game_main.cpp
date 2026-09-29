@@ -134,12 +134,7 @@ extern "C" void GameSettings_Save(GameSettings* settings);   // 0x140098970
 // ============================================================
 namespace {
 
-static void ShutdownEngineStaged(void* engineP) {
-    using std::uintptr_t;
-    uintptr_t base = reinterpret_cast<uintptr_t>(engineP);
-    auto load_ptr = [&](uintptr_t off) -> void* {
-        return *reinterpret_cast<void**>(base + off);
-    };
+static void ShutdownEngineStaged(::Engine::Engine* engine) {
 
     printf("[Shutdown] partial Engine::Shutdown (steps 1-13)\n");
     fflush(stdout);
@@ -151,9 +146,11 @@ static void ShutdownEngineStaged(void* engineP) {
     // poisoned save is attributable. Root cause of the 120x0 was an external
     // window manager (PowerToys FancyZones), not a minimize — see the guard in
     // dx11/src/devicedata.cpp, which now prevents the latch at the source.
-    void* videoDev = load_ptr(0x6c0);
+    Video::Device* videoDev = engine->GetVideoDevice();   // +0x6c0
+    // LEFT: Device::windowHandle is the HWND held as void* (the type header
+    // cannot include <windows.h>).
     HWND gameWnd = videoDev
-        ? *reinterpret_cast<HWND*>(reinterpret_cast<uintptr_t>(videoDev) + 0x90)
+        ? reinterpret_cast<HWND>(videoDev->windowHandle)   // +0x90
         : nullptr;
     auto logWindow = [&](const char* when) {
         if (!gameWnd) return;
@@ -173,83 +170,82 @@ static void ShutdownEngineStaged(void* engineP) {
     //    only on full success, so a good run stores false and the next boot
     //    skips the launcher dialog; a run that died during video init leaves it
     //    true, and the dialog comes back so the user can fix the settings.
-    if (void* vc = load_ptr(0x6b8)) {
-        const bool startupIncomplete =
-            *reinterpret_cast<uint8_t*>(base + 0x6f0) == 0;
-        *reinterpret_cast<bool*>(vc) = startupIncomplete;
+    if (Video::Configuration* vc = engine->GetVideoConfiguration()) {   // +0x6b8
+        const bool startupIncomplete = engine->_startupComplete == 0;   // +0x6f0
+        vc->settingsValid = startupIncomplete;                          // byte +0x00
         printf("[Shutdown] VideoSettings <- %s (engine+0x6f0=%u)\n",
                startupIncomplete ? "true (show launcher dialog next boot)"
                                  : "false (clean run)",
-               *reinterpret_cast<uint8_t*>(base + 0x6f0));
+               engine->_startupComplete);
     }
 
     // 2. AchievementManager::RemoveAll. ENDGAME B.3.7: the ResolveFn readiness
     // probe goes with the door — RemoveAll is a real member.
-    if (void* am = load_ptr(0x6e8)) {
-        reinterpret_cast<Achievement::AchievementManager*>(am)->RemoveAll();   // B.3.7 bridge
+    if (Achievement::AchievementManager* am = engine->GetAchievementManager()) {   // +0x6e8
+        am->RemoveAll();
     }
 
     // 3. Input::Device::PlatformShutdown. ENDGAME B.3.7: the ResolveFn readiness
     // probe goes with the door — PlatformShutdown is a real member.
-    if (void* d = load_ptr(0x6e0)) {
-        reinterpret_cast<Input::Device*>(d)->PlatformShutdown();   // B.3.7 bridge
+    if (Input::Device* d = engine->GetInputDevice()) {   // +0x6e0
+        d->PlatformShutdown();
     }
 
     // 4. Input::Configuration::Save (skip the FUN_180053440 inner-buffer free)
-    if (void* cfg = load_ptr(0x6d8)) {
-        reinterpret_cast<Input::Configuration*>(cfg)->Save();   // B.3.7 bridge
+    if (Input::Configuration* cfg = engine->GetInputConfiguration()) {   // +0x6d8
+        cfg->Save();
     }
 
     // 5. Audio sub-object teardown — vtable[+0x12] / [+0x2] of two children
     // at audio_device+0xa90 / +0xa88, then null those slots.
-    if (void* audioDev = load_ptr(0x6d0)) {
-        uintptr_t ad = reinterpret_cast<uintptr_t>(audioDev);
-        if (void* sub1 = *reinterpret_cast<void**>(ad + 0xa90)) {
+    if (Audio::Device* ad = engine->GetAudioDevice()) {   // +0x6d0
+        // LEFT: the XAudio2 interfaces are held as void* (Audio/Device.h); the two
+        // calls are IXAudio2MasteringVoice::DestroyVoice and IXAudio2::Release.
+        if (void* sub1 = ad->_masteringVoice) {                  // +0xa90
             void** vt = *reinterpret_cast<void***>(sub1);
             reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);
         }
-        *reinterpret_cast<void**>(ad + 0xa90) = nullptr;
-        if (void* sub2 = *reinterpret_cast<void**>(ad + 0xa88)) {
+        ad->_masteringVoice = nullptr;
+        if (void* sub2 = ad->_xaudio2) {                         // +0xa88
             void** vt = *reinterpret_cast<void***>(sub2);
             reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);
         }
-        *reinterpret_cast<void**>(ad + 0xa88) = nullptr;
+        ad->_xaudio2 = nullptr;
     }
 
     // 6. Audio::Configuration::Save. ENDGAME B.3.7: the ResolveFn readiness
     // probe goes with the door — Save is a real member.
-    if (void* cfg = load_ptr(0x6c8)) {
-        reinterpret_cast<Audio::Configuration*>(cfg)->Save();   // B.3.7 bridge
+    if (Audio::Configuration* cfg = engine->GetAudioConfiguration()) {   // +0x6c8
+        cfg->Save();
     }
 
     // 7. Video::Device::PlatformShutdown + FreeLibrary on the three plugin
     // HMODULE slots at video_device+0xb0/+0xc8/+0xe0.
-    if (void* vdev = load_ptr(0x6c0)) {
-        // B.3.5 bridge — ?PlatformShutdown@Device@Video@@AEAAXXZ. `AEAA` is
-        // retail's PRIVATE, but Device.h declares the member public (this DLL
-        // exports its private members — reference_aeaa_is_private_not_unexported).
-        reinterpret_cast<Video::Device*>(vdev)->PlatformShutdown();   // B.3.5 bridge
-        uintptr_t pv = reinterpret_cast<uintptr_t>(vdev) + 0xb0;
-        for (int i = 0; i < 3; ++i, pv += 24) {
-            HMODULE m = *reinterpret_cast<HMODULE*>(pv);
+    if (Video::Device* vdev = engine->GetVideoDevice()) {   // +0x6c0
+        // ?PlatformShutdown@Device@Video@@AEAAXXZ. `AEAA` is retail's PRIVATE, but
+        // Device.h declares the member public (this DLL exports its private
+        // members — reference_aeaa_is_private_not_unexported).
+        vdev->PlatformShutdown();
+        for (Video::Device::InterfaceSlot& slot : vdev->dllSlots) {   // +0xb0, stride 24
+            // LEFT: the plugin module is the HMODULE held as void*.
+            HMODULE m = reinterpret_cast<HMODULE>(slot.module);
             if (m) FreeLibrary(m);
-            *reinterpret_cast<uint64_t*>(pv) = 0;
-            *reinterpret_cast<uint64_t*>(pv + 8) = 0;
-            *reinterpret_cast<uint64_t*>(pv + 16) = 0;
+            slot.module = nullptr;
+            slot.getDeviceName = nullptr;
+            slot.createDeviceData = nullptr;
         }
     }
 
     // 8. Video::Configuration::Save — this is the snapshot that reaches the
     //    registry, so log the window block it is about to persist.
     logWindow("before Video::Configuration::Save");
-    if (void* cfg = load_ptr(0x6b8)) {
-        const uintptr_t c = reinterpret_cast<uintptr_t>(cfg);
+    if (Video::Configuration* cfg = engine->GetVideoConfiguration()) {   // +0x6b8
         printf("[Shutdown] Video::Configuration to persist: window %dx%d at %d,%d "
                "fullscreen=%u mode %dx%d\n",
-               *reinterpret_cast<int*>(c + 0x1c), *reinterpret_cast<int*>(c + 0x20),
-               *reinterpret_cast<int*>(c + 0x14), *reinterpret_cast<int*>(c + 0x18),
-               *reinterpret_cast<uint8_t*>(c + 0x40),
-               *reinterpret_cast<int*>(c + 0x0c), *reinterpret_cast<int*>(c + 0x10));
+               cfg->windowWidth, cfg->windowHeight,   // +0x1c / +0x20
+               cfg->windowX, cfg->windowY,            // +0x14 / +0x18
+               cfg->fullscreen,                       // +0x40
+               cfg->width, cfg->height);              // +0x0c / +0x10
         // Do not persist a collapsed window. AdjustDisplay copies GetClientRect
         // into Configuration+0x1c/+0x20 on every call with no floor, so if
         // anything reshaped the window at any point, what is sitting here is a
@@ -259,8 +255,8 @@ static void ShutdownEngineStaged(void* engineP) {
         // unlaunchable until the registry is edited by hand. Fall back to the
         // -1 "no override" sentinel from Video::Configuration's constructor.
         constexpr int kMinSaneWindowDim = 64;
-        int& winW = *reinterpret_cast<int*>(c + 0x1c);
-        int& winH = *reinterpret_cast<int*>(c + 0x20);
+        int& winW = cfg->windowWidth;
+        int& winH = cfg->windowHeight;
         if ((winW >= 0 && winW < kMinSaneWindowDim) ||
             (winH >= 0 && winH < kMinSaneWindowDim)) {
             fprintf(stderr, "[Shutdown] refusing to persist collapsed window "
@@ -268,14 +264,14 @@ static void ShutdownEngineStaged(void* engineP) {
             winW = -1;
             winH = -1;
         }
-        // B.3.5 bridge — ?Save@Configuration@Video@@QEAAXXZ.
-        reinterpret_cast<Video::Configuration*>(cfg)->Save();   // B.3.5 bridge
+        // ?Save@Configuration@Video@@QEAAXXZ.
+        cfg->Save();
     }
 
     // 9. Application::PlatformShutdown — DestroyWindow + UnregisterClass.
     // ENDGAME B.3.7: the ResolveFn readiness probe goes with the door.
-    if (void* app = load_ptr(0x690)) {
-        reinterpret_cast< ::Application::Application*>(app)->PlatformShutdown();   // B.3.7 bridge
+    if (::Application::Application* app = engine->GetApplication()) {   // +0x690
+        app->PlatformShutdown();
     }
 
     // 10. FreeLibrary on Object::Factory's compiler-plugin module (Runtime
@@ -285,11 +281,10 @@ static void ShutdownEngineStaged(void* engineP) {
     ::Object::Factory::_compilerModule = nullptr;
 
     // 11. Modification::SaveList
-    if (void* mod = load_ptr(0x680)) {
-        // B.3.4 bridge. ENDGAME B.3.4a closing: the `ResolveFn` readiness probe
-        // is gone with the door — `SaveList` is a real IO::Modification member
-        // and the call reads no pointer the probe could have tested.
-        reinterpret_cast<IO::Modification*>(mod)->SaveList();
+    if (IO::Modification* mod = engine->GetModification()) {   // +0x680
+        // ENDGAME B.3.4a closing: the `ResolveFn` readiness probe is gone with
+        // the door — `SaveList` is a real IO::Modification member.
+        mod->SaveList();
     }
 
     // 12. Persistence::WriteSettings (gated on engine[0x6f1] == 0)
@@ -298,14 +293,14 @@ static void ShutdownEngineStaged(void* engineP) {
     // for QEAA resolved to null and this step silently did nothing, so no
     // setting ever reached the registry. That is what made ResetVideoRegistry
     // look necessary. The failure is logged now rather than swallowed.
-    if (void* per = load_ptr(0x678)) {
-        if (*reinterpret_cast<uint8_t*>(base + 0x6f1) == 0) {
+    if (const IO::Persistence* per = engine->GetPersistence()) {   // +0x678
+        if (engine->_noConfigure == 0) {   // +0x6f1
             // ENDGAME B.3.4a closing: the ResolveFn probe and its "did not
             // resolve — settings NOT persisted" else arm are gone with the
             // door. That arm reported a null mangled-name lookup; WriteSettings
             // is a real const member of IO::Persistence now, so the state it
             // described cannot occur.
-            reinterpret_cast<const IO::Persistence*>(per)->WriteSettings();   // B.3.4 bridge
+            per->WriteSettings();
             printf("[Shutdown] Persistence::WriteSettings done\n");
         } else {
             printf("[Shutdown] WriteSettings skipped (engine+0x6f1 set)\n");
@@ -315,8 +310,8 @@ static void ShutdownEngineStaged(void* engineP) {
     // 13. FileSystem::ClosePackages
     // ENDGAME B.3.4a closing: onto IO::FileSystem::ClosePackages, and the
     // ResolveFn readiness guard retires here with its door.
-    if (void* fs = load_ptr(0x670)) {
-        reinterpret_cast<IO::FileSystem*>(fs)->ClosePackages();   // B.3.4 bridge
+    if (IO::FileSystem* fs = engine->GetFileSystem()) {   // +0x670
+        fs->ClosePackages();
     }
 
     // (14+ deliberately omitted — see header comment.)
@@ -336,9 +331,11 @@ struct alignas(16) EngineStorage {
 int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     EngineStorage engine;
     std::memset(&engine, 0, sizeof(engine));
+    // LEFT: the Engine lives in raw stack storage (its ctor is a door, RULE B5-4).
+    ::Engine::Engine* const eng = reinterpret_cast<::Engine::Engine*>(&engine);
 
     printf("[GameMain] Constructing Engine (storage=%p)...\n", (void*)&engine);
-    RtEngine_Engine_Ctor(reinterpret_cast<::Engine::Engine*>(&engine), hInstance);
+    RtEngine_Engine_Ctor(eng, hInstance);
     printf("[GameMain] Engine constructed.\n");
 
     StallDebug::Mark("Init() -> RunGameMain entry + Engine ctor");
@@ -353,7 +350,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // shadow-verified operations said nothing about it (WAVE9_LANE_E2.md 5.1).
     const unsigned arenaMB = 0x200;
     printf("[GameMain] Engine::Startup(cmdLine=%p, %u, 0, false)...\n", (void*)cmdLine, arenaMB);
-    unsigned ok = reinterpret_cast<Engine::Engine*>(&engine)->Startup(cmdLine, arenaMB, 0, false);   // B.3.7 bridge
+    unsigned ok = eng->Startup(cmdLine, arenaMB, 0, false);
     // Engine::Startup somehow disconnects stdout/stderr from the log files
     // that WinMain freopen()'d (cause TBD — Engine::Startup itself doesn't call
     // AllocConsole/FreeConsole/SetStdHandle/freopen per Ghidra). Re-redirect
@@ -439,11 +436,11 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
             StallDebug::Mark("RunStartupSelfTests + video probes");
 
             // MainLoop is 0xa0 bytes, 8-byte aligned (matches original GameMain).
-            void* ml = System::MemoryAllocator::MemAlloc(0xa0, 8);
-            printf("[GameMain] MainLoop alloc = %p\n", ml);
+            ::Engine::MainLoop* ml = static_cast<::Engine::MainLoop*>(
+                System::MemoryAllocator::MemAlloc(0xa0, 8));
+            printf("[GameMain] MainLoop alloc = %p\n", (void*)ml);
             if (ml) {
-                RtEngine_MainLoop_Ctor(static_cast<::Engine::MainLoop*>(ml),
-                                       reinterpret_cast<::Engine::Engine*>(&engine));
+                RtEngine_MainLoop_Ctor(ml, eng);
                 printf("[GameMain] MainLoop constructed.\n");
 
                 // Stage 5a: allocate the Game/KeyMap container (0xe0 bytes, 4-byte
@@ -465,12 +462,10 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // field is the KeyMap pointer. The KeyMap readers read
                 // Input::Configuration::_singleton->_keyMap (B3R STORAGE: the
                 // hand-built exref chain this used to fill is gone).
-                void* inputCfg = *reinterpret_cast<void**>(
-                    reinterpret_cast<uintptr_t>(&engine) + 0x6d8);
-                void* keyMap = inputCfg ? *reinterpret_cast<void**>(inputCfg)
-                                        : nullptr;
+                Input::Configuration* inputCfg = eng->GetInputConfiguration();   // +0x6d8
+                Input::KeyMap* keyMap = inputCfg ? inputCfg->_keyMap : nullptr;
                 printf("[GameMain] InputConfig=%p  -> KeyMap=%p\n",
-                       inputCfg, keyMap);
+                       (void*)inputCfg, (void*)keyMap);
                 (void)keyMap;   // the perf build strips the printf
 
                 // Populate KeyMap with default bindings (mirror of the original
@@ -584,8 +579,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                                    tag, mem, GameLoadDialogLoopT::Vtable());
                             if (!mem) return nullptr;
 
-                            uint64_t delayTime = 0;
-                            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&delayTime), delaySec);
+                            System::Time delayTime;
+                            delayTime._ticks = 0;
+                            RtSystem_Time_Ctor(&delayTime, delaySec);
 
                             System::String fileStr(filename);
 
@@ -594,7 +590,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             // compiler's), the two fade colours, Random at +0x194,
                             // the tip timer, _autoAdvance = 0.
                             GameLoadDialogLoopT* dlt = ::new (mem) GameLoadDialogLoopT(
-                                fileStr, next, *reinterpret_cast<const System::Time*>(&delayTime));
+                                fileStr, next, delayTime);
 
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p, "
                                    "delay=%.2fs\n",
@@ -674,10 +670,10 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             printf("[GameMain] %s alloc = %p\n", tag, mem);
                             if (!mem) return nullptr;
 
-                            uint64_t zeroDelay = 0;
-                            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zeroDelay), 0.0f);
-                            const System::Time& delay =
-                                *reinterpret_cast<const System::Time*>(&zeroDelay);
+                            System::Time zeroDelay;
+                            zeroDelay._ticks = 0;
+                            RtSystem_Time_Ctor(&zeroDelay, 0.0f);
+                            const System::Time& delay = zeroDelay;
                             Engine::LoaderLoop* ll = inner
                                 ? static_cast<Engine::LoaderLoop*>(::new (mem) InnerLoaderLoop(next, delay))
                                 : static_cast<Engine::LoaderLoop*>(::new (mem) GameLoaderLoop(next, delay));
@@ -707,7 +703,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         if (topLoop) {
                             printf("[GameMain] Calling MainLoop::Run with %s top "
                                    "loop = %p...\n", topTag, (void*)topLoop);
-                            reinterpret_cast<Engine::MainLoop*>(ml)->Run(topLoop);   // B.3.7 bridge
+                            ml->Run(topLoop);
                             // Run has returned: no more frames will ever be
                             // rendered, so the boot-state watchdog's hang
                             // detector must switch to its teardown budget here
@@ -739,7 +735,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     printf("[GameMain] Game freed.\n");
                 }
 
-                RtEngine_MainLoop_Dtor(static_cast<::Engine::MainLoop*>(ml));
+                RtEngine_MainLoop_Dtor(ml);
                 System::MemoryAllocator::MemFree(ml);
                 printf("[GameMain] MainLoop destroyed + freed.\n");
             }
@@ -750,13 +746,13 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
         // not even our SetUnhandledExceptionFilter sees a fault. We mirror its
         // body in stages with fflush between each so the last logged step is
         // the one that killed us.
-        ShutdownEngineStaged(&engine);
+        ShutdownEngineStaged(eng);
     } else {
         fprintf(stderr, "[GameMain] Engine::Startup FAILED\n");
     }
 
     printf("[GameMain] Destroying Engine...\n"); fflush(stdout);
-    RtEngine_Engine_Dtor(reinterpret_cast<::Engine::Engine*>(&engine));
+    RtEngine_Engine_Dtor(eng);
     printf("[GameMain] Engine destroyed.\n"); fflush(stdout);
 
     return ok != 0 ? 0 : 3;
