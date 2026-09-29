@@ -334,16 +334,10 @@ struct FoundArray {
     int32_t   _capacity;   // FindFiles' business, not read here
 };
 
-// `?_singleton@FileSystem@IO@@0PEAV12@EA`, ord 4811, retail 0x1801fc6a8, and
-// MINTED (rt_data_mint_tables.inc:1569). Read through the port-aware door so it
-// follows the mint at cutover.
-//
-// ClosePackages passes THIS, not its own `this`, to CloseFile — retail loads
+// ClosePackages passes `IO::FileSystem::_singleton` (ord 4811, retail
+// 0x1801fc6a8), not its own `this`, to CloseFile — retail loads
 // `MOV RCX,qword ptr [0x1801fc6a8]` at 0x1800abaef even though `this` is in
 // RDI and is almost certainly the same object. Reproduced literally.
-FileSystem** FileSystemSingletonSlot() {
-    return reinterpret_cast<FileSystem**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-}
 
 // ---- the array-growth idiom, inlined TWICE by retail ----------------------
 //
@@ -375,30 +369,30 @@ FileSystem** FileSystemSingletonSlot() {
 // same allocator singleton (0x1801fc718), same align 8. Likewise RtMemFree is
 // 0x1800c7ad0 and carries retail's `if (p)` inside itself, which is why the
 // callers below hand it a possibly-null pointer exactly as retail does.
-void AppendPackfile(FileSystem* self, PackageFileView* obj) {
-    PackageFileView** const old   = self->packfiles;
-    const int32_t           oldN  = self->packfileCount;
-    const int32_t           newN  = oldN + 1;
+void AppendPackfile(::IO::FileSystem* self, ::IO::PackageFile* obj) {
+    ::IO::PackageFile** const old  = self->_packfiles;
+    const int32_t             oldN = self->_packfileCount;
+    const int32_t             newN = oldN + 1;
     if (newN == oldN)
         return;
-    self->packfileCount = newN;
-    if (newN > self->packfileCapacity) {
-        self->packfileCapacity = newN;
+    self->_packfileCount = newN;
+    if (newN > self->_packfileCapacity) {
+        self->_packfileCapacity = newN;
         if (newN == oldN + 1 && oldN != 0)
-            self->packfileCapacity = newN * 3;
+            self->_packfileCapacity = newN * 3;
         // MOVSXD RBX,dword[RSI+0x2c] ; SHL RBX,3 — a SIGN extension of the
         // capacity, then times 8. Ghidra's C prints this as a zero extension.
         const uint64_t bytes =
-            static_cast<uint64_t>(static_cast<int64_t>(self->packfileCapacity)) * 8u;
-        self->packfiles = static_cast<PackageFileView**>(RtMemAlloc(bytes, 8));
+            static_cast<uint64_t>(static_cast<int64_t>(self->_packfileCapacity)) * 8u;
+        self->_packfiles = static_cast<::IO::PackageFile**>(RtMemAlloc(bytes, 8));
     }
-    int64_t k = (old == self->packfiles) ? static_cast<int64_t>(oldN) : 0;
+    int64_t k = (old == self->_packfiles) ? static_cast<int64_t>(oldN) : 0;
     for (; k < static_cast<int64_t>(newN); ++k) {
-        PackageFileView** const dst = self->packfiles + k;
+        ::IO::PackageFile** const dst = self->_packfiles + k;
         if (dst != nullptr)
             *dst = (k < static_cast<int64_t>(oldN)) ? old[k] : obj;
     }
-    if (old != self->packfiles && old != nullptr)
+    if (old != self->_packfiles && old != nullptr)
         RtMemFree(old);
 }
 
@@ -617,22 +611,21 @@ void FileSystem::ClosePackages() {
         // Retail RELOADS the array base on every iteration and indexes it twice
         // (0x1800abae0 and 0x1800abafb) rather than caching the element. Kept:
         // the deleting destructor below could in principle write the array.
-        RtIO::PackageFileView* pkg = _packfiles[i];
+        PackageFile* pkg = _packfiles[i];
 
-        // CloseFile(FileSystem::_singleton, &pkg->fileInfo). The FileInfo lives
+        // CloseFile(FileSystem::_singleton, &pkg->_file). The FileInfo lives
         // at pkg+0xC0 (`ADD RDX,0xc0`) and the receiver is the SINGLETON, not
-        // `this` — see FileSystemSingletonSlot()'s comment.
-        reinterpret_cast<::IO::FileSystem*>(*RtIO::FileSystemSingletonSlot())   // B.3.x bridge
-            ->CloseFile(*reinterpret_cast<RtIO::FileInfo*>(reinterpret_cast<uint8_t*>(pkg) + 0xC0));
+        // `this` — see the note above AppendPackfile.
+        _singleton->CloseFile(pkg->_file);
 
-        RtIO::PackageFileView* again = _packfiles[i];
+        PackageFile* again = _packfiles[i];
         if (again != nullptr) {
             // `MOV RAX,[RCX] ; MOV EDX,1 ; CALL qword ptr [RAX]` — vtable slot
             // 0, the VECTOR deleting destructor, flag 1 = also free the block.
             // Slot 0 of ??_7PackageFile@IO@@6B@ is 0x1800259d0 (§7); it is
             // reached through the object's own vtable pointer, faithfully, and
             // not by address. B3X W0: by name on the object's own class.
-            delete reinterpret_cast<::IO::PackageFile*>(again);   // B.3.x bridge
+            delete again;
         }
     }
 
@@ -717,17 +710,14 @@ void FileSystem::LoadPackages() {
     // B.3.9 IO: the constructor is `IO::PackageFile`'s own, on the same block.
     for (int32_t i = 0; i < found.count; ++i) {
         void* block = RtIO::RtMemAlloc(0xF0u, 8);
-        RtIO::PackageFileView* pkg = nullptr;
+        PackageFile* pkg = nullptr;
         if (block != nullptr)
-            pkg = reinterpret_cast<RtIO::PackageFileView*>(
-                      ::new (block) IO::PackageFile());   // B.3.9 IO: the real ctor
+            pkg = ::new (block) IO::PackageFile();   // B.3.9 IO: the real ctor
         // Unguarded on `pkg` — retail calls ReadPackfile with whatever the
         // constructor branch left in R12, including zero on the out-of-memory
         // path (`XOR R12D,R12D` at 0x1800ab5a5). Faithful; not a null check.
-        reinterpret_cast<::IO::PackageFile*>(pkg)                    // B.3.x bridge
-            ->IO::PackageFile::ReadPackfile(
-                *reinterpret_cast<const RtSystem::Filename*>(&found.data[i]));
-        RtIO::AppendPackfile(reinterpret_cast<RtIO::FileSystem*>(this), pkg);
+        pkg->IO::PackageFile::ReadPackfile(RtIO::Sys(found.data[i]));
+        RtIO::AppendPackfile(this, pkg);
     }
 
     // ---- the packfile sort ------------------------------------------------
@@ -780,30 +770,26 @@ void FileSystem::LoadPackages() {
     // NO sort afterwards — mods keep the order they were mounted in.
     for (int32_t i = 0; i < _userPackFilenameCount; ++i) {
         void* block = RtIO::RtMemAlloc(0xF0u, 8);
-        RtIO::PackageFileView* pkg = nullptr;
+        PackageFile* pkg = nullptr;
         if (block != nullptr)
-            pkg = reinterpret_cast<RtIO::PackageFileView*>(
-                      ::new (block) IO::PackageFile());   // B.3.9 IO: the real ctor
-        reinterpret_cast<::IO::PackageFile*>(pkg)                    // B.3.x bridge
-            ->IO::PackageFile::ReadPackfile(
-                *reinterpret_cast<const RtSystem::Filename*>(&_userPackFilenames[i]));
-        RtIO::AppendPackfile(reinterpret_cast<RtIO::FileSystem*>(this), pkg);
+            pkg = ::new (block) IO::PackageFile();   // B.3.9 IO: the real ctor
+        pkg->IO::PackageFile::ReadPackfile(RtIO::SysFile(_userPackFilenames[i]));
+        RtIO::AppendPackfile(this, pkg);
     }
 
     // ---- LOOP 3: the path -> {packIndex, fileIndex} index ------------------
     int64_t inserted = 0, overridden = 0, kept = 0;
     for (int32_t pi = 0; pi < _packfileCount; ++pi) {
-        RtIO::PackageFileView* pkg = _packfiles[pi];
-        const int32_t entries = pkg->entryCount;          // MOV EAX,[RCX+0xb8]
+        PackageFile* pkg = _packfiles[pi];
+        const int32_t entries = pkg->_entryCount;         // MOV EAX,[RCX+0xb8]
         for (int32_t fi = 0; fi < entries; ++fi) {
             // Retail RE-INDEXES the array here too rather than reusing `pkg`.
-            RtIO::PackageFileView* owner = _packfiles[pi];
+            PackageFile* owner = _packfiles[pi];
 
             // GetFileName writes through the hidden return slot (retail passes
             // an untouched [RBP+0x50]); the by-value return constructs `key` in
             // place, and the one release is ~key at the bottom of the iteration.
-            System::Filename key(reinterpret_cast<const ::IO::PackageFile*>(owner)   // B.3.x bridge
-                                     ->IO::PackageFile::GetFileName(fi));
+            System::Filename key(owner->IO::PackageFile::GetFileName(fi));
 
             RtIO::PackfileIndexNode* node =
                 RtIO::IndexFind(_packfileIndexRoot, key._data);
@@ -811,8 +797,8 @@ void FileSystem::LoadPackages() {
                 // The incumbent's OWN +0xAC decides, not the newcomer's: retail
                 // indexes packfiles[] with the FOUND NODE's packIndex
                 // (`MOV ECX,[RBX+0x8]`) and tests that object's byte.
-                RtIO::PackageFileView* incumbent = _packfiles[node->packIndex];
-                if (incumbent->overridable != 0) {
+                PackageFile* incumbent = _packfiles[node->packIndex];
+                if (incumbent->_overridable != 0) {
                     // Retail merges these into ONE qword store at [RBX+8].
                     node->packIndex = static_cast<uint32_t>(pi);
                     node->fileIndex = static_cast<uint32_t>(fi);
@@ -902,9 +888,9 @@ System::Filename PackageFile::GetFileName(int index) const {
     // prints it as a zero extension and that cost Wave 6 three defects. It only
     // matters for a negative index, which retail never passes; it is written as
     // int64 anyway because that is what the instruction says.
-    const System::Filename* entry = reinterpret_cast<const System::Filename*>(
-        static_cast<const uint8_t*>(_entries) + static_cast<int64_t>(index) * 16);
-    return *entry;   // the copy ctor, 0x1800067d0
+    // The entry's `name` (+0x00) is a Filename on the RtSystem::String POD;
+    // `Filename(const Filename&)` is the copy ctor 0x1800067d0.
+    return System::Filename(RtSystem::SysFile(_entries[static_cast<int64_t>(index)].name));
 }
 
 }  // namespace IO

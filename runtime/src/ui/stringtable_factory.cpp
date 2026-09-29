@@ -102,6 +102,7 @@
 
 #include "../../types/ui/StringTable.h"
 #include "../../types/system/String.h"
+#include "../../types/io/Stream.h"
 #include "../../types/collection/Collection.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringPair10
 
@@ -111,19 +112,6 @@ constexpr size_t kTiTypeIdOffset = 0x00;
 constexpr size_t kTiNameOffset   = 0x08;
 static_assert(kTiTypeIdOffset == 0, "BaseTypeInfo::typeId is at +0x00");
 static_assert(kTiNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
-
-using SerFactoryFn = void* (*)(void* encoding, void* ser, int flag);
-
-struct SerializerPair {
-    void* stream;   // +0x00
-    void* impl;     // +0x08
-};
-static_assert(sizeof(SerializerPair) == 0x10, "the pair retail keeps on the stack");
-
-void* VSlotOf(const void* obj, size_t byteOffset) {
-    void** vtbl = *reinterpret_cast<void** const*>(obj);
-    return vtbl[byteOffset / sizeof(void*)];
-}
 
 }  // namespace
 
@@ -161,25 +149,19 @@ Object::Base* StringTable::CreateInPlaceObject(void* place) {
 }
 
 bool StringTable::Serialize(void* streamV) {
-    uint8_t*       stream = static_cast<uint8_t*>(streamV);
+    IO::Stream* const stream = static_cast<IO::Stream*>(streamV);
 
-    SerializerPair ser;
-    ser.stream = stream;                                     // 18011d957
-    ser.impl   = nullptr;                                    // 18011d95c
-
-    void*    enc       = *reinterpret_cast<void**>(stream + 0x10);   // 18011d965
-    const int32_t dir  = *reinterpret_cast<const int32_t*>(stream + 0x8);
-    const size_t  slot = (dir == 0) ? 0x18 : 0x20;                   // 18011d96f
-    ser.impl = reinterpret_cast<SerFactoryFn>(VSlotOf(enc, slot))(enc, &ser, 0);
+    // ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z (0x1800b9960), inlined by retail
+    // (18011d957..18011d982): the stream, then CreateReader / CreateWriter of
+    // the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
 
     int32_t count = _size;                                   // 18011d987
-    // +0xa0 is SerializeInt (the old typedef here was named for +0x98).
-    reinterpret_cast<IO::ReaderWriter*>(ser.impl)->SerializeInt(     // B.3.x bridge
-        count, nullptr);                                             // 18011d99e
+    ser.Serialize(count, nullptr);                           // 18011d99e, +0xa0
 
     // The direction is RE-READ from the stream here, not cached from above:
     // 18011d9a4 reloads [RSP+0x28] and 18011d9a9 tests [RAX+0x8] again.
-    if (*reinterpret_cast<const int32_t*>(stream + 0x8) == 0) {      // 18011d9a9
+    if (stream->_direction == 0) {                           // 18011d9a9
         // ENDGAME B.3.2 step 2 — `_data`/`_size`/`_capacity` are the
         // {data,size,capacity} triple `Collection::Array<TextEntry>` would use,
         // contiguous and asserted at StringTable.h's offsets, and
@@ -188,16 +170,16 @@ bool StringTable::Serialize(void* streamV) {
             ->SetSize(count);                                 // 18011d9b7, retail 0x180078c90
     }
 
-    uint8_t* e = reinterpret_cast<uint8_t*>(_data);          // 18011d9bc
-    // System::String::Serialize (0x1800c9930), by name.
-    for (int32_t i = 0; i < count; ++i, e += 0x10) {         // bound is the LOCAL
-        reinterpret_cast<System::String*>(e)->Serialize(&ser);         // 18011d9d8
-        reinterpret_cast<System::String*>(e + 0x8)->Serialize(&ser);   // 18011d9e6
+    TextEntry* e = _data;                                    // 18011d9bc
+    // System::String::Serialize (0x1800c9930), by name. The two Strings are
+    // spelt `char*` in TextEntry (H5), so each is viewed as the String it is.
+    for (int32_t i = 0; i < count; ++i, ++e) {               // bound is the LOCAL
+        reinterpret_cast<System::String*>(&e->name)->Serialize(&ser);  // 18011d9d8
+        reinterpret_cast<System::String*>(&e->text)->Serialize(&ser);  // 18011d9e6
     }
 
-    if (ser.impl != nullptr) {                               // 18011d9f9
-        delete reinterpret_cast<IO::ReaderWriter*>(ser.impl);  // 18011da06  B.3.x bridge
-    }
+    // ~Serializer (0x1800b99b0), inlined by retail: deletes the ReaderWriter
+    // when there is one (18011d9f9 / 18011da06).
     return true;                                             // 18011da08
 }
 

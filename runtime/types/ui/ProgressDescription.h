@@ -48,6 +48,8 @@
 
 namespace UI {
 
+class SpriteSheet;
+
 class ProgressDescription : public ElementDescription {
 public:
     // ??0ProgressDescription@UI@@QEAA@XZ 0x18011a210 -- the REAL ctor:
@@ -93,14 +95,14 @@ private:
 public:
     uint32_t _unknown68;          // +0x68  ctor DWORD 0; kScalarUInt. Serialized, read by no slot
     uint32_t _pad6c;              // +0x6c  written by nothing
-    void*    _spriteSheet;        // +0x70  ExternalPtr<UI::SpriteSheet>
+    SpriteSheet*    _spriteSheet;        // +0x70  ExternalPtr<UI::SpriteSheet>
     char*    _fillLeftName;       // +0x78  System::String -> ProgressElement::_fillLeft
     char*    _fillMiddleName;     // +0x80  -> _fillMiddle
     char*    _fillRightName;      // +0x88  -> _fillRight
     char*    _trackLeftName;      // +0x90  -> _trackLeft
     char*    _trackMiddleName;    // +0x98  -> _trackMiddle
     char*    _trackRightName;     // +0xa0  -> _trackRight
-    void*    _childDescription;   // +0xa8  ExternalPtr<UI::ElementDescription>, OPTIONAL
+    ElementDescription*    _childDescription;   // +0xa8  ExternalPtr<UI::ElementDescription>, OPTIONAL
 };
 
 static_assert(sizeof(ProgressDescription) == 0xb0,

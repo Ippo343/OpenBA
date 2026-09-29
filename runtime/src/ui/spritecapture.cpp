@@ -114,7 +114,7 @@ inline void MemFree(void* p) {
 // pointer aimed at `chars`. Same idiom runtime/types/system/String.h documents
 // and runtime/src/ui/sprite.cpp's ReleaseStringRef uses.
 inline int32_t& StringRc(char* data) {
-    return *reinterpret_cast<int32_t*>(data - 4);
+    return RtSystem::StringRefCount(data);
 }
 // Retail's release, instruction for instruction (0x1800d8fc2, 0x1800d8e7c and
 // the two temporaries in AddSprite): decrement, and free the block eight bytes
@@ -225,14 +225,14 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     bool found = false;
     if (oldSize > 0) {
         void* const key = sprite.spriteSheet;
-        void* const* p  = static_cast<void* const*>(_sheets.data);
+        SpriteSheet* const* p = _sheets.data;
         for (index = 0; index < oldSize; ++index, ++p) {
             if (*p == key) { found = true; break; }
         }
     }
     if (!found) {
         index = oldSize;
-        void* fill = sprite.spriteSheet;
+        SpriteSheet* fill = static_cast<SpriteSheet*>(sprite.spriteSheet);
 
         // Array<void*>::SetSize(oldSize + 1, fill), inlined by retail at
         // 0x1800d8b92..0x1800d8c9f. `newSize != oldSize` is retail's guard and
@@ -241,7 +241,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
         // SetSize bodies in array.cpp should see the same shape.
         const int newSize = oldSize + 1;
         if (newSize != oldSize) {
-            void** oldData = static_cast<void**>(_sheets.data);
+            SpriteSheet** oldData = _sheets.data;
             _sheets.size = newSize;
             if (newSize > _sheets.capacity) {
                 _sheets.capacity = newSize;
@@ -251,15 +251,15 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
                 if (newSize == oldSize + 1 && oldSize != 0)
                     _sheets.capacity = newSize * 3;
                 const int64_t bytes = static_cast<int64_t>(_sheets.capacity) * 8;
-                _sheets.data = MemAlloc(static_cast<uint64_t>(bytes), 8);
+                _sheets.data = static_cast<SpriteSheet**>(MemAlloc(static_cast<uint64_t>(bytes), 8));
             }
             // Retail runs TWO cursors (EDX and RCX) that hold the same value
             // throughout; both are kept so the copy source reads as it does in
             // the disassembly.
             int32_t src = (oldData == _sheets.data) ? oldSize : 0;
             for (int64_t i = src; i < newSize; ++i, ++src) {
-                void** dst = static_cast<void**>(_sheets.data) + i;
-                void* const* from = (i < oldSize) ? (oldData + src) : &fill;
+                SpriteSheet** dst = _sheets.data + i;
+                SpriteSheet* const* from = (i < oldSize) ? (oldData + src) : &fill;
                 *dst = *from;
             }
             if (oldData != _sheets.data && oldData != nullptr)
@@ -302,8 +302,8 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
         // the "" literal at 0x1801551f0.
         char* block = static_cast<char*>(MemAlloc(9, 4));
         char* data  = block + 8;
-        reinterpret_cast<int32_t*>(data)[-2] = 0;   // length
-        reinterpret_cast<int32_t*>(data)[-1] = 1;   // refcount
+        RtSystem::StringLength(data) = 0;   // length
+        RtSystem::StringRefCount(data) = 1;   // refcount
         data[0] = '\0';
         name = data;
         e.name = name;
@@ -377,9 +377,8 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
 // in either pass calls anything at all. Written as one indexed loop each.
 // ---------------------------------------------------------------------------
 void SpriteCapture::EndAddingSprites() {
-    auto& entriesArr = reinterpret_cast<Collection::Array<CaptureEntry>&>(_entries);
-    const int32_t count = entriesArr.GetSize();
-    auto* entries = entriesArr.GetData();
+    const int32_t count = _entries.size;
+    CaptureEntry* entries = _entries.data;
 
     // The work verdict is "pass 1 actually saw a non-scissor entry". A capture
     // with zero entries, or one holding nothing but scissors, runs the whole

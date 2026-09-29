@@ -31,3 +31,21 @@ base; at W0's close **45,357 to remove** (tier I 327, CAST-OK 180), bridge marke
 
 Metric at `c7aedffa`: **45,262** to remove. The file map's build-directory exclusion swallowed the
 twelve `build*.cpp` files (866 casts) until `76f22aff`.
+
+| 8 | W1-R-UI-a | `6d2462aa` | runtime UI a (dialog, element, font, document text): 863 -> 135 in 97 files | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | ui ok · tools ok | 0 |
+
+Coordinator error 2: the merge `18662af7` (R-UI-b) does not build — the two UI blocks ran in
+parallel and each typed a field the other reads (`UserInterface::_toolTipDialog`). Fixed in the next
+commit. **A bisect must skip `18662af7`.** `mergegate.sh` now builds the merged tree BEFORE the
+merge commit is made.
+
+| 9 | W1-R-UI-b | `19d81b4b` | runtime UI b (UserInterface family, sprite context / capture, description serializers): 862 -> 197 in 78 files (merge `18662af7` + the fix) | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | ui ok · tools ok | 0 |
+| 10 | W1-R-IO | `9da51f45` | runtime io / save / object: 955 -> 419 in its files; `FileInfo::winHandle` is a HANDLE | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | ui ok · tools ok (tool routes re-run after the lockup) | 0 |
+
+Metric at `9da51f45`: **43,331** to remove.
+
+**Machine lockup, 2026-09-29 ~00:57** (five agents building at -j3 while the coordinator ran routes):
+the session died; the game-dir lock was left held by `coord` (released by hand); one file in an
+agent worktree was written as NUL bytes (`runtime/types/ui/UserInterface.h` in COMP-b's worktree,
+restored from its index); main and the object database were intact (`git fsck` clean). From here:
+at most FOUR agents, building at **-j2**.

@@ -100,15 +100,14 @@ void ClearBlockPtrs(Persistence* p) {
 // into one construction with the same single AddRef.
 namespace IO {
 
-bool Persistence::BeginGetSaveGameInfo(const RtSystem::String& nameRef, int count) {
-    const RtSystem::String* const name = &nameRef;
+bool Persistence::BeginGetSaveGameInfo(const System::String& name, int count) {
 
     if (_flags & 1u) return false;
 
     // C++17 constructs GetSaveFilename's result STRAIGHT INTO `fn`.
     // `AsString()` is the same eight bytes (Filename IS a String,
     // layout-identically), which is what retail assigns from.
-    System::Filename fnFile(GetSaveFilename(*name));
+    System::Filename fnFile(GetSaveFilename(name));
     const System::String& fn = fnFile.AsString();
 
     ::ClearBlockDescs(reinterpret_cast<RtIo::Persistence*>(this));

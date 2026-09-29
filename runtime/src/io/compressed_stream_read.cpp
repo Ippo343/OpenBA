@@ -139,19 +139,6 @@ namespace {
 
 constexpr int32_t kWin = kCompressedStreamWindowSize;   // 0x8000
 
-
-inline Window* Windows(CompressedStream* s) {
-    return static_cast<Window*>(s->windowData);
-}
-inline Header* Headers(CompressedStream* s) {
-    return static_cast<Header*>(s->headerData);
-}
-
-// B.3.4 block 4: the same accessor over the REAL class. An OVERLOAD, not a
-// signature change: the other bodies in this file are not part of this block's
-// conversion (section D keeps this file's edits to the one vtable slot it owns).
-inline Window* Windows(IO::CompressedStream* s) { return static_cast<Window*>(s->_windowData); }
-
 // `Collection::Array<T>::SetSize(size + 1)` as MSVC inlined it twice into
 // SetWindow's grow path (headers at 1800a9bb0, blocks at 1800a9cb1): 8-byte
 // elements, new slots zero-filled, capacity `n` on the first growth and `n*3`
@@ -159,35 +146,27 @@ inline Window* Windows(IO::CompressedStream* s) { return static_cast<Window*>(s-
 // the exported MemAlloc (compressed_stream_write.cpp says why they are the same
 // function). The element copy loop only runs over a FRESH allocation; when the
 // capacity already covers `n` it starts at `old` and just zeroes the new slot.
-inline void GrowByOne(void*& data, int32_t& size, int32_t& cap,
-                      size_t elem, int32_t align) {
+template <class T>
+inline void GrowByOne(T*& data, int32_t& size, int32_t& cap, int32_t align) {
+    const size_t elem = sizeof(T);
     const int32_t old = size;
     const int32_t n   = old + 1;
-    void* const oldData = data;
+    T* const oldData = data;
     size = n;
     if (cap < n) {                                      // 1800a9bd4 / 1800a9cd5
         cap = (old != 0) ? n * 3 : n;
-        data = ::System::MemoryAllocator::MemAlloc(
-                static_cast<uint64_t>(cap) * elem, align);
+        data = static_cast<T*>(::System::MemoryAllocator::MemAlloc(
+                static_cast<uint64_t>(cap) * elem, align));
     }
     if (data != nullptr) {
         const int32_t first = (oldData == data) ? old : 0;
-        uint8_t* const dst       = static_cast<uint8_t*>(data);
-        const uint8_t* const src = static_cast<const uint8_t*>(oldData);
         for (int32_t i = first; i < n; ++i) {
-            if (i < old) std::memcpy(dst + i * elem, src + i * elem, elem);
-            else         std::memset(dst + i * elem, 0, elem);
+            if (i < old) std::memcpy(data + i, oldData + i, elem);
+            else         std::memset(data + i, 0, elem);
         }
     }
     if (oldData != data && oldData != nullptr)
         ::System::MemoryAllocator::MemFree(oldData);
-}
-
-// The source stream, used by DecompressFromSource. Retail calls `[RAX+0x18]`
-// (Read, slot 3) and `[RAX+0x20]` (SetCurrentPos, slot 4); B3X W0 calls them by
-// name on `IO::Stream`, through the object's own vtable as retail does.
-inline ::IO::Stream* SourceStream(void* stream) {
-    return static_cast<::IO::Stream*>(stream);   // B.3.x bridge
 }
 
 }  // namespace
@@ -208,15 +187,23 @@ static SetWindowBranchCounts g_swBranch;
 
 const SetWindowBranchCounts& RtIo_SetWindowBranchCounts() { return g_swBranch; }
 
+int64_t RtIo_CompressedStreamGrowDelegations() { return g_swBranch.grow; }
+
+}  // namespace RtIo
+
+// B.4 R-IO: the three bodies below are `IO::CompressedStream` members (they
+// were `RtIo_CompressedStream_*` doors on the POD view), moved statement for
+// statement; section D binds them (see Read's banner at the bottom).
+
 // ============================================================================
 // ?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ           retail 0x1800a9980
 // ============================================================================
 // Pick a window to evict. Free windows first (the LAST free one — §3.2), else
 // the largest useCount (ties keep the earlier index — §3.3).
-extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* self) {
+int IO::CompressedStream::GetAvailableWindow() {
 
-    Window* const w = Windows(self);
-    const int32_t n = self->windowSize;                 // 1800a999a
+    RtIo::Window* const w = _windowData;
+    const int32_t n = _windowSize;                      // 1800a999a
     int32_t best = -1;                                  // 1800a99a0  OR EBX,-1
 
     if (n > 0) {
@@ -237,14 +224,14 @@ extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* se
     // Flush before evicting, but only when WRITING. On the read path
     // `direction` is 0 and CompressWindow is never reached — which is why this
     // lane does not port it.
-    if (w[best].start >= 0 && self->base.direction == 1) {   // 1800a9a1d / 1800a9a24
-        RtIo_CompressedStream_CompressWindow(self, best);                                     // 1800a9a2f
+    if (w[best].start >= 0 && _direction == 1) {        // 1800a9a1d / 1800a9a24
+        CompressWindow(best);                           // 1800a9a2f
     }
 
     w[best].start    = -1;                              // 1800a9a38
     w[best].end      = -1;                              // 1800a9a45
     w[best].useCount = 0;                               // 1800a9a52
-    for (int32_t i = 0; i < self->windowSize; ++i)      // 1800a9a59
+    for (int32_t i = 0; i < _windowSize; ++i)           // 1800a9a59
         if (i != best) ++w[i].useCount;                 // 1800a9a6a
 
     // No oracle here: this MUTATES the window array, so calling the shipped body
@@ -259,39 +246,38 @@ extern "C" int32_t RtIo_CompressedStream_GetAvailableWindow(CompressedStream* se
 // ?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z       retail 0x1800a96b0
 // ============================================================================
 // Fill the ACTIVE window from block `blk` of the source stream.
-extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* self,
-                                                           int32_t blk) {
+bool IO::CompressedStream::DecompressFromSource(int blk) {
 
-    if (blk >= self->headerSize) return false;          // 1800a96c2  JL continues
+    if (blk >= _headerSize) return false;               // 1800a96c2  JL continues
 
     // Retail's `_alloca(0x8020)` (0x1800a96b7 via 0x180095060, the stack probe).
     // The extra 0x20 is MSVC's home space for the calls below, not part of the
     // block; the block itself can never exceed 0x8000.
-    uint8_t scratch[kWin];
+    uint8_t scratch[RtIo::kWin];
 
-    const Header* const h = &Headers(self)[blk];        // 1800a96ec
-    Window* const w = &Windows(self)[self->activeWindow];  // 1800a96f0..fc
+    const RtIo::Header* const h = &_headerData[blk];    // 1800a96ec
+    RtIo::Window* const w = &_windowData[_activeWindow];   // 1800a96f0..fc
 
     w->start = blk << 15;                               // 1800a96d9 / 1800a9700
     w->end   = w->start + h->uncompressedSize;          // 1800a9703 / 1800a9709
 
-    void* const src = self->source;                     // 1800a970c
-    SourceStream(src)->SetCurrentPos(
+    // The source's Stream virtuals, through the object's own vtable as retail
+    // does (`[RAX+0x20]` SetCurrentPos, `[RAX+0x18]` Read).
+    Stream* const src = _source;                        // 1800a970c
+    src->SetCurrentPos(
         static_cast<int32_t>(h->sourceOffset));         // 1800a9715  CALL [RAX+0x20]
 
     if (h->compressedSize != 0) {                       // 1800a9723  TEST DX,DX
-        SourceStream(src)->Read(
-            h->compressedSize, scratch);                // 1800a9730  CALL [RAX+0x18]
+        src->Read(h->compressedSize, scratch);          // 1800a9730  CALL [RAX+0x18]
         // Rung 1's port -- this is the call that finally gives
         // Compression::Decompress real package bytes.
         ::System::Compression::Decompress(
                 scratch, h->compressedSize, w->buffer,
-                static_cast<uint32_t>(kWin));           // 1800a9746
+                static_cast<uint32_t>(RtIo::kWin));     // 1800a9746
     } else {
         // STORED: read straight into the window. compressedSize == 0 is the
         // stored marker, not an empty block (§2).
-        SourceStream(src)->Read(
-            h->uncompressedSize, w->buffer);            // 1800a9755  CALL [RAX+0x18]
+        src->Read(h->uncompressedSize, w->buffer);      // 1800a9755  CALL [RAX+0x18]
     }
 
     return true;                                        // 1800a9768
@@ -300,11 +286,13 @@ extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* sel
 // ============================================================================
 // ?SetWindow@CompressedStream@IO@@AEAA_NH@Z                  retail 0x1800a9aa0
 // ============================================================================
-extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t pos) {
+bool IO::CompressedStream::SetWindow(int pos) {
+    using RtIo::g_swBranch;
+    using RtIo::kWin;
 
-    self->position = pos;                               // 1800a9ac0
-    const int32_t active = self->activeWindow;          // 1800a9ac3
-    Window* const w = Windows(self);
+    _position = pos;                                    // 1800a9ac0
+    const int32_t active = _activeWindow;               // 1800a9ac3
+    RtIo::Window* const w = _windowData;
 
     // Loaded ONCE, and deliberately not reloaded inside the scan below — see
     // §3.1. This single value is both the fast-path test and the scan's guard.
@@ -315,7 +303,7 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
         return true;                                    // 1800a9ae7
     }
 
-    const int32_t n = self->windowSize;                 // 1800a9af3
+    const int32_t n = _windowSize;                      // 1800a9af3
     int32_t found = -1;
     for (int32_t i = 0; i < n; ++i) {                   // 1800a9b03
         if (i == active)      continue;                 // 1800a9b06
@@ -328,25 +316,23 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
     if (found >= 0) {                                   // 1800a9b2e
         ++g_swBranch.scanHit;
         w[found].useCount = 0;                          // 1800a9b35
-        for (int32_t k = 0; k < self->windowSize; ++k)  // 1800a9b3c
+        for (int32_t k = 0; k < _windowSize; ++k)       // 1800a9b3c
             if (k != found) ++w[k].useCount;            // 1800a9b4d
-        self->activeWindow = found;                     // 1800a9b61
+        _activeWindow = found;                          // 1800a9b61
         return true;
     }
 
     // ---- miss ------------------------------------------------------------
-    if (self->base.direction == 0) {                    // 1800a9b69
+    if (_direction == 0) {                              // 1800a9b69
         ++g_swBranch.readMiss;
         // READING: evict and pull the block from the source.
-        self->activeWindow =
-            RtIo_CompressedStream_GetAvailableWindow(self);   // 1800a9b72
-        const bool ok = RtIo_CompressedStream_DecompressFromSource(
-            self, self->position >> 15);                      // 1800a9b7d/83
+        _activeWindow = GetAvailableWindow();                 // 1800a9b72
+        const bool ok = DecompressFromSource(_position >> 15);   // 1800a9b7d/83
         return ok;                                            // 1800a9b88
     }
 
     const int32_t blk = pos >> 15;                      // 1800a9b8d
-    if (blk >= self->headerSize) {                      // 1800a9b94  JL -> in-memory
+    if (blk >= _headerSize) {                           // 1800a9b94  JL -> in-memory
         // ---- GROW (direction != 0, block beyond the end) ---- 1800a9ba0..1800a9e3a
         // Append one header and one block slot per iteration until the arrays
         // cover `blk`, claiming a window each time. Two quirks kept on purpose:
@@ -359,29 +345,27 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
         ++g_swBranch.grow;
         const int32_t blockStart = blk << 15;           // 1800a9ba7  local_res10
         do {
-            GrowByOne(self->headerData, self->headerSize, self->headerCap,
-                      sizeof(Header), 4);               // 1800a9bb0..1800a9cae
-            GrowByOne(self->blockData, self->blockSize, self->blockCap,
-                      sizeof(void*), 8);                // 1800a9cb1..1800a9dc7
-            const int32_t aw = RtIo_CompressedStream_GetAvailableWindow(self);  // 1800a9dc7
-            self->activeWindow = aw;                    // 1800a9dcc
-            Window* const w = &Windows(self)[aw];
+            RtIo::GrowByOne(_headerData, _headerSize, _headerCap, 4);   // 1800a9bb0..1800a9cae
+            RtIo::GrowByOne(_blockData, _blockSize, _blockCap, 8);      // 1800a9cb1..1800a9dc7
+            const int32_t aw = GetAvailableWindow();    // 1800a9dc7
+            _activeWindow = aw;                         // 1800a9dcc
+            RtIo::Window* const w = &_windowData[aw];
             w->start = blockStart;                      // 1800a9dd3
-            if (blk == self->headerSize - 1)            // 1800a9ddd
-                w->end = self->position;                // 1800a9df0
+            if (blk == _headerSize - 1)                 // 1800a9ddd
+                w->end = _position;                     // 1800a9df0
             else
                 w->end = w->start + kWin;               // 1800a9e0d
-        } while (self->headerSize < blk + 1);           // 1800a9e19
+        } while (_headerSize < blk + 1);                // 1800a9e19
         return true;                                    // 1800a9ebb
     }
 
     // ---- in-memory block (direction != 0, block already present) ---------
     ++g_swBranch.inMemory;
-    self->activeWindow = RtIo_CompressedStream_GetAvailableWindow(self);  // 1800a9e3f
-    const int32_t b = self->position >> 15;             // 1800a9e47/4a
-    const Header* const h  = &Headers(self)[b];
-    void* const* const blocks = static_cast<void* const*>(self->blockData);  // +0x50
-    Window* const aw = &Windows(self)[self->activeWindow];
+    _activeWindow = GetAvailableWindow();               // 1800a9e3f
+    const int32_t b = _position >> 15;                  // 1800a9e47/4a
+    const RtIo::Header* const h  = &_headerData[b];
+    void* const* const blocks = _blockData;             // +0x50
+    RtIo::Window* const aw = &_windowData[_activeWindow];
 
     aw->start = b << 15;                                // 1800a9e6a/6d
     aw->end   = aw->start + h->uncompressedSize;        // 1800a9e71/79
@@ -395,26 +379,6 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
     }
     return true;                                        // 1800a9ebb
 }
-
-// ============================================================================
-// ?Read@CompressedStream@IO@@UEAA_NHPEAX@Z                   retail 0x1800aa780
-// ============================================================================
-//   while (n > 0) {
-//       if (!SetWindow(position)) return false;
-//       chunk = min(n, window.end - position);
-//       memcpy(dst, window.buffer + (position - window.start), chunk);
-//       position += chunk; n -= chunk; dst += chunk;
-//   }
-// Note the loop re-enters SetWindow every iteration with the UPDATED position,
-// which is what makes a read spanning several blocks work.
-extern "C" bool RtIo_CompressedStream_Read(CompressedStream* self, int32_t n, void* dst) {
-    return reinterpret_cast<IO::CompressedStream*>(self)
-               ->IO::CompressedStream::Read(n, dst);
-}
-
-int64_t RtIo_CompressedStreamGrowDelegations() { return g_swBranch.grow; }
-
-}  // namespace RtIo
 
 // ============================================================================
 // `IO::CompressedStream::Read` — B.3.4 block 4 (STREAMS), and SECTION D
@@ -449,19 +413,18 @@ namespace IO {
 // which is what makes a read spanning several blocks work.
 bool CompressedStream::Read(int n, void* dst) {
 
-    RtIo::CompressedStream* const self = reinterpret_cast<RtIo::CompressedStream*>(this);
-    uint8_t* out = static_cast<uint8_t*>(dst);
+    uint8_t* out = static_cast<uint8_t*>(dst);          // CAST-OK: byte_io
 
     while (n > 0) {                                     // 1800aa7a2 / 1800aa806
-        if (!RtIo::RtIo_CompressedStream_SetWindow(self, _position)) {  // 1800aa7b6
+        if (!SetWindow(_position)) {                    // 1800aa7b6
             return false;                               // 1800aa825
         }
         const RtIo::CompressedStreamWindow* const w =
-            &RtIo::Windows(this)[_activeWindow];        // 1800aa7bf
+            &_windowData[_activeWindow];                // 1800aa7bf
         int32_t chunk = n;                              // 1800aa7c3  ESI = EBP
         const int32_t pos = _position;                  // 1800aa7d5
         if (pos + n > w->end) chunk = w->end - pos;     // 1800aa7db/7df/7e1
-        std::memcpy(out, static_cast<const uint8_t*>(w->buffer) + (pos - w->start),
+        std::memcpy(out, w->buffer + (pos - w->start),
                     static_cast<size_t>(chunk));        // 1800aa7e3..f7
         _position += chunk;                             // 1800aa7fc
         n   -= chunk;                                   // 1800aa7ff

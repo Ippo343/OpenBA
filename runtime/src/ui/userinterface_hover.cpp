@@ -126,34 +126,10 @@ struct HoverSummary {
 };
 HoverSummary g_hoverSummary;
 
-// ---------------------------------------------------------------------------
-// One queued UI event, 0x30 bytes.
-//
-// UserInterface.h models this as an opaque 0x30-byte blob on purpose, and the
-// interior below is NOT a re-derivation: it is the field set the two push sites
-// in THIS file write, named from the same evidence userinterface_close.cpp:221
-// records. `pad24` is called out because RETAIL LEAVES IT UNINITIALISED at both
-// push sites in this file -- the stack record is never zeroed and no store
-// covers +0x24..+0x27. A diff oracle must not compare those four bytes
-// (reference_oracle_must_not_compare_unwritten_bytes.md), and this port must
-// not "tidy" them to zero either, because that would be a real behavioural
-// difference from retail in the bytes SetSize copies.
-// ---------------------------------------------------------------------------
-struct EventRecord {
-    void*    dialog;     // +0x00
-    void*    element;    // +0x08
-    int32_t  eventId;    // +0x10
-    int32_t  elementId;  // +0x14
-    void*    userData;   // +0x18
-    uint32_t dragId;     // +0x20
-    uint32_t pad24;      // +0x24  DELIBERATELY LEFT UNINITIALISED (see above)
-    void*    dragData;   // +0x28
-};
-static_assert(sizeof(EventRecord) == 0x30, "UI event record stride is 0x30");
-static_assert(offsetof(EventRecord, eventId)   == 0x10, "");
-static_assert(offsetof(EventRecord, elementId) == 0x14, "");
-static_assert(offsetof(EventRecord, dragId)    == 0x20, "");
-static_assert(offsetof(EventRecord, dragData)  == 0x28, "");
+// The queued UI event is `UI::Event` (UserInterface.h). `_pad24` is called out
+// because RETAIL LEAVES IT UNINITIALISED at both push sites in this file -- the
+// stack record is never zeroed and no store covers +0x24..+0x27 -- and this
+// port does not "tidy" it to zero either.
 
 // ---------------------------------------------------------------------------
 // ENDGAME B.3.1 step 2: the two release idioms inlined in BeginToolTip
@@ -221,30 +197,32 @@ bool UI::UserInterface::IsInsideClipRegion(int32_t x, int32_t y) const {
 void UI::UserInterface::EndDragDrop() {
     ++g_endDragEntries;
 
-    EventRecord rec;                        // deliberately NOT zeroed
+    Event rec;                              // deliberately NOT zeroed
     rec.dialog    = _dragDropDialog;        // 0x180120afa / 0x180120b04
     rec.element   = nullptr;                // 0x180120b21
     rec.eventId   = 0xe;                    // 0x180120b26  drag-drop CANCEL
-    rec.elementId = -1;                     // 0x180120b2e
-    rec.userData  = nullptr;                // 0x180120b36
-    rec.dragId    = _dragDropId;            // 0x180120b09 / 0x180120b10
-    rec.dragData  = _dragDropData;          // 0x180120b14 / 0x180120b3b
+    rec.arg14     = -1;                     // 0x180120b2e
+    rec.arg18     = 0;                      // 0x180120b36 } one QWORD
+    rec.arg1C     = 0;                      //             }
+    rec.arg20     = static_cast<int32_t>(_dragDropId);   // 0x180120b09 / 0x180120b10
+    rec.userData  = _dragDropData;          // 0x180120b14 / 0x180120b3b
     rtcoll::RtColl_ArraySetSizeFill_180033690(&_events, _events._size + 1, &rec);               // 0x180120b40
 
     _dragDropDialog = nullptr;                                        // 0x180120b45
 
-    void* const elem = _dragDropElement;                              // 0x180120b49
+    Element* const elem = _dragDropElement;                           // 0x180120b49
     if (elem) {
         ++g_endDragDestroyed;
         // Element vtable slot 0, flag 1 == deleting destructor (destroy AND
         // free): `delete` through the virtual destructor.
-        delete reinterpret_cast<Element*>(elem);                      // 0x180120b58  B.3.6 bridge
+        delete elem;                                                  // 0x180120b58
         _dragDropElement = nullptr;                                   // 0x180120b5a
     }
     _dragDropElement   = nullptr;                                     // 0x180120b5e
     _dragDropId        = 0;                                           // 0x180120b62
     _dragDropData      = nullptr;                                     // 0x180120b65
-    _dragDropUserData  = nullptr;                                     // 0x180120b69
+    _dragDropGrabX     = 0;                                           // 0x180120b69 } one QWORD
+    _dragDropGrabY     = 0;                                           //             }
     // +0x88 _dragDropActive is NOT cleared by retail. Left alone.
 }
 
@@ -281,14 +259,15 @@ void UI::DialogInstance::EndHover(UserInterface* ui) {
         ++g_endHoverPushed;
         _hovering = 0;                              // 0x180113d24
 
-        EventRecord rec;                            // deliberately NOT zeroed
+        UserInterface::Event rec;                   // deliberately NOT zeroed
         rec.dialog    = this;                       // 0x180113d2b
         rec.element   = nullptr;                    // 0x180113d45
         rec.eventId   = 0x11;                       // 0x180113d39 (a QWORD store,
-        rec.elementId = 0;                          //   covering +0x10 AND +0x14)
-        rec.userData  = nullptr;                    // 0x180113d4a
-        rec.dragId    = 0;                          // 0x180113d51
-        rec.dragData  = nullptr;                    // 0x180113d55
+        rec.arg14     = 0;                          //   covering +0x10 AND +0x14)
+        rec.arg18     = 0;                          // 0x180113d4a } one QWORD
+        rec.arg1C     = 0;                          //             }
+        rec.arg20     = 0;                          // 0x180113d51
+        rec.userData  = nullptr;                    // 0x180113d55
         rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events, ui->_events._size + 1, &rec);   // 0x180113d5a
     }
 
@@ -337,10 +316,8 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
                                      int32_t x, int32_t y) {
     ++g_tipEntries;
     UserInterface* const self = this;
-    void** const dlgPtr  = reinterpret_cast<void**>(dialog);
-    void** const elemPtr = reinterpret_cast<void**>(element);
 
-    Element* const elem = reinterpret_cast<Element*>(*elemPtr);       // 0x18012088e
+    Element* const elem = element->Get();                              // 0x18012088e
     if (elem->_toolTipDialog == nullptr)      { ++g_tipRejected; return; }  // +0x40
     if (elem->_toolTip.table == nullptr)      { ++g_tipRejected; return; }  // +0x48
     if (elem->_toolTip.index < 0)             { ++g_tipRejected; return; }  // +0x50
@@ -349,8 +326,7 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
     // --- close whatever tooltip is already up (always, see the quirk above) --
     if (self->_toolTipDialog != nullptr) {                            // 0x1801208be
         ++g_tipClosedPrev;
-        Object::InternalPtr<DialogInstance> local(                    // 0x1801208d3
-            static_cast<DialogInstance*>(self->_toolTipDialog));
+        Object::InternalPtr<DialogInstance> local(self->_toolTipDialog); // 0x1801208d3
         CloseDialog(&local);                                          // 0x1801208de
         self->_toolTipDialog = nullptr;                               // 0x1801208e3
         self->_toolTipOwner  = nullptr;                               // 0x1801208e7
@@ -367,9 +343,11 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
     // element, userData = 0, flags = 0, then the stamp — spelt as the real
     // constructor (the DialogInstance ctor door and the minted
     // `??_7ToolTipDialog` stamp are retired).
-    void* tip = RtUi_ToolTipDialog_OperatorNew(0xc0);                   // 0x1801208f0
-    if (tip) {
-        ::new (tip) ToolTipDialog(                                     // 0x180120907..0x18012092e
+    void* const mem = RtUi_ToolTipDialog_OperatorNew(0xc0);            // 0x1801208f0
+    ToolTipDialog* tip = nullptr;
+    if (mem) {
+        // B.4 LEFT: `Element::_toolTipDialog` (+0x40) is `void*` (R-UI-a).
+        tip = ::new (mem) ToolTipDialog(                               // 0x180120907..0x18012092e
             self, static_cast<const Dialog*>(elem->_toolTipDialog),
             *dialog, Object::InternalPtr<Element>(elem));
     } else {
@@ -411,30 +389,28 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
         }
         // `ToolTipDialog::SetText` (0x1800dab00) — non-virtual member of the
         // real class (block B).
-        reinterpret_cast<UI::ToolTipDialog*>(self->_toolTipDialog)->SetText(text);  // B.3.6 bridge
+        self->_toolTipDialog->SetText(text);
     }                                                                   // 0x1801209dc
 
     // --- position it, open it, queue it -------------------------------------
-    self->_toolTipOwner = *dlgPtr;                                      // 0x180120a05
+    self->_toolTipOwner = dialog->Get();                                // 0x180120a05
 
     if (self->_toolTipDialog != nullptr) {                              // 0x180120a0c
         // y is offset UP by the tooltip root element's laid-out height, so the
         // tip sits ABOVE the cursor. element_vtable.cpp:761 does the same sum
-        // for the tooltip MOVE arm, from the same two offsets.
-        void* const root = *reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(self->_toolTipDialog) + 0x50);   // 0x180120a15
-        const int32_t h = *reinterpret_cast<const int32_t*>(
-            reinterpret_cast<const uint8_t*>(root) + 0x64);             // 0x180120a1d
+        // for the tooltip MOVE arm, from the same two offsets. `_root` (+0x50)
+        // through the dialog's own one-load accessor (0x180045580).
+        const int32_t h = self->_toolTipDialog->GetRoot()->_layoutHeight;   // 0x180120a15 / 0x180120a1d
         // `DialogInstance::SetUpperLeft` (0x180114a60) — non-virtual member.
-        reinterpret_cast<DialogInstance*>(self->_toolTipDialog)         // B.3.6 bridge
-            ->SetUpperLeft(x, y - h, false);                            // 0x180120a27
+        self->_toolTipDialog->SetUpperLeft(x, y - h, false);            // 0x180120a27
     }
 
-    void* queued = self->_toolTipDialog;                                // 0x180120a2c
+    ToolTipDialog* const queued = self->_toolTipDialog;                 // 0x180120a2c
     // vtable slot 4 (byte offset 0x20) is DialogInstance::OnOpened — VIRTUAL,
     // dispatched through the stamped ToolTipDialog table.
-    reinterpret_cast<DialogInstance*>(queued)->OnOpened();              // 0x180120a37  B.3.6 bridge
+    queued->OnOpened();                                                 // 0x180120a37
 
+    const DialogInstancePtr fill = queued;
     rtcoll::RtColl_ArraySetSizeFill_18007a0d0(&self->_addDialogs,
-                        self->_addDialogs._size + 1, &queued);          // 0x180120a47
+                        self->_addDialogs._size + 1, &fill);            // 0x180120a47
 }

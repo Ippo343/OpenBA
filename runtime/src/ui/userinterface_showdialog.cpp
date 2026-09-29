@@ -95,6 +95,7 @@
 #include "ui/DialogInstance.h"
 #include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K5): Engine::MainLoop::Frame
 #include "system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "system/Value.h"      // System::Time
 #include "system/MemoryAllocator.h"
 #include "collection/Collection.h"
 
@@ -104,10 +105,9 @@
 // into MainLoop's arrays as the registered DOOR functions (the (context,
 // userData) shape MainLoop calls — and what ResolveExport returned for them,
 // since both are always registered).
-extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);
 extern "C" void  RtUi_UserInterface_Dtor(UI::UserInterface* self);
-extern "C" void  RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui);
-extern "C" void  RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui);
+extern "C" void  RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, void* ui);
+extern "C" void  RtUi_UserInterface_DrawStandAloneUI(Video::Context* videoContext, void* ui);
 
 namespace {
 
@@ -126,35 +126,23 @@ namespace {
 //                rtcoll::RtColl_ArraySetSizeFill_18007a0d0)
 //   0x1800c7a50 / 0x1800c7ad0  MemoryAllocator::MemAlloc / MemFree
 
-// --- Object layout ----------------------------------------------------------
-constexpr uintptr_t kUI_Dialogs      = 0x00;   // list head; node->dialog +0x00, node->next +0x10
-constexpr uintptr_t kUI_AddDialogs   = 0x28;   // Array<InternalPtr<DialogInstance>>; count at +0x08
-constexpr uintptr_t kUI_InheritFirst = 0x90;   // eight qwords copied verbatim, +0x90..+0xc8
-constexpr int       kUI_InheritCount = 8;
-constexpr size_t    kUI_Size         = 0x128;
+// The one retail sizeof the whole class rests on: `MOV EDX,0x128` before the
+// nested UI's Allocate (0x18011fd10).
+static_assert(sizeof(UI::UserInterface) == 0x128, "the nested UI's Allocate size");
 
-constexpr uintptr_t kDlg_Ui     = 0x10;
-constexpr uintptr_t kDlg_Flags  = 0x20;
-constexpr uintptr_t kDlg_Result = 0x24;
-
-constexpr uintptr_t kML_DrawArr = 0x80, kML_DrawCnt = 0x88, kML_DrawCap = 0x8c;
-constexpr uintptr_t kML_UpdArr  = 0x90, kML_UpdCnt  = 0x98, kML_UpdCap  = 0x9c;
-
-struct Entry { void* fn; void* ctx; };
+// MainLoop's `_postDraw` (+0x80) / `_postUpdate` (+0x90) element.
+using Entry = RtEngine::MainLoopCallback;
+using CallbackArray = Collection::Array<RtEngine::MainLoopCallback>;
 
 // Retail inlines `EnterCriticalSection(alloc+0x640); Allocate(...);
 // LeaveCriticalSection(...)` six times in this body;
 // `System::MemoryAllocator::MemAlloc` (0x1800c7a50) and `MemFree` (0x1800c7ad0)
 // ARE that sequence -- lane UI1 decompiled and compared them.
-void* MemAllocS(uint64_t size, int align) {
-    return System::MemoryAllocator::MemAlloc(size, align);
-}
 void MemFreeS(void* p) {
     System::MemoryAllocator::MemFree(p);
 }
 
-// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
-void**        MainLoopSlot()  { return reinterpret_cast<void**>(&::Engine::MainLoop::_singleton); }
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
 const double* SecondsPerTick(){ return &::System::Timer::_secondsPerTick; }
 
 // Retail's inlined callback-array append, transcribed.
@@ -177,25 +165,23 @@ const double* SecondsPerTick(){ return &::System::Timer::_secondsPerTick; }
 //   for (i = start; i < newCount; ++i)
 //       arr[i] = (i < oldCount) ? old[i] : entry;
 //   if (old != arr && old) MemFree(old)
-void AppendCallback(uintptr_t ml, uintptr_t arrOff, uintptr_t cntOff, uintptr_t capOff,
-                    const Entry& entry) {
-    int oldCount = *reinterpret_cast<int*>(ml + cntOff);
+void AppendCallback(CallbackArray& arr, const Entry& entry) {
+    int oldCount = arr._size;
     int newCount = oldCount + 1;
     if (newCount == oldCount) return;
 
-    Entry* old = *reinterpret_cast<Entry**>(ml + arrOff);
-    *reinterpret_cast<int*>(ml + cntOff) = newCount;
+    Entry* old = arr._data;
+    arr._size = newCount;
 
-    if (newCount > *reinterpret_cast<int*>(ml + capOff)) {
-        *reinterpret_cast<int*>(ml + capOff) = newCount;
+    if (newCount > arr._capacity) {
+        arr._capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0)
-            *reinterpret_cast<int*>(ml + capOff) = newCount * 3;
-        int cap = *reinterpret_cast<int*>(ml + capOff);
-        *reinterpret_cast<Entry**>(ml + arrOff) =
-            reinterpret_cast<Entry*>(MemAllocS((uint64_t)cap << 4, 8));
+            arr._capacity = newCount * 3;
+        int cap = arr._capacity;
+        arr._data = static_cast<Entry*>(System::MemoryAllocator::MemAlloc((uint64_t)cap << 4, 8));
     }
 
-    Entry* cur = *reinterpret_cast<Entry**>(ml + arrOff);
+    Entry* cur = arr._data;
     int i = (old == cur) ? oldCount : 0;
     for (; i < newCount; ++i) {
         Entry* dst = cur ? (cur + i) : nullptr;
@@ -209,25 +195,24 @@ void AppendCallback(uintptr_t ml, uintptr_t arrOff, uintptr_t cntOff, uintptr_t 
 
 // Retail's inlined removal-and-compaction, 0x180120179.. and 0x180120210..
 // Scans for every (fn, ctx) match and shifts the tail down over it.
-void RemoveCallback(uintptr_t ml, uintptr_t arrOff, uintptr_t cntOff,
-                    void* fn, void* ctx) {
+void RemoveCallback(CallbackArray& arr, void* fn, void* ctx) {
     int i = 0;
-    int count = *reinterpret_cast<int*>(ml + cntOff);
+    int count = arr._size;
     if (count <= 0) return;
     do {
-        Entry* arr = *reinterpret_cast<Entry**>(ml + arrOff);
-        if (arr && arr[i].fn == fn && arr[i].ctx == ctx) {
+        Entry* a0 = arr._data;
+        if (a0 && a0[i]._func == fn && a0[i]._context == ctx) {
             int j = i;
-            while (j + 1 < *reinterpret_cast<int*>(ml + cntOff)) {
-                Entry* a = *reinterpret_cast<Entry**>(ml + arrOff);
+            while (j + 1 < arr._size) {
+                Entry* a = arr._data;
                 if (a) a[j] = a[j + 1];
                 ++j;
             }
-            *reinterpret_cast<int*>(ml + cntOff) -= 1;
+            arr._size -= 1;
             --i;
         }
         ++i;
-        count = *reinterpret_cast<int*>(ml + cntOff);
+        count = arr._size;
     } while (i < count);
 }
 
@@ -258,53 +243,49 @@ void DefectNoop(void*, void*) {}
 // Zero in every shipping configuration; nothing but the self-test writes it.
 extern "C" { int g_RtShowDialogDefect = 0; }
 
-// ENDGAME B.3.6 block E: the body is the member. `dialog` is the ADDRESS of the
-// caller's InternalPtr (RULE B6-11: 0x18011fd32 `MOV R14,RDX`, then
-// `MOV RAX,[R14]`), spelled `dialogPtr` below as the port always spelled it.
+// ENDGAME B.3.6 block E: the body is the member. `dialogArg` is the ADDRESS of
+// the caller's InternalPtr (RULE B6-11: 0x18011fd32 `MOV R14,RDX`, then
+// `MOV RAX,[R14]`).
 int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialogArg) {
-    void** const dialogPtr = reinterpret_cast<void**>(dialogArg);
-    uintptr_t outer = reinterpret_cast<uintptr_t>(this);
-
     // 1. Allocate + construct the nested UserInterface. Alignment 4 (MOV R8D,4).
     //    The ctor is a DOOR (B4b-2), called as one.
-    void* nested = MemAllocS(kUI_Size, 4);
+    UserInterface* nested = static_cast<UserInterface*>(
+        System::MemoryAllocator::MemAlloc(sizeof(UserInterface), 4));
     if (nested) {
         // retail takes the RETURN, not the argument
-        nested = RtUi_UserInterface_Ctor(static_cast<UserInterface*>(nested));
+        nested = RtUi_UserInterface_Ctor(nested);
     }
-    uintptr_t n = reinterpret_cast<uintptr_t>(nested);
 
-    // 2. Inherit +0x90..+0xc8. Retail does this with EIGHT unconditional
-    //    qword moves -- including on the path where the allocation FAILED and
-    //    `nested` is null. That is an unguarded null store in the shipped code
-    //    and it stays unguarded here (CLAUDE.md: don't "fix" a faithful crash).
-    for (int i = 0; i < kUI_InheritCount; ++i) {
-        *reinterpret_cast<uint64_t*>(n + kUI_InheritFirst + i * 8) =
-            *reinterpret_cast<uint64_t*>(outer + kUI_InheritFirst + i * 8);
+    // 2. Inherit +0x90..+0xc8 (`_audioScene` and the seven `_sounds`). Retail
+    //    does this with EIGHT unconditional qword moves -- including on the path
+    //    where the allocation FAILED and `nested` is null. That is an unguarded
+    //    null store in the shipped code and it stays unguarded here (CLAUDE.md:
+    //    don't "fix" a faithful crash).
+    nested->_audioScene = _audioScene;
+    for (int i = 0; i < 7; ++i) {
+        nested->_sounds[i] = _sounds[i];
     }
 
     // 3. Hand the dialog to the nested UI and clear its DeleteOnClose.
-    uintptr_t dlg = reinterpret_cast<uintptr_t>(*dialogPtr);
-    *reinterpret_cast<void**>(dlg + kDlg_Ui) = nested;
-    *reinterpret_cast<uint32_t*>(dlg + kDlg_Flags) |= 0x20;
+    DialogInstance* const dlg = dialogArg->Get();
+    dlg->_ui = nested;                                                   // +0x10
+    dlg->_flags |= 0x20;                                                 // +0x20
     if (g_RtShowDialogDefect == 3)
-        *reinterpret_cast<uint32_t*>(dlg + kDlg_Flags) |= 0x80000000u;   // control
+        dlg->_flags |= 0x80000000u;                                      // control
 
     // 4. Dialog vtable slot 4 (+0x20). Retail re-reads the InternalPtr, stores
     //    the dialog into a stack slot, and calls through it with RCX = dialog.
     //    ENDGAME B.3.6: slot 4 is `DialogInstance::OnOpened` — a VIRTUAL call,
     //    dispatched through the dialog's own (exe hand-built) table.
-    void* dialog = *dialogPtr;
-    reinterpret_cast<DialogInstance*>(dialog)->OnOpened();          // B.3.6 bridge
+    DialogInstance* const opened = dialogArg->Get();
+    opened->OnOpened();
+    const DialogInstancePtr dialog = opened;
 
     // 5. Push the dialog into nested->_addDialogs. `&dialog` is the by-value
     //    InternalPtr the stack slot from step 4 holds -- retail passes that same
     //    slot (LEA R8,[RSP+0x80]).
-    {
-        void* arr = reinterpret_cast<void*>(n + kUI_AddDialogs);
-        int   cnt = *reinterpret_cast<int*>(n + kUI_AddDialogs + 8);
-        rtcoll::RtColl_ArraySetSizeFill_18007a0d0(arr, cnt + 1, &dialog);
-    }
+    rtcoll::RtColl_ArraySetSizeFill_18007a0d0(&nested->_addDialogs,
+                                              nested->_addDialogs._size + 1, &dialog);
 
     // 6. Update(nested, Time(0)). Retail computes `(int64)(0.0 / _secondsPerTick)`
     //    -- a DIVSD by a loaded double, not a constant zero. 0.0/x is 0 for every
@@ -313,69 +294,57 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     //    Transcribed as the division so that degenerate case behaves alike.
     {
         double spt = *SecondsPerTick();
-        int64_t t = (int64_t)(0.0 / spt);
-        // `System::Time` is one int64 tick count; Update is a member now.
-        static_cast<UserInterface*>(nested)->Update(*reinterpret_cast<const System::Time*>(&t));
+        System::Time t;
+        t._ticks = (int64_t)(0.0 / spt);
+        nested->Update(t);
     }
 
     // 7 + 8. Register the draw and update callbacks, in that order. The entries
     //    are the registered DOORS (see the includes).
     void* drawFn = (void*)&RtUi_UserInterface_DrawStandAloneUI;
     void* updFn  = (void*)&RtUi_UserInterface_UpdateStandAloneUI;
-    void* ml     = *MainLoopSlot();
-    uintptr_t m  = reinterpret_cast<uintptr_t>(ml);
 
-    AppendCallback(m, kML_DrawArr, kML_DrawCnt, kML_DrawCap, Entry{ drawFn, nested });
+    AppendCallback(::Engine::MainLoop::_singleton->_postDraw, Entry{ drawFn, nested });
     // Retail re-reads MainLoop::_singleton before the second append. Kept.
-    ml = *MainLoopSlot();
-    m  = reinterpret_cast<uintptr_t>(ml);
-    AppendCallback(m, kML_UpdArr, kML_UpdCnt, kML_UpdCap, Entry{ updFn, nested });
+    AppendCallback(::Engine::MainLoop::_singleton->_postUpdate, Entry{ updFn, nested });
 
     // 9. The nested pump. Two exits: the dialog leaving nested->_dialogs, and
     //    Frame() returning true (quit). The dialog pointer is reloaded from the
     //    caller's InternalPtr on every iteration.
     {
         for (;;) {
-            void* want = *dialogPtr;
-            void* node = *reinterpret_cast<void**>(n + kUI_Dialogs);
+            void* want = dialogArg->Get();
             bool present = false;
-            while (node) {
-                if (*reinterpret_cast<void**>(node) == want) { present = true; break; }
-                node = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x10);
+            for (auto* node = nested->_dialogs._head; node; node = node->next) {
+                if (node->element == want) { present = true; break; }
             }
             if (!present) break;
-            void* cur = *MainLoopSlot();
-            if (reinterpret_cast< ::Engine::MainLoop*>(cur)->Frame(true)) break;  // B.3.7 bridge
+            if (::Engine::MainLoop::_singleton->Frame(true)) break;
         }
     }
 
     // 10. Un-register both callbacks (draw first, then update -- retail's order).
-    ml = *MainLoopSlot();
-    m  = reinterpret_cast<uintptr_t>(ml);
-    RemoveCallback(m, kML_DrawArr, kML_DrawCnt, drawFn, nested);
-    ml = *MainLoopSlot();
-    m  = reinterpret_cast<uintptr_t>(ml);
-    RemoveCallback(m, kML_UpdArr, kML_UpdCnt, updFn, nested);
+    RemoveCallback(::Engine::MainLoop::_singleton->_postDraw, drawFn, nested);
+    RemoveCallback(::Engine::MainLoop::_singleton->_postUpdate, updFn, nested);
 
     // 11. Destroy and free the nested UI.
-    RtUi_UserInterface_Dtor(static_cast<UserInterface*>(nested));   // the dtor DOOR (B4b-2)
+    RtUi_UserInterface_Dtor(nested);                             // the dtor DOOR (B4b-2)
     MemFreeS(nested);
 
     if (g_RtShowDialogDefect == 1) {                                     // control
-        ml = *MainLoopSlot();
-        m  = reinterpret_cast<uintptr_t>(ml);
         // A no-op, NOT drawFn/updFn: a leaked real entry would have retail's
         // Frame calling UpdateStandAloneUI on a freed nested UI every tick, and
         // a control that crashes the subject measures nothing.
         void* noop = (void*)&DefectNoop;
-        AppendCallback(m, kML_DrawArr, kML_DrawCnt, kML_DrawCap, Entry{ noop, nullptr });
-        AppendCallback(m, kML_UpdArr,  kML_UpdCnt,  kML_UpdCap,  Entry{ noop, nullptr });
+        AppendCallback(::Engine::MainLoop::_singleton->_postDraw,   Entry{ noop, nullptr });
+        AppendCallback(::Engine::MainLoop::_singleton->_postUpdate, Entry{ noop, nullptr });
     }
 
-    // 12. The result, re-read through the caller's InternalPtr.
+    // 12. The result (`_result`, +0x24), re-read through the caller's InternalPtr.
+    // B.4 LEFT: the defect-2 control reads the low dword of `_parent` (+0x28),
+    // which is no field.
     if (g_RtShowDialogDefect == 2)                                       // control
         return *reinterpret_cast<int*>(
-            reinterpret_cast<uintptr_t>(*dialogPtr) + 0x28);
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uintptr_t>(*dialogPtr) + kDlg_Result);
+            reinterpret_cast<uintptr_t>(dialogArg->Get()) + 0x28);
+    return dialogArg->Get()->_result;
 }

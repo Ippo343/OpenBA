@@ -24,13 +24,10 @@
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"   // RtSystem::String, RtString_ReleaseInline (Wave 2, lane String)
-#include "../system/pod_bridge.h"
+#include "../system/pod_bridge.h"             // Sys(): _savePath stays the POD (H5)
 #include "../collection/avl_trees.h"          // rtavl::StringMapInsert
 #include "../../types/system/Configuration.h"  // RtSystem_ConfigMap_Find
 
-using RtSystem::String;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
-using RtIo::Persistence;
 using RtIo::SettingsMapNode;
 
 namespace {
@@ -40,39 +37,32 @@ namespace {
 // rather than reimplemented: they are Collection::Set internals shared across
 // the whole DLL, not something this lane owns.
 //
-// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`,
-// deliberately. `Persistence` (+0x00 root / +0x08 count / +0x0C pad) IS a real
+// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`.
+// `Persistence` (+0x00 root / +0x08 count / +0x0C pad) IS a real
 // `Collection::Set<SettingsMapNode>` header, and `Insert(const T&)` would
 // express Map_Insert's shape exactly (new node vs. existing-node-untouched,
-// matching Persistence::Set's own comment below). What blocks it: the class's
-// `AllocNode` copy-constructs the element in place, so the node's String
-// fields would need to be the REAL `System::String` (proper AddRef on
-// insert) — but `SettingsMapNode` is declared with the old `RtSystem::String`
-// POD on purpose (Persistence.h: "a PREFIX view only... this lane never
-// walks, inserts, or rebalances a node by hand"), and that field type is
-// shared with persistence_startup.cpp / closure_batch2b_win.cpp /
-// engine/singleton_ctors.cpp, none of which are in this batch. Retyping
-// `SettingsMapNode` here to unblock one Insert call would change what those
-// files see. The member that would be needed is
-// `Collection::Set<SettingsMapNode, AVLCompare, DefaultAllocator,
-// System::String>::Insert(element)` (Key = the leading String, not the
-// 16-byte pair) once `SettingsMapNode`'s two fields are `System::String`.
+// matching Persistence::Set's own comment below). What blocks it:
+// `IO::Persistence` holds that header as three loose fields (it has no
+// constructor -- engine/singleton_ctors.cpp builds it), so the collection
+// bodies are handed `this` as the untyped Set they are.
 //
-// B3R RT-IO: both are called BY NAME now. The comments that stood here said the
-// two by-address resolves "asked the DLL"; they did not -- ResolveAddr consults
-// the port registry first, and these addresses have always answered with our
-// own bodies: 0x18002ace0 is RtSystem_ConfigMap_Find
+// B3R RT-IO: both are called BY NAME: 0x18002ace0 is RtSystem_ConfigMap_Find
 // (runtime/src/system/configuration.cpp), 0x18002a090 is rtavl::StringMapInsert
-// (runtime/src/collection/avl_trees.cpp).
-void* CallMapFind(void* self, const System::String* key) {
-    return RtSystem_ConfigMap_Find(                                   // Map_Find, retail 0x18002ace0
-        self, reinterpret_cast<const RtSystem::String*>(key));        // B.3.x bridge
+// (runtime/src/collection/avl_trees.cpp). The node each hands back IS
+// `RtIo::SettingsMapNode` (Persistence.h).
+const SettingsMapNode* CallMapFind(const IO::Persistence* self, const System::String& key) {
+    return static_cast<const SettingsMapNode*>(                       // LEFT: R-CORE's void* result
+        RtSystem_ConfigMap_Find(                                      // Map_Find, retail 0x18002ace0
+            const_cast<IO::Persistence*>(self),                       // LEFT: R-CORE's non-const map
+            reinterpret_cast<const RtSystem::String*>(&key)));        // LEFT: R-CORE's POD key
 }
-void* CallMapInsert(void* map, void** outNode, System::String* key, System::String* value) {
-    return rtavl::StringMapInsert(                                    // Map_Insert, retail 0x18002a090
-        static_cast<rtsetavl::Set*>(map),                             // B.3.x bridge
-        reinterpret_cast<rtsetavl::Node**>(outNode),
-        &key->_data, &value->_data);
+SettingsMapNode* CallMapInsert(void* map, const System::String& key,
+                               const System::String& value) {
+    rtsetavl::Node* node = nullptr;
+    rtavl::StringMapInsert(                                           // Map_Insert, retail 0x18002a090
+        static_cast<rtsetavl::Set*>(map),                             // LEFT: see above
+        &node, &key._data, &value._data);
+    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: set_avl.h's node keeps its element opaque
 }
 
 // Retail's key encoding: bare concatenation, no separator. "Game" + "StatusIconEnable"
@@ -122,19 +112,19 @@ bool RetailValueIsTrue(const char* value) {
 // the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so B34_BRIEFS
 // section A.1's re-entry hazard cannot arise.
 bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, int* out) {
-    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);  // B4 FORWARD: 1 outside caller(s)
 }
 
 bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out) {
-    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);  // B4 FORWARD: 2 outside caller(s)
 }
 
 void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, int value) {
-    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
+    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);  // B4 FORWARD: 1 outside caller(s)
 }
 
 void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value) {
-    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
+    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);  // B4 FORWARD: 1 outside caller(s)
 }
 
 // ============================================================================
@@ -163,14 +153,13 @@ bool Persistence::Get(const char* section, const char* key, int& outRef) const {
     int* const out = &outRef;
 
     System::String k = ::MakeSettingsKey(section, key);
-    void* node = ::CallMapFind(const_cast<Persistence*>(this), &k);
-    bool ours = (node != nullptr);
+    const SettingsMapNode* n = ::CallMapFind(this, k);
+    bool ours = (n != nullptr);
     int oursVal = *out;   // retail only ever writes *param_3 when found; preserve the caller's value otherwise
     if (ours) {
-        auto* n = static_cast<RtIo::SettingsMapNode*>(node);
         // FUN_18007f034 in retail is a bare tail-jump to CRT strtol(s, 0, 10)
         // — no need to call the DLL for it, this is not engine-specific.
-        oursVal = static_cast<int>(std::strtol(n->value.data ? n->value.data : "", nullptr, 10));
+        oursVal = static_cast<int>(std::strtol(n->value._data ? n->value._data : "", nullptr, 10));
     }
     // ~k is retail's release.
 
@@ -186,12 +175,11 @@ bool Persistence::Get(const char* section, const char* key, bool& outRef) const 
     bool* const out = &outRef;
 
     System::String k = ::MakeSettingsKey(section, key);
-    void* node = ::CallMapFind(const_cast<Persistence*>(this), &k);
-    bool ours = (node != nullptr);
+    const SettingsMapNode* n = ::CallMapFind(this, k);
+    bool ours = (n != nullptr);
     bool oursVal = *out;
     if (ours) {
-        auto* n = static_cast<RtIo::SettingsMapNode*>(node);
-        oursVal = ::RetailValueIsTrue(n->value.data);
+        oursVal = ::RetailValueIsTrue(n->value._data);
     }
     // ~k is retail's release.
 
@@ -212,9 +200,7 @@ void Persistence::Set(const char* section, const char* key, int value) {
     System::String valStr = System::String::Format("%i", value);
     System::String keyStr = ::MakeSettingsKey(section, key);
 
-    void* outNode = nullptr;
-    ::CallMapInsert(this, &outNode, &keyStr, &valStr);
-    auto* node = static_cast<RtIo::SettingsMapNode*>(outNode);
+    SettingsMapNode* const node = ::CallMapInsert(this, keyStr, valStr);
 
     // Retail's asymmetric release-then-adopt, transcribed exactly
     // (0x1800b80c0 + 0x50..0x90): Map_Insert only installs the value on a
@@ -222,11 +208,9 @@ void Persistence::Set(const char* section, const char* key, int value) {
     // == valStr in that case, so this branch is skipped); on an EXISTING
     // node Map_Insert leaves the old value untouched and Persistence::Set
     // itself must swap it. This IS `String::operator=` (0x1800c9810): the
-    // same guard-on-buffer, release, adopt sequence. `value` is a
-    // `RtSystem::String` member of `SettingsMapNode`, not yet converted, so
-    // it is reached through the one transitional bridge.
-    if (node->value.data != valStr._data) {
-        ::Sys(node->value) = valStr;
+    // same guard-on-buffer, release, adopt sequence.
+    if (node->value._data != valStr._data) {
+        node->value = valStr;
     }
     // ~keyStr, ~valStr are retail's two releases.
 }
@@ -240,14 +224,11 @@ void Persistence::Set(const char* section, const char* key, bool value) {
     System::String valStr = System::String::Format("%s", value ? "true" : "false");
     System::String keyStr = ::MakeSettingsKey(section, key);
 
-    void* outNode = nullptr;
-    ::CallMapInsert(this, &outNode, &keyStr, &valStr);
-    auto* node = static_cast<RtIo::SettingsMapNode*>(outNode);
+    SettingsMapNode* const node = ::CallMapInsert(this, keyStr, valStr);
 
-    // Same shape as Set(int) above -- `String::operator=` on the not-yet-
-    // converted `SettingsMapNode::value`, through the transitional bridge.
-    if (node->value.data != valStr._data) {
-        ::Sys(node->value) = valStr;
+    // Same shape as Set(int) above -- `String::operator=`.
+    if (node->value._data != valStr._data) {
+        node->value = valStr;
     }
     // ~keyStr, ~valStr are retail's two releases.
 }
@@ -266,7 +247,7 @@ System::String Persistence::GetSavePath() const {
     // construction, so this is still exactly one AddRef. `_savePath` is a
     // `RtSystem::String` member (the header says why it stays a POD), reached
     // through the one transitional bridge.
-    return System::String(::Sys(_savePath));
+    return System::String(RtSystem::Sys(_savePath));
 }
 
 }  // namespace IO

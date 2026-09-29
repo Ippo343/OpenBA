@@ -324,7 +324,7 @@ public:
     int32_t _scissorW;                           // +0x28
     int32_t _scissorH;                           // +0x2c
 
-    void*   _context;                            // +0x30  Video::Context*
+    Video::Context* _context;                    // +0x30
     uint8_t _deferring;                          // +0x38
     uint8_t _pad39[7];                           // +0x39
 

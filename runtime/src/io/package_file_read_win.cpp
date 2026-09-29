@@ -225,17 +225,9 @@ void RtSystem_Filename_AdjustDelimiters(Filename* self);
 // to reach the shipped body by accident
 // (reference_bypassed_port_needs_a_source_checker.md).
 namespace RtIO {
-extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem*, FileInfo*,
-                                              const RtSystem::Filename*);   // 0x1800ac880
-extern "C" bool      RtIo_FileSystem_ReadFile(FileSystem*, FileInfo*,
-                                              int32_t, void*);              // 0x1800ace00
 extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo*, const FileInfo*);      // 0x18000c200
 }  // namespace RtIO
 
-namespace RtIo {
-extern "C" bool RtIo_CompressedStream_Open(CompressedStream*, Stream*, int32_t); // 0x1800aa560
-extern "C" bool RtIo_CompressedStream_Read(CompressedStream*, int32_t, void*);   // 0x1800aa780
-}  // namespace RtIo
 
 namespace RtIO {
 
@@ -246,10 +238,6 @@ using RtSystem::RtString_ReleaseInline;
 using RtSystem::RtString_SetLength;
 using RtSystem::RtSystem_Filename_AdjustDelimiters;
 
-using RtIo::CompressedStream;
-using RtIo::CompressedMemoryStream;
-using RtIo::MemoryStream;
-using RtIo::Stream;
 
 namespace {
 
@@ -261,21 +249,12 @@ constexpr size_t kOutCap        = 0x800;    // = 0x860 - 0x60
 
 // `?_singleton@FileSystem@IO@@0PEAV12@EA`  (0x1801fc6a8) — the global retail
 // loads into RSI at 0x1800b46e8 and RELOADS at 0x1800b478b.
-FileSystem** FileSystemSingletonCell() {
-    return reinterpret_cast<FileSystem**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-}
 
 // B3R RT-IO: the per-file MemAlloc / MemFree (0x1800c7a50 / 0x1800c7ad0) and
 // Array SetSize / SetSizeFill (0x180029510, 0x180029630, 0x1800298f0) helpers
 // that stood here are direct calls: System::MemoryAllocator::MemAlloc /
 // MemFree and the rtcoll bodies by name.
 
-// A Stream virtual through the OBJECT's vtable, exactly as retail dispatches it
-// at 0x1800b603e (`MOV RAX,[RBP-0x58] ; CALL qword ptr [RAX+0x38]`). B3X W0:
-// the virtual call by name.
-void CallStreamClose(MemoryStream* ms) {
-    reinterpret_cast<IO::MemoryStream*>(ms)->Close();   // slot 7 +0x38 (B.3.x bridge)
-}
 
 // ---- §94: the two jump-table bodies ---------------------------------------
 
@@ -381,12 +360,14 @@ bool RawTerminatorInRead(const uint8_t* buf, int32_t len) {
 // Read a length, read that many BYTES, then decode `2 * len` of them as
 // UTF-16LE and re-encode to UTF-8 into the overlapping output buffer.
 // Returns whether the result is deterministic (§95).
-bool ReadStringUtf16(CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
+// `cs->IO::CompressedStream::Read` is retail's direct CALL 0x1800aa780 (a
+// qualified, non-virtual call, as the door that stood here was).
+bool ReadStringUtf16(IO::CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
                      String* tmp) {
     int32_t len = 0;                                       // 1800b4e22
-    RtIo::RtIo_CompressedStream_Read(cs, 4, &len);         // 1800b4e2e group
+    cs->IO::CompressedStream::Read(4, &len);               // 1800b4e2e group
     if (len > 0)                                           // 1800b4eba  TEST/JLE
-        RtIo::RtIo_CompressedStream_Read(cs, len, buf860); // 1800b4eb3 group
+        cs->IO::CompressedStream::Read(len, buf860);       // 1800b4eb3 group
 
     const bool deterministic = (len <= 0) || Utf16TerminatorInRead(buf860, len);
 
@@ -420,28 +401,17 @@ bool ReadStringUtf16(CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
 // ---- PATH B's string group (0x1800b559f and its two clones) ----------------
 // Read a length, read that many bytes STRAIGHT into the output buffer. No
 // transcode, and — note — no terminator is written either.
-bool ReadStringRaw(CompressedStream* cs, uint8_t* buf60, String* tmp) {
+bool ReadStringRaw(IO::CompressedStream* cs, uint8_t* buf60, String* tmp) {
     int32_t len = 0;                                       // 1800b55a2
-    RtIo::RtIo_CompressedStream_Read(cs, 4, &len);         // 1800b55ae group
+    cs->IO::CompressedStream::Read(4, &len);               // 1800b55ae group
     if (len > 0)                                           // 1800b5633  TEST/JLE
-        RtIo::RtIo_CompressedStream_Read(cs, len, buf60);  // 1800b562f group
+        cs->IO::CompressedStream::Read(len, buf60);        // 1800b562f group
 
     const bool deterministic = (len > 0) && RawTerminatorInRead(buf60, len);
     BuildStringFrom(buf60, tmp);
     return deterministic;
 }
 
-// ---- the oracle's field-by-field comparison -------------------------------
-int32_t ArrSize(const void* obj, size_t off) {
-    int32_t v; std::memcpy(&v, static_cast<const uint8_t*>(obj) + off, 4); return v;
-}
-void* ArrData(const void* obj, size_t off) {
-    void* v; std::memcpy(&v, static_cast<const uint8_t*>(obj) + off, 8); return v;
-}
-bool TextEqual(const char* a, const char* b) {
-    if (a == nullptr || b == nullptr) return a == b;
-    return std::strcmp(a, b) == 0;
-}
 
 }  // namespace
 
@@ -463,7 +433,7 @@ bool TextEqual(const char* a, const char* b) {
 // ============================================================================
 namespace IO {
 
-bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
+bool PackageFile::ReadPackfile(const System::Filename& name) {
     // A member of `IO::X` must be DEFINED in a namespace ENCLOSING the class
     // (B34_BRIEFS section A.2), so this body cannot live inside `namespace
     // RtIO` where its helpers, typedefs and using-declarations do. ONE
@@ -474,23 +444,17 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // the line that was in the door, except the field reads that became
     // members and the parameter that became a reference.
     using namespace RtIO;
-    const Filename* const name = &nameRef;
 
     // ---- the re-entrancy flag (0x1800b46e8..0x1800b4795) -------------------
-    // `fs->platformExistsGate` (+0x19) is Exists()'s second gate. ReadPackfile
+    // `fs->_platformExistsGate` (+0x19) is Exists()'s second gate. ReadPackfile
     // forces it to 1 across the OPEN so the file is found on disk rather than
     // through the (still empty) packfile index, then restores the SAVED byte.
     // Retail RE-READS the singleton before restoring; reproduced.
-    // *** `RtIO::` IN FULL, AND THE COMPILER IS WHY. *** Inside this
-    // `namespace IO` block a bare `FileSystem` binds to the REAL CLASS
-    // `IO::FileSystem` (B.3.4 PACKAGE+FS commit 4) instead of to the POD the
-    // singleton cell and the two OpenFile/ReadFile doors are typed with. That
-    // is B34_RULES section 7.2's grep hazard, and it presents here as a build
-    // error rather than a silent rebind -- which is the whole reason the rule
-    // says to spell the POD namespace out.
-    RtIO::FileSystem* fs = *FileSystemSingletonCell();          // 1800b46e8
-    const uint8_t savedGate = fs->platformExistsGate;          // 1800b46ef
-    fs->platformExistsGate = 1;                                // 1800b46f9
+    // B.4 R-IO: the class, spelled `IO::` in full because the using-directive
+    // above also brings in the `RtIO::FileSystem` POD (B34_RULES section 7.2).
+    IO::FileSystem* fs = IO::FileSystem::_singleton;           // 1800b46e8
+    const uint8_t savedGate = fs->_platformExistsGate;         // 1800b46ef
+    fs->_platformExistsGate = 1;                               // 1800b46f9
 
     FileInfo* const fi =
         &_file   /* +0xC0, the embedded FileInfo */;
@@ -499,15 +463,15 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         // Deliberately uninitialised: retail hands OpenFile an untouched
         // `[RBP+0x10]` as the hidden return slot and OpenFile writes it.
         FileInfo opened;
-        RtIo_FileSystem_OpenFile(fs, &opened, name);           // 1800b4707
+        fs->OpenFile(&opened, name);                           // 1800b4707
         RtIo_FileInfo_Assign(fi, &opened);                     // 1800b471a
         // Retail releases +0x38 (_name1) FIRST, then +0x30 (_name0).
         RtString_ReleaseInline(&opened._name1);                // 1800b472e..4757
         RtString_ReleaseInline(&opened._name0);                // 1800b4762..478b
     }
 
-    fs = *FileSystemSingletonCell();                           // 1800b478b
-    fs->platformExistsGate = savedGate;                        // 1800b4792
+    fs = IO::FileSystem::_singleton;                           // 1800b478b
+    fs->_platformExistsGate = savedGate;                       // 1800b4792
 
     if (fi->handle == -1) {                                    // 1800b4795  CMP [RDI],-1
         return false;                                          // 1800b479a  XOR AL,AL
@@ -515,7 +479,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
 
     // ---- the header word, its sign bit, and the seek (§69) -----------------
     int32_t hdr = 0;
-    RtIo_FileSystem_ReadFile(fs, fi, 4, &hdr);                 // 1800b47b1
+    fs->ReadFile(*fi, 4, &hdr);                                // 1800b47b1
     const int32_t compressed = (hdr & static_cast<int32_t>(0x80000000)) ? 1 : 0;
                                                                // 1800b47b9  BT/CMOVC
     hdr &= 0x7fffffff;                                         // 1800b47ca  BTR
@@ -523,37 +487,32 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // Only when the handle is -1 or -2, i.e. a LOOSE file, is there an OS
     // handle to mirror it into. `CMP dword [RDI],-3 ; JBE` is UNSIGNED.
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {     // 1800b47d4
-        ::SetFilePointer(reinterpret_cast<HANDLE>(
-                             static_cast<intptr_t>(fi->winHandle)),
-                         hdr, nullptr, FILE_BEGIN);            // 1800b47e3
+        ::SetFilePointer(fi->winHandle, hdr, nullptr, FILE_BEGIN);   // 1800b47e3
     }
 
     // ---- the compressed blob -----------------------------------------------
     int32_t blobLen = 0;
-    RtIo_FileSystem_ReadFile(fs, fi, 4, &blobLen);             // 1800b47f9
+    fs->ReadFile(*fi, 4, &blobLen);                            // 1800b47f9
     void* const blob = ::System::MemoryAllocator::MemAlloc(
         static_cast<uint64_t>(static_cast<int64_t>(blobLen)), 4);   // 1800b47fe MOVSXD
-    RtIo_FileSystem_ReadFile(fs, fi, blobLen, blob);           // 1800b4820
+    fs->ReadFile(*fi, blobLen, blob);                          // 1800b4820
 
     // ---- ONE CompressedMemoryStream, built in halves (§48) -----------------
     // Not two objects: the CompressedStream base ctor, then the class's own
     // vtable stamped over it, then the EMBEDDED MemoryStream's ctor at +0x68,
     // then four raw field stores, then Open with the embedded stream as source.
-    // ENDGAME B.3.9 IO (W2): the REAL class, built on the frame's raw storage
-    // -- base ctor, vptr, member ctor, the same three steps (1800b482a..4840);
-    // the body below keeps reading it through the RtIo POD view.
-    alignas(16) unsigned char cmsStorage[sizeof(IO::CompressedMemoryStream)];
-    IO::CompressedMemoryStream* const cmsObj =
-        ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
-    RtIo::CompressedMemoryStream& cms =
-        *reinterpret_cast<RtIo::CompressedMemoryStream*>(cmsObj);
-    cms.memoryStream.data           = blob;                    // 1800b4846
-    cms.memoryStream.size   = static_cast<uint32_t>(blobLen);  // 1800b484d
-    cms.memoryStream.cursor         = 0;                       // 1800b4850
-    cms.memoryStream.base.direction = 0;                       // 1800b4854
-    RtIo::RtIo_CompressedStream_Open(&cms.base, &cms.memoryStream.base, 1);  // 1800b4864
+    // ENDGAME B.3.9 IO (W2) / B.4 R-IO: the REAL class, a frame local -- base
+    // ctor, vptr, member ctor, the same three steps (1800b482a..4840). Its
+    // destructor at the function's end is retail's ~CompressedMemoryStream at
+    // 1800b604f, after the blob's MemFree.
+    IO::CompressedMemoryStream cms;
+    cms._memoryStream._data      = blob;                       // 1800b4846
+    cms._memoryStream._size      = static_cast<uint32_t>(blobLen);  // 1800b484d
+    cms._memoryStream._cursor    = 0;                          // 1800b4850
+    cms._memoryStream._direction = 0;                          // 1800b4854
+    cms.IO::CompressedStream::Open(cms._memoryStream, 1);      // 1800b4864
 
-    RtIo::CompressedStream* const cs = &cms.base;
+    IO::CompressedStream* const cs = &cms;
 
     // The frame's one buffer region, §93.
     uint8_t  frameBuf[kFrameBufBytes];
@@ -561,41 +520,40 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     uint8_t* const buf860 = frameBuf + kOutCap;                // [RBP+0x860]
 
     int32_t fileCount = 0;
-    RtIo::RtIo_CompressedStream_Read(cs, 4, &fileCount);       // 1800b4869 group
+    cs->IO::CompressedStream::Read(4, &fileCount);             // 1800b4869 group
 
     int32_t formatVersion = 0;                                 // 1800b48e9
 
     if (compressed >= 1) {                                     // 1800b48f0  CMP/JL
 
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &formatVersion);      // 1800b48fa
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_version);      // 1800b4979  +0x68
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_userVersion);  // 1800b49eb  +0x6c
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_priority);     // 1800b4a5d  +0x70
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_platform);     // 1800b4ad9  +0x74
+        cs->IO::CompressedStream::Read(4, &formatVersion);     // 1800b48fa
+        cs->IO::CompressedStream::Read(4, &_version);          // 1800b4979  +0x68
+        cs->IO::CompressedStream::Read(4, &_userVersion);      // 1800b49eb  +0x6c
+        cs->IO::CompressedStream::Read(4, &_priority);         // 1800b4a5d  +0x70
+        cs->IO::CompressedStream::Read(4, &_platform);         // 1800b4ad9  +0x74
         // ONE BYTE — §92(a). `MOV ESI,0x1` at 0x1800b4b4b.
-        RtIo::RtIo_CompressedStream_Read(cs, 1, &_overridable);  // 1800b4b4b  +0xac
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_crc);   // 1800b4bc9  +0xa8
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_iconWidth);    // 1800b4c49  +0x78
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_iconHeight);   // 1800b4cc0  +0x7c
+        cs->IO::CompressedStream::Read(1, &_overridable);      // 1800b4b4b  +0xac
+        cs->IO::CompressedStream::Read(4, &_crc);              // 1800b4bc9  +0xa8
+        cs->IO::CompressedStream::Read(4, &_iconWidth);        // 1800b4c49  +0x78
+        cs->IO::CompressedStream::Read(4, &_iconHeight);       // 1800b4cc0  +0x7c
 
         // The icon pixel array. Retail sizes it from height*width and then
         // reads `array._size * 4` bytes — the array's OWN size, not the product
         // it just passed. Identical unless SetSize clamped; transcribed as
         // spelled.
-        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
-        rtcoll::RtColl_ArraySetSize_180029510(iconArr,
+        // Array<uint32>::SetSize, handed the {data, size, capacity} header.
+        rtcoll::RtColl_ArraySetSize_180029510(&_iconData,
                      _iconHeight * _iconWidth);      // 1800b4d27/d37
-        RtIo::RtIo_CompressedStream_Read(
-            cs, ArrSize(this, 0x88) * 4, ArrData(this, 0x80)); // 1800b4d56  REAL CALL
+        cs->IO::CompressedStream::Read(
+            _iconCount * 4, _iconData);                        // 1800b4d56  REAL CALL
 
         if (formatVersion >= 2) {                              // 1800b4d62  CMP 2 / JL
             int32_t* const n90 =
                 &_previewByteCount;   /* +0x90 -- see PackageFile.h */
-            RtIo::RtIo_CompressedStream_Read(cs, 4, n90);      // 1800b4d6c  +0x90
-            uint8_t* const flagArr = reinterpret_cast<uint8_t*>(this) + 0x98;
-            rtcoll::RtColl_ArraySetSize_180029630(flagArr, *n90);   // 1800b4dea/df1
+            cs->IO::CompressedStream::Read(4, n90);            // 1800b4d6c  +0x90
+            rtcoll::RtColl_ArraySetSize_180029630(&_previewData, *n90);   // 1800b4dea/df1
             // NOTE the bound: retail reads `*n90` bytes, not the ARRAY's size.
-            RtIo::RtIo_CompressedStream_Read(cs, *n90, ArrData(this, 0x98));  // 1800b4e09
+            cs->IO::CompressedStream::Read(*n90, _previewData);  // 1800b4e09
         }
 
         String tmp;
@@ -638,31 +596,29 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         _overridable = 1;                                 // 1800b5b3c
         _iconWidth  = 1;                                  // 1800b5b49
         _iconHeight = 1;                                  // 1800b5b4d
-        uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
-        rtcoll::RtColl_ArraySetSize_180029510(iconArr, 1);     // 1800b5b5a
-        *static_cast<uint32_t*>(ArrData(this, 0x80)) = 0xff000000u;   // 1800b5b66
+        rtcoll::RtColl_ArraySetSize_180029510(&_iconData, 1);  // 1800b5b5a
+        _iconData[0] = 0xff000000u;                            // 1800b5b66
         // falls into 0x1800b5b6c, which reloads formatVersion — still 0 here.
     }
 
     // ---- the entry directory (0x1800b5b73) ---------------------------------
     if (fileCount > 0) {                                       // 1800b5b73  TEST/JLE
-        uint8_t* const entriesArr = reinterpret_cast<uint8_t*>(this) + 0xb0;  // 1800b5b86
 
         for (int32_t i = fileCount; i != 0; --i) {             // 1800b5b99 / 601a
 
             int32_t nameLen = 0;
-            RtIo::RtIo_CompressedStream_Read(cs, 4, &nameLen); // 1800b5ba0 group
+            cs->IO::CompressedStream::Read(4, &nameLen);       // 1800b5ba0 group
 
             // THE SAME SELECTOR AS THE METADATA BLOCK, WITH THE ARMS IN THE
             // OPPOSITE ORDER — raw first at 0x1800b5c1f, jumping over the
             // UTF-16 arm at 0x1800b5c9d. §86.
             if (formatVersion > 2) {                           // 1800b5c19  CMP 2 / JLE
                 if (nameLen > 0)                               // 1800b5c29
-                    RtIo::RtIo_CompressedStream_Read(cs, nameLen, buf60);  // 1800b5c25
+                    cs->IO::CompressedStream::Read(nameLen, buf60);  // 1800b5c25
                 // 1800b5c98  JMP 0x1800b5de3 — NO terminator is written here.
             } else {
                 if (nameLen > 0)                               // 1800b5cae
-                    RtIo::RtIo_CompressedStream_Read(cs, nameLen, buf860); // 1800b5ca7
+                    cs->IO::CompressedStream::Read(nameLen, buf860); // 1800b5ca7
                 const uint8_t* src       = buf860;             // 1800b5d22
                 const uint8_t* const end =
                     buf860 + 2 * static_cast<int64_t>(nameLen);// 1800b5d1c/d32
@@ -690,8 +646,8 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
             }
 
             int32_t entryOffset = 0, entrySize = 0;
-            RtIo::RtIo_CompressedStream_Read(cs, 4, &entryOffset);  // 1800b5de3  -> +0x08
-            RtIo::RtIo_CompressedStream_Read(cs, 4, &entrySize);    // 1800b5e59  -> +0x0c
+            cs->IO::CompressedStream::Read(4, &entryOffset);   // 1800b5de3  -> +0x08
+            cs->IO::CompressedStream::Read(4, &entrySize);     // 1800b5e59  -> +0x0c
 
             String tmp;
             BuildStringFrom(buf60, &tmp);                      // 1800b5ec6..5f3d
@@ -711,8 +667,8 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
             entry.offset = static_cast<uint32_t>(entryOffset); // 1800b5fa4  §91
             entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91
 
-            rtcoll::RtColl_ArraySetSizeFill_1800298f0(entriesArr,
-                             ArrSize(this, 0xb8) + 1, &entry); // 1800b5fb1..fbe
+            rtcoll::RtColl_ArraySetSizeFill_1800298f0(&_entries,  // 1800b5b86
+                             _entryCount + 1, &entry);         // 1800b5fb1..fbe
 
             RtString_ReleaseInline(&entry.name);               // 1800b5fc4..5fe9
             RtString_ReleaseInline(&tmp);                      // 1800b5fed..6015
@@ -725,12 +681,12 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // direction = 0 and only direction == 1 gets here. The GUARD is
     // transcribed and the arm is COUNTED, so "provably dead" is measured on
     // every run rather than asserted once.
-    if (cs->headerSize > 0 && cs->base.direction == 1) {       // 1800b6023/29
-        RtIo::RtIo_CompressedStream_Commit(cs);                // 1800b6035
+    if (cs->_headerSize > 0 && cs->_direction == 1) {          // 1800b6023/29
+        cs->Commit();                                          // 1800b6035
     }
-    CallStreamClose(&cms.memoryStream);                        // 1800b603a  slot 7
+    cms._memoryStream.Close();                                 // 1800b603a  slot 7, the member's vtable
     ::System::MemoryAllocator::MemFree(blob);                  // 1800b6045
-    cmsObj->IO::CompressedMemoryStream::~CompressedMemoryStream();       // 1800b604f  ~CompressedMemoryStream
+    // ~cms at the return: 1800b604f  ~CompressedMemoryStream
     const bool ours = true;                                    // 1800b6059  MOV AL,1
 
     return ours;
