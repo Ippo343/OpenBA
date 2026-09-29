@@ -29,6 +29,7 @@
 #include <cstddef>
 #include "object/Internal.h"
 #include "Object/exe_type.h"
+#include "Component/Component.h"   // FindComponent<T>: Array<InternalPtr<Component>>
 
 class ComponentDescription;
 
@@ -50,6 +51,47 @@ public:
     void RegisterUpdateDraw(uint32_t oldFlags);                   // 0x1400c33e0
     void OnAddedPass();                                           // 0x1400c2f60
 
+    // ---- FindComponent<T> (the template retail instantiates per component class)
+    // Every instance has one shape (read 2026-09-28 at 0x140003f60 ModelComponent,
+    // 0x14000c460 GrowthComponent, 0x140006270 StorageComponent, 0x140004740
+    // MultiObjectComponent, 0x14000b6f0 ConsumeProduceComponent and 20 more):
+    //   for (i = 0; i < _componentCount; ++i) {          // count re-read per pass
+    //       CheckPtr(&_components[i]);                   // IAT 0x140152ab0, a bare RET
+    //       if (_components[i]->Type() == T's cell)      // slot 2, [vtbl+0x10]
+    //           return IsDerivedFrom(c, T's cell) ? c : 0;   // IAT 0x140152a98
+    //   }
+    //   return 0;
+    // written through the InternalBasePtr ctor (IAT 0x140152a90, `mov [rcx],rdx`)
+    // into the caller's return slot: retail returns an InternalPtr<T> by value,
+    // which is these same eight bytes (Object::InternalPtr is trivially
+    // copyable), so the member returns the pointer TYPED (B4_RULES B10).
+    // No null check on the entity or on a component: retail has none.
+    // (The generic 0x1400c3680 is a different body: exact-id compare only, no
+    // IsDerivedFrom; it is not this template.)
+    template <class T>
+    T* FindComponent() const {
+        for (int32_t i = 0; i < _componentCount; ++i) {
+            Component* c = _components[i].Get();
+            if (c->Type() == T::TypeId())
+                return c->IsDerivedFrom(T::TypeId()) ? static_cast<T*>(c) : nullptr;
+        }
+        return nullptr;
+    }
+
+    // 0x1400c3680 -- the generic find by a runtime type id: the same walk
+    // (CheckPtr, Type() compare, count re-read per pass) but an EXACT id match
+    // only, no IsDerivedFrom; the match is stored raw into the return slot
+    // (`mov [r14],0; mov [r14],rax`), a miss through the InternalBasePtr ctor
+    // with null. No null checks.
+    Component* FindComponentByTypeId(uint32_t typeId) const {
+        for (int32_t i = 0; i < _componentCount; ++i) {
+            Component* c = _components[i].Get();
+            if (c->Type() == typeId)
+                return c;
+        }
+        return nullptr;
+    }
+
     // ---- fields (PUBLIC: EntityList and many unconverted readers use the raw
     // offsets) ----
     void*                 _entityList;      // +0x10 owning EntityList (set by RegisterEntity)
@@ -58,7 +100,8 @@ public:
                                             //       (0xFFFFFF = none); +0x1F: category byte
     void*                 _externals;       // +0x20 = entityList[0]
     ComponentDescription* _description;     // +0x28 ExternalPtr<ComponentDescription>
-    void*                 _components;      // +0x30 array of component InternalBasePtr (stride 8)
+    Object::InternalPtr<Component>* _components;  // +0x30 Array<InternalPtr<Component>> data (stride 8;
+                                            //       every FindComponent instance CheckPtr's &_components[i])
     int32_t               _componentCount;  // +0x38
     int32_t               _componentCap;    // +0x3C
     uint32_t              _entityFlags;     // +0x40 OR of every component's +0x20 flags:
