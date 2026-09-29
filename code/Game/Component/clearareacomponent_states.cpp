@@ -44,6 +44,7 @@
 #include "Component/Component.h"   // B.3.x W0: Component::OnEvent by name
 #include "Component/ComponentDescription.h"
 #include "Component/MapComponent.h"
+#include "Game/Map.h"
 #include "Component/WorkComponent.h"
 #include "Work/Work.h"   // B.3.8 CB1a (Vtable)
 #include "Work/ClearArea.h"   // B.3.8 CB1a (Vtable)
@@ -91,8 +92,8 @@ static T* FindOn(ComponentEntity* entity) {
 // GameUpdateLoop::m_game is still void* (GAME-a) and Map's cells are untyped (GAME-b):
 // every grid read below is LEFT.
 // ============================================================
-static inline uintptr_t GridTiles(int* grid) {
-    return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
+static inline uintptr_t GridTiles(const Map* grid) {
+    return reinterpret_cast<uintptr_t>(grid->cells);   // Map +0x80
 }
 
 // tile+0x08: the cell's occupant entity.
@@ -102,10 +103,10 @@ static inline ComponentEntity* GridOccupant(uintptr_t tiles, int cell) {
 
 // FUN_14009d860 — ground cells are clear & unreserved. Returns true if every cell in
 // the rect is passable (flags bit0/1 clear, +0x2a == 0xff) and not in the reserved BST.
-static bool Grid_GroundClear(int* grid, int x1, int y1, int w, int h) {
-    int width = *grid;
+static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
-    void* bstRoot = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(grid) + 0xe8);
+    void* bstRoot = grid->field_0xE8;   // the reserved-cell BST root (Map +0xE8)
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             int cell = width * row + col;
@@ -138,8 +139,8 @@ static bool Grid_GroundClear(int* grid, int x1, int y1, int w, int h) {
 // 0% for good (user-reported 2026-08-23; measured as every footprint cell holding the
 // new entity's own pointer). CountRemaining already skips self this exact
 // way; this makes the two agree.
-static bool Grid_AllEmpty(int* grid, int x1, int y1, int w, int h, ComponentEntity* selfEntity) {
-    int width = *grid;
+static bool Grid_AllEmpty(const Map* grid, int x1, int y1, int w, int h, ComponentEntity* selfEntity) {
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
@@ -153,9 +154,9 @@ static bool Grid_AllEmpty(int* grid, int x1, int y1, int w, int h, ComponentEnti
 
 // FUN_14009d930 — true if NO target NaturalResourceComponent remains in the rect
 // (optionally filtered to occupants whose description (entity+0x28) == filter).
-static bool Grid_NoTargetResource(int* grid, int x1, int y1, int w, int h,
+static bool Grid_NoTargetResource(const Map* grid, int x1, int y1, int w, int h,
                                   const ComponentDescription* filter) {
-    int width = *grid;
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
@@ -200,7 +201,7 @@ bool ClearAreaComponent::IsDone() {
     int w  = static_cast<int16_t>(mc->tileX1);
     int h  = static_cast<int16_t>(mc->tileY1);
 
-    int* grid = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
+    const Map* grid = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
     if (!grid) return false;
 
     bool groundOK = !clearGround || Grid_GroundClear(grid, x1, y1, w, h);
@@ -226,9 +227,9 @@ int ClearAreaComponent::CountRemaining() {
     int y1 = static_cast<int16_t>(mc->tileY0);
     int w  = static_cast<int16_t>(mc->tileX1);
     int h  = static_cast<int16_t>(mc->tileY1);
-    int* grid = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
+    const Map* grid = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
     if (!grid) return 0;
-    int width = *grid;
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     int n = 0;
     for (int row = 0; row < h; ++row) {
@@ -248,12 +249,12 @@ int ClearAreaComponent::CountRemaining() {
 //   bit10 -> 0x400, bit12 -> 0x1000 (iron), bit11 -> 0x800 (stone), else -> 1 (tree).
 // The result is the `code` argument the work-scheduler uses to categorise the job.
 // ============================================================
-static uint32_t ClearArea_ScanKindFlags(int* grid, int x1, int y1, int w, int h) {
+static uint32_t ClearArea_ScanKindFlags(const Map* grid, int x1, int y1, int w, int h) {
     uint32_t kind = 1;
     if (!grid) return kind;
     const uint32_t tidNatResDesc = NaturalResourceDescription::TypeId();
     const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
-    int width = *grid;
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
@@ -338,7 +339,7 @@ char ClearAreaComponent::State0Enter(void* sm) {
     WorkComponent* workComp = FindOn<WorkComponent>(_entity);   // 0x140003050
     MapComponent* mc = FindOn<MapComponent>(_entity);           // 0x140004680
 
-    int* grid = reinterpret_cast<int*>(gw->m_game);   // LEFT (GAME-a)
+    const Map* grid = reinterpret_cast<const Map*>(gw->m_game);   // LEFT (GAME-a)
     uint32_t kind = 1;
     if (mc && grid) {
         int x1 = static_cast<int16_t>(mc->tileX0);

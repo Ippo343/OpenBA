@@ -13,6 +13,7 @@
 #include "Component/clearareacomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "Component/MapComponent.h"
+#include "Game/Map.h"
 #include "Entity/ComponentEntity.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
@@ -64,10 +65,10 @@ int ClearAreaComponent::FootprintSweep() {
 
     // GameUpdateLoop::m_game (+0xf8) and m_entityList (+0xe8) are still void* (GAME-a)
     // and Map's cells are untyped (GAME-b): the grid and removal-array reads are LEFT.
-    int* map = reinterpret_cast<int*>(gw->m_game);
+    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
     if (!map) return 0;
-    int gridWidth = *map;
-    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    int gridWidth = map->size;
+    uintptr_t tileArray = reinterpret_cast<uintptr_t>(map->cells);
     uintptr_t entityList = reinterpret_cast<uintptr_t>(gw->m_entityList);
     if (!tileArray || !entityList) return 0;
 
