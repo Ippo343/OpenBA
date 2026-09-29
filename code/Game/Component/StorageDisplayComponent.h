@@ -26,6 +26,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "graphics/Mesh.h"   // Graphics::MeshInstance (the pile element)
+
+class ComponentDescription;   // Component/ComponentDescription.h
 
 class StorageDisplayComponent final : public Component {
     DECLARE_EXE_TYPE(StorageDisplayComponent)
@@ -44,12 +47,29 @@ public:
     void Update(void* time) override;                             // [9]  0x1400566a0
     void Slot11() override;                                       // [11] 0x140056940
 
+    // One pile on the footprint, 0x128 bytes: the MeshInstance and its scene id
+    // (Graphics::Scene::AddObject's answer, -1 while not in the scene).
+    struct Pile {
+        Graphics::MeshInstance mesh;   // +0x000
+        int32_t  sceneId;              // +0x120
+        uint8_t  _pad124[4];           // +0x124
+    };
+
+    void Refresh();                                               // 0x1400563e0 the piles from the StorageComponent's items
+    void SetPileCount(int newCount);                              // 0x14000ca10 Array<Pile>::SetSize on +0x28
+    void SetPileMesh(int index, float fraction, ComponentDescription* material);  // 0x1400562b0 (null material: clear)
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    displayData0; // +0x28 pile-display array data (torn down by the retail dtor)
-    void*    displayData1; // +0x30 its count / capacity
+    Pile*    piles;        // +0x28 Array<Pile> data (torn down by the retail dtor)
+    int32_t  pileCount;    // +0x30
+    int32_t  pileCapacity; // +0x34
 };
+
+static_assert(sizeof(StorageDisplayComponent::Pile) == 0x128, "pile stride 0x128 (0x14000ca10)");
+static_assert(offsetof(StorageDisplayComponent::Pile, sceneId) == 0x120, "");
 
 static_assert(sizeof(StorageDisplayComponent) == 0x38, "StorageDisplayComponent is 0x38 (create 0x14000c770)");
 static_assert(alignof(StorageDisplayComponent) == 8, "StorageDisplayComponent alignment");
-static_assert(offsetof(StorageDisplayComponent, displayData0) == 0x28, "");
-static_assert(offsetof(StorageDisplayComponent, displayData1) == 0x30, "");
+static_assert(offsetof(StorageDisplayComponent, piles) == 0x28, "");
+static_assert(offsetof(StorageDisplayComponent, pileCount) == 0x30, "");
+static_assert(offsetof(StorageDisplayComponent, pileCapacity) == 0x34, "");

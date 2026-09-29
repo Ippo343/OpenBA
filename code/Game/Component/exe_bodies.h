@@ -223,11 +223,6 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);
 int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount);  // 0x14000f090
 
-// ---- storagedisplaycomponent.cpp
-void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount);  // 0x14000ca10
-void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf);  // 0x14000cbd0
-void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction, uintptr_t materialType);  // 0x1400562b0
-
 // ---- toolbardescription.cpp
 extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount);  // 0x140028860
 
