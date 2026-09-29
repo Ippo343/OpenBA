@@ -32,9 +32,11 @@
 //   half[i]:  visible only if its double-index == fillLevel
 inline void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float currentVal, float maxVal)
 {
-    uintptr_t* wholeArr = *(uintptr_t**)(iconArrayBase);
-    int         count    = *(int*)(iconArrayBase + 8);
-    uintptr_t* halfArr  = *(uintptr_t**)(iconArrayBase + 0x10);
+    // LEFT: the icon group is raw storage (H5) in its owners (CitizenUI,
+    // StatusBarUI): its two Array<InternalPtr<Element>> are read at their offsets.
+    UI::Element** wholeArr = *(UI::Element***)(iconArrayBase);
+    int           count    = *(int*)(iconArrayBase + 8);
+    UI::Element** halfArr  = *(UI::Element***)(iconArrayBase + 0x10);
 
     if (count <= 0) return;
 
@@ -42,25 +44,15 @@ inline void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float curr
 
     int iVar2 = 1;  // double-index (1-based, step 2)
     for (int i = 0; i < count; i++) {
-        uintptr_t offset = (uintptr_t)i * 8;
-
         // Whole icon: show if iVar2 < fillLevel
-        {
-            uintptr_t ibpAddr = (uintptr_t)wholeArr + offset;
-            void* elem = *(void**)ibpAddr;
-            reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(
-                (iVar2 >= fillLevel) ? 1 : 0,
-                (iVar2 < fillLevel) ? 1 : 0);  // B.3.6 bridge
-        }
+        wholeArr[i]->SetFlagsOnOff(
+            (iVar2 >= fillLevel) ? 1 : 0,
+            (iVar2 < fillLevel) ? 1 : 0);
 
         // Half icon: show only if iVar2 == fillLevel
-        {
-            uintptr_t ibpAddr = (uintptr_t)halfArr + offset;
-            void* elem = *(void**)ibpAddr;
-            reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(
-                (iVar2 != fillLevel) ? 1 : 0,
-                (iVar2 == fillLevel) ? 1 : 0);  // B.3.6 bridge
-        }
+        halfArr[i]->SetFlagsOnOff(
+            (iVar2 != fillLevel) ? 1 : 0,
+            (iVar2 == fillLevel) ? 1 : 0);
 
         iVar2 += 2;
     }
@@ -77,9 +69,10 @@ inline void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float curr
 // groupElemIBP: InternalBasePtr to the parent group element
 inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemIBP)
 {
-    void* groupElem = *(void**)groupElemIBP;
+    // LEFT: the caller hands the ADDRESS of its InternalPtr to the group element.
+    UI::Element* groupElem = *(UI::Element**)groupElemIBP;
     if (!groupElem) return;
-    int childCount = reinterpret_cast<const UI::Element*>(groupElem)->ChildCount();  // B.3.6 bridge
+    int childCount = groupElem->ChildCount();
     if (childCount <= 0) return;
 
     for (int childIdx = 0; childIdx < childCount; childIdx++) {
@@ -87,59 +80,36 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
         {
             System::String nameStr("whole");
 
-            uint8_t childBuf[16];
-            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(groupElem)->Child(childIdx));  // B.3.6 bridge
-            void* childElem = *(void**)childBuf;
-
-            uint8_t foundBuf[16] = {};
-            ::new (foundBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr));  // B.3.6 bridge
-
-            void* wholeElem = *(void**)foundBuf;
-
-            uint8_t ibpBuf[8];
-            new (ibpBuf) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(wholeElem));   // B.3.3 bridge
+            UI::Element* childElem = groupElem->Child(childIdx).Get();
+            UI::Element* wholeElem = childElem->FindElement(nameStr).Get();
 
             // Push to whole array (dynamic array at param1+0).
-            // B.3.2 bridge: param1+0 is Collection::Array<{InternalBasePtr}>
-            // (stride 8, count +8, capacity +0xC) inside a struct §B.2 has not
-            // converted, so it is reached at its offset. The old copy loop wrote
+            // B.3.2 bridge: param1+0 is Collection::Array<InternalPtr<UI::Element>>
+            // (stride 8, count +8, capacity +0xC) inside a struct the owner keeps as
+            // raw storage (H5), so it is reached at its offset. The old copy loop wrote
             // `*dst = 0;` then unconditionally overwrote the same qword — a
-            // transcription artifact with no net effect; only the second write
-            // (the copied-old-entry or the new IBP) mattered.
-            auto& wholeArr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(param1, 0);
-            wholeArr.SetSize(wholeArr.GetSize() + 1, GameColl::Bytes<8, 8>(*(uint64_t*)ibpBuf));
+            // transcription artifact with no net effect.
+            auto& wholeArr = GameColl::ArrayAt<UI::Element*>(param1, 0);
+            wholeArr.SetSize(wholeArr.GetSize() + 1, wholeElem);
         }
 
         // --- Half icon element ---
         {
             System::String nameStr("half");
 
-            void* groupElem2 = *(void**)groupElemIBP;
-            uint8_t childBuf[16];
-            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(groupElem2)->Child(childIdx));  // B.3.6 bridge
-            void* childElem = *(void**)childBuf;
+            UI::Element* groupElem2 = *(UI::Element**)groupElemIBP;
+            UI::Element* childElem = groupElem2->Child(childIdx).Get();
+            UI::Element* halfElem = childElem->FindElement(nameStr).Get();
 
-            uint8_t foundBuf[16] = {};
-            ::new (foundBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr));  // B.3.6 bridge
-
-            void* halfElem = *(void**)foundBuf;
-
-            uint8_t ibpBuf[8];
-            new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(halfElem));   // B.3.3 bridge
-
-            // Push to half array (at param1+0x10).
-            // B.3.2 bridge: param1+0x10 is Collection::Array<{InternalBasePtr}>
-            // (stride 8, count +0x18, capacity +0x1C) inside a struct §B.2 has not
-            // converted, so it is reached at its offset. Same transcription-artifact
-            // double-write as the whole array above; only the second write mattered.
+            // Push to half array (at param1+0x10): the same Array, count +0x18,
+            // capacity +0x1C.
             uintptr_t halfBase = param1 + 0x10;
-            auto& halfArr = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(halfBase, 0);
-            halfArr.SetSize(halfArr.GetSize() + 1, GameColl::Bytes<8, 8>(*(uint64_t*)ibpBuf));
+            auto& halfArr = GameColl::ArrayAt<UI::Element*>(halfBase, 0);
+            halfArr.SetSize(halfArr.GetSize() + 1, halfElem);
         }
 
         // Re-check group element (may have been reallocated)
-        groupElem = *(void**)groupElemIBP;
-        childCount = reinterpret_cast<const UI::Element*>(groupElem)->ChildCount();  // B.3.6 bridge
+        groupElem = *(UI::Element**)groupElemIBP;
+        childCount = groupElem->ChildCount();
     }
 }

@@ -59,6 +59,10 @@
 #include "Dialog/exe_bodies.h"
 #include "Game/exe_constants.h"   // B3R: kRdata_140172198
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Component/AttendanceComponent.h"   // B4 DLG-a: CitizenComponent::school
+#include "Game/Profession.h"
+#include "Game/ProfessionList.h"
+#include "Game/PlayerToolManager.h"
 
 // FUN_140011050 — Entity::FindComponent<CitizenAIComponent>, the component whose +0x28
 // holds the citizen's current action-state index (the Action text on this panel and on
@@ -79,50 +83,53 @@ void fn_FindComponent_CitizenAI(void* entity, void* retval) {
 // (matching the original, which relies on the live game having them resolved). Reject
 // anything that isn't a plausible Win64 user-space heap pointer before dereferencing,
 // so the panel shows what it can instead of faulting.
-static inline bool CitUI_OkPtr(uintptr_t p) {
+static inline bool CitUI_OkAddr(uintptr_t p) {
     return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
 }
+static inline bool CitUI_OkPtr(const void* p) {
+    return CitUI_OkAddr((uintptr_t)p);  // CAST-OK: ptr_int
+}
 
-// TextElement::SetParameter (Runtime 0x18011e9b0) writes *(elem+0xC8)[index] but only
-// when index < *(int*)(elem+0xD0) (the param count). A citizen dialog element that
+// TextElement::SetParameter (Runtime 0x18011e9b0) writes _params._data[index] but only
+// when index < _params._size. A citizen dialog element that
 // standalone resolves by name can be a partially-initialized TextElement with a positive
-// param count but a garbage param-array pointer (+0xC8) — the write then faults. Only
+// param count but a garbage param-array pointer — the write then faults. Only
 // call SetParameter when the element genuinely has a valid parameter array.
 // A System::String is an 8-byte pointer to a ref-counted buffer (buffer[-4] = refcount).
 // SetParameter/SetText increment the source String's refcount (write buffer[-4]); an
-// uninitialized citizen field (e.g. the name at CitizenAI+0x28 is unset in standalone)
+// uninitialized citizen field (e.g. the name at CitizenComponent+0x28 is unset in standalone)
 // holds a garbage buffer pointer, faulting there. Accept only a null (empty) or a real
-// buffer pointer.
-static inline bool CitUI_OkString(const void* strObj) {
-    if (!CitUI_OkPtr(reinterpret_cast<uintptr_t>(strObj))) return false;
-    uintptr_t buf = *reinterpret_cast<const uintptr_t*>(strObj);
-    return buf == 0 || CitUI_OkPtr(buf);
+// buffer pointer. `strObj` is the String's raw 8-byte storage.
+static inline bool CitUI_OkString(const uint64_t* strObj) {
+    if (!CitUI_OkPtr(strObj)) return false;
+    uint64_t buf = *strObj;
+    return buf == 0 || CitUI_OkAddr(buf);
 }
 
-static inline bool CitUI_OkTextParam(void* elem) {
-    if (!CitUI_OkPtr((uintptr_t)elem)) return false;
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(elem) + 0xD0);
+static inline bool CitUI_OkTextParam(const UI::TextElement* elem) {
+    if (!CitUI_OkPtr(elem)) return false;
+    int count = elem->_params._size;
     if (count <= 0) return false;  // SetParameter is a no-op for 0 params anyway
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(elem) + 0xC8);
+    char** arr = elem->_params._data;
     if (!CitUI_OkPtr(arr)) return false;
     // The destination param slot arr[0] holds the CURRENT System::String (an 8-byte
     // ref-counted buffer pointer); SetParameter releases it (touches buffer+8) before
     // assigning the new one. A standalone dialog can allocate the param array but leave
     // its String entries uninitialized (garbage buffer pointer), faulting in the release.
     // Require the slot to be null (empty String) or a real pointer.
-    uintptr_t cur = *reinterpret_cast<uintptr_t*>(arr);   // index 0 (all our SetParameter calls use 0)
-    if (cur != 0 && !CitUI_OkPtr(cur)) return false;
-    // SetParameter also walks the element's +0x98 parent chain setting a dirty flag on
+    char* cur = arr[0];   // index 0 (all our SetParameter calls use 0)
+    if (cur != nullptr && !CitUI_OkPtr(cur)) return false;
+    // SetParameter also walks the element's _parent chain setting a dirty flag on
     // each ancestor. A detached / uninitialized standalone element can have a garbage
     // parent link, faulting in that loop before the (valid) param array is even touched.
     // Require the whole chain to be well-formed: every link a real pointer, terminating
     // at 0, within a sane depth. A live tree-attached element always satisfies this.
-    uintptr_t p = reinterpret_cast<uintptr_t>(elem);
-    for (int i = 0; i < 64 && p != 0; ++i) {
+    const UI::Element* p = elem;
+    for (int i = 0; i < 64 && p != nullptr; ++i) {
         if (!CitUI_OkPtr(p)) return false;
-        p = *reinterpret_cast<uintptr_t*>(p + 0x98);
+        p = p->_parent;
     }
-    return p == 0;  // reached the root cleanly (not truncated by the depth cap)
+    return p == nullptr;  // reached the root cleanly (not truncated by the depth cap)
 }
 
 // CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
@@ -131,29 +138,22 @@ static inline bool CitUI_OkTextParam(void* elem) {
 // ============================================================
 // WorldGrid_FindEntity (0x1400f9a60)
 // ============================================================
-// BST search: finds entity at tile index param_3 in world grid tree.
+// BST search: finds the Work at tile index `tileIndex` in the world work tree.
 // worldGrid+0x30 = root node ptr.
 // Node layout (piVar1): *piVar1 = key (tile index), *(piVar1+6) = left, *(piVar1+8) = right
-// On match: retval = *(piVar1+2) (entity InternalBasePtr, 8 bytes)
-// Returns param_2 (retval ptr).
-static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIndex)
+// On match: the node's +0x08 (the Work InternalBasePtr, 8 bytes); else null.
+// LEFT: the tree (GameUpdateLoop +0x118) and its nodes have no class.
+static Work* WorldGrid_FindEntity_Impl(void* worldGrid, int tileIndex)
 {
     int* piVar1 = *(int**)((uintptr_t)worldGrid + 0x30);
     while (true) {
         if (piVar1 == nullptr) {
-            new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            return retval;
+            return nullptr;
         }
         if (*piVar1 <= tileIndex) {
             if (tileIndex <= *piVar1) {
                 // Match
-                if (piVar1 != nullptr) {
-                    *(uint64_t*)retval = 0;
-                    *(uint64_t*)retval = *(uint64_t*)(piVar1 + 2);
-                    return retval;
-                }
-                new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                return retval;
+                return *(Work**)(piVar1 + 2);
             }
             // Go right
             piVar1 = *(int**)(piVar1 + 8);
@@ -165,25 +165,31 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
 }
 
 // ============================================================
-// Helper: Find element by name in dialog instance, return InternalPtr value
+// Helper: Find element by name in dialog instance
 // ============================================================
-static uint64_t FindDialogElem(void* dialogInst, const char* name) {
+static UI::Element* FindDialogElem(UI::DialogInstance* dialogInst, const char* name) {
     System::String nameStr(name);
-    uint64_t result = 0;
-    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
+    UI::Element* result = dialogInst->FindElement(nameStr).Get();
     // A missing element yields a non-null sentinel / unresolved value here rather than
     // 0 (seen as 0xffffffff00000000), which defeats the `if (elem)` guards downstream
     // and faults inside the engine. Normalise anything that isn't a real pointer to 0.
-    return CitUI_OkPtr(result) ? result : 0;
+    return CitUI_OkPtr(result) ? result : nullptr;
 }
 
-// Helper: Find element by name in element tree, return InternalPtr value
-static uint64_t FindElemInTree(void* elem, const char* name) {
+// Helper: Find element by name in element tree
+static UI::Element* FindElemInTree(UI::Element* elem, const char* name) {
     System::String nameStr(name);
-    uint64_t result = 0;
-    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(elem)->FindElement(nameStr));  // B.3.6 bridge
+    UI::Element* result = elem->FindElement(nameStr).Get();
     // Normalise a missing/unresolved element to 0 (see FindDialogElem).
-    return CitUI_OkPtr(result) ? result : 0;
+    return CitUI_OkPtr(result) ? result : nullptr;
+}
+
+// The citizen this panel shows: the data source's CitizenComponent. The generic
+// finder the tree called returned null for a null entity (kept).
+static CitizenComponent* CitizenUI_FindCitizen(Object::Base* dataSource) {
+    bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
+    ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
+    return entity ? entity->FindComponent<CitizenComponent>() : nullptr;   // 0x140009790
 }
 
 // ENDGAME B.3.9: ComponentEntity / CitizenDescription / CitizenComponent (was
@@ -199,7 +205,7 @@ static uint64_t FindElemInTree(void* elem, const char* name) {
 //
 // Finds 15 named UI elements and stores them in CitizenUI fields.
 // Elements found via DialogInstance::FindElement go through the full dialog tree;
-// elements found via Element::FindElement use the parent element at +0x20.
+// elements found via Element::FindElement use the container (+0x20).
 // groupHearts and groupStars are processed into icon arrays by FUN_14006abf0.
 // Three buttons get element IDs: buttonProfession(0x227), buttonHome(0x226),
 // buttonFollow(0x228).
@@ -207,43 +213,44 @@ static uint64_t FindElemInTree(void* elem, const char* name) {
 // [4] 0x1400651a0
 void CitizenUI::OnCreated() {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
-    void* dialogInst = *(void**)(s + 0x18);
-    void* parentElem = *(void**)(s + 0x20);
+    UI::DialogInstance* dialogInst = _dialog;
+    UI::Element* parentElem = _container;
 
     // --- Image elements (found via DialogInstance) ---
-    *(uint64_t*)(s + 0x30) = FindDialogElem(dialogInst, "imageMale");
-    *(uint64_t*)(s + 0x38) = FindDialogElem(dialogInst, "imageFemale");
+    imageMale   = FindDialogElem(dialogInst, "imageMale");
+    imageFemale = FindDialogElem(dialogInst, "imageFemale");
 
     // --- Text/number elements (found via Element tree from +0x20) ---
-    *(uint64_t*)(s + 0x48) = FindElemInTree(parentElem, "numberAge");
-    *(uint64_t*)(s + 0x40) = FindElemInTree(parentElem, "textName");
-    *(uint64_t*)(s + 0x50) = FindElemInTree(parentElem, "textProfession");
-    *(uint64_t*)(s + 0x60) = FindElemInTree(parentElem, "textEducatedNo");
-    *(uint64_t*)(s + 0x58) = FindElemInTree(parentElem, "textEducatedYes");
-    *(uint64_t*)(s + 0x68) = FindElemInTree(parentElem, "textClothing");
-    *(uint64_t*)(s + 0x70) = FindElemInTree(parentElem, "textTool");
-    *(uint64_t*)(s + 0x90) = FindElemInTree(parentElem, "textNameIs");
-    *(uint64_t*)(s + 0x98) = FindElemInTree(parentElem, "textAction");
+    // Retail stores each found element unchecked; each is read as its class.
+    numberAge       = static_cast<UI::NumberElement*>(FindElemInTree(parentElem, "numberAge"));
+    textName        = static_cast<UI::TextElement*>(FindElemInTree(parentElem, "textName"));
+    textProfession  = static_cast<UI::TextElement*>(FindElemInTree(parentElem, "textProfession"));
+    textEducatedNo  = FindElemInTree(parentElem, "textEducatedNo");
+    textEducatedYes = FindElemInTree(parentElem, "textEducatedYes");
+    textClothing    = static_cast<UI::TextElement*>(FindElemInTree(parentElem, "textClothing"));
+    textTool        = static_cast<UI::TextElement*>(FindElemInTree(parentElem, "textTool"));
+    textNameIs      = FindElemInTree(parentElem, "textNameIs");
+    textAction      = static_cast<UI::TextElement*>(FindElemInTree(parentElem, "textAction"));
 
     // --- Icon groups (heart/star arrays built from group children) ---
+    // LEFT: the icon groups are raw storage (H5), reached by address.
     {
-        uint64_t groupHearts = FindElemInTree(parentElem, "groupHearts");
-        CitizenUI_BuildIconArray_Impl(s + 0xA0, (uintptr_t)&groupHearts);
+        UI::Element* groupHearts = FindElemInTree(parentElem, "groupHearts");
+        CitizenUI_BuildIconArray_Impl((uintptr_t)heartIcons, (uintptr_t)&groupHearts);
     }
     {
-        uint64_t groupStars = FindElemInTree(parentElem, "groupStars");
-        CitizenUI_BuildIconArray_Impl(s + 0xC0, (uintptr_t)&groupStars);
+        UI::Element* groupStars = FindElemInTree(parentElem, "groupStars");
+        CitizenUI_BuildIconArray_Impl((uintptr_t)starIcons, (uintptr_t)&groupStars);
     }
 
     // --- Button elements (found via DialogInstance, with element IDs) ---
-    *(uint64_t*)(s + 0x78) = FindDialogElem(dialogInst, "buttonProfession");
-    *(uint64_t*)(s + 0x80) = FindDialogElem(dialogInst, "buttonHome");
-    *(uint64_t*)(s + 0x88) = FindDialogElem(dialogInst, "buttonFollow");
+    buttonProfession = FindDialogElem(dialogInst, "buttonProfession");
+    buttonHome       = FindDialogElem(dialogInst, "buttonHome");
+    buttonFollow     = FindDialogElem(dialogInst, "buttonFollow");
 
-    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x78))->SetElementId(0x227);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x80))->SetElementId(0x226);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x88))->SetElementId(0x228);  // B.3.6 bridge
+    buttonProfession->SetElementId(0x227);
+    buttonHome->SetElementId(0x226);
+    buttonFollow->SetElementId(0x228);
 }
 
 // ============================================================
@@ -254,20 +261,15 @@ void CitizenUI::OnCreated() {
 // [6] 0x140065130
 void CitizenUI::OnClosed() {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
-    uint64_t subDialog = *(uint64_t*)(s + 0xE0);
-    if (subDialog != 0) {
-        // Get the UserInterface from DialogInstance (+0x18) -> +0x10
-        void* dialogInst = (void*)*(uint64_t*)(s + 0x18);
-        void* userInterface = *(void**)((uintptr_t)dialogInst + 0x10);
-        reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(s + 0xE0));  // B.3.6 bridge
+    if (followDialog.Get() != nullptr) {
+        // The UserInterface of the owning DialogInstance
+        UI::UserInterface* userInterface = _dialog->_ui;
+        userInterface->CloseDialog(&followDialog);
     }
 
     // Reset +0xE0 to null InternalBasePtr
-    uint64_t nullPtr = 0;
-    new (&nullPtr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    *(uint64_t*)(s + 0xE0) = nullPtr;
+    followDialog = Object::InternalPtr<UI::DialogInstance>();
 }
 
 // ============================================================
@@ -275,295 +277,213 @@ void CitizenUI::OnClosed() {
 // ============================================================
 // Original: 0x140064AE0
 //
-// Gets the CitizenAIComponent from the entity at +0x28. Updates:
-// - Gender icon visibility (male/female based on +0x38 flag)
-// - Education status (compares age +0x210 vs description +0x118)
-// - Name text (from CitizenAI +0x28 System::String)
-// - Age number (from +0x3C float * age multiplier)
-// - Clothing text (from +0x1E4 index into string table at element +0xD8/+0xE0)
-// - Tool text (from +0xAC/+0xA8 tool count and comparison with description +0x110)
-// - Profession text (from +0x1F0 profession description, or fallback if child/worker)
-// - Health hearts (FUN_14006aed0 with +0x50 value vs description +0x70)
-// - Happiness stars (FUN_14006aed0 with +0x80 value vs description +0xA4)
-// - Profession button enabled state (based on workplace/job assignment)
+// Gets the CitizenComponent from the data-source entity. Updates:
+// - Gender icon visibility (male/female from `gender`)
+// - Education status (education vs description maxEducation)
+// - Name text (the citizen's name String)
+// - Age number (age * the age multiplier)
+// - Clothing text (clothingLevel index into the element's string table)
+// - Tool text (+0xAC / +0xA8 tool count and item vs description +0x110)
+// - Profession text (profession, or the child / student title)
+// - Health hearts (FUN_14006aed0 with health vs description maxHealth)
+// - Happiness stars (FUN_14006aed0 with happiness vs description maxHappiness)
+// - Profession button enabled state (workplace or school assigned)
 // - Home button virtual call (likely sets enabled state)
-// - Name-is text parameter
-// - Action text (based on current state from profession component)
+// - Action text (from the CitizenAIComponent's state)
 
 // [7] 0x140064ae0
 void CitizenUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
-    // Get entity from data source (+0x28), cast to ComponentEntity
-    void* entityBase = *(void**)(s + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
-    void* entity = isEntity ? entityBase : nullptr;
-    uint64_t entityRef = 0;
-    new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-
-    // Find CitizenAIComponent
-    uint64_t citizenAIRef = 0;
-    fn_FindComponent_Citizen((void*)entityRef, &citizenAIRef);
-    uintptr_t ai = (uintptr_t)citizenAIRef;
+    // Find the CitizenComponent of the data source (+0x28)
+    CitizenComponent* ai = CitizenUI_FindCitizen(_dataSource);
     if (!ai) return;
 
-    // Get CitizenDescription from CitizenAI (+0x18), check IsDerivedFrom
-    void* descBase = *(void**)(ai + 0x18);
+    // Get CitizenDescription from Component::_description (+0x18), check IsDerivedFrom
+    void* descBase = ai->_description;
     bool isDesc = ::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId());
-    void* citizenDesc = isDesc ? descBase : nullptr;
-    if (!CitUI_OkPtr((uintptr_t)citizenDesc)) citizenDesc = nullptr;
+    // LEFT: Component::_description is void* (COMP-a's header).
+    CitizenDescription* citizenDesc = isDesc ? (CitizenDescription*)descBase : nullptr;
+    if (!CitUI_OkPtr(citizenDesc)) citizenDesc = nullptr;
 
-    // CitizenAI+0x288 caches the CitizenDescription pointer; the original reads
-    // *(ai+0x288)+0x118 / +0x44 directly. In standalone that cache can be garbage
-    // (unresolved) while the Component-base description (+0x18, validated above as
+    // CitizenComponent::description (+0x288) caches the CitizenDescription pointer; the
+    // original reads its maxEducation / adultAge directly. In standalone that cache can be
+    // garbage (unresolved) while the Component-base description (validated above as
     // citizenDesc) is valid. Use +0x288 when it looks like a real pointer, else fall
     // back to citizenDesc (the same CitizenDescription); 0 if neither is valid.
-    uintptr_t aiDesc = *(uintptr_t*)(ai + 0x288);
-    if (!CitUI_OkPtr(aiDesc)) aiDesc = (uintptr_t)citizenDesc;
-    if (!CitUI_OkPtr(aiDesc)) aiDesc = 0;
+    CitizenDescription* aiDesc = ai->description;
+    if (!CitUI_OkPtr(aiDesc)) aiDesc = citizenDesc;
+    if (!CitUI_OkPtr(aiDesc)) aiDesc = nullptr;
 
     // --- Gender icon visibility ---
-    // +0x38 on CitizenAI: 0 = female, nonzero = male
-    bool isMale = (*(int*)(ai + 0x38) != 0);
-    // imageFemale (+0x38): visible if male, imageMale (+0x30): visible if female... wait
-    // Actually: if isMale, show imageMale (hide female), else show imageFemale (hide male)
-    void* imageFemale = (void*)*(uint64_t*)(s + 0x38);
+    // gender (+0x38): 0 = female, nonzero = male
+    bool isMale = (ai->gender != 0);
+    // if isMale, show imageMale (hide female), else show imageFemale (hide male)
     if (isMale) {
-        if (imageFemale) reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; hide imageFemale
+        if (imageFemale) imageFemale->SetFlagsOnOff(1, 0);  // hide imageFemale
     } else {
-        if (imageFemale) reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; show imageFemale
+        if (imageFemale) imageFemale->SetFlagsOnOff(0, 1);  // show imageFemale
     }
-    void* imageMale = (void*)*(uint64_t*)(s + 0x30);
-    if (imageMale) reinterpret_cast<UI::Element*>(imageMale)->SetFlagsOnOff(isMale ? 0 : 1, isMale ? 1 : 0);  // B.3.6 bridge
+    if (imageMale) imageMale->SetFlagsOnOff(isMale ? 0 : 1, isMale ? 1 : 0);
 
     // --- Education visibility ---
-    // age at +0x210 (int), education age threshold at description+0x118 (aiDesc = the
-    // CitizenDescription; see aiDesc note above). Skip if no description resolved.
-    bool isEducated = aiDesc && (*(int*)(ai + 0x210) < *(int*)(aiDesc + 0x118));
-    void* textEducatedNo = (void*)*(uint64_t*)(s + 0x60);
+    // education (+0x210) against the description's maxEducation (+0x118) (aiDesc =
+    // the CitizenDescription; see aiDesc note above). Skip if no description resolved.
+    bool isEducated = aiDesc && (ai->education < aiDesc->maxEducation);
     if (isEducated) {
-        if (textEducatedNo) reinterpret_cast<UI::Element*>(textEducatedNo)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; show textEducatedNo
+        if (textEducatedNo) textEducatedNo->SetFlagsOnOff(0, 1);  // show textEducatedNo
     } else {
-        if (textEducatedNo) reinterpret_cast<UI::Element*>(textEducatedNo)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; hide textEducatedNo
+        if (textEducatedNo) textEducatedNo->SetFlagsOnOff(1, 0);  // hide textEducatedNo
     }
-    void* textEducatedYes = (void*)*(uint64_t*)(s + 0x58);
-    if (textEducatedYes) reinterpret_cast<UI::Element*>(textEducatedYes)->SetFlagsOnOff(
-                             isEducated ? 1 : 0, isEducated ? 0 : 1);  // B.3.6 bridge
+    if (textEducatedYes) textEducatedYes->SetFlagsOnOff(
+                             isEducated ? 1 : 0, isEducated ? 0 : 1);
 
     // --- Name text ---
-    // CitizenAI+0x28 is the citizen's name (System::String)
-    void* textName = (void*)*(uint64_t*)(s + 0x40);
-    // Guard both the destination element AND the source name String (ai+0x28), which is
+    // Guard both the destination element AND the source name String (+0x28), which is
     // uninitialized on a standalone citizen and would fault when SetParameter bumps its
     // ref-count.
-    bool okName = CitUI_OkString((void*)(ai + 0x28));
+    bool okName = CitUI_OkString(&ai->name);
     bool okParam = CitUI_OkTextParam(textName);
+    // LEFT: CitizenComponent::name is raw String storage (H5, COMP-b's header).
     if (okName && okParam)
-        reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, *reinterpret_cast<const System::String*>(ai + 0x28));  // B.3.6 bridge
-#if defined(_DEBUG)
-    {
-    }
-#endif
+        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&ai->name));  // B.3.6 bridge
 
     // --- Age number ---
-    float ageFloat = *(float*)(ai + 0x3c);
+    float ageFloat = ai->age;
     int ageYears = (int)(ageFloat * kRdata_140172198);
-    void* numberAge = (void*)*(uint64_t*)(s + 0x48);
-    if (numberAge) reinterpret_cast<UI::NumberElement*>(numberAge)->SetValue(static_cast<int32_t>(ageYears));  // B.3.6 bridge
+    if (numberAge) numberAge->SetValue(static_cast<int32_t>(ageYears));
 
     // --- Clothing text (string table lookup) ---
-    {
-        void* clothingElem = (void*)*(uint64_t*)(s + 0x68);
-        if (clothingElem) {
-            uint32_t clothingIdx = *(uint32_t*)(ai + 0x1e4);
-            uintptr_t elemPtr = (uintptr_t)clothingElem;
-            // Build UI::String from element's string table (+0xD8) and string entry (+0xE0)
-            uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
-            uint8_t uiStr[16];
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), clothingIdx);  // B.3.6 bridge
-            uint8_t textVal[16];
-            *(uint64_t*)textVal = *(uint64_t*)uiStr;
-            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-            reinterpret_cast<UI::TextElement*>(clothingElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
-        }
+    // UI::String(the element's text table, clothingLevel)
+    if (textClothing) {
+        uint32_t clothingIdx = ai->clothingLevel;
+        UI::String text = textClothing->_text;
+        text.index = clothingIdx;
+        textClothing->SetText(&text);
     }
 
     // --- Tool text ---
     // tool count at +0xAC, tool item at +0xA8
-    // If tool count < 1: char value = 0
-    // Else: compare tool item (+0xA8) with description+0x110; result = 1 if same, 2 if different
+    // If tool count < 1: value = 0
+    // Else: compare the tool item with the description's +0x110; 1 if same, 2 if different
     int toolValue;
-    if (*(int*)(ai + 0xAC) < 1) {
+    if (ai->field_0xAC < 1) {
         toolValue = 0;
     } else {
-        int toolItem = *(int*)(ai + 0xA8);
-        void* descBase2 = *(void**)(ai + 0x18);
-        bool isDesc2 = ::Object::IsDerivedFromNullSafe(descBase2, CitizenDescription::TypeId());
-        void* desc2 = isDesc2 ? descBase2 : nullptr;
-        if (!CitUI_OkPtr((uintptr_t)desc2)) desc2 = nullptr;
+        int toolItem = ai->field_0xA8;
+        // The same checked cast of the same _description as citizenDesc above.
         // desc2 (CitizenDescription) may be null on a partially-initialized standalone
         // citizen — treat a missing description as "default tool" rather than faulting.
-        toolValue = desc2 ? ((toolItem != *(int*)((uintptr_t)desc2 + 0x110)) + 1) : 1;
+        CitizenDescription* desc2 = citizenDesc;
+        toolValue = desc2 ? ((toolItem != desc2->_i110) + 1) : 1;
     }
-    {
-        void* toolElem = (void*)*(uint64_t*)(s + 0x70);
-        if (toolElem) {
-            uintptr_t elemPtr = (uintptr_t)toolElem;
-            uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
-            uint8_t uiStr[16];
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), toolValue);  // B.3.6 bridge
-            uint8_t textVal[16];
-            *(uint64_t*)textVal = *(uint64_t*)uiStr;
-            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-            reinterpret_cast<UI::TextElement*>(toolElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
-        }
+    if (textTool) {
+        UI::String text = textTool->_text;
+        text.index = toolValue;
+        textTool->SetText(&text);
     }
 
     // --- Profession text ---
-    // If age < child threshold (CitizenAI+0x288 -> +0x44) or has workplace (+0x208 != 0):
-    //   If workplace (+0x208) == 0: use ProfessionList+0x40 (child profession)
-    //   Else: use ProfessionList+0x48 (worker profession)
-    //   Build UI::String from profession+0x20 (string table) and profession+0x30 (name)
-    // Else: use +0x1F0 (current profession description)
-    {
-        void* profElem = (void*)*(uint64_t*)(s + 0x50);
-        auto okPtr = [](uintptr_t p) { return CitUI_OkPtr(p); };
-        if (profElem) {
-            // gw+0xB0 is the ProfessionList, read directly off the GameWorld base
-            // (single deref) — matching retail (0x140064AE0) and the other call sites
-            // (the WorldGrid read at +0x118 below, starttown +0xb0). The prior
-            // *(uintptr_t*)*g_pGameWorldSingleton double-deref read GameWorld field 0 and
-            // then +0xB0 off THAT -> garbage profListBase, blanking the Student/worker Job
-            // text. Byte-faithful correction (the original has the same latent bug).
-            uintptr_t gwBase = (uintptr_t)GameUpdateLoop::_singleton;
-            uintptr_t profListBase = okPtr(gwBase) ? *(uintptr_t*)(gwBase + 0xB0) : 0;
+    // If a child (age < adultAge) or at school:
+    //   not at school: ProfessionList::childProfession (+0x40)
+    //   at school:     ProfessionList::studentProfession (+0x48)
+    // Else: the current profession (+0x1F0).
+    // Text = UI::String(profession->stringTable, profession's name key +0x30).
+    if (textProfession) {
+        // gw+0xB0 is the ProfessionList, read directly off the GameWorld base
+        // (single deref) — matching retail (0x140064AE0).
+        GameUpdateLoop* gwBase = GameUpdateLoop::_singleton;
+        ProfessionList* profListBase = CitUI_OkPtr(gwBase) ? gwBase->m_professionList : nullptr;
 
-            bool isChild = aiDesc && (*(float*)(ai + 0x3c) < *(float*)(aiDesc + 0x44));
-            bool hasWorkplace = (*(uintptr_t*)(ai + 0x208) != 0);
+        bool isChild = aiDesc && (ai->age < aiDesc->adultAge);
+        bool hasSchool = (ai->school != nullptr);
 
-            uint8_t textVal[16];
-            bool haveText = false;
-            if (isChild || hasWorkplace) {
-                uintptr_t profEntry = 0;
-                if (okPtr(profListBase)) {
-                    profEntry = (*(uintptr_t*)(ai + 0x208) == 0)
-                                    ? *(uintptr_t*)(profListBase + 0x40)   // child
-                                    : *(uintptr_t*)(profListBase + 0x48);  // worker w/ workplace
-                }
-                if (okPtr(profEntry)) {
-                    uint64_t strTable = *(uint64_t*)(profEntry + 0x20);
-                    uint8_t uiStr[16];
-                    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(strTable)), *reinterpret_cast<const System::String*>(profEntry + 0x30));  // B.3.6 bridge
-                    *(uint64_t*)textVal = *(uint64_t*)uiStr;
-                    *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-                    haveText = true;
-                }
-            } else {
-                uintptr_t profDesc = *(uintptr_t*)(ai + 0x1F0);
-                if (okPtr(profDesc)) {
-                    uint64_t strTable = *(uint64_t*)(profDesc + 0x20);
-                    uint8_t uiStr[16];
-                    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(strTable)), *reinterpret_cast<const System::String*>(profDesc + 0x30));  // B.3.6 bridge
-                    *(uint64_t*)textVal = *(uint64_t*)uiStr;
-                    *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-                    haveText = true;
-                }
+        Profession* titled = nullptr;
+        if (isChild || hasSchool) {
+            if (CitUI_OkPtr(profListBase)) {
+                titled = (ai->school == nullptr)
+                             ? profListBase->childProfession     // child
+                             : profListBase->studentProfession;  // student
             }
-            if (haveText) reinterpret_cast<UI::TextElement*>(profElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
+        } else {
+            titled = ai->profession;
+        }
+        if (CitUI_OkPtr(titled)) {
+            // LEFT: Profession::stringName is raw String storage (H5, W0's header).
+            UI::String text(Object::ExternalPtr<UI::StringTable>(titled->stringTable),
+                            *reinterpret_cast<const System::String*>(&titled->stringName));  // B.3.6 bridge
+            textProfession->SetText(&text);
         }
     }
 
     // --- Health hearts and happiness stars ---
-    // Max values come from the CitizenDescription (+0x70 health, +0xA4 happiness);
+    // Max values come from the CitizenDescription (maxHealth, maxHappiness);
     // use the resolved aiDesc/citizenDesc and skip if neither is a valid pointer.
     {
-        uintptr_t hd = aiDesc ? aiDesc : (uintptr_t)citizenDesc;
+        CitizenDescription* hd = aiDesc ? aiDesc : citizenDesc;
         if (CitUI_OkPtr(hd)) {
-            CitizenUI_UpdateIconDisplay_Impl(s + 0xA0, *(float*)(ai + 0x50), *(float*)(hd + 0x70));
-            CitizenUI_UpdateIconDisplay_Impl(s + 0xC0, *(float*)(ai + 0x80), *(float*)(hd + 0xA4));
+            CitizenUI_UpdateIconDisplay_Impl((uintptr_t)heartIcons, ai->health, hd->maxHealth);
+            CitizenUI_UpdateIconDisplay_Impl((uintptr_t)starIcons, ai->happiness, hd->maxHappiness);
         }
     }
 
     // --- Profession button enabled state ---
-    // Enabled if workplace (+0x248) or job entity (+0x208) exists
-    bool profEnabled = (*(uintptr_t*)(ai + 0x248) != 0) || (*(uintptr_t*)(ai + 0x208) != 0);
-    {
-        void* profBtn = (void*)*(uint64_t*)(s + 0x78);
-        if (profBtn) {
-            reinterpret_cast<UI::Element*>(profBtn)->Enable(profEnabled);  // B.3.6 bridge: Element slot 8 Enable (vtable+0x40)
-        }
+    // Enabled if a workplace (+0x248) or a school (+0x208) is assigned
+    bool profEnabled = (ai->workplace != nullptr) || (ai->school != nullptr);
+    if (buttonProfession) {
+        buttonProfession->Enable(profEnabled);   // Element slot 8 Enable (vtable+0x40)
     }
 
     // --- Home button virtual call ---
-    {
-        void* homeBtn = (void*)*(uint64_t*)(s + 0x80);
-        if (homeBtn) {
-            // Original passes result of CheckPtr on CitizenAI (always true if we got here)
-            reinterpret_cast<UI::Element*>(homeBtn)->Enable(true);  // B.3.6 bridge: Element slot 8 Enable (vtable+0x40)
-        }
+    if (buttonHome) {
+        // Original passes result of CheckPtr on the citizen (always true if we got here)
+        buttonHome->Enable(true);   // Element slot 8 Enable (vtable+0x40)
     }
 
     // --- textNameIs: set name parameter ---
     // In standalone the "textNameIs" element resolves to a partially-constructed
     // TextElement whose parameter-array String entries are uninitialized (garbage buffer
     // pointers), so SetParameter faults deep inside System::String::operator= even though
-    // the element, its +0xC8 array and its +0x98 chain all validate. It is a redundant
+    // the element, its param array and its parent chain all validate. It is a redundant
     // secondary name label — the primary textName above already shows the citizen's name
     // — so skip it in standalone. (The original keeps the CheckPtr + set here.)
 
     // --- Action text ---
-    // Get entity reference from CitizenComponent+0x10, find its CitizenAIComponent
+    // The citizen's entity (Component::_entity), then its CitizenAIComponent
     // (FUN_140011050 at 0x140064fc2).
-    uintptr_t entityFromAI = *(uintptr_t*)(ai + 0x10);
-    uint64_t profCompRef = 0;
-    // Guard the entity backref (component-list walk dereferences entity+0x30/+0x38);
+    ComponentEntity* entityFromAI = ai->_entity;
+    // Guard the entity backref (component-list walk dereferences its component array);
     // a partially-initialized standalone citizen can leave it as garbage.
     if (CitUI_OkPtr(entityFromAI)) {
-    fn_FindComponent_CitizenAI((void*)entityFromAI, &profCompRef);
+    CitizenAIComponent* aiComp = entityFromAI->FindComponent<CitizenAIComponent>();   // 0x140011050
 
-    // Read action index from CitizenAIComponent+0x28 -- unguarded, as retail
-    // (0x140064fd6): every citizen carries one. ENDGAME B.3.9 CB removed the
-    // `profCompRef != 0` skip, which only ever fired because the type id read 0.
-    int actionIndex = *(int*)(*(uintptr_t*)&profCompRef + 0x28);
+    // Read the action index (CitizenAIComponent::state) -- unguarded, as retail
+    // (0x140064fd6): every citizen carries one.
+    int actionIndex = aiComp->state;
 
     // Special case: if action is 9 (idle/searching), check if citizen has a home tile
     if (actionIndex == 9) {
-        uintptr_t homeRef = 0;
-        int homeTile = *(int*)(ai + 0x30);
+        Work* homeWork = nullptr;
+        int homeTile = ai->field_0x30;
         if (homeTile >= 0) {
-            // Look up entity at home tile via world grid
-            void* worldGrid = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x118);
-            uint64_t foundRef = 0;
-            WorldGrid_FindEntity_Impl(worldGrid, &foundRef, homeTile);
-            homeRef = foundRef;
+            // Look up the Work at the home tile via the world work tree (gw+0x118)
+            homeWork = WorldGrid_FindEntity_Impl(GameUpdateLoop::_singleton->m_tutorial, homeTile);
         }
-        if (homeRef != 0) {
-            // Get profession description from home entity, compare with citizen's
-            uintptr_t homeEntity = homeRef;
-            uint64_t descRef = 0;
-            // The gw+0x118 work tree's node payload is a Work (0x1400f88a0 fills it).
-            reinterpret_cast<Work*>(homeEntity)->GetTarget(&descRef);   // B.3.x bridge (slot 10)
-            uintptr_t profDesc = *(uintptr_t*)(ai + 0x1F0);
-            if (*(uintptr_t*)&descRef != profDesc) {
+        if (homeWork != nullptr) {
+            // The work's target against the citizen's profession
+            void* target = nullptr;
+            homeWork->GetTarget(&target);   // slot 10
+            if (target != ai->profession) {
                 actionIndex = 0x10;  // "looking for work" or similar
             }
         }
     }
 
-    // Set action text from string table at element +0xD8
-    {
-        void* actionElem = (void*)*(uint64_t*)(s + 0x98);
-        if (actionElem) {
-            uintptr_t elemPtr = (uintptr_t)actionElem;
-            uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
-            uint8_t uiStr[16];
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), actionIndex);  // B.3.6 bridge
-            uint8_t textVal[16];
-            *(uint64_t*)textVal = *(uint64_t*)uiStr;
-            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-            reinterpret_cast<UI::TextElement*>(actionElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
-        }
+    // Set action text from the element's string table
+    if (textAction) {
+        UI::String text = textAction->_text;
+        text.index = actionIndex;
+        textAction->SetText(&text);
     }
     }  // if (CitUI_OkPtr(entityFromAI))
 }
@@ -574,7 +494,7 @@ void CitizenUI::OnUpdateLayout() {
 // Original: 0x1400650F0
 //
 // Handles three button clicks:
-// - buttonProfession (0x227): Navigate camera to citizen's workplace or job location
+// - buttonProfession (0x227): Navigate camera to the citizen's school or workplace
 // - buttonHome (0x226): Navigate camera to citizen's home building
 // - buttonFollow (0x228): Open follow dialog to track this citizen
 //
@@ -590,121 +510,86 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
     // Only handle event type 0x12 (button click)
     if (param3 != 0x12) return;
 
-    uintptr_t s = (uintptr_t)this;
-
     if (param4 == 0x227) {
-        // --- buttonProfession: go to workplace/job ---
-        void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
-        void* entity = isEntity ? entityBase : nullptr;
-        uint64_t entityRef = 0;
-        new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
+        // --- buttonProfession: go to school / workplace ---
+        CitizenComponent* ai = CitizenUI_FindCitizen(_dataSource);
 
-        uint64_t aiRef = 0;
-        fn_FindComponent_Citizen((void*)entityRef, &aiRef);
-        uintptr_t ai = (uintptr_t)aiRef;
-
-        uint64_t targetRef;
-        uint64_t dialogRef;
-        if (*(uintptr_t*)(ai + 0x208) != 0) {
-            // Has workplace: navigate to workplace entity
-            uintptr_t workplace = *(uintptr_t*)(ai + 0x208);
-            targetRef = workplace;
-            // Get dialog from workplace entity +0x10
-            dialogRef = *(uint64_t*)(workplace + 0x10);
+        void* targetRef;
+        void* dialogRef;
+        if (ai->school != nullptr) {
+            // At school: navigate to the school component
+            AttendanceComponent* school = ai->school;
+            targetRef = school;
+            // and its entity (Component::_entity)
+            dialogRef = school->_entity;
         } else {
-            if (*(uintptr_t*)(ai + 0x248) == 0) return;
-            // Has job entity (+0x248): navigate there
-            targetRef = *(uintptr_t*)(ai + 0x248);
-            dialogRef = *(uint64_t*)(s + 0x18);
+            if (ai->workplace == nullptr) return;
+            // Has a workplace (+0x248): navigate there
+            targetRef = ai->workplace;
+            dialogRef = _dialog;
         }
 
-        void* gameSubsys = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x120);
+        PlayerToolManager* gameSubsys = GameUpdateLoop::_singleton->m_toolManager;
         Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
     }
     else if (param4 == 0x226) {
         // --- buttonHome: go to home building ---
-        void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
-        void* entity = isEntity ? entityBase : nullptr;
-        uint64_t entityRef = 0;
-        new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
+        CitizenComponent* ai = CitizenUI_FindCitizen(_dataSource);
 
-        uint64_t aiRef = 0;
-        fn_FindComponent_Citizen((void*)entityRef, &aiRef);
-        uintptr_t ai = (uintptr_t)aiRef;
+        ComponentEntity* homeEntity = ai->home;
+        if (homeEntity == nullptr) return;
 
-        uintptr_t homeEntity = *(uintptr_t*)(ai + 0x238);
-        if (homeEntity == 0) return;
-
-        uint64_t targetRef = homeEntity;
-        uint64_t dialogRef = *(uint64_t*)(s + 0x18);
-        void* gameSubsys = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x120);
+        void* targetRef = homeEntity;
+        void* dialogRef = _dialog;
+        PlayerToolManager* gameSubsys = GameUpdateLoop::_singleton->m_toolManager;
         Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
     }
     else if (param4 == 0x228) {
         // --- buttonFollow: open follow dialog ---
         // Creates a FollowDialog (0xD8 bytes) from Dialog/Follow.rsc and adds it to the UI.
-        // Manually constructs the object: DialogInstance base ctor + FollowDialog vtable + fields.
-        void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = ::Object::IsDerivedFromNullSafe(entityBase, ComponentEntity::TypeId());
-        void* entity = isEntity ? entityBase : nullptr;
-        uint64_t entityRef = 0;
-        new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
+        Object::Base* dataSource = _dataSource;
+        bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
+        ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
-        // Find CitizenAI component on entity
+        // Find the CitizenComponent on the entity
         uint64_t citizenAIRef = 0;
-        fn_FindComponent_Citizen((void*)entityRef, &citizenAIRef);
+        fn_FindComponent_Citizen(entity, &citizenAIRef);
 
         // Load Dialog/Follow.rsc resource
         System::Filename filename("Dialog/Follow.rsc");
-        void* extResource = const_cast<::Object::External*>(
-            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-                ->FindOrLoad(filename));
+        const ::Object::External* extResource =
+            ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
 
         // Type-check the resource
-        void* checkedRes = nullptr;
+        const UI::Dialog* checkedRes = nullptr;
         if (extResource) {
-            bool isExternal = ::Object::IsDerivedFromNullSafe(extResource, UI::Dialog::TypeId());
-            if (isExternal) checkedRes = extResource;
+            bool isDialog = ::Object::IsDerivedFromNullSafe(extResource, UI::Dialog::TypeId());
+            if (isDialog) checkedRes = static_cast<const UI::Dialog*>(extResource);
         }
 
         // Allocate and construct FollowDialog (0xD8 bytes)
-        void* followDialog = System::MemoryAllocator::MemAlloc(0xD8, 8);
-        void* resultPtr = nullptr;
-        if (followDialog) {
+        void* followMem = System::MemoryAllocator::MemAlloc(0xD8, 8);
+        FollowDialog* resultPtr = nullptr;
+        if (followMem) {
             // The real ctor (B38 B8-5): DialogInstance(ui, resource, null parent, 0, 0, 0),
-            // then FollowDialog's own table and zeroed +0xB8..+0xD0 - the bytes the tree's
-            // DialogInstance ctor door + stamp of FollowDialog_GetStandaloneVtable() built.
-            // (It used to read g_FollowDialog_Vtable first: 0x14015be00 is unregistered, so
-            // that read was always 0 and the stamp always took the getter.)
-            void* userInterface = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
-            FollowDialog* fd = ::new (followDialog) FollowDialog(
-                reinterpret_cast<UI::UserInterface*>(userInterface),
-                reinterpret_cast<const UI::Dialog*>(checkedRes),   // B.3.8 bridge
-                Object::InternalPtr<UI::DialogInstance>());
+            // then FollowDialog's own table and zeroed +0xB8..+0xD0.
+            FollowDialog* fd = ::new (followMem) FollowDialog(
+                _dialog->_ui, checkedRes, Object::InternalPtr<UI::DialogInstance>());
 
-            fd->dataB8 = citizenAIRef;                 // entity to follow (CitizenAI IBP)
-
-            uint64_t selfRef = 0;
-            new (&selfRef) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
-            fd->dataC0 = selfRef;                      // controller back-reference
+            fd->dataB8 = citizenAIRef;                 // entity to follow (the citizen IBP)
+            // LEFT: FollowDialog::dataC0 is uint64_t (DLG-b's header).
+            fd->dataC0 = reinterpret_cast<uint64_t>(this);   // controller back-reference
             // +0xC8 textFollow / +0xD0 textAction: zeroed by the ctor, set by slot 4.
 
-            resultPtr = followDialog;
+            resultPtr = fd;
         }
 
         // Store dialog ref at CitizenUI+0xE0
-        uint64_t dialogIBP = 0;
-        new (&dialogIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(resultPtr));   // B.3.3 bridge
-        *(uint64_t*)(s + 0xE0) = dialogIBP;
+        followDialog = Object::InternalPtr<UI::DialogInstance>(resultPtr);
 
         // Add dialog to UI
-        uint64_t dialogRef = dialogIBP;
-        void* ui = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
-        reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
+        Object::InternalPtr<UI::DialogInstance> dialogRef = followDialog;
+        _dialog->_ui->AddDialog(&dialogRef);
     }
 }
 
@@ -713,28 +598,11 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 // ============================================================
 // Clicking a citizen (now pickable via the Picking::Scene) opens a dialog whose
 // controller is CitizenUI. In standalone this type was a StubNop (all slots no-op)
-// so the panel opened blank. This block installs a real per-class vtable wiring the
-// reimplemented slots above, following the ToolUI/MapUI promotion pattern in
-// ui_dialog_stub_factories.cpp (which previously registered CitizenUI as a stub —
-// that registration is REMOVED there to avoid a duplicate REGISTER_TYPE).
-//
-// Vtable offsets (verified from the exe CitizenUI vtable @ 0x14015ba00):
-//   +0x20 (idx4) Slot4  = Setup (find elements + button ids)
-//   +0x30 (idx6) Slot6  = close sub-dialog
-//   +0x38 (idx7) Slot7  = content update (name/age/profession/hearts/stars)
-//   +0x40 (idx8)        = base DialogController::OnUpdate (per-frame; the framework
-//                         DialogInstance::OnUpdate dispatches ONLY +0x40 each frame,
-//                         Runtime 0x180115400) — base is a content no-op, so we drive
-//                         Slot7 here to refresh the panel every frame.
-//   +0x48 (idx9) Slot9  = button dispatch (profession/home/follow)
-//
-// The type ids CitizenUI_Slot7 reads are the classes' TypeId() statics and the age
-// multiplier is the .rdata constant kRdata_140172198 (B3R; the old EnsureGlobals
-// lazy-fill is gone).
-
-
-
-
+// so the panel opened blank. CitizenUI is a real class now (table 0x14015ba00):
+//   +0x20 (idx4) OnCreated, +0x30 (idx6) OnClosed, +0x38 (idx7) OnUpdateLayout,
+//   +0x40 (idx8) OnUpdate — retail inherits the base (a no-op); the framework
+//   dispatches ONLY +0x40 each frame (Runtime 0x180115400), so the tree drives
+//   OnUpdateLayout from it (standalone deviation), +0x48 (idx9) OnElementEvent.
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void CitizenUI::OnUpdate(const System::Time& /*time*/) {
