@@ -89,16 +89,20 @@ namespace UI {
 
 class Sprite;
 class SpriteContext;
+class SpriteSheet;
 
 // The array header every Collection::Array<T> uses. Same shape as
 // runtime/src/collection/array.cpp's ArrayHdr, spelled again here so this
-// header stays standalone.
+// header stays standalone. A plain header over typed storage: as
+// `Collection::Array<T>` members the three would run their own destructors
+// beside retail's three ~Array calls in ~SpriteCapture (B4_RULES H5).
+template <class T>
 struct CaptureArray {
-    void*   data;       // +0x00
+    T*      data;       // +0x00
     int32_t size;       // +0x08
     int32_t capacity;   // +0x0c
 };
-static_assert(sizeof(CaptureArray) == 0x10, "CaptureArray must be 0x10 bytes");
+static_assert(sizeof(CaptureArray<int32_t>) == 0x10, "CaptureArray must be 0x10 bytes");
 
 // One recorded draw or scissor. Stride 0x28 — proved by 0x18004bde0's
 // `LEA RCX,[RAX+RAX*4]; SHL RCX,3`, see the banner.
@@ -223,17 +227,17 @@ public:
     // External() and the stamps are the compiler's; then the seven zero
     // stores +0x20..+0x50.
     SpriteCapture() : Object::External() {
-        _sheets   = CaptureArray{};     // +0x20, +0x28
-        _entries  = CaptureArray{};     // +0x30, +0x38
-        _sprites  = CaptureArray{};     // +0x40, +0x48
+        _sheets   = {};                 // +0x20, +0x28
+        _entries  = {};                 // +0x30, +0x38
+        _sprites  = {};                 // +0x40, +0x48
         _width = 0; _height = 0;        // +0x50 (one qword)
     }
 
 public:
     // ---- the 0x38 bytes SpriteCapture adds (public: the doors reach them) --
-    CaptureArray _sheets;     // +0x20  Array<ExternalPtr<SpriteSheet>>, stride 8
-    CaptureArray _entries;    // +0x30  Array<CaptureEntry>,             stride 0x28
-    CaptureArray _sprites;    // +0x40  Array<UI::Sprite>,               stride 0x10
+    CaptureArray<SpriteSheet*> _sheets;   // +0x20  Array<ExternalPtr<SpriteSheet>>, stride 8
+    CaptureArray<CaptureEntry> _entries;  // +0x30  Array<CaptureEntry>,             stride 0x28
+    CaptureArray<Sprite>       _sprites;  // +0x40  Array<UI::Sprite>,               stride 0x10
     int32_t      _width;      // +0x50  GetWidth
     int32_t      _height;     // +0x54  GetHeight
 };
@@ -257,5 +261,6 @@ static_assert(offsetof(SpriteCapture, _sheets) == sizeof(Object::External),
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- ui/spritecapture_class.cpp
-extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void* basev);  // 0x18004c0d0
+namespace IO { class Serializer; }
+extern "C" void RtUi_SpriteCapture_SerializeEntries(IO::Serializer* ser, int count, UI::CaptureEntry* e);  // 0x18004c0d0
 // ==== end B3R W0-P0c ====
