@@ -692,15 +692,15 @@ Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
     Transform* const ret = &out;
     const int64_t* const t0 = &time._ticks;
     const int64_t* const t1 = &delta._ticks;
-    const uint8_t* a = reinterpret_cast<const uint8_t*>(this);   // B.3.5 bridge
-    const int32_t frameFirst = *reinterpret_cast<const int32_t*>(a + 0x30);
-    const int32_t frameLast  = *reinterpret_cast<const int32_t*>(a + 0x34);
-    const uint8_t looping    = *(a + 0x3c);
-    const int32_t loopFrame  = *reinterpret_cast<const int32_t*>(a + 0x40);
-    const float   rate       = *reinterpret_cast<const float*>(a + 0x44);
-    const int32_t perKey     = *reinterpret_cast<const int32_t*>(a + 0x4c);
-    const int32_t keyCount   = *reinterpret_cast<const int32_t*>(a + 0x50);
-    const uint8_t* keys      = *reinterpret_cast<const uint8_t* const*>(a + 0x60);
+    // B.4: `Graphics::Animation`'s own fields (Animation.h).
+    const int32_t frameFirst = _startFrame;        // +0x30
+    const int32_t frameLast  = _endFrame;          // +0x34
+    const bool    looping    = _looping;           // +0x3c
+    const int32_t loopFrame  = _loopFrame;         // +0x40
+    const float   rate       = _frameRate;         // +0x44
+    const int32_t perKey     = _boneCount;         // +0x4c  keys per frame
+    const int32_t keyCount   = _frameCount;        // +0x50
+    const Math::Transform* const keys = _keys._data;   // +0x60, stride 0x1c
 
     // The loop-start KEY INDEX. Retail short-circuits the whole fraction to 0
     // when loopFrame is zero rather than computing it.
@@ -722,7 +722,7 @@ Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
     // Clamp or wrap the first key.
     int32_t k0 = rawKey;
     if (k0 >= keyCount) {
-        if (looping == 0) {
+        if (!looping) {
             k0 = keyCount - 1;
         } else {
             k0 = loopKey + (rawKey % (keyCount - loopKey));
@@ -733,7 +733,7 @@ Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
     // after it. Retail computes `LEA R11D,[R9+1]` from the ALREADY-wrapped k0.
     int32_t k1 = k0 + 1;
     if (k1 >= keyCount) {
-        if (looping == 0) {
+        if (!looping) {
             k1 = keyCount - 1;
         } else {
             k1 = loopKey + (k1 % (keyCount - loopKey));
@@ -745,20 +745,21 @@ Math::Transform Animation::GetRootPoseAtTime(const System::Time& time,
 
     float x, y, z;
     if (k0 == k1 || frac == 0.0f) {
-        const uint8_t* e = keys + static_cast<int64_t>(perKey * k0) * 0x1c;
-        x = *reinterpret_cast<const float*>(e + 0x10);
-        y = *reinterpret_cast<const float*>(e + 0x14);
-        z = *reinterpret_cast<const float*>(e + 0x18);
+        // The frame's first key (the root), its translation (+0x10).
+        const Math::Vector3& e = keys[static_cast<int64_t>(perKey * k0)].translation;
+        x = e.x;
+        y = e.y;
+        z = e.z;
         ++rtgfxbody29::g_rootPoseSingle;
     } else {
-        const uint8_t* e0 = keys + static_cast<int64_t>(perKey * k0) * 0x1c;
-        const uint8_t* e1 = keys + static_cast<int64_t>(perKey * k1) * 0x1c;
-        const float ax = *reinterpret_cast<const float*>(e0 + 0x10);
-        const float ay = *reinterpret_cast<const float*>(e0 + 0x14);
-        const float az = *reinterpret_cast<const float*>(e0 + 0x18);
-        const float bx = *reinterpret_cast<const float*>(e1 + 0x10);
-        const float by = *reinterpret_cast<const float*>(e1 + 0x14);
-        const float bz = *reinterpret_cast<const float*>(e1 + 0x18);
+        const Math::Vector3& e0 = keys[static_cast<int64_t>(perKey * k0)].translation;
+        const Math::Vector3& e1 = keys[static_cast<int64_t>(perKey * k1)].translation;
+        const float ax = e0.x;
+        const float ay = e0.y;
+        const float az = e0.z;
+        const float bx = e1.x;
+        const float by = e1.y;
+        const float bz = e1.z;
         // a + (b - a) * t, in retail's association. NOT a*(1-t) + b*t.
         x = ax + (bx - ax) * frac;
         y = ay + (by - ay) * frac;

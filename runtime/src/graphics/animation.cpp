@@ -560,21 +560,21 @@ void ParticleInstance::IncrementInstanceIndex() {
 // (0x1800c6c00) / unlock, i.e. System::MemoryAllocator::MemFree. The record
 // elements are NOT nulled in the array (retail does not).
 // ============================================================================
+// B.4: on `_records` and each pool record's own `_records` header by name.
 void Graphics::Particle::ReleaseFields() {
-
-    uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x40); ++i) {
-        uint8_t* const rec =
-            (*reinterpret_cast<uint8_t* const* const*>(self + 0x38))[i];
+    for (int32_t i = 0; i < _records._size; ++i) {
+        RtGraphics::ParticleBoundsRecord* const rec = _records._data[i];
         if (rec == nullptr) continue;
-        if (void* const buf = *reinterpret_cast<void* const*>(rec + 0x18)) System::MemoryAllocator::MemFree(buf);
-        *reinterpret_cast<void**>(rec + 0x18) = nullptr;
-        *reinterpret_cast<uint64_t*>(rec + 0x20) = 0;
+        if (void* const buf = rec->_records._data) System::MemoryAllocator::MemFree(buf);
+        rec->_records._data     = nullptr;
+        rec->_records._size     = 0;               // one qword: size AND capacity
+        rec->_records._capacity = 0;
         System::MemoryAllocator::MemFree(rec);
     }
-    if (void* const data = *reinterpret_cast<void* const*>(self + 0x38)) System::MemoryAllocator::MemFree(data);
-    *reinterpret_cast<void**>(self + 0x38) = nullptr;
-    *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
+    if (void* const data = _records._data) System::MemoryAllocator::MemFree(data);
+    _records._data     = nullptr;
+    _records._size     = 0;                        // one qword: size AND capacity
+    _records._capacity = 0;
 }
 
 // ?_singleton@AnimationManager@Graphics@@0PEAV12@EA  retail 0x1801fe7b0 --
