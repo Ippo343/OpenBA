@@ -55,24 +55,26 @@
 // read (the null-safe trampoline EngineFuncsInit installed) is
 // Object::IsDerivedFromNullSafe, the same trampoline by name (B3R_RULES §3).
 void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr) {
-    // Zero out retval (InternalBasePtr = nullptr)
-    *(void**)retval = nullptr;
+    // The out slot is an InternalPtr<Component> (retval is void* for the callers of
+    // other blocks: LEFT). Zero it (InternalBasePtr = nullptr).
+    Component** out = (Component**)retval;
+    *out = nullptr;
     if (!entity || !typeIdPtr) return;
 
     uint32_t targetTypeId = *typeIdPtr;
+    ComponentEntity* e = (ComponentEntity*)entity;
 
-    // Component array at entity+0x30 (ptr), count at entity+0x38
-    void** compArray = *(void***)((uintptr_t)entity + 0x30);
-    int    compCount = *(int*)   ((uintptr_t)entity + 0x38);
+    // Component array ComponentEntity::_components (+0x30), count _componentCount (+0x38)
+    Object::InternalPtr<Component>* compArray = e->_components;
+    int compCount = e->_componentCount;
 
-    void* found = nullptr;
+    Component* found = nullptr;
     for (int i = 0; i < compCount; i++) {
-        void* comp = compArray[i];
+        Component* comp = compArray[i].Get();
         if (!comp) continue;
 
         // Object::Base::Type() (retail slot 2, +0x10) returns the component's type ID
-        int compTypeId = static_cast<int>(
-            static_cast<const ::Object::Base*>(comp)->Type());   // B.3.x bridge
+        int compTypeId = static_cast<int>(comp->Type());
 
         if ((uint32_t)compTypeId == targetTypeId) {
             // Confirm with IsDerivedFrom
@@ -83,9 +85,8 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
         }
     }
 
-    // Store result via InternalBasePtr::InternalBasePtr(retval, found)
-    new (retval) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+    // Store result (InternalBasePtr::InternalBasePtr(retval, found): one qword store)
+    *out = found;
 }
 
 namespace {
