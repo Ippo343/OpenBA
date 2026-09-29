@@ -36,6 +36,19 @@
 #include "Component/BuildDescription.h"   // ENDGAME B.3.8 CB3: BuildDescription::TypeId()
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
 #include "Component/InteractDescription.h"   // ENDGAME B.3.9 D5: InteractDescription::TypeId()
+#include "Component/InteractComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
+#include "Game/ProfessionList.h"
 
 
 // ============================================================
@@ -81,19 +94,18 @@
 #include <new>
 
 // ============================================================
-// Helper: Find RawMaterialComponent by type ID in entity's component list.
-// Iterates array at (entity+0x28), count at (entity+0x30).
+// Helper: the RawMaterialDescription among a ComponentDescription's sub-descriptions
+// (+0x28 data / +0x30 count) -- the inlined scan retail repeats (no CheckPtr).
 // ============================================================
-static void* FindRawMaterialInList(uintptr_t entity, uint32_t typeId) {
-    int count = *(int*)(entity + 0x30);
-    uintptr_t arr = *(uintptr_t*)(entity + 0x28);
+static RawMaterialDescription* FindRawMaterialInList(ComponentDescription* entity) {
+    const uint32_t typeId = RawMaterialDescription::TypeId();
+    int count = entity->_subDescCount;
     for (int i = 0; i < count; i++) {
-        uintptr_t obj = *(uintptr_t*)(arr + (uintptr_t)i * 8);
-        // slot 2 Type() (the old no-argument typedef never passed `this`)
-        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
-            void* comp = *(void**)(arr + (uintptr_t)i * 8);
+        Description* obj = entity->_subDescs[i];
+        if (obj->Type() == typeId) {
+            Description* comp = entity->_subDescs[i];
             if (Object::IsDerivedFromNullSafe(comp, typeId)) {
-                return comp;
+                return static_cast<RawMaterialDescription*>(comp);
             }
             return nullptr;
         }
@@ -102,90 +114,53 @@ static void* FindRawMaterialInList(uintptr_t entity, uint32_t typeId) {
 }
 
 // ============================================================
-// Helper: Tree iteration -- find leftmost node
-// ============================================================
-static uintptr_t TreeLeftmost(uintptr_t node) {
-    if (node == 0) return 0;
-    while (*(uintptr_t*)(node + 0x10) != 0) {
-        node = *(uintptr_t*)(node + 0x10);
-    }
-    return node;
-}
-
-// ============================================================
-// Helper: Tree iteration -- get next node (in-order)
-// (Currently unused but kept for future reference.)
-// ============================================================
-__attribute__((unused))
-static uintptr_t TreeNext(uintptr_t node) {
-    if (node == 0) return 0;
-    // If right child exists, go right then leftmost
-    uintptr_t right = *(uintptr_t*)(node + 0x18);
-    if (right != 0) {
-        return TreeLeftmost(right);
-    }
-    // Otherwise go up until we come from a left child
-    uintptr_t parent = *(uintptr_t*)(node + 0x8);
-    while (parent != 0 && *(uintptr_t*)(parent + 0x18) == node) {
-        node = parent;
-        parent = *(uintptr_t*)(node + 0x8);
-    }
-    return parent;
-}
-
-// ============================================================
 // Serialize (0x1400ec560)
 // Work::Serialize + 2 int arrays + tree serialization
 // ============================================================
 void GatherRawMaterials::Persist(void* stream) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create IO::Serializer with version 0
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // Create IO::Serializer with version 0 (Persist's stream is void* in Work.h: LEFT)
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Check if loading (stream+8 == 0 means loading)
-    bool isLoading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    bool isLoading = (static_cast<int>(serializer.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
 
     // --- Serialize first int array count (+0x50) ---
     int count50 = field_50;
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&count50), nullptr);   // B.3.4 bridge
+    serializer.Serialize(count50, nullptr);
 
     if (isLoading) {
         // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
         // GatherRawMaterials_Shutdown calls it at 1400ec5be). I32NoInit — a grown tail
         // is left as the allocation found it, like retail. Safe: load-only, and the bulk
         // int read below writes all count50 elements from the stream.
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x48)).SetSize(count50);
+        GameColl::AsArray<GameColl::I32NoInit>(&field_48).SetSize(count50);
         field_50 = count50;
     }
 
     // Bulk-serialize the first int array
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(field_50, reinterpret_cast<int*>(field_48), nullptr);   // B.3.4 bridge
+    serializer.Serialize(field_50, field_48, nullptr);
 
     // --- Serialize second int array count (+0x60) ---
     int count60 = field_60;
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&count60), nullptr);   // B.3.4 bridge
+    serializer.Serialize(count60, nullptr);
 
     if (isLoading) {
         // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
         // GatherRawMaterials_Shutdown calls it at 1400ec606). I32NoInit — a grown tail
         // is left as the allocation found it, like retail. Safe: load-only, and the bulk
         // int read below writes all count60 elements from the stream.
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x58)).SetSize(count60);
+        GameColl::AsArray<GameColl::I32NoInit>(&field_58).SetSize(count60);
         field_60 = count60;
     }
 
     // Bulk-serialize the second int array
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(field_60, reinterpret_cast<int*>(field_58), nullptr);   // B.3.4 bridge
+    serializer.Serialize(field_60, field_58, nullptr);
 
-    // --- Serialize tree at +0x68 ---
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(selfAddr + 0x68), serializerBuf);
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    // --- Serialize tree at +0x68 (the helper takes the container as uintptr_t*: LEFT) ---
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&field_68), &serializer);
 }
 
 // ============================================================
@@ -198,49 +173,47 @@ void GatherRawMaterials::Persist(void* stream) {
 //
 // Returns: 0=fail, 1=retry/done, 2=action pushed.
 // ============================================================
-int GatherRawMaterials::Execute(void* entityIBP, void* context) {
-    // retail's param3 (R8) is a by-value scratch slot whose address the body takes
-    uint64_t param3 = reinterpret_cast<uint64_t>(context);
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
+int GatherRawMaterials::Execute(void* entityIBPArg, void* context) {
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** entityIBP = static_cast<CitizenComponent**>(entityIBPArg);
+    // retail's param3 (R8) is a by-value scratch slot whose address the body takes:
+    // it becomes the out slot of the WorkPlaceComponent find below, and that value
+    // is what 0x1400f6ef0 receives as its fifth argument.
+    void* param3 = context;
 
-    // --- Find PositionComponent on work entity (self+0x10) ---
-    uintptr_t posCompIBP = 0;
-    WorkBase_FindComponent_2ed0(selfQ[2], &posCompIBP);
+    // --- Find the InteractComponent on the work entity (self+0x10) (0x140002ed0) ---
+    InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
-    // --- Find description component on work entity ---
-    uintptr_t descCompIBP = 0;
-    Dialog_FindComponent_d6c0(reinterpret_cast<void*>(selfQ[2]), &descCompIBP);
+    // --- Find the BuildComponent on the work entity (0x14000d6c0) ---
+    BuildComponent* descComp = field_10->FindComponent<BuildComponent>();
 
-    // Get GatherDescription from desc component +0x18
-    void* descBase = *(void**)(descCompIBP + 0x18);
+    // Its BuildDescription (+0x18)
+    Description* descBase = descComp->_description;
     bool isDerived = Object::IsDerivedFromNullSafe(descBase, BuildDescription::TypeId());
-    void* gatherDesc = isDerived ? descBase : nullptr;
+    BuildDescription* gatherDesc = isDerived ? static_cast<BuildDescription*>(descBase) : nullptr;
 
-    // --- Check workplace enable flag via WpExt component ---
-    uintptr_t descComp = descCompIBP;
-    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
-    // so the returned pointer is the out buffer itself.
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(*(uintptr_t*)(descComp + 0x10)), (void*)&param3);
-    void* wpExtIBP = (void*)&param3;
-    if (*(char*)(*(uintptr_t*)wpExtIBP + 0x50) == '\0') {
+    // --- Check the workplace enable flag on the site's WorkPlaceComponent (0x140002e10,
+    // written into param3's slot) ---
+    WorkPlaceComponent* workPlace = descComp->_entity->FindComponent<WorkPlaceComponent>();
+    param3 = workPlace;
+    if (workPlace->isAccepting == 0) {
         return 1;  // Workplace disabled
     }
 
     // --- Get game world data ---
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
-    void* worldEntityList = *(void**)(gameWorld + 0xf0);
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    Map* map = gameWorld->m_game;
+    CitizenBehavior* worldEntityList = gameWorld->m_citizenList;
 
-    // --- Get citizen position for cell calculation ---
-    uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
-    uintptr_t citizenAIComp = *(uintptr_t*)(citizenEntity + 0x278);
-    uintptr_t citizenPosComp = *(uintptr_t*)(citizenAIComp + 0x68);
+    // --- Get citizen position for cell calculation: CharacterComponent (+0x278) ->
+    // ModelComponent (+0x68) -> the transform's translation ---
+    const Math::Vector3& citizenPos = (*entityIBP)->character->modelComponent->transform.translation;
 
-    int mapSize = *mapGrid;
+    int mapSize = map->size;
     int halfMap = mapSize >> 1;
-    int cellX = (int)(*(float*)(citizenPosComp + 0x158) + (float)halfMap);
-    int cellY = (int)(*(float*)(citizenPosComp + 0x15c) + (float)halfMap);
+    int cellX = (int)(citizenPos.x + (float)halfMap);
+    int cellY = (int)(citizenPos.y + (float)halfMap);
     if (cellX < 0) cellX = 0;
     if (cellX >= mapSize) cellX = mapSize - 1;
     if (cellY < 0) cellY = 0;
@@ -248,46 +221,43 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
     uint32_t citizenCell = (uint32_t)(cellY * mapSize + cellX);
 
     // --- Iterate material slots ---
-    int numSlots = (int)selfQ[10]; // self->field_50 count
+    int numSlots = field_50;
     if (numSlots < 1) {
         return 1;
     }
 
-    uintptr_t gatherDescAddr = (uintptr_t)gatherDesc;
-    uintptr_t slotOffset = 0;      // +0x00, +0x10, +0x20, ...  (stride 0x10 per slot)
-    uintptr_t intOffset = 0;       // +0x00, +0x04, +0x08, ...  (stride 4 per slot)
-
     for (int slotIdx = 0; slotIdx < numSlots; slotIdx++) {
-        // Get material description data for this slot
-        uintptr_t matDescBase = *(uintptr_t*)(gatherDescAddr + 0x20);
+        // The BuildDescription cost entry for this slot
+        const BuildCost* cost = &gatherDesc->_costs[slotIdx];
 
-        // Calculate target amount: materialCount * multiplier from descComp
-        int targetAmount = *(int*)(slotOffset + matDescBase + 8) * *(int*)(descCompIBP + 0x4c);
+        // Calculate target amount: material quantity * the BuildComponent's cost multiplier
+        int targetAmount = cost->quantity * descComp->costMultiplier;
 
 
         // Check: buildCount[slotIdx] + field_48[slotIdx] < targetAmount
-        int buildCount = *(int*)(intOffset + selfQ[0xb]);      // self->field_58[slotIdx]
-        int assignCount = *(int*)(intOffset + selfQ[9]);        // self->field_48[slotIdx]
+        int buildCount = field_58[slotIdx];
+        int assignCount = field_48[slotIdx];
         if (buildCount + assignCount >= targetAmount) {
             // This slot is already fulfilled
             goto next_slot;
         }
 
         {
-            // --- Find RawMaterialComponent in the material description ---
-            uintptr_t matDescEntity = *(uintptr_t*)(slotOffset + matDescBase);
-            void* rawMatComp = FindRawMaterialInList(matDescEntity, RawMaterialDescription::TypeId());
+            // --- Find the RawMaterialDescription of the cost's material ---
+            RawMaterialDescription* rawMatComp = FindRawMaterialInList(cost->material);
 
             // --- Search for a storage entity with this resource ---
-            uintptr_t foundEntity = 0;
+            // (0x14008d590 takes the town, the out slot, the material and the position as
+            // integers: LEFT.)
+            ComponentEntity* foundEntity = nullptr;
             float searchPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-            uintptr_t excludeIBP = 0;  // Original: local null-initialized IBP (NOT &self->field_10)
+            ComponentEntity* excludeIBP = nullptr;  // Original: local null-initialized IBP (NOT &self->field_10)
 
             Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(worldEntityList), reinterpret_cast<int64_t*>(&foundEntity), citizenCell,
-                *(uint64_t*)(slotOffset + matDescBase), 1, '\0', reinterpret_cast<uint32_t*>(searchPos),
-                (void*)&excludeIBP);
+                reinterpret_cast<uint64_t>(cost->material), 1, '\0', reinterpret_cast<uint32_t*>(searchPos),
+                &excludeIBP);
 
-            if (foundEntity == 0) {
+            if (foundEntity == nullptr) {
                 // No storage found for this slot
                 goto next_slot;
             }
@@ -296,45 +266,41 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                 // --- Calculate how much to gather ---
                 int remaining = targetAmount - buildCount - assignCount;
 
-                // Check citizen's carrying capacity
-                uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
-                uintptr_t citizenStorageIBP = 0;
-                WorkBase_FindComponent_6270(*(uintptr_t*)(citizenEnt + 0x10), &citizenStorageIBP);
+                // Check citizen's carrying capacity (its entity's StorageComponent)
+                StorageComponent* citizenStorage = (*entityIBP)->_entity->FindComponent<StorageComponent>();
 
-                int capacity = *(int*)(citizenStorageIBP + 0x38);
-                int currentStored = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>((void*)citizenStorageIBP));
+                int capacity = citizenStorage->capacity;
+                // (0x14012cf10 takes the storage as an integer: LEFT.)
+                int currentStored = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(citizenStorage));
 
 
-                int carryWeight = *(int*)((uintptr_t)rawMatComp + 0x48);
+                int carryWeight = rawMatComp->_weight;
                 if (capacity - currentStored < carryWeight * remaining) {
-                    // Not enough carry capacity -- recalculate
-                    int remCapacity = WorkLeaf_FreeStorageCapacity_116540(*(uintptr_t*)entityIBP);
+                    // Not enough carry capacity -- recalculate (0x140116540 takes the
+                    // citizen as an integer: LEFT)
+                    int remCapacity = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(*entityIBP));
                     remaining = remCapacity / carryWeight;
                 }
 
                 if (remaining == 0) {
                     // Can't carry anything -- replan
-                    CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(*(void**)entityIBP));
+                    (*entityIBP)->LongTermPlan();
                     return 2;
                 }
 
                 // --- Find storage on the found entity and match material slot ---
-                uintptr_t storageCompIBP2 = 0;
-                void* retIBP = WorkBase_FindComponent_6270((uintptr_t)foundEntity, &storageCompIBP2);
-
-                uintptr_t storageComp = *(uintptr_t*)retIBP;
-                int storageSlotCount = *(int*)(storageComp + 0x30);
+                StorageComponent* storageComp = foundEntity->FindComponent<StorageComponent>();
+                int storageSlotCount = storageComp->slotCount;
                 int availableAmount = 0;
 
                 // Search storage slots for matching material type
                 // R8D=slotIdx starts at 0, increments on miss, used on match
                 if (storageSlotCount > 0) {
-                    uintptr_t* slotArray = *(uintptr_t**)(storageComp + 0x28);
+                    const StorageComponent::Item* slotArray = storageComp->storageSlots;
                     for (int si = 0; si < storageSlotCount; si++) {
-                        if (slotArray[si * 2] == *(uintptr_t*)(slotOffset + matDescBase)) {
+                        if (slotArray[si]._resource == cost->material) {
                             if (si >= 0) {  // R8D >= 0 (always true for unsigned, but matches original TEST R8D,R8D / JS)
-                                availableAmount = (int)slotArray[si * 2 + 1] -
-                                    *(int*)((uintptr_t)slotArray + si * 0x10 + 0xc);
+                                availableAmount = slotArray[si]._count - slotArray[si]._reserve;
                             }
                             break;
                         }
@@ -349,29 +315,27 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                 // --- Calculate target position ---
                 float targetPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-                void* posDescBase = *(void**)((uintptr_t)posCompIBP + 0x18);
+                Description* posDescBase = posComp->_description;
                 int bestDist = 0x7fffffff;
 
                 // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell -- the
                 // registered cell's own class, not the legacy healing fallback which used
-                // to read MapDescription::TypeId()).
+                // to read MapDescription::TypeId()). (0x140122be0 / 0x140122b00 take the
+                // component and the node array as integers: LEFT.)
                 bool isDerivedPos = Object::IsDerivedFromNullSafe(posDescBase, InteractDescription::TypeId());
-                void* posDesc = isDerivedPos ? posDescBase : nullptr;
-                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(posCompIBP,
-                    (uintptr_t)posDesc + 0x38, searchPos, targetPos, &bestDist) : 0;
+                InteractDescription* posDesc = isDerivedPos ? static_cast<InteractDescription*>(posDescBase) : nullptr;
+                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp),
+                    reinterpret_cast<uintptr_t>(&posDesc->_buildNodes), searchPos, targetPos, &bestDist) : 0;
 
-                void* posComp2 = (void*)posCompIBP;
-                if (*(int*)((uintptr_t)posComp2 + 0x30) > 0) {
-                    uintptr_t childOffset = 0;
+                if (posComp->useLocationCount > 0) {
                     int childCount = 0;
                     do {
-                        uintptr_t* childPtr = (uintptr_t*)(*(uintptr_t*)((uintptr_t)posComp2 + 0x28) + childOffset);
-                        uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(*childPtr, 1,
+                        uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(
+                            reinterpret_cast<uintptr_t>(posComp->useLocations[childCount]), 1,
                             searchPos, targetPos, &bestDist);
                         childCount++;
                         found |= childFound;
-                        childOffset += 8;
-                    } while (childCount < *(int*)((uintptr_t)posComp2 + 0x30));
+                    } while (childCount < posComp->useLocationCount);
                 }
 
                 if (found == 0) {
@@ -385,7 +349,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                 }
 
                 // --- Convert target position to grid cell ---
-                int mapSz = *mapGrid;
+                int mapSz = map->size;
                 int tgtCellX = (int)(targetPos[0] + (float)(mapSz >> 1));
                 int tgtCellY = (int)(targetPos[1] + (float)(mapSz >> 1));
                 if (tgtCellX < 0) tgtCellX = 0;
@@ -394,10 +358,10 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
                 if (tgtCellY >= mapSz) tgtCellY = mapSz - 1;
                 int targetCell = tgtCellY * mapSz + tgtCellX;
 
-                // --- Validate work assignment ---
-                uintptr_t citizenRef = *(uintptr_t*)entityIBP;
-                uint64_t validated = WorkImpl_BuildStructureStep_6ef0(selfAddr, &citizenRef,
-                    targetCell, citizenCell, (void*)param3);
+                // --- Validate work assignment (0x1400f6ef0 takes the work as an integer: LEFT) ---
+                CitizenComponent* citizenRef = *entityIBP;
+                uint64_t validated = WorkImpl_BuildStructureStep_6ef0(reinterpret_cast<uintptr_t>(this), &citizenRef,
+                    targetCell, citizenCell, param3);
 
                 if ((char)validated == '\0') {
                     return 0;
@@ -405,46 +369,46 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
 
                 // --- Find path and assign work ---
                 // Original uses a 3-qword stack buffer; [0]=worldEntityList
-                uintptr_t pathBuf[3] = { (uintptr_t)worldEntityList, 0, 0 };
-                uintptr_t destEntity = foundEntity;
-                int* mapGridPtr = (int*)selfQ[2];  // Reread from self
-                void* citizenPtr = *(void**)entityIBP;
+                // (0x1400bf790 takes the locations and the material as integers: LEFT.)
+                void* pathBuf[3] = { worldEntityList, nullptr, nullptr };
+                ComponentEntity* destEntity = foundEntity;
+                ComponentEntity* srcEntity = field_10;  // Reread from self
+                CitizenComponent* citizenPtr = *entityIBP;
 
                 WorkAct_GatherRawMatCtor_bf790(
                     pathBuf,            // stack buffer (original: local_58[3])
                     &citizenPtr,        // citizenPtr
-                    (int)selfQ[4],      // pathType (priority/workplaceId)
-                    reinterpret_cast<uint64_t*>(&mapGridPtr),        // mapGridPtr
+                    field_20,           // pathType (priority/workplaceId)
+                    reinterpret_cast<uint64_t*>(&srcEntity),        // the work entity
                     targetPos,          // targetPos
                     reinterpret_cast<void**>(&destEntity),        // destEntityPtr
                     searchPos,          // srcPos
-                    (int64_t)*(uint64_t*)(slotOffset + matDescBase),  // materialType
+                    reinterpret_cast<int64_t>(cost->material),  // materialType
                     remaining,          // amount
                     (remaining << 8) | slotIdx,  // packed slot info
                     0, '\0', 0, 0);
 
                 // --- Finalize: set citizen state and register work ---
-                uintptr_t priority = selfQ[4];
-                uintptr_t citizenFinal = *(uintptr_t*)entityIBP;
+                int priority = field_20;
+                CitizenComponent* citizenFinal = *entityIBP;
 
-                // Call vtable slot +0x50 (GetWorkEntity)
-                uintptr_t workEntIBP[2] = {0};
-                uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
-                uintptr_t workEntity = *wResult;
+                // Call vtable slot +0x50 (GetTarget)
+                Profession* workEntity = nullptr;
+                GetTarget(&workEntity);
 
-                *(uint32_t*)(citizenFinal + 0x54) |= 4;
-                *(int32_t*)(citizenFinal + 0x30) = (int)priority;
-                *(uint32_t*)(citizenFinal + 0xb0) = 0;
+                citizenFinal->statusFlags |= 4;
+                citizenFinal->field_0x30 = priority;
+                citizenFinal->field_0xB0 = 0;
 
-                if (workEntity == *(uintptr_t*)(citizenFinal + 0x1f0) && (int)priority >= 0) {
-                    *(uint32_t*)(citizenFinal + 0x88) |= 0x20000;
+                if (workEntity == citizenFinal->profession && priority >= 0) {
+                    citizenFinal->happinessFlags |= 0x20000;
                 }
 
-                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x68)), workEntIBP, entityIBP);
+                // (the tree helper takes the container as uintptr_t*: LEFT)
+                WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&field_68), &workEntity, entityIBP);
 
                 // Increment build count for this slot
-                int* buildCountPtr = (int*)(selfQ[0xb] + (int64_t)slotIdx * 4);
-                *buildCountPtr += remaining;
+                field_58[slotIdx] += remaining;
 
 
                 return 2;
@@ -452,8 +416,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
         }
 
     next_slot:
-        intOffset += 4;
-        slotOffset += 0x10;
+        ;
     }
 
     return 1;  // No work found
@@ -468,26 +431,24 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context) {
 // ============================================================
 int GatherRawMaterials::OnComplete(void* param2, void* /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
-    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Remove entity from tree at +0x68
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x68)), param2);
+    // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);
 
     // Extract slot index (low byte) and amount (high 24 bits, shifted right by 8)
     uint32_t slotIdx = param4 & 0xFF;
     int amount = (int)param4 >> 8;
 
     // Decrement field_58[slotIdx] (build counts) by amount
-    uintptr_t* selfQ = (uintptr_t*)this;
-    int* buildCountPtr = (int*)(selfQ[0xb] + (uintptr_t)slotIdx * 4);
-    *buildCountPtr -= amount;
+    field_58[slotIdx] -= amount;
 
     // Increment field_48[slotIdx] (assigned counts) by amount
-    int* assignCountPtr = (int*)(selfQ[9] + (uintptr_t)slotIdx * 4);
-    *assignCountPtr += amount;
+    field_48[slotIdx] += amount;
 
 
-    return (uintptr_t)selfQ[9] & 0xFFFFFF00;  // Original returns uVar3 & 0xffffffffffffff00
+    // Original returns uVar3 & 0xffffffffffffff00: retail's bool false in AL over the
+    // array pointer left in RAX.
+    return reinterpret_cast<uintptr_t>(field_48) & 0xFFFFFF00;  // CAST-OK: ptr_int
 }
 
 // ============================================================
@@ -498,20 +459,16 @@ int GatherRawMaterials::OnComplete(void* param2, void* /*param3*/, int arg3) {
 // ============================================================
 int GatherRawMaterials::OnCancel(void* param2, void* /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
-    (void)this; // selfAddr used below via cast
-    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Remove entity from tree at +0x68
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x68)), param2);
+    // Remove entity from tree at +0x68 (the helper takes the container as uintptr_t*: LEFT)
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&field_68), param2);
 
     // Extract slot index and amount
-    uintptr_t* selfQ = (uintptr_t*)this;
     uint32_t slotIdx = param4 & 0xFF;
     int amount = (int)param4 >> 8;
 
     // Decrement field_58[slotIdx] only (cancel = don't credit the work)
-    int* buildCountPtr = (int*)(selfQ[0xb] + (uintptr_t)slotIdx * 4);
-    *buildCountPtr -= amount;
+    field_58[slotIdx] -= amount;
     return 0;
 }
 
@@ -523,35 +480,30 @@ int GatherRawMaterials::OnCancel(void* param2, void* /*param3*/, int arg3) {
 // CitizenAI::StateMachineRelease.
 // ============================================================
 int GatherRawMaterials::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     while (true) {
-        uintptr_t root = *(uintptr_t*)(selfAddr + 0x68);
-        if (root == 0) return 0;
+        AssignmentNode* root = field_68;
+        if (root == nullptr) return 0;
 
         // Find leftmost node
-        uintptr_t node = root;
-        while (*(uintptr_t*)(node + 0x10) != 0) {
-            node = *(uintptr_t*)(node + 0x10);
+        AssignmentNode* node = root;
+        while (node->left != nullptr) {
+            node = node->left;
         }
 
         // Also try walking up from leftmost
-        uintptr_t current = root;
-        while (current != 0) {
-            uintptr_t next = *(uintptr_t*)(current + 0x10);
-            if (next == 0) break;
+        AssignmentNode* current = root;
+        while (current != nullptr) {
+            AssignmentNode* next = current->left;
+            if (next == nullptr) break;
             current = next;
         }
 
         // node is now leftmost
-        if (node == 0) return 0;
+        if (node == nullptr) return 0;
 
-        // Get the citizen entity IBP from this node
-        uintptr_t citizenEntity = *(uintptr_t*)node;
-
-        // Release citizen's state machine via +0x278 -> +0x48
-        uintptr_t citizenAI = *(uintptr_t*)(citizenEntity + 0x278);
-        WorkBase_TaskListCleanup_c5400((void*)(citizenAI + 0x48));
+        // Release the citizen's action list: CharacterComponent (+0x278) -> +0x48
+        CitizenComponent* citizenEntity = node->element;
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
     }
 }
 
@@ -565,28 +517,25 @@ int GatherRawMaterials::Cleanup() {
 // Returns: true (nonzero) if nothing was removed, false if any removed.
 // ============================================================
 int GatherRawMaterials::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
-
     // Walk tree at +0x68 (field_68), collect invalid entries
-    uintptr_t root = selfQ[0xd]; // +0x68
+    AssignmentNode* root = field_68;
     uint32_t invalidCount = 0;
-    void* invalidArray = nullptr;
+    CitizenComponent** invalidArray = nullptr;
     uint32_t invalidCapacity = 0;
 
-    if (root != 0) {
+    if (root != nullptr) {
         // Find leftmost node
-        uintptr_t node = root;
-        while (*(uintptr_t*)(node + 0x10) != 0) {
-            node = *(uintptr_t*)(node + 0x10);
+        AssignmentNode* node = root;
+        while (node->left != nullptr) {
+            node = node->left;
         }
 
-        while (node != 0) {
+        while (node != nullptr) {
             // Check if this task is still valid
-            uintptr_t taskIBP[1];
-            taskIBP[0] = *(uintptr_t*)node;
+            CitizenComponent* taskIBP[1];
+            taskIBP[0] = node->element;
 
-            char valid = WorkBase_ValidateTask_f7100((void*)this, nullptr, taskIBP, nullptr);
+            char valid = WorkBase_ValidateTask_f7100(this, nullptr, taskIBP, nullptr);
 
             if (valid == '\0') {
                 // Invalid -- add to removal list
@@ -598,17 +547,17 @@ int GatherRawMaterials::Validate() {
                             newCap = newCount * 3;
                         }
                         invalidCapacity = newCap;
-                        void* newArray = System::MemoryAllocator::MemAlloc((int64_t)(int)newCap << 3, 8);
+                        CitizenComponent** newArray = static_cast<CitizenComponent**>(System::MemoryAllocator::MemAlloc((int64_t)(int)newCap << 3, 8));
 
                         // Copy old entries
                         int copyStart = (invalidArray == newArray) ? (int)invalidCount : 0;
                         for (int ci = copyStart; ci < (int)newCount; ci++) {
-                            uintptr_t* dst = (uintptr_t*)((uintptr_t)newArray + (int64_t)ci * 8);
-                            *dst = 0;
+                            CitizenComponent** dst = &newArray[ci];
+                            *dst = nullptr;
                             if (ci < (int)invalidCount) {
-                                *dst = *((uintptr_t*)((uintptr_t)invalidArray + (int64_t)ci * 8));
+                                *dst = invalidArray[ci];
                             } else {
-                                *dst = *(uintptr_t*)node;
+                                *dst = node->element;
                             }
                         }
 
@@ -618,57 +567,56 @@ int GatherRawMaterials::Validate() {
                         invalidArray = newArray;
                     } else {
                         // Space available, just add
-                        *((uintptr_t*)((uintptr_t)invalidArray + (int64_t)invalidCount * 8)) = *(uintptr_t*)node;
+                        invalidArray[invalidCount] = node->element;
                     }
                     invalidCount = newCount;
                 }
             }
 
             // Get next node in tree (in-order traversal)
-            uintptr_t right = *(uintptr_t*)(node + 0x18);
-            if (right != 0) {
+            AssignmentNode* right = node->right;
+            if (right != nullptr) {
                 // Go right, then leftmost
                 node = right;
-                while (*(uintptr_t*)(node + 0x10) != 0) {
-                    node = *(uintptr_t*)(node + 0x10);
+                while (node->left != nullptr) {
+                    node = node->left;
                 }
             } else {
                 // Go up until we come from a left child
-                uintptr_t parent = *(uintptr_t*)(node + 0x8);
-                while (parent != 0) {
-                    if (*(uintptr_t*)(parent + 0x10) == node) {
+                AssignmentNode* parent = node->parent;
+                while (parent != nullptr) {
+                    if (parent->left == node) {
                         // node is left child of parent -- parent is next
                         break;
                     }
                     // node is right child, keep going up
                     node = parent;
-                    parent = *(uintptr_t*)(node + 0x8);
+                    parent = node->parent;
                 }
                 node = parent;
             }
         }
     }
 
-    // Remove invalid entries from tree
+    // Remove invalid entries from tree (keys compare unsigned)
     if ((int)invalidCount > 0) {
-        uintptr_t* invArr = (uintptr_t*)invalidArray;
         for (uint32_t i = 0; i < invalidCount; i++) {
             // Find node in tree by key and remove
-            uintptr_t searchKey = invArr[i];
-            uintptr_t* treeRoot = (uintptr_t*)(selfAddr + 0x68);
-            uintptr_t treeNode = *treeRoot;
+            CitizenComponent* searchKey = invalidArray[i];
+            AssignmentNode* treeNode = field_68;
 
-            while (treeNode != 0) {
-                uintptr_t nodeKey = *(uintptr_t*)treeNode;
+            while (treeNode != nullptr) {
+                CitizenComponent* nodeKey = treeNode->element;
                 if (searchKey < nodeKey) {
-                    treeNode = *(uintptr_t*)(treeNode + 0x10);
+                    treeNode = treeNode->left;
                 } else {
                     if (searchKey <= nodeKey) {
-                        // Found -- remove this node
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(selfAddr + 0x68), (void*)treeNode);
+                        // Found -- remove this node (the helper takes the container as
+                        // uintptr_t*: LEFT)
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_68), treeNode);
                         break;
                     }
-                    treeNode = *(uintptr_t*)(treeNode + 0x18);
+                    treeNode = treeNode->right;
                 }
             }
         }
@@ -678,9 +626,9 @@ int GatherRawMaterials::Validate() {
             Cleanup();   // slot 8 (vtable +0x40), a virtual dispatch in retail
 
             // Reset all build counts to 0
-            int numSlots = (int)selfQ[0xc]; // field_60 count
+            int numSlots = field_60;
             for (int i = 0; i < numSlots; i++) {
-                *(int*)(selfQ[0xb] + (uintptr_t)i * 4) = 0;
+                field_58[i] = 0;
             }
         }
     }
@@ -692,13 +640,12 @@ int GatherRawMaterials::Validate() {
 // ============================================================
 // GetTarget (0x1400ec510) -- vtable slot 10
 //
-// Returns target position from game world singleton.
-// Hidden return ptr: RCX=self, RDX=retbuf.
+// The ProfessionList's +0x30 profession from the game world singleton.
+// Hidden return ptr: RCX=self, RDX=retbuf. (The slot's return buffer is void* in
+// Work.h: LEFT.)
 // ============================================================
 void* GatherRawMaterials::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t something = *(uintptr_t*)(gameWorld + 0xb0);
-    *(uintptr_t*)retbuf = *(uintptr_t*)(something + 0x30);
+    *static_cast<Profession**>(retbuf) = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 
@@ -711,37 +658,34 @@ void* GatherRawMaterials::GetTarget(void* retbuf) {
 // ============================================================
 // GatherRawMaterials dtor 0x1400ec650. The stamps and the `~Internal` call are the compiler's chain.
 GatherRawMaterials::~GatherRawMaterials() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Free BST nodes at +0x68
-    void* bstRoot = *(void**)(selfAddr + 0x68);
+    AssignmentNode* bstRoot = field_68;
     if (bstRoot != nullptr) {
         // Clean up left subtree
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x10));
+        WorkBase_TreeNodeFree_14c30(&field_68, bstRoot->left);
         // Clean up right subtree
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x18));
+        WorkBase_TreeNodeFree_14c30(&field_68, bstRoot->right);
         // Free root node
         System::MemoryAllocator::MemFree(bstRoot);
     }
 
     // Zero out BST root and count
-    *(void**)(selfAddr + 0x68) = nullptr;
-    *(uint32_t*)(selfAddr + 0x70) = 0;
+    field_68 = nullptr;
+    field_70 = 0;
 
-    // Free second int array at +0x58
-    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x58));
-    *(void**)(selfAddr + 0x58) = nullptr;
-    *(uint64_t*)(selfAddr + 0x60) = 0;
+    // Free second int array at +0x58 (count and capacity: one qword store in retail)
+    System::MemoryAllocator::MemFree(field_58);
+    field_58 = nullptr;
+    field_60 = 0;
+    field_64 = 0;
 
-    // Free first int array at +0x48
-    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x48));
-    *(void**)(selfAddr + 0x48) = nullptr;
-    *(uint64_t*)(selfAddr + 0x50) = 0;
+    // Free first int array at +0x48 (count and capacity: one qword store in retail)
+    System::MemoryAllocator::MemFree(field_48);
+    field_48 = nullptr;
+    field_50 = 0;
+    field_54 = 0;
 
 }
-
-
-
 // Slot11 (+0x58) — retail 0x14002a400 is `return 0 < *(int*)(self + 0x70)` (this class
 // keeps its tree count at +0x70). Was pinned to 0 by Work_SlotRet0 (2026-09-05).
 int GatherRawMaterials::GetPriority() {
