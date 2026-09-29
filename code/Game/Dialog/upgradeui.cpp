@@ -3,7 +3,7 @@
 //
 // UpgradeUI (0x38 bytes) — upgrade panel controller.
 // Extends DialogController (0x30 base).
-// +0x30 = button element (InternalBasePtr)
+// +0x30 = the upgrade button (InternalPtr<ButtonElement>)
 //
 // Decompiled from Application-x64.exe.
 
@@ -13,7 +13,6 @@
 #include "ui/UserInterface.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
-#include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
 #include "Player/exe_bodies.h"   // B3R: RemovalCalc_StateMachine_dfa0
 #include <cstdint>
@@ -31,154 +30,95 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "runtime/types/ui/ButtonElement.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/ComponentDescription.h"
+#include "Component/DestroyComponent.h"
+#include "Dialog/UpgradeUI.h"
 
-namespace upgradeui_sa {
+namespace {
 
-// ENDGAME B.3.9 CG2: TypeId_UpgradeUIConfig -> UpgradeUIConfig::TypeId(),
-// TypeId_ComponentEntity -> ComponentEntity::TypeId(), TypeId_HelpButtonElem
-// (shares its initialiser exref 0x1401514f8 with TypeId_ButtonElement) ->
-// UI::ButtonElement::TypeId(), TypeId_ImageElement -> UI::ImageElement::TypeId(),
-// TypeId_ToolbarDescription_FC -> ToolbarDescription::TypeId(). The class statics
-// always answer, so the lazy-fill retires. B3R: the empty EnsureGlobals and the
-// always-true Ready() over the IsDerivedFrom / InternalBasePtr doors went with their
-// calls.
-
-// Serialize is only safe when the bound config is an UpgradeUIConfig with a
-// non-null target template at +0x20 (the stub config zero-fills it until the
-// real UpgradeUIConfig port lands).
-bool ConfigOk(void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* cfg = *reinterpret_cast<void**>(s + 0x10);
-    if (!cfg || !::Object::IsDerivedFromNullSafe(cfg, UpgradeUIConfig::TypeId())) return false;
-    return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cfg) + 0x20) != nullptr;
+// The bound config narrowed to an UpgradeUIConfig (retail's IsDerivedFrom on
+// DWORD_1401c5868), null otherwise.
+UpgradeUIConfig* UpgradeConfig(UpgradeUI* self) {
+    UI::DialogControllerConfig* cfg = self->_config.Get();
+    return ::Object::IsDerivedFromNullSafe(cfg, UpgradeUIConfig::TypeId())
+        ? static_cast<UpgradeUIConfig*>(cfg) : nullptr;
 }
 
-
-
-}  // namespace upgradeui_sa
+}  // namespace
 
 // ============================================================
-// UpgradeUI::Serialize (vtable +0x20) — Slot4
+// UpgradeUI::OnCreated (0x140086d90)
 // ============================================================
-// Finds the upgrade button element, creates a sprite from the
-// ToolbarDescription on the upgrade target template (UpgradeUIConfig+0x20),
-// and sets the sprite on the button's child image element.
-//
-// Original: 0x140086d90
-// [4] 0x140086d90
+// Narrows the container to the upgrade button, stamps its id, puts the
+// target template's ToolbarDescription icon on the button's image child, and
+// hands the button the target template as its user data.
 void UpgradeUI::OnCreated() {
-    if (!upgradeui_sa::ConfigOk(this)) {
-        return;
-    }
-    uintptr_t s = (uintptr_t)this;
+    // SA guard: only safe when the bound config is an UpgradeUIConfig with a
+    // target template (the stub config zero-filled it before the real port).
+    UpgradeUIConfig* upgradeConfig = UpgradeConfig(this);
+    if (!upgradeConfig || upgradeConfig->_target == nullptr) return;
 
-    // Get config from DialogController +0x10
-    void* desc = *(void**)(s + 0x10);
+    UI::Element* container = _container;
+    button = ::Object::IsDerivedFromNullSafe(container, UI::ButtonElement::TypeId())
+        ? static_cast<UI::ButtonElement*>(container) : nullptr;
+    button->SetElementId(33000);
 
-    // Check if config is an UpgradeUIConfig (its +0x20 holds the upgrade
-    // target ComponentEntity template)
-    bool isUpgrade = ::Object::IsDerivedFromNullSafe(desc, UpgradeUIConfig::TypeId());
-    void* upgradeDesc = isUpgrade ? desc : nullptr;
+    // The button's child 4 is its ImageElement.
+    UI::Element* child = button->Child(4).Get();
+    UI::ImageElement* image = ::Object::IsDerivedFromNullSafe(child, UI::ImageElement::TypeId())
+        ? static_cast<UI::ImageElement*>(child) : nullptr;
 
-    // CheckPtr on the InternalBasePtr at +0x20 before reading
-    void* elem = *(void**)(s + 0x20);
+    // The target template (UpgradeUIConfig +0x20, an ExternalPtr<ComponentDescription>).
+    ComponentDescription* target =
+        reinterpret_cast<ComponentDescription*>(upgradeConfig->_target);   // LEFT: UpgradeUIConfig::_target stays void* (ExternalPtrSerializeGeneric takes void**, Game/serialize_externals.h)
 
-    // Check if element is a ButtonElement (exref 0x1401514f8)
-    bool isButton = ::Object::IsDerivedFromNullSafe(elem, UI::ButtonElement::TypeId());
-    void* checkedElem = isButton ? elem : nullptr;
-
-    // Properly construct InternalBasePtr at +0x30 (button reference)
-    new ((void*)(s + 0x30)) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(checkedElem));   // B.3.3 bridge
-
-    // Set button element ID to 33000
-    void* button = *(void**)(s + 0x30);
-    reinterpret_cast<UI::Element*>(button)->SetElementId(33000);  // B.3.6 bridge
-
-    // Get button's child at index 4 (the ImageElement)
-    button = *(void**)(s + 0x30);
-    uint8_t childBuf[16];
-    ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(button)->Child(4));  // B.3.6 bridge
-
-    // Check if child is an ImageElement type
-    void* childElem = *(void**)childBuf;
-    bool isImage = ::Object::IsDerivedFromNullSafe(childElem, UI::ImageElement::TypeId());
-    void* checkedImage = isImage ? childElem : nullptr;
-
-    // Construct an IBP for the image element
-    uint8_t imageIBP[8];
-    new (imageIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checkedImage));   // B.3.3 bridge
-
-    // Get the target ComponentEntity template from UpgradeUIConfig+0x20
-    uintptr_t subDesc = *(uintptr_t*)((uintptr_t)upgradeDesc + 0x20);
-
-    // Find ToolbarDescription in the target template's component list
-    void* buildReqComp = nullptr;
-    if (subDesc && *(int*)(subDesc + 0x30) > 0) {
-        int compCount = *(int*)(subDesc + 0x30);
-        uintptr_t compArray = *(uintptr_t*)(subDesc + 0x28);
-
+    // Find the ToolbarDescription among the template's descriptions.
+    ToolbarDescription* toolbar = nullptr;
+    if (target && target->_subDescCount > 0) {
+        int compCount = target->_subDescCount;
         for (int i = 0; i < compCount; i++) {
-            void* comp = *(void**)(compArray + (uintptr_t)i * 8);
+            Object::Base* comp =
+                reinterpret_cast<Object::Base*>(target->_subDescs[i]);   // LEFT: ComponentDescription::_subDescs is void** (COMP-c)
             if (!comp) continue;
 
-            // Call component vtable[2] to get type ID
-            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-
-            if (typeId == ToolbarDescription::TypeId()) {
-                void* checked = ::Object::IsDerivedFromNullSafe(comp, ToolbarDescription::TypeId())
-                    ? comp : nullptr;
-                buildReqComp = checked;
+            if (comp->Type() == ToolbarDescription::TypeId()) {
+                toolbar = ::Object::IsDerivedFromNullSafe(comp, ToolbarDescription::TypeId())
+                    ? static_cast<ToolbarDescription*>(comp) : nullptr;
                 break;
             }
         }
     }
 
-    // SA-guard: retail data guarantees a ToolbarDescription on the upgrade
+    // SA guard: retail data guarantees a ToolbarDescription on the upgrade
     // target template; skip the icon when the standalone template lacks one.
-    if (!buildReqComp) return;
+    if (!toolbar) return;
 
-    // Create a Sprite from the ToolbarDescription using proper constructor
-    uintptr_t brc = (uintptr_t)buildReqComp;
-    uint8_t sprite[16];
-    ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(brc + 0x20))), *reinterpret_cast<const System::String*>(brc + 0x28));  // B.3.6 bridge
+    UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(
+                          reinterpret_cast<UI::SpriteSheet*>(toolbar->_descRef)),   // LEFT: ToolbarDescription::_descRef is void* (COMP-e)
+                      toolbar->_name);
+    image->SetSprite(&sprite);
 
-    // Set sprite on the image element
-    void* imageElem = *(void**)imageIBP;
-    reinterpret_cast<UI::ImageElement*>(imageElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
-
-    // Set button's user data to the target template
-    void* subDescBase = *(void**)((uintptr_t)upgradeDesc + 0x20);
-    button = *(void**)(s + 0x30);
-    reinterpret_cast<UI::Element*>(button)->SetUserData(reinterpret_cast<Object::Base*>(subDescBase));  // B.3.6 bridge
+    button->SetUserData(target);
 }
 
 // ============================================================
-// UpgradeUI::OnRemove (vtable +0x48) — Slot9
+// UpgradeUI::OnElementEvent (0x140086c90)
 // ============================================================
-// On button click (ID 33000), finds DestroyComponent on the entity,
-// copies the UpgradeDescription reference to it, and starts the upgrade.
-//
-// Original: 0x140086c90
-// [9] 0x140086c90
+// On the button's click (id 33000), writes the upgrade target into the
+// entity's DestroyComponent and starts the upgrade.
 void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventId,
                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    void* p2 = element;
-    if (!p2) return;
-    uintptr_t s = (uintptr_t)this;
+    if (!element) return;
 
     // Only handle button clicks (msg 0x12) with ID 33000
     if (eventType != 0x12 || eventId != 33000)
         return;
 
-    // Verify the event source matches our stored button element
-    void* button = *(void**)(s + 0x30);
-    void* eventSource = *(void**)p2;
-    if (eventSource != button)
+    // The event source must be our button.
+    if (element->Get() != button)
         return;
 
-    // Get the data source entity from DialogController +0x28
-    void* dataSource = *(void**)(s + 0x28);
+    ::Object::Base* dataSource = _dataSource;
     if (!dataSource)
         return;
 
@@ -188,44 +128,34 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
     if (!SA_DialogEntityAlive(this))
         return;
 
-    // Check if data source is a ComponentEntity
     if (!::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId()))
         return;
+    ComponentEntity* entity = static_cast<ComponentEntity*>(dataSource);
 
-    // Find DestroyComponent on the entity
-    uint8_t compBuf[16];
-    fn_FindComponent_Destroy(dataSource, compBuf);
-    void* destroyComp = *(void**)compBuf;
+    DestroyComponent* destroyComp = entity->FindComponent<DestroyComponent>();
     if (!destroyComp) {
         std::fprintf(stderr, "[UpgradeUI] OnRemove: no DestroyComponent on "
-                     "entity %p — upgrade aborted\n", dataSource);
+                     "entity %p — upgrade aborted\n", static_cast<void*>(entity));
         std::fflush(stderr);
         return;
     }
 
-    // Get the config from DialogController +0x10
-    void* desc = *(void**)(s + 0x10);
-    if (!desc)
+    UpgradeUIConfig* upgradeConfig = UpgradeConfig(this);
+    if (!upgradeConfig)
         return;
 
-    // Check if config is an UpgradeUIConfig
-    if (!::Object::IsDerivedFromNullSafe(desc, UpgradeUIConfig::TypeId()))
-        return;
-
-    // Set the upgrade target on DestroyComponent
-    // destroy+0x60 = config+0x20 (the target ComponentEntity template)
-    *(uint64_t*)((uintptr_t)destroyComp + 0x60) = *(uint64_t*)((uintptr_t)desc + 0x20);
+    // The upgrade target: DestroyComponent +0x60 = the config's target template.
+    destroyComp->field60 = upgradeConfig->_target;
 
     // Start the upgrade: pump the BuildState state machine. 0x14011dfa0 is the
     // generic driver ("StartUpgrade" was a misnomer); the disasm-verified port
-    // is RemovalCalc_StateMachine_dfa0 (keystone_a_removalcalcpath.cpp), called
-    // by name (B3R).
+    // is RemovalCalc_StateMachine_dfa0 (keystone_a_removalcalcpath.cpp).
     std::fprintf(stderr, "[UpgradeUI] OnRemove: target=%p written to "
                  "destroyComp=%p +0x60, pumping SM (driver=%p)\n",
-                 *(void**)((uintptr_t)desc + 0x20), destroyComp,
-                 (void*)&RemovalCalc_StateMachine_dfa0);
+                 upgradeConfig->_target, static_cast<void*>(destroyComp),
+                 reinterpret_cast<void*>(&RemovalCalc_StateMachine_dfa0));   // LEFT: printing a function address
     std::fflush(stderr);
-    RemovalCalc_StateMachine_dfa0(reinterpret_cast<int64_t>(destroyComp));   // 0x14011dfa0
+    RemovalCalc_StateMachine_dfa0(reinterpret_cast<int64_t>(destroyComp));   // 0x14011dfa0  LEFT: takes int64_t (Player/exe_bodies.h)
 }
 
 // ============================================================
@@ -233,19 +163,13 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
 // ============================================================
 // Retail vtable @ 0x14015df00 (11 slots): overrides 0,1,2,4,7,9. Slot 7
 // (0x140086d80) is a 3-byte RET 0 no-op, slots 3,5,6,8,10 are inherited
-// UI::DialogController base thunks. Standalone mirrors the residenceui_sa
-// pattern: Slot4 (Serialize, icon + button wiring) is driven once from slot 8
-// (OnUpdate) as a self-heal if the framework never calls slot 4; slot 9 is the
-// click handler (eventType 0x12, element id 33000 → write the upgrade target
-// template into DestroyComponent+0x60 and pump the state machine).
-// Replaces the UI_DIALOG_STUB(UpgradeUI, ...) no-op registration.
-
-
+// UI::DialogController base thunks. OnCreated (icon + button wiring) is driven
+// once from slot 8 (OnUpdate) as a self-heal if the framework never calls
+// slot 4; slot 9 is the click handler.
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void UpgradeUI::OnUpdate(const System::Time& /*time*/) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) UpgradeUI::OnCreated();
+    if (button == nullptr) UpgradeUI::OnCreated();
 }
 
 

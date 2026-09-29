@@ -145,45 +145,29 @@ extern "C" void TownHall_InventorySortDesc(void* items, int count, void*, void*)
 extern "C" void TownHall_RemoveWorker(void* citizenList, uint64_t professionId);  // 0x140091180
 
 // ---- townhallui.cpp
-// --- Reimplemented TownHallUI functions (clean C++ in townhallui.cpp) ---
-// Forward-declared here; defined in code/Game/Dialog/townhallui.cpp.
-class TownHallUI;  // forward decl
-void TownHallUI_InitGeneral(TownHallUI* self);           // was FUN_1400807f0
-void TownHallUI_InitGraph(TownHallUI* self);             // was FUN_14007f0a0
-void TownHallUI_InitProfessions(TownHallUI* self);       // was FUN_140080160
-void TownHallUI_InitProduction(TownHallUI* self);        // was FUN_14007fc30
-void TownHallUI_InitInventory(TownHallUI* self);         // was FUN_14007f660
-void TownHallUI_InitAgriculture(TownHallUI* self);       // was FUN_14007ebf0
-void TownHallUI_UpdateGraph(TownHallUI* self);           // was FUN_14007e5b0
-void TownHallUI_UpdateGeneral(TownHallUI* self);         // was FUN_14007d030
-void TownHallUI_UpdateProfessions(TownHallUI* self);     // was FUN_14007ccb0
-void TownHallUI_UpdateProduction(TownHallUI* self);      // was FUN_14007c7f0
-void TownHallUI_UpdateAgriculture(TownHallUI* self);     // was FUN_14007c220
-void TownHallUI_UpdateInventory(TownHallUI* self);       // was FUN_14007def0
-void TownHallUI_UpdateAll(TownHallUI* self);             // was FUN_14007d590
-void TownHallUI_OnProfessionButton(TownHallUI* self, int index); // was FUN_14007dca0
-void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index); // was FUN_14007dd10
+// B.4 DLG-e: the fifteen TownHallUI bodies are members (Dialog/TownHallUI.h).
 
 // ---- tradeui_buyentries.cpp
 extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray);  // 0x140059670
 
 // ---- tradeui_checkout.cpp
 extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp);  // 0x14005a490
+// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 
 // ---- tradeui_leaves.cpp
-extern "C" void TradeUI_DynArrayClear_16050(int64_t* header);  // 0x140016050
-extern "C" void TradeUI_DynArrayClear_16130(int64_t* header);  // 0x140016130
-extern "C" void TradeUI_DynArrayClear_16200(int64_t* header);  // 0x140016200
-extern "C" void* TradeUI_GetOrderName_15fd0(int64_t tradeState, void* out);  // 0x140015fd0
-extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState, int64_t resourceEntity, int8_t addFlag);  // 0x140059490
+class TradeComponent;        // code/Game/Component/TradeComponent.h
+class ComponentDescription;  // code/Game/Component/ComponentDescription.h
+namespace System { class String; }
+extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::String* out);  // 0x140015fd0
+extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, ComponentDescription* resourceEntity, int8_t addFlag);  // 0x140059490
 extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree, void** out, const uint64_t* entry);  // 0x14000e1c0
 
 // ---- tradeui_price.cpp
 extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity);  // 0x14005a520
 
 // ---- tradeui_sort.cpp
-extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count, void* , int64_t );  // 0x1400162d0
+extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count);  // 0x1400162d0
 extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count, void* ctx);  // 0x1400165d0
 
 // ---- unreg_lane2_mapparamsdialog_ctor.cpp

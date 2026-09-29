@@ -21,6 +21,7 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 #include "system/String.h"
+namespace UI { class SpriteSheet; class StringTable; }   // B4 H4 (DLG-e)
 
 class ValueDescription final : public Description {
     DECLARE_EXE_TYPE(ValueDescription)
@@ -37,9 +38,9 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14000fb10
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _sprite;                              // +0x20 ExternalPtr (sprite/icon)
+    UI::SpriteSheet* _sprite;                   // +0x20 ExternalPtr (sprite/icon)
     System::String _name;                       // +0x28 String
-    void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
+    UI::StringTable* _ref30;                    // +0x30 ExternalPtr (a raw pointer)
     System::String _s38;                        // +0x38 String
     int32_t _i40;                               // +0x40
     int32_t _baseValue;                         // +0x44
