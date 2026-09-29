@@ -161,8 +161,9 @@ void AttendanceComponent_ReleaseLink59b0(void* workerP) {
 // ============================================================
 // Reimpl of FUN_140002e10 (find the job-host component (type DWORD_1401c80e0)
 //   on an entity and return it wrapped in an InternalBasePtr via retbuf)
+// Retail returns the return buffer in RAX, as every by-value return does.
 // ============================================================
-void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
+void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
     void* found = nullptr;
     {
         const uint32_t tidJobHost = WorkPlaceComponent::TypeId();
@@ -182,6 +183,7 @@ void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
     }
     new (outPtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+    return outPtr;
 }
 
 // ============================================================

@@ -277,11 +277,9 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         if (workerCount < capacity) {
             int64_t tmpIBP[2] = { 0, 0 };                 // 16-byte scratch IBP (matches local_50)
             {
-                // 0x140002e10. The port is declared `void`; this reader reads RAX as
-                // the IBP* (retail returns outIBP). The cast keeps the bits it reads
-                // today (a behaviour: candidate, B3R).
-                void* reach = reinterpret_cast<void* (*)(void*, void*)>(
-                    &AttendanceComponent_GetJobHostComponent)(reinterpret_cast<void*>(building), tmpIBP);
+                // 0x140002e10 returns its return buffer (the IBP*).
+                void* reach = AttendanceComponent_GetJobHostComponent(
+                    reinterpret_cast<void*>(building), tmpIBP);
                 if (reach) {
                     accepting = *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(reach) + 0x50);
                     reachOk = (accepting != 0);
