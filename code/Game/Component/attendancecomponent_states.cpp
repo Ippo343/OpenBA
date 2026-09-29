@@ -66,13 +66,18 @@ using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 // 0x140002f90 WorkBase_FindComponent_2f90(entity, outIBP)       — MeshInstance.
 // 0x14012c3f0 CitizenComp_FUN_14012c3f0(mesh, flagIdx, value)  — MeshInstance set-state-flag.
 
+#include "Component/StatusIconComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Entity/ComponentEntity.h"
+
 // The town attendance registry: gameWorld+0xf0 is the town object, +0x60 its array
 // base and +0x68 the element count. Both state 2's enter (append) and the component's
-// vtable slot 7 (erase) operate on it, and helper_3db0 below walks it.
+// vtable slot 7 (erase) operate on it, and AllFull below walks it.
+// LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the list stays by offset.
 static uintptr_t AC_TownObject() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    return *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
 }
 
 // ── AttendanceDescription_helper_3db0 (0x140043db0) — "is every building of my kind
@@ -90,55 +95,50 @@ static uintptr_t AC_TownObject() {
 // ⚠ The desc deref after IsDerivedFrom is unguarded in retail and left unguarded here:
 // the equality test on the line above already established that entry carries this exact
 // description pointer, so the cast cannot fail.
-extern "C" char AttendanceComponent_AllFull(void* selfP) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+char AttendanceComponent::AllFull() {
     const uintptr_t town = AC_TownObject();
     if (!town) return 1;
 
-    const uintptr_t base  = *reinterpret_cast<uintptr_t*>(town + 0x60);
+    AttendanceComponent* const* base = *reinterpret_cast<AttendanceComponent* const* const*>(town + 0x60);
     const int       count = *reinterpret_cast<int32_t*>(town + 0x68);
-    const uintptr_t myDesc = *reinterpret_cast<uintptr_t*>(self + 0x18);
+    const Description* myDesc = _description;
 
     for (int i = 0; i < count && base; ++i) {
-        uintptr_t entry = *reinterpret_cast<uintptr_t*>(base + static_cast<uintptr_t>(i) * 8);
+        AttendanceComponent* entry = base[i];
         if (!entry) continue;
-        if (*reinterpret_cast<uintptr_t*>(entry + 0x18) != myDesc) continue;
+        if (entry->_description != myDesc) continue;
 
-        void* desc = *reinterpret_cast<void**>(entry + 0x18);
-        if (!::Object::IsDerivedFromNullSafe(desc, AttendanceDescription::TypeId()))
-            desc = nullptr;
-        const int capacity = *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uintptr_t>(desc) + 0x20);
-        if (*reinterpret_cast<int32_t*>(entry + 0x30) < capacity)
+        Description* d = entry->_description;
+        AttendanceDescription* desc = ::Object::IsDerivedFromNullSafe(d, AttendanceDescription::TypeId())
+                                          ? static_cast<AttendanceDescription*>(d) : nullptr;
+        const int capacity = desc->_i20;
+        if (entry->queueCount < capacity)
             return 0;
     }
     return 1;
 }
 
 // ── state 2 trans38 — retail 0x140043c30 — PER-FRAME ──────────────────────────────
-// Pushes the "all full" answer into the building's MeshInstance state flag 2, which is
-// the closed/full visual. This is the only per-frame work the attendance controller
-// does; there is no update handler on either state.
-static char Attendance_State2Frame(void* selfP, void* /*sm*/, void* /*time*/) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+// Pushes the "all full" answer into the building's status icon flag 2, which is the
+// closed/full visual. This is the only per-frame work the attendance controller does;
+// there is no update handler on either state.
+char AttendanceComponent::State2Frame() {
+    StatusIconComponent* mesh = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
 
-    uintptr_t meshIbp = 0;
-    WorkBase_FindComponent_2f90(*reinterpret_cast<uintptr_t*>(self + 0x10), &meshIbp);
-
-    const char full = AttendanceComponent_AllFull(selfP);
+    const char full = AllFull();
     // ⚠ Retail reads `*(longlong**)self` where `self` is the finder's RETURN value —
     // and the finder RETURNS ITS OUT-PARAM ADDRESS, so retail's deref is simply
-    // "load meshIbp". We already hold meshIbp by value, so there is nothing left to
-    // dereference: adding retail's `*` here handed 12c3f0 the component's VTABLE and
-    // it faulted reading -1 (see reference_outparam_finder_recycled_ibp).
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(meshIbp), 2, full);
+    // "load the found component". Handing 12c3f0 the component's VTABLE faulted
+    // (see reference_outparam_finder_recycled_ibp).
+    // LEFT: CitizenComp_FUN_14012c3f0 takes int64_t* (statusiconcomponent.cpp's declaration)
+    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 2, full);
     return 0;
 }
 
 // ── state 2 enter — retail 0x140043c90 (Ghidra: "LocationWork_Ctor") ──────────────
 // This is the OPEN transition and it is four distinct steps:
 //   1. append this component to the town attendance registry (gw+0xf0 +0x60/+0x68) —
-//      the list helper_3db0 above walks, and the list slot 7 erases from;
+//      the list AllFull walks, and the list slot 7 erases from;
 //   2. mint a 0x50-byte LocationWork bound to the owner entity;
 //   3. post it to the entity's WorkComponent ledger via CitizenAI_impl_ec60(.., 1, 0, ..)
 //      — this is what makes citizens actually walk here;
@@ -149,15 +149,11 @@ static char Attendance_State2Frame(void* selfP, void* /*sm*/, void* /*time*/) {
 // ⚠ Ghidra's name is a misnomer of the same family as "HerbalistWork_Ctor" for
 // HerbalistComponent's slot 18: this is a state ENTER handler that happens to build a
 // LocationWork, not LocationWork's constructor (that is 0x1400efc60).
-static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-
+char AttendanceComponent::State2Enter() {
     // 1. register in the town attendance list
     const uintptr_t town = AC_TownObject();
     if (town) {
-        uintptr_t selfIbp = 0;
-        new (&selfIbp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(selfP));   // B.3.3 bridge
+        Object::InternalPtr<AttendanceComponent> selfIbp(this);
         // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         const int32_t newCount = *reinterpret_cast<int32_t*>(town + 0x68) + 1;
         GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(town + 0x60))
@@ -172,7 +168,7 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
         // Retail inlines LocationWork's entity-seeded ctor here: Work_Ctor25
         // (0x1400f72e0), the 0x1401616a0 table, +0x48 = 0. ENDGAME B.3.9 OBJ:
         // the real class, not the `??0Internal` door + hand stamp.
-        uintptr_t entity = *reinterpret_cast<uintptr_t*>(self + 0x10);
+        ComponentEntity* entity = _entity;
         work = ::new (work) LocationWork(&entity);
     }
     uintptr_t workIbp = 0;
@@ -181,16 +177,16 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
 
     // 3. post it to the citizen work ledger
     {
-        uintptr_t workCompIbp = 0;
-        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
-        CitizenAI_WorkScheduler_Post(workCompIbp, 1, '\0', &workIbp);
+        WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
+        // LEFT: CitizenAI_WorkScheduler_Post takes the component as uintptr_t (COMP-b's declaration)
+        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 1, '\0', &workIbp);
     }
 
     // 4. open the workplace
     {
-        uintptr_t wpcIbp = 0;
-        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
-        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIbp), true);
+        WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
+        // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's declaration)
+        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), true);
     }
 
     return 0;
@@ -199,27 +195,32 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
 // ── state 3 enter — retail 0x140043bd0 ────────────────────────────────────────────
 // The CLOSED transition, the exact mirror of state 2:
 //   1. component vtable slot 7 (+0x38) — erase from the town attendance registry;
-//   2. AttendanceComponent_ProcessQueue — send every queued citizen home;
+//   2. ProcessQueue — send every queued citizen home;
 //   3. SetAccepting(wpc, 0) — close the workplace.
 // Step 1 goes through the vtable rather than calling the ported body directly, because
-// that is what retail does and because slot 7 is installed in the same wave — if it
-// ever regressed to the inert stub, a direct call here would hide it.
-static char Attendance_State3Enter(void* selfP, void* /*sm*/) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
+// that is what retail does.
+char AttendanceComponent::State3Enter() {
+    Component* self = this;
+    self->OnRemove();   // slot 7, dispatched as retail does
 
-    reinterpret_cast<AttendanceComponent*>(selfP)->OnRemove();   // B.3.8 bridge (slot 7, dispatched as retail does)
-
-    AttendanceComponent_ProcessQueue(selfP);
+    ProcessQueue();
 
     {
-        uintptr_t wpcIbp = 0;
-        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
-        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpcIbp), false);
+        WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
+        // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's declaration)
+        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), false);
     }
     return 0;
 }
 
 // ── the table — replicates AttendanceDescription_helper_4630 (0x140044630) ────────
+// The table (controller_state_table.h) holds plain handler addresses called as
+// handler([node+0x18], sm, time): [node+0x18] is the controller's back-pointer,
+// this component, so each entry is a one-line adapter that calls the member.
+static char Attendance_State2Enter(AttendanceComponent* a) { return a->State2Enter(); }   // 0x140043c90
+static char Attendance_State2Frame(AttendanceComponent* a) { return a->State2Frame(); }   // 0x140043c30
+static char Attendance_State3Enter(AttendanceComponent* a) { return a->State3Enter(); }   // 0x140043bd0
+
 extern "C" void AttendanceCtrl_PopulateTable() {
     using namespace ::ControllerLive;
     StateTable& t = AttendanceDispatch::table;

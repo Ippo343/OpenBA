@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "Component/Component.h"
+#include "system/Value.h"   // System::Time
 #include "Object/exe_type.h"
 
 class AnimalComponent final : public Component {
@@ -39,26 +40,39 @@ public:
     void Update(void* time) override;                             // [9]  0x140106420
     void Slot11() override;                                       // [11] 0x140106dd0 PORT GAP
 
-    // PUBLIC while the ported bodies read them (B38 decision 1). Names kept
-    // from the POD (dataNN) because sibling lanes spell them.
-    uint32_t data28;       // +0x28  habitat cell index (y * mapDim + x)
-    uint8_t  _pad2C[4];    // +0x2C
-    uint64_t data30;       // +0x30  System::Time move timer
-    uint64_t data38;       // +0x38  wander box: short x0, y0, width, height
-    uint8_t  data40;       // +0x40  non-zero once this animal grazes
-    uint8_t  _pad41[3];    // +0x41
-    uint32_t data44;       // +0x44  float age, in hours
-    uint32_t data48;       // +0x48  float age of death (rolled by Startup)
-    uint8_t  _pad4C[4];    // +0x4C
-    uint64_t data50;       // +0x50  System::Time graze timer
+    // ---- non-virtual members (retail addresses) ----
+    int  FindHabitat();                                           // 0x140106020
+    void UpdateBehavior();                                        // 0x140107320
+    void SetWanderTimer(uint32_t animId, float seconds);          // 0x140106250
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Types from
+    // Persist 0x140106e40: int (import 0x140152ac8), System::Time::Serialize
+    // (0x140152aa8), float (0x140152a60), bool (0x140152a58), short
+    // (0x140152468). No key names: the names say what Update does with them.
+    int32_t      habitatCell;   // +0x28 habitat cell index (y * mapDim + x)
+    uint8_t      _pad2C[4];     // +0x2C
+    System::Time moveTimer;     // +0x30 counts down to the next wander
+    int16_t      wanderX;       // +0x38 wander box (PastureComponent_AnimalSetBounds)
+    int16_t      wanderY;       // +0x3A
+    int16_t      wanderWidth;   // +0x3C
+    int16_t      wanderHeight;  // +0x3E
+    bool         canGraze;      // +0x40 gates Update's graze latch
+    uint8_t      _pad41[3];     // +0x41
+    float        age;           // +0x44 in hours
+    float        deathAge;      // +0x48 in hours (rolled by Startup)
+    uint8_t      _pad4C[4];     // +0x4C
+    System::Time grazeTimer;    // +0x50
 };
 
 static_assert(sizeof(AnimalComponent) == 0x58, "AnimalComponent is 0x58 (create 0x14002f020)");
 static_assert(alignof(AnimalComponent) == 8, "AnimalComponent alignment");
-static_assert(offsetof(AnimalComponent, data28) == 0x28, "");
-static_assert(offsetof(AnimalComponent, data30) == 0x30, "");
-static_assert(offsetof(AnimalComponent, data38) == 0x38, "");
-static_assert(offsetof(AnimalComponent, data40) == 0x40, "");
-static_assert(offsetof(AnimalComponent, data44) == 0x44, "");
-static_assert(offsetof(AnimalComponent, data48) == 0x48, "");
-static_assert(offsetof(AnimalComponent, data50) == 0x50, "");
+static_assert(offsetof(AnimalComponent, habitatCell) == 0x28, "AnimalComponent::habitatCell @ +0x28 (Serialize int&)");
+static_assert(offsetof(AnimalComponent, moveTimer) == 0x30, "AnimalComponent::moveTimer @ +0x30 (Time::Serialize)");
+static_assert(offsetof(AnimalComponent, wanderX) == 0x38, "AnimalComponent::wanderX @ +0x38 (Serialize short&)");
+static_assert(offsetof(AnimalComponent, wanderY) == 0x3A, "AnimalComponent::wanderY @ +0x3A (Serialize short&)");
+static_assert(offsetof(AnimalComponent, wanderWidth) == 0x3C, "AnimalComponent::wanderWidth @ +0x3C (Serialize short&)");
+static_assert(offsetof(AnimalComponent, wanderHeight) == 0x3E, "AnimalComponent::wanderHeight @ +0x3E (Serialize short&)");
+static_assert(offsetof(AnimalComponent, canGraze) == 0x40, "AnimalComponent::canGraze @ +0x40 (Serialize bool&)");
+static_assert(offsetof(AnimalComponent, age) == 0x44, "AnimalComponent::age @ +0x44 (Serialize float&)");
+static_assert(offsetof(AnimalComponent, deathAge) == 0x48, "AnimalComponent::deathAge @ +0x48 (Serialize float&)");
+static_assert(offsetof(AnimalComponent, grazeTimer) == 0x50, "AnimalComponent::grazeTimer @ +0x50 (Time::Serialize)");

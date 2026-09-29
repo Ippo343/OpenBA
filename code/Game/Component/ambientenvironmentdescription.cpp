@@ -135,20 +135,20 @@ bool AmbientEnvironmentDescription::Serialize(void* stream) {
     }
 
     if (count > 0) {
-        uint8_t* elem = static_cast<uint8_t*>(_entries);
-        for (int i = 0; i < count; ++i, elem += 0x28) {
-            ser.Serialize(*reinterpret_cast<unsigned int*>(elem + 0x00), nullptr);   // enum
-            Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x08, &ser);  // ExternalPtr, 0x140002340
-            AmbientExternalPtrSerialize_Reimpl(elem + 0x10, &ser);        // ExternalPtr, 0x1400019a0
-            AmbientExternalPtrSerialize_Reimpl(elem + 0x18, &ser);        // ExternalPtr, 0x1400019a0
-            ser.Serialize(*reinterpret_cast<int*>(elem + 0x20), nullptr);            // int
+        AmbientEnvironmentBiome* elem = _entries;
+        for (int i = 0; i < count; ++i, ++elem) {
+            ser.Serialize(elem->terrainMask, nullptr);                          // enum
+            Reimpl_ExternalPtr_Serialize_StringTable(&elem->entityFilter, &ser);  // ExternalPtr, 0x140002340
+            AmbientExternalPtrSerialize_Reimpl(&elem->daySound, &ser);           // ExternalPtr, 0x1400019a0
+            AmbientExternalPtrSerialize_Reimpl(&elem->nightSound, &ser);         // ExternalPtr, 0x1400019a0
+            ser.Serialize(elem->weight, nullptr);                               // int
         }
     }
-    
-    // +0x30 / +0x34: floats written through the 4-byte INT door (the tree's
-    // choice; same four bytes either way).
-    ser.Serialize(*reinterpret_cast<int*>(&_f30), nullptr);
-    ser.Serialize(*reinterpret_cast<int*>(&_f34), nullptr);
+
+    // +0x30 / +0x34: retail's float overload (import 0x140152a60 at 0x140043a25
+    // and 0x140043a37).
+    ser.Serialize(_f30, nullptr);
+    ser.Serialize(_f34, nullptr);
     return true;
 }
 

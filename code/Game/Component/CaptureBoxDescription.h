@@ -31,6 +31,8 @@
 #include "ui/ElementDescription.h"
 #include "Object/exe_type.h"
 
+namespace UI { class SpriteSheet; }
+
 class CaptureBoxDescription final : public UI::ElementDescription {
     DECLARE_EXE_TYPE(CaptureBoxDescription)
 
@@ -52,7 +54,7 @@ public:
     using UI::ElementDescription::CreateInstance;
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*          _spriteSheet;   // +0x68 ExternalPtr<UI::SpriteSheet>
+    UI::SpriteSheet* _spriteSheet; // +0x68 ExternalPtr<UI::SpriteSheet>
     System::String _spriteName;    // +0x70
 };
 

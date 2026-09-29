@@ -51,6 +51,11 @@ public:
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
 
+    // ---- non-virtual members (retail addresses) ----
+    // The state handlers of the controller's table (RCX = [node+0x18] = this).
+    char EnterBuilt();                                            // 0x140046fc0 state 2
+    char EnterDemolish();                                         // 0x140046f80 state 3
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
     // Grave-plot cell list, a plain DynArray<int>: the plot-grid builder (slot 6)
