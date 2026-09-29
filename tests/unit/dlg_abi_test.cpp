@@ -166,10 +166,10 @@ UNIT_TEST(dlg_achievement_goal_dialogs) {
 UNIT_TEST(dlg_scenario_dialog) {
     CHECK_EQ(sizeof(ScenarioDialog), (size_t)0xe8);
     CHECK_EQ(offsetof(ScenarioDialog, difficulty), (size_t)0xb8);
-    CHECK_EQ(offsetof(ScenarioDialog, dataC0), (size_t)0xc0);
-    CHECK_EQ(offsetof(ScenarioDialog, dataC8), (size_t)0xc8);
-    CHECK_EQ(offsetof(ScenarioDialog, dataD8), (size_t)0xd8);
-    CHECK_EQ(offsetof(ScenarioDialog, dataE0), (size_t)0xe0);
+    CHECK_EQ(offsetof(ScenarioDialog, parentMenu), (size_t)0xc0);
+    CHECK_EQ(offsetof(ScenarioDialog, selectedIndex), (size_t)0xc8);
+    CHECK_EQ(offsetof(ScenarioDialog, entries), (size_t)0xd8);
+    CHECK_EQ(offsetof(ScenarioDialog, entries) + offsetof(Collection::Array<ScenarioDialogEntry>, _size), (size_t)0xe0);
     CheckShape<ScenarioDialog>();
     CheckDialogInstanceSlots<ScenarioDialog>();
 }
