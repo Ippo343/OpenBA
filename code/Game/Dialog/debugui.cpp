@@ -58,6 +58,9 @@
 #include "Entity/componententity_funcs.h"     // B3R: ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Component/firecomponent_funcs.h"    // B3R: FireComponent_Ignite_610
 #include "Component/diseasecomponent_funcs.h" // B3R: DiseaseComp_Infect
+#include "Entity/CitizenBehavior.h"            // B4 DLG-a: the town lists
+#include "Component/PastureComponent.h"
+#include "Component/PopulationComponent.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "ui/SliderElement.h"          // B4 DLG-a: the typed DebugUI fields
 #include "ui/CheckElement.h"
@@ -337,27 +340,34 @@ static void Game_DestroyAllRawMaterials_Impl() {
     }
 }
 
+// The town lists (GameUpdateLoop +0xF0).
+static CitizenBehavior* DebugUI_Town() {
+    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a's header).
+    return (CitizenBehavior*)GameUpdateLoop::_singleton->m_citizenList;
+}
+
 // ============================================================
 // Game_SpawnItemsInStorage (FUN_140060290)
 // Iterates the storage list at gameWorld+0xF0, sub-list at +0x90/+0x98.
 // For each storage, spawns up to 5 items if current count < capacity.
-// LEFT: GameUpdateLoop::m_citizenList is void*; the pasture's class is unsettled.
+// The lists are CitizenBehavior's pastures (+0x90 / +0x98).
 // ============================================================
 static void Game_SpawnItemsInStorage_Impl() {
-    uintptr_t entityListBase = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
+    CitizenBehavior* town = DebugUI_Town();
 
-    int storageCount = *(int*)(entityListBase + 0x98);
+    int storageCount = town->pastureCount;
     if (storageCount <= 0) return;
 
-    uintptr_t arrayBase = *(uintptr_t*)(entityListBase + 0x90);
     for (int i = 0; i < storageCount; i++) {
-        void* storage = *(void**)(arrayBase + (uintptr_t)i * 8);
+        PastureComponent* storage = town->pastures[i];
 
         // Check if storage has items to spawn (component+0x28 != 0)
-        if (*(uintptr_t*)((uintptr_t)storage + 0x28) == 0) continue;
+        if (storage->field28 == nullptr) continue;
 
         for (int j = 0; j < 5; j++) {
-            int currentCount = *(int*)((uintptr_t)storage + 0x38);
+            // LEFT: PastureComponent +0x38 is declared void* (COMP-d's header); its
+            // low dword is the animal count.
+            int currentCount = *reinterpret_cast<const int32_t*>(&storage->field38);
             // 0x140128570 PastureComponent_ComputeCapacity (door misnamed
             // fn_StorageComponent_GetCapacity; the int the door read is the low dword).
             int capacity = static_cast<int>(PastureComponent_ComputeCapacity(reinterpret_cast<uintptr_t>(storage)));
@@ -380,9 +390,9 @@ static void Game_SpawnItemsInStorage_Impl() {
 static void Game_SpawnCitizens_Impl() {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
     System::Random* random = game->m_random;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (the building list at +0x00/+0x08).
-    uintptr_t* entityListPtr = (uintptr_t*)game->m_citizenList;
-    int buildingCount = (int)entityListPtr[1]; // building count at entityList+0x08
+    // The building list: CitizenBehavior +0x00 / +0x08.
+    CitizenBehavior* town = DebugUI_Town();
+    int buildingCount = town->field_0x08;
 
     if (buildingCount == 0) return;
 
@@ -391,11 +401,9 @@ static void Game_SpawnCitizens_Impl() {
         // Inner loop: scan all buildings
         int buildIdx = 0; // local_res10
         if (buildingCount > 0) {
-            uintptr_t buildOffset = 0; // local_b0 — byte offset into building array
             do {
-                // Get building from array: *(entityListPtr[0] + buildOffset)
-                uintptr_t buildArrayBase = entityListPtr[0];
-                ComponentEntity* building = *(ComponentEntity**)(buildOffset + buildArrayBase);
+                // The building (the array is re-read per pass)
+                ComponentEntity* building = town->field_0x00[buildIdx];
 
                 if (building != nullptr) {
 
@@ -527,9 +535,8 @@ static void Game_SpawnCitizens_Impl() {
 
                 // Advance to next building
                 buildIdx++;
-                buildOffset += 8;
                 // Re-read building count (may change if entities are added)
-                buildingCount = (int)entityListPtr[1];
+                buildingCount = town->field_0x08;
             } while (buildIdx < buildingCount);
         }
     } while (spawnedTotal < 4);
@@ -542,11 +549,11 @@ static void Game_SpawnCitizens_Impl() {
 // ============================================================
 void DebugUI::TriggerDisasterOnBuilding() {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    // LEFT: GameUpdateLoop::m_citizenList is void*.
-    uintptr_t entityListBase = (uintptr_t)game->m_citizenList;
+    CitizenBehavior* town = DebugUI_Town();
 
-    // Pick random building from the building list
-    uint32_t buildingCount = *(uint32_t*)(entityListBase + 0xA8);
+    // Pick a random citizen (CitizenBehavior +0xA0 / +0xA8; the tree called it the
+    // building list)
+    uint32_t buildingCount = (uint32_t)town->citizenCount;
     if (buildingCount == 0) return;
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(buildingCount));
 
@@ -562,7 +569,7 @@ void DebugUI::TriggerDisasterOnBuilding() {
     if (!diseaseDesc) return;
 
     // Get building entity from building array
-    void* building = *(void**)(*(uintptr_t*)(entityListBase + 0xA0) + (int64_t)(int)randIdx * 8);
+    CitizenComponent* building = town->citizens[(int)randIdx];
     if (!building) return;
 
     // Apply disease to building
@@ -575,16 +582,16 @@ void DebugUI::TriggerDisasterOnBuilding() {
 // ============================================================
 static void Game_StartRandomFire_Impl() {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    // LEFT: GameUpdateLoop::m_citizenList is void*.
-    uintptr_t entityListBase = (uintptr_t)game->m_citizenList;
-    uint32_t buildingCount = *(uint32_t*)(entityListBase + 0x28);
+    // The building list: CitizenBehavior +0x20 / +0x28.
+    CitizenBehavior* town = DebugUI_Town();
+    uint32_t buildingCount = (uint32_t)town->field_0x28;
 
     if (buildingCount == 0) return;
 
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(buildingCount));
 
     // Get random building entity
-    ComponentEntity* building = *(ComponentEntity**)(*(uintptr_t*)(entityListBase + 0x20) + (uintptr_t)randIdx * 8);
+    ComponentEntity* building = town->field_0x20[randIdx];
 
     // Find FireComponent on the building (FindComponent<FireComponent>, cell 0x1401c41e0)
     FireComponent* fireComp = building->FindComponent<FireComponent>();
@@ -636,18 +643,18 @@ static void Game_SpawnTornado_Impl() {
 // ============================================================
 static void Game_InfectRandomCitizen_Impl() {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    // LEFT: GameUpdateLoop::m_citizenList is void*.
-    uintptr_t entityListBase = (uintptr_t)game->m_citizenList;
+    // The disease components: CitizenBehavior +0xF0 / +0xF8.
+    CitizenBehavior* town = DebugUI_Town();
 
-    uint32_t citizenCount = *(uint32_t*)(entityListBase + 0xF8);
+    uint32_t citizenCount = (uint32_t)town->diseaseCount;
     if (citizenCount == 0) return;
 
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(citizenCount));
 
     // Get random citizen
-    uintptr_t citizenArray = *(uintptr_t*)(entityListBase + 0xF0);
+    DiseaseComponent** citizenArray = town->diseases;
     if (!citizenArray) return;
-    DiseaseComponent* citizen = *(DiseaseComponent**)(citizenArray + (uintptr_t)randIdx * 8);
+    DiseaseComponent* citizen = citizenArray[randIdx];
     if (!citizen) return;
 
     // Infect citizen's disease component
@@ -1077,13 +1084,11 @@ void DebugUI::OnCreated() {
 
             // Populate from the population list at gameWorld+0xF0 (+0xC0/+0xC8).
             // STANDALONE: guard a null list (empty combo instead of a fault).
-            // LEFT: GameUpdateLoop::m_citizenList is void*.
-            uintptr_t drawableList = (uintptr_t)gameWorld->m_citizenList;
-            int drawCount = drawableList ? *(int*)(drawableList + 200) : 0; // +0xC8
+            CitizenBehavior* town = DebugUI_Town();
+            int drawCount = town ? town->populationCount : 0; // +0xC8
             int selectedIndex = 0;
             for (int i = 0; i < drawCount; i++) {
-                Component* entry = *(Component**)((uintptr_t)i * 8 +
-                    *(uintptr_t*)(drawableList + 0xC0));
+                Component* entry = town->populations[i];   // +0xC0
                 Description* inner = entry->_description;
                 bool isDrawable = ::Object::IsDerivedFromNullSafe(inner, PopulationDescription::TypeId());
                 PopulationDescription* drawableDesc = isDrawable ? static_cast<PopulationDescription*>(inner) : nullptr;
