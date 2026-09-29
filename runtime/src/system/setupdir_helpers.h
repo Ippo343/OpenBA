@@ -16,10 +16,6 @@
 #include "../../types/system/Filename.h"
 
 namespace RtSystem {
-
-// ?GetPathDirectory@Filename@System@@QEBA?AV12@XZ                  0x1800c6880
-Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret);
-
 // ?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platform@12@@Z
 //                                                                  0x1800c5210
 String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int platform);

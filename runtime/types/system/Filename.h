@@ -131,8 +131,6 @@ struct FilenamePrivateAccess {
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 namespace RtSystem {
-// ---- system/filename.cpp
-bool RtSystem_Filename_Less(const Filename* self, const Filename* other);  // 0x180026cb0
 Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);  // 0x1800067d0 (B3R RT-Core)
 }  // namespace RtSystem
 // ==== end B3R W0-P0c ====

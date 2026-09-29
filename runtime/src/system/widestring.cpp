@@ -227,19 +227,6 @@ bool SameText(const char* a, const char* b) {
 // ============================================================================
 // ?SetLength@WideString@System@@AEAAXH@Z                   retail 0x1800ca9b0
 // ============================================================================
-// Release, then allocate `8 + (len+1)*2` bytes at alignment 4; length at
-// block+0, refcount 1 at block+4, data at block+8. Like String::SetLength it
-// does NOT write a terminator — both callers below write their own.
-//
-// ORACLE: none, and none is possible in the useful direction. It is a
-// PRIVATE mutator whose entire effect is "self now owns a fresh uninitialised
-// buffer of n characters"; running the shipped body afterwards on the same
-// object would leak our buffer and hand back a second one whose CONTENTS are
-// undefined, so a byte compare is meaningless. It is proved instead by its two
-// callers, both of which have real oracles.
-void RtSystem_WideString_SetLength(WideString* self, int len) {
-    Sys(self)->SetLength(len);
-}
 
 // ============================================================================
 // ?Set@WideString@System@@QEAAXPEB_W@Z                     retail 0x1800caf40
@@ -611,11 +598,6 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
     return self;
 }
 
-WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src) {
-    new (Sys(self)) System::WideString(src);
-    return self;
-}
-
 WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src) {
     new (Sys(self)) System::WideString(src);
     return self;
@@ -623,10 +605,6 @@ WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src)
 
 void RtSystem_WideString_Dtor(WideString* self) {
     Sys(self)->~WideString();
-}
-
-int RtSystem_WideString_StrLength(const wchar_t* s) {
-    return System::WideString::StrLength(s);
 }
 
 }  // namespace RtSystem

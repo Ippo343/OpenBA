@@ -21,22 +21,15 @@
 #include "../../types/system/WideString.h"
 
 namespace RtSystem {
-
-// ?SetLength@WideString@System@@AEAAXH@Z          0x1800ca9b0  (PRIVATE: AEAA)
-void        RtSystem_WideString_SetLength(WideString* self, int len);
 // ?Set@WideString@System@@QEAAXPEB_W@Z            0x1800caf40
 void        RtSystem_WideString_Set(WideString* self, const wchar_t* src);
 // ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ   0x1800cacd0
 String*     RtSystem_WideString_AsUTF8(const WideString* self, String* ret);
 // ??0WideString@System@@QEAA@AEBVString@1@@Z      0x1800cab50
 WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src);
-// ??0WideString@System@@QEAA@PEB_W@Z              0x18000a6e0
-WideString* RtSystem_WideString_CtorFromWide(WideString* self, const wchar_t* src);
 // ??0WideString@System@@QEAA@PEBD@Z               0x1800cb110  (Wave 9 lane PLAT)
 WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src);
 // ??1WideString@System@@QEAA@XZ                   0x18000a730
 void        RtSystem_WideString_Dtor(WideString* self);
-// ?StrLength@WideString@System@@SAHPEB_W@Z        0x1800cab20
-int         RtSystem_WideString_StrLength(const wchar_t* s);
 
 }  // namespace RtSystem

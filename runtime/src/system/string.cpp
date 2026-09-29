@@ -1176,33 +1176,10 @@ void RtString_SetLength(String* self, int len) {
 void RtString_ReleaseInline(String* self) {
     System::StringPrivateAccess::Release(*AsSys(self));
 }
-void RtString_AdoptInline(String* self, char* src) {
-    System::StringPrivateAccess::Adopt(*AsSys(self), src);
-}
 int RtString_StrCompare(const char* a, const char* b) {
     return System::String::StrCompare(a, b);
 }
 int RtString_GetLength(const String* self) { return AsSys(self)->GetLength(); }
-
-void RtSystem_String_Dtor(String* self) { AsSys(self)->~String(); }
-
-String* RtSystem_String_Assign(String* self, const String* rhs) {
-    *AsSys(self) = *AsSys(rhs);
-    return self;
-}
-
-String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs) {
-    new (AsSys(ret)) System::String(*AsSys(lhs) + rhs);
-    return ret;
-}
-String* RtSystem_String_AppendAssign(String* self, String* ret, const String* rhs) {
-    new (AsSys(ret)) System::String(*AsSys(self) += *AsSys(rhs));
-    return ret;
-}
-String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* rhs) {
-    new (AsSys(ret)) System::String(*AsSys(self) += rhs);
-    return ret;
-}
 
 }  // namespace RtSystem
 

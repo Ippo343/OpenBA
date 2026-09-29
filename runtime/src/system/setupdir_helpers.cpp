@@ -54,20 +54,6 @@ bool SameText(const char* a, const char* b) {
 // ============================================================================
 // ?GetPathDirectory@Filename@System@@QEBA?AV12@XZ          retail 0x1800c6880
 // ============================================================================
-// ENDGAME B.3.1 step 1: THE BODY MOVED to `System::Filename::GetPathDirectory`
-// (runtime/src/system/filename.cpp), where the rest of the class lives. The
-// reason it was written here in the first place — "Wave 2 lane A owns
-// filename.cpp and two lanes must not edit one source" — went with the waves.
-// This is now a one-line shim keeping the name, the signature and the two
-// registry rows below alive; it dies in step 2 with its last caller.
-Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret) {
-    // ENDGAME B.3.1 step 2: the POD<->class casts now go through the one
-    // transitional bridge (pod_bridge.h). `ret` is the hidden return slot —
-    // raw bytes — so the result is placement-constructed into it, which is
-    // what retail's CALL at the 0x1800c6880 return path does.
-    new (Sys(ret)) System::Filename(Sys(self)->GetPathDirectory());
-    return ret;
-}
 
 // ============================================================================
 // ?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platform@12@@Z

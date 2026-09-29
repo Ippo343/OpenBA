@@ -80,12 +80,6 @@ void MemFreeAt(void* p) {
 // four opens `TEST RCX,RCX / JZ ret`. MemFree tests again inside; both tests
 // are retail's and both are kept.
 // ---------------------------------------------------------------------------
-extern "C" void RtGraphics_MaterialInstance_OperatorDelete(void* p) {
-    if (p) rtclosure2b::MemFreeAt(p);
-}
-extern "C" void RtVideo_ImageBuffer_OperatorDelete(void* p) {
-    if (p) rtclosure2b::MemFreeAt(p);
-}
 extern "C" void RtIo_PackageFile_OperatorDelete(void* p) {
     if (p) rtclosure2b::MemFreeAt(p);
 }
