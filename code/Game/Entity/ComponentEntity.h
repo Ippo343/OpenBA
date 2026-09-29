@@ -54,6 +54,7 @@ public:
     // named from what they do). Defined in entitylist.cpp.
     void TickComponents(void* time);                              // 0x1400c2de0 slot 8 on flag-bit-2 components
     void PostUpdateComponents();                                  // 0x1400c2c70 slot 10 on flag-bit-4 components
+    void SendEvent(int eventId);                                  // 0x1400c2b70 slot 12 on every component (body: modelcomponent.cpp)
 
     // ---- FindComponent<T> (the template retail instantiates per component class)
     // Every instance has one shape (read 2026-09-28 at 0x140003f60 ModelComponent,

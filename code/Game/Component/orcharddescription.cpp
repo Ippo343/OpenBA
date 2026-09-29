@@ -30,16 +30,16 @@
 OrchardDescription::OrchardDescription()
     : Description(),
       _type(5),
-      _i24(2),
-      _i28(2),
-      _f2c(0.0f) {}
+      _spacingX(2),
+      _spacingY(2),
+      _boostRate(0.0f) {}
 
 // [5] 0x140052300: stream order as retail.
 bool OrchardDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_i24, nullptr);
-    ser.Serialize(_i28, nullptr);
-    ser.Serialize(_f2c, nullptr);
+    ser.Serialize(_spacingX, nullptr);
+    ser.Serialize(_spacingY, nullptr);
+    ser.Serialize(_boostRate, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;
 }

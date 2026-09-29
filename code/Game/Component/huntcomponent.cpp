@@ -12,8 +12,9 @@
 #include "Component/huntcomponent_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
-#include "Component/exe_bodies.h"   // AttendanceComponent_GetJobHostComponent
-#include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Tutorial/exe_bodies.h"    // WorkComponent_CalcMaxWorkers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -24,8 +25,8 @@
 
 // ============================================================
 // Helpers, called by name (B3R):
-//   0x140002e10 AttendanceComponent_GetJobHostComponent — find the terrain/character component
-//   0x140003050 WorkBase_FindComponent_3050             — find the map tile component
+//   0x140002e10 FindComponent<WorkPlaceComponent>
+//   0x140003050 FindComponent<WorkComponent>
 //   0x14012e5c0 WorkComponent_CalcMaxWorkers — the description-derived, footprint-scaled
 //     worker capacity, cached at workComp+0x30. HuntComponent::Update reuses that same cache
 //     as its speed divisor (the old name here was "ComputeTerrainSpeed"). The single body
@@ -46,10 +47,9 @@
 void HuntComponent::Persist(void* stream) {
     ResourceProduceComponent::Persist(stream);
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(&huntData)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
+    huntProgress.Serialize(ser);
 }
 
 // NOTE on slot 9: HuntComponent::Update is implemented above (0x140122740). Hunt is
@@ -59,46 +59,36 @@ void HuntComponent::Persist(void* stream) {
 // VALUE (an 8-byte tick count in a register): the base declares that register as
 // `void*`, so its bits are the tick count.
 void HuntComponent::Update(void* time) {
-    const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));   // the elapsed ticks travel in the pointer slot
+    // LEFT: the elapsed ticks travel in the pointer slot (see above).
+    const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));
 
-    // Find the terrain/character component on our owner entity
-    int64_t entityPtr = *reinterpret_cast<int64_t*>(
-        reinterpret_cast<uintptr_t>(this) + 0x10);
+    // The owner's workplace: its worker count is the speed numerator
+    WorkPlaceComponent* workplace = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
+    int workerCount = workplace->workerCount;
 
-    int64_t terrainComponent = 0;
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityPtr), &terrainComponent);
-
-    // Read terrain base speed from component+0x60
-    int terrainBaseSpeed = *reinterpret_cast<int*>(terrainComponent + 0x60);
-
-    // Find the map tile component via terrainComponent's owner
-    int64_t tileOwner = *reinterpret_cast<int64_t*>(terrainComponent + 0x10);
-    int64_t tileComponentPtr = 0;
-    void* result = WorkBase_FindComponent_3050(static_cast<uintptr_t>(tileOwner), &tileComponentPtr);
-
-    // Dereference to get actual tile data
-    int64_t tileData = *reinterpret_cast<int64_t*>(result);
+    // The work component of the workplace's owner: its cached worker capacity
+    WorkComponent* work = workplace->_entity->FindComponent<WorkComponent>();   // 0x140003050
 
     // Lazily compute the capacity divisor if not cached
-    int terrainSpeed = *reinterpret_cast<int*>(tileData + 0x30);
-    if (terrainSpeed == 0) {
-        terrainSpeed = WorkComponent_CalcMaxWorkers(static_cast<uintptr_t>(tileData));
-        *reinterpret_cast<int*>(tileData + 0x30) = terrainSpeed;
+    int capacity = work->workState;
+    if (capacity == 0) {
+        // LEFT: WorkComponent_CalcMaxWorkers takes the component as uintptr_t (TUTORIAL's body).
+        capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(work));
+        work->workState = capacity;
     }
 
     // Convert delta time to seconds (inline Time::AsSeconds)
     float deltaSeconds = static_cast<float>(
         static_cast<double>(deltaTime) * ::System::Timer::_secondsPerTick);
 
-    // Scale by terrain speed ratio and convert back to ticks
-    float scaledSeconds = deltaSeconds * (static_cast<float>(terrainBaseSpeed) /
-                                           static_cast<float>(terrainSpeed));
+    // Scale by the staffing ratio and convert back to ticks
+    float scaledSeconds = deltaSeconds * (static_cast<float>(workerCount) /
+                                           static_cast<float>(capacity));
     int64_t scaledTicks = static_cast<int64_t>(
         static_cast<double>(scaledSeconds) / ::System::Timer::_secondsPerTick);
 
-    // Accumulate into hunt progress at +0x50
-    *reinterpret_cast<int64_t*>(
-        reinterpret_cast<uintptr_t>(this) + 0x50) += scaledTicks;
+    // Accumulate into the hunt progress
+    huntProgress._ticks += scaledTicks;
 }
 
 // ============================================================================
@@ -116,7 +106,7 @@ extern "C" uintptr_t* HuntComponent_CreateWork(void*, uintptr_t*);   // resource
 
 // 0x1401228e0: the RP ctor (CALL 0x14012b3d0), the compiler's stamp,
 // `MOV qword [RBX+0x50],0`, then `_flags |= 8` (0x80 | 8 = 0x88).
-HuntComponent::HuntComponent() : ResourceProduceComponent(), huntData(nullptr) {
+HuntComponent::HuntComponent() : ResourceProduceComponent(), huntProgress{0} {
     OrFlagsInCtor(0x8);
 }
 

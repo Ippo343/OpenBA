@@ -59,10 +59,8 @@ void MarketComponent::Persist(void* stream) {
     // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
     ResourceProduceComponent::Persist(stream);
 
-    // Empty serializer block (version 0)
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    // Empty serializer block (version 0). LEFT: Component::Persist takes void* (COMP-c's header).
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }
 }
 
 // [18] 0x14004ea40 MarketComponent::CreateWork lives in resourceproduce_creatework.cpp.

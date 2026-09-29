@@ -42,16 +42,15 @@
 #include <new>
 
 namespace {
-// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
-void* AllocArray(void* header, int count, int stride) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    *(int32_t*)(h + 8) = count;
-    *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && System::MemoryAllocator::_singleton)
-                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
-                : nullptr;
-    *(void**)h = buf;
-    return buf;
+// {data, count, cap}: set count = cap = n and allocate n elements (8-aligned).
+template <class T>
+T* AllocArray(T*& data, int32_t& size, int32_t& capacity, int count) {
+    size = count;
+    capacity = count;
+    data = (count > 0 && System::MemoryAllocator::_singleton)
+           ? static_cast<T*>(System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)sizeof(T), 8))
+           : nullptr;
+    return data;
 }
 }  // namespace
 
@@ -63,19 +62,19 @@ ModelDescription::ModelDescription()
       _meshGroups(nullptr),
       _meshGroupCount(0),
       _meshGroupCap(0),
-      _lod0(0),
-      _lod1(0),
-      _castShadow(false) {}
+      _defaultMeshGroup(0),
+      _defaultMeshIndex(0),
+      _randomMeshGroup(false) {}
 
 // dtor (slot 0 0x140035a70 minus the stamps): frees every MeshGroup's material array, then the group array.
 // The compiler then chains ~Description -> ~External.
 ModelDescription::~ModelDescription() {
-    // Free each MeshGroup's material sub-array, then the MeshGroup array.
-    uint8_t* e = static_cast<uint8_t*>(_meshGroups);
+    // Free each MeshGroup's mesh sub-array, then the MeshGroup array.
+    ModelMeshGroup* e = _meshGroups;
     int count = _meshGroupCount;
     if (e) {
         for (int i = 0; i < count; ++i) {
-            void* mat = *(void**)(e + i * 0x18 + 8);
+            Graphics::GraphicsMesh** mat = e[i].meshes;
             if (mat) System::MemoryAllocator::MemFree(mat);
         }
         System::MemoryAllocator::MemFree(e);
@@ -92,34 +91,36 @@ bool ModelDescription::Serialize(void* stream) {
     int count = _meshGroupCount;
     
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
-    uint8_t* e;
+    ModelMeshGroup* e;
     if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(&_meshGroups, count, 0x18));
+        AllocArray(_meshGroups, _meshGroupCount, _meshGroupCap, count);
+        e = _meshGroups;
         for (int i = 0; i < count; ++i) {
-            *(uint64_t*)(e + i * 0x18)        = 0;          // mesh
-            *(uint64_t*)(e + i * 0x18 + 8)    = 0;          // materialArray
-            *(uint64_t*)(e + i * 0x18 + 0x10) = 0;          // materialCount + cap
+            e[i].field_0x00   = nullptr;   // ExternalPtr
+            e[i].meshes       = nullptr;   // mesh array
+            e[i].meshCount    = 0;         // mesh count + cap
+            e[i].meshCapacity = 0;
         }
     } else {
-        e = static_cast<uint8_t*>(_meshGroups);
+        e = _meshGroups;
     }
-    
-    for (int i = 0; i < count; ++i, e += 0x18) {
-        Reimpl_ExternalPtr_Serialize_GraphicsMesh(e, &ser);      // mesh ref (elem+0)
-    
-        ser.Serialize(*reinterpret_cast<int*>(e + 0x10), nullptr);   // materialCount, elem+0x10
-        int matCount = *(int32_t*)(e + 0x10);
-    
+
+    for (int i = 0; i < count; ++i, ++e) {
+        Reimpl_ExternalPtr_Serialize_GraphicsMesh(&e->field_0x00, &ser);      // elem+0
+
+        ser.Serialize(e->meshCount, nullptr);   // mesh count, elem+0x10
+        int matCount = e->meshCount;
+
         if (loading) {
-            uint8_t* m = reinterpret_cast<uint8_t*>(AllocArray(e + 8, matCount, 8));
-            for (int j = 0; j < matCount; ++j) *(uint64_t*)(m + j * 8) = 0;
+            AllocArray(e->meshes, e->meshCount, e->meshCapacity, matCount);
+            for (int j = 0; j < matCount; ++j) e->meshes[j] = nullptr;
         }
-        // serialize materialArray of External* (elem+8 base)
-        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, matCount, *(void**)(e + 8));
+        // serialize the mesh array of External* (elem+8 base)
+        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, matCount, e->meshes);
     }
-    ser.Serialize(_lod0, nullptr);
-    ser.Serialize(_lod1, nullptr);
-    ser.Serialize(_castShadow, nullptr);
+    ser.Serialize(_defaultMeshGroup, nullptr);
+    ser.Serialize(_defaultMeshIndex, nullptr);
+    ser.Serialize(_randomMeshGroup, nullptr);
     return true;
 }
 

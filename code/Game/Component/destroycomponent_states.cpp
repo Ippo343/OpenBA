@@ -662,10 +662,10 @@ char DestroyComponent::State5Tick() {
     float yaw = 0.0f;
     uint16_t orient = 0;
     if (pq) {
-        // ModelComponent's transform (+0x148) is raw storage in COMP-d's header: LEFT.
-        tf[0] = *reinterpret_cast<float*>(pq->transform + 0x10);
-        tf[1] = *reinterpret_cast<float*>(pq->transform + 0x14);
-        tf[2] = *reinterpret_cast<float*>(pq->transform + 0x18);
+        // ModelComponent's transform (+0x148): its translation (+0x10 / +0x14 / +0x18).
+        tf[0] = pq->transform.translation.x;
+        tf[1] = pq->transform.translation.y;
+        tf[2] = pq->transform.translation.z;
         orient = static_cast<uint16_t>(pq->meshGroup);
         yaw = pq->yaw;
     }
@@ -912,7 +912,7 @@ char DestroyComponent::CancelDemolition(void* sm) {
         // construction SITE — otherwise this entity itself.
         MultiObjectComponent* yard0 = FindOn<MultiObjectComponent>(entity);
         ComponentEntity* target = entity;
-        if (yard0) target = yard0->field48[0].Get();
+        if (yard0) target = yard0->children[0].Get();
 
         ModelComponent* model = FindOn<ModelComponent>(target);
         int16_t modelVariant = model->meshIndex;

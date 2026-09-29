@@ -50,20 +50,15 @@
 #include <new>
 
 namespace {
-// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
-void* AllocArray(void* header, int count, int stride) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    *(int32_t*)(h + 8) = count;
-    *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0)
-                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
-                : nullptr;
-    *(void**)h = buf;
-    return buf;
-}
-
-void InitTime(void* field, float seconds) {
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(field), seconds);
+// {data, count, cap}: set count = cap = n and allocate n elements (8-aligned).
+template <class T>
+T* AllocArray(T*& data, int32_t& size, int32_t& capacity, int count) {
+    size = count;
+    capacity = count;
+    data = (count > 0)
+           ? static_cast<T*>(System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)sizeof(T), 8))
+           : nullptr;
+    return data;
 }
 }  // namespace
 
@@ -72,7 +67,7 @@ void InitTime(void* field, float seconds) {
 // the defaults.
 ParticleDescription::ParticleDescription()
     : Description(),
-      _materialRef(nullptr),
+      _attachPoints(nullptr),
       _emitters(nullptr),
       _emitterCount(0),
       _emitterCap(0) {}
@@ -80,10 +75,10 @@ ParticleDescription::ParticleDescription()
 // dtor (slot 0 0x14000a500 minus the stamps): destroys each emitter's String, then frees the emitter array.
 // The compiler then chains ~Description -> ~External.
 ParticleDescription::~ParticleDescription() {
-    uint8_t* e = static_cast<uint8_t*>(_emitters);
+    ParticleEmitterDescription* e = _emitters;
     int count = _emitterCount;
     if (e) {
-        for (int i = 0; i < count; ++i) reinterpret_cast<System::String*>(e + i * 0x28 + 0x08)->~String();  // B.3.1 bridge
+        for (int i = 0; i < count; ++i) e[i].name.~String();
         System::MemoryAllocator::MemFree(e);
     }
     _emitters = nullptr;
@@ -98,36 +93,36 @@ bool ParticleDescription::Serialize(void* stream) {
     int count = _emitterCount;
     
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
-    uint8_t* e;
+    ParticleEmitterDescription* e;
     if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(&_emitters, count, 0x28));
+        e = AllocArray(_emitters, _emitterCount, _emitterCap, count);
         for (int i = 0; i < count; ++i) {
-            uint8_t* el = e + i * 0x28;
-            *(uint64_t*)(el + 0x00) = 0;       // ref
-            ::new (static_cast<void*>(el + 0x08)) System::String();  // B.3.1 bridge: String
-            *(uint8_t*)(el + 0x10) = 0;
-            *(uint8_t*)(el + 0x11) = 1;
-            *(uint8_t*)(el + 0x12) = 1;
-            *(uint8_t*)(el + 0x13) = 0;
-            InitTime(el + 0x18, 0.0f);          // t0 default 0.0
-            InitTime(el + 0x20, 1.0f);          // t1 default 1.0 (g_fUVScale)
+            ParticleEmitterDescription& el = e[i];
+            el.particle = nullptr;
+            ::new (&el.name) System::String();
+            el.followNode = false;
+            el.autoStart = true;
+            el.eventToggled = true;
+            el.noModelTransform = false;
+            RtSystem_Time_Ctor(&el.prewarm, 0.0f);    // default 0.0
+            RtSystem_Time_Ctor(&el.fadeTime, 1.0f);   // default 1.0 (g_fUVScale)
         }
     } else {
-        e = static_cast<uint8_t*>(_emitters);
+        e = _emitters;
     }
-    
-    for (int i = 0; i < count; ++i, e += 0x28) {
-        Reimpl_ExternalPtr_Serialize_Typed_7140(e + 0x00, &ser);                                 // ref (elem+0)
-        reinterpret_cast<System::String*>(e + 0x08)->Serialize(&ser);             // B.3.1 bridge: String (elem+8)
-        ser.Serialize(*reinterpret_cast<bool*>(e + 0x10), nullptr);
-        ser.Serialize(*reinterpret_cast<bool*>(e + 0x11), nullptr);
-        ser.Serialize(*reinterpret_cast<bool*>(e + 0x12), nullptr);
-        ser.Serialize(*reinterpret_cast<bool*>(e + 0x13), nullptr);
-        reinterpret_cast<System::Time*>(e + 0x20)->Serialize(ser);                // t1 (elem+0x20) FIRST   // B.3.4b bridge
-        reinterpret_cast<System::Time*>(e + 0x18)->Serialize(ser);                // t0 (elem+0x18) SECOND  // B.3.4b bridge
+
+    for (int i = 0; i < count; ++i, ++e) {
+        Reimpl_ExternalPtr_Serialize_Typed_7140(&e->particle, &ser);   // elem+0
+        e->name.Serialize(&ser);                                       // elem+8
+        ser.Serialize(e->followNode, nullptr);
+        ser.Serialize(e->autoStart, nullptr);
+        ser.Serialize(e->eventToggled, nullptr);
+        ser.Serialize(e->noModelTransform, nullptr);
+        e->fadeTime.Serialize(ser);   // t1 (elem+0x20) FIRST
+        e->prewarm.Serialize(ser);    // t0 (elem+0x18) SECOND
     }
-    
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_materialRef, &ser);   // materialRef (+0x20)
+
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_attachPoints, &ser);   // attach points (+0x20)
     return true;
 }
 

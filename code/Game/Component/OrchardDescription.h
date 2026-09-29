@@ -37,14 +37,14 @@ public:
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     uint32_t _type;                             // +0x20 enum (serialized through the uint door)
-    int32_t _i24;                               // +0x24
-    int32_t _i28;                               // +0x28
-    float _f2c;                                 // +0x2c ctor stores int 0
+    int32_t _spacingX;                          // +0x24 cells between tree columns (state 9 enter)
+    int32_t _spacingY;                          // +0x28 cells between tree rows
+    float _boostRate;                           // +0x2c growth added per boost (OnMessage 2); ctor stores int 0
 };
 
 static_assert(sizeof(OrchardDescription) == 0x30, "OrchardDescription is 0x30 (create 0x1400098d0 MemAlloc(0x30))");
 static_assert(alignof(OrchardDescription) == 8, "OrchardDescription alignment");
 static_assert(offsetof(OrchardDescription, _type) == 0x20, "OrchardDescription::_type @ +0x20");
-static_assert(offsetof(OrchardDescription, _i24) == 0x24, "OrchardDescription::_i24 @ +0x24");
-static_assert(offsetof(OrchardDescription, _i28) == 0x28, "OrchardDescription::_i28 @ +0x28");
-static_assert(offsetof(OrchardDescription, _f2c) == 0x2c, "OrchardDescription::_f2c @ +0x2c");
+static_assert(offsetof(OrchardDescription, _spacingX) == 0x24, "OrchardDescription::_spacingX @ +0x24");
+static_assert(offsetof(OrchardDescription, _spacingY) == 0x28, "OrchardDescription::_spacingY @ +0x28");
+static_assert(offsetof(OrchardDescription, _boostRate) == 0x2c, "OrchardDescription::_boostRate @ +0x2c");

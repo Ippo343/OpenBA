@@ -607,19 +607,19 @@ void GrowthComponent::PostUpdate() {
 
     const float scale = displayScale;
 
-    // The scale lanes live inside ModelComponent::meshInstance (+0x28, raw storage,
-    // H5, COMP-d's header): model+0x134..+0x140 are meshInstance+0x10c..+0x118. LEFT.
-    uint8_t* mi = model.Get()->meshInstance;
+    // The scale lanes are the model's MeshInstance::_color (model+0x134..+0x140 =
+    // meshInstance+0x10c..+0x118).
+    float* color = model.Get()->meshInstance._color;
 
     if (desc->_b64) {
         // Crop form: spread (x,y) reaches full early, height (z) tracks growth.
         float spread = scale / kCropSpreadDiv;
         if (spread < 0.0f)      spread = 0.0f;
         else if (spread > kOne) spread = kOne;
-        *reinterpret_cast<float*>(mi + 0x10c) = spread;
-        *reinterpret_cast<float*>(mi + 0x110) = spread;
-        *reinterpret_cast<float*>(mi + 0x114) = scale;
-        *reinterpret_cast<float*>(mi + 0x118) = kOne;
+        color[0] = spread;
+        color[1] = spread;
+        color[2] = scale;
+        color[3] = kOne;
     } else {
         // Uniform form: Math::Vector4(const Scalar&) broadcasts the scale into 4 lanes.
         float scalar = scale;
@@ -628,10 +628,11 @@ void GrowthComponent::PostUpdate() {
             *reinterpret_cast<const Math::Scalar*>(&scalar));   // slot 0x140152958, B.3.x bridge
         {
             const uint32_t* v = reinterpret_cast<const uint32_t*>(vec4);
-            *reinterpret_cast<uint32_t*>(mi + 0x10c) = v[0];
-            *reinterpret_cast<uint32_t*>(mi + 0x110) = v[1];
-            *reinterpret_cast<uint32_t*>(mi + 0x114) = v[2];
-            *reinterpret_cast<uint32_t*>(mi + 0x118) = v[3];
+            uint32_t* lanes = reinterpret_cast<uint32_t*>(color);   // the four dword stores as retail
+            lanes[0] = v[0];
+            lanes[1] = v[1];
+            lanes[2] = v[2];
+            lanes[3] = v[3];
         }
     }
 
