@@ -2,8 +2,8 @@
 // PerformWork work-action-queue builders (Work action-ctor sub-batch).
 //
 // Faithful 1:1 ports of two exe helpers that build a citizen's work-action chain
-// and append it to the CitizenAIComponent task list (citizen+0x278 -> aiComp,
-// list base aiComp+0x48; the SendComponentMessage action is stored at aiComp+0x58
+// and append it to the citizen's action stack (CitizenComponent +0x278 -> its
+// CharacterComponent, stack at +0x48; the SendComponentMessage action is stored at +0x58
 #include "Work/exe_bodies.h"
 // after DeletePtr-ing the prior one). Each appended sub-action is allocated via the
 // MemAlloc static slot (0x140152b60) and wrapped in an InternalBasePtr before being
@@ -14,8 +14,9 @@
 //
 // This is a REVERSE-ENGINEERING transcription of the disassembly; do NOT "improve"
 // behavior. Every offset/size/immediate below is annotated with its disasm address.
-// Sub-callees are resolved via ResolveAddr(Module::Exe, 0xADDR) and null-guarded
-// (skipped if unregistered, matching project semantics). They are NOT registered here.
+// LEFT: the callers (BuildRoad, ClearArea, FireWork in WORK-a / WORK-b) hand the
+// citizen reference as void* and the road destination as uint32_t*; the action ctors
+// (ACT's C bodies) take their references as uint64_t*.
 //
 
 #include <new>
@@ -32,6 +33,11 @@
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include "Component/FireComponent.h"   // ENDGAME B.3.9 D5
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/StorageComponent.h"
+#include "Action/Action.h"
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Sub-callees, called by name (B3R)
@@ -41,7 +47,7 @@
 //   0x1400c5400 TaskListCleanup                       WorkBase_TaskListCleanup_c5400
 //   0x1400c54e0 TaskListAppend                        Pf_ActStackPush_54e0
 //   0x1400012d0 Entity_FindComponent_Family           ActMv_FindComponentFamily_12d0
-//   0x140006270 Entity_FindComponent_Storage          WorkBase_FindComponent_6270
+//   0x140006270 FindComponent<StorageComponent>
 //   0x14012cf10 StorageComponent_QueryCount           CitizenComp_StorageComponent_QueryCount
 //   0x1400cb1d0 SendComponentMessage copy-ctor        Pf_SendComponentMessageCopyCtor_b1d0
 //   0x1400c5da0 CompleteTask copy-ctor                Pf_CompleteTaskCopyCtor_5da0
@@ -84,7 +90,7 @@ static inline void  WAP_Append(void* list, void* ibp) { Pf_ActStackPush_54e0(sta
 //   actionType   -> [o+0x2c]    (int, 0x6 or 0x7)
 //   timeVal      -> [o+0x30]    (int64 from System::Time::Time)
 //   [o+0x44]     = 0xffffffff
-static void WAP_BuildInlinePerformWork(void* o, uintptr_t entityInner, float heading,
+static void WAP_BuildInlinePerformWork(void* o, CitizenComponent* entityInner, float heading,
                                        int actionType, int64_t timeVal) {
     // The inlined PerformWork ctor 0x1400c9720 with useTool = 0, +0x44 = -1: the real ctor.
     new (o) PerformWork(&entityInner, heading, static_cast<uint32_t>(actionType), timeVal, 0, -1);
@@ -94,7 +100,7 @@ static void WAP_BuildInlinePerformWork(void* o, uintptr_t entityInner, float hea
 // PerformWork_Action_CopyCtor (0x1400ba9f0) -> WorkAct_PerformWorkCopyCtor_ba9f0
 // ============================================================
 // Builds the forester/clear-area work-action chain for a citizen and stores it on the
-// CitizenAIComponent task list (citizen+0x278, list base +0x48).
+// citizen's action stack (CharacterComponent +0x48).
 //   citizenIBP = InternalBasePtr*           (RCX)
 //   workId     = u32                         (EDX -> CompleteTask workId)
 //   pos3       = float*                      (R8, param_3: Vector3 minuend src + 2nd MoveTo dest)
@@ -105,29 +111,31 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
                                        float* pos3, float* pos4, float* pos5,
                                        int64_t* srcEntity6) {
 
-    // list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400baa2f..0x1400baa53)
-    uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
-    void* list = reinterpret_cast<void*>(aiComp + 0x48);
+    // the action stack = character + 0x48 ; cleanup (0x1400baa2f..0x1400baa53)
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
+    CharacterComponent* character = (*citizenRef)->character;
+    void* list = &character->actions;
     WorkBase_TaskListCleanup_c5400(list);
 
-    uintptr_t ibpA = 0, ibpB = 0, ibpC = 0;
+    Action* ibpA = nullptr;
+    Action* ibpB = nullptr;
+    Action* ibpC = nullptr;
 
-    // --- SendComponentMessage #1 → aiComp+0x58 (DeletePtr old) (0x1400baa58..0x1400baae5) ---
+    // --- SendComponentMessage #1 → character+0x58 (DeletePtr old) (0x1400baa58..0x1400baae5) ---
     void* obj = WAP_Alloc(0x40, 8);  // 0x1400baa5d: ECX=0x38+8=0x40
     void* sm = nullptr;
     if (obj) {
-        uintptr_t innerIbp = 0;
+        uint64_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+        ComponentEntity* entityInner = (*citizenRef)->_entity;
         sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
     WAP_IbpCtor(&ibpA, sm);
-    // 0x1400baad0: CMP [R15+0x10] — R15 = aiComp+0x48, so this is (aiComp+0x48)+0x10 = aiComp+0x58.
-    if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-        reinterpret_cast< ::Object::InternalBasePtr*>(aiComp + 0x58)->DeletePtr();   // B.3.3 bridge
-    *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpA; // 0x1400baae5: MOV [R15+0x10],RAX
+    // 0x1400baad0: CMP [R15+0x10] — R15 = character+0x48, so this is (character+0x48)+0x10 = character+0x58.
+    if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+    character->field_0x58 = ibpA; // 0x1400baae5: MOV [R15+0x10],RAX
 
     // --- heading via Entity_impl_29a0(pos5, &{*param_6}) (0x1400baae9..0x1400bab02; XMM6) ---
     int64_t srcInner6 = srcEntity6 ? *srcEntity6 : 0; // 0x1400baaed: MOV RAX,[R13]; [RBP+0x7f]=RAX
@@ -149,10 +157,10 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x48, 8); // 0x1400bab4f: ECX=0x40+8=0x48
     void* pw1 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400bab6c: [R14]
-        uint64_t timeVal = 0;
-        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
-        WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x7, static_cast<int64_t>(timeVal)); // 0x2c=7
+        CitizenComponent* entityInner = *citizenRef; // 0x1400bab6c: [R14]
+        System::Time timeVal = {0};
+        { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
+        WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x7, timeVal._ticks); // 0x2c=7
         pw1 = obj;
     }
     WAP_IbpCtor(&ibpA, pw1);
@@ -162,7 +170,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x30, 8); // 0x1400babf7: ECX=0x28+8=0x30
     void* st1 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        CitizenComponent* entityInner = *citizenRef;
         st1 = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0 /* 0x1400bac10: OR R8D,0xffffffff = -1 */);
     }
     WAP_IbpCtor(&ibpA, st1);
@@ -172,10 +180,10 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x38, 8); // 0x1400bac43: ECX=0x30+8=0x38
     void* ct = nullptr;
     if (obj) {
-        uintptr_t innerIbp = 0;
+        uint64_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400bac64: [R14]
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, &entityInner, &innerIbp, 0); // EDX=R12D=workId, [RSP+0x20]=0
+        CitizenComponent* entityInner = *citizenRef; // 0x1400bac64: [R14]
+        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, reinterpret_cast<uint64_t*>(&entityInner), &innerIbp, 0); // EDX=R12D=workId, [RSP+0x20]=0
     }
     WAP_IbpCtor(&ibpB, ct);
     WAP_Append(list, &ibpB);
@@ -184,11 +192,11 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x40, 8); // 0x1400baca5: ECX=0x38+8=0x40
     void* sm2 = nullptr;
     if (obj) {
-        uintptr_t innerIbp = 0;
+        uint64_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = FireComponent::TypeId(); // 0x1401c41e0
-        uintptr_t entityInner = srcEntity6 ? static_cast<uintptr_t>(*srcEntity6) : 0; // 0x1400baccf: MOV RCX,[R13]
-        sm2 = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
+        uint64_t entityInner = srcEntity6 ? static_cast<uint64_t>(*srcEntity6) : 0; // 0x1400baccf: MOV RCX,[R13]
+        sm2 = Pf_SendComponentMessageCopyCtor_b1d0(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
     WAP_IbpCtor(&ibpC, sm2);
     WAP_Append(list, &ibpC);
@@ -197,10 +205,10 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x48, 8); // 0x1400bad1a: ECX=0x40+8=0x48
     void* pw2 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
-        uint64_t timeVal = 0;
-        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
-        WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x6, static_cast<int64_t>(timeVal)); // 0x1400bad7d: 0x2c=6
+        CitizenComponent* entityInner = *citizenRef;
+        System::Time timeVal = {0};
+        { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
+        WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x6, timeVal._ticks); // 0x1400bad7d: 0x2c=6
         pw2 = obj;
     }
     WAP_IbpCtor(&ibpA, pw2);
@@ -212,10 +220,10 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x480, 8); // 0x1400badc8: ECX=0x480
     void* mv1 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+        ComponentEntity* entityInner = (*citizenRef)->_entity;
         void* familyIBP = nullptr;
-        uintptr_t famRet = 0;
-        familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet); // 0x1400012d0
+        uint64_t famRet = 0;
+        familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet); // 0x1400012d0
         // 0x1400bae37: LEA R8D,[R9+4] (R9=0) → pathType=4 (Faster); [RSP+0x28]=0xe1f; [RSP+0x30]=0; XMM=speed
         mv1 = Pf_MoveToCtor_9170(obj, familyIBP, 4, 0, pos5, 0xe1f, 0, speed);
     }
@@ -226,10 +234,10 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x48, 8); // 0x1400bae66: ECX=0x40+8=0x48
     void* pw3 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
-        uint64_t timeVal = 0;
-        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
-        WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x7, static_cast<int64_t>(timeVal)); // 0x1400baebc: 0x2c=7, XMM8
+        CitizenComponent* entityInner = *citizenRef;
+        System::Time timeVal = {0};
+        { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
+        WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x7, timeVal._ticks); // 0x1400baebc: 0x2c=7, XMM8
         pw3 = obj;
     }
     WAP_IbpCtor(&ibpA, pw3);
@@ -239,7 +247,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x30, 8); // 0x1400baef9: ECX=0x28+8=0x30
     void* st2 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        CitizenComponent* entityInner = *citizenRef;
         st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, 8 /* 0x1400baf12: MOV R8D,8 (Barrow) */);
     }
     WAP_IbpCtor(&ibpA, st2);
@@ -249,10 +257,10 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x48, 8); // 0x1400baf47: ECX=0x40+8=0x48
     void* pw4 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
-        uint64_t timeVal = 0;
-        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
-        WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x6, static_cast<int64_t>(timeVal)); // 0x1400baf9d: 0x2c=6, XMM8
+        CitizenComponent* entityInner = *citizenRef;
+        System::Time timeVal = {0};
+        { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
+        WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x6, timeVal._ticks); // 0x1400baf9d: 0x2c=6, XMM8
         pw4 = obj;
     }
     WAP_IbpCtor(&ibpA, pw4);
@@ -262,10 +270,10 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     obj = WAP_Alloc(0x480, 8); // 0x1400bafda: ECX=0x480
     void* mv2 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+        ComponentEntity* entityInner = (*citizenRef)->_entity;
         void* familyIBP = nullptr;
-        uintptr_t famRet = 0;
-        familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet);
+        uint64_t famRet = 0;
+        familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
         // 0x1400bb041: LEA R8D,[R9+1] (R9=0) → pathType=1 (Slow); dest=pos3 ([RBP+0x67]); XMM6=speed
         mv2 = Pf_MoveToCtor_9170(obj, familyIBP, 1, 0, pos3, 0xe1f, 0, speed);
     }
@@ -279,7 +287,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
 // PerformWork_Action_Ctor (0x1400bffd0) -> WorkAct_PerformWorkCtor_bffd0
 // ============================================================
 // Builds the road/raw-material work-action chain for a citizen and stores it on the
-// CitizenAIComponent task list (citizen+0x278, list base +0x48).
+// citizen's action stack (CharacterComponent +0x48).
 //   citizenIBP = InternalBasePtr*  (RCX)            param_1
 //   workId     = u32   (EDX = R15D)                 param_2  -> CompleteTask workId
 //   roadP3     = u32   (R8D... actually R8=p3 ptr)  param_3  (int; CompleteRoad p2 + MoveTo#1 dest cast)
@@ -299,39 +307,41 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
                                    uint32_t completeTaskP7, int64_t consumeArg8, int loopCount9,
                                    float* pos10, int64_t* srcEntity11) {
 
-    // list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400c0010..0x1400c0034)
-    uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
-    uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
-    void* list = reinterpret_cast<void*>(aiComp + 0x48);  // RSI = aiComp+0x48
+    // the action stack = character + 0x48 ; cleanup (0x1400c0010..0x1400c0034)
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
+    CharacterComponent* character = (*citizenRef)->character;
+    void* list = &character->actions;  // RSI = character+0x48
     WorkBase_TaskListCleanup_c5400(list);
 
-    uintptr_t ibpA = 0, ibpB = 0, ibpC = 0;
+    Action* ibpA = nullptr;
+    Action* ibpB = nullptr;
+    Action* ibpC = nullptr;
 
-    // --- SendComponentMessage #1 → aiComp+0x58 (DeletePtr old) (0x1400c0039..0x1400c00c6) ---
+    // --- SendComponentMessage #1 → character+0x58 (DeletePtr old) (0x1400c0039..0x1400c00c6) ---
     void* obj = WAP_Alloc(0x40, 8); // 0x1400c003e: ECX=0x38+8=0x40
     void* sm = nullptr;
     if (obj) {
-        uintptr_t innerIbp = 0;
+        uint64_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+        ComponentEntity* entityInner = (*citizenRef)->_entity;
         sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
     WAP_IbpCtor(&ibpA, sm);
-    // 0x1400c00b1: CMP [RSI+0x10] — RSI = aiComp+0x48 → aiComp+0x58.
-    if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
-        reinterpret_cast< ::Object::InternalBasePtr*>(aiComp + 0x58)->DeletePtr();   // B.3.3 bridge
-    *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpA; // 0x1400c00c6: MOV [RSI+0x10],RAX
+    // 0x1400c00b1: CMP [RSI+0x10] — RSI = character+0x48 → character+0x58.
+    if (character->field_0x58 != nullptr)   // PORT GAP 0x140151ab8: the fallback member DeletePtr is the code
+        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+    character->field_0x58 = ibpA; // 0x1400c00c6: MOV [RSI+0x10],RAX
 
     // --- CompleteTask (workId, p5=completeTaskP7) (0x1400c00ca..0x1400c012a) ---
     obj = WAP_Alloc(0x38, 8); // 0x1400c00cf: ECX=0x30+8=0x38
     void* ct = nullptr;
     if (obj) {
-        uintptr_t innerIbp = 0;
+        uint64_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c00f0: [R14]
+        CitizenComponent* entityInner = *citizenRef; // 0x1400c00f0: [R14]
         // 0x1400c00f7: ECX=[RBP+0x67] (param_7) → [RSP+0x20]=p5 ; EDX=R15D=workId
-        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, &entityInner, &innerIbp, completeTaskP7);
+        ct = Pf_CompleteTaskCopyCtor_5da0(obj, workId, reinterpret_cast<uint64_t*>(&entityInner), &innerIbp, completeTaskP7);
     }
     WAP_IbpCtor(&ibpB, ct);
     WAP_Append(list, &ibpB);
@@ -350,7 +360,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     obj = WAP_Alloc(0x30, 8); // 0x1400c017c: ECX=0x28+8=0x30
     void* st1 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c018e: [R14]
+        CitizenComponent* entityInner = *citizenRef; // 0x1400c018e: [R14]
         st1 = ActChild_ShowToolCtor_42890(obj, &entityInner, ~0 /* 0x1400c0195: OR R8D,0xffffffff = -1 */);
     }
     WAP_IbpCtor(&ibpC, st1);
@@ -368,10 +378,10 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
                                   // bffd0+0x3ff, 2026-07-26.)
         void* crm = nullptr;
         if (obj) {
-            uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // 0x1400c01ed
+            ComponentEntity* entityInner = (*citizenRef)->_entity; // 0x1400c01ed
             // 0x1400c01f8: byte[RSP+0x20]=0 (p5, the FIFTH argument) ; R8=[RBP+0x6f]=param_8 (p3) ;
             // RDX=&entityInner ; R9 not written (p4, unused by the body).
-            crm = ActChild_ConsumeRawCopyCtor_c63b0(obj, &entityInner, consumeArg8, 0, 0); // 0x1400c63b0
+            crm = ActChild_ConsumeRawCopyCtor_c63b0(obj, reinterpret_cast<uint64_t*>(&entityInner), consumeArg8, 0, 0); // 0x1400c63b0
         }
         WAP_IbpCtor(&ibpA, crm);
         WAP_Append(list, &ibpA);
@@ -385,13 +395,13 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
                               // road-build heap corruption, caught by redzone PAD+SCAN)
     void* pw = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c0245: [R14]
+        CitizenComponent* entityInner = *citizenRef; // 0x1400c0245: [R14]
         float timeF = kRdata_140172194; // 0x1400c024c: XMM1=DAT_140172194=4.0f
-        uint64_t timeVal = 0;
-        { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeF); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
+        System::Time timeVal = {0};
+        { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeF); if (t) timeVal = *t; }
         float headingC = WAP_RdataF(kRdata_1401722a8); // 0x1400c0279: XMM2=DAT_1401722a8=-1000.0f
         // 0x1400c0273: R9D=0xa ; [RSP+0x30]=0xffffffff (p7=-1) ; byte[RSP+0x28]=1 (p6) ; [RSP+0x20]=time
-        pw = Pf_PerformWorkCtor7_9720(obj, &entityInner, headingC, 0xA, static_cast<int64_t>(timeVal), 1, -1);
+        pw = Pf_PerformWorkCtor7_9720(obj, &entityInner, headingC, 0xA, timeVal._ticks, 1, -1);
     }
     WAP_IbpCtor(&ibpA, pw);
     WAP_Append(list, &ibpA);
@@ -402,10 +412,10 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     obj = WAP_Alloc(0x480, 8); // 0x1400c02b0: ECX=0x480
     void* mv1 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+        ComponentEntity* entityInner = (*citizenRef)->_entity;
         void* familyIBP = nullptr;
-        uintptr_t famRet = 0;
-        familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet);
+        uint64_t famRet = 0;
+        familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
         // 0x1400c031d: LEA R8D,[R9+2] (R9=0) → pathType=2 (Fast); dest=param_3 (R13 at entry); XMM8=speed
         mv1 = Pf_MoveToCtor_9170(obj, familyIBP, 2, 0, reinterpret_cast<float*>(roadP3), 0xe1f, 0, speed);
     }
@@ -416,7 +426,7 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
     obj = WAP_Alloc(0x30, 8); // 0x1400c034c: ECX=0x28+8=0x30
     void* st2 = nullptr;
     if (obj) {
-        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        CitizenComponent* entityInner = *citizenRef;
         // 0x1400c0359: R13D=1 ; 0x1400c036b: R8D=R13D=1 (Axe)
         st2 = ActChild_ShowToolCtor_42890(obj, &entityInner, 1 /* Axe */);
     }
@@ -436,10 +446,10 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         obj = WAP_Alloc(0x48, 8); // 0x1400c03c6: ECX=0x40+8=0x48
         void* pwA = nullptr;
         if (obj) {
-            uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
-            uint64_t timeVal = 0;
-            { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
-            WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x7, static_cast<int64_t>(timeVal)); // 0x1400c0430: 0x2c=7
+            CitizenComponent* entityInner = *citizenRef;
+            System::Time timeVal = {0};
+            { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
+            WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x7, timeVal._ticks); // 0x1400c0430: 0x2c=7
             pwA = obj;
         }
         WAP_IbpCtor(&ibpA, pwA);
@@ -449,11 +459,11 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         obj = WAP_Alloc(0x48, 8); // 0x1400c0470: ECX=0x40+8=0x48
         void* pickup = nullptr;
         if (obj) {
-            uintptr_t srcInner = srcEntity11 ? static_cast<uintptr_t>(*srcEntity11) : 0; // 0x1400c0482: MOV RCX,[R12]
-            uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP); // 0x1400c048a: [R14]
+            uint64_t srcInner = srcEntity11 ? static_cast<uint64_t>(*srcEntity11) : 0; // 0x1400c0482: MOV RCX,[R12]
+            CitizenComponent* entityInner = *citizenRef; // 0x1400c048a: [R14]
             // 0x1400c0491: byte[RSP+0x28]=1 (p6) ; [RSP+0x20]=0xffffffff (p5=-1) ; R9=[RBP+0x6f]=param_8 (p4) ;
             //   R8=&srcInner ; RDX=&entityInner.
-            pickup = ActChild_PickupStoredCopyCtor_ca520(obj, &entityInner, &srcInner, consumeArg8, -1, 1); // 0x1400ca520
+            pickup = ActChild_PickupStoredCopyCtor_ca520(obj, reinterpret_cast<uint64_t*>(&entityInner), &srcInner, consumeArg8, -1, 1); // 0x1400ca520
         }
         WAP_IbpCtor(&ibpB, pickup);
         WAP_Append(list, &ibpB);
@@ -462,10 +472,10 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         obj = WAP_Alloc(0x48, 8); // 0x1400c04d5: ECX=0x40+8=0x48
         void* pwB = nullptr;
         if (obj) {
-            uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
-            uint64_t timeVal = 0;
-            { void* t = RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), timeC); if (t) timeVal = *reinterpret_cast<uint64_t*>(t); }
-            WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x6, static_cast<int64_t>(timeVal)); // 0x1400c053f: 0x2c=6
+            CitizenComponent* entityInner = *citizenRef;
+            System::Time timeVal = {0};
+            { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
+            WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x6, timeVal._ticks); // 0x1400c053f: 0x2c=6
             pwB = obj;
         }
         WAP_IbpCtor(&ibpA, pwB);
@@ -476,23 +486,21 @@ void WorkAct_PerformWorkCtor_bffd0(void* citizenIBP, uint32_t workId, uint32_t* 
         void* mv2 = nullptr;
         if (obj) {
             // QueryCount(entity storage) → BL=(count>0) (0x1400c059a..0x1400c05d2)
-            uintptr_t entObj = *reinterpret_cast<uintptr_t*>(citizenIBP);    // 0x1400c05a3: [R14]
-            uintptr_t storRet = 0;
-            void* storIbp = reinterpret_cast<void*>(&storRet);
-            WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(entObj + 0x10), &storRet); // 0x140006270 (local_78)
+            CitizenComponent* entObj = *citizenRef;                            // 0x1400c05a3: [R14]
+            StorageComponent* storage = entObj->_entity->FindComponent<StorageComponent>();   // 0x140006270 (local_78)
             int count = 0;
-            count = CitizenComp_StorageComponent_QueryCount(static_cast<int64_t>(storRet)); // 0x14012cf10
+            // LEFT: 0x14012cf10's C signature (COMP-b) takes the component as an integer.
+            count = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storage)); // 0x14012cf10
             bool countPositive = (count > 0); // 0x1400c05d0: TEST EAX,EAX; SETG BL
 
-            uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+            ComponentEntity* entityInner = (*citizenRef)->_entity;
             int pathType = 1; // R13D = Slow (default); 0x1400c05fc: CMOVNZ R13D, 4 if BL
             if (countPositive) pathType = 4; // Faster
             void* familyIBP = nullptr;
-            uintptr_t famRet = 0;
-            familyIBP = ActMv_FindComponentFamily_12d0(entityInner, &famRet);
+            uint64_t famRet = 0;
+            familyIBP = ActMv_FindComponentFamily_12d0(reinterpret_cast<uintptr_t>(entityInner), &famRet);
             // 0x1400c0631: R8D=R13D=pathType ; dest=[RBP+0x7f]=param_10 ; XMM8=speed ; [RSP+0x28]=0xe1f
             mv2 = Pf_MoveToCtor_9170(obj, familyIBP, pathType, 0, pos10, 0xe1f, 0, speed);
-            (void)storIbp;
         }
         WAP_IbpCtor(&ibpA, mv2);
         WAP_Append(list, &ibpA);

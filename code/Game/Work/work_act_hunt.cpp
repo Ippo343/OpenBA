@@ -66,11 +66,6 @@ static inline void  WAH_Append(void* list, void* ibp) { Pf_ActStackPush_54e0(sta
 // The SendComponentMessage action goes into the character's +0x58 slot, the
 // previous one DeletePtr'd first. LEFT: CharacterComponent declares the InternalPtr
 // member as Action* (COMP-a), so DeletePtr is reached through the base view.
-static inline void WAH_StoreMessage(CharacterComponent* character, Action* message) {
-    if (character->field_0x58 != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
-    character->field_0x58 = message;
-}
 
 // ============================================================
 // WorkAct_HuntWorkCtor_bbbc0 (0x1400bbbc0)
@@ -116,7 +111,9 @@ void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targ
         sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
     }
     WAH_IbpCtor(&ibpA, sm);
-    WAH_StoreMessage(character, ibpA);  // [RDI+0x10] = character+0x58
+    if (character->field_0x58 != nullptr)
+        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+    character->field_0x58 = ibpA;       // [RDI+0x10] = character+0x58
 
     // --- CompleteTask action --- disasm 0x1400bbcad..0x1400bbd0f (alloc 0x38,8)
     obj = WAH_Alloc(0x38, 8);
@@ -226,7 +223,9 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
         sm = Pf_SendComponentMessageCopyCtor_b1d0(obj, reinterpret_cast<uint64_t*>(&entityInner), &msgId, 0, &innerIbp, 0);
     }
     WAH_IbpCtor(&ibpA, sm);
-    WAH_StoreMessage(character, ibpA);
+    if (character->field_0x58 != nullptr)
+        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();
+    character->field_0x58 = ibpA;
 
     // --- CompleteTask action (param_5 = param_8) --- disasm 0x1400bde13..0x1400bde72 (alloc 0x38,8)
     obj = WAH_Alloc(0x38, 8);
