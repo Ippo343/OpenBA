@@ -27,6 +27,7 @@
 #include <cstddef>
 
 namespace Video { class ImageBuffer; }
+namespace IO { class Stream; }
 
 class Minimap {
 public:
@@ -41,6 +42,9 @@ public:
     uint32_t*           overlayPixels;         // +0x28 Array<uint> data (size^2, zeroed on a new game)
     int32_t             overlayPixelCount;     // +0x30
     int32_t             overlayPixelCapacity;  // +0x34
+
+    // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
+    void Serialize(IO::Stream& stream);   // 0x1400a57f0
 };
 
 static_assert(sizeof(Minimap) == 0x38, "Minimap is 0x38 (Load MemAlloc(0x38, 4))");

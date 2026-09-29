@@ -26,8 +26,29 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "math/Math.h"   // Math::Vector3 (the saved camera view's position)
 
 class ComponentEntity;
+namespace IO { class Stream; }
+
+// B.4 GAME-a: one saved camera view of the +0x70 array (stride 0x1C, align 4;
+// resize 0x14002e000, Serialize 0x140102920: Vector3, three floats, a bool).
+// Only ever an element of that raw-allocated array (never constructed by C++).
+struct PlayerCameraView {
+    Math::Vector3 position;       // +0x00 (Vector3::Serialize)
+    float         field_0x0C;     // +0x0C (Serialize float)
+    float         field_0x10;     // +0x10 (Serialize float)
+    float         field_0x14;     // +0x14 (Serialize float)
+    bool          used;           // +0x18 (Serialize bool)
+    uint8_t       _pad19[3];      // +0x19 never written by the copy
+};
+static_assert(sizeof(PlayerCameraView) == 0x1C, "PlayerCameraView stride 0x1C (0x14002e000)");
+static_assert(offsetof(PlayerCameraView, position) == 0x00, "PlayerCameraView::position @ +0x00");
+static_assert(offsetof(PlayerCameraView, field_0x0C) == 0x0C, "PlayerCameraView +0x0C");
+static_assert(offsetof(PlayerCameraView, field_0x10) == 0x10, "PlayerCameraView +0x10");
+static_assert(offsetof(PlayerCameraView, field_0x14) == 0x14, "PlayerCameraView +0x14");
+static_assert(offsetof(PlayerCameraView, used) == 0x18, "PlayerCameraView::used @ +0x18");
+static_assert(offsetof(PlayerCameraView, _pad19) == 0x19, "PlayerCameraView +0x19");
 
 // B.4 GAME-a: one node of the two entity sets at +0x50 / +0x60 (moved here
 // from entityui.cpp, whose walkers read it): an AVL tree of 0x38-byte nodes
@@ -35,8 +56,8 @@ class ComponentEntity;
 // removed by 0x14002c690 / 0x140025740.
 struct TrackedEntityNode {
     ComponentEntity*   key;       // +0x00 the entity (InternalPtr value)
-    uint32_t           x;         // +0x08
-    uint32_t           y;         // +0x0C
+    int32_t            x;         // +0x08 (Serialize int, 0x14002e470)
+    int32_t            y;         // +0x0C (Serialize int)
     uint8_t            active;    // +0x10 (the insert stores the dword 1)
     uint8_t            _pad11[7]; // +0x11
     TrackedEntityNode* parent;    // +0x18
@@ -71,8 +92,8 @@ public:
     int32_t  field_0x34;         // +0x34 ctor 1 (the tree: game speed)
     bool     field_0x38;         // +0x38 ctor 0
     uint8_t  _pad39[3];          // +0x39
-    int32_t  field_0x3C;         // +0x3C ctor 0 (one qword store with +0x40)
-    int32_t  field_0x40;         // +0x40 ctor 0
+    float    field_0x3C;         // +0x3C ctor 0 (one qword store with +0x40); Serialize float (0x140102920)
+    float    field_0x40;         // +0x40 ctor 0; Serialize float
     float    field_0x44;         // +0x44 ctor 0.75
     void*    field_0x48;         // +0x48 ctor 0
     TrackedEntityNode* field_0x50; // +0x50 ctor 0; the pinned entity set's root (EntityUI unpin removes, 0x14002c690)
@@ -81,9 +102,9 @@ public:
     TrackedEntityNode* field_0x60; // +0x60 ctor 0; the open-entity set's root (EntityUI::OnClosed removes)
     int32_t  field_0x68;         // +0x68 ctor 0; its count
     uint8_t  _pad6C[4];          // +0x6C
-    void*    field_0x70;         // +0x70 Array data (sized to 5 by the ctor)
-    int32_t  field_0x78;         // +0x78 Array count
-    int32_t  field_0x7C;         // +0x7C Array capacity
+    PlayerCameraView* cameraViews; // +0x70 Array data (sized to 5 by the ctor; saved views 1-5)
+    int32_t  cameraViewCount;    // +0x78 Array count
+    int32_t  cameraViewCapacity; // +0x7C Array capacity
     bool     field_0x80;         // +0x80 pending-tool flag (ctor 0)
     uint8_t  _pad81[7];          // +0x81
     void*    field_0x88;         // +0x88 pending tool (ctor 0)
@@ -95,6 +116,9 @@ public:
     uint8_t  _padA5[3];          // +0xA5
     int32_t  field_0xA8;         // +0xA8 not written by the ctor
     int32_t  field_0xAC;         // +0xAC not written by the ctor
+
+    // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
+    void Serialize(IO::Stream& stream);   // 0x140102920
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");
@@ -120,9 +144,9 @@ static_assert(offsetof(PlayerToolManager, _pad5C) == 0x5C, "+0x5C");
 static_assert(offsetof(PlayerToolManager, field_0x60) == 0x60, "+0x60");
 static_assert(offsetof(PlayerToolManager, field_0x68) == 0x68, "+0x68");
 static_assert(offsetof(PlayerToolManager, _pad6C) == 0x6C, "+0x6C");
-static_assert(offsetof(PlayerToolManager, field_0x70) == 0x70, "+0x70");
-static_assert(offsetof(PlayerToolManager, field_0x78) == 0x78, "+0x78");
-static_assert(offsetof(PlayerToolManager, field_0x7C) == 0x7C, "+0x7C");
+static_assert(offsetof(PlayerToolManager, cameraViews) == 0x70, "PlayerToolManager::cameraViews @ +0x70");
+static_assert(offsetof(PlayerToolManager, cameraViewCount) == 0x78, "PlayerToolManager::cameraViewCount @ +0x78");
+static_assert(offsetof(PlayerToolManager, cameraViewCapacity) == 0x7C, "PlayerToolManager::cameraViewCapacity @ +0x7C");
 static_assert(offsetof(PlayerToolManager, field_0x80) == 0x80, "+0x80");
 static_assert(offsetof(PlayerToolManager, _pad81) == 0x81, "+0x81");
 static_assert(offsetof(PlayerToolManager, field_0x88) == 0x88, "+0x88");

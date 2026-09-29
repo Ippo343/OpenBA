@@ -65,6 +65,7 @@ class MapGenerator;       // Game/MapGenerator.h
 class TerrainGenerator;   // Game/TerrainGenerator.h
 class ClimateGenerator;   // Game/ClimateGenerator.h
 namespace Save        { class SavedState; }
+namespace IO          { class Stream; }
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -98,6 +99,11 @@ public:
     // [11] AllowsModChanges: inherited (Engine::UpdateLoop's, false).
 
     void OnScenarioComplete();                                   // 0x140096830
+
+    // 0x140095a90: the master serializer SaveRestore (0x1400959c0) calls with
+    // the stream, the SavedState and the out int (B4 GAME-a: a member; retail's
+    // is non-virtual and unnamed). Body in gameupdateloop_serialize.cpp.
+    void SerializeAll(IO::Stream& stream, Save::SavedState* state, int* outParam);
 
     static const void* Vtable();
 
@@ -190,7 +196,7 @@ public:
 
     // Scenario/achievement
     Achievement::AchievementInstance* m_scenarioInstance; // +0x150 InternalBasePtr<AchievementInstance> (ctor: *p3)
-    uint8_t  m_scenarioCompleted;   // +0x158 set to 1 when scenario met/failed
+    bool     m_scenarioCompleted;   // +0x158 set to 1 when scenario met/failed (Serialize bool, 0x140095a90)
     uint8_t  _pad159[3];            // +0x159
     int32_t  m_scenarioIndex;       // +0x15C index into scenario list (-1 = none)
 };

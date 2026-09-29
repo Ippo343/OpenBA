@@ -26,6 +26,7 @@
 #include "system/String.h"   // System::String (the entry's text)
 
 namespace UI { class StringTable; }
+namespace IO { class Stream; }
 
 // One message (stride 0x28): Serialize 0x1400952c0's field order.
 struct EventLogEntry {
@@ -60,6 +61,9 @@ public:
     EventLogEntry* entries;       // +0x18 Array<Entry> data
     int32_t        entryCount;    // +0x20
     int32_t        entryCapacity; // +0x24
+
+    // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
+    void Serialize(IO::Stream& stream);   // 0x1400952c0
 };
 
 static_assert(sizeof(EventLog) == 0x28, "EventLog is 0x28 (Load MemAlloc(0x28, 4))");

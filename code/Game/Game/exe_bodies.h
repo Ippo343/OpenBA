@@ -91,9 +91,6 @@ extern "C" void GameSettings_Save(GameSettings* settings);  // 0x140098970
 // g_pNewGameSettings. Null outside RunGameMain's settings lifetime.
 extern GameSettings* g_gameSettings;
 
-// ---- gamegrid_serialize.cpp
-extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream);  // 0x14009f100
-
 // ---- gameupdateloop.cpp
 extern "C" float CalcWindFactor_Reg(void* time);  // 0x1401027c0
 

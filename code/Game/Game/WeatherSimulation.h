@@ -40,6 +40,7 @@ class EnvironmentDescription;   // Component/EnvironmentDescription.h
 class ClimateGenerator;         // Game/ClimateGenerator.h
 class ComponentEntity;
 namespace Graphics { class Geometry; }
+namespace IO { class Stream; }
 
 class WeatherSimulation {
 public:
@@ -62,6 +63,9 @@ public:
     int32_t                 emitterCount;    // +0x68
     int32_t                 emitterCapacity; // +0x6C
     System::Time            disasterTime;    // +0x70 += dt (Update's disaster roll)
+
+    // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
+    void Serialize(IO::Stream& stream);   // 0x140093c90
 };
 
 static_assert(sizeof(WeatherSimulation) == 0x78, "WeatherSimulation is 0x78 (Load MemAlloc(0x78, 8))");
