@@ -189,17 +189,29 @@ static_assert(offsetof(Persistence, savePath) == 0x90,
               "IO::Persistence::_savePath must sit at +0x90 (GetSavePath, retail 0x180007ad0)");
 
 // ----------------------------------------------------------------------------
-// The settings map's node — a PREFIX view only.
+// The settings map's node.
 // ----------------------------------------------------------------------------
 // Map_Find returns a node pointer whose first two qwords are the key and
 // value Strings (Persistence::Get reads `*(node+8)` as the value's `char*`;
-// Persistence::Set writes through the same offset). The node continues past
-// this with parent/left/right pointers at +0x10/+0x18/+0x20 — the exact
-// pattern WAVE3_LANE_A.md measured for Set<Pair<K,V>> generally
-// (`parent @ align8(sizeof K + sizeof V)`, then left, then right) — but this
-// lane never walks, inserts, or rebalances a node by hand, so those fields
-// are not declared here. Do not take sizeof(SettingsMapNode) as the real node
-// size; it is a PREFIX overlay onto memory Map_Find/Map_Insert own.
+// Persistence::Set writes through the same offset). The node continues with
+// parent/left/right pointers at +0x10/+0x18/+0x20 — the exact pattern
+// WAVE3_LANE_A.md measured for Set<Pair<K,V>> generally (`parent @ align8(sizeof
+// K + sizeof V)`, then left, then right).
+//
+// B.4 R-IO: the link fields are declared, each pinned by a reader in this
+// DLL: `parent` by WriteSettings (0x1800b8a9c reads [node+0x10] as the parent
+// in its in-order successor, 0x1800b8aa5 compares [parent+0x18] against the
+// node), `left`/`right` by Map_Clear (0x18000f7f4 recurses on [node+0x18],
+// 0x18000f7fd on [node+0x20]). The two 16-bit AVL words at +0x28/+0x2a are
+// runtime/src/collection/set_avl.h's (pinned there by the node allocator and
+// the rotations); they are declared for the size and never read here.
+//
+// The key and value are the real `System::String`. No SettingsMapNode is ever
+// constructed or destroyed as a C++ object: the nodes are raw memory that
+// Map_Insert (rtavl::StringMapInsert) and Map_Clear (rtsetclear::Clear) own,
+// and this header only views them, so the class type adds no ctor or dtor
+// call anywhere. What it adds is `operator=` on the value, which IS the
+// `String::operator=` (0x1800c9810) Persistence::Set and ReadSettings inline.
 //
 // Map_Find (retail 0x18002ace0) and Map_Insert (retail 0x18002a090) are
 // process-wide shared code, not Persistence-specific: MSVC folds every
@@ -212,10 +224,20 @@ static_assert(offsetof(Persistence, savePath) == 0x90,
 // "one BST for two node layouts" trap WAVE3_LANE_A.md and
 // reference_one_bst_find_two_node_layouts.md both warn about.
 struct SettingsMapNode {
-    RtSystem::String key;    // +0x00
-    RtSystem::String value;  // +0x08
+    System::String   key;      // +0x00
+    System::String   value;    // +0x08
+    SettingsMapNode* parent;   // +0x10
+    SettingsMapNode* left;     // +0x18
+    SettingsMapNode* right;    // +0x20
+    int16_t          balance;  // +0x28
+    int16_t          height;   // +0x2a
+    uint32_t         pad2c;    // +0x2c
 };
-static_assert(sizeof(SettingsMapNode) == 0x10, "SettingsMapNode prefix must be exactly key+value, 0x10 bytes");
+static_assert(offsetof(SettingsMapNode, value)  == 0x08, "value @ +0x08 (Persistence::Get)");
+static_assert(offsetof(SettingsMapNode, parent) == 0x10, "parent @ +0x10 (0x1800b8a9c)");
+static_assert(offsetof(SettingsMapNode, left)   == 0x18, "left @ +0x18 (0x18000f7f4)");
+static_assert(offsetof(SettingsMapNode, right)  == 0x20, "right @ +0x20 (0x18000f7fd)");
+static_assert(sizeof(SettingsMapNode) == 0x30, "the Set node set_avl.h pins");
 
 // ============================================================================
 // IO::Persistence::SaveBlock — 0x10 bytes. One buffer handed to the save/load
@@ -343,10 +365,8 @@ static_assert(sizeof(SaveGameInfo) == 0x10, "sizeof(IO::Persistence::SaveGameInf
 // (+0x90) is released BY HAND by `~Persistence` itself. Retyping either to
 // `System::String` would add an implicit member destructor running IN ADDITION
 // to those hand-written releases — the B31 `RtSystem::String` double-free.
-// `RtIo::SettingsMapNode`'s two fields stay PODs for the reason
-// `persistence.cpp` and `persistence_saves.cpp` already record at length: they
-// are shared with `closure_batch2b_win.cpp` and `engine/singleton_ctors.cpp`,
-// neither of which is in this block's file set.
+// (`RtIo::SettingsMapNode`'s key and value are `System::String` since B.4:
+// see that struct -- no node is ever a C++ object, so no ctor/dtor is added.)
 //
 // *** THERE IS NO CONSTRUCTOR. *** `??0Persistence@IO@@QEAA@XZ` (0x1800b8020)
 // is NOT ported here: it constructs the embedded `System::Thread` and stamps the
@@ -430,7 +450,7 @@ public:
     // offsets through `RtIo::Persistence`, and `offsetof` on them has to be
     // well formed for the pins below. Field for field with the POD above, whose
     // per-offset evidence comments are not repeated here.
-    void*               _settingsMapRoot;    // +0x00
+    RtIo::SettingsMapNode* _settingsMapRoot; // +0x00 — the Set<Pair<String,String>> root
     int32_t             _settingsMapCount;   // +0x08
     uint8_t             _pad0c[0x04];        // +0x0C — NOT pinned
     void*               _workerVtable;       // +0x10 — the EMBEDDED worker's vptr

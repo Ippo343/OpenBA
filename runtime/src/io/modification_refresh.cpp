@@ -847,7 +847,7 @@ void Modification::RefreshList() {
                 RtSystem_ConfigMap_Find(                         // 0x18002ace0  B.3.x bridge
                     pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));
             if (node != nullptr) {
-                const char* v = node->value.data;                // +0x08
+                const char* v = node->value._data;               // +0x08
                 const int cmp = (v == nullptr) ? -1 : std::strcmp(v, "true");
                 m->enabled = static_cast<uint8_t>(cmp == 0);
             }
@@ -862,7 +862,7 @@ void Modification::RefreshList() {
                 RtSystem_ConfigMap_Find(                         // B.3.x bridge
                     pers, reinterpret_cast<const RtSystem::String*>(&keyStr)));
             if (node != nullptr) {
-                const char* v = node->value.data;                // +0x08
+                const char* v = node->value._data;               // +0x08
                 m->order = RtCrt_ParseInt10_18007f034(v);        // 0x18007f034
             }
         }  // ~keyStr releases here
