@@ -102,7 +102,8 @@ public:
     uint8_t  pickingScene[0x60]; // +0x08 Picking::Scene (embedded; raw, H5)
     void*    field_0x68;         // +0x68 ctor 0 (the tree seeds its pathfinder worker here)
     void*    field_0x70;         // +0x70 ctor 0 (the tree: region-connectivity graph)
-    void*    field_0x78;         // +0x78 ctor 0 (the tree: region pair cache)
+    int64_t* regionPairCache;    // +0x78 ctor 0; the region pair cache (Update hands it to 0x1400a5d10,
+                                 //       whose tree body takes int64_t*)
     MapCell* cells;              // +0x80 cell Array data (MapCell, stride 0x30)
     int32_t  cellCount;          // +0x88 cell Array count (Serialize int&)
     int32_t  cellCapacity;       // +0x8C cell Array capacity
@@ -131,7 +132,7 @@ static_assert(offsetof(Map, _pad04) == 0x04, "Map +0x04");
 static_assert(offsetof(Map, pickingScene) == 0x08, "Map::pickingScene @ +0x08");
 static_assert(offsetof(Map, field_0x68) == 0x68, "Map +0x68");
 static_assert(offsetof(Map, field_0x70) == 0x70, "Map +0x70");
-static_assert(offsetof(Map, field_0x78) == 0x78, "Map +0x78");
+static_assert(offsetof(Map, regionPairCache) == 0x78, "Map::regionPairCache @ +0x78");
 static_assert(offsetof(Map, cells) == 0x80, "Map::cells @ +0x80");
 static_assert(offsetof(Map, cellCount) == 0x88, "Map::cellCount @ +0x88");
 static_assert(offsetof(Map, cellCapacity) == 0x8C, "Map::cellCapacity @ +0x8C");

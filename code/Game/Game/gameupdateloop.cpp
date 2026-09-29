@@ -47,6 +47,13 @@
 #include "Game/EventLog.h"   // m_eventNotifier's class (B.4 GAME-a)
 #include "Game/WorkScheduler.h"   // m_tutorial's class (B.4 GAME-a)
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
+#include "Game/Map.h"        // m_game's class (B.4 GAME-a)
+#include "Game/PlayerToolManager.h"   // m_toolManager's class (B.4 GAME-a)
+#include "Game/PlayerController.h"    // m_playerController's class (B.4 GAME-a)
+#include "Game/ProfessionList.h"      // m_professionList's class
+#include "Entity/EntityList.h"        // m_entityList's class
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
@@ -507,15 +514,14 @@ void SimProfReport(int speedMultiplier, long entCount) {
 // (+0x34) and clear the paused flag (+0x30) every frame, so an A/B of 1x vs 2x
 // vs 3x is deterministic under autostart with no clicking. Diagnostic only.
 int g_forceSpeed = -1;
-inline void ApplyForceSpeed(void* entityUIv) {
+inline void ApplyForceSpeed(PlayerToolManager* toolManager) {
     if (g_forceSpeed < 0) {
         const char* e = Opt().forceSpeed;
         g_forceSpeed = (e && e[0]) ? std::atoi(e) : 0;
     }
-    if (g_forceSpeed > 0 && entityUIv) {
-        uint8_t* ui = (uint8_t*)entityUIv;
-        *(char*)(ui + 0x30) = 0;                       // not paused
-        *(int32_t*)(ui + 0x34) = g_forceSpeed;         // speed multiplier
+    if (g_forceSpeed > 0 && toolManager) {
+        toolManager->field_0x30 = false;               // not paused
+        toolManager->field_0x34 = g_forceSpeed;        // speed multiplier
     }
 }
 
@@ -534,9 +540,10 @@ extern "C" const char* GameUpdateLoop_SimProfName(int phase) {
 }
 
 bool GameUpdateLoop::Update(const System::Time& timeRef) {
-    // The body reads the Time through a raw pointer (unchanged from the
-    // hand-built table's slot); retail's slot takes it by const&.
-    void* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
+    // Retail's slot takes the Time by const&; the tick bodies below take a mutable
+    // Time* / int64_t* (EntityList::Update, Weather_ResetTime_Reimpl,
+    // CitizenBehavior::Update), so the body holds it through a mutable pointer.
+    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
     // in-game world build) is not yet implemented, so on the new-game path
     // m_game (+0xF8) is still null when the loader chain transitions in. Every
@@ -740,7 +747,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
     // bit-0x400 cull on start-town buildings was fixed. See storagedisplaycomponent.cpp.)
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",
-          s_frameNum, (void*)this, time, (long long)m_gameTime);
+          s_frameNum, (void*)this, (void*)time, (long long)m_gameTime);
 
     // Step 1: Check if UI pauses game
     TRACE("[GameUpdateLoop::Update] checking PausesGame...\n");
@@ -756,19 +763,19 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
         int speedMultiplier = 0;
         int iteration = 0;
 
-        // Step 2: Read speed multiplier from EntityUI
-        // EntityUI+0x30 = paused flag, EntityUI+0x34 = speed multiplier
-        uint8_t* entityUI = (uint8_t*)m_toolManager;
-        bool entityUIPaused = (*(char*)(entityUI + 0x30)) != 0;
+        // Step 2: Read speed multiplier from the tool manager
+        // +0x30 = paused flag, +0x34 = speed multiplier
+        PlayerToolManager* toolManager = m_toolManager;
+        bool entityUIPaused = toolManager->field_0x30;
         if (!entityUIPaused) {
-            speedMultiplier = *(int32_t*)(entityUI + 0x34);
+            speedMultiplier = toolManager->field_0x34;
         }
         TRACE("[GameUpdateLoop::Update] entityUIPaused=%d, speedMultiplier=%d\n",
                (int)entityUIPaused, speedMultiplier);
 
         if (speedMultiplier > 0) {
             // Accumulate game time
-            m_gameTime += *(int64_t*)time;
+            m_gameTime += time->_ticks;
             TRACE("[GameUpdateLoop::Update] gameTime updated to %lld\n", (long long)m_gameTime);
         }
 
@@ -778,12 +785,10 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 TRACE("[GameUpdateLoop::Update] === sim iteration %d/%d ===\n", iteration + 1, speedMultiplier);
 
                 // 3a. Region-pair distance cache staleness sweep
-                void* game = m_game;
-                void* regionPairCache = *(void**)((uint8_t*)game + 0x78);
-                TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", regionPairCache);
+                int64_t* regionPairCache = m_game->regionPairCache;
+                TRACE("[GameUpdateLoop::Update] calling RegionPairCache::Tick (cache=%p)...\n", (void*)regionPairCache);
                 { PhaseTimer pt(kPhPairCache);
-                Pf_RegionPairCacheTick_5d10(static_cast<int64_t*>(regionPairCache),
-                            reinterpret_cast<const int64_t*>(time));   // 0x1400a5d10
+                Pf_RegionPairCacheTick_5d10(regionPairCache, &time->_ticks);   // 0x1400a5d10
                 }
                 TRACE("[GameUpdateLoop::Update] RegionPairCache::Tick done\n");
 
@@ -795,10 +800,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 { PhaseTimer pt(kPhAnimation);
                 // B.3.5 bridge — the exe dispatch slot 0x140152050 read and its
                 // [GUARD-M5] readiness guard went with the door. `time` is a
-                // `const System::Time*` here, so it is dereferenced at the call.
-                m_animationManager
-                    ->Update(*reinterpret_cast<const System::Time*>(time),
-                             rootOnly);   // B.3.5 bridge
+                // `System::Time*` here, so it is dereferenced at the call.
+                m_animationManager->Update(*time, rootOnly);
                 }
                 TRACE("[GameUpdateLoop::Update] AnimationManager::Update done\n");
 
@@ -814,7 +817,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3d. Day counter increment
                 {
                     Calendar* dayCounter = m_dayCounter;
-                    dayCounter->yearTime._ticks += *(int64_t*)time;
+                    dayCounter->yearTime._ticks += time->_ticks;
                     if (dayCounter->yearTime._ticks >= dayCounter->yearLength._ticks) {
                         dayCounter->year = dayCounter->year + 1;
                         dayCounter->yearTime._ticks -= dayCounter->yearLength._ticks;
@@ -825,14 +828,14 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3e. Weather::ResetTime
                 TRACE("[GameUpdateLoop::Update] calling Weather_ResetTime...\n");
                 { PhaseTimer pt(kPhWeather);
-                Weather_ResetTime_Reimpl(m_weather, (void*)time);   // 0x1400944e0
+                Weather_ResetTime_Reimpl(m_weather, time);   // 0x1400944e0
                 }
                 TRACE("[GameUpdateLoop::Update] Weather_ResetTime done\n");
 
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                m_citizenList->Update(reinterpret_cast<int64_t*>(time));   // 0x14008c2b0
+                m_citizenList->Update(&time->_ticks);   // 0x14008c2b0
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
@@ -840,7 +843,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 {
                     WorkScheduler* scheduler = m_tutorial;
                     scheduler->stepCount = scheduler->stepCount + 1;
-                    scheduler->time._ticks = scheduler->time._ticks + *(int64_t*)time;
+                    scheduler->time._ticks = scheduler->time._ticks + time->_ticks;
                     TRACE("[GameUpdateLoop::Update] tutorial frame=%d, tutorialTime=%lld\n",
                            (int)scheduler->stepCount, (long long)scheduler->time._ticks);
                 }
@@ -859,8 +862,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                m_scenarioInstance, (int)m_scenarioCompleted);
         if (m_scenarioInstance != nullptr && m_scenarioCompleted == 0) {
             TRACE("[GameUpdateLoop::Update] calling AchievementInstance::Update...\n");
-            m_scenarioInstance->Update(   // B.3.7 bridge
-                *reinterpret_cast<const System::Time*>(time));
+            m_scenarioInstance->Update(*time);   // B.3.7 bridge
             TRACE("[GameUpdateLoop::Update] AchievementInstance::Update done\n");
 
             bool isMet = m_scenarioInstance->IsMet();   // B.3.7 bridge
@@ -884,18 +886,18 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
         // Step 4b: AchievementManager::Update with scaled time
         TRACE("[GameUpdateLoop::Update] calling AchievementManager::Update...\n");
         {
-            float seconds = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
-            int64_t scaledTime[1];
+            float seconds = time->AsSeconds();
+            System::Time scaledTime;
             // AchClock_TimeScale() is 1.0 unless BANISHED_ACH_TIME_SCALE is set, so
             // this is retail's `seconds * speedMultiplier` unchanged by default. This
             // one Time is what every TimeGoalInstance accumulates, so scaling it here
             // advances all of them at once (standalone/ach_clock.cpp).
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(scaledTime),
+            RtSystem_Time_Ctor(&scaledTime,
                                seconds * (float)speedMultiplier * AchClock_TimeScale());
             // Achievement::AchievementManager::_singleton (retail: **import slot
             // 0x1401514f0). The null check on the manager is the M5 first-slice guard.
             if (::Achievement::AchievementManager::_singleton) {
-                void* achievementMgr = ::Achievement::AchievementManager::_singleton;
+                ::Achievement::AchievementManager* achievementMgr = ::Achievement::AchievementManager::_singleton;
 
                 // BANISHED_ACH_IGNORE_MODS=1 -- NON-RETAIL TEST FIXTURE.
                 //
@@ -923,8 +925,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 }
                 if (s_ignoreMods == 1) {
                     if (::IO::FileSystem::_singleton) {
-                        modGate = reinterpret_cast<int32_t*>(
-                            reinterpret_cast<uint8_t*>(::IO::FileSystem::_singleton) + 0x38);
+                        modGate = &::IO::FileSystem::_singleton->_userPackFilenameCount;   // +0x38
                         savedGate = *modGate;
                         if (savedGate > 0) {
                             *modGate = 0;
@@ -958,8 +959,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // missing init, not a Persist defect.
                 // The report below is now a FIXTURE THAT SHOULD NEVER FIRE. If it does,
                 // some OTHER path into a game is missing that same call.
-                void* instList = *reinterpret_cast<void**>(
-                    static_cast<uint8_t*>(achievementMgr) + 0x18);
+                const void* instList = achievementMgr->_instances._data;   // mgr+0x18
                 if (modGate && !instList) {
                     static bool s_warned = false;
                     if (!s_warned) {
@@ -973,8 +973,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                         fflush(stderr);
                     }
                 } else {
-                    reinterpret_cast<Achievement::AchievementManager*>(achievementMgr)->Update(   // B.3.7 bridge
-                        *reinterpret_cast<const System::Time*>(scaledTime));
+                    achievementMgr->Update(scaledTime);
                 }
 
                 if (modGate) *modGate = savedGate;   // restore before anything else reads it
@@ -999,18 +998,18 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // layout disagreement. Found by lane P while diagnosing an
             // AsTransform3 divergence that turned out to be an oracle defect --
             // the overflow is older and unrelated to that port.
-            uint8_t transform3[48]; // Transform3 scratch space (0x30 bytes)
-            void* playerCtrl = m_playerController;
-            void* result = Reimpl_FUN_1400983f0(playerCtrl, transform3);   // 0x1400983f0
+            PlayerController* playerCtrl = m_playerController;
+            Math::Transform transform = playerCtrl->CalcTransform();   // 0x1400983f0
             // AsTransform3 on the result, then SetCameraToWorld
-            Math::Transform3 t3 =
-                reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
+            Math::Transform3 t3 = transform.AsTransform3();
             // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
-            // `playerCtrl` is `m_playerController` (+0xE0, GameUpdateLoop.h:115) and
-            // its ctor Reimpl_FUN_1400985b0 (gameupdateloop_load.cpp:591) constructs
-            // a `Graphics::Camera` at `p + 0x34` -- the receiver is proved by the
-            // writer, not by the variable's name. There was no readiness guard here.
-            reinterpret_cast<Graphics::Camera*>((uintptr_t)playerCtrl + 0x34)
+            // `playerCtrl` is `m_playerController` (+0xE0) and its ctor
+            // (gameupdateloop_load.cpp) constructs a `Graphics::Camera` in its +0x34
+            // raw storage -- the receiver is proved by the writer. There was no
+            // readiness guard here.
+            // LEFT: PlayerController::camera is raw storage (H5: Camera's default
+            // ctor is protected).
+            reinterpret_cast<Graphics::Camera*>(playerCtrl->camera)
                 ->SetCameraToWorld(t3);   // B.3.5 bridge
         }
         TRACE("[GameUpdateLoop::Update] camera transform done\n");
@@ -1035,8 +1034,7 @@ post_simulation:
         // Caller batch CB6: slot 1 (vtable +0x08) of the real class. The receiver is
         // PROVED: Load's step 23 builds it with WorldGeometry's ctor (and Load is
         // m_worldGeometry's only writer). A virtual call, as retail's is.
-        m_worldGeometry->Update(
-            *reinterpret_cast<const System::Time*>(time));   // B.3.8 bridge
+        m_worldGeometry->Update(*time);
     }
     TRACE("[GameUpdateLoop::Update] WorldGeometry::Update done\n");
 
@@ -1048,8 +1046,7 @@ post_simulation:
     // placed -- after this frame's input poll, before the UI decodes it. Both
     // calls are a cached-getenv no-op unless BANISHED_MOUSE_INJECT is set.
     MouseInject::PreUpdate(m_userInterface);
-    int uiCursor = m_userInterface->Update(  // B.3.6 bridge
-        *reinterpret_cast<const System::Time*>(time));
+    int uiCursor = m_userInterface->Update(*time);  // B.3.6 bridge
     MouseInject::PostUpdate(m_userInterface);
     TRACE("[GameUpdateLoop::Update] UI::UserInterface::Update done (cursor=%d)\n", uiCursor);
 
@@ -1064,13 +1061,13 @@ post_simulation:
             // registered, so fn_EntityUI_Update is null and the camera never moved.
             // Drive the camera directly from the KeyMap here — hotkeys (pause/presets)
             // first, then per-frame movement, matching the original helper order.
-            Game::Camera_UpdateHotkeys(m_toolManager, noInputFocus ? 1 : 0, *(int64_t*)time);
-            Game::Camera_UpdateMovement(m_toolManager, noInputFocus ? 1 : 0, *(int64_t*)time);
+            Game::Camera_UpdateHotkeys(m_toolManager, noInputFocus ? 1 : 0, time->_ticks);
+            Game::Camera_UpdateMovement(m_toolManager, noInputFocus ? 1 : 0, time->_ticks);
             // Phase 3: tick the active player tool (the tool half of EntityUI::Update
             // that camera_input.cpp omitted) — OnKey (dialog + left-click confirm) +
             // Serialize (ghost preview) + cursor. -1 = no active tool -> keep default.
             {
-                int toolCursor = EntityUI_ToolTick_SA(m_toolManager, noInputFocus ? 1 : 0, *(int64_t*)time);
+                int toolCursor = EntityUI_ToolTick_SA(m_toolManager, noInputFocus ? 1 : 0, time->_ticks);
                 if (toolCursor >= 0) cursorIndex = toolCursor;
             }
             TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
@@ -1091,11 +1088,12 @@ post_simulation:
     // Step 11: Set cursor
     TRACE("[GameUpdateLoop::Update] setting cursor (index=%d)...\n", cursorIndex);
     {
-        void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
+        GameContainer* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
-            uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x28 + (int64_t)cursorIndex * 8);
-            m_userInterface->SetCursor(  // B.3.6 bridge
-                Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
+            // The six cursors +0x28..+0x50 are indexed as one array (retail:
+            // container + 0x28 + index * 8).
+            const Object::ExternalPtr<UI::Cursor>* cursors = &keyMapMgr->cursorArrow;
+            m_userInterface->SetCursor(cursors[cursorIndex]);  // B.3.6 bridge
         }
     }
     TRACE("[GameUpdateLoop::Update] cursor set\n");
@@ -1103,31 +1101,29 @@ post_simulation:
     // Step 12: Audio::Scene::Update
     TRACE("[GameUpdateLoop::Update] calling Audio::Scene::Update...\n");
     {
-        void* playerCtrl = m_playerController;
-        // Build listener position from PlayerController camera data
-        float listenerPos[3];
-        // Transform3 at playerCtrl+0x98, camera offset at +0x1c,+0x20,+0x24
-        // Copy transform3 for audio listener
-        float tx = *(float*)((uintptr_t)playerCtrl + 0x98);
-        float ty = *(float*)((uintptr_t)playerCtrl + 0x9c);
-        float tz = *(float*)((uintptr_t)playerCtrl + 0xa0);
-        listenerPos[0] = tx + 0.0f;
-        listenerPos[1] = ty + 0.0f;
-        listenerPos[2] = tz + 0.0f;
+        PlayerController* playerCtrl = m_playerController;
+        // Build listener position from PlayerController camera data: the camera's
+        // cameraToWorld (Transform3) at playerCtrl+0x34+0x64 = +0x98.
+        // LEFT: PlayerController::camera is raw storage (H5).
+        const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera);
+        float tx = camera->_cameraToWorld.axisX.x;   // +0x98
+        float ty = camera->_cameraToWorld.axisX.y;   // +0x9c
+        float tz = camera->_cameraToWorld.axisX.z;   // +0xa0
+        Math::Vector3 listenerPos(tx + 0.0f, ty + 0.0f, tz + 0.0f);
 
         // Get speed multiplier for audio time scaling
         int speedMul = 0;
-        uint8_t* entityUI = (uint8_t*)m_toolManager;
-        if (*(char*)(entityUI + 0x30) == 0) {
-            speedMul = *(int32_t*)(entityUI + 0x34);
+        PlayerToolManager* toolManager = m_toolManager;
+        if (!toolManager->field_0x30) {
+            speedMul = toolManager->field_0x34;
         }
 
         {
-            float seconds = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
-            int64_t scaledTime[1];
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(scaledTime),
+            float seconds = time->AsSeconds();
+            System::Time scaledTime;
+            RtSystem_Time_Ctor(&scaledTime,
                                seconds * (float)speedMul * kRdata_14017219c);
-            float windFactor = CalcWindFactor_Reg(scaledTime);   // 0x1401027c0
+            float windFactor = CalcWindFactor_Reg(&scaledTime);   // 0x1401027c0
             // Sanity-check the camera-position sub-offset (playerCtrl+0x34+0x88) once:
             // it was derived from stack arithmetic in the retail disasm, not from a
             // struct definition. CLAUDE.md documents the default camera dist as 40, so
@@ -1142,11 +1138,11 @@ post_simulation:
             }
             // windFactor is the FLOAT the mangled name's trailing `M` says; an
             // earlier uint32_t cache typedef converted it (40.5f -> 40).
-            System::Time audioNow;    audioNow._ticks    = *(int64_t*)time;
-            System::Time audioScaled; audioScaled._ticks = scaledTime[0];
+            System::Time audioNow;    audioNow._ticks    = time->_ticks;
+            System::Time audioScaled; audioScaled._ticks = scaledTime._ticks;
             m_audioScene->Update(
                 audioNow, audioScaled, *m_random,
-                *reinterpret_cast<const Vector3*>(listenerPos), windFactor);   // B.3.7 bridge
+                listenerPos, windFactor);   // B.3.7 bridge
         }
     }
     TRACE("[GameUpdateLoop::Update] Audio::Scene::Update done\n");
@@ -1155,9 +1151,9 @@ post_simulation:
     // Original asm at 0x1400966c1: triple deref from slot, dispatch call at 0x140151758
     // Match proven working pattern from dragtool/pathtool — no null guards (original has none).
     {
-        void* keyMap = Input::Configuration::_singleton->_keyMap;
+        const Input::KeyMap* keyMap = Input::Configuration::_singleton->_keyMap;
 
-        if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x21)) {  // B.3.7 bridge
+        if (keyMap->Pressed(0, 0x21)) {  // B.3.7 bridge
             m_quickSavePressed = 1;
         }
 
@@ -1188,7 +1184,7 @@ post_simulation:
             }
         }
 
-        if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x22)) {  // B.3.7 bridge
+        if (keyMap->Pressed(0, 0x22)) {  // B.3.7 bridge
             m_quickLoadPressed = 1;
         }
         TRACE("[GameUpdateLoop::Update] quicksave/quickload checked (save=%d, load=%d)\n",
@@ -1198,7 +1194,7 @@ post_simulation:
     // Step 14: SaveLoad::Update if active
     if (m_saveLoad != nullptr) {  // [GUARD-M5]
         TRACE("[GameUpdateLoop::Update] calling SaveLoad::Update...\n");
-        m_saveLoad->Update(*reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
+        m_saveLoad->Update(*time);   // B.3.7 bridge
         TRACE("[GameUpdateLoop::Update] SaveLoad::Update done\n");
     }
 
@@ -1210,11 +1206,12 @@ post_simulation:
     // Normalize CALL and the Scene::Clean CALL. This appears to be dead code in
     // the original binary — possibly a removed/vestigial lighting update.
     {
-        void* playerCtrl = m_playerController;
-        uintptr_t pc = (uintptr_t)playerCtrl;
-        float dirX = *(float*)(pc + 0xa4) + *(float*)(pc + 0x98) + 0.0f;
-        float dirY = *(float*)(pc + 0xa8) + *(float*)(pc + 0x9c) + 0.0f;
-        float dirZ = (*(float*)(pc + 0xac) + *(float*)(pc + 0xa0)) - kRdata_14017214c;
+        // LEFT: PlayerController::camera is raw storage (H5).
+        const Math::Transform3& view =
+            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera)->_cameraToWorld;
+        float dirX = view.axisY.x + view.axisX.x + 0.0f;   // +0xa4 + +0x98
+        float dirY = view.axisY.y + view.axisX.y + 0.0f;   // +0xa8 + +0x9c
+        float dirZ = (view.axisY.z + view.axisX.z) - kRdata_14017214c;   // +0xac + +0xa0
         float dir[3] = { dirX, dirY, dirZ };
         float len = sqrtf(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
         if (len > 0.0f) { dir[0] /= len; dir[1] /= len; dir[2] /= len; }
@@ -1277,10 +1274,10 @@ post_simulation:
         g_phCalls[kPhWholeUpdate]++;
         long entCount = -1;
         if (m_entityList)
-            entCount = *reinterpret_cast<int*>((uint8_t*)m_entityList + 0x30);
+            entCount = m_entityList->buckets[1].count;   // +0x30
         int spd = 0;
-        if (m_toolManager && *(char*)((uint8_t*)m_toolManager + 0x30) == 0)
-            spd = *(int32_t*)((uint8_t*)m_toolManager + 0x34);
+        if (m_toolManager && !m_toolManager->field_0x30)
+            spd = m_toolManager->field_0x34;
         SimProfReport(spd, entCount);
     }
     // [STRESS] close the Update bracket; the harness's own periodic work (CSV row,
@@ -1341,7 +1338,7 @@ void GameUpdateLoop::Draw(float alpha) {
 
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
     bool paused = m_userInterface->PausesGame();  // B.3.6 bridge
-    bool entityUIPaused = (*(char*)((uintptr_t)m_toolManager + 0x30) != 0);
+    bool entityUIPaused = m_toolManager->field_0x30;
     if (paused || entityUIPaused) {
         alpha = kRdata_14017214c; // 1.0f
     }
@@ -1349,14 +1346,14 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 2: Set time on video context
     TRACE("[GameUpdateLoop::Draw] setting video context time...\n");
     {
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
-        int64_t engineFrameTime = reinterpret_cast< ::Engine::MainLoop*>(engine)->_frameUpdateTime;   // B.3.8 bridge
+        ::Engine::MainLoop* engine = ::Engine::MainLoop::_singleton;
+        Video::Context* videoCtx = engine->_context;
+        System::Time gameTime;        gameTime._ticks = m_gameTime;
+        System::Time engineFrameTime; engineFrameTime._ticks = engine->_frameUpdateTime;
 
-        float gameSeconds = reinterpret_cast<const System::Time*>((void*)&m_gameTime)->AsSeconds();   // B.3.4b bridge
-        float frameSeconds = reinterpret_cast<const System::Time*>((void*)&engineFrameTime)->AsSeconds();   // B.3.4b bridge
-        reinterpret_cast<Video::Context*>(videoCtx)->SetTime(
-            gameSeconds + frameSeconds * alpha);   // B.3.5 bridge
+        float gameSeconds = gameTime.AsSeconds();
+        float frameSeconds = engineFrameTime.AsSeconds();
+        videoCtx->SetTime(gameSeconds + frameSeconds * alpha);
     }
     TRACE("[GameUpdateLoop::Draw] video context time set\n");
 
@@ -1364,8 +1361,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] checking image capture terrain...\n");
     {
         Minimap* imageCapture = m_imageCapture;
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
+        Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
         // ImageCapture::DrawCheck (exe FUN_1400a5140) is our clean port
         // Minimap_PaintTerrain. It fires
         // once — when the minimap's terrain GPU buffer (imageCapture+0x08) is still
@@ -1387,15 +1383,13 @@ void GameUpdateLoop::Draw(float alpha) {
 
     // Step 4: Camera update
     TRACE("[GameUpdateLoop::Draw] updating player camera...\n");
-    Reimpl_FUN_140098660(m_playerController,
-                         kRdata_1401721dc, kRdata_140172174, kRdata_140172240);   // 0x140098660
+    m_playerController->UpdateCamera(kRdata_1401721dc, kRdata_140172174, kRdata_140172240);   // 0x140098660
     TRACE("[GameUpdateLoop::Draw] player camera done\n");
 
     // Step 5: Weather draw update
     TRACE("[GameUpdateLoop::Draw] calling Weather::DrawUpdate...\n");
     {
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
+        Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
         // PORT GAP 0x1400938d0 Weather::DrawUpdate: not ported; retail calls it here
         // (RCX=weather, RDX=videoCtx).
         // Native time-of-day sun/lighting. The original Weather::DrawUpdate
@@ -1468,7 +1462,7 @@ void GameUpdateLoop::Draw(float alpha) {
         // crash-free; terrain + buildings cast/receive). The day cycle is driven by
         // Weather_SunUpdate above.
         if (::Video::Configuration::_singleton) {
-            shadowMode = *(uint32_t*)((uintptr_t)::Video::Configuration::_singleton + 0x30);
+            shadowMode = ::Video::Configuration::_singleton->shaderDetail;   // +0x30
         }
         m_renderer->_shaderDetail = shadowMode;
     }
@@ -1479,7 +1473,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // different set (the union with the PREVIOUS world box, and the mesh's own
     // distance table), so it needs its own measurement.
     SceneWatch_LodCensus(m_graphicsScene,
-                         (const void*)((uintptr_t)m_playerController + 0x34),
+                         m_playerController->camera,   // the Graphics::Camera at +0x34
                          // The MAIN scene pass's variant index, measured not guessed:
                          // Renderer::Draw hands BeginDrawGroup the scene entry's +0xec,
                          // which is AddScene's param_6 and is a literal 0 there. (The
@@ -1490,13 +1484,12 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 7: Graphics::Renderer::Draw
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
+        Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
+        // LEFT: PlayerController::camera is raw storage (H5).
         m_renderer->Draw(
-            *reinterpret_cast<Video::Context*>(videoCtx), alpha,
+            *videoCtx, alpha,
             *m_graphicsScene,
-            *reinterpret_cast<const Graphics::Camera*>(
-                (uintptr_t)m_playerController + 0x34));   // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Camera*>(m_playerController->camera));   // B.3.5 bridge
     }
     TRACE("[GameUpdateLoop::Draw] Renderer::Draw done\n");
 
@@ -1507,11 +1500,10 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 8: SaveLoad::Draw if active
     if (m_saveLoad != nullptr) {
         TRACE("[GameUpdateLoop::Draw] calling SaveLoad::Draw...\n");
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
+        Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
         // Save::SaveLoad::Draw — the ExternalPtr<Material> is a bare register value (B7-5).
         m_saveLoad->Draw(   // B.3.7 bridge
-            *reinterpret_cast<Video::Context*>(videoCtx),
+            *videoCtx,
             Object::ExternalPtr<Graphics::Material>(m_uiMaterial));
         TRACE("[GameUpdateLoop::Draw] SaveLoad::Draw done\n");
     }
@@ -1526,9 +1518,10 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 10: Set camera matrices on video context for UI
     TRACE("[GameUpdateLoop::Draw] setting camera matrices...\n");
     {
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
-        uintptr_t pc = (uintptr_t)m_playerController;
+        Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
+        // LEFT: PlayerController::camera is raw storage (H5).
+        const Graphics::Camera* camera =
+            reinterpret_cast<const Graphics::Camera*>(m_playerController->camera);
 
         // Original copies Transform3 (12 floats at +0x98..+0xC4 = 48 bytes) and projection
         // matrix (16 floats at +0xC8) from PlayerController onto the stack, then calls
@@ -1538,46 +1531,37 @@ void GameUpdateLoop::Draw(float alpha) {
         // the 3D placement overlay behind the camera (RenderDoc VS-out w<0). Terrain was
         // unaffected (drawn earlier inside Renderer::Draw with its own camera).
         // AsMatrix returns Matrix by value (64 bytes) — requires hidden return pointer ABI.
-        uint8_t transform3[48]; // 12 floats = Transform3 (48 bytes)
-        for (int i = 0; i < 12; i++) {
-            ((uint32_t*)transform3)[i] = *(uint32_t*)(pc + 0x98 + i * 4);
-        }
+        const Math::Transform3 transform3 = camera->_cameraToWorld;   // +0x98, 48 bytes
 
-        Math::Matrix viewMatrix =
-            reinterpret_cast<const Math::Transform3*>(transform3)->AsMatrix();
+        Math::Matrix viewMatrix = transform3.AsMatrix();
 
         // Projection matrix at +0xC8 (16 floats = 64 bytes)
-        uint8_t projMatrix[64];
-        for (int i = 0; i < 16; i++) {
-            ((uint32_t*)projMatrix)[i] = *(uint32_t*)(pc + 0xC8 + i * 4);
-        }
+        const Math::Matrix projMatrix = camera->_projection;
 
-        reinterpret_cast<Video::Context*>(videoCtx)->SetCamera(
-            viewMatrix, *reinterpret_cast<const Math::Matrix*>(projMatrix));   // B.3.5 bridge
+        videoCtx->SetCamera(viewMatrix, projMatrix);
     }
     TRACE("[GameUpdateLoop::Draw] camera matrices set\n");
 
     // Step 11: EntityUI toolbar draw (via vtable call on EntityUI's current tool)
     TRACE("[GameUpdateLoop::Draw] calling EntityUI toolbar draw...\n");
     {
-        uintptr_t entityUI = (uintptr_t)m_toolManager;
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
+        PlayerToolManager* toolManager = m_toolManager;
+        Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
 
         // Check if UI has input focus or pauses game -> pass as flag
         bool hasInput = (m_userInterface->_mouseCaptured != 0);   // B.3.8 bridge
         bool pauseCheck = m_userInterface->PausesGame();  // B.3.6 bridge
         uint64_t drawFlag = (hasInput || pauseCheck) ? 1 : 0;
 
-        // EntityUI+0x28 is InternalBasePtr to current tool
-        void* tool = *(void**)(entityUI + 0x28);
+        // +0x28 is the InternalPtr to the current tool
+        Tool* tool = toolManager->currentTool;
         if (tool) {
             // Caller batch CB6: slot 8 (vtable +0x40) `Tool::Draw(context, active)`.
             // The receiver is PROVED by its only writer, Toolbar_ShowGroup_Impl
             // (toolbardialog.cpp): it stores the Factory::CreateObject result only
             // after IsDerivedFrom(DWORD_1401c6eb8), and that cell is TypeId(Tool).
             // The old typedef passed the flag as a qword; the slot reads its low byte.
-            reinterpret_cast<Tool*>(tool)->Draw(videoCtx, static_cast<char>(drawFlag));   // B.3.8 bridge
+            tool->Draw(videoCtx, static_cast<char>(drawFlag));
         }
     }
     TRACE("[GameUpdateLoop::Draw] EntityUI toolbar draw done\n");
@@ -1585,9 +1569,8 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 12: UI::UserInterface::Draw
     TRACE("[GameUpdateLoop::Draw] calling UI::UserInterface::Draw...\n");
     {
-        void* engine = ::Engine::MainLoop::_singleton;
-        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
-        m_userInterface->Draw(*reinterpret_cast<Video::Context*>(videoCtx));  // B.3.6 bridge
+        Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
+        m_userInterface->Draw(*videoCtx);  // B.3.6 bridge
     }
     TRACE("[GameUpdateLoop::Draw] UI::UserInterface::Draw done\n");
 
@@ -1655,22 +1638,20 @@ void GameUpdateLoop::Startup() {
     // 0x140099260 was unregistered and the call was a no-op; the fields it writes are
     // the only evidence it ran. uiScale 0 == never applied (edittool.cpp:674 reads it).
     {
-        uintptr_t ui = (uintptr_t)m_userInterface;
+        const UI::UserInterface* ui = m_userInterface;
         std::fprintf(stderr, "[Startup] SetupUIRefs: uiScale=%.3f sndButtonDown=%p sndAlert=%p\n",
-                     ui ? *(float*)(ui + 0xDC) : -1.0f,
-                     ui ? *(void**)(ui + 0xB8) : nullptr,
-                     ui ? *(void**)(ui + 0xC8) : nullptr);
+                     ui ? ui->_uiScale : -1.0f,       // +0xDC
+                     ui ? ui->_sounds[4] : nullptr,   // +0xB8
+                     ui ? ui->_sounds[6] : nullptr);  // +0xC8
         std::fflush(stderr);
     }
 
     // Set default cursor
     TRACE("[GameUpdateLoop::Startup] setting default cursor...\n");
     {
-        void* keyMapMgr = g_gameContainer;  // [GUARD-M5]
+        GameContainer* keyMapMgr = g_gameContainer;  // [GUARD-M5]
         if (keyMapMgr) {
-            uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x30);
-            m_userInterface->SetCursor(  // B.3.6 bridge
-                Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
+            m_userInterface->SetCursor(keyMapMgr->cursorHand);  // B.3.6 bridge (+0x30)
         }
     }
 
@@ -1957,15 +1938,14 @@ void GameUpdateLoop::Shutdown() {
     // Clear achievement event handler
     TRACE("[GameUpdateLoop::Shutdown] clearing achievement event handler...\n");
     if (::Achievement::AchievementManager::_singleton) {
-        void* achievementMgr = ::Achievement::AchievementManager::_singleton;
-        reinterpret_cast<Achievement::AchievementManager*>(achievementMgr)->SetEventHandler(nullptr);   // B.3.7 bridge
+        ::Achievement::AchievementManager::_singleton->SetEventHandler(nullptr);   // B.3.7 bridge
     }
 
     // Clear game flags (remove 0x100 bit)
     TRACE("[GameUpdateLoop::Shutdown] clearing game flags...\n");
     {
-        void* gameWorld = GameUpdateLoop::_singleton;
-        uint32_t* flags = &static_cast<GameUpdateLoop*>(gameWorld)->m_gameFlags;   // B.3.8 bridge
+        GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+        uint32_t* flags = &gameWorld->m_gameFlags;
         *flags = *flags & 0xFFFFFEFF;
     }
 
@@ -1984,36 +1964,34 @@ void GameUpdateLoop::Shutdown() {
     // Citizen housing reassignment loop
     TRACE("[GameUpdateLoop::Shutdown] reassigning citizen housing...\n");
     {
-        uint8_t* citizenList = (uint8_t*)m_citizenList;
-        int32_t citizenCount = *(int32_t*)(citizenList + 0xa8);
-        void** citizenArray = *(void***)(citizenList + 0xa0);
+        CitizenBehavior* citizenList = m_citizenList;
+        int32_t citizenCount = citizenList->citizenCount;       // +0xa8
+        CitizenComponent** citizenArray = citizenList->citizens;   // +0xa0
 
         for (int i = 0; i < citizenCount; i++) {
-            void* citizen = citizenArray[i];
+            CitizenComponent* citizen = citizenArray[i];
 
-            uint8_t* cit = (uint8_t*)citizen;
-            // Check if citizen needs housing reassignment:
-            // age (float at +0x3c) >= max age (from profession at +0x288 + 0x44)
-            // and housing ptr at +0x208 == 0
-            float age = *(float*)(cit + 0x3c);
-            float maxAge = *(float*)(*(uintptr_t*)(cit + 0x288) + 0x44);
-            void* housing = *(void**)(cit + 0x208);
+            // An adult (age +0x3c >= the description's adultAge +0x44) with no
+            // school (+0x208) goes back to the list's default profession and
+            // loses its workplace.
+            float age = citizen->age;
+            float maxAge = citizen->description->adultAge;
+            AttendanceComponent* school = citizen->school;
 
-            if (age >= maxAge && housing == nullptr) {
-                // Get profession list town hall ptr
-                void* profList = m_professionList;
-                int64_t townHall = *(int64_t*)((uintptr_t)profList + 0x30);
+            if (age >= maxAge && school == nullptr) {
+                // The profession list's +0x30 profession
+                Profession* defaultProfession = m_professionList->field_0x30;
 
-                // Check if citizen's current building != townHall or housing != null
-                int64_t citBuilding = *(int64_t*)(cit + 0x1f0);
-                int64_t citHousingRef = *(int64_t*)(cit + 0x248);
+                // Current profession (+0x1f0) and workplace (+0x248)
+                Profession* citProfession = citizen->profession;
+                ComponentEntity* citWorkplace = citizen->workplace;
 
                 int64_t nullRef[1] = {0};
                 new (nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-                if (citBuilding != townHall || citHousingRef != nullRef[0]) {
-                    CitizenComp_AssignHousing(static_cast<CitizenComponent*>(citizen), nullRef);   // 0x140111ee0
-                    *(int64_t*)(cit + 0x1f0) = townHall;
+                if (citProfession != defaultProfession || citWorkplace != nullptr) {
+                    CitizenComp_AssignHousing(citizen, nullRef);   // 0x140111ee0
+                    citizen->profession = defaultProfession;
                 }
             }
         }
@@ -2098,6 +2076,7 @@ void GameUpdateLoop::Shutdown() {
     // Game
     if (m_game != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Game...\n");
+        // LEFT: the body (keystone_a_gamedtor.cpp, another block's) takes the map as int64_t.
         Game_Dtor_9ed60(reinterpret_cast<int64_t>(m_game));   // 0x14009ed60
         System::MemoryAllocator::MemFree(m_game);
     }
@@ -2231,16 +2210,18 @@ void GameUpdateLoop::Shutdown() {
 // this avoids taking a dependency on dispatch slot 0x140152940, which nothing else
 // in the tree registers.
 static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
-    void* gw = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0.0f;
-    uintptr_t playerCtrl = reinterpret_cast<uintptr_t>(
-        static_cast<GameUpdateLoop*>(gw)->m_playerController);   // B.3.8 bridge
+    const PlayerController* playerCtrl = gw->m_playerController;
     if (!playerCtrl) return 0.0f;
 
-    const float* camPos = (const float*)(playerCtrl + 0x34 + 0x88);
-    float dx = camPos[0] - *(float*)(playerCtrl + 0x1c);
-    float dy = camPos[1] - *(float*)(playerCtrl + 0x20);
-    float dz = camPos[2] - *(float*)(playerCtrl + 0x24);
+    // The camera's position: its cameraToWorld translation (+0x34 + 0x88).
+    // LEFT: PlayerController::camera is raw storage (H5).
+    const Math::Vector3& camPos =
+        reinterpret_cast<const Graphics::Camera*>(playerCtrl->camera)->_cameraToWorld.translation;
+    float dx = camPos.x - playerCtrl->targetX;
+    float dy = camPos.y - playerCtrl->targetY;
+    float dz = camPos.z - playerCtrl->targetZ;
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
@@ -2260,8 +2241,7 @@ void GameUpdateLoop::OnScenarioComplete() {
     m_scenarioCompleted = 1;
 
     // Check if the achievement has a parent Achievement object
-    void* achievementInstance = m_scenarioInstance;
-    void* achievement = *(void**)((uintptr_t)achievementInstance + 0x20);
+    Achievement::Achievement* achievement = m_scenarioInstance->_achievement.Get();   // +0x20
 
     if (achievement == nullptr) {
         // No parent achievement — simple notification
@@ -2285,15 +2265,11 @@ void GameUpdateLoop::OnScenarioComplete() {
         System::String titleStr;
         // B.3.7 bridge: GetTitle returns System::String BY VALUE; constructed
         // straight into titleStr's storage (one AddRef, as the door did).
-        ::new (&titleStr) System::String(
-            reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());   // B.3.7 bridge
+        ::new (&titleStr) System::String(achievement->GetTitle());   // B.3.7 bridge
 
         // Build UI::String from achievement name (B.3.6: the old `uint8_t uiStr[24]`
         // scratch, whose only uses were this ctor and the conversion below).
-        UI::String uiStr(
-            Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
-                reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))),
-            titleStr);
+        UI::String uiStr(achievement->_stringTable, titleStr);   // Achievement+0x20
 
         // Retail destructs the title String here — it reuses that same stack slot
         // for the UI::String -> System::String conversion below.

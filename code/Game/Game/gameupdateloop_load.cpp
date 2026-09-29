@@ -517,45 +517,46 @@ static void* Reimpl_FUN_14000f090(void* hdr, int n) {
 // Subsystem constructors (verified bodies)
 // ============================================================
 
-// FUN_1400983f0 — PlayerController/Camera lookAt-transform builder (helper_83f0).
-// Exposed (extern "C") + registered at 0x1400983f0 so gameupdateloop.cpp's
-// fn_PlayerController_CalcTransform (resolved via ResolveAddr) finds it in standalone.
-extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform) {
-    uint8_t* p = (uint8_t*)self;
-    float yaw = *(float*)(p + 0x28);
-    float pitch = *(float*)(p + 0x2c);
-    float distance = *(float*)(p + 0x30);
+// 0x1400983f0 — the look-at transform builder. Returns the transform through
+// retail's hidden return slot and stores it into +0x00.
+Math::Transform PlayerController::CalcTransform() {
     // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0
     Math::Vector3 dir = Math::Vector3::FromYawPitch(yaw, pitch);
-    // The camera focus point lives inline at self+0x1c (Transform::translation).
-    const Math::Vector3& pos = *reinterpret_cast<const Math::Vector3*>(p + 0x1c);
+    // The camera focus point: the three target floats at +0x1c.
+    const Math::Vector3 pos(targetX, targetY, targetZ);
     Math::Vector3 eye(pos.x - dir.x * distance,
                       pos.y - dir.y * distance,
                       pos.z - dir.z * distance);
     // ?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z  retail 0x18007dbb0
     Math::Transform lookAt = Math::Transform::FromLookAt(eye, pos);
-    *reinterpret_cast<Math::Transform*>(p) = lookAt;              // self[+0x00..+0x1b]
-    *reinterpret_cast<Math::Transform*>(outTransform) = lookAt;
+    // LEFT: +0x00 is raw storage (H5: Math::Transform's ctor would run).
+    *reinterpret_cast<Math::Transform*>(transform) = lookAt;   // self[+0x00..+0x1b]
+    return lookAt;
+}
+
+// B4 FORWARD: 1 outside caller file (Dialog/toolbardialog.cpp).
+extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform) {
+    *reinterpret_cast<Math::Transform*>(outTransform) =
+        reinterpret_cast<PlayerController*>(self)->CalcTransform();
     return outTransform;
 }
 
-// FUN_1400985b0 — PlayerController camera-system ctor (+0xE0, 0x10c).
-static void* Reimpl_FUN_1400985b0(void* selfMem, void* frustum, float yaw, float pitch, float distance) {
-    uint8_t* p = (uint8_t*)selfMem;
+// 0x1400985b0 — the PlayerController ctor (+0xE0, 0x10c).
+PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float pitch_, float distance_) {
     // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
-    *reinterpret_cast<Math::Transform*>(selfMem) = Math::Transform();
-    *(uint64_t*)(p + 0x1c) = 0;
-    *(uint32_t*)(p + 0x24) = 0;
-    *(float*)(p + 0x28) = yaw;
-    *(float*)(p + 0x2c) = pitch;
-    *(float*)(p + 0x30) = distance;
-    Math::Transform localTransform;
-    void* lt = Reimpl_FUN_1400983f0(selfMem, &localTransform);
-    if (!lt) lt = &localTransform;
-    Math::Transform3 t3 = reinterpret_cast<const Math::Transform*>(lt)->AsTransform3();
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(p + 0x34),
-                           reinterpret_cast<const ::Frustum*>(frustum), &t3, true);
-    return selfMem;
+    // LEFT: +0x00 is raw storage (H5).
+    *reinterpret_cast<Math::Transform*>(transform) = Math::Transform();
+    targetX = 0.0f;                           // +0x1c / +0x20: retail's qword 0 (H7: two stores)
+    targetY = 0.0f;
+    targetZ = 0.0f;                           // +0x24: dword 0
+    yaw = yaw_;
+    pitch = pitch_;
+    distance = distance_;
+    Math::Transform localTransform = CalcTransform();
+    Math::Transform3 t3 = localTransform.AsTransform3();
+    // LEFT: +0x34 is raw storage (H5: Camera's default ctor is protected); the
+    // ctor door takes the POD mirror.
+    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(camera), &frustum, &t3, true);
 }
 
 // 0x1400c3f90 — the EntityList ctor's body (+0xE8, 0xe8): memset + the 5
@@ -719,13 +720,13 @@ static void CharacterGrid_Construct(CharacterGrid* grid, float param2) {
     }
 }
 
-// FUN_140098660 — PlayerController::UpdateCamera (builds projection frustum on camera+0x34).
-// Exposed + registered at 0x140098660 (gameupdateloop.cpp Draw + Load step 33 call it).
-extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, float farZ) {
+// 0x140098660 — PlayerController::UpdateCamera (builds the projection frustum on
+// the camera at +0x34). Draw and Load step 33 call it.
+void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
     int width = 1920, height = 1080;          // default 16:9 if viewport singleton unavailable
     {
-        uint8_t* vp = reinterpret_cast<uint8_t*>(::Video::Device::_singleton);
-        if (vp) { width = *(int32_t*)(vp + 4); height = *(int32_t*)(vp + 8); }
+        const ::Video::Device* vp = ::Video::Device::_singleton;
+        if (vp) { width = vp->backBufferWidth; height = vp->backBufferHeight; }   // +0x04 / +0x08
     }
     const float kAspectThresh = 1.7777778f, kHalf = 0.5f, kDeg2Rad = 0.017453292f,
                 kTwo = 2.0f, kRad2Deg = 57.29578f;
@@ -741,9 +742,9 @@ extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, flo
     void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),
         reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
         reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
-    reinterpret_cast<Graphics::Camera*>((uint8_t*)camera + 0x34)->SetFrustum(
+    // LEFT: +0x34 is raw storage (H5).
+    reinterpret_cast<Graphics::Camera*>(camera)->SetFrustum(
         *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge
-    return camera;
 }
 
 // FUN_1401025c0 (helper_25c0) — in-game EntityUI-style ctor (+0x120, 0xb0).
@@ -958,21 +959,20 @@ void GameUpdateLoop::Load() {
     {
         int width = 1920, height = 1080;
         {
-            uint8_t* vp = reinterpret_cast<uint8_t*>(::Video::Device::_singleton);
-            if (vp) { width = *(int32_t*)(vp + 8); height = *(int32_t*)(vp + 4); }  // step6 reads +8/+4
+            const ::Video::Device* vp = ::Video::Device::_singleton;
+            if (vp) { width = vp->backBufferHeight; height = vp->backBufferWidth; }  // step6 reads +8/+4
         }
         float aspect = (height != 0) ? (float)width / (float)height : 1.7777778f;
         void* mem = AllocSub(0x10c, 4);
-        // B.4 W0-H2: begin the (trivial) PlayerController's lifetime in the raw
-        // block -- constructs nothing -- so the member is stored typed.
-        PlayerController* pc = mem ? ::new (mem) PlayerController : nullptr;
+        PlayerController* pc = nullptr;
         if (mem) {
             float nearZ = 2.0f, farZ = 70.0f, fovX = 60.0f, fovY = aspect * 60.0f;
             uint8_t frustum[0xC0] = {};
-            RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),
+            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);
+            RtVolume_Frustum_Ctor_Perspective(fr,
                 reinterpret_cast<const Math::Scalar*>(&nearZ), reinterpret_cast<const Math::Scalar*>(&farZ),
                 reinterpret_cast<const Math::Scalar*>(&fovX), reinterpret_cast<const Math::Scalar*>(&fovY));
-            Reimpl_FUN_1400985b0(mem, frustum, 0.0f, -40.0f, 25.0f);
+            pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
         m_playerController = pc;
     }
@@ -1414,13 +1414,13 @@ void GameUpdateLoop::Load() {
             // tile is deferred. See code/Game/Game/starttown.cpp.
             {
                 void* startCfg   = m_mapConfig;   // mapGen
-                void* playerCtrl = m_playerController;
+                PlayerController* playerCtrl = m_playerController;
                 if (startCfg && playerCtrl && game && dim > 0) {
                     float camPos[3] = { 0, 0, 0 };
                     StartTown_ComputeCamera(startCfg, game, camPos);
-                    *(float*)((uint8_t*)playerCtrl + 0x1c) = camPos[0];
-                    *(float*)((uint8_t*)playerCtrl + 0x20) = camPos[1];
-                    *(float*)((uint8_t*)playerCtrl + 0x24) = camPos[2];
+                    playerCtrl->targetX = camPos[0];   // +0x1c
+                    playerCtrl->targetY = camPos[1];   // +0x20
+                    playerCtrl->targetZ = camPos[2];   // +0x24
                     fprintf(stderr, "[startTown::DIAG]   camPos = (%.2f, %.2f, %.2f)\n",
                             camPos[0], camPos[1], camPos[2]);
                     fflush(stderr);
@@ -1647,7 +1647,7 @@ void GameUpdateLoop::Load() {
 
     // Step 33 — finalize camera + add scene globals + unpause audio channels.
     if (m_playerController)
-        Reimpl_FUN_140098660(m_playerController, 40.0f, 2.0f, 512.0f);
+        m_playerController->UpdateCamera(40.0f, 2.0f, 512.0f);   // 0x140098660
     {
         Graphics::Scene* gScene = m_graphicsScene;   // g_pGameWorld+0x60
         // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term went with
