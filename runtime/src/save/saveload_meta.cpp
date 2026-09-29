@@ -300,25 +300,14 @@ void ModInfoArraySetSize(ModInfoArray* a, int32_t newSize) {
 // ENDGAME B.3.1 step 2: the String::Serialize and String::Set door typedefs
 // are gone with their call sites — both are class members now.
 
-// The IO::Encoding factory slots. THREE arguments — the version stays live in
-// R8D across the whole inlined Serializer ctor; runtime/types/io/Serializer.h
-// records the pin.
-using MakeCodecFn   = rt::io::ReaderWriter* (*)(void* encoding,
-                                                rt::io::Serializer* ser, int version);
 // B3X W0: the ReaderWriter (SerializeInt +0xa0, SerializeUInt +0x98,
 // SerializeBytes +0xC8, DeletingDtor slot 0) and the embedded MemoryStream's
-// Close (slot 7, +0x38) are called BY NAME below. `ReadVtableSlot` stays for
-// the IO::Encoding factory slot alone -- that table has no destructor slot and
-// does not flip.
+// Close (slot 7, +0x38) are called BY NAME below. B.4 R-IO: so is the
+// IO::Encoding factory, inside `IO::Serializer`'s constructor; the
+// `ReadVtableSlot` offset accessor is gone.
 
 // ENDGAME B.3.9 IO (W2): the RT_VTABLE_ONCE by-name vtable stamps went with
 // the inlined CompressedMemoryStream ctor/dtor -- the real class stores its own.
-
-inline void* ReadVtableSlot(const void* obj, int byteOffset) {
-    void* const* vtbl = *reinterpret_cast<void* const* const*>(obj);
-    return *reinterpret_cast<void* const*>(
-        reinterpret_cast<const uint8_t*>(vtbl) + byteOffset);
-}
 
 // ---------------------------------------------------------------------------
 } // namespace
@@ -360,136 +349,130 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // ---- inlined ??0Serializer@IO@@(stream, 3) ----------------------------
     // The stream's own Encoding decides which ReaderWriter gets built; the
     // direction chooses the slot. Version 3 is a literal in the bytes.
-    rt::io::Serializer ser;
-    ser.stream       = reinterpret_cast<rt::io::Stream*>(&cs);
-    ser.readerWriter = nullptr;
+    // B.4 R-IO: that inlined body IS `IO::Serializer`'s constructor
+    // (0x1800b9960) -- the two stores, then the factory by direction -- so the
+    // real class is built here; its destructor is the inlined ~Serializer at
+    // the end of the scope below, at the same position as before.
     {
-        void* encoding = cs._encoding;
-        const int slot = (cs._direction == 0)
-            ? rt::io::encoding_vtbl::kCreateReader
-            : rt::io::encoding_vtbl::kCreateWriter;
-        ser.readerWriter = reinterpret_cast<MakeCodecFn>(ReadVtableSlot(encoding, slot))(
-            encoding, &ser, 3);
-    }
-    rt::io::ReaderWriter* rw = ser.readerWriter;
-    // Retail reloads `[RSP+0x28]` and re-walks the vtable before EVERY one of
-    // the calls below; a by-name virtual call does the same (B3X W0).
-    ::IO::ReaderWriter* const rwc = reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
-    // ---- the record -------------------------------------------------------
-    // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
-    // (0x1800c9930) is the class's own member now. `name` is the registered
-    // entry point's POD parameter, so it comes through the one bridge.
-    name->Serialize(&ser);
+        ::IO::Serializer ser(cs, 3);
+        // Retail reloads `[RSP+0x28]` and re-walks the vtable before EVERY one of
+        // the calls below; a by-name virtual call does the same (B3X W0).
+        ::IO::ReaderWriter* const rwc = ser._readerWriter;
+        // ---- the record -------------------------------------------------------
+        // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+        // (0x1800c9930) is the class's own member now. `name` is the registered
+        // entry point's POD parameter, so it comes through the one bridge.
+        name->Serialize(&ser);
 
-    // Retail serialises the ARGUMENT HOME SLOTS: it spills R8D/R9D at entry
-    // (0x1800c1493/0x1800c1497) and hands their addresses to the scalar slot,
-    // which takes an `int&`. Our parameters occupy the same role. On the write
-    // path the slot only reads them.
-    // The slot takes an `int&` and writes back through it on the read path, so
-    // the argument itself is handed over, exactly as retail hands it the home
-    // slot.
-    rwc->SerializeInt(width,  nullptr);                 // +0xa0
-    rwc->SerializeInt(height, nullptr);                 // +0xa0
+        // Retail serialises the ARGUMENT HOME SLOTS: it spills R8D/R9D at entry
+        // (0x1800c1493/0x1800c1497) and hands their addresses to the scalar slot,
+        // which takes an `int&`. Our parameters occupy the same role. On the write
+        // path the slot only reads them.
+        // The slot takes an `int&` and writes back through it on the read path, so
+        // the argument itself is handed over, exactly as retail hands it the home
+        // slot.
+        rwc->SerializeInt(width,  nullptr);                 // +0xa0
+        rwc->SerializeInt(height, nullptr);                 // +0xa0
 
-    rwc->SerializeBytes(width * height * 4, pixels, nullptr);   // +0xC8
+        rwc->SerializeBytes(width * height * 4, pixels, nullptr);   // +0xC8
 
-    rwc->SerializeInt(nameMode, nullptr);               // +0xa0
+        rwc->SerializeInt(nameMode, nullptr);               // +0xa0
 
-    // ---- collect the enabled mods -----------------------------------------
-    // The Modification singleton pointer is hoisted (`MOV R14,[...]` once at
-    // 0x1800c1606) but `_mods` and `_count` are RE-READ every iteration
-    // (0x1800c1630, 0x1800c1766). Transcribed as re-reads: String::Set and the
-    // array grow both allocate, and hoisting would be a guess about what the
-    // allocator cannot do.
-    ::IO::Modification* mods = RtSaveDetail::ModificationSingleton();
+        // ---- collect the enabled mods -----------------------------------------
+        // The Modification singleton pointer is hoisted (`MOV R14,[...]` once at
+        // 0x1800c1606) but `_mods` and `_count` are RE-READ every iteration
+        // (0x1800c1630, 0x1800c1766). Transcribed as re-reads: String::Set and the
+        // array grow both allocate, and hoisting would be a guess about what the
+        // allocator cannot do.
+        ::IO::Modification* mods = RtSaveDetail::ModificationSingleton();
 
-    ModInfoArray arr;
-    arr.data     = nullptr;
-    arr.size     = 0;
-    arr.capacity = 0;
+        ModInfoArray arr;
+        arr.data     = nullptr;
+        arr.size     = 0;
+        arr.capacity = 0;
 
-    // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
-    // with its one call site — it is `work.Set(...)` below.
+        // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
+        // with its one call site — it is `work.Set(...)` below.
 
-    for (int32_t i = 0; i < mods->_count; ++i) {
-        RtIO::Mod* entry = &mods->_mods[i];
-        if (entry->enabled == 0) continue;
+        for (int32_t i = 0; i < mods->_count; ++i) {
+            RtIO::Mod* entry = &mods->_mods[i];
+            if (entry->enabled == 0) continue;
 
-        // ModInfo's real default ctor IS retail's two stores here (name and
-        // path zeroed, +0x10.. left as the stack held them), and its real
-        // destructor at the end of this iteration IS retail's two releases —
-        // path, then name — after the append (see the end of the loop).
-        ModInfo tmp;
+            // ModInfo's real default ctor IS retail's two stores here (name and
+            // path zeroed, +0x10.. left as the stack held them), and its real
+            // destructor at the end of this iteration IS retail's two releases —
+            // path, then name — after the append (see the end of the loop).
+            ModInfo tmp;
 
-        // The display name, adopted straight off the Mod entry with an AddRef
-        // (String's adopt, 0x180006cb0's second half; the Mod entry's name is
-        // still the RtIO::Mod POD's raw buffer pointer).
-        System::StringPrivateAccess::Adopt(tmp.name, entry->name);
+            // The display name, adopted straight off the Mod entry with an AddRef
+            // (String's adopt, 0x180006cb0's second half; the Mod entry's name is
+            // still the RtIO::Mod POD's raw buffer pointer).
+            System::StringPrivateAccess::Adopt(tmp.name, entry->name);
 
-        // The path, with the data-directory prefix stripped. See the banner.
-        //
-        // ENDGAME B.3.1 step 2: the two locals are RAII objects and the
-        // explicit scope ends exactly where retail's two releases are, so the
-        // destructors fire there — work then dataDir, retail's own order, the
-        // reverse of the declarations — and not at the end of the iteration.
-        {
-            System::Filename dataDir(                            // 0x180007bd0
-                RtSaveDetail::FileSystemSingleton()->GetDataDirectory());
+            // The path, with the data-directory prefix stripped. See the banner.
+            //
+            // ENDGAME B.3.1 step 2: the two locals are RAII objects and the
+            // explicit scope ends exactly where retail's two releases are, so the
+            // destructors fire there — work then dataDir, retail's own order, the
+            // reverse of the declarations — and not at the end of the iteration.
+            {
+                System::Filename dataDir(                            // 0x180007bd0
+                    RtSaveDetail::FileSystemSingleton()->GetDataDirectory());
 
-            // GetLength (0x1800063c0) IS the null-guarded stored-length read.
-            const int32_t dirLen = dataDir.GetLength();
+                // GetLength (0x1800063c0) IS the null-guarded stored-length read.
+                const int32_t dirLen = dataDir.GetLength();
 
-            // `?Set@String@System@@QEAAXPEBD@Z` (0x1800c95d0) as itself; the
-            // default ctor is retail's `work.data = nullptr`.
-            System::String work;
-            work.Set(entry->file.data + static_cast<int64_t>(dirLen));
+                // `?Set@String@System@@QEAAXPEBD@Z` (0x1800c95d0) as itself; the
+                // default ctor is retail's `work.data = nullptr`.
+                System::String work;
+                work.Set(entry->file.data + static_cast<int64_t>(dirLen));
 
-            // Adopt with an AddRef into the zeroed path: String::operator=
-            // on a null destination.
-            tmp.path = work;
+                // Adopt with an AddRef into the zeroed path: String::operator=
+                // on a null destination.
+                tmp.path = work;
+            }
+
+            tmp.versionMajor = entry->i2c;   // -> CheckMod status 4
+            tmp.gameVersion  = entry->i18;   // -> CheckMod status 2 (< 0x1000400)
+            tmp.versionMinor = entry->i1c;   // -> CheckMod status 3
+            // tmp.pad1c is deliberately NOT written; retail does not write it and
+            // the array copy above does not copy it.
+
+            ModInfoArraySetSize(&arr, arr.size + 1, &tmp);
+            // <- ~ModInfo(tmp): ReleaseStringSlot(path), then (name).
         }
 
-        tmp.versionMajor = entry->i2c;   // -> CheckMod status 4
-        tmp.gameVersion  = entry->i18;   // -> CheckMod status 2 (< 0x1000400)
-        tmp.versionMinor = entry->i1c;   // -> CheckMod status 3
-        // tmp.pad1c is deliberately NOT written; retail does not write it and
-        // the array copy above does not copy it.
+        // ---- the mod block ----------------------------------------------------
+        // `count` is a SEPARATE local from arr.size (retail copies it into a stack
+        // slot at 0x1800c1775 and serialises THAT). It matters: the element loop
+        // below is bounded by `count`, the destroy at the end by `arr.size`, and on
+        // the read path SetSize is what makes them agree. Collapsing them into one
+        // variable would be right today and wrong the moment this runs backwards.
+        int32_t count = arr.size;
+        rwc->SerializeInt(count, nullptr);                  // +0xa0
 
-        ModInfoArraySetSize(&arr, arr.size + 1, &tmp);
-        // <- ~ModInfo(tmp): ReleaseStringSlot(path), then (name).
-    }
+        if (ser._stream->_direction == 0) {        // read path; dead here, see above
+            ModInfoArraySetSize(&arr, count);
+        }
 
-    // ---- the mod block ----------------------------------------------------
-    // `count` is a SEPARATE local from arr.size (retail copies it into a stack
-    // slot at 0x1800c1775 and serialises THAT). It matters: the element loop
-    // below is bounded by `count`, the destroy at the end by `arr.size`, and on
-    // the read path SetSize is what makes them agree. Collapsing them into one
-    // variable would be right today and wrong the moment this runs backwards.
-    int32_t count = arr.size;
-    rwc->SerializeInt(count, nullptr);                  // +0xa0
+        for (int32_t i = 0; i < count; ++i) {
+            ModInfo* e = arr.data + i;
+            e->name.Serialize(&ser);
+            e->path.Serialize(&ser);
+            rwc->SerializeUInt(e->versionMajor, nullptr);   // +0x98
+            rwc->SerializeUInt(e->gameVersion,  nullptr);   // +0x98
+            rwc->SerializeUInt(e->versionMinor, nullptr);   // +0x98
+        }
 
-    if (ser.stream->direction == 0) {          // read path; dead here, see above
-        ModInfoArraySetSize(&arr, count);
-    }
+        ModInfoDestroyRange(arr.data, arr.size);
+        if (arr.data != nullptr) MemFree(arr.data);
+        arr.data     = nullptr;
+        arr.size     = 0;
+        arr.capacity = 0;
 
-    for (int32_t i = 0; i < count; ++i) {
-        ModInfo* e = arr.data + i;
-        e->name.Serialize(&ser);
-        e->path.Serialize(&ser);
-        rwc->SerializeUInt(e->versionMajor, nullptr);   // +0x98
-        rwc->SerializeUInt(e->gameVersion,  nullptr);   // +0x98
-        rwc->SerializeUInt(e->versionMinor, nullptr);   // +0x98
-    }
-
-    ModInfoDestroyRange(arr.data, arr.size);
-    if (arr.data != nullptr) MemFree(arr.data);
-    arr.data     = nullptr;
-    arr.size     = 0;
-    arr.capacity = 0;
-
-    // ---- inlined ~Serializer ----------------------------------------------
-    if (rw != nullptr) {
-        delete rwc;                           // slot 0, flags 1
+        // ---- inlined ~Serializer ----------------------------------------------
+        // `if (rw) delete rw;` (slot 0, flags 1) is ~Serializer, 0x1800b99b0, run
+        // by the scope's end here -- before the stream's Close, as retail.
     }
 
     // ---- inlined ?Close@CompressedMemoryStream, then the handoff ----------

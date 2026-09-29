@@ -217,28 +217,15 @@ using ModArray = Collection::Array<ModInfo>;
 // site — see `rtcoll::AsArray<&rtcoll::kSpec_MetaEntry20>(mods)->SetSize(...)`
 // below.
 
-// IO::Encoding vtable +0x18 / +0x20: (this, Serializer*, int version)
-// -> ReaderWriter*. Arity 3 is pinned in runtime/types/io/Serializer.h off
-// ??0Serializer's own R8D liveness, and independently here: retail leaves
-// R8D zeroed by `XOR R8D,R8D` at 0x1800c1bd1 and never reloads it.
-using CreateCodecFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-
-// IO::ReaderWriter: called BY NAME (B3X W0) -- GetVersion +0x08, SerializeUInt
-// +0x98, SerializeInt +0xa0, SerializeBytes +0xc8, DeletingDtor slot 0. `rw` is
-// the rt::io POD view of the object the Encoding factory built.
-inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
-    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
+// B.4 R-IO: the IO::Encoding factory (+0x18 / +0x20, arity 3 -- retail leaves
+// R8D zeroed by `XOR R8D,R8D` at 0x1800c1bd1) is reached through
+// `IO::Serializer`'s own constructor, and IO::ReaderWriter is called BY NAME
+// (B3X W0) -- GetVersion +0x08, SerializeUInt +0x98, SerializeInt +0xa0,
+// SerializeBytes +0xc8, DeletingDtor slot 0. The `CreateCodecFn` / `VSlot`
+// slot readers and the `Rw` POD bridge are gone.
 
 using LoadMetaDataFn = void (*)(SaveLoad*, const char**, void**,
                                 int*, int*, int*, ModArray*);
-
-template <typename Fn>
-inline Fn VSlot(const void* obj, int byteOffset) {
-    const void* const* vtbl = *reinterpret_cast<const void* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        const_cast<void*>(vtbl[byteOffset / static_cast<int>(sizeof(void*))]));
-}
 
 // ENDGAME B.3.7 B2: `DestroyScratchModArray`, the by-address door onto
 // FUN_1800331f0 (Array<ModInfo>::~Array) that only the retired oracle used, is
@@ -272,7 +259,6 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // ENDGAME B.3.9 IO (W2, foreign site): the REAL class on that storage.
     IO::CompressedMemoryStream* const cmsObj =
         ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
-    CompressedMemoryStream* cms = reinterpret_cast<CompressedMemoryStream*>(cmsObj);
 
     // ---- 0x1800c1b90 / 0x1800c1ba1 : fill the embedded MemoryStream --------
     // Open allocates the buffer and sets _size/_ownsData; the copy that follows
@@ -280,7 +266,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // at 0x1800c1b95, after the Open call), and is transcribed with the same
     // second read. 0x18008a290 is memmove, not memcpy (runtime/src/system/error.cpp).
     cmsObj->_memoryStream.Open(static_cast<int>(_embeddedState._size));   // ENDGAME B.3.9 IO: the member
-    std::memmove(cms->memoryStream.data,
+    std::memmove(cmsObj->_memoryStream._data,
                  _embeddedState._data,
                  _embeddedState._size);
 
@@ -297,82 +283,76 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // null the codec, then ask the stream's Encoding for a reader or a writer
     // depending on the stream's own direction. `version` here is the literal 0
     // retail passes (`XOR R8D,R8D`), not the out-parameter of the same name.
-    Serializer ser;
-    ser.stream       = reinterpret_cast<rt::io::Stream*>(cms);
-    ser.readerWriter = nullptr;
+    // B.4 R-IO: that inlined body IS the class's constructor, so the real
+    // `IO::Serializer` is built; the scope's end is the inlined ~Serializer
+    // at 0x1800c1d63, before cms.Close(), as before.
     {
-        Encoding* enc = reinterpret_cast<Encoding*>(cms->base.base.encoding);
-        const int slot = (cms->base.base.direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                                         : rt::io::encoding_vtbl::kCreateWriter;
-        ser.readerWriter = VSlot<CreateCodecFn>(enc, slot)(enc, &ser, 0);
-    }
-    ReaderWriter* rw = ser.readerWriter;
+        ::IO::Serializer ser(*cmsObj, 0);
+        ::IO::ReaderWriter* const rw = ser._readerWriter;
 
-    // ---- 0x1800c1bf7 : out-param 6 = the format version --------------------
-    *version = Rw(rw)->GetVersion();
+        // ---- 0x1800c1bf7 : out-param 6 = the format version --------------------
+        *version = rw->GetVersion();
 
-    // ---- 0x1800c1c09 : out-param 1 = the description String ----------------
-    // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
-    // (0x1800c9930) is the class's own member now. The out-param is modelled as
-    // the String's single field (`const char**`) because that is the shape the
-    // registered entry point's callers spell, so it comes through a
-    // transitional cast (B31_RULES, "not-yet-converted").
-    description.Serialize(&ser);
+        // ---- 0x1800c1c09 : out-param 1 = the description String ----------------
+        // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
+        // (0x1800c9930) is the class's own member now. The out-param is modelled as
+        // the String's single field (`const char**`) because that is the shape the
+        // registered entry point's callers spell, so it comes through a
+        // transitional cast (B31_RULES, "not-yet-converted").
+        description.Serialize(&ser);
 
-    // ---- 0x1800c1c1c / 0x1800c1c34 : out-params 3 and 4 --------------------
-    // Both through the SIGNED scalar slot (+0xa0) with a null field name.
-    Rw(rw)->SerializeInt(*width,  nullptr);
-    Rw(rw)->SerializeInt(*height, nullptr);
+        // ---- 0x1800c1c1c / 0x1800c1c34 : out-params 3 and 4 --------------------
+        // Both through the SIGNED scalar slot (+0xa0) with a null field name.
+        rw->SerializeInt(*width,  nullptr);
+        rw->SerializeInt(*height, nullptr);
 
-    // ---- 0x1800c1c3a..0x1800c1c93 : out-param 2 = the thumbnail ------------
-    // `MOV ESI,[RDI] ; IMUL ESI,[RBX] ; SHL ESI,0x2` — a 32-bit product that is
-    // then SIGN-extended by `MOVSXD RDX,ESI` for the allocator. Transcribed with
-    // the 32-bit arithmetic and the sign extension intact rather than promoted to
-    // 64-bit, because promoting it changes the size request on any w*h that
-    // overflows. The locked Allocate retail inlines around
-    // MemoryAllocator::_singleton+0x640 is byte-identical to the exported
-    // MemAlloc (established by Wave 5 on SavedState::Store, same call shape).
-    const int32_t byteCount = (*width) * (*height) * 4;
-    *pixels = MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(byteCount)), 4);
-    Rw(rw)->SerializeBytes(byteCount, *pixels, nullptr);
+        // ---- 0x1800c1c3a..0x1800c1c93 : out-param 2 = the thumbnail ------------
+        // `MOV ESI,[RDI] ; IMUL ESI,[RBX] ; SHL ESI,0x2` — a 32-bit product that is
+        // then SIGN-extended by `MOVSXD RDX,ESI` for the allocator. Transcribed with
+        // the 32-bit arithmetic and the sign extension intact rather than promoted to
+        // 64-bit, because promoting it changes the size request on any w*h that
+        // overflows. The locked Allocate retail inlines around
+        // MemoryAllocator::_singleton+0x640 is byte-identical to the exported
+        // MemAlloc (established by Wave 5 on SavedState::Store, same call shape).
+        const int32_t byteCount = (*width) * (*height) * 4;
+        *pixels = MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(byteCount)), 4);
+        rw->SerializeBytes(byteCount, *pixels, nullptr);
 
-    // ---- 0x1800c1c9a : the mod list, format version 3 and up ---------------
-    if (*version > 2) {
-        // The SECOND write to the version out-param. See note 1 in the header.
-        Rw(rw)->SerializeInt(*version, nullptr);
+        // ---- 0x1800c1c9a : the mod list, format version 3 and up ---------------
+        if (*version > 2) {
+            // The SECOND write to the version out-param. See note 1 in the header.
+            rw->SerializeInt(*version, nullptr);
 
-        // Seeded from the array (the writing path's value), then replaced by the
-        // stored count on the reading path. See note 2.
-        int count = mods->_size;
-        Rw(rw)->SerializeInt(count, nullptr);
+            // Seeded from the array (the writing path's value), then replaced by the
+            // stored count on the reading path. See note 2.
+            int count = mods->_size;
+            rw->SerializeInt(count, nullptr);
 
-        // `MOV RAX,[RSP+0x20] ; CMP dword ptr [RAX+0x8],0x0` — the stream the
-        // SERIALIZER holds, dereferenced, then its direction. This is the
-        // dereference Ghidra's C drops; see the header.
-        if (ser.stream->direction == 0)
-            // retail 0x180034010 — Array<Save::MetaDataEntry>::SetSize(n), the
-            // hand-derived kSpec_MetaEntry20 row (see the banner above `mods`
-            // is a real `Collection::Array<ModInfo>*`, but its own trait-derived
-            // SetSize is the wrong instantiation for this address).
-            rtcoll::AsArray<&rtcoll::kSpec_MetaEntry20>(mods)->SetSize(count);
+            // `MOV RAX,[RSP+0x20] ; CMP dword ptr [RAX+0x8],0x0` — the stream the
+            // SERIALIZER holds, dereferenced, then its direction. This is the
+            // dereference Ghidra's C drops; see the header.
+            if (ser._stream->_direction == 0)
+                // retail 0x180034010 — Array<Save::MetaDataEntry>::SetSize(n), the
+                // hand-derived kSpec_MetaEntry20 row (see the banner above `mods`
+                // is a real `Collection::Array<ModInfo>*`, but its own trait-derived
+                // SetSize is the wrong instantiation for this address).
+                rtcoll::AsArray<&rtcoll::kSpec_MetaEntry20>(mods)->SetSize(count);
 
-        // 0x1800c1ced: the base pointer is read ONCE. See note 3.
-        ModInfo* e = mods->_data;
-        for (int i = 0; i < count; ++i, ++e) {
-            e->name.Serialize(&ser);
-            e->path.Serialize(&ser);
-            // +0x98, the UNSIGNED slot, for all three. See note 4.
-            Rw(rw)->SerializeUInt(e->versionMajor, nullptr);
-            Rw(rw)->SerializeUInt(e->gameVersion, nullptr);
-            Rw(rw)->SerializeUInt(e->versionMinor, nullptr);
+            // 0x1800c1ced: the base pointer is read ONCE. See note 3.
+            ModInfo* e = mods->_data;
+            for (int i = 0; i < count; ++i, ++e) {
+                e->name.Serialize(&ser);
+                e->path.Serialize(&ser);
+                // +0x98, the UNSIGNED slot, for all three. See note 4.
+                rw->SerializeUInt(e->versionMajor, nullptr);
+                rw->SerializeUInt(e->gameVersion, nullptr);
+                rw->SerializeUInt(e->versionMinor, nullptr);
+            }
         }
-    }
 
-    // ---- 0x1800c1d63 : ~Serializer, inlined --------------------------------
-    // The scalar-DELETING destructor with flags = 1, i.e. the codec is freed.
-    if (ser.readerWriter != nullptr) {
-        ReaderWriter* dying = ser.readerWriter;
-        delete Rw(dying);
+        // ---- 0x1800c1d63 : ~Serializer, inlined --------------------------------
+        // The scalar-DELETING destructor with flags = 1, i.e. the codec is freed:
+        // `if (rw) delete rw;`, ~Serializer 0x1800b99b0, at the scope's end.
     }
 
     // ---- 0x1800c1d77 : cms.Close() -----------------------------------------

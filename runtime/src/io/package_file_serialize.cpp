@@ -125,14 +125,11 @@
 #include <cstdio>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"        // IO::Stream: the Serializer's stream
 #include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
-
-using rt::io::Stream;
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
+#include "../system/pod_bridge.h"             // RtSystem::Sys: the String fields
 
 namespace {
 
@@ -145,47 +142,26 @@ namespace {
 //   Array<T>::SetSize 0x180029a80 / 0x180029510 -> rtcoll::RtColl_ArraySetSize_*
 
 // ---- prologue / epilogue, from 0x1800b60ca and 0x1800b626e ---------------
-// Identical to goal_serialize.cpp's and elementdescription_serialize.cpp's,
-// including the THIRD argument being 0: retail zeroes R8D at 0x1800b60ce for
-// the `CMP [RDX+0x8],R8D` and never reloads it before the factory call, so the
-// save-format version reaching BinaryReader/BinaryWriter's ctor is 0.
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
+// B.4 R-IO: the prologue (0x1800b60ca..e6) is `IO::Serializer`'s constructor
+// inlined -- the two stores, then the Encoding factory by direction -- with
+// the THIRD argument 0: retail zeroes R8D at 0x1800b60ce for the
+// `CMP [RDX+0x8],R8D` and never reloads it before the factory call, so the
+// save-format version reaching BinaryReader/BinaryWriter's ctor is 0. The
+// epilogue (0x1800b6261..6e, `if (rw) delete rw`) is its destructor. The body
+// below builds the real class; `MakeCodec` / `DestroyCodec` / `Rw` are gone.
 
-    Encoding* enc = stream->encoding;                            // 1800b60ca
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader  // 1800b60de
-                         : rt::io::encoding_vtbl::kCreateWriter; // 1800b60e3
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw =
-        reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;                                      // 1800b60e6
-    return rw;
+// B3X W0: the ReaderWriter calls by name.
+void RecInt(::IO::ReaderWriter* rw, int32_t* v) {
+    rw->SerializeInt(*v, nullptr);                               // +0xa0
 }
 
-// B3X W0: the four ReaderWriter calls by name. `rw` is the rt::io POD view of
-// the object the Encoding factory built.
-inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
-    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;                                             // 1800b6261
-    delete Rw(rw);                                     // slot 0, flags 1
-}
-
-void RecInt(ReaderWriter* rw, int32_t* v) {
-    Rw(rw)->SerializeInt(*v, nullptr);                           // +0xa0
-}
-
-void RecBool(ReaderWriter* rw, void* v) {
-    Rw(rw)->SerializeBool(*static_cast<bool*>(v), nullptr);      // +0x78
+void RecBool(::IO::ReaderWriter* rw, void* v) {
+    rw->SerializeBool(*static_cast<bool*>(v), nullptr);          // +0x78
 }
 
 // `SerializeUIntArray` is (count, uint*, name) — EDX, R8, R9 at 0x1800b624c-0x1800b6259.
-void RecArrayUInt(ReaderWriter* rw, int32_t n, uint32_t* data) {
-    Rw(rw)->SerializeUIntArray(n, data, nullptr);                // +0x40
+void RecArrayUInt(::IO::ReaderWriter* rw, int32_t n, uint32_t* data) {
+    rw->SerializeUIntArray(n, data, nullptr);                    // +0x40
 }
 
 }  // namespace
@@ -202,12 +178,9 @@ void RecArrayUInt(ReaderWriter* rw, int32_t n, uint32_t* data) {
 // (B34_BRIEFS section A.2), so it lives here rather than in the anonymous
 // namespace with its helpers.
 //
-// *** THIS FILE IS WHERE B34_RULES section 7.2's GREP HAZARD IS LIVE. *** It
-// carries `using rt::io::Stream; using rt::io::Serializer;` and friends at
-// GLOBAL scope, and inside `namespace IO` a bare `Serializer` or `Stream` would
-// bind to the REAL CLASS instead -- silently, and with a different size. So
-// every POD in this body is spelled `rt::io::X` in full, and there is
-// deliberately no `using namespace` anywhere in it.
+// B.4 R-IO: the file's global `using rt::io::…` declarations are gone with
+// the POD Serializer; inside `namespace IO`, `Serializer` and `Stream` are the
+// real classes.
 //
 // THE FIELD OFFSETS ARE GONE, AND THAT IS THE WIN. The body used to reach
 // eleven fields through `FieldAt(self, 0xNN)` / `CountAt(self, 0xNN)` /
@@ -219,15 +192,16 @@ void RecArrayUInt(ReaderWriter* rw, int32_t n, uint32_t* data) {
 namespace IO {
 
 bool PackageFile::Serialize(void* streamv) {
-    rt::io::Stream* const stream = static_cast<rt::io::Stream*>(streamv);
-    rt::io::Serializer ser;
-    rt::io::ReaderWriter* const rw = MakeCodec(stream, &ser);
+    // LEFT: the slot's parameter is `void*` (Object::External's slot 5 in
+    // runtime/types/object/External.h, read-only to this block).
+    Serializer ser(*static_cast<Stream*>(streamv), 0);          // 1800b60ca..e6
+    ReaderWriter* const rw = ser._readerWriter;
 
-    reinterpret_cast<::System::String*>(&_name)->Serialize(&ser);  // 1800b60ea  B.3.x bridge
-    reinterpret_cast<::System::String*>(&_author)->Serialize(&ser);  // 1800b60ff  B.3.x bridge
-    reinterpret_cast<::System::String*>(&_description)->Serialize(&ser);  // 1800b610c  B.3.x bridge
-    reinterpret_cast<::System::String*>(&_string58)->Serialize(&ser);  // 1800b6119  B.3.x bridge
-    reinterpret_cast<::System::String*>(&_string60)->Serialize(&ser);  // 1800b6126  B.3.x bridge
+    RtSystem::Sys(_name).Serialize(&ser);                       // 1800b60ea
+    RtSystem::Sys(_author).Serialize(&ser);                     // 1800b60ff
+    RtSystem::Sys(_description).Serialize(&ser);                // 1800b610c
+    RtSystem::Sys(_string58).Serialize(&ser);                   // 1800b6119
+    RtSystem::Sys(_string60).Serialize(&ser);                   // 1800b6126
 
     RecInt(rw, &_userVersion);                // 1800b6139
     RecInt(rw, &_priority);                   // 1800b614d
@@ -238,14 +212,14 @@ bool PackageFile::Serialize(void* streamv) {
     {
         int32_t n = _stringArray20Count;                          // 1800b6153
         RecInt(rw, &n);                                           // 1800b6167
-        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6171
+        if (ser._stream->_direction == rt::io::kDirectionReading)  // 1800b6171
             rtcoll::RtColl_ArraySetSize_180029a80(&_stringArray20, n);  // 1800b617e
         RtIo_SerializeStringArray(&ser, n, _stringArray20, nullptr);  // 1800b618e
     }
     {
         int32_t m = _stringArray30Count;                          // 1800b6193
         RecInt(rw, &m);                                           // 1800b61a7
-        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b61b1
+        if (ser._stream->_direction == rt::io::kDirectionReading)  // 1800b61b1
             rtcoll::RtColl_ArraySetSize_180029a80(&_stringArray30, m);  // 1800b61be
         RtIo_SerializeStringArray(&ser, m, _stringArray30, nullptr);  // 1800b61ce
     }
@@ -257,13 +231,13 @@ bool PackageFile::Serialize(void* streamv) {
     {
         int32_t k = _iconCount;                                   // 1800b620f
         RecInt(rw, &k);                                           // 1800b6226
-        if (ser.stream->direction == rt::io::kDirectionReading)    // 1800b6230
+        if (ser._stream->_direction == rt::io::kDirectionReading)  // 1800b6230
             rtcoll::RtColl_ArraySetSize_180029510(&_iconData, k);       // 1800b6240
         RecArrayUInt(rw, k, _iconData);                            // 1800b6259
     }
 
-    DestroyCodec(rw);                         // 1800b626e
     return true;                              // 1800b6270  MOV AL,1
+                                              // ~ser: 1800b626e, before the return
 }
 
 }  // namespace IO
