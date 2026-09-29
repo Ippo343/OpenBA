@@ -2,15 +2,11 @@
 // Clean reimplementation of ParticleComponent lifecycle methods from Application-x64.exe.
 //
 // ParticleComponent (0x48 bytes) manages particle effects attached to entities.
-// Fields: +0x28=emitter flag array, +0x30=count, +0x38=geometry array, +0x40=total count
+// Fields: +0x28 per-emitter "running" flags (Array<bool>), +0x38 the emitters'
+// live state (Array<ParticleEmitterSlot>, stride 0x18).
 //
 // Vtable at 0x14015a290. Six non-trivial overrides — all deeply coupled to
 // Graphics::Scene, MeshInstance, and particle emitter subsystems.
-//
-// Due to deep Graphics subsystem dependencies (MeshInstance::GetNodeToWorld,
-// Scene::RemoveObject, Geometry::SetTransform, etc.), several methods delegate
-// to original exe functions for the complex Graphics work while the serialization
-// and control flow logic is reimplemented.
 //
 
 // graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
@@ -23,6 +19,10 @@
 #include <new>
 #include "Component/particlecomponent_funcs.h"
 #include "Component/coll_bridge.h"
+#include "Component/ModelComponent.h"
+#include "Component/MapComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "pathfinding/PointList.h"
 #include "scene_watch.h"
 #include "object/External.h"
 #include "object/Internal.h"
@@ -30,6 +30,7 @@
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"              // Map::size (GameUpdateLoop::m_game)
 #include "system/MemoryAllocator.h"
 #include "system/String.h"
 #include "math/Math.h"
@@ -40,6 +41,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <functional>
 #include <new>
 #include "graphics/ParticleInstance.h"   // ENDGAME B.3.9 SS2: ParticleInstance::_frameIndex
 #include "graphics/Particle.h"           // B.3.x W0: Particle::CreateSystem by name
@@ -48,8 +50,7 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
-#include "Action/exe_bodies.h"      // ActHunt_NotifyEntityChanged_c3470, ActCNR_FindComponent_3f60
-#include "Component/exe_bodies.h"   // FloorComponent_FindResData
+#include "Component/exe_bodies.h"
 
 static float PC_UVScale();  // defined with the helper ports below
 
@@ -74,21 +75,16 @@ static uint32_t PC_DescTypeId() {
     return 0;
 }
 
-// Helper: get particle description from _unk18
-static void* GetParticleDesc(void* self) {
-    void* baseObj = *(void**)((uintptr_t)self + 0x18);
+// The component's description as a ParticleDescription.
+static ParticleDescription* GetParticleDesc(const ParticleComponent* self) {
+    Description* baseObj = self->_description;
     if (!baseObj) return nullptr;
     // +0x18 is the description sub-block the component was instantiated from;
     // the SA factory tree can false-negative IsDerivedFrom, so trust non-null
     // (Object::IsDerivedFromOrTrust convention).
-    return Object::IsDerivedFromOrTrust(baseObj, PC_DescTypeId()) ? baseObj : nullptr;
+    return Object::IsDerivedFromOrTrust(baseObj, PC_DescTypeId())
+               ? static_cast<ParticleDescription*>(baseObj) : nullptr;
 }
-
-
-
-
-
-
 
 // ============================================================
 // Full ports of the exe helper closure.
@@ -106,24 +102,12 @@ static void* GetParticleDesc(void* self) {
 //   0x140052b30  UpdateTick   — per-frame (vtable+0x40): node-follow transform
 //                               + opacity fade integration + geometry Update
 //   0x140053090  Event        — event 2 = fade-in start, 3 = fade-out (b2 set)
+//
+// LEFT (B.4 COMP-d): GameUpdateLoop::m_graphicsScene / m_game are void* (W0);
+// ModelComponent's MeshInstance / Transform are raw storage (H5, later commit);
+// Pathfinding::PointList::Point keeps its name and position raw (runtime header);
+// Component's Persist / Tick take void* (COMP-c's header).
 // ============================================================
-
-// Geometry-array entry (self+0x38 array, stride 0x18; count at self+0x40)
-struct PCGeoEntry {
-    void*   geo;       // +0x00 Graphics::ParticleSystemInstance (Geometry subclass)
-    int32_t sceneId;   // +0x08 Graphics::Scene object id, -1 = not in scene
-    int32_t nodeIdx;   // +0x0c mesh-node / attach-point index to follow, -1 = static
-    float   fadeRate;  // +0x10 opacity units/sec (0 = steady)
-    int32_t _pad14;    // +0x14
-};
-static_assert(sizeof(PCGeoEntry) == 0x18, "PCGeoEntry stride");
-
-// Emitter entry in ParticleDescription (+0x28 array, stride 0x28) — layout per
-// code/Game/Component/particledescription.cpp:
-//   +0x00 External* particleSystem, +0x08 String name, +0x10 b0 followNode,
-//   +0x11 b1 autoStart, +0x12 b2 eventToggled, +0x13 b3 noModelTransform,
-//   +0x18 Time t0 prewarm, +0x20 Time t1 fadeDuration
-
 
 // g_fUVScale is the retail .rdata constant 1.0f. In SA the ResolveAddr for
 // 0x140172234 lands inside an unrelated registered data blob (observed value
@@ -131,53 +115,45 @@ static_assert(sizeof(PCGeoEntry) == 0x18, "PCGeoEntry stride");
 // the known retail value directly.
 static float PC_UVScale() { return 1.0f; }
 
-// Owning entity from the component's +0x10 InternalBasePtr.
-static uintptr_t PC_Entity(void* self) {
-    void* ibp = (void*)((uintptr_t)self + 0x10);
-    if (*(uintptr_t*)ibp == 0) return 0;
-    return *(uintptr_t*)ibp;
+// FindComponent (exe 0x140003f60 ModelComponent, 0x140004680 MapComponent) on the
+// owning entity; the null-entity test is the tree's.
+static ModelComponent* PC_FindModel(ComponentEntity* entity) {
+    if (!entity) return nullptr;
+    return entity->FindComponent<ModelComponent>();   // 0x140003f60
+}
+static MapComponent* PC_FindMap(ComponentEntity* entity) {
+    if (!entity) return nullptr;
+    return entity->FindComponent<MapComponent>();   // 0x140004680
 }
 
-// FindComponent helpers (exe): 0x140003f60 = ModelComponent, 0x140004680 = MapComponent.
-// (entity, retbuf IBP) — retbuf[0] receives the component pointer (or 0).
-static void* PC_FindModel(uintptr_t entity) {
-    if (!entity) return nullptr;
-    uintptr_t buf[2] = {0, 0};
-    ActCNR_FindComponent_3f60(entity, buf);   // 0x140003f60
-    return (void*)buf[0];
-}
-static void* PC_FindMap(uintptr_t entity) {
-    if (!entity) return nullptr;
-    uintptr_t buf[2] = {0, 0};
-    FloorComponent_FindResData((void*)entity, buf);   // 0x140004680
-    return (void*)buf[0];
+// The scene the emitters are drawn in. LEFT: GameUpdateLoop::m_graphicsScene is void* (W0).
+static Graphics::Scene* PC_Scene() {
+    return reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
 }
 
-// Geometry-array (re)size — port of FUN_14000a640 (stride 0x18).
-// Header at self+0x38: {void* data(+0), int count(+8), int cap(+0xc)}.
-// New entries init to {geo=0, sceneId=-1, nodeIdx=0, fadeRate=0}.
-static void PC_GeoArrayResize(void* header, int newCount) {
-    uint8_t* h = (uint8_t*)header;
-    int oldCount = *(int32_t*)(h + 8);
+// Emitter-array (re)size — port of FUN_14000a640 (stride 0x18).
+// New entries init to {instance=0, sceneId=-1, nodeIndex=0, fadeRate=0}.
+static void PC_EmitterArrayResize(ParticleComponent* self, int newCount) {
+    int oldCount = self->emitterCount;
     if (newCount == oldCount) return;
 
-    uint8_t* oldData = *(uint8_t**)h;
-    *(int32_t*)(h + 8) = newCount;
-    if (*(int32_t*)(h + 0xc) < newCount) {
+    ParticleEmitterSlot* oldData = self->emitters;
+    self->emitterCount = newCount;
+    if (self->emitterCapacity < newCount) {
         int cap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        *(int32_t*)(h + 0xc) = cap;
-        *(void**)h = System::MemoryAllocator::MemAlloc((uint64_t)cap * 0x18, 8);
+        self->emitterCapacity = cap;
+        self->emitters = static_cast<ParticleEmitterSlot*>(System::MemoryAllocator::MemAlloc((uint64_t)cap * 0x18, 8));
     }
-    uint8_t* data = *(uint8_t**)h;
-    if (!data) { *(int32_t*)(h + 8) = 0; *(int32_t*)(h + 0xc) = 0; return; }
+    ParticleEmitterSlot* data = self->emitters;
+    if (!data) { self->emitterCount = 0; self->emitterCapacity = 0; return; }
     int keep = (oldData == data) ? oldCount : 0;  // in-place: old entries stay valid
     for (int i = 0; i < newCount; i++) {
-        PCGeoEntry* e = (PCGeoEntry*)(data + (size_t)i * 0x18);
+        ParticleEmitterSlot* e = &data[i];
         if (i < keep) continue;
         if (i < oldCount && oldData) {
-            memcpy(e, oldData + (size_t)i * 0x18, 0x18);
+            *e = oldData[i];
         } else {
-            e->geo = nullptr; e->sceneId = -1; e->nodeIdx = 0;
+            e->instance = nullptr; e->sceneId = -1; e->nodeIndex = 0;
             e->fadeRate = 0.0f; e->_pad14 = 0;
         }
     }
@@ -187,109 +163,101 @@ static void PC_GeoArrayResize(void* header, int newCount) {
 // ============================================================
 // ParticleComponent_helper_2560 — place emitter i (0x140052560)
 // ============================================================
-extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
-    uintptr_t s = (uintptr_t)self;
-    void* desc = GetParticleDesc(self);
+void ParticleComponent::Place(int index) {
+    ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) return;
-    uint8_t* elem = *(uint8_t**)((uintptr_t)desc + 0x28) + (size_t)index * 0x28;
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
-    if (!geoArr) return;
-    PCGeoEntry* ge = &geoArr[index];
-    if (!ge->geo) return;   // resource failed to load — leave emitter inert
+    const ParticleEmitterDescription& em = desc->_emitters[index];
+    if (!emitters) return;
+    ParticleEmitterSlot* ge = &emitters[index];
+    if (!ge->instance) return;   // resource failed to load — leave emitter inert
 
-    uintptr_t entity = PC_Entity(self);
-    void* model = PC_FindModel(entity);
-    void* mapc  = PC_FindMap(entity);
+    ModelComponent* model = PC_FindModel(_entity);
+    MapComponent* mapc  = PC_FindMap(_entity);
 
-    // Transform = quat(x,y,z,w) at +0x00, pos(x,y,z) at +0x10 — 7 floats.
-    float tf[7] = {0, 0, 0, PC_UVScale(), 0, 0, 0};   // identity
-    if (model && elem[0x13] == 0) {
-        // Building/entity model transform (+0x148)
-        memcpy(tf, (uint8_t*)model + 0x148, 7 * sizeof(float));
+    Math::Transform tf;   // identity
+    if (model && !em.noModelTransform) {
+        // Building/entity model transform (+0x148). LEFT: raw storage (H5).
+        tf = *reinterpret_cast<const Math::Transform*>(model->transform);
     } else if (mapc && GameUpdateLoop::_singleton != nullptr) {
         // Centre cell of the entity's map footprint → terrain-height world pos
-        void* mapDims = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8);
-        int W = mapDims ? *(int*)mapDims : 0;
+        void* game = GameUpdateLoop::_singleton->m_game;
+        // LEFT: GameUpdateLoop::m_game is void* (W0 header).
+        int W = game ? reinterpret_cast<const Map*>(game)->size : 0;
         if (W > 0) {
-            uintptr_t m = (uintptr_t)mapc;
-            int idx = ((int)*(int16_t*)(m + 0x2a) + ((int)*(int16_t*)(m + 0x2e) >> 1)) * W
-                    + ((int)*(int16_t*)(m + 0x2c) >> 1) + (int)*(int16_t*)(m + 0x28);
+            int idx = ((int)static_cast<int16_t>(mapc->tileY0) + ((int)static_cast<int16_t>(mapc->tileY1) >> 1)) * W
+                    + ((int)static_cast<int16_t>(mapc->tileX1) >> 1) + (int)static_cast<int16_t>(mapc->tileX0);
             float half = (float)(W >> 1) - 0.5f;
-            float in[3]  = {(float)(idx % W) - half, (float)(idx / W) - half, 0.0f};
-            float out[3] = {0, 0, 0};
-            Reimpl_MapGetTerrainPos(mapDims, out, in, '\0', nullptr);
-            tf[4] = out[0]; tf[5] = out[1]; tf[6] = out[2];
+            Math::Vector3 in((float)(idx % W) - half, (float)(idx / W) - half, 0.0f);
+            Math::Vector3 out(0.0f, 0.0f, 0.0f);
+            Reimpl_MapGetTerrainPos(game, &out.x, &in.x, '\0', nullptr);
+            tf.translation = out;
         }
     }
 
-    float pos[3] = {tf[4], tf[5], tf[6]};
+    Math::Vector3 pos = tf.translation;
     int followIdx = -1;
-    void* attach = *(void**)((uintptr_t)desc + 0x20);
+    Pathfinding::PointList* attach = desc->_attachPoints;
     if (attach) {
-        // Named attach-point table: entries {String name(+0), Vector3 offset(+8)}, stride 0x18
-        int n = *(int32_t*)((uintptr_t)attach + 0x38);
-        uint8_t* arr = *(uint8_t**)((uintptr_t)attach + 0x30);
+        // Named attach-point table: entries {String name, Vector3 offset}, stride 0x18
+        const Collection::Array<Pathfinding::PointList::Point>& points = attach->Points();
+        int n = points.GetSize();
+        const Pathfinding::PointList::Point* arr = points.GetData();
         for (int j = 0; j < n && arr; j++) {
             // System::String::operator==(const String&) — slot 0x140151438.
-            if (*reinterpret_cast<const System::String*>(arr + (size_t)j * 0x18) ==
-                *reinterpret_cast<const System::String*>(elem + 8)) {   // B.3.1 bridge
+            // LEFT: PointList::Point keeps its name / position raw (runtime header).
+            if (*reinterpret_cast<const System::String*>(&arr[j].name) == em.name) {
                 const float zero = 0.0f;
                 const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
-                    zero, zero,
-                    *reinterpret_cast<const Math::Vector3*>(arr + (size_t)j * 0x18 + 8));   // B.3.1 bridge
+                    zero, zero, *reinterpret_cast<const Math::Vector3*>(arr[j].pos));
                 // Math::Transform::operator*(const Transform&) — slot 0x140151430.
-                const Math::Transform prod =
-                    ypo * *reinterpret_cast<const Math::Transform*>(tf);   // B.3.1 bridge
-                pos[0] = prod.translation.x; pos[1] = prod.translation.y; pos[2] = prod.translation.z;
+                const Math::Transform prod = ypo * tf;
+                pos = prod.translation;
                 followIdx = j;
                 break;
             }
         }
     } else if (model) {
         // Mesh-node lookup by emitter name (e.g. a "smoke" node in the building mesh)
-        void* mesh = *(void**)((uintptr_t)model + 0xe8);
-        char* name = *(char**)(elem + 8);
-        if (mesh && name && *(int32_t*)(name - 8) != 0) {
-            int n = reinterpret_cast<const Graphics::GraphicsMesh*>(mesh)
-                        ->GetNodeIndexFromName(name);   // B.3.5 bridge
+        // LEFT: ModelComponent::meshInstance is raw storage (H5).
+        const Graphics::MeshInstance* mi =
+            reinterpret_cast<const Graphics::MeshInstance*>(model->meshInstance);
+        const Graphics::GraphicsMesh* mesh = mi->GetMesh().Get();
+        const char* name = em.name._data;
+        if (mesh && name && em.name.GetLength() != 0) {
+            int n = mesh->GetNodeIndexFromName(name);
             if (n >= 0) {
                 // GetNodeToWorld is a hidden-retslot door in retail; the door body
                 // moves to the call site as ONE construction into the same storage.
-                float ntw[7] = {0, 0, 0, 1, 0, 0, 0};
-                ::new (static_cast<void*>(ntw)) Math::Transform(
-                    reinterpret_cast<const Graphics::MeshInstance*>((uint8_t*)model + 0x28)
-                        ->GetNodeToWorld(n));   // B.3.5 bridge
-                pos[0] = ntw[4]; pos[1] = ntw[5]; pos[2] = ntw[6];
+                const Math::Transform ntw = mi->GetNodeToWorld(n);
+                pos = ntw.translation;
                 followIdx = n;
             }
         }
     }
 
     // Final placement: identity rotation + computed position
-    float finalTf[7] = {0, 0, 0, PC_UVScale(), pos[0], pos[1], pos[2]};
-    reinterpret_cast<Graphics::Geometry*>(ge->geo)
-        ->SetTransform(*reinterpret_cast<const Math::Transform*>(finalTf));   // B.3.5 bridge
+    Math::Transform finalTf;
+    finalTf.translation = pos;
+    ge->instance->SetTransform(finalTf);
 
     // Configure the instance from its ParticleSystem resource (slot 9, +0x48).
-    // ge->geo is the concrete ParticleSystemInstance CreateSystem built (Setup);
+    // ge->instance is the concrete ParticleSystemInstance CreateSystem built (Setup);
     // ParticleInstance itself is abstract, so no live object has a pure slot here.
-    Graphics::ParticleInstance* inst = reinterpret_cast<Graphics::ParticleInstance*>(ge->geo);   // B.3.x bridge
-    void* res = *(void**)(elem + 0);
-    if (res)
-        inst->SetParticle(Graphics::ExternalPtrHandle{res});   // slot 9
+    Graphics::ParticleInstance* inst = ge->instance;
+    if (em.particle)
+        inst->SetParticle(Graphics::ExternalPtrHandle{em.particle});   // slot 9
 
     ge->sceneId = -1;
-    ge->nodeIdx = (elem[0x10] != 0) ? followIdx : -1;
-
+    ge->nodeIndex = em.followNode ? followIdx : -1;
 
     // Prewarm: tick the emitter forward by t0 (elem+0x18) in engine fixed steps
-    int64_t t0 = *(int64_t*)(elem + 0x18);
+    int64_t t0 = em.prewarm._ticks;
     if (t0 > 0 && ::Engine::MainLoop::_singleton) {
-        int64_t step = *(int64_t*)((uintptr_t)::Engine::MainLoop::_singleton + 0x48);
-        if (step > 0) {
-            for (int64_t acc = step; ; acc += step) {
-                static_cast<Graphics::Geometry*>(inst)->Update(
-                    *reinterpret_cast<const System::Time*>(&step));   // slot 1
+        System::Time step;
+        step._ticks = ::Engine::MainLoop::_singleton->_deltaTime;
+        if (step._ticks > 0) {
+            for (int64_t acc = step._ticks; ; acc += step._ticks) {
+                static_cast<Graphics::Geometry*>(inst)->Update(step);   // slot 1
                 if (acc >= t0) break;
             }
         }
@@ -299,138 +267,130 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
 // ============================================================
 // ParticleComponent_helper_2990 — stop emitter i (0x140052990)
 // ============================================================
-extern "C" void ParticleComponent_StopEmitter(ParticleComponent* self, int index) {
-    uintptr_t s = (uintptr_t)self;
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
-    if (!geoArr) return;
-    PCGeoEntry* ge = &geoArr[index];
+void ParticleComponent::StopEmitter(int index) {
+    if (!emitters) return;
+    ParticleEmitterSlot* ge = &emitters[index];
     if (ge->sceneId >= 0) {
         if (GameUpdateLoop::_singleton != nullptr) {
-            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
+            Graphics::Scene* scene = PC_Scene();
             if (scene)
-                reinterpret_cast<Graphics::Scene*>(scene)
-                    ->RemoveObject((uint32_t)ge->sceneId);   // B.3.5 bridge
+                scene->RemoveObject((uint32_t)ge->sceneId);
         }
         ge->sceneId = -1;
     }
-    uint8_t* flagArr = *(uint8_t**)(s + 0x28);
-    if (flagArr) flagArr[index] = 0;
+    if (active) active[index] = false;
 
     // Any emitter still live? Keep the per-frame flag.
-    int total = *(int32_t*)(s + 0x40);
+    int total = emitterCount;
     for (int j = 0; j < total; j++)
-        if (geoArr[j].sceneId >= 0) return;
+        if (emitters[j].sceneId >= 0) return;
 
     if (!PC_RebucketEntity()) return;
-    uint32_t oldFlags = *(uint32_t*)(s + 0x20);
+    uint32_t oldFlags = _flags;
     uint32_t newFlags = oldFlags & ~0x4u;
-    *(uint32_t*)(s + 0x20) = newFlags;
-    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
-        ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));
+    _flags = newFlags;
+    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+        _entity->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 
 // ============================================================
 // ParticleComponent_helper_2a50 — start emitter i (0x140052a50)
 // ============================================================
-extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int index) {
-    uintptr_t s = (uintptr_t)self;
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
-    if (!geoArr) return;
-    PCGeoEntry* ge = &geoArr[index];
+void ParticleComponent::StartEmitter(int index) {
+    if (!emitters) return;
+    ParticleEmitterSlot* ge = &emitters[index];
 
-    void* scene = (GameUpdateLoop::_singleton != nullptr)
-                  ? *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60) : nullptr;
+    Graphics::Scene* scene = (GameUpdateLoop::_singleton != nullptr) ? PC_Scene() : nullptr;
     if (ge->sceneId >= 0 && scene)
-        reinterpret_cast<Graphics::Scene*>(scene)
-            ->RemoveObject((uint32_t)ge->sceneId);   // B.3.5 bridge
+        scene->RemoveObject((uint32_t)ge->sceneId);
 
-    ParticleComponent_Place(self, index);
-    if (!ge->geo || !scene) return;
+    Place(index);   // 0x140052560
+    if (!ge->instance || !scene) return;
 
     // Initial Update(Time(0)) then add to the scene
-    int64_t zeroTime = 0;
-    reinterpret_cast<Graphics::Geometry*>(ge->geo)->Update(
-        *reinterpret_cast<const System::Time*>(&zeroTime));   // B.3.x bridge (slot 1)
+    System::Time zeroTime;
+    zeroTime._ticks = 0;
+    ge->instance->Update(zeroTime);   // slot 1
     {
-        ge->sceneId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
-            ->AddObject(reinterpret_cast<Graphics::Geometry*>(ge->geo));   // B.3.5 bridge
-        SceneWatch_Note((uint32_t)ge->sceneId, ge->geo, "ParticleComponent");
+        ge->sceneId = (int32_t)scene->AddObject(ge->instance);
+        SceneWatch_Note((uint32_t)ge->sceneId, ge->instance, "ParticleComponent");
     }
 
     if (PC_RebucketEntity()) {
-        uint32_t oldFlags = *(uint32_t*)(s + 0x20);
+        uint32_t oldFlags = _flags;
         uint32_t newFlags = oldFlags | 0x4u;
-        *(uint32_t*)(s + 0x20) = newFlags;
-        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
-            ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));
+        _flags = newFlags;
+        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+            _entity->RefreshEntityFlags();   // 0x1400c3470
         }
     }
-    uint8_t* flagArr = *(uint8_t**)(s + 0x28);
-    if (flagArr) flagArr[index] = 1;
-
+    if (active) active[index] = true;
 }
 
 // ============================================================
 // FUN_140053660 — start emitter i with fade-in (0x140053660)
 // ============================================================
-extern "C" void ParticleComponent_StartEmitterFade(ParticleComponent* self, int index) {
-    uintptr_t s = (uintptr_t)self;
-    void* desc = GetParticleDesc(self);
+void ParticleComponent::StartEmitterFade(int index) {
+    ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) return;
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
-    if (!geoArr) return;
-    PCGeoEntry* ge = &geoArr[index];
+    if (!emitters) return;
+    ParticleEmitterSlot* ge = &emitters[index];
 
-    uint8_t* elem = *(uint8_t**)((uintptr_t)desc + 0x28) + (size_t)index * 0x28;
-    float t1 = reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds();   // B.3.4b bridge
+    float t1 = desc->_emitters[index].fadeTime.AsSeconds();
     ge->fadeRate = PC_UVScale() / t1;
 
-    if (ge->geo) {
-        uintptr_t g = (uintptr_t)ge->geo;
-        if (*(float*)(g + 0x7c) != 0.0f) {
-            *(uint32_t*)(g + 0x2c) |= 4;      // dirty
-            *(uint64_t*)(g + 0x7c) = 0;       // opacity (both floats) = 0
+    if (ge->instance) {
+        Graphics::ParticleInstance* g = ge->instance;
+        if (g->_opacity != 0.0f) {
+            g->_dirtyFlags |= 4;      // dirty
+            g->_opacity = 0.0f;       // opacity (both floats) = 0
+            g->_opacityPrev = 0.0f;
         }
     }
-    ParticleComponent_StartEmitter(self, index);
+    StartEmitter(index);   // 0x140052a50
+}
+
+// B4 FORWARD: 2 outside callers (diseasecomponent.cpp, firecomponent_ignite.cpp).
+extern "C" void ParticleComponent_StartEmitterFade(ParticleComponent* self, int index) {
+    self->StartEmitterFade(index);
 }
 
 // ============================================================
 // ParticleComponent_sub_2480 — setup (0x140052480)
 // ============================================================
-extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
-    uintptr_t s = (uintptr_t)self;
-    void* desc = GetParticleDesc(self);
+void ParticleComponent::Setup() {
+    ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) {
         return;
     }
-    int n = *(int32_t*)((uintptr_t)desc + 0x30);
-    PC_GeoArrayResize((void*)(s + 0x38), n);
+    int n = desc->_emitterCount;
+    PC_EmitterArrayResize(this, n);
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
-    GameColl::AsArray<GameColl::U8>((void*)(s + 0x28)).SetSize(n);
+    GameColl::AsArray<GameColl::U8>(&active).SetSize(n);
 
-    uint8_t* emArr = *(uint8_t**)((uintptr_t)desc + 0x28);
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
-    int total = *(int32_t*)(s + 0x40);
+    ParticleEmitterDescription* emArr = desc->_emitters;
+    ParticleEmitterSlot* geoArr = emitters;
+    int total = emitterCount;
     if (!emArr || !geoArr) return;
     int nullRes = 0, nullInst = 0;
     for (int i = 0; i < total; i++) {
-        void* res = *(void**)(emArr + (size_t)i * 0x28);
-        void* inst = nullptr;
+        Graphics::Particle* res = emArr[i].particle;
+        Graphics::ParticleInstance* inst = nullptr;
         if (res) {
             // Graphics::Particle slot 8 (+0x40) CreateSystem: pure in Particle,
             // filled by the concrete ParticleSystem every resource is.
-            inst = reinterpret_cast<const Graphics::Particle*>(res)->CreateSystem();   // B.3.x bridge (slot 8)
+            inst = res->CreateSystem();   // slot 8
         }
-        // A null here is FATAL LATER, not here: ParticleComponent_Draw (slot 6 OnAdded)
-        // reads geoArr[i].geo->+0x7C with no test, exactly as retail 0x140053029 does,
-        // because in retail this slot is always populated. Say so at the site that
-        // produced the null, or the only evidence is an AV reading address 0x7c.
+        // A null here is FATAL LATER, not here: ParticleComponent::OnAdded (slot 6)
+        // reads emitters[i].instance->_opacity with no test, exactly as retail
+        // 0x140053029 does, because in retail this slot is always populated. Say so
+        // at the site that produced the null, or the only evidence is an AV reading
+        // address 0x7c.
         if (!res)  ++nullRes;
         if (!inst) ++nullInst;
-        geoArr[i].geo = inst;
-        ParticleComponent_Place(self, i);
+        geoArr[i].instance = inst;
+        Place(i);   // 0x140052560
     }
     if (nullRes || nullInst) {
         static int s_pcNullBudget = 0;
@@ -442,7 +402,7 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
                     "ParticleAttachment _particle external never resolved; nullInstance "
                     "with nullResource==0 means the resource resolved but its vtable+0x40 "
                     "CreateInstance returned null.\n",
-                    (void*)self, total, nullRes, nullInst);
+                    static_cast<void*>(this), total, nullRes, nullInst);
             fflush(stderr);
         }
     }
@@ -510,7 +470,7 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
     // the 800-house stress town — silently stopped un-stamping the rest, freezing their
     // smoke) and a hot spot (2.2% of the EntityList phase at 800x10: ~400 calls per
     // iteration, each scanning up to 64 pointers per geo entry).
-    struct SeenSlot { uintptr_t key; int gen; };
+    struct SeenSlot { const void* key; int gen; };
     constexpr int kSeenCap = 4096;   // power of two; ~5 emits per component worst case
     static SeenSlot s_seenTbl[kSeenCap];
     const int frame = GameUpdateLoop_CurrentFrame();
@@ -522,17 +482,21 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
     // the 800-citizen stress town; this was 2.6% of the EntityList phase at 10x).
     constexpr int kCompCap = 8192;
     static SeenSlot s_compTbl[kCompCap];
+    // Pointer hash over the address bits (std::hash of a pointer is its address).
+    auto slotOf = [](const void* p, int cap) -> uint32_t {
+        return (uint32_t)((std::hash<const void*>{}(p) >> 4) * 2654435761u) & (cap - 1);
+    };
     {
-        const uintptr_t k = (uintptr_t)self;
-        uint32_t h = (uint32_t)((k >> 4) * 2654435761u) & (kCompCap - 1);
+        const void* k = self;
+        uint32_t h = slotOf(k, kCompCap);
         for (int probe = 0; probe < kCompCap; ++probe) {
             SeenSlot& sl = s_compTbl[(h + probe) & (kCompCap - 1)];
             if (sl.gen != frame) { sl.gen = frame; sl.key = k; break; }
             if (sl.key == k) return;   // already un-stamped this frame
         }
     }
-    auto seenInsert = [&](uintptr_t k) -> bool {   // true = already un-stamped this frame
-        uint32_t h = (uint32_t)((k >> 4) * 2654435761u) & (kSeenCap - 1);
+    auto seenInsert = [&](const void* k) -> bool {   // true = already un-stamped this frame
+        uint32_t h = slotOf(k, kSeenCap);
         for (int probe = 0; probe < kSeenCap; ++probe) {
             SeenSlot& sl = s_seenTbl[(h + probe) & (kSeenCap - 1)];
             if (sl.gen != frame) { sl.gen = frame; sl.key = k; return false; }
@@ -541,33 +505,31 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
         return false;   // table full (cannot happen below kSeenCap distinct emits)
     };
 
-    uintptr_t s = (uintptr_t)self;
-    PCGeoEntry* arr = *(PCGeoEntry**)(s + 0x38);
-    int total = *(int32_t*)(s + 0x40);
+    ParticleEmitterSlot* arr = self->emitters;
+    int total = self->emitterCount;
     for (int i = 0; arr && i < total; ++i) {
-        if (!arr[i].geo || arr[i].sceneId < 0) continue;
-        uintptr_t g = (uintptr_t)arr[i].geo;
-        uintptr_t res  = *(uintptr_t*)(g + 0xc0);
-        uintptr_t emit = *(uintptr_t*)(g + 0xc8);
-        if (!res || !emit || *(uint8_t*)(res + 0x20) == 0) continue;
+        if (!arr[i].instance || arr[i].sceneId < 0) continue;
+        Graphics::ParticleInstance* g = arr[i].instance;
+        Graphics::Particle* res = g->_resource;
+        RtGraphics::ParticleBoundsRecord* emit = g->_boundsPtr;
+        if (!res || !emit || res->_active == 0) continue;
         if (seenInsert(emit)) continue;              // already un-stamped this frame
-        if (*(int32_t*)(emit + 0x2c) == fi)
-            *(int32_t*)(emit + 0x2c) = fi - 1;
+        if (emit->frameTag == fi)
+            emit->frameTag = fi - 1;
     }
 }
 
 // [PerfX PARTICLE_CULL -- NON-RETAIL] a particle system nobody can see is FROZEN (not
 // ticked) rather than simulated; when the camera reaches it the plume it had simply
-// continues. Position = the first live emitter geometry's transform (+0x94).
+// continues. Position = the first live emitter geometry's transform translation (+0x94).
 static bool PC_Culled(ParticleComponent* self) {
     if (!PerfX::ParticleCull()) return false;
-    uintptr_t s = (uintptr_t)self;
-    int total = *(int32_t*)(s + 0x40);
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    int total = self->emitterCount;
+    ParticleEmitterSlot* geoArr = self->emitters;
     if (total <= 0 || !geoArr) return false;
     for (int i = 0; i < total; i++) {
-        if (geoArr[i].geo && geoArr[i].sceneId >= 0)
-            return PerfX::ParticleCullSkip(reinterpret_cast<const float*>((uintptr_t)geoArr[i].geo + 0x94));
+        if (geoArr[i].instance && geoArr[i].sceneId >= 0)
+            return PerfX::ParticleCullSkip(&geoArr[i].instance->_transform.translation.x);
     }
     return false;
 }
@@ -575,7 +537,8 @@ static bool PC_Culled(ParticleComponent* self) {
 // 0x1400533d0. Component() is the CALL 0x1401188b0; the 0x14015a290 stamp is
 // the compiler's; +0x28..+0x40 = 0; flags |= 0xc3.
 ParticleComponent::ParticleComponent()
-    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr) {
+    : active(nullptr), activeCount(0), activeCapacity(0),
+      emitters(nullptr), emitterCount(0), emitterCapacity(0) {
     OrFlagsInCtor(0xc3);
 }
 
@@ -586,26 +549,23 @@ ParticleComponent::ParticleComponent()
 // ParticleComponent::Persist (0x140053270)
 // ============================================================
 void ParticleComponent::Persist(void* stream) {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    IO::Serializer ser(*st, 0);
 
-    int localCount = *(int*)(selfAddr + 0x30);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
+    int localCount = activeCount;
+    ser.Serialize(localCount, nullptr);
 
     // If loading, resize bool array
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x28)).SetSize(localCount);
+    if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+        GameColl::AsArray<GameColl::U8>(&active).SetSize(localCount);
     }
 
     // Serialize bool array
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, *(bool**)(selfAddr + 0x28), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(localCount, active, nullptr);
 }
 
 // [4] 0x140053230 — setup: create the ParticleSystemInstances.
@@ -613,16 +573,13 @@ void ParticleComponent::Persist(void* stream) {
 // ParticleComponent::Startup (0x140053230) — actually setup/init
 // ============================================================
 void ParticleComponent::Startup() {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
-    ParticleComponent_Setup(this);
+    Setup();   // 0x140052480
 
     // Zero all emitter flags
-    int count = *(int*)(selfAddr + 0x30);
+    int count = activeCount;
     if (count > 0) {
-        uint8_t* flags = *(uint8_t**)(selfAddr + 0x28);
         for (int i = 0; i < count; i++) {
-            flags[i] = 0;
+            active[i] = false;
         }
     }
 }
@@ -632,47 +589,42 @@ void ParticleComponent::Startup() {
 // ParticleComponent::OnAdded (0x140052f70)
 // ============================================================
 void ParticleComponent::OnAdded() {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
-    void* desc = GetParticleDesc(this);
+    ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) return;
 
     float uvScale = PC_UVScale();
 
-    int emitterCount = *(int*)((uintptr_t)desc + 0x30);
-    if (emitterCount <= 0) return;
+    int emitterTotal = desc->_emitterCount;
+    if (emitterTotal <= 0) return;
 
-    uintptr_t descArray = *(uintptr_t*)((uintptr_t)desc + 0x28);
-    uintptr_t geoArray = *(uintptr_t*)(selfAddr + 0x38);
+    ParticleEmitterDescription* descArray = desc->_emitters;
+    ParticleEmitterSlot* geoArray = emitters;
 
-    for (int i = 0; i < emitterCount; i++) {
-        uintptr_t descEntry = descArray + (uintptr_t)i * 0x28;
-
-        // Check if emitter is active (byte at descEntry + 0x11)
-        if (*(uint8_t*)(descEntry + 0x11) == 0) continue;
+    for (int i = 0; i < emitterTotal; i++) {
+        // Is the emitter started on add? (autoStart, +0x11)
+        if (!descArray[i].autoStart) continue;
 
         // Re-check IsDerivedFrom for desc (original does this per iteration)
-        void* descCheck = GetParticleDesc(this);
+        ParticleDescription* descCheck = GetParticleDesc(this);
         if (!descCheck) continue;
 
-        uintptr_t geoEntry = geoArray + (uintptr_t)i * 0x18;
+        ParticleEmitterSlot* geoEntry = &geoArray[i];
 
-        // Get timing from desc: entry array slot
-        uintptr_t descArr2 = *(uintptr_t*)((uintptr_t)descCheck + 0x28);
-        uintptr_t timeAddr = descArr2 + ((uintptr_t)i * 5 + 4) * 8;
-        float timeSecs = reinterpret_cast<const System::Time*>((void*)timeAddr)->AsSeconds();   // B.3.4b bridge
+        // The fade time of the emitter
+        float timeSecs = descCheck->_emitters[i].fadeTime.AsSeconds();
 
         // Set emitter timing: uvScale / timeSecs
-        *(float*)(geoEntry + 0x10) = uvScale / timeSecs;
+        geoEntry->fadeRate = uvScale / timeSecs;
 
         // Check/set geometry opacity
-        uintptr_t geoObj = *(uintptr_t*)geoEntry;
-        if (*(float*)(geoObj + 0x7C) != 0.0f) {
-            *(uint32_t*)(geoObj + 0x2C) |= 4;
-            *(uint64_t*)(geoObj + 0x7C) = 0;
+        Graphics::ParticleInstance* geoObj = geoEntry->instance;
+        if (geoObj->_opacity != 0.0f) {
+            geoObj->_dirtyFlags |= 4;
+            geoObj->_opacity = 0.0f;
+            geoObj->_opacityPrev = 0.0f;
         }
 
-        ParticleComponent_StartEmitter(this, i);   // 0x140052a50
+        StartEmitter(i);   // 0x140052a50
     }
 }
 
@@ -681,35 +633,32 @@ void ParticleComponent::OnAdded() {
 // ParticleComponent::OnRemove (0x140052e80)
 // ============================================================
 void ParticleComponent::OnRemove() {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
-    int totalCount = *(int*)(selfAddr + 0x40);
+    int totalCount = emitterCount;
     if (totalCount <= 0) return;
 
-    uintptr_t geoArray = *(uintptr_t*)(selfAddr + 0x38);
-    uint8_t* flagArray = *(uint8_t**)(selfAddr + 0x28);
+    ParticleEmitterSlot* geoArray = emitters;
+    bool* flagArray = active;
 
     for (int i = 0; i < totalCount; i++) {
-        uintptr_t geoEntry = geoArray + (uintptr_t)i * 0x18;
+        ParticleEmitterSlot* geoEntry = &geoArray[i];
 
         // Remove scene object if valid
-        uint32_t objId = *(uint32_t*)(geoEntry + 8);
+        uint32_t objId = (uint32_t)geoEntry->sceneId;
         if ((int)objId >= 0) {
             if (GameUpdateLoop::_singleton != nullptr) {
-                void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
-                reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(objId);   // B.3.5 bridge
+                PC_Scene()->RemoveObject(objId);
             }
-            *(uint32_t*)(geoEntry + 8) = 0xFFFFFFFF;
+            geoEntry->sceneId = -1;
         }
 
         // Clear emitter flag
-        flagArray[i] = 0;
+        flagArray[i] = false;
 
         // Check if any emitter still has a valid scene object
         bool anyValid = false;
         if (totalCount > 0) {
             for (int j = 0; j < totalCount; j++) {
-                if ((int)*(uint32_t*)(*(uintptr_t*)(selfAddr + 0x38) + (uintptr_t)j * 0x18 + 8) >= 0) {
+                if (emitters[j].sceneId >= 0) {
                     anyValid = true;
                     break;
                 }
@@ -718,12 +667,12 @@ void ParticleComponent::OnRemove() {
 
         if (!anyValid) {
             // Clear bit 2 of component flags
-            uint32_t oldFlags = *(uint32_t*)(selfAddr + 0x20);
+            uint32_t oldFlags = _flags;
             uint32_t newFlags = oldFlags & ~0x4u;
-            *(uint32_t*)(selfAddr + 0x20) = newFlags;
+            _flags = newFlags;
 
-            if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(selfAddr + 0x10) != 0) {
-                ActHunt_NotifyEntityChanged_c3470(*(void**)(selfAddr + 0x10));
+            if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+                _entity->RefreshEntityFlags();   // 0x1400c3470
             }
         }
     }
@@ -738,82 +687,81 @@ void ParticleComponent::OnRemove() {
 void ParticleComponent::Tick(void* time) {
     if (PC_Culled(this)) return;   // frozen off-screen: neither the unstamp nor the tick
     PC_UnstampOwnEmitters(this);   // SA per-frame frame-index advance (see helper) before the tick
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    int total = *(int32_t*)(s + 0x40);
+    int total = emitterCount;
     if (total <= 0) return;
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    ParticleEmitterSlot* geoArr = emitters;
     if (!geoArr) return;
     float uvScale = PC_UVScale();
+    // LEFT: Component::Tick takes void* (COMP-c's header).
+    const System::Time& elapsed = *reinterpret_cast<const System::Time*>(time);
 
     for (int i = 0; i < total; i++) {
-        PCGeoEntry* ge = &geoArr[i];
+        ParticleEmitterSlot* ge = &geoArr[i];
 
         // Node/attach-point follow: recompute transform every frame
-        if (ge->nodeIdx >= 0 && ge->geo) {
-            uintptr_t entity = PC_Entity(this);
-            void* model = PC_FindModel(entity);
-            void* desc = GetParticleDesc(this);
+        if (ge->nodeIndex >= 0 && ge->instance) {
+            ModelComponent* model = PC_FindModel(_entity);
+            ParticleDescription* desc = GetParticleDesc(this);
             if (desc && model) {
-                float tf[7] = {0, 0, 0, 1, 0, 0, 0};
+                Math::Transform tf;
                 bool have = false;
-                void* attach = *(void**)((uintptr_t)desc + 0x20);
+                Pathfinding::PointList* attach = desc->_attachPoints;
                 if (attach) {
-                    uint8_t* arr = *(uint8_t**)((uintptr_t)attach + 0x30);
+                    const Pathfinding::PointList::Point* arr = attach->Points().GetData();
                     if (arr) {
                         // Transform copy-ctor (seven dwords) from the ModelComponent's +0x148.
+                        // LEFT: raw storage (H5).
                         const Math::Transform modelTf =
-                            *reinterpret_cast<const Math::Transform*>((uint8_t*)model + 0x148);   // B.3.1 bridge
+                            *reinterpret_cast<const Math::Transform*>(model->transform);
                         const float zero = 0.0f;
+                        // LEFT: PointList::Point keeps its position raw (runtime header).
                         const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
-                            zero, zero,
-                            *reinterpret_cast<const Math::Vector3*>(arr + (size_t)ge->nodeIdx * 0x18 + 8));   // B.3.1 bridge
+                            zero, zero, *reinterpret_cast<const Math::Vector3*>(arr[ge->nodeIndex].pos));
                         // Math::Transform::operator*(const Transform&) — slot 0x140151430.
-                        *reinterpret_cast<Math::Transform*>(tf) = ypo * modelTf;   // B.3.1 bridge
+                        tf = ypo * modelTf;
                         have = true;
                     }
                 } else {
                     // Retail retslot door, body moved to the call site: exactly one
                     // construction into `tf`, the same storage the door wrote.
-                    ::new (static_cast<void*>(tf)) Math::Transform(
-                        reinterpret_cast<const Graphics::MeshInstance*>((uint8_t*)model + 0x28)
-                            ->GetNodeToWorld(ge->nodeIdx));   // B.3.5 bridge
+                    // LEFT: ModelComponent::meshInstance is raw storage (H5).
+                    tf = reinterpret_cast<const Graphics::MeshInstance*>(model->meshInstance)
+                             ->GetNodeToWorld(ge->nodeIndex);
                     have = true;
                 }
                 if (have)
-                    reinterpret_cast<Graphics::Geometry*>(ge->geo)
-                        ->SetTransform(*reinterpret_cast<const Math::Transform*>(tf));   // B.3.5 bridge
+                    ge->instance->SetTransform(tf);
             }
         }
 
         // Opacity fade integration + geometry tick (only while in the scene)
-        if (ge->sceneId >= 0 && ge->geo) {
-            uintptr_t g = (uintptr_t)ge->geo;
-            float op = *(float*)(g + 0x7c);
+        if (ge->sceneId >= 0 && ge->instance) {
+            Graphics::ParticleInstance* g = ge->instance;
+            float op = g->_opacity;
             if (ge->fadeRate != 0.0f) {
-                float dt = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
+                float dt = elapsed.AsSeconds();
                 op += dt * ge->fadeRate;
                 if (op > uvScale) {
                     ge->fadeRate = 0.0f;
                     op = uvScale;
                 } else if (op < 0.0f) {
                     ge->fadeRate = 0.0f;
-                    ParticleComponent_StopEmitter(this, i);
+                    StopEmitter(i);   // 0x140052990
                     continue;
                 } else if (op <= 0.0f) {
-                    ParticleComponent_StopEmitter(this, i);
+                    StopEmitter(i);   // 0x140052990
                     continue;
                 }
             } else if (op <= 0.0f) {
-                ParticleComponent_StopEmitter(this, i);
+                StopEmitter(i);   // 0x140052990
                 continue;
             }
-            if (op != *(float*)(g + 0x7c)) {
-                *(uint32_t*)(g + 0x2c) |= 4;   // dirty
-                *(float*)(g + 0x7c) = op;
-                *(float*)(g + 0x80) = op;
+            if (op != g->_opacity) {
+                g->_dirtyFlags |= 4;   // dirty
+                g->_opacity = op;
+                g->_opacityPrev = op;
             }
-            reinterpret_cast<Graphics::Geometry*>(ge->geo)->Update(
-                *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
+            ge->instance->Update(elapsed);   // slot 1
         }
     }
 }
@@ -823,22 +771,20 @@ void ParticleComponent::Tick(void* time) {
 // ParticleComponent::Slot11 (0x1400531b0)
 // ============================================================
 void ParticleComponent::Slot11() {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+    ParticleDescription* desc = GetParticleDesc(this);
 
-    void* desc = GetParticleDesc(this);
-
-    ParticleComponent_Setup(this);
+    Setup();   // 0x140052480
 
     if (!desc) return;
 
-    int emitterCount = *(int*)((uintptr_t)desc + 0x30);
-    if (emitterCount <= 0) return;
+    int emitterTotal = desc->_emitterCount;
+    if (emitterTotal <= 0) return;
 
-    uint8_t* flagArray = *(uint8_t**)(selfAddr + 0x28);
+    bool* flagArray = active;
 
-    for (int i = 0; i < emitterCount; i++) {
-        if (flagArray[i] != 0) {
-            ParticleComponent_StartEmitterFade(this, i);   // 0x140053660
+    for (int i = 0; i < emitterTotal; i++) {
+        if (flagArray[i]) {
+            StartEmitterFade(i);   // 0x140053660
         }
     }
 }
@@ -849,21 +795,20 @@ void ParticleComponent::Slot11() {
 // event 2 = start with fade-in, event 3 = begin fade-out (b2 emitters only)
 // ============================================================
 void ParticleComponent::OnEvent(int eventCode) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    void* desc = GetParticleDesc(this);
+    ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) return;
-    uint8_t* emArr = *(uint8_t**)((uintptr_t)desc + 0x28);
-    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
-    int total = *(int32_t*)(s + 0x40);
+    ParticleEmitterDescription* emArr = desc->_emitters;
+    ParticleEmitterSlot* geoArr = emitters;
+    int total = emitterCount;
     if (!emArr || !geoArr) return;
 
     for (int i = 0; i < total; i++) {
-        uint8_t* elem = emArr + (size_t)i * 0x28;
-        if (elem[0x12] == 0) continue;   // b2: event-toggled emitters only
+        const ParticleEmitterDescription& elem = emArr[i];
+        if (!elem.eventToggled) continue;   // b2: event-toggled emitters only
         if (eventCode == 2) {
-            ParticleComponent_StartEmitterFade(this, i);
+            StartEmitterFade(i);   // 0x140053660
         } else if (eventCode == 3) {
-            float t1 = reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds();   // B.3.4b bridge
+            float t1 = elem.fadeTime.AsSeconds();
             geoArr[i].fadeRate = -(PC_UVScale() / t1);
         }
     }
