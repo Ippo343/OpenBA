@@ -28,6 +28,8 @@
 #include "Component/AnimalDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/Component.h"   // B.3.x W0: Component::Command by name
+#include "Component/PastureComponent.h"
+#include "Component/ComponentDescription.h"
 
 // ============================================================
 // File-local helper: PastureCalcMaxCount_Impl (FUN_140128570)
@@ -90,11 +92,11 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
     return (uint32_t)((int)(maxOcc * curOcc) / slotsPerAnimal);
 }
 
-// LEFT (B4 DLG-c): the PastureComponent's fields (+0x28 the animal type, +0x38 /
-// +0x40 the counts) and PastureCalcMaxCount_Impl (retail 0x140128570, a
-// PastureComponent member) stay raw: PastureComponent.h is block COMP-d's,
-// running beside this one. The citizen list's resource array (+0xF0 +0x120) is
-// read through GameUpdateLoop::m_citizenList (void*, GAME-a).
+// LEFT (B4 DLG-c): PastureCalcMaxCount_Impl (a second body of
+// PastureComponent::ComputeCapacity, retail 0x140128570, with two guards of the
+// tree's) stays raw; the citizen list's resource array (+0xF0 +0x120) is read
+// through GameUpdateLoop::m_citizenList (void*, GAME-a); the resource type
+// crosses SelectResourceUI's int64_t SetResource / void* GetResource (DLG-a).
 
 // ============================================================
 // PastureUI::UpdateSlider (FUN_1400b4fa0)
@@ -116,10 +118,9 @@ void PastureUI::UpdateSlider() {
     ComponentEntity* entityVal = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
     // Find PastureComponent
-    uint64_t pastureRet = 0;
-    fn_FindComponent_Pasture(entityVal, &pastureRet);
-    uintptr_t pastureComp = pastureRet;
-    if (!pastureComp) return;
+    PastureComponent* pasture = nullptr;
+    fn_FindComponent_Pasture(entityVal, &pasture);
+    if (!pasture) return;
 
     // The slider element (+0x38)
     if (!slider) return;
@@ -128,12 +129,11 @@ void PastureUI::UpdateSlider() {
     slider->_minimum = 0.0f;
 
     // Set slider max = PastureCalcMaxCount
-    uint32_t maxCount = PastureCalcMaxCount_Impl(pastureComp);
+    uint32_t maxCount = PastureCalcMaxCount_Impl((uintptr_t)pasture);
     slider->_maximum = (float)(int)maxCount;
 
-    // Set slider current = current animal count at pastureComp+0x40
-    pastureComp = pastureRet;
-    int currentCount = *(int*)(pastureComp + 0x40);
+    // Set slider current = the pasture's capacity (+0x40)
+    int currentCount = pasture->capacity;
     slider->_value = (float)currentCount;
 }
 
@@ -200,9 +200,8 @@ void PastureUI::OnUpdateLayout() {
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
-    uint64_t compBuf = 0;
-    fn_FindComponent_Pasture(entity, &compBuf);
-    uintptr_t comp = compBuf;
+    PastureComponent* comp = nullptr;
+    fn_FindComponent_Pasture(entity, &comp);
     // SA guard (retail unguarded): entity without a PastureComponent, or the
     // combo/slider elements not seated yet (Slot4 hasn't run) — bail.
     if (!comp) return;
@@ -211,7 +210,7 @@ void PastureUI::OnUpdateLayout() {
     // Enable combo only if it has items AND pasture has no animals yet
     UI::ComboElement* comboElem = static_cast<UI::ComboElement*>(internalBasePtr);
     int itemCount = comboElem->GetItemCount();
-    bool enableCombo = (itemCount > 0) && (*(int32_t*)(comp + 0x38) == 0);
+    bool enableCombo = (itemCount > 0) && (comp->animalCount == 0);
 
     // Set combo enabled/disabled via vtable[8]
     comboElem->Enable(enableCombo);   // Element slot 8 Enable
@@ -219,13 +218,13 @@ void PastureUI::OnUpdateLayout() {
     // Format current animal count → slider param 0
     UI::SliderElement* sliderElem = slider;
     {
-        System::String fmtStr = System::String::Format("%i", *(uint32_t*)(comp + 0x38));
+        System::String fmtStr = System::String::Format("%i", comp->animalCount);
         sliderElem->SetParameter(0, fmtStr);
     }
 
     // Format max animal count → slider param 1
     {
-        System::String fmtStr = System::String::Format("%i", *(uint32_t*)(comp + 0x40));
+        System::String fmtStr = System::String::Format("%i", comp->capacity);
         sliderElem->SetParameter(1, fmtStr);
     }
 }
@@ -253,24 +252,25 @@ void PastureUI::SetResource(int64_t param2) {
     }
 
     // Find PastureComponent on entity
-    uint64_t pastureComp = 0;
-    fn_FindComponent_Pasture(checkedEntity, &pastureComp);
-    if (!pastureComp) return;   // SA guard (retail unguarded)
+    PastureComponent* pasture = nullptr;
+    fn_FindComponent_Pasture(checkedEntity, &pasture);
+    if (!pasture) return;   // SA guard (retail unguarded)
 
     // If currently no resource set (comp+0x28 == 0) and new resource is valid,
     // set resource first then call initialization via vtable[14](comp, 2)
-    int64_t currentResource = *(int64_t*)(pastureComp + 0x28);
-    if (currentResource == 0 && param2 != 0) {
-        *(int64_t*)(pastureComp + 0x28) = param2;
-        reinterpret_cast<Component*>(pastureComp)->Command(2);   // B.3.x bridge (slot 14)
+    // (LEFT: the type arrives as SelectResourceUI's int64_t)
+    ComponentDescription* newType = reinterpret_cast<ComponentDescription*>(param2);
+    if (pasture->livestockType == nullptr && param2 != 0) {
+        pasture->livestockType = newType;
+        pasture->Command(2);   // slot 14
     }
 
     // Set the resource type
-    *(int64_t*)(pastureComp + 0x28) = param2;
+    pasture->livestockType = newType;
 
     // Recalculate max animal count from pasture dimensions
-    uint32_t maxCount = PastureCalcMaxCount_Impl(pastureComp);
-    *(int32_t*)(pastureComp + 0x40) = (int32_t)maxCount;
+    uint32_t maxCount = PastureCalcMaxCount_Impl((uintptr_t)pasture);
+    pasture->capacity = (int32_t)maxCount;
 
     // Update slider display
     UpdateSlider();
@@ -295,12 +295,13 @@ void* PastureUI::GetResource(void* param2) {
     }
 
     // Find PastureComponent on entity
-    uint64_t pastureComp = 0;
-    fn_FindComponent_Pasture(checkedEntity, &pastureComp);
-    if (!pastureComp) { *(uint64_t*)param2 = 0; return param2; }  // SA guard
+    PastureComponent* pasture = nullptr;
+    fn_FindComponent_Pasture(checkedEntity, &pasture);
+    // (LEFT: `out` is SelectResourceUI's void* retslot)
+    if (!pasture) { *(ComponentDescription**)param2 = nullptr; return param2; }  // SA guard
 
     // Return resource type at comp+0x28
-    *(uint64_t*)param2 = *(uint64_t*)(pastureComp + 0x28);
+    *(ComponentDescription**)param2 = pasture->livestockType;
     return param2;
 }
 
@@ -338,11 +339,11 @@ void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
         ComponentEntity* checkedEntity = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
-        uint64_t pastureComp = 0;
-        fn_FindComponent_Pasture(checkedEntity, &pastureComp);
+        PastureComponent* pasture = nullptr;
+        fn_FindComponent_Pasture(checkedEntity, &pasture);
 
         float sliderValue = slider->_value;
-        *(int32_t*)(pastureComp + 0x40) = (int32_t)sliderValue;
+        pasture->capacity = (int32_t)sliderValue;
     }
 }
 
