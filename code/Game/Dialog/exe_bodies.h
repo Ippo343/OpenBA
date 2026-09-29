@@ -83,8 +83,9 @@ extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterfac
 // B.4 DLG-d: the item sort (0x1400213f0) is file-local to storageui.cpp, typed.
 
 // ---- toolbar_utility_helpers.cpp
-extern "C" void ToolbarUtility_FindDialogByControllerType_0270(void* , void* retBuf, uint64_t param);  // 0x140100270
-extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData);  // 0x140014890
+// B.4 DLG-d: 0x140100270 is PlayerToolManager::FindUtilityDialog (Game/PlayerToolManager.h).
+extern "C" void ToolbarUtility_FindDialogByControllerType_0270(void* , void* retBuf, uint64_t param);  // 0x140100270 B4 FORWARD: Tutorial/tutorial_wave.cpp
+extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData);  // 0x140014890 B4 FORWARD: townhallui.cpp (DLG-e) and ToggleUtilityDialog
 
 // ---- toolbardialog.cpp
 // B.4 DLG-d: 0x140102b60 / 0x140101a80 / 0x140101ce0 / 0x140103040 are

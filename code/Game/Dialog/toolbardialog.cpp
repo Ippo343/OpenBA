@@ -505,10 +505,7 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
     const void* key = description;
 
     // Step 1: Check if a dialog with this controller type is already open
-    // LEFT: 0x140100270's declaration takes the key as uint64_t (1 outside caller).
-    UI::DialogInstance* existingDialog = nullptr;
-    ToolbarUtility_FindDialogByControllerType_0270(this, &existingDialog,
-                                                   reinterpret_cast<uint64_t>(description));   // 0x140100270
+    UI::DialogInstance* existingDialog = FindUtilityDialog(description);   // 0x140100270
 
     if (existingDialog != nullptr) {
         // Dialog is already open — close it

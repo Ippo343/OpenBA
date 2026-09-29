@@ -150,6 +150,11 @@ public:
     // 0x140103040: move the camera onto the entity, mark the dialog's EntityUI
     // as following it, and select it with the EditTool.
     void CenterOnEntity(UI::DialogInstance* const* dialog, ComponentEntity* const* entity);
+    // 0x140100270: the open dialog whose ToolUI shows `description`, or null
+    // (retail: an InternalPtr through the hidden slot). Body in
+    // Dialog/toolbar_utility_helpers.cpp.
+    // Retail passes the manager in RCX and never reads it: static here.
+    static UI::DialogInstance* FindUtilityDialog(const ComponentDescription* description);
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");
