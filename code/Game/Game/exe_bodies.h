@@ -31,6 +31,8 @@
 #include "object/External.h"    // Object::ExternalPtr<UI::Cursor>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameSettings.h"   // g_gameSettings's struct
+class Minimap;             // Game/Minimap.h (Game_ImageCaptureDtor)
+class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 // ---- citizen_names.cpp
@@ -73,8 +75,8 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 void Game_DestroyStringArray18(void* arrayHeader);  // 0x14001b030
 void Game_EventNotifierCleanup(void* arrayHeader);  // 0x14000a8a0
 void Game_MusicPlayerDtor(void* self);  // 0x140018220
-void Game_ImageCaptureDtor(void* self);  // 0x1400a4fc0
-void Game_WeatherDtor(void* self);  // 0x140093eb0
+void Game_ImageCaptureDtor(Minimap* self);  // 0x1400a4fc0
+void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
 // ---- game_settings_persist.cpp
 extern "C" void GameSettings_Load(GameSettings* settings);  // 0x140098b60
