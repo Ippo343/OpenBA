@@ -15,6 +15,9 @@
 #include "Component/storagecomponent_funcs.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/StorageDescription.h"
+#include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Component/coll_bridge.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
@@ -47,15 +50,15 @@ static uint32_t EffTid_StorageDescription() {
 // ============================================================
 // Helper: Get StorageDescription sibling component
 // ============================================================
-static void* GetStorageDescription(StorageComponent* self) {
+static StorageDescription* GetStorageDescription(StorageComponent* self) {
     uint32_t tid = EffTid_StorageDescription();
     if (tid == 0) return nullptr;
 
-    void* obj = self->_description;
+    Description* obj = self->_description;
     if (!obj) return nullptr;
 
     bool derived = Object::IsDerivedFromNullSafe(obj, tid);
-    return derived ? obj : nullptr;
+    return derived ? static_cast<StorageDescription*>(obj) : nullptr;
 }
 
 // ============================================================
@@ -71,19 +74,20 @@ static void* GetStorageDescription(StorageComponent* self) {
 // item with a non-null material at +0x50) called a null fn ptr and died
 // at BuildRoad_Execute+0x7a7 (2026-07-26).
 
-int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity) {
-    if (!storageComp) return 0;
-
-    uintptr_t sc = (uintptr_t)storageComp;
-    int slotCount = *(int*)(sc + 0x30);
-    uintptr_t slotArray = *(uintptr_t*)(sc + 0x28);
-
+int StorageComponent::QueryAvailable(const ComponentDescription* material) const {
     for (int i = 0; i < slotCount; i++) {
-        uintptr_t row = slotArray + (uintptr_t)i * 0x10;
-        if (*(int64_t*)row == materialEntity)
-            return *(int*)(row + 0x08) - *(int*)(row + 0x0c);
+        const Item& row = storageSlots[i];
+        if (row._resource == material)
+            return row._count - row._reserve;
     }
     return 0;
+}
+
+// B4 FORWARD: 1 outside caller (Work/buildroad.cpp). The null test is the tree's.
+int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity) {
+    if (!storageComp) return 0;
+    return reinterpret_cast<StorageComponent*>(storageComp)->QueryAvailable(
+        reinterpret_cast<const ComponentDescription*>(materialEntity));
 }
 
 // ============================================================
@@ -173,39 +177,33 @@ void StorageComponent::Persist(void* stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // Create local IO::Serializer (version 1)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (Persist takes void*)
 
-    // Serialize slot count
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-    int slotCount = *(int*)(selfAddr + 0x30);
+    // Serialize the slot count through a local
     int serSlotCount = slotCount;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(serSlotCount, nullptr);   // B.3.4 bridge
+    ser.Serialize(serSlotCount, nullptr);
 
     // If loading (encoding direction == 0), resize the slot array
-    int encodingDir = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    int encodingDir = static_cast<int>(ser.GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
     if (encodingDir == 0) {
-        // B.3.2 bridge: FUN_14000f090 is Collection::Array<Bytes<0x10,8>>::SetSize(n)
-        GameColl::AsArray<GameColl::Bytes<0x10, 8>>((void*)(selfAddr + 0x28))
-            .SetSize(serSlotCount);
+        // B.3.2 bridge: FUN_14000f090 is Collection::Array<Item>::SetSize(n)
+        // LEFT: the item array is the raw triple (H5).
+        GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storageSlots).SetSize(serSlotCount);
     }
 
-    // Iterate storage slots (each 0x10 bytes: [ptr(8), int(4), int(4)])
+    // Iterate the items: _count, _reserve, then the ExternalPtr
     if (serSlotCount > 0) {
-        uintptr_t slotBase = *(uintptr_t*)(selfAddr + 0x28);
+        Item* slotBase = storageSlots;
         for (int i = 0; i < serSlotCount; i++) {
-            uintptr_t slotEntry = slotBase + (uintptr_t)i * 0x10;
-            // Serialize two int fields at slot+0x08 and slot+0x0C
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x08), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(slotEntry + 0x0C), nullptr);   // B.3.4 bridge
-            // Serialize External reference at slot+0x00
-            Reimpl_ExternalPtr_Serialize_StringTable((void*)slotEntry, serializer);   // 0x140002340
+            Item& slotEntry = slotBase[i];
+            ser.Serialize(slotEntry._count, nullptr);
+            ser.Serialize(slotEntry._reserve, nullptr);
+            Reimpl_ExternalPtr_Serialize_StringTable(&slotEntry._resource, &ser);   // 0x140002340
         }
     }
 
-    // Serialize field38 (int at self+0x38)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x38), nullptr);   // B.3.4 bridge
+    // Serialize the capacity (+0x38)
+    ser.Serialize(capacity, nullptr);
 
     // Serialize field3c through the object at Serializer+0x08 — NOT the Stream at
     // Serializer+0x00. IO::Serializer::Serializer (Runtime 0x1800b9960) lays it out as
@@ -226,20 +224,17 @@ void StorageComponent::Persist(void* stream) {
     // 0x00002000076e40be -> 0x0000200000000000 (low dword zeroed = an 8-byte write).
     //
     // Third arg mirrors retail's XOR R8D,R8D.
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(selfAddr + 0x3c), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    ser.Serialize(rawMaterialFlags, nullptr);   // 0x98 = uint door
 
 
     // Version 0 migration: if loading and version==0, copy from StorageDescription
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
     if (version == 0 && encodingDir == 0) {
-        void* storageDesc = GetStorageDescription(this);
+        StorageDescription* storageDesc = GetStorageDescription(this);
         if (storageDesc) {
-            *(uint32_t*)(selfAddr + 0x3c) = *(uint32_t*)((uintptr_t)storageDesc + 0x28);
+            rawMaterialFlags = storageDesc->_rawMaterialFlags;
         }
     }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // [4] 0x14012c720 — the class's own `RET` body.
 void StorageComponent::Startup() {}
@@ -263,60 +258,54 @@ void StorageComponent::Startup() {}
 
 void StorageComponent::OnAdded() {
     // Get StorageDescription
-    void* storageDesc = GetStorageDescription(this);
+    StorageDescription* storageDesc = GetStorageDescription(this);
     if (!storageDesc) return;
-
-    uintptr_t descAddr = (uintptr_t)storageDesc;
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
     // Check if storage is defined (byte at +0x21). NOTE: this early return leaves +0x38
     // (max volume capacity) at its ctor ZERO, and a zero capacity makes CanAdd refuse
     // everything and makes PickupStoredRawMaterial compute a requested count of 0 — which
     // deposits a {resType, 0} stack that hangs the spill loop. Report the exit, don't
     // assume it: an empty log line here would otherwise read as "capacity was set fine".
-    if (*(uint8_t*)(descAddr + 0x21) == 0) {
+    if (!storageDesc->_flagB) {
         return;
     }
 
     // Compute tile multiplier
     int tileArea = 1;
-    if (*(uint8_t*)(descAddr + 0x20) != 0) {
+    if (storageDesc->_flagA) {
         // Find MapComponent on entity, get tile dimensions
         {
-            uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
-            uintptr_t mapCompBuf[2];
-            FloorComponent_FindResData((void*)entity, (void*)mapCompBuf);   // 0x140004680
-            uintptr_t mapComp = mapCompBuf[0];
+            MapComponent* mapComp = _entity->FindComponent<MapComponent>();   // 0x140004680
             if (mapComp) {
-                int16_t w = *(int16_t*)(mapComp + 0x2c);
-                int16_t h = *(int16_t*)(mapComp + 0x2e);
+                int16_t w = mapComp->tileX1;
+                int16_t h = mapComp->tileY1;
                 tileArea = (int)w * (int)h;
             }
         }
     }
 
     // Read template data
-    int maxPerSlot = *(int*)(descAddr + 0x24);
-    uint32_t defaultType = *(uint32_t*)(descAddr + 0x28);
+    int maxPerSlot = storageDesc->_pickupValue;
+    uint32_t defaultType = storageDesc->_rawMaterialFlags;
 
     // Resize slot array to 0 (clear existing)
-    // B.3.2 bridge: FUN_14000f090 is Collection::Array<Bytes<0x10,8>>::SetSize(n)
-    GameColl::AsArray<GameColl::Bytes<0x10, 8>>((void*)(selfAddr + 0x28)).SetSize(0);
+    // B.3.2 bridge: FUN_14000f090 is Collection::Array<Item>::SetSize(n)
+    // LEFT: the item array is the raw triple (H5).
+    GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storageSlots).SetSize(0);
 
     // Set computed values
-    *(int*)(selfAddr + 0x38) = maxPerSlot * tileArea;
-    *(uint32_t*)(selfAddr + 0x3c) = defaultType;
+    capacity = maxPerSlot * tileArea;
+    rawMaterialFlags = defaultType;
 
     // Iterate template storage entries
-    uintptr_t templateArray = *(uintptr_t*)(descAddr + 0x30);
-    int templateCount = *(int*)(descAddr + 0x38);
+    StorageDescription::Volume* templateArray = storageDesc->_volumes;
+    int templateCount = storageDesc->_volumeCount;
 
     if (templateCount > 0) {
         for (int i = 0; i < templateCount; i++) {
-            uintptr_t entry = templateArray + (uintptr_t)i * 0x10;
-            uintptr_t materialType = *(uintptr_t*)entry;
-            int count = *(int*)(entry + 8);
-            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(this), static_cast<int64_t>(materialType), count);   // 0x14012d000
+            const StorageDescription::Volume& entry = templateArray[i];
+            // LEFT: ActRm_StorageAdd_d000 takes the storage and the item as integers (ACT-b's declaration).
+            ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(this), reinterpret_cast<int64_t>(entry._resource), entry._count);   // 0x14012d000
         }
     }
 }
@@ -336,34 +325,37 @@ void* StorageComponent::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_TYPE(StorageComponent, "Component")
 
-// moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
-int fn_StorageComponent_QueryCount(void* storageComp) {
-    uintptr_t sc = (uintptr_t)storageComp;
-    int slotCount = *(int*)(sc + 0x30);
+// StorageComponent::QueryCount (0x14012cf10): the stored weight — every item's
+// count times its RawMaterialDescription::_weight (+0x48).
+// (moved from engine_funcs.h, ENDGAME B.3.9 TR)
+int StorageComponent::QueryCount() const {
     int total = 0;
-    uintptr_t itemArray = *(uintptr_t*)(sc + 0x28);
     for (int i = 0; i < slotCount; i++) {
-        uintptr_t slotBase = itemArray + (uintptr_t)i * 0x10;
-        uintptr_t item = *(uintptr_t*)slotBase;
-        int itemQty = *(int*)(slotBase + 0x8);
-        // Scan item's component array for ResourceType
-        int compCount = *(int*)(item + 0x30);
-        uintptr_t compArray = *(uintptr_t*)(item + 0x28);
-        void* resourceType = nullptr;
+        const Item& slot = storageSlots[i];
+        const ComponentDescription* item = slot._resource;
+        int itemQty = slot._count;
+        // Scan the item's sub-descriptions for its RawMaterialDescription
+        int compCount = item->_subDescCount;
+        const RawMaterialDescription* resourceType = nullptr;
         for (int j = 0; j < compCount; j++) {
-            void* comp = *(void**)(compArray + (uintptr_t)j * 8);
-            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+            Description* comp = item->_subDescs[j];
+            uint32_t typeId = comp->Type();   // slot 2
             if (typeId == RawMaterialDescription::TypeId()) {
                 if (Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
-                    resourceType = comp;
+                    resourceType = static_cast<const RawMaterialDescription*>(comp);
                 }
                 break;
             }
         }
         if (resourceType) {
-            int quantity = *(int*)((uintptr_t)resourceType + 0x48);
+            int quantity = resourceType->_weight;
             total += quantity * itemQty;
         }
     }
     return total;
+}
+
+// B4 FORWARD: outside callers in ~25 files (Action, Component, Dialog, Entity, Game, Work).
+int fn_StorageComponent_QueryCount(void* storageComp) {
+    return reinterpret_cast<StorageComponent*>(storageComp)->QueryCount();
 }

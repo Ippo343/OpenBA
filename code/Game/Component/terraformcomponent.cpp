@@ -25,9 +25,14 @@
 #include <cstdio>
 #include <new>
 #include <cstring>
-#include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "Action/exe_bodies.h"      // Pf_RegionDirty4_b150, Pf_AvlInsertA_a4f0, Pf_FineCellDirty_a8c90,
-                                    // Pf_EnqueueCmd2_a6fe0, ActCNR_FindComponent_3f60
+                                    // Pf_EnqueueCmd2_a6fe0
+#include "Component/TerraformComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/MapComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/WorldGeometry.h"
+#include "Game/Map.h"
 #include "Game/exe_constants.h"
 
 // ============================================================
@@ -50,23 +55,23 @@ static float TF_RdataF32(uint32_t bits) { float f; memcpy(&f, &bits, sizeof f); 
 // ============================================================
 // Reimpl of FUN_1400ab150 (CitizenAI_impl_b150): mark the region cell(s) that
 // contain world tile (x,y) dirty so the region/pathing graph is rebuilt there.
-// Region cell size is at terrainGrid+0xc8; grid dimension = (terrainGrid+0xc0)/cell.
-// When (x,y) sits on a cell boundary the adjacent cells are flagged too. The region
-// manager is at terrainGrid+0xe8. Faithful 1:1 port; closure = CitizenAI_impl_a4f0
-// (0x14001a4f0, registered).
-void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
+// The chunk size is WorldGeometry::_chunkSize; grid dimension = _gridSize / chunk.
+// When (x,y) sits on a chunk boundary the adjacent chunks are flagged too. The
+// dirty tree is at +0xE8. A second port of the body Pf_RegionDirty4_b150
+// (action_pf_road.cpp) that differs by the zero-chunk guard below (the tree's):
+// kept, listed.
+void TerraformComponent_RegionRecalc(WorldGeometry* terrain, int x, int y) {
     // QuarryComponent calls this directly. A dropped dirty mark means the carve lands
     // in the int16 heightmap but the terrain VB never refreshes, so no pit shows and
     // the decal (which follows the carved, lower heights) is fully depth-rejected
     // behind the stale terrain.
-    int64_t grid = (int64_t)terrainGridV;
-    int cell = *(int*)(grid + 0xc8);
+    int cell = terrain->_chunkSize;
     if (cell == 0) return;
     int gx = x / cell;
     int gy = y / cell;
-    int dim = *(int*)(grid + 0xc0) / cell;
+    int dim = terrain->_gridSize / cell;
 
-    int64_t* regionMgr = (int64_t*)(grid + 0xe8);
+    int64_t* regionMgr = reinterpret_cast<int64_t*>(&terrain->_dirtyTreeRoot);   // Pf_AvlInsertA_a4f0 takes the root slot as int64_t*
     uint64_t scratch = 0;
     uint32_t cellIdx;
 
@@ -88,18 +93,18 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
 
 
 // ============================================================
-// Terrain-deformation driver (previously unported)
+// Terrain-deformation driver
 // ============================================================
 // Retail dispatch chain for the tunnel mouth:
 //
 //   TerraformComponent vtable +0x60 (slot 12, 0x140057310) — the per-component
 //   MESSAGE slot — fires on msgId == 4 (build complete) and runs three passes:
 //
-//     1. MeshPass(self, ceiling=true)   0x140056b50 with param_2 = 1
-//     2. MeshPass(self, ceiling=false)  0x140056b50 with param_2 = 0
-//     3. FootprintPass(self)            0x140057120
+//     1. ApplyMesh(ceiling=true)    0x140056b50 with param_2 = 1
+//     2. ApplyMesh(ceiling=false)   0x140056b50 with param_2 = 0
+//     3. ApplyFootprint()           0x140057120
 //
-// MeshPass is the deformation itself. It walks every vertex of a Picking::PickingMesh
+// ApplyMesh is the deformation itself. It walks every vertex of a Picking::PickingMesh
 // carried by the TerraformDescription, transforms it into world space by the owner's
 // ModelComponent transform, and writes the terrain HEIGHTMAP under it. That carve is
 // what reads on screen as the dark recess at a tunnel entrance — there is no separate
@@ -107,88 +112,68 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
 // DecalComponent's Terrain/TiledDecals/TunnelMaterial, a different, already-live path.)
 //
 // The two mesh/mask pairs on TerraformDescription (from Template/TunnelStart.rsc):
-//     desc +0x20 = _floorMesh      desc +0x30 = _floorModifyBits
-//     desc +0x28 = _ceilingMesh    desc +0x34 = _ceilingModifyBits
+//     _floorMesh / _floorModifyBits      _ceilingMesh / _ceilingModifyBits
 // Floor pass lowers terrain where the mesh sits BELOW it (the trench the road runs in);
 // ceiling pass raises terrain where the mesh sits ABOVE it (the hill over the mouth).
 // Only the ceiling pass records an undo entry — faithful to retail.
-
-#include <cstring>
-#include <cstdlib>
-
-typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
-
-// The two component finders (entity, outIbp), by retail address.
-static void TF_FindModel(void* e, void* out) { ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(e), out); }  // 0x140003f60
-static void TF_FindMap(void* e, void* out)   { FloorComponent_FindResData(e, out); }                                 // 0x140004680
+//
 // 0x14009f3e0 Reimpl_MapGetTerrainPos samples the terrain; slot 0x140152a98 is
 // ?IsDerivedFrom@Base@Object@@, called on the object. Import slots 0x140152b60 /
 // 0x140152b68 are System::MemoryAllocator::MemAlloc / MemFree (the static pair).
 // .rdata 0x140172100 == 0.25f (vertex bias), 0x14017214c == 1.0f (g_fUVScale, cell step)
 
-
-// Resolve the component's owning entity (component +0x10 is an InternalBasePtr).
-static void* TerraformOwnerEntity(uintptr_t self) {
-    return *reinterpret_cast<void**>(self + 0x10);
-}
-
-// Both finders return their result through an InternalBasePtr out-param.
-static void* TerraformFindComp(fn_FindCompOut_t finder, void* entity) {
-    if (!entity) return nullptr;
-    uintptr_t out[2] = {0, 0};
-    finder(entity, out);
-    if (!out[0]) return nullptr;
-    return reinterpret_cast<void*>(out[0]);
-}
-
 // Array push_back, byte-faithful to the inlined grow in 0x140056b50 / 0x140057120:
 // growth is newCount*3 once the array is non-empty, exact-fit on the first element.
-static void TerraformArrayPush(void** pData, int32_t* pCount, int32_t* pCap,
-                               const void* elem, size_t elemSize) {
-    const int oldCount = *pCount;
+template <typename T>
+static void TerraformArrayPush(T*& data, int32_t& count, int32_t& cap, const T& elem) {
+    const int oldCount = count;
     const int newCount = oldCount + 1;
-    void* oldData = *pData;
+    T* oldData = data;
 
-    *pCount = newCount;
-    if (*pCap < newCount) {
-        *pCap = (oldCount != 0) ? newCount * 3 : newCount;
-        *pData = System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(*pCap) * static_cast<uint64_t>(elemSize), 4);
+    count = newCount;
+    if (cap < newCount) {
+        cap = (oldCount != 0) ? newCount * 3 : newCount;
+        data = static_cast<T*>(System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(cap) * static_cast<uint64_t>(sizeof(T)), 4));
     }
     // Buffer reused -> only the new tail element is written; reallocated -> copy all.
-    int i = (oldData == *pData) ? oldCount : 0;
+    int i = (oldData == data) ? oldCount : 0;
     for (; i < newCount; ++i) {
-        uint8_t* dst = reinterpret_cast<uint8_t*>(*pData) + static_cast<size_t>(i) * elemSize;
-        const uint8_t* src = (i < oldCount)
-            ? reinterpret_cast<const uint8_t*>(oldData) + static_cast<size_t>(i) * elemSize
-            : reinterpret_cast<const uint8_t*>(elem);
-        memcpy(dst, src, elemSize);
+        data[i] = (i < oldCount) ? oldData[i] : elem;
     }
-    if (oldData != *pData) System::MemoryAllocator::MemFree(oldData);
+    if (oldData != data) System::MemoryAllocator::MemFree(oldData);
+}
+
+// The terrain-type byte of map cell `idx` (MapCell::terrainType, +0x29).
+static uint8_t* TerraformCellTypeAt(Map* map, int64_t idx) {
+    return &map->cells[idx].terrainType;
 }
 
 // Terrain type byte of the map cell containing world point (wx, wy). Retail truncates
 // toward zero (CVTTSS2SI) after biasing by half the grid, then clamps to the grid.
-static uint8_t TerraformCellType(int* tileGrid, float wx, float wy) {
-    const int gw = *tileGrid;
+static uint8_t TerraformCellType(Map* map, float wx, float wy) {
+    const int gw = map->size;
     int cx = static_cast<int>(wx + static_cast<float>(gw >> 1));
     int cy = static_cast<int>(wy + static_cast<float>(gw >> 1));
     if (cx < 0) cx = 0;
     if (cx >= gw) cx = gw - 1;
     if (cy < 0) cy = 0;
     if (cy >= gw) cy = gw - 1;
-    const uintptr_t tileData = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(tileGrid) + 0x80);
     const int64_t idx = static_cast<int64_t>(gw) * cy + cx;
-    return *reinterpret_cast<uint8_t*>(tileData + 0x29 + idx * 0x30);
+    return *TerraformCellTypeAt(map, idx);
+}
+
+// The terrain heightmap sample at (mapX, mapY): WorldGeometry's +0xD8 int16 array,
+// row stride +0xD0.
+static int16_t& TerraformHeightAt(WorldGeometry* terrain, int mapX, int mapY) {
+    int16_t* heights = reinterpret_cast<int16_t*>(terrain->_arrayD8);   // LEFT: WorldGeometry::_arrayD8 is void* (its header)
+    return heights[static_cast<int64_t>(terrain->_fieldD0) * mapY + mapX];
 }
 
 // ------------------------------------------------------------
 // 0x140056b50 — one heightmap pass over a TerraformDescription picking mesh.
 // ------------------------------------------------------------
-void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
-    const uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
-
+void TerraformComponent::ApplyMesh(bool ceiling) {
     // Every way this pass can silently do nothing is reported once. A deformation that
     // does not happen is invisible in a log otherwise, and the failure modes here are all
     // "a pointer or type id resolved to zero" — the exact class of bug that reads as
@@ -197,40 +182,36 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
         static int n = 0;
         if (n < 8) { ++n;
             fprintf(stderr, "[Terraform] MeshPass(%s) SKIPPED self=%p — %s\n",
-                    ceiling ? "ceiling" : "floor", reinterpret_cast<void*>(self), why);
+                    ceiling ? "ceiling" : "floor", static_cast<void*>(this), why);
             fflush(stderr);
         }
     };
 
-    // desc = component +0x18, accepted only if it really is a TerraformDescription.
+    // The description, accepted only if it really is a TerraformDescription.
     // Retail derefs the description unguarded (it is always there); the checks below are
     // OUR resolution failures, not retail's, which is why they bail rather than fault.
-    void* descRaw = *reinterpret_cast<void**>(selfA + 0x18);
+    Description* descRaw = _description;
     if (!descRaw) { bail("component +0x18 description is null"); return; }
-    if (!reinterpret_cast<const Object::Base*>(descRaw)
-             ->IsDerivedFrom(TerraformDescription::TypeId())) {   // B.3.x bridge
+    if (!descRaw->IsDerivedFrom(TerraformDescription::TypeId())) {
         bail("description is not a TerraformDescription"); return;
     }
-    void* desc = descRaw;
+    TerraformDescription* desc = static_cast<TerraformDescription*>(descRaw);
 
-    // The owner's ModelComponent carries the placed transform at +0x148.
-    void* model = TerraformFindComp(TF_FindModel, TerraformOwnerEntity(selfA));
+    // The owner's ModelComponent carries the placed transform (FindComponent 0x140003f60).
+    ModelComponent* model = _entity ? _entity->FindComponent<ModelComponent>() : nullptr;
     if (!model) { bail("owner has no ModelComponent (finder 0x140003f60 returned null)"); return; }
     // Retail copy-constructs a Transform on the stack (??0Transform@Math@@QEAA@AEBV01@@Z,
-    // slot 0x140151418) from the ModelComponent's +0x148.
-    const Math::Transform xform(*reinterpret_cast<const Math::Transform*>(
-        reinterpret_cast<uintptr_t>(model) + 0x148));   // B.3.1 bridge
+    // slot 0x140151418) from the ModelComponent's transform.
+    const Math::Transform xform(model->transform);
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    const uintptr_t terrainGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0x110);
-    int* tileGrid = *reinterpret_cast<int**>(gameWorld + 0xF8);
-    if (!terrainGrid || !tileGrid) { bail("gameWorld terrain/tile grid null"); return; }
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    WorldGeometry* terrain = gameWorld->m_worldGeometry;
+    Map* map = gameWorld->m_game;
+    if (!terrain || !map) { bail("gameWorld terrain/tile grid null"); return; }
 
-    void* mesh = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(desc) + (ceiling ? 0x28 : 0x20));
-    const uint32_t modifyBits = *reinterpret_cast<uint32_t*>(
-        reinterpret_cast<uintptr_t>(desc) + (ceiling ? 0x34 : 0x30));
+    const Picking::PickingMesh* mesh = ceiling ? desc->_ceilingMesh : desc->_floorMesh;
+    const uint32_t modifyBits = ceiling ? desc->_ceilingModifyBits : desc->_floorModifyBits;
     if (!mesh) { bail(ceiling ? "desc+0x28 _ceilingMesh is null" : "desc+0x20 _floorMesh is null"); return; }
 
     const float bias        = kRdata_140172100;
@@ -240,30 +221,24 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
 
     int applied = 0;
     // Picking::PickingMesh::Vertices (import slot 0x140151478) — a reference return.
-    void* verts = const_cast<void*>(static_cast<const void*>(
-        &reinterpret_cast<const Picking::PickingMesh*>(mesh)->Vertices(0)));   // B.3.7 bridge
-    const int vertCount = verts
-        ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(verts) + 8) : 0;
+    const int vertCount = mesh->Vertices(0).GetSize();
 
     for (int i = 0; i < vertCount; ++i) {
         // Re-query per iteration exactly as retail does.
-        void* arr = const_cast<void*>(static_cast<const void*>(
-            &reinterpret_cast<const Picking::PickingMesh*>(mesh)->Vertices(0)));   // B.3.7 bridge
-        if (!arr) break;
-        const uint8_t* data = *reinterpret_cast<const uint8_t**>(arr);
-        const void* localVtx = data + static_cast<size_t>(i) * 0xC;
+        const ::Vector3& localVtx = mesh->Vertices(0)[i];
 
-        // Transform::operator*(const Vector3&) — slot 0x140151470.
+        // Transform::operator*(const Vector3&) — slot 0x140151470. LEFT: the picking
+        // mesh's element is the global engine Vector3, Math::Vector3's layout twin.
         const Math::Vector3 world =
-            xform * *reinterpret_cast<const Math::Vector3*>(localVtx);   // B.3.1 bridge
+            xform * *reinterpret_cast<const Math::Vector3*>(&localVtx);
 
         // p = transformed vertex, nudged a quarter cell so it lands inside a cell
         // rather than exactly on the shared corner.
         const float p[3] = { world.x + bias, world.y + bias, world.z + 0.0f };
 
         // Original terrain point under p: (x, y, currentHeight). This is the undo record.
-        float original[3] = {0.0f, 0.0f, 0.0f};
-        Reimpl_MapGetTerrainPos(tileGrid, original, const_cast<float*>(p), '\0', nullptr);   // 0x14009f3e0
+        Math::Vector3 original(0.0f, 0.0f, 0.0f);
+        Reimpl_MapGetTerrainPos(map, &original.x, const_cast<float*>(p), '\0', nullptr);   // 0x14009f3e0
 
         // Every cell sharing this heightmap vertex must be a terrain type the mask allows.
         // NOTE: retail samples (x,y), (x-1,y), (x-1,y-1) and then (x-1,y) AGAIN — the
@@ -272,32 +247,28 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
         // identical to the second sample's 0x140056d3d. Replicated as-is: "fixing" it
         // would widen the mask test and deform cells retail leaves alone.
         uint32_t bits = 0;
-        bits |= 1u << (TerraformCellType(tileGrid, p[0],            p[1])            & 0x1F);
-        bits |= 1u << (TerraformCellType(tileGrid, p[0] - cellStep, p[1])            & 0x1F);
-        bits |= 1u << (TerraformCellType(tileGrid, p[0] - cellStep, p[1] - cellStep) & 0x1F);
-        bits |= 1u << (TerraformCellType(tileGrid, p[0] - cellStep, p[1])            & 0x1F);
+        bits |= 1u << (TerraformCellType(map, p[0],            p[1])            & 0x1F);
+        bits |= 1u << (TerraformCellType(map, p[0] - cellStep, p[1])            & 0x1F);
+        bits |= 1u << (TerraformCellType(map, p[0] - cellStep, p[1] - cellStep) & 0x1F);
+        bits |= 1u << (TerraformCellType(map, p[0] - cellStep, p[1])            & 0x1F);
         if ((notMask & bits) != 0) continue;
 
         // Ceiling raises terrain up to the mesh; floor lowers terrain down to it.
-        const bool apply = ceiling ? (original[2] < p[2]) : (p[2] < original[2]);
+        const bool apply = ceiling ? (original.z < p[2]) : (p[2] < original.z);
         if (!apply) continue;
 
-        const float half = static_cast<float>(*reinterpret_cast<int*>(terrainGrid + 0xC0) >> 1);
+        const float half = static_cast<float>(terrain->_gridSize >> 1);
         const int mapX = static_cast<int>(p[0] + half);
         const int mapY = static_cast<int>(p[1] + half);
 
-        const uintptr_t heightArray = *reinterpret_cast<uintptr_t*>(terrainGrid + 0xD8);
-        const int stride = *reinterpret_cast<int*>(terrainGrid + 0xD0);
-        *reinterpret_cast<int16_t*>(heightArray +
-            (static_cast<int64_t>(stride) * mapY + mapX) * 2) =
+        TerraformHeightAt(terrain, mapX, mapY) =
             static_cast<int16_t>(static_cast<int>(p[2] * heightScale));
 
-        Pf_RegionDirty4_b150(static_cast<int64_t>(terrainGrid), mapX, mapY);   // 0x1400ab150
+        Pf_RegionDirty4_b150(reinterpret_cast<int64_t>(terrain), mapX, mapY);   // 0x1400ab150
         ++applied;
 
         if (ceiling) {
-            TerraformArrayPush(&self->heightRecord, &self->heightCount, &self->heightCap,
-                               original, 0xC);
+            TerraformArrayPush(heightRecord, heightCount, heightCap, original);
         }
     }
 
@@ -308,45 +279,36 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
 // Over the owner's MapComponent footprint rect, every cell currently of terrain type
 // 10 becomes type 6, and its index is recorded so OnRemove can put it back.
 // ------------------------------------------------------------
-void TerraformComponent_FootprintPass(TerraformComponent* self) {
-    const uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
-
-    void* mapComp = TerraformFindComp(TF_FindMap, TerraformOwnerEntity(selfA));
+void TerraformComponent::ApplyFootprint() {
+    MapComponent* mapComp = _entity ? _entity->FindComponent<MapComponent>() : nullptr;   // 0x140004680
     if (!mapComp) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    int* tileGrid = *reinterpret_cast<int**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF8);
-    if (!tileGrid) return;
+    Map* map = GameUpdateLoop::_singleton->m_game;
+    if (!map) return;
 
-    const uintptr_t m = reinterpret_cast<uintptr_t>(mapComp);
-    const int x0 = *reinterpret_cast<int16_t*>(m + 0x28);
-    const int y0 = *reinterpret_cast<int16_t*>(m + 0x2A);
-    const int w  = *reinterpret_cast<int16_t*>(m + 0x2C);
-    const int h  = *reinterpret_cast<int16_t*>(m + 0x2E);
+    const int x0 = mapComp->tileX0;
+    const int y0 = mapComp->tileY0;
+    const int w  = mapComp->tileX1;
+    const int h  = mapComp->tileY1;
 
-    const uintptr_t tileData = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(tileGrid) + 0x80);
     int converted = 0;
 
     for (int y = y0; y < y0 + h; ++y) {
         for (int x = x0; x < x0 + w; ++x) {
-            const int idx = *tileGrid * y + x;
-            uint8_t* type = reinterpret_cast<uint8_t*>(
-                tileData + 0x29 + static_cast<int64_t>(idx) * 0x30);
+            const int idx = map->size * y + x;
+            uint8_t* type = TerraformCellTypeAt(map, idx);
             if (*type != 10) continue;
 
-            *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(tileGrid) + 0xA2) |= 1;
+            map->field_0xA2 |= 1;
             *type = 6;
-            Pf_FineCellDirty_a8c90(*reinterpret_cast<int64_t*>(
-                    reinterpret_cast<uintptr_t>(tileGrid) + 0x70),
-                idx % *tileGrid, idx / *tileGrid);   // 0x1400a8c90
+            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->field_0x70),
+                idx % map->size, idx / map->size);   // 0x1400a8c90
             // The door typed args 3/4 as (int, uint64_t); the body declares them void*:
             // the same register values, cast at the call.
-            Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(
-                    reinterpret_cast<uintptr_t>(tileGrid) + 0x68),
+            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->field_0x68),
                 static_cast<uint32_t>(idx), reinterpret_cast<void*>(static_cast<uintptr_t>(6)),
                 nullptr);   // 0x1400a6fe0
-            TerraformArrayPush(&self->tileRecord, &self->tileCount, &self->tileCap, &idx, 4);
+            TerraformArrayPush(tileRecord, tileCount, tileCap, static_cast<int32_t>(idx));
             ++converted;
         }
     }
@@ -365,7 +327,6 @@ void TerraformComponent_FootprintPass(TerraformComponent* self) {
 //   [12] Message             0x140057310 — applies the deformation on msg 4
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/TerraformComponent.h"
 
 // 0x140057620: Component() is the CALL 0x1401188b0; the 0x14015a880 stamp is
 // the compiler's; +0x28/+0x30/+0x38/+0x40 = 0; flags |= 3 (0x83).
@@ -378,40 +339,29 @@ TerraformComponent::TerraformComponent()
 // ============================================================
 // TerraformComponent::Persist (0x140057500)
 // ============================================================
-
-// [3] 0x140057500 — the body resolves its helpers first (slot 3 is the first
-// call into the class on a load-from-save).
 void TerraformComponent::Persist(void* stream) {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
-    // Serialize Vector3 count from +0x30
-    uint32_t count = *(uint32_t*)(selfAddr + 0x30);
-    uint32_t localCount = count;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+    // The undo record's count
+    int localCount = heightCount;
+    ser.Serialize(localCount, nullptr);
 
     // If loading, resize the Vector3 array
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x28))
-            .SetSize(static_cast<int>(localCount));
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+        GameColl::AsArray<GameColl::Vec3>(&heightRecord).SetSize(localCount);
     }
 
-    // Serialize each Vector3 (12 bytes each)
-    void* vecArray = *(void**)(selfAddr + 0x28);
-    if ((int)localCount > 0) {
-        uint8_t* pVec = (uint8_t*)vecArray;
-        for (uint32_t i = 0; i < localCount; i++) {
-            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
-            pVec += 0xC;  // sizeof(Vector3) = 12
+    // Serialize each Vector3
+    Math::Vector3* vec = heightRecord;
+    if (localCount > 0) {
+        for (uint32_t i = 0; i < static_cast<uint32_t>(localCount); i++) {
+            vec->Serialize(&ser);
+            ++vec;
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // [6] 0x1400574f0 — the class's own `RET` body.
 void TerraformComponent::OnAdded() {}
@@ -420,87 +370,73 @@ void TerraformComponent::OnAdded() {}
 // ============================================================
 // Ghidra labels this OnCreate; it is the TEARDOWN half. It REPLAYS the undo record
 // this component built at build-complete: it writes the ORIGINAL terrain heights back
-// from the Vector3 array at +0x28, and puts every recorded map cell's terrain type
-// back to 10 (the value the footprint pass converted to 6). Applying it at creation
-// would restore terrain that was never deformed; the "OnCreate/OnRemove off by one"
-// Ghidra mislabel is a known trap in this project, and the direction of the writes
-// (10 here vs 10 -> 6 in the completion pass) is what settles it.
+// from heightRecord, and puts every recorded map cell's terrain type back to 10 (the
+// value the footprint pass converted to 6). Applying it at creation would restore
+// terrain that was never deformed; the "OnCreate/OnRemove off by one" Ghidra mislabel
+// is a known trap in this project, and the direction of the writes (10 here vs
+// 10 -> 6 in the completion pass) is what settles it.
 // [7] 0x140057350
 void TerraformComponent::OnRemove() {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     float heightScale = TF_RdataF32(kRdata_140172230);
 
     // Phase 1: Apply Vector3 terrain heights
-    uintptr_t terrainGrid = *(uintptr_t*)(gameWorld + 0x110);
-    int vecCount = *(int*)(selfAddr + 0x30);
+    WorldGeometry* terrain = gameWorld->m_worldGeometry;
+    int vecCount = heightCount;
 
-    if (vecCount > 0 && terrainGrid) {
-        uintptr_t vecArray = *(uintptr_t*)(selfAddr + 0x28);
-        float halfSize = (float)(*(int*)(terrainGrid + 0xC0) >> 1);
+    if (vecCount > 0 && terrain) {
+        float halfSize = (float)(terrain->_gridSize >> 1);
 
         for (int i = 0; i < vecCount; i++) {
-            uintptr_t vec = vecArray + (uintptr_t)i * 0xC;
-            float vx = *(float*)vec;
-            float vy = *(float*)(vec + 4);
-            float vz = *(float*)(vec + 8);
+            const Math::Vector3& vec = heightRecord[i];
 
             // Offset by half grid size
-            float mapX = halfSize + vx;
-            float mapY = halfSize + vy;
+            float mapX = halfSize + vec.x;
+            float mapY = halfSize + vec.y;
 
             // Convert Z to height index
-            uint32_t heightIdx = (uint32_t)(vz * heightScale);
+            uint32_t heightIdx = (uint32_t)(vec.z * heightScale);
 
             // Write height to terrain height array
-            uintptr_t heightArray = *(uintptr_t*)(terrainGrid + 0xD8);
-            int stride = *(int*)(terrainGrid + 0xD0);
-            int64_t offset = ((int64_t)stride * (int64_t)(int)mapY + (int64_t)(int)mapX) * 2;
-            *(int16_t*)(heightArray + offset) = (int16_t)heightIdx;
+            TerraformHeightAt(terrain, (int)mapX, (int)mapY) = (int16_t)heightIdx;
 
             // Recalculate terrain at this position
-            Pf_RegionDirty4_b150(static_cast<int64_t>(terrainGrid), (int)mapX, (int)mapY);   // 0x1400ab150
+            Pf_RegionDirty4_b150(reinterpret_cast<int64_t>(terrain), (int)mapX, (int)mapY);   // 0x1400ab150
         }
     }
 
-    // Phase 2: Update tile types from tile index array at +0x38/+0x40
-    int* tileGrid = *(int**)(gameWorld + 0xF8);
-    int tileCount = *(int*)(selfAddr + 0x40);
+    // Phase 2: Update tile types from the recorded cell indices
+    Map* map = gameWorld->m_game;
+    int count = tileCount;
 
-    if (tileCount > 0 && tileGrid) {
-        uintptr_t tileArray = *(uintptr_t*)(selfAddr + 0x38);
-        int gridWidth = *tileGrid;
+    if (count > 0 && map) {
+        int gridWidth = map->size;
 
-        for (int i = 0; i < tileCount; i++) {
-            int tileIndex = *(int*)(tileArray + (uintptr_t)i * 4);
+        for (int i = 0; i < count; i++) {
+            int tileIndex = tileRecord[i];
 
             // Read current terrain type
-            uintptr_t tileData = *(uintptr_t*)((uintptr_t)tileGrid + 0x80);
-            uint8_t oldType = *(uint8_t*)(tileData + 0x29 + (int64_t)tileIndex * 0x30);
+            uint8_t* type = TerraformCellTypeAt(map, tileIndex);
+            uint8_t oldType = *type;
 
             // Update buildable flag
             bool isBuildable = ((1 << (oldType & 0x1F)) & 0x1E0) != 0;
-            *(uint8_t*)((uintptr_t)tileGrid + 0xA2) |= (isBuildable ? 1 : 0);
+            map->field_0xA2 |= (isBuildable ? 1 : 0);
 
             // Set tile type to 10 (terraformed)
-            *(uint8_t*)(tileData + 0x29 + (int64_t)tileIndex * 0x30) = 10;
+            *type = 10;
 
             // Update terrain visuals if was buildable
             if (isBuildable) {
-                uintptr_t visualPtr = *(uintptr_t*)((uintptr_t)tileGrid + 0x70);
-                Pf_FineCellDirty_a8c90(static_cast<int64_t>(visualPtr),
+                Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->field_0x70),
                                        tileIndex % gridWidth, tileIndex / gridWidth);   // 0x1400a8c90
             }
 
             // Set terrain type (0x1400a6fe0; args 3/4 cast as above)
-            {
-                uintptr_t threadPtr = *(uintptr_t*)((uintptr_t)tileGrid + 0x68);
-                Pf_EnqueueCmd2_a6fe0(static_cast<int64_t>(threadPtr), static_cast<uint32_t>(tileIndex),
-                                     reinterpret_cast<void*>(static_cast<uintptr_t>(10)), nullptr);
-            }
+            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->field_0x68), static_cast<uint32_t>(tileIndex),
+                                 reinterpret_cast<void*>(static_cast<uintptr_t>(10)), nullptr);
         }
     }
 }
@@ -511,9 +447,9 @@ void TerraformComponent::OnRemove() {
 // ------------------------------------------------------------
 void TerraformComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
-    TerraformComponent_MeshPass(this, /*ceiling=*/true);
-    TerraformComponent_MeshPass(this, /*ceiling=*/false);
-    TerraformComponent_FootprintPass(this);
+    ApplyMesh(/*ceiling=*/true);
+    ApplyMesh(/*ceiling=*/false);
+    ApplyFootprint();
 }
 
 // create 0x14000cc90: MemAlloc(0x48, 8), then the ctor.

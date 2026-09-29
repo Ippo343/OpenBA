@@ -71,7 +71,7 @@ public:
     StateController _controller;   // +0x28 the shared RP controller (D6)
     // +0x48 the panel's pause latch: state 2 enter picks 14 (paused) when it is
     // set, 13 (producing) when clear; serialized as a bool by Persist.
-    uint8_t         produceFlag;   // +0x48
+    bool            produceFlag;   // +0x48
     uint8_t         _pad49[7];     // +0x49 never written by the ctor
 
 protected:

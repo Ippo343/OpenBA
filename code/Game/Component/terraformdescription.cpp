@@ -33,18 +33,18 @@
 // the defaults.
 TerraformDescription::TerraformDescription()
     : Description(),
-      _ref20(nullptr),
-      _ref28(nullptr),
-      _u30(0),
-      _u34(0) {}
+      _floorMesh(nullptr),
+      _ceilingMesh(nullptr),
+      _floorModifyBits(0),
+      _ceilingModifyBits(0) {}
 
 // [5] 0x1400576a0: stream order as retail.
 bool TerraformDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
-    ser.Serialize(_u30, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);
-    ser.Serialize(_u34, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_floorMesh, &ser);     // 0x14000b7b0
+    ser.Serialize(_floorModifyBits, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_ceilingMesh, &ser);   // 0x14000b7b0
+    ser.Serialize(_ceilingModifyBits, nullptr);
     return true;
 }
 

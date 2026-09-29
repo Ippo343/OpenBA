@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class StorageDescription final : public Description {
     DECLARE_EXE_TYPE(StorageDescription)
 
@@ -35,6 +37,15 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140038ce0
     virtual Object::External* Construct();                                 // [9] 0x140038c20
 
+    // One `_volumes` element, 0x10 bytes (Serialize 0x14012c9a0: Serialize(int&) +0x08,
+    // then ExternalPtr<ComponentDescription>::Serialize 0x140002340 +0x00): a material
+    // the storage starts with and how much of it (StorageComponent::OnAdded 0x14012c640).
+    struct Volume {
+        ComponentDescription* _resource;   // +0x00 ExternalPtr<ComponentDescription>
+        int32_t               _count;      // +0x08
+        int32_t               _pad0C;      // +0x0C zeroed with _count by the tree's load (one qword)
+    };
+
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     bool _flagA;                                // +0x20
     bool _flagB;                                // +0x21
@@ -42,7 +53,7 @@ public:
     int32_t _pickupValue;                       // +0x24
     uint32_t _rawMaterialFlags;                 // +0x28 enum (serialized through the uint door)
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
-    void* _volumes;                             // +0x30 volume array data (0x10 stride: External* ref, int)
+    Volume* _volumes;                           // +0x30 Array<Volume> data (H5: the raw triple)
     int32_t _volumeCount;                       // +0x38
     int32_t _volumeCap;                         // +0x3c
 };
@@ -54,5 +65,7 @@ static_assert(offsetof(StorageDescription, _flagB) == 0x21, "StorageDescription:
 static_assert(offsetof(StorageDescription, _pickupValue) == 0x24, "StorageDescription::_pickupValue @ +0x24");
 static_assert(offsetof(StorageDescription, _rawMaterialFlags) == 0x28, "StorageDescription::_rawMaterialFlags @ +0x28");
 static_assert(offsetof(StorageDescription, _volumes) == 0x30, "StorageDescription::_volumes @ +0x30");
+static_assert(sizeof(StorageDescription::Volume) == 0x10, "volume stride 0x10 (Serialize 0x14012c9a0)");
+static_assert(offsetof(StorageDescription::Volume, _count) == 0x08, "volume count +0x08 (Serialize 0x14012ca5d)");
 static_assert(offsetof(StorageDescription, _volumeCount) == 0x38, "StorageDescription::_volumeCount @ +0x38");
 static_assert(offsetof(StorageDescription, _volumeCap) == 0x3c, "StorageDescription::_volumeCap @ +0x3c");

@@ -57,6 +57,7 @@
 #include "Component/ModelComponent.h"         // 0x1401c7a50 cell class
 #include "Component/ModelDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7a88 cell class
 #include "Component/PopulationComponent.h"    // 0x1401c4790 cell class
+#include "Component/PopulationDescription.h"  // PopulationDescription::_habitatBlock
 #include "Component/ComponentDescription.h"   // ComponentDescription::_category
 #include "Component/exe_bodies.h"
 
@@ -135,21 +136,18 @@ bool AnimalComponent::IsInWanderBox() const {
 // is > 0, and returns the fraction (countPositive / gridDim^2). The grid is
 // 0xC-byte records.
 float PopulationComponent::HerdCellFood(int cell) const {
-    // LEFT: PopulationComponent's fields are untyped words (COMP-e's header); retail
-    // reads +0x30 and +0x48 as signed ints.
-    int cellDim = static_cast<int32_t>(field48);
-    int mapStride = static_cast<int32_t>(field30);
+    int cellDim = herdDim;
+    int mapStride = habitatDim;
     int gridDim = mapStride / cellDim;
-    const uint8_t* tiles = reinterpret_cast<const uint8_t*>(field38);
 
     int positive = 0;
     for (int64_t row = 0; row < gridDim; row++) {
-        const int* pTile = reinterpret_cast<const int*>(tiles +
+        const Cell* pTile = cells +
             (((cell / cellDim) * gridDim + row) * (int64_t)mapStride +
-             (int64_t)((cell % cellDim) * gridDim)) * 0xc);
+             (int64_t)((cell % cellDim) * gridDim));
         for (int64_t col = gridDim; col != 0; col--) {
-            positive += (*pTile > 0) ? 1 : 0;
-            pTile += 3;
+            positive += (pTile->density > 0) ? 1 : 0;
+            pTile++;
         }
     }
     return (float)positive / (float)(gridDim * gridDim);
@@ -569,13 +567,8 @@ static bool IsTileValid(HerdComponent* self) {
     int64_t quotient = static_cast<int64_t>(tileIdx) / static_cast<int64_t>(mapWidth);
     int64_t remainder = static_cast<int64_t>(tileIdx) % static_cast<int64_t>(mapWidth);
 
-    // LEFT: PopulationComponent's fields are untyped words (COMP-e's header):
-    // +0x28 the PopulationDescription (its +0x28 the cell size), +0x30 the stride,
-    // +0x38 the grid.
-    int cellSize = *reinterpret_cast<const int*>(
-        reinterpret_cast<const uint8_t*>(population->field28) + 0x28);
-    int stride = static_cast<int32_t>(population->field30);
-    const uint8_t* tileArray = reinterpret_cast<const uint8_t*>(population->field38);
+    int cellSize = population->description->_habitatBlock;
+    int stride = population->habitatDim;
 
     // Compute grid row/col (matching decompiler's division pattern)
     int row = static_cast<int>(
@@ -589,10 +582,10 @@ static bool IsTileValid(HerdComponent* self) {
             static_cast<uint64_t>(static_cast<uint32_t>(remainder))
         ) / static_cast<int64_t>(cellSize));
 
-    // Each tile entry is 0xC (12) bytes. Check the int at offset 0.
-    int64_t tileOffset = (static_cast<int64_t>(row) * static_cast<int64_t>(stride) +
-                          static_cast<int64_t>(col)) * 0xC;
-    int terrainType = *reinterpret_cast<const int*>(tileArray + tileOffset);
+    // The habitability cell's density (0: uninhabitable).
+    int64_t cellIndex = static_cast<int64_t>(row) * static_cast<int64_t>(stride) +
+                        static_cast<int64_t>(col);
+    int terrainType = population->cells[cellIndex].density;
 
     return terrainType != 0;
 }
