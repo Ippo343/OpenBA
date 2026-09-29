@@ -112,6 +112,7 @@
 #include "Component/DiseaseComponent.h"
 #include "Component/DiseaseDescription.h"
 #include "Component/PastureComponent.h"
+#include "Component/LivestockComponent.h"   // PastureComponent::animals' element
 #include "Component/NaturalResourceComponent.h"
 #include "Component/ParticleComponent.h"
 #include "Component/ParticleDescription.h"
@@ -252,8 +253,7 @@ extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription
 
     PastureComponent* pasture = entity->FindComponent<PastureComponent>();   // 0x140004fe0
     if (pasture != nullptr) {
-        // PastureComponent +0x28 is `void* field28` (COMP-d's header): LEFT.
-        *out = reinterpret_cast<ComponentDescription*>(pasture->field28);
+        *out = pasture->livestockType;
         return out;
     }
 
@@ -292,8 +292,7 @@ extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription
         }
         OrchardComponent* orchard = entity->FindComponent<OrchardComponent>();   // 0x140005440
         if (orchard != nullptr) {
-            // OrchardComponent +0x60 is `void* field60` (COMP-d's header): LEFT.
-            *out = reinterpret_cast<ComponentDescription*>(orchard->field60);
+            *out = orchard->treeType;
             ::System::MemoryAllocator::MemFree(listData);
             return out;
         }
@@ -317,8 +316,8 @@ extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription
 void ParticleComponent::StopEmitterFade() {
     Description* base = _description;
     ParticleDescription* desc = static_cast<ParticleDescription*>(base);
-    int count = *reinterpret_cast<int32_t*>(&field40);
-    uintptr_t geoArr = reinterpret_cast<uintptr_t>(field38);
+    int count = emitterCount;
+    uintptr_t geoArr = reinterpret_cast<uintptr_t>(emitters);
     if (!desc || !geoArr) return;
     uintptr_t elems = reinterpret_cast<uintptr_t>(desc->_emitters);
     if (!elems) return;
@@ -343,8 +342,8 @@ bool DiseaseComponent::CheckCure() {
         PastureComponent* pasture = _entity->FindComponent<PastureComponent>();   // 0x140004fe0
         // Faithful: retail derefs unguarded — isPasture==1 means the finder
         // already located a PastureComponent at Startup. The herd count is
-        // PastureComponent +0x38, `void* field38` in COMP-d's header: LEFT.
-        if (*reinterpret_cast<int32_t*>(&pasture->field38) != 0) return false;
+        // PastureComponent::animalCount.
+        if (pasture->animalCount != 0) return false;
         return true;
     }
 
@@ -500,9 +499,7 @@ void DiseaseComponent::Infect() {
     ParticleComponent* particle = _entity->FindComponent<ParticleComponent>();   // 0x140005200
     int emitters = 0;
     if (particle) {
-        // ParticleComponent +0x40 (the emitter count) is `void* field40` in
-        // COMP-d's header: LEFT.
-        emitters = *reinterpret_cast<int32_t*>(&particle->field40);
+        emitters = particle->emitterCount;
         for (int i = 0; i < emitters; ++i)
             ParticleComponent_StartEmitterFade(particle, i);
     }
@@ -593,15 +590,15 @@ void DiseaseComponent::KillOneAnimal() {
     void* entityMgr = gw ? gw->m_entityList : nullptr;
 
     PastureComponent* pasture = _entity->FindComponent<PastureComponent>();   // 0x140004fe0
-    // The herd (+0x30 data, +0x38 count) is `void*` in COMP-d's header: LEFT.
-    if (*reinterpret_cast<int32_t*>(&pasture->field38) == 0) return;
+    // The herd (+0x30 animals, +0x38 animalCount).
+    if (pasture->animalCount == 0) return;
 
     int attempts = 0;
     bool killed = false;
     do {
-        uint32_t herd = *reinterpret_cast<uint32_t*>(&pasture->field38);
+        uint32_t herd = static_cast<uint32_t>(pasture->animalCount);
         uint32_t idx = rng->Rand(static_cast<uint32_t>(herd));
-        Component* member = reinterpret_cast<Component**>(pasture->field30)[idx];
+        Component* member = pasture->animals[idx];
 
         // Retail inlines this scan; 0x140005500 is the same scan on the same type id.
         AnimalComponent* animal = member->_entity->FindComponent<AnimalComponent>();

@@ -23,6 +23,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
+
+class PastureComponent;
 
 class LivestockComponent final : public Component {
     DECLARE_EXE_TYPE(LivestockComponent)
@@ -37,12 +40,16 @@ public:
     void OnRemove() override;                                     // [7] 0x140123c00
     void Update(void* time) override;                             // [9] 0x140123b50
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint64_t data28;       // +0x28 assigned PastureComponent back-ref
-    uint64_t data30;       // +0x30 System::Time production timer
+    void SetPasture(PastureComponent* const* pasture);   // 0x140123cc0
+    void PenInPasture();                                  // 0x1401240a0
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
+    // 0x140123e10 (InternalPtr validated against PastureComponent; Time).
+    PastureComponent* pasture;          // +0x28 InternalPtr: the pasture it is kept in (null = free-roaming)
+    System::Time      productionTimer;  // +0x30
 };
 
 static_assert(sizeof(LivestockComponent) == 0x38, "LivestockComponent is 0x38 (create 0x140035480)");
 static_assert(alignof(LivestockComponent) == 8, "LivestockComponent alignment");
-static_assert(offsetof(LivestockComponent, data28) == 0x28, "");
-static_assert(offsetof(LivestockComponent, data30) == 0x30, "");
+static_assert(offsetof(LivestockComponent, pasture) == 0x28, "");
+static_assert(offsetof(LivestockComponent, productionTimer) == 0x30, "");

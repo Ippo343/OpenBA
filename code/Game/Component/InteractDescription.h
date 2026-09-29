@@ -20,6 +20,9 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"   // Math::Vector3
+
+namespace Pathfinding { class PointList; }
 
 class InteractDescription final : public Description {
     DECLARE_EXE_TYPE(InteractDescription)
@@ -35,15 +38,22 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140035270
     virtual Object::External* Construct();                                 // [9] 0x140035240
 
+    // One use / build / create point (0x18 bytes), built by Serialize 0x140123500
+    // from a PointList point: its position and the direction of its yaw.
+    struct Node {
+        Math::Vector3 offset;      // +0x00
+        Math::Vector3 direction;   // +0x0C Vector3::FromYawPitch(yaw, 0)
+    };
+
     // {data, count, cap}: the header of one 0x18-stride node array.
     struct NodeArray {
-        void*   data;
+        Node*   data;
         int32_t count;
         int32_t cap;
     };
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _descRef;                             // +0x20 ExternalPtr<Pathfinding::PointList>
+    Pathfinding::PointList* _points;            // +0x20 ExternalPtr<Pathfinding::PointList> (0x14000ab20 type-checks it)
     InteractDescription::NodeArray _useNodes;   // +0x28 0x18-stride node array {data, count, cap}
     InteractDescription::NodeArray _buildNodes; // +0x38 idem
     InteractDescription::NodeArray _createNodes;// +0x48 idem
@@ -51,7 +61,9 @@ public:
 
 static_assert(sizeof(InteractDescription) == 0x58, "InteractDescription is 0x58 (create 0x140035200 MemAlloc(0x58))");
 static_assert(alignof(InteractDescription) == 8, "InteractDescription alignment");
-static_assert(offsetof(InteractDescription, _descRef) == 0x20, "InteractDescription::_descRef @ +0x20");
+static_assert(offsetof(InteractDescription, _points) == 0x20, "InteractDescription::_points @ +0x20");
+static_assert(sizeof(InteractDescription::Node) == 0x18, "InteractDescription node stride 0x18");
+static_assert(offsetof(InteractDescription::Node, direction) == 0x0C, "");
 static_assert(offsetof(InteractDescription, _useNodes) == 0x28, "InteractDescription::_useNodes @ +0x28");
 static_assert(offsetof(InteractDescription, _buildNodes) == 0x38, "InteractDescription::_buildNodes @ +0x38");
 static_assert(offsetof(InteractDescription, _createNodes) == 0x48, "InteractDescription::_createNodes @ +0x48");

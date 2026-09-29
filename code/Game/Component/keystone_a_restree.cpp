@@ -42,6 +42,7 @@
 // "held" inside reg_player_highlight because that whole batch waited on ace40, an
 // UNRELATED tessellation sibling — not a callee of 14b40).
 
+#include <cstddef>
 #include <cstdint>
 #include "Component/exe_bodies.h"
 #include "Player/exe_bodies.h"          // TradeWork_impl_4b40 (0x140014b40)
@@ -53,170 +54,190 @@ namespace {
 // 0x140152b60 / 0x140152b68 (?MemAlloc@ SAPEAX_KH / ?MemFree@ SAXPEAX) point at; the
 // bodies below call them by name (B3R R9).
 
-// AVL node field accessors (0x38-byte node; offsets disasm-verified).
-inline uint64_t& NodeKey(int64_t n)    { return *reinterpret_cast<uint64_t*>(n + 0x00); }
-inline int64_t&  NodeParent(int64_t n) { return *reinterpret_cast<int64_t*>(n + 0x18); }
-inline int64_t&  NodeLeft(int64_t n)   { return *reinterpret_cast<int64_t*>(n + 0x20); }
-inline int64_t&  NodeRight(int64_t n)  { return *reinterpret_cast<int64_t*>(n + 0x28); }
+// The node payload: a growable array of 8-byte elements (Collection::Array, 0x10).
+struct RecordArray {
+    uint64_t* data;       // +0x00
+    int32_t   count;      // +0x08
+    int32_t   capacity;   // +0x0C
+};
+static_assert(sizeof(RecordArray) == 0x10, "RecordArray is 0x10 (0x140015ec0)");
 
-} // namespace
+// The record streamed into 7460 / 72f0: a node's first 0x18 bytes.
+struct Record {
+    uint64_t    key;      // +0x00
+    RecordArray items;    // +0x08
+};
+static_assert(sizeof(Record) == 0x18, "Record is 0x18 (0x140017230's stack record)");
+
+// The AVL node (0x38 bytes, 0x140017460).
+struct RecordNode {
+    uint64_t    key;       // +0x00
+    RecordArray items;     // +0x08
+    RecordNode* parent;    // +0x18
+    RecordNode* left;      // +0x20
+    RecordNode* right;     // +0x28
+    int16_t     balance;   // +0x30 rightHeight - leftHeight
+    int16_t     height;    // +0x32
+};
+static_assert(sizeof(RecordNode) == 0x38, "RecordNode is 0x38 (MemAlloc(0x38) at 0x140017460)");
+static_assert(offsetof(RecordNode, parent) == 0x18, "RecordNode +0x18");
+static_assert(offsetof(RecordNode, left) == 0x20, "RecordNode +0x20");
+static_assert(offsetof(RecordNode, right) == 0x28, "RecordNode +0x28");
+static_assert(offsetof(RecordNode, balance) == 0x30, "RecordNode +0x30");
+
+// The tree object: the root and the node count.
+struct RecordTree {
+    RecordNode* root;    // +0x00
+    int32_t     count;   // +0x08
+};
 
 // ============================================================
 // 0x140015ec0 — ResidenceComponent_helper_5ec0. Growable-array deep-copy.
-// Frees *param_1, then copies param_2's count 8-byte elements into a freshly allocated
-// buffer. Array struct: +0x00 data ptr, +0x08 count(int), +0x0C capacity(int).
-//   if(param_1 != param_2){ MemFree(*param_1); param_1[1]=0; *param_1=0;
-//                           cnt=(int)param_2[1]; *(int*)(param_1+1)=cnt;
-//                           if(cnt>0){ *(int*)((char*)param_1+0xC)=cnt;
-//                                      *param_1=MemAlloc(cnt<<3,8); }
-//                           loop copy 8-byte elems }
-// Returns param_1.
+// Frees dst's buffer, then copies src's count 8-byte elements into a freshly
+// allocated one. Returns dst.
 // ============================================================
-extern "C" int64_t* ResidenceComponent_helper_5ec0(int64_t* param_1, int64_t* param_2) {
-    if (param_1 == param_2) return param_1;
+RecordArray* CopyRecordArray(RecordArray* dst, const RecordArray* src) {
+    if (dst == src) return dst;
 
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(*param_1));   // MemFree(*param_1)
-    param_1[1] = 0;                               // +0x08 count/capacity qword := 0
-    *param_1 = 0;                                 // +0x00 data := 0
-    int cnt = static_cast<int>(param_2[1]);       // (int)param_2[1] = source count (+0x08 low)
-    *reinterpret_cast<int*>(param_1 + 1) = cnt;   // +0x08 count := cnt
+    System::MemoryAllocator::MemFree(dst->data);   // MemFree(*param_1)
+    dst->count = 0;                                // +0x08 count/capacity qword := 0
+    dst->capacity = 0;
+    dst->data = nullptr;                           // +0x00 data := 0
+    int cnt = src->count;                          // source count
+    dst->count = cnt;
     if (cnt > 0) {
-        *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0xC) = cnt; // +0x0C capacity
-        *param_1 = reinterpret_cast<int64_t>(
-            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 3, 8));                       // data := MemAlloc(cnt*8,8)
+        dst->capacity = cnt;
+        dst->data = static_cast<uint64_t*>(
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 3, 8));   // data := MemAlloc(cnt*8,8)
     }
 
-    // Copy `count` 8-byte elements from *param_2 into *param_1.
-    if (static_cast<int>(param_1[1]) > 0) {
-        uint64_t off = 0;
+    // Copy `count` 8-byte elements from src into dst.
+    if (dst->count > 0) {
         int i = 0;
         do {
-            uint64_t* dst = reinterpret_cast<uint64_t*>(*param_1 + static_cast<int64_t>(off));
-            if (dst != nullptr) {
-                int64_t srcData = *param_2;
-                *dst = 0;
-                *dst = *reinterpret_cast<uint64_t*>(off + srcData);
+            uint64_t* d = dst->data + i;
+            if (d != nullptr) {
+                *d = 0;
+                *d = src->data[i];
             }
             ++i;
-            off += 8;
-        } while (i < static_cast<int>(param_1[1]));
+        } while (i < dst->count);
     }
-    return param_1;
+    return dst;
 }
 
 // ============================================================
 // 0x140017460 — ResidenceComponent_impl_7460. AVL node allocator.
 // Allocates a 0x38-byte node, copies the key, zero-inits the embedded array struct, then
 // deep-copies the source array via 5ec0, links the parent, and zeroes children + balance.
-//   param_1 (RCX) is UNUSED by the body (verified in disasm — saved to stack, never read).
-//   param_2 (RDX) = src record (key at +0x00, array struct at +0x08).
-//   param_3 (R8)  = parent node ptr.
+// Retail's first argument (RCX) is UNUSED by the body (verified in disasm — saved to
+// stack, never read), so it is not carried.
 // Returns the new node (or null on OOM).
 // ============================================================
-extern "C" void* ResidenceComponent_impl_7460(int64_t /*unused*/, int64_t* param_2, int64_t param_3) {
-    int64_t* n = reinterpret_cast<int64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+RecordNode* NewRecordNode(const Record* src, RecordNode* parent) {
+    RecordNode* n = static_cast<RecordNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (n != nullptr) {
-        n[0] = *param_2;        // +0x00 key := src key
-        n[1] = 0;               // +0x08 array.data/count := 0
-        n[2] = 0;               // +0x10 array.count/capacity := 0
-        // 5ec0(node+0x08, src+0x08) — deep-copy the embedded array struct.
-        ResidenceComponent_helper_5ec0(n + 1, param_2 + 1);
-        n[3] = param_3;         // +0x18 parent
-        n[4] = 0;               // +0x20 left
-        n[5] = 0;               // +0x28 right
-        *reinterpret_cast<int*>(n + 6) = 0;  // +0x30 balance/height (dword)
+        n->key = src->key;                  // +0x00 key := src key
+        n->items.data = nullptr;            // +0x08 array.data := 0
+        n->items.count = 0;                 // +0x10 array.count/capacity := 0
+        n->items.capacity = 0;
+        CopyRecordArray(&n->items, &src->items);   // 5ec0(node+0x08, src+0x08)
+        n->parent = parent;                 // +0x18 parent
+        n->left = nullptr;                  // +0x20 left
+        n->right = nullptr;                 // +0x28 right
+        n->balance = 0;                     // +0x30 balance/height (dword)
+        n->height = 0;
     }
     return n;
 }
 
 // ============================================================
-// 0x1400172f0 — ResidenceComponent_helper_72f0. AVL insert keyed by the node's low uint64.
-//   param_1 = &tree (root at param_1[0], count int at param_1+0x08)
-//   param_2 = out (receives inserted/existing node ptr)
-//   param_3 = src record to insert (key = *param_3)
-// 1:1 port. Note: 7460's arg1 is ignored, so the empty-vs-nonempty arg1 difference in the
-// decompile is immaterial (passes param_1 when empty, key when non-empty — both unused).
+// 0x1400172f0 — ResidenceComponent_helper_72f0. AVL insert keyed by the node's key.
+//   tree = the tree (root, count)
+//   out  = receives the inserted/existing node
+//   src  = the record to insert
 // ============================================================
-extern "C" void** ResidenceComponent_helper_72f0(int64_t* param_1, void** param_2, uint64_t* param_3) {
-    int64_t root = *param_1;
+RecordNode** InsertRecord(RecordTree* tree, RecordNode** out, const Record* src) {
+    RecordNode* root = tree->root;
 
-    if (root == 0) {
-        void* newNode = ResidenceComponent_impl_7460(reinterpret_cast<int64_t>(param_1),
-                                                     reinterpret_cast<int64_t*>(param_3), 0);
-        *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x08) =
-            *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x08) + 1;  // count++
-        *param_1 = reinterpret_cast<int64_t>(newNode);
-        *param_2 = newNode;
-        return param_2;
+    if (root == nullptr) {
+        RecordNode* newNode = NewRecordNode(src, nullptr);
+        tree->count = tree->count + 1;
+        tree->root = newNode;
+        *out = newNode;
+        return out;
     }
 
-    uint64_t key = *param_3;
-    int64_t cur = root;
-    int64_t cursor;     // local_res8 — the descent node (parent of the new node)
-    void* newNode = nullptr;
+    uint64_t key = src->key;
+    RecordNode* cur = root;
+    RecordNode* cursor;     // local_res8 — the descent node (parent of the new node)
+    RecordNode* newNode = nullptr;
     for (;;) {
         // Descend left while key < node key.
         for (;;) {
             cursor = cur;
-            if (!(key < NodeKey(cursor))) break;
-            int64_t left = NodeLeft(cursor);   // +0x20
-            if (left == 0) {
-                // insert as left child. 7460(arg1=key[unused], src=param_3, parent=cursor).
-                newNode = ResidenceComponent_impl_7460(static_cast<int64_t>(key),
-                                                       reinterpret_cast<int64_t*>(param_3), cursor);
-                NodeLeft(cursor) = reinterpret_cast<int64_t>(newNode);
+            if (!(key < cursor->key)) break;
+            RecordNode* left = cursor->left;   // +0x20
+            if (left == nullptr) {
+                // insert as left child.
+                newNode = NewRecordNode(src, cursor);
+                cursor->left = newNode;
                 goto rebalance;
             }
             cur = left;
         }
-        if (key <= NodeKey(cursor)) {
+        if (key <= cursor->key) {
             // exact match — return existing node, no structural change.
-            *param_2 = reinterpret_cast<void*>(cursor);
-            return param_2;
+            *out = cursor;
+            return out;
         }
         // descend right (+0x28).
-        cur = NodeRight(cursor);
-        if (cur == 0) {
-            newNode = ResidenceComponent_impl_7460(static_cast<int64_t>(key),
-                                                   reinterpret_cast<int64_t*>(param_3), cursor);
-            NodeRight(cursor) = reinterpret_cast<int64_t>(newNode);
+        cur = cursor->right;
+        if (cur == nullptr) {
+            newNode = NewRecordNode(src, cursor);
+            cursor->right = newNode;
             goto rebalance;
         }
     }
 
 rebalance:
     {
-        int64_t retraceCursor = cursor;    // &local_res8 (the descent node)
-        TradeWork_impl_4b40(param_1, &retraceCursor);  // shared retrace (0x140014b40)
-        *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x08) =
-            *reinterpret_cast<int*>(reinterpret_cast<int64_t>(param_1) + 0x08) + 1;  // count++
-        *param_2 = newNode;
+        RecordNode* retraceCursor = cursor;    // &local_res8 (the descent node)
+        // LEFT: the shared retrace takes the tree and its cursor as int64_t* (PLAYER's body).
+        TradeWork_impl_4b40(reinterpret_cast<int64_t*>(tree),
+                            reinterpret_cast<int64_t*>(&retraceCursor));   // 0x140014b40
+        tree->count = tree->count + 1;
+        *out = newNode;
     }
-    return param_2;
+    return out;
 }
+
+} // namespace
 
 // ============================================================
 // 0x140017230 — ResidenceComponent_impl_7230. 3-call wrapper:
 //   local = {0,0}; 5ec0(&local, param_4); 72f0(param_1, param_2, &keyRecord); MemFree(local.data);
-// where keyRecord on the stack is { *param_3 (key), local.data, local.count/capacity },
-// i.e. local_20=*param_3, local_18=array.data, local_10=array.count/capacity. The deep-copied
-// array (built by 5ec0 into local_18/local_10) becomes the record's +0x08 array struct, which
-// 72f0->7460->5ec0 then deep-copies AGAIN into the node; the temporary is freed here.
-// Returns param_2.
+// where keyRecord on the stack is { *param_3 (key), local.data, local.count/capacity }.
+// The deep-copied array (built by 5ec0 into the record) becomes the record's +0x08
+// array struct, which 72f0->7460->5ec0 then deep-copies AGAIN into the node; the
+// temporary is freed here. Returns param_2.
 // ============================================================
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2,
                                               uint64_t* param_3, int64_t* param_4) {
-    // Stack record: local_20 (key) / local_18 (array.data) / local_10 (array.count/cap).
-    uint64_t rec[3];
-    rec[0] = *param_3;   // local_20 = *param_3 (key)
-    rec[1] = 0;          // local_18 = array.data
-    rec[2] = 0;          // local_10 = array.count/capacity
+    // LEFT: the caller (zonecomponent.cpp) hands the tree / out / array as untyped words.
+    RecordTree* tree = reinterpret_cast<RecordTree*>(param_1);
+    RecordNode** out = reinterpret_cast<RecordNode**>(param_2);
+    const RecordArray* items = reinterpret_cast<const RecordArray*>(param_4);
 
-    // 5ec0(&local_18, param_4) — note the array struct begins at local_18 (rec+1).
-    ResidenceComponent_helper_5ec0(reinterpret_cast<int64_t*>(&rec[1]), param_4);
-    // 72f0(param_1, param_2, &local_20) — the full record (key at rec[0], array at rec[1..]).
-    ResidenceComponent_helper_72f0(param_1, param_2, &rec[0]);
-    // MemFree(local_18) — free the temporary array buffer.
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(rec[1]));
+    // Stack record: local_20 (key) / local_18 (array.data) / local_10 (array.count/cap).
+    Record rec;
+    rec.key = *param_3;
+    rec.items.data = nullptr;
+    rec.items.count = 0;
+    rec.items.capacity = 0;
+
+    CopyRecordArray(&rec.items, items);   // 5ec0(&local_18, param_4)
+    InsertRecord(tree, out, &rec);        // 72f0(param_1, param_2, &local_20)
+    System::MemoryAllocator::MemFree(rec.items.data);   // free the temporary array buffer
     return param_2;
 }

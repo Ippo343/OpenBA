@@ -43,6 +43,7 @@ public:
     void OnRemove() override;                                     // [7]  0x140054180
     void Update(void* time) override;                             // [9]  0x140054070
     void Slot11() override;                                       // [11] 0x140054210 (RET)
+    float HerdCellFood(int cell) const;                           // 0x140053f20 (body: herdcomponent.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     void*    field28;      // +0x28 PopulationDescription

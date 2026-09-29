@@ -75,15 +75,17 @@ static const bool s_immigrationStateTableBuilt = (ImmigrationCtrl_PopulateTable(
 // 0x14004e640. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer; +0x48..+0x60 = 0. No flag OR.
 ImmigrationComponent::ImmigrationComponent()
-    : _controller(this), field48(nullptr), field50(0), _pad54{}, field58(nullptr), field60(nullptr) {}
+    : _controller(this), waitTimer{0}, arrivedCount(0), _pad54{}, group(nullptr), groupCount(0),
+      groupCapacity(0) {}
 
 // 0x14004e5d0: the group array (+0x58 data, +0x60 count/capacity) is freed and
 // zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
 // compiler's chain.
 ImmigrationComponent::~ImmigrationComponent() {
-    Object::detail::InternalMemFree(field58);
-    field58 = nullptr;
-    field60 = nullptr;
+    Object::detail::InternalMemFree(group);
+    group = nullptr;
+    groupCount = 0;
+    groupCapacity = 0;
 }
 
 // create 0x140007a20: MemAlloc(0x68, 8), then the ctor.
@@ -105,26 +107,30 @@ void* ImmigrationComponent::CreateInPlaceObject(void* storage) {
 // it is not a ComponentEntity) and the Time at +0x48.
 void ImmigrationComponent::Persist(void* stream) {
     Component::Persist(stream);
-    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
-    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
-    ser.Serialize(*reinterpret_cast<int*>(&field50), nullptr);
-    int arrayCount = *reinterpret_cast<int*>(&field60);
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+    { IO::Serializer scope(*st, 0); }
+    IO::Serializer ser(*st, 0);
+    ser.Serialize(arrivedCount, nullptr);
+    int arrayCount = groupCount;
     ser.Serialize(arrayCount, nullptr);
     // "Am I loading?" is the STREAM's direction (Serializer -> stream +8), not the
     // Serializer's own +8 (m_encoding): see
     // reference_serializer_plus8_is_encoding_not_loading_flag.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>(&field58).SetSize(arrayCount);
+        GameColl::AsArray<GameColl::Ptr8>(&group).SetSize(arrayCount);
     }
-    uint8_t* element = static_cast<uint8_t*>(field58);
-    for (int64_t remaining = arrayCount; remaining > 0; --remaining, element += 8) {
-        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(ser);   // B.3.8 bridge (the array is raw bytes)
-        void* obj = *reinterpret_cast<void**>(element);
+    ComponentEntity** element = group;
+    for (int64_t remaining = arrayCount; remaining > 0; --remaining, ++element) {
+        // LEFT: the array holds InternalPtr<ComponentEntity>; InternalBasePtr has no
+        // typed view of a bare pointer slot.
+        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(ser);
+        ComponentEntity* obj = *element;
         if (obj != nullptr && !::Object::IsDerivedFromNullSafe(obj, ComponentEntity::TypeId()))
-            *reinterpret_cast<uint64_t*>(element) = 0;
+            *element = nullptr;
     }
-    reinterpret_cast<System::Time*>(&field48)->Serialize(ser);   // B.3.8 bridge (field48 is a Time)
+    waitTimer.Serialize(ser);
 }
 
 DEFINE_EXE_TYPE(ImmigrationComponent, "ControllerComponent")

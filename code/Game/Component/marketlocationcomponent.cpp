@@ -39,32 +39,39 @@
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/coll_bridge.h"
+#include "Entity/CitizenBehavior.h"   // the market-location list (GameUpdateLoop::m_citizenList)
+#include "io/Serializer.h"
 
 using MarketLocationCtrlDispatch = ::ControllerLive::Dispatcher<MarketLocationCtrlTag>;
 
+// The town manager at GameUpdateLoop+0xf0; its +0x10 array is the market-location list.
+// LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
+static CitizenBehavior* MarketTown() {
+    return reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+}
+
 // state-2 ENTER — retail 0x14004ef20. REGISTER the market: append the owner entity to
-// the town's market-location list at (gameState+0xf0)+0x10 —
-//   local = *(comp+0x10); list = *(gw+0xf0) + 0x10;
+// the town's market-location list (CitizenBehavior +0x10) —
+//   local = _entity; list = town +0x10;
 //   Array<void*>::SetSize(list, list.count + 1, &local)       (0x140003110)
 // — then `XOR AL,AL` (0: the Tick's enter walk continues past this node). The slot-7
 // removal hook (0x14004ef60) and the state-3 enter below are the matching erase.
-static char MarketLoc_State2Enter(void* data, void* /*sm*/) {
+static char MarketLoc_State2Enter(MarketLocationComponent* self, void* /*sm*/) {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    uint64_t entityPtr = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(data) + 0x10);
-    const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    ComponentEntity* entityPtr = self->_entity;
+    CitizenBehavior* town = MarketTown();
     // B.3.2 bridge: 0x140003110 is Collection::Array<void*>::SetSize(n, fill).
-    const int count = *reinterpret_cast<int*>(townMgr + 0x18);
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x10))
+    const int count = town->field_0x18;
+    GameColl::AsArray<GameColl::Ptr8>(&town->field_0x10)
         .SetSizeFill(count + 1, &entityPtr);
     return 0;
 }
 
-// state-3 ENTER — retail 0x14004eee0: `local = *(comp+0x10);
-// DynArray8_EraseByValue(*(gw+0xf0) + 0x10, &local)` (0x140002cc0), then `XOR AL,AL`.
-// Byte-for-byte the slot-7 removal hook's body.
-static char MarketLoc_State3Enter(void* data, void* /*sm*/) {
-    reinterpret_cast<MarketLocationComponent*>(data)->MarketLocationComponent::OnRemove();   // B.3.8 bridge (retail: an identical body, not a dispatch)
+// state-3 ENTER — retail 0x14004eee0: `local = _entity;
+// DynArray8_EraseByValue(town +0x10, &local)` (0x140002cc0), then `XOR AL,AL`.
+// Byte-for-byte the slot-7 removal hook's body (retail: an identical body, not a dispatch).
+static char MarketLoc_State3Enter(MarketLocationComponent* self, void* /*sm*/) {
+    self->MarketLocationComponent::OnRemove();
     return 0;
 }
 
@@ -125,14 +132,12 @@ void MarketLocationComponent::Persist(void* stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // Two empty serializer blocks (version 0)
-    alignas(8) uint8_t serializerBuf1[24];
-    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
 
-    alignas(8) uint8_t serializerBuf2[24];
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
+    // Two empty serializer blocks (version 0)
+    { IO::Serializer block1(*st, 0); }
+    { IO::Serializer block2(*st, 0); }
 }
 // ============================================================
 // MarketLocationComponent::OnRemove (vtable slot [7], 0x14004ef60)
@@ -158,15 +163,11 @@ void MarketLocationComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr)
         return;
 
-    // Build an InternalBasePtr on the stack with the owner entity
-    uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
+    // The needle: the owner entity
+    ComponentEntity* entityPtr = _entity;
 
-    // Get the world manager from game state
-    uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
-
-    // Erase the owner entity from the market-location list at worldMgr + 0x10
-    CemeteryListErase_Reimpl((void*)(worldMgr + 0x10), &entityPtr);   // 0x140002cc0
+    // Erase the owner entity from the town's market-location list
+    CemeteryListErase_Reimpl(&MarketTown()->field_0x10, &entityPtr);   // 0x140002cc0
 }
 
 DEFINE_EXE_TYPE(MarketLocationComponent, "ControllerComponent")

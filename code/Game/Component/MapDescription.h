@@ -37,22 +37,23 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400357d0
     virtual Object::External* Construct();                                 // [9] 0x1400357a0
 
-    // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    uint32_t _overlayType;                      // +0x20 enum (serialized through the uint door)
+    // ---- fields (B.4 COMP-d: names from what MapComponent does with them,
+    // AddToMap 0x1401241b0, OnAdded 0x140124370, OnRemove 0x1401242f0) ----
+    uint32_t _cellType;                         // +0x20 enum (the uint door): the cell class the footprint stamps
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
-    System::String _label;                      // +0x28 String (empty)
-    bool _b30;                                  // +0x30
-    bool _b31;                                  // +0x31
-    bool _b32;                                  // +0x32
+    System::String _footprint;                  // +0x28 the footprint stamp ('#', '_', '.' per cell)
+    bool _claimOnAdd;                           // +0x30 OnAdded runs AddToMap (natural resources)
+    bool _noOccupancy;                          // +0x31 AddToMap skips the cell occupancy write
+    bool _showOnMap;                            // +0x32 the footprint is painted on the minimap
     uint8_t _pad33[1];                          // +0x33 never written by the ctor
     System::Color _color;                       // +0x34 ARGB, opaque black
 };
 
 static_assert(sizeof(MapDescription) == 0x38, "MapDescription is 0x38 (create 0x140035760 MemAlloc(0x38))");
 static_assert(alignof(MapDescription) == 8, "MapDescription alignment");
-static_assert(offsetof(MapDescription, _overlayType) == 0x20, "MapDescription::_overlayType @ +0x20");
-static_assert(offsetof(MapDescription, _label) == 0x28, "MapDescription::_label @ +0x28");
-static_assert(offsetof(MapDescription, _b30) == 0x30, "MapDescription::_b30 @ +0x30");
-static_assert(offsetof(MapDescription, _b31) == 0x31, "MapDescription::_b31 @ +0x31");
-static_assert(offsetof(MapDescription, _b32) == 0x32, "MapDescription::_b32 @ +0x32");
+static_assert(offsetof(MapDescription, _cellType) == 0x20, "MapDescription::_cellType @ +0x20");
+static_assert(offsetof(MapDescription, _footprint) == 0x28, "MapDescription::_footprint @ +0x28");
+static_assert(offsetof(MapDescription, _claimOnAdd) == 0x30, "MapDescription::_claimOnAdd @ +0x30");
+static_assert(offsetof(MapDescription, _noOccupancy) == 0x31, "MapDescription::_noOccupancy @ +0x31");
+static_assert(offsetof(MapDescription, _showOnMap) == 0x32, "MapDescription::_showOnMap @ +0x32");
 static_assert(offsetof(MapDescription, _color) == 0x34, "MapDescription::_color @ +0x34");

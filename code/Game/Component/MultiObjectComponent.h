@@ -46,19 +46,22 @@ public:
     // 0x140125a00
     ~MultiObjectComponent() override;                                   // [0]  0x1400360c0
     void          Persist(void* stream) override;                       // [3]  0x140125880
-    // PORT GAP (retail 0x1401257c0) — B38 D9: the removal hook (mark every child for
-    // removal) is ported as MultiObjectComponent_OnCreate but was never wired in the
-    // tree; the inherited RET is what the tree's inert slot did.
-    void          OnRemove() override {}                                // [7]  0x1401257c0
+    void          OnRemove() override;                                  // [7]  0x1401257c0 mark every child for removal
     void          OnEvent(int eventId) override;                        // [12] 0x140125490
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080
 
-    // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
+    // ---- non-virtual members (retail addresses) ----
+    char EnterState2();                                                 // 0x140125560 state 2 enter
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
+    // 0x140125880 (int count +0x50 with the +0x48 IBP array, each validated against
+    // ComponentEntity; int +0x58).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    Object::InternalPtr<ComponentEntity>* field48; // +0x48 the child-entity list (Array<InternalBasePtr> data)
-    void*    field50;              // +0x50 its count (dword) / capacity
-    uint32_t multiCount;           // +0x58 1 in retail's ctor
+    Object::InternalPtr<ComponentEntity>* children; // +0x48 the child-entity list (Array<InternalBasePtr> data)
+    int32_t  childCount;           // +0x50
+    int32_t  childCapacity;        // +0x54
+    int32_t  multiCount;           // +0x58 1 in retail's ctor (Persist: Serialize(int&))
     uint8_t  _pad5C[4];            // +0x5c
 };
 
@@ -68,6 +71,7 @@ static_assert(offsetof(MultiObjectComponent, _controller) == 0x28,
               "MultiObjectComponent's controller member at +0x28 (slot 17 0x140004080)");
 static_assert(offsetof(MultiObjectComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x140125acc)");
-static_assert(offsetof(MultiObjectComponent, field48) == 0x48, "MultiObjectComponent +0x48");
-static_assert(offsetof(MultiObjectComponent, field50) == 0x50, "MultiObjectComponent +0x50");
+static_assert(offsetof(MultiObjectComponent, children) == 0x48, "MultiObjectComponent +0x48");
+static_assert(offsetof(MultiObjectComponent, childCount) == 0x50, "MultiObjectComponent +0x50");
+static_assert(offsetof(MultiObjectComponent, childCapacity) == 0x54, "MultiObjectComponent +0x54");
 static_assert(offsetof(MultiObjectComponent, multiCount) == 0x58, "MultiObjectComponent +0x58 (ctor 0x140125ad8)");

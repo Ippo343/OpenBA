@@ -20,6 +20,7 @@
 #include <cstddef>
 #include "Component/ResourceProduceComponent.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
 
 class HuntComponent final : public ResourceProduceComponent {
     DECLARE_EXE_TYPE(HuntComponent)
@@ -36,9 +37,9 @@ public:
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x1401226a0
 
     // +0x50 the hunt-progress accumulator (a System::Time, in ticks).
-    void*    huntData;          // +0x50
+    System::Time huntProgress;  // +0x50 Time::Serialize (Persist 0x140122820); Update advances it
 };
 
 static_assert(sizeof(HuntComponent) == 0x58, "HuntComponent is 0x58 (create 0x140034f30)");
 static_assert(alignof(HuntComponent) == 8, "HuntComponent alignment");
-static_assert(offsetof(HuntComponent, huntData) == 0x50, "HuntComponent +0x50 (ctor 0x14012290b)");
+static_assert(offsetof(HuntComponent, huntProgress) == 0x50, "HuntComponent +0x50 (ctor 0x14012290b)");
