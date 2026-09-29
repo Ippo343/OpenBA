@@ -13,7 +13,7 @@
 #include "Component/BoatComponent.h"
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
-#include "Component/ResidenceComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "math/Math.h"
@@ -84,8 +84,8 @@ void* BoatComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x1400465d0: Component::Persist (a direct CALL 0x1401189b0), an empty
 // Serializer scope (format compat), then one scope carrying: the +0x28 pointer
-// (validated against ti 0x1401c7cf0 = ResidenceComponent, the tree's old name for
-// it was "ComponentEntity"), the +0x40 Vector3, the +0x4c float, the +0x30 pointer
+// (validated against ti 0x1401c5d70 = ComponentEntity at 0x140046635; the tree had
+// read it as ResidenceComponent 0x1401c7cf0), the +0x40 Vector3, the +0x4c float, the +0x30 pointer
 // (ModelComponent, ti 0x1401c7a50), the +0x38 pointer (CharacterComponent, ti
 // 0x1401c7078), the +0x50 Vector3, the +0x70 route index and the +0x60 Vector3
 // route array (count at +0x68, resized on a load). A pointer whose object fails
@@ -95,7 +95,7 @@ void BoatComponent::Persist(void* stream) {
     IO::Stream& io = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream is void* (Object::Base)
     { IO::Serializer scope(io, 0); }
     IO::Serializer ser(io, 0);
-    destination.Serialize(ser, ResidenceComponent::TypeId());
+    destination.Serialize(ser, ComponentEntity::TypeId());   // 0x140046635: MOV EDX,[0x1401c5d70]
     dockPosition.Serialize(&ser);
     ser.Serialize(dockHeading, nullptr);                                               // +0x4c float
     model.Serialize(ser, ModelComponent::TypeId());
