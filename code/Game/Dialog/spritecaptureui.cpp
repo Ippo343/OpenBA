@@ -15,7 +15,8 @@
 //   FileSystem::GetSourceDirectory + edit text + ".rsc", calls External::SaveText.
 
 #include "ui/Panels.h"
-#include "Dialog/spritecaptureui_funcs.h"
+#include "Dialog/SpriteCaptureUI.h"
+#include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "system/String.h"
@@ -45,7 +46,9 @@ static UI::Element* FindTyped(UI::Element* root, const char* name, uint32_t type
 // ============================================================
 // SpriteCaptureUI::OnCreated (vtable +0x20, 0x140079640)
 // ============================================================
-void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
+// [4] 0x140079640
+void SpriteCaptureUI::OnCreated() {
+    SpriteCaptureUI* self = this;
     // --- the three elements, each checked with IsDerivedFrom ---
     self->editCapture = static_cast<UI::EditElement*>(
         FindTyped(self->_container, "editCapture", UI::EditElement::TypeId()));
@@ -80,7 +83,9 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
 // Per-frame update: drag capture box with left mouse + key 0x3E.
 // When pendingExternal is set, waits one frame then saves.
 // ============================================================
-void SpriteCaptureUI_OnCreate(SpriteCaptureUI* self) {
+// [8] 0x1400793a0
+void SpriteCaptureUI::OnUpdate(const System::Time& /*time*/) {
+    SpriteCaptureUI* self = this;
     // Input::Device singleton (the tree's null guard; retail reads it unguarded)
     const Input::Device* inputDevice = ::Input::Device::_singleton;
     if (!inputDevice) return;
