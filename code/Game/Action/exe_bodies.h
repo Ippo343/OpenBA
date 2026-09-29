@@ -118,11 +118,18 @@ void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float p
 void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4, float* destination, int param_6, int param_7, float speed);  // 0x1400c9170
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
 void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3, uint32_t param_4, uint64_t* param_5, uint32_t param_6);  // 0x1400cb1d0
-void Pf_SetFlagRefreshUpdate_107260(int64_t* param_1);  // 0x140107260
-int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2);  // 0x140123070
-int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2);  // 0x14012c560
-void Pf_StorageDropOff_116760(int64_t param_1, int64_t param_2, int param_3);  // 0x140116760
-int Pf_StorageCountDelta_1167c0(int64_t param_1, int64_t param_2);  // 0x1401167c0
+class Component;              // Component/Component.h
+class ComponentDescription;   // Component/ComponentDescription.h
+class ComponentEntity;        // Entity/ComponentEntity.h
+class InteractComponent;      // Component/InteractComponent.h
+class StorageComponent;       // Component/StorageComponent.h
+template <class T> struct RawArray;   // Action/PathSearch.h
+void Pf_SetFlagRefreshUpdate_107260(Component* self);  // 0x140107260
+int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
+int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2);  // 0x140123070 B4 FORWARD -> InteractNodeCount
+bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
+void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count);  // 0x140116760
+int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material);  // 0x1401167c0
 
 // ---- action_pf_geom.cpp
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
@@ -158,9 +165,17 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2);  // 0x140087fb0
 void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);  // 0x1400af370
 
 // ---- action_pf_roots_drop.cpp
-void Pf_SpillAllStorage_7570(int64_t param_1);  // 0x1400c7570
-uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, uint64_t param_4);  // 0x1400c7620
-void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4, void* param_5, int64_t param_6, uint32_t param_7);  // 0x1400bbea0
+class AnimalDescription;      // Component/AnimalDescription.h
+class CitizenComponent;       // Component/CitizenComponent.h
+class DropOffRawMaterial;     // Action/DropOffRawMaterial.h
+struct ActionStack;           // Action/Action.h
+void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* material, int count);  // 0x1400c78c0
+void SpillAllStorage(DropOffRawMaterial* self);  // 0x1400c7570
+uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target, ComponentDescription* material);  // 0x1400c7620
+void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, float* destination, uint32_t createFlag, Component* const* animal, const AnimalDescription* description, uint32_t gate);  // 0x1400bbea0
+void Pf_SpillAllStorage_7570(int64_t param_1);  // 0x1400c7570 B4 FORWARD -> SpillAllStorage
+uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, uint64_t param_4);  // 0x1400c7620 B4 FORWARD -> DropOffExec
+void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4, void* param_5, int64_t param_6, uint32_t param_7);  // 0x1400bbea0 B4 FORWARD -> RemoveAnimalActions
 
 // ---- action_pf_roots_misc.cpp
 int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* param_4, uint32_t param_5);  // 0x14009bd40
@@ -174,10 +189,14 @@ void Pf_RefreshRegionHeight_9e0e0(unsigned int* param_1, int param_2, int param_
 void Pf_FinalizeRoadTile_9c640(unsigned int* param_1, int param_2, uint8_t param_3, unsigned int param_4);  // 0x14009c640
 
 // ---- action_pf_roots_route.cpp
-int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810
-uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3);  // 0x14012cd80
-int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param_3, int64_t param_4);  // 0x14012d5d0
-int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3, uint64_t param_4, int param_5, char param_6, uint32_t* param_7, void* param_8);  // 0x14008d590
+bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
+int FindBestAdjacentCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14012d5d0
+ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, ComponentEntity* const* exclude);  // 0x14008d590
+// B4 FORWARD C spellings (defined in action_pf_ctors.cpp)
+int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4);  // 0x14009f810 -> Map::PathDistance
+uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3);  // 0x14012cd80 -> StorageCanAdd
+int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param_3, int64_t param_4);  // 0x14012d5d0 -> FindBestAdjacentCell
+int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3, uint64_t param_4, int param_5, char param_6, uint32_t* param_7, void* param_8);  // 0x14008d590 -> PickBestDropTarget
 
 // ---- keystone_a_zone.cpp
 int RoadTool_helper_6e30(int64_t param_1, unsigned int param_2, uint64_t param_3, void* param_4, int64_t param_5, int param_6);  // 0x1400a6e30

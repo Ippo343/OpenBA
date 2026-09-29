@@ -46,7 +46,7 @@ public:
     // ---- the 10 slots, in retail order -------------------------------------
     // The retail dtor's non-vptr work: release +0x10. `~Internal` is chained by
     // the compiler.
-    ~Action() override { if (_entity) _entity.DeletePtr(); }         // [0] 0x140021c90
+    ~Action() override { if (_next) _next.DeletePtr(); }         // [0] 0x140021c90
     // [1]/[2]: the abstract base answers its own registration by name (B38 D4,
     // as the pilot's Component); every leaf overrides both.
     // [1] TypeName 0x140021c80 and [2] Type 0x140021c70: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
@@ -64,9 +64,11 @@ public:
 
 
     // ---- the 0x10 bytes Action adds, retail order ---------------------------
-    // PUBLIC while unconverted bodies (the executor, Pf_ActStackWalkClear_4f10)
-    // read them at raw offsets.
-    ::Object::InternalBasePtr _entity;   // +0x10 released by the dtor (DeletePtr)
+    // PUBLIC while unconverted bodies (the executor) read them at raw offsets.
+    // +0x10 is the next node of the stack entry's chain (B.4 ACT-a: the walk
+    // 0x1400c4f10 advances through it, the dtor releases it; the tree called it
+    // `_entity`).
+    ::Object::InternalPtr<Action> _next; // +0x10 released by the dtor (DeletePtr)
     bool     _status;                     // +0x18 serialized by slot 3; the
                                           //       stack walk 0x1400c4f10 clears it
     uint8_t  _pad19[7];                   // +0x19 never written by the ctor
@@ -74,10 +76,34 @@ public:
 protected:
     // The inlined retail base ctor: `Internal()`, then +0x10 = 0, +0x18 = 0.
     // The vptr store is the compiler's.
-    Action() : Object::Internal(), _entity(), _status(false) {}
+    Action() : Object::Internal(), _next(), _status(false) {}
 };
 
 static_assert(sizeof(Action) == 0x20, "Action is 0x20 bytes (0x10 Internal + 0x10)");
 static_assert(alignof(Action) == 8, "Action is 8-aligned");
-static_assert(offsetof(Action, _entity) == 0x10, "Action +0x10 entity IBP (0x1400013ee)");
+static_assert(offsetof(Action, _next) == 0x10, "Action +0x10 next IBP (0x1400013ee)");
 static_assert(offsetof(Action, _status) == 0x18, "Action +0x18 status byte (0x1400013f6)");
+
+// ActionStack (B.4 ACT-a): the 0x20-byte action list a CharacterComponent embeds at
+// +0x48 (its ctor takes the sub-object's address, the dtor releases it through
+// 0x1400c5150). Read from the push 0x1400c54e0 (grows `actions` through
+// Array<qword>::SetSize 0x1400032e0 when `current + 1 == count`, walks the old top
+// with 0x1400c4f10, then stores at ++current) and CharacterComponent's own fields.
+struct ActionStack {
+    ::Object::InternalPtr<Action>* actions;   // +0x00 Array<InternalPtr<Action>> data
+    int32_t  count;                           // +0x08 Array count
+    int32_t  capacity;                        // +0x0C Array capacity
+    Action*  field_0x10;                      // +0x10 InternalPtr<Action>
+    int32_t  current;                         // +0x18 index of the running entry (-1 = none)
+    uint8_t  _pad1C[4];                       // +0x1C
+};
+
+static_assert(sizeof(ActionStack) == 0x20, "ActionStack: CharacterComponent +0x48..+0x67");
+static_assert(offsetof(ActionStack, actions)    == 0x00, "ActionStack::actions @ +0x00");
+static_assert(offsetof(ActionStack, count)      == 0x08, "ActionStack::count @ +0x08");
+static_assert(offsetof(ActionStack, capacity)   == 0x0C, "ActionStack::capacity @ +0x0C");
+static_assert(offsetof(ActionStack, field_0x10) == 0x10, "ActionStack +0x10");
+static_assert(offsetof(ActionStack, current)    == 0x18, "ActionStack::current @ +0x18");
+
+void ActionStackWalkClear(ActionStack* stack, ::Object::InternalPtr<Action>* cursor);   // 0x1400c4f10 (action_pf_ctors.cpp)
+void ActionStackPush(ActionStack* stack, const ::Object::InternalPtr<Action>* action);  // 0x1400c54e0 (action_pf_ctors.cpp)
