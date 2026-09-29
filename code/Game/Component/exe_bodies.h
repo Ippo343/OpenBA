@@ -177,11 +177,6 @@ void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, shor
 void FishingComponent_NotifyTile(void* selfP, int16_t param2);  // 0x14004a300
 
 // ---- herdcomponent.cpp
-char HerdComponent_Helper6b10(int64_t param_1);  // 0x140106b10
-float HerdComponent_CheckFood(int64_t entityComp, int gridCell);  // 0x140053f20
-char HerdComponent_CheckMigrationDone(int64_t herdComp);  // 0x140121980
-void HerdComponent_AdjustSize(void* herdComp, int targetSize);  // 0x140121450
-void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp);  // 0x14012e510
 
 // ---- interactcomponent.cpp
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  // 0x140004740

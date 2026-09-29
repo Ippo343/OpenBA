@@ -185,22 +185,21 @@ void HerdComponent::Persist(void* stream) {
 
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
-    // LEFT: HerdComponent's fields are untyped words (COMP-d's header)
-    int count = *reinterpret_cast<int*>(&data40);
+    int count = memberCount;
     ser.Serialize(count, nullptr);
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&data38).SetSize(count);
+    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&members).SetSize(count);
 
-    uint8_t* member = reinterpret_cast<uint8_t*>(data38);
-    for (int i = 0; i < count && member; ++i, member += 8)
+    WildAnimalComponent** member = members;
+    for (int i = 0; i < count && member; ++i, ++member)
         SerializeValidatedIBP(member, ser, WildAnimalComponent::TypeId());
 
-    ser.Serialize(*reinterpret_cast<bool*>(&data48), nullptr);
-    reinterpret_cast<System::Time*>(&data50)->Serialize(ser);
-    reinterpret_cast<System::Time*>(&data58)->Serialize(ser);
-    ser.Serialize(data4C, nullptr);
-    SerializeValidatedIBP(&data28, ser, PopulationComponent::TypeId());
-    ser.Serialize(*reinterpret_cast<int*>(&data30), nullptr);
+    ser.Serialize(migrating, nullptr);
+    grazeTimer.Serialize(ser);
+    spawnTimer.Serialize(ser);
+    ser.Serialize(tile, nullptr);
+    SerializeValidatedIBP(&population, ser, PopulationComponent::TypeId());
+    ser.Serialize(populationCell, nullptr);
 }
 
 void LivestockComponent::Persist(void* stream) {

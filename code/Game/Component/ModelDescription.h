@@ -21,6 +21,25 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace Graphics { class GraphicsMesh; }
+namespace Object { class External; }
+
+// One element of ModelDescription's mesh-group array (stride 0x18), from Serialize
+// 0x140124dc0: an ExternalPtr at +0x00 (0x140035b40, type cell import 0x140152980,
+// not settled), then an Array of ExternalPtr<GraphicsMesh> (0x14001bcc0, type cell
+// import 0x140151f20 = GraphicsMesh) whose element is the mesh a ModelComponent's
+// meshIndex selects (0x140107400, 0x140124ac0).
+struct ModelMeshGroup {
+    Object::External*        field_0x00;   // +0x00 ExternalPtr (class not settled)
+    Graphics::GraphicsMesh** meshes;       // +0x08 Array<ExternalPtr<GraphicsMesh>> data
+    int32_t                  meshCount;    // +0x10
+    int32_t                  meshCapacity; // +0x14
+};
+static_assert(sizeof(ModelMeshGroup) == 0x18, "ModelDescription mesh group stride 0x18");
+static_assert(offsetof(ModelMeshGroup, meshes) == 0x08, "");
+static_assert(offsetof(ModelMeshGroup, meshCount) == 0x10, "");
+static_assert(offsetof(ModelMeshGroup, meshCapacity) == 0x14, "");
+
 class ModelDescription final : public Description {
     DECLARE_EXE_TYPE(ModelDescription)
 
@@ -36,7 +55,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x1400359a0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _meshGroups;                          // +0x20 MeshGroup array data (0x18 stride: mesh, material array, count, cap)
+    ModelMeshGroup* _meshGroups;                // +0x20 Array<ModelMeshGroup> data
     int32_t _meshGroupCount;                    // +0x28
     int32_t _meshGroupCap;                      // +0x2c
     int32_t _lod0;                              // +0x30

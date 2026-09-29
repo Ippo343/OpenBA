@@ -26,6 +26,8 @@
 #include "system/Value.h"   // System::Time
 #include "Object/exe_type.h"
 
+namespace Math { class Vector3; }
+
 class AnimalComponent final : public Component {
     DECLARE_EXE_TYPE(AnimalComponent)
 
@@ -44,6 +46,8 @@ public:
     int  FindHabitat();                                           // 0x140106020
     void UpdateBehavior();                                        // 0x140107320
     void SetWanderTimer(uint32_t animId, float seconds);          // 0x140106250
+    void Place(const Math::Vector3* position, float yaw, bool pose); // 0x140107400 (body: herdcomponent.cpp)
+    bool IsInWanderBox() const;                                   // 0x140106b10 (body: herdcomponent.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from
     // Persist 0x140106e40: int (import 0x140152ac8), System::Time::Serialize
