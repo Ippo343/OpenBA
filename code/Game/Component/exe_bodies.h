@@ -216,9 +216,6 @@ void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount); 
 void ResidenceComponent_ResidenceInit(void* selfP);  // 0x140129ef0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::EvictResidents
 bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0 B4 FORWARD: 1 outside caller (standalone/death_harness.cpp) -> ResidenceComponent::IsFamilyFull (moved from citizencomponent.cpp)
 
-// ---- spawncomponent.cpp
-void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag);  // 0x140055780
-
 // ---- statusiconcomponent.cpp
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0 B4 FORWARD: outside callers in 16 files -> StatusIconComponent::SetFlag (moved from citizencomponent.cpp)
 

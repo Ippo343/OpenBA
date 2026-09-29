@@ -13,6 +13,11 @@
 #include "Component/spawncomponent_funcs.h"
 #include "Component/SpawnDescription.h"
 #include "Component/GrowthDescription.h"
+#include "Component/GrowthComponent.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/MapComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
 #include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -27,9 +32,8 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
 #include "Component/exe_bodies.h"
-#include "Action/exe_bodies.h"          // ActCNR_FindComponent_c460, ActCNR_SetupModelAtCell_126540,
-                                        // ActCNR_SetGrowthProgress_120db0
-#include "Work/exe_bodies.h"            // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
+#include "Action/exe_bodies.h"          // ActCNR_SetupModelAtCell_126540, ActCNR_SetGrowthProgress_120db0
+#include "Work/exe_bodies.h"            // WorkLeaf_FootprintOwnerCheck_120c30
 #include "Player/exe_bodies.h"          // PlayerPath_CharComp_f5d0
 #include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Game/exe_constants.h"
@@ -40,11 +44,11 @@
 
 static constexpr float SECS_PER_SEASON = 300.0f;
 
-// 0x1400052c0 WorkBase_FindComponent_52c0 — gets linked object from entity owner
-// 0x140055780 SpawnComponent_DoSpawn (below) — performs actual spawn operation
+// 0x1400052c0 FindComponent<NaturalResourceComponent> — the owner's growth
+// 0x140055780 SpawnComponent::DoSpawn (below) — performs actual spawn operation
 
 // FUN_140001bb0 — dynamic Time-array resize (stride 8). Sizes the per-entry timer
-// array at self+0x28 in the OnCreate/Startup body-init. ENDGAME B.3.2 step 2:
+// array in the OnCreate/Startup body-init. ENDGAME B.3.2 step 2:
 // converted to GameColl::AsArray<GameColl::Ptr8>(h).SetSize(n) (same stride/align/
 // zero-tail as Collection::Array<void*>::SetSize).
 
@@ -65,7 +69,7 @@ bool g_worldgenDone = false;
 
 
 // ============================================================
-// SpawnComponent initial seed — ComponentEntity_impl_5cc0 (0x140055cc0)
+// SpawnComponent initial seed — SpawnComponent::InitialSpawn (0x140055cc0)
 // ============================================================
 // Called once per scattered natural resource by FUN_1400a12b0 (the worldgen
 // scatter), right after the growth/age init and before the model-variant pick —
@@ -90,83 +94,73 @@ bool g_worldgenDone = false;
 //     meaningless (retail's data never has one).
 // The dead component-search over the OWNER's list at the top of 5cc0 (its result
 // is computed and discarded) is not reproduced.
-void SpawnComponent_InitialSpawn(SpawnComponent* self) {
-    if (!self) return;
-
-    uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-
-    // Sibling NaturalResourceComponent — carries the growth value at +0x28.
-    uintptr_t ownerIBP = comp + 0x10;
-    uintptr_t natRes = 0;
-    WorkBase_FindComponent_52c0(*(uintptr_t*)ownerIBP, &natRes);
-    if (natRes == 0) return;
-    const float growth = *(float*)(natRes + 0x28);
+void SpawnComponent::InitialSpawn() {
+    // Sibling NaturalResourceComponent (FindComponent 0x1400052c0) — carries the
+    // growth value at +0x28.
+    NaturalResourceComponent* natRes = _entity->FindComponent<NaturalResourceComponent>();
+    if (natRes == nullptr) return;
+    const float growth = natRes->resourceScale;
 
     // SpawnDescription at +0x18 (IsDerivedFromOrTrust — same policy as Update).
-    void* baseObj = self->_description;
+    Description* baseObj = _description;
     if (!baseObj) return;
-    void* spawnDesc = baseObj;
-    if (Object::IsDerivedFromNullSafe(baseObj, SpawnDescription::TypeId()))
-        spawnDesc = baseObj;
+    SpawnDescription* spawnDesc = static_cast<SpawnDescription*>(baseObj);
 
-    const int entryCount = *(int*)((uintptr_t)spawnDesc + 0x28);
-    const uintptr_t entryArrayBase = *(uintptr_t*)((uintptr_t)spawnDesc + 0x20);
-    if (entryCount <= 0 || !entryArrayBase) return;
+    const int entryCount = spawnDesc->_entryCount;
+    const SpawnDescription::Entry* entries = spawnDesc->_entries;
+    if (entryCount <= 0 || !entries) return;
 
     for (int i = 0; i < entryCount; ++i) {
-        const uintptr_t entry = entryArrayBase + (uintptr_t)i * 0x10;
-        const float minAge = *(float*)(entry + 0x08);
-        const float maxAge = *(float*)(entry + 0x0C);
-        if (growth < minAge || growth > maxAge) continue;
+        const SpawnDescription::Entry& entry = entries[i];
+        if (growth < entry._minSpawnAge || growth > entry._maxSpawnAge) continue;
 
         // The spawn template entity; find its GrowthDescription for the divisor.
-        const int64_t host = *(int64_t*)entry;
+        const ComponentDescription* host = entry._template;
         if (!host) continue;
-        void* growthDesc = nullptr;
-        const int compCount = *(int*)(host + 0x30);
-        const int64_t compArr = *(int64_t*)(host + 0x28);
+        GrowthDescription* growthDesc = nullptr;
+        const int compCount = host->_subDescCount;
+        Description** compArr = host->_subDescs;
         for (int j = 0; j < compCount && compArr; ++j) {
-            void* c = *(void**)(compArr + (int64_t)j * 8);
+            Description* c = compArr[j];
             if (!c) continue;
-            const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
-            if (tid == GrowthDescription::TypeId()) {
-                growthDesc = c;   // trust it; IsDerivedFrom is unreliable here
+            if (c->Type() == GrowthDescription::TypeId()) {
+                growthDesc = static_cast<GrowthDescription*>(c);   // trust it; IsDerivedFrom is unreliable here
                 break;
             }
         }
         if (!growthDesc) continue;
 
-        const float perSpawn = *(float*)((uintptr_t)growthDesc + 0x20);
+        const float perSpawn = growthDesc->_f20;
         if (!(perSpawn > 0.0f)) continue;
         const int repeats = (int)(growth / perSpawn) + 1;
         for (int r = 0; r < repeats; ++r) {
-            SpawnComponent_DoSpawn(self, spawnDesc, i, 1);   // flag=1 => random orientation
+            DoSpawn(spawnDesc, i, 1);   // flag=1 => random orientation
         }
     }
 }
 
-// 0x140055ee0 door: registered by address (standalone/reg_growth_spawn_serialize.cpp).
-extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
+// B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> SpawnComponent::InitialSpawn
+void SpawnComponent_InitialSpawn(SpawnComponent* self) {
     if (!self) return;
-    reinterpret_cast<SpawnComponent*>(self)->SpawnComponent::Persist(stream);   // B.3.8 bridge
+    self->InitialSpawn();
 }
 
 
 // ============================================================
-// Reimpl of FUN_140055780 (ComponentEntity_impl_5780: probabilistically spawn one
-//   child entity (animal/resource) near the owner from a spawn-table entry)
+// SpawnComponent::DoSpawn (0x140055780; ComponentEntity_impl_5780): probabilistically
+//   spawn one child entity (animal/resource) near the owner from a spawn-table entry
 // ============================================================
-// Faithful port of the Ghidra decompilation. resourceData+0x20 holds the spawn
-// table (0x10 stride); entryIndex selects the template. A random roll gated by the
-// template's density (g_fUVScale / templ+0x48) decides whether to spawn; the tile is
+// Faithful port of the Ghidra decompilation. desc->_entries holds the spawn
+// table; entryIndex selects the template. A random roll gated by the
+// template's density (g_fUVScale / GrowthDescription+0x48) decides whether to spawn; the tile is
 // chosen by RandTol jitter around the owner tile and validated, then a copy of the
 // template entity is instantiated, placed, oriented, and registered.
 // The DoSpawn closure, by retail address:
-//   0x140004680 FloorComponent_FindResData        (the owner's map component)
+//   0x140004680 FindComponent<MapComponent>       (the owner's map component)
 //   0x14009f5d0 PlayerPath_CharComp_f5d0          (can-place test)
 //   0x140120c30 WorkLeaf_FootprintOwnerCheck_120c30 (tile-free test; the door read AL)
 //   0x1400c3720 ComponentEntity_CtorFromDescription
-//   0x1400052c0 WorkBase_FindComponent_52c0       0x14000c460 ActCNR_FindComponent_c460
+//   0x1400052c0 FindComponent<NaturalResourceComponent>  0x14000c460 FindComponent<GrowthComponent>
 //   0x140126540 ActCNR_SetupModelAtCell_126540    0x140120db0 ActCNR_SetGrowthProgress_120db0
 //   0x1400c48a0 EntityList_RegisterEntity_Impl
 //   .rdata 0x14017214c = 1.0 (g_fUVScale), 0x140172140 = 0.98, 0x140172248 = 1000.0
@@ -215,29 +209,30 @@ extern "C" void SpawnComponent_ReportDoSpawnCensus(const char* tag) {
 // StartTown_GrowthInitResource uses) was tried on 2026-08-13 and is NOT the cause:
 // BANISHED_LIVE_GROWTH is default-on, so the links ARE populated, the guard never
 // fired, and the crash reproduced byte-identically. Ruled out — don't re-spend it.
-void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag) {
-    uintptr_t self = (uintptr_t)selfP;
+void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char randomGrowth) {
     ++g_doSpawn.calls;
     if (GameUpdateLoop::_singleton == nullptr) { ++g_doSpawn.noWorld; return; }
-    uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
-    int* grid = *(int**)(gw + 0xf8);
-    void* random = *(void**)(gw + 0xd8);
-    if ((*(uint32_t*)(gw + 0xd0) >> 10) & 1) { ++g_doSpawn.worldBitSet; return; }
+    // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map goes to the
+    // can-place test as the int* it has always been.
+    int* grid = reinterpret_cast<int*>(gw->m_game);
+    System::Random* random = gw->m_random;
+    if ((gw->m_gameFlags >> 10) & 1) { ++g_doSpawn.worldBitSet; return; }
 
-    int64_t* entry = (int64_t*)((int64_t)entryIndex * 0x10 + *(int64_t*)((uintptr_t)resourceData + 0x20));
-    int64_t host = *entry;
+    const SpawnDescription::Entry* entry = &desc->_entries[entryIndex];
+    const ComponentDescription* host = entry->_template;
 
-    // Find the template component (type DAT_1401c77e8) on the entry entity
-    void* templ = nullptr;
+    // Find the template's GrowthDescription (cell DAT_1401c77e8) among its sub-descriptions
+    GrowthDescription* templ = nullptr;
     {
-        int count = *(int*)(host + 0x30);
-        int64_t arr = *(int64_t*)(host + 0x28);
+        int count = host->_subDescCount;
+        Description** arr = host->_subDescs;
         for (int i = 0; i < count; i++) {
-            void* comp = *(void**)(arr + (int64_t)i * 8);
-            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-            if (tid == GrowthDescription::TypeId()) {
-                if (Object::IsDerivedFromNullSafe(comp, GrowthDescription::TypeId())) templ = comp;
+            Description* comp = arr[i];
+            if (comp->Type() == GrowthDescription::TypeId()) {
+                if (Object::IsDerivedFromNullSafe(comp, GrowthDescription::TypeId()))
+                    templ = static_cast<GrowthDescription*>(comp);
                 break;
             }
         }
@@ -245,20 +240,18 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     if (!templ) { ++g_doSpawn.noTemplate; return; }
 
     // Density roll
-    float roll = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
-    float density = kRdata_14017214c / (float)*(int*)((uintptr_t)templ + 0x48);
+    float roll = random->RandFloat();
+    float density = kRdata_14017214c / (float)templ->_i48;
     if (roll > density) { ++g_doSpawn.densityRoll; return; }
 
-    // Owner tile
-    uint8_t mapBuf[8] = {0};
-    FloorComponent_FindResData(*(void**)(self + 0x10), mapBuf);
-    int64_t mapComp = *(int64_t*)mapBuf;
-    int16_t baseX = *(int16_t*)(mapComp + 0x28);
-    int16_t baseY = *(int16_t*)(mapComp + 0x2a);
+    // Owner tile (FindComponent<MapComponent> 0x140004680)
+    MapComponent* map = _entity->FindComponent<MapComponent>();
+    int16_t baseX = map->tileX0;
+    int16_t baseY = map->tileY0;
 
-    int tol = *(int*)((uintptr_t)templ + 0x4c);
-    int x = baseX + reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
-    int y = baseY + reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol));   // B.3.4b bridge
+    int tol = templ->_i4c;
+    int x = baseX + random->RandTol(static_cast<int32_t>(tol));
+    int y = baseY + random->RandTol(static_cast<int32_t>(tol));
     if (x < 0 || y < 0) { ++g_doSpawn.offMap; return; }
     int mapSize = *grid;
     if (x >= mapSize || y >= mapSize) { ++g_doSpawn.offMap; return; }
@@ -272,35 +265,27 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
               reinterpret_cast<intptr_t>(templ), x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
 
     int placeMapSize = *grid;
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* newEntity = nullptr;
-    if (mem) newEntity = ComponentEntity_CtorFromDescription(
-                             reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(*entry));
+    ComponentEntity* mem = static_cast<ComponentEntity*>(
+        System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* newEntity = nullptr;
+    if (mem) newEntity = ComponentEntity_CtorFromDescription(mem, entry->_template);
     // Retail carries a null entity through the remaining steps (every one of them
     // is individually null-guarded, and the final Register would file a null IBP).
     // Bailing here reaches the same end state without adding a junk entry.
     if (!newEntity) { ++g_doSpawn.allocFailed; return; }
 
-    int64_t entityIbp = 0;
-    new (&entityIbp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
+    Object::InternalPtr<ComponentEntity> entityIbp(newEntity);
 
-    // Place at tile index
-    int64_t linkBufA = 0;
-    void* pa = WorkBase_FindComponent_52c0(static_cast<uintptr_t>(entityIbp), &linkBufA);
-    if (pa) {
-        ActCNR_SetupModelAtCell_126540(*(int64_t*)pa, placeMapSize * y + x);
-    }
+    // Place at tile index (NaturalResourceComponent, FindComponent 0x1400052c0)
+    NaturalResourceComponent* natRes = newEntity->FindComponent<NaturalResourceComponent>();
+    ActCNR_SetupModelAtCell_126540(reinterpret_cast<int64_t>(natRes), placeMapSize * y + x);
 
-    // Reset orientation
-    int64_t linkBufB = 0;
-    void* pb = ActCNR_FindComponent_c460(static_cast<uintptr_t>(entityIbp), &linkBufB);
-    if (pb) {
-        ActCNR_SetGrowthProgress_120db0(*(int64_t*)pb, 0.0f);
-    }
+    // Reset the growth (GrowthComponent, FindComponent 0x14000c460)
+    GrowthComponent* growth = newEntity->FindComponent<GrowthComponent>();
+    ActCNR_SetGrowthProgress_120db0(reinterpret_cast<int64_t>(growth), 0.0f);
 
     // Register with world entity list
-    int64_t regIbp = entityIbp;
+    Object::InternalPtr<ComponentEntity> regIbp = entityIbp;
     {
         // EntityList::RegisterEntity (0x1400c48a0) opens with
         //   if (*(char*)((char*)list + 0xE0)) { InternalBasePtr::DeletePtr(ibp); return; }
@@ -309,24 +294,21 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
         // also counts the non-event, so read the flag first and tally separately —
         // a deleted entity that already joined Graphics::Scene during its ctor is
         // precisely the dangling scene node Scene::Clean faults on.
-        void* list = *(void**)(gw + 0xe8);
-        const bool closed = list && *((char*)list + 0xE0) != '\0';
-        EntityList_RegisterEntity_Impl(list, &regIbp,
-                                       *(int*)(*(int64_t*)(*(int64_t*)(self + 0x10) + 0x28) + 0x20));
+        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): its +0xE0 byte by offset.
+        void* list = gw->m_entityList;
+        const bool closed = list && reinterpret_cast<const char*>(list)[0xE0] != '\0';
+        EntityList_RegisterEntity_Impl(list, &regIbp, _entity->_description->_category);
         // Measurement only — the tail below stays byte-faithful to retail, which
         // also carries on through the deleted IBP (its finders return null there).
         if (closed) ++g_doSpawn.listClosed; else ++g_doSpawn.created;
     }
 
-    // Optional random orientation
-    if (flag != '\0') {
-        int64_t b2 = 0;
-        void* p2 = ActCNR_FindComponent_c460(static_cast<uintptr_t>(entityIbp), &b2);
-        if (p2 && *(int64_t*)p2 != 0) {
-            int64_t b3 = 0;
-            void* p3 = ActCNR_FindComponent_c460(static_cast<uintptr_t>(entityIbp), &b3);
-            float rf = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
-            if (p3) ActCNR_SetGrowthProgress_120db0(*(int64_t*)p3, rf);
+    // Optional random growth
+    if (randomGrowth != '\0') {
+        if (newEntity->FindComponent<GrowthComponent>() != nullptr) {
+            GrowthComponent* g3 = newEntity->FindComponent<GrowthComponent>();
+            float rf = random->RandFloat();
+            ActCNR_SetGrowthProgress_120db0(reinterpret_cast<int64_t>(g3), rf);
         }
     }
 }
@@ -340,7 +322,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 
 // 0x140056030. Component() is the CALL 0x1401188b0; the 0x14015a670 stamp is
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0x88.
-SpawnComponent::SpawnComponent() : field28(nullptr), field30(nullptr) {
+SpawnComponent::SpawnComponent() : timers(nullptr), timerCount(0), timerCapacity(0) {
     OrFlagsInCtor(0x88);
 }
 
@@ -350,170 +332,138 @@ SpawnComponent::SpawnComponent() : field28(nullptr), field30(nullptr) {
 // serializer, not a dtor).
 // ============================================================
 // Fields (verified against retail decompile/disassembly at 0x140055ee0):
-//   +0x30  int             per-entry timer count (also written BACK by the
-//                           resize helper itself, not by an explicit store).
-//   +0x28  Time[count]     per-entry accumulation timers, stride 8 (see
-//                           SpawnComponent_Startup / SpawnComponent_Update),
-//                           load-side resized via the same stride-8 resizer
-//                           (0x140001bb0, GameColl::AsArray<GameColl::Ptr8>::SetSize)
-//                           used by Startup's body-init.
+//   timerCount  per-entry timer count (also written BACK by the resize helper
+//               itself, not by an explicit store).
+//   timers      Time[count] per-entry accumulation timers, load-side resized via
+//               the same stride-8 resizer (0x140001bb0,
+//               GameColl::AsArray<GameColl::Ptr8>::SetSize) used by Startup.
 //   On load only, retail then reconciles the restored count against the LIVE
-//   SpawnDescription's entry count (desc+0x28, desc validated by
-//   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918, already
-//   resolved as s_pSpawnResourceTypeId): if they differ, resize again to
-//   match the description currently in effect.
+//   SpawnDescription's entry count (desc->_entryCount, desc validated by
+//   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918): if they
+//   differ, resize again to match the description currently in effect.
 void SpawnComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
-    // True when the serializer is READING (retail reads the stream's own +8
-    // field for this component, equivalent to the serializer's first field).
-    auto Loading = [](void* s) {
-        return static_cast<int>(reinterpret_cast<IO::Serializer*>(s)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    };
+    int count = timerCount;
+    ser.Serialize(count, nullptr);
+    if (static_cast<int>(ser.GetDirection()) == 0)   // IO::Serializer::GetDirection, retail 0x180006210
+        GameColl::AsArray<GameColl::Ptr8>(&timers).SetSize(count);  // also writes timerCount = count
 
-    int count = *reinterpret_cast<int*>(comp + 0x30);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
-    if (Loading(ser))
-        GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(count);  // also writes comp+0x30 = count
+    System::Time* timer = timers;
+    int n = timerCount;
+    for (int i = 0; i < n && timer; ++i, ++timer)
+        timer->Serialize(ser);
 
-    uint8_t* timer = *reinterpret_cast<uint8_t**>(comp + 0x28);
-    int n = *reinterpret_cast<int*>(comp + 0x30);
-    for (int i = 0; i < n && timer; ++i, timer += 8)
-        reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-
-    if (Loading(stream)) {
-        void* desc = *reinterpret_cast<void**>(comp + 0x18);
-        void* validated = nullptr;
-        if (desc &&
-            reinterpret_cast<const Object::Base*>(desc)->IsDerivedFrom(SpawnDescription::TypeId()))   // B.3.x bridge
-            validated = desc;
-        int descCount = validated
-            ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(validated) + 0x28)
-            : 0;
-        if (*reinterpret_cast<int*>(comp + 0x30) != descCount)
-            GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(descCount);
+    // LEFT (a tree defect, listed): this test reads the STREAM as a Serializer, so it
+    // answers from the stream's vtable word and is never "loading"; retail tests the
+    // stream's direction here (0x140055ee0) and reconciles on every load.
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(stream)->GetDirection()) == 0) {
+        Description* desc = _description;
+        SpawnDescription* validated = nullptr;
+        if (desc && desc->IsDerivedFrom(SpawnDescription::TypeId()))
+            validated = static_cast<SpawnDescription*>(desc);
+        int descCount = validated ? validated->_entryCount : 0;
+        if (timerCount != descCount)
+            GameColl::AsArray<GameColl::Ptr8>(&timers).SetSize(descCount);
     }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 // ============================================================
 // SpawnComponent::Startup (vtable slot [4], +0x20, original SpawnComponent_Serialize
 // / OnCreate 0x140055e90)
 // ============================================================
-// Body-init: size the per-entry timer array at self+0x28 to the SpawnDescription's
-// entry count (desc+0x28), via the registered stride-8 Time-array resizer
-// (FUN_140001bb0). The array descriptor occupies self+0x28 (data ptr) / +0x30
-// (count) / +0x34 (capacity) — the two pointers the Ctor zeroes. Called at spawn
-// by ComponentEntity_StartupComponents (SpawnComponent flags 0x88 have bit 7).
+// Body-init: size the per-entry timer array to the SpawnDescription's entry count,
+// via the stride-8 Time-array resizer (FUN_140001bb0). Called at spawn by
+// ComponentEntity_StartupComponents (SpawnComponent flags 0x88 have bit 7).
 //
-// The original gates the count on IsDerivedFrom(_unk18, SpawnDescription); in
-// standalone that can be unreliable, so we trust comp+0x18 (the description the
+// The original gates the count on IsDerivedFrom(_description, SpawnDescription); in
+// standalone that can be unreliable, so we trust _description (the description the
 // copy-ctor stored), matching growthcomponent.cpp's documented precedent.
 void SpawnComponent::Startup() {
-    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
-
-    void* desc = *reinterpret_cast<void**>(comp + 0x18);   // _unk18 = SpawnDescription
+    Description* desc = _description;
     if (!desc) return;                                     // not yet wired to a description
 
-    int entryCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
+    int entryCount = static_cast<SpawnDescription*>(desc)->_entryCount;
     if (entryCount <= 0) return;
 
-    // Resize the timer array (descriptor at comp+0x28). Zero-initialised entries.
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(comp + 0x28)).SetSize(entryCount);
+    // Resize the timer array. Zero-initialised entries.
+    GameColl::AsArray<GameColl::Ptr8>(&timers).SetSize(entryCount);
 }
 
 // [9] 0x140055ad0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void SpawnComponent::Update(void* timeV) {
-    int64_t* pDeltaTime = static_cast<int64_t*>(timeV);
-
-    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
-    // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array at
-    // +0x28 (data ptr) / +0x30 (count) is allocated by SpawnComponent_Startup (step
-    // 2 of the recipe), which the spawn pipeline invokes via vtable+0x20 in
-    // ComponentEntity_StartupComponents. As belt-and-suspenders, if +0x28 is still
-    // null but the description(+0x18) is present, run the body-init now (idempotent).
-    // The loop below indexes *(self+0x28) unconditionally, so bail if still unset.
-    if (*(uintptr_t*)(comp + 0x28) == 0) {
-        if (*(uintptr_t*)(comp + 0x18) != 0)
+    // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array is
+    // allocated by SpawnComponent::Startup, which the spawn pipeline invokes via
+    // vtable+0x20 in ComponentEntity_StartupComponents. As belt-and-suspenders, if
+    // the timers are still null but the description is present, run the body-init
+    // now (idempotent). The loop below indexes the timers unconditionally, so bail
+    // if still unset.
+    if (timers == nullptr) {
+        if (_description != nullptr)
             SpawnComponent::Startup();
-        if (*(uintptr_t*)(comp + 0x28) == 0) {
+        if (timers == nullptr) {
             return;
         }
     }
 
-    // CheckPtr on owner IBP, then get linked object
-    uintptr_t ownerIBP = (uintptr_t)this + 0x10;
-    uintptr_t linkedObjPtr = 0;
-    WorkBase_FindComponent_52c0(*(uintptr_t*)ownerIBP, &linkedObjPtr);
+    // The owner's NaturalResourceComponent (FindComponent 0x1400052c0)
+    NaturalResourceComponent* natRes = _entity->FindComponent<NaturalResourceComponent>();
 
-    // Get resource data via IsDerivedFrom check on _unk18
-    void* baseObj = _description;
-    bool isDerived = Object::IsDerivedFromNullSafe(baseObj, SpawnDescription::TypeId());
-    void* resourceData = isDerived ? baseObj : nullptr;
-    // [STANDALONE TRUST] The factory tree can be incomplete in standalone, making
-    // IsDerivedFrom on a description unreliable (see growthcomponent.cpp Startup).
-    // _unk18 is the SpawnDescription the copy-ctor stored at +0x18 — trust it.
-    if (!resourceData && baseObj) resourceData = baseObj;
+    // The SpawnDescription. Retail validates it with IsDerivedFrom; [STANDALONE
+    // TRUST] the factory tree can be incomplete in standalone, making IsDerivedFrom
+    // on a description unreliable (see growthcomponent.cpp Startup), so the tree
+    // trusts the description the copy-ctor stored (its answer never changed the value).
+    Description* desc = _description;
+    SpawnDescription* resourceData = static_cast<SpawnDescription*>(desc);
     if (!resourceData) {
         return;
     }
 
-    // CheckPtr on linked object IBP before reading growth
-    // [BRING-UP GUARD] The owner needs a sibling NaturalResourceComponent (found by
-    // GetLinkedObject 0x1400052c0) for the growth read; bail rather than null-deref
-    // if a spawner lacks one in standalone.
-    if (linkedObjPtr == 0) {
+    // [BRING-UP GUARD] The owner needs a sibling NaturalResourceComponent for the
+    // growth read; bail rather than null-deref if a spawner lacks one in standalone.
+    if (natRes == nullptr) {
         return;
     }
-    float currentGrowth = *(float*)(linkedObjPtr + 0x28);
+    float currentGrowth = natRes->resourceScale;
 
 
-    // Get spawn entry count from resourceData+0x28
-    int entryCount = *(int*)((uintptr_t)resourceData + 0x28);
+    int entryCount = resourceData->_entryCount;
     if (entryCount <= 0) {
         return;
     }
 
-    uintptr_t entryArrayBase = *(uintptr_t*)((uintptr_t)resourceData + 0x20);
+    const SpawnDescription::Entry* entries = resourceData->_entries;
 
     for (int i = 0; i < entryCount; i++) {
-        uintptr_t entry = entryArrayBase + (uintptr_t)i * 0x10;
+        const SpawnDescription::Entry& entry = entries[i];
 
-        float minGrowth = *(float*)(entry + 0x08);
-        float maxGrowth = *(float*)(entry + 0x0C);
-
-        if (currentGrowth < minGrowth || currentGrowth > maxGrowth) {
+        if (currentGrowth < entry._minSpawnAge || currentGrowth > entry._maxSpawnAge) {
             continue;
         }
 
         // Accumulate delta time
-        int64_t byteOffset = (int64_t)i * 8;
-        int64_t* pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
-        *pTimer += *pDeltaTime;
+        timers[i]._ticks += pDeltaTime->_ticks;
 
 
-        // Get spawn template data from the entry
-        uintptr_t templateData = *(uintptr_t*)entry;
+        // The spawn template
+        const ComponentDescription* templateData = entry._template;
 
-        // Search template's component list for the spawn interval component
-        int componentCount = *(int*)(templateData + 0x30);
-        void* spawnIntervalComp = nullptr;
+        // Search the template's sub-descriptions for its GrowthDescription
+        int componentCount = templateData->_subDescCount;
+        GrowthDescription* spawnIntervalComp = nullptr;
 
         for (int j = 0; j < componentCount; j++) {
-            void* comp = *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8);
-            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+            Description* comp = templateData->_subDescs[j];
 
-            if (typeId == GrowthDescription::TypeId()) {
+            if (comp->Type() == GrowthDescription::TypeId()) {
                 if (Object::IsDerivedFromNullSafe(comp, GrowthDescription::TypeId())) {
-                    spawnIntervalComp = comp;
+                    spawnIntervalComp = static_cast<GrowthDescription*>(comp);
                 }
                 break;
             }
@@ -524,12 +474,11 @@ void SpawnComponent::Update(void* timeV) {
         }
 
         // Convert spawn interval to ticks
-        float intervalSecs = *(float*)((uintptr_t)spawnIntervalComp + 0x28) * SECS_PER_SEASON;
+        float intervalSecs = spawnIntervalComp->_f28 * SECS_PER_SEASON;
         int64_t intervalTicks = (int64_t)((double)intervalSecs / ::System::Timer::_secondsPerTick);
 
-        pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
-        while (intervalTicks > 0 && *pTimer >= intervalTicks) {
-            *pTimer -= intervalTicks;
+        while (intervalTicks > 0 && timers[i]._ticks >= intervalTicks) {
+            timers[i]._ticks -= intervalTicks;
             {
                 // Positive assertion: only the per-tick arm can print this,
                 // one-shot.
@@ -541,9 +490,8 @@ void SpawnComponent::Update(void* timeV) {
                         fflush(stderr);
                     }
                 }
-                SpawnComponent_DoSpawn(this, resourceData, i, 0);
+                DoSpawn(resourceData, i, 0);
             }
-            pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
         }
     }
 }
