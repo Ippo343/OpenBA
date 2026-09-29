@@ -20,6 +20,7 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+namespace UI { class SpriteSheet; class StringTable; }   // B4 H4 (DLG-e)
 
 class TradeDescription final : public Description {
     DECLARE_EXE_TYPE(TradeDescription)
@@ -36,8 +37,8 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14000dc10
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
-    void* _ref28;                               // +0x28 ExternalPtr (a raw pointer)
+    UI::SpriteSheet* _ref20;                    // +0x20 ExternalPtr (a raw pointer)
+    UI::StringTable* _ref28;                    // +0x28 ExternalPtr (a raw pointer)
     void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
     void* _pairs;                               // +0x38 string-pair array data (0x18 stride: enum, String, String)
     int32_t _pairCount;                         // +0x40
