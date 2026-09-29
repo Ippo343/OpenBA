@@ -207,10 +207,6 @@ extern "C" int Pasture_FillAllPastures();  // 0x140060290
 // ---- pasturecomponent_states.cpp
 extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770
 
-// ---- populationcomponent.cpp
-void PopulationComponent_SmoothDensity_Reimpl(void* selfV);  // 0x1400538c0
-void PopulationComponent_ScanHabitability_Reimpl(void* selfV, void* terrainGridV, int cellIndex);  // 0x140053b50
-
 // ---- rawmaterialcomponent.cpp
 void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial
 

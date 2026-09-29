@@ -97,7 +97,7 @@ UNIT_TEST(cit_component_member_offsets) {
     CHECK_EQ(offsetof(LivestockComponent, productionTimer),    (size_t)0x30);
     CHECK_EQ(offsetof(NaturalResourceComponent, mature),       (size_t)0x2c);
     CHECK_EQ(offsetof(ParticleComponent, emitterCount),             (size_t)0x40);
-    CHECK_EQ(offsetof(PopulationComponent, field68),           (size_t)0x68);
+    CHECK_EQ(offsetof(PopulationComponent, scanIndex),         (size_t)0x68);
     CHECK_EQ(offsetof(SpawnComponent, field30),                (size_t)0x30);
     CHECK_EQ(offsetof(TombstoneComponent, field28),            (size_t)0x28);
     CHECK_EQ(offsetof(TornadoComponent, path.index),           (size_t)0x50);
