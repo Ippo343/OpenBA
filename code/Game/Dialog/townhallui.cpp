@@ -35,6 +35,8 @@
 #include "Game/Profession.h"
 #include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "Component/CitizenComponent.h"
+#include "Entity/CitizenBehavior.h"
+#include "runtime/types/collection/Collection.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "Component/coll_bridge.h"
@@ -699,8 +701,15 @@ void TownHallUI::InitAgriculture() {
 // Reads time/graph combo selections, populates the graph element
 // with historical data series, and updates y-axis labels.
 void TownHallUI::UpdateGraph() {
+    // The town manager and its stat-history series (+0x150: an Array of int
+    // Arrays, one per series; series 0's count is the current tick).
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+    const Collection::Array<int>* history =
+        reinterpret_cast<const Collection::Array<int>*>(town->field_0x150);   // LEFT: CitizenBehavior::field_0x150 is void* (WORK-a)
+
     // Cache game tick
-    cachedGameTick = *(int*)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton->m_citizenList + 0x150) + 8);   // LEFT: the town manager (WORK-a)
+    cachedGameTick = history[0]._size;
 
     // Read combo selections
     int timeIdx = timeCombo->_currentItem;
@@ -763,8 +772,7 @@ void TownHallUI::UpdateGraph() {
     // Remove existing graphs
     graphData->RemoveGraphs();
 
-    uintptr_t gameData = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;   // LEFT: the town manager (WORK-a)
-    int currentTick = *(int*)(*(uintptr_t*)(gameData + 0x150) + 8);
+    int currentTick = history[0]._size;
     int maxVal = 0;
     int graphCount = 0;
 
@@ -790,8 +798,7 @@ void TownHallUI::UpdateGraph() {
             }
 
             for (int64_t idx = startIdx; idx < currentTick; idx += stepSize) {
-                uintptr_t histBase = *(uintptr_t*)(*(uintptr_t*)(gameData + 0x150) + (uintptr_t)seriesIdx * 0x10);   // LEFT: WORK-a
-                int val = *(int*)(histBase + idx * 4);
+                int val = history[seriesIdx]._data[idx];
                 if (val > maxVal) maxVal = val;
                 graphData->AddGraphPoint(graphCount, val);
             }
@@ -834,15 +841,16 @@ void TownHallUI::UpdateGraph() {
 // TownHallUI::UpdateGeneral (0x14007d030)
 // ============================================================
 void TownHallUI::UpdateGeneral() {
-    uintptr_t gameData = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;   // LEFT: the town manager (WORK-a)
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
 
-    int totalCitizens = *(int*)(gameData + 0xa8);
+    int totalCitizens = town->citizenCount;
     int adults = 0, students = 0, children = 0, familyCount = 0;
     float clothedSum = 0.0f, educatedSum = 0.0f, healthSum = 0.0f, happinessSum = 0.0f;
     float perCitizen = (totalCitizens > 0) ? (1.0f / (float)totalCitizens) : 0.0f;
 
     for (int i = 0; i < totalCitizens; i++) {
-        CitizenComponent* citizen = (*(CitizenComponent***)(gameData + 0xa0))[i];   // LEFT: WORK-a
+        CitizenComponent* citizen = town->citizens[i];
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
@@ -893,7 +901,7 @@ void TownHallUI::UpdateGeneral() {
     textMonth->SetText(&monthCopy);
 
     // Home count
-    int homeCount = *(int*)(gameData + 0x28);   // LEFT: WORK-a
+    int homeCount = town->field_0x28;
     numberHomes->SetValue(static_cast<int32_t>(homeCount));
 
     // Citizen counts
@@ -922,19 +930,19 @@ void TownHallUI::UpdateGeneral() {
         TownHall_GroupRatingUpdate(&groupHearts, 0.0f, 1.0f);   // 0x14006aed0
         TownHall_GroupRatingUpdate(&groupStars, 0.0f, 1.0f);   // 0x14006aed0
     } else {
-        CitizenComponent* firstCitizen = **(CitizenComponent***)(gameData + 0xa0);   // LEFT: WORK-a
-        void* desc = firstCitizen->_description;
+        CitizenComponent* firstCitizen = town->citizens[0];
+        Description* desc = firstCitizen->_description;
         CitizenDescription* citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
-            ? reinterpret_cast<CitizenDescription*>(desc) : nullptr;   // LEFT: Component::_description is void*
+            ? static_cast<CitizenDescription*>(desc) : nullptr;
 
         TownHall_GroupRatingUpdate(&groupHearts, healthSum * perCitizen,
                               citizenDesc->maxHealth);
 
         // Re-read first citizen for the happiness maximum
-        firstCitizen = **(CitizenComponent***)(gameData + 0xa0);   // LEFT: WORK-a
+        firstCitizen = town->citizens[0];
         desc = firstCitizen->_description;
         citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
-            ? reinterpret_cast<CitizenDescription*>(desc) : nullptr;   // LEFT: void*
+            ? static_cast<CitizenDescription*>(desc) : nullptr;
 
         TownHall_GroupRatingUpdate(&groupStars, happinessAvg,
                               citizenDesc->maxHappiness);
@@ -977,25 +985,23 @@ void TownHallUI::UpdateProfessions() {
     int prevEnd = timePtr[0] * 0x30 - 0x31;
     int prevStart = (timePtr[0] - (int)yearSpan - 1) * 0x30;
 
-    void* townMgr = GameUpdateLoop::_singleton->m_citizenList;
-    uintptr_t gameData = (uintptr_t)townMgr;   // LEFT: the town manager (WORK-a)
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
     uint32_t resIdx = 10;
     int prodCount = prodLimitsCount;
 
     if (prodCount > 0) {
-        int64_t dataOff = 0;
         for (int i = 0; i < prodCount; i++) {
-            int stock = *(int*)(*(uintptr_t*)(gameData + 0x170) + dataOff);   // LEFT: WORK-a
+            int stock = town->professionResources[i].currentCount;
 
             prodLimits[i].stock->SetValue(static_cast<int32_t>(stock));
 
-            uintptr_t prodData = *(uintptr_t*)(gameData + 0x170);   // LEFT: WORK-a
-            int usedCur = TownHall_QueryProductionStat(townMgr, resIdx - 1, currentYearTick, endTick);   // 0x140090f20
-            int usedStock = *(int*)(prodData + 0xc + dataOff);
-            int prodCur = TownHall_QueryProductionStat(townMgr, resIdx, currentYearTick, endTick);   // 0x140090f20
-            int prodStock = *(int*)(prodData + 0x10 + dataOff);
-            int usedPrev = TownHall_QueryProductionStat(townMgr, resIdx - 1, prevStart, prevEnd);   // 0x140090f20
-            int prodPrev = TownHall_QueryProductionStat(townMgr, resIdx, prevStart, prevEnd);   // 0x140090f20
+            int usedCur = TownHall_QueryProductionStat(town, resIdx - 1, currentYearTick, endTick);   // 0x140090f20
+            int usedStock = town->professionResources[i].field_0x0C;
+            int prodCur = TownHall_QueryProductionStat(town, resIdx, currentYearTick, endTick);   // 0x140090f20
+            int prodStock = town->professionResources[i]._field10;
+            int usedPrev = TownHall_QueryProductionStat(town, resIdx - 1, prevStart, prevEnd);   // 0x140090f20
+            int prodPrev = TownHall_QueryProductionStat(town, resIdx, prevStart, prevEnd);   // 0x140090f20
 
             prodLimits[i].used->SetValue(static_cast<int32_t>(usedCur + usedStock));
 
@@ -1006,7 +1012,6 @@ void TownHallUI::UpdateProfessions() {
             prodLimits[i].producedPrev->SetValue(static_cast<int32_t>(prodPrev));
 
             resIdx += 3;
-            dataOff += 0x20;
         }
     }
 }
@@ -1240,15 +1245,16 @@ void TownHallUI::UpdateProduction() {
 // in-order, updates agriculture label elements with sprites
 // and text from SelectDescription components.
 void TownHallUI::UpdateAgriculture() {
-    uintptr_t gameData = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;   // LEFT: the town manager (WORK-a)
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
 
-    // Build temporary BST from entity list at gameData+0x120/+0x128
+    // Build temporary BST from the town's description list (+0x120/+0x128)
     AgricultureNode* tempBSTRoot = nullptr;
     int tempBSTCount = 0;
-    int entityCount = *(int*)(gameData + 0x128);   // LEFT: WORK-a
+    int entityCount = town->field_0x128;
 
     for (int i = 0; i < entityCount; i++) {
-        uint64_t entityPtr = *(uint64_t*)(*(uintptr_t*)(gameData + 0x120) + (uintptr_t)i * 8);   // LEFT: WORK-a
+        uint64_t entityPtr = reinterpret_cast<uint64_t>(town->field_0x120[i]);   // LEFT: the tree key is the pointer's bits
 
         if (!tempBSTRoot) {
             // First node — allocate root
@@ -1376,7 +1382,8 @@ next_entity: ;
 // WorkPlaceComponent / WorkComponent to calculate
 // max worker slots, updates NumberEditElement values.
 void TownHallUI::UpdateInventory() {
-    uintptr_t gameData = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;   // LEFT: the town manager (WORK-a)
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
     ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
     int profCount = profList->arrayCount;
 
@@ -1390,12 +1397,12 @@ void TownHallUI::UpdateInventory() {
     }
 
     // Phase 2: For each profession, look up the town's profession tree
-    // (gameData+0x100) to find the buildings of that profession, count worker slots
+    // (+0x100) to find the buildings of that profession, count worker slots
     for (int p = 0; p < profCount; p++) {
         uint64_t profTypeId = reinterpret_cast<uint64_t*>(profList->arrayData)[p];   // LEFT: GAME-b void*
 
-        // Look up profession type in entity BST at gameData+0x100
-        void* bstNode = *(void**)(gameData + 0x100);   // LEFT: WORK-a
+        // Look up profession type in the town's profession tree (+0x100)
+        void* bstNode = town->field_0x100;   // the node walk below stays raw: CitizenBehavior types no node (WORK-a)
         while (bstNode) {
             uint64_t nodeKey = *(uint64_t*)bstNode;
             if (profTypeId < nodeKey)
@@ -1458,9 +1465,9 @@ void TownHallUI::UpdateInventory() {
     }
 
     // Phase 3: Count adult citizens per profession
-    int citizenCount = *(int*)(gameData + 0xa8);   // LEFT: WORK-a
+    int citizenCount = town->citizenCount;
     for (int c = 0; c < citizenCount; c++) {
-        CitizenComponent* citizen = (*(CitizenComponent***)(gameData + 0xa0))[c];   // LEFT: WORK-a
+        CitizenComponent* citizen = town->citizens[c];
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
@@ -1508,14 +1515,14 @@ void TownHallUI::UpdateInventory() {
 // and populates invBST counters, then updates inventory and
 // agriculture table UI based on component types.
 void TownHallUI::UpdateAll() {
-    uintptr_t gameData = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;   // LEFT: the town manager (WORK-a)
-    uintptr_t* gdPtr = (uintptr_t*)gameData;
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
 
-    // Phase 1: For each tracked entity (gameData+0x110/+0x118),
+    // Phase 1: For each tracked description (+0x110/+0x118),
     // zero or insert entry in invBST
-    int trackedCount = *(int*)(gameData + 0x118);   // LEFT: WORK-a
+    int trackedCount = town->field_0x118;
     for (int i = 0; i < trackedCount; i++) {
-        uint64_t entityPtr = *(uint64_t*)(*(uintptr_t*)(gameData + 0x110) + (uintptr_t)i * 8);   // LEFT: WORK-a
+        uint64_t entityPtr = reinterpret_cast<uint64_t>(town->field_0x110[i]);   // LEFT: the tree key is the pointer's bits
 
         // Look up in invBST
         InventoryNode* bstNode = InvBST_Find(invBST, entityPtr);
@@ -1537,29 +1544,27 @@ void TownHallUI::UpdateAll() {
     }
 
     // Phase 2: Collect all entities from 4 entity lists
-    // Each list is at gameData[i*2] = array ptr, gameData[i*2+1] = count
+    // The town's first four arrays (+0x00/+0x10/+0x20/+0x30, each {data, count})
     //
     // B.3.2 bridge: this is a local Collection::Array<uint64_t> (retail's
     // hand-inlined SetSize on a stack-local {data,size,capacity} triple, not a
     // struct field), so it is a real instance of the template rather than a
     // GameColl::ArrayAt view over someone else's bytes.
-    Collection::Array<uint64_t> entityArr;
+    Collection::Array<ComponentEntity*> entityArr;
 
+    ComponentEntity** const lists[4] = { town->field_0x00, town->field_0x10, town->field_0x20, town->field_0x30 };
+    const int32_t listCounts[4] = { town->field_0x08, town->field_0x18, town->field_0x28, town->field_0x38 };
     for (int listIdx = 0; listIdx < 4; listIdx++) {
-        uintptr_t arrayPtr = gdPtr[listIdx * 2];
-        int listCount = (int)gdPtr[listIdx * 2 + 1];
-
-        for (int j = 0; j < listCount; j++) {
-            uint64_t entityPtr = *(uint64_t*)(arrayPtr + (uintptr_t)j * 8);   // LEFT: WORK-a
-            entityArr.SetSize(entityArr.GetSize() + 1, entityPtr);
+        for (int j = 0; j < listCounts[listIdx]; j++) {
+            entityArr.SetSize(entityArr.GetSize() + 1, lists[listIdx][j]);
         }
     }
 
     // Phase 3: For each collected entity, find components and update BST counters
-    uint64_t* entities = entityArr.GetData();
+    ComponentEntity** entities = entityArr.GetData();
     int entityCount = entityArr.GetSize();
     for (int i = 0; i < entityCount; i++) {
-        ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entities[i]);   // LEFT: the list holds the pointer bits
+        ComponentEntity* entity = entities[i];
 
         // Find StorageComponent (DAT_1401c7e78)
         StorageComponent* storage = entity->FindComponent<StorageComponent>();
@@ -1641,36 +1646,33 @@ void TownHallUI::OnProfessionSpinner(int index) {
     if (current < desired) {
         int toAdd = desired - current;
         for (int i = 0; i < toAdd; i++) {
-            void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t*>(GameUpdateLoop::_singleton->m_professionList->arrayData)[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
+            // The seat functions take the town manager and the profession as integers.
+            const int64_t townKey = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenEmploy_Strat_* / FindAvailableBuilding take int64_t (Component/Game exe_bodies.h)
+            const int64_t profKey = reinterpret_cast<int64_t*>(GameUpdateLoop::_singleton->m_professionList->arrayData)[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
 
-            uint64_t retBuf[2] = {0, 0};
-            FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
-            uint64_t slot = retBuf[0];
+            int64_t retBuf[2] = {0, 0};
+            FindAvailableBuilding(townKey, retBuf, static_cast<uint64_t>(profKey));   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
+            int64_t slot = retBuf[0];
 
-            // Try idle -> working -> student -> any
-            uint64_t slotCopy = slot;
-            uint8_t findBuf[8] = {0};
-            void* result = CitizenEmploy_Strat_cbf0(reinterpret_cast<int64_t>(citizenList), findBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008cbf0
-            uint64_t found = *(uint64_t*)result;
+            // Try idle -> working -> student -> any. Each strategy returns its
+            // `out` argument, so the result is read there.
+            int64_t slotCopy = slot;
+            int64_t found = 0;
+            CitizenEmploy_Strat_cbf0(townKey, &found, &slotCopy, profKey);   // 0x14008cbf0
 
             if (found == 0) {
                 if (slot != 0) {
                     slotCopy = slot;
-                    uint8_t fb2[8] = {0};
-                    result = CitizenEmploy_Strat_ca20(reinterpret_cast<int64_t>(citizenList), fb2, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008ca20
-                    found = *(uint64_t*)result;
+                    CitizenEmploy_Strat_ca20(townKey, &found, &slotCopy, profKey);   // 0x14008ca20
                     if (found != 0) continue;
                 }
                 slotCopy = slot;
-                uint8_t fb3[8] = {0};
-                result = CitizenEmploy_Strat_c5f0(reinterpret_cast<int64_t>(citizenList), fb3, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c5f0
-                found = *(uint64_t*)result;
+                CitizenEmploy_Strat_c5f0(townKey, &found, &slotCopy, profKey);   // 0x14008c5f0
 
                 if (found == 0) {
                     slotCopy = slot;
-                    uint64_t anyBuf = 0;
-                    CitizenEmploy_Strat_c4b0(reinterpret_cast<int64_t>(citizenList), &anyBuf, reinterpret_cast<int64_t*>(&slotCopy), static_cast<int64_t>(profId));   // 0x14008c4b0
+                    int64_t anyBuf = 0;
+                    CitizenEmploy_Strat_c4b0(townKey, &anyBuf, &slotCopy, profKey);   // 0x14008c4b0
                 }
             }
         }
@@ -1715,13 +1717,14 @@ bool Ready() {
 bool TownReady() {
     if (!(GameUpdateLoop::_singleton != nullptr)) return false;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    uintptr_t townMgr = (uintptr_t)gw->m_citizenList;   // LEFT: the town manager (WORK-a)
+    CitizenBehavior* townMgr =
+        reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
     ProfessionList* profList = gw->m_professionList;
     if (!townMgr || !profList) return false;
     if (profList->arrayCount <= 0 || profList->arrayData == nullptr) return false;
     if (gw->m_dayCounter == nullptr) return false;
-    if (*(uintptr_t*)(townMgr + 0x150) == 0) return false;   // stat-history series
-    if (*(uintptr_t*)(townMgr + 0x170) == 0) return false;   // production records
+    if (townMgr->field_0x150 == nullptr) return false;           // stat-history series
+    if (townMgr->professionResources == nullptr) return false;   // production records
     return true;
 }
 
@@ -1757,19 +1760,20 @@ void DiagPrint(const char* where, const TownHallUI* self) {
             (::Object::ExternalFactory::_singleton) ? 1 : 0);
     if (GameUpdateLoop::_singleton != nullptr) {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-        uintptr_t townMgr = (uintptr_t)gw->m_citizenList;   // LEFT: the town manager (WORK-a)
+        CitizenBehavior* townMgr =
+            reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
         ProfessionList* profList = gw->m_professionList;
         fprintf(stderr, "[TownHallSA]   gw=%p townMgr=%p profList=%p profCnt=%d clock=%p hist(+150)=%p prod(+170)=%p\n",
                 static_cast<void*>(gw), gw->m_citizenList, static_cast<void*>(profList),
                 profList ? profList->arrayCount : -1,
                 gw->m_dayCounter,
-                townMgr ? (void*)*(uintptr_t*)(townMgr + 0x150) : nullptr,
-                townMgr ? (void*)*(uintptr_t*)(townMgr + 0x170) : nullptr);
+                townMgr ? townMgr->field_0x150 : nullptr,
+                townMgr ? static_cast<void*>(townMgr->professionResources) : nullptr);
         // UpdateGeneral's two data sources: the town citizen list (+0xa0/+0xa8,
         // CitizenComponent_OnAdd) and the residence list (+0x20/+0x28, helper_9de0).
         if (townMgr)
             fprintf(stderr, "[TownHallSA]   citizens(+0xa8)=%d homes(+0x28)=%d\n",
-                    *(int*)(townMgr + 0xa8), *(int*)(townMgr + 0x28));
+                    townMgr->citizenCount, townMgr->field_0x28);
     } else {
         fprintf(stderr, "[TownHallSA]   GameUpdateLoop::_singleton=%p\n",
                 static_cast<void*>(GameUpdateLoop::_singleton));
@@ -1884,7 +1888,9 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
         TownHallUI::OnUpdateLayout();
         return;
     }
-    int currentTick = *(int*)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton->m_citizenList + 0x150) + 8);   // LEFT: the town manager (WORK-a)
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+    int currentTick = reinterpret_cast<const Collection::Array<int>*>(town->field_0x150)[0]._size;   // LEFT: CitizenBehavior::field_0x150 is void* (WORK-a)
 
     if (this->cachedGameTick != currentTick) {
         this->cachedGameTick = currentTick;

@@ -308,9 +308,9 @@ void WorkPlaceUI::OnCreated() {
     // guard belongs. The buttons found above keep their .rsc default state, so
     // skipping here is a strict no-op for those buildings.
     if (!work) return;
-    void* descSource = work->_description;
+    Description* descSource = work->_description;
     WorkDescription* workDesc = ::Object::IsDerivedFromNullSafe(descSource, WorkDescription::TypeId())
-        ? reinterpret_cast<WorkDescription*>(descSource) : nullptr;   // LEFT: Component::_description is void* (Component.h)
+        ? static_cast<WorkDescription*>(descSource) : nullptr;
 
     if (workDesc && !workDesc->_b20) {
         jobCountUp->SetFlagsOnOff(1, 0);
@@ -337,9 +337,9 @@ void WorkPlaceUI::OnUpdateLayout() {
     WorkPlaceComponent* workPlace = entity->FindComponent<WorkPlaceComponent>();
     WorkComponent* work = entity->FindComponent<WorkComponent>();
 
-    void* descSource = work->_description;
+    Description* descSource = work->_description;
     WorkDescription* workDesc = ::Object::IsDerivedFromNullSafe(descSource, WorkDescription::TypeId())
-        ? reinterpret_cast<WorkDescription*>(descSource) : nullptr;   // LEFT: Component::_description is void* (Component.h)
+        ? static_cast<WorkDescription*>(descSource) : nullptr;
 
     // No profession: the building is complete (or not a workplace) — hide the panel.
     if (workPlace->profession == nullptr) {

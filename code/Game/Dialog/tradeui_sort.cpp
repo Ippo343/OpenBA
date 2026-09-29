@@ -54,6 +54,8 @@
 #include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 #include "Dialog/exe_bodies.h"
+#include "Dialog/TradeUI.h"
+#include "Component/RawMaterialDescription.h"
 
 namespace {
 
@@ -86,17 +88,17 @@ inline void Swap24(Elem a, Elem b) {
 // That is reproduced rather than "fixed": adding a dtor call retail does not make
 // would be a behaviour change smuggled in under the heading of correctness.
 bool BuildNameKey(const void* elem, System::String* outString) {
-    const uint8_t* p = *reinterpret_cast<const uint8_t* const*>(
-        reinterpret_cast<const uint8_t*>(elem) + 8);
+    // The elements are TradeUI::StorageItem rows (_storageItems, +0x30); P is
+    // the row's RawMaterialDescription.
+    const RawMaterialDescription* p =
+        reinterpret_cast<const TradeUI::StorageItem*>(elem)->rawMaterial;   // LEFT: the introsort is byte-generic (retail's shared body)
     if (!p) { return false; }
 
     alignas(8) uint8_t uiBuf[64];
-    void* ui = ::new (static_cast<void*>(uiBuf)) UI::String(
-        ::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(
-            *reinterpret_cast<const uint64_t*>(p + 0x28))),
-        *reinterpret_cast<const System::String*>(p + 0x30));  // B.3.6 bridge
+    UI::String* ui = ::new (static_cast<void*>(uiBuf)) UI::String(
+        ::Object::ExternalPtr<UI::StringTable>(p->_stringTable), p->_name);
     System::String tmp;
-    ::new (static_cast<void*>(&tmp)) System::String(reinterpret_cast<const UI::String*>(ui)->operator System::String());  // B.3.6 bridge
+    ::new (static_cast<void*>(&tmp)) System::String(ui->operator System::String());
     *outString = tmp;
     return true;
 }

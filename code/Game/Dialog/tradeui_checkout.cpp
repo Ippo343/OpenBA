@@ -72,6 +72,7 @@
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/CitizenBehavior.h"
 #include "Action/exe_bodies.h"      // B3R: ActRm_StorageSubtract_d150, _StorageAdd_d000, _GetResourceCategory_88f90
 #include "Component/exe_bodies.h"   // B3R: TradeComponent_SpawnPurchasedLivestock
 #include <cstdint>
@@ -92,8 +93,7 @@
 #include "runtime/types/ui/NumberElement.h"
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
-// 0x140091e60 — appends into townMgr+0x110 (code/Game/Component/rawmaterialcomponent.cpp)
-extern void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);
+// 0x140091e60 RawMaterialComponent_RegisterRawMaterial: Component/exe_bodies.h.
 // 0x140091a20 — appends into townMgr+0x120 (code/Game/Game/starttown.cpp)
 extern void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc);
 
@@ -191,24 +191,23 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     if (!tradeComp) return;
     TradeComponent* trade = reinterpret_cast<TradeComponent*>(tradeComp);   // LEFT: the C signature (outside caller tradecomponent_dock.cpp)
 
-    void* desc = trade->_description;
+    Description* desc = trade->_description;
     // 0x1401c4bb8 is TradeDescription's type-id cell (Table 1).
     const uint32_t tidTradeDesc = TradeDescription::TypeId();
     if (!desc || !::Object::IsDerivedFromNullSafe(desc, tidTradeDesc)) return;
-    TradeDescription* d = reinterpret_cast<TradeDescription*>(desc);   // LEFT: Component::_description is void*
+    TradeDescription* d = static_cast<TradeDescription*>(desc);
 
-    uintptr_t townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenBehavior (WORK-a)
-    if (!townMgr) return;
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
+    if (!town) return;
 
     float weight = d->_f68;
-    float* dstWeight = reinterpret_cast<float*>(townMgr + 0x1a8);
-    if (weight > *dstWeight) *dstWeight = weight;
+    if (weight > town->field_0x1A8) town->field_0x1A8 = weight;
 
     int32_t units = d->_i6c;
     int64_t stay = 0;                                  // 8 bytes — the ctor fills all of it
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&stay), static_cast<float>(units) * 300.0f);
-    int64_t* dstStay = reinterpret_cast<int64_t*>(townMgr + 0x1a0);
-    if (*dstStay < stay) *dstStay = stay;
+    if (town->field_0x1A0 < stay) town->field_0x1A0 = stay;
 }
 
 // ============================================================
@@ -229,14 +228,15 @@ void TradeUI::OnTradeButton() {
 
     TradeDescription_ExtendMerchantStay(trade);
 
-    uintptr_t townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenBehavior (WORK-a)
+    CitizenBehavior* town =
+        reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: GameUpdateLoop::m_citizenList is void* (W0)
 
     // OUTCOME counters. A click that commits nothing and a click that commits a full
     // basket look identical from outside this function, and "the button did nothing" is
     // exactly the report this wave was opened on — so the tail below prints what actually
     // moved, not that the handler was entered.
     int soldRows = 0, soldUnits = 0, boughtRows = 0, boughtUnits = 0;
-    const int creditBefore = *reinterpret_cast<int*>(townMgr + 0x1ac);   // LEFT: WORK-a
+    const int creditBefore = town->field_0x1AC;
 
     // ── Phase 1: sell rows ───────────────────────────────────────────────────
     // _sellItems (+0x30, stride 0x20): resource +0x00, pending quantity +0x18.
@@ -254,15 +254,12 @@ void TradeUI::OnTradeButton() {
                                        reinterpret_cast<int64_t>(resEntity), qty);   // 0x14012d150
 
             // Credit the town's per-category produced-goods tally.
-            //   townMgr+0x170 = category array, stride 0x20, running total at +0x0c
+            //   town->professionResources (+0x170): the category array, running total at +0x0c
             {
                 int cat = ActRm_GetResourceCategory_88f90(
                     storage, reinterpret_cast<uintptr_t>(resEntity));   // 0x140088f90
                 if (cat >= 0) {
-                    uintptr_t catArray = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);   // LEFT: WORK-a
-                    int* total = reinterpret_cast<int*>(
-                        catArray + static_cast<uintptr_t>(cat) * 0x20 + 0x0c);
-                    *total += qty;
+                    town->professionResources[cat].field_0x0C += qty;
                 }
             }
 
@@ -276,7 +273,7 @@ void TradeUI::OnTradeButton() {
     // (+0x100, current value at element+0xd8) rather than recomputed, so the
     // displayed figure and the credited figure cannot disagree.
     {
-        *reinterpret_cast<int*>(townMgr + 0x1ac) += _numberSellTotal->_intValue;   // LEFT: WORK-a
+        town->field_0x1AC += _numberSellTotal->_intValue;
     }
 
     // ── Phase 2: buy rows ────────────────────────────────────────────────────
@@ -299,16 +296,15 @@ void TradeUI::OnTradeButton() {
             if (FindComponentByTypeId(bought, RawMaterialDescription::TypeId())) {
                 ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),
                                       reinterpret_cast<int64_t>(bought), qty);   // 0x14012d000
-                RawMaterialComponent_RegisterRawMaterial(
-                    reinterpret_cast<void*>(townMgr), bought);
+                RawMaterialComponent_RegisterRawMaterial(town, bought);
             }
             // Natural resource (crop / orchard seed): availability only.
             else if (FindComponentByTypeId(bought, NaturalResourceDescription::TypeId())) {
-                TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
+                TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(town), bought);   // LEFT: takes uint8_t* (its declaring header)
             }
             // Livestock: availability, plus spawn the animals into the world.
             else if (FindComponentByTypeId(bought, LivestockDescription::TypeId())) {
-                TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
+                TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(town), bought);   // LEFT: takes uint8_t* (its declaring header)
                 // The door was named fn_Building_AddBuyToStorage; it is bound to
                 // 0x14005ace0 TradeComponent_SpawnPurchasedLivestock (B3R: the binding
                 // decides). The never-taken "did not resolve" arm went with the door.
@@ -325,7 +321,7 @@ void TradeUI::OnTradeButton() {
     fprintf(stderr, "[TradeCheckout] committed: sold %d unit(s) over %d row(s), "
                     "bought %d unit(s) over %d row(s), town trade credit %d -> %d\n",
             soldUnits, soldRows, boughtUnits, boughtRows,
-            creditBefore, *reinterpret_cast<int*>(townMgr + 0x1ac));   // LEFT: WORK-a
+            creditBefore, town->field_0x1AC);
     fflush(stderr);
 
     // ── Phase 3: repaint ─────────────────────────────────────────────────────
