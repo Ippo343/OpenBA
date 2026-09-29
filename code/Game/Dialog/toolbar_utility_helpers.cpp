@@ -20,6 +20,7 @@
 #include "Player/exe_bodies.h"   // B3R: TradeWork_impl_4b40
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
@@ -36,43 +37,56 @@ namespace {
 // Retrace/rebalance (0x140014b40, TradeWork_impl_4b40) — shared AVL retrace,
 // called by name (B3R).
 
+// The 0x38-byte node 0x140014890 inserts: a key and two data qwords (for the
+// utility-dialog set, PlayerToolManager.h's TrackedEntityNode: the key, the
+// packed x / y and the flags), then the tree links.
+struct SetNode {
+    uint64_t key;       // +0x00
+    uint64_t data[2];   // +0x08 / +0x10
+    SetNode* parent;    // +0x18
+    SetNode* left;      // +0x20
+    SetNode* right;     // +0x28
+    uint32_t balance;   // +0x30
+    uint32_t _pad34;    // +0x34
+};
+static_assert(sizeof(SetNode) == 0x38, "set node 0x38");
+static_assert(offsetof(SetNode, parent) == 0x18, "");
+static_assert(offsetof(SetNode, left) == 0x20, "");
+static_assert(offsetof(SetNode, right) == 0x28, "");
+
+// The set header the callers hand over: the root and the count.
+struct SetHeader {
+    SetNode* root;    // +0x00
+    int32_t  count;   // +0x08
+};
+
 // sub_4a90 — allocate + init a new 0x38-byte AVL node (copies the 3 data qwords,
 // sets parent, zeroes children + balance).
-uint64_t* BstNodeAlloc(uint64_t* insertData, uint64_t parent) {
-    uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+SetNode* BstNodeAlloc(const uint64_t* insertData, SetNode* parent) {
+    SetNode* n = static_cast<SetNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
-    n[0] = insertData[0];                 // key (Description ptr)
-    n[1] = insertData[1];                 // packed (x,y)
-    n[2] = insertData[2];                 // flags
-    n[3] = parent;                        // +0x18 parent
-    n[4] = 0;                             // +0x20 left
-    n[5] = 0;                             // +0x28 right
-    *reinterpret_cast<uint32_t*>(n + 6) = 0;  // +0x30 balance
+    n->key = insertData[0];               // key (Description ptr)
+    n->data[0] = insertData[1];           // packed (x,y)
+    n->data[1] = insertData[2];           // flags
+    n->parent = parent;
+    n->left = nullptr;
+    n->right = nullptr;
+    n->balance = 0;
     return n;
 }
 
 }  // namespace
 
-extern "C" {
-
 // ---- FUN_140100270: FindDialogByControllerType ------------------------------
-// (RCX=toolController[unused], RDX=retBuf, R8=param = Description ptr)
-// Writes *retBuf = matching DialogInstance* (or null). Returns void (callers read
-// retBuf; the exe returns retBuf in RAX, harmlessly ignored here).
-void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
-                                                    void* retBuf, uint64_t param) {
-    // Init retBuf InternalBasePtr to null (matches the exe's leading IBP_Ctor).
-    new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+// The open dialog whose ToolUI controller's +0x30 (its description) is
+// `description`, or null. Used to detect an already-open utility dialog (toggle).
+UI::DialogInstance* PlayerToolManager::FindUtilityDialog(const ComponentDescription* description) {
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
+    if (!game) return nullptr;
+    UI::UserInterface* ui = game->m_userInterface;
+    if (!ui) return nullptr;
 
-    void* gameWorld = GameUpdateLoop::_singleton;
-    if (!gameWorld) return;
-    UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
-        reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
-    if (!ui) return;
-
-    // ToolUI type-id (DWORD_1401c5788, RegisterType_ToolUI writer). Raw .rdata →
-    // NULL in standalone; fill from the live factory tree. GetTypeIdByName is a
-    // no-op cost after the first hit (cached in the class's own path); cache here.
+    // ToolUI type-id (DWORD_1401c5788, RegisterType_ToolUI writer), cached.
     static uint32_t s_toolUITid = 0;
     if (s_toolUITid == 0) s_toolUITid = ToolUI::TypeId();
     const uint32_t toolUITid = s_toolUITid;
@@ -80,97 +94,104 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
     // Walk the dialog linked list. `_dialogs.GetFirst()` IS retail's
     // GetFirstDialog (0x180031150 = `*retval = this->_dialogs._head`), and the
     // iterator is the bare node pointer, so `it.node` is the address retail
-    // hands to CheckPtr and `it.node->element` is the DialogInstance IBP.
+    // hands to CheckPtr and `it.node->element` is the DialogInstance.
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
-        void* dialog = it.node->element;
+        // LEFT: the list's element is the runtime's `DialogInstancePtr`, a void*
+        // (UserInterface.h).
+        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(it.node->element);
 
-        // GetController(dialog, &ctrlBuf, ToolUI tid) — R8=type-id filters internally.
-        void* controller = nullptr;
-        uintptr_t ctrlBuf[2] = {};
-        if (dialog)
-            ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialog)->GetController(toolUITid));  // B.3.6 bridge
-        if (ctrlBuf[0] != 0) {
-            void* c = reinterpret_cast<void*>(ctrlBuf[0]);
-            if (::Object::IsDerivedFromNullSafe(c, toolUITid)) controller = c;
+        // GetController(ToolUI tid), narrowed to a ToolUI
+        const ToolUI* controller = nullptr;
+        if (dialog) {
+            UI::DialogController* c = dialog->GetController(toolUITid).Get();
+            if (c && ::Object::IsDerivedFromNullSafe(c, toolUITid)) controller = static_cast<const ToolUI*>(c);
         }
 
-        // Wrap the (possibly null) controller in an IBP, resolve, compare +0x30.
-        uintptr_t ctrlRef = 0;
-        new (&ctrlRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(controller));   // B.3.3 bridge
-        if (ctrlRef != 0) {
-            if (*reinterpret_cast<uint64_t*>(ctrlRef + 0x30) == param) {
-                *reinterpret_cast<void**>(retBuf) = it.node->element;
-                return;
-            }
+        if (controller != nullptr && controller->description == description) {
+            return dialog;
         }
     }
+    return nullptr;
+}
+
+extern "C" {
+
+// B4 FORWARD: tutorial_wave.cpp (TUT) passes the retail shape — its own object
+// in RCX (unread), the InternalPtr slot, the key as a qword.
+void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
+                                                    void* retBuf, uint64_t param) {
+    *reinterpret_cast<UI::DialogInstance**>(retBuf) =
+        PlayerToolManager::FindUtilityDialog(reinterpret_cast<const ComponentDescription*>(param));  // CAST-OK: ptr_int
 }
 
 // ---- FUN_140014890: BST_Insert_0x14 ----------------------------------------
 // (RCX=rootHolder, RDX=retNode, R8=insertData)
-//   rootHolder: [0]=root node ptr, [+8] int32 count
+//   rootHolder: the set header, root node and int32 count
 //   retNode:    *retNode = the found-or-inserted node
-//   insertData: [0]=key(Description ptr), [1]=packed(x,y), [2]=flags
+//   insertData: [0]=key, [1] / [2] the node's two data qwords
 // Faithful AVL find-or-insert; rebalances from the insertion point via 0x140014b40.
+// B4 FORWARD: the int64_t* / void** / uint64_t* signature is kept for
+// townhallui.cpp (DLG-e, running) and PlayerToolManager::ToggleUtilityDialog.
 void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData) {
-    if (*rootHolder == 0) {
+    SetHeader* set = reinterpret_cast<SetHeader*>(rootHolder);
+    if (set->root == nullptr) {
         // Empty tree — the new node becomes the root.
-        uint64_t* n = reinterpret_cast<uint64_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+        SetNode* n = static_cast<SetNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
         if (!n) {
-            *rootHolder = 0;
+            set->root = nullptr;
             *retNode = nullptr;
         } else {
-            n[0] = insertData[0];
-            n[1] = insertData[1];
-            n[2] = insertData[2];
-            n[3] = 0; n[4] = 0; n[5] = 0;
-            *reinterpret_cast<uint32_t*>(n + 6) = 0;
+            n->key = insertData[0];
+            n->data[0] = insertData[1];
+            n->data[1] = insertData[2];
+            n->parent = nullptr; n->left = nullptr; n->right = nullptr;
+            n->balance = 0;
             *retNode = n;
-            *rootHolder = reinterpret_cast<int64_t>(n);
+            set->root = n;
         }
     } else {
         const uint64_t key = insertData[0];
-        uint64_t* next = reinterpret_cast<uint64_t*>(*rootHolder);
-        uint64_t* node = nullptr;      // current node examined (== insertion parent)
-        uint64_t* newNode = nullptr;
+        SetNode* next = set->root;
+        SetNode* node = nullptr;      // current node examined (== insertion parent)
+        SetNode* newNode = nullptr;
         bool inserted = false;
 
         while (!inserted) {
             node = next;
             // Walk right while node->key < key.
-            while (*node <= key) {
-                if (key <= *node) {          // equal → existing node found (no count++)
+            while (node->key <= key) {
+                if (key <= node->key) {      // equal → existing node found (no count++)
                     *retNode = node;
                     return;
                 }
-                if (node[5] == 0) {          // right child null → insert right
-                    newNode = BstNodeAlloc(insertData, reinterpret_cast<uint64_t>(node));
-                    node[5] = reinterpret_cast<uint64_t>(newNode);
+                if (node->right == nullptr) {   // right child null → insert right
+                    newNode = BstNodeAlloc(insertData, node);
+                    node->right = newNode;
                     inserted = true;
                     break;
                 }
-                next = reinterpret_cast<uint64_t*>(node[5]);
+                next = node->right;
                 node = next;
             }
             if (inserted) break;
             // node->key > key → go left.
-            if (node[4] == 0) {              // left child null → insert left
-                newNode = BstNodeAlloc(insertData, reinterpret_cast<uint64_t>(node));
-                node[4] = reinterpret_cast<uint64_t>(newNode);
+            if (node->left == nullptr) {     // left child null → insert left
+                newNode = BstNodeAlloc(insertData, node);
+                node->left = newNode;
                 inserted = true;
                 break;
             }
-            next = reinterpret_cast<uint64_t*>(node[4]);
+            next = node->left;
         }
 
+        // LEFT: 0x140014b40's declaration (Player/exe_bodies.h) takes int64_t*.
         TradeWork_impl_4b40(rootHolder, reinterpret_cast<int64_t*>(&node));   // 0x140014b40
         *retNode = newNode;
     }
 
-    // count (rootHolder[+8], int32) — incremented on every non-early-return path,
-    // matching the exe (even the alloc-failure sub-case).
-    *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(rootHolder) + 8) += 1;
+    // count — incremented on every non-early-return path, matching the exe
+    // (even the alloc-failure sub-case).
+    set->count += 1;
 }
 
 }  // extern "C"

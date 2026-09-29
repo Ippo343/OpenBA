@@ -23,6 +23,10 @@
 #include <cstdint>
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
+#include "runtime/types/collection/Collection.h"
+
+class Toolbar;   // Game/Toolbar.h
+namespace UI { class RadioElement; class Element; }
 
 class ToolbarDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(ToolbarDialog)
@@ -31,7 +35,7 @@ public:
     ToolbarDialog();                                                // create 0x140021710
     ToolbarDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                   Object::InternalPtr<UI::DialogInstance> parent,
-                  uint64_t toolbarGroup);                           // 0x1400b9910
+                  const Toolbar* group);                            // 0x1400b9910
 
     ~ToolbarDialog() override;                                     // [0] 0x140021760
     void OnOpened() override;                                      // [4] 0x1400b97c0
@@ -45,38 +49,39 @@ public:
     // slot: slot 5 is a JMP to it and button case 5 calls it on the parent.
     void CloseSubDialog();
 
+    // FUN_1400b91b0: step the game speed (the tool manager's +0x34) one entry of
+    // speedValues up (+1) or down (-1), clamped. Called by OnElementEvent.
+    void ChangeSpeed(int direction);
+
+    // FUN_1400b8fd0: enable the ShowGroup (1) / FocusEntity (4) buttons from
+    // the town's per-template counts. The tail of OnUpdateLayout.
+    void UpdateButtons();
+
 public:
-    uint64_t radioElement;      // +0xB8: the "toolbarContent" RadioElement
-    uint64_t buttonElements;    // +0xC0: Array<Element*> data
-    int32_t  buttonCount;       // +0xC8
-    int32_t  buttonCapacity;    // +0xCC
-    uint64_t toolbarItems;      // +0xD0: Array<ToolbarItem*> data
-    int32_t  itemCount;         // +0xD8
-    int32_t  itemCapacity;      // +0xDC
-    uint64_t toolbarGroupId;    // +0xE0: the group this (sub-)toolbar shows
-    uint64_t subDialog;         // +0xE8: InternalBasePtr to the open sub-toolbar
+    UI::RadioElement* radioElement;       // +0xB8: the "toolBar" RadioElement (id 1000)
+    // +0xC0 / +0xD0 / +0xF8: three Collection::Arrays; the dtor 0x140021760
+    // frees +0xF8, +0xD0, +0xC0 in that order (the members' reverse order).
+    Collection::Array<UI::Element*> buttonElements;  // +0xC0: one cloned button per item
+    Collection::Array<const Toolbar*> toolbarItems;  // +0xD0: the Toolbar items shown, by priority
+    const Toolbar* toolbarGroup; // +0xE0: the parent item whose group this (sub-)toolbar shows (null = the main bar)
+    Object::InternalPtr<UI::DialogInstance> subDialog;  // +0xE8: the open sub-toolbar
     int32_t  openSubIndex;      // +0xF0: -1 = none
     int32_t  currentSpeedIndex; // +0xF4
-    uint64_t speedValues;       // +0xF8: Array<int32> data
-    int32_t  speedValueCount;   // +0x100
-    int32_t  speedValueCapacity;// +0x104
+    Collection::Array<int32_t> speedValues;          // +0xF8: the game speeds {1, 2, 5, 10, ...}
 };
 
 static_assert(offsetof(ToolbarDialog, radioElement) == 0xB8, "ToolbarDialog +0xb8");
 static_assert(offsetof(ToolbarDialog, buttonElements) == 0xC0, "ToolbarDialog +0xc0");
-static_assert(offsetof(ToolbarDialog, buttonCount) == 0xC8, "ToolbarDialog +0xc8");
 static_assert(offsetof(ToolbarDialog, toolbarItems) == 0xD0, "ToolbarDialog +0xd0");
-static_assert(offsetof(ToolbarDialog, itemCount) == 0xD8, "ToolbarDialog +0xd8");
-static_assert(offsetof(ToolbarDialog, toolbarGroupId) == 0xE0, "ToolbarDialog +0xe0");
+static_assert(offsetof(ToolbarDialog, toolbarGroup) == 0xE0, "ToolbarDialog +0xe0");
 static_assert(offsetof(ToolbarDialog, subDialog) == 0xE8, "ToolbarDialog +0xe8");
 static_assert(offsetof(ToolbarDialog, openSubIndex) == 0xF0, "ToolbarDialog +0xf0");
 static_assert(offsetof(ToolbarDialog, currentSpeedIndex) == 0xF4, "ToolbarDialog +0xf4");
 static_assert(offsetof(ToolbarDialog, speedValues) == 0xF8, "ToolbarDialog +0xf8");
-static_assert(offsetof(ToolbarDialog, speedValueCount) == 0x100, "ToolbarDialog +0x100");
 static_assert(sizeof(ToolbarDialog) == 0x108, "ToolbarDialog is 0x108 (create 0x140021710)");
 static_assert(alignof(ToolbarDialog) == 8, "ToolbarDialog is qword-aligned");
 
-// The ctor door, registered at 0x1400b9910 (address_registry.cpp) and read through
-// fn_ToolbarDialog_Ctor by GameUpdateLoop::Startup: placement-news the class.
-void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
-                              void* parentPtr, void* toolbarData);
+// B4 FORWARD: 1 outside caller(s) (Game/gameupdateloop.cpp). The ctor door at
+// 0x1400b9910: placement-news the class; parentPtr is the InternalPtr the ctor copies.
+ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
+                                       void* parentPtr, void* toolbarData);

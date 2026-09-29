@@ -43,6 +43,8 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Game/Scenario.h"   // X::TypeId() (B.3.9 CG2)
+#include "ui/ButtonElement.h"
+#include "io/Persistence.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
@@ -60,65 +62,59 @@
 // Assertion: "table->ChildCount() >= scenarioCount"
 // Source: Dialog\ScenarioDialog.cpp, line 0x3B
 
+// LEFT: Scenario's two Strings (+0x58 the name, +0x88 the save name) are
+// `void*` in Scenario.h (GAME-b's header; a String member would add a ctor /
+// dtor that Scenario's own 0x1400a9480 / 0x14001eb40 do not run).
+static const System::String& ScenarioString(void* const& field) {
+    return *reinterpret_cast<const System::String*>(&field);
+}
+
+// The element of that name under `root` (the tree does not narrow it)
+static UI::Element* FindIn(UI::Element* root, const char* name) {
+    return root->FindElement(System::String(name)).Get();
+}
+
 void ScenarioDialog::OnOpened() {
-    // The Game container slot this function reads (+0x08 scenario ExternalList) is
+    // The Game container slot this function reads (the scenario ExternalList) is
     // NULL until something loads it - standalone never runs retail GameContainer_Init.
     // Fill it upstream rather than guarding the GetResourceCount deref below, which is
     // byte-faithful and load-bearing.
     GameContainer_EnsureLists();
-    uintptr_t s = (uintptr_t)this;
-    uint8_t selfDifficulty = *(uint8_t*)(s + 0xB8);
-    printf("[ScenarioDialog::Slot4] Setup called, this=%p, difficulty=%d\n", this, selfDifficulty);
+    printf("[ScenarioDialog::Slot4] Setup called, this=%p, difficulty=%d\n",
+           static_cast<void*>(this), difficulty);
 
-    // --- Find "buttonCancel" → set element ID 100, set +0xC0 flag = 8 ---
+    // --- Find "buttonCancel" → set element ID 100, shortcut key 8 ---
     {
-        System::String nameStr("buttonCancel");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
-        void* cancelBtn = *(void**)retBuf;
-        reinterpret_cast<UI::Element*>(cancelBtn)->SetElementId(100);  // B.3.6 bridge
-        *(uint32_t*)((uintptr_t)cancelBtn + 0xC0) = 8;
+        UI::ButtonElement* cancelBtn =
+            static_cast<UI::ButtonElement*>(FindElement(System::String("buttonCancel")).Get());
+        cancelBtn->SetElementId(100);
+        cancelBtn->_keyIndex = 8;
     }
 
     // --- Find "buttonOk" → store at +0xD0, set ID 0x65 (101), disable it ---
     {
-        System::String nameStr("buttonOk");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
-        void* okBtn = *(void**)retBuf;
-
-        *(void**)(s + 0xD0) = okBtn;
-        reinterpret_cast<UI::Element*>(okBtn)->SetElementId(0x65);  // B.3.6 bridge
-
-        // Disable via vtable[8]: SetEnabled(false)
-        reinterpret_cast<UI::Element*>(okBtn)->Enable(false);  // B.3.6 bridge
+        UI::Element* okBtn = FindElement(System::String("buttonOk")).Get();
+        buttonOk = okBtn;
+        okBtn->SetElementId(0x65);
+        okBtn->Enable(false);
     }
 
-    // --- Get scenario list from singleton at *g_pKeyMapSingleton + 8 ---
-    // The global at 0x1401c3de8 points to a management struct:
-    //   +0x00 = KeyMap, +0x08 = ExternalList (scenario list)
-    void* mgmtObj = g_gameContainer;
-    void* scenarioList = *(void**)((uintptr_t)mgmtObj + 8);
+    // --- The scenario list: the game container's ScenarioList.rsc ---
+    GameContainer* container = g_gameContainer;
+    const Object::ExternalList* scenarioList = container->scenarioList.Get();
 
     // --- Find "tableScenario" element ---
-    void* table = nullptr;
-    {
-        System::String nameStr("tableScenario");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
-        table = *(void**)retBuf;
-    }
+    UI::TableElement* table =
+        static_cast<UI::TableElement*>(FindElement(System::String("tableScenario")).Get());
 
     // --- Get scenario count and iterate ---
-    int scenarioCount = reinterpret_cast<const ::Object::ExternalList*>(scenarioList)  // B.3.3 bridge
-                             ->GetResourceCount();
+    int scenarioCount = scenarioList->GetResourceCount();
     int entryIndex = 0;  // counts matched scenarios (for button IDs and array)
     printf("[ScenarioDialog::Slot4] scenarioCount=%d, mgmtObj=%p, scenarioList=%p\n",
-           scenarioCount, mgmtObj, scenarioList);
+           scenarioCount, static_cast<void*>(container), static_cast<const void*>(scenarioList));
 
     for (int i = 0; i < scenarioCount; i++) {
-        // Get resource[i] from ExternalList: *(array+0x20)[i*8]
-        void* resource = *(void**)(*(uintptr_t*)((uintptr_t)scenarioList + 0x20) + (uintptr_t)i * 8);
+        Object::External* resource = scenarioList->_resources[i];
 
         // Check IsDerivedFrom(Scenario). ENDGAME B.3.9 CG2: TypeId_Scenario (cell
         // 0x1401c5b08) -> Scenario::TypeId(); the "unregistered" null guard was
@@ -126,154 +122,73 @@ void ScenarioDialog::OnOpened() {
         // This rejection used to be silent, which made an empty scenario table
         // indistinguishable from "no scenarios installed". Report it once.
         bool isScenario = ::Object::IsDerivedFromNullSafe(resource, Scenario::TypeId());
-        void* scenario = isScenario ? resource : nullptr;
+        Scenario* scenario = isScenario ? static_cast<Scenario*>(resource) : nullptr;
         if (!scenario) {
-            fprintf(stderr, "[ScenarioDialog] resource[%d]=%p rejected by IsDerivedFrom(typeId=%u)\n", i, resource, Scenario::TypeId());
+            fprintf(stderr, "[ScenarioDialog] resource[%d]=%p rejected by IsDerivedFrom(typeId=%u)\n",
+                    i, static_cast<void*>(resource), Scenario::TypeId());
             fflush(stderr);
             continue;
         }
 
-        // Filter by difficulty: scenario+0x69 must match this+0xB8
-        uint8_t scenDifficulty = *(uint8_t*)((uintptr_t)scenario + 0x69);
-        uint8_t selfDifficultyVal = *(uint8_t*)(s + 0xB8);
+        // Filter by difficulty: Scenario +0x69 must match this one's
+        uint8_t scenDifficulty = static_cast<uint8_t>(scenario->_field69);
         printf("[ScenarioDialog::Slot4] scenario[%d] at %p: difficulty=%d (want %d), isScenario=%d\n",
-               i, scenario, scenDifficulty, selfDifficultyVal, isScenario);
-        if (scenDifficulty != selfDifficultyVal) continue;
+               i, static_cast<void*>(scenario), scenDifficulty, difficulty, isScenario);
+        if (scenDifficulty != difficulty) continue;
 
-        // --- Clone template element from Dialog ---
-        // GetTemplate(dialog, retval, 0)
-        uint8_t templateBuf[8];
-        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18))->GetTemplate(0));  // B.3.6 bridge
-
-        // Clone via vtable[8]: templateObj->Clone(&cloneBuf, dialog)
-        // (= UI::ElementDescription slot 8 CreateInstance, RETSLOT per B6-2)
-        void* templateObj = *(void**)templateBuf;
-        uint8_t cloneBuf[16];
-        reinterpret_cast<const UI::ElementDescription*>(templateObj)->CreateInstance(  // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
-            reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18)));
-        void* clonedElem = *(void**)cloneBuf;
+        // --- Clone the dialog's template 0 into a table row ---
+        // (UI::ElementDescription slot 8 CreateInstance, RETSLOT per B6-2)
+        Object::ExternalPtr<UI::ElementDescription> rowTemplate = _dialog->GetTemplate(0);
+        Object::InternalPtr<UI::Element> clone;
+        rowTemplate.Get()->CreateInstance(&clone, _dialog);
+        UI::Element* clonedElem = clone.Get();
 
         // --- Insert clone into table ---
-        uint8_t clonePtr[8];
-        *(void**)clonePtr = clonedElem;
-        reinterpret_cast<UI::TableElement*>(table)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(clonePtr), entryIndex);  // B.3.6 bridge
+        table->SetChild(&clone, entryIndex);
 
-        // --- Build 0x38-byte entry ---
-        // Layout: +0x00 = element ptr, +0x08 = selectSave ptr,
-        //         +0x10 = imageIcon ptr, +0x18 = textTitle ptr,
-        //         +0x20 = textDescription ptr, +0x28 = scenario ptr,
-        //         +0x30 = resource index
-        uint8_t entry[0x38];
-        memset(entry, 0, 0x38);
-
-        // entry[0] = cloned element
-        *(void**)entry = clonedElem;
+        // --- Build the entry ---
+        ScenarioDialogEntry entry = {};
+        entry.element = clonedElem;
 
         // Set element hidden initially (flags 0x10000 = hidden)
-        reinterpret_cast<UI::Element*>(clonedElem)->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
+        clonedElem->SetFlagsOnOff(0x10000, 0);
 
         // Set element ID = entryIndex + 1000
-        reinterpret_cast<UI::Element*>(clonedElem)->SetElementId(entryIndex + 1000);  // B.3.6 bridge
+        clonedElem->SetElementId(entryIndex + 1000);
 
         // --- Find sub-elements in the clone ---
-
-        // "imageIcon" → entry[0x10]
-        {
-            System::String nameStr("imageIcon");
-            uint8_t retBuf[16];
-            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
-            *(void**)(entry + 0x10) = *(void**)retBuf;
-        }
-
-        // "textTitle" → entry[0x18]
-        {
-            System::String nameStr("textTitle");
-            uint8_t retBuf[16];
-            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
-            *(void**)(entry + 0x18) = *(void**)retBuf;
-        }
-
-        // "textDescription" → entry[0x20]
-        {
-            System::String nameStr("textDescription");
-            uint8_t retBuf[16];
-            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
-            *(void**)(entry + 0x20) = *(void**)retBuf;
-        }
-
-        // "selectSave" → entry[0x08]
-        {
-            System::String nameStr("selectSave");
-            uint8_t retBuf[16];
-            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
-            *(void**)(entry + 0x08) = *(void**)retBuf;
-        }
+        entry.imageIcon       = static_cast<UI::ImageElement*>(FindIn(clonedElem, "imageIcon"));
+        entry.textTitle       = static_cast<UI::TextElement*>(FindIn(clonedElem, "textTitle"));
+        entry.textDescription = static_cast<UI::TextElement*>(FindIn(clonedElem, "textDescription"));
+        entry.selectSave      = FindIn(clonedElem, "selectSave");
 
         // Store scenario pointer and resource index
-        *(void**)(entry + 0x28) = scenario;
-        *(int*)(entry + 0x30) = i;
+        entry.scenario = scenario;
+        entry.resourceIndex = i;
 
         // --- Set icon sprite from scenario ---
-        // GetSpriteName returns String (non-trivial return: RCX=this, RDX=retval)
         {
-            System::String spriteNameStr;
-            ::new (&spriteNameStr) System::String(reinterpret_cast<const Achievement::Achievement*>(scenario)->GetSpriteName());  // B.3.7 bridge
-
-            // Create UI::Sprite(retval, spriteSheet, spriteName)
-            // spriteSheet = *(scenario + 0x38)
-            uint64_t spriteSheet = *(uint64_t*)((uintptr_t)scenario + 0x38);
-            uint8_t sprite[16];
-            ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), spriteNameStr);  // B.3.6 bridge
-
-            // SetSprite on imageIcon
-            void* imageIcon = *(void**)(entry + 0x10);
-            reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
+            System::String spriteName = scenario->GetSpriteName();
+            UI::Sprite sprite(scenario->GetSpriteSheet(), spriteName);
+            entry.imageIcon->SetSprite(&sprite);
         }
 
         // --- Set title text from scenario ---
         {
-            System::String titleStr;
-            ::new (&titleStr) System::String(reinterpret_cast<const Achievement::Achievement*>(scenario)->GetTitle());  // B.3.7 bridge
-
-            // Create UI::String(retval, stringTable, titleStr)
-            // stringTable = *(scenario + 0x20)
-            uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
-            uint8_t uiStr[16];
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), titleStr);  // B.3.6 bridge
-
-            // SetText on textTitle
-            void* textTitle = *(void**)(entry + 0x18);
-            reinterpret_cast<UI::TextElement*>(textTitle)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+            System::String title = scenario->GetTitle();
+            UI::String text(scenario->GetStringTable(), title);
+            entry.textTitle->SetText(&text);
         }
 
         // --- Set description text from scenario ---
         {
-            System::String descStr;
-            ::new (&descStr) System::String(reinterpret_cast<const Achievement::Achievement*>(scenario)->GetDescription());  // B.3.7 bridge
-
-            // Create UI::String(retval, stringTable, descStr)
-            uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
-            uint8_t uiStr[16];
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), descStr);  // B.3.6 bridge
-
-            // SetText on textDescription
-            void* textDesc = *(void**)(entry + 0x20);
-            reinterpret_cast<UI::TextElement*>(textDesc)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+            System::String description = scenario->GetDescription();
+            UI::String text(scenario->GetStringTable(), description);
+            entry.textDescription->SetText(&text);
         }
 
-        // --- Push entry to dynamic array at this+0xD8 ---
-        // B.3.2 bridge: ScenarioDialog+0xD8 is Collection::Array<{7 x uint64
-        // fields}> (stride 0x38, count +0xE0, capacity +0xE4) inside a struct
-        // §B.2 has not converted, so it is reached at its offset. Was
-        // FUN_140013b60's own inlined SetSize (ScenarioDialog_ArrayPush_Impl).
-        {
-            uint64_t* entryQW = (uint64_t*)entry;
-            auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x38, 8>>(s, 0xD8);
-            rows.SetSize(rows.GetSize() + 1,
-                         GameColl::Bytes<0x38, 8>(entryQW[0], entryQW[1], entryQW[2], entryQW[3],
-                                        entryQW[4], entryQW[5], entryQW[6]));
-        }
+        // --- Push the entry (FUN_140013b60's inlined SetSize) ---
+        entries.SetSize(entries.GetSize() + 1, entry);
 
         printf("[ScenarioDialog::Slot4] Added entry[%d] for scenario[%d]\n", entryIndex, i);
         // Identity dump: which scenario record backs each list row, and which .sav
@@ -281,15 +196,15 @@ void ScenarioDialog::OnOpened() {
         // expected -- the series is progressive -- so this is the only way to tell
         // "tutorial N legitimately continues N-1's town" from a real off-by-one.
         {
-            void* nameData = *(void**)(scenario + 0x58);
-            void* saveData = *(void**)(scenario + 0x88);
-            int nameLen = nameData ? *(int*)((uint8_t*)nameData - 8) : 0;
-            int saveLen = saveData ? *(int*)((uint8_t*)saveData - 8) : 0;
+            const char* nameData = ScenarioString(scenario->scenarioName)._data;
+            const char* saveData = ScenarioString(scenario->_field88)._data;
+            int nameLen = nameData ? RtSystem::StringLength(nameData) : 0;
+            int saveLen = saveData ? RtSystem::StringLength(saveData) : 0;
             printf("[ScenarioID] entry[%d] scenario[%d] name=\"%.*s\" (len=%d) "
                    "save=\"%.*s\" (len=%d)\n",
                    entryIndex, i,
-                   nameLen, (const char*)nameData, nameLen,
-                   saveLen, (const char*)saveData, saveLen);
+                   nameLen, nameData, nameLen,
+                   saveLen, saveData, saveLen);
         }
         entryIndex++;
     }
@@ -306,38 +221,33 @@ void ScenarioDialog::OnUpdate(const System::Time& /*time*/) {
 // ============================================================
 // ScenarioDialog::Slot6 (vtable +0x30) — Update entry visibility
 // ============================================================
-// Iterates scenario entries at +0xD8 (stride 0x38), shows entry matching
-// selected index at +0xC8, hides all others. Enables/disables confirm
-// button at +0xD0 based on whether a valid selection exists.
+// Shows the selectSave mark of the selected row, hides the others, and
+// enables the OK button when a row is selected.
 //
 // Original: 0x140077BE0.
 
 static int s_slot6LogCount = 0;
 void ScenarioDialog::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
-
-    int count = *(int*)(s + 0xE0);
-    int selected = *(int*)(s + 0xC8);
+    int count = entries.GetSize();
+    int selected = selectedIndex;
     if (s_slot6LogCount < 3) {
         printf("[ScenarioDialog::Slot6] Draw: count=%d, selected=%d\n", count, selected);
         s_slot6LogCount++;
     }
-    uintptr_t entryArray = *(uintptr_t*)(s + 0xD8);
 
     // Show selected entry, hide all others
     for (int i = 0; i < count; i++) {
-        void* elem = *(void**)(entryArray + 8 + (uintptr_t)i * 0x38);
+        UI::Element* mark = entries[i].selectSave;
         bool isNotSelected = (i != selected);
-        reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(isNotSelected ? 1 : 0, isNotSelected ? 0 : 1);  // B.3.6 bridge
+        mark->SetFlagsOnOff(isNotSelected ? 1 : 0, isNotSelected ? 0 : 1);
     }
 
     // Enable/disable confirm button based on valid selection
-    void* confirmBtn = (void*)*(uint64_t*)(s + 0xD0);
-    reinterpret_cast<UI::Element*>(confirmBtn)->Enable(selected >= 0);  // B.3.6 bridge
+    buttonOk->Enable(selected >= 0);
 }
 
 // ============================================================
-// ScenarioDialog_LoadSelected — reimplementation of FUN_140077cb0
+// ScenarioDialog::LoadSelected — reimplementation of FUN_140077cb0
 // ============================================================
 // Loads the selected scenario. Two paths:
 // 1. New scenario (no save name): reads terrain/climate/seed params from scenario
@@ -345,73 +255,65 @@ void ScenarioDialog::OnUpdateLayout() {
 // 2. Saved scenario (has save name): loads the save file first, then uses the
 //    saved state to start the game.
 //
-// Entry array: self+0xD8 = data*, self+0xE0 = count, stride 0x38 bytes.
-// Entry layout: +0x28 = scenario resource pointer.
 // Scenario resource: +0x58 = display name, +0x60 = seed, +0x64 = terrainSize,
-//   +0x68 = disasterOff, +0x70 = climate, +0x78 = terrain, +0x80 = mapGen,
+//   +0x68 = disasterOff, +0x70 = mapGen, +0x78 = terrainGen, +0x80 = climateGen,
 //   +0x88 = save name string (empty = new scenario).
 
-static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
-    uintptr_t s = (uintptr_t)self;
-    printf("[ScenarioDialog::LoadSelected] Called, self=%p\n", self);
+void ScenarioDialog::LoadSelected() {
+    printf("[ScenarioDialog::LoadSelected] Called, self=%p\n", static_cast<void*>(this));
 
-    int selectedIdx = *(int*)(s + 0xC8);  // +0xC8 = selectedIndex (200 decimal = 0xC8)
-    uintptr_t entryArray = *(uintptr_t*)(s + 0xD8);
-    uintptr_t scenario = *(uintptr_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x28);
+    int selectedIdx = selectedIndex;
+    const ScenarioDialogEntry& selectedEntry = entries[selectedIdx];
+    Scenario* scenario = selectedEntry.scenario;
 
-    // Get save name string from scenario+0x88. B.3.1 bridge: raw exe-struct
-    // SystemString fields, not owned here.
-    System::String saveNameStr = *reinterpret_cast<System::String*>(scenario + 0x88);
+    // The save name (+0x88) and the display name (+0x58)
+    System::String saveNameStr = ScenarioString(scenario->_field88);
+    System::String displayNameStr = ScenarioString(scenario->scenarioName);
 
-    // Get display name string from scenario+0x58
-    System::String displayNameStr = *reinterpret_cast<System::String*>(scenario + 0x58);
-
-    uint64_t saveStrPtr = (uint64_t)(uintptr_t)saveNameStr._data;
-    bool hasSaveState = (saveStrPtr != 0 && *(int*)(saveStrPtr - 8) > 0);
+    const char* saveStrPtr = saveNameStr._data;
+    bool hasSaveState = (saveStrPtr != nullptr && RtSystem::StringLength(saveStrPtr) > 0);
     printf("[ScenarioDialog::LoadSelected] selectedIdx=%d, scenario=%p, hasSaveState=%d, saveStrPtr=%p\n",
-           selectedIdx, (void*)scenario, hasSaveState, (void*)saveStrPtr);
+           selectedIdx, static_cast<void*>(scenario), hasSaveState, static_cast<const void*>(saveStrPtr));
 
     if (!hasSaveState) {
         // New scenario: start fresh game with scenario parameters
-        // Read scenario params
-        uint32_t seedVal = *(uint32_t*)(scenario + 0x60);
-        uint32_t terrainSizeVal = *(uint32_t*)(scenario + 0x64);
-        char disasterOff = *(char*)(scenario + 0x68);
+        uint32_t seedVal = static_cast<uint32_t>(scenario->_field60);
+        uint32_t terrainSizeVal = static_cast<uint32_t>(scenario->_field64);
+        char disasterOff = static_cast<char>(scenario->_field68);
         // Scenario generator triple. These offsets were labelled climate/terrain/map;
         // retail's own LoadSelected (0x140077cb0, the call at +0x243) proves the outer
         // two are the other way round: it passes +0x70 as arg6 and +0x80 as arg8, and
         // 0x1400b4540 stores args 6/7/8 into GameUpdateLoop +0x40/+0x48/+0x50, which
         // Load reads as mapGen / terrainGen / climateGen. The positional order passed
         // below is unchanged and already matched retail - only the names were wrong.
-        void* mapGen = *(void**)(scenario + 0x70);
-        void* terrainGen = *(void**)(scenario + 0x78);
-        void* climateGen = *(void**)(scenario + 0x80);
+        void* mapGen = scenario->mapGenerator;
+        void* terrainGen = scenario->terrainGenerator;
+        void* climateGen = scenario->climateGenerator;
 
-        // Get scenario index from entry array: +0x30 in the entry
-        uint32_t scenarioResIdx = *(uint32_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x30);
+        // The scenario's index in the ScenarioList
+        uint32_t scenarioResIdx = static_cast<uint32_t>(selectedEntry.resourceIndex);
 
-        // Get parent controller (self+0xC0 is InternalBasePtr to parent MainMenuDialog)
-        void* parentCtrl = *(void**)(s + 0xC0);
+        // The parent MainMenuDialog (+0xC0)
+        UI::DialogInstance* parentCtrl = parentMenu;
 
-        // Build InternalBasePtr(null) for retval
-        uint8_t nullIBP[8];
-        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        // The saved-state InternalPtr: null
+        ::Object::InternalBasePtr nullIBP(nullptr);
 
         printf("[ScenarioDialog::LoadSelected] NEW SCENARIO: seed=%u, terrainSize=%u, disasterOff=%d, scenarioResIdx=%u\n",
                seedVal, terrainSizeVal, (int)disasterOff, scenarioResIdx);
         printf("[ScenarioDialog::LoadSelected] mapGen=%p, terrainGen=%p, climateGen=%p, parentCtrl=%p\n",
-               mapGen, terrainGen, climateGen, parentCtrl);
+               mapGen, terrainGen, climateGen, static_cast<void*>(parentCtrl));
 
-        // Call original FUN_1400b4540 directly — constructs GameUpdateLoop ->
-        // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
-        // 0x1400b4540 StartNewGame_Reg. The door typedef passed seed / terrainSize as
-        // uint32 values; the body takes pointer-width slots and reads their low dword
-        // ((uint32_t)(uintptr_t)), so the zero-extended value is the same bits (B3R).
+        // 0x1400b4540 StartNewGame_Reg — constructs GameUpdateLoop ->
+        // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop. The door
+        // typedef passed seed / terrainSize as uint32 values; the body takes
+        // pointer-width slots and reads their low dword ((uint32_t)(uintptr_t)),
+        // so the zero-extended value is the same bits (B3R).
         StartNewGame_Reg(parentCtrl, &displayNameStr,
-                         reinterpret_cast<void*>(static_cast<uintptr_t>(seedVal)),
-                         reinterpret_cast<void*>(static_cast<uintptr_t>(terrainSizeVal)),
+                         reinterpret_cast<void*>(static_cast<uintptr_t>(seedVal)),        // CAST-OK: ptr_int
+                         reinterpret_cast<void*>(static_cast<uintptr_t>(terrainSizeVal)), // CAST-OK: ptr_int
                          disasterOff, mapGen, terrainGen, climateGen,
-                         scenarioResIdx, nullIBP);
+                         scenarioResIdx, &nullIBP);
         printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
     } else {
         fflush(stderr);
@@ -426,56 +328,39 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
                 return;
             }
         }
-        void* saveLoad = ::Save::SaveLoad::_singleton;
-        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(3), 0);  // B.3.7 bridge
-        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(saveNameStr, 2);  // B.3.7 bridge
+        Save::SaveLoad* saveLoad = ::Save::SaveLoad::_singleton;
+        saveLoad->SetOperation(Save::SaveLoad::kOpLoadFromFile, 0);
+        saveLoad->SetSaveName(saveNameStr, 2);
 
         // Get save path and set data directory
         // Original flow (from assembly at 0x140077d41-0x140077d96):
-        //   1. GetSavePath → Filename at RSP+0xa8 (kept alive until after loop)
+        //   1. GetSavePath → String at RSP+0xa8 (kept alive until after loop)
         //   2. GetDataDirectory → temp at RSP+0xb0, returns ref in RAX
         //   3. persistence+0x90 = RAX (data dir)
         //   4. Destroy RSP+0xb0 (GetDataDirectory temp)
         //   5. SaveLoad::Update loop
         //   6. persistence+0x90 = RSP+0xa8 (restore from GetSavePath result)
-        //
-        // Despite the "Filename return buffer" comment this slot's actual runtime
-        // type (per Persistence::GetSavePath's export signature) is System::String;
-        // String and Filename share the exact same 8-byte layout and release
-        // sequence (Filename.h), so this was always safe, just misnamed.
-        void* persistence = ::IO::Persistence::_singleton;
-        System::String savePathBuf;  // kept alive until after the SaveLoad::Update loop
-        // B.3.4 bridge. This IS the door's own body moved to the call site: the
-        // member returns `System::String` BY VALUE through MSVC's hidden return
-        // slot, and `&savePathBuf` is the slot the door was handed, so the
-        // prvalue is constructed straight into it (guaranteed elision) — exactly
-        // one AddRef, as before, and ~String at scope exit is the one release.
-        ::new (&savePathBuf) System::String(
-            reinterpret_cast<const IO::Persistence*>(persistence)->GetSavePath());
-        // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
-        System::String& persistenceDataDir = *reinterpret_cast<System::String*>(reinterpret_cast<uintptr_t>(::IO::Persistence::_singleton) + 0x90);
+        IO::Persistence* persistence = ::IO::Persistence::_singleton;
+        System::String savePathBuf = persistence->GetSavePath();  // kept alive until after the SaveLoad::Update loop
+        // LEFT: Persistence::_savePath is the runtime's RtSystem::String POD
+        // (runtime/types/io/Persistence.h); the refcounted assignments go
+        // through it as a System::String.
+        System::String& persistenceDataDir =
+            *reinterpret_cast<System::String*>(&persistence->_savePath);
         {
-            void* fileSystem = ::IO::FileSystem::_singleton;
-            System::String dataDirBuf;  // destroyed at the end of this block (matches retail's early release)
-            // B.3.4 bridge. The member returns `System::Filename` by value; the
-            // door placement-constructed it into this very slot, and a Filename
-            // and a String are the same 8 bytes with the same release sequence
-            // (Filename.h), which is what the comment above already records. One
-            // AddRef here, one ~String release at the end of the block.
-            ::new (reinterpret_cast<System::Filename*>(&dataDirBuf)) System::Filename(
-                reinterpret_cast<const IO::FileSystem*>(fileSystem)->GetDataDirectory());
-            persistenceDataDir = dataDirBuf;
-        }
+            System::Filename dataDir = ::IO::FileSystem::_singleton->GetDataDirectory();
+            persistenceDataDir = dataDir.AsString();
+        }   // (matches retail's early release of the data-directory temp)
 
         // Run SaveLoad::Update loop until operation completes
-        int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
+        int operation = saveLoad->GetOperation();
         printf("[ScenarioDialog::LoadSelected] SAVED SCENARIO: entering SaveLoad loop, initial operation=%d\n", operation);
         int loopCount = 0;
         while (operation != 0) {
-            uint8_t zeroTime[8];
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(zeroTime), 0.0f);
-            reinterpret_cast<Save::SaveLoad*>(saveLoad)->Update(*reinterpret_cast<const System::Time*>(zeroTime));  // B.3.7 bridge
-            operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
+            System::Time zeroTime;
+            RtSystem_Time_Ctor(&zeroTime, 0.0f);
+            saveLoad->Update(zeroTime);
+            operation = saveLoad->GetOperation();
             loopCount++;
             if (loopCount % 100 == 0) {
                 printf("[ScenarioDialog::LoadSelected] SaveLoad loop iteration %d, operation=%d\n", loopCount, operation);
@@ -485,26 +370,20 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
         // Restore persistence path from GetSavePath result (matches original at 0x140077df0)
         persistenceDataDir = savePathBuf;
-        // NOT Filename::~Filename, and NOT here. Persistence::GetSavePath returns a
-        // System::String (verified in the DLL export table), so destroying its 8-byte
-        // result with the Filename dtor read the uninitialised tail of this 16-byte
-        // stack buffer and faulted on the garbage pointer it found. Retail destroys
-        // it as a String, and only after WorldSetup_LoadFromSave has run - see the
-        // String::~String(local_res10) at the tail of 0x140077cb0. Moved below.
+        // Retail destroys the GetSavePath String only after WorldSetup_LoadFromSave
+        // has run (String::~String(local_res10) at the tail of 0x140077cb0):
+        // savePathBuf's scope ends below.
 
-        // Get parent controller and load from saved state
-        void* parentCtrl = *(void**)(s + 0xC0);
+        // The parent MainMenuDialog and a null InternalPtr
+        UI::DialogInstance* parentCtrl = parentMenu;
+        ::Object::InternalBasePtr nullIBP(nullptr);
 
-        uint8_t nullIBP[8];
-        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        uint32_t scenarioResIdx = static_cast<uint32_t>(selectedEntry.resourceIndex);
+        Save::SavedState* savedState = saveLoad->GetSaveState();
 
-        uint32_t scenarioResIdx = *(uint32_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x30);
-        void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
-
-        // Use fn_LoadScenarioFromSave for the complex loop construction
         WorldSetup_LoadFromSave(parentCtrl, savedState,   // 0x1400b49f0
-                                (void*)(uintptr_t)scenarioResIdx, nullIBP);
-        // retail: String::~String(local_res10) — savePathBuf's scope ends here, matching.
+                                reinterpret_cast<void*>(static_cast<uintptr_t>(scenarioResIdx)),  // CAST-OK: ptr_int
+                                &nullIBP);
     }
 }
 
@@ -515,25 +394,22 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 // param3=2 (selection change): updates selected index from button IDs 1000+
 // param3=0x12 (button click): id=100 → close, id=101 → load selected scenario
 void ScenarioDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    uintptr_t s = (uintptr_t)this;
     printf("[ScenarioDialog::Slot8] OnCommand: param3=0x%x, param4=%d\n", param3, param4);
 
     if (param3 == 2) {
         // Selection change — button IDs are 1000 + index
-        int maxIndex = *(int*)(s + 0xE0);
+        int maxIndex = entries.GetSize();
         if (param4 > 999 && param4 < maxIndex + 1000) {
-            *(int*)(s + 0xC8) = param4 - 1000;
+            selectedIndex = param4 - 1000;
         }
     } else if (param3 == 0x12) {
         if (param4 == 100) {
             // Close button
-            uint8_t basePtr[16];
-            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            void* ui = *(void**)(s + 0x10);
-            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
+            Object::InternalPtr<UI::DialogInstance> self(this);
+            _ui->CloseDialog(&self);
         } else if (param4 == 0x65) {
-            // Confirm/load button — reimpl of FUN_140077cb0
-            ScenarioDialog_LoadSelected(this);
+            // Confirm/load button — FUN_140077cb0
+            LoadSelected();
         }
     }
 }
@@ -563,33 +439,25 @@ void ScenarioDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*
 //   [9] 0x14003a954 OnSerialize   (base thunk)
 
 ScenarioDialog::ScenarioDialog()
-    : difficulty(0), dataC0(0), dataC8(-1), dataD0(0), dataD8(0), dataE0(0) {}
+    : difficulty(0), parentMenu(nullptr), selectedIndex(-1), buttonOk(nullptr) {}
 
 // ScenarioDialog_CopyCtor (0x1400786b0): shared by ScenarioDialog and the
 // TutorialDialog (same class; difficulty byte at +0xB8 differentiates the two —
 // MainMenuDialog_OpenScenario passes 0, MainMenuDialog_OpenTutorial passes 1).
 //   base ctor: DialogInstance(ui, extRes, parent, 0, 0, 0)
 //   +0xB8 (u8)  = difficulty
-//   +0xC0 (u64) = *parentMenuIBP   (selection's parent-controller InternalBasePtr)
+//   +0xC0       = the parent menu  (its InternalPtr)
 //   +0xC8 (i32) = -1               (selectedIndex, read by OnElementEvent)
-//   +0xD0 (u64) = 0
-//   +0xD8 (u64) = 0                (scenario entry array)
-//   +0xE0 (u64) = 0                (scenario count, read by OnOpened)
+//   +0xD0       = 0                (buttonOk)
+//   +0xD8 / +0xE0 = 0              (the entries Array)
+// ~ScenarioDialog (0x140013af0 before ~DialogInstance) is the entries Array's
+// dtor: MemFree(+0xD8), the header cleared (the entries are plain copies).
 ScenarioDialog::ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                                Object::InternalPtr<UI::DialogInstance> parent,
-                               uint64_t parentMenu, uint8_t difficultyArg)
+                               UI::DialogInstance* parentMenuArg, uint8_t difficultyArg)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
-      difficulty(difficultyArg), dataC0(parentMenu), dataC8(-1),
-      dataD0(0), dataD8(0), dataE0(0) {}
-
-// The body of ScenarioDialog_ScalarDtor (0x140013af0) before ~DialogInstance:
-// free the +0xD8 scenario entry array (entries are plain-copy 7 x u64, no
-// per-entry String dtor), clear its header.
-ScenarioDialog::~ScenarioDialog() {
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dataD8));
-    dataD8 = 0;
-    dataE0 = 0;
-}
+      difficulty(difficultyArg), parentMenu(parentMenuArg), selectedIndex(-1),
+      buttonOk(nullptr) {}
 
 // create 0x140013970: MemAlloc(0xe8, 8), then the ctor.
 void* ScenarioDialog::CreateNewObject() {
@@ -607,7 +475,7 @@ void* ScenarioDialog::CreateInPlaceObject(void* storage) {
 // replaces (ui_dialog_stub_factories.cpp, B38 D4). Nothing reads 0x14015d2d0
 // back by address any more, so its registration (reg_nullsweep.cpp) is gone.
 
-// The ctor DOOR, bound by name in engine_funcs.cpp (fn_ScenarioDialog_Ctor).
+// B4 FORWARD: mainmenudialog.cpp's two calls, the old signature.
 void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
                           void* parentMenuIBP, uint8_t difficulty) {
     if (!self) return nullptr;
@@ -616,6 +484,6 @@ void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
         parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
     return ::new (self) ScenarioDialog(static_cast<UI::UserInterface*>(ui),
                                        static_cast<const UI::Dialog*>(extRes), parent,
-                                       parentMenuIBP ? *static_cast<const uint64_t*>(parentMenuIBP) : 0,
+                                       parentMenuIBP ? static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentMenuIBP)->Get() : nullptr,
                                        difficulty);
 }

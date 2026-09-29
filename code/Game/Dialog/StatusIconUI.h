@@ -16,7 +16,10 @@
 #include <cstdint>
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
+#include "runtime/types/collection/Collection.h"
 #include "Object/exe_type.h"
+
+namespace UI { class Element; }
 
 class StatusIconUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(StatusIconUI)
@@ -26,18 +29,20 @@ public:
 
     // 0x140014370 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String member at +0x30; the tree never did
-    // (leak kept).
+    // Retail frees the Array at +0x30 and zeroes its header: the `icons` Array's dtor.
     ~StatusIconUI() override = default;                           // [0] 0x140014370
     void OnCreated() override;   // [4] 0x14007b270
     void OnUpdateLayout() override;   // [7] 0x14007b0a0
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
     void OnUpdate(const System::Time& time) override;
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
+    // ---- fields ----------------------------------------------------------
+    // +0x30 the "icons" group's children: a Collection::Array<InternalPtr<UI::Element>>
+    // (OnCreated 0x14007b270 SetSize 0x1400032e0 + one Child() per slot; the dtor
+    // 0x140014370 MemFrees the data and zeroes the header: the Array's dtor).
+    Collection::Array<UI::Element*> icons;   // +0x30
 };
 
+static_assert(offsetof(StatusIconUI, icons) == 0x30, "StatusIconUI::icons @ +0x30 (0x14007b270)");
 static_assert(sizeof(StatusIconUI) == 0x40, "StatusIconUI is 0x40 (create 0x140014180 MemAlloc(0x40))");
 static_assert(alignof(StatusIconUI) == 8, "qword-aligned (the vptr)");

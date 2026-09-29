@@ -257,13 +257,7 @@ DEFINE_EXE_TYPE(MapUI, "UI::DialogController")
 // the stub, so they stay PORT GAPs here and wiring them is its own titled
 // commit.
 
-// [4] PORT GAP (retail 0x1400714c0; ported as NoiseUI_Slot4, unwired) — the
-// tree's stub held a no-op; kept. B38 D3.2.
-void NoiseUI::OnCreated() {}
-// [9] PORT GAP (retail 0x1400714a0; ported as NoiseUI_Slot9, unwired) — kept a no-op.
-void NoiseUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t /*a*/,
-                             int32_t /*b*/, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
-                             void* /*userData*/) {}
+// [4] 0x1400714c0 / [9] 0x1400714a0: noiseui.cpp (B4 DLG-d, correction 2).
 
 // create 0x1400126d0: MemAlloc(0x30, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -390,10 +384,7 @@ DEFINE_EXE_TYPE(ResourceLimitUI, "UI::DialogController")
 // through the stub; they stay PORT GAPs (no-ops, as the stub had them) and
 // wiring them is its own titled commit.
 
-// [4] PORT GAP (retail 0x140079640; ported as SpriteCaptureUI_Serialize, unwired).
-void SpriteCaptureUI::OnCreated() {}
-// [8] PORT GAP (retail 0x1400793a0; ported as SpriteCaptureUI_OnCreate, unwired).
-void SpriteCaptureUI::OnUpdate(const System::Time& /*time*/) {}
+// [4] 0x140079640 / [8] 0x1400793a0: spritecaptureui.cpp (B4 DLG-d, correction 2).
 // [9] PORT GAP (retail 0x140079620; not ported).
 void SpriteCaptureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
                                      int32_t /*a*/, int32_t /*b*/, int32_t /*c*/,

@@ -342,10 +342,10 @@ void EntityUI::OnCreated() {
         ToolUI* toolPtr = EntityUI_FindToolUI(_dialog);
 
         // Reset the ToolUI's pin flag (+0x40) and, with it, +0x41
-        toolPtr->hasBorderTitle = 0;
-        if (toolPtr->hasBorderTitle == 0 &&
-            toolPtr->isDragging != 0) {
-            toolPtr->isDragging = 0;
+        toolPtr->pinned = 0;
+        if (toolPtr->pinned == 0 &&
+            toolPtr->dragging != 0) {
+            toolPtr->dragging = 0;
         }
     }
 
@@ -491,11 +491,11 @@ void EntityUI::UpdateInput() {
     ToolUI* toolPtr = EntityUI_FindToolUI(_dialog);
 
     // Set controller +0x4C = 1 (input active flag)
-    toolPtr->hasTitleDragZone = 1;
+    toolPtr->pinOnDrag = 1;
 
     // Sync the pin: compare the controller's +0x40 with checkPin's _checked
     char checkVal = checkPin->_checked;
-    char ctrlVal = toolPtr->hasBorderTitle;
+    char ctrlVal = toolPtr->pinned;
 
     if (ctrlVal != checkVal) {
         checkPin->_checked = ctrlVal;
@@ -666,9 +666,9 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         char pinState = checkPin->_checked;
 
         // Set ToolUI +0x40 flag to pin state
-        toolPtr->hasBorderTitle = pinState;
-        if (pinState == 0 && toolPtr->isDragging != 0) {
-            toolPtr->isDragging = 0;
+        toolPtr->pinned = pinState;
+        if (pinState == 0 && toolPtr->dragging != 0) {
+            toolPtr->dragging = 0;
         }
 
         // If unpinned, remove entity from tracking set (tool manager +0x50)

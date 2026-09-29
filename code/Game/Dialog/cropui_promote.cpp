@@ -76,7 +76,7 @@ uint32_t ProgressElementTypeId() {
 // component's own vtable[14](comp, 2) BEFORE storing. Order matters: that handler reads
 // +0x50 as "still unset" to decide this is a fresh planting.
 // [11] 0x1400b2920
-void CropUI::SetResource(int64_t newType) {
+void CropUI::SetResource(ComponentDescription* newType) {
     CropFieldComponent* comp = FindComp(this);
 
     // SA guard (retail unguarded): in retail a combo event can only be routed to an
@@ -84,19 +84,17 @@ void CropUI::SetResource(int64_t newType) {
     if (!comp) return;
 
     // The field's crop type (+0x50)
-    if (comp->cropDescription == nullptr && newType != 0) {
+    if (comp->cropDescription == nullptr && newType != nullptr) {
         comp->Command(2);   // slot 14
     }
-    // LEFT: SelectResourceUI's SetResource takes the type as int64_t (DLG-d's header).
-    comp->cropDescription = reinterpret_cast<ComponentDescription*>(newType);   // COMP-c typed +0x50 (merge fix)
+    comp->cropDescription = newType;
 }
 
 // idx12 (+0x60) — retail 0x1400b29d0. Current crop type via out-param.
 // [12] 0x1400b29d0
-void* CropUI::GetResource(void* out) {
+ComponentDescription** CropUI::GetResource(ComponentDescription** out) {
     CropFieldComponent* comp = FindComp(this);
-    // LEFT: the out slot is void* in SelectResourceUI's declaration (DLG-d's header).
-    *reinterpret_cast<void**>(out) =comp ? comp->cropDescription : nullptr;   // COMP-c named +0x50 (merge fix)
+    *out = comp ? comp->cropDescription : nullptr;
     return out;
 }
 
@@ -166,7 +164,7 @@ void CropUI::OnUpdateLayout() {
         yieldElem->SetProgressTextParameter(0, textStr);
     }
 
-    if (internalBasePtr)
+    if (selectResource)
         SelectResourceUI::OnUpdateLayout();   // = 0x140078cb0, the base's idx7
 }
 
@@ -174,9 +172,9 @@ void CropUI::OnUpdateLayout() {
 // idx8 (+0x40) — base combo refresh, with the same null-combo self-heal.
 void CropUI::OnUpdate(const System::Time& time) {
     if (!SA_DialogEntityAlive(this)) return;
-    if (!internalBasePtr) {
+    if (!selectResource) {
         CropUI::OnCreated();
-        if (!internalBasePtr) return;
+        if (!selectResource) return;
     }
     SelectResourceUI::OnUpdate(time);
 }
