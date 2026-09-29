@@ -38,11 +38,11 @@ category needs the coordinator (M2).
 | `elem_stride` | 5 | 0 | 5 | container storage stepped by element size (`Collection.h`) |
 | `gpu_map` | 2 | 0 | 2 | memory returned by a GPU buffer map |
 | `com_iid` | 2 | 0 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID |
-| `crt` | 5 | 5 | 0 | the ported CRT's own `void*` / `char*` parameters (qsort, `_stricmp`) |
+| `crt` | 7 | 5 | 0 | the ported CRT's own `void*` / `char*` parameters (qsort, `_stricmp`) |
 | `hash` | 3 | 2 | 1 | a pointer hashed as an integer |
 | `vslot` | 1 | 1 | 0 | `Object::SlotAddressOf`, the one sanctioned look into a compiler vtable (diagnostics) |
-| `dx11_seam` | 27 | 0 | 27 | deferred: the VideoDX11 seam, removed by plan §4.1 (`dx11/funcs/dx11_seam.*`, `Video::*Data` self-casts, video_interface's Dx9Placeholder) |
-| **total** | **344** | **182** | **162** | |
+| `dx11_seam` | 39 | 0 | 27 | (raised 27 -> 39 by R-VIDEO: the 12 `DeletingDtor` vector arms in `runtime/types/video/CompanionData.h`) deferred: the VideoDX11 seam, removed by plan §4.1 (`dx11/funcs/dx11_seam.*`, `Video::*Data` self-casts, video_interface's Dx9Placeholder) |
+| **total** | **358** | **182** | **162** | |
 
 E's own names map as: `crash_diag` → `crash_walk`, `pe_image` → `pe_walk`, `value_pun` →
 `float_bits`, `container_storage` → `elem_stride`, `gpu_mapped` → `gpu_map`, `vtable_diag` →

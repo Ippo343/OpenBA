@@ -22,6 +22,7 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 #include "system/String.h"
+namespace UI { class SpriteSheet; class StringTable; }   // B4 H4 (DLG-e)
 
 class RawMaterialDescription final : public Description {
     DECLARE_EXE_TYPE(RawMaterialDescription)
@@ -38,8 +39,8 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140037310
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _spriteSheet;                         // +0x20 SpriteSheet* (.rsc _spriteSheet)
-    void* _stringTable;                         // +0x28 StringTable* (.rsc _stringTable)
+    UI::SpriteSheet* _spriteSheet;              // +0x20 SpriteSheet* (.rsc _spriteSheet)
+    UI::StringTable* _stringTable;              // +0x28 StringTable* (.rsc _stringTable)
     System::String _name;                       // +0x30 .rsc _name (full-size sprite name)
     System::String _nameSmall;                  // +0x38 .rsc _nameSmall
     int32_t _lowCreateCount;                    // +0x40
