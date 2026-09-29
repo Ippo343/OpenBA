@@ -290,18 +290,18 @@ namespace professionui_sa {
     // UI::NumberEditElement::TypeId() (the ported Runtime static) makes unnecessary.
     void Trace([[maybe_unused]] const char* slot, ProfessionUI* self) {
         static int n=0; if (n>=32) return; ++n;
-        uint32_t spinN = self ? static_cast<uint32_t>(self->spinnerCount) : 0;
+        uint32_t spinN = self ? static_cast<uint32_t>(self->spinners._size) : 0;
         printf("[ProfessionUI] %s self=%p dlg(+0x18)=%p root(+0x20)=%p counts(+0x30)=%p "
                "spinners(+0x40)=%p n=%u numbers(+0x50)=%p n=%u\n", slot, self,
                self?self->_dialog:nullptr,
                self?self->_container:nullptr,
-               self?self->countsData:nullptr,
-               self?self->spinnerData:nullptr, spinN,
-               self?self->numberData:nullptr,
-               self?static_cast<uint32_t>(self->numberCount):0);
+               self?self->counts._data:nullptr,
+               self?self->spinners._data:nullptr, spinN,
+               self?self->numbers._data:nullptr,
+               self?static_cast<uint32_t>(self->numbers._size):0);
         // Dump the per-profession citizen counts (+0x30 int array) so we can confirm
         // Slot8 computes real assignments, not all-zero placeholder rows.
-        int32_t* counts = self?self->countsData:nullptr;
+        int32_t* counts = self?self->counts._data:nullptr;
         if (counts && spinN>0 && spinN<=64) {
             printf("[ProfessionUI]   counts[0..%u]:", spinN-1);
             for (uint32_t i=0;i<spinN;i++) printf(" %d", counts[i]);
@@ -312,8 +312,8 @@ namespace professionui_sa {
     // Has Slot5 populated the caches yet? counts(+0x30) is allocated by the Slot5 tail
     // (ExeArrayResize2), spinners(+0x40) grown as each profession row is added.
     bool IsSetUp(ProfessionUI* self) {
-        return self->countsData != nullptr &&
-               self->spinnerData != nullptr;
+        return self->counts._data != nullptr &&
+               self->spinners._data != nullptr;
     }
 }
 
@@ -533,19 +533,11 @@ void ProfessionUI::OnOpened() {
         if (::Object::IsDerivedFromNullSafe(numEditRaw, UI::NumberEditElement::TypeId()))
             numEditChecked = static_cast<UI::NumberEditElement*>(numEditRaw);
 
-        // Push spinner's NumberEditElement to spinner array at +0x40
-        // B.3.2 bridge: +0x40 is Collection::Array<InternalPtr<NumberEditElement>>,
-        // raw storage until ~ProfessionUI frees it (H5).
-        {
-            auto& arr = GameColl::ArrayAt<UI::NumberEditElement*>(this, 0x40);
-            arr.SetSize(arr.GetSize() + 1, numEditChecked);
-        }
+        // Push spinner's NumberEditElement to the spinner array at +0x40
+        spinners.SetSize(spinners.GetSize() + 1, numEditChecked);
 
-        // Push number element to number array at +0x50 (the same bridge)
-        {
-            auto& arr = GameColl::ArrayAt<UI::NumberElement*>(this, 0x50);
-            arr.SetSize(arr.GetSize() + 1, number);
-        }
+        // Push number element to the number array at +0x50
+        numbers.SetSize(numbers.GetSize() + 1, number);
 
         // If this profession is the transient "default/laborer" profession (profList+0x30,
         // _default="laborer" in Profession.rsc), hide the two worker-count elements that
@@ -576,7 +568,7 @@ void ProfessionUI::OnOpened() {
     // Resize counts array to profCount.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400021d0, stride 4 align 4,
     // grown tail left as the allocation found it (no init arm). Slot8 zeroes it below.
-    GameColl::ArrayAt<GameColl::I32NoInit>(this, 0x30).SetSize(profCount);
+    counts.SetSize(profCount);
 
     // Call Slot8 (vtable +0x40) with Time(0.0)
     System::Time timeVal;
@@ -604,9 +596,9 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     int profCount = profListPtr->arrayCount;
 
     // Zero out counts array
-    int* counts = countsData;
+    int* countsNow = counts._data;
     for (int i = 0; i < profCount; i++) {
-        counts[i] = 0;
+        countsNow[i] = 0;
     }
 
     // Iterate all citizens (LEFT: through m_citizenList)
@@ -648,20 +640,20 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         }
 
         if (profIndex >= 0) {
-            counts[profIndex]++;
+            countsNow[profIndex]++;
         }
     }
 
     // Update first spinner (index 0): set value and min/max to same value (locked)
-    spinnerData[0]->SetValue(counts[0]);
-    spinnerData[0]->SetMinMax(counts[0], counts[0]);
+    spinners[0]->SetValue(countsNow[0]);
+    spinners[0]->SetMinMax(countsNow[0], countsNow[0]);
 
     // Update remaining spinners
-    int spinnerN = spinnerCount;
+    int spinnerN = spinners._size;
     for (int i = 1; i < spinnerN; i++) {
-        spinnerData[i]->SetValue(counts[i]);
+        spinners[i]->SetValue(countsNow[i]);
         // Min=0, Max=counts[i]+counts[0] (can reassign from "None" profession)
-        spinnerData[i]->SetMinMax(0, counts[i] + counts[0]);
+        spinners[i]->SetMinMax(0, countsNow[i] + countsNow[0]);
     }
 
     // Update number elements with actual worker counts per profession
@@ -773,7 +765,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         }
 
         // Set number element value (with CheckPtr, matching original)
-        numberData[p]->SetValue(static_cast<int32_t>(totalWorkers));
+        numbers[p]->SetValue(static_cast<int32_t>(totalWorkers));
     }
 }
 
@@ -803,11 +795,11 @@ void ProfessionUI::HandleSpinner(int profIndex) {
     int64_t idx = (int64_t)profIndex;
 
     // Get spinner element at this index and read desired value
-    int desired = spinnerData[idx]->GetValue();
+    int desired = spinners[idx]->GetValue();
 
     // Get current count from counts array
-    int* counts = countsData;
-    int current = counts[profIndex];
+    int* countsNow = counts._data;
+    int current = countsNow[profIndex];
 
 
     // Add citizens if desired > current
@@ -1009,4 +1001,31 @@ void ProfessionUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
     if (param4 > 499 && param4 <= profCount + 500) {
         HandleButton(param4 - 500);
     }
+}
+
+// ============================================================
+// ~ProfessionUI (0x1400774e0, called by the scalar deleting dtor 0x140013450)
+// ============================================================
+// Retail frees the profession Set's nodes (0x14000e320: left subtree, right
+// subtree, then the node), zeroes its root and count, then releases the three
+// Arrays in the order +0x50, +0x40, +0x30 — which is what the members' own
+// dtors do after this body (reverse declaration order) — and chains
+// ~DialogController.
+static void FreeProfessionIndex(ProfNode* node) {   // 0x14000e320
+    if (node != nullptr) {
+        FreeProfessionIndex(node->left);
+        FreeProfessionIndex(node->right);
+        System::MemoryAllocator::MemFree(node);
+    }
+}
+
+ProfessionUI::~ProfessionUI() {
+    ProfNode* root = professionIndexRoot;
+    if (root != nullptr) {
+        FreeProfessionIndex(root->left);
+        FreeProfessionIndex(root->right);
+        System::MemoryAllocator::MemFree(root);
+    }
+    professionIndexRoot = nullptr;
+    professionIndexCount = 0;
 }

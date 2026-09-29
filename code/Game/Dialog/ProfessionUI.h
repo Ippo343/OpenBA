@@ -17,6 +17,7 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "runtime/types/collection/Collection.h"
 
 class Profession;   // Game/Profession.h
 namespace UI { class NumberEditElement; class NumberElement; }
@@ -27,11 +28,10 @@ class ProfessionUI final : public UI::DialogController {
 public:
     ProfessionUI() = default;                            // 0x140013400 (ctor inlined in the factory)
 
-    // 0x140013450 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail's dtor mirrors ctor 0x1400775a0 (owning members released);
-    // the tree never did (leak kept).
-    ~ProfessionUI() override = default;                           // [0] 0x140013450
+    // 0x140013450 minus the free: ~ProfessionUI 0x1400774e0 frees the Set's nodes,
+    // then the three Arrays (+0x50, +0x40, +0x30: member order, reversed), then
+    // the compiler chains ~DialogController (and so ~Internal: RemoveObject).
+    ~ProfessionUI() override;                                     // [0] 0x140013450
     void OnOpened() override;   // [5] 0x140076ca0
     void OnUpdate(const System::Time& time) override;   // [8] 0x1400765a0
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
@@ -59,17 +59,11 @@ private:
 
 public:
     // ---- fields: retail's three Collection::Arrays and one Set, released by
-    // ~ProfessionUI 0x1400774e0. Raw storage until the tree's dtor does the same
-    // (H5); the zero initialisers are the create path's stores (0x140013400).
-    int32_t*  countsData = nullptr;        // +0x30 Array<int>: citizens per profession row
-    int32_t   countsCount = 0;             // +0x38
-    int32_t   countsCapacity = 0;          // +0x3C
-    UI::NumberEditElement** spinnerData = nullptr; // +0x40 Array<InternalPtr<NumberEditElement>>
-    int32_t   spinnerCount = 0;            // +0x48
-    int32_t   spinnerCapacity = 0;         // +0x4C
-    UI::NumberElement** numberData = nullptr;      // +0x50 Array<InternalPtr<NumberElement>>
-    int32_t   numberCount = 0;             // +0x58
-    int32_t   numberCapacity = 0;          // +0x5C
+    // ~ProfessionUI 0x1400774e0; the zero initialisers are the create path's
+    // stores (0x140013400).
+    Collection::Array<int32_t> counts;                  // +0x30 citizens per profession row
+    Collection::Array<UI::NumberEditElement*> spinners; // +0x40 InternalPtr<NumberEditElement>
+    Collection::Array<UI::NumberElement*> numbers;      // +0x50 InternalPtr<NumberElement>
     ProfessionIndexNode* professionIndexRoot = nullptr; // +0x60 Set root
     int32_t   professionIndexCount = 0;    // +0x68 (u32 write)
     uint8_t _pad6C[4] = {};                // +0x6C: gap
@@ -79,15 +73,9 @@ public:
 
 static_assert(sizeof(ProfessionUI) == 0x78, "ProfessionUI is 0x78 (create 0x140013400 MemAlloc(0x78))");
 static_assert(alignof(ProfessionUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(ProfessionUI, countsData) == 0x30, "countsData @ 0x30");
-static_assert(offsetof(ProfessionUI, countsCount) == 0x38, "countsCount @ 0x38");
-static_assert(offsetof(ProfessionUI, countsCapacity) == 0x3C, "countsCapacity @ 0x3C");
-static_assert(offsetof(ProfessionUI, spinnerData) == 0x40, "spinnerData @ 0x40");
-static_assert(offsetof(ProfessionUI, spinnerCount) == 0x48, "spinnerCount @ 0x48");
-static_assert(offsetof(ProfessionUI, spinnerCapacity) == 0x4C, "spinnerCapacity @ 0x4C");
-static_assert(offsetof(ProfessionUI, numberData) == 0x50, "numberData @ 0x50");
-static_assert(offsetof(ProfessionUI, numberCount) == 0x58, "numberCount @ 0x58");
-static_assert(offsetof(ProfessionUI, numberCapacity) == 0x5C, "numberCapacity @ 0x5C");
+static_assert(offsetof(ProfessionUI, counts) == 0x30, "counts @ 0x30");
+static_assert(offsetof(ProfessionUI, spinners) == 0x40, "spinners @ 0x40");
+static_assert(offsetof(ProfessionUI, numbers) == 0x50, "numbers @ 0x50");
 static_assert(offsetof(ProfessionUI, professionIndexRoot) == 0x60, "professionIndexRoot @ 0x60");
 static_assert(offsetof(ProfessionUI, professionIndexCount) == 0x68, "professionIndexCount @ 0x68");
 static_assert(offsetof(ProfessionUI, gotoIndex) == 0x70, "gotoIndex @ 0x70");
