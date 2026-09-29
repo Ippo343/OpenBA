@@ -112,6 +112,7 @@ struct EntityList {
     void PostUpdate();                                // 0x1400c43d0
     void RemoveEntity(ComponentEntity** entityIBP);   // 0x1400c38e0 (an InternalPtr slot)
     void Serialize(IO::Stream& stream);               // 0x1400c44a0
+    void RegisterEntity(ComponentEntity** entityIBP, int category);  // 0x1400c48a0 (body in componententity.cpp)
 
 private:
     // The retail step-5 tail of Update (0x1400c4090), relocated to the top of the
