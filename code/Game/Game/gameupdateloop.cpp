@@ -796,7 +796,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // B.3.5 bridge — the exe dispatch slot 0x140152050 read and its
                 // [GUARD-M5] readiness guard went with the door. `time` is a
                 // `const System::Time*` here, so it is dereferenced at the call.
-                reinterpret_cast<Graphics::AnimationManager*>(m_animationManager)
+                m_animationManager
                     ->Update(*reinterpret_cast<const System::Time*>(time),
                              rootOnly);   // B.3.5 bridge
                 }
@@ -1144,7 +1144,7 @@ post_simulation:
             // earlier uint32_t cache typedef converted it (40.5f -> 40).
             System::Time audioNow;    audioNow._ticks    = *(int64_t*)time;
             System::Time audioScaled; audioScaled._ticks = scaledTime[0];
-            reinterpret_cast<Audio::Scene*>(m_audioScene)->Update(
+            m_audioScene->Update(
                 audioNow, audioScaled, *m_random,
                 *reinterpret_cast<const Vector3*>(listenerPos), windFactor);   // B.3.7 bridge
         }
@@ -1236,7 +1236,7 @@ post_simulation:
     TRACE("[GameUpdateLoop::Update] calling Graphics::Scene::Clean...\n");
     // B.3.5 bridge — the `if (fn_Graphics_Scene_Clean)` readiness guard (and its
     // SKIP trace) went with the door call.
-    reinterpret_cast<Graphics::Scene*>(m_graphicsScene)->Clean();   // B.3.5 bridge
+    m_graphicsScene->Clean();
     TRACE("[GameUpdateLoop::Update] Graphics::Scene::Clean done\n");
 
     // Step 16: Image capture check
@@ -1372,10 +1372,8 @@ void GameUpdateLoop::Draw(float alpha) {
         // null — to render the terrain top-down into the minimap pixel arrays.
         if (imageCapture->terrainImage == nullptr) {
             // Remove and re-add global objects for terrain update
-            void* gameWorld = GameUpdateLoop::_singleton;
-            void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
-
-            Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
+            GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+            Graphics::Scene* gs = gameWorld->m_graphicsScene;
             gs->RemoveGlobalObject(m_sunLight);       // B.3.5 bridge
             gs->RemoveGlobalObject(m_worldGeometry);  // B.3.5 bridge
 
@@ -1472,7 +1470,7 @@ void GameUpdateLoop::Draw(float alpha) {
         if (::Video::Configuration::_singleton) {
             shadowMode = *(uint32_t*)((uintptr_t)::Video::Configuration::_singleton + 0x30);
         }
-        *(uint32_t*)((uintptr_t)m_renderer + 0x3c) = shadowMode;
+        m_renderer->_shaderDetail = shadowMode;
     }
 
     // [diag] BANISHED_LOD_CENSUS — replicate MeshInstance's distance-based detail
@@ -1494,9 +1492,9 @@ void GameUpdateLoop::Draw(float alpha) {
     {
         void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
-        reinterpret_cast<Graphics::Renderer*>(m_renderer)->Draw(
+        m_renderer->Draw(
             *reinterpret_cast<Video::Context*>(videoCtx), alpha,
-            *reinterpret_cast<const Graphics::Scene*>(m_graphicsScene),
+            *m_graphicsScene,
             *reinterpret_cast<const Graphics::Camera*>(
                 (uintptr_t)m_playerController + 0x34));   // B.3.5 bridge
     }
@@ -1981,7 +1979,7 @@ void GameUpdateLoop::Shutdown() {
 
     // Stop all audio
     TRACE("[GameUpdateLoop::Shutdown] stopping all audio...\n");
-    reinterpret_cast<Audio::Scene*>(m_audioScene)->StopAll();   // B.3.7 bridge
+    m_audioScene->StopAll();
 
     // Citizen housing reassignment loop
     TRACE("[GameUpdateLoop::Shutdown] reassigning citizen housing...\n");
@@ -2039,9 +2037,8 @@ void GameUpdateLoop::Shutdown() {
     // Remove global scene objects
     TRACE("[GameUpdateLoop::Shutdown] removing global scene objects...\n");
     {
-        void* gameWorld = GameUpdateLoop::_singleton;
-        void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
-        Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
+        GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+        Graphics::Scene* gs = gameWorld->m_graphicsScene;
         gs->RemoveGlobalObject(m_worldGeometry);  // B.3.5 bridge
         gs->RemoveGlobalObject(m_sunLight);       // B.3.5 bridge
         gs->RemoveGlobalObject(m_skyMesh);        // B.3.5 bridge
@@ -2072,7 +2069,7 @@ void GameUpdateLoop::Shutdown() {
     // Renderer
     if (m_renderer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Renderer...\n");
-        RtGraphics_Renderer_Dtor(static_cast<RtGraphics::Renderer*>(m_renderer));
+        RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(m_renderer));   // the dtor door takes the POD mirror
         System::MemoryAllocator::MemFree(m_renderer);
     }
 
@@ -2142,7 +2139,7 @@ void GameUpdateLoop::Shutdown() {
     // Graphics::Scene
     if (m_graphicsScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Graphics::Scene...\n");
-        RtGraphics_Scene_Dtor(static_cast<RtGraphics::Scene*>(m_graphicsScene));
+        RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(m_graphicsScene));
         System::MemoryAllocator::MemFree(m_graphicsScene);
     }
 
@@ -2156,7 +2153,7 @@ void GameUpdateLoop::Shutdown() {
     // Picking::Scene
     if (m_pickingScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Picking::Scene...\n");
-        static_cast< ::Picking::Scene*>(m_pickingScene)->::Picking::Scene::~Scene();
+        m_pickingScene->::Picking::Scene::~Scene();
         System::MemoryAllocator::MemFree(m_pickingScene);
     }
 
@@ -2178,7 +2175,7 @@ void GameUpdateLoop::Shutdown() {
     // AnimationManager
     if (m_animationManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying AnimationManager...\n");
-        RtGraphics_AnimationManager_Dtor(static_cast<RtGraphics::AnimationManager*>(m_animationManager));
+        RtGraphics_AnimationManager_Dtor(reinterpret_cast<RtGraphics::AnimationManager*>(m_animationManager));
         System::MemoryAllocator::MemFree(m_animationManager);
     }
 
@@ -2370,7 +2367,10 @@ GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t s
     m_climateConfig = climateConfig;
     m_savedState    = savedState;
     // +0x60..+0xB8, in field order (retail's qword stores).
-    m_graphicsScene = m_animationManager = m_pickingScene = m_audioScene = nullptr;
+    m_audioScene = nullptr;    // the chained store's order: +0x78, +0x70, +0x68, +0x60
+    m_pickingScene = nullptr;
+    m_animationManager = nullptr;
+    m_graphicsScene = nullptr;
     m_renderer = nullptr;      // the chained store's order: +0x90, +0x88, +0x80
     m_characterGrid = nullptr;
     m_musicPlayer = nullptr;

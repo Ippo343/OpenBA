@@ -979,8 +979,8 @@ void GameUpdateLoop::Load() {
     // Step 7 — Renderer (+0x90, 0x50).
     {
         void* mem = AllocSub(0x50, 4);
-        if (mem) RtGraphics_Renderer_Ctor(static_cast<RtGraphics::Renderer*>(mem));
-        m_renderer = mem;
+        if (mem) RtGraphics_Renderer_Ctor(static_cast<RtGraphics::Renderer*>(mem));   // the ctor door takes the POD mirror
+        m_renderer = static_cast<Graphics::Renderer*>(mem);
     }
 
     // Step 8 — EntityList (+0xE8, 0xe8).
@@ -1097,21 +1097,21 @@ void GameUpdateLoop::Load() {
     {
         void* mem = AllocSub(0x78, 8);
         if (mem) RtGraphics_Scene_Ctor(static_cast<RtGraphics::Scene*>(mem));
-        m_graphicsScene = mem;
+        m_graphicsScene = static_cast<Graphics::Scene*>(mem);
     }
 
     // Step 19 — Audio::Scene (+0x78, 0x38).
     {
         void* mem = AllocSub(0x38, 8);
         if (mem) RtAudio_Scene_Ctor(mem);
-        m_audioScene = mem;
+        m_audioScene = static_cast<Audio::Scene*>(mem);
     }
 
     // Step 20 — Picking::Scene (+0x70, 0x60).
     {
         void* mem = AllocSub(0x60, 8);
-        if (mem) RtPicking_Scene_Ctor(mem);
-        m_pickingScene = mem;
+        // Retail stores the ctor's return (this), as here (0x140096b00).
+        m_pickingScene = mem ? RtPicking_Scene_Ctor(mem) : nullptr;
     }
 
     // Step 21 - CharacterGrid: loose Morton quadtree over characters (+0x88, 0x60).
@@ -1126,7 +1126,7 @@ void GameUpdateLoop::Load() {
     {
         void* mem = AllocSub(0x9d8, 8);
         if (mem) RtGraphics_AnimationManager_Ctor(static_cast<RtGraphics::AnimationManager*>(mem));
-        m_animationManager = mem;
+        m_animationManager = static_cast<Graphics::AnimationManager*>(mem);
     }
 
     // Step 23 — WorldGeometry (+0x110, 0x230): the real ctor (0x1400b00e0).
@@ -1648,11 +1648,11 @@ void GameUpdateLoop::Load() {
     if (m_playerController)
         Reimpl_FUN_140098660(m_playerController, 40.0f, 2.0f, 512.0f);
     {
-        void* gScene = m_graphicsScene;   // g_pGameWorld+0x60
+        Graphics::Scene* gScene = m_graphicsScene;   // g_pGameWorld+0x60
         // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term went with
         // the door; `gScene` is an object test and stays.
         if (gScene) {
-            Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(gScene);   // B.3.5 bridge
+            Graphics::Scene* gs = gScene;
             if (m_worldGeometry)
                 gs->AddGlobalObject(m_worldGeometry); // WorldGeom  B.3.5 bridge
             // M5 5b lighting: add the SunLight so the directional light + ambient
@@ -1674,11 +1674,11 @@ void GameUpdateLoop::Load() {
             if (kAddSkyMesh && m_skyMesh)
                 gs->AddGlobalObject(m_skyMesh); // SkyMesh  B.3.5 bridge
         }
-        void* aScene = m_audioScene;   // g_pGameWorld+0x78
+        Audio::Scene* aScene = m_audioScene;   // g_pGameWorld+0x78
         if (aScene) {
-            reinterpret_cast<Audio::Scene*>(aScene)->Pause(4, false);   // B.3.7 bridge
-            reinterpret_cast<Audio::Scene*>(aScene)->Pause(3, false);   // B.3.7 bridge
-            reinterpret_cast<Audio::Scene*>(aScene)->Pause(2, false);   // B.3.7 bridge
+            aScene->Pause(4, false);
+            aScene->Pause(3, false);
+            aScene->Pause(2, false);
         }
     }
 

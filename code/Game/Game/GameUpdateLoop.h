@@ -38,7 +38,10 @@
 // `void*` name their class in the comment; W0-H2's hand-in lists why each
 // stays (a void* ctor parameter, a Runtime POD-mirror construction / read, an
 // allocation through a void* helper, or no class in the tree yet).
-namespace Graphics    { class Material; class SunLight; class MeshInstance; }
+namespace Graphics    { class Material; class SunLight; class MeshInstance;
+                        class Scene; class AnimationManager; class Renderer; }
+namespace Picking     { class Scene; }
+namespace Audio       { class Scene; }
 namespace UI          { class UserInterface; }
 namespace System      { class Random; }
 namespace Save        { class SaveLoad; }
@@ -111,10 +114,15 @@ public:
     void*    m_savedState;          // +0x58  Save::SavedState*, non-null = loading from save (ctor p2)
 
     // Rendering subsystems (created in Load, destroyed in Shutdown)
-    void*    m_graphicsScene;       // +0x60  Graphics::Scene*, MemAlloc(0x78) in Load
-    void*    m_animationManager;    // +0x68  Graphics::AnimationManager*, MemAlloc(0x9d8) in Load
-    void*    m_pickingScene;        // +0x70  Picking::Scene*, MemAlloc(0x60) in Load
-    void*    m_audioScene;          // +0x78  Audio::Scene*, MemAlloc(0x38) in Load
+    // B.4 GAME-a (H4): typed. Load / Shutdown still build and destroy the
+    // Graphics three and Audio::Scene through the Runtime ctor / dtor doors
+    // (RtGraphics_* on the POD mirrors, RtAudio_Scene_*): the real classes'
+    // ctors / dtors are declared and undefined (runtime/types/graphics/Scene.h,
+    // Camera.h, AnimationManager.h), so the order of calls is main's.
+    Graphics::Scene*            m_graphicsScene;    // +0x60  MemAlloc(0x78) in Load
+    Graphics::AnimationManager* m_animationManager; // +0x68  MemAlloc(0x9d8) in Load
+    Picking::Scene*             m_pickingScene;     // +0x70  MemAlloc(0x60) in Load
+    Audio::Scene*               m_audioScene;       // +0x78  MemAlloc(0x38) in Load
     // +0x80: MusicPlayer* — MemAlloc(0x18,4) {+0x00 int32 currentTrackId = -1,
     //   +0x08 MusicTrackList* = Find("Game/MusicTracks.rsc"), +0x10 int64 0};
     //   ticked by 0x1400a40e0 (MusicPlayer::Update).
@@ -123,7 +131,7 @@ public:
     //   ctor 0x1400182b0 (8 levels, 0x5555 cells). NOT a MusicPlayer and NOT a
     //   Transform (the +0x80/+0x88 names were swapped until 2026-08-30).
     CharacterGrid* m_characterGrid; // +0x88
-    void*    m_renderer;            // +0x90  Graphics::Renderer*, MemAlloc(0x50) in Load
+    Graphics::Renderer* m_renderer; // +0x90  MemAlloc(0x50) in Load
     UI::UserInterface* m_userInterface; // +0x98  MemAlloc(0x128) in Load
 
     // Resource references (looked up in Load from the ExternalList). Retail's

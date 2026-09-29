@@ -744,9 +744,9 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     // The `s_fn_AnimMgr_Serialize` cache, its typedef, its resolver and the
     // `anim=%p` it fed the [GUL::Serialize] fprintf all went in the closing pass:
     // a diagnostic that prints the address of a door nobody calls reports nothing.
-    reinterpret_cast<Graphics::AnimationManager*>(self->m_animationManager)->Serialize(
+    self->m_animationManager->Serialize(
         *reinterpret_cast<IO::Serializer*>(ser));   // B.3.5 bridge
-    reinterpret_cast<Audio::Scene*>(self->m_audioScene)->Serialize(ser);   // B.3.7 bridge
+    self->m_audioScene->Serialize(ser);
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
