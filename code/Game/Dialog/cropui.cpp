@@ -8,6 +8,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/cropui_funcs.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Dialog/exe_bodies.h"
