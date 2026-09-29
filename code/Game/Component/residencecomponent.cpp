@@ -27,6 +27,7 @@
 #include "Component/WorkComponent.h"
 #include "Component/ModelComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"   // CitizenBehavior::field_0x20 (the residence list)
 #include "Component/coll_bridge.h"
 #include "Component/firecomponent_funcs.h"
 #include "object/TypeInfo.h"
@@ -46,11 +47,11 @@
 #include "Action/exe_bodies.h"
 
 // The exe helpers this file calls, by retail address:
-//   0x140037ad0 ResidenceComponent_ResizeResidentArray (below)
+//   0x140037ad0 ResidenceComponent::SetFamilyCount (below)
 //   0x140037c50 ResidenceComponent::SerializeFamilies (below)
 //   0x140129ef0 ResidenceComponent::EvictResidents (below)
 //   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
-//   0x140007960 ResidenceComponent_CopyInnerArray (below)
+//   0x140007960 CopyFamily (below)
 //   0x1401163d0 CitizenComponent::SetHome
 //   0x140152a98 ?IsDerivedFrom@Base@Object@@ (import slot)
 
@@ -74,117 +75,115 @@ void ResidenceComponent::EvictAndUnregister() {
     // The owner entity, as the InternalBasePtr value retail builds on the stack
     ComponentEntity* entityPtr = _entity;
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): its +0x20 list stays by offset.
-    uintptr_t worldMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
-    // Unregister the entity from worldMgr+0x20 (the residence entity list)
-    CemeteryListErase_Reimpl((void*)(worldMgr + 0x20), &entityPtr);   // 0x140002cc0
+    // Unregister the entity from the town's residence entity list (+0x20)
+    CemeteryListErase_Reimpl(&worldMgr->field_0x20, &entityPtr);   // 0x140002cc0
 }
 
-// Resident per-slot inner-array copy on grow.
+// Resident per-family member-array copy on grow.
 // CALLER-BUG FIX: the literal was 0x140035ec0, which is MID-FUNCTION inside the
 // resize helper FUN_140035d50 (its body is 0x140035d50-0x140035ec8). The actual
 // per-element copy the resize loop CALLs is FUN_140007960 (verified: the only
 // CALL 0x140007960 inside FUN_140035d50 is at 0x140035e17, the inner-move site).
-// FUN_140007960(dst, src) frees dst's 8-byte-stride pointer array and deep-copies
-// src's. Closure-safe (only MemAlloc/MemFree).
 // ============================================================
-// Reimpl of FUN_140007960 (resident per-slot inner pointer-array deep copy).
-// dst/src each describe an array {ptr@+0, int count@+8, int capacity@+0xc}. Frees
-// dst's old buffer, copies src's count, allocates count*8 (8-byte stride, align 8),
-// and copies the pointers element-by-element. No-op when dst==src. Closure-safe:
-// only MemAlloc/MemFree. Faithful 1:1 port of the Ghidra decompile.
-// (Registered for 0x140007960 — see CALLER-BUG FIX note above.)
+// Reimpl of FUN_140007960 (Array<InternalPtr<CitizenComponent>>::operator=, the
+// family member array deep copy). Frees dst's old buffer, copies src's count,
+// allocates count*8 (8-byte stride, align 8), and copies the pointers
+// element-by-element. No-op when dst==src. Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
-void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP) {
-    int64_t* dst = reinterpret_cast<int64_t*>(dstP);
-    int64_t* src = reinterpret_cast<int64_t*>(srcP);
+static void CopyFamily(ResidenceComponent::Family* dst, const ResidenceComponent::Family* src) {
     if (dst == src) return;
 
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dst[0]));
-    dst[1] = 0;
-    dst[0] = 0;
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
-    *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8) =
-        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(src) + 8);
-    count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
+    System::MemoryAllocator::MemFree(dst->members);
+    dst->count = 0;
+    dst->capacity = 0;
+    dst->members = nullptr;
+    dst->count = src->count;
+    int count = dst->count;
     if (count > 0) {
-        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 0xc) = count;
-        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)count << 3), 8);
-        dst[0] = (int64_t)nb;
+        dst->capacity = count;
+        dst->members = static_cast<Object::InternalPtr<CitizenComponent>*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)count << 3), 8));
     }
-    int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
+    int n = dst->count;
     for (int i = 0; i < n; i++) {
-        int64_t* slot = reinterpret_cast<int64_t*>(dst[0] + (int64_t)i * 8);
+        Object::InternalPtr<CitizenComponent>* slot = dst->members + i;
         if (slot) {
-            *slot = *reinterpret_cast<int64_t*>(src[0] + (int64_t)i * 8);
+            *slot = src->members[i];
         }
     }
 }
 
 // ============================================================
-// Reimpl of FUN_140037ad0 (ResidenceComponent_Controller_sub_7ad0:
-//   grow/shrink the 16-byte-stride resident-slot array at the field this points to)
+// ResidenceComponent::SetFamilyCount (0x140037ad0, ResidenceComponent_Controller_sub_7ad0:
+//   Array<Family>::SetSize on residentSlots)
 // ============================================================
-// param_1 = address of {void* ptr (+0), int count (+8), int capacity (+0xc)}.
-// On grow, new tail slots are zeroed; existing slots are moved with helper_5ec0
-// when the buffer was reallocated. On shrink (param_2 < count) the dropped slots'
-// inner buffers (slot[0]) are MemFree'd. When realloc happens, every old slot is
-// freed and the old buffer released.
-void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
-    int64_t* field = (int64_t*)arrayFieldPtr;   // field[0]=ptr, [1] low=count, high=capacity
-    int oldCount = (int)field[1];
+// On grow, new tail families are zeroed; existing families are copied with
+// CopyFamily when the buffer was reallocated. On shrink the dropped families'
+// member buffers are MemFree'd. When realloc happens, every old family is freed
+// and the old buffer released.
+void ResidenceComponent::SetFamilyCount(int newCount) {
+    int oldCount = residentSlotCount;
     if (newCount == oldCount) return;
 
-    int64_t* oldBuf = (int64_t*)field[0];
-    *(int*)((uintptr_t)field + 8) = newCount;
-    if (*(int*)((uintptr_t)field + 0xc) < newCount) {
-        *(int*)((uintptr_t)field + 0xc) = newCount;
+    Family* oldBuf = residentSlots;
+    residentSlotCount = newCount;
+    if (residentSlotCapacity < newCount) {
+        residentSlotCapacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            *(int*)((uintptr_t)field + 0xc) = newCount * 3;
+            residentSlotCapacity = newCount * 3;
         }
-        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
-        field[0] = (int64_t)nb;
+        residentSlots = static_cast<Family*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)residentSlotCapacity << 4), 8));
     }
 
-    int start = (oldBuf == (int64_t*)field[0]) ? oldCount : 0;
+    int start = (oldBuf == residentSlots) ? oldCount : 0;
     if (start < newCount) {
-        int64_t* srcSlot = oldBuf + (int64_t)start * 2;
+        Family* srcSlot = oldBuf + start;
         for (int i = start; i < newCount; i++) {
-            int64_t* slot = (int64_t*)(field[0] + (int64_t)i * 0x10);
+            Family* slot = residentSlots + i;
             if (i < oldCount) {
                 if (slot) {
-                    slot[0] = 0;
-                    slot[1] = 0;
-                    ResidenceComponent_CopyInnerArray(slot, srcSlot);   // 0x140007960
+                    slot->members = nullptr;
+                    slot->count = 0;
+                    slot->capacity = 0;
+                    CopyFamily(slot, srcSlot);   // 0x140007960
                 }
             } else {
-                if (slot) { slot[0] = 0; slot[1] = 0; }
+                if (slot) { slot->members = nullptr; slot->count = 0; slot->capacity = 0; }
             }
-            srcSlot += 2;
+            srcSlot += 1;
         }
     }
 
-    if (oldBuf == (int64_t*)field[0]) {
-        // No realloc: free inner buffers of the shrunk-off tail
+    if (oldBuf == residentSlots) {
+        // No realloc: free the member buffers of the shrunk-off tail
         if (newCount < oldCount) {
-            int64_t* p = oldBuf + (int64_t)newCount * 2;
+            Family* p = oldBuf + newCount;
             for (int i = 0; i < oldCount - newCount; i++) {
-                System::MemoryAllocator::MemFree((void*)p[0]);
-                p[0] = 0; p[1] = 0;
-                p += 2;
+                System::MemoryAllocator::MemFree(p->members);
+                p->members = nullptr; p->count = 0; p->capacity = 0;
+                p += 1;
             }
         }
     } else {
-        // Reallocated: free every old slot's inner buffer, then the old buffer
-        int64_t* p = oldBuf;
+        // Reallocated: free every old family's member buffer, then the old buffer
+        Family* p = oldBuf;
         for (int i = 0; i < oldCount; i++) {
-            System::MemoryAllocator::MemFree((void*)p[0]);
-            p[0] = 0; p[1] = 0;
-            p += 2;
+            System::MemoryAllocator::MemFree(p->members);
+            p->members = nullptr; p->count = 0; p->capacity = 0;
+            p += 1;
         }
         if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
     }
+}
+
+// B4 FORWARD: 1 outside caller (Game/starttown.cpp), which passes &residentSlots.
+void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
+    ResidenceComponent* self = reinterpret_cast<ResidenceComponent*>(   // B4 FORWARD receiver
+        reinterpret_cast<uint8_t*>(arrayFieldPtr) - offsetof(ResidenceComponent, residentSlots));
+    self->SetFamilyCount(newCount);
 }
 
 // ============================================================
@@ -369,8 +368,7 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
         for (int flag = 6; flag <= 7; ++flag) {
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
             if (icon)
-                CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon),   // LEFT: B4 FORWARD's old signature (StatusIconComponent::SetFlag)
-                                          static_cast<uint8_t>(flag), 0);
+                icon->SetFlag(static_cast<uint8_t>(flag), 0);   // 0x14012c3f0
         }
         // Model refresh (variant 3 = idle/empty).
         ModelComponentNotify_Reimpl(_entity, 3);
@@ -421,11 +419,10 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
         float pos[3] = {0.0f, 0.0f, 0.0f};
         {
             ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
-            int64_t modelComp = reinterpret_cast<int64_t>(model);   // LEFT: ModelComponent::transform is raw storage (COMP-d)
-            if (modelComp) {
-                pos[0] = *reinterpret_cast<float*>(modelComp + 0x158);
-                pos[1] = *reinterpret_cast<float*>(modelComp + 0x15c);
-                pos[2] = *reinterpret_cast<float*>(modelComp + 0x160);
+            if (model) {
+                pos[0] = model->transform.translation.x;
+                pos[1] = model->transform.translation.y;
+                pos[2] = model->transform.translation.z;
             }
         }
         int64_t emData = emIBP[0];
@@ -677,7 +674,7 @@ void ResidenceComponent::Persist(void* stream) {
 
     // On load (direction == 0): resize the family array
     if (static_cast<int>(ser.GetDirection()) == 0) {
-        ResidenceComponent_ResizeResidentArray(&residentSlots, localCount);
+        SetFamilyCount(localCount);   // 0x140037ad0
     }
 
     // Serialize the families
@@ -709,7 +706,7 @@ void ResidenceComponent::Startup() {
     if (!desc) return;
 
     // Resize the family array at +0x50 to the description's family count (+0x20)
-    ResidenceComponent_ResizeResidentArray(&residentSlots, desc->_maxFamilies);
+    SetFamilyCount(desc->_maxFamilies);   // 0x140037ad0
 }
 
 // [7] 0x14012a0e0 — helper_9ef0 (evict the residents) + remove the owner entity from

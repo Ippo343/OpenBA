@@ -27,6 +27,8 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"       // Math::Vector3
+#include "system/Value.h"    // System::Time
 
 class TornadoComponent final : public Component {
     DECLARE_EXE_TYPE(TornadoComponent)
@@ -41,30 +43,45 @@ public:
     void Startup() override;                                      // [4] 0x1400585a0
     void Tick(void* time) override;                               // [8] 0x140057cd0
 
+    // The waypoint path at +0x30 (H6): 0x1400a70c0 and 0x1400a71e0 take `this+0x30`
+    // as their receiver. The point array is an Array<Vector3> (SetSize 0x14000d030,
+    // append 0x14000cf40; freed by the retail dtor): H5, kept as its raw triple.
+    struct Path {
+        Math::Vector3  target;     // +0x00 the waypoint being walked to (Advance latches it, z = 0)
+        uint8_t        _pad0C[4];  // +0x0C
+        Math::Vector3* points;     // +0x10 Array<Vector3> data
+        int32_t        count;      // +0x18
+        int32_t        capacity;   // +0x1C
+        int32_t        index;      // +0x20 the current waypoint (ctor -1)
+        uint8_t        _pad24[4];  // +0x24
+
+        // 0x1400a70c0: the first waypoint after `index` at least `radius` from `pos`
+        // (XY distance, the waypoint's Z ignored), -1 past the end.
+        int  FindNext(const float* pos, float radius) const;
+        // 0x1400a71e0: once `target` is within `arriveRadius`, latch the next
+        // waypoint more than `skipRadius` away. False only when the path is exhausted.
+        bool Advance(const float* pos, float skipRadius, float arriveRadius);
+    };
+
+    // 0x140058980: recursive midpoint displacement over points[lo..hi].
+    void BuildPathFractal(float* points, int lo, int hi);
+    // 0x140058040: the damage countdown and the three strike sets.
+    void DamageTick(const System::Time* dt);
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    int64_t  damageCountdown;   // +0x28 System::Time; reloaded from desc+0x28
-    float    waypointX;         // +0x30 current path target (Vector3)
-    float    waypointY;         // +0x34
-    float    waypointZ;         // +0x38
-    uint8_t  _pad3C[4];         // +0x3C
-    void*    pathData;          // +0x40 Vector3[] (freed by the retail dtor)
-    int32_t  pathCount;         // +0x48
-    int32_t  pathCapacity;      // +0x4C
-    int32_t  pathIndex;         // +0x50 ctor -1; current waypoint index
-    uint8_t  _pad54[4];         // +0x54
-    float    posX;              // +0x58 live world position (Vector3)
-    float    posY;              // +0x5C
-    float    posZ;              // +0x60
-    uint8_t  _pad64[4];         // +0x64
+    System::Time   damageCountdown; // +0x28 reloaded from TornadoDescription::damageInterval
+    Path           path;            // +0x30 .. +0x57
+    Math::Vector3  position;        // +0x58 live world position
+    uint8_t        _pad64[4];       // +0x64
 };
 
 static_assert(sizeof(TornadoComponent) == 0x68, "TornadoComponent is 0x68 (create 0x14000d500)");
 static_assert(alignof(TornadoComponent) == 8, "TornadoComponent alignment");
 static_assert(offsetof(TornadoComponent, damageCountdown) == 0x28, "");
-static_assert(offsetof(TornadoComponent, waypointX)       == 0x30, "");
-static_assert(offsetof(TornadoComponent, pathData)        == 0x40, "");
-static_assert(offsetof(TornadoComponent, pathCount)       == 0x48, "");
-static_assert(offsetof(TornadoComponent, pathCapacity)    == 0x4C, "");
-static_assert(offsetof(TornadoComponent, pathIndex)       == 0x50, "");
-static_assert(offsetof(TornadoComponent, posX)            == 0x58, "");
-static_assert(offsetof(TornadoComponent, posZ)            == 0x60, "");
+static_assert(offsetof(TornadoComponent, path)            == 0x30, "the path block (0x1400a71e0's receiver)");
+static_assert(sizeof(TornadoComponent::Path)              == 0x28, "");
+static_assert(offsetof(TornadoComponent::Path, points)    == 0x10, "path +0x40 (the retail dtor frees it)");
+static_assert(offsetof(TornadoComponent::Path, count)     == 0x18, "path count +0x48");
+static_assert(offsetof(TornadoComponent::Path, capacity)  == 0x1C, "path capacity +0x4C");
+static_assert(offsetof(TornadoComponent::Path, index)     == 0x20, "path index +0x50 (ctor -1)");
+static_assert(offsetof(TornadoComponent, position)        == 0x58, "");

@@ -10,7 +10,7 @@
 //   +0x21  bool   flagB               (default 0)
 //   +0x24  int32  pickupValue         (default 0)
 //   +0x28  int32  rawMaterialFlags    (enum; serialized via serializer vtable+0x98)
-//   +0x30  void*  volumeArray         (dyn-array of 0x10-stride entries)
+//   +0x30  Volume* volumeArray        (dyn-array of 0x10-stride entries)
 //   +0x38  int32  volumeCount
 //
 // The +0x30 array element layout (stride 0x10):
@@ -34,20 +34,6 @@
 #include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
-
-namespace {
-// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
-void* AllocArray(void* header, int count, int stride) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    *(int32_t*)(h + 8) = count;
-    *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0)
-                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
-                : nullptr;
-    *(void**)h = buf;
-    return buf;
-}
-}  // namespace
 
 // ctor (inlined into create 0x140038bb0 / createInPlace 0x140038c20):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -83,19 +69,27 @@ bool StorageDescription::Serialize(void* stream) {
     int count = _volumeCount;
     
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
-    uint8_t* e;
+    Volume* e;
     if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(&_volumes, count, 0x10));
+        // The tree's load: count = capacity = n, allocate exactly n (8-aligned), zero
+        // each element. (Retail calls the array's SetSize 0x14000da70 here.)
+        _volumeCount = count;
+        _volumeCap = count;
+        _volumes = (count > 0)
+                   ? static_cast<Volume*>(System::MemoryAllocator::MemAlloc((uint64_t)count * 0x10u, 8))
+                   : nullptr;
+        e = _volumes;
         for (int i = 0; i < count; ++i) {
-            *(uint64_t*)(e + i * 0x10)       = 0;          // External* ref
-            *(uint64_t*)(e + i * 0x10 + 8)   = 0;          // int (+pad)
+            e[i]._resource = nullptr;   // External* ref
+            e[i]._count    = 0;         // int (+pad: H7, the tree's one qword store)
+            e[i]._pad0C    = 0;
         }
     } else {
-        e = static_cast<uint8_t*>(_volumes);
+        e = _volumes;
     }
-    for (int i = 0; i < count; ++i, e += 0x10) {
-        ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // int field, elem+8
-        Reimpl_ExternalPtr_Serialize_StringTable(e, &ser);                        // External* ref (elem+0)
+    for (int i = 0; i < count; ++i, ++e) {
+        ser.Serialize(e->_count, nullptr);                                  // int field, elem+8
+        Reimpl_ExternalPtr_Serialize_StringTable(&e->_resource, &ser);      // External* ref (elem+0), 0x140002340
     }
     return true;
 }

@@ -25,6 +25,8 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 
+class ComponentEntity;   // Entity/ComponentEntity.h
+
 class PickingComponent final : public Component {
     DECLARE_EXE_TYPE(PickingComponent)
 
@@ -39,13 +41,16 @@ public:
     void OnRemove() override;                                     // [7]  0x140128b50
     void Slot11() override;                                       // [11] 0x140128ba0 PORT GAP
 
+    // 0x140128f50 (slots 6 / 11 JMP here): drop the mesh, then add the model's pick mesh.
+    void RefreshMesh();
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
     int32_t  pickingId;    // +0x28 Picking::Scene mesh id (ctor -1 = none)
     uint8_t  _pad2C[4];    // +0x2C
-    void*    field30;      // +0x30 (ctor 0)
+    ComponentEntity* userData; // +0x30 InternalPtr<ComponentEntity>: the entity a pick answers (Startup: the owner)
 };
 
 static_assert(sizeof(PickingComponent) == 0x38, "PickingComponent is 0x38 (create 0x140036da0)");
 static_assert(alignof(PickingComponent) == 8, "PickingComponent alignment");
 static_assert(offsetof(PickingComponent, pickingId) == 0x28, "");
-static_assert(offsetof(PickingComponent, field30) == 0x30, "");
+static_assert(offsetof(PickingComponent, userData) == 0x30, "");

@@ -34,7 +34,6 @@
 //     (load), skipping matches retail-with-valid-data behaviour.
 #include "Component/coll_bridge.h"
 #include "Game/serialize_externals.h"          // ExternalPtrSerializeGeneric
-#include "Component/populationcomponent_funcs.h" // PopulationComponent_ResizeCells
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
@@ -108,9 +107,8 @@ inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) 
 // 12-byte-cell resize(+0x38) and per-cell field order 0/8/4, herd-entity
 // count(+0x58) with load-side IBP resize(+0x50, validated ComponentEntity),
 // smooth Time(+0x60), ints +0x68/+0x6c.
-// LEFT: the member PopulationComponent::Persist is defined in
-// populationcomponent.cpp (COMP-e) as a call of this body; the fields are that
-// header's untyped words, so the reads keep their casts.
+// The member PopulationComponent::Persist (populationcomponent.cpp) calls this body;
+// it reads the fields by name.
 // ============================================================
 extern "C" void PopulationComponent_Serialize_Real(void* selfP, void* stream) {
     if (!selfP || !stream) return;
@@ -123,34 +121,33 @@ extern "C" void PopulationComponent_Serialize_Real(void* selfP, void* stream) {
     // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
     // (code/Game/Game, out of C1's file set) still wants a pointer.
     const uint32_t tidPopDesc = PopulationDescription::TypeId();
-    ExternalPtrSerializeGeneric(&self->field28, &ser,
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&self->description), &ser,
                                 &tidPopDesc, "PopulationDescription");
-    ser.Serialize(*reinterpret_cast<int*>(&self->field30), nullptr);
-    ser.Serialize(*reinterpret_cast<int*>(&self->field48), nullptr);
+    ser.Serialize(self->habitatDim, nullptr);
+    ser.Serialize(self->herdDim, nullptr);
 
-    int cells = *reinterpret_cast<int*>(&self->field40);
+    int cells = self->cellCount;
     ser.Serialize(cells, nullptr);
     if (Loading(ser))
-        PopulationComponent_ResizeCells(reinterpret_cast<int64_t*>(&self->field38), cells);
-    uint8_t* cell = reinterpret_cast<uint8_t*>(self->field38);
-    for (int i = 0; i < cells && cell; ++i, cell += 0xc) {
-        ser.Serialize(*reinterpret_cast<int*>(cell + 0x0), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(cell + 0x8), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(cell + 0x4), nullptr);
+        self->SetCellCount(cells);   // 0x14000b0d0
+    PopulationComponent::Cell* cell = self->cells;
+    for (int i = 0; i < cells && cell; ++i, ++cell) {
+        ser.Serialize(cell->density, nullptr);
+        ser.Serialize(cell->minimum, nullptr);
+        ser.Serialize(cell->smoothed, nullptr);
     }
 
-    int herds = *reinterpret_cast<int*>(&self->field58);
+    int herds = self->herdCount;
     ser.Serialize(herds, nullptr);
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&self->field50).SetSize(herds);
-    uint8_t* herd = reinterpret_cast<uint8_t*>(self->field50);
-    for (int i = 0; i < herds && herd; ++i, herd += 8)
+    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&self->herds).SetSize(herds);
+    ComponentEntity** herd = self->herds;
+    for (int i = 0; i < herds && herd; ++i, ++herd)
         SerializeValidatedIBP(herd, ser, ComponentEntity::TypeId());
 
-    reinterpret_cast<System::Time*>(&self->field60)->Serialize(ser);
-    int32_t* ints68 = reinterpret_cast<int32_t*>(&self->field68);
-    ser.Serialize(ints68[0], nullptr);
-    ser.Serialize(ints68[1], nullptr);
+    self->smoothTimer.Serialize(ser);
+    ser.Serialize(self->scanIndex, nullptr);
+    ser.Serialize(self->field_0x6c, nullptr);
 }
 
 void AnimalComponent::Persist(void* stream) {

@@ -64,6 +64,9 @@ public:
     void Startup() override;                                      // [4] 0x14012c720 own RET
     void OnAdded() override;                                      // [6] 0x14012c640
 
+    int  QueryAvailable(const ComponentDescription* material) const;  // 0x14012ce70 count - reserve of the material's item, 0 if none
+    int  QueryCount() const;                                      // 0x14012cf10 sum of count * RawMaterialDescription::_weight
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
     Item*    storageSlots;      // +0x28 _items data (freed by the retail dtor; H5: kept a raw triple)
     int32_t  slotCount;         // +0x30 _items count
