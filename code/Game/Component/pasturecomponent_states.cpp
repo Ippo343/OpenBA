@@ -91,8 +91,8 @@
 //   0x1400c3720 ComponentEntity_CtorFromDescription
 //   .rdata 0x140172204 = 90.0f, the quarter-turn the dropped pile is rotated by.
 // LEFT (B.4 COMP-d): GameUpdateLoop m_citizenList / m_game / m_entityList are void* (W0
-// header); the Map's cells, RawMaterialComponent's quantity word (COMP-e) and
-// ComponentDescription::_subDescs (COMP-c) are untyped; the leaves above take their
+// header); the Map's cells and RawMaterialComponent's quantity word (COMP-e) are
+// untyped; the leaves above take their
 // objects as int64_t / uintptr_t (other blocks' bodies).
 namespace {
 
@@ -109,12 +109,11 @@ LivestockDescription* FindLivestockDescription(ComponentDescription* tmpl) {
     const uint32_t tid = LivestockDescription::TypeId();   // cell 0x1401c79a8 (D5)
     if (!tmpl || !tid) return nullptr;
     int n = tmpl->_subDescCount;
-    void** arr = tmpl->_subDescs;
+    Description** arr = tmpl->_subDescs;
     if (!arr) return nullptr;
     for (int i = 0; i < n; ++i) {
         if (!arr[i]) continue;
-        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-        Object::Base* d = reinterpret_cast<Object::Base*>(arr[i]);
+        Object::Base* d = arr[i];
         uint32_t t = d->Type();   // slot 2
         if (t != tid) continue;
         return (Object::IsDerivedFromNullSafe(d, tid)) ? static_cast<LivestockDescription*>(d) : nullptr;

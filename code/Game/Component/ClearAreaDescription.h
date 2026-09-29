@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class ClearAreaDescription final : public Description {
     DECLARE_EXE_TYPE(ClearAreaDescription)
 
@@ -35,26 +37,28 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140031050
     virtual Object::External* Construct();                                 // [9] 0x140030f80
 
-    // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _descRef;                             // +0x20 ExternalPtr (Description)
-    bool _flag0;                                // +0x28
-    bool _flag1;                                // +0x29
-    bool _flag2;                                // +0x2a
-    bool _flag3;                                // +0x2b
-    bool _flag4;                                // +0x2c
-    bool _flag5;                                // +0x2d
-    uint8_t _pad2e[2];                          // +0x2e never written by the ctor
+    // ---- fields (PUBLIC: the components read them by name) ----
+    // Serialize 0x1401180f0: ExternalPtr<ComponentDescription> (0x140002340), six bools, int.
+    ComponentDescription* _target;  // +0x20 the resource kind to clear (compared against an
+                                    //       occupant's ComponentEntity::_description; 0 = any)
+    bool _clearTrees;               // +0x28 ClearArea work +0x70; IsDone: 0 => every cell empty
+    bool _clearGround;              // +0x29 ClearArea work +0x71; IsDone: ground must be clear
+    bool _clearBuildings;           // +0x2a ClearArea work +0x72; IsDone: 1 => every cell empty
+    bool _priority;                 // +0x2b the work-scheduler post flag (0x14012ec60 arg 3)
+    bool _regrowTerrain;            // +0x2c FinishClear 0x140118270: refresh the region, event 5
+    bool _instant;                  // +0x2d State0Enter 0x140117960: sweep the footprint at once
+    uint8_t _pad2e[2];              // +0x2e never written by the ctor
     int32_t _value;                             // +0x30
     uint8_t _pad34[4];                          // +0x34 never written by the ctor
 };
 
 static_assert(sizeof(ClearAreaDescription) == 0x38, "ClearAreaDescription is 0x38 (create 0x140030f00 MemAlloc(0x38))");
 static_assert(alignof(ClearAreaDescription) == 8, "ClearAreaDescription alignment");
-static_assert(offsetof(ClearAreaDescription, _descRef) == 0x20, "ClearAreaDescription::_descRef @ +0x20");
-static_assert(offsetof(ClearAreaDescription, _flag0) == 0x28, "ClearAreaDescription::_flag0 @ +0x28");
-static_assert(offsetof(ClearAreaDescription, _flag1) == 0x29, "ClearAreaDescription::_flag1 @ +0x29");
-static_assert(offsetof(ClearAreaDescription, _flag2) == 0x2a, "ClearAreaDescription::_flag2 @ +0x2a");
-static_assert(offsetof(ClearAreaDescription, _flag3) == 0x2b, "ClearAreaDescription::_flag3 @ +0x2b");
-static_assert(offsetof(ClearAreaDescription, _flag4) == 0x2c, "ClearAreaDescription::_flag4 @ +0x2c");
-static_assert(offsetof(ClearAreaDescription, _flag5) == 0x2d, "ClearAreaDescription::_flag5 @ +0x2d");
+static_assert(offsetof(ClearAreaDescription, _target) == 0x20, "ClearAreaDescription::_target @ +0x20");
+static_assert(offsetof(ClearAreaDescription, _clearTrees) == 0x28, "ClearAreaDescription::_clearTrees @ +0x28");
+static_assert(offsetof(ClearAreaDescription, _clearGround) == 0x29, "ClearAreaDescription::_clearGround @ +0x29");
+static_assert(offsetof(ClearAreaDescription, _clearBuildings) == 0x2a, "ClearAreaDescription::_clearBuildings @ +0x2a");
+static_assert(offsetof(ClearAreaDescription, _priority) == 0x2b, "ClearAreaDescription::_priority @ +0x2b");
+static_assert(offsetof(ClearAreaDescription, _regrowTerrain) == 0x2c, "ClearAreaDescription::_regrowTerrain @ +0x2c");
+static_assert(offsetof(ClearAreaDescription, _instant) == 0x2d, "ClearAreaDescription::_instant @ +0x2d");
 static_assert(offsetof(ClearAreaDescription, _value) == 0x30, "ClearAreaDescription::_value @ +0x30");

@@ -65,6 +65,8 @@ public:
     void Tick(void* time) override;                               // [8]  0x140052b30
     void Slot11() override;                                       // [11] 0x1400531b0
     void OnEvent(int eventId) override;                           // [12] 0x140053090
+    // Fade every emitter OUT (defined in diseasecomponent.cpp, B4 COMP-c).
+    void StopEmitterFade();                                       // 0x1400537f0
 
     // ---- non-virtual members (retail addresses) ----
     void Setup();                                                 // 0x140052480

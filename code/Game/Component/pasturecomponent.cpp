@@ -10,8 +10,7 @@
 //   OnRemove  (0x1401277e0) — release every animal
 //
 // LEFT (B.4 COMP-d): GameUpdateLoop m_game is void* (W0 header) and the Map's 0x30-byte
-// cell (array at +0x80) has no type yet (GAME-b); ComponentDescription::_subDescs is
-// void** (COMP-c); the Pf_* map
+// cell (array at +0x80) has no type yet (GAME-b); the Pf_* map
 // helpers take their objects as int64_t (Action's bodies).
 //
 // Decompiled from Application-x64.exe using Ghidra.
@@ -94,8 +93,7 @@ int PastureComponent::ComputeCapacity() const {
     const AnimalDescription* found = nullptr;
     int n = animalRef->_subDescCount;
     for (int i = 0; i < n; i++) {
-        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-        Object::Base* comp = reinterpret_cast<Object::Base*>(animalRef->_subDescs[i]);
+        Object::Base* comp = animalRef->_subDescs[i];
         uint32_t t = comp->Type();   // slot 2
         if (t == AnimalDescription::TypeId()) {
             if (Object::IsDerivedFromNullSafe(comp, AnimalDescription::TypeId()))

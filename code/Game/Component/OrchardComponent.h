@@ -34,7 +34,7 @@
 class ComponentEntity;
 class NaturalResourceComponent;
 class FruitComponent;
-namespace Object { class External; }
+class ComponentDescription;
 
 struct OrchardCtrlTag {};
 
@@ -108,7 +108,7 @@ public:
     OrchardSlot*      slots;            // +0x50 Array<OrchardSlot> data (freed by the dtor)
     int32_t           slotCount;        // +0x58
     int32_t           slotCapacity;     // +0x5c
-    Object::External* treeType;         // +0x60 ExternalPtr: the tree chosen in OrchardUI (Startup clears it)
+    ComponentDescription* treeType;     // +0x60 ExternalPtr: the tree template chosen in OrchardUI (Startup clears it)
 };
 
 static_assert(sizeof(OrchardComponent) == 0x68, "OrchardComponent is 0x68 (create 0x140009870)");

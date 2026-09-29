@@ -39,8 +39,11 @@ public:
     void Slot11() override;                                       // [11] 0x14011f540
     void OnEvent(int eventId) override;                           // [12] 0x14011f520
 
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    void PlaceFloor();                                            // 0x14011f390
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint8_t  floorFlag;    // +0x28 "a floor is placed" (the one persisted field; ctor 0)
+    bool     floorFlag;    // +0x28 "a floor is placed" (the one persisted field, Serialize(bool&); ctor 0)
     uint8_t  _pad29[3];    // +0x29
     int32_t  floorId;      // +0x2C picking-mesh id (ctor -1 = none)
 };

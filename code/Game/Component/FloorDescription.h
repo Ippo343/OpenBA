@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace Picking { class PickingMesh; }   // picking/PickingMesh.h
+
 class FloorDescription final : public Description {
     DECLARE_EXE_TYPE(FloorDescription)
 
@@ -36,12 +38,12 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x1400346d0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
-    bool _b28;                                  // +0x28
+    Picking::PickingMesh* _mesh;                // +0x20 ExternalPtr<PickingMesh> (0x14000b7b0): the deck's pick mesh
+    bool _addOnCreate;                          // +0x28 place the floor from OnAdded 0x14011f340 (bridges)
     uint8_t _pad29[7];                          // +0x29 never written by the ctor
 };
 
 static_assert(sizeof(FloorDescription) == 0x30, "FloorDescription is 0x30 (create 0x140034660 MemAlloc(0x30))");
 static_assert(alignof(FloorDescription) == 8, "FloorDescription alignment");
-static_assert(offsetof(FloorDescription, _ref20) == 0x20, "FloorDescription::_ref20 @ +0x20");
-static_assert(offsetof(FloorDescription, _b28) == 0x28, "FloorDescription::_b28 @ +0x28");
+static_assert(offsetof(FloorDescription, _mesh) == 0x20, "FloorDescription::_mesh @ +0x20");
+static_assert(offsetof(FloorDescription, _addOnCreate) == 0x28, "FloorDescription::_addOnCreate @ +0x28");

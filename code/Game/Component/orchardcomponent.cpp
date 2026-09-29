@@ -9,8 +9,7 @@
 //
 // LEFT (B.4 COMP-d): GameUpdateLoop m_game / m_dayCounter are void* (W0 header) and
 // the Map's 0x30-byte cell record (array at +0x80, +0x08 = the entity on the cell)
-// has no type yet (GAME-b); FruitComponent keeps its ripeness float as a uint32_t
-// (COMP-c's header); the StateMachine at StateMachineComponent+0x48 is a void*
+// has no type yet (GAME-b); the StateMachine at StateMachineComponent+0x48 is a void*
 // (COMP-e's header); WorkPlaceComponent_SetAccepting takes an int64_t (COMP-f).
 
 #include "Component/orchardcomponent_funcs.h"
@@ -236,8 +235,7 @@ float OrchardComponent::GetGrowth() const {
         if (slot.state != 1) continue;
 
         if (!slot.fruit) continue;   // SA: retail derefs unguarded; state 1 implies it
-        // LEFT: FruitComponent keeps its ripeness float as a uint32_t (COMP-c's header).
-        float g = *reinterpret_cast<const float*>(&slot.fruit->field30);
+        float g = slot.fruit->ripeness;
         if (g > maxGrowth) g = maxGrowth;
         total += g;
     }
@@ -286,7 +284,7 @@ static void BoostFruit(FruitComponent* fruit, float scale) {
     FruitDescription* validated = nullptr;
     if (::Object::IsDerivedFromNullSafe(desc, FruitDescription::TypeId()))
         validated = static_cast<FruitDescription*>(desc);
-    const float rate  = validated->_f20;
+    const float rate  = validated->_ripenSeasons;
     const float secs  = rate * kRdata_140172234 * scale;
     // System::Time is 8 bytes — a 4-byte target here is the documented clobber trap.
     System::Time timeVal{0};
@@ -646,7 +644,7 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
         OrchardSlot& slot = slots[idx];
         slot.picked = true;
         if (slot.fruit != nullptr && slot.tree != nullptr) {
-            slot.fruit->field30   = 0;
+            slot.fruit->ripeness  = 0.0f;
             slot.fruit->fruitFlag = 1;
         }
         return;

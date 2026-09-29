@@ -41,6 +41,10 @@
 #include "Component/controller_state_table.h"
 #include "Player/exe_bodies.h"
 #include "Dialog/dialog_exe_helpers.h"
+#include "Component/DestroyComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Entity/ComponentEntity.h"
 
 namespace {
 
@@ -52,13 +56,12 @@ namespace {
 // ---------------------------------------------------------------------------
 // The shared body of e7b0 and ea10: request state `targetState` on the entity's
 // StateMachineComponent and pump the machine until it settles.
-// `ownerIbpSlot` is the component's +0x10 InternalBasePtr slot.
+// `owner` is the component's +0x10 entity. The StateMachine sub-object at
+// StateMachineComponent +0x48..+0x53 is raw bytes in COMP-e's header: LEFT.
 // ---------------------------------------------------------------------------
-void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
-    uintptr_t smcIbp = 0;
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(ownerIbpSlot), &smcIbp);
-
-    uint8_t* L = reinterpret_cast<uint8_t*>(smcIbp);
+void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) {
+    uint8_t* L = reinterpret_cast<uint8_t*>(
+        owner->FindComponent<StateMachineComponent>());   // 0x140003ea0
     if (!L) {
         return;
     }
@@ -80,9 +83,9 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
 
     // Settle a half-finished transition before asking for a new state.
     if (static_cast<int8_t>(L[0x51]) < 0) {
-        int64_t t0 = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&t0), 0.0f);
-        StateMachine_TickReimpl(sm, t0, 0, 0);
+        ::System::Time t0 = {0};
+        RtSystem_Time_Ctor(&t0, 0.0f);
+        StateMachine_TickReimpl(sm, t0._ticks, 0, 0);
     }
 
     // node->vtable[1](node, currentIndex, &targetState) -> transition index (or < 0)
@@ -98,9 +101,9 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
 
 
     // The inlined tail == StateMachine::Tick(sm, Time(0), useAlt=0, doTransition=1).
-    int64_t tZero = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<::System::Time*>(&tZero), 0.0f);
-    StateMachine_TickReimpl(sm, tZero, 0, 1);
+    ::System::Time tZero = {0};
+    RtSystem_Time_Ctor(&tZero, 0.0f);
+    StateMachine_TickReimpl(sm, tZero._ticks, 0, 1);
 }
 
 }  // namespace
@@ -112,15 +115,10 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
 // returns true when the effective state (pending +0x52 if >= 0, else current
 // +0x50) is 6 or 7. Ignite aborts on true: a building on its way down does not
 // catch fire.
-extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp) {
-    if (!destroyComp) return false;
-
-    void* ibpSlot = reinterpret_cast<uint8_t*>(destroyComp) + 0x10;
-    uintptr_t smcIbp = 0;
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(ibpSlot), &smcIbp);
-    if (!smcIbp) return false;   // standalone: no SMC => not demolishing
-
-    uint8_t* L = reinterpret_cast<uint8_t*>(smcIbp);
+bool DestroyComponent::IsBeingDemolished() {
+    uint8_t* L = reinterpret_cast<uint8_t*>(
+        _entity->FindComponent<StateMachineComponent>());   // 0x140003ea0
+    if (!L) return false;   // standalone: no SMC => not demolishing
     int8_t s = static_cast<int8_t>(L[0x52]);
     if (s < 0) s = static_cast<int8_t>(L[0x50]);
     if (s == 6) return true;
@@ -137,26 +135,21 @@ extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp) {
 // (its BuildComponent's +0x48 progress word is still 0). Otherwise stamps the
 // DestroyComponent's burning flag (+0x50 = 1) and burn duration (+0x48), then
 // drives the entity's state machine to state 3 (BURNING).
-extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64_t* burnTime) {
-    if (!destroyComp) return false;
-    uint8_t* dc = reinterpret_cast<uint8_t*>(destroyComp);
-    void* ibpSlot = dc + 0x10;
-
+bool DestroyComponent::BeginBurning(const System::Time* time) {
     // Unfinished-construction gate.
     {
-        uintptr_t buildIbp = 0;
-        Dialog_FindComponent_d6c0(*reinterpret_cast<void**>(ibpSlot), &buildIbp);
-        if (buildIbp != 0) {
-            if (*reinterpret_cast<int32_t*>(buildIbp + 0x48) == 0) {
+        BuildComponent* build = _entity->FindComponent<BuildComponent>();   // 0x14000d6c0
+        if (build != nullptr) {
+            if (build->laborProgress == 0) {
                 return false;
             }
         }
     }
 
-    dc[0x50] = 1;                                                  // burning
-    *reinterpret_cast<int64_t*>(dc + 0x48) = burnTime ? *burnTime : 0;
+    burning = true;
+    burnTime._ticks = time ? time->_ticks : 0;
 
-    ForceSMState(ibpSlot, 3, "begin");
+    ForceSMState(_entity, 3, "begin");
     return true;
 }
 
@@ -165,7 +158,22 @@ extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64
 // ============================================================
 // param_1 = the DestroyComponent. Drives the entity's state machine to state 7.
 // Note it does NOT clear +0x50 / +0x48; the state-7 handler owns that.
+void DestroyComponent::StopBurning() {
+    ForceSMState(_entity, 7, "stop");
+}
+
+// ---- B4 FORWARD: 1 outside caller file (Component/tornadocomponent.cpp); the
+// closing wave rewires it. The null tests are the tree's (kept, B9).
+extern "C" bool FireComponent_IsBeingDemolished_11e690(void* destroyComp) {
+    if (!destroyComp) return false;
+    return reinterpret_cast<DestroyComponent*>(destroyComp)->IsBeingDemolished();
+}
+extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64_t* time) {
+    if (!destroyComp) return false;
+    return reinterpret_cast<DestroyComponent*>(destroyComp)->BeginBurning(
+        reinterpret_cast<const System::Time*>(time));
+}
 extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp) {
     if (!destroyComp) return;
-    ForceSMState(reinterpret_cast<uint8_t*>(destroyComp) + 0x10, 7, "stop");
+    reinterpret_cast<DestroyComponent*>(destroyComp)->StopBurning();
 }

@@ -16,5 +16,4 @@
 // Controller state-machine enters (retail table 0x14004b020):
 //   state 2 "built"    0x14004ae30 -- append the component IBP to townMgr+0x70
 //   state 3 "demolish" 0x14004adf0 -- erase it again
-extern "C" char HealerComponent_EnterBuilt(void* comp, void* sm);
-extern "C" char HealerComponent_EnterDemolish(void* comp, void* sm);
+// (HealerComponent::StateBuiltEnter / StateDemolishEnter, HealerComponent.h)

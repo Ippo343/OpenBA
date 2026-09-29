@@ -25,26 +25,22 @@
 #include <cstdint>
 
 
-// --- behaviour bodies -------------------------------------------------------
+// --- behaviour bodies: DiseaseComponent members (DiseaseComponent.h) -------
+// B4 FORWARD: 2 outside caller files (Dialog/debugui.cpp, standalone/disaster_harness.cpp).
 extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self);                        // 0x1400481b0
-extern "C" void DiseaseComp_Cure(DiseaseComponent* self);                             // 0x140048320
 extern "C" void DiseaseComp_Infect(DiseaseComponent* self);                           // 0x1400483a0
-extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* deltaTime);// 0x140048610
-extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* deltaTime);// 0x140048840
-extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self);                     // 0x140047b40
-extern "C" void DiseaseComp_KillOneAnimal(DiseaseComponent* self);                    // 0x140047d70
 
 // --- shared leaves ----------------------------------------------------------
 // "Is the crop recorded at the last cure still planted on my tiles?" — the
 // crop-rotation mechanic. Compares tile cell+0x10 (the grown-resource identity
 // raster) across the footprint.
-extern "C" bool  DiseaseComp_SameCropProbe(void* map, int x, int y, int w, int h,
-                                           int64_t wantIdentity);                     // 0x14009fb60
+class ComponentDescription;
+class ComponentEntity;
+// 0x14009fb60 is Map::HasIdentityInRect (Game/Map.h), defined in diseasecomponent.cpp.
 // What this entity is currently growing (pasture livestock / tile plant / the crop
-// the field is merely SET to). `entityIBPSlot` points at a slot holding the entity.
-extern "C" void* DiseaseComp_GrownIdentity(uint64_t* out, void* entityIBPSlot);       // 0x140047f80
-// DiseaseComponent sibling finder (only exe caller is the spread block).
-extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP);               // 0x1400050a0
-// ParticleComponent: fade every emitter OUT (sign-flipped fade rate). Sibling of
-// ParticleComponent_StartEmitterFade (0x140053660) in particlecomponent.cpp.
-extern "C" void  ParticleComponent_StopEmitterFade(void* self);                       // 0x1400537f0
+// the field is merely SET to): retail returns ExternalPtr<ComponentDescription> by
+// value (RCX) from an InternalPtr<ComponentEntity> (RDX).
+extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription** out,
+                                                           ComponentEntity* const* entitySlot); // 0x140047f80
+// 0x1400050a0 (the DiseaseComponent finder) is ComponentEntity::FindComponent<DiseaseComponent>;
+// 0x1400537f0 is ParticleComponent::StopEmitterFade (ParticleComponent.h).

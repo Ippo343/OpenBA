@@ -1071,7 +1071,7 @@ static ::Object::Base* TownHall_FindComponentByTypeId(uint64_t entity, uint32_t 
         return nullptr;
     }
     const ComponentDescription* desc = reinterpret_cast<const ComponentDescription*>(entity);   // LEFT: the key is the pointer's bits
-    void** compArray = desc->_subDescs;
+    Description** compArray = desc->_subDescs;   // COMP-c typed _subDescs (merge fix)
     int compCount = desc->_subDescCount;
 
     if (!compArray) {

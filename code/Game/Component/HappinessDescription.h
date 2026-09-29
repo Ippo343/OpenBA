@@ -36,18 +36,18 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140005c80
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    uint32_t _happinessType;                    // +0x20 enum (serialized through the uint door)
-    bool _b24;                                  // +0x24
-    bool _b25;                                  // +0x25
-    uint8_t _pad26[2];                          // +0x26 never written by the ctor
-    uint32_t _u28;                              // +0x28 enum (serialized through the uint door)
+    uint32_t _happinessType;        // +0x20 enum: 0..4 the map influence kind, 5 = always active
+    bool _needsWorkers;             // +0x24 IsActive 0x14004a550: a staffed, open workplace
+    bool _needsGoods;               // +0x25 IsActive 0x14004a550: a stored good matching _goodsFlags
+    uint8_t _pad26[2];              // +0x26 never written by the ctor
+    uint32_t _goodsFlags;           // +0x28 RawMaterialDescription::_flags mask (serialized as an enum)
     int32_t _i2c;                               // +0x2c
 };
 
 static_assert(sizeof(HappinessDescription) == 0x30, "HappinessDescription is 0x30 (create 0x140005c10 MemAlloc(0x30))");
 static_assert(alignof(HappinessDescription) == 8, "HappinessDescription alignment");
 static_assert(offsetof(HappinessDescription, _happinessType) == 0x20, "HappinessDescription::_happinessType @ +0x20");
-static_assert(offsetof(HappinessDescription, _b24) == 0x24, "HappinessDescription::_b24 @ +0x24");
-static_assert(offsetof(HappinessDescription, _b25) == 0x25, "HappinessDescription::_b25 @ +0x25");
-static_assert(offsetof(HappinessDescription, _u28) == 0x28, "HappinessDescription::_u28 @ +0x28");
+static_assert(offsetof(HappinessDescription, _needsWorkers) == 0x24, "HappinessDescription::_needsWorkers @ +0x24");
+static_assert(offsetof(HappinessDescription, _needsGoods) == 0x25, "HappinessDescription::_needsGoods @ +0x25");
+static_assert(offsetof(HappinessDescription, _goodsFlags) == 0x28, "HappinessDescription::_goodsFlags @ +0x28");
 static_assert(offsetof(HappinessDescription, _i2c) == 0x2c, "HappinessDescription::_i2c @ +0x2c");

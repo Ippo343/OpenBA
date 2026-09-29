@@ -16,8 +16,8 @@
 //
 // helper_7960 (state-0 ENTER) is the actual clearing dispatch:
 //   * (guarded) instant footprint sweep — only when the global instant bit
-//     (gw+0xd0 &1) is set OR the description's _flag5 (+0x2d) is set. The DEFAULT
-//     ClearAreaDescription has _flag5=0, so the sweep is skipped and clearing goes
+//     (gw+0xd0 &1) is set OR the description's _instant (+0x2d) is set. The DEFAULT
+//     ClearAreaDescription has _instant=0, so the sweep is skipped and clearing goes
 //     through the harvest path below (matching retail default behaviour).
 //   * is-done check (FUN_140118440). If already clear -> request transition to 1.
 //   * otherwise build a ClearArea WORK action (ClearArea_Ctor@0x1400e6960 over
@@ -39,8 +39,13 @@
 
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
+#include "Entity/ComponentEntity.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/Component.h"   // B.3.x W0: Component::OnEvent by name
+#include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
+#include "Game/Map.h"
+#include "Component/WorkComponent.h"
 #include "Work/Work.h"   // B.3.8 CB1a (Vtable)
 #include "Work/ClearArea.h"   // B.3.8 CB1a (Vtable)
 #include "clearareacomponent_funcs.h"
@@ -59,32 +64,49 @@
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
 
-// The instant footprint sweep lives in clearareacomponent.cpp (also used by the
-// harness + the _flag5 instant path). Reused here for the guarded sweep.
-class ClearAreaComponent;
-extern int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self);
+// ============================================================
+// Helpers, called directly: 0x140003050 FindComponent<WorkComponent>,
+// 0x14012ec60 CitizenAI_WorkScheduler_Post.
+// ============================================================
 
-// ============================================================
-// Helpers, called directly: FUN_140003050 WorkBase_FindComponent_3050 (the
-// WorkComponent), 0x14012ec60 CitizenAI_WorkScheduler_Post.
-// ============================================================
+// Retail's `IsDerivedFrom(p, tid) ? p : nullptr` idiom on a component's description.
+template <class T>
+static T* AsType(Description* obj) {
+    if (!obj || !T::TypeId()) return nullptr;
+    return ::Object::IsDerivedFromNullSafe(obj, T::TypeId()) ? static_cast<T*>(obj) : nullptr;
+}
+
+// Every finder is ComponentEntity::FindComponent<T>. The tree answers null for a null
+// entity; retail has no such test. Kept (B9).
+template <class T>
+static T* FindOn(ComponentEntity* entity) {
+    if (!entity) return nullptr;
+    return entity->FindComponent<T>();
+}
 
 // ============================================================
 // Grid area-status helpers (ports of FUN_14009d860 / dac0 / d930).
 // grid = int*; grid[0] = width; *(char*)grid+0x80 = tile array base; tile stride
 // 0x30; tile+0x08 = occupant entity IBP; tile+0x29 flags byte, +0x2a byte;
 // *(void**)((char*)grid+0xe8) = reserved-cell BST root {key@0, left@0x10, right@0x18}.
+// GameUpdateLoop::m_game is still void* (GAME-a) and Map's cells are untyped (GAME-b):
+// every grid read below is LEFT.
 // ============================================================
-static inline uintptr_t GridTiles(int* grid) {
-    return *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
+static inline uintptr_t GridTiles(const Map* grid) {
+    return reinterpret_cast<uintptr_t>(grid->cells);   // Map +0x80
+}
+
+// tile+0x08: the cell's occupant entity.
+static inline ComponentEntity* GridOccupant(uintptr_t tiles, int cell) {
+    return *reinterpret_cast<ComponentEntity**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
 }
 
 // FUN_14009d860 — ground cells are clear & unreserved. Returns true if every cell in
 // the rect is passable (flags bit0/1 clear, +0x2a == 0xff) and not in the reserved BST.
-static bool Grid_GroundClear(int* grid, int x1, int y1, int w, int h) {
-    int width = *grid;
+static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
-    void* bstRoot = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(grid) + 0xe8);
+    void* bstRoot = grid->field_0xE8;   // the reserved-cell BST root (Map +0xE8)
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             int cell = width * row + col;
@@ -115,16 +137,14 @@ static bool Grid_GroundClear(int* grid, int x1, int y1, int w, int h) {
 // AllEmpty branch reports done=0 forever, the SM parks in state 0 and never reaches
 // BuildComponent's state 1 — so builders never deliver and the rebuilt house sits at
 // 0% for good (user-reported 2026-08-23; measured as every footprint cell holding the
-// new entity's own pointer). ClearArea_CountRemaining already skips self this exact
+// new entity's own pointer). CountRemaining already skips self this exact
 // way; this makes the two agree.
-static bool Grid_AllEmpty(int* grid, int x1, int y1, int w, int h, void* selfEntity) {
-    int width = *grid;
+static bool Grid_AllEmpty(const Map* grid, int x1, int y1, int w, int h, ComponentEntity* selfEntity) {
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
-            int cell = width * row + col;
-            void* occ = *reinterpret_cast<void**>(
-                tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
+            ComponentEntity* occ = GridOccupant(tiles, width * row + col);
             if (occ != nullptr && occ != selfEntity)
                 return false;
         }
@@ -132,39 +152,18 @@ static bool Grid_AllEmpty(int* grid, int x1, int y1, int w, int h, void* selfEnt
     return true;
 }
 
-// Scan an entity's component list for a NaturalResourceComponent (type 1c7b30).
-static bool EntityHasNatResComp(void* entity) {
-    if (!entity) return false;
-    const uint32_t tidNatResComp = NaturalResourceComponent::TypeId();
-    uintptr_t e = reinterpret_cast<uintptr_t>(entity);
-    int count = *reinterpret_cast<int*>(e + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
-    if (!arr) return false;
-    for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* comp = *slot;
-        if (!comp) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-        if (tid == tidNatResComp)
-            return ::Object::IsDerivedFromNullSafe(comp, tidNatResComp);
-    }
-    return false;
-}
-
 // FUN_14009d930 — true if NO target NaturalResourceComponent remains in the rect
-// (optionally filtered to occupants whose description-ref (entity+0x28) == filter).
-static bool Grid_NoTargetResource(int* grid, int x1, int y1, int w, int h, uint64_t filter) {
-    int width = *grid;
+// (optionally filtered to occupants whose description (entity+0x28) == filter).
+static bool Grid_NoTargetResource(const Map* grid, int x1, int y1, int w, int h,
+                                  const ComponentDescription* filter) {
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
-            int cell = width * row + col;
-            uintptr_t t = tiles + static_cast<uintptr_t>(cell) * 0x30;
-            void* occ = *reinterpret_cast<void**>(t + 8);
+            ComponentEntity* occ = GridOccupant(tiles, width * row + col);
             if (!occ) continue;
-            occ = *reinterpret_cast<void**>(t + 8);
-            if (!EntityHasNatResComp(occ)) continue;
-            if (filter == 0 || *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(occ) + 0x28) == filter)
+            if (occ->FindComponent<NaturalResourceComponent>() == nullptr) continue;
+            if (filter == nullptr || occ->_description == filter)
                 return false;
         }
     }
@@ -172,128 +171,121 @@ static bool Grid_NoTargetResource(int* grid, int x1, int y1, int w, int h, uint6
 }
 
 // ============================================================
-// FUN_140118440 — is the clear area fully done?
-//   desc = comp+0x18 (ClearAreaDescription); footprint from FindComponent_Build(owner).
-//   groundOK = (desc._flag1==0) || Grid_GroundClear
-//   if (desc._flag0==0 || desc._flag2!=0) done = groundOK && Grid_AllEmpty
-//   else                                  done = groundOK && Grid_NoTargetResource(descRef)
+// ClearAreaComponent::IsDone — FUN_140118440: is the clear area fully done?
+//   desc = the ClearAreaDescription; footprint from FindComponent<MapComponent>(owner).
+//   groundOK = (desc._clearGround==0) || Grid_GroundClear
+//   if (desc._clearTrees==0 || desc._clearBuildings!=0) done = groundOK && Grid_AllEmpty
+//   else                                                done = groundOK && Grid_NoTargetResource(target)
+// Retail takes the description through IsDerivedFrom (CMOVNZ to 0) and then reads its
+// flags unguarded; the tree reads them off the component's description, answering zero
+// flags when it has none. Retail derefs the MapComponent and the map unguarded; the tree
+// answers false. Both kept (B9).
 // ============================================================
-static bool ClearArea_IsDone(void* comp) {
-    if (!comp || GameUpdateLoop::_singleton == nullptr) return true;
-    uintptr_t c = reinterpret_cast<uintptr_t>(comp);
-    void* descObj = *reinterpret_cast<void**>(c + 0x18);
-    // desc must be a ClearAreaDescription; if not, treat flags as zero (defensive).
-    uint8_t flag0 = 0, flag1 = 0, flag2 = 0; uint64_t descRef = 0;
-    if (descObj) {
-        uintptr_t d = reinterpret_cast<uintptr_t>(descObj);
-        flag0 = *reinterpret_cast<uint8_t*>(d + 0x28);
-        flag1 = *reinterpret_cast<uint8_t*>(d + 0x29);
-        flag2 = *reinterpret_cast<uint8_t*>(d + 0x2a);
-        descRef = *reinterpret_cast<uint64_t*>(d + 0x20);
+bool ClearAreaComponent::IsDone() {
+    if (GameUpdateLoop::_singleton == nullptr) return true;
+    Description* d = _description;
+    const ClearAreaDescription* desc = static_cast<ClearAreaDescription*>(d);
+    bool clearTrees = false, clearGround = false, clearBuildings = false;
+    const ComponentDescription* target = nullptr;
+    if (desc) {
+        clearTrees     = desc->_clearTrees;
+        clearGround    = desc->_clearGround;
+        clearBuildings = desc->_clearBuildings;
+        target         = desc->_target;
     }
 
-    uint64_t buildComp = 0;
-    fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
-    if (!buildComp) return false;
-    uintptr_t bc = static_cast<uintptr_t>(buildComp);
-    int x1 = *reinterpret_cast<int16_t*>(bc + 0x28);
-    int y1 = *reinterpret_cast<int16_t*>(bc + 0x2a);
-    int w  = *reinterpret_cast<int16_t*>(bc + 0x2c);
-    int h  = *reinterpret_cast<int16_t*>(bc + 0x2e);
+    MapComponent* mc = FindOn<MapComponent>(_entity);   // 0x140004680
+    if (!mc) return false;
+    int x1 = static_cast<int16_t>(mc->tileX0);
+    int y1 = static_cast<int16_t>(mc->tileY0);
+    int w  = static_cast<int16_t>(mc->tileX1);
+    int h  = static_cast<int16_t>(mc->tileY1);
 
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+    const Map* grid = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
     if (!grid) return false;
 
-    bool groundOK = (flag1 == 0) || Grid_GroundClear(grid, x1, y1, w, h);
+    bool groundOK = !clearGround || Grid_GroundClear(grid, x1, y1, w, h);
     if (!groundOK) return false;
     // Owner entity — skipped by the AllEmpty scan; see the note on Grid_AllEmpty.
-    void* selfEntity = *reinterpret_cast<void**>(c + 0x10);
-    const bool allEmptyBranch = (flag0 == 0 || flag2 != 0);
-    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, selfEntity)
-                                     : Grid_NoTargetResource(grid, x1, y1, w, h, descRef);
+    const bool allEmptyBranch = (!clearTrees || clearBuildings);
+    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, _entity)
+                                     : Grid_NoTargetResource(grid, x1, y1, w, h, target);
 
     return done;
 }
 
 // ============================================================
-// BuildUI_helper_8330 — count footprint occupants that are not the owner itself.
-// Stored into comp+0x48 (clearState) by helper_7960 as progress bookkeeping.
+// ClearAreaComponent::CountRemaining — BuildUI_helper_8330 (0x140118330): count
+// footprint occupants that are not the owner itself. Stored into clearState (+0x48) by
+// State0Enter as progress bookkeeping.
 // ============================================================
-static int ClearArea_CountRemaining(void* comp) {
-    if (!comp || GameUpdateLoop::_singleton == nullptr) return 0;
-    uintptr_t c = reinterpret_cast<uintptr_t>(comp);
-    uint64_t buildComp = 0;
-    fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
-    if (!buildComp) return 0;
-    uintptr_t bc = static_cast<uintptr_t>(buildComp);
-    int x1 = *reinterpret_cast<int16_t*>(bc + 0x28);
-    int y1 = *reinterpret_cast<int16_t*>(bc + 0x2a);
-    int w  = *reinterpret_cast<int16_t*>(bc + 0x2c);
-    int h  = *reinterpret_cast<int16_t*>(bc + 0x2e);
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
+int ClearAreaComponent::CountRemaining() {
+    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    MapComponent* mc = FindOn<MapComponent>(_entity);   // 0x140004680
+    if (!mc) return 0;
+    int x1 = static_cast<int16_t>(mc->tileX0);
+    int y1 = static_cast<int16_t>(mc->tileY0);
+    int w  = static_cast<int16_t>(mc->tileX1);
+    int h  = static_cast<int16_t>(mc->tileY1);
+    const Map* grid = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
     if (!grid) return 0;
-    int width = *grid;
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     int n = 0;
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
-            int cell = (y1 + row) * width + (x1 + col);
-            void* occ = *reinterpret_cast<void**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
-            void* se = *reinterpret_cast<void**>(c + 0x10);
-            if (occ != se && occ != nullptr) ++n;
+            ComponentEntity* occ = GridOccupant(tiles, (y1 + row) * width + (x1 + col));
+            if (occ != _entity && occ != nullptr) ++n;
         }
     }
     return n;
 }
 
 // ============================================================
-// Resource-kind scan (helper_7960 inner block). Walks the footprint; for the first
-// occupant carrying a NaturalResourceDescription sub-description, reads its nested
-// RawMaterialDescription (+0x5c kind bits) and OR's the scheduler category bit:
+// Resource-kind scan (State0Enter's inner block, 0x140117960). Walks the footprint;
+// for the first occupant carrying a NaturalResourceDescription sub-description, reads
+// its nested RawMaterialDescription (_flags +0x5c kind bits) and OR's the scheduler
+// category bit:
 //   bit10 -> 0x400, bit12 -> 0x1000 (iron), bit11 -> 0x800 (stone), else -> 1 (tree).
 // The result is the `code` argument the work-scheduler uses to categorise the job.
 // ============================================================
-static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, int w, int h) {
+static uint32_t ClearArea_ScanKindFlags(const Map* grid, int x1, int y1, int w, int h) {
     uint32_t kind = 1;
-    if (!comp || !grid) return kind;
+    if (!grid) return kind;
     const uint32_t tidNatResDesc = NaturalResourceDescription::TypeId();
     const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
-    int width = *grid;
+    int width = grid->size;
     uintptr_t tiles = GridTiles(grid);
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
-            int cell = (y1 + row) * width + (x1 + col);
-            void* occ = *reinterpret_cast<void**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
+            ComponentEntity* occ = GridOccupant(tiles, (y1 + row) * width + (x1 + col));
             if (!occ) continue;
-            occ = *reinterpret_cast<void**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
-            // entity+0x28 = its description; iterate sub-descriptions for NaturalResourceDescription.
-            uintptr_t desc = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(occ) + 0x28);
+            // The occupant's description; iterate its sub-descriptions for the
+            // NaturalResourceDescription.
+            ComponentDescription* desc = occ->_description;
             if (!desc) continue;
-            int subCount = *reinterpret_cast<int*>(desc + 0x30);
-            uintptr_t subArr = *reinterpret_cast<uintptr_t*>(desc + 0x28);
-            if (!subArr) continue;
-            void* natRes = nullptr;
-            for (int j = 0; j < subCount; ++j) {
-                void* sub = *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8);
+            if (!desc->_subDescs) continue;
+            NaturalResourceDescription* natRes = nullptr;
+            for (int j = 0; j < desc->_subDescCount; ++j) {
+                Description* sub = desc->_subDescs[j];
                 if (!sub) continue;
-                if (reinterpret_cast<Object::Base*>(sub)->Type() == tidNatResDesc) {   // B.3.8 bridge (slot 2)
-                    if (::Object::IsDerivedFromNullSafe(sub, tidNatResDesc)) natRes = sub;
+                if (sub->Type() == tidNatResDesc) {
+                    if (::Object::IsDerivedFromNullSafe(sub, tidNatResDesc))
+                        natRes = static_cast<NaturalResourceDescription*>(sub);
                     break;
                 }
             }
             if (!natRes) continue;
-            // NaturalResourceDescription+0x20 = nested RawMaterialDescription holder.
-            uintptr_t holder = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(natRes) + 0x20);
+            // NaturalResourceDescription::_building = the nested RawMaterialDescription holder.
+            ComponentDescription* holder = natRes->_building;
             if (!holder) continue;
-            int rCount = *reinterpret_cast<int*>(holder + 0x30);
-            uintptr_t rArr = *reinterpret_cast<uintptr_t*>(holder + 0x28);
-            if (!rArr) continue;
-            for (int k = 0; k < rCount; ++k) {
-                void* rm = *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8);
+            if (!holder->_subDescs) continue;
+            for (int k = 0; k < holder->_subDescCount; ++k) {
+                Description* rm = holder->_subDescs[k];
                 if (!rm) continue;
-                if (reinterpret_cast<Object::Base*>(rm)->Type() == tidRawMatDesc) {   // B.3.8 bridge (slot 2)
+                if (rm->Type() == tidRawMatDesc) {
                     if (::Object::IsDerivedFromNullSafe(rm, tidRawMatDesc)) {
-                        uint32_t f = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c);
+                        uint32_t f = static_cast<RawMaterialDescription*>(rm)->_flags;
                         uint32_t u;
                         if ((f >> 10) & 1)      u = 0x400;
                         else if ((f >> 12) & 1) u = 0x1000;
@@ -310,19 +302,6 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
 }
 
 // ============================================================
-// ClearArea_Ctor@0x1400e6960 (parameterized) over Work_Ctor25@0x1400f72e0.
-//   work: 0x78-byte buffer. ownerEnt: the building entity ptr. descRef: filter.
-//   clearTrees/Ground/Buildings: the description flags.
-// ENDGAME B.3.9 EXA: the real class's parameterised ctor (was the `??0Internal`
-// door on raw memory, a hand-inlined Work_Ctor25 and two stamps).
-// ============================================================
-static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
-                                 uint8_t clearTrees, uint8_t clearGround, uint8_t clearBuildings) {
-    void* ownerIBP = ownerEnt;   // retail: local_res10 = *param_2 (the entity IBP)
-    return ::new (work) ClearArea(&ownerIBP, descRef, clearTrees, clearGround, clearBuildings);
-}
-
-// ============================================================
 // Request a 0->target transition through the SM node, exactly like helper_7960's /
 // helper_78f0's finalize tail (node slot +0x08 = RequestTransition). Uses the shared
 // idiom in controller_state_table.h.
@@ -330,78 +309,71 @@ static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
 #include "Component/controller_state_table.h"
 
 // ============================================================
-// State-0 ENTER — port of ClearAreaDescription_helper_7960.
-//   data = the ClearAreaComponent (node+0x18); sm = the state machine.
+// State-0 ENTER — ClearAreaComponent::State0Enter, 0x140117960.
 // ============================================================
-extern "C" char ClearArea_State0Enter(void* data, void* sm) {
-    if (!data || GameUpdateLoop::_singleton == nullptr) return 1;
-    uintptr_t c = reinterpret_cast<uintptr_t>(data);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
+char ClearAreaComponent::State0Enter(void* sm) {
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    if (gw == nullptr) return 1;
 
-    void* descObj = *reinterpret_cast<void**>(c + 0x18);
-    bool descIsCA = descObj && ::Object::IsDerivedFromNullSafe(descObj, ClearAreaDescription::TypeId());
-    uint8_t* desc = descIsCA ? reinterpret_cast<uint8_t*>(descObj) : nullptr;
+    ClearAreaDescription* desc = AsType<ClearAreaDescription>(_description);
 
-    // (1) Guarded instant sweep: only when global instant bit or _flag5(+0x2d) set.
-    bool doSweep = (gw[0xd0] & 1) != 0;
-    if (!doSweep && desc && desc[0x2d] != 0) doSweep = true;
+    // (1) Guarded instant sweep: only when the global instant bit or _instant is set.
+    bool doSweep = (gw->m_gameFlags & 1) != 0;
+    if (!doSweep && desc && desc->_instant) doSweep = true;
     if (doSweep)
-        ClearAreaComponent_FootprintSweep(reinterpret_cast<ClearAreaComponent*>(data));
+        FootprintSweep();
 
     // (2) is-done? A footprint whose only occupant is the building itself (an
     // already-built house — its cells register their own entity at tile+0x08, so
     // Grid_AllEmpty is never true) has nothing to clear: CountRemaining skips self,
     // so remaining==0 means "no clearable resource" and we finish immediately rather
     // than posting phantom clear-work every state entry.
-    int remaining = ClearArea_CountRemaining(data);
-    *reinterpret_cast<int32_t*>(c + 0x48) = remaining;   // clearState bookkeeping (+0x48)
-    if (remaining == 0 || ClearArea_IsDone(data)) {
+    int remaining = CountRemaining();
+    clearState = remaining;   // progress bookkeeping (+0x48)
+    if (remaining == 0 || IsDone()) {
         ::ControllerLive::RequestStateTransition(sm, 1);   // finish: 0 -> 1
         return 1;
     }
 
     // (3) dispatch the harvest work-action to the citizen work-scheduler.
-    uint64_t workCompIBP = 0;
-    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(c + 0x10), &workCompIBP);
+    WorkComponent* workComp = FindOn<WorkComponent>(_entity);   // 0x140003050
+    MapComponent* mc = FindOn<MapComponent>(_entity);           // 0x140004680
 
-    uint64_t buildComp = 0;
-    fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &buildComp);
-
-    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
+    const Map* grid = reinterpret_cast<const Map*>(gw->m_game);   // LEFT (GAME-a)
     uint32_t kind = 1;
-    if (buildComp && grid) {
-        uintptr_t b = static_cast<uintptr_t>(buildComp);
-        int x1 = *reinterpret_cast<int16_t*>(b + 0x28);
-        int y1 = *reinterpret_cast<int16_t*>(b + 0x2a);
-        int w  = *reinterpret_cast<int16_t*>(b + 0x2c);
-        int h  = *reinterpret_cast<int16_t*>(b + 0x2e);
-        kind = ClearArea_ScanKindFlags(data, grid, x1, y1, w, h);
+    if (mc && grid) {
+        int x1 = static_cast<int16_t>(mc->tileX0);
+        int y1 = static_cast<int16_t>(mc->tileY0);
+        int w  = static_cast<int16_t>(mc->tileX1);
+        int h  = static_cast<int16_t>(mc->tileY1);
+        kind = ClearArea_ScanKindFlags(grid, x1, y1, w, h);
     }
 
-    if (!workCompIBP || !::System::MemoryAllocator::_singleton) return 1;
+    if (!workComp || !::System::MemoryAllocator::_singleton) return 1;
 
-    // Build the ClearArea work-action and post it.
-    void* work = ::System::MemoryAllocator::MemAlloc(0x78, 8);
-    if (!work) return 1;
-    void* ownerEnt = *reinterpret_cast<void**>(c + 0x10);
-    uint64_t descRef = desc ? *reinterpret_cast<uint64_t*>(desc + 0x20) : 0;
-    uint8_t f0 = desc ? desc[0x28] : 1, f1 = desc ? desc[0x29] : 0, f2 = desc ? desc[0x2a] : 1;
-    uint8_t f3 = desc ? desc[0x2b] : 0;
-    ClearArea_BuildWork(work, ownerEnt, descRef, f0, f1, f2);
+    // Build the ClearArea work-action (ClearArea_Ctor 0x1400e6960) and post it.
+    void* mem = ::System::MemoryAllocator::MemAlloc(0x78, 8);
+    if (!mem) return 1;
+    ComponentDescription* target = desc ? desc->_target : nullptr;
+    uint8_t f0 = desc ? desc->_clearTrees : 1, f1 = desc ? desc->_clearGround : 0;
+    uint8_t f2 = desc ? desc->_clearBuildings : 1;
+    uint8_t f3 = desc ? desc->_priority : 0;
+    void* ownerIBP = _entity;   // retail: local_res10 = *param_2 (the entity IBP)
+    // ClearArea's ctor (WORK-a) takes the ExternalPtr as a raw uint64_t: LEFT.
+    ClearArea* work = ::new (mem) ClearArea(&ownerIBP, reinterpret_cast<uint64_t>(target), f0, f1, f2);
 
-    uint64_t workIBP = 0;
-    new (&workIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-    CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(workCompIBP), kind, static_cast<char>(f3), &workIBP);
+    ::Object::InternalPtr<ClearArea> workIBP(work);
+    // CitizenAI_WorkScheduler_Post (COMP-b) takes the WorkComponent as uintptr_t: LEFT.
+    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), kind, static_cast<char>(f3), &workIBP);
 
     return 1;
 }
 
 // ============================================================
-// State-0 PER-FRAME — port of ClearAreaDescription_helper_78f0.
+// State-0 PER-FRAME — ClearAreaComponent::State0PerFrame, 0x1401178f0.
 //   When the footprint is finally clear, request the 0 -> 1 transition.
 // ============================================================
-//   Faithful to 78f0: the ONLY done-test is the grid-emptiness is-done (140118440).
+//   Faithful to 78f0: the ONLY done-test is the grid-emptiness IsDone (0x140118440).
 //   The CountRemaining==0 short-circuit that State0Enter uses must NOT appear here.
 //   CountRemaining only counts natural-resource occupants, so it drops to 0 the moment
 //   the tree is felled — finishing the job (and stopping the citizen's work slot) before
@@ -411,106 +383,111 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
 //   lies there, holding the job open until a citizen hauls it away — exactly as retail.
 //   State0Enter keeps its short-circuit: that guards the already-built founding houses,
 //   whose own footprint self-occupancy would otherwise post phantom clear-work forever.
-extern "C" char ClearArea_State0PerFrame(void* data, void* sm) {
-    if (!data) return 1;
-    if (ClearArea_IsDone(data)) {
+char ClearAreaComponent::State0PerFrame(void* sm) {
+    if (IsDone()) {
         ::ControllerLive::RequestStateTransition(sm, 1);
     }
     return 1;
 }
 
 // ============================================================
-// State-0 UPDATE (on transition) — port of ClearAreaDescription_helper_7890.
+// State-0 UPDATE (on transition) — ClearAreaComponent::State0Update, 0x140117890.
 //   Stop the owner WorkComponent's active work slot when leaving state 0.
 //   FUN_14012ead0 = has-active-slot (WorkComponent_CheckWorkSlot),
 //   FUN_14012eb50 = stop-slot (WorkComponent_RegisterWorkSlot).
 // ============================================================
-extern "C" char ClearArea_State0Update(void* data, void* /*sm*/) {
-    if (!data) return 1;
-    uintptr_t c = reinterpret_cast<uintptr_t>(data);
-    uint64_t wcIBP = 0;
-    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(c + 0x10), &wcIBP);
-    if (wcIBP && WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(wcIBP))) {
-        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(wcIBP));
+char ClearAreaComponent::State0Update() {
+    WorkComponent* wc = FindOn<WorkComponent>(_entity);   // 0x140003050
+    if (wc && WorkComponent_CheckWorkSlot(wc)) {
+        WorkComponent_RegisterWorkSlot(wc);
     }
     return 1;
 }
 
 // ============================================================
 // ModelComponent_helper_2b70 (0x1400c2b70) — broadcast a lifecycle event to every
-// component on an entity via the component vtable "event" slot +0x60. This is what
-// tells the clear-job's StatusIcon/Model/etc. components to finalize (remove the
-// removal icon, hide the felled model) when the area is cleared.
+// component on an entity via Component::OnEvent (slot 12). This is what tells the
+// clear-job's StatusIcon/Model/etc. components to finalize (remove the removal icon,
+// hide the felled model) when the area is cleared. The null entity / null slot tests
+// are the tree's (retail's 0x1400c2b70 has neither); kept (B9). The same body is
+// ModelComponentNotify_Reimpl in modelcomponent.cpp (not this block).
 // ============================================================
-static void ClearArea_BroadcastEvent(void* ownerEntity, uint32_t ev) {
+static void ClearArea_BroadcastEvent(ComponentEntity* ownerEntity, int ev) {
     if (!ownerEntity) return;
-    uintptr_t e = reinterpret_cast<uintptr_t>(ownerEntity);
-    int count = *reinterpret_cast<int*>(e + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
-    if (!arr) return;
-    for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* comp = *slot;
+    if (!ownerEntity->_components) return;
+    for (int i = 0; i < ownerEntity->_componentCount; ++i) {
+        Component* comp = ownerEntity->_components[i].Get();
         if (!comp) continue;
-        reinterpret_cast<Component*>(comp)->OnEvent(static_cast<int>(ev));   // B.3.x bridge (slot 12)
+        comp->OnEvent(ev);
     }
 }
 
 // ============================================================
-// ModelComponent_impl_8270 (0x140118270) — state-1 finalize body. Gated on the
-// ClearAreaDescription +0x2c flag: when set, notifies CitizenAI over the footprint
-// (terrain regrow — DEFERRED, e0e0 not yet ported) then broadcasts event 5 to the
-// owner's components. When +0x2c is clear (the common case) it is a no-op.
+// ClearAreaComponent::FinishClear — 0x140118270 (Ghidra ModelComponent_impl_8270; its
+// RCX is the ClearAreaComponent: +0x18 IsDerivedFrom ClearAreaDescription, +0x10 the
+// entity). Gated on _regrowTerrain (+0x2c): when set, refreshes the region height over
+// the footprint then broadcasts event 5 to the owner's components. When clear (the
+// common case) it is a no-op.
 // ============================================================
 // CitizenAI_impl_e0e0 (0x14009e0e0) = Pf_RefreshRegionHeight_9e0e0, called directly.
+void ClearAreaComponent::FinishClear() {
+    ClearAreaDescription* desc = AsType<ClearAreaDescription>(_description);
+    if (!desc) return;
+    if (!desc->_regrowTerrain) return;
 
-void ClearArea_Finalize8270(void* comp) {
-    if (!comp) return;
-    uintptr_t c = reinterpret_cast<uintptr_t>(comp);
-    void* descObj = *reinterpret_cast<void**>(c + 0x18);
-    bool isCA = descObj && ::Object::IsDerivedFromNullSafe(descObj, ClearAreaDescription::TypeId());
-    if (!isCA) return;
-    uint8_t flag2c = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(descObj) + 0x2c);
-    if (flag2c == 0) return;
-
-    // desc+0x2c set: terrain regrow over the footprint, then broadcast event 5.
     if (GameUpdateLoop::_singleton != nullptr) {
-        uint64_t bc = 0;
-        fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &bc);
-        if (bc) {
-            void* map = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
-            uintptr_t b = static_cast<uintptr_t>(bc);
-            int x1 = *reinterpret_cast<int16_t*>(b + 0x28);
-            int y1 = *reinterpret_cast<int16_t*>(b + 0x2a);
-            int x2 = *reinterpret_cast<int16_t*>(b + 0x2c) + x1;
-            int y2 = *reinterpret_cast<int16_t*>(b + 0x2e) + y1;
-            Pf_RefreshRegionHeight_9e0e0(reinterpret_cast<unsigned int*>(map), x1, y1, x2, y2);
+        MapComponent* mc = FindOn<MapComponent>(_entity);   // 0x140004680
+        if (mc) {
+            // Map (m_game) is still void* (GAME-a): LEFT.
+            unsigned int* map = reinterpret_cast<unsigned int*>(GameUpdateLoop::_singleton->m_game);
+            int x1 = static_cast<int16_t>(mc->tileX0);
+            int y1 = static_cast<int16_t>(mc->tileY0);
+            int x2 = static_cast<int16_t>(mc->tileX1) + x1;
+            int y2 = static_cast<int16_t>(mc->tileY1) + y1;
+            Pf_RefreshRegionHeight_9e0e0(map, x1, y1, x2, y2);
         }
     }
-    ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 5);
+    ClearArea_BroadcastEvent(_entity, 5);
+}
+
+// B4 FORWARD: buildcomponent_state1.cpp.
+void ClearArea_Finalize8270(void* comp) {
+    if (!comp) return;
+    reinterpret_cast<ClearAreaComponent*>(comp)->FinishClear();
 }
 
 // ============================================================
-// State-1 ENTER — port of ClearAreaDescription_helper_7820.
-//   ModelComponent_impl_8270(comp) then request the 1 -> 2 transition.
+// State-1 ENTER — ClearAreaComponent::State1Enter, 0x140117820.
+//   FinishClear then request the 1 -> 2 transition.
 // ============================================================
-extern "C" char ClearArea_State1Enter(void* data, void* sm) {
-    if (!data) return 1;
-    ClearArea_Finalize8270(data);
+char ClearAreaComponent::State1Enter(void* sm) {
+    FinishClear();
     ::ControllerLive::RequestStateTransition(sm, 2);   // 1 -> 2
     return 1;
 }
 
 // ============================================================
-// State-2 ENTER — port of ClearAreaDescription_helper_77f0.
+// State-2 ENTER — ClearAreaComponent::State2Enter, 0x1401177f0.
 //   Broadcast event 1 to the owner's components (final cleanup: removes the removal
 //   icon, finishes the model). The SM then rests in state 2 (terminal for the flow).
 // ============================================================
-extern "C" char ClearArea_State2Enter(void* data, void* /*sm*/) {
-    if (!data) return 1;
-    uintptr_t c = reinterpret_cast<uintptr_t>(data);
-    ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 1);
+char ClearAreaComponent::State2Enter() {
+    ClearArea_BroadcastEvent(_entity, 1);
     return 1;
+}
+
+// The state table's handler adapters: the controller hands each one its owner
+// (node+0x18), the ClearAreaComponent.
+static char CA_State0Enter(ClearAreaComponent* c, void* sm)    { return c->State0Enter(sm); }     // 0x140117960
+static char CA_State0PerFrame(ClearAreaComponent* c, void* sm) { return c->State0PerFrame(sm); }  // 0x1401178f0
+static char CA_State0Update(ClearAreaComponent* c)             { return c->State0Update(); }      // 0x140117890
+static char CA_State1Enter(ClearAreaComponent* c, void* sm)    { return c->State1Enter(sm); }     // 0x140117820
+static char CA_State2Enter(ClearAreaComponent* c)              { return c->State2Enter(); }       // 0x1401177f0
+
+// B4 FORWARD: tool_harness.cpp drives state 0's enter directly.
+extern "C" char ClearArea_State0Enter(void* data, void* sm) {
+    if (!data) return 1;
+    return reinterpret_cast<ClearAreaComponent*>(data)->State0Enter(sm);
 }
 
 // ============================================================
@@ -531,9 +508,9 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
     if (t.count != 0) return;   // idempotent
     // state 0: enter=State0Enter (dispatch harvest), update=State0Update (stop slot),
     //          per-frame=State0PerFrame (finish when clear). transitions -> {1, 3}.
-    TableRegisterState(t, 0, reinterpret_cast<void*>(&ClearArea_State0Enter),
-                       nullptr, reinterpret_cast<void*>(&ClearArea_State0PerFrame),
-                       reinterpret_cast<void*>(&ClearArea_State0Update));
+    TableRegisterState(t, 0, reinterpret_cast<void*>(&CA_State0Enter),
+                       nullptr, reinterpret_cast<void*>(&CA_State0PerFrame),
+                       reinterpret_cast<void*>(&CA_State0Update));
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 3, nullptr);
     // state 0x15: cancel/removal path — not reached from the clear flow; register the
@@ -542,12 +519,12 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 3, nullptr);
     // state 1: model-finalize on entry (helper_7820: 8270 + request 1->2) -> {2, 3}.
-    TableRegisterState(t, 1, reinterpret_cast<void*>(&ClearArea_State1Enter),
+    TableRegisterState(t, 1, reinterpret_cast<void*>(&CA_State1Enter),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 3, nullptr);
     // state 2: model-finalize on entry (helper_77f0: broadcast event 1) -> {3}.
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&ClearArea_State2Enter),
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&CA_State2Enter),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }
@@ -561,10 +538,15 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
 // Re-porting either one into orchardcomponent_states.cpp would fork two copies of the
 // grid-scan semantics, so they are exported here instead of duplicated.
 // ============================================================
-extern "C" bool ClearAreaCtrl_IsDone(void* comp) { return ClearArea_IsDone(comp); }
+// B4 FORWARD: orchardcomponent_states.cpp. The tree answers true for a null component.
+extern "C" bool ClearAreaCtrl_IsDone(void* comp) {
+    if (!comp) return true;
+    return reinterpret_cast<ClearAreaComponent*>(comp)->IsDone();
+}
 
 extern "C" void* ClearAreaCtrl_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
                                          uint8_t clearTrees, uint8_t clearGround,
                                          uint8_t clearBuildings) {
-    return ClearArea_BuildWork(work, ownerEnt, descRef, clearTrees, clearGround, clearBuildings);
+    void* ownerIBP = ownerEnt;   // retail: local_res10 = *param_2 (the entity IBP)
+    return ::new (work) ClearArea(&ownerIBP, descRef, clearTrees, clearGround, clearBuildings);
 }

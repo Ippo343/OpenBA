@@ -753,12 +753,11 @@ ClearAreaDescription* FindClearAreaDescription(ComponentEntity* entity) {
     ComponentDescription* descList = entity ? entity->_description : nullptr;
     if (!descList || !want) return nullptr;
     const int count = descList->_subDescCount;
-    void** arr = descList->_subDescs;
+    Description** arr = descList->_subDescs;
     for (int i = 0; arr && i < count; ++i) {
-        void* elem = arr[i];
+        Description* elem = arr[i];
         if (!elem) continue;
-        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-        Object::Base* sub = reinterpret_cast<Object::Base*>(elem);
+        Object::Base* sub = elem;
         if (sub->Type() != want) continue;   // slot 2
         // Retail confirms the hit with IsDerivedFrom before accepting it, and BREAKS out of
         // the loop either way — a type-id match that fails the derived test yields null.
@@ -792,7 +791,7 @@ char OrchardComponent::EnterClearing() {
         if (mem) {
             // LEFT: ClearAreaCtrl_BuildWork takes the description ExternalPtr as uint64_t.
             work = ClearAreaCtrl_BuildWork(
-                mem, entity, reinterpret_cast<uint64_t>(caDesc->_descRef),
+                mem, entity, reinterpret_cast<uint64_t>(caDesc->_target),
                 1, 0, 1);
         }
     }

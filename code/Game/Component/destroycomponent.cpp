@@ -3,8 +3,9 @@
 //
 // DestroyComponent (0x68 bytes) -- ControllerComponent subclass.
 // Manages building demolition/destruction process.
-// Fields: field48 (Time), destroyFlags (uint16 +0x50), field51 (bool),
-//         field54 (uint32), field58 (ptr), field60 (entity ref / mesh ID).
+// Fields (DestroyComponent.h): burnTime (Time +0x48), burning (+0x50),
+//         hasBuildComponent (+0x51), progress / progressTarget (int +0x54 / +0x58),
+//         upgradeTarget (ExternalPtr<ComponentDescription> +0x60).
 //
 // Vtable at 0x140163120. Two non-trivial overrides:
 //   Shutdown  (0x14011DB50) -- serialize all destroy state fields
@@ -47,11 +48,12 @@ extern "C" void DestroyCtrl_PopulateTable();
 static const bool s_destroyStateTableBuilt = (DestroyCtrl_PopulateTable(), true);
 
 // 0x14011dc80. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
-// `_controller(this)` is the member's back-pointer; +0x48 = 0, +0x50 = 0 (word),
-// +0x54 = 0 (qword: +0x54 and the low half of +0x58), +0x60 = 0. No flag OR.
+// `_controller(this)` is the member's back-pointer; +0x48 = 0, +0x50 = 0 (word:
+// the two bools, H7), +0x54 = 0 (qword: +0x54 and +0x58), +0x60 = 0. No flag OR.
+// The tree also zeroes +0x52 and +0x5c (kept).
 DestroyComponent::DestroyComponent()
-    : _controller(this), field48(nullptr), destroyFlags(0), _pad52{}, field54(0),
-      field58(nullptr), field60(nullptr) {}
+    : _controller(this), burnTime{0}, burning(false), hasBuildComponent(false), _pad52{},
+      progress(0), progressTarget(0), _pad5C{}, upgradeTarget(nullptr) {}
 
 // 0x14011dc20: restamp + ~Internal, no own work.
 DestroyComponent::~DestroyComponent() = default;
@@ -77,20 +79,20 @@ void DestroyComponent::Persist(void* stream) {
     Component::Persist(stream);
     { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
-    ser.Serialize(*reinterpret_cast<int*>(&field54), nullptr);
-    ser.Serialize(*reinterpret_cast<int*>(&field58), nullptr);
-    ser.Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(&destroyFlags) + 1), nullptr);   // +0x51
-    Reimpl_ExternalPtr_Serialize_StringTable(&field60, &ser);
-    ser.Serialize(*reinterpret_cast<bool*>(&destroyFlags), nullptr);
-    reinterpret_cast<System::Time*>(&field48)->Serialize(ser);   // B.3.8 bridge (field48 is a Time)
+    ser.Serialize(progress, nullptr);
+    ser.Serialize(progressTarget, nullptr);
+    ser.Serialize(hasBuildComponent, nullptr);   // +0x51
+    Reimpl_ExternalPtr_Serialize_StringTable(&upgradeTarget, &ser);   // 0x140002340
+    ser.Serialize(burning, nullptr);             // +0x50
+    burnTime.Serialize(ser);
 }
 
 // [4] 0x14011db00 — copies the DestroyDescription's default target (desc+0x20)
 // into +0x60; dispatched at spawn by ComponentEntity_StartupComponents.
 void DestroyComponent::Startup() {
-    void* desc = _description;
+    Description* desc = _description;
     if (::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId()))
-        field60 = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
+        upgradeTarget = static_cast<DestroyDescription*>(desc)->_replaceEntity;
 }
 
 // [15] 0x14011daf0: `if (msgCode == 0) ++*(int*)(self + 0x54);` — the demolition-
@@ -100,7 +102,7 @@ void DestroyComponent::Startup() {
 // PerformWork routes here and advances +0x54 toward the +0x58 target that gates the
 // state-5 tick.
 void DestroyComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
-    if (message == 0) ++field54;
+    if (message == 0) ++progress;
 }
 
 DEFINE_EXE_TYPE(DestroyComponent, "ControllerComponent")
