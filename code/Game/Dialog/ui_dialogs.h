@@ -22,19 +22,5 @@ void MainMenuDialog_Slot5(MainMenuDialog* self);
 
 // ENDGAME B.3.8 DLG: OptionsDialog is a real class (Dialog/OptionsDialog.h);
 // its slots [4] OnOpened, [5] OnClosed and [8] OnElementEvent are members.
-// The non-virtual helpers below stay free functions.
-
-// OnOk: Applies all settings, saves to disk, closes dialog.
-void OptionsDialog_OnOk(OptionsDialog* self);
-
-// OnCancel: Reverts all settings from disk, closes dialog.
-void OptionsDialog_OnCancel(OptionsDialog* self);
-
-// OnApply: Applies all settings, saves to disk (keeps dialog open).
-void OptionsDialog_OnApply(OptionsDialog* self);
-
-// PopulateInputBindList: Fills input binding list with key names and element IDs.
-void OptionsDialog_PopulateInputBindList(OptionsDialog* self);
-
-// OnInputBindClick: Shows input bind dialog, handles key rebinding.
-void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot);
+// B.4 DLG-c: OnOk, OnCancel, OnApply, PopulateInputBindList and OnInputBindClick
+// are private members too.

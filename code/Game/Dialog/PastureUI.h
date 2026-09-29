@@ -19,6 +19,8 @@
 #include "Dialog/SelectResourceUI.h"
 #include "Object/exe_type.h"
 
+namespace UI { class SliderElement; }
+
 class PastureUI final : public SelectResourceUI {
     DECLARE_EXE_TYPE(PastureUI)
 
@@ -38,10 +40,14 @@ public:
     void* GetResource(void* out) override;                        // [12] 0x1400b4d00
     int   GetCategory() override;                                 // [13] 0x1400b4cf0  MOV EAX,2
 
+private:
+    void  UpdateSlider();                                         // 0x1400b4fa0
+
+public:
     // ---- fields -----------------------------------------------------------------
-    uint64_t data38 = 0;           // +0x38: livestock slider (InternalBasePtr)
+    UI::SliderElement* slider = nullptr;   // +0x38: the livestock "slider" (InternalBasePtr)
 };
 
 static_assert(sizeof(PastureUI) == 0x40, "PastureUI is 0x40 (create 0x140020e10 MemAlloc(0x40))");
 static_assert(alignof(PastureUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(PastureUI, data38) == 0x38, "slider @ +0x38 (0x1400b5090)");
+static_assert(offsetof(PastureUI, slider) == 0x38, "slider @ +0x38 (0x1400b5090)");
