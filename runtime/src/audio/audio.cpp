@@ -1063,79 +1063,6 @@ void Scene::StopAll() {
 
 }  // namespace Audio
 
-// ============================================================================
-// THE DOORS — one-line QUALIFIED delegations. B7-5: `soundRef` arrives as the
-// bare register pointer (ExternalPtr by value); `const Time&` / `const
-// Vector3&` arrive as pointers. Non-virtual members, so qualification is not a
-// recursion guard here; it is the door convention.
-// ============================================================================
-namespace {
-inline Audio::Scene* AsScene(void* p) { return reinterpret_cast<Audio::Scene*>(p); }   // B.3.7 bridge
-inline Object::ExternalPtr<Audio::SoundEffect> AsEffect(uint64_t ref) {
-    return Object::ExternalPtr<Audio::SoundEffect>(reinterpret_cast<Audio::SoundEffect*>(ref));   // B.3.7 bridge
-}
-inline const System::Time& AsTime(const Time* t) { return *reinterpret_cast<const System::Time*>(t); }   // B.3.7 bridge
-}  // namespace
-
-void RtAudio_Scene_AddEmitter(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
-    AsScene(selfPtr)->Audio::Scene::AddEmitter(id, *pos, volume);
-}
-void RtAudio_Scene_MoveEmitter(void* selfPtr, uint32_t id, const Vector3* oldPos, const Vector3* newPos) {
-    AsScene(selfPtr)->Audio::Scene::MoveEmitter(id, *oldPos, *newPos);
-}
-void RtAudio_Scene_RemoveEmitter(void* selfPtr, uint32_t id, const Vector3* pos) {
-    AsScene(selfPtr)->Audio::Scene::RemoveEmitter(id, *pos);
-}
-void RtAudio_Scene_SetEmitterVolume(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
-    AsScene(selfPtr)->Audio::Scene::SetEmitterVolume(id, *pos, volume);
-}
-int RtAudio_Scene_GetEmitterCount(void* selfPtr, uint32_t id) {
-    return AsScene(selfPtr)->Audio::Scene::GetEmitterCount(id);
-}
-bool RtAudio_Scene_IsEffectPlaying(void* selfPtr, uint32_t handle) {
-    return AsScene(selfPtr)->Audio::Scene::IsEffectPlaying(handle);
-}
-uint32_t RtAudio_Scene_FindEffect3D(void* selfPtr, uint64_t soundRef) {
-    return AsScene(selfPtr)->Audio::Scene::FindEffect3D(AsEffect(soundRef));
-}
-uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soundType, const Time* time) {
-    return AsScene(selfPtr)->Audio::Scene::PlayEffect(
-        AsEffect(soundRef), static_cast<Audio::Scene::SoundType>(soundType), AsTime(time));
-}
-int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
-                                       const Time* time, const Vector3* pos) {
-    return AsScene(selfPtr)->Audio::Scene::FindFree3DEffect(AsEffect(soundRef), AsTime(time), *pos);
-}
-uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t soundType,
-                                    const Time* time, const Vector3* pos) {
-    return AsScene(selfPtr)->Audio::Scene::PlayEffect3D(
-        AsEffect(soundRef), static_cast<Audio::Scene::SoundType>(soundType), AsTime(time), *pos);
-}
-void RtAudio_Scene_Serialize(void* self, void* serializer) {
-    AsScene(self)->Audio::Scene::Serialize(serializer);
-}
-void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
-    AsScene(selfPtr)->Audio::Scene::PauseEffect(handle);
-}
-void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
-    AsScene(selfPtr)->Audio::Scene::StopEffect(handle);
-}
-void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
-    AsScene(selfPtr)->Audio::Scene::Pause(soundType, paused);
-}
-void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
-    AsScene(selfPtr)->Audio::Scene::StopEffect3D(id);
-}
-void RtAudio_Scene_StopAll(void* selfPtr) {
-    AsScene(selfPtr)->Audio::Scene::StopAll();
-}
-void RtAudio_Configuration_Save(void* selfPtr) {
-    reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::Save();       // B.3.7 bridge
-}
-bool RtAudio_Configuration_Startup(void* selfPtr) {
-    return reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::Startup();   // B.3.7 bridge
-}
-
 // ---------------------------------------------------------------------------
 // Audio::Configuration::~Configuration() - retail 0x1800DE0D0, ord 554.
 // WAVE 23 LANE TAIL.
@@ -1171,10 +1098,6 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 // `this` is genuinely unused - retail's two instructions never touch RCX.
 Audio::Configuration::~Configuration() {
     *reinterpret_cast<void**>(&::Audio::Configuration::_singleton) = nullptr;
-}
-
-void RtAudio_Configuration_Dtor(void* selfPtr) {
-    reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::~Configuration();   // B.3.7 bridge
 }
 
 // ?_singleton@Configuration@Audio@@0PEAV12@EA (0x1801fe758) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);

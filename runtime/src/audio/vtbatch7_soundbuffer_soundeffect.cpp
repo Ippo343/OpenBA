@@ -491,27 +491,3 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
         }
     }
 }
-
-// ============================================================================
-// BATCH C (2026-09-12): ?PlatformSerialize@SoundBuffer@Audio@@ (retail
-// 0x1800e05c0, ordinal 3389) BECOMES A REGISTERED PORT.
-//
-// The BODY already existed — `PlatformSerialize` above, written by this batch's
-// predecessor as a file-local helper for `SoundBuffer::Serialize`. It was never
-// registered, so every OTHER caller (and the census) still reached the DLL's
-// copy. Registration is the whole of the port; a second body would be exactly
-// the duplication this file's family exists to prevent, so there is one body
-// and this is a thin extern "C" door onto it.
-//
-// `AEAA` = PRIVATE, which this DLL still exports
-// (reference_aeaa_is_private_not_unexported.md), so the NAME door is real.
-// ============================================================================
-
-// ============================================================================
-// The PlatformSerialize name door (an exported non-slot member, AEAA =
-// private). ENDGAME B.3.9 ENG: the sixteen slot doors are gone -- their only
-// reader was the two minted tables.
-// ============================================================================
-extern "C" void RtAudio_SoundBuffer_PlatformSerialize(void* selfv, void* serv) {
-    reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::PlatformSerialize(serv);        // B.3.7 bridge
-}

@@ -668,14 +668,3 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
 }
 
 }  // namespace Audio
-
-// The door: both Times arrive BY VALUE in registers (B7-5), the Random& and
-// the Vector3& as pointers.
-extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t nowTicks,
-                                     void* rngv, const void* listenerPos, float m) {
-    System::Time delta; delta._ticks = deltaTicks;
-    System::Time now;   now._ticks   = nowTicks;
-    return reinterpret_cast<Audio::Scene*>(selfv)->Audio::Scene::Update(                   // B.3.7 bridge
-        delta, now, *static_cast<System::Random*>(rngv),
-        *static_cast<const Vector3*>(listenerPos), m);
-}

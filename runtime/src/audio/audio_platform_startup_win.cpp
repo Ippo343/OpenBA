@@ -159,7 +159,3 @@ bool Device::PlatformStartup() {
 }
 
 }  // namespace Audio
-
-extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
-    return reinterpret_cast<Audio::Device*>(self)->Audio::Device::PlatformStartup();   // B.3.7 bridge
-}
