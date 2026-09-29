@@ -179,7 +179,7 @@ bool CitizenDescription::Serialize(void* stream) {
         ser.Serialize(count, nullptr);   // local temp, as retail
         if (static_cast<int>(ser.GetDirection()) == 0) {   // loading
             // B.3.2 bridge: exe 0x140001bb0 IS Collection::Array<void*>::SetSize(n).
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(&_refs)).SetSize(count);
+            GameColl::AsArray<GameColl::Ptr8>(&_refs).SetSize(count);
         }
         // 0x14001bcc0 takes three arguments: its prologue spills R9 to the home slot
         // [RBP+0x58], which the body only reuses as a local after writing it, so the
