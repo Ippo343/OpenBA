@@ -46,10 +46,7 @@ public:
     // 0x140125a00
     ~MultiObjectComponent() override;                                   // [0]  0x1400360c0
     void          Persist(void* stream) override;                       // [3]  0x140125880
-    // PORT GAP (retail 0x1401257c0) — B38 D9: the removal hook (mark every child for
-    // removal) is ported as MultiObjectComponent_OnCreate but was never wired in the
-    // tree; the inherited RET is what the tree's inert slot did.
-    void          OnRemove() override {}                                // [7]  0x1401257c0
+    void          OnRemove() override;                                  // [7]  0x1401257c0 mark every child for removal
     void          OnEvent(int eventId) override;                        // [12] 0x140125490
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080

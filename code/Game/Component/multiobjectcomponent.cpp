@@ -6,7 +6,7 @@
 //
 // Vtable at 0x140163cf0. Two non-trivial overrides:
 //   Persist   (0x140125880) — Serialize entity ref array + multiCount
-//   OnRemove  (0x1401257C0) — Mark child entities for removal
+//   OnRemove  (0x1401257c0) — Mark child entities for removal
 //
 
 #include "Component/multiobjectcomponent_funcs.h"
@@ -25,40 +25,28 @@
 #include "Entity/EntityList.h"
 
 // ============================================================
-// MultiObjectComponent's slot 7 body (0x1401257C0)
+// MultiObjectComponent::OnRemove — slot 7 (0x1401257c0)
 // ============================================================
-// Iterates the child entity array. For each valid child, checks bit 10 of
-// the entity flags. If not already marked, calls MarkForRemoval and adds it
-// to the removal queue.
-//
-// Nothing calls this body (the class's slot 7 is a PORT GAP, MultiObjectComponent.h).
-// B3R: its two doors are gone — the game-state cell 0x1401c3dd8 is read through the
-// engine_funcs storage global bound to the same cell (converted by the STORAGE block),
-// and 0x1400c2ea0 is ActHunt_MarkEntityRemoval_c2ea0 by name.
-
-void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
-    int count = self->childCount;
-    Object::InternalPtr<ComponentEntity>* array = self->children;
-
+// Iterates the child entity array (count and data re-read per pass, as retail). For
+// each child not yet marked (entity flag bit 10), MarkForRemoval (0x1400c2ea0) and
+// append it to the entity list's removal queue (0x140003110).
+// The singleton / entity-list null tests are the tree's (retail has neither).
+void MultiObjectComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    for (int i = 0; i < count; i++) {
-        ComponentEntity* entityPtr = array[i].Get();
+    for (int i = 0; i < childCount; i++) {
+        ComponentEntity* entityPtr = children[i].Get();
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header).
         EntityList* entityList = reinterpret_cast<EntityList*>(GameUpdateLoop::_singleton->m_entityList);
 
-        if (entityPtr != nullptr) {
+        if (entityPtr != nullptr && ((entityPtr->_entityFlags >> 10) & 1) == 0) {
+            ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
 
-            uint32_t entityFlags = entityPtr->_entityFlags;
-            if (((entityFlags >> 10) & 1) == 0) {
-                ActHunt_MarkEntityRemoval_c2ea0(entityPtr);
-
-                if (entityList) {
-                    int removalCount = entityList->removalList.count;
-                    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
-                        .SetSizeFill(removalCount + 1, &array[i]);
-                }
+            if (entityList) {
+                int removalCount = entityList->removalList.count;
+                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
+                    .SetSizeFill(removalCount + 1, &entityPtr);
             }
         }
     }
