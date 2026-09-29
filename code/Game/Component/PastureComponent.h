@@ -32,6 +32,10 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+class LivestockComponent;
+class AnimalComponent;
+
 struct PastureCtrlTag {};
 
 class PastureComponent final : public ControllerComponent {
@@ -56,20 +60,37 @@ public:
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140036770
 
-    // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
-    void*    field28;              // +0x28 (Startup clears it)
-    void*    field30;              // +0x30 the animal list (Array data)
-    void*    field38;              // +0x38 its count / capacity
-    uint8_t  _pad40[4];            // +0x40 capacity (OnAdded); not written by the ctor
-    uint32_t field44;              // +0x44
+    // ---- non-virtual members (retail addresses; pasturecomponent*.cpp) ----
+    int  ComputeCapacity() const;                                  // 0x140128570
+    void AdoptWanderers();                                         // 0x140127140
+    void Reproduce();                                              // 0x140127370
+    void ReleaseAllAnimals();                                      // 0x140126e40 (= slot 7's body)
+    void SpawnLivestock(AnimalComponent* const* parent);           // 0x140128670
+    // The state table's handlers (the controller hands them this component).
+    char EnterOperational();                                       // 0x1401270c0 state 2
+    char TickOperational();                                        // 0x1401267e0
+    char EnterTeardown();                                          // 0x140126e40 state 3
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
+    // 0x140127f40 (ExternalPtr +0x28; the +0x30 InternalPtr array validated against
+    // LivestockComponent; int +0x40, int +0x44).
+    ComponentDescription* livestockType;    // +0x28 ExternalPtr: the template the pasture keeps (Startup clears it)
+    LivestockComponent**  animals;          // +0x30 Array<InternalPtr<LivestockComponent>> data (freed by the dtor)
+    int32_t               animalCount;      // +0x38
+    int32_t               animalCapacity;   // +0x3c
+    int32_t               capacity;         // +0x40 ComputeCapacity (OnAdded); not written by the ctor
+    int32_t               production;       // +0x44 credited by LivestockComponent::Update, spent by TickOperational
     StateController _controller;   // +0x48 the embedded controller (D6)
 };
 
 static_assert(sizeof(PastureComponent) == 0x68, "PastureComponent is 0x68 (create 0x140036730)");
 static_assert(alignof(PastureComponent) == 8, "PastureComponent alignment");
-static_assert(offsetof(PastureComponent, field28) == 0x28, "PastureComponent +0x28");
-static_assert(offsetof(PastureComponent, field30) == 0x30, "PastureComponent +0x30");
-static_assert(offsetof(PastureComponent, field44) == 0x44, "PastureComponent +0x44 (ctor 0x140128123)");
+static_assert(offsetof(PastureComponent, livestockType) == 0x28, "PastureComponent +0x28");
+static_assert(offsetof(PastureComponent, animals) == 0x30, "PastureComponent +0x30");
+static_assert(offsetof(PastureComponent, animalCount) == 0x38, "PastureComponent +0x38");
+static_assert(offsetof(PastureComponent, animalCapacity) == 0x3c, "PastureComponent +0x3c");
+static_assert(offsetof(PastureComponent, capacity) == 0x40, "PastureComponent +0x40");
+static_assert(offsetof(PastureComponent, production) == 0x44, "PastureComponent +0x44 (ctor 0x140128123)");
 static_assert(offsetof(PastureComponent, _controller) == 0x48,
               "PastureComponent's controller member at +0x48 (slot 17 0x140036770: LEA RAX,[RCX+0x48])");
 static_assert(offsetof(PastureComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x60,

@@ -277,10 +277,8 @@ void ModelComponent::SetMaterialSet(int materialSetIdx) {
     void* const* data = *reinterpret_cast<void* const* const*>(list);
     int    n    = *reinterpret_cast<const int*>(reinterpret_cast<uintptr_t>(list) + 8);
     if (!data || n <= 0) return;
-    // ModelComponent::meshInstance is raw storage (H5, COMP-d's header): LEFT.
     for (int i = 0; i < n; ++i)
-        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
-            ->SetMaterialInstance(i, Graphics::ExternalPtrHandle{data[i]});   // B.3.5 bridge
+        meshInstance.SetMaterialInstance(i, Graphics::ExternalPtrHandle{data[i]});
 }
 
 // ============================================================
@@ -338,9 +336,7 @@ void DestroyComponent::RubbleStep() {
             ModelDescription* modelDesc = AsType<ModelDescription>(modelComp->_description);
             void* mesh = MeshFromModelDesc(modelDesc, modelComp->meshGroup,
                                            static_cast<int16_t>(next));
-            // ModelComponent::meshInstance is raw storage (H5, COMP-d's header): LEFT.
-            reinterpret_cast<Graphics::MeshInstance*>(modelComp->meshInstance)
-                ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
+            modelComp->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
             model->OnAdded();
         }
         if (Milestone()) {

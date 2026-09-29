@@ -36,6 +36,7 @@ public:
     ~WildAnimalComponent() override = default;                    // [0] 0x140039df0
     void Persist(void* stream) override;                          // [3] 0x14012e300
     void OnRemove() override;                                     // [7] 0x14012e2b0
+    void SetHerd(HerdComponent* const* herd);                     // 0x14012e510 (body: herdcomponent.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     Object::InternalPtr<HerdComponent> herd;   // +0x28 the herd this animal belongs to (Persist

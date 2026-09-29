@@ -22,11 +22,9 @@
 //     every other slot = Component's
 //
 // The embedded Graphics::MeshInstance (+0x28) and Math::Transform (+0x148)
-// stay byte arrays that the tree's ctor builds with placement new (and whose
-// MeshInstance the dtor destroys by an explicit call). B.4 H5: declaring them
-// with their real types would make the compiler construct them a second time
-// (and destroy the MeshInstance twice); that is a `behaviour:` commit of its
-// own (LISTED by W0-H2).
+// are real members (B.4 H5): the compiler constructs them in retail's order
+// (MeshInstance() then Transform(), ctor 0x140124d20) and the dtor's member
+// ~MeshInstance is retail's direct ??1MeshInstance call (0x140124cd0).
 //
 // B.4 W0-H2 fields (retail Persist 0x140124b70, Startup 0x140124ac0, ctor):
 //   +0x164 int16 meshGroup  Serialize(short&); index into ModelDescription's
@@ -45,6 +43,8 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "graphics/Mesh.h"   // Graphics::MeshInstance (embedded)
+#include "math/Math.h"       // Math::Transform (embedded)
 
 class ModelComponent final : public Component {
     DECLARE_EXE_TYPE(ModelComponent)
@@ -64,8 +64,8 @@ public:
     void SetMaterialSet(int materialSetIdx);                      // 0x140125020
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint8_t  meshInstance[0x120]; // +0x28 Graphics::MeshInstance (door-built)
-    uint8_t  transform[0x1C];     // +0x148 Math::Transform
+    Graphics::MeshInstance meshInstance; // +0x28
+    Math::Transform        transform;    // +0x148
     int16_t  meshGroup;           // +0x164 mesh-group index
     int16_t  meshIndex;           // +0x166 mesh index in the group (< 0 = none)
     float    yaw;                 // +0x168 placement yaw, degrees

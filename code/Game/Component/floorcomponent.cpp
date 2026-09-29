@@ -158,11 +158,11 @@ void FloorComponent::PlaceFloor() {
         return;
     }
 
-    // Copy the 7-uint transform block from ModelComponent +0x148..+0x160 (raw storage,
-    // COMP-d H5).
+    // Copy the 7-uint transform block from ModelComponent +0x148..+0x160.
     Math::Transform xform;
     static_assert(sizeof(xform) == sizeof(model->transform), "Math::Transform is 0x1C");
-    std::memcpy(&xform, model->transform, sizeof(xform));
+    const Math::Transform& modelTransform = model->transform;
+    std::memcpy(&xform, &modelTransform, sizeof(xform));
 
     Description* d = _description;
     const uint32_t descTid = FloorDescription::TypeId();

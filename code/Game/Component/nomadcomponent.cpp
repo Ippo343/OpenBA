@@ -12,6 +12,7 @@
 #include "Component/nomadcomponent_funcs.h"
 #include "Dialog/EntityUI.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"
 #include "Dialog/exe_bodies.h"   // Toolbar_ShowGroup_Impl
 #include "Player/exe_bodies.h"   // PlayerTrade_BSTFindRemove_2c690
 #include "math/Math.h"
@@ -76,16 +77,13 @@
 // returns nothing for a garbage id -- silently, with no crash and no log.
 // See reference_getcontroller_third_arg_is_a_type_filter.
 
-void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(param_1);
-
-    if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
-        // Retail's local_res8: seeded from *param_2 BEFORE the call, and passed by
+void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
+    if (currentTool != nullptr) {
+        // Retail's local_res8: seeded from *entity BEFORE the call, and passed by
         // address as the slot's second argument (see the typedef note above).
-        int64_t entityRef = *reinterpret_cast<int64_t*>(param_2);
-        int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
-        char active = reinterpret_cast<Tool*>(ctrl)->IsSelected(
-            reinterpret_cast<uint64_t*>(&entityRef));   // B.3.x bridge (slot 10)
+        ComponentEntity* entityRef = *entity;
+        // LEFT: Tool::IsSelected takes the entity InternalPtr as uint64_t* (PLAYER's header).
+        char active = currentTool->IsSelected(reinterpret_cast<uint64_t*>(&entityRef));   // slot 10
         // 0x140102b60 is EntityUI::SetEditMode / Toolbar::ShowGroup — resetting the
         // active tool to mode 0 when the entity it was bound to goes away. This call
         // was DEAD for the whole life of the project (0x140102b60 was ported but never
@@ -97,18 +95,18 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
             static int s_hits = 0;
             if (++s_hits <= 16) {
                 fprintf(stderr, "[NomadB60] entity-removed -> SetEditMode(pc,0) hit#%d self=%p\n",
-                        s_hits, (void*)param_1);
+                        s_hits, static_cast<void*>(this));
                 fflush(stderr);
             }
-            Toolbar_ShowGroup_Impl(reinterpret_cast<void*>(param_1), 0);   // 0x140102b60
+            Toolbar_ShowGroup_Impl(this, 0);   // 0x140102b60
         }
     }
 
-    int64_t entity = *reinterpret_cast<int64_t*>(param_2);
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(self + 0x60), &entity);   // 0x14002c690
+    ComponentEntity* key = *entity;
+    // LEFT: +0x60 is a tree root with no node type yet (GAME-b); 0x14002c690 takes int64_t*.
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&field_0x60), &key);   // 0x14002c690
 
-    UI::UserInterface* ui = *reinterpret_cast<UI::UserInterface**>(
-        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0x98);
+    UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
     // HISTORY, kept because it cost two bugs. Retail reaches this list through
     // GetFirstDialog, which returns a struct BY VALUE, so the ABI passes a hidden
     // return-buffer pointer in RDX and the callee WRITES through it. Runtime-x64.dll
@@ -141,24 +139,21 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
         ++visited;
         if (it.node->element != nullptr) {
-            void* ctrlBuf[2] = {nullptr, nullptr};
             // R8 = EntityUI (retail `MOV R8D,[0x1401c4f00]` at 0x140103517). The
             // IsDerivedFrom(EntityUI) narrow just below is retail's own second check,
             // NOT a substitute for this filter -- without it the call returns nothing
             // and the narrow never gets anything to reject.
-            ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(
+            Object::InternalPtr<UI::DialogController> ctrl(
                 reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetController(  // B.3.6 bridge
                     EntityUI::TypeId()));   // DAT_1401c4f00
-            void* found = nullptr;
-            if (ctrlBuf[0] != nullptr) {
-                if (::Object::IsDerivedFromNullSafe(ctrlBuf[0], EntityUI::TypeId()))
-                    found = ctrlBuf[0];
+            EntityUI* found = nullptr;
+            if (ctrl.Get() != nullptr) {
+                if (::Object::IsDerivedFromNullSafe(ctrl.Get(), EntityUI::TypeId()))
+                    found = static_cast<EntityUI*>(ctrl.Get());
             }
-            int64_t ibp = 0;
-            new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-            if (ibp != 0) {
-                int64_t bound = *reinterpret_cast<int64_t*>(ibp + 0x30);
-                if (bound == *reinterpret_cast<int64_t*>(param_2)) {
+            if (found != nullptr) {
+                ComponentEntity* bound = found->entity;
+                if (bound == *entity) {
                     void* dlgPtr = it.node->element;
                     ui->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgPtr));  // B.3.6 bridge
                     closed = 1;
@@ -177,6 +172,12 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                         "the removed entity)\n", s_walks, visited, closed);
         fflush(stderr);
     }
+}
+
+// B4 FORWARD: 2 outside caller files (citizen_onremove.cpp, destroycomponent_states.cpp).
+void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
+    reinterpret_cast<PlayerToolManager*>(param_1)->OnEntityRemoved(
+        reinterpret_cast<ComponentEntity* const*>(param_2));
 }
 
 // ============================================================================
@@ -202,8 +203,8 @@ static const bool s_nomadStateTableBuilt = (NomadCtrl_PopulateTable(), true);
 // +0x28..+0x50 = 0; `_controller(this)` is the member's back-pointer at +0x70;
 // then `_flags |= 2` (0x82).
 NomadComponent::NomadComponent()
-    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr), field48(nullptr),
-      field50(0), _pad54{}, _controller(this) {
+    : hall(nullptr), spawnPoint(0.0f, 0.0f, 0.0f), meetPoint(0.0f, 0.0f, 0.0f), wanderTimer{0},
+      gender(0), _pad54{}, _controller(this) {
     OrFlagsInCtor(0x2);
 }
 
@@ -230,49 +231,44 @@ void* NomadComponent::CreateInPlaceObject(void* storage) {
 //   IBP at +0x28, Vector3 at +0x30, Vector3 at +0x3C, int at +0x50, Time at +0x48
 
 void NomadComponent::Persist(void* stream) {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+
     // Empty controller serializer block
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
+    { IO::Serializer scope(*st, 0); }
 
     // Main data serializer
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*st, 0);
 
-    // Serialize IBP at +0x28
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
+    // Serialize the hall IBP at +0x28. LEFT: InternalBasePtr has no typed view of a
+    // bare pointer member.
+    reinterpret_cast<Object::InternalBasePtr*>(&hall)->Serialize(ser);
 
     // Validate IBP after deserialize
     // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =
     // ComponentEntity::TypeId() (Persist 0x14004fc40, at 0x14004fca5). The tree read 0x1401c72e8 instead -- the NAME
     // field (+8) of Description's record, whose only retail reader is Description's
     // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
-    void* ibpVal = *(void**)(selfAddr + 0x28);
-    if (ibpVal != nullptr) {
+    if (hall != nullptr) {
         // slot 0x140152a98 = ?IsDerivedFrom@Base@Object@@QEBA_NI@Z
-        if (!reinterpret_cast<const Object::Base*>(ibpVal)->IsDerivedFrom(
-                ComponentEntity::TypeId())) {   // B.3.x bridge
-            *(uintptr_t*)(selfAddr + 0x28) = 0;
+        if (!hall->IsDerivedFrom(ComponentEntity::TypeId())) {
+            hall = nullptr;
         }
     }
 
     // Serialize Vector3 at +0x30 (12 bytes)
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x30)->Serialize(serializer2);   // B.3.1 bridge
+    spawnPoint.Serialize(&ser);
 
     // Serialize Vector3 at +0x3C (12 bytes)
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x3C)->Serialize(serializer2);   // B.3.1 bridge
+    meetPoint.Serialize(&ser);
 
     // Serialize int at +0x50
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x50), nullptr);   // B.3.4 bridge
+    ser.Serialize(gender, nullptr);
 
     // Serialize Time at +0x48
-    reinterpret_cast<System::Time*>((void*)(selfAddr + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
+    wanderTimer.Serialize(ser);
 }
 
 // [7] 0x14004fd20 — the removed-from-world broadcast: hand the owner entity to the
@@ -283,10 +279,8 @@ void NomadComponent::Persist(void* stream) {
 //     MOV RCX,[RCX+0x120]; MOV [RSP+0x30],RAX; CALL 0x140103480
 // Unguarded, as retail. The notify is NomadComp_FUN_140103480, called by name.
 void NomadComponent::OnRemove() {
-    int64_t entityIBP = reinterpret_cast<int64_t>(_entity);
-    NomadComp_FUN_140103480(   // 0x140103480
-        *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x120),
-           &entityIBP);
+    ComponentEntity* entityIBP = _entity;
+    GameUpdateLoop::_singleton->m_toolManager->OnEntityRemoved(&entityIBP);   // 0x140103480
 }
 
 DEFINE_EXE_TYPE(NomadComponent, "ControllerComponent")

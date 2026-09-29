@@ -166,9 +166,8 @@ static void BC8_SetMeshFrame(ModelComponent* model, int frame) {
     if (frame >= 0) {
         ModelDescription* modelDesc = BC8_MeshModelDesc(model);
         void* framePtr = BC8_MeshFramePtr(model, modelDesc, frame);
-        // LEFT: ModelComponent::meshInstance is raw storage (H5, W0 header)
-        reinterpret_cast<Graphics::MeshInstance*>(model->meshInstance)
-            ->SetMesh(Graphics::ExternalPtrHandle{framePtr});   // B.3.5 bridge
+        model->meshInstance
+            .SetMesh(Graphics::ExternalPtrHandle{framePtr});   // B.3.5 bridge
         model->OnAdded();    // slot 6
     }
 }

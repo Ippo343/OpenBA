@@ -33,24 +33,24 @@
 // the defaults.
 HerdDescription::HerdDescription()
     : Description(),
-      _ref20(nullptr),
-      _i28(0),
-      _i2c(0),
-      _f30(0.0f),
-      _f34(0.0f),
-      _i38(0),
-      _f3c(0.0f) {}
+      _animal(nullptr),
+      _maxSize(0),
+      _minSize(0),
+      _grazeMinutes(0.0f),
+      _grazeRandomMinutes(0.0f),
+      _spread(0),
+      _growMinutes(0.0f) {}
 
 // [5] 0x1401221e0: stream order as retail.
 bool HerdDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
-    ser.Serialize(_i28, nullptr);
-    ser.Serialize(_i2c, nullptr);
-    ser.Serialize(_f30, nullptr);
-    ser.Serialize(_f34, nullptr);
-    ser.Serialize(_i38, nullptr);
-    ser.Serialize(_f3c, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_animal, &ser);
+    ser.Serialize(_maxSize, nullptr);
+    ser.Serialize(_minSize, nullptr);
+    ser.Serialize(_grazeMinutes, nullptr);
+    ser.Serialize(_grazeRandomMinutes, nullptr);
+    ser.Serialize(_spread, nullptr);
+    ser.Serialize(_growMinutes, nullptr);
     return true;
 }
 

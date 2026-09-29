@@ -152,11 +152,9 @@ inline AnimalDescription* AnimalDesc(AnimalComponent* self) {
     return ::Object::IsDerivedFromNullSafe(raw, AnimalDescription::TypeId()) ? static_cast<AnimalDescription*>(raw) : nullptr;
 }
 
-// A model's world position and visual scale live in its raw MeshInstance /
-// Transform storage. LEFT: ModelComponent::meshInstance / transform are raw
-// storage (H5, W0 header).
+// A model's world position and visual scale live in its MeshInstance / Transform.
 inline Math::Transform* ModelTransform(ModelComponent* model) {
-    return reinterpret_cast<Math::Transform*>(model->transform);
+    return &model->transform;
 }
 
 inline int ClampCell(int v, int dim) {
@@ -281,8 +279,7 @@ void AnimalComponent::UpdateBehavior() {
 
     const Math::Scalar scaleS(scale);
     Math::Vector4 vec4(scaleS);   // Vector4(const Scalar&) splat, slot 0x140152958
-    // LEFT: ModelComponent::meshInstance is raw storage (H5, W0 header)
-    Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(model->meshInstance);
+    Graphics::MeshInstance* mesh = &model->meshInstance;
     mesh->_color[0] = vec4.x;
     mesh->_color[1] = vec4.y;
     mesh->_color[2] = vec4.z;

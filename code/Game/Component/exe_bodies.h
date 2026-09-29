@@ -173,17 +173,11 @@ void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780  B4 FORW
 // ---- happinesscomponent.cpp
 
 // ---- herdcomponent.cpp
-char HerdComponent_Helper6b10(int64_t param_1);  // 0x140106b10
-float HerdComponent_CheckFood(int64_t entityComp, int gridCell);  // 0x140053f20
-char HerdComponent_CheckMigrationDone(int64_t herdComp);  // 0x140121980
-void HerdComponent_AdjustSize(void* herdComp, int targetSize);  // 0x140121450
-void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp);  // 0x14012e510
 
 // ---- interactcomponent.cpp
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  // 0x140004740
 
 // ---- keystone_a_map.cpp
-void MapComponent_sub_41b0(int64_t param_1);  // 0x1401241b0
 
 // ---- keystone_a_restree.cpp
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, uint64_t* param_3, int64_t* param_4);  // 0x140017230
@@ -202,18 +196,13 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  
 void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 
 // ---- orchardcomponent.cpp
-void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount);  // 0x140009f80
-void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arrayBase);  // 0x14000a230
-void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830
+void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830 B4 FORWARD to OrchardComponent::ValidateRefs
 
 // ---- pasturecomponent.cpp
-void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20
-uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570
-void PastureComponent_Helper5ed0(void* entityRef);  // 0x140105ed0
-void PastureComponent_ReassignEntityRef(uintptr_t entityPtr);  // 0x1401240a0
+void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20 B4 FORWARD to AnimalComponent::GetWanderBox
+uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570 B4 FORWARD to PastureComponent::ComputeCapacity
 
 // ---- pasturecomponent_spawn.cpp
-extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);  // 0x14002f1d0
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 

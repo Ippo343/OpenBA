@@ -75,7 +75,7 @@ UNIT_TEST(mib_rp_member_and_fields) {
     CHECK_EQ(offsetof(FishingComponent, fishingFlag),   (size_t)0x50);
     CHECK_EQ(offsetof(FishingComponent, fishingRate),   (size_t)0x54);
     CHECK_EQ(offsetof(ForesterComponent, plantTrees), (size_t)0x50);
-    CHECK_EQ(offsetof(HuntComponent, huntData),         (size_t)0x50);
+    CHECK_EQ(offsetof(HuntComponent, huntProgress),     (size_t)0x50);
 }
 
 // ===========================================================================
@@ -183,7 +183,7 @@ UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
     CHECK_SLOT(MarketLocationComponent, OnRemove, 7);   // 0x14004ef60
     CheckCtlLeaf<MultiObjectComponent>(0x28);      // slot 17 0x140004080 (D9 #8: the tree had none)
     CHECK_EQ(sizeof(MultiObjectComponent), (size_t)0x60);      // create 0x140035ef0
-    CHECK_EQ(offsetof(MultiObjectComponent, field48),    (size_t)0x48);
+    CHECK_EQ(offsetof(MultiObjectComponent, children),    (size_t)0x48);
     CHECK_EQ(offsetof(MultiObjectComponent, multiCount), (size_t)0x58);
     CHECK_SLOT(MultiObjectComponent, OnRemove, 7);      // 0x1401257c0
     CHECK_SLOT(MultiObjectComponent, OnEvent,  12);     // 0x140125490
@@ -192,10 +192,10 @@ UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
 UNIT_TEST(mib_controller_member_fields) {
     CHECK_EQ(offsetof(CropFieldComponent, workEnabled), (size_t)0x48);
     CHECK_EQ(offsetof(CropFieldComponent, slots),      (size_t)0x58);
-    CHECK_EQ(offsetof(OrchardComponent, orchardId),    (size_t)0x4c);
-    CHECK_EQ(offsetof(OrchardComponent, field50),      (size_t)0x50);
-    CHECK_EQ(offsetof(PastureComponent, field28),      (size_t)0x28);
-    CHECK_EQ(offsetof(PastureComponent, field44),      (size_t)0x44);
+    CHECK_EQ(offsetof(OrchardComponent, lastHarvestYear),(size_t)0x4c);
+    CHECK_EQ(offsetof(OrchardComponent, slots),        (size_t)0x50);
+    CHECK_EQ(offsetof(PastureComponent, livestockType),(size_t)0x28);
+    CHECK_EQ(offsetof(PastureComponent, production),   (size_t)0x44);
     CHECK_EQ(offsetof(TradeComponent, tradeId),        (size_t)0x2c);
     CHECK_EQ(offsetof(TradeComponent, tradeFlag),      (size_t)0x71);
     CHECK_EQ(offsetof(TradeComponent, merchant),       (size_t)0x80);

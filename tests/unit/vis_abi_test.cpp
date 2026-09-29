@@ -103,7 +103,7 @@ UNIT_TEST(vis_member_offsets) {
     CHECK_EQ(offsetof(FloorComponent, floorId),             (size_t)0x2c);
     CHECK_EQ(offsetof(HighlightComponent, edgeMeshInstance),(size_t)0x28);
     CHECK_EQ(offsetof(HighlightComponent, highlightId),     (size_t)0x120);
-    CHECK_EQ(offsetof(InteractComponent, field28),          (size_t)0x28);
+    CHECK_EQ(offsetof(InteractComponent, useLocations),          (size_t)0x28);
     CHECK_EQ(offsetof(MapComponent, tileX0),                (size_t)0x28);
     CHECK_EQ(offsetof(MapComponent, extraField),            (size_t)0x30);
     CHECK_EQ(offsetof(ModelComponent, meshInstance),        (size_t)0x28);

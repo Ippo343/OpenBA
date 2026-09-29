@@ -25,8 +25,18 @@
 #include <cstdint>
 #include <cstddef>
 #include "Component/Component.h"
+#include "system/Value.h"   // System::Time
 #include "Object/exe_type.h"
 
+class PopulationComponent;
+class WildAnimalComponent;
+
+// Field types (B.4 COMP-d) from Persist 0x140121f90 (int count +0x40 with the
+// load-side resize of the +0x38 IBP array, each validated against
+// WildAnimalComponent 0x1401c8000; bool +0x48; Time +0x50 / +0x58; int +0x4c;
+// IBP +0x28 validated against PopulationComponent 0x1401c4790; int +0x30) and
+// Update 0x140121bf0 (+0x30 is handed to PopulationComponent 0x140053f20 as the
+// grid cell; +0x4c is a map tile, signed `/` and `%` by the map width).
 class HerdComponent final : public Component {
     DECLARE_EXE_TYPE(HerdComponent)
 
@@ -39,28 +49,38 @@ public:
     void Persist(void* stream) override;                          // [3] 0x140121f90
     // [4] inherited: Component's `RET` 0x140118a50 (the ctor writes +0x4c = -1).
     void OnAdded() override;                                      // [6] 0x140121f40
-    void OnRemove() override;                                     // [7] 0x140121e20 PORT GAP
+    void OnRemove() override;                                     // [7] 0x140121e20
     void Update(void* time) override;                             // [9] 0x140121bf0
 
+    // ---- non-virtual members (retail addresses) ----
+    char CheckMigrationDone();                                    // 0x140121980
+    void AdjustSize(int targetSize);                              // 0x140121450
+    void AddMember(WildAnimalComponent* const* member);           // 0x140121ad0
+    void Populate(int count);                                     // 0x140120f50
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint64_t data28;       // +0x28 PopulationComponent back-ref
-    uint64_t data30;       // +0x30 not written by the retail ctor
-    uint64_t data38;       // +0x38 member array data (freed by the retail dtor)
-    uint64_t data40;       // +0x40 member array count / capacity
-    uint8_t  data48;       // +0x48 phase (0 grazing, 1 migrating)
-    uint8_t  _pad49[3];    // +0x49
-    int32_t  data4C;       // +0x4C tile (ctor -1)
-    uint64_t data50;       // +0x50 System::Time timer
-    uint64_t data58;       // +0x58
+    PopulationComponent*  population;     // +0x28 InternalPtr<PopulationComponent>
+    int32_t               populationCell; // +0x30 grid cell of the population map; the ctor leaves it
+    uint8_t               _pad34[4];      // +0x34
+    WildAnimalComponent** members;        // +0x38 Array<InternalPtr<WildAnimalComponent>> data (freed by the retail dtor)
+    int32_t               memberCount;    // +0x40
+    int32_t               memberCapacity; // +0x44
+    bool                  migrating;      // +0x48 phase (false grazing, true migrating)
+    uint8_t               _pad49[3];      // +0x49
+    int32_t               tile;           // +0x4C herd centre tile (ctor -1)
+    System::Time          grazeTimer;     // +0x50 counts down while grazing
+    System::Time          spawnTimer;     // +0x58 accumulates to the description's interval
 };
 
 static_assert(sizeof(HerdComponent) == 0x60, "HerdComponent is 0x60 (create 0x140034cd0)");
 static_assert(alignof(HerdComponent) == 8, "HerdComponent alignment");
-static_assert(offsetof(HerdComponent, data28) == 0x28, "");
-static_assert(offsetof(HerdComponent, data30) == 0x30, "");
-static_assert(offsetof(HerdComponent, data38) == 0x38, "");
-static_assert(offsetof(HerdComponent, data40) == 0x40, "");
-static_assert(offsetof(HerdComponent, data48) == 0x48, "");
-static_assert(offsetof(HerdComponent, data4C) == 0x4C, "");
-static_assert(offsetof(HerdComponent, data50) == 0x50, "");
-static_assert(offsetof(HerdComponent, data58) == 0x58, "");
+static_assert(offsetof(HerdComponent, population) == 0x28, "");
+static_assert(offsetof(HerdComponent, populationCell) == 0x30, "");
+static_assert(offsetof(HerdComponent, _pad34) == 0x34, "");
+static_assert(offsetof(HerdComponent, members) == 0x38, "");
+static_assert(offsetof(HerdComponent, memberCount) == 0x40, "");
+static_assert(offsetof(HerdComponent, memberCapacity) == 0x44, "");
+static_assert(offsetof(HerdComponent, migrating) == 0x48, "");
+static_assert(offsetof(HerdComponent, tile) == 0x4C, "");
+static_assert(offsetof(HerdComponent, grazeTimer) == 0x50, "");
+static_assert(offsetof(HerdComponent, spawnTimer) == 0x58, "");

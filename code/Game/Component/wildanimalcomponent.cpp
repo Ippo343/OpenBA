@@ -108,17 +108,17 @@ void WildAnimalComponent::OnRemove() {
     if (!herdComp) ++g_war_noHerd;
     ++g_war_calls;
     const bool trace = (g_war_calls % 10) == 1;
-    // HerdComponent +0x40: the member array's count (the low dword of data40).
-    const int before = herdComp ? static_cast<int>(herdComp->data40) : -1;
+    // HerdComponent +0x40: the member array's count.
+    const int before = herdComp ? herdComp->memberCount : -1;
 
     if (herdComp) {
         // Erase self from the herd's member array (+0x38) by value (0x140002cc0).
         Object::InternalPtr<WildAnimalComponent> self(this);
-        CemeteryListErase_Reimpl(&herdComp->data38, &self);
+        CemeteryListErase_Reimpl(&herdComp->members, &self);
     }
 
     if (trace) {
-        const int after = herdComp ? static_cast<int>(herdComp->data40) : -1;
+        const int after = herdComp ? herdComp->memberCount : -1;
         fprintf(stderr, "[WildAnimalRm] calls=%lld noHerd=%lld herd=%p members %d -> %d%s\n",
                 g_war_calls, g_war_noHerd, static_cast<void*>(herdComp),
                 before, after, (before == after) ? "  ERASE-NO-OP" : "");

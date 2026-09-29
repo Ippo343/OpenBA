@@ -12,6 +12,8 @@
 #include "Component/livestockcomponent_funcs.h"
 #include "Component/LivestockDescription.h"
 #include "Component/coll_bridge.h"
+#include "Component/PastureComponent.h"
+#include "Entity/CitizenBehavior.h"   // CitizenBehavior::livestock (GameUpdateLoop::m_citizenList)
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -60,95 +62,80 @@
 
 // 0x140123ee0. Component() is the CALL 0x1401188b0; the 0x1401639b0 stamp is
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0x0b (0x8b).
-LivestockComponent::LivestockComponent() : data28(0), data30(0) {
+LivestockComponent::LivestockComponent() : pasture(nullptr), productionTimer{0} {
     OrFlagsInCtor(0x0b);
 }
 
 void LivestockComponent::OnAdded() {
-    if (data28 != 0) return;
+    if (pasture != nullptr) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-
-    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
-    if (!gs) return;
-    uint64_t ibp = 0;
-    new (&ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
+    CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    if (!town) return;
+    LivestockComponent* ibp = this;
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(gs + 0x80))
-        .SetSizeFill(*reinterpret_cast<int*>(gs + 0x88) + 1, &ibp);
+    GameColl::AsArray<GameColl::Ptr8>(&town->livestock)
+        .SetSizeFill(town->livestockCount + 1, &ibp);
     std::fprintf(stderr, "[Pasture] livestock %p joined the free-roaming pool (now %d)\n",
-                 (void*)this, *reinterpret_cast<int*>(gs + 0x88));
+                 (void*)this, town->livestockCount);
     std::fflush(stderr);
 }
+
 void LivestockComponent::OnRemove() {
     // 0x140002cc0 is CemeteryListErase_Reimpl (cemeterycomponent.cpp): called
     // directly, no first-call cache (B.3.8, B6-5).
     const auto s_erase = &CemeteryListErase_Reimpl;
-
-    uint64_t ibp = 0;
-    new (&ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-
-    if (data28 == 0) {
+    LivestockComponent* ibp = this;
+    if (pasture == nullptr) {
         if (GameUpdateLoop::_singleton == nullptr) return;
-        uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
-        if (gs) s_erase(reinterpret_cast<void*>(gs + 0x80), &ibp);
+        // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
+        CitizenBehavior* town = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+        if (town) s_erase(&town->livestock, &ibp);
         return;
     }
-    s_erase(reinterpret_cast<void*>(static_cast<uintptr_t>(data28) + 0x30), &ibp);
+    s_erase(&pasture->animals, &ibp);
 }
 
 // [9] 0x140123b50. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af); the ported body takes the Time by value.
 void LivestockComponent::Update(void* time) {
-    const int64_t deltaTime = time ? *static_cast<int64_t*>(time) : 0;
+    // LEFT: Component::Update takes the Time as void* (COMP-c's header).
+    const int64_t deltaTime = time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;
 
-    // Early out: no herd component pointer
-    if (data28 == 0) {
+    // Early out: no pasture
+    if (pasture == nullptr) {
         return;
     }
 
-    // Get the related component from _unk18 and check its type
-    void* relatedComponent = _description;
-    bool isDerived = ::Object::IsDerivedFromNullSafe(relatedComponent, LivestockDescription::TypeId());
+    // The description, checked against LivestockDescription
+    Description* desc = _description;
+    bool isDerived = ::Object::IsDerivedFromNullSafe(desc, LivestockDescription::TypeId());
+    const LivestockDescription* config = isDerived ? static_cast<const LivestockDescription*>(desc) : nullptr;
 
-    void* configComponent = isDerived ? relatedComponent : nullptr;
-
-    // Check if config component has valid data at +0x20
-    if (configComponent == nullptr) {
+    if (config == nullptr) {
         return;
     }
-    int64_t configDataPtr = *reinterpret_cast<int64_t*>(
-        reinterpret_cast<uintptr_t>(configComponent) + 0x20);
-    if (configDataPtr == 0) {
+    if (config->_byproduct == nullptr) {
         return;
     }
 
-    // Accumulate delta time into reproduction timer
-    data30 += static_cast<uint64_t>(deltaTime);
+    // Accumulate delta time into the production timer
+    productionTimer._ticks += deltaTime;
 
-    // Compute reproduction threshold in ticks:
-    //   threshold = Time(config[+0x2C] * timeMultiplier)
+    // Compute the production threshold in ticks:
+    //   threshold = Time(config->_productionInterval * timeMultiplier)
     //   Time(float seconds) = (int64_t)((double)seconds / _secondsPerTick)
-    float intervalSeconds = *reinterpret_cast<float*>(
-        reinterpret_cast<uintptr_t>(configComponent) + 0x2C);
+    float intervalSeconds = config->_productionInterval;
     float thresholdSeconds = intervalSeconds * kRdata_140172234;
     int64_t thresholdTicks = static_cast<int64_t>(
         static_cast<double>(thresholdSeconds) / ::System::Timer::_secondsPerTick);
 
-    // Fire birth events while accumulator exceeds threshold
-    if (thresholdTicks < static_cast<int64_t>(data30)) {
+    // Credit the pasture while the accumulator exceeds the threshold
+    if (thresholdTicks < productionTimer._ticks) {
         do {
-            // Increment birth counter at herdComponent+0x44
-            int32_t* birthCounter = reinterpret_cast<int32_t*>(
-                data28 + 0x44);
-            *birthCounter = *birthCounter + 1;
-
-            // Subtract threshold from accumulator
-            data30 -= static_cast<uint64_t>(thresholdTicks);
-        } while (thresholdTicks < static_cast<int64_t>(data30));
+            pasture->production = pasture->production + 1;
+            productionTimer._ticks -= thresholdTicks;
+        } while (thresholdTicks < productionTimer._ticks);
     }
 }
 
