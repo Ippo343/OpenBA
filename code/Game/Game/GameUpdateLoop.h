@@ -54,6 +54,7 @@ class CitizenBehavior;    // Entity/CitizenBehavior.h (block WORK-a)
 class CharacterGrid;      // Component/CharacterGrid.h (block COMP-a)
 class Calendar;           // Game/Calendar.h (B4 GAME-a)
 class WeatherSimulation;  // Game/WeatherSimulation.h (B4 GAME-a)
+class WorkScheduler;      // Game/WorkScheduler.h (B4 GAME-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -154,7 +155,9 @@ public:
     WorldGeometry*          m_worldGeometry; // +0x110 terrain, MemAlloc(0x230) + ctor 0x1400b00e0
 
     // Game managers
-    void*    m_tutorial;            // +0x118 Tutorial* (0x138 bytes)
+    // +0x118: the work scheduler (0x138 bytes), NOT a Tutorial: the member keeps
+    //   the tree's name until the coordinator renames it (other blocks read it).
+    WorkScheduler* m_tutorial;      // +0x118
     // +0x120: NOT an EntityUI (that is a 0x48-byte UI::DialogController). Load
     //   builds it with MemAlloc(0xb0, 4) + ctor 0x1401025c0 (no vtable: an
     //   InternalBasePtr at +0x00, the CURRENT TOOL InternalBasePtr at +0x28 that

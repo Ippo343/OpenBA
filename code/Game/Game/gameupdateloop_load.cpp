@@ -42,6 +42,7 @@
 #include "Component/CharacterGrid.h"  // m_characterGrid's class (B.4 GAME-a)
 #include "Calendar.h"                // m_dayCounter's class (B.4 GAME-a)
 #include "WeatherSimulation.h"       // m_weather's class (B.4 GAME-a)
+#include "WorkScheduler.h"           // m_tutorial's class (B.4 GAME-a)
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -610,12 +611,12 @@ Map::Map() {
     field_0xD0 = 8;
 }
 
-// MainMenuDialog_helper_9180 @ 0x1400f9180 — Tutorial-ish ctor (+0x118, 0x138).
-static void* Reimpl_FUN_1400f9180(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    memset(p, 0, 0x138);                      // zeroes header + the 15x16 array @+0x30
-    *(int32_t*)(p + 0x08) = 1;
-    return selfMem;
+// 0x1400f9180 — the WorkScheduler ctor's body (+0x118, 0x138).
+static_assert(std::is_trivially_default_constructible<WorkScheduler>::value,
+              "placement new of WorkScheduler runs no code");
+static void WorkScheduler_Construct(WorkScheduler* scheduler) {
+    memset(scheduler, 0, sizeof(WorkScheduler));   // zeroes header + the 15x16 array @+0x30
+    scheduler->stepCount = 1;
 }
 
 // FUN_140093f60 — in-game Weather SIMULATION ctor (+0x130, 0x78). PerlinNoise-driven.
@@ -1006,8 +1007,9 @@ void GameUpdateLoop::Load() {
     // Step 12 — Tutorial-ish (+0x118, 0x138).
     {
         void* mem = AllocSub(0x138, 4);
-        if (mem) Reimpl_FUN_1400f9180(mem);
-        m_tutorial = mem;
+        WorkScheduler* scheduler = mem ? new (mem) WorkScheduler : nullptr;
+        if (scheduler) WorkScheduler_Construct(scheduler);
+        m_tutorial = scheduler;
     }
 
     // Step 13 — EntityUI (+0x120, 0xb0).

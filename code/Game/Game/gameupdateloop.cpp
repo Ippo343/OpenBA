@@ -43,6 +43,7 @@
 #include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/WorkScheduler.h"   // m_tutorial's class (B.4 GAME-a)
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
@@ -835,13 +836,11 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
                 // 3g. Tutorial frame/time increment
                 {
-                    uint8_t* tutorial = (uint8_t*)m_tutorial;
-                    int32_t* frameCount = (int32_t*)(tutorial + 0x08);
-                    int64_t* tutorialTime = (int64_t*)(tutorial + 0x130);
-                    *frameCount = *frameCount + 1;
-                    *tutorialTime = *tutorialTime + *(int64_t*)time;
+                    WorkScheduler* scheduler = m_tutorial;
+                    scheduler->stepCount = scheduler->stepCount + 1;
+                    scheduler->time._ticks = scheduler->time._ticks + *(int64_t*)time;
                     TRACE("[GameUpdateLoop::Update] tutorial frame=%d, tutorialTime=%lld\n",
-                           *frameCount, (long long)*tutorialTime);
+                           (int)scheduler->stepCount, (long long)scheduler->time._ticks);
                 }
 
                 // 3h. Global frame index increment
