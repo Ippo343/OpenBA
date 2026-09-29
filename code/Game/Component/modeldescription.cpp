@@ -62,9 +62,9 @@ ModelDescription::ModelDescription()
       _meshGroups(nullptr),
       _meshGroupCount(0),
       _meshGroupCap(0),
-      _lod0(0),
-      _lod1(0),
-      _castShadow(false) {}
+      _defaultMeshGroup(0),
+      _defaultMeshIndex(0),
+      _randomMeshGroup(false) {}
 
 // dtor (slot 0 0x140035a70 minus the stamps): frees every MeshGroup's material array, then the group array.
 // The compiler then chains ~Description -> ~External.
@@ -118,9 +118,9 @@ bool ModelDescription::Serialize(void* stream) {
         // serialize the mesh array of External* (elem+8 base)
         Reimpl_Array_Serialize_External_GraphicsMesh(&ser, matCount, e->meshes);
     }
-    ser.Serialize(_lod0, nullptr);
-    ser.Serialize(_lod1, nullptr);
-    ser.Serialize(_castShadow, nullptr);
+    ser.Serialize(_defaultMeshGroup, nullptr);
+    ser.Serialize(_defaultMeshIndex, nullptr);
+    ser.Serialize(_randomMeshGroup, nullptr);
     return true;
 }
 

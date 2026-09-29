@@ -25,7 +25,6 @@
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"
-#include "Action/exe_bodies.h"   // ActHunt_NotifyEntityChanged_c3470
 #include "Component/ModelDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
 #include "Entity/ComponentEntity.h"
 #include "perf_experimental.h"
@@ -43,8 +42,12 @@
 // is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen.
 
 // Helpers, called by name (B3R): RtSystem_Time_Ctor (import slot 0x140152b00,
-// ??0Time@System@@QEAA@M@Z), ModelComponentNotify_Reimpl (0x1400c2b70, below),
-// ActHunt_NotifyEntityChanged_c3470 (0x1400c3470).
+// ??0Time@System@@QEAA@M@Z), ComponentEntity::SendEvent (0x1400c2b70, below),
+// ComponentEntity::RefreshEntityFlags (0x1400c3470).
+//
+// LEFT (B.4 COMP-d): the embedded MeshInstance (+0x28) and Transform (+0x148) are raw
+// storage until the H5 `behaviour:` commit; GameUpdateLoop::m_graphicsScene is void*
+// (W0 header).
 //
 // ENDGAME B.3.9 GFX (coordinator ruling 4, B9-13 foreign site): the
 // embedded Graphics::MeshInstance at +0x28 is built and destroyed by the real
@@ -72,92 +75,86 @@ extern "C" void ModelComponentNotify_Reimpl(void* entity, int param) {
 }
 
 // ============================================================
-// Helper: Get MultiObjectDescription sibling component
+// Helper: the linked ModelDescription
 // ============================================================
-static void* GetMultiObjDescription(uintptr_t self) {
-    void* obj = *(void**)(self + 0x18);
-    if (!obj) return nullptr;
-
-    // The standalone Runtime factory tree is incomplete, so fn_IsDerivedFrom
-    // returns false for legit descriptions. ComponentEntity::CtorFromDescription
-    // has already linked +0x18 to this component's ModelDescription template, so
-    // trust the non-null pointer (matches the IsDerivedFromOrTrust policy used
-    // throughout the spawn path).
-    return obj;
+// The standalone Runtime factory tree is incomplete, so fn_IsDerivedFrom
+// returns false for legit descriptions. ComponentEntity::CtorFromDescription
+// has already linked _description to this component's ModelDescription template,
+// so trust the non-null pointer (matches the IsDerivedFromOrTrust policy used
+// throughout the spawn path).
+static ModelDescription* LinkedModelDescription(const ModelComponent* self) {
+    Description* obj = self->_description;
+    return static_cast<ModelDescription*>(obj);
 }
 
 // ============================================================
-// Helper: Get mesh resource from description arrays
+// Helper: the mesh of a group from the description's mesh-group array
 // ============================================================
-// Description +0x20 = array of variant groups (each 0x18 bytes, sub-array ptr at +8)
-// variant group[variantIdx] has sub-array at +8, indexed by modelVariant * 8
-static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t modelVariant) {
-    if (!desc || modelVariant < 0 || variantIdx < 0) return nullptr;
-    uintptr_t d = (uintptr_t)desc;
-    // desc+0x20 points to array of variant groups
-    uintptr_t groupArray = *(uintptr_t*)(d + 0x20);
+// _meshGroups[meshGroup].meshes[meshIndex]
+static Graphics::GraphicsMesh* GetMeshFromDescription(const ModelDescription* desc, int16_t meshGroup,
+                                                      int16_t meshIndex) {
+    if (!desc || meshIndex < 0 || meshGroup < 0) return nullptr;
+    const ModelMeshGroup* groupArray = desc->_meshGroups;
     if (!groupArray) return nullptr;            // description carries no meshes
-    // Each group is 0x18 bytes; get the one at variantIdx
-    uintptr_t group = *(uintptr_t*)(groupArray + 8 + (int64_t)variantIdx * 0x18);
+    Graphics::GraphicsMesh** group = groupArray[meshGroup].meshes;
     if (!group) return nullptr;
-    // Index into sub-array by modelVariant
-    void* meshResource = *(void**)(group + (int64_t)modelVariant * 8);
-    return meshResource;
+    return group[meshIndex];
 }
 
 // ============================================================
 // Per-entity model-variant pick (faithful core of FUN_1401253d0)
 // ============================================================
-// Citizens all render identically because ModelComponent::Serialize sets the
-// variant index from a FIXED description field (+0x30) and the per-citizen pick
-// that the original performs in the deferred citizen init (FUN_140117080 ->
-// FUN_1401253d0) is guarded off in standalone. This helper reproduces the safe
-// core of FUN_1401253d0: choose a random variant group within the description's
-// valid range, then SetMesh the matching mesh into the MeshInstance (+0x28). It
-// touches ONLY the same fields/SetMesh path ModelComponent::Serialize already
-// uses for buildings — no risky vtable Draw/Remove calls.
+// Citizens all render identically because ModelComponent::Startup sets the
+// mesh group from a FIXED description field and the per-citizen pick that the
+// original performs in the deferred citizen init (FUN_140117080 -> FUN_1401253d0)
+// is guarded off in standalone. This helper reproduces the safe core of
+// FUN_1401253d0: choose a random mesh group within the description's valid range,
+// then SetMesh the matching mesh into the MeshInstance (+0x28). It touches ONLY the
+// same fields/SetMesh path ModelComponent::Startup already uses for buildings — no
+// risky vtable Draw/Remove calls.
 //
-// MUST be called AFTER the component's Serialize (so +0x166 is populated) and
+// MUST be called AFTER the component's Startup (so meshIndex is populated) and
 // BEFORE the entity is registered (so the entity's OnAdded adds the new mesh to
-// the scene). desc+0x28 is the variant-group count (the same field the building
-// randomize path uses as its Rand range), so the pick is always in-bounds.
+// the scene). The description's mesh-group count is the same field the building
+// randomize path uses as its Rand range, so the pick is always in-bounds.
 //
-// Returns the chosen variant index, or -1 if no change was made. `forceIdx` picks
-// a specific variant GROUP (e.g. gender: retail uses variantIdx=(gender==0)?1:0);
+// Returns the chosen group index, or -1 if no change was made. `forceIdx` picks
+// a specific GROUP (e.g. gender: retail uses group=(gender==0)?1:0);
 // pass -1 to keep the original random pick over the group count.
 extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
     if (!modelComp) return -1;
     if (GameUpdateLoop::_singleton == nullptr) return -1;
-    uintptr_t s = (uintptr_t)modelComp;
+    // LEFT: starttown.cpp hands the component as void*.
+    ModelComponent* self = reinterpret_cast<ModelComponent*>(modelComp);
 
-    void* desc = GetMultiObjDescription(s);
+    ModelDescription* desc = LinkedModelDescription(self);
     if (!desc) return -1;
-    uintptr_t d = (uintptr_t)desc;
 
-    // Variant-group count (desc+0x28). Nothing to randomize over <= 1 group.
-    uint32_t count = *(uint32_t*)(d + 0x28);
+    // Mesh-group count. Nothing to randomize over <= 1 group.
+    uint32_t count = static_cast<uint32_t>(desc->_meshGroupCount);
     if (count <= 1) return -1;
 
-    int16_t variantIdx;
+    int16_t meshGroup;
     if (forceIdx >= 0) {
-        variantIdx = (int16_t)((uint32_t)forceIdx % count);   // clamp into range
+        meshGroup = (int16_t)((uint32_t)forceIdx % count);   // clamp into range
     } else {
-        void* randomPtr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
-        if (!randomPtr) return -1;
-        variantIdx = (int16_t)reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
+        System::Random* random = GameUpdateLoop::_singleton->m_random;
+        if (!random) return -1;
+        meshGroup = (int16_t)random->Rand(static_cast<uint32_t>(count));
     }
-    *(int16_t*)(s + 0x164) = variantIdx;
+    self->meshGroup = meshGroup;
 
-    // Keep the model variant Serialize already chose (+0x166); skip if it has no
-    // renderable mesh ( < 0 ).
-    int16_t modelVariant = *(int16_t*)(s + 0x166);
-    if (modelVariant < 0) return -1;
+    // Keep the mesh index Startup already chose; skip if it has no renderable
+    // mesh ( < 0 ).
+    int16_t meshIndex = self->meshIndex;
+    if (meshIndex < 0) return -1;
 
-    void* meshResource = GetMeshFromDescription(desc, variantIdx, modelVariant);
-    if (!meshResource) return -1;
-    reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
-        ->SetMesh(Graphics::ExternalPtrHandle{meshResource});   // B.3.5 bridge
-    return variantIdx;
+    Graphics::GraphicsMesh* mesh = GetMeshFromDescription(desc, meshGroup, meshIndex);
+    if (!mesh) return -1;
+    // LEFT: ModelComponent::meshInstance is raw storage (H5).
+    reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+        ->SetMesh(Graphics::ExternalPtrHandle{mesh});
+    return meshGroup;
 }
 
 
@@ -203,102 +200,87 @@ ModelComponent::~ModelComponent() {
 // ============================================================
 // ModelComponent::Persist (vtable slot [3], 0x140124b70)
 // ============================================================
-// Serializes mesh state: variant indices, transform, scale, mesh instance data,
+// Serializes mesh state: mesh group / index, transform, yaw, mesh instance data,
 // and a boolean flag for whether modelId is valid.
 //
-// On load (serializer direction == 0): if variant >= 0, calls SetMesh to
-// restore the mesh from the description resource arrays.
-// Also conditionally calls vtable Draw (+0x30) to re-add to scene.
+// On load (serializer direction == 0): if meshIndex >= 0, calls SetMesh to
+// restore the mesh from the description's mesh groups.
+// Also conditionally calls OnAdded (+0x30) to re-add to scene.
 
 void ModelComponent::Persist(void* stream) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
     // Base class serialize
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    // Create IO::Serializer (version 0)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Serialize variant index (+0x164 as short) and model variant (+0x166 as short)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x164), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(s + 0x166), nullptr);   // B.3.4 bridge
+    ser.Serialize(meshGroup, nullptr);
+    ser.Serialize(meshIndex, nullptr);
 
-    // Serialize Math::Transform at +0x148 (slot 0x1401522e0)
-    reinterpret_cast<Math::Transform*>(s + 0x148)->Serialize(serializer);   // B.3.1 bridge
+    // Math::Transform at +0x148 (slot 0x1401522e0). LEFT: raw storage (H5).
+    reinterpret_cast<Math::Transform*>(transform)->Serialize(&ser);
 
-    // Serialize scale float at +0x168
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x168), nullptr);   // B.3.4 bridge
+    ser.Serialize(yaw, nullptr);
 
-    // On load: if model variant >= 0, restore mesh from description
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        int16_t modelVariant = *(int16_t*)(s + 0x166);
-        if (modelVariant >= 0) {
-            void* desc = GetMultiObjDescription(s);
-            void* meshResource = GetMeshFromDescription(
-                desc, *(int16_t*)(s + 0x164), modelVariant);
+    // LEFT: ModelComponent::meshInstance is raw storage (H5).
+    Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(meshInstance);
+
+    // On load: if the mesh index is set, restore the mesh from the description
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        if (meshIndex >= 0) {
+            ModelDescription* desc = LinkedModelDescription(this);
+            Graphics::GraphicsMesh* meshResource = GetMeshFromDescription(desc, meshGroup, meshIndex);
             if (meshResource) {
-                reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
-                    ->SetMesh(Graphics::ExternalPtrHandle{meshResource});   // B.3.5 bridge
+                mesh->SetMesh(Graphics::ExternalPtrHandle{meshResource});
             }
         }
     }
 
-    // Serialize MeshInstance sub-object
-    reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
-        ->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.5 bridge
+    // Serialize the MeshInstance sub-object
+    mesh->Serialize(ser);
 
     // Serialize bool flag: modelId >= 0
     bool hasModelId = (modelId >= 0);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasModelId, nullptr);   // B.3.4 bridge
+    ser.Serialize(hasModelId, nullptr);
 
-    // On load: if flag was set, call vtable Draw (+0x30) to re-register in scene
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0 && hasModelId) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    // On load: if flag was set, re-register in the scene
+    if (static_cast<int>(ser.GetDirection()) == 0 && hasModelId) {   // IO::Serializer::GetDirection, retail 0x180006210
         // Slot 6 (+0x30, OnAdded) on this, a virtual dispatch in retail.
         OnAdded();
     }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // ============================================================
 // ModelComponent::Startup (vtable slot [4], 0x140124ac0)
 // ============================================================
-// Reads building data from MultiObjectDescription, sets variant indices,
-// optionally randomizes variant, calls SetMesh if variant >= 0.
+// Reads the default mesh group / index from the ModelDescription, optionally
+// randomizes the group, calls SetMesh if the index >= 0.
 
 void ModelComponent::Startup() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    void* desc = GetMultiObjDescription(s);
+    ModelDescription* desc = LinkedModelDescription(this);
     if (!desc) return;
-    uintptr_t d = (uintptr_t)desc;
 
-    // Read variant index from description +0x30 (as short -> stored at +0x164)
-    *(int16_t*)(s + 0x164) = *(int16_t*)(d + 0x30);
+    meshGroup = static_cast<int16_t>(desc->_defaultMeshGroup);
 
-    // If description +0x38 (byte flag) is set, randomize the variant index
-    if (*(uint8_t*)(d + 0x38) != 0) {
+    // If the description asks for it, randomize the mesh group
+    if (desc->_randomMeshGroup) {
         if (GameUpdateLoop::_singleton != nullptr) {
-            void* randomPtr = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xd8);
-            uint32_t range = *(uint32_t*)(d + 0x28);
-            uint32_t randVal = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
-            *(int16_t*)(s + 0x164) = (int16_t)randVal;
+            System::Random* random = GameUpdateLoop::_singleton->m_random;
+            uint32_t range = static_cast<uint32_t>(desc->_meshGroupCount);
+            uint32_t randVal = random->Rand(static_cast<uint32_t>(range));
+            meshGroup = (int16_t)randVal;
         }
     }
 
-    // Read model variant from description +0x34
-    int16_t modelVariant = *(int16_t*)(d + 0x34);
-    *(int16_t*)(s + 0x166) = modelVariant;
+    int16_t index = static_cast<int16_t>(desc->_defaultMeshIndex);
+    meshIndex = index;
 
-    // If variant >= 0, set the mesh
-    void* meshResource = nullptr;
-    if (modelVariant >= 0) {
-        meshResource = GetMeshFromDescription(
-            desc, *(int16_t*)(s + 0x164), modelVariant);
+    // If the index >= 0, set the mesh
+    if (index >= 0) {
+        Graphics::GraphicsMesh* meshResource = GetMeshFromDescription(desc, meshGroup, index);
         if (meshResource) {
-            reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
-                ->SetMesh(Graphics::ExternalPtrHandle{meshResource});   // B.3.5 bridge
+            // LEFT: ModelComponent::meshInstance is raw storage (H5).
+            reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
+                ->SetMesh(Graphics::ExternalPtrHandle{meshResource});
         }
     }
 
@@ -307,7 +289,7 @@ void ModelComponent::Startup() {
 // ModelComponent::OnAdded (vtable slot [6], 0x140124a30)
 // ============================================================
 // Adds mesh geometry to the Graphics::Scene for rendering.
-// Only acts if variant >= 0 and not yet in scene (modelId < 0).
+// Only acts if meshIndex >= 0 and not yet in scene (modelId < 0).
 
 #if defined(_DEBUG)
 // [ModelComponent::OnAdded] trace budget (B6-5: namespace-scope atomic).
@@ -315,41 +297,39 @@ static std::atomic<int> s_modelDrawLog{0};
 #endif
 
 void ModelComponent::OnAdded() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    const int16_t index = meshIndex;
+    const int32_t id0 = modelId;
 
-    int16_t modelVariant = *(int16_t*)(s + 0x166);
-    int32_t modelId = *(int32_t*)(s + 0x16c);
-
-    if (modelVariant >= 0 && modelId < 0) {
+    if (index >= 0 && id0 < 0) {
         // IsDerivedFrom check (result unused in original — just side effect?)
         // cell 0x1401c7a88 = ModelDescription (the old "MultiObjDesc" name lied)
-        (void)::Object::IsDerivedFromNullSafe(*(void**)(s + 0x18), ModelDescription::TypeId());
+        Description* desc = _description;
+        (void)::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId());
 
-        // Set transform on the geometry sub-object
-        reinterpret_cast<Graphics::Geometry*>(s + 0x28)
-            ->SetTransform(*reinterpret_cast<const Math::Transform*>(s + 0x148));   // B.3.5 bridge
+        // LEFT: ModelComponent::meshInstance / transform are raw storage (H5).
+        Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(meshInstance);
+        mesh->SetTransform(*reinterpret_cast<const Math::Transform*>(transform));
 
-        // Call MeshInstance::Update with Time(0) via vtable +0x8
+        // MeshInstance::Update with Time(0) (Geometry slot 1)
         {
-            uint8_t timeObj[8];
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), 0.0f);   // slot 0x140152b00
-            reinterpret_cast<Graphics::Geometry*>(s + 0x28)->Update(
-                *reinterpret_cast<const System::Time*>(timeObj));   // B.3.x bridge (Geometry slot 1)
+            System::Time timeObj{0};
+            RtSystem_Time_Ctor(&timeObj, 0.0f);   // slot 0x140152b00
+            mesh->Update(timeObj);
         }
 
         // Add to scene
         if (GameUpdateLoop::_singleton) {
-            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
+            // LEFT: GameUpdateLoop::m_graphicsScene is void* (W0 header).
+            Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
             if (scene) {
-                uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
-                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(s + 0x28));   // B.3.5 bridge
-                *(uint32_t*)(s + 0x16c) = id;
-                SceneWatch_Note(id, (void*)(s + 0x28), "ModelComponent::Draw");
+                uint32_t id = scene->AddObject(mesh);
+                modelId = static_cast<int32_t>(id);
+                SceneWatch_Note(id, mesh, "ModelComponent::Draw");
 #if defined(_DEBUG)
                 if (s_modelDrawLog.fetch_add(1, std::memory_order_relaxed) < 10) {
                     fprintf(stderr, "[ModelComponent::OnAdded] self=%p scene=%p "
                             "modelVariant=%d sceneObjId=%u\n",
-                            (void*)this, scene, (int)modelVariant, id);
+                            (void*)this, static_cast<void*>(scene), (int)index, id);
                     fflush(stderr);
                 }
 #endif
@@ -363,45 +343,39 @@ void ModelComponent::OnAdded() {
 // Removes mesh from Scene and resets modelId. Notifies owner entity.
 
 void ModelComponent::OnRemove() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    const int16_t index = meshIndex;
+    const int32_t id0 = modelId;
 
-    int16_t modelVariant = *(int16_t*)(s + 0x166);
-    int32_t modelId = *(int32_t*)(s + 0x16c);
-
-    if (modelVariant >= 0 && modelId >= 0) {
+    if (index >= 0 && id0 >= 0) {
         // Remove from scene
         if (GameUpdateLoop::_singleton) {
-            void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x60);
+            // LEFT: GameUpdateLoop::m_graphicsScene is void* (W0 header).
+            Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
             if (scene) {
-                reinterpret_cast<Graphics::Scene*>(scene)
-                    ->RemoveObject((uint32_t)modelId);   // B.3.5 bridge
+                scene->RemoveObject((uint32_t)id0);
             }
         }
 
-        // Reset modelId to -1
-        *(int32_t*)(s + 0x16c) = -1;
+        modelId = -1;
 
         // Check owner and notify
-        void* ownerEntity = *(void**)(s + 0x10);
-        if (ownerEntity) {
-            ModelComponentNotify_Reimpl(ownerEntity, 0);   // 0x1400c2b70
+        if (_entity) {
+            _entity->SendEvent(0);   // 0x1400c2b70
         }
     }
 }
 // ============================================================
 // ModelComponent::Tick (vtable slot [8], 0x140124960)
 // ============================================================
-// Calls MeshInstance vtable +0x8 (Update), checks IsAnimating.
-// If not animating, clears draw flag bit 2 from +0x20, notifies entity.
+// Calls MeshInstance Update (Geometry slot 1), checks IsAnimating.
+// If not animating, clears draw flag bit 2 from _flags, notifies entity.
 // NOTE: RDX (time) is forwarded implicitly by the caller.
 
 void ModelComponent::Tick(void* time) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    // Call MeshInstance vtable +0x8 (Update) — RDX contains time pointer
     // The embedded MeshInstance (+0x28) is always constructed (the ctor builds it), so
     // the old null-slot test of its table is gone with the by-name call.
-    Graphics::Geometry* mesh = reinterpret_cast<Graphics::Geometry*>(s + 0x28);   // B.3.x bridge (slot 1)
+    // LEFT: ModelComponent::meshInstance is raw storage (H5).
+    Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(meshInstance);
     {
         // [PerfX ANIM_CULL -- NON-RETAIL] On the last speed-iteration retail poses every
         // animated mesh (AnimationState::UpdateNodes). A mesh outside the camera frustum
@@ -419,32 +393,30 @@ void ModelComponent::Tick(void* time) {
         // non-instanced root-motion model is ticked normally (PerfX::AnimBatchDecide).
         int64_t batchedTime = 0;
         if (PerfX::AnimBatchDecide(this, time, &batchedTime)) return;
-        void* timeArg = &batchedTime;
+        const System::Time t{batchedTime};
         if (PerfX::AnimCullSkip(this)) {
             uint8_t* flag = PerfX::RootOnlyFlag();
             *flag = 1;
-            mesh->Update(*reinterpret_cast<const System::Time*>(timeArg));
+            mesh->Update(t);
             *flag = 0;
         } else {
-            mesh->Update(*reinterpret_cast<const System::Time*>(timeArg));
+            mesh->Update(t);
         }
     }
 
     // Check if still animating
     {
-        bool animating = reinterpret_cast<const Graphics::MeshInstance*>(s + 0x28)
-                             ->IsAnimating();   // B.3.5 bridge
+        bool animating = mesh->IsAnimating();
         if (!animating) {
-            // Clear flag bit 2 (0x04) from flags at +0x20
-            uint32_t oldFlags = *(uint32_t*)(s + 0x20);
+            // Clear flag bit 2 (0x04)
+            uint32_t oldFlags = _flags;
             uint32_t newFlags = oldFlags & ~0x04u;
-            *(uint32_t*)(s + 0x20) = newFlags;
+            _flags = newFlags;
 
             // If flags actually changed (low 16 bits) and owner is non-null, notify
             if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
-                void* ownerEntity = *(void**)(s + 0x10);
-                if (ownerEntity != nullptr) {
-                    ActHunt_NotifyEntityChanged_c3470(*(void**)(s + 0x10));   // 0x1400c3470
+                if (_entity != nullptr) {
+                    _entity->RefreshEntityFlags();   // 0x1400c3470
                 }
             }
         }

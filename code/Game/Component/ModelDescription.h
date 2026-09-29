@@ -58,9 +58,9 @@ public:
     ModelMeshGroup* _meshGroups;                // +0x20 Array<ModelMeshGroup> data
     int32_t _meshGroupCount;                    // +0x28
     int32_t _meshGroupCap;                      // +0x2c
-    int32_t _lod0;                              // +0x30
-    int32_t _lod1;                              // +0x34
-    bool _castShadow;                           // +0x38
+    int32_t _defaultMeshGroup;                              // +0x30
+    int32_t _defaultMeshIndex;                              // +0x34
+    bool _randomMeshGroup;                           // +0x38
     uint8_t _pad39[7];                          // +0x39 never written by the ctor
 };
 
@@ -69,6 +69,6 @@ static_assert(alignof(ModelDescription) == 8, "ModelDescription alignment");
 static_assert(offsetof(ModelDescription, _meshGroups) == 0x20, "ModelDescription::_meshGroups @ +0x20");
 static_assert(offsetof(ModelDescription, _meshGroupCount) == 0x28, "ModelDescription::_meshGroupCount @ +0x28");
 static_assert(offsetof(ModelDescription, _meshGroupCap) == 0x2c, "ModelDescription::_meshGroupCap @ +0x2c");
-static_assert(offsetof(ModelDescription, _lod0) == 0x30, "ModelDescription::_lod0 @ +0x30");
-static_assert(offsetof(ModelDescription, _lod1) == 0x34, "ModelDescription::_lod1 @ +0x34");
-static_assert(offsetof(ModelDescription, _castShadow) == 0x38, "ModelDescription::_castShadow @ +0x38");
+static_assert(offsetof(ModelDescription, _defaultMeshGroup) == 0x30, "ModelDescription::_defaultMeshGroup @ +0x30");
+static_assert(offsetof(ModelDescription, _defaultMeshIndex) == 0x34, "ModelDescription::_defaultMeshIndex @ +0x34");
+static_assert(offsetof(ModelDescription, _randomMeshGroup) == 0x38, "ModelDescription::_randomMeshGroup @ +0x38");
