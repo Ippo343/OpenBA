@@ -260,13 +260,18 @@ public:
         ::Transform _bind;     // +0x28 .. +0x43  ctor: identity; see above
         uint32_t  _pad44;             // +0x44  past the ctor's last store
 
+        // ??4Node@GraphicsMesh@Graphics@@QEAAAEAU012@AEBU012@@Z 0x180012880 — not ported
+        // ?Serialize@Node@…QEAAXAEAVSerializer@IO@@@Z       0x1800ff0d0 — not ported
         // ??0Node@GraphicsMesh@Graphics@@QEAA@XZ            0x180012550 — not ported
         // ??0Node@GraphicsMesh@Graphics@@QEAA@AEBU012@@Z    0x1800127f0 — PORTED,
         //   registered in `runtime/src/graphics/animationstate.cpp` (the one
         //   `GraphicsMesh` fragment in that file, B35_FILEMAP.md:97)
         // ??1Node@GraphicsMesh@Graphics@@QEAA@XZ            0x1800127b0 — not ported
-        // ??4Node@GraphicsMesh@Graphics@@QEAAAEAU012@AEBU012@@Z 0x180012880 — not ported
-        // ?Serialize@Node@…QEAAXAEAVSerializer@IO@@@Z       0x1800ff0d0 — not ported
+        //
+        // B.4: the default ctor stays UNDECLARED -- the unit test pins
+        // `!is_default_constructible<Node>` -- and so no `Array<Node>` can carry
+        // its element type (the trait-derived element init names `Node()`).
+        // Every `Array<Node>` stays a raw header; `GetNodes` is the one view.
         Node(const Node& src);
         Node& operator=(const Node& src);
         ~Node();
@@ -320,7 +325,9 @@ public:
         // retail's own addresses (`SetSize` 0x1800136f0, `~Array` through
         // `array_graphics_mesh.cpp`), and the typed form would make the compiler
         // emit a SECOND element lifecycle beside the ported one.
-        Collection::Array<uint8_t> _triangleLists;        // +0x98  ?GetTriangleLists@
+        // B.4: typed. TriangleList is trivially destructible, so the implicit
+        // member dtor is the same Clear-then-J1 as the raw header's.
+        Collection::Array<TriangleList> _triangleLists;   // +0x98  ?GetTriangleLists@
         int32_t  _maxInstances;          // +0xa8  ?GetMaxInstances@
         uint32_t _padAC;                 // +0xac  no body read touches it
     };
@@ -407,9 +414,16 @@ public:
     const Video::VertexBuffer& GetVertexBuffer(int32_t level) const;     // 0x1800125e0
     const Video::IndexBuffer&  GetSkinIndexBuffer(int32_t level) const;  // 0x180012600
     const Video::VertexBuffer& GetSkinVertexBuffer(int32_t level) const; // 0x180012620
-    const Collection::Array<uint8_t>& GetTriangleLists(int32_t level) const; // 0x180012640
+    // B.4: retail's `const Array<TriangleList>&` (`?GetTriangleLists@…QEBAAEBV?$
+    // Array@UTriangleList@…@H@Z`). Declared, not ported.
+    const Collection::Array<TriangleList>& GetTriangleLists(int32_t level) const; // 0x180012640
     float   GetDetailLevelDistance(int32_t level) const;   // 0x180012660
-    const Collection::Array<uint8_t>& GetNodes() const;    // 0x180012690
+    // 0x180012690 `LEA RAX,[RCX+0x60]; RET`, retail's `const Array<Node>&`.
+    // B.4: PORTED, inline. LEFT: `_nodes` stays the raw header (see `Node`),
+    // so this is the one view of it as its element type.
+    const Collection::Array<Node>& GetNodes() const {
+        return *reinterpret_cast<const Collection::Array<Node>*>(&_nodes);
+    }
     float   GetMaxDepthDistance() const;                   // 0x180012680
     int32_t GetSkinCount() const;                          // 0x1800126a0
     const Collection::Array<Object::ExternalPtr<MaterialInstance> >&
@@ -483,6 +497,10 @@ public:
     // The three arrays, all RAW 16-byte headers for `AnimationGroup.h`'s reason
     // (see `DetailLevel::_triangleLists`). The true element types and the
     // registered `SetSize` addresses are named beside each.
+    // B.4: they STAY raw (LEFT). `Node` has no default ctor (the unit test pins
+    // it), and the unit test writes a size into `_detailLevels` /
+    // `_skinMaterials` over a null buffer and lets the implicit member dtors run:
+    // a typed member would then destroy elements that do not exist.
     Collection::Array<uint8_t> _detailLevels;   // +0x50  Array<DetailLevel>, stride 0xb0,
                                                 //        SetSize 0x18005d840, ~Array 0x180013fb0
     Collection::Array<uint8_t> _nodes;          // +0x60  Array<Node>, stride 0x48,

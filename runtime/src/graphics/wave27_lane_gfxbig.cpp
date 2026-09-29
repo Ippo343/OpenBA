@@ -107,6 +107,7 @@
 
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "../../types/graphics/AnimationGroup.h"   // B.4: AnimationGroup::GetAnimation
 #include "../../types/graphics/Animation.h"   // ENDGAME B.3.5 closing pass:
                                               // Graphics::Animation, the clip record
                                               // ApplyEvents is called on
@@ -123,10 +124,6 @@
 
 namespace rtgfxbig {
 
-using RtGraphics::AnimationClipPrefix;
-using RtGraphics::AnimationLayer;
-using RtGraphics::AnimationState;
-using RtGraphics::InterpolatedTransform;
 using RtGraphics::MaterialBinding;
 using RtGraphics::MaterialInstance;
 using RtGraphics::MaterialParameterSet;
@@ -592,15 +589,6 @@ extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void
 // ----------------------------------------------------------------------------
 namespace {
 
-using CopyInstancedFn = void (*)(AnimationState*, const void* nodes, const void* base,
-                                 void* interp, int32_t);
-using UpdateRootFn    = void (*)(AnimationState*, float dt, void* outVec3);
-using UpdateNodesFn   = void (*)(AnimationState*, float dt, const void* nodes,
-                                 const void* base, void* interpA, void* interpB,
-                                 void* outVec3);
-using ApplyEventsFn   = void (*)(const void* clip, const void* base,
-                                 const int64_t* fromTime, const int64_t* toTime);
-
 // `System::Timer::_secondsPerTick`, retail 0x1801fe728 — a DOUBLE in .data's
 // uninitialised tail, written at engine startup. ENDGAME B.3.9 close (D7): the
 // class static, read fresh -- the cached by-address door is gone.
@@ -608,36 +596,24 @@ inline double SecondsPerTick() {
     return ::System::Timer::_secondsPerTick;
 }
 
-// `Graphics::AnimationManager::_singleton`, retail 0x1801fe7b0 — the same global
-// animation.cpp:179 already resolves. Read here only to reach the 0x30-stride
-// group record a dying layer's handle names.
-// ENDGAME B.3.9 GFX: the class static, not the lazy by-address cache (D7 A44).
-inline uint8_t* AnimManagerGroups() {
-    uint8_t* const mgr = reinterpret_cast<uint8_t*>(Graphics::AnimationManager::_singleton);
-    if (!mgr) return nullptr;
-    return *reinterpret_cast<uint8_t**>(mgr);      // _singleton->_groupData
-}
-
 }  // namespace
 
 // ENDGAME B.3.5 block GC: THE BODY MOVED to
 // `Graphics::AnimationState::Update`, in this file's trailing `namespace Graphics`
 // block. It cannot live here: everything above is inside `namespace rtgfxbig` and
-// `Graphics` is its SIBLING, not its child (B34_BRIEFS A.2). Block H1 left the
-// body here because this file is not block H1's; the door keeps its name, its
-// registration and its two counters.
+// `Graphics` is its SIBLING, not its child (B34_BRIEFS A.2). The door keeps its
+// name and its counter. B.4: its one caller (`AnimationManager::GetInstanceId`,
+// animationstate_transforms.cpp) holds typed pointers, so the door takes them.
 extern "C" bool RtGraphics_AnimationState_Update(
-        void* self, const void* time, const void* nodes, const void* baseTransform,
-        void* interpA, void* interpB, void* outVec3, bool rootOnly, bool applyEvents) {
+        Graphics::AnimationState* self, const System::Time* time,
+        const Collection::Array<Graphics::GraphicsMesh::Node>* nodes,
+        const Math::Transform* baseTransform,
+        Graphics::InterpolatedState<Math::Transform>* interp, Math::Transform* pose,
+        Math::Vector3* outVec3, bool rootOnly, bool applyEvents) {
     Attend("AnimationState::Update", g_animStateCalls);
-    return reinterpret_cast<Graphics::AnimationState*>(self)            // B.3.5 bridge
-        ->Graphics::AnimationState::Update(
-            *reinterpret_cast<const System::Time*>(time),
-            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodes),
-            *reinterpret_cast<const Math::Transform*>(baseTransform),
-            interpA, interpB,
-            *reinterpret_cast<Math::Vector3*>(outVec3),                 // B.3.5 bridge
-            rootOnly, applyEvents);
+    return self->Graphics::AnimationState::Update(*time, *nodes, *baseTransform,
+                                                  interp, pose, *outVec3,
+                                                  rootOnly, applyEvents);
 }
 
 // One line beside the other wave summaries, so a run that entered none of these
@@ -824,27 +800,22 @@ void MaterialInstance::BuildParameters() {
 // call site below.
 // ---------------------------------------------------------------------------
 bool AnimationState::Update(const System::Time& timeRef,
-                            const Collection::Array<uint8_t>& nodesRef,
-                            const Math::Transform& root, void* interpA, void* interpB,
+                            const Collection::Array<GraphicsMesh::Node>& nodes,
+                            const Math::Transform& root,
+                            InterpolatedState<Math::Transform>* interp,
+                            Math::Transform* pose,
                             Math::Vector3& rootOffsetOut, bool rootOnly, bool applyEvents) {
-    RtGraphics::AnimationState* const s =
-        reinterpret_cast<RtGraphics::AnimationState*>(this);   // B.3.5 bridge
-    const void* const nodes = &nodesRef;
-    const void* const baseTransform = &root;
-    void* const outVec3 = &rootOffsetOut;
     const int64_t deltaTicks = timeRef._ticks;
 
     // MOVSS [RBX],XMM7 x3 — the out Vector3 is zeroed before the early return,
     // so a caller that ignores the `false` still sees a defined value.
-    float* const out = static_cast<float*>(outVec3);
-    out[0] = 0.0f; out[1] = 0.0f; out[2] = 0.0f;
+    rootOffsetOut.x = 0.0f; rootOffsetOut.y = 0.0f; rootOffsetOut.z = 0.0f;
 
-    if (s->layerCount == 0) return false;          // CMP [RCX+0x10],0 / XOR AL,AL
+    if (_layers._size == 0) return false;          // CMP [RCX+0x10],0 / XOR AL,AL
 
-    s->layers[0].restarted = 1;                    // MOV BYTE PTR [RAX+0x30],1
+    _layers._data[0]._restarted = true;            // MOV BYTE PTR [RAX+0x30],1
 
-    const int32_t nodeCount = *reinterpret_cast<const int32_t*>(
-        static_cast<const uint8_t*>(nodes) + 8);   // MOVSXD R14,[R8+8]
+    const int32_t nodeCount = nodes._size;         // MOVSXD R14,[R8+8]
 
     // seconds = ticks * _secondsPerTick, computed in DOUBLE and then narrowed to
     // float by CVTPD2PS — NOT computed in float. The association order is
@@ -854,60 +825,48 @@ bool AnimationState::Update(const System::Time& timeRef,
     const float dt = static_cast<float>(
         static_cast<double>(deltaTicks) * rtgfxbig::SecondsPerTick());
 
-    const int32_t layerCount = s->layerCount;
-    RtGraphics::AnimationLayer* const lastLayer = s->layers + (layerCount - 1);
+    const int32_t layerCount = _layers._size;
+    Layer* const lastLayer = _layers._data + (layerCount - 1);
 
-    if (layerCount == 1 && lastLayer->handle >= 0) {
+    if (layerCount == 1 && lastLayer->_handle >= 0) {
         // CMP ECX,0x1 / JNE, then CMP [RDX+0xc],0 / JL, then MOV [RSI],CL —
         // and CL is the LAYER COUNT, which on this branch is exactly 1.
-        s->needsUniqueCopy = 1;
+        _needsUniqueCopy = true;
     } else {
-        if (s->needsUniqueCopy != 0) {
+        if (_needsUniqueCopy) {
             this->Graphics::AnimationState::CopyInstancedToUnique(
-                nodesRef, root, interpA, lastLayer->handle);
-            s->needsUniqueCopy = 0;
+                nodes, root, interp, lastLayer->_handle);
+            _needsUniqueCopy = false;
         }
         if (rootOnly) {
             this->Graphics::AnimationState::UpdateRootOnly(dt, rootOffsetOut);
         } else {
             this->Graphics::AnimationState::UpdateNodes(
-                dt, nodesRef, root, interpA, interpB, rootOffsetOut);
+                dt, nodes, root, interp, pose, rootOffsetOut);
         }
     }
 
     // A zero frame delta SNAPSHOTS every node's interpolated pair, so an
     // interpolation at any alpha yields the same pose. Copy direction is
-    // +0x00 -> +0x1c; see AnimationState.h on why the members are named by
-    // position rather than by role.
+    // _current (+0x00) -> _previous (+0x1c). A trivially-copyable Transform
+    // assignment is a bit copy (retail: seven dword moves).
     if (deltaTicks == 0 && nodeCount > 0) {
-        RtGraphics::InterpolatedTransform* const it = static_cast<RtGraphics::InterpolatedTransform*>(interpA);
-        for (int32_t i = 0; i < nodeCount; ++i) {
-            const uint32_t* const src =
-                reinterpret_cast<const uint32_t*>(&it[i].first[0]);
-            uint32_t* const dst = reinterpret_cast<uint32_t*>(&it[i].second[0]);
-            // INTEGER moves of float storage: retail copies dwords (MOV EAX,...),
-            // which is bit-exact where a float assignment is only value-exact.
-            // The two differ on a signalling NaN and on negative zero
-            // (wave23_lane_gfxbody.cpp §5.3 gives the same reason).
-            for (int k = 0; k < 7; ++k) dst[k] = src[k];
-        }
+        for (int32_t i = 0; i < nodeCount; ++i)
+            interp[i]._previous = interp[i]._current;
     }
 
     // ---------------- the layer loop --------------------------------------
     // The bound is RE-READ at the bottom (`CMP R12D,[RSI+0x10]` at 0x1800fdefd)
     // because the removal arm DECREMENTS it mid-loop.
-    for (int32_t li = 0; li < s->layerCount; ++li) {
+    for (int32_t li = 0; li < _layers._size; ++li) {
         // `layers` is reloaded at the TOP of every iteration (MOV R15,[RSI+8]).
-        RtGraphics::AnimationLayer* const L = s->layers + li;
+        Layer* const L = _layers._data + li;
         ++rtgfxbig::g_animStateLayers;
 
-        const uint8_t* const group = static_cast<const uint8_t*>(L->group);
-        const RtGraphics::AnimationClipPrefix* const clip =
-            reinterpret_cast<const RtGraphics::AnimationClipPrefix*>(
-                *reinterpret_cast<const uint8_t* const*>(group + 0x20) +
-                static_cast<int64_t>(L->clipIndex) * 0x70);
+        // `?GetAnimation@AnimationGroup@` inlined: `_clips + clipIndex * 0x70`.
+        const Animation& clip = L->_group->GetAnimation(L->_clipIndex);
 
-        const int64_t duration = clip->duration;
+        const int64_t duration = clip._duration;
 
         // At speed exactly 1.0 the frame delta is used VERBATIM in ticks — no
         // round trip through seconds. UCOMISS + JP + JNE, so a NaN speed takes
@@ -915,49 +874,30 @@ bool AnimationState::Update(const System::Time& timeRef,
         // comparison in C++ has the same NaN behaviour, but the ORDER of the two
         // branches is retail's.
         int64_t advance;
-        if (L->speed == 1.0f) {
+        if (L->_speed == 1.0f) {
             advance = deltaTicks;
         } else {
             // ticks = (int64)((double)(speed * dtSeconds) / _secondsPerTick).
             // MULSS in FLOAT first, then widened by CVTPS2PD, then DIVSD, then
             // CVTTSD2SI (truncation toward zero). Every step in that order.
-            const float scaled = L->speed * dt;
+            const float scaled = L->_speed * dt;
             advance = static_cast<int64_t>(static_cast<double>(scaled) / rtgfxbig::SecondsPerTick());
         }
 
-        int64_t newTime = advance + L->time;
+        int64_t newTime = advance + L->_time._ticks;
 
-        if (applyEvents && li == 0 && clip->eventCount > 0) {
+        if (applyEvents && li == 0 && clip._events._size > 0) {
             // ApplyEvents(base, fromTime, toTime) — fromTime is the layer's
-            // CURRENT time and toTime a local holding the new one, so retail hands
-            // it a reference INTO the layer and a reference to its own stack. The
-            // order matters: the store of `newTime` into the layer happens AFTER
-            // this call (0x1800fdd80), so the callee sees the OLD value through its
-            // third argument -- and it still does here, because `L->time` is bound
-            // as a reference at the call and `L->time = newTime` is the next
-            // statement.
-// THE CLIP RECORD *IS* A `Graphics::Animation`, and the note that used to say
-// otherwise is withdrawn. The proof is retail's own mangled RETURN TYPE:
-//   ?GetAnimation@AnimationGroup@Graphics@@QEBAAEBVAnimation@2@H@Z  0x180016660
-// is the element helper over `AnimationGroup::_clips` and its body is an
-// `imul $0x70` -- so retail names the element type `Graphics::Animation` and fixes
-// the stride at 0x70 in the same symbol. `AnimationGroup.h:185/195` asserts the
-// array at +0x20, `Animation.h:453` asserts `sizeof(Graphics::Animation) == 0x70`
-// (block H1 measured it three ways), and this lane's own `LayerClip()` computes
-// exactly `*(uint8_t**)(group + 0x20) + clipIndex * 0x70` -- i.e. `&_clips[i]` of
-// that same array. Receiver settled; the `AnimationClipPrefix` POD stays, because
-// the hand-inlined FIELD reads around the call are not doors and stay
-// byte-identical.
-            reinterpret_cast<const Graphics::Animation*>(clip)   // B.3.5 bridge
-                ->Graphics::Animation::ApplyEvents(
-                    *reinterpret_cast<const Math::Transform*>(baseTransform),
-                    *reinterpret_cast<const System::Time*>(&L->time),
-                    *reinterpret_cast<const System::Time*>(&newTime));
+            // CURRENT time and toTime a local holding the new one. The store of
+            // `newTime` into the layer happens AFTER this call (0x1800fdd80), so
+            // the callee sees the OLD value through its second argument.
+            const System::Time to = { newTime };
+            clip.Graphics::Animation::ApplyEvents(root, L->_time, to);
         }
 
-        L->time = newTime;
+        L->_time._ticks = newTime;
 
-        if (clip->looping != 0) {
+        if (clip._looping) {
             if (newTime >= duration) {
                 // Retail's do/while subtract, not a modulo: `SUB RBX,RDI` in a
                 // loop while `RBX >= RDI` (0x1800fdd90). Identical result for
@@ -966,107 +906,79 @@ bool AnimationState::Update(const System::Time& timeRef,
                 // zero-duration looping clip is a data defect retail would also
                 // hang on and a guard would hide it.
                 do { newTime -= duration; } while (newTime >= duration);
-                L->time = newTime;
+                L->_time._ticks = newTime;
 
                 // The restart offset. loopFrame == 0 short-circuits the entire
                 // fraction to zero (TEST EAX,EAX / JNZ at 0x1800fdd9f), which is
                 // NOT the same as computing it and getting zero: with
                 // frameLast == frameFirst the division would be 0/0.
                 float offsetSeconds;
-                if (clip->loopFrame == 0) {
+                if (clip._loopFrame == 0) {
                     offsetSeconds = 0.0f;
                 } else {
-                    const float num = static_cast<float>(clip->loopFrame - clip->frameFirst);
-                    const float den = static_cast<float>(clip->frameLast  - clip->frameFirst);
-                    // `rate` was this lane's name for +0x50 and it is WRONG:
-                    // +0x50 is the clip's FRAME COUNT (corrected 2026-09-12 in
-                    // AnimationState.h from ?GetPoseAtTime@Animation@Graphics@@,
-                    // which bounds a frame index with it). The expression is
-                    // unchanged -- fraction * frameCount is a frame index, and
-                    // +0x48 converts that to seconds.
-                    const float rate = static_cast<float>(clip->frameCount);
+                    const float num = static_cast<float>(clip._loopFrame - clip._startFrame);
+                    const float den = static_cast<float>(clip._endFrame  - clip._startFrame);
+                    // +0x50 is the clip's FRAME COUNT: fraction * frameCount is
+                    // a frame index, and +0x48 converts that to seconds.
+                    const float rate = static_cast<float>(clip._frameCount);
                     // (((num / den) * rate) * loopScale) — THREE separate
                     // instructions in this exact order (DIVSS, MULSS, MULSS at
-                    // 0x1800fddc7..0x1800fddcf). Re-associating would be
-                    // algebraically identical and numerically different.
-                    offsetSeconds = ((num / den) * rate) * clip->loopScale;
+                    // 0x1800fddc7..0x1800fddcf).
+                    offsetSeconds = ((num / den) * rate) * clip._loopScale;
                 }
                 const int64_t offsetTicks = static_cast<int64_t>(
                     static_cast<double>(offsetSeconds) / rtgfxbig::SecondsPerTick());
-                L->time = offsetTicks + newTime;
+                L->_time._ticks = offsetTicks + newTime;
             }
         } else if (newTime >= duration) {
-            L->time = duration;                    // clamp, 0x1800fddf7
+            L->_time._ticks = duration;            // clamp, 0x1800fddf7
         }
 
         // ---- the fade countdown and the layer removal --------------------
-        if (L->fadeLength <= 0) continue;
+        if (L->_fadeLength._ticks <= 0) continue;
 
-        L->fadeRemaining -= static_cast<int64_t>(
+        L->_fadeRemaining._ticks -= static_cast<int64_t>(
             static_cast<double>(dt) / rtgfxbig::SecondsPerTick());
-        if (L->fadeRemaining > 0) continue;
+        if (L->_fadeRemaining._ticks > 0) continue;
 
         ++rtgfxbig::g_animStateExpired;
 
-        // Release the manager-side group this layer's handle names. The handle
-        // is RE-READ from the array (`MOV RAX,[RSI+8]` then
+        // Release the manager-side instance this layer's handle names. The
+        // handle is RE-READ from the array (`MOV RAX,[RSI+8]` then
         // `MOV ECX,[R14+RAX+0xc]` at 0x1800fde2c) rather than reused from L.
-        const int32_t handle = s->layers[li].handle;
+        const int32_t handle = _layers._data[li]._handle;
         if (handle >= 0) {
             const uint32_t gi = static_cast<uint32_t>(handle >> 8) & 0xFFu;  // SAR then MOVZX CL
-            uint8_t* const groups = rtgfxbig::AnimManagerGroups();
+            // LEFT (B9): the two null tests (the singleton, then its instance
+            // buffer) are the tree's; retail reads both unguarded. Kept, not
+            // extended -- their removal is NEXT_SESSION §0.2's.
+            AnimationManager* const mgr = AnimationManager::_singleton;
+            AnimationManager::Instance* const groups =
+                mgr != nullptr ? mgr->_instances._data : nullptr;
             if (groups != nullptr) {
-                uint8_t* const g = groups + static_cast<int64_t>(gi) * 0x30;
-                if (--*reinterpret_cast<int32_t*>(g + 0x0c) == 0) {
-                    *reinterpret_cast<int64_t*>(g)        = 0;
-                    *reinterpret_cast<int32_t*>(g + 0x08) = -1;
-                    // -----------------------------------------------------
-                    // ADDRESS DOORS 2 and 3 of 3.
-                    //   SYMBOL:      0x18005aa30 (403 bytes) and 0x18005b1e0
-                    //                (382 bytes) — `Collection::Array<T>::SetSize`
-                    //                for the group's node array (+0x10) and its
-                    //                AnimationState array (+0x20), both called
-                    //                with newSize 0. NEITHER is in the export
-                    //                directory; checked with pefile rather than
-                    //                inferred from a comment
-                    //                (reference_aeaa_is_private_not_unexported.md).
-                    //   CONDITION:   reached ONLY when a fading layer's countdown
-                    //                expires AND its manager group's refcount at
-                    //                +0x0c falls to zero — a rare arm, which is
-                    //                why `rtgfxbig::g_animStateExpired` counts it
-                    //                separately from the door.
-                    //   CONSEQUENCE: at cutover, with the DLL absent, these
-                    //                resolve to nothing and the group's two
-                    //                buffers LEAK (they are not freed and the
-                    //                headers keep stale pointers). Not a crash,
-                    //                and not visible in a short run. ADDRESSEE:
-                    //                the Wave 28 Graphics lane; residuals R2/R3
-                    //                in WAVE27_LANE_GFXBIG.md §6. Both are plain
-                    //                SetSizeCore instantiations with a
-                    //                non-trivial element, so the cheap route is
-                    //                two more ArraySpec rows, not two bodies.
-                    // -----------------------------------------------------
-                    // B3R: the two instantiations by body name.
-                    rtcoll::Rt_SetSize_18005aa30(g + 0x10, 0);
-                    rtcoll::Rt_SetSize_18005b1e0(g + 0x20, 0);
+                AnimationManager::Instance& g = groups[gi];
+                if (--g._refCount == 0) {
+                    g._group     = nullptr;
+                    g._animIndex = -1;
+                    // `Collection::Array<T>::SetSize` for the instance's node
+                    // array (+0x10) and its state array (+0x20), both with
+                    // newSize 0: the two instantiations by body name (B3R).
+                    rtcoll::Rt_SetSize_18005aa30(&g._nodes, 0);
+                    rtcoll::Rt_SetSize_18005b1e0(&g._states, 0);
                 }
             }
         }
 
         // Erase layer `li` by shifting the tail down one slot. Retail copies
         // SEVEN QWORDS per element (0x1800fde9c..0x1800fded6), i.e. the whole
-        // 0x38 stride, and RE-READS `_layers` and `layerCount` inside the shift
+        // 0x38 stride, and RE-READS `_layers` and the count inside the shift
         // loop. Both transcribed.
-        for (int32_t k = li; k + 1 < s->layerCount; ++k) {
-            uint8_t* const dst = reinterpret_cast<uint8_t*>(s->layers) +
-                                 static_cast<int64_t>(k) * 0x38;
+        for (int32_t k = li; k + 1 < _layers._size; ++k) {
+            Layer* const dst = _layers._data + k;
             if (dst == nullptr) break;             // retail tests the COMPUTED address
-            const uint8_t* const src = dst + 0x38;
-            for (int q = 0; q < 7; ++q)
-                reinterpret_cast<uint64_t*>(dst)[q] =
-                    reinterpret_cast<const uint64_t*>(src)[q];
+            dst[0] = dst[1];
         }
-        --s->layerCount;
+        --_layers._size;
         --li;                                      // DEC R12D then the INC at the top
     }
 

@@ -100,6 +100,8 @@
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Mesh.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"                  // B.4: IO::Stream::_encoding / _direction
+#include "../../types/video/CompanionData.h"        // B.4: Video::{Index,Vertex}BufferData::Serialize
 #include "../../types/video/Context.h"           // ENDGAME B.3.5 block GC
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
 #include "../../types/graphics/ParticleInstance.h"  // Graphics::ParticleInstance
@@ -143,15 +145,8 @@ namespace {
 // (ENDGAME B.3.9 GFX: `ExternalDtor`, the ??1External door the retired ??1EdgeMesh
 // door tail-called, is gone; the real ~EdgeMesh chains ~External.)
 
-// Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
-// both PORTED (video/buffers.cpp) and registered by name and address.
-// ENDGAME B.3.5 caller batch: both are DEFINED members, so both are member calls.
-void IndexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge
-}
-void VertexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformDestruct();  // B.3.5 bridge
-}
+// Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0:
+// member calls on EdgeMesh's typed buffers (B.4; the two wrappers are gone).
 
 // `??2ImageBuffer@Video@@SAPEAX_K@Z` / `??2RenderBuffer@Video@@SAPEAX_K@Z` —
 // the class operator news. CreateTargets INLINES both (Enter(alloc+0x640);
@@ -437,23 +432,24 @@ extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
 // ENDGAME B.3.9 block GFX: the door is RETIRED with the RT_DELDTOR row
 // 0x1800134b0 it served; its body is the real protected `~EdgeMesh()`. The
 // restamp and the tail ~External are the compiler's chain.
+//
+// B.4: the members by name. The two explicit ~Array calls zero their headers,
+// so the typed members' implicit `~Array<TriangleList>` that follows is the
+// same no-op the raw headers' was.
 Graphics::EdgeMesh::~EdgeMesh() {
-    RtGraphics::EdgeMesh* const self =
-        reinterpret_cast<RtGraphics::EdgeMesh*>(this);                 // B.3.9 bridge (the POD view)
-
     // 0x180013e70 — Array<T>::~Array for the two list arrays. An unexported
     // template instantiation, called by its body name.
-    rtcoll::RtColl_ArrayDtor_180013e70(&self->_edgeLists);
-    rtcoll::RtColl_ArrayDtor_180013e70(&self->_triangleLists);
+    rtcoll::RtColl_ArrayDtor_180013e70(&_edgeLists);
+    rtcoll::RtColl_ArrayDtor_180013e70(&_triangleLists);
 
-    IndexBufferPlatformDestruct(&self->_extraIndices);
-    VertexBufferPlatformDestruct(&self->_extraVerts);
-    IndexBufferPlatformDestruct(&self->_capIndices);
-    VertexBufferPlatformDestruct(&self->_capVerts);
-    IndexBufferPlatformDestruct(&self->_edgeIndices);
-    VertexBufferPlatformDestruct(&self->_edgeVerts);
-    IndexBufferPlatformDestruct(&self->_triIndices);
-    VertexBufferPlatformDestruct(&self->_triVerts);
+    _edgeSkinIndexBuffer.PlatformDestruct();    // +0x128
+    _edgeSkinVertexBuffer.PlatformDestruct();   // +0x108
+    _edgeIndexBuffer.PlatformDestruct();        // +0x0e8
+    _edgeVertexBuffer.PlatformDestruct();       // +0x0c8
+    _skinIndexBuffer.PlatformDestruct();        // +0x0a8
+    _skinVertexBuffer.PlatformDestruct();       // +0x088
+    _indexBuffer.PlatformDestruct();            // +0x068
+    _vertexBuffer.PlatformDestruct();           // +0x048
 }
 
 // ############################################################################
@@ -518,67 +514,16 @@ Graphics::EdgeMesh::~EdgeMesh() {
 // ############################################################################
 namespace {
 
-constexpr uint32_t kLvlStride   = 0xb0;
-constexpr uint32_t kLvlBuf20    = 0x20;
-constexpr uint32_t kLvlBuf40    = 0x40;
-constexpr uint32_t kLvlBuf60    = 0x60;
-constexpr uint32_t kLvlBuf80    = 0x80;
-constexpr uint32_t kLvlTriData  = 0x98;
-constexpr uint32_t kLvlTriCount = 0xa0;
-constexpr uint32_t kLvlTail     = 0xa8;
-static_assert(kLvlTail + 4 <= kLvlStride, "detail-level fields must fit the 0xb0 stride");
-static_assert(kLvlTriCount == kLvlTriData + 8,
-              "the triangle Array's _size must follow its _data, Collection::Array shape");
-
-using BufSerFn   = void (*)(void*, Serializer*);
-
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+// The four buffer calls: `MOV RCX,[level+X] ; MOV RAX,[RCX] ; CALL [RAX+0x30]`
+// -- slot 6 `Serialize` of the buffer's companion (`_deviceData`, what
+// PlatformConstruct wrote). The dereference is unguarded, which is faithful.
+// LEFT: `DetailLevel::Buffer::_deviceData` is a `void*` (the unit test pins
+// the `Buffer` struct), so the one view of it as its companion is here.
+void SerializeIndexBuffer(void* deviceData, IO::Serializer& sub) {
+    static_cast<Video::IndexBufferData*>(deviceData)->Serialize(&sub);
 }
-void RwInt(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeInt(*static_cast<int32_t*>(p), nullptr);
-}
-int RwVersion(ReaderWriter* rw) {
-    return AsRw(rw)->GetVersion();
-}
-void DeleteRw(ReaderWriter* rw) {
-    if (rw == nullptr) return;
-    delete AsRw(rw);
-}
-bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
-
-ReaderWriter* MakeReaderWriter(Serializer* ser) {
-    Stream* stream = ser->stream;
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = IsReading(stream) ? rt::io::encoding_vtbl::kCreateReader
-                                       : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-// `?_singleton@Device@Video@@0PEAV12@EA` @ 0x1801fe7a8; Device+0xF8 is
-// `activeInterface` (runtime/types/video/Device.h). ENDGAME B.3.9 SS1
-// (B39_RULES D7): the class static now -- the null test this used to carry
-// was, by its own comment, justified only because RT_DATA_SLOT could hand
-// back an unfilled mint slot ("retail's own static could not be null"); that
-// reason is gone, so the guard goes with it and retail's unguarded deref is
-// restored.
-int32_t ActiveInterface() {
-    void* device = ::Video::Device::_singleton;
-    return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0xF8);
-}
-
-// ENDGAME B.3.5 block G: it now takes the OBJECT the caller loaded instead of a
-// (base, byte offset) pair, because `GraphicsMesh::DetailLevel` names all four
-// `_deviceData` qwords. The dereference is still unguarded, which is faithful.
-void SerializeBufferSlot(void* obj, Serializer* sub) {
-    void** vt = *reinterpret_cast<void***>(obj);            // faithful: unguarded
-    reinterpret_cast<BufSerFn>(vt[0x30 / 8])(obj, sub);
+void SerializeVertexBuffer(void* deviceData, IO::Serializer& sub) {
+    static_cast<Video::VertexBufferData*>(deviceData)->Serialize(&sub);
 }
 
 }  // namespace
@@ -639,39 +584,34 @@ void MaterialInstance::GenerateTextures(Video::Context& context, int32_t arg) co
 }
 
 void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
-    // The ported bodies in this file speak the `rt::io::Serializer` POD; the
-    // member takes retail's own `IO::Serializer&` so the header names the retail
-    // signature. The two describe the same bytes.
-    Serializer* const outer = reinterpret_cast<Serializer*>(&serializer);  // B.3.5 bridge
-
-    // `if (!stream->encoding->vtable[0](encoding)) return;` — the encoding
-    // policy object's "does this stream carry platform data at all" slot.
-    {
-        void** encVt = *reinterpret_cast<void***>(outer->stream->encoding);
-        using CarriesPlatformDataFn = bool (*)(void*);
-        if (!reinterpret_cast<CarriesPlatformDataFn>(encVt[0])(outer->stream->encoding)) {
-            return;
-        }
+    // `if (!stream->encoding->vt[0](encoding)) return;` — slot 0 of the
+    // stream's `IO::Encoding`, `IsBinary`: only a binary stream carries
+    // platform data at all.
+    if (!serializer._stream->_encoding->IsBinary()) {
+        return;
     }
 
     const int32_t levelCount = _detailLevels._size;                  // +0x58
 
     for (int arm = 0; arm < 2; ++arm) {
-        Serializer sub = { outer->stream, nullptr };
-        ReaderWriter* rw = MakeReaderWriter(&sub);
+        // Each arm's own ReaderWriter: `{ stream, 0 }` then the encoding's
+        // CreateReader / CreateWriter (version 0), and `if (rw) delete rw` at
+        // the end of the arm -- IO::Serializer's ctor and dtor, inlined.
+        IO::Serializer sub(*serializer._stream, 0);
+        IO::ReaderWriter* const rw = sub._readerWriter;
 
-        const int32_t iface = ActiveInterface();
+        // `Video::Device::_singleton->activeInterface` (+0xF8), unguarded.
+        const int32_t iface = ::Video::Device::_singleton->activeInterface;
         const bool active = (arm == 0) ? (iface == 0) : (iface == 1 || iface == 2);
         if (!active) {
-            AsRw(rw)->Skip();
-            DeleteRw(rw);
+            rw->Skip();
             continue;
         }
 
         // The gate reads the OUTER reader/writer — see the banner.
-        if (RwVersion(outer->readerWriter) >= 1) {
+        if (serializer._readerWriter->GetVersion() >= 1) {
             int32_t discarded = 0;
-            RwInt(rw, &discarded);
+            rw->SerializeInt(discarded, nullptr);
         }
 
         for (int32_t i = 0; i < levelCount; ++i) {
@@ -679,47 +619,45 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
             // 0x1800a4b30), so a slot-0x30 handler that reallocates the level
             // array is seen. Not hoisted.
             DetailLevel* const level =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
 
             int32_t n = level->_triangleLists._size;                  // +0xa0
-            RwInt(rw, &n);
-            if (IsReading(sub.stream))
+            rw->SerializeInt(n, nullptr);
+            if (sub._stream->_direction == IO::kReading)
                 rtcoll::RtColl_ArraySetSize_1800136f0(&level->_triangleLists, n);  // +0x98
 
-            void* triData = level->_triangleLists._data;
+            TriangleList* const triData = level->_triangleLists._data;
             if (arm == 0) {
                 // 0x180014850 SerializeTriangleListArray(ctx, count, data) —
-                // PORTED (closure_batch2b.cpp) and registered by address.
-                RtGraphics_EdgeMesh_SerializeTriangleListArray(&sub, n, triData);   // 0x180014850
+                // PORTED (closure_batch2b.cpp).
+                RtGraphics_EdgeMesh_SerializeTriangleListArray(sub, n, triData);   // 0x180014850
             } else {
                 // The same six dwords per element, emitted inline by retail on
                 // this arm (0x1800a4b90..0x1800a4c0e, stride 0x18).
-                uint8_t* e = static_cast<uint8_t*>(triData);
-                for (int32_t j = 0; j < n; ++j, e += 0x18) {
-                    RwInt(rw, e + 0x00);
-                    RwInt(rw, e + 0x04);
-                    RwInt(rw, e + 0x08);
-                    RwInt(rw, e + 0x0c);
-                    RwInt(rw, e + 0x10);
-                    RwInt(rw, e + 0x14);
+                TriangleList* e = triData;
+                for (int32_t j = 0; j < n; ++j, ++e) {
+                    rw->SerializeInt(e->_f00, nullptr);
+                    rw->SerializeInt(e->_f04, nullptr);
+                    rw->SerializeInt(e->_f08, nullptr);
+                    rw->SerializeInt(e->_f0c, nullptr);
+                    rw->SerializeInt(e->_f10, nullptr);
+                    rw->SerializeInt(e->_f14, nullptr);
                 }
             }
 
             // The four buffers, INDEX BEFORE VERTEX in each pair, retail's
             // order (+0x40, +0x20, +0x80, +0x60 = each header's +0x08).
             DetailLevel* const lvl2 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
-            SerializeBufferSlot(lvl2->_indexBuffer._deviceData,      &sub);
-            SerializeBufferSlot(lvl2->_vertexBuffer._deviceData,     &sub);
-            SerializeBufferSlot(lvl2->_skinIndexBuffer._deviceData,  &sub);
-            SerializeBufferSlot(lvl2->_skinVertexBuffer._deviceData, &sub);
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+            SerializeIndexBuffer (lvl2->_indexBuffer._deviceData,      sub);
+            SerializeVertexBuffer(lvl2->_vertexBuffer._deviceData,     sub);
+            SerializeIndexBuffer (lvl2->_skinIndexBuffer._deviceData,  sub);
+            SerializeVertexBuffer(lvl2->_skinVertexBuffer._deviceData, sub);
 
             DetailLevel* const lvl3 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
-            RwInt(rw, &lvl3->_maxInstances);                          // +0xa8
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+            rw->SerializeInt(lvl3->_maxInstances, nullptr);            // +0xa8
         }
-
-        DeleteRw(rw);
     }
 }
 

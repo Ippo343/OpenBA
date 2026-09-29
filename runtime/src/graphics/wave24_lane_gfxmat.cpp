@@ -176,6 +176,7 @@
 #include "../../types/graphics/Mesh.h"              // ENDGAME B.3.5 block G
 #include "../../types/graphics/AnimationManager.h"  // ENDGAME B.3.5 block G
 #include "../../types/io/Serializer.h"             // IO::ReaderWriter (B3X W0)
+#include "../../types/io/Stream.h"                 // B.4: IO::Stream::_direction
 #include "../../types/graphics/AnimationState.h"   // Graphics::AnimationState::Serialize, the anim-array bodies
 #include "../../types/collection/Collection.h"     // rtcoll:: the array instantiations
 #include "../../types/object/External.h"           // the ExternalPtr serializers
@@ -679,21 +680,17 @@ namespace Graphics {
 void AnimationManager::Serialize(IO::Serializer& s) {
     ++g_animSerCalls;
 
-    RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(&s);   // B.3.5 bridge
-
-    RtIoStream* localStream = ser->stream;
-    RtIoSerializer localSer = { localStream, nullptr };     // [RSP+0x28], [RSP+0x30]
-    void* enc = MakeEncoding(&localSer);
+    // B.4: the local `{ stream, enc }` pair, the factory call and the closing
+    // `if (enc) delete enc` are `IO::Serializer`'s ctor and dtor, inlined.
+    IO::Serializer localSer(*s._stream, 0);                 // [RSP+0x28], [RSP+0x30]
 
     int32_t n = _instances._size;                           // +0x08
-    AsRw(enc)->SerializeInt(n, nullptr);
+    localSer._readerWriter->SerializeInt(n, nullptr);
 
-    if (localStream->mode == 0)
+    if (localSer._stream->_direction == IO::kReading)
         rtcoll::Rt_SetSize_18005c3d0(&_instances, n);            // +0x00 == this
 
-    RtGraphics_SerializeAnimInstances(AsSer(&localSer), n, _instances._data);   // 0x18005c660
-
-    if (enc) delete AsRw(enc);
+    RtGraphics_SerializeAnimInstances(localSer, n, _instances._data);   // 0x18005c660
 }
 
 }  // namespace Graphics

@@ -18,6 +18,8 @@
 
 #include "../../types/graphics/Geometry.h"
 #include "../../types/io/Serializer.h"   // IO::ReaderWriter (B3X W0)
+#include "../../types/graphics/GraphicsMesh.h"   // B.4: GraphicsMesh::TriangleList
+#include "../../types/graphics/Mesh.h"           // B.4: RtGraphics_EdgeMesh_SerializeTriangleListArray
 #include "../../types/graphics/Camera.h"          // rtgfxd::RtGraphics_Camera_CopyCtor
 #include "../../types/collection/Collection.h"    // rtcoll:: the array instantiations
 
@@ -271,29 +273,25 @@ extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
 // virtual call. `MOV ESI,EDX` then `DEC RSI`: the counter is the zero-extended
 // 32-bit argument, so a negative count is impossible rather than huge.
 // ============================================================================
-namespace {
-// `ctx` is the `IO::Serializer`; `[ctx+8]` is its ReaderWriter and +0xa0 is
-// `SerializeInt` (Serializer.h). B3X W0: by name on the real class.
-IO::ReaderWriter* CtxRw(void* ctx) {
-    return *reinterpret_cast<IO::ReaderWriter**>(static_cast<uint8_t*>(ctx) + 8);  // B.3.x bridge
-}
-}
-
-extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int count,
-                                                               void* data) {
+// `ser._readerWriter` is [ctx+8] and +0xa0 is `SerializeInt` (Serializer.h).
+// B.4: typed -- the six DWORDs are the TriangleList's six fields, stride 0x18.
+void RtGraphics_EdgeMesh_SerializeTriangleListArray(IO::Serializer& ser, int count,
+                                                    Graphics::GraphicsMesh::TriangleList* data) {
     if (count <= 0) return;                                  // TEST/JLE
-    uint8_t* e = static_cast<uint8_t*>(data);
+    Graphics::GraphicsMesh::TriangleList* e = data;
     uint64_t n = static_cast<uint32_t>(count);               // MOV ESI,EDX
     do {
-        CtxRw(ctx)->SerializeInt(*reinterpret_cast<int32_t*>(e + 0x00), nullptr);
-        // Retail re-loads `ctx->readerWriter` and the slot before EVERY call; a
+        // Retail re-loads `ser._readerWriter` and the slot before EVERY call; a
         // hoisted load would be one less indirection than retail performs and
-        // would miss a reader/writer swapped mid-element. Kept literal: the
-        // receiver is re-read here and the virtual call re-reads the vptr.
-        for (uint32_t o = 0x04; o <= 0x14; o += 4) {
-            CtxRw(ctx)->SerializeInt(*reinterpret_cast<int32_t*>(e + o), nullptr);
-        }
-        e += 0x18;
+        // would miss a reader/writer swapped mid-element. `ser` is a reference,
+        // so each `ser._readerWriter` below is a fresh load.
+        ser._readerWriter->SerializeInt(e->_f00, nullptr);
+        ser._readerWriter->SerializeInt(e->_f04, nullptr);
+        ser._readerWriter->SerializeInt(e->_f08, nullptr);
+        ser._readerWriter->SerializeInt(e->_f0c, nullptr);
+        ser._readerWriter->SerializeInt(e->_f10, nullptr);
+        ser._readerWriter->SerializeInt(e->_f14, nullptr);
+        ++e;
     } while (--n);
 }
 

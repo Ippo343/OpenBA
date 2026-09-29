@@ -43,6 +43,10 @@
 
 #include "../collection/Collection.h"
 #include "../object/External.h"   // Object::ExternalPtr<T>, for PlayAnimation
+#include "../math/Math.h"          // B.4: Math::Transform / Vector3, the typed members
+#include "InterpolatedState.h"     // B.4: Array<InterpolatedState<Math::Transform>>
+#include "GraphicsMesh.h"          // B.4: Array<GraphicsMesh::Node>, retail's parameter type
+#include "../system/Value.h"       // B.4: System::Time, the three Layer times
 
 // Forward declarations only — see the `namespace Graphics` block at the bottom.
 // Tags match the real declarations (RULE B4b-5).
@@ -363,17 +367,20 @@ public:
     // banner above, which this declaration mirrors field for field.
     // ------------------------------------------------------------------------
     struct Layer {
-        void*   _group;          // +0x00  Graphics::AnimationGroup* (a raw copy;
+        AnimationGroup* _group;  // +0x00  Graphics::AnimationGroup* (a raw copy;
                                  //        the reference is the layer's, not the
                                  //        instance cache entry's)
         int32_t _clipIndex;      // +0x08  index into _group->_clips, scaled 0x70
         int32_t _handle;         // +0x0c  packed (instance << 8 | frame), or < 0
         float   _speed;          // +0x10
         int32_t _unpinned_14;    // +0x14  no reader in any body read
-        int64_t _time;           // +0x18  System::Time ticks
-        int64_t _fadeLength;     // +0x20  ticks; > 0 is what ARMS the countdown
-        int64_t _fadeRemaining;  // +0x28  ticks; <= 0 removes the layer
-        uint8_t _restarted;      // +0x30
+        // B.4: System::Time, retail's type -- `GetPoseAtTime` takes `+0x18` as
+        // its `const Time&` (0x1800fcc20) and the fade weight reads the other two
+        // as tick counts.
+        System::Time _time;          // +0x18
+        System::Time _fadeLength;    // +0x20  > 0 is what ARMS the countdown
+        System::Time _fadeRemaining; // +0x28  <= 0 removes the layer
+        bool    _restarted;      // +0x30  bool: SerializeBool (0x18005cb40)
         uint8_t _unpinned_31[7]; // +0x31
     };
 
@@ -424,7 +431,7 @@ public:
     // (the H1 brief: forward-declare, do not convert), so the parameter is the
     // raw 16-byte Array header every ported body in this cluster already uses.
     void PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int animIndex,
-                       const Collection::Array<uint8_t>& nodes,
+                       const Collection::Array<GraphicsMesh::Node>& nodes,
                        const System::Time& startTime, const System::Time& fadeTime,
                        float speed, bool instanced);
 
@@ -433,9 +440,12 @@ public:
     //   `namespace Graphics` block (ENDGAME B.3.5 block GC). Its three calls onto
     //   this class's own `CopyInstancedToUnique` / `UpdateRootOnly` /
     //   `UpdateNodes` are QUALIFIED member calls now, not three resolver hits.
-    bool Update(const System::Time& dt, const Collection::Array<uint8_t>& nodes,
-                const Math::Transform& root, void* interp38, void* interp28,
-                Math::Vector3& rootOffsetOut, bool rootOnly, bool flag8);
+    // B.4: retail's parameter types (the mangled name's `PEAV?$InterpolatedState@
+    // VTransform@Math@@@2@PEAV78@`): the node transforms, then the pose buffer.
+    bool Update(const System::Time& dt, const Collection::Array<GraphicsMesh::Node>& nodes,
+                const Math::Transform& root, InterpolatedState<Math::Transform>* interp,
+                Math::Transform* pose, Math::Vector3& rootOffsetOut, bool rootOnly,
+                bool flag8);
 
     // ?GetAnimationElapsed@          0x1800fe220  NOT PORTED
     float GetAnimationElapsed() const;
@@ -479,12 +489,14 @@ public:
     //
     // ?CopyInstancedToUnique@ 0x1800fd4c0 — `this` IS NEVER READ (RCX is
     //   overwritten four instructions in); the parameter stays for the ABI.
-    void CopyInstancedToUnique(const Collection::Array<uint8_t>& nodes,
-                               const Math::Transform& root, void* interp,
+    void CopyInstancedToUnique(const Collection::Array<GraphicsMesh::Node>& nodes,
+                               const Math::Transform& root,
+                               InterpolatedState<Math::Transform>* interp,
                                int handle) const;
     // ?UpdateNodes@    0x1800fcc20
-    void UpdateNodes(float speed, const Collection::Array<uint8_t>& nodes,
-                     const Math::Transform& root, void* interp, void* pose,
+    void UpdateNodes(float speed, const Collection::Array<GraphicsMesh::Node>& nodes,
+                     const Math::Transform& root,
+                     InterpolatedState<Math::Transform>* interp, Math::Transform* pose,
                      Math::Vector3& rootOffsetOut);
     // ?UpdateRootOnly@ 0x1800fc870 — body in wave28_lane_gfxbody.cpp
     void UpdateRootOnly(float speed, Math::Vector3& rootOffsetOut);
@@ -503,13 +515,19 @@ public:
     // +0x00  "the unique node set is stale". Set to 1 when there is exactly one
     //        layer whose handle is >= 0; `Update` then calls
     //        `CopyInstancedToUnique` and clears it.
-    uint8_t  _needsUniqueCopy;
+    bool     _needsUniqueCopy;   // B.4: bool -- retail's SerializeBool (0x1800fe250)
     uint8_t  _pad01[7];
-    Collection::Array<uint8_t> _layers;  // +0x08  Array<Layer>, stride 0x38
-    float    _rootOffset[3];             // +0x18  Math::Vector3
+    //
+    // B.4: the three Arrays carry their ELEMENT TYPE now. No lifecycle changed:
+    // this class's ctors and dtor are declared and never defined, so no member
+    // ctor / dtor of these Arrays is ever instantiated through it; element
+    // construction, copy and destruction still run through the registered
+    // `rtcoll::Rt_*` rows at retail's addresses (array_graphics_anim.cpp).
+    Collection::Array<Layer> _layers;    // +0x08  stride 0x38
+    Math::Vector3 _rootOffset;           // +0x18
     int32_t  _pad24;                     // +0x24  the Array triple's _capacity half
-    Collection::Array<uint8_t> _pose;    // +0x28  Array<Math::Transform>, 0x1c
-    Collection::Array<uint8_t> _nodes;   // +0x38  Array<InterpolatedState<Transform>>
+    Collection::Array<Math::Transform> _pose;   // +0x28  stride 0x1c
+    Collection::Array<InterpolatedState<Math::Transform>> _nodes;  // +0x38  stride 0x38
 };
 static_assert(sizeof(AnimationState) == 0x48,
               "Graphics::AnimationState is 0x48 bytes -- the stride AnimationManager"
@@ -550,9 +568,13 @@ static_assert(std::is_standard_layout<AnimationState>::value,
 // reader can call it by name. Nothing calls it through this declaration yet.
 namespace rt { namespace io { struct Serializer; } }   // io/Serializer.h
 
-// ---- graphics/animationstate.cpp
-extern "C" void RtGraphics_SerializeMeshNodes(rt::io::Serializer* ser, int count, void* basev);  // 0x18005c120
-extern "C" void RtGraphics_SerializeAnimInstances(rt::io::Serializer* ser, int count, void* basev);  // 0x18005c660
+// ---- graphics/animationstate.cpp: three `Array<T>::Serialize` instantiations
+// (Collection::Array has no Serialize member -- Collection.h's banner), typed
+// by the element retail's instantiation names (B.4).
+void RtGraphics_SerializeMeshNodes(IO::Serializer& ser, int count,
+                                   Graphics::GraphicsMesh::Node* base);  // 0x18005c120
+void RtGraphics_SerializeTransformArray(Collection::Array<Math::Transform>* a,
+                                        IO::Serializer& ser);  // 0x180059820
 // ==== end B3R W0-P0c ====
 
 // ==== B3R RT-VG: the graphics-anim Collection::Array instantiations ====
@@ -577,6 +599,9 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<In
 // ---- graphics/wave27_lane_gfxbig.cpp: the Update door (it counts its calls
 // for the [GFXBIG27] line, then calls Graphics::AnimationState::Update)
 extern "C" bool RtGraphics_AnimationState_Update(
-        void* self, const void* time, const void* nodes, const void* baseTransform,
-        void* interpA, void* interpB, void* outVec3, bool rootOnly, bool applyEvents);  // 0x1800fdb20
+        Graphics::AnimationState* self, const System::Time* time,
+        const Collection::Array<Graphics::GraphicsMesh::Node>* nodes,
+        const Math::Transform* baseTransform,
+        Graphics::InterpolatedState<Math::Transform>* interp, Math::Transform* pose,
+        Math::Vector3* outVec3, bool rootOnly, bool applyEvents);  // 0x1800fdb20
 // ==== end B3R RT-VG ====

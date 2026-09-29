@@ -58,27 +58,19 @@
 #include <cstring>
 
 #include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
+#include "../../types/graphics/GraphicsMesh.h"     // B.4: GraphicsMesh::DetailLevel / TriangleList
 #include "../../types/graphics/Mesh.h"
 #include "../../types/system/Value.h"              // System::Time, ditto
 #include "../../types/video/Context.h"             // ENDGAME B.3.5 caller batch
 
-using RtGraphics::MeshInstance;
-
 namespace {
 
-inline uint8_t*       B(void* p)       { return reinterpret_cast<uint8_t*>(p); }
-inline const uint8_t* B(const void* p) { return reinterpret_cast<const uint8_t*>(p); }
-
-template <typename T> T Rd(const void* p, size_t off) {
-    T v; std::memcpy(&v, B(p) + off, sizeof(T)); return v;
-}
-
-// Math::Transform — 28 bytes, three floats of translation then a four-float
-// rotation. The size is pinned by wave23_lane_gfxbody.cpp's own
-// `static_assert(sizeof(AnimTransform) == 0x1c)` and re-confirmed here by the
-// 0x1c stride of retail's own identity-table fill loop (see kIdentityTable).
+// The identity table's STORAGE: 28 raw bytes per entry, so the file static is
+// zero-initialised as retail's `.data` is (a `Math::Transform` array would be
+// constant-initialised to identity by its constexpr ctor, before the first
+// Update's fill). Re-confirmed by the 0x1c stride of retail's fill loop.
 struct Transform28 { uint8_t b[0x1c]; };
-static_assert(sizeof(Transform28) == 0x1c, "Math::Transform is 28 bytes");
+static_assert(sizeof(Transform28) == sizeof(Math::Transform), "Math::Transform is 28 bytes");
 
 uint64_t g_miUpdate = 0;         // ?Update@MeshInstance@ entries
 uint64_t g_miUpdateInit = 0;     // ... times THIS process ran the lazy init
@@ -128,7 +120,8 @@ uint32_t    g_updateInitGuard = 0;           // retail 0x1801ff30c
 Transform28 g_identityTable[48] = {};        // retail 0x1801ff310 .. 0x1801ff850
 static_assert(sizeof(g_identityTable) == 1344, "0x540 bytes, the mint row's size");
 uint32_t*    UpdateInitGuard() { return &g_updateInitGuard; }
-Transform28* IdentityTable()   { return g_identityTable; }
+// LEFT: the one view of the raw storage as the Transforms it holds (above).
+Math::Transform* IdentityTable() { return reinterpret_cast<Math::Transform*>(g_identityTable); }
 
 //   SYMBOL:      ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA, retail
 //                0x1801fc70b, ordinal 4796 — a DATA export, a single static
@@ -157,8 +150,7 @@ const bool* RootOnlyUpdates() {
 // settled the argument mapping, and the eight parameters are the member's.
 
 // ?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ — retail 0x1800ff910, PORTED
-// (mesh.cpp:2903) and reached BY NAME for the same reason.
-using UpdateHierarchyFn = void (*)(void* self);
+// (mesh.cpp), called as a qualified member.
 
 // ?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z
 //   SYMBOL:      retail 0x180100070, an ordinary public export.
@@ -220,8 +212,9 @@ using UpdateHierarchyFn = void (*)(void* self);
 //    are BYTE writes into the argument area; the typedef declares both as
 //    `bool` so the compiler emits byte-width stores too.
 //
-// 5. THE SECOND `InterpolatedState<Transform>*` IS THAT GLOBAL IDENTITY TABLE,
-//    not a second per-instance array. `lea rax,[rip+0xfea23]` at 0x1801008e6
+// 5. THE `Math::Transform*` ARGUMENT (the mangled name's `PEAV78@`, after the
+//    `InterpolatedState<Transform>*`) IS THAT GLOBAL IDENTITY TABLE, not a
+//    second per-instance array. `lea rax,[rip+0xfea23]` at 0x1801008e6
 //    resolves to 0x1801ff310, the same object the fill loop just wrote. The
 //    FIRST is `this->_nodes._data` (+0xf0). Crossing the two would hand the
 //    animator the instance's own poses as its rest pose, which is a silent
@@ -238,11 +231,8 @@ namespace Graphics {
 void MeshInstance::Update(const System::Time& timeRef) {
     ++g_miUpdate;
 
-    const void* const time = reinterpret_cast<const void*>(&timeRef);   // B.3.5 bridge
-    uint8_t* const me = B(static_cast<void*>(this));
-
     uint32_t* const guard = UpdateInitGuard();
-    Transform28* const ident = IdentityTable();
+    Math::Transform* const ident = IdentityTable();
     const bool* const rootOnly = RootOnlyUpdates();
     if (!guard || !ident || !rootOnly) {
         static bool said = false;
@@ -262,30 +252,22 @@ void MeshInstance::Update(const System::Time& timeRef) {
         *guard |= 1u;                              // 0x180100834  BEFORE the fill
         ++g_miUpdateInit;
         for (int i = 0; i < 48; ++i) {             // see note 2: 48, not 47
-            uint8_t* const e = reinterpret_cast<uint8_t*>(ident + i);
-            const uint64_t zero = 0;
-            const uint64_t one  = 0x3f800000ull;   // float 1.0f at +0x0c, 0 at +0x10
-            const uint32_t z32  = 0;
-            std::memcpy(e + 0x00, &zero, 8);       // 0x180100850
-            std::memcpy(e + 0x08, &z32,  4);       // 0x180100854
-            std::memcpy(e + 0x0c, &one,  8);       // 0x180100857
-            std::memcpy(e + 0x14, &zero, 8);       // 0x18010085f
+            // B.4: the identity Transform by name -- rotation (0,0,0) with 1.0f
+            // at +0x0c, translation zero: the same 28 bytes retail's four stores
+            // (0x180100850 .. 0x18010085f) cover.
+            Math::Transform& e = ident[i];
+            e.rotation.x = 0.0f; e.rotation.y = 0.0f; e.rotation.z = 0.0f;
+            e.rotation.w = 1.0f;
+            e.translation.x = 0.0f; e.translation.y = 0.0f; e.translation.z = 0.0f;
         }
     }
 
-    // ---- the base Transform, copied field by field from Geometry +0x84 ------
-    // Retail copies it as SEVEN separate dword moves (0x18010086b..0x1801008ad)
-    // rather than a 28-byte block, and this port keeps the field granularity so
-    // the read set is identical; the destination is a local either way.
-    Transform28 base;
-    for (int i = 0; i < 7; ++i) {
-        const uint32_t w = Rd<uint32_t>(me, 0x84 + 4u * i);
-        std::memcpy(base.b + 4 * i, &w, 4);
-    }
+    // ---- the base Transform, Geometry::_transform (+0x84) -------------------
+    // Retail copies it as SEVEN dword moves (0x18010086b..0x1801008ad); a
+    // trivially-copyable struct copy is the same 28 bytes, bit for bit.
+    const Math::Transform base = _transform;
 
     // ---- the animator call (0x1801008b1 .. 0x1801008ff) --------------------
-    void* const mesh = Rd<void*>(me, 0xc0);        // ExternalPtr<GraphicsMesh>: pointee @ +0
-    void* const nodesArray = Rd<void*>(me, 0xf0);  // _nodes._data
     // ENDGAME B.3.5 block GC item 6: this was a `ResolveExport` name door onto
     // `?Update@AnimationState@Graphics@@` reaching OUR OWN body through the port
     // registry, with a one-shot "resolved NULL" announcement behind it.
@@ -296,26 +278,24 @@ void MeshInstance::Update(const System::Time& timeRef) {
     // it (the block brief's "a file-local cache whose last caller you converted
     // goes with its guard").
     //
-    // `me + 0xd8` is `MeshInstance::_animation`, the 0x18-byte PREFIX of an
-    // `AnimationState` that `Mesh.h` embeds; the rest of the record lives in the
-    // AnimationManager's instance pool, and `AnimationState.h` pins the boundary
-    // at `offsetof(_rootOffset) == 0x18` so it cannot move silently. The cast is
-    // that prefix relationship, not a reinterpretation of the class.
+    // `_animation` (+0xd8) is the 0x18-byte `MeshAnimationState` -- retail's
+    // whole `Graphics::AnimationState` (0x18 bytes: ctor 0x1800fdaf0), which
+    // the tree's 0x48-byte `AnimationState` begins with (`offsetof(_rootOffset)
+    // == 0x18` pins the boundary). LEFT: that prefix view is one cast.
 
     // r8 = mesh + 0x60 is `const Array<Node>&` — the ADDRESS of the embedded
     // array, not a loaded pointer. Mesh.h's own banner records that confusing
     // the embedded +0x60 with the pointer-to-array +0x70 cost Wave 6 an
     // integration run, and is silent whenever the garbage count reads 0.
     const bool ok =
-        reinterpret_cast<::Graphics::AnimationState*>(me + 0xd8)    // B.3.5 bridge
+        reinterpret_cast<::Graphics::AnimationState*>(&_animation)
             ->::Graphics::AnimationState::Update(
-                *reinterpret_cast<const System::Time*>(time),
-                *reinterpret_cast<const Collection::Array<uint8_t>*>(
-                    B(mesh) + 0x60),                   // &mesh->_nodes
-                *reinterpret_cast<const Math::Transform*>(&base),
-                nodesArray,                            // arg 4: THIS instance's poses
+                timeRef,
+                GetMesh()->GetNodes(),                 // &mesh->_nodes (+0x60)
+                base,
+                _nodes._data,                          // arg 4: THIS instance's poses
                 ident,                                 // arg 5: the identity table
-                *reinterpret_cast<Math::Vector3*>(me + 0x100),  // &_rootAnimationOffset
+                _rootAnimationOffset,                  // +0x100
                 *rootOnly,                             // arg 7 (note 4)
                 true);                                 // arg 8 (note 4)
 
@@ -425,32 +405,32 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
                                             float t) const {
     ++g_miSSID;
 
-    // ENDGAME B.3.5 caller batch: the `void* ctx` bridge local is gone with the
-    // `SetBones` name door below — `context` is already the real class.
-    const uint8_t* const me = B(static_cast<const void*>(this));
-
     const int64_t wide = static_cast<int64_t>(packed);      // movsxd r9,r8d
     const uint32_t lo  = static_cast<uint32_t>(wide) & 0xfffu;
     const uint32_t hi  = static_cast<uint32_t>(wide >> 12) & 0xfu;   // sar, then &0xf
 
-    const void* const mesh = Rd<const void*>(me, 0xc0);
-    const uint8_t* const levels = Rd<const uint8_t*>(mesh, 0x50);
-    const uint8_t* const rec = Rd<const uint8_t*>(levels, hi * 0xb0u + 0x98u);
+    // B.4: `levels` is `GetMesh()->_detailLevels._data`, `rec` that level's
+    // `_triangleLists._data`, and +0x14 of the 24-byte record is
+    // `TriangleList::_f14`.
+    const GraphicsMesh::DetailLevel* const levels =
+        reinterpret_cast<const GraphicsMesh::DetailLevel*>(GetMesh()->_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+    const GraphicsMesh::TriangleList* const rec = levels[hi]._triangleLists._data;
     // UNGUARDED, and deliberately: retail dereferences `levels` and `rec`
     // without a test. If either is null here, something upstream handed us a
     // mesh with no detail level and THAT is the bug
     // (CLAUDE.md, "Don't 'fix' a faithful crash with a null check").
-    if (Rd<int32_t>(rec, static_cast<size_t>(lo) * 24u + 0x14u) >= 0) {
+    if (rec[lo]._f14 >= 0) {
         ++g_miSSIDskip;
         return 0;                                            // 0x1801016a7  JGE
     }
 
     // ---- the 47-matrix scratch, zeroed (0x1801016b5 .. 0x180101715) --------
-    float bones[47 * 16];
-    for (int i = 0; i < 47 * 16; ++i) bones[i] = 0.0f;
+    // `Matrix()` zeroes its sixteen floats.
+    Math::Matrix bones[47];
 
     // ---- the identity Transform (0x18010171f .. 0x180101750) ---------------
-    float ident[7] = {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
+    // `Transform()`: rotation (0,0,0,1), translation zero.
+    const Math::Transform ident;
 
     // ENDGAME B.3.5 caller batch: both were `ResolveExport` name doors into
     // locals, with a one-shot "resolved NULL" announcement behind them. Both are
@@ -460,10 +440,8 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
     // qualified and non-virtual on `this` (retail's own direct CALL to
     // 0x180100070). The two typedefs, the two locals and the announcement are
     // gone: a member call cannot be null, so there was nothing left to announce.
-    const int32_t n = this->MeshInstance::GetBones(
-        t, *reinterpret_cast<const Math::Transform*>(ident),
-        reinterpret_cast<Math::Matrix*>(bones));              // 0x180101759
-    context.SetBones(n, reinterpret_cast<const Math::Matrix*>(bones));  // 0x180101768
+    const int32_t n = this->MeshInstance::GetBones(t, ident, bones);   // 0x180101759
+    context.SetBones(n, bones);                                         // 0x180101768
 
     return 0;                                                // ALWAYS 0 — see banner
 }

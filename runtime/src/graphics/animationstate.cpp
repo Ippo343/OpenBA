@@ -73,23 +73,19 @@
 #include "../../types/system/Value.h"
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"             // B.4: IO::Stream::_direction (IsReading)
 #include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_AnimationGroup
 #include "../../types/math/Math.h"               // Math::Quaternion::Lerp
 #include "../../types/system/MemoryAllocator.h"
+#include "../system/string.h"                  // B.4: RtString_ReleaseInline (~Node)
 #include "../picking/scene_grid.h"               // rtpickgrid::TransformArrayAssign
 
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
-
-using RtGraphics::AnimInstanceRec;
-using RtGraphics::AnimStateRec;
-using RtGraphics::AnimationManagerView;
-namespace anim_clip = RtGraphics::anim_clip;
+using Graphics::AnimationManager;
+using Graphics::AnimationState;
+using Graphics::GraphicsMesh;
+using Graphics::InterpolatedState;
 
 namespace {
-
-using ArrayHdr = Collection::Array<uint8_t>;
 
 // ---------------------------------------------------------------------------
 // The neighbours these bodies call, by name (B3R). The Collection::Array<T>
@@ -103,15 +99,6 @@ using ArrayHdr = Collection::Array<uint8_t>;
 // ---------------------------------------------------------------------------
 using rtpickgrid::TransformArrayAssign;
 
-// ?_singleton@AnimationManager@Graphics@@0PEAV12@EA — the slot at 0x1801fe7b0.
-// ONE deref of the slot gives the manager; the manager's +0x00 is the instance
-// buffer. `MOV RAX,[0x1801fe7b0]` / `ADD RBX,[RAX]` at 0x1800fd97a is the pair.
-// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
-AnimationManagerView* AnimationManagerSingleton() {
-    return reinterpret_cast<AnimationManagerView*>(
-        Graphics::AnimationManager::_singleton);   // B.3.9 bridge (the POD view)
-}
-
 // ?_secondsPerTick@Timer@System@@0NA — a DOUBLE. Every tick<->seconds
 // conversion in this file goes through it, exactly as retail's inlined
 // `CVTSI2SD / MULSD [rip+_secondsPerTick]` does.
@@ -120,28 +107,21 @@ double SecondsPerTick() {
     return ::System::Timer::_secondsPerTick;
 }
 
-// ---------------------------------------------------------------------------
-// ReaderWriter calls. Four members, and only four, appear in this cluster:
-// SerializeInt (+0xA0), SerializeFloat (+0x80), SerializeBool (+0x78) and
-// SerializeFloatArray (+0x28). B3X W0: by name on the real class; the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h. `name` is nullptr, as retail passes.
-// ---------------------------------------------------------------------------
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-void RwInt(ReaderWriter* rw, void* p)   { AsRw(rw)->SerializeInt(*static_cast<int32_t*>(p), nullptr); }
-void RwFloat(ReaderWriter* rw, void* p) { AsRw(rw)->SerializeFloat(*static_cast<float*>(p), nullptr); }
-void RwBool(ReaderWriter* rw, void* p)  { AsRw(rw)->SerializeBool(*static_cast<bool*>(p), nullptr); }
-void RwFloats(ReaderWriter* rw, int count, void* p) {
-    AsRw(rw)->SerializeFloatArray(count, static_cast<float*>(p), nullptr);
-}
-
 // `stream->direction == 0` is IO::Stream::Direction::Reading. Every "if we are
 // loading, resize the destination first" guard below is retail's
-// `MOV RAX,[RDI]; CMP dword ptr [RAX+8],0; JNZ`.
-bool IsReading(const Serializer* ser) {
-    return ser->stream->direction == rt::io::kDirectionReading;
+// `MOV RAX,[RDI]; CMP dword ptr [RAX+8],0; JNZ` -- the inlined
+// `?GetDirection@Serializer@IO@@`.
+bool IsReading(const IO::Serializer& ser) {
+    return ser._stream->_direction == IO::kReading;
+}
+
+// ExternalPtr<AnimationGroup>::Serialize (0x18005b840). LEFT: the object
+// block's entry point still takes the `RtObject::External**` / `rt::io::
+// Serializer*` PODs (runtime/types/object/External.h:1046).
+void SerializeGroupPtr(Graphics::AnimationGroup*& group, IO::Serializer& ser) {
+    RtObject_ExternalPtrSerialize_AnimationGroup(
+        reinterpret_cast<RtObject::External**>(&group),
+        reinterpret_cast<rt::io::Serializer*>(&ser));
 }
 
 }  // namespace
@@ -164,13 +144,13 @@ bool IsReading(const Serializer* ser) {
 // make a byte comparator fail on bytes neither side writes.
 //
 // ENDGAME B.3.5 block G: BODY MOVED to `Graphics::GraphicsMesh::Node`'s copy
-// constructor, at the bottom of this file's `namespace Graphics` block. The
-// fifteen-dword flat copy became three member assignments — `_parent` (4) +
-// `_local` (0x1c) + `_bind` (0x1c) is EXACTLY +0x08..+0x43 — which is also why
-// `_pad44` is left alone without a comment having to promise it.
+// constructor, at the bottom of this file's `namespace Graphics` block.
+//
+// B.4: the element op array_graphics_anim.cpp's spec row calls with untyped
+// element pointers (`rtcoll::ElemAssign`); that signature is the collection
+// block's, so the two element views stay here (LEFT).
 extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
-    return new (dstv) Graphics::GraphicsMesh::Node(                  // B.3.5 bridge
-        *reinterpret_cast<const Graphics::GraphicsMesh::Node*>(srcv));
+    return new (dstv) GraphicsMesh::Node(*static_cast<const GraphicsMesh::Node*>(srcv));
 }
 
 // 0x18005b660 — Graphics::AnimationState's copy constructor.
@@ -180,30 +160,35 @@ extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
 // destination, so handing it the garbage that is in raw MemAlloc memory would
 // free a garbage pointer. (Same reasoning array.cpp records for the
 // GraphSeries element assign.)
+//
+// B.4: the same stores, by name. Each Array header is zeroed as the two qword
+// stores retail makes (`_data`, then `_size` + `_capacity` — written here as
+// the two named dwords, H7), then assigned. The `void*` pair is the element-op
+// signature of the collection block's spec row (LEFT).
 extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
-    uint8_t* d = static_cast<uint8_t*>(dstv);
-    const uint8_t* s = static_cast<const uint8_t*>(srcv);
+    AnimationState* d = static_cast<AnimationState*>(dstv);
+    const AnimationState* s = static_cast<const AnimationState*>(srcv);
 
-    d[0] = s[0];                                                   // _needsUniqueCopy
+    d->_needsUniqueCopy = s->_needsUniqueCopy;
 
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;                    // _layers
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    rtcoll::Rt_ArrayAssign_18001b700(d + 0x08, s + 0x08);                            // CALL 0x18001b700
+    d->_layers._data     = nullptr;
+    d->_layers._size     = 0;
+    d->_layers._capacity = 0;
+    rtcoll::Rt_ArrayAssign_18001b700(&d->_layers, &s->_layers);    // CALL 0x18001b700
 
-    *reinterpret_cast<uint32_t*>(d + 0x18) =                       // _rootOffset
-        *reinterpret_cast<const uint32_t*>(s + 0x18);
-    *reinterpret_cast<uint32_t*>(d + 0x1c) =
-        *reinterpret_cast<const uint32_t*>(s + 0x1c);
-    *reinterpret_cast<uint32_t*>(d + 0x20) =
-        *reinterpret_cast<const uint32_t*>(s + 0x20);
+    d->_rootOffset.x = s->_rootOffset.x;                           // three dwords
+    d->_rootOffset.y = s->_rootOffset.y;
+    d->_rootOffset.z = s->_rootOffset.z;
 
-    *reinterpret_cast<uint64_t*>(d + 0x28) = 0;                    // _pose
-    *reinterpret_cast<uint64_t*>(d + 0x30) = 0;
-    TransformArrayAssign(d + 0x28, s + 0x28);                              // CALL 0x18001b360
+    d->_pose._data     = nullptr;
+    d->_pose._size     = 0;
+    d->_pose._capacity = 0;
+    TransformArrayAssign(&d->_pose, &s->_pose);                    // CALL 0x18001b360
 
-    *reinterpret_cast<uint64_t*>(d + 0x38) = 0;                    // _nodes
-    *reinterpret_cast<uint64_t*>(d + 0x40) = 0;
-    rtcoll::Rt_ArrayAssign_18001b810(d + 0x38, s + 0x38);                            // CALL 0x18001b810
+    d->_nodes._data     = nullptr;
+    d->_nodes._size     = 0;
+    d->_nodes._capacity = 0;
+    rtcoll::Rt_ArrayAssign_18001b810(&d->_nodes, &s->_nodes);      // CALL 0x18001b810
     return d;
 }
 
@@ -214,20 +199,23 @@ extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
 // instance table is a cache keyed by the pointer, and the reference that keeps
 // the group alive is the LAYER's, not the cache entry's.
 extern "C" void* RtGraphics_AnimInstance_CopyCtor(void* dstv, const void* srcv) {
-    uint8_t* d = static_cast<uint8_t*>(dstv);
-    const uint8_t* s = static_cast<const uint8_t*>(srcv);
+    AnimationManager::Instance* d = static_cast<AnimationManager::Instance*>(dstv);
+    const AnimationManager::Instance* s =
+        static_cast<const AnimationManager::Instance*>(srcv);
 
-    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
-    *reinterpret_cast<uint32_t*>(d + 0x08) = *reinterpret_cast<const uint32_t*>(s + 0x08);
-    *reinterpret_cast<uint32_t*>(d + 0x0c) = *reinterpret_cast<const uint32_t*>(s + 0x0c);
+    d->_group     = s->_group;
+    d->_animIndex = s->_animIndex;
+    d->_refCount  = s->_refCount;
 
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;                    // _nodes
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    rtcoll::Rt_ArrayAssign_180013960(d + 0x10, s + 0x10);                             // CALL 0x180013960
+    d->_nodes._data     = nullptr;
+    d->_nodes._size     = 0;
+    d->_nodes._capacity = 0;
+    rtcoll::Rt_ArrayAssign_180013960(&d->_nodes, &s->_nodes);      // CALL 0x180013960
 
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;                    // _states
-    *reinterpret_cast<uint64_t*>(d + 0x28) = 0;
-    rtcoll::Rt_ArrayAssign_18005b130(d + 0x20, s + 0x20);                            // CALL 0x18005b130
+    d->_states._data     = nullptr;
+    d->_states._size     = 0;
+    d->_states._capacity = 0;
+    rtcoll::Rt_ArrayAssign_18005b130(&d->_states, &s->_states);    // CALL 0x18005b130
     return d;
 }
 
@@ -235,42 +223,47 @@ extern "C" void* RtGraphics_AnimInstance_CopyCtor(void* dstv, const void* srcv) 
 // The six serializers
 // ============================================================================
 //
-// Five take retail's `(Serializer*, int count, void* base)` element-loop shape;
+// Five take retail's `(Serializer*, int count, T* base)` element-loop shape;
 // the sixth (0x180059820) takes `(Array*, Serializer*)` and does the count and
 // the resize itself. The asymmetry is retail's and is reproduced.
 //
 // Every one of them reads the DESTINATION sizes back out of the array header
 // AFTER the resize, never from the local it just deserialized — which is why
 // `count` is passed on rather than re-read.
+//
+// B.4: each takes the element type retail's instantiation names, and reaches
+// the ReaderWriter's SerializeInt (+0xA0), SerializeFloat (+0x80),
+// SerializeBool (+0x78) and SerializeFloatArray (+0x28) slots through the real
+// `IO::Serializer`'s `_readerWriter`, as retail's inlined copies do.
 
 // 0x180059820 — Array<Math::Transform>::Serialize. Element 0x1c: a quaternion
 // (four floats at +0x00) and a Vector3 (three floats at +0x10).
-extern "C" void RtGraphics_SerializeTransformArray(void* arrayv, Serializer* ser) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arrayv);
-    ReaderWriter* rw = ser->readerWriter;
+void RtGraphics_SerializeTransformArray(Collection::Array<Math::Transform>* a,
+                                        IO::Serializer& ser) {
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     int32_t n = a->_size;
-    RwInt(rw, &n);
+    rw->SerializeInt(n, nullptr);
     if (IsReading(ser)) rtcoll::RtColl_ArraySetSize_180059140(a, n);        // CALL 0x180059140
 
-    uint8_t* p = a->_data;
-    for (int32_t i = 0; i < n; ++i, p += 0x1c) {
-        RwFloats(rw, 4, p);
-        RwFloats(rw, 3, p + 0x10);
+    Math::Transform* p = a->_data;
+    for (int32_t i = 0; i < n; ++i, ++p) {
+        rw->SerializeFloatArray(4, &p->rotation.x, nullptr);
+        rw->SerializeFloatArray(3, &p->translation.x, nullptr);
     }
 }
 
 // 0x18005c230 — Array<InterpolatedState<Transform>>::Serialize's element loop.
 // Two 0x1c Math::Transforms back to back.
-extern "C" void RtGraphics_SerializeInterpTransforms(Serializer* ser, int count, void* basev) {
+static void RtGraphics_SerializeInterpTransforms(IO::Serializer& ser, int count,
+                                                 InterpolatedState<Math::Transform>* p) {
     if (count <= 0) return;
-    ReaderWriter* rw = ser->readerWriter;
-    uint8_t* p = static_cast<uint8_t*>(basev);
-    for (int i = 0; i < count; ++i, p += 0x38) {
-        RwFloats(rw, 4, p + 0x00);
-        RwFloats(rw, 3, p + 0x10);
-        RwFloats(rw, 4, p + 0x1c);
-        RwFloats(rw, 3, p + 0x2c);
+    IO::ReaderWriter* rw = ser._readerWriter;
+    for (int i = 0; i < count; ++i, ++p) {
+        rw->SerializeFloatArray(4, &p->_current.rotation.x, nullptr);
+        rw->SerializeFloatArray(3, &p->_current.translation.x, nullptr);
+        rw->SerializeFloatArray(4, &p->_previous.rotation.x, nullptr);
+        rw->SerializeFloatArray(3, &p->_previous.translation.x, nullptr);
     }
 }
 
@@ -278,18 +271,17 @@ extern "C" void RtGraphics_SerializeInterpTransforms(Serializer* ser, int count,
 // {String name, int parent, Transform local, Transform bind}, stride 0x48.
 // The last three floats are at +0x38 (read out of `MOV R8,RBX` at 0x18005c1ad,
 // where RBX is elem+0x38 — Ghidra's decompiler drops that operand).
-extern "C" void RtGraphics_SerializeMeshNodes(Serializer* ser, int count, void* basev) {
+void RtGraphics_SerializeMeshNodes(IO::Serializer& ser, int count, GraphicsMesh::Node* p) {
     if (count <= 0) return;
-    ReaderWriter* rw = ser->readerWriter;
-    uint8_t* p = static_cast<uint8_t*>(basev);
-    for (int i = 0; i < count; ++i, p += 0x48) {
-        // B.3.1 bridge: GraphicsMesh::Node::_name, untyped node storage.
-        reinterpret_cast<System::String*>(p + 0x00)->Serialize(ser);
-        RwInt(rw, p + 0x08);
-        RwFloats(rw, 4, p + 0x0c);
-        RwFloats(rw, 3, p + 0x1c);
-        RwFloats(rw, 4, p + 0x28);
-        RwFloats(rw, 3, p + 0x38);
+    IO::ReaderWriter* rw = ser._readerWriter;
+    for (int i = 0; i < count; ++i, ++p) {
+        // LEFT (H5): `_name` is the RtSystem::String POD (GraphicsMesh.h's note).
+        reinterpret_cast<System::String*>(&p->_name)->Serialize(&ser);
+        rw->SerializeInt(p->_parent, nullptr);
+        rw->SerializeFloatArray(4, &p->_local.rotation.x, nullptr);
+        rw->SerializeFloatArray(3, &p->_local.translation.x, nullptr);
+        rw->SerializeFloatArray(4, &p->_bind.rotation.x, nullptr);
+        rw->SerializeFloatArray(3, &p->_bind.translation.x, nullptr);
     }
 }
 
@@ -298,32 +290,22 @@ extern "C" void RtGraphics_SerializeMeshNodes(Serializer* ser, int count, void* 
 // NOTE THE ORDER: the int at +0x0c (the packed instance handle) is written
 // SIXTH, after the three Times, not second next to the clip index. Reordering
 // it to match the declaration would change the byte layout of every save.
-extern "C" void RtGraphics_SerializeAnimLayers(Serializer* ser, int count, void* basev) {
+//
+// The three int64 Times go through `IO::Serializer::Serialize(int64_t&)`
+// (0x180035000, the ReaderWriter's +0x90 slot), as block H1 spelled them.
+static void RtGraphics_SerializeAnimLayers(IO::Serializer& ser, int count,
+                                           AnimationState::Layer* p) {
     if (count <= 0) return;
-    ReaderWriter* rw = ser->readerWriter;
-    uint8_t* p = static_cast<uint8_t*>(basev);
-    for (int i = 0; i < count; ++i, p += 0x38) {
-        RtObject_ExternalPtrSerialize_AnimationGroup(reinterpret_cast<RtObject::External**>(p + 0x00), ser);                  // ExternalPtr<AnimationGroup>
-        RwInt(rw, p + 0x08);       // clip index
-        RwFloat(rw, p + 0x10);       // speed / weight
-        // ENDGAME B.3.5 block H1 — THE THREE HAND-INLINED int64 SLOT CALLS
-        // B35_RULES section 11 listed as "receiver-side work". Block H1 owns the
-        // receiver (`Graphics::AnimationState::Layer`), and
-        // `IO::Serializer::Serialize(int64_t&, const char*)`
-        // (`?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z` @ 0x180035000) is a real
-        // member, so they are spelled as member calls. The member's own body
-        // still calls the ReaderWriter's +0x90 slot (Serializer.h's section 3.1
-        // banner: the 22 members KEEP their raw slot calls until the minted
-        // tables retire), so this is a spelling change and nothing else — and it
-        // removes the last three places a Graphics body spells `0x90` by hand.
-        // The `rt::io::Serializer` POD and `IO::Serializer` are asserted
-        // layout-identical in runtime/types/io/Serializer.h.
-        IO::Serializer* const sc = reinterpret_cast<IO::Serializer*>(ser);  // B.3.5 bridge
-        sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x18), nullptr);      // time
-        sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x20), nullptr);      // fade length
-        sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x28), nullptr);      // fade remaining
-        RwInt(rw, p + 0x0c);       // packed instance handle
-        RwBool(rw, p + 0x30);       // restarted
+    IO::ReaderWriter* rw = ser._readerWriter;
+    for (int i = 0; i < count; ++i, ++p) {
+        SerializeGroupPtr(p->_group, ser);                 // ExternalPtr<AnimationGroup>
+        rw->SerializeInt(p->_clipIndex, nullptr);          // clip index
+        rw->SerializeFloat(p->_speed, nullptr);            // speed / weight
+        ser.Serialize(p->_time._ticks, nullptr);                // time
+        ser.Serialize(p->_fadeLength._ticks, nullptr);          // fade length
+        ser.Serialize(p->_fadeRemaining._ticks, nullptr);       // fade remaining
+        rw->SerializeInt(p->_handle, nullptr);             // packed instance handle
+        rw->SerializeBool(p->_restarted, nullptr);         // restarted
     }
 }
 
@@ -332,49 +314,48 @@ extern "C" void RtGraphics_SerializeAnimLayers(Serializer* ser, int count, void*
 // Visits the layer array, the bool, the node array, the root offset and the
 // pose array, in that order. The bool at +0x00 lands BETWEEN the two arrays,
 // which is why it is not hoisted to the top.
-extern "C" void RtGraphics_SerializeAnimStates(Serializer* ser, int count, void* basev) {
+static void RtGraphics_SerializeAnimStates(IO::Serializer& ser, int count, AnimationState* p) {
     if (count <= 0) return;
-    ReaderWriter* rw = ser->readerWriter;
-    uint8_t* p = static_cast<uint8_t*>(basev);
-    for (int i = 0; i < count; ++i, p += 0x48) {
-        int32_t n = *reinterpret_cast<const int32_t*>(p + 0x10);     // _layers._size
-        RwInt(rw, &n);
-        if (IsReading(ser)) rtcoll::Rt_SetSize_18005c8a0(p + 0x08, n);            // CALL 0x18005c8a0
-        RtGraphics_SerializeAnimLayers(ser, n, *reinterpret_cast<void* const*>(p + 0x08));
+    IO::ReaderWriter* rw = ser._readerWriter;
+    for (int i = 0; i < count; ++i, ++p) {
+        int32_t n = p->_layers._size;
+        rw->SerializeInt(n, nullptr);
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005c8a0(&p->_layers, n);            // CALL 0x18005c8a0
+        RtGraphics_SerializeAnimLayers(ser, n, p->_layers._data);
 
-        RwBool(rw, p + 0x00);
+        rw->SerializeBool(p->_needsUniqueCopy, nullptr);
 
-        n = *reinterpret_cast<const int32_t*>(p + 0x40);             // _nodes._size
-        RwInt(rw, &n);
-        if (IsReading(ser)) rtcoll::Rt_SetSize_18005ac50(p + 0x38, n);            // CALL 0x18005ac50
-        RtGraphics_SerializeInterpTransforms(ser, n, *reinterpret_cast<void* const*>(p + 0x38));
+        n = p->_nodes._size;
+        rw->SerializeInt(n, nullptr);
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005ac50(&p->_nodes, n);            // CALL 0x18005ac50
+        RtGraphics_SerializeInterpTransforms(ser, n, p->_nodes._data);
 
-        RwFloats(rw, 3, p + 0x18);                                   // _rootOffset
+        rw->SerializeFloatArray(3, &p->_rootOffset.x, nullptr);   // _rootOffset
 
-        RtGraphics_SerializeTransformArray(p + 0x28, ser);           // CALL 0x180059820
+        RtGraphics_SerializeTransformArray(&p->_pose, ser);     // CALL 0x180059820
     }
 }
 
 // 0x18005c660 — Array<AnimationManager::Instance>::Serialize's element loop.
 // The STATES array is visited before the NODES array; see AnimationManager.h.
-extern "C" void RtGraphics_SerializeAnimInstances(Serializer* ser, int count, void* basev) {
+void RtGraphics_SerializeAnimInstances(IO::Serializer& ser, int count,
+                                       AnimationManager::Instance* p) {
     if (count <= 0) return;
-    ReaderWriter* rw = ser->readerWriter;
-    uint8_t* p = static_cast<uint8_t*>(basev);
-    for (int i = 0; i < count; ++i, p += 0x30) {
-        RtObject_ExternalPtrSerialize_AnimationGroup(reinterpret_cast<RtObject::External**>(p + 0x00), ser);
-        RwInt(rw, p + 0x08);                 // clip index
-        RwInt(rw, p + 0x0c);                 // reference count
+    IO::ReaderWriter* rw = ser._readerWriter;
+    for (int i = 0; i < count; ++i, ++p) {
+        SerializeGroupPtr(p->_group, ser);
+        rw->SerializeInt(p->_animIndex, nullptr);          // clip index
+        rw->SerializeInt(p->_refCount, nullptr);           // reference count
 
-        int32_t n = *reinterpret_cast<const int32_t*>(p + 0x28);     // _states._size
-        RwInt(rw, &n);
-        if (IsReading(ser)) rtcoll::Rt_SetSize_18005b1e0(p + 0x20, n);            // CALL 0x18005b1e0
-        RtGraphics_SerializeAnimStates(ser, n, *reinterpret_cast<void* const*>(p + 0x20));
+        int32_t n = p->_states._size;
+        rw->SerializeInt(n, nullptr);
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005b1e0(&p->_states, n);            // CALL 0x18005b1e0
+        RtGraphics_SerializeAnimStates(ser, n, p->_states._data);
 
-        n = *reinterpret_cast<const int32_t*>(p + 0x18);             // _nodes._size
-        RwInt(rw, &n);
-        if (IsReading(ser)) rtcoll::Rt_SetSize_18005aa30(p + 0x10, n);             // CALL 0x18005aa30
-        RtGraphics_SerializeMeshNodes(ser, n, *reinterpret_cast<void* const*>(p + 0x10));
+        n = p->_nodes._size;
+        rw->SerializeInt(n, nullptr);
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005aa30(&p->_nodes, n);             // CALL 0x18005aa30
+        RtGraphics_SerializeMeshNodes(ser, n, p->_nodes._data);
     }
 }
 
@@ -438,16 +419,13 @@ namespace Graphics {
 // and SerializeBool (+0x78), by name since B3X W0.
 // ============================================================================
 void AnimationState::Serialize(IO::Serializer& s) {
-    // The POD view of the same 16 bytes — Serializer.h asserts the two
-    // interchangeable. Used because the helpers above take the POD.
-    Serializer* ser = reinterpret_cast<Serializer*>(&s);   // B.3.5 bridge
-    ReaderWriter* rw = ser->readerWriter;
+    IO::ReaderWriter* rw = s._readerWriter;
 
     int32_t n = _layers._size;
-    RwInt(rw, &n);
-    if (IsReading(ser)) rtcoll::Rt_SetSize_18005c8a0(&_layers, n);
-    RtGraphics_SerializeAnimLayers(ser, n, _layers._data);
-    RwBool(rw, &_needsUniqueCopy);
+    rw->SerializeInt(n, nullptr);
+    if (IsReading(s)) rtcoll::Rt_SetSize_18005c8a0(&_layers, n);
+    RtGraphics_SerializeAnimLayers(s, n, _layers._data);
+    rw->SerializeBool(_needsUniqueCopy, nullptr);
 }
 
 // ============================================================================
@@ -464,28 +442,21 @@ void AnimationState::Serialize(IO::Serializer& s) {
 // it in the table, which is what lets `GetInstanceId` reuse the slot: its first
 // pass looks for `group == 0` and remembers the first such index.
 //
-// THE SINGLETON STAYS AN `RT_DATA_SLOT` READ. `?_singleton@AnimationManager@
-// Graphics@@0PEAV12@EA` @ 0x1801fe7b0 is a `CUTOVER_REQUIRED` row with six
-// by-name doors; per B35_RULES section 9 / RULE B4b-4 its `MintStorageCell()`
-// redirect is OWED at the class-static conversion, the END of B.3, not here.
-//
 // Every deref is UNGUARDED, exactly as retail's is.
 // ============================================================================
 void AnimationState::ResetAnimationState() {
     for (int32_t i = 0; i < _layers._size; ++i) {
-        const int32_t handle =
-            *reinterpret_cast<const int32_t*>(_layers._data + i * 0x38 + 0x0c);
+        const int32_t handle = _layers._data[i]._handle;
         if (handle < 0) continue;                        // TEST ECX,ECX / JS
 
-        RtGraphics::AnimationManagerView* mgr = AnimationManagerSingleton();
-        uint8_t* inst = mgr->_instances._data +
-                        static_cast<int64_t>((handle >> 8) & 0xff) * 0x30;
-        if (--*reinterpret_cast<int32_t*>(inst + 0x0c) != 0) continue;
+        AnimationManager::Instance* inst =
+            &AnimationManager::_singleton->_instances._data[(handle >> 8) & 0xff];
+        if (--inst->_refCount != 0) continue;
 
-        *reinterpret_cast<uint64_t*>(inst + 0x00) = 0;   // _group
-        *reinterpret_cast<int32_t*>(inst + 0x08)  = -1;  // _animIndex
-        rtcoll::Rt_SetSize_18005aa30(inst + 0x10, 0);                  // CALL 0x18005aa30
-        rtcoll::Rt_SetSize_18005b1e0(inst + 0x20, 0);                 // CALL 0x18005b1e0
+        inst->_group     = nullptr;
+        inst->_animIndex = -1;
+        rtcoll::Rt_SetSize_18005aa30(&inst->_nodes, 0);                // CALL 0x18005aa30
+        rtcoll::Rt_SetSize_18005b1e0(&inst->_states, 0);               // CALL 0x18005b1e0
     }
 
     // The inlined ~Array. `MemFree` is null-guarded inside 0x1800c7ad0, which is
@@ -508,37 +479,26 @@ void AnimationState::ResetAnimationState() {
 // table. That is retail's, so it stays that way (CLAUDE.md: retail's unguarded
 // derefs are load-bearing).
 //
-// The copy is SEVEN 32-BIT MOVES per Transform rather than a float assignment,
-// for the reason wave21 records: an integer move of a float is bit-exact where a
-// float assignment is only value-exact, and the two differ on a signalling NaN
-// or a negative zero. The nested records are still reached at raw offsets
-// (`+0x20` = `Instance::_states._data`, `+0x28` = `AnimationState::_pose._data`)
-// because the class's own Array members are the RAW header type; the offsets are
-// the ones the headers assert.
+// The copy is a `Math::Transform` assignment: the class is trivially copyable
+// (retail's own copy is seven dword moves, 0x180014fd0), so the assignment is a
+// bit copy — a float-register round trip is never involved.
 // ============================================================================
-void AnimationManager::GetPose(int handle, Math::Transform* outv, int count) const {
-    const uint8_t* inst = _instances._data +
-                          static_cast<int64_t>((handle >> 8) & 0xff) * 0x30;
-    const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(inst + 0x20);
-    const uint8_t* pose = *reinterpret_cast<const uint8_t* const*>(
-        states + static_cast<int64_t>(handle & 0xff) * 0x48 + 0x28);
+void AnimationManager::GetPose(int handle, Math::Transform* out, int count) const {
+    const Instance& inst = _instances._data[(handle >> 8) & 0xff];
+    const Math::Transform* pose = inst._states._data[handle & 0xff]._pose._data;
 
-    uint8_t* out = reinterpret_cast<uint8_t*>(outv);
-    for (int i = 0; i < count; ++i, out += 0x1c, pose += 0x1c)
-        for (int w = 0; w < 7; ++w)
-            reinterpret_cast<uint32_t*>(out)[w] = reinterpret_cast<const uint32_t*>(pose)[w];
+    for (int i = 0; i < count; ++i)
+        out[i] = pose[i];
 }
 
 // ?GetPoseAtTime@Animation@Graphics@@QEBAXAEBVTime@System@@0PEAVTransform@Math@@H@Z
 // retail 0x1800faca0. The banner above the door carries the porting argument;
-// what changed in this commit is the SPELLING — every `clip + anim_clip::kX`
-// offset became a named member of `Graphics::Animation`, whose layout is pinned
+// every field is a named member of `Graphics::Animation`, whose layout is pinned
 // in runtime/types/graphics/Animation.h against the same instructions.
 void Animation::GetPoseAtTime(const System::Time& timeRef, const System::Time& deltaRef,
-                              Math::Transform* outv, int /*unused*/) const {
+                              Math::Transform* out, int /*unused*/) const {
     const int64_t* const time  = &timeRef._ticks;
     const int64_t* const delta = &deltaRef._ticks;
-    uint8_t* out = reinterpret_cast<uint8_t*>(outv);
 
     const int32_t loopFrame  = _loopFrame;
     const int32_t frameFirst = _startFrame;
@@ -547,7 +507,7 @@ void Animation::GetPoseAtTime(const System::Time& timeRef, const System::Time& d
     const int32_t boneCount  = _boneCount;
     const uint8_t  looping   = _looping ? 1u : 0u;
     const float    rate      = _frameRate;
-    const uint8_t* keys      = _keys._data;
+    const Math::Transform* keys = _keys._data;
 
     // Where a loop restarts, as a frame index. Zero when the clip has no loop
     // frame at all — and note that THIS is the short-circuit, not a test on the
@@ -572,49 +532,37 @@ void Animation::GetPoseAtTime(const System::Time& timeRef, const System::Time& d
     const float frac = cursor - static_cast<float>(whole);
 
     if (f0 == f1 || frac == 0.0f) {
-        const uint8_t* src = keys + static_cast<int64_t>(boneCount * f0) * 0x1c;
-        uint8_t* dst = out;
-        for (int32_t i = 0; i < boneCount; ++i, src += 0x1c, dst += 0x1c)
-            for (int w = 0; w < 7; ++w)
-                reinterpret_cast<uint32_t*>(dst)[w] = reinterpret_cast<const uint32_t*>(src)[w];
+        const Math::Transform* src = keys + boneCount * f0;
+        for (int32_t i = 0; i < boneCount; ++i)
+            out[i] = src[i];
     } else {
-        const uint8_t* a = keys + static_cast<int64_t>(boneCount * f0) * 0x1c;
-        const uint8_t* b = keys + static_cast<int64_t>(boneCount * f1) * 0x1c;
-        uint8_t* dst = out;
-        for (int32_t i = 0; i < boneCount; ++i, a += 0x1c, b += 0x1c, dst += 0x1c) {
-            const float ax = *reinterpret_cast<const float*>(a + 0x10);
-            const float ay = *reinterpret_cast<const float*>(a + 0x14);
-            const float az = *reinterpret_cast<const float*>(a + 0x18);
-            const float bx = *reinterpret_cast<const float*>(b + 0x10);
-            const float by = *reinterpret_cast<const float*>(b + 0x14);
-            const float bz = *reinterpret_cast<const float*>(b + 0x18);
+        const Math::Transform* a = keys + boneCount * f0;
+        const Math::Transform* b = keys + boneCount * f1;
+        for (int32_t i = 0; i < boneCount; ++i) {
+            const float ax = a[i].translation.x;
+            const float ay = a[i].translation.y;
+            const float az = a[i].translation.z;
+            const float bx = b[i].translation.x;
+            const float by = b[i].translation.y;
+            const float bz = b[i].translation.z;
 
-            // Math::Quaternion::Lerp (0x18001d500) by value; `q` is the slot.
-            float q[4];
-            *reinterpret_cast<Math::Quaternion*>(q) =
-                reinterpret_cast<const Math::Quaternion*>(a)->Lerp(
-                    *reinterpret_cast<const Math::Quaternion*>(b),
-                    *reinterpret_cast<const Math::Scalar*>(&frac));
-            const float* r = q;
-            reinterpret_cast<uint32_t*>(dst)[0] = reinterpret_cast<const uint32_t*>(r)[0];
-            reinterpret_cast<uint32_t*>(dst)[1] = reinterpret_cast<const uint32_t*>(r)[1];
-            reinterpret_cast<uint32_t*>(dst)[2] = reinterpret_cast<const uint32_t*>(r)[2];
-            reinterpret_cast<uint32_t*>(dst)[3] = reinterpret_cast<const uint32_t*>(r)[3];
+            // Math::Quaternion::Lerp (0x18001d500) by value.
+            out[i].rotation = a[i].rotation.Lerp(b[i].rotation, Math::Scalar(frac));
 
-            *reinterpret_cast<float*>(dst + 0x10) = ax + (bx - ax) * frac;
-            *reinterpret_cast<float*>(dst + 0x14) = ay + (by - ay) * frac;
-            *reinterpret_cast<float*>(dst + 0x18) = az + (bz - az) * frac;
+            out[i].translation.x = ax + (bx - ax) * frac;
+            out[i].translation.y = ay + (by - ay) * frac;
+            out[i].translation.z = az + (bz - az) * frac;
         }
     }
 
     const float scale = static_cast<float>(static_cast<double>(*delta) * SecondsPerTick()) * rate;
-    *reinterpret_cast<uint32_t*>(out + 0x00) = 0;
-    *reinterpret_cast<uint32_t*>(out + 0x04) = 0;
-    *reinterpret_cast<uint32_t*>(out + 0x08) = 0;
-    *reinterpret_cast<float*>(out + 0x0c) = 1.0f;              // DAT_18016169c
-    *reinterpret_cast<float*>(out + 0x10) *= scale;
-    *reinterpret_cast<float*>(out + 0x14) *= scale;
-    *reinterpret_cast<float*>(out + 0x18) *= scale;
+    out->rotation.x = 0.0f;
+    out->rotation.y = 0.0f;
+    out->rotation.z = 0.0f;
+    out->rotation.w = 1.0f;                                    // DAT_18016169c
+    out->translation.x *= scale;
+    out->translation.y *= scale;
+    out->translation.z *= scale;
 }
 
 // ---------------------------------------------------------------------------

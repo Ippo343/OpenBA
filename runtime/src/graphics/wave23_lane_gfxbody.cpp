@@ -426,24 +426,10 @@ Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
 // ============================================================================
 namespace {
 
-struct AnimGroup {          // stride 0x30
-    void*    _f00;          // +0x00  null => skip
-    uint64_t _f08;
-    uint8_t  _nodes[0x10];  // +0x10  Collection::Array<GraphicsMesh::Node>, passed by reference
-    void*    _states;       // +0x20
-    int32_t  _stateCount;   // +0x28
-    int32_t  _f2c;
-};
-static_assert(sizeof(AnimGroup) == 0x30, "AnimationManager group stride is 0x30");
-static_assert(offsetof(AnimGroup, _nodes) == 0x10, "group node array @ +0x10");
-static_assert(offsetof(AnimGroup, _states) == 0x20, "group state array @ +0x20");
-static_assert(offsetof(AnimGroup, _stateCount) == 0x28, "group state count @ +0x28");
-
-struct AnimTransform {      // Math::Transform — Quaternion then Vector3, 0x1c bytes
-    float q[4];
-    float t[3];
-};
-static_assert(sizeof(AnimTransform) == 0x1c, "Math::Transform is 28 bytes");
+// B.4: the file-local `AnimGroup` (stride 0x30) and `AnimTransform` PODs are
+// gone. The group is `Graphics::AnimationManager::Instance` (`_group` +0x00,
+// `_nodes` +0x10, `_states` +0x20 / count +0x28, AnimationManager.h's asserts)
+// and the transform is `Math::Transform`.
 
 // The nine-argument `RT_EXPORT_ONCE` forwarder onto
 // `?Update@AnimationState@Graphics@@` that used to sit here is GONE: block GC
@@ -503,30 +489,22 @@ void AnimationManager::Update(const System::Time& time, bool rootOnly) {
     if (_instances._size <= 0) return;             // [RCX+8], Array::_size
 
     for (;;) {
-        uint8_t* const groupBase = _instances._data;    // [RCX], reloaded each pass
-        ::AnimGroup* const g = reinterpret_cast<::AnimGroup*>(groupBase + groupIndex * 0x30);
+        Instance* const g = &_instances._data[groupIndex];  // [RCX], reloaded each pass
 
-        if (g->_f00 != nullptr && g->_stateCount > 0) {
+        if (g->_group != nullptr && g->_states._size > 0) {
             // Control 5 hoists this bound. It is the EFFECTIVENESS control and
             // is EXPECTED TO REPORT NOT CAUGHT: nothing reachable here grows the
             // array, so the hoist is genuinely unobservable and a control set in
             // which every control fires proves only that the controls were
             // picked to fire (reference_probe_needs_an_effectiveness_control.md).
-            for (int32_t i = 0; i < g->_stateCount; ++i) {
-                uint8_t* const state =
-                    static_cast<uint8_t*>(g->_states)
-                    + static_cast<int64_t>(i) * 0x48;
+            for (int32_t i = 0; i < g->_states._size; ++i) {
+                AnimationState* const state = &g->_states._data[i];   // stride 0x48
 
                 // Rebuilt inside the loop, exactly as retail does (the callee
                 // takes it by const reference and could keep the address).
-                ::AnimTransform base;
-                base.q[0] = 0.0f; base.q[1] = 0.0f; base.q[2] = 0.0f;
-                base.q[3] = 1.0f;                      // [0x18016169c] == 00 00 80 3f
-                base.t[0] = 0.0f; base.t[1] = 0.0f; base.t[2] = 0.0f;
-
-                void* interp38 = *reinterpret_cast<void**>(state + 0x38);  // 5th arg
-                void* interp28 = *reinterpret_cast<void**>(state + 0x28);  // 6th arg
-                void* const outVec3 = state + 0x18;                        // 7th arg
+                // `Transform()`: rotation (0,0,0) with w = 1.0f
+                // ([0x18016169c] == 00 00 80 3f), translation zero.
+                const Math::Transform base;
 
                 // ?Update@AnimationState@Graphics@@QEAA_NAEBVTime@System@@AEBV?$Array@
                 // UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$
@@ -534,26 +512,23 @@ void AnimationManager::Update(const System::Time& time, bool rootOnly) {
                 // retail 0x1800fdb20 -- eight parameters plus `this`, in the order
                 // that mangled name gives them. The 9th is retail's literal 0
                 // (MOV byte [RSP+0x40],0), NOT the bool this function was given.
-                reinterpret_cast<Graphics::AnimationState*>(state)      // B.3.5 bridge
-                    ->Graphics::AnimationState::Update(
-                        time,
-                        *reinterpret_cast<const Collection::Array<uint8_t>*>(&g->_nodes),
-                        *reinterpret_cast<const Math::Transform*>(&base),
-                        interp38, interp28,
-                        *reinterpret_cast<Math::Vector3*>(outVec3),
+                // 5th arg `_nodes._data` (+0x38), 6th `_pose._data` (+0x28),
+                // 7th `_rootOffset` (+0x18).
+                state->Graphics::AnimationState::Update(
+                        time, g->_nodes, base,
+                        state->_nodes._data, state->_pose._data,
+                        state->_rootOffset,
                         rootOnly, false);
 
                 // Write the identity-rotation Transform carrying the Vector3 the
-                // callee produced into *state->_interp28. `_interp28` is RE-READ
-                // (`MOV RAX,[RDI+0x28]` at 0x1800fc33b) rather than reused.
-                uint8_t* const dst = *reinterpret_cast<uint8_t**>(state + 0x28);
-                const uint32_t* const src =
-                    reinterpret_cast<const uint32_t*>(state + 0x18);
-                float* const dq = reinterpret_cast<float*>(dst);
-                dq[0] = 0.0f; dq[1] = 0.0f; dq[2] = 0.0f;
-                dq[3] = 1.0f;
-                uint32_t* const dt = reinterpret_cast<uint32_t*>(dst + 0x10);
-                dt[0] = src[0]; dt[1] = src[1]; dt[2] = src[2];   // integer moves, see §5.3
+                // callee produced into *state->_pose._data. `_pose._data` is
+                // RE-READ (`MOV RAX,[RDI+0x28]` at 0x1800fc33b) rather than reused.
+                Math::Transform* const dst = state->_pose._data;
+                dst->rotation.x = 0.0f; dst->rotation.y = 0.0f; dst->rotation.z = 0.0f;
+                dst->rotation.w = 1.0f;
+                // A trivially-copyable struct copy: bit-exact, as retail's three
+                // integer moves are (see §5.3).
+                dst->translation = state->_rootOffset;
 
                 ++::g_animUpdStates;
             }

@@ -20,6 +20,7 @@
 #include "../object/External.h"
 #include "../object/Internal.h"      // B.3.9: InternalMemFree (the concrete slot 0)
 #include "../collection/Collection.h"
+#include "../math/Math.h"            // B.4: Array<Math::Transform> _keys
 
 // Forward declarations only, for the members that are DECLARED-not-ported. None
 // of them is used by value in a defined body here, so no header is dragged in;
@@ -359,7 +360,7 @@ public:
     struct Event {
         int32_t  _frame;      // +0x00  serialized as an int by 0x18005a040
         int32_t  _pad04;      // +0x04
-        void*    _event;      // +0x08  Object::ExternalPtr<AnimationEvent>
+        AnimationEvent* _event;  // +0x08  Object::ExternalPtr<AnimationEvent>
     };
 
     // ---- the members retail exports, in mangled-name order ------------------
@@ -447,7 +448,9 @@ public:
 
     // +0x00  Collection::Array<Event>, stride 0x10 (GetEvent 0x180016090,
     //        GetEventCount 0x180016080 reads `_size` at +0x08).
-    Collection::Array<uint8_t> _events;
+    // B.4: typed; ~Animation / Animation() are declared and never defined, so
+    // no Array member ctor / dtor is instantiated through this class.
+    Collection::Array<Event> _events;
 
     char*    _name;          // +0x10  System::String — GetName 0x180015f10
     char*    _meshName;      // +0x18  System::String — GetMeshName 0x180015f50
@@ -469,7 +472,7 @@ public:
     int64_t  _duration;      // +0x58  System::Time ticks; GetLength 0x180016000
     // +0x60  Collection::Array<Math::Transform>, stride 0x1c, _boneCount *
     //        _frameCount keys (anim_clip::kKeys, 0x1800fade4).
-    Collection::Array<uint8_t> _keys;
+    Collection::Array<Math::Transform> _keys;
 };
 static_assert(sizeof(Animation) == 0x70,
               "Graphics::Animation is 0x70 bytes -- the imul 0x70 in GetAnimation "

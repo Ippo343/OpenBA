@@ -134,23 +134,15 @@
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
 #include "../../types/graphics/AnimationState.h"  // Graphics::AnimationState
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "../../types/graphics/AnimationGroup.h"     // B.4: AnimationGroup::GetAnimation
+#include "../../types/graphics/Material.h"           // B.4: MaterialInstance::_shaderClass
 #include "../../types/video/Buffers.h"            // Video::{Index,Vertex}Buffer
 #include "../../types/graphics/Geometry.h"        // Graphics::Geometry::SetTransform
 #include "../../types/collection/Collection.h"    // rtcoll:: the array instantiations
 #include "../../types/math/Math.h"                // Math::Quaternion::Lerp
 
-using RtGraphics::ExternalPtr;
-using RtGraphics::Geometry;
-using RtGraphics::GraphicsMeshView;
-using RtGraphics::EdgeMesh;
-using RtGraphics::EdgeMeshInstance;
 using RtGraphics::EdgeVertex;
-using RtGraphics::InterpolatedTransform;
-using RtGraphics::MeshAnimationLayer;
-using RtGraphics::MeshInstance;
-using RtGraphics::MeshNode;
 using RtGraphics::TriangleVertex;
-using RtGraphics::VideoBufferHeader;
 using RtGraphics::kEdgeMeshVertexScale;
 
 namespace {
@@ -184,18 +176,10 @@ namespace {
 // members. The `(self, ret, arg)` SHAPE is kept because the call sites below
 // work on raw offsets into GraphicsMesh's untyped node/pool storage; those
 // B.3.1 bridges go when THAT class is converted.
-inline void* QuaternionMultiply(const void* self, void* ret, const void* other) {
-    *static_cast<Math::Quaternion*>(ret) =
-        *static_cast<const Math::Quaternion*>(self) *
-        *static_cast<const Math::Quaternion*>(other);
-    return ret;
-}
-inline void* QuaternionRotate(const void* self, void* ret, const void* vec) {
-    *static_cast<Math::Vector3*>(ret) =
-        static_cast<const Math::Quaternion*>(self)->Rotate(
-            *static_cast<const Math::Vector3*>(vec));
-    return ret;
-}
+//
+// B.4: the two `(self, ret, arg)` wrappers (QuaternionMultiply /
+// QuaternionRotate) that viewed raw node / pool storage as those classes are
+// gone with the raw storage; the call sites call the members on typed operands.
 
 // RT_EXPORT_ONCE on the four below (Wave 9 lane R, 2026-09-07). All four names
 // are PORTED, and the raw door skipped the port registry by design -- so
@@ -281,24 +265,11 @@ inline void* QuaternionRotate(const void* self, void* ret, const void* vec) {
 // are gone -- every class these ctors built is real and the stamps are the
 // compiler's.
 
-// Graphics::AnimationManager::_singleton, an exported DATA symbol
-// (0x1801fe7b0). GetNodeToWorld and RootAnimationOffset index the instanced
-// pose pool through it.
-// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
-void* RtAnimationManager() {
-    return Graphics::AnimationManager::_singleton;
-}
-
-// Byte helpers. Every body below addresses its object through the typed struct
-// where the struct pins the field, and through these where the retail code
-// reaches past what this lane pinned (GraphicsMesh's detail levels, the
-// AnimationManager pool).
-inline uint8_t*       B(void* p)       { return reinterpret_cast<uint8_t*>(p); }
-inline const uint8_t* B(const void* p) { return reinterpret_cast<const uint8_t*>(p); }
-
-template <typename T> T  Rd(const void* p, size_t off) {
-    T v; std::memcpy(&v, B(p) + off, sizeof(T)); return v;
-}
+// Graphics::AnimationManager::_singleton (0x1801fe7b0), the class static:
+// GetNodeToWorld and RootAnimationOffset index the instanced pose pool
+// through it. B.4: the `RtAnimationManager()` accessor and the `B` / `Rd`
+// byte helpers are gone -- every read below is a named field of a typed
+// record.
 
 }  // namespace
 
@@ -426,21 +397,20 @@ namespace {
 // ENDGAME B.3.5 block E: retyped from `const RtGraphics::MeshInstance*` to the
 // REAL class. Its four callers were all doors in this file and all four are now
 // members of `Graphics::MeshInstance`, so the POD spelling had no user left.
-const uint8_t* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
-    const uint8_t* layers = mi->_animation._layers._data;
-
+//
+// B.4: the three steps by name. `_singleton->_instances._data` is the second
+// dereference; `[hi]._states._data` the bank; `[lo]` the slot. The slot is the
+// 0x48 per-frame record (`Graphics::AnimationState` in this tree).
+const ::Graphics::AnimationState* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
     // MOVSXD: the stored pool id is a SIGNED int32 widened to 64 bits.
-    const int64_t poolId = Rd<int32_t>(
-        layers, static_cast<size_t>(mi->_animation._layers._size) * 0x38 - 0x2c);
+    const int64_t poolId =
+        mi->_animation._layers._data[mi->_animation._layers._size - 1]._handle;
 
     // SAR then MOVZX AL: arithmetic shift of the sign-extended value, low byte.
     const uint64_t hi = static_cast<uint64_t>(static_cast<uint8_t>(poolId >> 8));
     const uint64_t lo = static_cast<uint64_t>(static_cast<uint8_t>(poolId));
 
-    const uint8_t* mgr  = B(RtAnimationManager());        // *(0x1801fe7b0)
-    const uint8_t* base = B(Rd<void*>(mgr, 0));           // *mgr  <- the second deref
-    const uint8_t* bank = B(Rd<void*>(base, 0x20 + hi * 0x30));
-    return bank + lo * 0x48;
+    return &::Graphics::AnimationManager::_singleton->_instances._data[hi]._states._data[lo];
 }
 
 }  // namespace
@@ -714,36 +684,31 @@ const uint8_t* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
 // (Geometry's copy ctor -- the base in the init list), the MeshInstance stamp
 // (the compiler's), then the stores below in retail's order.
 Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other) {
-    RtGraphics::MeshInstance* const mi =
-        reinterpret_cast<RtGraphics::MeshInstance*>(this);                  // B.3.9 bridge (the POD view)
-    const RtGraphics::MeshInstance* const src =
-        reinterpret_cast<const RtGraphics::MeshInstance*>(&other);          // B.3.9 bridge (the POD view)
+    _mesh = other._mesh;
 
-    mi->_mesh = src->_mesh;
+    _materials._data = nullptr;
+    _materials._size = 0;
+    _materials._capacity = 0;
+    rtcoll::RtColl_ArrayAssign_180014c70(&_materials, &other._materials);
 
-    mi->_materials._data = nullptr;
-    mi->_materials._size = 0;
-    mi->_materials._capacity = 0;
-    rtcoll::RtColl_ArrayAssign_180014c70(&mi->_materials, &src->_materials);
+    _animation._instanced = other._animation._instanced;
 
-    mi->_animation._instanced = src->_animation._instanced;
+    _animation._layers._data = nullptr;
+    _animation._layers._size = 0;
+    _animation._layers._capacity = 0;
+    rtcoll::Rt_ArrayAssign_18001b700(&_animation._layers, &other._animation._layers);
 
-    mi->_animation._layers._data = nullptr;
-    mi->_animation._layers._size = 0;
-    mi->_animation._layers._capacity = 0;
-    rtcoll::Rt_ArrayAssign_18001b700(&mi->_animation._layers, &src->_animation._layers);
+    _nodes._data = nullptr;
+    _nodes._size = 0;
+    _nodes._capacity = 0;
+    rtcoll::Rt_ArrayAssign_18001b810(&_nodes, &other._nodes);
 
-    mi->_nodes._data = nullptr;
-    mi->_nodes._size = 0;
-    mi->_nodes._capacity = 0;
-    rtcoll::Rt_ArrayAssign_18001b810(&mi->_nodes, &src->_nodes);
-
-    mi->_rootAnimationOffset = src->_rootAnimationOffset;
-    mi->_color[0] = src->_color[0];
-    mi->_color[1] = src->_color[1];
-    mi->_color[2] = src->_color[2];
-    mi->_color[3] = src->_color[3];
-    mi->_sortBias = src->_sortBias;
+    _rootAnimationOffset = other._rootAnimationOffset;
+    _color[0] = other._color[0];
+    _color[1] = other._color[1];
+    _color[2] = other._color[2];
+    _color[3] = other._color[3];
+    _sortBias = other._sortBias;
 }
 
 // ============================================================================
@@ -785,38 +750,34 @@ Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other
 // Graphics::MeshInstance::MeshInstance() / ~MeshInstance(): the bodies of
 // ??0MeshInstance 0x1800fffc0 after Geometry() and the stamp, and of
 // ??1MeshInstance 0x180017060 before ~Geometry -- the B.3.8 `InitFields` /
-// `ReleaseFields` split, now the members themselves, through the
-// field-identical `RtGraphics::MeshInstance` POD view (cross-asserted in Mesh.h).
+// `ReleaseFields` split, now the members themselves (B.4: by name).
 // ============================================================================
 Graphics::MeshInstance::MeshInstance() {
-    RtGraphics::MeshInstance* const mi = reinterpret_cast<RtGraphics::MeshInstance*>(this);   // B.3.8 bridge (the POD view)
-    mi->_mesh.p = nullptr;
-    mi->_materials._data = nullptr;
-    mi->_materials._size = 0;
-    mi->_materials._capacity = 0;
-    mi->_animation._instanced = 0;
-    mi->_animation._layers._data = nullptr;
-    mi->_animation._layers._size = 0;
-    mi->_animation._layers._capacity = 0;
-    mi->_nodes._data = nullptr;
-    mi->_nodes._size = 0;
-    mi->_nodes._capacity = 0;
-    mi->_rootAnimationOffset.x = 0.0f;
-    mi->_rootAnimationOffset.y = 0.0f;
-    mi->_rootAnimationOffset.z = 0.0f;
-    mi->_color[0] = 1.0f;
-    mi->_color[1] = 1.0f;
-    mi->_color[2] = 1.0f;
-    mi->_color[3] = 1.0f;
-    mi->_sortBias = 0;
+    _mesh.p = nullptr;
+    _materials._data = nullptr;
+    _materials._size = 0;
+    _materials._capacity = 0;
+    _animation._instanced = false;
+    _animation._layers._data = nullptr;
+    _animation._layers._size = 0;
+    _animation._layers._capacity = 0;
+    _nodes._data = nullptr;
+    _nodes._size = 0;
+    _nodes._capacity = 0;
+    _rootAnimationOffset.x = 0.0f;
+    _rootAnimationOffset.y = 0.0f;
+    _rootAnimationOffset.z = 0.0f;
+    _color[0] = 1.0f;
+    _color[1] = 1.0f;
+    _color[2] = 1.0f;
+    _color[3] = 1.0f;
+    _sortBias = 0;
 }
 
 Graphics::MeshInstance::~MeshInstance() {
-    RtGraphics::MeshInstance* const mi = reinterpret_cast<RtGraphics::MeshInstance*>(this);   // B.3.8 bridge (the POD view)
-    rtcoll::Rt_ArrayDtor_18001c550(&mi->_nodes);
-    rtcoll::Rt_ArrayDtor_18001c480(&mi->_animation._layers);
-    rtcoll::RtColl_ArrayDtor_180014d00(&mi->_materials);
-
+    rtcoll::Rt_ArrayDtor_18001c550(&_nodes);
+    rtcoll::Rt_ArrayDtor_18001c480(&_animation._layers);
+    rtcoll::RtColl_ArrayDtor_180014d00(&_materials);
 }
 
 // ============================================================================
@@ -834,12 +795,14 @@ Graphics::MeshInstance::~MeshInstance() {
 // ============================================================================
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h) for the
 // exe-side reader in code/Game/Player/tool_base_render.cpp.
+// B.4 LEFT: the `void*` signature is its one outside caller's
+// (code/Game/Player/tool_base_render.cpp); each parameter is viewed once.
 void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
-
-    TriangleVertex* tv = reinterpret_cast<TriangleVertex*>(self);
-    tv->x = static_cast<int16_t>(static_cast<int>(Rd<float>(vec3, 0) * kEdgeMeshVertexScale));
-    tv->y = static_cast<int16_t>(static_cast<int>(Rd<float>(vec3, 4) * kEdgeMeshVertexScale));
-    tv->z = static_cast<int16_t>(static_cast<int>(Rd<float>(vec3, 8) * kEdgeMeshVertexScale));
+    TriangleVertex* tv = static_cast<TriangleVertex*>(self);
+    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);
+    tv->x = static_cast<int16_t>(static_cast<int>(v->x * kEdgeMeshVertexScale));
+    tv->y = static_cast<int16_t>(static_cast<int>(v->y * kEdgeMeshVertexScale));
+    tv->z = static_cast<int16_t>(static_cast<int>(v->z * kEdgeMeshVertexScale));
     tv->w = 0;
 
     return self;
@@ -861,10 +824,10 @@ void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
 // ============================================================================
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h), as above.
 void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
-
-    EdgeVertex* ev = reinterpret_cast<EdgeVertex*>(self);
-    const TriangleVertex* ta = reinterpret_cast<const TriangleVertex*>(a);
-    const TriangleVertex* tb = reinterpret_cast<const TriangleVertex*>(b);
+    // B.4 LEFT: the outside caller's `void*` signature, as above.
+    EdgeVertex* ev = static_cast<EdgeVertex*>(self);
+    const TriangleVertex* ta = static_cast<const TriangleVertex*>(a);
+    const TriangleVertex* tb = static_cast<const TriangleVertex*>(b);
 
     ev->a.x = ta->x;  ev->b.x = tb->x;
     ev->a.y = ta->y;  ev->b.y = tb->y;
@@ -934,43 +897,38 @@ void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void*
 // the compiler's base chain (Object::External()); the body is the rest, in
 // retail's order, through the field-identical POD view.
 Graphics::EdgeMesh::EdgeMesh() {
-    RtGraphics::EdgeMesh* const em =
-        reinterpret_cast<RtGraphics::EdgeMesh*>(this);                 // B.3.9 bridge (the POD view)
-    void* const self = static_cast<void*>(this);
+    _reserved20 = nullptr;
+    _maskMaterial     = nullptr;
+    _skinMaskMaterial = nullptr;
+    _edgeMaterial     = nullptr;
+    _skinEdgeMaterial = nullptr;
 
-    em->_reserved20 = nullptr;
-    em->_material0.p = nullptr;
-    em->_material1.p = nullptr;
-    em->_material2.p = nullptr;
-    em->_material3.p = nullptr;
-
-    VideoBufferHeader* const vbufs[4] = { &em->_triVerts, &em->_edgeVerts,
-                                          &em->_capVerts, &em->_extraVerts };
-    VideoBufferHeader* const ibufs[4] = { &em->_triIndices, &em->_edgeIndices,
-                                          &em->_capIndices, &em->_extraIndices };
+    Video::VertexBuffer* const vbufs[4] = { &_vertexBuffer, &_skinVertexBuffer,
+                                            &_edgeVertexBuffer, &_edgeSkinVertexBuffer };
+    Video::IndexBuffer* const ibufs[4]  = { &_indexBuffer, &_skinIndexBuffer,
+                                            &_edgeIndexBuffer, &_edgeSkinIndexBuffer };
     for (int i = 0; i < 4; ++i) {
         // Retail's order is strictly vertex, index, vertex, index, ... and each
         // pair is (zero the dword, zero the flag byte, PlatformConstruct).
         // ENDGAME B.3.5 caller batch: both `PlatformConstruct` bodies are DEFINED
         // members of the real Video buffer classes (video/buffers.cpp).
-        vbufs[i]->_size = 0;  vbufs[i]->_flags = 0;
-        reinterpret_cast<Video::VertexBuffer*>(vbufs[i])->PlatformConstruct();  // B.3.5 bridge
-        ibufs[i]->_size = 0;  ibufs[i]->_flags = 0;
-        reinterpret_cast<Video::IndexBuffer*>(ibufs[i])->PlatformConstruct();   // B.3.5 bridge
+        vbufs[i]->size = 0;  vbufs[i]->dynamic = false;
+        vbufs[i]->PlatformConstruct();
+        ibufs[i]->size = 0;  ibufs[i]->dynamic = false;
+        ibufs[i]->PlatformConstruct();
     }
 
-    em->_triangleLists._data = nullptr;
-    em->_triangleLists._size = 0;
-    em->_triangleLists._capacity = 0;
-    em->_edgeLists._data = nullptr;
-    em->_edgeLists._size = 0;
-    em->_edgeLists._capacity = 0;
+    _triangleLists._data = nullptr;
+    _triangleLists._size = 0;
+    _triangleLists._capacity = 0;
+    _edgeLists._data = nullptr;
+    _edgeLists._size = 0;
+    _edgeLists._capacity = 0;
 
-    float* bounds = reinterpret_cast<float*>(B(self) + 0x168);
-    const uint32_t kPlus  = 0x4cbebc20u;   //  +1e8f
-    const uint32_t kMinus = 0xccbebc20u;   //  -1e8f
-    for (int i = 0; i < 3; ++i) std::memcpy(&bounds[i],     &kPlus,  4);
-    for (int i = 0; i < 3; ++i) std::memcpy(&bounds[3 + i], &kMinus, 4);
+    // An EMPTY box: +1e8 (0x4cbebc20) x3 then -1e8 (0xccbebc20) x3. Both are
+    // exact floats, so the decimal spelling stores retail's bits.
+    _aabb.min.x = 1e8f;  _aabb.min.y = 1e8f;  _aabb.min.z = 1e8f;
+    _aabb.max.x = -1e8f; _aabb.max.y = -1e8f; _aabb.max.z = -1e8f;
 }
 
 // ============================================================================
@@ -1178,14 +1136,8 @@ namespace {
 // value (B3R). HIDDEN RETURN SLOT in retail: RCX = the FROM quaternion, RDX =
 // the return buffer, R8 = the TO quaternion, R9 = &t.
 
-// Math::Transform::AsMatrix — retail 0x18001e5f0, ordinal 1619. ENDGAME B.3.1
-// step 2: a direct member call; there is no door left to bypass. The
-// `(xf, ret)` shape is kept for the same reason as the two above.
-inline void* TransformAsMatrix(const void* xf, void* ret) {
-    *static_cast<Math::Matrix*>(ret) =
-        static_cast<const Math::Transform*>(xf)->AsMatrix();
-    return ret;
-}
+// Math::Transform::AsMatrix — retail 0x18001e5f0, ordinal 1619: the member,
+// called on typed operands (B.4: the `(xf, ret)` wrapper is gone).
 
 // ENDGAME B.3.5 block E: `RtNodeToWorldInterp` and its `NodeToWorldInterpFn`
 // typedef are DELETED. They were a `RT_EXPORT_ONCE` door onto
@@ -1211,14 +1163,7 @@ inline void* TransformAsMatrix(const void* xf, void* ret) {
 // wave9_lane_gfx.cpp records from the shipped call site, kept in the shape
 // below because the caller works on raw offsets into the interpolated-state
 // pair (a B.3.1 bridge that goes with Graphics::MeshInstance).
-inline void* TransformLerp(const void* from, void* ret, const void* to,
-                           const void* t) {
-    *static_cast<Math::Transform*>(ret) =
-        static_cast<const Math::Transform*>(from)->Lerp(
-            *static_cast<const Math::Transform*>(to),
-            *static_cast<const Math::Scalar*>(t));
-    return ret;
-}
+// B.4: called as `prev.Lerp(cur, t)` on the typed pair; the wrapper is gone.
 
 // ?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z — retail
 // 0x1800155a0, ordinal 3992: Graphics::Geometry::SetTransform, the member (B3R).
@@ -1247,21 +1192,17 @@ inline void* TransformLerp(const void* from, void* ret, const void* to,
 // +0x1c is PREVIOUS, and that matches Geometry's +0x84 `_transform` /
 // +0xa0 `_prevTransform` ordering in runtime/types/graphics/Geometry.h.
 // ---------------------------------------------------------------------------
-void RtLerpTransformPair(const uint8_t* pair, float t, Transform* out) {
-    const Transform* cur =
-        reinterpret_cast<const Transform*>(pair + 0x00);
-    const Transform* prev =
-        reinterpret_cast<const Transform*>(pair + 0x1c);
+//
+// B.4: the pair is named -- `cur` / `prev` are the two halves of an
+// `InterpolatedState<Math::Transform>`, or Geometry's `_transform` /
+// `_prevTransform`, which are laid out the same way.
+void RtLerpTransformPair(const Transform& cur, const Transform& prev, float t,
+                         Transform* out) {
+    out->rotation = prev.rotation.Lerp(cur.rotation, Math::Scalar(t));
 
-    const Scalar s = { t };
-    *reinterpret_cast<Math::Quaternion*>(&out->rotation) =              // B.3.x bridge
-        reinterpret_cast<const Math::Quaternion*>(&prev->rotation)->Lerp(
-            *reinterpret_cast<const Math::Quaternion*>(&cur->rotation),
-            *reinterpret_cast<const Math::Scalar*>(&s));
-
-    out->translation.x = prev->translation.x + (cur->translation.x - prev->translation.x) * t;
-    out->translation.y = prev->translation.y + (cur->translation.y - prev->translation.y) * t;
-    out->translation.z = prev->translation.z + (cur->translation.z - prev->translation.z) * t;
+    out->translation.x = prev.translation.x + (cur.translation.x - prev.translation.x) * t;
+    out->translation.y = prev.translation.y + (cur.translation.y - prev.translation.y) * t;
+    out->translation.z = prev.translation.z + (cur.translation.z - prev.translation.z) * t;
 }
 
 }  // namespace
@@ -1626,28 +1567,15 @@ void RtLerpTransformPair(const uint8_t* pair, float t, Transform* out) {
 
 namespace {
 
-// The draw group's view position. `Camera.h` models `RendererDrawGroup` from
-// +0xe0 onward and states in terms that its 0xe0-byte HEAD is "not read by lane
-// F" — these three floats live inside that head, so they are read by offset
-// rather than through a member, and the header is NOT edited to invent a field
-// on one witness.
-const size_t kDrawGroupViewPos = 0x90;          // three floats, x/y/z
-
-// Graphics::GraphicsMesh::DetailLevel — stride 0xb0. Only the four fields these
-// two bodies read are named; Mesh.h's GraphicsMeshView declares the array as
-// `Array<uint8_t>` at +0x50 with the 0xb0 stride in its banner, and nothing
-// else in the tree models the element.
-const size_t kDetail_Stride       = 0xb0;
-const size_t kDetail_SwitchDist   = 0x10;   // float; compared SQUARED
-const size_t kDetail_Lists        = 0x98;   // -> TriangleList[], stride 0x18
-const size_t kDetail_ListCount    = 0xa0;   // int32
-const size_t kDetail_DefaultArg8  = 0xa8;   // int32, handed to AddDrawItem arg8
-
-// One entry of a detail level's list array — stride 0x18 for MeshInstance and
-// for BOTH EdgeMesh arrays (`LEA (%rax,%rax,2),%rcx` then scale 8).
-const size_t kList_Stride    = 0x18;
-const size_t kList_Material  = 0x10;   // int32 index into MeshInstance::_materials
-const size_t kList_NodeFlag  = 0x14;   // int32; NEGATIVE means "skinned"
+// B.4: every offset these two bodies read is a named field now:
+//   the draw group's view position (+0x90) is `_camera._cameraToWorld
+//   .translation` (+0x08 + 0x64 + 0x24; Camera.h's correction 7 names the
+//   group's head);
+//   GraphicsMesh::DetailLevel (stride 0xb0) is `_distance` (+0x10, compared
+//   SQUARED), `_triangleLists` (+0x98 / count +0xa0) and `_maxInstances`
+//   (+0xa8, AddDrawItem's arg8);
+//   GraphicsMesh::TriangleList (stride 0x18) is `_f10` (+0x10, the index into
+//   MeshInstance::_materials) and `_f14` (+0x14, NEGATIVE means "skinned").
 
 // The name door for the append. Spelled on ONE line: runtime_census.py's
 // called-scan cannot see a mangled name split across a C++ string-literal
@@ -1904,15 +1832,12 @@ bool MeshInstance::IsAnimating() const {
     if (_animation._layers._size == 0)
         return false;
 
-    const uint8_t* layer = _animation._layers._data;
-    const void*    group = Rd<void*>(layer, 0x00);
-    const int32_t  animIndex = Rd<int32_t>(layer, 0x08);
-    const int64_t  layerTime = Rd<int64_t>(layer, 0x18);
-
-    const uint8_t* anim = B(Rd<void*>(group, 0x20)) + static_cast<int64_t>(animIndex) * 0x70;
-    if (Rd<int8_t>(anim, 0x3c) != 0)
+    // `layer->_group->_clips + animIndex * 0x70`: GetAnimation, inlined.
+    const AnimationState::Layer& layer = _animation._layers._data[0];
+    const Animation& anim = layer._group->GetAnimation(layer._clipIndex);
+    if (anim._looping)
         return true;
-    return layerTime < Rd<int64_t>(anim, 0x58);
+    return layer._time._ticks < anim._duration;
 }
 
 // ---------------------------------------------------------------------------
@@ -1925,40 +1850,31 @@ bool MeshInstance::IsAnimating() const {
 // ---------------------------------------------------------------------------
 Math::Transform MeshInstance::GetNodeToWorld(int node) const {
     Math::Transform result;
-    uint8_t* const out = reinterpret_cast<uint8_t*>(&result);
 
-    if (_animation._instanced == 0) {
-        const uint8_t* src = B(_nodes._data) + static_cast<int64_t>(node) * 0x38;
-        std::memcpy(out, src, 0x1c);            // seven dwords, _state[0]
+    if (!_animation._instanced) {
+        result = _nodes._data[node]._current;             // seven dwords, the CURRENT half
     } else {
         // The geometry transform, copied into a local first exactly as retail
         // does (it materialises all seven floats before either call).
-        uint8_t geomXf[0x1c];
-        std::memcpy(geomXf, &_transform, 0x1c);
+        const Math::Transform geomXf = _transform;
 
-        // slot + 0x38 is a POINTER to the pool entry's per-node pose array; the
+        // The slot's `_nodes._data` is the pool entry's per-node pose array; the
         // node index strides THAT, not the slot. See RtInstancedPoolSlot.
-        const uint8_t* poses = B(Rd<void*>(RtInstancedPoolSlot(this), 0x38));
-        uint8_t poolXf[0x1c];
-        std::memcpy(poolXf, poses + static_cast<int64_t>(node) * 0x38, 0x1c);
+        const Math::Transform poolXf = RtInstancedPoolSlot(this)->_nodes._data[node]._current;
 
         // Retail seeds the return slot with the identity transform before the
         // two calls: qword at +0x0c = 0x3f800000, everything else zero.
-        std::memset(out, 0, 0x1c);
-        const float one = 1.0f;
-        std::memcpy(out + 0x0c, &one, 4);
+        result.rotation.x = 0.0f; result.rotation.y = 0.0f; result.rotation.z = 0.0f;
+        result.rotation.w = 1.0f;
+        result.translation.x = 0.0f; result.translation.y = 0.0f; result.translation.z = 0.0f;
 
         // translation = geom.translation + Rotate(geom.rotation, pool.translation)
-        uint8_t rotated[16];
-        QuaternionRotate(geomXf /* rotation at +0x00 */, rotated, poolXf + 0x10);
-        for (int i = 0; i < 3; ++i) {
-            const float t = Rd<float>(geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
-            std::memcpy(out + 0x10 + i * 4, &t, 4);
-        }
+        const Math::Vector3 rotated = geomXf.rotation.Rotate(poolXf.translation);
+        result.translation.x = geomXf.translation.x + rotated.x;
+        result.translation.y = geomXf.translation.y + rotated.y;
+        result.translation.z = geomXf.translation.z + rotated.z;
         // rotation = geom.rotation * pool.rotation
-        uint8_t q[16];
-        QuaternionMultiply(geomXf, q, poolXf);
-        std::memcpy(out, q, 16);
+        result.rotation = geomXf.rotation * poolXf.rotation;
     }
 
     return result;
@@ -1973,33 +1889,29 @@ Math::Transform MeshInstance::GetNodeToWorld(int node) const {
 // ---------------------------------------------------------------------------
 Math::Transform MeshInstance::GetNodeToWorld(int node, float t) const {
     Math::Transform result;
-    uint8_t* const out = reinterpret_cast<uint8_t*>(&result);
 
-    if (_animation._instanced == 0) {
-        const uint8_t* pair = B(_nodes._data) + static_cast<int64_t>(node) * 0x38;
-        const Scalar s = { t };
-        TransformLerp(pair + 0x1c, &result, pair + 0x00, &s);
+    if (!_animation._instanced) {
+        // Transform::Lerp(prev, ret, cur, &t) -- 0x18001d690, a CALL in retail.
+        const InterpolatedState<Math::Transform>& pair = _nodes._data[node];
+        result = pair._previous.Lerp(pair._current, Math::Scalar(t));
     } else {
         Transform geomXf;
-        RtLerpTransformPair(B(&_transform), t, &geomXf);
+        RtLerpTransformPair(_transform, _prevTransform, t, &geomXf);
 
-        const uint8_t* poses = B(Rd<void*>(RtInstancedPoolSlot(this), 0x38));
+        const InterpolatedState<Math::Transform>& pose =
+            RtInstancedPoolSlot(this)->_nodes._data[node];
         Transform poolXf;
-        RtLerpTransformPair(poses + static_cast<int64_t>(node) * 0x38, t, &poolXf);
+        RtLerpTransformPair(pose._current, pose._previous, t, &poolXf);
 
-        std::memset(out, 0, 0x1c);
-        const float one = 1.0f;
-        std::memcpy(out + 0x0c, &one, 4);
+        result.rotation.x = 0.0f; result.rotation.y = 0.0f; result.rotation.z = 0.0f;
+        result.rotation.w = 1.0f;
+        result.translation.x = 0.0f; result.translation.y = 0.0f; result.translation.z = 0.0f;
 
-        uint8_t rotated[16];
-        QuaternionRotate(&geomXf.rotation, rotated, &poolXf.translation);
-        for (int i = 0; i < 3; ++i) {
-            const float v = Rd<float>(&geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
-            std::memcpy(out + 0x10 + i * 4, &v, 4);
-        }
-        uint8_t q[16];
-        QuaternionMultiply(&geomXf, q, &poolXf);
-        std::memcpy(out, q, 16);
+        const Math::Vector3 rotated = geomXf.rotation.Rotate(poolXf.translation);
+        result.translation.x = geomXf.translation.x + rotated.x;
+        result.translation.y = geomXf.translation.y + rotated.y;
+        result.translation.z = geomXf.translation.z + rotated.z;
+        result.rotation = geomXf.rotation * poolXf.rotation;
     }
 
     return result;
@@ -2011,10 +1923,10 @@ Math::Transform MeshInstance::GetNodeToWorld(int node, float t) const {
 // ---------------------------------------------------------------------------
 Math::Vector3 MeshInstance::RootAnimationOffset() const {
     Math::Vector3 result;
-    if (_animation._instanced == 0) {
-        std::memcpy(&result, &_rootAnimationOffset, 12);
+    if (!_animation._instanced) {
+        result = _rootAnimationOffset;
     } else {
-        std::memcpy(&result, RtInstancedPoolSlot(this) + 0x18, 12);
+        result = RtInstancedPoolSlot(this)->_rootOffset;   // the slot's +0x18
     }
     return result;
 }
@@ -2032,31 +1944,31 @@ void MeshInstance::UpdateHierarchy() {
     if (count == 0)
         return;
 
-    uint8_t* xf = B(_nodes._data);
-    const uint8_t* mesh = B(_mesh.p);
+    InterpolatedState<Math::Transform>* const xf = _nodes._data;
+    const GraphicsMesh* const mesh = GetMesh().Get();
 
     // Node 0: the geometry's own transform, in both halves.
-    std::memcpy(xf, &_transform, 0x1c);
-    std::memcpy(xf + 0x1c, xf, 0x1c);
+    xf[0]._current  = _transform;
+    xf[0]._previous = xf[0]._current;
 
-    const uint8_t* nodes = B(Rd<void*>(mesh, 0x60));
+    const GraphicsMesh::Node* const nodes = mesh->GetNodes()._data;
     for (int i = 1; i < count; ++i) {
-        const uint8_t* node   = nodes + static_cast<int64_t>(i) * 0x48;
-        const int32_t  parent = Rd<int32_t>(node, 0x08);
-        const uint8_t* p      = xf + static_cast<int64_t>(parent) * 0x38;
+        const GraphicsMesh::Node& node = nodes[i];
+        const int32_t parent = node._parent;
+        const Math::Transform& p = xf[parent]._current;
 
-        const float qx = Rd<float>(p, 0x00);
-        const float qy = Rd<float>(p, 0x04);
-        const float qz = Rd<float>(p, 0x08);
-        const float qw = Rd<float>(p, 0x0c);
-        const float px = Rd<float>(p, 0x10);
-        const float py = Rd<float>(p, 0x14);
-        const float pz = Rd<float>(p, 0x18);
+        const float qx = p.rotation.x;
+        const float qy = p.rotation.y;
+        const float qz = p.rotation.z;
+        const float qw = p.rotation.w;
+        const float px = p.translation.x;
+        const float py = p.translation.y;
+        const float pz = p.translation.z;
 
-        const uint8_t* localXf = node + 0x0c;
-        const float vx = Rd<float>(localXf, 0x10);
-        const float vy = Rd<float>(localXf, 0x14);
-        const float vz = Rd<float>(localXf, 0x18);
+        const Math::Transform& localXf = node._local;
+        const float vx = localXf.translation.x;
+        const float vy = localXf.translation.y;
+        const float vz = localXf.translation.z;
 
         // Conjugate components; the w component is deliberately NOT negated.
         const float cx = -qx, cy = -qy, cz = -qz;
@@ -2075,15 +1987,14 @@ void MeshInstance::UpdateHierarchy() {
         const float wy = py + ry;
         const float wz = pz + rz;
 
-        uint8_t q[16];
-        QuaternionMultiply(p, q, localXf);
+        const Math::Quaternion q = p.rotation * localXf.rotation;
 
-        uint8_t* dst = xf + static_cast<int64_t>(i) * 0x38;
-        std::memcpy(dst + 0x00, q, 16);
-        std::memcpy(dst + 0x10, &wx, 4);
-        std::memcpy(dst + 0x14, &wy, 4);
-        std::memcpy(dst + 0x18, &wz, 4);
-        std::memcpy(dst + 0x1c, dst, 0x1c);       // second half = first half
+        InterpolatedState<Math::Transform>& dst = xf[i];
+        dst._current.rotation      = q;
+        dst._current.translation.x = wx;
+        dst._current.translation.y = wy;
+        dst._current.translation.z = wz;
+        dst._previous = dst._current;             // second half = first half
     }
 }
 
@@ -2093,45 +2004,53 @@ void MeshInstance::UpdateHierarchy() {
 // One store, no bounds check — retail has none and CLAUDE.md forbids adding one.
 // ---------------------------------------------------------------------------
 void MeshInstance::SetMaterialInstance(int index, ExternalPtrHandle value) {
-    _materials._data[index] = value;
+    // LEFT: `ExternalPtrHandle` is the untyped handle its code/Game callers hold.
+    _materials._data[index] = static_cast<MaterialInstance*>(value.p);
 }
 
 // ---------------------------------------------------------------------------
 // ?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@…@Z retail 0x1800ffea0
 //
 // The one trap this body cost an integration run for is preserved in the
-// comment at the array copy: GraphicsMesh+0x70 is a POINTER to an array of
-// Array headers, so the source of the copy is the LOADED value, not the address
-// of the field. Read the stars, not the offsets.
+// comment at the array copy: GraphicsMesh+0x70 is the `_skinMaterials` Array
+// of Arrays, so the source of the copy is its `_data` (the first skin's
+// Array header), not the address of the field. Read the stars, not the offsets.
 // ---------------------------------------------------------------------------
 void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
     _mesh = mesh;
-    rtcoll::RtColl_ArrayAssign_180014c70(&_materials,
-                     reinterpret_cast<const RtGraphics::GraphicsMeshView*>(mesh.p)->_materialLists);
+    // LEFT: the untyped `ExternalPtrHandle` its code/Game callers hold.
+    const GraphicsMesh* const newMesh = static_cast<const GraphicsMesh*>(mesh.p);
+    rtcoll::RtColl_ArrayAssign_180014c70(&_materials, newMesh->_skinMaterials._data);
 
     if (_materials._size > 0) {
         uint32_t flags = _materialTypeFlags;
-        const RtGraphics::ExternalPtr* mats = _materials._data;
+        const Object::ExternalPtr<MaterialInstance>* mats = _materials._data;
         for (int32_t n = _materials._size; n != 0; --n) {
-            const void* mat = mats->p;
+            const MaterialInstance* mat = mats->Get();
             ++mats;
-            flags |= 1u << (static_cast<uint8_t>(Rd<int32_t>(mat, 0x20)) & 0x1f);
+            flags |= 1u << (static_cast<uint8_t>(mat->_shaderClass) & 0x1f);
             _materialTypeFlags = flags;          // retail stores back each time
         }
     }
 
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // B.3.5 bridge
+    // LEFT: `_animation` is the 0x18-byte retail AnimationState (Mesh.h's
+    // MeshAnimationState); the tree's 0x48 class is only its prefix-compatible
+    // superset, so the member is reached through a view of the same bytes.
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)
         ->::Graphics::AnimationState::ResetAnimationState();
-    rtcoll::Rt_SetSize_18005ac50(&_nodes, Rd<int32_t>(mesh.p, 0x68));
+    rtcoll::Rt_SetSize_18005ac50(&_nodes, newMesh->_nodes._size);
     this->MeshInstance::UpdateHierarchy();
 
-    const uint8_t* m = B(_mesh.p);               // re-read, as retail does
-    float* lb = reinterpret_cast<float*>(&_localBounds);
-    if (lb[0] != Rd<float>(m, 0x80) || lb[1] != Rd<float>(m, 0x84) ||
-        lb[2] != Rd<float>(m, 0x88) || lb[3] != Rd<float>(m, 0x8c) ||
-        lb[4] != Rd<float>(m, 0x90) || lb[5] != Rd<float>(m, 0x94)) {
-        for (int i = 0; i < 6; ++i)
-            lb[i] = Rd<float>(m, 0x80 + i * 4);
+    const GraphicsMesh* const m = GetMesh().Get();   // re-read, as retail does
+    if (_localBounds.min.x != m->_aabb.min.x || _localBounds.min.y != m->_aabb.min.y ||
+        _localBounds.min.z != m->_aabb.min.z || _localBounds.max.x != m->_aabb.max.x ||
+        _localBounds.max.y != m->_aabb.max.y || _localBounds.max.z != m->_aabb.max.z) {
+        _localBounds.min.x = m->_aabb.min.x;
+        _localBounds.min.y = m->_aabb.min.y;
+        _localBounds.min.z = m->_aabb.min.z;
+        _localBounds.max.x = m->_aabb.max.x;
+        _localBounds.max.y = m->_aabb.max.y;
+        _localBounds.max.z = m->_aabb.max.z;
         _dirtyFlags |= 2u;
     }
 }
@@ -2139,26 +2058,27 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
 // ---------------------------------------------------------------------------
 // ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@…HAEBVTime@…1M@Z
 //                                                        retail 0x1800ff840
-// `startTime` and `blendTime` stay `const void*`: `System::Time` is block H's
-// neighbourhood and this body only forwards the two pointers. They are the
-// FIFTH and SIXTH arguments, which is exactly where the recorded
-// pointer-typed-as-int trap bites, so they are typed against the callee's
-// mangled name rather than guessed.
+// `startTime` and `blendTime` stay `const void*` in the declaration: that is the
+// signature code/Game's callers hold. They are the FIFTH and SIXTH arguments,
+// which is exactly where the recorded pointer-typed-as-int trap bites, so they
+// are typed against the callee's mangled name rather than guessed.
 // ---------------------------------------------------------------------------
 void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
                                  const void* startTime, const void* blendTime,
                                  float weight) {
-    // ENDGAME B.3.5 caller batch. `B(_mesh.p) + 0x60` is the ADDRESS of the
-    // embedded `Array<Node>`, not a loaded pointer (Mesh.h's banner). The
-    // eight-argument door had `this` first; the member takes seven.
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // B.3.5 bridge
+    // ENDGAME B.3.5 caller batch. `GetMesh()->_nodes` is the embedded
+    // `Array<Node>` at mesh+0x60, handed over by ADDRESS (Mesh.h's banner).
+    // LEFT: the `_animation` view (see SetMesh), the untyped group handle and
+    // the two untyped Time pointers are this member's declared signature,
+    // which its code/Game callers hold.
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)
         ->::Graphics::AnimationState::PlayAnimation(
             Object::ExternalPtr<::Graphics::AnimationGroup>(
-                reinterpret_cast<::Graphics::AnimationGroup*>(group.p)),
+                static_cast<::Graphics::AnimationGroup*>(group.p)),
             index,
-            *reinterpret_cast<const Collection::Array<uint8_t>*>(B(_mesh.p) + 0x60),
-            *reinterpret_cast<const System::Time*>(startTime),
-            *reinterpret_cast<const System::Time*>(blendTime),
+            GetMesh()->GetNodes(),
+            *static_cast<const System::Time*>(startTime),
+            *static_cast<const System::Time*>(blendTime),
             weight, true);
 }
 
@@ -2173,7 +2093,7 @@ Math::Transform* MeshInstance::GetSubTransform(Math::Transform* ret, int node) c
         *ret = this->MeshInstance::GetNodeToWorld(node);
         return ret;
     }
-    std::memcpy(ret, &_transform, 0x1c);          // seven dwords
+    *ret = _transform;                            // seven dwords
     return ret;
 }
 
@@ -2193,29 +2113,29 @@ Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int packed,
     const int64_t element = wide & 0xfff;
     const int64_t level   = (wide >> 12) & 0xf;
 
-    const uint8_t* const mesh   = B(_mesh.p);
-    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));
-    const uint8_t* const lists  = B(Rd<void*>(levels, level * 0xb0 + 0x98));
-    const int64_t node = Rd<int32_t>(lists, static_cast<size_t>(element) * 0x18 + 0x14);
-
-    const uint8_t* pair = nullptr;
-    if (node < 0) {
-        pair = B(&_transform);                    // +0x84 cur / +0xa0 prev
-    } else if (_animation._instanced == 0) {
-        pair = B(_nodes._data) + node * 0x38;
-    } else {
-        pair = B(Rd<void*>(RtInstancedPoolSlot(this), 0x38)) + node * 0x38;
-    }
+    const GraphicsMesh* const mesh = GetMesh().Get();
+    const GraphicsMesh::TriangleList* const lists =
+        reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data)[level]  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+            ._triangleLists._data;
+    const int64_t node = lists[element]._f14;     // MOVSXD
 
     Transform xf;
-    RtLerpTransformPair(pair, t, &xf);
+    if (node < 0) {
+        RtLerpTransformPair(_transform, _prevTransform, t, &xf);   // +0x84 cur / +0xa0 prev
+    } else if (!_animation._instanced) {
+        const InterpolatedState<Math::Transform>& pair = _nodes._data[node];
+        RtLerpTransformPair(pair._current, pair._previous, t, &xf);
+    } else {
+        const InterpolatedState<Math::Transform>& pair =
+            RtInstancedPoolSlot(this)->_nodes._data[node];
+        RtLerpTransformPair(pair._current, pair._previous, t, &xf);
+    }
 
-    Matrix m;
-    TransformAsMatrix(&xf, &m);
+    const Matrix m = xf.AsMatrix();
 
     // Twelve matrix stores, then the four colour stores. `m.m[3]`, `m.m[7]`,
     // `m.m[11]` and `m.m[15]` are deliberately never read.
-    float* const out = reinterpret_cast<float*>(ret);
+    float* const out = ret->m;
     out[0]  = m.m[0];  out[1]  = m.m[1];  out[2]  = m.m[2];   out[3]  = _color[0];
     out[4]  = m.m[4];  out[5]  = m.m[5];  out[6]  = m.m[6];   out[7]  = _color[1];
     out[8]  = m.m[8];  out[9]  = m.m[9];  out[10] = m.m[10];  out[11] = _color[2];
@@ -2229,56 +2149,55 @@ Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int packed,
 //                                                        retail 0x180100f20
 //
 // The `Scene&` argument is accepted and NEVER READ (RDX is overwritten at
-// 0x180100f65). `Renderer&` is still reached by offset: `Graphics::Renderer` is
-// block F's class, so it is taken by reference here and bridged at the one place
-// the offsets are read.
+// 0x180100f65).
 // ---------------------------------------------------------------------------
 void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     (void)scene;                      // RDX is overwritten at 0x180100f65
     ++g_addDrawItemsMesh;
 
-    const uint8_t* const mesh = B(_mesh.p);                    // 180100f32
-    const uint8_t* const rend = reinterpret_cast<const uint8_t*>(&renderer);  // B.3.5 bridge
-    const float alpha = Rd<float>(rend, 0x40);                 // Renderer::frameAlpha
+    const GraphicsMesh* const mesh = GetMesh().Get();          // 180100f32
+    const float alpha = renderer._alphaT;                      // Renderer::_alphaT
 
     int32_t level = 0;                                         // r15d
-    const int32_t levelCount = Rd<int32_t>(mesh, 0x58);        // 180100f57
+    const int32_t levelCount = mesh->_detailLevels._size;      // 180100f57
 
     if (levelCount > 1) {                                      // 180100f5b  JLE
-        const uint8_t* const groups = B(Rd<void*>(rend, 0x10));
-        const size_t gi = static_cast<size_t>(Rd<int32_t>(rend, 0x34)) * 0x1f0;
-        const uint8_t* const view = groups + gi + kDrawGroupViewPos;
+        // The current draw group's view position: its camera's world
+        // translation (group + 0x08 + 0x64 + 0x24 == group + 0x90).
+        const Math::Vector3& view =
+            renderer._drawGroups._data[renderer._currentDrawGroup]
+                ._camera._cameraToWorld.translation;
 
-        const void* const g = static_cast<const Geometry*>(this);
-        const float maxZ = (Rd<float>(g, 0x78) > Rd<float>(g, 0x60)) ? Rd<float>(g, 0x78) : Rd<float>(g, 0x60);
-        const float maxY = (Rd<float>(g, 0x74) > Rd<float>(g, 0x5c)) ? Rd<float>(g, 0x74) : Rd<float>(g, 0x5c);
-        const float maxX = (Rd<float>(g, 0x70) > Rd<float>(g, 0x58)) ? Rd<float>(g, 0x70) : Rd<float>(g, 0x58);
-        const float minZ = (Rd<float>(g, 0x54) > Rd<float>(g, 0x6c)) ? Rd<float>(g, 0x6c) : Rd<float>(g, 0x54);
-        const float minY = (Rd<float>(g, 0x50) > Rd<float>(g, 0x68)) ? Rd<float>(g, 0x68) : Rd<float>(g, 0x50);
-        const float minX = (Rd<float>(g, 0x4c) > Rd<float>(g, 0x64)) ? Rd<float>(g, 0x64) : Rd<float>(g, 0x4c);
+        const float maxZ = (_prevWorldBounds.max.z > _worldBounds.max.z) ? _prevWorldBounds.max.z : _worldBounds.max.z;
+        const float maxY = (_prevWorldBounds.max.y > _worldBounds.max.y) ? _prevWorldBounds.max.y : _worldBounds.max.y;
+        const float maxX = (_prevWorldBounds.max.x > _worldBounds.max.x) ? _prevWorldBounds.max.x : _worldBounds.max.x;
+        const float minZ = (_worldBounds.min.z > _prevWorldBounds.min.z) ? _prevWorldBounds.min.z : _worldBounds.min.z;
+        const float minY = (_worldBounds.min.y > _prevWorldBounds.min.y) ? _prevWorldBounds.min.y : _worldBounds.min.y;
+        const float minX = (_worldBounds.min.x > _prevWorldBounds.min.x) ? _prevWorldBounds.min.x : _worldBounds.min.x;
 
         const float kHalf = 0.5f;                              // 0x180161694
         const float cx = (minX + maxX) * kHalf;
         const float cy = (minY + maxY) * kHalf;
         const float cz = (minZ + maxZ) * kHalf;
 
-        float dx = Rd<float>(view, 0x00) - cx;
-        float dy = Rd<float>(view, 0x04) - cy;
-        float dz = Rd<float>(view, 0x08) - cz;
+        float dx = view.x - cx;
+        float dy = view.y - cy;
+        float dz = view.z - cz;
         dx *= dx; dy *= dy; dz *= dz;
         const float distSq = (dy + dx) + dz;                   // retail's order
 
-        const uint8_t* lvl = B(Rd<void*>(mesh, 0x50));
+        const GraphicsMesh::DetailLevel* const lvl =
+            reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
         for (int32_t i = 0; i < levelCount; ++i) {             // 180101070
-            const float d = Rd<float>(lvl, i * kDetail_Stride + kDetail_SwitchDist);
+            const float d = lvl[i]._distance;
             if (d * d > distSq) { level = i; break; }          // COMISS / JA
         }
         // The `TEST EDX,EDX ; JS` that follows is unreachable — see the door.
     }
 
-    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));    // 18010109a
-    const size_t off = static_cast<size_t>(level) * kDetail_Stride;
-    const int32_t listCount = Rd<int32_t>(levels, off + kDetail_ListCount);
+    const GraphicsMesh::DetailLevel* const levels =                              // 18010109a
+        reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+    const int32_t listCount = levels[level]._triangleLists._size;
     if (listCount <= 0) return;                                // 1801010c0
 
     const uint16_t packedLevel = static_cast<uint16_t>(
@@ -2286,37 +2205,26 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     const float kOne = 1.0f;                                   // 0x18016169c
     const float oneMinusAlpha = kOne - alpha;                  // SUBSS XMM6,XMM10
 
-    // ENDGAME B.3.5 block GC item 6: the `ResolveExport` name door onto
-    // `?AddDrawItem@Renderer@Graphics@@` that used to be resolved here is GONE.
-    // `Graphics::Renderer::AddDrawItem` is a MEMBER as of block GC commit 3
-    // (body in `wave9_lane_gfx.cpp`), and `renderer` is already the real class,
-    // so the calls below are QUALIFIED non-virtual member calls -- retail's own
-    // direct CALLs to 0x1801057b0. The `resolved NULL -- no mesh will draw`
-    // announcement goes with the resolve: a member call cannot be null.
-
     for (int32_t i = 0; i < listCount; ++i) {                  // 1801010f0
         // BOTH re-read inside the loop, exactly as retail does.
-        const uint8_t* const meshNow = B(_mesh.p);
-        const uint8_t* const lists   = B(Rd<void*>(levels, off + kDetail_Lists));
-        const size_t li = static_cast<size_t>(i) * kList_Stride;
+        const GraphicsMesh* const meshNow = GetMesh().Get();
+        const GraphicsMesh::TriangleList* const lists = levels[level]._triangleLists._data;
 
         uint32_t arg10 = 0xffffffffu;                          // OR $-1,%r10d
-        const uint8_t* const levelsNow = B(Rd<void*>(meshNow, 0x50));
-        int32_t arg8 = Rd<int32_t>(levelsNow, off + kDetail_DefaultArg8);
+        int32_t arg8 = reinterpret_cast<const GraphicsMesh::DetailLevel*>(
+            meshNow->_detailLevels._data)[level]._maxInstances;  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
 
-        if (Rd<int32_t>(lists, li + kList_NodeFlag) < 0) {     // 180101103  JGE
-            if (_animation._instanced == 0) {                  // 180101116
+        if (lists[i]._f14 < 0) {                               // 180101103  JGE
+            if (!_animation._instanced) {                      // 180101116
                 arg8 = 1;                                      // 180101138
             } else {
-                arg10 = static_cast<uint32_t>(Rd<int32_t>(
-                    _animation._layers._data,
-                    static_cast<size_t>(_animation._layers._size) * 0x38 - 0x2c));
+                arg10 = static_cast<uint32_t>(
+                    _animation._layers._data[_animation._layers._size - 1]._handle);
             }
         }
 
-        const int32_t matIndex = Rd<int32_t>(lists, li + kList_Material);
-        const void* material = Rd<void*>(_materials._data,
-                                         static_cast<size_t>(matIndex) * 8);
+        const int32_t matIndex = lists[i]._f10;
+        const MaterialInstance* material = _materials._data[matIndex].Get();
 
         // 16-BIT add: `ADD 0x28(%rbx),%r9w`. It WRAPS; it does not promote.
         const uint16_t arg4 = static_cast<uint16_t>(
@@ -2329,8 +2237,7 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
         const float arg7 = (alpha * _opacity) + (oneMinusAlpha * _opacityPrev);
 
         renderer.Graphics::Renderer::AddDrawItem(
-                static_cast<const Geometry*>(this),
-                reinterpret_cast<const MaterialInstance*>(material)   /* B.3.5 bridge */, arg4, arg5,
+                static_cast<const Geometry*>(this), material, arg4, arg5,
             0.0f, arg7, arg8, meshNow, arg10);                 // 18010119e
         ++g_addDrawItemsMeshQ;
     }
@@ -2357,10 +2264,8 @@ void EdgeMeshInstance::Update(const System::Time& time) {
 
     MeshInstance* const followed = _followed;
     if (followed) {
-        Transform xf;
-        std::memcpy(&xf, &followed->_transform, 0x1c);   // seven dwords
-        reinterpret_cast<::Graphics::Geometry*>(this)                   // B.3.x bridge
-            ->::Graphics::Geometry::SetTransform(*reinterpret_cast<const Math::Transform*>(&xf));
+        const Math::Transform xf = followed->_transform;   // seven dwords
+        this->::Graphics::Geometry::SetTransform(xf);
     }
 }
 
@@ -2378,22 +2283,23 @@ Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int pack
     const int  index     = packed & 0x7fff;
     const bool whichList = ((static_cast<uint32_t>(packed) >> 15) & 1u) != 0;
 
-    const uint8_t* const mesh = B(_mesh.p);
-    const uint8_t* const listData = B(Rd<void*>(mesh, whichList ? 0x158 : 0x148));
-    const uint8_t* const entry = listData + static_cast<int64_t>(index) * 0x18;
-    const int32_t node = Rd<int32_t>(entry, 0x14);   // plain MOV dword; see the door
+    // LEFT: `_mesh` is the untyped `RtGraphics::ExternalPtr` handle SetMesh
+    // takes from its code/Game caller.
+    const EdgeMesh* const mesh = static_cast<const EdgeMesh*>(_mesh.p);
+    const GraphicsMesh::TriangleList* const listData =
+        whichList ? mesh->_edgeLists._data : mesh->_triangleLists._data;
+    const int32_t node = listData[index]._f14;   // plain MOV dword; see the door
 
     if (node >= 0 && _followed != nullptr) {
         // ENDGAME B.3.5: `MeshInstance::GetNodeToWorld(int, float)` is now a
         // member of the real class and the body is in this file, so retail's
-        // direct internal CALL becomes a direct member call — the port-registry
-        // door it used to go through is gone, along with its resolve.
+        // direct internal CALL becomes a direct member call.
         const Transform got = _followed->MeshInstance::GetNodeToWorld(node, t);
-        TransformAsMatrix(&got, ret);
+        *ret = got.AsMatrix();
     } else {
         Transform xf;
-        RtLerpTransformPair(B(&_transform), t, &xf);
-        TransformAsMatrix(&xf, ret);
+        RtLerpTransformPair(_transform, _prevTransform, t, &xf);
+        *ret = xf.AsMatrix();
     }
 
     return ret;
@@ -2404,23 +2310,24 @@ Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int pack
 //                                                        retail 0x1800a3a20
 // `_followed` is stored FIRST and the mesh handle second — retail's order. The
 // four OR's write `_materialTypeFlags` back after EACH one, which is observable
-// to a re-entrant reader, so the loop keeps that shape.
+// to a re-entrant reader, so the four stay four statements. Read in the order
+// edge (+0x38), mask (+0x28), skinEdge (+0x40), skinMask (+0x30).
 // ---------------------------------------------------------------------------
 void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
     _followed = followed;
     _mesh = mesh;
 
-    const size_t order[4] = { 0x38, 0x28, 0x40, 0x30 };
-    for (int i = 0; i < 4; ++i) {
-        const void* mat = Rd<void*>(mesh.p, order[i]);
-        _materialTypeFlags |= 1u << (static_cast<uint8_t>(Rd<int32_t>(mat, 0x20)) & 0x1f);
-    }
+    // LEFT: the untyped handle its caller holds (see GetInstanceTransform).
+    const EdgeMesh* const em = static_cast<const EdgeMesh*>(mesh.p);
+    _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_edgeMaterial->_shaderClass) & 0x1f);
+    _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_maskMaterial->_shaderClass) & 0x1f);
+    _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_skinEdgeMaterial->_shaderClass) & 0x1f);
+    _materialTypeFlags |= 1u << (static_cast<uint8_t>(em->_skinMaskMaterial->_shaderClass) & 0x1f);
 
     // ENDGAME B.3.5 caller batch: `Graphics::Geometry::SetBounds` is a DEFINED
-    // member (scene.cpp:1373) and `this` IS a Geometry, so the resolve-and-return
-    // accessor is gone and the call is qualified and non-virtual, as retail's is.
-    this->::Graphics::Geometry::SetBounds(
-        *reinterpret_cast<const ::Box*>(B(mesh.p) + 0x168));
+    // member (scene.cpp:1373) and `this` IS a Geometry, so the call is qualified
+    // and non-virtual, as retail's is.
+    this->::Graphics::Geometry::SetBounds(em->_aabb);
 }
 
 // ---------------------------------------------------------------------------
@@ -2438,31 +2345,24 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 
     const float kOne = 1.0f;                                   // 0x18016169c
 
-    // ENDGAME B.3.5 block GC item 6: the `ResolveExport` name door onto
-    // `?AddDrawItem@Renderer@Graphics@@` that used to be resolved here is GONE.
-    // `Graphics::Renderer::AddDrawItem` is a MEMBER as of block GC commit 3
-    // (body in `wave9_lane_gfx.cpp`), and `renderer` is already the real class,
-    // so the calls below are QUALIFIED non-virtual member calls -- retail's own
-    // direct CALLs to 0x1801057b0. The `resolved NULL -- no mesh will draw`
-    // announcement goes with the resolve: a member call cannot be null.
+    // LEFT: `_mesh` is the untyped handle (see GetInstanceTransform); each of
+    // the four loads below is retail's own reload of it.
 
     // ---- pass 1: the triangle lists, sort key 0x2000 -----------------------
     {
-        const uint8_t* const em = B(_mesh.p);                  // 1800a2fe2
-        const int32_t n = Rd<int32_t>(em, 0x150);
+        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a2fe2
+        const int32_t n = em->_triangleLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a3020
-            const uint8_t* const emNow = B(_mesh.p);
-            const uint8_t* const lists = B(Rd<void*>(em, 0x148));
-            const size_t li = static_cast<size_t>(i) * kList_Stride;
+            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);
+            const GraphicsMesh::TriangleList* const lists = em->_triangleLists._data;
 
-            const void* material =
-                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a305f  JGE
-                    ? Rd<void*>(emNow, 0x28)                    // _material0
-                    : Rd<void*>(emNow, 0x30);                   // _material1
+            const MaterialInstance* material =
+                (lists[i]._f14 >= 0)                            // 1800a305f  JGE
+                    ? emNow->_maskMaterial.Get()                // +0x28
+                    : emNow->_skinMaskMaterial.Get();           // +0x30
 
             renderer.Graphics::Renderer::AddDrawItem(
-                static_cast<const Geometry*>(this),
-                reinterpret_cast<const MaterialInstance*>(material)   /* B.3.5 bridge */,
+                static_cast<const Geometry*>(this), material,
                 0x2000, static_cast<uint16_t>(i),
                 0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a3078
             ++g_addDrawItemsEdgeQ;
@@ -2471,24 +2371,22 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 
     // ---- pass 2: the edge lists, sort key 0x2001, index | 0x8000 -----------
     {
-        const uint8_t* const em = B(_mesh.p);                  // 1800a3087 RELOAD
-        const int32_t n = Rd<int32_t>(em, 0x160);
+        const EdgeMesh* const em = static_cast<const EdgeMesh*>(_mesh.p);      // 1800a3087 RELOAD
+        const int32_t n = em->_edgeLists._size;
         for (int32_t i = 0; i < n; ++i) {                      // 1800a30b0
-            const uint8_t* const emNow = B(_mesh.p);
-            const uint8_t* const lists = B(Rd<void*>(em, 0x158));
-            const size_t li = static_cast<size_t>(i) * kList_Stride;
+            const EdgeMesh* const emNow = static_cast<const EdgeMesh*>(_mesh.p);
+            const GraphicsMesh::TriangleList* const lists = em->_edgeLists._data;
 
-            const void* material =
-                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a30ef  JGE
-                    ? Rd<void*>(emNow, 0x38)                    // _material2
-                    : Rd<void*>(emNow, 0x40);                   // _material3
+            const MaterialInstance* material =
+                (lists[i]._f14 >= 0)                            // 1800a30ef  JGE
+                    ? emNow->_edgeMaterial.Get()                // +0x38
+                    : emNow->_skinEdgeMaterial.Get();           // +0x40
 
             const uint16_t arg5 =
                 static_cast<uint16_t>(static_cast<uint16_t>(i) | 0x8000u);
 
             renderer.Graphics::Renderer::AddDrawItem(
-                static_cast<const Geometry*>(this),
-                reinterpret_cast<const MaterialInstance*>(material)   /* B.3.5 bridge */,
+                static_cast<const Geometry*>(this), material,
                 0x2001, arg5,
                 0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a310f
             ++g_addDrawItemsEdgeQ;
@@ -2508,18 +2406,15 @@ void EdgeMeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 //
 // The whole body is `return *(mesh + 0x70) + index * 0x10`. `_skinMaterials` is
 // an `Array<Array<ExternalPtr<MaterialInstance>>>`, so `_data` is the buffer of
-// 0x10-byte Array HEADERS and `index` selects a header, not an element — the
-// distinction `Mesh.h`'s `GraphicsMeshView` banner says cost lane E its first
-// integration run. `_skinMaterials._size` is what `?GetSkinCount@` returns, i.e.
-// there is one material list per skin.
-//
-// ORACLE: FULL (pure pointer arithmetic on a const object, no side effects).
+// 0x10-byte Array HEADERS and `index` selects a header, not an element.
+// `_skinMaterials._size` is what `?GetSkinCount@` returns, i.e. there is one
+// material list per skin.
 // ---------------------------------------------------------------------------
 const Collection::Array<Object::ExternalPtr<MaterialInstance> >&
 GraphicsMesh::GetMaterialList(int32_t skin) const {
-    const uint8_t* const headers = _skinMaterials._data;
-    return *reinterpret_cast<const Collection::Array<Object::ExternalPtr<MaterialInstance> >*>(
-        headers + static_cast<int64_t>(skin) * 0x10);
+    // LEFT: `_skinMaterials` stays a raw header (GraphicsMesh.h).
+    return reinterpret_cast<const Collection::Array<Object::ExternalPtr<MaterialInstance> >*>(
+        _skinMaterials._data)[skin];
 }
 
 // ---------------------------------------------------------------------------
@@ -2532,24 +2427,12 @@ GraphicsMesh::GetMaterialList(int32_t skin) const {
 //  * NULL is a legal name on both sides and compares EQUAL to NULL. If a node's
 //    name is null the body returns that node's index when `name` is null too,
 //    and otherwise SKIPS the node without comparing — it never dereferences a
-//    null (`if (pcVar1 == 0) { if (param_1 == 0) return i; } else if (param_1
-//    != 0) {...}`). A null `name` against a named node therefore falls through
-//    to "not this one", not to a crash. This is not a guard retail lacks; it is
-//    retail's own control flow, and CLAUDE.md's rule about not inventing null
-//    checks cuts the other way here — inventing a std::strcmp would ADD a crash
-//    retail does not have.
+//    null. This is not a guard retail lacks; it is retail's own control flow.
 //  * The scan returns the FIRST match, and -1 when nothing matches.
-//
-// `_nodes` is the RAW `Array<uint8_t>` header the real class declares (see
-// `GraphicsMesh.h`: the element lifecycle belongs to the registered `kSpec_*`
-// rows), so the walk strides `sizeof(GraphicsMesh::Node)` explicitly — which the
-// header asserts is retail's 0x48.
-//
-// ORACLE: FULL. Const, no side effects.
 // ---------------------------------------------------------------------------
 int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
     const int32_t count = _nodes._size;
-    const Node* const nodes = reinterpret_cast<const Node*>(_nodes._data);
+    const Node* const nodes = GetNodes()._data;
 
     int32_t ours = -1;
     for (int32_t i = 0; i < count; ++i) {
@@ -2575,36 +2458,21 @@ int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
     return ours;
 }
 
-// ---------------------------------------------------------------------------
-// ?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@
-//  Graphics@@@Object@@000@Z                              retail 0x1800a2760
-//
-// Retail's four stores are arg1 -> +0x28, arg2 -> +0x38, arg3 -> +0x30,
-// arg4 -> +0x40, and the four exported getters name those four offsets
-// mask / edge / skinMask / skinEdge — see the door's banner above. Written out
-// with the parameters named, which is the same four stores and no longer needs a
-// warning attached.
-//
-// `EdgeMeshInstance::SetMesh` reads the four back in the order +0x38, +0x28,
-// +0x40, +0x30 when it ORs their material type flags; that is edge, mask,
-// skinEdge, skinMask, and it is unaffected by this spelling.
-// ---------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // bool Graphics::EdgeMesh::Set(25 args)   retail 0x1800a23e0, ordinal 3813
 //
-// Body MOVED here from `RtGraphics_EdgeMesh_Set` by ENDGAME B.3.5's closing pass,
-// unchanged except that `self` became `this` and the `const void* box` parameter
-// became the `const ::Box&` the mangled name says it is (`AEBVBox@Volume@@`). The
-// door above it now delegates. Mesh.h carries the argument-by-argument
-// tokenisation of the mangled name and the note on why the four (index, vertex)
-// groups are asymmetric.
-//
 // Copy the bounds box, resize and fill the two TriangleList arrays, then upload
 // four (index, vertex) buffer pairs and return whether every upload succeeded.
-// Each upload is two VIRTUAL calls on the embedded Video buffer object: slot 1 at
-// vt+0x08 to size it and slot 2 at vt+0x10 to fill it, and any false
-// short-circuits the whole chain -- a failure at pair 2 leaves pairs 3 and 4
-// untouched. That early-out is retail behaviour, not an optimisation.
+// Each upload is the buffer's companion slot 1 (`Create`: size it) then slot 2
+// (`SetData`: fill it) -- retail inlines the two `Video::*Buffer::Create` /
+// `Set` trampolines (buffers.cpp) and calls through `platformData`'s vtable;
+// B.4 calls the trampolines, the same two dispatches. Any false short-circuits
+// the whole chain -- a failure at pair 2 leaves pairs 3 and 4 untouched. That
+// early-out is retail behaviour, not an optimisation.
+//
+// The four pairs are, in retail's order: (index +0x68, vertex +0x48), (+0xa8,
+// +0x88), (+0xe8, +0xc8), (+0x128, +0x108) -- the INDEX buffer of each pair is
+// uploaded FIRST.
 // ----------------------------------------------------------------------------
 bool EdgeMesh::Set(int triCount, const void* triLists,
                    int edgeCount, const void* edgeLists,
@@ -2613,42 +2481,40 @@ bool EdgeMesh::Set(int triCount, const void* triLists,
                    uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
                    uint16_t* ib3, int v3s, void* vb3, int v3n,
                    const ::Box& box) {
-    for (int i = 0; i < 6; ++i)
-        std::memcpy(B(this) + 0x168 + i * 4, B(&box) + i * 4, 4);
+    _aabb = box;
+
+    // LEFT: the two list parameters are `const void*` in the declaration its
+    // code/Game caller (tool_base_render.cpp) holds; retail's are
+    // `const GraphicsMesh::TriangleList*`.
+    const GraphicsMesh::TriangleList* const tris =
+        static_cast<const GraphicsMesh::TriangleList*>(triLists);
+    const GraphicsMesh::TriangleList* const edges =
+        static_cast<const GraphicsMesh::TriangleList*>(edgeLists);
 
     rtcoll::RtColl_ArraySetSize_1800136f0(&_triangleLists, triCount);
     for (int i = 0; i < _triangleLists._size; ++i)
-        std::memcpy(_triangleLists._data + i * 0x18, B(triLists) + i * 0x18, 0x18);
+        _triangleLists._data[i] = tris[i];
 
     rtcoll::RtColl_ArraySetSize_1800136f0(&_edgeLists, edgeCount);
     for (int i = 0; i < _edgeLists._size; ++i)
-        std::memcpy(_edgeLists._data + i * 0x18, B(edgeLists) + i * 0x18, 0x18);
+        _edgeLists._data[i] = edges[i];
 
-    // vt[1] = Create(bytes, flags, data=null); vt[2] = SetData(bytes, flags, data).
-    typedef bool (*BufCreateFn)(void* buf, int bytes, int flags, void* data);
-    struct Upload {
-        size_t   headerOff;   // the buffer OBJECT pointer, header + 0x08
-        int      bytes;
-        void*    data;
-    };
-    const Upload uploads[8] = {
-        { 0x70, i0  * 2,   ib0 },  { 0x50, v0s * v0n, vb0 },
-        { 0xb0, v0x * 2,   ib1 },  { 0x90, v1s * v1n, vb1 },
-        { 0xf0, v1x * 2,   ib2 },  { 0xd0, v2s * v2n, vb2 },
-        { 0x130, v2x * 2,  ib3 },  { 0x110, v3s * v3n, vb3 },
-    };
-
-    bool ours = true;
-    for (int i = 0; i < 8 && ours; ++i) {
-        void* buf = Rd<void*>(this, uploads[i].headerOff);
-        void** vt = *reinterpret_cast<void***>(buf);
-        BufCreateFn create = reinterpret_cast<BufCreateFn>(vt[1]);   // vt + 0x08
-        BufCreateFn fill   = reinterpret_cast<BufCreateFn>(vt[2]);   // vt + 0x10
-        ours = create(buf, uploads[i].bytes, 0, nullptr)
-            && fill(buf, uploads[i].bytes, 0, uploads[i].data);
-    }
-
-    return ours;
+    return _indexBuffer.Create(i0 * 2, false, nullptr)
+        && _indexBuffer.Set(i0 * 2, 0, ib0)
+        && _vertexBuffer.Create(v0s * v0n, false, nullptr)
+        && _vertexBuffer.Set(v0s * v0n, 0, vb0)
+        && _skinIndexBuffer.Create(v0x * 2, false, nullptr)
+        && _skinIndexBuffer.Set(v0x * 2, 0, ib1)
+        && _skinVertexBuffer.Create(v1s * v1n, false, nullptr)
+        && _skinVertexBuffer.Set(v1s * v1n, 0, vb1)
+        && _edgeIndexBuffer.Create(v1x * 2, false, nullptr)
+        && _edgeIndexBuffer.Set(v1x * 2, 0, ib2)
+        && _edgeVertexBuffer.Create(v2s * v2n, false, nullptr)
+        && _edgeVertexBuffer.Set(v2s * v2n, 0, vb2)
+        && _edgeSkinIndexBuffer.Create(v2x * 2, false, nullptr)
+        && _edgeSkinIndexBuffer.Set(v2x * 2, 0, ib3)
+        && _edgeSkinVertexBuffer.Create(v3s * v3n, false, nullptr)
+        && _edgeSkinVertexBuffer.Set(v3s * v3n, 0, vb3);
 }
 
 void EdgeMesh::SetMaterials(Object::ExternalPtr<MaterialInstance> mask,

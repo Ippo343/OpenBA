@@ -456,7 +456,7 @@ public:
         _shaderClass = 0;                                 // +0x20
         _hasRenderTexture = 0;                            // +0x24 } one WORD store
         _hasRenderedTexture = 0;                          // +0x25 }
-        *reinterpret_cast<void**>(&_material) = nullptr;  // +0x28 (raw storage)
+        _material = nullptr;                              // +0x28
         _parameters._data = nullptr; _parameters._size = 0; _parameters._capacity = 0;   // +0x30
         _constants._data  = nullptr; _constants._size  = 0; _constants._capacity  = 0;   // +0x40
         _textures._data   = nullptr; _textures._size   = 0; _textures._capacity   = 0;   // +0x50
