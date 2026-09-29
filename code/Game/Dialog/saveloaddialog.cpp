@@ -129,10 +129,10 @@ static T* FindChildElem(UI::Element* parentElem, const char* name) {
 
 void SaveLoadDialog::PopulateFileList() {
     // --- Phase 1: Destroy old entries (cleanup MaterialInstance/SpriteSheet objects) ---
-    int oldEntryCount = entryCount;
+    int oldEntryCount = entries._size;
 
     for (int i = 0; i < oldEntryCount; i++) {
-        SaveLoadEntry& oldEntry = entryData[i];
+        SaveLoadEntry& oldEntry = entries[i];
 
         // Destroy MaterialInstance at +0x30 (scalar deleting destructor, vtable[0])
         Graphics::MaterialInstance* matInst = oldEntry.materialInstance;
@@ -150,10 +150,10 @@ void SaveLoadDialog::PopulateFileList() {
     }
 
     // Free the entry array and reset
-    System::MemoryAllocator::MemFree(entryData);
-    entryData = nullptr;
-    entryCount = 0;     // count + capacity = 0 (one qword store in retail)
-    entryCapacity = 0;
+    System::MemoryAllocator::MemFree(entries._data);
+    entries._data = nullptr;
+    entries._size = 0;       // count + capacity = 0 (one qword store in retail)
+    entries._capacity = 0;
 
     // --- Phase 2: Calculate table dimensions ---
     int saveCountNow = saveCount;
@@ -342,15 +342,11 @@ void SaveLoadDialog::PopulateFileList() {
             entry.labelSaveName->SetParameter(0, saveInfo.description);
         }
 
-        // Push entry into array at +0x110.
-        // B.3.2 bridge: SaveLoadDialog+0x110 is Collection::Array<SaveLoadEntry>
-        // (stride 0x40, count +0x118, capacity +0x11C), declared as raw storage
-        // until ~SaveLoadDialog does retail's (H5), so it is reached at its
-        // offset. Was FUN_1400211e0's own inlined SetSize; the
-        // MaterialInstance/SpriteSheet pointers it carries are destroyed
-        // separately in Phase 1 above, not by this growth.
-        auto& rows = GameColl::ArrayAt<SaveLoadEntry>(this, 0x110);
-        rows.SetSize(rows.GetSize() + 1, entry);
+        // Push entry into the row array at +0x110 (was FUN_1400211e0's own
+        // inlined SetSize; the MaterialInstance/SpriteSheet pointers it carries
+        // are destroyed separately in Phase 1 above and by ~SaveLoadDialog, not
+        // by this growth).
+        entries.SetSize(entries.GetSize() + 1, entry);
     }
 
     // --- Phase 4: Fill remaining empty rows ---
@@ -527,7 +523,7 @@ void SaveLoadDialog::OnUpdateLayout() {
         if (saveCountNow < 1) return;
 
         for (int i = 0; i < saveCountNow; i++) {
-            SaveLoadEntry& entry = entryData[i];
+            SaveLoadEntry& entry = entries[i];
             bool notSelected = (i != selectedIdx);
 
             // selectSave — shown when selected, hidden otherwise
@@ -1105,9 +1101,9 @@ void SaveLoadDialog::InitFields(uint8_t modeArg, MenuDialogLoopT* menuLoopArg,
     labelLoad = nullptr;
     labelSave = nullptr;
     tableSaveList = nullptr;
-    entryData = nullptr;
-    entryCount = 0;
-    entryCapacity = 0;
+    entries._data = nullptr;
+    entries._size = 0;
+    entries._capacity = 0;
     textLoading = nullptr;
     textSaving = nullptr;
     textPleaseWait = nullptr;
@@ -1116,6 +1112,26 @@ void SaveLoadDialog::InitFields(uint8_t modeArg, MenuDialogLoopT* menuLoopArg,
     buttonLoad = nullptr;
     buttonCancel = nullptr;
     buttonDelete = nullptr;
+}
+
+// ~SaveLoadDialog (0x1400b80f0, called by the scalar deleting dtor
+// 0x1400211b0): each row's MaterialInstance is deleted (slot 0, flag 1) and,
+// when there was one, its SpriteSheet; then retail MemFrees the row array and
+// zeroes +0x110 / +0x118 — `entries`' own dtor, which runs after this body —
+// and chains ~DialogInstance.
+SaveLoadDialog::~SaveLoadDialog() {
+    for (int i = 0; i < entries._size; i++) {
+        Graphics::MaterialInstance* matInst = entries[i].materialInstance;
+        if (matInst != nullptr) {
+            delete matInst;   // slot 0, free
+        }
+        if (entries[i].materialInstance != nullptr) {
+            UI::SpriteSheet* sheet = entries[i].spriteSheet;
+            if (sheet != nullptr) {
+                delete sheet;   // slot 0, free
+            }
+        }
+    }
 }
 
 SaveLoadDialog::SaveLoadDialog(UI::UserInterface* ui, const UI::Dialog* dialog,

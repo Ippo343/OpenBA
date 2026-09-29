@@ -22,6 +22,7 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "runtime/types/ui/Sprite.h"
 #include "Object/exe_type.h"
+#include "runtime/types/collection/Collection.h"
 
 class GameUpdateLoop;    // Game/GameUpdateLoop.h
 class MenuDialogLoopT;   // Game/MenuDialogLoopT.h
@@ -67,7 +68,9 @@ public:
                    uint8_t mode, MenuDialogLoopT* menuLoop,
                    GameUpdateLoop* game);                           // 0x1400b8270
 
-    ~SaveLoadDialog() override = default;                          // [0] 0x1400211b0
+    // 0x1400211b0 minus the free: ~SaveLoadDialog 0x1400b80f0 deletes each row's
+    // MaterialInstance / SpriteSheet, then `entries`' own dtor frees the array.
+    ~SaveLoadDialog() override;                                    // [0] 0x1400211b0
     void OnOpened() override;                                      // [4] 0x1400b7d00
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x1400b6880
@@ -107,11 +110,8 @@ public:
     UI::Element*       labelLoad;      // +0xF8
     UI::Element*       labelSave;      // +0x100
     UI::TableElement*  tableSaveList;  // +0x108
-    // +0x110: Collection::Array<SaveLoadEntry> (retail's dtor frees it). Raw
-    // storage until the tree's dtor does retail's (H5).
-    SaveLoadEntry*     entryData;      // +0x110
-    int32_t            entryCount;     // +0x118
-    int32_t            entryCapacity;  // +0x11C
+    // +0x110: the save list's rows (~SaveLoadDialog frees them and the array).
+    Collection::Array<SaveLoadEntry> entries;   // +0x110 data, +0x118 count, +0x11C capacity
     UI::Element*       textLoading;    // +0x120
     UI::Element*       textSaving;     // +0x128
     UI::Element*       textPleaseWait; // +0x130
@@ -137,9 +137,7 @@ static_assert(offsetof(SaveLoadDialog, mainPage) == 0xF0, "SaveLoadDialog +0xf0"
 static_assert(offsetof(SaveLoadDialog, labelLoad) == 0xF8, "SaveLoadDialog +0xf8");
 static_assert(offsetof(SaveLoadDialog, labelSave) == 0x100, "SaveLoadDialog +0x100");
 static_assert(offsetof(SaveLoadDialog, tableSaveList) == 0x108, "SaveLoadDialog +0x108");
-static_assert(offsetof(SaveLoadDialog, entryData) == 0x110, "SaveLoadDialog +0x110");
-static_assert(offsetof(SaveLoadDialog, entryCount) == 0x118, "SaveLoadDialog +0x118");
-static_assert(offsetof(SaveLoadDialog, entryCapacity) == 0x11C, "SaveLoadDialog +0x11c");
+static_assert(offsetof(SaveLoadDialog, entries) == 0x110, "SaveLoadDialog +0x110");
 static_assert(offsetof(SaveLoadDialog, textLoading) == 0x120, "SaveLoadDialog +0x120");
 static_assert(offsetof(SaveLoadDialog, textSaving) == 0x128, "SaveLoadDialog +0x128");
 static_assert(offsetof(SaveLoadDialog, textPleaseWait) == 0x130, "SaveLoadDialog +0x130");
