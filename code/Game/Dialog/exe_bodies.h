@@ -53,15 +53,11 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // ---- eventnotifydialog.cpp
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140068ab0
 
-// ---- mainmenudialog.cpp
-void MainMenuDialog_ReturnToMenu(MainMenuDialog* self);  // 0x1400b4790
-
 // ---- messagedialog.cpp
 void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006d300
 
 // ---- newgamedialog.cpp
 extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed, void* terrainSize, char disastersOff, void* mapGen, void* terrainGen, void* climateGen, unsigned scenarioResIdx, void* savedStateIBP);  // 0x1400b4540
-void* NewGameDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* nullParent, void* parentMenuIBP);  // 0x140071040
 
 // ---- optioninputbinddialog.cpp
 void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140071d30

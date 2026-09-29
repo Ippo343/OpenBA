@@ -138,8 +138,8 @@ UNIT_TEST(dlg_loader_autosave_dialogs) {
 
 UNIT_TEST(dlg_mainmenu_mapparams_dialogs) {
     CHECK_EQ(sizeof(MainMenuDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(MainMenuDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(MainMenuDialog, dataC0), (size_t)0xc0);
+    CHECK_EQ(offsetof(MainMenuDialog, game), (size_t)0xb8);
+    CHECK_EQ(offsetof(MainMenuDialog, menuLoop), (size_t)0xc0);
     CheckShape<MainMenuDialog>();
     CheckDialogInstanceSlots<MainMenuDialog>();
     CHECK_EQ(sizeof(MapParamsDialog), (size_t)0xf8);
@@ -186,7 +186,7 @@ UNIT_TEST(dlg_newgame_dialog) {
     CHECK_EQ(sizeof(NewGameDialog), (size_t)0xae8);
     CHECK_EQ(offsetof(NewGameDialog, comboTerrain), (size_t)0xb8);
     CHECK_EQ(offsetof(NewGameDialog, random), (size_t)0x118);
-    CHECK_EQ(offsetof(NewGameDialog, worldSetup), (size_t)0xae0);
+    CHECK_EQ(offsetof(NewGameDialog, mainMenu), (size_t)0xae0);
     CheckShape<NewGameDialog>();
     CheckDialogInstanceSlots<NewGameDialog>();
 }

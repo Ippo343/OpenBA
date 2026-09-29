@@ -69,7 +69,7 @@
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "ui/Dialog.h"   // UI::Dialog::TypeId() (ENDGAME B.3.9 TR)
-#include "Dialog/MainMenuDialog.h"   // B3R: MainMenuDialog_ReturnToMenu
+#include "Dialog/MainMenuDialog.h"   // MainMenuDialog::ReturnToMenu
 #include "save/SaveLoad.h"          // B3R: Save::SavedState
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -293,7 +293,7 @@ void ModDialog::CloseAndReload() {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     if (gameWorld == nullptr) {
-        MainMenuDialog_ReturnToMenu(parentMenu.Get());   // 0x1400b4790
+        parentMenu->ReturnToMenu();   // 0x1400b4790
         return;
     }
 

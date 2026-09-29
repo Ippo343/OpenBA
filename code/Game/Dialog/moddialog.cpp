@@ -59,7 +59,7 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
-#include "Dialog/MainMenuDialog.h"     // B3R: MainMenuDialog_ReturnToMenu
+#include "Dialog/MainMenuDialog.h"     // MainMenuDialog::ReturnToMenu
 #include "save/SaveLoad.h"             // B3R: Save::SavedState
 #include "system/Configuration.h"      // B3R: System::Configuration::GetVersionString
 #include "Game/exe_constants.h"   // B3R: kRdata_*
@@ -591,7 +591,7 @@ void ModDialog::Apply() {
 
             if (gameWorld == nullptr) {
                 // Menu context: simple reload through the owning menu
-                MainMenuDialog_ReturnToMenu(parentMenu.Get());   // 0x1400b4790
+                parentMenu->ReturnToMenu();   // 0x1400b4790
             } else {
                 // Game context: allocate SavedState (0x10 bytes), construct it
                 void* savedState = System::MemoryAllocator::MemAlloc(0x10, 4);
