@@ -27,17 +27,14 @@
 #include "Component/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 
-// FUN_140042e10(self) -- building ambient audio setup (clean reimpl below).
-extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self);
+#include "Component/AmbientEmitterComponent.h"
+#include "audio/SoundEffect.h"
 
 // ============================================================
 // Type id for AmbientEmitterDescription (comp+0x18 building description).
 // ============================================================
-// The .rdata type-id global DAT_1401c3e98 is NOT resolvable via
-// ResolveAddr(Module::Exe, .rdata) (it hits a not-implemented stub — see
-// reference_standalone_rdata_null_fallback), so look the id up by name via the
-// factory registry (the same CRC32 fn_IsDerivedFrom compares against). Latch only
-// once the factory registry has frozen the ids (they start at the 0xFFFFFFFF sentinel).
+// Latch only once the factory registry has frozen the ids (they start at the
+// 0xFFFFFFFF sentinel).
 static uint32_t s_tidEmitterDesc = 0;
 static bool s_tidResolved = false;
 static void EnsureEmitterDescTid() {
@@ -47,16 +44,20 @@ static void EnsureEmitterDescTid() {
 }
 
 // ============================================================
-// Helper: Get building description component
+// Helper: the component's AmbientEmitterDescription, or null
 // ============================================================
-// Uses the shared fn_IsDerivedFrom engine func (resolved via engine_funcs) rather
-// than the .rdata dispatch slot, so the building-emitter path works in standalone.
-static void* GetBuildingData(void* self) {
+static AmbientEmitterDescription* GetBuildingData(AmbientEmitterComponent* self) {
     EnsureEmitterDescTid();
-    void* obj = *(void**)((uintptr_t)self + 0x18);
+    Description* obj = self->_description;
     if (!obj || !s_tidEmitterDesc)
         return nullptr;
-    return ::Object::IsDerivedFromNullSafe(obj, s_tidEmitterDesc) ? obj : nullptr;
+    return ::Object::IsDerivedFromNullSafe(obj, s_tidEmitterDesc) ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
+}
+
+// The world Audio::Scene. LEFT: GameUpdateLoop::m_audioScene is void* (W0 header).
+static Audio::Scene* WorldAudioScene() {
+    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
+    return reinterpret_cast<Audio::Scene*>(GameUpdateLoop::_singleton->m_audioScene);
 }
 
 // ============================================================
@@ -67,6 +68,9 @@ static void* GetBuildingData(void* self) {
 // non-empty array), MemAlloc(cap*0x10, 8), copy existing elements (2 qwords each),
 // zero-init the new tail with element layout [u32 0][f32 1.0][u64 0]. The exe body
 // is hand-unrolled x4; this is the equivalent scalar 1:1 port.
+// LEFT: a Collection::Array<AmbientEmitterSlot>::SetSize instance whose element
+// default is {0, 1.0f, null}; the template's SetSize zero-fills, so it is not the
+// template's body.
 extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
     uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
     int oldCount = *(int*)(arr + 8);
@@ -111,53 +115,123 @@ extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
 // ============================================================
 // Building ambient audio setup — clean reimpl of FUN_140042e10.
 // ============================================================
-// For each emitter entry (count at self+0x40, 0x10-byte entries in the array at
-// self+0x38), ensures a 3D looping SoundEffect is playing at the building's
-// position (self+0x28) via the world Audio::Scene (gameWorld+0x78):
-//   entry {+0x00 uint handle, +0x04 float volume, +0x08 ExternalPtr soundRef}
-// The soundRef is lazily copied from the building's AmbientEmitterDescription
-// (self+0x18, type DAT_1401c3e98) sound array at desc+0x28 (stride 8). FindEffect3D
-// reuses an existing channel; PlayEffect3D (SoundType 3 = ambient) starts a new
-// one; AddEmitter registers this building as a spatial source of that effect.
-extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    int count = *(int*)(s + 0x40);
+// For each emitter slot, ensures a 3D looping SoundEffect is playing at the
+// building's position via the world Audio::Scene (gameWorld+0x78). The slot's
+// sound is lazily copied from the building's AmbientEmitterDescription
+// (type DAT_1401c3e98) sound array at desc+0x28. FindEffect3D reuses an existing
+// channel; PlayEffect3D (SoundType 3 = ambient) starts a new one; AddEmitter
+// registers this building as a spatial source of that effect.
+void AmbientEmitterComponent::StartEmitters() {
+    int count = slotCount;
     if (count <= 0) return;
-    if (GameUpdateLoop::_singleton == nullptr) return;
 
-    void* scene = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x78);
+    Audio::Scene* scene = WorldAudioScene();
     if (!scene) return;
 
-    void* building = GetBuildingData(self);   // AmbientEmitterDescription (may be null)
-    void* soundArray = building ? *(void**)((uintptr_t)building + 0x28) : nullptr;
-    uint8_t* arrBase = *(uint8_t**)(s + 0x38);
+    AmbientEmitterDescription* building = GetBuildingData(this);   // may be null
+    Audio::SoundEffect** soundArray = building ? building->_emitters : nullptr;
+    AmbientEmitterSlot* arrBase = slots;
     if (!arrBase) return;
 
-    const void* pos = reinterpret_cast<const void*>(s + 0x28);   // Vector3 position
-
     for (int i = 0; i < count; ++i) {
-        uint8_t* entry = arrBase + (intptr_t)i * 0x10;
-        uint64_t* soundRef = reinterpret_cast<uint64_t*>(entry + 8);
+        AmbientEmitterSlot* entry = &arrBase[i];
         // Lazily bind the sound resource from the building description.
-        if (*soundRef == 0 && soundArray)
-            *soundRef = reinterpret_cast<const uint64_t*>(soundArray)[i];
+        if (entry->sound == nullptr && soundArray)
+            entry->sound = soundArray[i];
 
-        uint32_t handle = reinterpret_cast<Audio::Scene*>(scene)->FindEffect3D(
-            reinterpret_cast<Audio::SoundEffect*>(*soundRef));   // B.3.7 bridge
-        *(uint32_t*)(entry + 0) = handle;
+        uint32_t handle = scene->FindEffect3D(entry->sound);
+        entry->handle = handle;
         if (handle == 0) {
-            int64_t timeZero = 0;                 // System::Time(0)
-            float   posZero[3] = { 0.0f, 0.0f, 0.0f };
-            handle = reinterpret_cast<Audio::Scene*>(scene)->PlayEffect3D(
-                reinterpret_cast<Audio::SoundEffect*>(*soundRef), static_cast<Audio::Scene::SoundType>(3),
-                *reinterpret_cast<const System::Time*>(&timeZero),
-                *reinterpret_cast<const Vector3*>(posZero));   // B.3.7 bridge
-            *(uint32_t*)(entry + 0) = handle;
+            const System::Time timeZero{0};       // System::Time(0)
+            const Math::Vector3 posZero(0.0f, 0.0f, 0.0f);
+            handle = scene->PlayEffect3D(entry->sound, static_cast<Audio::Scene::SoundType>(3),
+                                         timeZero, posZero);
+            entry->handle = handle;
         }
-        reinterpret_cast<Audio::Scene*>(scene)->AddEmitter(
-            handle, *reinterpret_cast<const Vector3*>(pos), *(float*)(entry + 4));   // B.3.7 bridge
+        scene->AddEmitter(handle, position, entry->volume);
     }
+}
+
+// ---- sub_2c60: (re)play the effect for one emitter slot and add its emitter. ----
+void AmbientEmitterComponent::PlaySlot(int slot) {
+    Audio::Scene* scene = WorldAudioScene();
+    if (!scene) return;
+    AmbientEmitterDescription* desc = GetBuildingData(this);
+    AmbientEmitterSlot* arr = slots;
+    if (!arr) return;
+    AmbientEmitterSlot* entry = &arr[slot];
+
+    if (entry->sound == nullptr && desc) {
+        Audio::SoundEffect** sounds = desc->_emitters;
+        if (sounds) entry->sound = sounds[slot];
+    }
+
+    uint32_t handle = scene->FindEffect3D(entry->sound);
+    entry->handle = handle;
+    if (handle == 0) {
+        const System::Time timeZero{0};
+        const Math::Vector3 posZero(0.0f, 0.0f, 0.0f);
+        handle = scene->PlayEffect3D(entry->sound, static_cast<Audio::Scene::SoundType>(3),
+                                     timeZero, posZero);
+        entry->handle = handle;
+    }
+    scene->AddEmitter(handle, position, entry->volume);
+}
+
+// ---- sub_2a10: set slot `slot` of the emitter component to `sound` @ `vol`. ----
+void AmbientEmitterComponent::SetSlot(int slot, Audio::SoundEffect* sound, float vol) {
+    AmbientEmitterDescription* desc = GetBuildingData(this);
+    // Ensure the emitter array matches the description's emitter count.
+    if (desc) {
+        int wantCount = desc->_emitterCount;
+        if (slotCount != wantCount)
+            AmbientEmitterResize_Reimpl(&slots, wantCount);
+    }
+
+    AmbientEmitterSlot* arr = slots;
+    if (!arr) return;
+    AmbientEmitterSlot* entry = &arr[slot];
+
+    uint32_t handle = entry->handle;
+
+    if (handle == 0) {
+        // Record the sound reference + volume, then START playback.
+        //
+        // DEVIATION FROM RETAIL: the exe's sub_2a10 only records here (return
+        // without playing) because retail initializes the emitter handles earlier
+        // via the AmbientEmitterComponent's OnAdded (FUN_140042e10). In standalone
+        // that component is inert (OnAdded is a no-op stub), so nothing ever seeds
+        // the handle and sub_2a10's play branches (which require handle!=0) would
+        // never fire. We seed it on-demand here: PlaySlot does FindEffect3D /
+        // PlayEffect3D + AddEmitter for this slot's biome sound. Once handle!=0 the
+        // subsequent ticks follow the faithful volume-crossfade / sound-swap paths.
+        entry->sound = sound;
+        entry->volume = vol;
+        if (sound != nullptr) PlaySlot(slot);
+        return;
+    }
+
+    if (entry->sound != sound) {
+        // Sound changed — tear down the old emitter, then play the new one.
+        Audio::Scene* scene = WorldAudioScene();
+        if (scene) {
+            scene->RemoveEmitter(handle, position);
+            int cnt = scene->GetEmitterCount(handle);
+            if (cnt == 0) scene->StopEffect3D(handle);
+        }
+        entry->handle = 0;
+        entry->volume = vol;
+        entry->sound = sound;
+        PlaySlot(slot);
+        return;
+    }
+
+    // Same sound, live handle — just adjust volume if it moved.
+    if (entry->volume == vol) return;
+    entry->volume = vol;
+    Audio::Scene* scene = WorldAudioScene();
+    if (scene)
+        scene->SetEmitterVolume(handle, position, vol);
 }
 
 // ============================================================================
@@ -170,18 +244,15 @@ extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
 // ctor/dtor chain (B38_RULES D1, D2).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/AmbientEmitterComponent.h"
 
 // 0x1400430c0. Component() is the CALL 0x1401188b0; the 0x140158a60 stamp is
 // the compiler's; +0x28, +0x30 (dword), +0x38, +0x40 = 0; flags |= 0x43 (0xc3).
 AmbientEmitterComponent::AmbientEmitterComponent()
-    : field28(nullptr), field30(0), _pad34{}, field38(nullptr), field40(nullptr) {
+    : position(), _pad34{}, slots(nullptr), slotCount(0), slotCapacity(0) {
     OrFlagsInCtor(0x43);
 }
 
-// [3] 0x140042f30 — the body resolves its own helpers first.
-// ============================================================
-// AmbientEmitterComponent::Shutdown (vtable slot [3], 0x140042f30)
+// [3] 0x140042f30
 // ============================================================
 // Serializes:
 //   1. Base Component_Serialize
@@ -189,86 +260,54 @@ AmbientEmitterComponent::AmbientEmitterComponent()
 //      - Vector3 at +0x28 (position)
 //      - count from +0x40, serialize it
 //      - If loading: resize array at +0x38
-//      - Loop: serialize (InternalBasePtr + uint + float) per entry (16 bytes each)
+//      - per slot: the sound ExternalPtr (+0x08), the handle uint (+0x00), the volume (+0x04)
 //      - If version==0: resize from building data +0x30
 //   3. ~Serializer
 void AmbientEmitterComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // Persist's stream is void*
 
-    uintptr_t selfAddr = (uintptr_t)this;
+    position.Serialize(&serializer);
 
-    // Serialize Vector3 at +0x28
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x28)->Serialize(serializer);   // B.3.1 bridge
-
-    // Read count from +0x40 into local, serialize it
-    uint32_t localCount = *(uint32_t*)(selfAddr + 0x40);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+    int localCount = slotCount;
+    serializer.Serialize(localCount, nullptr);
 
     // If loading (stream mode == 0), resize emitter array
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        AmbientEmitterResize_Reimpl((void*)(selfAddr + 0x38), (int)localCount);   // 0x140001770
+    if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        AmbientEmitterResize_Reimpl(&slots, localCount);   // 0x140001770
     }
 
-    // Serialize each emitter entry: InternalBasePtr(8) + uint(4) + float(4) = 16 bytes per entry
-    // Array base at +0x38 (ptr). Entries: float* pfVar4 starts at array+4
-    if ((int)localCount > 0) {
-        void* arrayBase = *(void**)(selfAddr + 0x38);
-        // Each entry is 16 bytes. Loop pointer starts at +4 (the float field).
-        // Layout per entry: [uint(4)][InternalBasePtr(8, at +4)][float(4, at +12)]...
-        // Actually from decomp: pfVar4 starts at array+4, pfVar4+1 = IBP, pfVar4-1 = uint, pfVar4 = float
-        // pfVar4 = (float*)(array + 4), stride = 4 floats = 16 bytes
-        float* pfVar4 = (float*)((uintptr_t)arrayBase + 4);
-        for (uint32_t i = 0; i < localCount; i++) {
-            // Serialize InternalBasePtr at pfVar4+1 (offset +4 from pfVar4)
-            AmbientExternalPtrSerialize_Reimpl((void*)(pfVar4 + 1), serializer);   // 0x1400019a0
-            // Serialize uint at pfVar4-1 (offset -4 from pfVar4)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pfVar4 - 1), nullptr);   // B.3.4 bridge
-            // Serialize float at pfVar4
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pfVar4, nullptr);   // B.3.4 bridge
-            pfVar4 += 4; // advance 16 bytes
+    if (localCount > 0) {
+        AmbientEmitterSlot* arrayBase = slots;
+        for (int i = 0; i < localCount; i++) {
+            AmbientExternalPtrSerialize_Reimpl(&arrayBase[i].sound, &serializer);   // 0x1400019a0
+            serializer.Serialize(*reinterpret_cast<int*>(&arrayBase[i].handle), nullptr);   // retail's int door for the uint
+            serializer.Serialize(arrayBase[i].volume, nullptr);
         }
     }
 
     // Version-gated: if version==0, resize from building data
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    int version = serializer.GetVersion();
     if (version == 0) {
-        void* building = GetBuildingData(this);
+        AmbientEmitterDescription* building = GetBuildingData(this);
         if (building) {
-            int buildingCount = *(int*)((uintptr_t)building + 0x30);
-            AmbientEmitterResize_Reimpl((void*)(selfAddr + 0x38), buildingCount);   // 0x140001770
+            AmbientEmitterResize_Reimpl(&slots, building->_emitterCount);   // 0x140001770
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // [6] 0x140042ba0 — dispatched by ComponentEntity_OnAddedPass at register time
 // (flags bit 0): size the emitter array and start the building's ambient sounds.
-// ============================================================
-// AmbientEmitterComponent::Draw (vtable slot [6], 0x140042ba0)
-// ============================================================
-// Gets building data via IsDerivedFrom(+0x18, DAT_1401c3e98).
-// Resizes emitter list from building[0x30].
-// If building[0x20] != 0, calls audio setup FUN_140042e10(self).
+// Resizes emitter list from building[0x30]; if building[0x20] != 0, calls
+// StartEmitters (FUN_140042e10).
 void AmbientEmitterComponent::OnAdded() {
-    void* building = GetBuildingData(this);
+    AmbientEmitterDescription* building = GetBuildingData(this);
     if (!building) return;
 
-    uintptr_t selfAddr = (uintptr_t)this;
+    AmbientEmitterResize_Reimpl(&slots, building->_emitterCount);
 
-    // Resize emitter list to the building description's emitter count. Use the
-    // ported AmbientEmitterResize_Reimpl (not the resolved FUN_140001770) so this
-    // works in standalone, where 0x140001770 is not in the address registry.
-    int count = *(int*)((uintptr_t)building + 0x30);
-    AmbientEmitterResize_Reimpl((void*)(selfAddr + 0x38), count);
-
-    // If building has audio flag at +0x20, set up the 3D ambient emitters.
-    bool audioFlag = *(char*)((uintptr_t)building + 0x20) != '\0';
-
-    if (audioFlag) {
-        AmbientEmitterAudioSetup_Reimpl(this);
+    if (building->_enabled) {
+        StartEmitters();
     }
 }
 

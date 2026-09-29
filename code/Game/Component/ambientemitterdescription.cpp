@@ -84,10 +84,10 @@ bool AmbientEmitterDescription::Serialize(void* stream) {
     }
     
     // 3. per-element ExternalPtr serialize (each slot is an External*)
-    uint8_t* buf = static_cast<uint8_t*>(_emitters);
+    Audio::SoundEffect** buf = _emitters;
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            Reimpl_ExternalPtr_Serialize_StringTable(buf + (size_t)i * 8, &ser);
+            Reimpl_ExternalPtr_Serialize_StringTable(&buf[i], &ser);
         }
     }
     ser.Serialize(_enabled, nullptr);

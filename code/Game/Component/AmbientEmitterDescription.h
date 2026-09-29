@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace Audio { class SoundEffect; }
+
 class AmbientEmitterDescription final : public Description {
     DECLARE_EXE_TYPE(AmbientEmitterDescription)
 
@@ -38,7 +40,7 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     bool _enabled;                              // +0x20
     uint8_t _pad21[7];                          // +0x21 never written by the ctor
-    void* _emitters;                            // +0x28 ExternalPtr array data
+    Audio::SoundEffect** _emitters;             // +0x28 ExternalPtr<SoundEffect> array data
     int32_t _emitterCount;                      // +0x30
     int32_t _emitterCap;                        // +0x34
 };
