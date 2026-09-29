@@ -35,6 +35,7 @@
 #include "Component/ModelComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/Profession.h"
+#include "Game/ProfessionList.h"
 #include "Game/PlayerToolManager.h"
 #include "Game/PlayerController.h"
 
@@ -150,17 +151,14 @@ void FollowDialog::OnUpdateLayout() {
     {
         Profession* profEntry = nullptr;
         if (isChild || hasWorkplace) {
-            // The ProfessionList (child / student entries).
-            // LEFT for a behaviour: commit: this reads the GameUpdateLoop's FIRST
-            // qword (its vptr) and then +0xB0 of that table — the B3R storage
-            // change kept the old cell deref. Retail 0x140068f70 reads
-            // gameWorld->m_professionList. Kept, listed.
-            uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)GameUpdateLoop::_singleton + 0xB0);
-            if (FD_OkPtr(profListBase)) {
+            // The ProfessionList's child / student entries (retail 0x140068f70:
+            // the game's +0xB0, then its +0x40 / +0x48).
+            ProfessionList* professions = GameUpdateLoop::_singleton->m_professionList;
+            if (FD_OkPtr((uintptr_t)professions)) {
                 if (ai->school == nullptr) {
-                    profEntry = *(Profession**)(profListBase + 0x40);  // child profession
+                    profEntry = professions->childProfession;
                 } else {
-                    profEntry = *(Profession**)(profListBase + 0x48);  // student profession
+                    profEntry = professions->studentProfession;
                 }
             }
         } else {
