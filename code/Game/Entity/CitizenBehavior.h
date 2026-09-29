@@ -125,6 +125,11 @@ struct PathGraph {
     void*    m_bstRoot;       // +0x18: tree root: the distance cache {(high,low) -> distance}
     int32_t  m_bstCount;      // +0x20: tree count
     int32_t  _pad24;          // +0x24
+
+    // ---- members (B4 WORK-a; no retail symbol, the tree's names; bodies in
+    // citizenbehavior.cpp) ----
+    bool ProcessPaths();      // 0x1400d6f00 up to 7 pending pair costs per call
+    void BuildPathGraph();    // 0x1400d70c0 rebuild the pair list when idle
 };
 static_assert(sizeof(PathGraph) == 0x28, "PathGraph size");
 static_assert(offsetof(PathGraph, m_pairs)        == 0x00, "");
@@ -231,6 +236,12 @@ public:
     int32_t  field_0x1B0;                  // +0x1B0 int (version > 2)
     uint8_t  _pad1B4[4];                   // +0x1B4
     PathGraph* pathGraph;                  // +0x1B8 MemAlloc(0x28, 4) in the ctor
+
+    // ---- members (B4 WORK-a; bodies in citizenbehavior.cpp) ----
+    void Update(int64_t* deltaTime);       // 0x14008c2b0 (deltaTime: a System::Time*)
+    void CountResources();                 // 0x140089ed0
+    void CheckThresholds(int64_t* deltaTime); // 0x14008c100
+    void CollectStats();                   // 0x14008a730
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");
