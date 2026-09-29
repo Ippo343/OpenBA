@@ -68,21 +68,6 @@ using RtIO::FileSystem;
 // ============================================================================
 // ?Startup@FileSystem@IO@@QEAA_NXZ                          retail 0x1800abc50
 // ============================================================================
-// ORACLE: none. It runs once, from `Engine::Startup`, and both of its callees
-// mutate the process's file-system state (directories created, `.pkg` files
-// opened and indexed) -- a replay would open every package twice. The shadow
-// below checks the two gate bytes, which are the only thing this body writes
-// that nothing else in it wrote, plus a did-work counter.
-//
-// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
-// `IO::FileSystem::Startup()`, below. The door keeps its name, its `extern "C"`
-// linkage and both registration lines, and delegates. No qualified `IO::` call
-// is needed: `IO::FileSystem` has no vtable at all
-// (runtime/types/io/FileSystem.h), so B34_BRIEFS section A.1's re-entry hazard
-// cannot arise.
-extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
-    return reinterpret_cast<IO::FileSystem*>(self)->Startup();
-}
 
 // ============================================================================
 // `IO::FileSystem::Startup` — the member body

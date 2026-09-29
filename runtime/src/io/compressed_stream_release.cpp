@@ -41,8 +41,6 @@ namespace {
 // (0x180024aa0 / 0x1800249c0 / 0x1800248e0) ~CompressedStream calls on its
 // own members.
 
-inline uint8_t* U8(void* p) { return static_cast<uint8_t*>(p); }
-
 }  // namespace
 
 // ============================================================================

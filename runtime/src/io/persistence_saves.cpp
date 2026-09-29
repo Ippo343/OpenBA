@@ -149,14 +149,6 @@ const char kRtPersistSaveFilenameFormat[] = "%sSave\\%s.sav";
 // 0x1800b7740 joins and closes a REAL thread — handing it a fabricated worker
 // is not a controlled experiment, it is a crash with extra steps.
 // ============================================================================
-// `??1Persistence@IO@@QEAA@XZ` -- the door for a REAL C++ destructor now. The
-// explicit `->~Persistence()` is the whole delegation; nothing else destroys an
-// `IO::Persistence`, because nothing in the tree ever holds one by value (the
-// live object is the singleton, constructed by retail's still-unported
-// 0x1800b8020 through engine/singleton_ctors.cpp).
-void RtIo_Persistence_dtor(void* self) {
-    reinterpret_cast<IO::Persistence*>(self)->~Persistence();
-}
 
 // ============================================================================
 // `IO::Persistence`'s member bodies for this file

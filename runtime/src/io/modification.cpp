@@ -645,32 +645,6 @@ void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
 // RBX,R8D) before the shift and `a` separately (MOVSXD RDI,EDX); both strides
 // are `<< 7`.
 
-// ?SaveList@Modification@IO@@QEAAXXZ   retail 0x1800b05f0
-//
-//     if (!this->savingSettings) { Array<Mod>::operator=(&savedMods, &mods);
-//                                  return; }
-//     Persistence* p = *(0x1801fc6b8);
-//     for (int i = 0; i < this->count; ++i) {
-//         mods[i].order = i;
-//         Filename tmp = mods[i].file.GetPathFilename(true);   // 0x1800c6740
-//         char* nameRef = tmp.data;  addref;                   // then release tmp
-//         p->Set("ModEnabled_", nameRef, mods[i].enabled);     // 0x1800b8380
-//         p->Set("ModIndex_",   nameRef, mods[i].order);       // 0x1800b80c0
-//         release nameRef;
-//     }
-//
-// The two literals are at 0x1801557f8 ("ModEnabled_") and 0x180155808
-// ("ModIndex_"), read out of .rdata; they are the same prefixes RefreshList
-// formats back with "%s%s" (0x1801551f8) when it reads the settings in.
-//
-// `mods[i].order` is re-read from the record for the second Set rather than
-// reusing the loop counter — retail does `MOV R9D,[RBP+R14+0x20]`. Identical in
-// value; transcribed as written so a future change to the first store cannot
-// silently desynchronise the two.
-void RtIo_Modification_SaveList(void* selfv) {
-    reinterpret_cast<IO::Modification*>(selfv)->SaveList();
-}
-
 }  // namespace RtIO
 
 // ============================================================================

@@ -325,17 +325,6 @@ void DigestTree(const void* node, uint64_t& h, uint32_t& count,
     DigestTree(NodeChild(node, kNodeRight), h, count, firstKey, depthLeft - 1);
 }
 
-uint64_t DigestMap(const void* root, uint32_t* countOut, const char** firstKeyOut) {
-    uint64_t h = 14695981039346656037ull;
-    uint32_t count = 0;
-    const char* firstKey = nullptr;
-    DigestTree(root, h, count, firstKey, 128);
-    FnvBytes(h, &count, sizeof(count));
-    if (countOut)    *countOut = count;
-    if (firstKeyOut) *firstKeyOut = firstKey;
-    return h;
-}
-
 }  // namespace
 
 namespace IO {
@@ -915,16 +904,6 @@ void WriteSettingsBody(const Persistence* self) {
 }
 
 }  // namespace
-
-// ENDGAME B.3.4 PACKAGE+FS commit 6: the door now delegates to
-// `IO::Persistence::WriteSettings()`, which is itself the same one-line call
-// into `WriteSettingsBody` -- the 400-line C body that ENDGAME B.3.1
-// DELIBERATELY LEFT AS C (it carries the inlined `~Registry` teardowns the
-// Registry.h banner is about) is NOT moved and NOT touched. The door keeps its
-// name, its `extern "C"` linkage and both registration lines.
-extern "C" void RtIo_Persistence_WriteSettings(const Persistence* self) {
-    reinterpret_cast<const IO::Persistence*>(self)->WriteSettings();
-}
 
 namespace IO {
 

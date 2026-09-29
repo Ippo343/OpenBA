@@ -103,15 +103,6 @@ void** FileSystemSingletonSlot() {
 // ============================================================================
 // ?Startup@Persistence@IO@@QEAA_NXZ                        retail 0x1800b7ee0
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 6: the body is now
-// `IO::Persistence::Startup()`, below. The door keeps its name, its
-// `extern "C"` linkage and both registration lines, and delegates. No qualified
-// `IO::` call is needed: `IO::Persistence` has no vtable of its own -- the vptr
-// at +0x10 is the EMBEDDED worker's -- so B34_BRIEFS section A.1's re-entry
-// hazard cannot arise.
-extern "C" bool RtIo_Persistence_Startup(Persistence* self) {
-    return reinterpret_cast<IO::Persistence*>(self)->Startup();
-}
 
 // ============================================================================
 // `IO::Persistence::Startup` -- the member body

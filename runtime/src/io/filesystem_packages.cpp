@@ -580,10 +580,6 @@ static_assert(offsetof(PackfileIndexSet::Node, height) == offsetof(PackfileIndex
               "Node::height must line up with PackfileIndexNode::height");
 }  // namespace
 
-extern "C" void RtIo_FileSystem_ClosePackages(FileSystem* self) {
-    reinterpret_cast<IO::FileSystem*>(self)->ClosePackages();
-}
-
 }  // namespace RtIO
 
 // ============================================================================
