@@ -303,18 +303,4 @@ void MakeRow(SweepRow* r, uint64_t sortKey, int32_t saveIndex) {
     *reinterpret_cast<int32_t*>(r->bytes + 0x40) = saveIndex;
 }
 
-// The MUTANT: identical except the key compare is SIGNED. Used as the negative
-// control. It is NOT registered and nothing else calls it.
-int SaveInfoCompareSignedMutant(const void* a, const void* b) {
-    const uint8_t* pa = static_cast<const uint8_t*>(a);
-    const uint8_t* pb = static_cast<const uint8_t*>(b);
-    if (*reinterpret_cast<const int32_t*>(pa + 0x40) < 0) return 1;
-    if (*reinterpret_cast<const int32_t*>(pb + 0x40) < 0) return 1;
-    const int64_t ka = *reinterpret_cast<const int64_t*>(pa + 0x30);
-    const int64_t kb = *reinterpret_cast<const int64_t*>(pb + 0x30);
-    if (kb > ka) return 1;
-    if (kb < ka) return -1;
-    return 0;
-}
-
 }  // namespace

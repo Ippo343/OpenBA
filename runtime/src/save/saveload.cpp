@@ -852,11 +852,6 @@ void Save::SaveLoad::Update(const System::Time& delta) {
 // scratches pre-filled with 0xCD so the comparison proves the writes rather
 // than agreeing on an accident of zeroed memory.
 // ============================================================================
-// ENDGAME B.3.7 B2: the body is the inline ctor (SaveLoad.h); the door
-// placement-news it and returns `this` in RAX as retail's MSVC ctor does.
-SavedState* RtSave_SavedState_Ctor(SavedState* self) {
-    return new (self) Save::SavedState();
-}
 
 // ============================================================================
 // Save::SavedState::~SavedState()       retail 0x1800c0ea0   ordinal 667
