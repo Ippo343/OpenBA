@@ -36,8 +36,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self);                     
 // raster) across the footprint.
 class ComponentDescription;
 class ComponentEntity;
-extern "C" bool  DiseaseComp_SameCropProbe(void* map, int x, int y, int w, int h,
-                                           const ComponentDescription* wantIdentity); // 0x14009fb60
+// 0x14009fb60 is Map::HasIdentityInRect (Game/Map.h), defined in diseasecomponent.cpp.
 // What this entity is currently growing (pasture livestock / tile plant / the crop
 // the field is merely SET to): retail returns ExternalPtr<ComponentDescription> by
 // value (RCX) from an InternalPtr<ComponentEntity> (RDX).

@@ -64,6 +64,7 @@ public:
 
     void RemoveFloor(uint32_t floorId, int x, int y, int w, int h);   // 0x14009cba0 (defined in Component/floorcomponent.cpp)
     void StampInfluence(int state, int cx, int cy, int r, short delta);  // 0x14009f990 (defined in Component/happinesscomponent.cpp)
+    bool HasIdentityInRect(int x, int y, int w, int h, const class ComponentDescription* identity) const;  // 0x14009fb60 (Component/diseasecomponent.cpp)
 };
 
 static_assert(sizeof(Map) == 0xF8, "Map is 0xF8 (Load MemAlloc(0xf8, 8))");

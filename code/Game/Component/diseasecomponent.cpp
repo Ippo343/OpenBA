@@ -106,6 +106,9 @@
 #include <cstring>
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Component/MapComponent.h"
+#include "Component/coll_bridge.h"
+#include "Game/Map.h"
+#include "Entity/CitizenBehavior.h"
 #include "Component/DiseaseComponent.h"
 #include "Component/DiseaseDescription.h"
 #include "Component/PastureComponent.h"
@@ -158,6 +161,13 @@ static inline float SecsPerMonth()  { return kRdata_140172234; }          // 300
 static inline float SecsPerYear()   { return BitsF(kRdata_14017225c); }   // 3600.0f
 static inline float OneF()          { return kRdata_14017214c; }          // 1.0f (g_fUVScale)
 
+// GameUpdateLoop::m_citizenList (+0xF0) is still void* (GAME-a); the town manager it
+// points at is the CitizenBehavior (WORK-a), whose disease registry is read by name. The
+// one bridge from the untyped member is LEFT.
+static inline CitizenBehavior* TownManager(GameUpdateLoop* gw) {
+    return reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);
+}
+
 static inline GameUpdateLoop* GameWorld() {
     return GameUpdateLoop::_singleton;
 }
@@ -206,14 +216,15 @@ static const int kRollBudget = 400;
 // field is cell+0x10, the grown-resource identity raster (cell+0x00 is the zone
 // raster and cell+0x08 the entity raster — a different thing entirely).
 // Outer loop walks x across `w`, inner loop steps whole rows down `h`.
-extern "C" bool DiseaseComp_SameCropProbe(void* map, int x, int y, int w, int h,
-                                          const ComponentDescription* wantIdentity) {
-    const uint8_t* m = reinterpret_cast<const uint8_t*>(map);
-    int32_t width = *reinterpret_cast<const int32_t*>(m + 0x00);
-    uintptr_t cells = *reinterpret_cast<const uintptr_t*>(m + 0x80);
+// Its receiver is the Map (GameUpdateLoop +0xf8): Map::HasIdentityInRect. The 0x30-byte
+// cells are raw storage (GAME-b): the two reads through them are LEFT.
+bool Map::HasIdentityInRect(int x, int y, int w, int h,
+                            const ComponentDescription* wantIdentity) const {
+    const int32_t width = size;
+    const uintptr_t base = reinterpret_cast<uintptr_t>(cells);
 
     for (int64_t dx = 0; dx < w; ++dx) {
-        uintptr_t cell = cells + 0x10 +
+        uintptr_t cell = base + 0x10 +
             (uintptr_t)(((int64_t)width * y) + dx + x) * 0x30;
         for (int64_t dy = 0; dy < h; ++dy) {
             if (*reinterpret_cast<ComponentDescription* const*>(cell) == wantIdentity) return true;
@@ -640,7 +651,8 @@ void DiseaseComponent::InfectionTick(System::Time* deltaTime) {
 
     if (month < desc->firstMonth || month > desc->lastMonth) return;
 
-    void* map = gw->m_game;
+    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): the one bridge is LEFT.
+    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
     System::Random* rng = gw->m_random;
 
     MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
@@ -658,7 +670,7 @@ void DiseaseComponent::InfectionTick(System::Time* deltaTime) {
         // retail answers with +0x2c (the SHORTER mean interval). Polarity verified
         // against 0x140048610's `if (probe == 0) +0x28 else +0x2c`; see the warning
         // on DiseaseDescription about the inverted _low/_highSpawnChance names.
-        bool sameCrop = DiseaseComp_SameCropProbe(map, fx, fy, fw, fh, curedIdentity);
+        bool sameCrop = map->HasIdentityInRect(fx, fy, fw, fh, curedIdentity);   // 0x14009fb60
         float years = sameCrop ? desc->yearsIfSame : desc->yearsIfChanged;
         float chance = OneF() / ((MonthsPerYear() / desc->rollMonths) * years);
         float roll = rng->RandFloat();
@@ -714,7 +726,7 @@ void DiseaseComponent::ActiveDisease(System::Time* deltaTime) {
     System::Random* rng = gw->m_random;
     // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a) and Map's cells are
     // untyped: the width and the cell reads below are LEFT.
-    int* mapInts = reinterpret_cast<int*>(gw->m_game);
+    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
 
     for (;;) {
         spreadAccum._ticks -= spreadPeriod;
@@ -722,7 +734,7 @@ void DiseaseComponent::ActiveDisease(System::Time* deltaTime) {
         MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 
         // Retail loads the footprint with MOVSX: signed shorts.
-        int width = *mapInts;
+        int width = map->size;
         int centre = ((static_cast<int16_t>(mc->tileY1) >> 1) + static_cast<int16_t>(mc->tileY0))
                      * width
                    + (static_cast<int16_t>(mc->tileX1) >> 1) + static_cast<int16_t>(mc->tileX0);
@@ -734,10 +746,9 @@ void DiseaseComponent::ActiveDisease(System::Time* deltaTime) {
         if (tx >= width) tx = width - 1;
         if (ty >= width) ty = width - 1;
 
-        // Cell array base is at map+0x80 (`piVar4 + 0x20` on an int* = 0x80 bytes).
-        uintptr_t cells = *reinterpret_cast<uintptr_t*>((uintptr_t)mapInts + 0x80);
+        // Map::cells (+0x80) are raw 0x30-byte records (GAME-b): LEFT.
         ComponentEntity* const* cell = reinterpret_cast<ComponentEntity* const*>(
-            cells + (uintptr_t)(width * ty + tx) * 0x30);
+            reinterpret_cast<uintptr_t>(map->cells) + (uintptr_t)(width * ty + tx) * 0x30);
 
         ComponentEntity* target = nullptr;
         if (cell[0] != nullptr)      target = cell[0];     // zone raster wins
@@ -846,15 +857,13 @@ void DiseaseComponent::Startup() {
 void DiseaseComponent::OnAdded() {
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    // GameUpdateLoop::m_citizenList (+0xF0) is still void* (GAME-a): the town's
-    // registry array at +0xF0 is LEFT.
-    uintptr_t town = reinterpret_cast<uintptr_t>(gw->m_citizenList);
+    CitizenBehavior* town = TownManager(gw);
     if (!town) return;
-    int64_t* reg = reinterpret_cast<int64_t*>(town + 0xF0);
 
     ::Object::InternalPtr<DiseaseComponent> ibp(this);
-    int count = *reinterpret_cast<int32_t*>((uintptr_t)reg + 8);
-    ActHunt_DynArraySetCount_3110(reg, count + 1, &ibp);
+    int count = town->diseaseCount;
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(&town->diseases).SetSizeFill(count + 1, &ibp);
 
     if (CDTrace()) {
         printf("[CropDisease] REGISTER this=%p registry-count=%d\n",
@@ -865,11 +874,10 @@ void DiseaseComponent::OnAdded() {
 void DiseaseComponent::OnRemove() {
     GameUpdateLoop* gw = GameWorld();
     if (gw) {
-        // m_citizenList is void* (GAME-a): the registry erase stays by offset (LEFT).
-        uintptr_t town = reinterpret_cast<uintptr_t>(gw->m_citizenList);
+        CitizenBehavior* town = TownManager(gw);
         if (town) {
             ::Object::InternalPtr<DiseaseComponent> ibp(this);
-            CemeteryListErase_Reimpl(reinterpret_cast<int64_t*>(town + 0xF0), &ibp);
+            CemeteryListErase_Reimpl(&town->diseases, &ibp);   // 0x140002cc0
         }
     }
     Cure();
