@@ -23,6 +23,8 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
+namespace UI { class SpriteSheet; }
+
 class ModDetailsDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(ModDetailsDialog)
 
@@ -30,7 +32,7 @@ public:
     ModDetailsDialog();                                             // create 0x140012790
     ModDetailsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                      Object::InternalPtr<UI::DialogInstance> parent,
-                     uint64_t sprite, int32_t modIndex);            // inlined by ModDialog
+                     UI::SpriteSheet* sprite, int32_t modIndex);    // inlined by ModDialog
 
     ~ModDetailsDialog() override;                                  // [0] 0x140012890
     void OnOpened() override;                                      // [4] 0x14006d700
@@ -38,13 +40,16 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14006d6a0
 
+    // 0x14006d400 (update) / 0x14006d550 (delete): both open Dialog/ModUpdate.rsc.
+    void OpenUpdateDialog(const char* rscPath);                    // 0x14006d400 / 0x14006d550
+
 public:
-    uint64_t dataB8;           // +0xB8: the mod's thumbnail sprite (borrowed)
-    int32_t  modIndex;         // +0xC0: index into the mod list
-    int32_t  _padC4;           // +0xC4
+    UI::SpriteSheet* spriteSheet;  // +0xB8: the mod row's thumbnail sheet (borrowed from ModDialog)
+    int32_t  modIndex;             // +0xC0: index into the mod list
+    int32_t  _padC4;               // +0xC4
 };
 
-static_assert(offsetof(ModDetailsDialog, dataB8) == 0xB8, "ModDetailsDialog +0xb8");
+static_assert(offsetof(ModDetailsDialog, spriteSheet) == 0xB8, "ModDetailsDialog +0xb8");
 static_assert(offsetof(ModDetailsDialog, modIndex) == 0xC0, "ModDetailsDialog +0xc0");
 static_assert(sizeof(ModDetailsDialog) == 0xC8, "ModDetailsDialog is 0xc8 (create 0x140012790)");
 static_assert(alignof(ModDetailsDialog) == 8, "ModDetailsDialog is qword-aligned");

@@ -24,6 +24,7 @@
 #include "Game/MenuDialogLoopT.h"       // ENDGAME B.3.9 EXA: the real loop classes
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
+#include "Dialog/ModDialog.h"
 #include "Dialog/MapParamsDialog.h"
 #include "Dialog/AchievementDialog.h"
 #include "Dialog/GoalDialog.h"
@@ -405,14 +406,10 @@ void MainMenuDialog_OpenMod(MainMenuDialog* self) {
     void* dlgObj = nullptr;
     void* dlgMem = System::MemoryAllocator::MemAlloc(0xD8, 8);
     if (dlgMem) {
-        uint8_t parentIBP[8];
-        new (parentIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
-        uint8_t nullIBP[8];
-        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        dlgObj = ModDialog_Ctor_Standalone(dlgMem,   // 0x140070030
-                                    *(void**)((uintptr_t)self + 0x10),
-                                    extRes, nullIBP, parentIBP);
+        dlgObj = ::new (dlgMem) ModDialog(self->_ui,   // 0x140070030
+                                    static_cast<const UI::Dialog*>(extRes),
+                                    Object::InternalPtr<UI::DialogInstance>(),
+                                    Object::InternalPtr<MainMenuDialog>(self));
     }
     AddDialogToUI(self, dlgObj);
 }
@@ -812,8 +809,6 @@ void MainMenuDialog::OnClosed() {}
 // [8] OnElementEvent — button click dispatch. The runtime sends msg=0x12 with
 // the element ID as the second int.
 void StandaloneOpenMapParams(void* self);  // defined below (map dialog bring-up)
-
-extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf);
 
 void MainMenuDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
                                     int32_t msg, int32_t id, int32_t /*c*/,

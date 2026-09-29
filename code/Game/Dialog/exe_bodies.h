@@ -59,10 +59,6 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self);  // 0x1400b4790
 // ---- messagedialog.cpp
 void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006d300
 
-// ---- mod_dialog_vtables.cpp
-extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface, void* externalRes, void* parentIBP, void* parentMenuIBP);  // 0x140070030
-extern "C" void ModDialog_CloseAndReload(void* self);  // 0x14006e9b0
-
 // ---- newgamedialog.cpp
 extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed, void* terrainSize, char disastersOff, void* mapGen, void* terrainGen, void* climateGen, unsigned scenarioResIdx, void* savedStateIBP);  // 0x1400b4540
 void* NewGameDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* nullParent, void* parentMenuIBP);  // 0x140071040
@@ -187,9 +183,6 @@ extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count, void
 
 // ---- unreg_lane2_mapparamsdialog_ctor.cpp
 extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006bd80
-
-// ---- moddialog.cpp (the body moved there from engine/funcs/engine_funcs.cpp, B3R W2-EZ)
-void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* elementPtr);  // 0x140012a60
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 

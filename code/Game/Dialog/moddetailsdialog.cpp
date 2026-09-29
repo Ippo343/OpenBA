@@ -2,25 +2,23 @@
 // Clean reimplementation of ModDetailsDialog methods.
 //
 // ModDetailsDialog (0xC8 bytes): Shows mod details with action buttons.
-// Layout: DialogInstance base (0xB8), +0xB8 = sprite handle, +0xC0 = mod index
+// Layout: DialogInstance base (0xB8), +0xB8 = sprite sheet, +0xC0 = mod index
 //
-// Mod struct (0x80 bytes) field offsets:
-//   +0x00: name (System::String)
-//   +0x08: author (System::String)
-//   +0x10: description (System::String)
-//   +0x18: version major (uint32_t, passed to GetVersionString)
-//   +0x1c: version number (uint32_t, displayed)
-//   +0x50: enabled flag (uint8_t)
-//   +0x58: path (System::String, pointer to char*)
-//   +0x60: resource BST root (Filename* node)
-//   +0x70: conflict array pointer (Filename*[])
-//   +0x78: conflict count (int)
+// The mod is an RtIO::Mod (runtime/types/io/Modification.h): name / author /
+// description / file are String bodies (char*), i18 / i1c the version pair,
+// `set` the Filename-keyed resource set, `files` the Array<Filename> of the
+// mods this one conflicts with.
+//
+// LEFT (B.4 W1 DLG-b): the reads that view those char* / void* members as
+// System::String / System::Filename stay casts until R-IO's POD is the class.
 
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ButtonElement.h"
 #include "ui/DocumentTextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -29,7 +27,6 @@
 #include "Dialog/ModUploadDialog.h"
 #include <cstdio>
 #include "Dialog/ui_dialogs.h"
-#include "Component/coll_bridge.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -44,78 +41,66 @@
 // ============================================================
 // File-local helper: ModDetails_StringArrayPush (FUN_14006e290)
 // ============================================================
-// Appends each byte of a System::String to a 1-byte-stride dynamic array,
-// then destructs the string (takes ownership).
+// Appends each byte of a System::String to a 1-byte-stride dynamic array.
+// Equivalent to: for each char in str, push it as a byte.
 //
-// arrayBase layout: [data* at +0][count int32 at +8][capacity int32 at +0xc]
-// Equivalent to: for each char in str, push it as a byte; then dtor str.
-//
-// Original: FUN_14006e290.
-//
-// B.3.2 bridge: the array is Collection::Array<uint8_t> (stride 1, align 1 —
-// retail's fn_MemAlloc align argument was 1, matching alignof(uint8_t)); reached
-// via the real template directly rather than through GameColl::ArrayAt since
-// neither of those bridge helpers covers a 1-byte stride.
-static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, System::String&& str) {
-    uintptr_t strData = (uintptr_t)str._data;
+// Original: FUN_14006e290. The array is Collection::Array<char> (stride 1,
+// align 1 — retail's fn_MemAlloc align argument was 1, matching alignof(char)).
+static void ModDetails_StringArrayPush_Impl(Collection::Array<char>& arr, System::String&& str) {
+    const char* strData = str._data;
     int strLen = str.GetLength();
-    auto& arr = *reinterpret_cast<Collection::Array<uint8_t>*>(arrayBasePtr);
     for (int i = 0; i < strLen; i++) {
-        char ch = *(char*)(strData + i);
-        arr.SetSize(arr.GetSize() + 1, (uint8_t)ch);
+        char ch = strData[i];
+        arr.SetSize(arr.GetSize() + 1, ch);
     }
     // `str` is bound by rvalue reference to a caller-owned temporary; the
     // caller's own scope (see call sites) releases it once this returns.
 }
 
 // ============================================================
-// Helper: find element by name, cast to typed pointer
+// Helper: find element by name
 // ============================================================
-static void* FindElem(void* dialog, const char* name) {
+static UI::Element* FindElem(ModDetailsDialog* dialog, const char* name) {
     System::String nameStr(name);
-    uint8_t retval[16];
-    ::new (retval) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
-    return *(void**)retval;
+    return dialog->FindElement(nameStr).Get();
 }
 
 // ============================================================
 // Helper: BST leftmost node (in-order start)
-// BST node layout: +0x00 = Filename data, +0x08 = parent, +0x10 = left, +0x18 = right
 // ============================================================
-static void* BSTLeftmost(void* root) {
+static const RtIO::ModSetNode* BSTLeftmost(const RtIO::ModSetNode* root) {
     if (!root) return nullptr;
-    void* cur = root;
-    while (*(void**)((uintptr_t)cur + 0x10))
-        cur = *(void**)((uintptr_t)cur + 0x10);
+    const RtIO::ModSetNode* cur = root;
+    while (cur->left)
+        cur = cur->left;
     return cur;
 }
 
 // ============================================================
 // Helper: BST in-order successor
 // ============================================================
-static void* BSTNext(void* node) {
+static const RtIO::ModSetNode* BSTNext(const RtIO::ModSetNode* node) {
     if (!node) return nullptr;
-    uintptr_t n = (uintptr_t)node;
 
     // If right child exists, go right then all the way left
-    void* right = *(void**)(n + 0x18);
+    const RtIO::ModSetNode* right = node->right;
     if (right) {
-        void* cur = right;
-        while (*(void**)((uintptr_t)cur + 0x10))
-            cur = *(void**)((uintptr_t)cur + 0x10);
+        const RtIO::ModSetNode* cur = right;
+        while (cur->left)
+            cur = cur->left;
         return cur;
     }
 
     // Go up: if we came from a left child, parent is next
-    void* parent = *(void**)(n + 0x08);
+    const RtIO::ModSetNode* parent = node->parent;
     if (parent) {
-        if (*(void**)((uintptr_t)parent + 0x10) == node)
+        if (parent->left == node)
             return parent;
         // Came from right — walk up until we come from a left child
-        void* cur = node;
-        while (parent && *(void**)((uintptr_t)parent + 0x18) == cur) {
+        const RtIO::ModSetNode* cur = node;
+        while (parent && parent->right == cur) {
             cur = parent;
-            parent = *(void**)((uintptr_t)cur + 0x08);
+            parent = cur->parent;
         }
     }
     return parent;
@@ -124,15 +109,16 @@ static void* BSTNext(void* node) {
 // ============================================================
 // Helper: search BST for filename match using Filename::operator<
 // ============================================================
-static bool BSTContains(void* root, void* filename) {
-    System::Filename& fnameRef = *reinterpret_cast<System::Filename*>(filename); // B.3.1 bridge
-    void* node = root;
+static bool BSTContains(const RtIO::ModSetNode* root, const RtIO::ModSetNode* filename) {
+    // LEFT: RtSystem::Filename is the POD mirror of System::Filename (R-IO's node).
+    const System::Filename& fnameRef = *reinterpret_cast<const System::Filename*>(&filename->key);
+    const RtIO::ModSetNode* node = root;
     while (node) {
-        System::Filename& nodeRef = *reinterpret_cast<System::Filename*>(node); // B.3.1 bridge
+        const System::Filename& nodeRef = *reinterpret_cast<const System::Filename*>(&node->key);
         if (fnameRef < nodeRef) {
-            node = *(void**)((uintptr_t)node + 0x10); // left
+            node = node->left;
         } else if (nodeRef < fnameRef) {
-            node = *(void**)((uintptr_t)node + 0x18); // right
+            node = node->right;
         } else {
             return true; // equal (neither < nor >)
         }
@@ -141,105 +127,94 @@ static bool BSTContains(void* root, void* filename) {
 }
 
 // ============================================================
-// Slot4 (0x14006D700): Setup — populates mod details UI
+// OnOpened (0x14006D700): Setup — populates mod details UI
 // ============================================================
 extern void* g_lastModDetails;   // mod_dialog_vtables.cpp (autostart click driver)
 void ModDetailsDialog::OnOpened() {
     g_lastModDetails = this;
     printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", (void*)this, modIndex);
-    uintptr_t s = (uintptr_t)this;
 
     // --- Find 12 UI elements ---
-    void* buttonOk = FindElem(this, "buttonOk");
-    reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(0);  // B.3.6 bridge
-    *(uint32_t*)((uintptr_t)buttonOk + 0xC0) = 8;
+    UI::Element* buttonOk = FindElem(this, "buttonOk");
+    buttonOk->SetElementId(0);
+    static_cast<UI::ButtonElement*>(buttonOk)->_keyIndex = 8;
 
-    void* buttonCreate = FindElem(this, "buttonCreate");
-    reinterpret_cast<UI::Element*>(buttonCreate)->SetElementId(1);  // B.3.6 bridge
+    UI::Element* buttonCreate = FindElem(this, "buttonCreate");
+    buttonCreate->SetElementId(1);
 
-    void* buttonUpdate = FindElem(this, "buttonUpdate");
-    reinterpret_cast<UI::Element*>(buttonUpdate)->SetElementId(2);  // B.3.6 bridge
+    UI::Element* buttonUpdate = FindElem(this, "buttonUpdate");
+    buttonUpdate->SetElementId(2);
 
-    void* imageIcon       = FindElem(this, "imageIcon");
-    void* textName        = FindElem(this, "textName");
-    void* textPath        = FindElem(this, "textPath");
-    void* textAuthor      = FindElem(this, "textAuthor");
-    void* textVersion     = FindElem(this, "textVersion");
-    void* textDescription = FindElem(this, "textDescription");
-    void* textConflictTitle = FindElem(this, "textConflictTitle");
-    void* textConflictList  = FindElem(this, "textConflictList");
-    void* textResourceList  = FindElem(this, "textResourceList");
+    UI::ImageElement* imageIcon = static_cast<UI::ImageElement*>(FindElem(this, "imageIcon"));
+    UI::TextElement* textName        = static_cast<UI::TextElement*>(FindElem(this, "textName"));
+    UI::TextElement* textPath        = static_cast<UI::TextElement*>(FindElem(this, "textPath"));
+    UI::TextElement* textAuthor      = static_cast<UI::TextElement*>(FindElem(this, "textAuthor"));
+    UI::TextElement* textVersion     = static_cast<UI::TextElement*>(FindElem(this, "textVersion"));
+    UI::TextElement* textDescription = static_cast<UI::TextElement*>(FindElem(this, "textDescription"));
+    UI::Element* textConflictTitle = FindElem(this, "textConflictTitle");
+    UI::DocumentTextElement* textConflictList = static_cast<UI::DocumentTextElement*>(FindElem(this, "textConflictList"));
+    UI::DocumentTextElement* textResourceList = static_cast<UI::DocumentTextElement*>(FindElem(this, "textResourceList"));
 
     // --- Get mod data ---
-    void* modification = ::IO::Modification::_singleton;
-    int modIndex = *(int*)(s + 0xC0);
-    void* mod = const_cast<RtIO::Mod*>(
-        &reinterpret_cast<const IO::Modification*>(modification)->GetModification(modIndex));   // B.3.4 bridge
-    uintptr_t m = (uintptr_t)mod;
+    IO::Modification* modification = ::IO::Modification::_singleton;
+    int modIndex = this->modIndex;
+    const RtIO::Mod& mod = modification->GetModification(modIndex);
 
     // --- Hide create/update buttons ---
-    reinterpret_cast<UI::Element*>(buttonCreate)->Hide(true);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(buttonUpdate)->Hide(true);  // B.3.6 bridge
+    buttonCreate->Hide(true);
+    buttonUpdate->Hide(true);
 
-    // --- Set icon sprite from +0xB8 sprite handle ---
+    // --- Set icon sprite from the sprite sheet ---
     // Retail (0x14006dca6) calls dispatch slot 0x140151898 =
     // ??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z -- the
     // BY-INDEX ctor with index 0, same as ModDialog's row icon. The by-NAME
     // overload that used to be here dereferences its String* (READ of 0).
-    uint8_t sprite[16];
-    ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(void**)(s + 0xB8))), 0);  // B.3.6 bridge
-    reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
+    UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(spriteSheet), 0);
+    imageIcon->SetSprite(&sprite);
 
     // --- Set text parameters ---
-    // Name (mod+0x00 = String)
-    reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, *reinterpret_cast<const System::String*>((void*)m));  // B.3.6 bridge
+    textName->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));
 
-    // Author (mod+0x08 = String)
-    reinterpret_cast<UI::TextElement*>(textAuthor)->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x08)));  // B.3.6 bridge
+    textAuthor->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));
 
-    // Path (mod+0x58 = String, dereference to char*)
+    // Path (the mod's Filename, as a new String)
     {
-        System::String pathStr(*(const char**)(m + 0x58));
-        reinterpret_cast<UI::TextElement*>(textPath)->SetParameter(0, pathStr);  // B.3.6 bridge
+        System::String pathStr(mod.file.data);
+        textPath->SetParameter(0, pathStr);
     }
 
     // Version: "%i (%s)" with version number and version string
     {
         // ?GetVersionString@Configuration@System@@ is a by-value static; its door
         // placement-constructed the result over this (empty) local.
-        System::String versionStr = System::Configuration::GetVersionString(*(uint32_t*)(m + 0x18), false);
-        System::String formatted = System::String::Format("%i (%s)", (uint64_t)*(uint32_t*)(m + 0x1c),
+        System::String versionStr = System::Configuration::GetVersionString((uint32_t)mod.i18, false);
+        System::String formatted = System::String::Format("%i (%s)", (uint64_t)(uint32_t)mod.i1c,
                          versionStr._data);
-        reinterpret_cast<UI::TextElement*>(textVersion)->SetParameter(0, formatted);  // B.3.6 bridge
+        textVersion->SetParameter(0, formatted);
     }
 
-    // Description (mod+0x10 = String)
-    reinterpret_cast<UI::TextElement*>(textDescription)->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x10)));  // B.3.6 bridge
+    textDescription->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));
 
     // --- Build conflict list markup ---
-    int conflictCount = *(int*)(m + 0x78);
+    int conflictCount = mod.files.size;
     System::String conflictResult("^jl^f0^c0^lb");
 
     for (int i = 0; i < conflictCount; i++) {
-        void** conflictArray = *(void***)(m + 0x70);
+        // LEFT: RtIO::ModArray::data is void* (R-IO's POD).
+        const RtSystem::Filename* conflictArray = static_cast<const RtSystem::Filename*>(mod.files.data);
         // Find(const Filename&) takes the ADDRESS of the array element (retail
         // 0x14006ddee: `LEA RDX,[RAX + RCX*8]` on the array base, not a MOV of
         // the slot's value) — &conflictArray[i], not conflictArray[i].
-        int cIdx = reinterpret_cast<const IO::Modification*>(modification)
-                       ->Find(*reinterpret_cast<const RtSystem::Filename*>(&conflictArray[i]));   // B.3.4 bridge
-        void* cMod = const_cast<RtIO::Mod*>(
-            &reinterpret_cast<const IO::Modification*>(modification)->GetModification(cIdx));   // B.3.4 bridge
-        uintptr_t cm = (uintptr_t)cMod;
+        int cIdx = modification->Find(conflictArray[i]);
+        const RtIO::Mod& cMod = modification->GetModification(cIdx);
 
         // Color: ^li^c1 if enabled, ^li^c0 if disabled
-        const char* prefix = (*(uint8_t*)(cm + 0x50) != 0) ? "^li^c1" : "^li^c0";
+        const char* prefix = (cMod.enabled != 0) ? "^li^c1" : "^li^c0";
 
         // Build entry: prefix + name + " ^n[" + path + "]^n"
-        const char* modName = *(const char**)cm;
-        const char* modPath = *(const char**)(cm + 0x58);
-        System::String entry = System::String::Format("%s%s ^n[%s]^n", (uint64_t)(uintptr_t)prefix,
-                         (uint64_t)(uintptr_t)modName,
-                         (uint64_t)(uintptr_t)modPath);
+        const char* modName = cMod.name;
+        const char* modPath = cMod.file.data;
+        System::String entry = System::String::Format("%s%s ^n[%s]^n", prefix, modName, modPath);
         // retail's operator+= returns a copy of the new value that the
         // original discarded (see the Append note); genuinely unused here.
         conflictResult += entry;
@@ -253,18 +228,15 @@ void ModDetailsDialog::OnOpened() {
 
     if (conflictCount == 0) {
         // Hide conflict title and list when no conflicts
-        reinterpret_cast<UI::Element*>(textConflictTitle)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(textConflictList)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        textConflictTitle->SetFlagsOnOff(1, 0);
+        textConflictList->SetFlagsOnOff(1, 0);
     } else {
         // Set conflict list text (DocumentTextElement)
-        reinterpret_cast<UI::DocumentTextElement*>(textConflictList)->SetText(conflictResult);  // B.3.6 bridge
+        textConflictList->SetText(conflictResult);
     }
 
     // --- Build resource list ---
-    // Dynamic string array: { void* ptr; int count; int capacity; }
-    uint8_t resArray[16];
-    *(void**)resArray = nullptr;
-    *(uint64_t*)(resArray + 8) = 0;
+    Collection::Array<char> resArray;
 
     // Push header
     {
@@ -273,25 +245,23 @@ void ModDetailsDialog::OnOpened() {
     }
 
     // Traverse resource BST in-order
-    void* bstRoot = *(void**)(m + 0x60);
+    const RtIO::ModSetNode* bstRoot = mod.set.root;
     if (bstRoot) {
-        void* node = BSTLeftmost(bstRoot);
+        const RtIO::ModSetNode* node = BSTLeftmost(bstRoot);
         while (node) {
             // For each resource file, check conflicts with enabled mods
             bool hasConflict = false;
             bool higherPriority = false;
 
             for (int i = 0; i < conflictCount; i++) {
-                void** cArray = *(void***)(m + 0x70);
+                const RtSystem::Filename* cArray = static_cast<const RtSystem::Filename*>(mod.files.data);
                 // Same address-vs-value fix as above (retail 0x14006dfd7:
                 // `LEA RDX,[RAX + RCX*8]`) — &cArray[i], not cArray[i].
-                int cIdx = reinterpret_cast<const IO::Modification*>(modification)
-                               ->Find(*reinterpret_cast<const RtSystem::Filename*>(&cArray[i]));   // B.3.4 bridge
-                void* cMod = const_cast<RtIO::Mod*>(
-                    &reinterpret_cast<const IO::Modification*>(modification)->GetModification(cIdx));   // B.3.4 bridge
+                int cIdx = modification->Find(cArray[i]);
+                const RtIO::Mod& cMod = modification->GetModification(cIdx);
 
-                if (*(uint8_t*)((uintptr_t)cMod + 0x50) != 0) {
-                    void* cBstRoot = *(void**)((uintptr_t)cMod + 0x60);
+                if (cMod.enabled != 0) {
+                    const RtIO::ModSetNode* cBstRoot = cMod.set.root;
                     if (BSTContains(cBstRoot, node)) {
                         hasConflict = true;
                         if (cIdx < modIndex) {
@@ -313,9 +283,8 @@ void ModDetailsDialog::OnOpened() {
                 prefix = "^li^c1";
 
             // Build entry: prefix + filename + "^n"
-            const char* filename = *(const char**)node;
-            System::String entryStr = System::String::Format("%s%s^n", (uint64_t)(uintptr_t)prefix,
-                             (uint64_t)(uintptr_t)filename);
+            const char* filename = node->key.data;
+            System::String entryStr = System::String::Format("%s%s^n", prefix, filename);
             ModDetails_StringArrayPush_Impl(resArray, std::move(entryStr));
             // Note: ModDetails_StringArrayPush_Impl reads entryStr in place; it
             // is released here when this iteration's scope ends.
@@ -330,85 +299,75 @@ void ModDetailsDialog::OnOpened() {
         ModDetails_StringArrayPush_Impl(resArray, std::move(ftr));
     }
 
-    // Null-terminate the byte buffer (original code does this inline after last
-    // push). Same Collection::Array<uint8_t> as ModDetails_StringArrayPush_Impl.
-    {
-        auto& arr = *reinterpret_cast<Collection::Array<uint8_t>*>(resArray);
-        arr.SetSize(arr.GetSize() + 1, (uint8_t)'\0');
-    }
+    // Null-terminate the byte buffer (original code does this inline after last push).
+    resArray.SetSize(resArray.GetSize() + 1, '\0');
 
     // Build String from null-terminated buffer, set on textResourceList
     {
-        char* data = (char*)*(void**)resArray;
+        const char* data = resArray._data;
         System::String resultStr(data ? data : "");
-        reinterpret_cast<UI::DocumentTextElement*>(textResourceList)->SetText(resultStr);  // B.3.6 bridge
+        textResourceList->SetText(resultStr);
     }
 
-    // Free resource array buffer
-    System::MemoryAllocator::MemFree(*(void**)resArray);
+    // Free resource array buffer (the ~Array below then frees a null buffer).
+    System::MemoryAllocator::MemFree(resArray._data);
+    resArray._data = nullptr;
+    resArray._size = 0;
+    resArray._capacity = 0;
 }
 
 // ============================================================
-// ModDetailsDialog_OpenDialog_Impl — opens a dialog from .rsc resource
+// ModDetailsDialog::OpenUpdateDialog — opens a dialog from .rsc resource
 // ============================================================
 // Shared by OpenUpdateDialog and DeleteMod (both open "Dialog/ModUpdate.rsc").
 // Original: FUN_14006d400 (OpenUpdateDialog) and FUN_14006d550 (DeleteMod).
 // Both are structurally identical: load resource, create 0xB8 DialogInstance,
 // set vtable to PTR_FUN_14015c6c0 (ModUpdateDialog), add to UI.
-static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
-    uintptr_t s = (uintptr_t)self;
-
+void ModDetailsDialog::OpenUpdateDialog(const char* rscPath) {
     // Load dialog resource
     System::Filename filenameBuf(rscPath);
-    void* extFactory = ::Object::ExternalFactory::_singleton;
-    void* ext = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
-            ->FindOrLoad(filenameBuf));
+    const ::Object::External* ext =
+        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
     // IsDerivedFrom check for Dialog type — the resource IS a Dialog if it loads
     // from a .rsc file, so we pass it directly (matches original behavior where
     // the check always succeeds for valid resources).
-    void* dialog = ext;
+    const UI::Dialog* dialog = static_cast<const UI::Dialog*>(ext);
 
     // Allocate and construct DialogInstance (0xB8 bytes)
     void* newDialog = System::MemoryAllocator::MemAlloc(sizeof(ModUploadDialog), 8);
-    void* dialogInst = nullptr;
+    ModUploadDialog* dialogInst = nullptr;
     if (newDialog) {
         // ENDGAME B.3.8 DLG: the real class. The old path ran the DialogInstance
         // ctor door and stamped g_ModUpdateDialog_Vtable (0x14015c6c0), which is
         // unregistered, so the stamp was skipped and the object stayed a bare
         // DialogInstance (B38 D9 #15).
         dialogInst = ::new (newDialog) ModUploadDialog(
-            *reinterpret_cast<UI::UserInterface**>(s + 0x10), static_cast<const UI::Dialog*>(dialog),
-            Object::InternalPtr<UI::DialogInstance>());
+            _ui, dialog, Object::InternalPtr<UI::DialogInstance>());
     }
 
     // Add to UI
-    uint64_t dialogRef;
-    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
-    reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> dialogRef(dialogInst);
+    _ui->AddDialog(&dialogRef);
 }
 
 // ============================================================
-// Slot8 (0x14006D6A0): OnCommand — button dispatch.
+// OnElementEvent (0x14006D6A0): OnCommand — button dispatch.
 // ============================================================
 void ModDetailsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 == 0x12)
         printf("[ModDetailsDialog::OnEvent] click id=%d\n", param4);
-    uintptr_t s = (uintptr_t)this;
 
     if (param3 != 0x12)
         return;
 
     if (param4 == 0) {
-        uint8_t basePtr[16];
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-        void* ui = *(void**)(s + 0x10);
-        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
+        Object::InternalPtr<UI::DialogInstance> basePtr(this);
+        _ui->CloseDialog(&basePtr);
     } else if (param4 == 1) {
         // OpenUpdateDialog — opens ModUpdate.rsc dialog
-        ModDetailsDialog_OpenDialog_Impl(this, "Dialog/ModUpdate.rsc");
+        OpenUpdateDialog("Dialog/ModUpdate.rsc");
     } else if (param4 == 2) {
         // DeleteMod — also opens ModUpdate.rsc dialog (same behavior as OpenUpdateDialog)
-        ModDetailsDialog_OpenDialog_Impl(this, "Dialog/ModUpdate.rsc");
+        OpenUpdateDialog("Dialog/ModUpdate.rsc");
     }
 }
