@@ -42,26 +42,23 @@
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/Component.h"
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/CropFieldComponent.h"   // B4 DLG-a
 
 namespace {
 
-// FUN_140005380 = WorkAcc_FindComponent_5380, FUN_14011b410 =
+// FUN_140005380 = FindComponent<CropFieldComponent>, FUN_14011b410 =
 // CropFieldComponent_Maturity: called by name (B3R).
 
 // Resolve the CropFieldComponent behind this panel's entity. Mirrors the retail
 // prologue shared by idx7/idx11/idx12: entity(+0x28) -> IsDerivedFrom(ComponentEntity)
-// -> InternalBasePtr -> FUN_140005380.
-void* FindComp(void* self) {
+// -> FindComponent<CropFieldComponent> (0x140005380; no null test there, as retail).
+CropFieldComponent* FindComp(CropUI* self) {
     if (!self) return nullptr;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* entity = *reinterpret_cast<void**>(s + 0x28);
+    Object::Base* entity = self->_dataSource;
     uint32_t entTid = ComponentEntity::TypeId();
-    void* checked = ::Object::IsDerivedFromNullSafe(entity, entTid) ? entity : nullptr;
-    uint64_t entIbp = 0;
-    new (&entIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    uint64_t comp = 0;
-    WorkAcc_FindComponent_5380(static_cast<uintptr_t>(entIbp), &comp);   // 0x140005380
-    return reinterpret_cast<void*>(comp);
+    ComponentEntity* checked =
+        ::Object::IsDerivedFromNullSafe(entity, entTid) ? static_cast<ComponentEntity*>(entity) : nullptr;
+    return checked->FindComponent<CropFieldComponent>();   // 0x140005380
 }
 
 // ENDGAME B.3.9: UI::ProgressElement now has a ported TypeId() (a class static, always
@@ -80,25 +77,26 @@ uint32_t ProgressElementTypeId() {
 // +0x50 as "still unset" to decide this is a fresh planting.
 // [11] 0x1400b2920
 void CropUI::SetResource(int64_t newType) {
-    void* comp = FindComp(this);
+    CropFieldComponent* comp = FindComp(this);
 
     // SA guard (retail unguarded): in retail a combo event can only be routed to an
     // entity that has a CropFieldComponent.
     if (!comp) return;
 
-    int64_t cur = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50);
-    if (cur == 0 && newType != 0) {
-        reinterpret_cast<Component*>(comp)->Command(2);   // slot 14; B.3.8 bridge
+    // The field's crop type (+0x50)
+    if (comp->field50 == nullptr && newType != 0) {
+        comp->Command(2);   // slot 14
     }
-    *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50) = newType;
+    // LEFT: SelectResourceUI's SetResource takes the type as int64_t (DLG-d's header).
+    comp->field50 = (void*)newType;
 }
 
 // idx12 (+0x60) — retail 0x1400b29d0. Current crop type via out-param.
 // [12] 0x1400b29d0
 void* CropUI::GetResource(void* out) {
-    void* comp = FindComp(this);
-    *reinterpret_cast<uint64_t*>(out) =
-        comp ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50) : 0;
+    CropFieldComponent* comp = FindComp(this);
+    // LEFT: the out slot is void* in SelectResourceUI's declaration (DLG-d's header).
+    *(void**)out = comp ? comp->field50 : nullptr;
     return out;
 }
 
@@ -119,30 +117,25 @@ int CropUI::GetCategory() {
 // idx4 (+0x20) — retail 0x1400b2b50: base idx4 (combo bind + element id 500 +
 // populate), then find "yield" and seat it at +0x38 with progress 1.0f.
 void CropUI::OnCreated() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     // Needs the DialogInstance (+0x18) the framework seats before dispatch.
-    if (!*reinterpret_cast<void**>(s + 0x18)) return;
+    if (!_dialog) return;
 
     SelectResourceUI::OnCreated();   // 0x140078be0, the base's idx4
 
-    uint64_t found = 0;
+    UI::Element* raw;
     {
         System::String nameStr("yield");
-        void* parentElem = *reinterpret_cast<void**>(s + 0x20);
-        ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
+        raw = _container->FindElement(nameStr).Get();
     }
 
-    void* raw = reinterpret_cast<void*>(found);
-    void* checked = ::Object::IsDerivedFromNullSafe(raw, ProgressElementTypeId()) ? raw : nullptr;
-    uint64_t ibp = 0;
-    new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    *reinterpret_cast<uint64_t*>(s + 0x38) = ibp;
+    yield = ::Object::IsDerivedFromNullSafe(raw, ProgressElementTypeId())
+                ? static_cast<UI::ProgressElement*>(raw) : nullptr;
 
     // Retail writes this unguarded (Crop.rsc always carries "yield"); guarded here for
     // the same reason orchardui.cpp is — the shared StandardDialog mount could reach a
     // layout without it, which retail cannot.
-    if (*reinterpret_cast<uint64_t*>(s + 0x38))
-        *reinterpret_cast<float*>(*reinterpret_cast<uint64_t*>(s + 0x38) + 0x124) = 1.0f;
+    if (yield)
+        yield->_maxValue = 1.0f;
 
 }
 
@@ -151,30 +144,29 @@ void CropUI::OnCreated() {
 // then the base's idx7 (enable the combo iff it has items).
 void CropUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Self-heal, same as orchardui.cpp: Slot4 may not have run for this instance yet.
-    if (!*reinterpret_cast<uint64_t*>(s + 0x38)) {
+    if (!yield) {
         CropUI::OnCreated();
-        if (!*reinterpret_cast<uint64_t*>(s + 0x38)) return;
+        if (!yield) return;
     }
 
-    void* comp = FindComp(this);
+    CropFieldComponent* comp = FindComp(this);
     if (!comp) return;
 
     float maturity = CropFieldComponent_Maturity(comp);   // 0x14011b410
 
-    void* yieldElem = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x38));
-    *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(yieldElem) + 0x128) = maturity;
+    UI::ProgressElement* yieldElem = yield;
+    yieldElem->_currentValue = maturity;
 
     int percent = static_cast<int>(maturity * 100.0f + 0.5f);
     {
         System::String textStr = System::String::Format("%i",
                          static_cast<uint64_t>(static_cast<uint32_t>(percent)));
-        reinterpret_cast<UI::ProgressElement*>(yieldElem)->SetProgressTextParameter(0, textStr);  // B.3.6 bridge
+        yieldElem->SetProgressTextParameter(0, textStr);
     }
 
-    if (*reinterpret_cast<uint64_t*>(s + 0x30))
+    if (internalBasePtr)
         SelectResourceUI::OnUpdateLayout();   // = 0x140078cb0, the base's idx7
 }
 
@@ -182,15 +174,12 @@ void CropUI::OnUpdateLayout() {
 // idx8 (+0x40) — base combo refresh, with the same null-combo self-heal.
 void CropUI::OnUpdate(const System::Time& time) {
     if (!SA_DialogEntityAlive(this)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    if (!*reinterpret_cast<uint64_t*>(s + 0x30)) {
+    if (!internalBasePtr) {
         CropUI::OnCreated();
-        if (!*reinterpret_cast<uint64_t*>(s + 0x30)) return;
+        if (!internalBasePtr) return;
     }
     SelectResourceUI::OnUpdate(time);
 }
-
-
 
 
 // create 0x140020b10: MemAlloc(0x60, 8), then the ctor (DialogController ->

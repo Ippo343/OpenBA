@@ -67,19 +67,16 @@ void SelectResourceUI::OnUpdateLayout() {
     // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
     // entitylist.cpp Step 0).
     if (!SA_DialogEntityAlive(this)) return;
-    // Wrap entity in InternalBasePtr (base class requirement, not used directly)
-    void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
+    // Retail's checked cast of the data source (+0x28); the result is not read.
+    Object::Base* entity = _dataSource;
+    (void)::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
 
-    // Get selectResource combo element
-    void* combo = (void*)this->internalBasePtr;
+    // The selectResource combo element (+0x30; stored unchecked, read as a ComboElement)
+    UI::ComboElement* combo = static_cast<UI::ComboElement*>(internalBasePtr);
 
     // Enable combo if it has items, disable if empty
-    int itemCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
+    int itemCount = combo->GetItemCount();
 
-    // Virtual call: vtable[8] = SetEnabled(hasItems)
-    reinterpret_cast<UI::Element*>(combo)->Enable(itemCount > 0);  // B.3.6 bridge: Element slot 8 Enable
+    // Element slot 8 Enable(hasItems)
+    combo->Enable(itemCount > 0);
 }
