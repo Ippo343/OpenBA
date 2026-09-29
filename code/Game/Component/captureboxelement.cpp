@@ -33,12 +33,11 @@ CaptureBoxElement::CaptureBoxElement()
 // [4] 0x140078fb0 — ComputeSize: if the "size-pending" flag (bit 27 of +0x34)
 // is set, the element's size (+0x60/+0x64) is 1x1 and the flag is cleared.
 void CaptureBoxElement::ComputeSize() {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    uint32_t flags = *reinterpret_cast<uint32_t*>(s + 0x34);
+    uint32_t flags = _flags;
     if ((flags >> 27) & 1u) {
-        *reinterpret_cast<int32_t*>(s + 0x60) = 1;
-        *reinterpret_cast<int32_t*>(s + 0x64) = 1;
-        *reinterpret_cast<uint32_t*>(s + 0x34) = flags & 0xf7ffffffu;
+        _layoutWidth = 1;
+        _layoutHeight = 1;
+        _flags = flags & 0xf7ffffffu;
     }
 }
 
@@ -48,11 +47,10 @@ void CaptureBoxElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h
     UI::Element::ComputeLayout(x, y, w, h);   // base — QUALIFIED (slot 5)
     int outX = 0, outY = 0, outW = 0, outH = 0;
     GetAlignedPosition(x, y, w, h, 0, 0, outX, outY, outW, outH, false, false);
-    uint8_t* e = reinterpret_cast<uint8_t*>(this);
-    *reinterpret_cast<int*>(e + 0x68) = outX;
-    *reinterpret_cast<int*>(e + 0x70) = outX + outW;
-    *reinterpret_cast<int*>(e + 0x6c) = outY;
-    *reinterpret_cast<int*>(e + 0x74) = outY + outH;
+    _layoutLeft   = outX;
+    _layoutRight  = outX + outW;
+    _layoutTop    = outY;
+    _layoutBottom = outY + outH;
 }
 
 // [6] 0x140078da0 — Draw: the base, then the four sides of the box
@@ -60,10 +58,9 @@ void CaptureBoxElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h
 // (halved if flag bit 18 of +0x34 is set).
 void CaptureBoxElement::Draw(UI::SpriteContext& context, uint8_t alpha) const {
     UI::Element::Draw(context, alpha);   // base — QUALIFIED (slot 6)
-    const uint8_t* e = reinterpret_cast<const uint8_t*>(this);
     uint32_t a32 = alpha;
-    if (*reinterpret_cast<const uint32_t*>(e + 0x34) & 0x40000) a32 = (uint32_t)(alpha >> 1);
-    uint32_t v = *reinterpret_cast<const uint32_t*>(e + 0x38);
+    if (_flags & 0x40000) a32 = (uint32_t)(alpha >> 1);
+    uint32_t v = _color;
     uint32_t color = ((((v >> 8) & 0xffff0000u) * a32 ^ v) & 0xffffffu)
                      ^ (((v >> 8) & 0xff0000u) * a32);
     context.AddLine(_lineSprite, _x0, _y0, _x1, _y0, color);

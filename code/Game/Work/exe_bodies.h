@@ -17,16 +17,15 @@
 #include <cstdint>
 
 // ---- build_actions.cpp
-extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t priority, int64_t* buildingIBPptr, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
+class CitizenComponent;
+class ComponentEntity;
+extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority, ComponentEntity** building, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
 
 // ---- buildstructure.cpp
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim);  // 0x1400e59c0 (local extern in buildcomponent_state8.cpp, destroycomponent_states.cpp)
 extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP);  // no retail address (standalone harness entry)
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)
-
-// ---- firework_search.cpp
-int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_3, float* param_4, float* param_5);  // 0x1400881d0
 
 // ---- foresterwork.cpp
 bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)

@@ -66,6 +66,7 @@
 #include "../../types/math/Math.h"
 // ENDGAME B.3.5 block E: the real `Graphics::MeshInstance` / `EdgeMeshInstance`.
 #include "../../types/graphics/Mesh.h"
+#include "../../types/graphics/GraphicsMesh.h"      // B.4: DetailLevel / TriangleList
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 #include "../../types/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
@@ -73,27 +74,14 @@
 namespace {
 
 // ---------------------------------------------------------------------------
-// Video::Context offsets these two bodies poke. Same block lights_vtable.cpp
-// documents; only the members used here are listed.
-//   +0x10  dirty mask      +0x18 / +0x1c  sub-masks
-//   +0x48  a bound object          +0xb8 / +0x138 / +0x178  the vertex binding
-//   +0x1b8 / +0x1c0         the index binding
-//   +0x3f8 .. +0x404  a float4 of tuning constants
-//   +0x408 .. +0x414  a float4 whose w is the fade alpha
-//   +0x2160 the render-state object; vtable slot 12 (+0x60) issues the draw
+// Video::Context, the fields these two bodies set (B.4: by name, Context.h):
+//   `_dirty` (+0x10), `_imageBufferDirty` (+0x18), `_imageBuffers[3]` (+0x48),
+//   the vertex binding `_vertexBuffers[0]` / `_vertexOffsets[0]` /
+//   `_vertexStrides[0]` (+0xb8 / +0x138 / +0x178), the index binding
+//   `_indexBuffer` / `_indexOffset` (+0x1b8 / +0x1c0), `_inverseScale`
+//   (+0x3f8, the tuning float4), `_color` (+0x408, whose w is the fade alpha)
+//   and `_contextData` (+0x2160), whose slot 12 issues the draw.
 // ---------------------------------------------------------------------------
-constexpr uint32_t kCtxDirty   = 0x10;
-constexpr uint32_t kCtxSub18   = 0x18;
-constexpr uint32_t kCtxSub1c   = 0x1c;
-constexpr uint32_t kCtxObj48   = 0x48;
-constexpr uint32_t kCtxVB      = 0xb8;
-constexpr uint32_t kCtxVBFirst = 0x138;
-constexpr uint32_t kCtxVBStride= 0x178;
-constexpr uint32_t kCtxIB      = 0x1b8;
-constexpr uint32_t kCtxIBFirst = 0x1c0;
-constexpr uint32_t kCtxTune    = 0x3f8;
-constexpr uint32_t kCtxColour  = 0x408;
-constexpr uint32_t kCtxState   = 0x2160;
 
 // The three tuning constants and the fallback, read out of the image with
 // read_memory rather than converted from decimal:
@@ -111,73 +99,25 @@ float AsFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
 // loads the literal 0x2f (EdgeMeshInstance) and runs the zero loop while the
 // counter stays non-negative, which is 48 passes of 0x40 bytes. MeshInstance's
 // form looks variable and is not — the block it sits in only runs when arg8 is
-// 1, which the branch above it has already established.
+// 1, which the branch above it has already established. `Matrix()` zeroes.
 constexpr int kBoneMatrices = 48;
 
 // ---------------------------------------------------------------------------
-// The six named dependencies. Every one is EXPORTED and every one is already
-// PORTED, so RT_EXPORT_ONCE (registry-first) lands on our bodies.
+// The named dependencies, all members (B.4: the `(self, ret)` wrappers and the
+// `void*` receivers are gone):
+//   `Math::Quaternion::Lerp`, `Math::Transform::AsMatrix`
+//   `Graphics::MeshInstance::GetBones` / `GetNodeToWorld`
+//   `Video::Context::SetBones` / `SetTransformScale` (0x18001a400, the
+//     four-argument setter -- THE DOOR DECIDED THE OVERLOAD) / `SetColor` /
+//     `SetInverseScale` / `SetVertexBuffer` / `DrawIndexed`, each of which
+//     retail inlines here and each of which is the ported body of that inline.
 // ---------------------------------------------------------------------------
-// ENDGAME B.3.5 caller batch: `GetBonesFn`, `SetBonesFn` and `SetTfsFn` went with
-// the three by-name doors below, which are member calls now.
-
-// ENDGAME B.3.1 step 2: both are Math:: members. The `(self, ret, ...)` shape
-// stays because the call sites work on raw offsets into MeshInstance's untyped
-// storage; those B.3.1 bridges go when THAT class is converted.
-void* QuaternionLerp(const void* self, void* ret, const void* other, const float* s) {
-    *static_cast<Math::Quaternion*>(ret) =
-        static_cast<const Math::Quaternion*>(self)->Lerp(
-            *static_cast<const Math::Quaternion*>(other),
-            *reinterpret_cast<const Math::Scalar*>(s));
-    return ret;
-}
-void* TransformAsMatrix(const void* self, void* ret) {
-    *static_cast<Math::Matrix*>(ret) =
-        static_cast<const Math::Transform*>(self)->AsMatrix();
-    return ret;
-}
-// ENDGAME B.3.5 caller batch: all three are DEFINED members today —
-// `Graphics::MeshInstance::GetBones` in animationstate_transforms.cpp, and
-// `Video::Context::SetBones` / `::SetTransformScale` in video/context.cpp — so
-// the three by-name doors become member calls. THE DOOR DECIDED THE OVERLOAD:
-// `?SetTransformScale@…AEBVMatrix@Math@@AEBVVector4@4@@Z` 0x18001a400 is the
-// four-argument setter, not `SetTransform` (0x18001a6b0).
-int32_t MeshInstanceGetBones(const void* self, float t, const void* xform, void* out) {
-    return reinterpret_cast<const ::Graphics::MeshInstance*>(self)->GetBones(
-        t, *reinterpret_cast<const Math::Transform*>(xform),
-        static_cast<Math::Matrix*>(out));                            // B.3.5 bridge
-}
-void ContextSetBones(void* ctx, int32_t count, const void* matrices) {
-    reinterpret_cast<Video::Context*>(ctx)->SetBones(
-        count, reinterpret_cast<const Math::Matrix*>(matrices));      // B.3.5 bridge
-}
-void ContextSetTransformScale(void* ctx, int32_t slot, const void* matrix,
-                              const void* scale) {
-    reinterpret_cast<Video::Context*>(ctx)->SetTransformScale(
-        slot, *reinterpret_cast<const Math::Matrix*>(matrix),
-        *reinterpret_cast<const Math::Vector4*>(scale));               // B.3.5 bridge
-}
-// ENDGAME B.3.5 block E: `MeshInstanceGetNodeToWorld` DELETED. It was a
-// `RT_EXPORT_ONCE` door onto `?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AV
-// Transform@Math@@HM@Z`, i.e. a runtime-internal caller reaching its own
-// neighbour through the port registry. That body is now a member of the real
-// `Graphics::MeshInstance` (`runtime/src/graphics/mesh.cpp`), so
-// `EdgeMeshInstance::Draw` calls it directly and qualified. Its `NodeToWorldFn`
-// typedef went with it.
-
-// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-const uint8_t* VideoDevice() {
-    return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
-}
-// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
-const uint8_t* AnimationManager() {
-    return reinterpret_cast<const uint8_t*>(::Graphics::AnimationManager::_singleton);
-}
 
 // ---------------------------------------------------------------------------
 // `Math::Transform` — 0x1c: a Quaternion at +0x00 (four floats) and a Vector3
 // at +0x10 (three). Both bodies build one on the stack by LERPing the two
-// Transforms of an `InterpolatedState<Transform>`:
+// Transforms of an `InterpolatedState<Transform>` (or Geometry's `_transform`
+// / `_prevTransform`, laid out the same way):
 //
 //     out.rotation    = prev.rotation.Lerp(cur.rotation, t)
 //     out.translation = prev.translation + (cur.translation - prev.translation) * t
@@ -192,104 +132,81 @@ const uint8_t* AnimationManager() {
 // `-march` beyond the x86-64 baseline, so GCC cannot contract these into FMAs
 // and the arithmetic is bit-exact against the shipped MULSS/ADDSS pairs.
 // ---------------------------------------------------------------------------
-void LerpTransform(const uint8_t* state, float t, float* out) {
-    const float* const cur  = reinterpret_cast<const float*>(state);
-    const float* const prev = reinterpret_cast<const float*>(state + 0x1c);
-
+Math::Transform LerpTransform(const Math::Transform& cur, const Math::Transform& prev,
+                              float t) {
+    Math::Transform out;
     // The scalar is passed BY ADDRESS (`AEBVScalar@2@`); retail spills `t` to a
-    // stack slot and hands over its address, which is what this local is.
-    const float scalar = t;
-    float quat[4];
-    QuaternionLerp(state + 0x1c, quat, state, &scalar);
+    // stack slot and hands over its address.
+    const Math::Quaternion quat = prev.rotation.Lerp(cur.rotation, Math::Scalar(t));
 
-    for (int i = 0; i < 3; ++i) {
-        const float d = (cur[4 + i] - prev[4 + i]) * t;
-        out[4 + i] = prev[4 + i] + d;
-    }
-    out[0] = quat[0]; out[1] = quat[1]; out[2] = quat[2]; out[3] = quat[3];
+    const float dx = (cur.translation.x - prev.translation.x) * t;
+    out.translation.x = prev.translation.x + dx;
+    const float dy = (cur.translation.y - prev.translation.y) * t;
+    out.translation.y = prev.translation.y + dy;
+    const float dz = (cur.translation.z - prev.translation.z) * t;
+    out.translation.z = prev.translation.z + dz;
+    out.rotation = quat;
+    return out;
 }
 
 // ---------------------------------------------------------------------------
 // The instanced-pose pool slot, retail 0x180100b73 .. 0x180100bbd. IDENTICAL to
-// the helper runtime/src/graphics/mesh.cpp:562 carries for
-// `GetNodeToWorld`/`GetInstanceTransform`; spelled again here because that one
-// is file-local and a second `extern` declaration of a file-local is the
-// link-time coincidence this tree has been bitten by (closure_batch2b.cpp says
-// the same about `GeometryVtable`).
+// mesh.cpp's `RtInstancedPoolSlot` for `GetNodeToWorld`/`GetInstanceTransform`;
+// spelled again here because that one is file-local.
 //
-//     poolId = *(int32*)(layers._data + layers._size * 0x38 - 0x2c);  // MOVSXD
+//     poolId = _animation._layers[_size - 1]._handle   (layers + size*0x38 - 0x2c)
 //     hi = (uint8)(poolId >> 8);   lo = (uint8)poolId;
-//     bank  = *(void**)(*(void**)AnimationManager + 0x20 + hi * 0x30);
-//     poses = *(void**)(bank + lo * 0x48 + 0x38);
+//     poses = AnimationManager::_singleton->_instances[hi]._states[lo]._nodes._data
 //
-// `*(void**)AnimationManager` is the SECOND dereference the wave-6 lane paid
-// for: the exported symbol is a pointer to the manager and the manager's first
-// member is the pool base.
+// B.4: every step is a named field (AnimationState.h / AnimationManager.h).
 // ---------------------------------------------------------------------------
-const uint8_t* InstancedPoses(const uint8_t* self) {
-    const uint8_t* const layers = *reinterpret_cast<const uint8_t* const*>(self + 0xe0);
-    const int32_t size = *reinterpret_cast<const int32_t*>(self + 0xe8);
-    const int64_t poolId = *reinterpret_cast<const int32_t*>(
-        layers + static_cast<int64_t>(size) * 0x38 - 0x2c);          // MOVSXD
+const Graphics::InterpolatedState<Math::Transform>*
+InstancedPoses(const Graphics::MeshInstance& self) {
+    const auto& layers = self._animation._layers;
+    const int64_t poolId = layers._data[layers._size - 1]._handle;       // MOVSXD
 
     const uint64_t hi = static_cast<uint8_t>(poolId >> 8);
     const uint64_t lo = static_cast<uint8_t>(poolId);
 
-    const uint8_t* const base = *reinterpret_cast<const uint8_t* const*>(AnimationManager());
-    const uint8_t* const bank =
-        *reinterpret_cast<const uint8_t* const*>(base + 0x20 + hi * 0x30);
-    return *reinterpret_cast<const uint8_t* const*>(bank + lo * 0x48 + 0x38);
+    return ::Graphics::AnimationManager::_singleton->_instances._data[hi]
+               ._states._data[lo]._nodes._data;
 }
 
-// `if (ctx->[off] != {a,b,c,d}) { store; ctx->dirty |= 0x1000; }` over four
-// floats. The compare is UCOMISS + JP + JNZ per term in retail — an ORDERED
-// compare, so a NaN in either operand takes the "differs" arm. `!=` on floats
-// in C++ is the same unordered-aware test for this purpose (NaN != x is true),
-// so the branch is reproduced, not approximated.
-void SetFloat4(void* ctx, uint32_t off, float a, float b, float c, float d) {
-    float* const p = reinterpret_cast<float*>(static_cast<uint8_t*>(ctx) + off);
-    if (p[0] == a && p[1] == b && p[2] == c && p[3] == d) return;
-    p[0] = a; p[1] = b; p[2] = c; p[3] = d;
-    *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx) + kCtxDirty) |= 0x1000u;
+// The material object bind, `mode != 1` only: `Context::SetImageBuffer(obj, 3)`
+// behind an extra `obj != nullptr` test retail makes first (+0x48, dirty 2,
+// sub-bit 8). Spelled on the named fields because of that extra test.
+// `MeshInstance::_color` (+0x10c) is four floats (Mesh.h keeps the array: a
+// `Math::Vector4` member would add its zeroing ctor to MeshInstance's), handed
+// to `SetTransformScale` as the `const Vector4&` it is.
+Math::Vector4 ColorOf(const Graphics::MeshInstance& mi) {
+    return Math::Vector4(mi._color[0], mi._color[1], mi._color[2], mi._color[3]);
 }
 
-// The vertex-buffer binding triple, which both bodies write twice over.
-void BindVertexBuffer(void* ctx, const void* buffer, int32_t first, int32_t stride) {
-    uint8_t* const c = static_cast<uint8_t*>(ctx);
-    if (*reinterpret_cast<const void* const*>(c + kCtxVB) == buffer &&
-        *reinterpret_cast<const int32_t*>(c + kCtxVBFirst) == first &&
-        *reinterpret_cast<const int32_t*>(c + kCtxVBStride) == stride)
+void BindMaterialImage(Video::Context& context, void* obj) {
+    if (obj != nullptr && obj != context._imageBuffers[3]) {
+        context._dirty |= RtVideo::kDirtyImageBuffers;
+        context._imageBufferDirty |= 8u;
+        context._imageBuffers[3] = obj;
+    }
+}
+
+// The index binding: `Context::SetIndexBuffer` (0x180019fb0, no C++ body) —
+// compare, dirty 0x10, the offset stored BEFORE the pointer as retail does.
+void BindIndexBuffer(Video::Context& context, const void* buffer, int32_t first) {
+    if (context._indexBuffer == buffer && context._indexOffset == first)
         return;
-    *reinterpret_cast<uint32_t*>(c + kCtxDirty) |= 8u;
-    *reinterpret_cast<uint32_t*>(c + kCtxSub1c) |= 1u;
-    *reinterpret_cast<const void**>(c + kCtxVB)      = buffer;
-    *reinterpret_cast<int32_t*>(c + kCtxVBFirst)     = first;
-    *reinterpret_cast<int32_t*>(c + kCtxVBStride)    = stride;
+    context._dirty |= RtVideo::kDirtyIndexBuffer;
+    context._indexOffset = first;
+    context._indexBuffer = const_cast<void*>(buffer);
 }
 
-void BindIndexBuffer(void* ctx, const void* buffer, int32_t first) {
-    uint8_t* const c = static_cast<uint8_t*>(ctx);
-    if (*reinterpret_cast<const void* const*>(c + kCtxIB) == buffer &&
-        *reinterpret_cast<const int32_t*>(c + kCtxIBFirst) == first)
-        return;
-    *reinterpret_cast<uint32_t*>(c + kCtxDirty) |= 0x10u;
-    *reinterpret_cast<int32_t*>(c + kCtxIBFirst) = first;
-    *reinterpret_cast<const void**>(c + kCtxIB)  = buffer;
-}
-
-// The draw itself: `obj = ctx->[0x2160]; obj->vtable[12](obj, 0, rec[0], rec[4],
-// rec[8], rec[0xc], last)`. SEVEN values — two of them on the stack — and
-// Ghidra's C output prints four.
-void IssueDraw(void* ctx, const uint8_t* rec, int32_t last) {
-    void* const obj = *reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + kCtxState);
-    void** const vt = *reinterpret_cast<void***>(obj);
-    using Fn = void (*)(void*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
-    reinterpret_cast<Fn>(vt[12])(obj, 0,
-                                 *reinterpret_cast<const int32_t*>(rec + 0x00),
-                                 *reinterpret_cast<const int32_t*>(rec + 0x04),
-                                 *reinterpret_cast<const int32_t*>(rec + 0x08),
-                                 *reinterpret_cast<const int32_t*>(rec + 0x0c),
-                                 last);
+// The draw itself: `obj = ctx->_contextData; obj->vtable[12](obj, 0, rec->_f00,
+// rec->_f04, rec->_f08, rec->_f0c, last)` — `Context::DrawIndexed`
+// (0x1800f22.. , context.cpp: `ContextData::DrawIndexed`) inlined. SEVEN values —
+// two of them on the stack — and Ghidra's C output prints four.
+void IssueDraw(Video::Context& context, const Graphics::GraphicsMesh::TriangleList& rec,
+               int32_t last) {
+    context.DrawIndexed(0, rec._f00, rec._f04, rec._f08, rec._f0c, last);
 }
 
 }  // namespace
@@ -310,113 +227,90 @@ void IssueDraw(void* ctx, const uint8_t* rec, int32_t last) {
 // matrices and the world transform are submitted once per object and not once
 // per pass.
 //
-// The buffer triple comes off `this->_geometry->[0x50]` (`[this+0xc0]` then
+// The buffer triple comes off `this->_mesh->_detailLevels` (`[this+0xc0]` then
 // `+0x50`), re-read from the object EVERY time — four separate reloads in
-// retail, kept literal.
+// retail, kept literal. LEFT: `_detailLevels` is a raw header (GraphicsMesh.h),
+// so each reload views it once as its element type.
 // ============================================================================
 
 namespace Graphics {
 
-// ============================================================================
-// void Graphics::MeshInstance::Draw(Video::Context&, const Camera&,
-//                                   ExternalPtr<MaterialInstance>, float,
-//                                   int, int, int) const           [slot 2]
-//                                                   retail 0x180100960
-// The banner above the door is the evidence for every offset below; it is not
-// repeated. `Video::Context` and `Graphics::Camera` are other blocks' classes and
-// are taken by REFERENCE under their real names; the offsets are read through the
-// one bridge cast at the top of the body, which is where they were read before.
-// ============================================================================
+namespace {
+const GraphicsMesh::DetailLevel* DetailLevels(const GraphicsMesh* mesh) {
+    return reinterpret_cast<const GraphicsMesh::DetailLevel*>(mesh->_detailLevels._data);
+}
+}  // namespace
+
 void MeshInstance::Draw(Video::Context& context, const Camera& camera,
                         ExternalPtrHandle material, float t, int32_t flags,
                         int32_t mode, int32_t pass) const {
     (void)camera; (void)material;                  // R8/R9, never reloaded
-    void* const ctx = reinterpret_cast<void*>(&context);            // B.3.5 bridge
-    const void* const self = this;
-
-    const uint8_t* const d = reinterpret_cast<const uint8_t*>(this);
 
     const int32_t node = (flags >> 12) & 0xf;      // SAR 0xc / AND 0xf
-    const int64_t nodeOff = static_cast<int64_t>(node) * 0xb0;
-    const int64_t recOff  = static_cast<int64_t>(flags & 0xfff) * 0x18;
+    const int32_t sub  = flags & 0xfff;            // record index, stride 0x18
 
-    const uint8_t* const lists =
-        *reinterpret_cast<const uint8_t* const*>(
-            *reinterpret_cast<const uint8_t* const*>(d + 0xc0) + 0x50);
-    const uint8_t* const rec =
-        *reinterpret_cast<const uint8_t* const*>(lists + nodeOff + 0x98) + recOff;
+    const GraphicsMesh::DetailLevel& level = DetailLevels(GetMesh().Get())[node];
+    const GraphicsMesh::TriangleList& rec = level._triangleLists._data[sub];
 
     if (pass == 1) {
-        const int32_t boneNode = *reinterpret_cast<const int32_t*>(rec + 0x14);
+        const int32_t boneNode = rec._f14;
 
-        float world[7];                            // Math::Transform, 0x1c
+        Math::Transform world;                     // 0x1c
 
         if (boneNode < 0) {
             // --- the SKINNED arm: pose 48 bones from this object's own state
-            alignas(16) float bones[kBoneMatrices * 16];
-            std::memset(bones, 0, sizeof bones);   // 48 x 0x40, see kBoneMatrices
+            Math::Matrix bones[kBoneMatrices];     // 48 x 0x40, zeroed
 
-            LerpTransform(d + 0x84, t, world);
+            world = LerpTransform(_transform, _prevTransform, t);
 
             // GetBones is handed the FIRST of the two Transforms verbatim (the
             // seven dwords at +0x84), NOT the lerped one — retail copies
             // `[RBX+0x00 .. RBX+0x18]` into the argument buffer at 0x180100b12.
-            float bindPose[7];
-            std::memcpy(bindPose, d + 0x84, sizeof bindPose);
+            const Math::Transform bindPose = _transform;
 
-            const int32_t count = MeshInstanceGetBones(self, t, bindPose, bones);
-            ContextSetBones(ctx, count, bones);
+            const int32_t count = GetBones(t, bindPose, bones);
+            context.SetBones(count, bones);
         } else {
             // --- the RIGID arm: one node transform out of the pose array
-            const uint8_t* base;
-            if (d[0xd8] != 0) base = InstancedPoses(d);                 // instanced
-            else              base = *reinterpret_cast<const uint8_t* const*>(d + 0xf0);
-            LerpTransform(base + static_cast<int64_t>(boneNode) * 0x38, t, world);
+            const InterpolatedState<Math::Transform>* base;
+            if (_animation._instanced) base = InstancedPoses(*this);   // instanced
+            else                       base = _nodes._data;
+            const InterpolatedState<Math::Transform>& pair = base[boneNode];
+            world = LerpTransform(pair._current, pair._previous, t);
         }
 
-        float matrix[16];
-        void* const m = TransformAsMatrix(world, matrix);
-        ContextSetTransformScale(ctx, 0, m, d + 0x10c);
+        const Math::Matrix matrix = world.AsMatrix();
+        context.SetTransformScale(0, matrix, ColorOf(*this));
     }
 
     // ---- the fade colour ----------------------------------------------------
-    // `alpha = t * this->[0x7c] + (1 - t) * this->[0x80]`, in that order:
+    // `alpha = t * _opacity + (1 - t) * _opacityPrev`, in that order:
     // XMM9 = t * [0x7c] is computed FIRST and the (1-t) term is added to it.
-    const float alpha = (t * *reinterpret_cast<const float*>(d + 0x7c)) +
-                        ((1.0f - t) * *reinterpret_cast<const float*>(d + 0x80));
-    SetFloat4(ctx, kCtxColour, 1.0f, 1.0f, 1.0f, alpha);
+    const float alpha = (t * _opacity) + ((1.0f - t) * _opacityPrev);
+    context.SetColor(Math::Vector4(1.0f, 1.0f, 1.0f, alpha));
 
     // ---- the material object, bound only when `mode != 1` -------------------
     if (mode != 1) {
-        void* const obj = *reinterpret_cast<void* const*>(lists + nodeOff + 0x08);
-        void** const slot = reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + kCtxObj48);
-        if (obj != nullptr && obj != *slot) {
-            uint8_t* const c = static_cast<uint8_t*>(ctx);
-            *reinterpret_cast<uint32_t*>(c + kCtxDirty) |= 2u;
-            *reinterpret_cast<uint32_t*>(c + kCtxSub18) |= 8u;
-            *slot = obj;
-        }
+        BindMaterialImage(context, level._image.Get());
     }
 
-    SetFloat4(ctx, kCtxTune, AsFloat(kTune0), AsFloat(kTune1), AsFloat(kTune2),
-              AsFloat(kNegOne));
+    context.SetInverseScale(AsFloat(kTune0), AsFloat(kTune1), AsFloat(kTune2),
+                            AsFloat(kNegOne));
 
     // ---- the buffer bindings ------------------------------------------------
-    // `this->_geometry->[0x50]` is RE-READ before each of the two, which is why
-    // it is loaded twice below rather than reused from `lists`.
+    // `this->_mesh->_detailLevels` is RE-READ before each of the two, which is
+    // why it is loaded twice below rather than reused from `level`.
     {
-        const uint8_t* const l1 = *reinterpret_cast<const uint8_t* const*>(
-            *reinterpret_cast<const uint8_t* const*>(d + 0xc0) + 0x50);
-        const bool skinned = *reinterpret_cast<const int32_t*>(rec + 0x14) < 0;
-        BindVertexBuffer(ctx, l1 + (skinned ? 0x58 : 0x18) + nodeOff, 0,
-                         skinned ? 0x20 : 0x18);
+        const GraphicsMesh::DetailLevel& l1 = DetailLevels(GetMesh().Get())[node];
+        const bool skinned = rec._f14 < 0;
+        context.SetVertexBuffer(skinned ? &l1._skinVertexBuffer : &l1._vertexBuffer,
+                                0, 0, skinned ? 0x20 : 0x18);
 
-        const uint8_t* const l2 = *reinterpret_cast<const uint8_t* const*>(
-            *reinterpret_cast<const uint8_t* const*>(d + 0xc0) + 0x50);
-        BindIndexBuffer(ctx, l2 + (skinned ? 0x78 : 0x38) + nodeOff, 0);
+        const GraphicsMesh::DetailLevel& l2 = DetailLevels(GetMesh().Get())[node];
+        BindIndexBuffer(context, skinned ? &l2._skinIndexBuffer : &l2._indexBuffer, 0);
     }
 
-    IssueDraw(ctx, rec, pass);
+    IssueDraw(context, rec, pass);
 }
 
 }  // namespace Graphics
@@ -428,22 +322,24 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
 // something a "same but for edges" assumption would get wrong:
 //
 //   1. The flags word is split at BIT 15, not bit 12, and the high bit selects
-//      between TWO record arrays — `_geometry->[0x158]` when set and
-//      `_geometry->[0x148]` when clear — rather than indexing one of them.
-//   2. The pose source is a SEPARATE MeshInstance at `this->[0xc8]`, not this
+//      between TWO record arrays — `_mesh->_edgeLists` (+0x158) when set and
+//      `_mesh->_triangleLists` (+0x148) when clear — rather than indexing one.
+//   2. The pose source is a SEPARATE MeshInstance, `_followed` (+0xc8), not this
 //      object. When it is non-null and the record's node index is >= 0, the
 //      transform comes from `MeshInstance::GetNodeToWorld(node, t)` rather than
 //      from a lerp; when it is NULL the object falls back to its own
-//      InterpolatedState at +0x84 AND uses a UNIT scale vector instead of the
-//      mesh's — `(1, 1, 1, 0)`, four immediates at 0x1800a350a.
-//   3. The tuning float4's w is `1.0f / (float)Video::Device::_singleton->[4]`
-//      — a reciprocal of the device WIDTH, computed with CVTDQ2PS + DIVSS — not
-//      MeshInstance's -1.0f constant. That is the edge-thickness-in-pixels term.
+//      `_transform` / `_prevTransform` AND uses a UNIT scale vector instead of
+//      the mesh's — `(1, 1, 1, 0)`, four immediates at 0x1800a350a.
+//   3. The tuning float4's w is `1.0f / (float)Video::Device::_singleton->
+//      backBufferWidth` — CVTDQ2PS + DIVSS — not MeshInstance's -1.0f constant.
+//      That is the edge-thickness-in-pixels term.
 //   4. The colour float4 is a flat `(1, 1, 1, 1)`: there is no fade alpha, so
-//      neither `this->[0x7c]` nor `this->[0x80]` is read, and the last argument
-//      of the draw call is the LITERAL 1 rather than the pass number.
+//      neither `_opacity` nor `_opacityPrev` is read, and the last argument of
+//      the draw call is the LITERAL 1 rather than the pass number.
 //
 // The bone buffer's 48 matrices and the 0x18 record stride are the same.
+// LEFT: `_mesh` is the untyped `RtGraphics::ExternalPtr` handle (Mesh.h keeps
+// `SetMesh`'s signature for its code/Game callers), viewed once as the EdgeMesh.
 // ============================================================================
 
 namespace Graphics {
@@ -452,89 +348,75 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
                             ExternalPtrHandle material, float t, int32_t flags,
                             int32_t mode, int32_t pass) const {
     (void)camera; (void)material; (void)mode; (void)pass;
-    void* const ctx = reinterpret_cast<void*>(&context);            // B.3.5 bridge
-
-    const uint8_t* const d = reinterpret_cast<const uint8_t*>(this);
 
     const bool edgePass = ((static_cast<uint32_t>(flags) >> 15) & 1u) != 0;   // SHR/AND
-    const int64_t recOff = static_cast<int64_t>(flags & 0x7fff) * 0x18;
+    const int32_t sub = flags & 0x7fff;
 
-    const uint8_t* const geometry = *reinterpret_cast<const uint8_t* const*>(d + 0xc0);
-    const uint8_t* const array =
-        *reinterpret_cast<const uint8_t* const*>(geometry + (edgePass ? 0x158 : 0x148));
-    const uint8_t* const rec = array + recOff;
-    const int32_t boneNode = *reinterpret_cast<const int32_t*>(rec + 0x14);
+    const EdgeMesh* const mesh = static_cast<const EdgeMesh*>(_mesh.p);
+    const GraphicsMesh::TriangleList& rec =
+        (edgePass ? mesh->_edgeLists : mesh->_triangleLists)._data[sub];
+    const int32_t boneNode = rec._f14;
 
-    const void* const poseSource = *reinterpret_cast<const void* const*>(d + 0xc8);
+    const MeshInstance* const poseSource = _followed;
 
-    float world[7];                                 // Math::Transform, 0x1c
-    float scale[4];                                 // the Vector4 handed to the ctx
+    Math::Transform world;                          // 0x1c
+    Math::Vector4   scale;                          // the Vector4 handed to the ctx
 
     if (boneNode < 0) {
         // --- SKINNED: pose 48 bones through the OTHER MeshInstance -----------
-        alignas(16) float bones[kBoneMatrices * 16];
-        std::memset(bones, 0, sizeof bones);
+        Math::Matrix bones[kBoneMatrices];          // zeroed
 
-        LerpTransform(d + 0x84, t, world);
+        world = LerpTransform(_transform, _prevTransform, t);
 
-        float bindPose[7];
-        std::memcpy(bindPose, d + 0x84, sizeof bindPose);
-        const int32_t count = MeshInstanceGetBones(poseSource, t, bindPose, bones);
-        ContextSetBones(ctx, count, bones);
+        const Math::Transform bindPose = _transform;
+        const int32_t count = poseSource->GetBones(t, bindPose, bones);
+        context.SetBones(count, bones);
 
-        std::memcpy(scale, *reinterpret_cast<const uint8_t* const*>(d + 0xc8) + 0x10c,
-                    sizeof scale);
+        scale = ColorOf(*_followed);                 // re-read from +0xc8, +0x10c
     } else if (poseSource != nullptr) {
         // --- RIGID, driven by the mesh instance ------------------------------
-        // ENDGAME B.3.5 block E: this was `RT_EXPORT_ONCE(…"?GetNodeToWorld@
-        // MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z")` — a runtime-
-        // internal caller reaching its own neighbour through the port registry.
-        // The body is now a member of the real class (`mesh.cpp`), so this is a
-        // direct qualified member call and the resolve is gone.
-        const Math::Transform got =
-            _followed->MeshInstance::GetNodeToWorld(boneNode, t);
-        std::memcpy(world, &got, sizeof world);
-        std::memcpy(scale, static_cast<const uint8_t*>(poseSource) + 0x10c, sizeof scale);
+        world = _followed->MeshInstance::GetNodeToWorld(boneNode, t);
+        scale = ColorOf(*poseSource);                // +0x10c
     } else {
         // --- RIGID, standalone: lerp our own state and use a UNIT scale ------
-        LerpTransform(d + 0x84, t, world);
-        scale[0] = 1.0f; scale[1] = 1.0f; scale[2] = 1.0f; scale[3] = 0.0f;
+        world = LerpTransform(_transform, _prevTransform, t);
+        scale.x = 1.0f; scale.y = 1.0f; scale.z = 1.0f; scale.w = 0.0f;
     }
 
-    float matrix[16];
-    void* const m = TransformAsMatrix(world, matrix);
-    ContextSetTransformScale(ctx, 0, m, scale);
+    const Math::Matrix matrix = world.AsMatrix();
+    context.SetTransformScale(0, matrix, scale);
 
-    SetFloat4(ctx, kCtxColour, 1.0f, 1.0f, 1.0f, 1.0f);
+    context.SetColor(Math::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 
     // `CVTDQ2PS` on the device width, then `1.0f / that`. A signed int-to-float
     // conversion, then a single DIVSS — not a multiply by a precomputed
     // reciprocal, which would round differently.
-    const float deviceWidth =
-        static_cast<float>(*reinterpret_cast<const int32_t*>(VideoDevice() + 0x04));
-    SetFloat4(ctx, kCtxTune, AsFloat(kTune0), AsFloat(kTune1), AsFloat(kTune2),
-              1.0f / deviceWidth);
+    const float deviceWidth = static_cast<float>(::Video::Device::_singleton->backBufferWidth);
+    context.SetInverseScale(AsFloat(kTune0), AsFloat(kTune1), AsFloat(kTune2),
+                            1.0f / deviceWidth);
 
     // ---- the buffer bindings ------------------------------------------------
-    // Four (offset, stride) pairs, chosen by `edgePass` and the record's sign.
-    // The base is `this->_geometry`, RE-READ from the object for each of the two
+    // Four (buffer, stride) pairs, chosen by `edgePass` and the record's sign.
+    // The base is `this->_mesh`, RE-READ from the object for each of the two
     // bindings exactly as retail reloads it.
     {
-        const uint8_t* const g1 = *reinterpret_cast<const uint8_t* const*>(d + 0xc0);
+        const EdgeMesh* const g1 = static_cast<const EdgeMesh*>(_mesh.p);
         const bool skinned = boneNode < 0;
-        const uint32_t vbOff    = edgePass ? (skinned ? 0x108u : 0x0c8u)
-                                           : (skinned ? 0x088u : 0x048u);
-        const int32_t  vbStride = edgePass ? (skinned ? 0x20   : 0x10)
-                                           : (skinned ? 0x10   : 0x08);
-        BindVertexBuffer(ctx, g1 + vbOff, 0, vbStride);
+        const Video::VertexBuffer* const vb =
+            edgePass ? (skinned ? &g1->_edgeSkinVertexBuffer : &g1->_edgeVertexBuffer)
+                     : (skinned ? &g1->_skinVertexBuffer     : &g1->_vertexBuffer);
+        const int32_t vbStride = edgePass ? (skinned ? 0x20 : 0x10)
+                                          : (skinned ? 0x10 : 0x08);
+        context.SetVertexBuffer(vb, 0, 0, vbStride);
 
-        const uint8_t* const g2 = *reinterpret_cast<const uint8_t* const*>(d + 0xc0);
-        const uint32_t ibOff = edgePass ? (skinned ? 0x128u : 0x0e8u)
-                                        : (skinned ? 0x0a8u : 0x068u);
-        BindIndexBuffer(ctx, g2 + ibOff, 0);
+        const EdgeMesh* const g2 = static_cast<const EdgeMesh*>(_mesh.p);
+        const Video::IndexBuffer* const ib =
+            edgePass ? (skinned ? &g2->_edgeSkinIndexBuffer : &g2->_edgeIndexBuffer)
+                     : (skinned ? &g2->_skinIndexBuffer     : &g2->_indexBuffer);
+        BindIndexBuffer(context, ib, 0);
     }
 
-    IssueDraw(ctx, rec, 1);                         // the LITERAL 1, not `pass`
+    IssueDraw(context, rec, 1);                     // the LITERAL 1, not `pass`
 }
 
 }  // namespace Graphics

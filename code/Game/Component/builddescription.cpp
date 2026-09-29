@@ -105,41 +105,40 @@ bool BuildDescription::Serialize(void* stream) {
     // reproduce identical data — therefore an empty re-load must never overwrite a
     // populated array. (Non-fenced buildings are loaded once and were unaffected,
     // which is why only the Pasture lost its icon.)
-    void*   oldArr   = _costs;
-    int32_t oldCount = _costCount;
-    bool oldPopulated = (oldArr && oldCount > 0 && *(uint64_t*)oldArr != 0);
-    
+    BuildCost* oldArr   = _costs;
+    int32_t    oldCount = _costCount;
+    bool oldPopulated = (oldArr && oldCount > 0 && oldArr[0].material != nullptr);
+
     // count @ +0x28 (read from stream)
     ser.Serialize(_costCount, nullptr);
     int count = _costCount;
-    
-    // Fresh-load: alloc count * 0x10 element buffer. Each element = {External* @0,
-    // int @8}. Populate a fresh buffer; commit to +0x20 only after confirming it
-    // isn't an empty reference-mode re-load (below).
-    uint8_t* arr = nullptr;
+
+    // Fresh-load: alloc count * 0x10 element buffer. Populate a fresh buffer; commit
+    // to +0x20 only after confirming it isn't an empty reference-mode re-load (below).
+    BuildCost* arr = nullptr;
     if (count > 0) {
-        arr = reinterpret_cast<uint8_t*>(
+        arr = static_cast<BuildCost*>(
             ::System::MemoryAllocator::MemAlloc((uint64_t)count * 0x10, 8));
     }
-    
-    uint8_t* e = arr;
-    for (int i = 0; i < count; ++i, e += 0x10) {
-        *(uint64_t*)(e + 0)  = 0;   // External* (resolved ref)
-        *(int32_t*) (e + 8)  = 0;   // int cost qty
-        ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);            // int @ elem+0x08
-        Reimpl_ExternalPtr_Serialize_StringTable(e + 0, &ser);             // ref  @ elem+0x00
+
+    for (int i = 0; i < count; ++i) {
+        BuildCost* e = &arr[i];
+        e->material = nullptr;                                     // External* (resolved ref)
+        e->quantity = 0;                                           // int cost qty
+        ser.Serialize(e->quantity, nullptr);                       // int @ elem+0x08
+        Reimpl_ExternalPtr_Serialize_StringTable(&e->material, &ser);   // ref  @ elem+0x00
     }
-    
+
     ser.Serialize(_i30, nullptr);   // int +0x30
     ser.Serialize(_b34, nullptr);   // bool +0x34
-    
+
     // Commit, keeping a populated array over an empty re-load. (The tree ran this
     // after ~Serializer; it touches only this object's memory, so ending the
     // Serializer scope at the return instead changes nothing.)
-    bool newPopulated = (count > 0 && arr && *(uint64_t*)arr != 0);
+    bool newPopulated = (count > 0 && arr && arr[0].material != nullptr);
     if (oldPopulated && !newPopulated) {
         if (arr) ::System::MemoryAllocator::MemFree(arr);  // discard empty re-load
-        arr = reinterpret_cast<uint8_t*>(oldArr);
+        arr = oldArr;
         count = oldCount;
     } else if (oldArr && oldArr != arr) {
         ::System::MemoryAllocator::MemFree(oldArr);                            // replaced -> free prior

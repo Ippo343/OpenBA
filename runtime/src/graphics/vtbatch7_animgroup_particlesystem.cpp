@@ -149,6 +149,7 @@
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"      // B.4: IO::Stream::_direction
 #include "../../types/object/External.h"
 // ENDGAME B.3.5 step 5, block H1: the real `Graphics::AnimationGroup` and
 // `Graphics::Animation`. The two file-local `struct AnimationGroup` /
@@ -164,65 +165,29 @@
 // `Graphics::ParticleSystem` to `Particle.h`. Every POD spelling inside such a
 // block must be written `RtGraphics::`.
 #include "../../types/graphics/AnimationGroup.h"
+#include "../../types/graphics/AnimationState.h"   // B.4: RtGraphics_SerializeTransformArray
 #include "../../types/graphics/Particle.h"
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/collection/Collection.h"   // rtcoll::MemAlloc
 
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
-
-// 0x180059820 — Array<Math::Transform>::Serialize, already ported and
-// registered by runtime/src/graphics/animationstate.cpp. `extern "C"`
-// (matching that definition's linkage) and declared at NAMESPACE SCOPE, not
-// inside the anonymous namespace below or a function body: an `extern`
-// re-declaration inside this file's own anonymous namespace would pick up
-// C++ (mangled) linkage and silently bind to nothing, rather than to that
-// file's C-linkage symbol.
-extern "C" void RtGraphics_SerializeTransformArray(void* arrayv, Serializer* ser);
+// 0x180059820 — Array<Math::Transform>::Serialize, ported in
+// runtime/src/graphics/animationstate.cpp and declared in AnimationState.h.
 
 namespace {
 
-// B.3.x bridge: `str` is a System::String field; the member is
-// ?Serialize@String@System@@ 0x1800c9930.
-inline void StrSer(void* str, Serializer* ser) {
-    static_cast<System::String*>(str)->Serialize(ser);
+// `str` is a `char*` System::String field (Animation.h keeps the three names
+// raw); the member is ?Serialize@String@System@@ 0x1800c9930. LEFT: the one
+// view of the raw field as the real `System::String`.
+inline void StrSer(void* str, IO::Serializer& ser) {
+    static_cast<System::String*>(str)->Serialize(&ser);
 }
 
-// B3X W0: the ReaderWriter members this file uses, by name on the real class
-// (the `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-void RwInt(ReaderWriter* rw, void* p)   { AsRw(rw)->SerializeInt(*static_cast<int32_t*>(p), nullptr); }
-void RwUInt(ReaderWriter* rw, void* p)  { AsRw(rw)->SerializeUInt(*static_cast<uint32_t*>(p), nullptr); }
-void RwFloat(ReaderWriter* rw, void* p) { AsRw(rw)->SerializeFloat(*static_cast<float*>(p), nullptr); }
-void RwBool(ReaderWriter* rw, void* p)  { AsRw(rw)->SerializeBool(*static_cast<bool*>(p), nullptr); }
-void RwFloats(ReaderWriter* rw, int count, void* p) {
-    AsRw(rw)->SerializeFloatArray(count, static_cast<float*>(p), nullptr);
-}
-bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
-
-// Build the local {stream,rw} pair the same way every External::Serialize in
-// this tree does (vertexlayout.cpp's ConstructBody banner is the reference
-// shape); returns the ReaderWriter*, which the caller must destroy(1) if
-// non-null.
-ReaderWriter* MakeReaderWriter(Serializer* ser, Stream* stream) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = IsReading(stream) ? rt::io::encoding_vtbl::kCreateReader
-                                       : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-void DestroyReaderWriter(ReaderWriter* rw) {
-    if (!rw) return;
-    delete AsRw(rw);
-}
+// B.4: the local `{ stream, rw }` pair every External::Serialize in this file
+// builds, the encoding's CreateReader / CreateWriter call and the closing
+// `if (rw) delete rw` are `IO::Serializer`'s ctor and dtor, inlined; the
+// ReaderWriter members are called by name on `ser._readerWriter`, re-read
+// before each call as retail re-reads it (`name` nullptr, as retail passes).
+bool IsReading(const IO::Stream& s) { return s._direction == IO::kReading; }
 
 // (ENDGAME B.3.9 block GFX: the minted Base / External stamp accessors and
 // `CallSlot0` went with the two ConstructBody helpers; slot 0 is a virtual
@@ -251,7 +216,9 @@ using AnimationGroup = ::Graphics::AnimationGroup;
 
 // 0x1800594a0 — Object::ExternalPtr<AnimationEvent>::Serialize, ported as an
 // appended thunk in external_ptr_serialize.cpp (shared 748-byte template).
-extern "C" void RtObject_ExternalPtrSerialize_AnimationEvent(void** self, Serializer* ser);
+// LEFT: declared here in object's POD spellings (`void**`, `rt::io::Serializer*`),
+// the EXTPTR_THUNK_OF shape; External.h (object's header) does not declare it.
+extern "C" void RtObject_ExternalPtrSerialize_AnimationEvent(void** self, rt::io::Serializer* ser);
 
 // 0x18005a040 — `Array<Graphics::Animation>::Serialize`'s element loop, called
 // by `AnimationGroup::Serialize` with (Serializer*, int count, Animation* data).
@@ -262,53 +229,44 @@ extern "C" void RtObject_ExternalPtrSerialize_AnimationEvent(void** self, Serial
 // B.3.5 block H1 is the SPELLING: every `c->i30`-style position name is now the
 // retail field name off `Graphics::Animation`, whose layout is pinned in its
 // header against the eleven accessor bodies listed there.
-extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int count, void* datav) {
+//
+// B.4: typed on `IO::Serializer&`. LEFT: `datav` is `_clips`' raw storage
+// (AnimationGroup.h keeps `_clips` raw, H5), viewed once as its element type.
+void RtGraphics_AnimationGroup_SerializeClips(IO::Serializer& ser, int count, void* datav) {
     if (count <= 0) return;
     AnimationClip* c = static_cast<AnimationClip*>(datav);
     for (int i = 0; i < count; ++i, ++c) {
-        ReaderWriter* rw = ser->readerWriter;
         StrSer(&c->_name, ser);
         StrSer(&c->_meshName, ser);
         StrSer(&c->_sourceName, ser);
 
-        rw = ser->readerWriter;
-        RwInt(rw, &c->_startFrame);
-        rw = ser->readerWriter;
-        RwInt(rw, &c->_endFrame);
-        rw = ser->readerWriter;
-        RwFloat(rw, &c->_rate);
-        rw = ser->readerWriter;
-        RwBool(rw, &c->_looping);
-        rw = ser->readerWriter;
-        RwInt(rw, &c->_loopFrame);
-        rw = ser->readerWriter;
-        RwInt(rw, &c->_instanceCount);
-        rw = ser->readerWriter;
-        RwBool(rw, &c->_instanced);
+        ser._readerWriter->SerializeInt  (c->_startFrame, nullptr);
+        ser._readerWriter->SerializeInt  (c->_endFrame, nullptr);
+        ser._readerWriter->SerializeFloat(c->_rate, nullptr);
+        ser._readerWriter->SerializeBool (c->_looping, nullptr);
+        ser._readerWriter->SerializeInt  (c->_loopFrame, nullptr);
+        ser._readerWriter->SerializeInt  (c->_instanceCount, nullptr);
+        ser._readerWriter->SerializeBool (c->_instanced, nullptr);
 
         // The nested Array<Animation::Event> at c->+0x00, stride 0x10.
         int32_t n = c->_events._size;
-        rw = ser->readerWriter;
-        RwInt(rw, &n);
-        if (IsReading(ser->stream)) {
+        ser._readerWriter->SerializeInt(n, nullptr);
+        if (IsReading(*ser._stream)) {
             rtcoll::RtColl_ArraySetSize_180059930(&c->_events, n);   // 0x180059930
         }
-        uint8_t* e = c->_events._data;
-        for (int32_t k = 0; k < n; ++k, e += 0x10) {
-            rw = ser->readerWriter;
-            RwInt(rw, e);
+        ::Graphics::Animation::Event* e = c->_events._data;
+        for (int32_t k = 0; k < n; ++k, ++e) {
+            ser._readerWriter->SerializeInt(e->_frame, nullptr);
+            // LEFT: the thunk's POD spellings (declared above).
             RtObject_ExternalPtrSerialize_AnimationEvent(
-                reinterpret_cast<void**>(e + 8), ser);
+                reinterpret_cast<void**>(&e->_event),
+                reinterpret_cast<rt::io::Serializer*>(&ser));
         }
 
-        rw = ser->readerWriter;
-        RwInt(rw, &c->_frameCount);
-        rw = ser->readerWriter;
-        RwFloat(rw, &c->_frameRate);
-        rw = ser->readerWriter;
-        RwFloat(rw, &c->_loopScale);
-        rw = ser->readerWriter;
-        RwInt(rw, &c->_boneCount);
+        ser._readerWriter->SerializeInt  (c->_frameCount, nullptr);
+        ser._readerWriter->SerializeFloat(c->_frameRate, nullptr);
+        ser._readerWriter->SerializeFloat(c->_loopScale, nullptr);
+        ser._readerWriter->SerializeInt  (c->_boneCount, nullptr);
 
         // Already-ported Array<Math::Transform>::Serialize (animationstate.cpp).
         RtGraphics_SerializeTransformArray(&c->_keys, ser);
@@ -323,7 +281,7 @@ extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int co
         // retire), so this is a spelling change and nothing else. The three int64
         // calls in `RtGraphics_ParticleSystem_Serialize` below are NOT touched:
         // that class is block H2's and its half of this file stays byte-identical.
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(c->_duration, nullptr);  // B.3.5 bridge
+        ser.Serialize(c->_duration, nullptr);
     }
 }
 
@@ -397,32 +355,32 @@ void AnimationGroup::Destruct() { this->~AnimationGroup(); }
 // The +0x30 float goes out AFTER the tag array (see the comment at that call).
 // Getting it wrong presents as a HANG, not a crash.
 bool AnimationGroup::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-    Serializer ser{};
-    ReaderWriter* rw = MakeReaderWriter(&ser, stream);
+    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(stream, 0);
 
     // +0x20 Array<Graphics::Animation>
     int32_t n = _clips._size;
-    RwInt(rw, &n);
+    ser._readerWriter->SerializeInt(n, nullptr);
     if (IsReading(stream)) {
         rtcoll::RtColl_ArraySetSize_180059e70(&_clips, n);
     }
-    RtGraphics_AnimationGroup_SerializeClips(&ser, n, _clips._data);
+    RtGraphics_AnimationGroup_SerializeClips(ser, n, _clips._data);
 
-    // +0x38 Array<{String,String,float}>, stride 0x18.
+    // +0x38 Array<{String,String,float}>, stride 0x18. LEFT: `_tags` stays a
+    // raw header (its element has no retail name), so the float at +0x10 of
+    // each element is viewed once.
     n = _tags._size;
-    rw = ser.readerWriter;
-    RwInt(rw, &n);
+    ser._readerWriter->SerializeInt(n, nullptr);
     if (IsReading(stream)) {
         rtcoll::RtColl_ArraySetSize_18005a220(&_tags, n);
     }
     {
         uint8_t* p = _tags._data;
         for (int32_t i = 0; i < n; ++i, p += 0x18) {
-            StrSer(p + 0x00, &ser);
-            StrSer(p + 0x08, &ser);
-            rw = ser.readerWriter;
-            RwFloat(rw, p + 0x10);
+            StrSer(p + 0x00, ser);
+            StrSer(p + 0x08, ser);
+            ser._readerWriter->SerializeFloat(*reinterpret_cast<float*>(p + 0x10), nullptr);
         }
     }
 
@@ -434,21 +392,17 @@ bool AnimationGroup::Serialize(void* streamv) {
     // the first cutover boot to get this far read the tag count out of the
     // float's bytes (count=1288519116), asked CompressedStream::Read for bytes
     // past the end of the file, and spun forever in Read's chunk loop.
-    rw = ser.readerWriter;
-    RwFloat(rw, &_defaultBlend);
+    ser._readerWriter->SerializeFloat(_defaultBlend, nullptr);
 
     // +0x48 Array<float>, bulk kArrayFloat.
     n = _blendTimes._size;
-    rw = ser.readerWriter;
-    RwInt(rw, &n);
+    ser._readerWriter->SerializeInt(n, nullptr);
     if (IsReading(stream)) {
         rtcoll::RtColl_ArraySetSize_18005a410(&_blendTimes, n);
     }
-    rw = ser.readerWriter;
-    RwFloats(rw, n, _blendTimes._data);
+    ser._readerWriter->SerializeFloatArray(n, _blendTimes._data, nullptr);
 
-    DestroyReaderWriter(ser.readerWriter);
-    return true;
+    return true;   // ~Serializer: `if (rw) delete rw`
 }
 
 // ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620 -- retail's body, moved here
@@ -675,12 +629,12 @@ void ParticleSystem::Destruct() { this->~ParticleSystem(); }
 // ~Array then sees the zeroed header: a no-op.
 ParticleSystem::~ParticleSystem() {
     for (int32_t i = 0; i < _pool._size; ++i) {
-        void** const data = reinterpret_cast<void**>(_pool._data);
-        void** const e = static_cast<void**>(data[i]);
+        RtGraphics::ParticleEmitter* const e = _pool._data[i];
         if (e == nullptr) continue;
-        if (e[0] != nullptr) rtcoll::MemFree(e[0]);
-        e[0] = nullptr;
-        e[1] = nullptr;
+        if (e->_extra._data != nullptr) rtcoll::MemFree(e->_extra._data);
+        e->_extra._data     = nullptr;
+        e->_extra._size     = 0;                          // e[1]: _size AND _capacity
+        e->_extra._capacity = 0;
         rtcoll::MemFree(e);
     }
     if (_pool._data != nullptr) rtcoll::MemFree(_pool._data);
@@ -718,7 +672,8 @@ Object::Base* ParticleSystem::CreateInPlaceObject(void* place) {
 // `_spreadScale` (+0x78) goes out BEFORE `_spreadX/Y/Z` (+0x6c), which is why the
 // header declares the fields in ascending memory order and the order lives here.
 bool ParticleSystem::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
 
     // `Particle::Serialize` (0x180103f00) — the base slot. Retail's `CALL` is a
     // direct call of the base body; until ENDGAME B.3.9 this reached it BY
@@ -728,12 +683,12 @@ bool ParticleSystem::Serialize(void* streamv) {
     // as retail discards it.
     (void)Particle::Serialize(streamv);
 
-    Serializer ser{};
-    ReaderWriter* rw = MakeReaderWriter(&ser, stream);
+    IO::Serializer ser(stream, 0);
+    IO::ReaderWriter* rw = ser._readerWriter;
 
-    RwFloat(rw, &_f48);
-    rw = ser.readerWriter; RwFloat(rw, &_rateAccelA);
-    rw = ser.readerWriter; RwFloat(rw, &_rateAccelB);
+    rw->SerializeFloat(_f48, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_rateAccelA, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_rateAccelB, nullptr);
     // ENDGAME B.3.5 block H2 — THE FIRST OF THE THREE HAND-INLINED int64 SLOT
     // CALLS B35_RULES section 11 listed in this file as "receiver-side work".
     // Block H2 owns this receiver, and `IO::Serializer::Serialize(int64_t&, const
@@ -741,47 +696,45 @@ bool ParticleSystem::Serialize(void* streamv) {
     // That member's own body still calls the ReaderWriter's +0x90 slot
     // (Serializer.h section 3.1: the 22 members keep their raw slot calls until
     // the minted tables retire), so this is a spelling change and nothing else.
-    // The cast is the bridge from the POD `rt::io::Serializer` this body builds on
-    // the stack to the real class; block H1 converted its one site the same way.
-    reinterpret_cast<IO::Serializer*>(&ser)->Serialize(_durationTicks, nullptr);  // B.3.5 bridge
-    rw = ser.readerWriter; RwFloats(rw, 3, &_emitDirX);
-    rw = ser.readerWriter; RwFloat(rw, &_spreadScale); // retail's order: 0x78 before 0x6c
-    rw = ser.readerWriter; RwFloats(rw, 3, &_spreadX);
+    ser.Serialize(_durationTicks, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloatArray(3, &_emitDirX, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_spreadScale, nullptr); // retail's order: 0x78 before 0x6c
+    rw = ser._readerWriter; rw->SerializeFloatArray(3, &_spreadX, nullptr);
 
     // The fifteen consecutive float scalars, +0x7c..+0xb4. Written out one field
     // at a time rather than walked as `float*`: retail emits fifteen separate
     // scalar calls, the names are what a reader needs, and `Particle.h` carries a
     // `static_assert` that the run is still contiguous.
-    rw = ser.readerWriter; RwFloat(rw, &_angleBRange);
-    rw = ser.readerWriter; RwFloat(rw, &_angleARange);
-    rw = ser.readerWriter; RwFloat(rw, &_speedBase);
-    rw = ser.readerWriter; RwFloat(rw, &_speedRange);
-    rw = ser.readerWriter; RwFloat(rw, &_accelScale);
-    rw = ser.readerWriter; RwFloat(rw, &_damping);
-    rw = ser.readerWriter; RwFloat(rw, &_rotBase);
-    rw = ser.readerWriter; RwFloat(rw, &_rotRange);
-    rw = ser.readerWriter; RwFloat(rw, &_spinBase);
-    rw = ser.readerWriter; RwFloat(rw, &_spinRange);
-    rw = ser.readerWriter; RwFloat(rw, &_spinAccel);
-    rw = ser.readerWriter; RwFloat(rw, &_spinDamp);
-    rw = ser.readerWriter; RwFloat(rw, &_lifeBase);
-    rw = ser.readerWriter; RwFloat(rw, &_lifeRange);
-    rw = ser.readerWriter; RwFloat(rw, &_gravScale);
+    rw = ser._readerWriter; rw->SerializeFloat(_angleBRange, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_angleARange, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_speedBase, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_speedRange, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_accelScale, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_damping, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_rotBase, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_rotRange, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_spinBase, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_spinRange, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_spinAccel, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_spinDamp, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_lifeBase, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_lifeRange, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_gravScale, nullptr);
 
-    rw = ser.readerWriter; RwFloats(rw, 3, &_gravX);
+    rw = ser._readerWriter; rw->SerializeFloatArray(3, &_gravX, nullptr);
 
-    rw = ser.readerWriter; RwFloat(rw, &_sizeBase);
-    rw = ser.readerWriter; RwFloat(rw, &_sizeRange);
-    rw = ser.readerWriter; RwFloat(rw, &_sizeAccel);
-    rw = ser.readerWriter; RwFloat(rw, &_sizeDamp);
+    rw = ser._readerWriter; rw->SerializeFloat(_sizeBase, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_sizeRange, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_sizeAccel, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_sizeDamp, nullptr);
 
-    rw = ser.readerWriter; RwUInt(rw, &_color0);
-    rw = ser.readerWriter; RwUInt(rw, &_color1);
-    rw = ser.readerWriter; RwFloat(rw, &_colorT0);
-    rw = ser.readerWriter; RwFloat(rw, &_colorT1);
+    rw = ser._readerWriter; rw->SerializeUInt(_color0, nullptr);
+    rw = ser._readerWriter; rw->SerializeUInt(_color1, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_colorT0, nullptr);
+    rw = ser._readerWriter; rw->SerializeFloat(_colorT1, nullptr);
     // The second and third int64 sites — same conversion, same reason.
-    reinterpret_cast<IO::Serializer*>(&ser)->Serialize(_fadeInTicks, nullptr);   // B.3.5 bridge
-    reinterpret_cast<IO::Serializer*>(&ser)->Serialize(_fadeOutTicks, nullptr);  // B.3.5 bridge
+    ser.Serialize(_fadeInTicks, nullptr);
+    ser.Serialize(_fadeOutTicks, nullptr);
 
     // READ-ONLY tail (retail 0x1800a505c..0x1800a5107): when reading and the
     // resource is active (Particle::_active, +0x20), rebuild the pool-pointer
@@ -810,13 +763,18 @@ bool ParticleSystem::Serialize(void* streamv) {
     // 0x1800c6e60 / 0x18014b388 that array.cpp already owns.
     if (IsReading(stream) && _active != 0) {
         rtcoll::RtColl_ArraySetSize_180021220(&_pool, _recordCount);    // 1800a507a
-        uint8_t** poolArr = reinterpret_cast<uint8_t**>(_pool._data);   // 1800a50f1
+        RtGraphics::ParticleEmitter** poolArr = _pool._data;            // 1800a50f1
         for (int32_t i = 0; i < _recordCount; ++i) {                    // 1800a5103
-            uint8_t* rec = static_cast<uint8_t*>(rtcoll::MemAlloc(0x18, 8));
+            // The raw 0x18-byte block viewed as the record the stores build
+            // (no C++ constructor runs: retail's are these stores).
+            RtGraphics::ParticleEmitter* rec =
+                static_cast<RtGraphics::ParticleEmitter*>(rtcoll::MemAlloc(0x18, 8));
             if (rec) {                                                  // 1800a50d4
-                std::memset(rec, 0, 0x10);                              // 1800a50d8/db
-                std::memcpy(rec + 0x10, &_f48, 4);                      // 1800a50df/e2
-                rtcoll::RtColl_ArraySetSize_180020e90(rec, _subCount);  // 1800a50eb
+                rec->_extra._data     = nullptr;                        // 1800a50d8/db
+                rec->_extra._size     = 0;
+                rec->_extra._capacity = 0;
+                rec->_rate = _f48;                                      // 1800a50df/e2 (a dword move)
+                rtcoll::RtColl_ArraySetSize_180020e90(&rec->_extra, _subCount);  // 1800a50eb
             }
             // Retail stores RDI unconditionally, so a failed allocation parks a
             // null in the slot rather than skipping the index.
@@ -824,8 +782,7 @@ bool ParticleSystem::Serialize(void* streamv) {
         }
     }
 
-    DestroyReaderWriter(ser.readerWriter);
-    return true;
+    return true;   // ~Serializer: `if (rw) delete rw`
 }
 
 }  // namespace Graphics

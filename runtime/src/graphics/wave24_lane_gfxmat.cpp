@@ -176,29 +176,12 @@
 #include "../../types/graphics/Mesh.h"              // ENDGAME B.3.5 block G
 #include "../../types/graphics/AnimationManager.h"  // ENDGAME B.3.5 block G
 #include "../../types/io/Serializer.h"             // IO::ReaderWriter (B3X W0)
+#include "../../types/io/Stream.h"                 // B.4: IO::Stream::_direction
 #include "../../types/graphics/AnimationState.h"   // Graphics::AnimationState::Serialize, the anim-array bodies
 #include "../../types/collection/Collection.h"     // rtcoll:: the array instantiations
 #include "../../types/object/External.h"           // the ExternalPtr serializers
 #include "../../types/system/String.h"
 
-// ---------------------------------------------------------------------------
-// NEGATIVE-CONTROL SEAM — COMPILED ONLY INTO tools/gfxmat24_probe.
-//
-// The shipping build never defines GFXMAT24_PROBE, so not one byte of the
-// control machinery reaches reimpl-x64.exe. The probe defines it and drives
-// `GfxmatProbeCorrupt()` from its own `--corrupt N` flag; at N == 0 every
-// guarded site is `if (0 == <literal>)`, which the optimiser deletes, so the
-// probe's measured body and the shipped body differ only in code that is
-// provably dead on the measured run. Said out loud because Wave 21 lane
-// GFXBODY closed with the opposite: "the binary measured in §7 is not the one
-// described in §4".
-// ---------------------------------------------------------------------------
-#ifdef GFXMAT24_PROBE
-extern "C" int GfxmatProbeCorrupt();
-#  define RT_GFXMAT_CORRUPT(n) (GfxmatProbeCorrupt() == (n))
-#else
-#  define RT_GFXMAT_CORRUPT(n) (false)
-#endif
 
 namespace {
 
@@ -360,82 +343,35 @@ uint64_t g_oracleRuns       = 0;   // the effectiveness counter (instrument rule
 // ---------------------------------------------------------------------------
 namespace {
 
-struct RtIoStream {           // ONLY the two fields these bodies read.
-    uint8_t  _head_00[0x08];
-    int32_t  mode;            // +0x08  0 == reading
-    int32_t  _pad_0c;
-    void*    encodingFactory; // +0x10
-};
-static_assert(offsetof(RtIoStream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(RtIoStream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-
-struct RtIoSerializer {       // ONLY the two fields these bodies read.
-    RtIoStream* stream;       // +0x00
-    void*       encoding;     // +0x08
-};
-static_assert(offsetof(RtIoSerializer, encoding) == 0x08, "IO::Serializer encoding @ +0x08");
-
-using MakeEncodingFn = void* (*)(void* factory, RtIoSerializer* ser, int zero);
-
-// The Encoding factory slots, RETAIL offsets (IO::Encoding is exempt from the
-// normal-virtual cutover: its slot 0 is not a destructor, B3X_RULES X1).
-constexpr size_t kEncMakeRead       = 0x18;
-constexpr size_t kEncMakeWrite      = 0x20;
-
-// What the factory returns is the IO::ReaderWriter (the lane called it the
-// "encoding"). Its three slots these bodies use -- [0] DeletingDtor, +0x28
-// SerializeFloatArray, +0xa0 SerializeInt; a profile-build port would use +0xb8
-// for the int -- are by-name calls on the real class since B3X W0.
-IO::ReaderWriter* AsRw(void* enc) {
-    return static_cast<IO::ReaderWriter*>(enc);   // B.3.x bridge
+// B.4: the `{ stream, enc }` pair, the factory call and the closing
+// `if (enc) enc->vt[0](enc, 1)` are `IO::Serializer`'s ctor and dtor (retail
+// keeps the pair on its own stack at [RSP+0x28] / [RSP+0x30] and hands
+// `LEA [RSP+0x28]` to every callee -- the Serializer object is that pair).
+// The lane's RtIoStream / RtIoSerializer views, the factory-slot constants and
+// the VSlot reader are gone with the hand-built pair; so are the six
+// `RT_GFXMAT_CORRUPT` negative controls, which compiled only under
+// GFXMAT24_PROBE -- a define nothing in the tree sets, for a
+// tools/gfxmat24_probe that does not exist.
+//
+// LEFT: the ExternalPtr serializers take object's POD spellings (External.h),
+// so the Serializer is viewed once per call as `rt::io::Serializer`.
+inline rt::io::Serializer* PodSerializer(IO::Serializer& ser) {
+    return reinterpret_cast<rt::io::Serializer*>(&ser);
 }
 
-void** VTableOf(void* obj) { return *reinterpret_cast<void***>(obj); }
-void*  VSlot(void* obj, size_t byteOffset) {
-    return VTableOf(obj)[byteOffset / sizeof(void*)];
-}
-
-// Make the Encoding the way retail does: read-side factory slot when the
-// stream's mode is 0, write-side otherwise.
-// Retail keeps the IO::Serializer PAIR on its own stack -- [RSP+0x28] = stream,
-// [RSP+0x30] = the reader/writer the factory returns (0x1800fc1a5..0x1800fc1d0)
-// -- and hands `LEA [RSP+0x28]` to every callee. The first draft of this file
-// passed the address of a lone `RtIoStream*` local instead, so every callee
-// read its reader from whatever stack slot happened to sit next to it. With
-// the DLL present that slot happened to survive; the first cutover boot to
-// reach ExternalPtr<Material>::Serialize through it died on EXEC-of-8.
-void* MakeEncoding(RtIoSerializer* ser) {
-    RtIoStream* stream = ser->stream;
-    void* factory = stream->encodingFactory;
-    const size_t which = (stream->mode == 0) ? kEncMakeRead : kEncMakeWrite;
-    void* enc = reinterpret_cast<MakeEncodingFn>(VSlot(factory, which))(factory, ser, 0);
-    ser->encoding = enc;                                   // MOV [RSP+0x30],RAX
-    return enc;
-}
-
-// The ten callees, by name (B3R). B.3.x bridges: `RtIoSerializer` is this
-// lane's view of an rt::io::Serializer; the fields are ExternalPtr / String.
-using ArraySetSizeFn = void (*)(void* arrayField, int count);   // the probe's control 1
-inline rt::io::Serializer* AsSer(RtIoSerializer* ser) {
-    return reinterpret_cast<rt::io::Serializer*>(ser);
-}
-inline void SerExtPtrMaterial(void* field, RtIoSerializer* ser) {      // 0x180061100
-    RtObject_ExternalPtrSerialize_Material(reinterpret_cast<RtObject::External**>(field), AsSer(ser));
-}
-inline void SerExtPtrImageBuffer(void* field, RtIoSerializer* ser) {   // 0x18005d0f0
-    RtObject_ExternalPtrSerialize_ImageBuffer(reinterpret_cast<RtObject::External**>(field), AsSer(ser));
-}
-inline void SerString(void* field, RtIoSerializer* ser) {              // 0x1800c9930
-    static_cast<System::String*>(field)->Serialize(ser);
+// 0x1800c9930, `System::String::Serialize`: each element's leading String.
+// LEFT: `MaterialTexture::name` / `MaterialConstant::_head` stay raw (a
+// `System::String` member would make the element non-trivial and change its
+// array's lifecycle rows), so the String is viewed at the field.
+inline void SerString(void* field, IO::Serializer& ser) {
+    static_cast<System::String*>(field)->Serialize(&ser);
 }
 
 }  // namespace
 
 // ENDGAME B.3.5 block G: BODY MOVED to `Graphics::MaterialInstance::Serialize`,
-// below. Every `self->x` became `x`, the six `RT_GFXMAT_CORRUPT` negative
-// controls came with it unchanged (the macro is at file scope), and the two
-// stride literals are still `sizeof()` of the header's element types so a stride
-// error stays a compile error rather than a heap walk.
+// below. The two strides are the element types' (Material.h static_asserts
+// 0x10 and 0x18).
 namespace Graphics {
 
 // ---------------------------------------------------------------------------
@@ -489,91 +425,53 @@ Object::Base* MaterialInstance::CreateInPlaceObject(void* place) {
 bool MaterialInstance::Serialize(void* streamv) {
     ++g_matSerCalls;
 
-    RtIoStream* localStream = reinterpret_cast<RtIoStream*>(streamv);
-    RtIoSerializer ser = { localStream, nullptr };          // [RSP+0x28], [RSP+0x30]
-    void* enc = MakeEncoding(&ser);
+    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(stream, 0);                          // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
-    // The ExternalPtr<Material> at +0x28.
-    SerExtPtrMaterial(&_material, &ser);
-
-    // Control 2 is THE documented retail-vs-profile Encoding offset trap turned
-    // into a negative control: a port written from the profile decompile would
-    // read the int encoder at +0xb8 and this is what that costs.
-    // The control's +0xb8 is `SerializeUChar`, handed the same `&n` the raw
-    // call passed.
-    auto serializeCount = [&enc](int32_t& v) {
-        if (RT_GFXMAT_CORRUPT(2))
-            AsRw(enc)->SerializeUChar(*reinterpret_cast<unsigned char*>(&v), nullptr);
-        else
-            AsRw(enc)->SerializeInt(v, nullptr);
-    };
+    // The ExternalPtr<Material> at +0x28 (0x180061100).
+    RtObject_ExternalPtrSerialize_Material(
+        reinterpret_cast<RtObject::External**>(&_material), PodSerializer(ser));
 
     // --- textures, stride 0x10 --------------------------------------------
     int32_t n = _textures._size;
-    serializeCount(n);
-    if (localStream->mode == 0)
-        (RT_GFXMAT_CORRUPT(1) ? ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_1800616c0)
-                              : ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_180061880))(
-            &_textures, n);
+    rw->SerializeInt(n, nullptr);                           // +0xa0
+    if (stream._direction == IO::kReading)
+        rtcoll::RtColl_ArraySetSize_180061880(&_textures, n);
     {
-        uint8_t* p = reinterpret_cast<uint8_t*>(_textures._data);
-        const size_t stride = RT_GFXMAT_CORRUPT(3)
-                                  ? sizeof(RtGraphics::MaterialConstant)
-                                  : sizeof(RtGraphics::MaterialTexture);
-        // Control 6 is the EFFECTIVENESS control and MUST NOT FIRE: retail
-        // latches the bound in EDI, nothing under the loop can resize the
-        // array, so a re-read is genuinely unobservable here.
-        for (int32_t i = 0; i < (RT_GFXMAT_CORRUPT(6) ? _textures._size : n); ++i) {
-            SerString(p, &ser);
-            SerExtPtrImageBuffer(p + 8, &ser);
-            p += stride;                                     // static_asserted 0x10
+        // The bound is latched (EDI), as retail does.
+        RtGraphics::MaterialTexture* p = _textures._data;
+        for (int32_t i = 0; i < n; ++i) {
+            SerString(&p->name, ser);                       // 0x1800c9930
+            RtObject_ExternalPtrSerialize_ImageBuffer(      // 0x18005d0f0
+                reinterpret_cast<RtObject::External**>(&p->image), PodSerializer(ser));
+            ++p;
             ++g_matSerTextures;
         }
     }
 
     // --- constants, stride 0x18 -------------------------------------------
     n = _constants._size;
-    serializeCount(n);
-    if (localStream->mode == 0)
-        (RT_GFXMAT_CORRUPT(1) ? ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_180061880)
-                              : ArraySetSizeFn(&rtcoll::RtColl_ArraySetSize_1800616c0))(
-            &_constants, n);
+    rw->SerializeInt(n, nullptr);
+    if (stream._direction == IO::kReading)
+        rtcoll::RtColl_ArraySetSize_1800616c0(&_constants, n);
     {
-        uint8_t* p = reinterpret_cast<uint8_t*>(_constants._data);
+        RtGraphics::MaterialConstant* p = _constants._data;
         for (int32_t i = n; i > 0; --i) {
-            SerString(p, &ser);
-            AsRw(enc)->SerializeFloatArray(
-                RT_GFXMAT_CORRUPT(5) ? 3 : 4, reinterpret_cast<float*>(p + 8), nullptr);
-            p += sizeof(RtGraphics::MaterialConstant);       // static_asserted 0x18
+            SerString(p->_head, ser);
+            rw->SerializeFloatArray(4, p->value, nullptr);  // +0x28, (enc, 4, p+8, 0)
+            ++p;
             ++g_matSerConstants;
         }
     }
 
-    // BY NAME, through the port registry — BuildParameters is an EXPORT and is
-    // already in the census `called` column, so this adds no address door and
-    // no census row.
-    //
-    // CORRECTED 2026-09-12: this comment used to end "It is unported today and
-    // this call reaches the DLL's copy." Both halves are now false.
-    // `?BuildParameters@MaterialInstance@Graphics@@` (retail 0x1801033e0) is
-    // ported and registered, and the 2026-09-12 cutover boot ran it with the
-    // DLL ABSENT — `[GFXBIG27] MaterialInstance::BuildParameters calls=1`,
-    // followed by `[GFXBODY28] Material::GetTextureName calls=1` and
-    // `MaterialInstance::FindTexture calls=1`, then a completed
-    // `[SpriteSheetLoad] Dialog/SpriteSheet.rsc`. RT_EXPORT_ONCE resolves
-    // registry-first, so this call site needed no change to follow the port.
-    if (!RT_GFXMAT_CORRUPT(4)) {
-        // ENDGAME B.3.5 caller batch: `MaterialInstance::BuildParameters` is a
-        // DEFINED member (wave27_lane_gfxbig.cpp:773), so this is the qualified
-        // non-virtual member call retail makes, and `BuildParamsFn` is gone.
-        this->MaterialInstance::BuildParameters();
-    }
+    // ?BuildParameters@MaterialInstance@Graphics@@ (retail 0x1801033e0), a
+    // DEFINED member (wave27_lane_gfxbig.cpp): the qualified non-virtual call
+    // retail makes, before the Encoding is released.
+    this->MaterialInstance::BuildParameters();
 
-    if (enc) delete AsRw(enc);
-
-    // Attendance and an effectiveness count. NOT a comparison — see the header
-    // block: the replay for this body lives in tools/gfxmat24_probe/.
-    return true;
+    return true;                                            // ~Serializer: `if (enc) delete enc`
 }
 
 }  // namespace Graphics
@@ -591,48 +489,34 @@ bool MaterialInstance::Serialize(void* streamv) {
 //
 // The asymmetry called out at the top of the file: this body neither makes nor
 // destroys an Encoding. It also reads the mode through `ser->stream->mode`, one
-// deref deeper than MaterialInstance::Serialize's — the disassembly is
-// `MOV RAX,[RDI] ; CMP dword [RAX+8],0`, and a decompile that drops one of
-// those two derefs reads as `ser->mode`.
+// deref deeper than MaterialInstance::Serialize's.
 //
-// `self+0xc8` / `self+0xd0` / `self+0xd8` WERE "MeshInstance fields this lane
-// does not name", and the comment that stood here said naming them from one body
-// would be a guess. THEY ARE NAMED NOW, by somebody else and from other bodies:
-// `Mesh.h` (Wave 6 lane E, then ENDGAME B.3.5 block E's real class) pins
-// `_materials` at +0xc8 with its `_size` at +0xd0 and `_animation` at +0xd8, all
-// from `??0MeshInstance@` and `IsAnimating`. So this body is retyped onto
-// `Graphics::MeshInstance` and the three offsets become three field names.
-//
-// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::MeshInstance::Serialize` —
-// block E's class, declared in `Mesh.h` and left declared-undefined there. NO
-// HEADER EDIT WAS NEEDED; `Mesh.h`'s "exported, NOT PORTED" comment beside the
-// declaration is STALE and belongs to the closing pass, not to a concurrent
-// block's diff.
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::MeshInstance::Serialize`.
+// B.4: the serializer's `_stream` / `_readerWriter` by name.
 // ---------------------------------------------------------------------------
 namespace Graphics {
 
 void MeshInstance::Serialize(IO::Serializer& serializer) {
     ++g_meshSerCalls;
 
-    // The lane's two-field views of the serializer pair; the same bytes the real
-    // `IO::Serializer` describes.
-    RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(&serializer);  // B.3.5 bridge
-
+    // LEFT: `_animation` is the 0x18-byte retail AnimationState (Mesh.h's
+    // MeshAnimationState); the tree's 0x48 class is its prefix-compatible
+    // superset, so the member is reached through a view of the same bytes.
     reinterpret_cast<Graphics::AnimationState*>(&_animation)      // +0xd8, 0x1800fe250
-        ->Graphics::AnimationState::Serialize(serializer);        // B.3.x bridge
+        ->Graphics::AnimationState::Serialize(serializer);
 
     int32_t n = _materials._size;                                 // +0xd0
-    void* enc = ser->encoding;
-    AsRw(enc)->SerializeInt(n, nullptr);
+    serializer._readerWriter->SerializeInt(n, nullptr);
 
     // `ser->stream->mode`, one deref deeper than MaterialInstance::Serialize's —
-    // the disassembly is `MOV RAX,[RDI] ; CMP dword [RAX+8],0`, and a decompile
-    // that drops one of those two derefs reads as `ser->mode`.
-    if (ser->stream->mode == 0)
+    // the disassembly is `MOV RAX,[RDI] ; CMP dword [RAX+8],0`.
+    if (serializer._stream->_direction == IO::kReading)
         rtcoll::RtColl_ArraySetSize_18005cc60(&_materials, n);     // +0xc8
 
+    // LEFT: External.h's POD spellings (the serializer and the element array).
     RtObject_ExternalPtrArraySerialize_MaterialInstance(          // 0x18005d4a0
-        AsSer(ser), n, reinterpret_cast<RtObject::External**>(_materials._data));
+        PodSerializer(serializer), n,
+        reinterpret_cast<RtObject::External**>(_materials._data));
 }
 
 }  // namespace Graphics
@@ -679,21 +563,17 @@ namespace Graphics {
 void AnimationManager::Serialize(IO::Serializer& s) {
     ++g_animSerCalls;
 
-    RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(&s);   // B.3.5 bridge
-
-    RtIoStream* localStream = ser->stream;
-    RtIoSerializer localSer = { localStream, nullptr };     // [RSP+0x28], [RSP+0x30]
-    void* enc = MakeEncoding(&localSer);
+    // B.4: the local `{ stream, enc }` pair, the factory call and the closing
+    // `if (enc) delete enc` are `IO::Serializer`'s ctor and dtor, inlined.
+    IO::Serializer localSer(*s._stream, 0);                 // [RSP+0x28], [RSP+0x30]
 
     int32_t n = _instances._size;                           // +0x08
-    AsRw(enc)->SerializeInt(n, nullptr);
+    localSer._readerWriter->SerializeInt(n, nullptr);
 
-    if (localStream->mode == 0)
+    if (localSer._stream->_direction == IO::kReading)
         rtcoll::Rt_SetSize_18005c3d0(&_instances, n);            // +0x00 == this
 
-    RtGraphics_SerializeAnimInstances(AsSer(&localSer), n, _instances._data);   // 0x18005c660
-
-    if (enc) delete AsRw(enc);
+    RtGraphics_SerializeAnimInstances(localSer, n, _instances._data);   // 0x18005c660
 }
 
 }  // namespace Graphics

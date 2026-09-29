@@ -22,6 +22,20 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"
+
+namespace Audio { class SoundEffect; }
+
+// One emitter slot (0x10; Persist 0x140042f30, resize 0x140001770 default
+// {0, 1.0f, null}).
+struct AmbientEmitterSlot {
+    uint32_t            handle;   // +0x00 the Audio::Scene effect id (0 = not playing)
+    float               volume;   // +0x04
+    Audio::SoundEffect* sound;    // +0x08 ExternalPtr<SoundEffect>
+};
+static_assert(sizeof(AmbientEmitterSlot) == 0x10, "AmbientEmitterSlot stride 0x10 (0x140001770)");
+static_assert(offsetof(AmbientEmitterSlot, volume) == 0x04, "AmbientEmitterSlot::volume @ +0x04");
+static_assert(offsetof(AmbientEmitterSlot, sound) == 0x08, "AmbientEmitterSlot::sound @ +0x08");
 
 class AmbientEmitterComponent final : public Component {
     DECLARE_EXE_TYPE(AmbientEmitterComponent)
@@ -36,17 +50,27 @@ public:
     void OnAdded() override;                                      // [6] 0x140042ba0
     void OnRemove() override;                                     // [7] 0x140042b90 PORT GAP
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 Vector3 position (x, y)
-    uint32_t field30;      // +0x30 Vector3 position (z)
-    uint8_t  _pad34[4];    // +0x34
-    void*    field38;      // +0x38 emitter array data (0x10-byte entries)
-    void*    field40;      // +0x40 emitter array count / capacity
+    // ---- non-virtual members (retail addresses) ----
+    // 0x140042e10: start (or join) the 3D ambient effect of every emitter slot.
+    void StartEmitters();
+    // 0x140042a10: set slot `slot` to `sound` at `volume` (AmbientEnvironmentComponent).
+    void SetSlot(int slot, Audio::SoundEffect* sound, float volume);
+    // 0x140042c60: (re)play slot `slot`'s effect and add this emitter to it.
+    void PlaySlot(int slot);
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Persist
+    // 0x140042f30: Vector3::Serialize, then the count and per slot the
+    // ExternalPtr<SoundEffect> (0x1400019a0), the uint and the float.
+    Math::Vector3       position;      // +0x28 where the emitter sounds
+    uint8_t             _pad34[4];     // +0x34
+    AmbientEmitterSlot* slots;         // +0x38 slot Array data (freed by the retail dtor)
+    int32_t             slotCount;     // +0x40
+    int32_t             slotCapacity;  // +0x44
 };
 
 static_assert(sizeof(AmbientEmitterComponent) == 0x48, "AmbientEmitterComponent is 0x48 (create 0x1400014b0)");
 static_assert(alignof(AmbientEmitterComponent) == 8, "AmbientEmitterComponent alignment");
-static_assert(offsetof(AmbientEmitterComponent, field28) == 0x28, "");
-static_assert(offsetof(AmbientEmitterComponent, field30) == 0x30, "");
-static_assert(offsetof(AmbientEmitterComponent, field38) == 0x38, "");
-static_assert(offsetof(AmbientEmitterComponent, field40) == 0x40, "");
+static_assert(offsetof(AmbientEmitterComponent, position) == 0x28, "AmbientEmitterComponent::position @ +0x28 (Vector3::Serialize)");
+static_assert(offsetof(AmbientEmitterComponent, slots) == 0x38, "AmbientEmitterComponent::slots @ +0x38");
+static_assert(offsetof(AmbientEmitterComponent, slotCount) == 0x40, "AmbientEmitterComponent::slotCount @ +0x40");
+static_assert(offsetof(AmbientEmitterComponent, slotCapacity) == 0x44, "AmbientEmitterComponent::slotCapacity @ +0x44");

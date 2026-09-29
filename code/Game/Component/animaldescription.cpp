@@ -28,15 +28,6 @@
 #include <new>
 #include "system/MemoryAllocator.h"
 
-namespace {
-// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
-// (0 == ok on the read leg). The tree's check before it allocates an array.
-inline int SerStreamErr(IO::Serializer& ser) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
-}
-}  // namespace
-
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 // ctor (inlined into create 0x14002f080 / createInPlace 0x14002f0c0):
@@ -70,11 +61,12 @@ bool AnimalDescription::Serialize(void* stream) {
     // External*-array @ +0x48 (count @ +0x50, stride 8)
     ser.Serialize(_refCount, nullptr);
     int n = _refCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && ::System::MemoryAllocator::_singleton) {
-        void* buf = ::System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
+    // IO::Serializer::GetDirection (retail 0x180006210: the stream's +0x08 word), 0 = reading.
+    if (static_cast<int>(ser.GetDirection()) == 0 && n > 0 && ::System::MemoryAllocator::_singleton) {
+        void** buf = static_cast<void**>(::System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
         _refs = buf;
         _refCap = n;
-        if (buf) for (int i = 0; i < n; ++i) static_cast<void**>(buf)[i] = nullptr;
+        if (buf) for (int i = 0; i < n; ++i) buf[i] = nullptr;
     }
     Desc_LoadExternalArray(&ser, n, _refs);
     ser.Serialize(_i20, nullptr);

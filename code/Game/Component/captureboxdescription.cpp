@@ -53,11 +53,9 @@ int32_t CaptureBoxDescription::GetFileVersion() const {
 // dtor left there.)
 bool CaptureBoxDescription::Serialize(void* stream) {
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, serializer);   // ExternalPtr +0x68
-    _spriteName.Serialize(serializer);                     // String      +0x70
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (stream is void* in the slot)
+    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // ExternalPtr +0x68
+    _spriteName.Serialize(&ser);                                      // String      +0x70
     return true;
 }
 
@@ -80,20 +78,17 @@ void CaptureBoxDescription::Destruct() { this->~CaptureBoxDescription(); }
 // (The frustum twin, 0x14006c340, has the same shape plus the size copy.)
 Object::InternalPtr<UI::Element>* CaptureBoxDescription::CreateInstance(
         Object::InternalPtr<UI::Element>* ret, const UI::Dialog* /*dialog*/) const {
-    void* elem = CaptureBoxElement::CreateNewObject();
+    // MemAlloc(0xe0, 8) and the ctor, inlined in retail as create 0x140013eb0 does.
+    void* p = Object::detail::InternalMemAlloc(sizeof(CaptureBoxElement), 8);
+    CaptureBoxElement* elem = p ? new (p) CaptureBoxElement() : nullptr;
 
-    uint8_t ibp[16] = {};
-    new (ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
+    Object::InternalPtr<UI::Element> ibp(elem);
     // Non-virtual applier; QUALIFIED (the slot-8 override hides the base overload).
-    UI::ElementDescription::CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ibp));
-    CaptureBoxElement* e = *reinterpret_cast<CaptureBoxElement**>(ibp);
+    UI::ElementDescription::CreateInstance(&ibp);
+    CaptureBoxElement* e = static_cast<CaptureBoxElement*>(ibp.Get());
 
-    e->_lineSprite = UI::Sprite(
-        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(_spriteSheet)),  // B.3.6 bridge
-        _spriteName);
-    *reinterpret_cast<void**>(ret) = e;
+    e->_lineSprite = UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(_spriteSheet), _spriteName);
+    *ret = Object::InternalPtr<UI::Element>(e);
     return ret;
 }
 

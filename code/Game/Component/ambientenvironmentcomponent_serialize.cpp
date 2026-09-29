@@ -31,16 +31,6 @@
 #include <new>
 #include "Component/AmbientEnvironmentComponent.h"
 
-namespace {
-
-// (The base serialize 0x1401189b0 is Component::Persist, called directly below.)
-
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
-}
-
-}  // namespace
-
 // ============================================================
 // AmbientEnvironmentComponent::Serialize (vtable slot [3], 0x1400437e0)
 // ============================================================
@@ -50,14 +40,11 @@ void AmbientEnvironmentComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
-    reinterpret_cast<Math::Vector3*>(At(this, 0x38))->Serialize(ser);   // B.3.1 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x2c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x34)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    position.Serialize(&ser);
+    ser.Serialize(regionX, nullptr);
+    ser.Serialize(regionY, nullptr);
+    ser.Serialize(regionWidth, nullptr);
+    ser.Serialize(regionHeight, nullptr);
 }

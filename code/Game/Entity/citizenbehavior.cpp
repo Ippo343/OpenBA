@@ -29,6 +29,10 @@
 #include "Component/RawMaterialDescription.h"
 #include "Component/ResidenceComponent.h"
 #include "Component/CitizenDescription.h"
+#include "Component/CitizenComponent.h"
+#include "Component/Component.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/ProfessionList.h"
 #include "Entity/exe_bodies.h"
 #include "Action/exe_bodies.h"      // Pf_IsDstReachable_f810, Pf_EntityAnchorCell_7fb0, PathBST_Insert_25a10, PathPairs_Clear_25b30
 #include "Component/exe_bodies.h"   // CitizenEmploy_Strat_c4b0, PathGraph_ReassignWorkers, CitizenAssignCitizens, CitizenComp_AssignHousing, StorageComponent_DynArrayResize
@@ -68,80 +72,83 @@ extern "C" void BuilderPool_Tick();
 //   6. If notifyTimer < 0: clear notifyFlags, reset timer to 0
 //
 // Original: Entity_impl_c2b0
-void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
-    int64_t* q = reinterpret_cast<int64_t*>(self->data);
+void CitizenBehavior::Update(int64_t* deltaTime) {
+    // Advance timers
+    field_0x190 += *deltaTime;       // pathAccumTimer
+    field_0x198 -= *deltaTime;       // statsTimer
+    field_0x1A0 -= *deltaTime;       // notifyTimer
 
-    // Advance timers (Ghidra longlong* indexing)
-    q[0x32] += *deltaTime;       // pathAccumTimer
-    q[0x33] -= *deltaTime;       // statsTimer
-    q[0x34] -= *deltaTime;       // notifyTimer
+    // CountResources â€” Entity_helper_9ed0(self)
+    CountResources();
 
-    // CountResources — Entity_helper_9ed0(self)
-    CitizenBehavior_CountResources(self);
-
-    // CheckThresholds — Entity_helper_c100(self, deltaTime)
-    CitizenBehavior_CheckThresholds(self, deltaTime);
+    // CheckThresholds â€” Entity_helper_c100(self, deltaTime)
+    CheckThresholds(deltaTime);
 
     // Path graph processing
     // DAT_140172234 is the path graph interval (float seconds)
     // System::Time::Time constructs a Time value from float
-    int64_t pathInterval = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&pathInterval), kRdata_140172234);   // 0x140172234
+    System::Time pathIntervalTime;
+    pathIntervalTime._ticks = 0;
+    RtSystem_Time_Ctor(&pathIntervalTime, kRdata_140172234);   // 0x140172234
+    const int64_t pathInterval = pathIntervalTime._ticks;
 
 
-    if (pathInterval <= q[0x32]) {
-        // Try to process pending paths
+    if (pathInterval <= field_0x190) {
+        // Try to process pending paths. The null tests on the path graph are the
+        // tree's (the ctor always allocates it; retail has none): listed, kept.
         bool pathsDone = false;
-        PathGraph* pg = self->pathGraph();
-        pathsDone = CitizenBehavior_ProcessPaths(pg);
+        PathGraph* pg = pathGraph;
+        pathsDone = pg != nullptr && pg->ProcessPaths();
 
         if (!pathsDone) {
             // Build new path graph
-            CitizenBehavior_BuildPathGraph(pg);
-        } else if (pg && pg->m_pendingIdx < 0 && pathInterval < q[0x32]) {
+            if (pg) pg->BuildPathGraph();
+        } else if (pg && pg->m_pendingIdx < 0 && pathInterval < field_0x190) {
             // Clamp accumulated time: subtract intervals until within one interval.
             // Guard against pathInterval <= 0 (BANISHED_PATHGRAPH_FAST forces 0, or a failed
-            // interval resolve) — `acc -= 0` would spin forever. This branch is reached only
+            // interval resolve) â€” `acc -= 0` would spin forever. This branch is reached only
             // when ProcessPaths returns true (pairs drained), which requires townMgr+0x100 to
-            // be non-empty (e.g. a registered construction site) — so it stayed latent until
+            // be non-empty (e.g. a registered construction site) â€” so it stayed latent until
             // the natural builder flow first populated that BST.
             if (pathInterval > 0) {
-                int64_t acc = q[0x32];
+                int64_t acc = field_0x190;
                 do {
                     acc -= pathInterval;
                 } while (pathInterval < acc);
-                q[0x32] = acc;
+                field_0x190 = acc;
             } else {
-                q[0x32] = 0;   // no positive interval to modulo by -> reset the accumulator
+                field_0x190 = 0;   // no positive interval to modulo by -> reset the accumulator
             }
         }
     }
 
     // Stats collection (periodic)
-    if (q[0x33] < 1) {
-        CitizenBehavior_CollectStats(self);
+    if (field_0x198 < 1) {
+        CollectStats();
         // Reset timer from DAT_1401721fc (float seconds)
         {
-            int64_t newTime = 0;
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&newTime), kRdata_1401721fc);   // 0x1401721fc
-            q[0x33] = newTime;
+            System::Time newTime;
+            newTime._ticks = 0;
+            RtSystem_Time_Ctor(&newTime, kRdata_1401721fc);   // 0x1401721fc
+            field_0x198 = newTime._ticks;
         }
     }
 
-    // Notification timer reset
-    if (q[0x34] < 0) {
-        *reinterpret_cast<uint32_t*>(&q[0x35]) = 0; // clear notify flags
-        q[0x34] = 0;
+    // Notification timer reset: retail stores a dword 0 into +0x1A8 (the float's bits)
+    if (field_0x1A0 < 0) {
+        field_0x1A8 = 0.0f;
+        field_0x1A0 = 0;
     }
 
     // Tick-driven Builder pool (BANISHED_BUILDER_NATURAL, opt-in): keep registered
     // construction sites staffed by seating idle Laborers as Builders via the real
     // FindAvailableBuilding cascade, nearest-first, capped by site capacity. No-op unless
     // the natural flow is enabled. This is the headless stand-in for the player's town-hall
-    // Builder count — the engine has no player-free first-builder seater (the periodic
+    // Builder count â€” the engine has no player-free first-builder seater (the periodic
     // employment allocator only rebalances already-staffed sites). See builder_pool_driver.cpp.
     BuilderPool_Tick();
 }
+
 
 // ============================================================
 // CitizenBehavior::ProcessPaths (0x1400d6f00)
@@ -154,8 +161,8 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
 // via fn_PathGraph_ReassignWorkers and fn_PathGraph_AssignCitizens.
 //
 // Original: FUN_1400d6f00
-bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
-    if (!pg) return false;
+bool PathGraph::ProcessPaths() {
+    PathGraph* pg = this;
     int pendingIdx = pg->m_pendingIdx;
 
     // Nothing to process
@@ -170,8 +177,8 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
     }
 
     // Get map grid pointer: *(int**)(g_pGameWorldSingleton + 0xf8)
-    int* mapGrid = *reinterpret_cast<int**>(
-        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
+    // (GameUpdateLoop::m_game is still void*: LEFT)
+    int* mapGrid = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
 
     // Pairs array: each entry is {int32 cellA, int32 cellB} = 8 bytes
     int32_t* pairs = reinterpret_cast<int32_t*>(pg->m_pairs);
@@ -294,8 +301,8 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
 // 5. Sets pendingIdx = pairCount - 1 to begin processing
 //
 // Original: Entity_impl_70c0
-void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
-    if (!pg) return;
+void PathGraph::BuildPathGraph() {
+    PathGraph* pg = this;
     // Only rebuild when not currently processing
     if (pg->m_pendingIdx >= 0) {
         return;
@@ -304,10 +311,11 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     int dbgEntities = 0, dbgEntRegionOk = 0, dbgPairsAdded = 0;
 
     // Get key pointers from the game world singleton
-    uint8_t* world = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-    int* mapGrid = *reinterpret_cast<int**>(world + 0xf8);
-    uint8_t* citizenBehavior = *reinterpret_cast<uint8_t**>(world + 0xf0);
-    uint8_t* buildingList = *reinterpret_cast<uint8_t**>(world + 0xb0);
+    // (GameUpdateLoop::m_game and m_citizenList are still void*: LEFT)
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
+    int* mapGrid = reinterpret_cast<int*>(world->m_game);
+    uint8_t* citizenBehavior = reinterpret_cast<uint8_t*>(world->m_citizenList);
+    ProfessionList* buildingList = world->m_professionList;
 
     // ---- Step 1: Collect grid cell IDs for all buildings ----
     // Retail (0x1400d70c0): lVar3 = *(gw+0xf0), loop over *(int*)(lVar3+0x28)
@@ -400,13 +408,13 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
         reinterpret_cast<uint8_t*>(mapGrid) + 0x80);
 
     // Building list at citizenBehavior+0xb0 (via game world +0xb0)
-    int profGroupCount = *reinterpret_cast<int*>(buildingList + 0x28);
+    int profGroupCount = buildingList->arrayCount;
 
 
     for (int gi = 0; gi < profGroupCount; gi++) {
         // Get profession key from building list
-        uint64_t profKey = *reinterpret_cast<uint64_t*>(
-            *reinterpret_cast<int64_t*>(buildingList + 0x20) + gi * 8);
+        // (ProfessionList keeps its Array as raw storage, H5: LEFT)
+        uint64_t profKey = reinterpret_cast<uint64_t*>(buildingList->arrayData)[gi];
 
         // Look up profession BST at citizenBehavior+0x100
         uint64_t* profNode = *reinterpret_cast<uint64_t**>(citizenBehavior + 0x100);
@@ -501,14 +509,14 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
 
                     // Grow pairs array (same dynamic array pattern)
                     void* oldPairs = pg->m_pairs;
-                    *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(pg) + 0x08) = newPairCount;
-                    int pairCap = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(pg) + 0x0C);
+                    pg->m_pairCount = newPairCount;
+                    int pairCap = pg->m_pairCapacity;
                     if (pairCap < newPairCount) {
                         int newCap = newPairCount;
                         if (curPairCount != 0) {
                             newCap = newPairCount * 3;
                         }
-                        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(pg) + 0x0C) = newCap;
+                        pg->m_pairCapacity = newCap;
                         void* newArr = System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 4);
                         pg->m_pairs = newArr;
                     }
@@ -605,44 +613,37 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
 //   bit 27             -> entry 20 (Farmer2)       offset 0x280
 //
 // Original: Entity_helper_9ed0
-void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
-    int64_t* q = reinterpret_cast<int64_t*>(self->data);
-
+void CitizenBehavior::CountResources() {
     // --- Phase 0: Shift currentCount -> previousCount and zero currentCount ---
     // The profResources array is 21 entries of 0x20 bytes each (total 0x2A0).
-    // For each entry: previousCount (+0x04) = currentCount (+0x00), then currentCount = 0.
-    uint8_t* profRes = reinterpret_cast<uint8_t*>(q[0x2e]); // param_1[0x2e] = profResources ptr
+    ProfessionResourceEntry* profRes = professionResources;
     if (profRes) {
-        for (int64_t off = 0; off < 0x2A0; off += 0x20) {
-            // previousCount = currentCount
-            *reinterpret_cast<int32_t*>(profRes + off + 0x04) =
-                *reinterpret_cast<int32_t*>(profRes + off + 0x00);
-            // currentCount = 0
-            *reinterpret_cast<int32_t*>(profRes + off + 0x00) = 0;
+        for (int e = 0; e < 21; e++) {
+            profRes[e].previousCount = profRes[e].currentCount;
+            profRes[e].currentCount = 0;
         }
     }
 
-    // --- Zero notification summary at param_1[0x30] (offset 0x180) ---
-    int32_t* notifySummary = reinterpret_cast<int32_t*>(q[0x30]);
+    // --- Zero notification summary at +0x180 (the two ResourceNotifyEntry records:
+    // [0] = normal resources, [1] = tools / health / clothing / textile) ---
+    ResourceNotifyEntry* notifySummary = notifyEntries;
     if (notifySummary) {
-        notifySummary[1] = 0;  // +0x04: normal resource worker count
-        notifySummary[0] = 0;  // +0x00: normal resource total
-        notifySummary[5] = 0;  // +0x14: dead resource worker count
-        notifySummary[4] = 0;  // +0x10: dead resource total
+        notifySummary[0].maxCapacity = 0;  // +0x04: normal resource worker count
+        notifySummary[0].current = 0;      // +0x00: normal resource total
+        notifySummary[1].maxCapacity = 0;  // +0x14: dead resource worker count
+        notifySummary[1].current = 0;      // +0x10: dead resource total
     }
 
     // Helper lambda: find a component on an entity by type ID.
-    // Entity layout: +0x30 = component array (void**), +0x38 = component count (int).
-    // Returns the found component pointer, or nullptr.
-    auto findComponent = [](uintptr_t entity, uint32_t targetId) -> void* {
+    // Returns the found component, or nullptr. The null tests are the tree's.
+    auto findComponent = [](ComponentEntity* entity, uint32_t targetId) -> Component* {
         if (!entity) return nullptr;
-        void** compArray = *reinterpret_cast<void***>(entity + 0x30);
-        int compCount = *reinterpret_cast<int*>(entity + 0x38);
+        int compCount = entity->_componentCount;
         for (int i = 0; i < compCount; i++) {
-            void* comp = compArray[i];
+            Component* comp = entity->_components[i].Get();
             if (!comp) continue;
             // virtual slot 2 (+0x10): Type()
-            int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type());  // B.3.8 bridge
+            int compTypeId = static_cast<int>(comp->Type());
             if (static_cast<uint32_t>(compTypeId) == targetId) {
                 if (::Object::IsDerivedFromNullSafe(comp, targetId)) {
                     return comp;
@@ -654,127 +655,120 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
     };
 
     // Helper lambda: given RawMaterialFlags, add itemCount to the correct
-    // profession entry in profResources. Returns the profession entry offset
-    // within profRes (or -1 if no matching flag).
+    // profession entry in profResources.
     auto addToProfession = [&](uint32_t flags, int32_t itemCount) {
-        int offset = -1;
+        int entry = -1;
         if (flags & 0x20) {
             // bit 5 (Edible) -> entry 5, offset 0xa0
-            offset = 0xa0;
+            entry = 5;
         } else if (flags & 0x80) {
             // bit 7 (Wood) -> entry 3, offset 0x60
-            offset = 0x60;
+            entry = 3;
         } else if (flags & 0x100) {
             // bit 8 (Stone) -> entry 9, offset 0x120
-            offset = 0x120;
+            entry = 9;
         } else if (flags & 0x200) {
             // bit 9 (Iron) -> entry 4, offset 0x80
-            offset = 0x80;
+            entry = 4;
         } else if (flags & 0x400) {
             // bit 10 (Health) -> entry 0, offset 0x00
-            offset = 0x00;
+            entry = 0;
         } else if (flags & 0x800) {
             // bit 11 (Clothing) -> entry 1, offset 0x20
-            offset = 0x20;
+            entry = 1;
         } else if (flags & 0x1000) {
             // bit 12 (Textile) -> entry 2, offset 0x40
-            offset = 0x40;
+            entry = 2;
         } else if (flags & 0x2000) {
             // bit 13 (Alcohol) -> entry 6, offset 0xc0
-            offset = 0xc0;
+            entry = 6;
         } else if (flags & 0x4000) {
             // bit 14 (Custom0) -> entry 7, offset 0xe0
-            offset = 0xe0;
+            entry = 7;
         } else if (flags & 0x20000) {
             // bit 17 (Custom3) -> entry 8, offset 0x100
-            offset = 0x100;
+            entry = 8;
         } else if (flags & 0x10000) {
             // bit 16 (Custom2) -> entry 10, offset 0x140
-            offset = 0x140;
+            entry = 10;
         } else if (flags & 0x40000) {
             // bit 18 (Custom4) -> entry 11, offset 0x160
-            offset = 0x160;
+            entry = 11;
         } else if (flags & 0x80000) {
             // bit 19 (Custom5) -> entry 12, offset 0x180
-            offset = 0x180;
+            entry = 12;
         } else if (flags & 0x100000) {
             // bit 20 (Custom6) -> entry 13, offset 0x1a0
-            offset = 0x1a0;
+            entry = 13;
         } else if (flags & 0x200000) {
             // bit 21 (Custom7) -> entry 14, offset 0x1c0
-            offset = 0x1c0;
+            entry = 14;
         } else if (flags & 0x400000) {
             // bit 22 (Custom8) -> entry 15, offset 0x1e0
-            offset = 0x1e0;
+            entry = 15;
         } else if (flags & 0x800000) {
             // bit 23 (Custom9) -> entry 16, offset 0x200
-            offset = 0x200;
+            entry = 16;
         } else if (flags & 0x1000000) {
             // bit 24 -> entry 17, offset 0x220
-            offset = 0x220;
+            entry = 17;
         } else if (flags & 0x2000000) {
             // bit 25 -> entry 18, offset 0x240
-            offset = 0x240;
+            entry = 18;
         } else if (flags & 0x4000000) {
             // bit 26 -> entry 19, offset 0x260
-            offset = 0x260;
+            entry = 19;
         } else if (flags & 0x8000000) {
             // bit 27 -> entry 20, offset 0x280
-            offset = 0x280;
+            entry = 20;
         }
 
-        if (offset >= 0 && profRes) {
-            *reinterpret_cast<int32_t*>(profRes + offset) += itemCount;
+        if (entry >= 0 && profRes) {
+            profRes[entry].currentCount += itemCount;
         }
     };
 
-    // --- Phase 1: Iterate first entity array (param_1[0]/param_1[1], offset +0x00/+0x08) ---
+    // --- Phase 1: Iterate first entity array (+0x00/+0x08) ---
     // These entities have StorageComponent; their items are tallied for both
     // profession resource counts AND notification summaries.
-    int64_t firstCount = static_cast<int64_t>(static_cast<int32_t>(q[1])); // param_1[1] = +0x08
+    int64_t firstCount = static_cast<int64_t>(field_0x08);
     for (int64_t idx = 0; idx < firstCount; idx++) {
-        // Read entity InternalBasePtr from array
-        int64_t entityIBP = *reinterpret_cast<int64_t*>(q[0] + idx * 8);
-
         // Find StorageComponent on this entity
-        void* storageComp = findComponent(static_cast<uintptr_t>(entityIBP),
-                                          StorageComponent::TypeId());
+        Component* storageComp = findComponent(field_0x00[idx], StorageComponent::TypeId());
+        // (found by the type id and IsDerivedFrom above: B10)
+        StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
-        // Wrap in InternalBasePtr
-        int64_t storageIBP = 0;
-        {
-            new (&storageIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
-        }
-
-        // Read item count from storage: *(int*)(storage + 0x30)
-        int32_t itemCount = *reinterpret_cast<int32_t*>(storageIBP + 0x30);
+        // Read item count from storage (+0x30)
+        int32_t itemCount = storage->slotCount;
         if (itemCount <= 0) continue;
 
         bool hadNormalResources = false;
         bool hadDeadResources = false;
 
-        // Iterate storage items: array at *(ptr*)(storage + 0x28), stride 0x10
-        // Each item: [0x00] = item entity ptr, [0x08] = quantity (int cast from longlong)
+        // Iterate storage items: array at +0x28, stride 0x10
+        // Each item: [0x00] = item description ptr, [0x08] = quantity (int cast from longlong)
+        // StorageComponent.h keeps the item array as raw storage (H5): LEFT.
         for (int32_t j = 0; j < itemCount; j++) {
             int64_t* itemEntry = reinterpret_cast<int64_t*>(
-                *reinterpret_cast<int64_t*>(storageIBP + 0x28) + j * 0x10);
+                reinterpret_cast<int64_t>(storage->storageSlots) + j * 0x10);
 
             // Find RawMaterialDescription on the item entity
             // Item entity has components at +0x28/+0x30 (different from top-level entity +0x30/+0x38)
+            // The item's first qword is a description whose child list is at
+            // +0x28 / count +0x30 (its class is not settled here: LEFT).
             int64_t itemEntity = itemEntry[0];
-            void* rawMat = nullptr;
+            RawMaterialDescription* rawMat = nullptr;
             if (itemEntity) {
                 int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
                 uint32_t rawMatTypeId = RawMaterialDescription::TypeId();
                 for (int k = 0; k < subCompCount; k++) {
-                    void* subComp = *reinterpret_cast<void**>(
+                    Object::Base* subComp = *reinterpret_cast<Object::Base**>(
                         *reinterpret_cast<int64_t*>(itemEntity + 0x28) + k * 8);
                     if (!subComp) continue;
-                    int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(subComp)->Type());  // B.3.8 bridge
+                    int compTypeId = static_cast<int>(subComp->Type());
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
                         if (::Object::IsDerivedFromNullSafe(subComp, rawMatTypeId)) {
-                            rawMat = subComp;
+                            rawMat = static_cast<RawMaterialDescription*>(subComp);
                         }
                         break;
                     }
@@ -782,26 +776,24 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             }
             if (!rawMat) continue;
 
-            // Get weight per unit from rawMat+0x48, multiply by item quantity
-            int32_t weightPerUnit = *reinterpret_cast<int32_t*>(
-                reinterpret_cast<uintptr_t>(rawMat) + 0x48);
+            // Weight per unit (+0x48) times the item quantity
+            int32_t weightPerUnit = rawMat->_weight;
             int32_t quantity = static_cast<int32_t>(itemEntry[1]);
             int32_t totalAmount = weightPerUnit * quantity;
 
-            // Get RawMaterialFlags from rawMat+0x5c
-            uint32_t flags = *reinterpret_cast<uint32_t*>(
-                reinterpret_cast<uintptr_t>(rawMat) + 0x5c);
+            // RawMaterialFlags (+0x5c)
+            uint32_t flags = rawMat->_flags;
 
             // Update notification summary: split by flag 0x1c40
             // 0x1c40 = Tool(6) | Health(10) | Clothing(11) | Textile(12)
             if (notifySummary) {
                 if ((flags & 0x1c40) == 0) {
                     // Normal resources (food, fuel, etc.)
-                    notifySummary[0] += totalAmount;
+                    notifySummary[0].current += totalAmount;
                     hadNormalResources = true;
                 } else {
                     // Tools/health/clothing/textile
-                    notifySummary[4] += totalAmount;
+                    notifySummary[1].current += totalAmount;
                     hadDeadResources = true;
                 }
             }
@@ -812,54 +804,44 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 
         // Update notification worker counts from storage+0x38 (capacity/worker count)
         if (hadDeadResources && notifySummary) {
-            notifySummary[5] += *reinterpret_cast<int32_t*>(storageIBP + 0x38);
+            notifySummary[1].maxCapacity += storage->capacity;
         }
         if (hadNormalResources && notifySummary) {
-            notifySummary[1] += *reinterpret_cast<int32_t*>(storageIBP + 0x38);
+            notifySummary[0].maxCapacity += storage->capacity;
         }
     }
 
-    // --- Phase 2: Iterate second entity array (param_1[2]/param_1[3], offset +0x10/+0x18) ---
+    // --- Phase 2: Iterate second entity array (+0x10/+0x18) ---
     // Same logic as Phase 1 but WITHOUT notification summary updates.
-    int64_t secondCount = static_cast<int64_t>(static_cast<int32_t>(q[3])); // param_1[3] = +0x18
+    int64_t secondCount = static_cast<int64_t>(field_0x18);
     for (int64_t idx = 0; idx < secondCount; idx++) {
-        // Read entity InternalBasePtr from array
-        int64_t entityIBP = *reinterpret_cast<int64_t*>(q[2] + idx * 8);
-
         // Find StorageComponent on this entity
-        uintptr_t entityAddr = static_cast<uintptr_t>(entityIBP);
-        void* storageComp = findComponent(entityAddr, StorageComponent::TypeId());
+        Component* storageComp = findComponent(field_0x10[idx], StorageComponent::TypeId());
+        StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
-        // Wrap in InternalBasePtr
-        int64_t storageIBP = 0;
-        {
-            new (&storageIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
-        }
-
-        // Read item count from storage: *(int*)(storage + 0x30)
-        int32_t itemCount = *reinterpret_cast<int32_t*>(storageIBP + 0x30);
+        // Read item count from storage (+0x30)
+        int32_t itemCount = storage->slotCount;
         if (itemCount <= 0) continue;
 
         // Iterate storage items
         for (int32_t j = 0; j < itemCount; j++) {
             int64_t* itemEntry = reinterpret_cast<int64_t*>(
-                *reinterpret_cast<int64_t*>(storageIBP + 0x28) + j * 0x10);
+                reinterpret_cast<int64_t>(storage->storageSlots) + j * 0x10);
 
             // Find RawMaterialDescription on the item entity
             int64_t itemEntity = itemEntry[0];
-            void* rawMat = nullptr;
+            RawMaterialDescription* rawMat = nullptr;
             if (itemEntity) {
                 uint32_t rawMatTypeId = RawMaterialDescription::TypeId();
                 int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
                 for (int k = 0; k < subCompCount; k++) {
-                    void* subComp = *reinterpret_cast<void**>(
+                    Object::Base* subComp = *reinterpret_cast<Object::Base**>(
                         *reinterpret_cast<int64_t*>(itemEntity + 0x28) + k * 8);
                     if (!subComp) continue;
-                    int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(subComp)->Type());  // B.3.8 bridge
+                    int compTypeId = static_cast<int>(subComp->Type());
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
                         if (::Object::IsDerivedFromNullSafe(subComp, rawMatTypeId)) {
-                            rawMat = subComp;
+                            rawMat = static_cast<RawMaterialDescription*>(subComp);
                         }
                         break;
                     }
@@ -867,15 +849,13 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             }
             if (!rawMat) continue;
 
-            // Get RawMaterialFlags from rawMat+0x5c
-            uint32_t flags = *reinterpret_cast<uint32_t*>(
-                reinterpret_cast<uintptr_t>(rawMat) + 0x5c);
-
-            // Categorize by profession flag (no notification update in Phase 2)
-            addToProfession(flags, static_cast<int32_t>(itemEntry[1]));
+            // RawMaterialFlags (+0x5c); categorize by profession flag (no notification
+            // update in Phase 2)
+            addToProfession(rawMat->_flags, static_cast<int32_t>(itemEntry[1]));
         }
     }
 }
+
 // ============================================================
 // CitizenBehavior::CheckThresholds (0x14008c100)
 // ============================================================
@@ -898,15 +878,14 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 //           reset timer to 120 seconds
 //
 // Original: Entity_helper_c100
-void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTime) {
+void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
     float notifyInterval = 120.0f; // DAT_140172210 = 120.0f seconds
-    void* notifMgr = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x138);
+    // GameUpdateLoop +0x138 is the event notifier (still void* in GameUpdateLoop.h)
+    void* notifMgr = GameUpdateLoop::_singleton->m_eventNotifier;
 
     // Part 1: Check profession resource thresholds (21 entries)
     for (int i = 0; i < 21; i++) {
-        uintptr_t profRes = reinterpret_cast<uintptr_t>(self->profResources());
-        int64_t* timer = reinterpret_cast<int64_t*>(profRes + i * 0x20 + 0x18);
+        int64_t* timer = &professionResources[i].timer;
 
         // Decrement timer
         *timer -= *deltaTime;
@@ -915,31 +894,30 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
             // Reset timer to zero (will be set to interval if notification fires)
             *timer = 0;
 
-            int32_t maxCount = *reinterpret_cast<int32_t*>(profRes + i * 0x20 + 0x08);
-            int32_t currentCount = *reinterpret_cast<int32_t*>(profRes + i * 0x20 + 0x00);
-            int32_t previousCount = *reinterpret_cast<int32_t*>(profRes + i * 0x20 + 0x04);
+            int32_t maxCount = professionResources[i].maxCount;
+            int32_t currentCount = professionResources[i].currentCount;
+            int32_t previousCount = professionResources[i].previousCount;
 
             // Profession 3 (Fisherman): combine with profession 9 (Stonecutter)
             if (i == 3) {
-                uintptr_t profRes2 = reinterpret_cast<uintptr_t>(self->profResources());
-                maxCount += *reinterpret_cast<int32_t*>(profRes2 + 9 * 0x20 + 0x08);
-                currentCount += *reinterpret_cast<int32_t*>(profRes2 + 9 * 0x20 + 0x00);
-                previousCount += *reinterpret_cast<int32_t*>(profRes2 + 9 * 0x20 + 0x04);
+                maxCount += professionResources[9].maxCount;
+                currentCount += professionResources[9].currentCount;
+                previousCount += professionResources[9].previousCount;
             }
 
             int32_t threshold = maxCount / 20; // 5% threshold
             if (currentCount < threshold && threshold <= previousCount) {
-                // Fire shortage notification
+                // Fire shortage notification (with a null entity InternalBasePtr)
                 {
-                    uint64_t nullIBP = 0;
-                    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                    void* nullIBP = nullptr;
                     EventLog_AddEvent(notifMgr, i + 0x11, 3, &nullIBP);   // 0x140095580
                 }
                 // Reset timer to notification cooldown (120 seconds)
                 {
-                    int64_t newTime = 0;
-                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&newTime), notifyInterval);
-                    *timer = newTime;
+                    System::Time newTime;
+                    newTime._ticks = 0;
+                    RtSystem_Time_Ctor(&newTime, notifyInterval);
+                    *timer = newTime._ticks;
                 }
             }
         }
@@ -950,12 +928,12 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
     // (fn_SummaryArray_Init(self->data + 0x180, 2) in the ctor; original:
     // `lVar3 = *(longlong*)(param_1 + 0x180)`). The previous code used the field
     // address itself as the array, so "current" read the pointer's low dword
-    // (huge -> 95%-full always true) and the "timer" writes stomped +0x188 —
+    // (huge -> 95%-full always true) and the "timer" writes stomped +0x188 â€”
     // that was the type-24 event spam (thousands of storage-full posts/minute).
     for (int i = 0; i < 2; i++) {
-        uintptr_t notifyBase = *reinterpret_cast<uintptr_t*>(self->data + 0x180);
+        ResourceNotifyEntry* notifyBase = notifyEntries;
         if (!notifyBase) break;
-        int64_t* timer = reinterpret_cast<int64_t*>(notifyBase + i * 0x10 + 0x08);
+        int64_t* timer = &notifyBase[i].timer;
 
         // Decrement timer
         *timer -= *deltaTime;
@@ -963,27 +941,28 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
         if (*timer < 1) {
             *timer = 0;
 
-            int32_t current = *reinterpret_cast<int32_t*>(notifyBase + i * 0x10 + 0x00);
-            int32_t maxCapacity = *reinterpret_cast<int32_t*>(notifyBase + i * 0x10 + 0x04);
+            int32_t current = notifyBase[i].current;
+            int32_t maxCapacity = notifyBase[i].maxCapacity;
 
             // Check if storage is > 95% full: current > (max/20)*19
             if ((maxCapacity / 20) * 19 < current) {
                 // Notification type: 0x17 for food (entry 0), 0x18 for firewood (entry 1)
                 int notifType = 0x17 + (i != 0 ? 1 : 0);
                 {
-                    uint64_t nullIBP = 0;
-                    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                    void* nullIBP = nullptr;
                     EventLog_AddEvent(notifMgr, notifType, 3, &nullIBP);   // 0x140095580
                 }
                 {
-                    int64_t newTime = 0;
-                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&newTime), notifyInterval);
-                    *timer = newTime;
+                    System::Time newTime;
+                    newTime._ticks = 0;
+                    RtSystem_Time_Ctor(&newTime, notifyInterval);
+                    *timer = newTime._ticks;
                 }
             }
         }
     }
 }
+
 
 // ============================================================
 // CitizenBehavior::CollectStats (0x14008a730)
@@ -1010,65 +989,66 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
 // After pushing all stats, clears profRes +0x0C and +0x10 for each of 21 entries.
 //
 // Original: FUN_14008a730
-void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
+void CitizenBehavior::CollectStats() {
     // The per-citizen SA-guard below is VirtualQuery-backed (~80 us/syscall). All
     // citizens live in a couple of engine-heap arenas, so let the probe cache those
-    // regions for the duration of this pass — nothing is unmapped while it runs.
+    // regions for the duration of this pass â€” nothing is unmapped while it runs.
     ForceWork::ResetReadableCache();
 
     // -- Phase 1: Iterate all citizens, accumulate counters --
-    int citizenCount = self->allCitizensCount();
-    uint64_t* citizenArray = reinterpret_cast<uint64_t*>(self->allCitizensPtr());
+    // Field names are CitizenComponent.h's (W0-H1). The tree's local names are kept
+    // where the header names the field differently: `happinessSum` sums +0x50
+    // (`health`), `healthSum` sums +0x80 (`happiness`), `dead` counts a non-null
+    // +0x208 (`school`), `working` a non-zero +0x1E4 (`clothingLevel`).
+    int citizenCount = this->citizenCount;
+    CitizenComponent** citizenArray = citizens;
 
     float happinessSum = 0.0f;
     float healthSum = 0.0f;
     int adults = 0;    // alive, age >= adult age
     int children = 0;  // alive, age < adult age
-    int dead = 0;      // death timestamp != 0
+    int dead = 0;      // +0x208 != 0
     int educated = 0;  // education >= threshold AND adult AND alive
-    int working = 0;   // has job flag
+    int working = 0;   // +0x1E4 != 0
 
     for (int i = 0; i < citizenCount; i++) {
-        uint64_t citizenIBP = citizenArray[i];
-        uintptr_t c = static_cast<uintptr_t>(citizenIBP);
+        CitizenComponent* c = citizenArray[i];
 
         // SA-guard: skip an entry that is not a readable citizen. Retail's array holds
         // only live citizens, so this can only trip on a standalone list-integrity bug
-        // — the town citizen list (self+0xA0/+0xA8) has no verified unregister when a
+        // â€” the town citizen list (self+0xA0/+0xA8) has no verified unregister when a
         // citizen entity is freed, and CheckPtr is an empty function in the shipping
         // Runtime, so it cannot null a stale weak ref. Observed live: an entry whose
         // +0x288 CitizenDescription read back as 0x760, so `descPtr + 0x44` faulted at
         // 0x7a4 (ACCESS_VIOLATION in CollectStats, 2026-07-21 and again 2026-07-24).
-        // CollectStats only AVERAGES — dropping a dead entry changes a statistic, never
+        // CollectStats only AVERAGES â€” dropping a dead entry changes a statistic, never
         // simulation state, which is much cheaper than aborting the process. The stale
         // entry itself is the real bug; the log names it so it can be root-caused.
         const bool guardFailed =
-            !ForceWork::Readable(reinterpret_cast<void*>(c), 0x28C) ||
-            !ForceWork::Readable(
-                reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(c + 0x288)), 0x11C);
+            !ForceWork::Readable(c, 0x28C) ||
+            !ForceWork::Readable(c->description, 0x11C);
         if (guardFailed) {
             static int s_reported = 0;
             if (s_reported++ < 20) {
                 std::fprintf(stderr, "[CollectStats] SKIP stale citizen[%d/%d]=%p desc=%p "
-                             "— entry in the town citizen list is not live (list-integrity "
+                             "â€” entry in the town citizen list is not live (list-integrity "
                              "bug: citizen freed without unregistering)\n",
-                             i, citizenCount, reinterpret_cast<void*>(c),
-                             ForceWork::Readable(reinterpret_cast<void*>(c), 0x28C)
-                                 ? *reinterpret_cast<void**>(c + 0x288) : nullptr);
+                             i, citizenCount, static_cast<void*>(c),
+                             ForceWork::Readable(c, 0x28C)
+                                 ? static_cast<void*>(c->description) : nullptr);
                 std::fflush(stderr);
             }
             continue;
         }
 
         // Read citizen fields
-        float age = *reinterpret_cast<float*>(c + 0x3C);
-        uintptr_t descPtr = *reinterpret_cast<uintptr_t*>(c + 0x288);
-        float adultAge = *reinterpret_cast<float*>(descPtr + 0x44);
-        int64_t deathTime = *reinterpret_cast<int64_t*>(c + 0x208);
+        float age = c->age;
+        float adultAge = c->description->adultAge;
+        const bool atSchool = c->school != nullptr;
 
-        // Classify: child (age < adult AND alive), dead, or adult
-        if (age < adultAge || deathTime != 0) {
-            if (deathTime == 0) {
+        // Classify: child (age < adult AND no +0x208), +0x208 set, or adult
+        if (age < adultAge || atSchool) {
+            if (!atSchool) {
                 children++;
             } else {
                 dead++;
@@ -1077,37 +1057,29 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
             adults++;
         }
 
-        // Accumulate happiness (+0x50) and health (+0x80)
-        c = static_cast<uintptr_t>(citizenIBP);
-        happinessSum += *reinterpret_cast<float*>(c + 0x50);
+        // Accumulate +0x50 and +0x80
+        happinessSum += c->health;
+        healthSum += c->happiness;
 
-        c = static_cast<uintptr_t>(citizenIBP);
-        healthSum += *reinterpret_cast<float*>(c + 0x80);
-
-        // Check educated: education level >= threshold AND adult AND alive
-        c = static_cast<uintptr_t>(citizenIBP);
-        descPtr = *reinterpret_cast<uintptr_t*>(c + 0x288);
-        int educThreshold = *reinterpret_cast<int*>(descPtr + 0x118);
-        int educLevel = *reinterpret_cast<int*>(c + 0x210);
+        // Check educated: education level >= threshold AND adult AND +0x208 null
+        int educThreshold = c->description->maxEducation;
+        int educLevel = c->education;
         if (educLevel >= educThreshold) {
-            c = static_cast<uintptr_t>(citizenIBP);
-            descPtr = *reinterpret_cast<uintptr_t*>(c + 0x288);
-            float citizenAge = *reinterpret_cast<float*>(c + 0x3C);
-            float citizenAdultAge = *reinterpret_cast<float*>(descPtr + 0x44);
-            if (citizenAdultAge <= citizenAge && *reinterpret_cast<int64_t*>(c + 0x208) == 0) {
+            float citizenAge = c->age;
+            float citizenAdultAge = c->description->adultAge;
+            if (citizenAdultAge <= citizenAge && c->school == nullptr) {
                 educated++;
             }
         }
 
-        // Check working: has job flag at +0x1E4
-        c = static_cast<uintptr_t>(citizenIBP);
-        if (*reinterpret_cast<int*>(c + 0x1E4) != 0) {
+        // Check working: +0x1E4 != 0
+        if (c->clothingLevel != 0) {
             working++;
         }
     }
 
     // -- Phase 1b: Compute percentage stats --
-    // Uses first citizen's CitizenDescription for max happiness/health values.
+    // Uses first citizen's CitizenDescription for the two maxima.
     int happinessPct = 0;
     int healthPct = 0;
     int educatedPct = 0;
@@ -1115,41 +1087,35 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
 
     if (citizenCount > 0) {
         // Get CitizenDescription from first citizen's +0x18 via IsDerivedFrom.
-        // Retail (0x14008a730): local_res8 = **(ulonglong**)(param_1+0xa0) —
-        // allCitizensPtr() IS the array base, so ONE deref gives array[0] (the
-        // citizen IBP value). A second deref would read the citizen's vtable
-        // and +0x18 lands in .text (IsDerivedFrom faults on a code address).
-        uint64_t firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
-        void* descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
-        void* citizenDesc = nullptr;
+        // Retail (0x14008a730): local_res8 = **(ulonglong**)(param_1+0xa0) â€”
+        // the array base, ONE deref gives array[0] (the citizen), then its
+        // Component +0x18 description.
+        void* descBase = citizens[0]->_description;
+        CitizenDescription* citizenDesc = nullptr;
         if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
-            citizenDesc = descBase;
+            citizenDesc = reinterpret_cast<CitizenDescription*>(descBase);   // Component::_description is void*: LEFT
         }
 
-        // Read maxHealth from CitizenDescription+0xA4
+        // Read CitizenDescription+0xA4
         float maxHealth = 0.0f;
         if (citizenDesc) {
-            maxHealth = *reinterpret_cast<float*>(
-                reinterpret_cast<uintptr_t>(citizenDesc) + 0xA4);
+            maxHealth = citizenDesc->maxHappiness;
         }
 
-        // Re-read first citizen for maxHappiness from CitizenDescription+0x70
-        // (same single-deref as above).
-        firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
-        descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
+        // Re-read first citizen for CitizenDescription+0x70 (same single-deref as above).
+        descBase = citizens[0]->_description;
         citizenDesc = nullptr;
         if (::Object::IsDerivedFromNullSafe(descBase, CitizenDescription::TypeId())) {
-            citizenDesc = descBase;
+            citizenDesc = reinterpret_cast<CitizenDescription*>(descBase);   // Component::_description is void*: LEFT
         }
 
         float maxHappiness = 0.0f;
         if (citizenDesc) {
-            maxHappiness = *reinterpret_cast<float*>(
-                reinterpret_cast<uintptr_t>(citizenDesc) + 0x70);
+            maxHappiness = citizenDesc->maxHealth;
         }
 
         float fCount = static_cast<float>(citizenCount);
-        // DAT_140172208 = 100.0f — scale to percentage
+        // DAT_140172208 = 100.0f â€” scale to percentage
         if (maxHappiness != 0.0f) {
             happinessPct = static_cast<int>(
                 ((happinessSum / fCount) / maxHappiness) * 100.0f);
@@ -1170,12 +1136,12 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
     // Stats history at +0x150: each sub-array is a 0x10-byte struct
     //   { void* data, int count, int capacity }
     // 21 professions, 3 values each, at hist + 0x80 + profIdx*0x30 + {0, 0x10, 0x20}
-    uintptr_t hist = reinterpret_cast<uintptr_t>(self->statsHistory());
-    uintptr_t profRes = reinterpret_cast<uintptr_t>(self->profResources());
+    // (CitizenBehavior.h keeps +0x150 as a void* data pointer: LEFT)
+    uintptr_t hist = reinterpret_cast<uintptr_t>(field_0x150);
 
     for (int prof = 0; prof < 21; prof++) {
         uintptr_t histSlot = hist + 0x80 + prof * 0x30;
-        uintptr_t profEntry = profRes + prof * 0x20;
+        const ProfessionResourceEntry& profEntry = professionResources[prof];
 
         // Every push below is Collection::Array<T>::SetSize(n, fill) — B.3.2,
         // retail 0x140003600, stride 4 align 4, no init arm (every new slot takes
@@ -1184,71 +1150,60 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         // Push currentCount (+0x00)
         int curArrayCount = *reinterpret_cast<int*>(histSlot + 0x08);
         GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x00).SetSize(
-            curArrayCount + 1,
-            *reinterpret_cast<const GameColl::I32NoInit*>(profEntry + 0x00));
+            curArrayCount + 1, GameColl::I32NoInit{profEntry.currentCount});
 
-        // Push field_0C (+0x0C)
+        // Push field_0x0C (+0x0C)
         int f0CArrayCount = *reinterpret_cast<int*>(histSlot + 0x10 + 0x08);
         GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x10).SetSize(
-            f0CArrayCount + 1,
-            *reinterpret_cast<const GameColl::I32NoInit*>(profEntry + 0x0C));
+            f0CArrayCount + 1, GameColl::I32NoInit{profEntry.field_0x0C});
 
-        // Push field_10 (+0x10)
+        // Push _field10 (+0x10)
         int f10ArrayCount = *reinterpret_cast<int*>(histSlot + 0x20 + 0x08);
         GameColl::ArrayAt<GameColl::I32NoInit>(histSlot, 0x20).SetSize(
-            f10ArrayCount + 1,
-            *reinterpret_cast<const GameColl::I32NoInit*>(profEntry + 0x10));
+            f10ArrayCount + 1, GameColl::I32NoInit{profEntry._field10});
     }
 
     // -- Phase 3: Push population stats --
     // 8 computed stats at hist + 0x00..0x70 (each 0x10-byte sub-array)
     // Same helper as Phase 2: Collection::Array<T>::SetSize(n, fill) — B.3.2,
     // retail 0x140003600, stride 4 align 4, no init arm (every new slot takes the fill).
-    int32_t totalCount = citizenCount;
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x00).SetSize(
-        *reinterpret_cast<int*>(hist + 0x08) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&totalCount));
+        *reinterpret_cast<int*>(hist + 0x08) + 1, GameColl::I32NoInit{citizenCount});
 
-    int32_t adultsVal = adults;
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x10).SetSize(
-        *reinterpret_cast<int*>(hist + 0x18) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&adultsVal));
+        *reinterpret_cast<int*>(hist + 0x18) + 1, GameColl::I32NoInit{adults});
 
-    int32_t deadVal = dead;
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x20).SetSize(
-        *reinterpret_cast<int*>(hist + 0x28) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&deadVal));
+        *reinterpret_cast<int*>(hist + 0x28) + 1, GameColl::I32NoInit{dead});
 
-    int32_t childrenVal = children;
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x30).SetSize(
-        *reinterpret_cast<int*>(hist + 0x38) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&childrenVal));
+        *reinterpret_cast<int*>(hist + 0x38) + 1, GameColl::I32NoInit{children});
 
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x40).SetSize(
-        *reinterpret_cast<int*>(hist + 0x48) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&happinessPct));
+        *reinterpret_cast<int*>(hist + 0x48) + 1, GameColl::I32NoInit{happinessPct});
 
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x60).SetSize(
-        *reinterpret_cast<int*>(hist + 0x68) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&healthPct));
+        *reinterpret_cast<int*>(hist + 0x68) + 1, GameColl::I32NoInit{healthPct});
 
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x50).SetSize(
-        *reinterpret_cast<int*>(hist + 0x58) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&educatedPct));
+        *reinterpret_cast<int*>(hist + 0x58) + 1, GameColl::I32NoInit{educatedPct});
 
     GameColl::ArrayAt<GameColl::I32NoInit>(hist, 0x70).SetSize(
-        *reinterpret_cast<int*>(hist + 0x78) + 1,
-        *reinterpret_cast<const GameColl::I32NoInit*>(&workingPct));
+        *reinterpret_cast<int*>(hist + 0x78) + 1, GameColl::I32NoInit{workingPct});
 
     // -- Phase 4: Clear per-tick accumulators in profResources --
     // Clear +0x0C and +0x10 of each ProfessionResourceEntry
-    for (int64_t off = 0x20; off < 0x2A0; off += 0x20) {
-        *reinterpret_cast<int32_t*>(profRes + off - 0x14) = 0;  // +0x0C of entry
-        *reinterpret_cast<int32_t*>(profRes + off - 0x10) = 0;  // +0x10 of entry
+    for (int e = 0; e < 21; e++) {
+        professionResources[e].field_0x0C = 0;  // +0x0C of entry
+        professionResources[e]._field10 = 0;    // +0x10 of entry
     }
+}
 
-    // Old delegate fallback (commented out):
-    // if (fn_CitizenBehavior_CollectStats) {
-    //     fn_CitizenBehavior_CollectStats(self);
-    // }
+
+// ============================================================
+// B4 FORWARD: 1 outside caller (code/Game/Game/gameupdateloop.cpp, which still
+// hands a CitizenBehaviorRaw*). The closing wave rewires it and deletes this.
+// ============================================================
+void CitizenBehavior_Update(void* self, int64_t* deltaTime) {
+    reinterpret_cast<CitizenBehavior*>(self)->Update(deltaTime);
 }

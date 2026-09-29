@@ -129,19 +129,28 @@ void ImageBufferCtor(void* p) {
 // `Create` are DEFINED members of the real `Video::RenderBuffer` today, so the
 // three by-name doors become member calls and `RbCreateFn` goes with them. The
 // `??3` operator delete below is the class member too (B3R).
-void RenderBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
+void RenderBufferPlatformConstruct(Video::RenderBuffer* p) {
+    p->PlatformConstruct();
 }
-void RenderBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
+void RenderBufferPlatformDestruct(Video::RenderBuffer* p) {
+    p->PlatformDestruct();
 }
 void RenderBufferOperatorDelete(void* p) {
     Video::RenderBuffer::operator delete(p);       // 0x18001f360
 }
-bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
-        reinterpret_cast<const Video::ImageBuffer*>(colour),
-        reinterpret_cast<const Video::ImageBuffer*>(depth));          // B.3.5 bridge
+bool RenderBufferCreate(Video::RenderBuffer* rb, const Video::ImageBuffer* colour,
+                        const Video::ImageBuffer* depth) {
+    return rb->Create(colour, depth);
+}
+
+// The three zeroed qwords retail stores into a fresh RenderBuffer before
+// PlatformConstruct: +0x00 / +0x08 (the two attachments) and +0x10 (width,
+// height).
+void RenderBufferZeroHeader(Video::RenderBuffer* rb) {
+    rb->colorBuffer = nullptr;
+    rb->depthBuffer = nullptr;
+    rb->width  = 0;
+    rb->height = 0;
 }
 
 // ENDGAME B.3.9 block GFX: `VtFrameCopy` / `VtGenerated` (the two minted
@@ -228,61 +237,55 @@ bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
 // 0x1800a3d10 after the FrameCopy stamp, and 0x1800a3c80 between its restamp
 // and the Generated restamp -- the bodies the B.3.8 `InitFields` /
 // `ReleaseFields` split shared with the retired doors, MOVED VERBATIM through
-// the field-identical `RtGraphics::FrameCopyImageBuffer` POD view.
+// the field-identical `RtGraphics::FrameCopyImageBuffer` POD view. B.4: on
+// the real class's own fields.
 // ============================================================================
 Graphics::FrameCopyImageBuffer::FrameCopyImageBuffer() {
     Attend("FrameCopyImageBuffer::ctor", g_ctorCalls);
-    RtGraphics::FrameCopyImageBuffer* const p =
-        reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
-    p->_backBufferImage = nullptr;                   // 0x1800a3d4c
-    p->_sourceTarget    = nullptr;                   // 0x1800a3d50
-    p->_destTarget      = nullptr;                   // 0x1800a3d54
+    _backBufferImage = nullptr;                      // 0x1800a3d4c
+    _sourceTarget    = nullptr;                      // 0x1800a3d50
+    _destTarget      = nullptr;                      // 0x1800a3d54
 
     // --- the back-buffer alias ---------------------------------------------
-    void* const image = System::MemoryAllocator::MemAlloc(0x68, 8);           // LEA EDX,[RBP+0x68] / LEA R8D,[RBP+8]
+    // The raw 0x68-byte block, typed once as the ImageBuffer built in it.
+    Video::ImageBuffer* const image = static_cast<Video::ImageBuffer*>(
+        System::MemoryAllocator::MemAlloc(0x68, 8));                          // LEA EDX,[RBP+0x68] / LEA R8D,[RBP+8]
     if (image != nullptr) ImageBufferCtor(image);
-    p->_backBufferImage = image;                     // never the ctor's return; see banner
+    _backBufferImage = image;                        // never the ctor's return; see banner
 
     // `MOV RCX,[RAX+0x60]; MOV RAX,[RCX]; CALL [RAX+8]` — slot 1 of the
     // ImageBuffer's platform companion, `this` and nothing else (retail sets no
-    // other argument register). dx11/src/imagebufferdata.cpp:11 names slot 1
-    // "alias the DeviceData color buffer, build an RTV", which is what makes
-    // this member the back buffer rather than a fresh texture.
-    {
-        void* const data = *reinterpret_cast<void**>(
-            reinterpret_cast<uint8_t*>(image) + 0x60);      // faithful: unguarded
-        void** const vt = *reinterpret_cast<void***>(data);
-        reinterpret_cast<void (*)(void*)>(vt[1])(data);
-    }
+    // other argument register): `ImageBufferData::AttachColorBuffer`.
+    // dx11/src/imagebufferdata.cpp:11 names slot 1 "alias the DeviceData color
+    // buffer, build an RTV", which is what makes this member the back buffer
+    // rather than a fresh texture.
+    image->_data->AttachColorBuffer();               // faithful: unguarded
 
     // --- the RenderBuffer over it -------------------------------------------
-    void* const rb = System::MemoryAllocator::MemAlloc(0x30, 8);              // MOV EDX,0x30 / LEA R8D,[RDX-0x28]
+    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(
+        System::MemoryAllocator::MemAlloc(0x30, 8));                          // MOV EDX,0x30 / LEA R8D,[RDX-0x28]
     if (rb != nullptr) {
         // Three qword zero stores INSIDE the success arm, then PlatformConstruct
         // — the same shape saveload_draw.cpp:497 transcribed for the standalone
         // RenderBuffer it builds.
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferZeroHeader(rb);
         RenderBufferPlatformConstruct(rb);
     }
-    p->_sourceTarget = rb;
+    _sourceTarget = rb;
 
-    RenderBufferCreate(rb, p->_backBufferImage, nullptr);   // XOR R8D,R8D => depth = null
+    RenderBufferCreate(rb, _backBufferImage, nullptr);   // XOR R8D,R8D => depth = null
 }
 
 Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
     Attend("FrameCopyImageBuffer::dtor", g_dtorCalls);
-    RtGraphics::FrameCopyImageBuffer* const p =
-        reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
 
-    if (p->_sourceTarget != nullptr) {               // +0x78
-        RenderBufferPlatformDestruct(p->_sourceTarget);
-        RenderBufferOperatorDelete(p->_sourceTarget);
+    if (_sourceTarget != nullptr) {                  // +0x78
+        RenderBufferPlatformDestruct(_sourceTarget);
+        RenderBufferOperatorDelete(_sourceTarget);
     }
-    if (p->_destTarget != nullptr) {                 // +0x80
-        RenderBufferPlatformDestruct(p->_destTarget);
-        RenderBufferOperatorDelete(p->_destTarget);
+    if (_destTarget != nullptr) {                    // +0x80
+        RenderBufferPlatformDestruct(_destTarget);
+        RenderBufferOperatorDelete(_destTarget);
     }
     if (_backBufferImage != nullptr) {               // +0x70
         // Retail: slot 0 with EDX = 1 -> the deleting destructor frees as well
@@ -426,24 +429,10 @@ Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
 // ============================================================================
 namespace {
 
-struct AnimGroup {          // stride 0x30
-    void*    _f00;          // +0x00  null => skip
-    uint64_t _f08;
-    uint8_t  _nodes[0x10];  // +0x10  Collection::Array<GraphicsMesh::Node>, passed by reference
-    void*    _states;       // +0x20
-    int32_t  _stateCount;   // +0x28
-    int32_t  _f2c;
-};
-static_assert(sizeof(AnimGroup) == 0x30, "AnimationManager group stride is 0x30");
-static_assert(offsetof(AnimGroup, _nodes) == 0x10, "group node array @ +0x10");
-static_assert(offsetof(AnimGroup, _states) == 0x20, "group state array @ +0x20");
-static_assert(offsetof(AnimGroup, _stateCount) == 0x28, "group state count @ +0x28");
-
-struct AnimTransform {      // Math::Transform — Quaternion then Vector3, 0x1c bytes
-    float q[4];
-    float t[3];
-};
-static_assert(sizeof(AnimTransform) == 0x1c, "Math::Transform is 28 bytes");
+// B.4: the file-local `AnimGroup` (stride 0x30) and `AnimTransform` PODs are
+// gone. The group is `Graphics::AnimationManager::Instance` (`_group` +0x00,
+// `_nodes` +0x10, `_states` +0x20 / count +0x28, AnimationManager.h's asserts)
+// and the transform is `Math::Transform`.
 
 // The nine-argument `RT_EXPORT_ONCE` forwarder onto
 // `?Update@AnimationState@Graphics@@` that used to sit here is GONE: block GC
@@ -503,30 +492,22 @@ void AnimationManager::Update(const System::Time& time, bool rootOnly) {
     if (_instances._size <= 0) return;             // [RCX+8], Array::_size
 
     for (;;) {
-        uint8_t* const groupBase = _instances._data;    // [RCX], reloaded each pass
-        ::AnimGroup* const g = reinterpret_cast<::AnimGroup*>(groupBase + groupIndex * 0x30);
+        Instance* const g = &_instances._data[groupIndex];  // [RCX], reloaded each pass
 
-        if (g->_f00 != nullptr && g->_stateCount > 0) {
+        if (g->_group != nullptr && g->_states._size > 0) {
             // Control 5 hoists this bound. It is the EFFECTIVENESS control and
             // is EXPECTED TO REPORT NOT CAUGHT: nothing reachable here grows the
             // array, so the hoist is genuinely unobservable and a control set in
             // which every control fires proves only that the controls were
             // picked to fire (reference_probe_needs_an_effectiveness_control.md).
-            for (int32_t i = 0; i < g->_stateCount; ++i) {
-                uint8_t* const state =
-                    static_cast<uint8_t*>(g->_states)
-                    + static_cast<int64_t>(i) * 0x48;
+            for (int32_t i = 0; i < g->_states._size; ++i) {
+                AnimationState* const state = &g->_states._data[i];   // stride 0x48
 
                 // Rebuilt inside the loop, exactly as retail does (the callee
                 // takes it by const reference and could keep the address).
-                ::AnimTransform base;
-                base.q[0] = 0.0f; base.q[1] = 0.0f; base.q[2] = 0.0f;
-                base.q[3] = 1.0f;                      // [0x18016169c] == 00 00 80 3f
-                base.t[0] = 0.0f; base.t[1] = 0.0f; base.t[2] = 0.0f;
-
-                void* interp38 = *reinterpret_cast<void**>(state + 0x38);  // 5th arg
-                void* interp28 = *reinterpret_cast<void**>(state + 0x28);  // 6th arg
-                void* const outVec3 = state + 0x18;                        // 7th arg
+                // `Transform()`: rotation (0,0,0) with w = 1.0f
+                // ([0x18016169c] == 00 00 80 3f), translation zero.
+                const Math::Transform base;
 
                 // ?Update@AnimationState@Graphics@@QEAA_NAEBVTime@System@@AEBV?$Array@
                 // UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$
@@ -534,26 +515,23 @@ void AnimationManager::Update(const System::Time& time, bool rootOnly) {
                 // retail 0x1800fdb20 -- eight parameters plus `this`, in the order
                 // that mangled name gives them. The 9th is retail's literal 0
                 // (MOV byte [RSP+0x40],0), NOT the bool this function was given.
-                reinterpret_cast<Graphics::AnimationState*>(state)      // B.3.5 bridge
-                    ->Graphics::AnimationState::Update(
-                        time,
-                        *reinterpret_cast<const Collection::Array<uint8_t>*>(&g->_nodes),
-                        *reinterpret_cast<const Math::Transform*>(&base),
-                        interp38, interp28,
-                        *reinterpret_cast<Math::Vector3*>(outVec3),
+                // 5th arg `_nodes._data` (+0x38), 6th `_pose._data` (+0x28),
+                // 7th `_rootOffset` (+0x18).
+                state->Graphics::AnimationState::Update(
+                        time, g->_nodes, base,
+                        state->_nodes._data, state->_pose._data,
+                        state->_rootOffset,
                         rootOnly, false);
 
                 // Write the identity-rotation Transform carrying the Vector3 the
-                // callee produced into *state->_interp28. `_interp28` is RE-READ
-                // (`MOV RAX,[RDI+0x28]` at 0x1800fc33b) rather than reused.
-                uint8_t* const dst = *reinterpret_cast<uint8_t**>(state + 0x28);
-                const uint32_t* const src =
-                    reinterpret_cast<const uint32_t*>(state + 0x18);
-                float* const dq = reinterpret_cast<float*>(dst);
-                dq[0] = 0.0f; dq[1] = 0.0f; dq[2] = 0.0f;
-                dq[3] = 1.0f;
-                uint32_t* const dt = reinterpret_cast<uint32_t*>(dst + 0x10);
-                dt[0] = src[0]; dt[1] = src[1]; dt[2] = src[2];   // integer moves, see §5.3
+                // callee produced into *state->_pose._data. `_pose._data` is
+                // RE-READ (`MOV RAX,[RDI+0x28]` at 0x1800fc33b) rather than reused.
+                Math::Transform* const dst = state->_pose._data;
+                dst->rotation.x = 0.0f; dst->rotation.y = 0.0f; dst->rotation.z = 0.0f;
+                dst->rotation.w = 1.0f;
+                // A trivially-copyable struct copy: bit-exact, as retail's three
+                // integer moves are (see §5.3).
+                dst->translation = state->_rootOffset;
 
                 ++::g_animUpdStates;
             }
@@ -593,9 +571,8 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
     // slot 3 of the platform companion, "create the texture and all its views"
     // (dx11/src/imagebufferdata.cpp:13), taking the level-descriptor array.
     // TWO arguments: retail sets RCX and RDX and nothing else.
-    void* const data = _data;                          // +0x60
-    void** const vt = *reinterpret_cast<void***>(data);
-    const bool ok = reinterpret_cast<bool (*)(void*, void*)>(vt[3])(data, levels);
+    // `ImageBufferData::Create(levels)`, by name.
+    const bool ok = _data->Create(levels);             // +0x60
     if (!ok) return false;                              // TEST AL,AL / JZ -> return AL
 
     // The second RenderBuffer, this time with `this` as the colour attachment.
@@ -604,11 +581,10 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
     // 0x1800a3be2. Same five instructions as the inlined form in the ctor, and
     // MemAlloc(0x30, 8) is that body (see the MemAlloc note above), so this is
     // spelled the same way for one arena and one reader.
-    void* const rb = System::MemoryAllocator::MemAlloc(0x30, 8);
+    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(
+        System::MemoryAllocator::MemAlloc(0x30, 8));
     if (rb != nullptr) {
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferZeroHeader(rb);
         RenderBufferPlatformConstruct(rb);
     }
     _destTarget = rb;                                   // +0x80
@@ -636,11 +612,10 @@ void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
     Attend("FrameCopyImageBuffer::Generate BLIT", g_generateCopies);
 
     // rax = _destTarget (+0x80); rcx = rax->platformData (+0x28); r8 = _sourceTarget.
-    void* const data = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(_destTarget) + 0x28);   // faithful: unguarded
-    void** const vt = *reinterpret_cast<void***>(data);
-    reinterpret_cast<void (*)(void*, void*, void*, bool)>(vt[3])(
-        data, context, _sourceTarget, true);
+    // `RenderBufferData::Resolve` (slot 3). LEFT: `RenderBuffer::platformData`
+    // is `void*` (Device.h), viewed once as the companion it is.
+    static_cast<Video::RenderBufferData*>(_destTarget->platformData)   // faithful: unguarded
+        ->Resolve(context, _sourceTarget, true);
 
     const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]
 }

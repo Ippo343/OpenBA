@@ -52,6 +52,10 @@ public:
     int         GetDefaultState() const override { return 0; }    // [16] 0x140003730
     Controller* GetController() override { return &_controller; } // [17] 0x140004080
 
+    // The per-frame handler of state 0 (RCX = [node+0x18] = this): sweep the footprint
+    // and absorb loose raw materials into the entity's storage.
+    char State0Tick();                                            // 0x140105950
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
 };

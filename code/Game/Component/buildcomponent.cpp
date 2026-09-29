@@ -16,6 +16,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Component/BuildComponent.h"
 #include "Component/MultiObjectComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
@@ -93,16 +94,13 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
 // time, for components whose +0x20 bit 0 is set (BuildComponent's flags are 0x83, so
 // it qualifies). It is NOT a per-frame draw-tick: verified 2026-07-27, the function's
 // only xref is 0x140162290 == vtable_BuildComponent(0x140162260) + 0x30, and +0x40
-// (index 8) is 0x140118a70, a shared empty `return;` stub. The name below is kept as
-// *_DrawReimpl only because callers and the address registry already use it; Ghidra's
-// "Draw" label is the familiar slot-6 mislabel.
+// (index 8) is 0x140118a70, a shared empty `return;` stub. Ghidra's "Draw" label is
+// the familiar slot-6 mislabel. The body is BuildComponent::FillModelLists.
 //
-// Wiring is DEFAULT-ON via BANISHED_LIVE_BUILD_ONADDED (kill-switch =0) — see
-// BuildComponent_InstallMsgSlot.
-// Faithful port of the Ghidra decompilation. The exe-internal helpers are called
-// directly: 0x140003f60 ActCNR_FindComponent_3f60 (ModelComponent), 0x140026a30
-// BuildComponent_FindStorage26a30, 0x140004740 InteractComponent_FindWorkplaceComponent,
-// 0x140128f50 PickingComponent_RegisterMesh.
+// Faithful port of the Ghidra decompilation. The finders are
+// ComponentEntity::FindComponent<T>: 0x140003f60 (ModelComponent), 0x140026a30
+// (PickingComponent), 0x140004740 (MultiObjectComponent); 0x140128f50 is
+// PickingComponent_RegisterMesh.
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call sites below.
 // Type-id VALUES. The .rdata globals are never seeded (ResolveAddr(Exe,.rdata)==NULL)
@@ -132,17 +130,17 @@ static void LatchDrawTypeIds() {
     s_bcDrawResolved = true;
 }
 
-// Scan an entity's component list (compHost+0x30 array, +0x38 count) for the
-// first component whose GetTypeId (vtable+0x10) == typeId; verify with IsDerivedFrom.
-static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
+// Scan an entity's component list (_components / _componentCount) for the first
+// component whose Type() (slot 2) == typeId; verify with IsDerivedFrom. The tree's
+// null-type and null-slot guards are the tree's own (retail's inlined finder has
+// neither); they are kept, not extended.
+static Component* BC_FindComponentByType(ComponentEntity* compHost, uint32_t typeId) {
     if (!typeId) return nullptr;
-    int count = *(int*)(compHost + 0x38);
-    int64_t arr = *(int64_t*)(compHost + 0x30);
+    int count = compHost->_componentCount;
     for (int i = 0; i < count; i++) {
-        int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-        void* comp = (void*)*slot;
+        Component* comp = compHost->_components[i].Get();
         if (!comp) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
+        uint32_t tid = comp->Type();
         if (tid == typeId) {
             if (::Object::IsDerivedFromNullSafe(comp, typeId)) return comp;
             return nullptr;
@@ -151,15 +149,13 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
     return nullptr;
 }
 
-void BuildComponent_DrawReimpl(void* selfP);   // body, 0x140108720
-
-void BuildComponent_DrawReimpl(void* selfP) {
+// 0x140108720, the OnAdded body.
+void BuildComponent::FillModelLists() {
     LatchDrawTypeIds();
-    int64_t* self = (int64_t*)selfP;
 
     if (GameUpdateLoop::_singleton == nullptr) return;
     // NOTE: the instant-build gate that used to sit here has MOVED to
-    // BuildComponent_OnAddedVSlot, because that is where retail keeps it. 0x140108d40 is
+    // OnAdded, because that is where retail keeps it. 0x140108d40 is
     // only a 4-instruction thunk:
     //     MOV RAX,[0x1401c3dd8]; TEST byte [RAX+0xd0],0x1; JZ 0x140108720; RET
     // The gate is in the THUNK; the body at 0x140108720 is ungated and has two callers —
@@ -168,55 +164,44 @@ void BuildComponent_DrawReimpl(void* selfP) {
     // would wrongly suppress that second caller, since it runs precisely when the bit IS
     // set — and that caller is the whole insta-build completion path.
 
-
-
     // --- Stage 1: append the site's own ModelComponent (whose +0x18 ModelDescription
     //     has a non-empty frame group) to the +0x58 mesh list / +0x68 storage list.
-    int64_t multiBuf = 0;
-    ActCNR_FindComponent_3f60(static_cast<uintptr_t>(self[2]), &multiBuf);
-    if (multiBuf != 0) {
-        ActCNR_FindComponent_3f60(static_cast<uintptr_t>(self[2]), &multiBuf);
-        void* objBase = *(void**)(multiBuf + 0x18);
-        void* multi = (s_tid_ModelDesc &&
-                       ::Object::IsDerivedFromNullSafe(objBase, s_tid_ModelDesc)) ? objBase : nullptr;
-        if (multi && *(int*)((uintptr_t)multi + 0x28) > 0) {
-            int64_t b1 = 0;
-            ActCNR_FindComponent_3f60(static_cast<uintptr_t>(self[2]), &b1);
+    if (_entity->FindComponent<ModelComponent>() != nullptr) {
+        Description* objBase = _entity->FindComponent<ModelComponent>()->_description;
+        ModelDescription* multi = (s_tid_ModelDesc &&
+                       ::Object::IsDerivedFromNullSafe(objBase, s_tid_ModelDesc))
+                                      ? static_cast<ModelDescription*>(objBase) : nullptr;
+        if (multi && multi->_meshGroupCount > 0) {
+            Object::InternalPtr<ModelComponent> b1(_entity->FindComponent<ModelComponent>());
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &b1);
-            int64_t b2 = 0;
-            BuildComponent_FindStorage26a30(self[2], &b2);
-            GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &b2);
+            GameColl::AsArray<GameColl::Ptr8>(&modelComponents).SetSizeFill(modelComponentCount + 1, &b1);
+            Object::InternalPtr<PickingComponent> b2(_entity->FindComponent<PickingComponent>());
+            GameColl::AsArray<GameColl::Ptr8>(&pickingComponents).SetSizeFill(pickingComponentCount + 1, &b2);
         }
     }
 
-    // --- Stage 2: iterate the owner workplace's job hosts, collecting the
-    //     Build component and Storage component of each into +0xb / +0xd lists.
-    int64_t workBuf = 0;
-    InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(self[2]), &workBuf);
-    if (workBuf != 0) {
-        InteractComponent_FindWorkplaceComponent(static_cast<uintptr_t>(self[2]), &workBuf);
-        int jobCount = *(int*)(workBuf + 0x50);
+    // --- Stage 2: iterate the MultiObjectComponent's child entities, collecting the
+    //     ModelComponent and PickingComponent of each into the two lists.
+    if (_entity->FindComponent<MultiObjectComponent>() != nullptr) {
+        MultiObjectComponent* multiObj = _entity->FindComponent<MultiObjectComponent>();
+        // LEFT: the child count is the low dword of the untyped +0x50 (MultiObjectComponent.h, COMP-d)
+        int jobCount = *reinterpret_cast<int*>(&multiObj->field50);
         for (int j = 0; j < jobCount; j++) {
-            int64_t host = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
-            void* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
-            int64_t ib1 = 0;
-            new (&ib1) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
-            GameColl::AsArray<GameColl::Ptr8>(self + 0xb).SetSizeFill((int)self[0xc] + 1, &ib1);
+            ComponentEntity* host = multiObj->field48[j].Get();
+            Component* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
+            Object::InternalPtr<Component> ib1(buildComp);
+            GameColl::AsArray<GameColl::Ptr8>(&modelComponents).SetSizeFill(modelComponentCount + 1, &ib1);
 
-            int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
-            void* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
-            int64_t ib2 = 0;
-            new (&ib2) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(storeComp));   // B.3.3 bridge
-            GameColl::AsArray<GameColl::Ptr8>(self + 0xd).SetSizeFill((int)self[0xe] + 1, &ib2);
+            ComponentEntity* host2 = multiObj->field48[j].Get();
+            Component* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
+            Object::InternalPtr<Component> ib2(storeComp);
+            GameColl::AsArray<GameColl::Ptr8>(&pickingComponents).SetSizeFill(pickingComponentCount + 1, &ib2);
         }
     }
 
 
-    // --- Stage 3: walk our collected Build list (+0xb / count +0xc), driving each
-    //     child's job hosts; finalise Storage list entries via Entity_impl_8f50.
+    // --- Stage 3: walk the collected model list, resetting each model to
+    //     build-controlled; register each picking entry via Entity_impl_8f50.
     //
     // NOTE (2026-07-27): the `mark >= 0` branch below is retail's "reset this model to
     // build-controlled" — hide it via the model's +0x38, stamp modelVariant = -1 — so the
@@ -225,79 +210,66 @@ void BuildComponent_DrawReimpl(void* selfP) {
     // 8). Retail does not special-case that here; it suppresses this whole function via
     // the instant-build bit at the top (gw+0xd0 bit 0), which the start-town spawner sets
     // across each building's setup + RegisterEntity. See StartTown_SpawnStructures.
-    int buildCount = (int)self[0xc];
+    int buildCount = modelComponentCount;
     for (int i = 0; i < buildCount; i++) {
-        int64_t arrB = self[0xb];
-        int64_t* slot = (int64_t*)(arrB + (int64_t)i * 8);
-        int64_t* node = (int64_t*)*slot;
-        int16_t mark = *(int16_t*)((uintptr_t)node + 0x166);
+        ModelComponent* node = modelComponents[i].Get();
+        int16_t mark = node->meshIndex;
         if (mark == -1) {
-            int64_t host = node[2];
-            int hc = *(int*)(host + 0x38);
+            ComponentEntity* host = node->_entity;
+            int hc = host->_componentCount;
             for (int k = 0; k < hc; k++) {
-                int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
                 // Retail passes EDX = 0 here too (0x140108a2e XOR EDX,EDX before
                 // CALL [RAX+0x60] at 0x140108a33); the old C call dropped it.
-                reinterpret_cast<Component*>(h)->OnEvent(0);   // B.3.x bridge (slot 12)
+                host->_components[k].Get()->OnEvent(0);   // slot 12
             }
         } else {
             if (mark >= 0) {
-                reinterpret_cast<Component*>(node)->OnRemove();   // B.3.x bridge (slot 7)
+                node->OnRemove();   // slot 7
             }
-            *(int16_t*)((uintptr_t)node + 0x166) = (int16_t)0xffff;
-            int64_t host = node[2];
-            int hc = *(int*)(host + 0x38);
+            node->meshIndex = (int16_t)0xffff;
+            ComponentEntity* host = node->_entity;
+            int hc = host->_componentCount;
             for (int k = 0; k < hc; k++) {
-                int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
-                reinterpret_cast<Component*>(h)->OnEvent(0);   // B.3.x bridge (slot 12)
+                host->_components[k].Get()->OnEvent(0);   // slot 12
             }
         }
-        int64_t* sslot = (int64_t*)(self[0xd] + (int64_t)i * 8);
-        if (*sslot != 0) {
-            PickingComponent_RegisterMesh((void*)*sslot);   // 0x140128f50
+        if (pickingComponents[i].Get() != nullptr) {
+            PickingComponent_RegisterMesh(pickingComponents[i].Get());   // 0x140128f50
         }
     }
 
-    // --- Stage 4: progress = 1; then read the WorkplaceComponent's progress at +0xb*8.
-    *(int*)((uintptr_t)self + 0x4c) = 1;
-    void* wp = BC_FindComponentByType(self[2], s_tid_MultiObj);
-    int64_t wpIbp = 0;
-    new (&wpIbp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
-    if (wpIbp != 0) {
-        void* wp2 = BC_FindComponentByType(self[2], s_tid_MultiObj);
-        new (&wpIbp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(wp2));   // B.3.3 bridge
-        // Retail: bc+0x4c = WorkPlaceComponent+0x58 (the build-effort multiplier). In the
-        // standalone exe the WorkPlaceComponent lifecycle is inert, so +0x58 stays 0 — which
+    // --- Stage 4: multiplier = 1; then the MultiObjectComponent's +0x58.
+    costMultiplier = 1;
+    Component* wp = BC_FindComponentByType(_entity, s_tid_MultiObj);
+    if (wp != nullptr) {
+        MultiObjectComponent* wp2 = static_cast<MultiObjectComponent*>(
+            BC_FindComponentByType(_entity, s_tid_MultiObj));
+        // Retail: bc+0x4c = MultiObjectComponent+0x58 (the build-effort multiplier). In the
+        // standalone exe the lifecycle is inert, so +0x58 can stay 0 — which
         // would clobber the default 1 set above and collapse the build target
         // (matComp[0x30] * bc[0x4c]) to 0. Two downstream failures follow: (1) BC8_Target has
         // to clamp it back to 1 for the mesh ramp, and (2) BuildComplete_Impl (the EntityUI
         // page-routing predicate, retail 0x140109390) reads `totalRequired * bc[0x4c] <=
         // bc[0x48]` == `0 <= 0` and reports the build COMPLETE the instant materials arrive
         // (1->8) — flipping the dialog from the build page to the operational page while the
-        // building is still under construction (labor not yet done). Only adopt the workplace
+        // building is still under construction (labor not yet done). Only adopt the
         // value when it's a valid positive multiplier (same clamp State1Enter applies); keep
         // the default 1 otherwise, so the target stays matComp[0x30] and routing stays "under
         // construction" until the labor accumulator (bc+0x48) actually reaches it.
-        int wpMult = (int)((int64_t*)wpIbp)[0xb];
+        int wpMult = (int)wp2->multiCount;
         if (wpMult > 0)
-            *(int*)((uintptr_t)self + 0x4c) = wpMult;
+            costMultiplier = wpMult;
     }
 
 }
 
 // ============================================================
-// Reimpl of FUN_140026a30 (BuildComponent find first StorageComponent child)
+// Reimpl of FUN_140026a30 (FindComponent<PickingComponent>)
 // ============================================================
-// Scan the compHost's component list (+0x30 array of IBP, +0x38 count) for the
-// first component whose GetTypeId (vtable+0x10) == StorageComponent type id
-// (DAT_1401c7c10); verify with IsDerivedFrom; construct an IBP into retbuf.
-// Closure: CheckPtr / IsDerivedFrom / InternalBasePtr_Ctor (all engine).
 // Returns retbuf (caller passes &out).
 void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
     return new (retbuf) ::Object::InternalPtr<PickingComponent>(
-        reinterpret_cast<ComponentEntity*>(compHost)->FindComponent<PickingComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(compHost)->FindComponent<PickingComponent>());   // B4 FORWARD: 2 outside callers (destroycomponent_state6.cpp, fencedtool_calcpath.cpp)
 }
 
 // ============================================================================
@@ -322,13 +294,18 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
 //  it is resolved up the SM node chain.)
 using BuildCtrlDispatch = ::ControllerLive::Dispatcher<BuildCtrlTag>;
 
-// Ported state handlers (buildcomponent_state1.cpp / buildcomponent_state8.cpp).
-extern "C" int  BuildComponent_State1Enter(void* buildComp, void* smNode);   // sub_8290 (slot +0x18)
-extern "C" char BuildComponent_State1Update(void* buildComp, void* sm);      // sub_81e0 (slot +0x38, per-frame)
-extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm);       // sub_7ae0 (slot +0x18)
-extern "C" char BuildComponent_State8Update(void* buildComp, void* sm);      // sub_76e0 (slot +0x38, per-frame)
-extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm);     // sub_7600 (slot +0x20, exit-transition)
-extern "C" char BuildComponent_State8To2Action(void* buildComp);             // sub_75e0 (slot +0x28, 8->2 action)
+// The state handlers are BuildComponent members (buildcomponent_state1.cpp /
+// buildcomponent_state8.cpp). The table (controller_state_table.h) holds plain
+// handler addresses called as handler([node+0x18], sm): [node+0x18] is the
+// controller's back-pointer, this component, so each entry is a one-line
+// adapter that calls the member on it. The null-receiver returns are the tree's
+// (retail's handlers have none); kept, not extended.
+static int  BuildState1Enter(BuildComponent* bc, void* sm)   { return bc ? bc->State1Enter(sm) : 1; }    // sub_8290 (slot +0x18)
+static char BuildState1Update(BuildComponent* bc, void* sm)  { return bc ? bc->State1Update(sm) : 1; }   // sub_81e0 (slot +0x38, per-frame)
+static char BuildState8Enter(BuildComponent* bc, void* sm)   { return bc ? bc->State8Enter(sm) : 1; }    // sub_7ae0 (slot +0x18)
+static char BuildState8Update(BuildComponent* bc, void* sm)  { return bc ? bc->State8Update(sm) : 1; }   // sub_76e0 (slot +0x38, per-frame)
+static char BuildState8OneShot(BuildComponent* bc, void* sm) { return bc ? bc->State8OneShot(sm) : 1; }  // sub_7600 (slot +0x20, exit-transition)
+static char BuildState8To2Action(BuildComponent* bc)         { return bc ? bc->State8To2Action() : 0; }  // sub_75e0 (slot +0x28, 8->2 action)
 
 // Table field->node-slot mapping (see controller_state_table.h + buildcomponent_state8.cpp):
 //   enterHandler (arg2) -> slot +0x18 Enter        (on state entry)
@@ -342,16 +319,16 @@ static void BuildComponent_PopulateStateTable() {
     StateTable& t = BuildCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
     // state 1: enter=State1Enter (spawner); per-frame=State1Update (materials -> req 8).
-    TableRegisterState(t, 1, reinterpret_cast<void*>(&BuildComponent_State1Enter),
-                       nullptr, reinterpret_cast<void*>(&BuildComponent_State1Update), nullptr);
+    TableRegisterState(t, 1, reinterpret_cast<void*>(&BuildState1Enter),
+                       nullptr, reinterpret_cast<void*>(&BuildState1Update), nullptr);
     TableAddTransition(t, 8, nullptr);
     TableAddTransition(t, 3, nullptr);
     // state 8: enter=State8Enter (mesh reset); per-frame=State8Update (progress -> frames,
     //          complete -> req 2); exit-transition=State8OneShot; 8->2 action=Finalize.
-    TableRegisterState(t, 8, reinterpret_cast<void*>(&BuildComponent_State8Enter),
-                       nullptr, reinterpret_cast<void*>(&BuildComponent_State8Update),
-                       reinterpret_cast<void*>(&BuildComponent_State8OneShot));
-    TableAddTransition(t, 2, reinterpret_cast<void*>(&BuildComponent_State8To2Action));
+    TableRegisterState(t, 8, reinterpret_cast<void*>(&BuildState8Enter),
+                       nullptr, reinterpret_cast<void*>(&BuildState8Update),
+                       reinterpret_cast<void*>(&BuildState8OneShot));
+    TableAddTransition(t, 2, reinterpret_cast<void*>(&BuildState8To2Action));
     TableAddTransition(t, 3, nullptr);
     TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
@@ -396,102 +373,76 @@ void* BuildComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BuildComponent());
 }
 
-// [3] 0x140108d80 — buildState/buildProgress/buildFlag (+0x48/+0x4c/+0x50) and both
-// entity-IBP lists round-trip (save/load wave 2026-08-27).
+// [3] 0x140108d80 — laborProgress/costMultiplier/buildFlag (+0x48/+0x4c/+0x50) and
+// both component lists round-trip (save/load wave 2026-08-27).
 void BuildComponent::Persist(void* stream) {
-    uintptr_t s = (uintptr_t)this;
-
     // Base class serialize (retail's direct CALL 0x1401189b0)
     Component::Persist(stream);
 
+    IO::Stream& io = *reinterpret_cast<IO::Stream*>(stream);   // Persist's stream parameter is void* (Object::Base)
+
     // Version 0 block (empty — just opens and closes)
-    alignas(8) uint8_t ser0[24];
-    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();                                       // B.3.4 bridge
+    { IO::Serializer ser0(io, 0); }
 
     // Version 1 block
-    alignas(8) uint8_t ser1[24];
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer ser1(io, 1);
 
-    // Serialize buildState (+0x48), buildProgress (+0x4C), buildFlag (+0x50)
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x4C), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x50), nullptr);   // B.3.4 bridge
+    ser1.Serialize(laborProgress, nullptr);
+    ser1.Serialize(costMultiplier, nullptr);
+    ser1.Serialize(buildFlag, nullptr);
 
-    // Serialize entityArray1 count (+0x60)
-    int count1 = *(int*)(s + 0x60);
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count1, nullptr);   // B.3.4 bridge
+    // the model list's count (+0x60)
+    int count1 = modelComponentCount;
+    ser1.Serialize(count1, nullptr);
 
     // On load: resize array
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    if (static_cast<int>(ser1.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
-        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x58).SetSize(count1);
+        GameColl::AsArray<GameColl::Ptr8>(&modelComponents).SetSize(count1);
     }
 
-    // Serialize each IBP in array1, validate with IsDerivedFrom
-    void** arr1 = *(void***)(s + 0x58);
+    // Serialize each element, nulled unless IsDerivedFrom ModelComponent (ti 0x1401c7a50)
+    Object::InternalPtr<ModelComponent>* arr1 = modelComponents;
     if (count1 > 0) {
         for (int i = 0; i < count1; i++) {
-            void* ibp = (void*)((uintptr_t)arr1 + i * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
-            // Validate: if non-null but wrong type, clear
-            void* val = *(void**)ibp;
-            if (val != nullptr) {
-                bool valid = ::Object::IsDerivedFromNullSafe(val, ModelComponent::TypeId());   // ti 0x1401c7a50
-                if (!valid) {
-                    *(uint64_t*)ibp = 0;
-                }
-            }
+            arr1[i].Serialize(ser1, ModelComponent::TypeId());
         }
     }
 
-    // Serialize entityArray2 count (+0x70)
-    int count2 = *(int*)(s + 0x70);
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count2, nullptr);   // B.3.4 bridge
+    // the picking list's count (+0x70)
+    int count2 = pickingComponentCount;
+    ser1.Serialize(count2, nullptr);
 
     // On load: resize array2
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    if (static_cast<int>(ser1.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
-        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x68).SetSize(count2);
+        GameColl::AsArray<GameColl::Ptr8>(&pickingComponents).SetSize(count2);
     }
 
-    // Serialize each IBP in array2, validate with IsDerivedFrom
-    void** arr2 = *(void***)(s + 0x68);
+    // Serialize each element, nulled unless IsDerivedFrom PickingComponent (ti 0x1401c7c10)
+    Object::InternalPtr<PickingComponent>* arr2 = pickingComponents;
     if (count2 > 0) {
         for (int i = 0; i < count2; i++) {
-            void* ibp = (void*)((uintptr_t)arr2 + i * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
-            // Validate with PickingComponent type (DAT_1401c7c10)
-            void* val = *(void**)ibp;
-            if (val != nullptr) {
-                bool valid = ::Object::IsDerivedFromNullSafe(val, PickingComponent::TypeId());   // ti 0x1401c7c10
-                if (!valid) {
-                    *(uint64_t*)ibp = 0;
-                }
-            }
+            arr2[i].Serialize(ser1, PickingComponent::TypeId());
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();                                       // B.3.4 bridge
 }
 
-// [6] 0x140108d40 — the real OnAdded broadcast. It fills the mesh (+0x58/+0x60) and
-// picking (+0x68/+0x70) lists from the site's own ModelComponent and from each
-// MultiObjectComponent child, HIDES each collected model (retail's "this model is now
-// build-controlled" transition — a placed foundation carries no building mesh until
-// State8Enter/State8Update sets a construction frame; the spawner's instant-build bit
-// makes the thunk return before that stage for pre-built buildings), and writes
-// +0x4c from MultiObjectComponent+0x58. The body is also reached by address (the
-// door at 0x140108d40, buildcomponent.cpp's own s_fn_Draw_Original), so it stays a
-// free function.
+// [6] 0x140108d40 — the real OnAdded broadcast, a thunk over FillModelLists
+// (0x140108720): it fills the mesh (+0x58/+0x60) and picking (+0x68/+0x70) lists
+// from the site's own ModelComponent and from each MultiObjectComponent child,
+// HIDES each collected model (retail's "this model is now build-controlled"
+// transition — a placed foundation carries no building mesh until
+// State8Enter/State8Update sets a construction frame; the spawner's instant-build
+// bit makes the thunk return before the body for pre-built buildings), and writes
+// +0x4c from MultiObjectComponent+0x58.
 void BuildComponent::OnAdded() {
     if (GameUpdateLoop::_singleton != nullptr) {
-        uintptr_t gw = (uintptr_t)GameUpdateLoop::_singleton;
-        if (*(uint8_t*)(gw + 0xd0) & 1) return;   // instant build -> OnAdded does nothing
+        if (GameUpdateLoop::_singleton->m_gameFlags & 1) return;   // instant build -> OnAdded does nothing (TEST byte [RAX+0xd0],1)
     }
-    BuildComponent_DrawReimpl(this);
+    FillModelLists();
 }
 
 // [7] 0x140108cb0 — the removed-from-world broadcast (NOT OnCreate: misnamed in
@@ -505,14 +456,14 @@ void BuildComponent::OnRemove() {
         return;
 
     // Create InternalBasePtr on stack — original passes this (component ptr)
-    uint8_t ptrBuf[8];
-    new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
+    Object::InternalPtr<BuildComponent> ptrBuf(this);
 
-    void* gameState = GameUpdateLoop::_singleton;
-    void* worldData = *(void**)((uintptr_t)gameState + 0xF0);
+    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the CitizenBehavior
+    // reads below stay by offset.
+    void* worldData = GameUpdateLoop::_singleton->m_citizenList;
 
     // Find in removal queue
-    int idx = BuildComponent_FindInQueue((void*)((uintptr_t)worldData + 0xD0), ptrBuf);
+    int idx = BuildComponent_FindInQueue((void*)((uintptr_t)worldData + 0xD0), &ptrBuf);
 
     if (idx >= 0) {
         int count = *(int*)((uintptr_t)worldData + 0xD8);

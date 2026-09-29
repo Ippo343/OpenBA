@@ -23,6 +23,12 @@
 #include "Action/Action.h"     // B.3.x W0: Action::Enter by name
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "Component/CharacterComponent.h"
+#include "Component/CharacterDescription.h"
+#include "Component/CharacterGrid.h"
+#include "Component/ModelComponent.h"
+#include "Component/PickingComponent.h"
+#include "Entity/ComponentEntity.h"
 
 // Character_UpdateAnimation(arrayBase*, InternalBasePtr*, Time)
 // Located at 0x1400c4f80 in Application-x64.exe; Character_UpdateAnimation_Reimpl below,
@@ -57,18 +63,19 @@
 // whose enabled-flag (+0x18) is set, invokes vtable slot +0x30 (Draw/UpdateAnimation)
 // with (node, arrayBase, deltaTime); advances via node+0x10. Non-static for registration.
 // ============================================================
-void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t deltaTime) {
-    int64_t node = *reinterpret_cast<int64_t*>(ptrRef);
-    while (node != 0) {
-        if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x18) != '\0') {
+void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* deltaTime) {
+    Action* node = *ptrRef;
+    while (node != nullptr) {
+        if ((*ptrRef)->_status) {
             // Action slot 6 (the list is the action stack's node chain: +0x18 status,
             // +0x10 next). `deltaTime` is the Time* CharacterComponent::Update received
             // (0x1401094a8 `MOV R8,RDX`), passed through as retail's R8.
-            reinterpret_cast<Action*>(*reinterpret_cast<int64_t**>(ptrRef))
-                ->Enter(arrayBase, reinterpret_cast<void*>(deltaTime));   // B.3.x bridge (slot 6)
+            (*ptrRef)->Enter(arrayBase, deltaTime);   // slot 6
         }
-        node = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x10);
-        *reinterpret_cast<int64_t*>(ptrRef) = node;
+        // LEFT: Action's +0x10 is declared as the InternalBasePtr `_entity` (ACT's header);
+        // this walk reads it as the next node.
+        node = reinterpret_cast<Action*>((*ptrRef)->_entity.Get());
+        *ptrRef = node;
     }
 }
 
@@ -91,17 +98,16 @@ void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t del
 // inert => byte-unchanged. Finds are self-contained over the class's TypeId()
 // (ENDGAME B.3.9 TR: was a by-name lookup of the same record).
 // ------------------------------------------------------------------
-static void* CharComp_FindSiblingByTypeId(int64_t ownerEntity, uint32_t want) {
+// The tree's null-entity, bad-id and null-slot guards are its own (retail's
+// FindComponent<T> instances have none); kept, not extended.
+static Component* CharComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, uint32_t want) {
     if (!ownerEntity) return nullptr;
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;
-    uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
-    int count = *reinterpret_cast<int*>(e + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
+    int count = ownerEntity->_componentCount;
     for (int i = 0; i < count; i++) {
-        void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-        void* comp = *ibp;
+        Component* comp = ownerEntity->_components[i].Get();
         if (!comp) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
+        uint32_t tid = comp->Type();
         if (tid == want)
             return ::Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
     }
@@ -109,7 +115,6 @@ static void* CharComp_FindSiblingByTypeId(int64_t ownerEntity, uint32_t want) {
 }
 
 // Char spatial-hash manager registrar (charmanager.cpp) — allocates the char render-index.
-extern "C" int64_t CharMgr_sub_83f0(float* mgr, int64_t* ibp);
 
 // ------------------------------------------------------------------
 // Brick 4b — per-tick move/anim tick + action executor (0x1401094c0).
@@ -155,7 +160,6 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
 // query then reads the stale slot's entity +0x68 -> +0x160 and faults on freed memory.
 // Gated with the same flag as the allocation so the two halves can never be on separately.
 // ------------------------------------------------------------------
-extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
 
 // ============================================================================
 // ENDGAME B.3.8 CIT — CharacterComponent as a REAL class (CharacterComponent.h).
@@ -187,8 +191,6 @@ CharacterComponent::CharacterComponent()
 // [4] 0x140109a30 — sibling finds + description adoption; the tree also folds the
 // OnAdd char-index allocation in here (see CharacterComponent_BodyInit).
 void CharacterComponent::Startup() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-
     // ctor (0x140109d20) sentinels: +0x40 grid-index = -1, +0x60 action-stack top
     // = -1 (EMPTY stack — a freshly spawned citizen has no queued actions). This is
     // faithful AND required for Brick 3: the CitizenAI Phase-8 check reads
@@ -197,19 +199,20 @@ void CharacterComponent::Startup() {
     // (CheckEducation/CheckAge/TransitionState) to assign a state. (Brick 3 ports
     // that path + guards it crash-safe; the move-tick/executor is still inert, so
     // -1 never drives the executor on an empty stack.)
-    *reinterpret_cast<int32_t*>(p + 0x40) = -1;
-    *reinterpret_cast<int32_t*>(p + 0x60) = -1;
+    characterIndex = -1;
+    currentAction = -1;
 
     // Startup (0x140109a30): find sibling components + adopt the description.
-    int64_t owner = *reinterpret_cast<int64_t*>(p + 0x10);
+    ComponentEntity* owner = _entity;
     if (!owner) return;
 
     // +0x68 = ModelComponent (geometry; +0x158 = world position).
-    *reinterpret_cast<void**>(p + 0x68) = CharComp_FindSiblingByTypeId(owner, ModelComponent::TypeId());
+    modelComponent = static_cast<ModelComponent*>(CharComp_FindSiblingByTypeId(owner, ModelComponent::TypeId()));
     // +0x70 = PickingComponent.
-    *reinterpret_cast<void**>(p + 0x70) = CharComp_FindSiblingByTypeId(owner, PickingComponent::TypeId());
+    pickingComponent = static_cast<PickingComponent*>(CharComp_FindSiblingByTypeId(owner, PickingComponent::TypeId()));
     // +0x78 = CharacterDescription (trust comp+0x18).
-    *reinterpret_cast<void**>(p + 0x78) = *reinterpret_cast<void**>(p + 0x18);
+    Description* description = _description;
+    characterDescription = static_cast<CharacterDescription*>(description);
 
     // --- OnAdd (0x1401099c0): char render-index allocation — GATES the move-tick TAIL ---
     // The real engine runs OnAdd as a later lifecycle phase; we fold it into Startup-time
@@ -228,46 +231,43 @@ void CharacterComponent::Startup() {
         // tail skips the picking update (the render-transform write via Geometry::SetTransform
         // is unaffected). When the picking subsystem registers citizens via AddMesh, +0x28
         // will hold a real id and this becomes a no-op.
-        void* pickComp = *reinterpret_cast<void**>(p + 0x70);
+        PickingComponent* pickComp = pickingComponent;
         if (pickComp) {
-            *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(pickComp) + 0x28) = -1;
+            pickComp->pickingId = -1;
             // PickingComponent::Startup (exe 0x140128c30) copies the component's entity
             // backref (+0x10) into +0x30 — this is the InternalBasePtr value handed to
             // Picking::Scene::AddMesh as the pick userData (Entity_impl_8f50 param_1[6]),
             // and returned verbatim by GetUserData when the citizen is clicked. The inert
             // standalone factory never runs slot +0x20, so do the copy here so the citizen
             // pick mesh carries a non-null owner (else the click resolves to a null entity).
-            uint8_t* pc = reinterpret_cast<uint8_t*>(pickComp);
-            *reinterpret_cast<void**>(pc + 0x30) = *reinterpret_cast<void**>(pc + 0x10);
+            pickComp->field30 = pickComp->_entity;
         }
 
-        int64_t model = *reinterpret_cast<int64_t*>(p + 0x68);
-        void* gw = GameUpdateLoop::_singleton;
-        void* charMgr = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x88)
-                           : nullptr;
+        ModelComponent* model = modelComponent;
+        // LEFT: GameUpdateLoop::m_characterGrid is void* (W0 header)
+        CharacterGrid* charMgr = GameUpdateLoop::_singleton
+                                     ? reinterpret_cast<CharacterGrid*>(GameUpdateLoop::_singleton->m_characterGrid)
+                                     : nullptr;
         if (model && charMgr) {
             // facing init: CharacterComponent+0x3c = ModelComponent+0x168.
-            *reinterpret_cast<int32_t*>(p + 0x3c) = *reinterpret_cast<int32_t*>(model + 0x168);
+            field_0x3C = model->yaw;
             // wrap this as an InternalBasePtr, register with the manager -> char-index.
-            int64_t selfIbp = 0;
-            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            int64_t ibpArg = selfIbp;
-            *reinterpret_cast<int32_t*>(p + 0x40) =
-                static_cast<int32_t>(CharMgr_sub_83f0(reinterpret_cast<float*>(charMgr), &ibpArg));
+            Object::InternalPtr<CharacterComponent> ibpArg(this);
+            characterIndex = static_cast<int32_t>(charMgr->Register(&ibpArg));
             // BANISHED_MOVETICK_TRACE: one line per char-index allocation. The owner
             // entity ptr correlates with [Herd]/[Pasture] SPAWN traces to prove whether
             // ANIMAL characters ever register (the [MoveTick] trace caps at 4 subjects
             // and cannot answer that).
             if (Opt().movetickTrace) {
                 fprintf(stderr, "[CharIdx] idx=%d char=%p entity=%p model=%p\n",
-                        *reinterpret_cast<int32_t*>(p + 0x40), (void*)this,
-                        (void*)owner, (void*)model);
+                        characterIndex, static_cast<void*>(this),
+                        static_cast<void*>(owner), static_cast<void*>(model));
             }
         }
         else if (Opt().movetickTrace) {
             fprintf(stderr, "[CharIdx] SKIPPED char=%p entity=%p model=%p charMgr=%p\n",
-                    (void*)this, (void*)owner, (void*)*reinterpret_cast<int64_t*>(p + 0x68),
-                    (void*)charMgr);
+                    static_cast<void*>(this), static_cast<void*>(owner), static_cast<void*>(modelComponent),
+                    static_cast<void*>(charMgr));
         }
     }
 }
@@ -279,14 +279,13 @@ void CharacterComponent::OnAdded() {}
 
 // [7] 0x140109980 — release the char index (the other half of the allocation).
 void CharacterComponent::OnRemove() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
+    WorkBase_TaskListCleanup_c5400(&actions);   // 0x1400c5400, the action-stack clear
 
-    WorkBase_TaskListCleanup_c5400(p + 0x48);   // 0x1400c5400, the action-stack clear
-
-    void* gw = GameUpdateLoop::_singleton;
-    int64_t charMgr = gw ? *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(gw) + 0x88)
-                         : 0;
-    int idx = *reinterpret_cast<int32_t*>(p + 0x40);
+    // LEFT: GameUpdateLoop::m_characterGrid is void* (W0 header)
+    CharacterGrid* charMgr = GameUpdateLoop::_singleton
+                                 ? reinterpret_cast<CharacterGrid*>(GameUpdateLoop::_singleton->m_characterGrid)
+                                 : nullptr;
+    int idx = characterIndex;
     // DEVIATION (ours, not retail'this): retail passes +0x40 through unguarded, and
     // impl_8560 writes `slots + idx*0x18` and pushes idx onto the free list without
     // checking it -- so a -1 corrupts memory ahead of the slot array. Retail can do that
@@ -294,9 +293,9 @@ void CharacterComponent::OnRemove() {
     // when it found both a ModelComponent and a seeded gw+0x88, so a CharacterComponent
     // can legitimately still hold the -1 sentinel here. Guard both operands for that
     // reason alone; a character that never registered has nothing to release.
-    if (charMgr && idx >= 0) CharMgr_impl_8560(charMgr, idx);
+    if (charMgr && idx >= 0) charMgr->Release(idx);
 
-    *reinterpret_cast<int32_t*>(p + 0x40) = -1;
+    characterIndex = -1;
 }
 
 // [8] 0x1401094c0 — the move-tick, EVERY FRAME from the EntityList tree walk
@@ -310,22 +309,10 @@ void CharacterComponent::Tick(void* time) {
 // same value to the action's +0x30 as param_3, so it is passed through, not
 // dereferenced.
 void CharacterComponent::Update(void* time) {
-    const int64_t deltaTime = reinterpret_cast<int64_t>(time);   // forwarded raw (see above)
-
     if (currentAction >= 0) {
-        // actions is a pointer to an array of object pointers
-        // currentAction is the index into that array
-        void** objArray = *reinterpret_cast<void***>(&actions);
-        void* obj = objArray[currentAction];
-
-        // Character_UpdateAnimation expects a pointer to the object pointer
-        // (InternalBasePtr is just a pointer-sized wrapper)
-        void* localPtr = obj;
-        Character_UpdateAnimation_Reimpl(
-            reinterpret_cast<void*>(&actions),
-            &localPtr,
-            deltaTime
-        );
+        // actions is the array of action pointers, currentAction the index into it
+        Action* localPtr = actions[currentAction];
+        Character_UpdateAnimation_Reimpl(&actions, &localPtr, time);
     }
 }
 
