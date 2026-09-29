@@ -35,6 +35,8 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 
+namespace UI { class SpriteSheet; }
+
 // The billboard Geometry (retail table 0x14015f0c0, 0xd8 bytes). Bodies in
 // statusicon_geometry.cpp. Before this class the tree COPIED the minted
 // `??_7Geometry@Graphics@@` table and patched slots 2/3 (a D5 slot-copy site).
@@ -51,13 +53,17 @@ public:
     void AddDrawItems(const Graphics::Scene& scene,
                       Graphics::Renderer& renderer) const override;        // [3] 0x1400a9b90
 
-    // The billboard's own 0x18 bytes (written by StatusIconComponent_helper_a440).
+    // 0x1400aa440 (StatusIconComponent_helper_a440, one caller: Startup 0x14012bed0):
+    // the sprite parameters and the local bounds of a stack of `spriteCount` icons.
+    void Setup(float size, int count, uint8_t constant, UI::SpriteSheet* sheet);
+
+    // The billboard's own 0x18 bytes (written by Setup 0x1400aa440).
     float    iconSize;      // +0xc0 (component +0xe8)
     int32_t  spriteCount;   // +0xc4 (component +0xec)
     uint32_t activeMask;    // +0xc8 (component +0xf0) — the persisted icon bits
     uint8_t  constantSize;  // +0xcc (component +0xf4) — camera-constant screen size
     uint8_t  _padCD[3];     // +0xcd
-    void*    spriteSheet;   // +0xd0 (component +0xf8)
+    UI::SpriteSheet* spriteSheet;   // +0xd0 (component +0xf8) StatusIconDescription::_spriteSheet
 };
 
 static_assert(sizeof(StatusIconGeometry) == 0xd8, "the billboard spans component +0x28..+0x100");
@@ -79,6 +85,17 @@ public:
     void OnRemove() override;                                     // [7]  0x14012beb0 TREE DIVERGENCE
     void Tick(void* time) override;                               // [8]  0x14012bbd0
     void Slot11() override;                                       // [11] 0x14012bf40 PORT GAP
+
+    // 0x14012c3f0 (the tree's CitizenComp_FUN_14012c3f0): set / clear icon bit
+    // `flagIndex` in the billboard's activeMask (+0xF0); an empty mask removes the
+    // geometry from the scene, a non-empty one adds it (settings permitting) and
+    // repositions it through Tick; the +0x20 flag 4 follows, and a change notifies
+    // the entity.
+    void SetFlag(uint8_t flagIndex, char value);
+    // The body of [11] 0x14012bf40 (re-run the sprite setup, add the geometry to the
+    // scene when bits are set and it is not there yet). NOT installed in Slot11: the
+    // slot stays the tree's stub (PORT GAP); installing it is a `behaviour:` commit.
+    void ShowAfterLoad();
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     StatusIconGeometry _geometry;  // +0x28 the billboard (vptr 0x14015f0c0 in retail)

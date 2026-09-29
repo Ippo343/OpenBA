@@ -123,7 +123,6 @@ int CitizenComp_Storage_GetResourceCount(int64_t self);  // 0x14012a9d0
 void CitizenComp_sub_1fa0(int64_t selfV, void* param2);  // 0x140111fa0
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2);  // 0x14010ffc0
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2);  // 0x140110470
-void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0
 void CitizenComp_helper_1b90(int64_t selfV);  // 0x140111b90
 int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4);  // 0x14008ef40
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2);  // 0x140111ee0
@@ -240,7 +239,7 @@ bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0 B4 FORWA
 void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, char flag);  // 0x140055780
 
 // ---- statusiconcomponent.cpp
-void StatusIconComponent_GeometrySetup(void* geometry, float param2, int spriteCount, void* param4, void* spriteSheet);  // 0x1400aa440
+void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0 B4 FORWARD: outside callers in 16 files -> StatusIconComponent::SetFlag (moved from citizencomponent.cpp)
 
 // ---- storagecomponent.cpp
 int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70
