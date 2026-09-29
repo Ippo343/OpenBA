@@ -483,7 +483,9 @@ public:
     const VertexBuffer* _vertexBuffers[16];             // 0x00b8
     int32_t  _vertexOffsets[16];                        // 0x0138
     int32_t  _vertexStrides[16];                        // 0x0178
-    const IndexBuffer* _indexBuffer;                    // 0x01b8
+    // LEFT (B.4 R-VIDEO): `const IndexBuffer*` in retail; graphics/meshinstance_draw.cpp
+    // (R-GFX) stores a `const void*` into it by name, so it stays untyped.
+    void*    _indexBuffer;                              // 0x01b8
     int32_t  _indexOffset;                              // 0x01c0
     int32_t  _unknown01c4;                              // 0x01c4
     const RenderState* _renderState;                    // 0x01c8
@@ -542,7 +544,11 @@ public:
         float    invRange;         // +0x48  1.0f / (far - near)
         float    zero4c;           // +0x4c
         float    shadow[4];        // +0x50  1.0f / shadowResolution, 0, 0, 0
-        uint8_t  _unwritten60[0x140];  // +0x60
+        uint8_t  _unwritten60[0x40];   // +0x60
+        // +0xa0 (Context+0x1e78): the shadow matrix the Graphics lights'
+        // WriteShadowMatrix stores (graphics/lights_vtable.cpp).
+        Math::Matrix shadowMatrix;     // +0xa0
+        uint8_t  _unwrittenE0[0xc0];   // +0xe0
     };
     LightStaging _lightStaging;                         // 0x1dd8
 
@@ -622,7 +628,9 @@ static_assert(offsetof(Context::LightStaging, negNearPlane)   == 0x44, "LightSta
 static_assert(offsetof(Context::LightStaging, invRange)       == 0x48, "LightStaging::invRange");
 static_assert(offsetof(Context::LightStaging, zero4c)         == 0x4c, "LightStaging::zero4c");
 static_assert(offsetof(Context::LightStaging, shadow)         == 0x50, "LightStaging::shadow");
-static_assert(offsetof(Context::LightStaging, _unwritten60)   == 0x60, "LightStaging tail");
+static_assert(offsetof(Context::LightStaging, _unwritten60)   == 0x60, "LightStaging +0x60");
+static_assert(offsetof(Context::LightStaging, shadowMatrix)   == 0xa0, "LightStaging::shadowMatrix (Context+0x1e78)");
+static_assert(offsetof(Context::LightStaging, _unwrittenE0)   == 0xe0, "LightStaging tail");
 static_assert(offsetof(Context, _globalConstants)       == 0x1f78, "Context::_globalConstants");
 static_assert(offsetof(Context, _instanceConstants)     == 0x1fc0, "Context::_instanceConstants");
 static_assert(offsetof(Context, _boneConstants)         == 0x2008, "Context::_boneConstants");

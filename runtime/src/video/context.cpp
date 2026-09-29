@@ -503,7 +503,7 @@ void Context::Reset() {
     // being the single memset the disassembly shows. The cast says "yes, bytes"
     // and keeps the transcription.
     std::memset(static_cast<void*>(_transforms), 0, sizeof(_transforms));
-    std::memset(&_lightStaging, 0, sizeof(_lightStaging));
+    std::memset(static_cast<void*>(&_lightStaging), 0, sizeof(_lightStaging));
 
     _transformCount = 0;
     _unknown0024    = 0;   // retail zeroes +0x20 as one qword
