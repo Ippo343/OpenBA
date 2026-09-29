@@ -115,7 +115,7 @@ UNIT_TEST(vis_member_offsets) {
     CHECK_EQ(offsetof(StorageDisplayComponent, displayData1),(size_t)0x30);
     CHECK_EQ(offsetof(TerraformComponent, tileRecord),      (size_t)0x38);
     CHECK_EQ(offsetof(TrackerComponent, trackerId),         (size_t)0x48);
-    CHECK_EQ(offsetof(UIComponent, uiData0),                (size_t)0x28);
+    CHECK_EQ(offsetof(UIComponent, data),                   (size_t)0x28);
     CHECK_EQ(offsetof(WorkComponent, workFlags),            (size_t)0x2c);
     // D6: the two embedded members at +0x28.
     CHECK_EQ(offsetof(StateMachineComponent, _controller),  (size_t)0x28);

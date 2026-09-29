@@ -20,6 +20,26 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+#include "object/Type.h"
+#include "system/String.h"
+namespace UI { class Dialog; }
+
+// +0x30 element (0x28) of UIDescription (Serialize 0x14012de80, dtor 0x140039700 /
+// 0x1400397d0): Object::Type, three ExternalPtrs (0x140027ad0, 0x140039840,
+// 0x140027ad0; their classes not settled here), a String.
+struct UIDescriptionEntry {
+    Object::Type   type;         // +0x00 (Object::Type::Serialize, import 0x1401516b0)
+    uint8_t        _pad04[4];    // +0x04
+    void*          ref08;        // +0x08 ExternalPtr (0x140027ad0)
+    void*          ref10;        // +0x10 ExternalPtr (0x140039840)
+    void*          ref18;        // +0x18 ExternalPtr (0x140027ad0)
+    System::String name;         // +0x20
+};
+static_assert(sizeof(UIDescriptionEntry) == 0x28, "UIDescriptionEntry stride 0x28");
+static_assert(offsetof(UIDescriptionEntry, ref08) == 0x08, "UIDescriptionEntry +0x08");
+static_assert(offsetof(UIDescriptionEntry, ref10) == 0x10, "UIDescriptionEntry +0x10");
+static_assert(offsetof(UIDescriptionEntry, ref18) == 0x18, "UIDescriptionEntry +0x18");
+static_assert(offsetof(UIDescriptionEntry, name) == 0x20, "UIDescriptionEntry +0x20");
 
 class UIDescription final : public Description {
     DECLARE_EXE_TYPE(UIDescription)
@@ -38,8 +58,8 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     int32_t _valTail;                           // +0x20 serialized LAST; slot 8 builds a UIComponent only when > 0
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
-    void* _descRef;                             // +0x28 ExternalPtr (Description)
-    void* _entries;                             // +0x30 element array data (0x28 stride: Type, 3 ExternalPtr, String)
+    UI::Dialog* _dialog;                        // +0x28 ExternalPtr<UI::Dialog> (0x140028650: ?_typeInfo@Dialog@UI@@ gate)
+    UIDescriptionEntry* _entries;               // +0x30 element array data
     int32_t _entryCount;                        // +0x38
     int32_t _entryCap;                          // +0x3c
     int32_t _valHead;                           // +0x40
@@ -49,7 +69,7 @@ public:
 static_assert(sizeof(UIDescription) == 0x48, "UIDescription is 0x48 (create 0x1400395b0 MemAlloc(0x48))");
 static_assert(alignof(UIDescription) == 8, "UIDescription alignment");
 static_assert(offsetof(UIDescription, _valTail) == 0x20, "UIDescription::_valTail @ +0x20");
-static_assert(offsetof(UIDescription, _descRef) == 0x28, "UIDescription::_descRef @ +0x28");
+static_assert(offsetof(UIDescription, _dialog) == 0x28, "UIDescription::_dialog @ +0x28");
 static_assert(offsetof(UIDescription, _entries) == 0x30, "UIDescription::_entries @ +0x30");
 static_assert(offsetof(UIDescription, _entryCount) == 0x38, "UIDescription::_entryCount @ +0x38");
 static_assert(offsetof(UIDescription, _entryCap) == 0x3c, "UIDescription::_entryCap @ +0x3c");

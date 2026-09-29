@@ -16,7 +16,7 @@
 
 // 0x14012de00: Component() is the CALL 0x1401188b0; the 0x1401649f0 stamp is
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0x80.
-UIComponent::UIComponent() : uiData0(nullptr), uiData1(nullptr) {
+UIComponent::UIComponent() : data(nullptr), dataCount(0), dataCap(0) {
     OrFlagsInCtor(0x80);
 }
 
