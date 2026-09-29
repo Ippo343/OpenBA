@@ -26,11 +26,12 @@
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Component/Component.h"   // B.3.x W0: Component::Command by name
-#include "Component/orchardcomponent_funcs.h"   // B3R: OrchardComponent_GetGrowth
+#include "Component/OrchardComponent.h"
+#include "Component/ComponentDescription.h"
 #include "Dialog/OrchardUI.h"
 
-// LEFT (B4 DLG-c): the OrchardComponent's fields (+0x60 the tree type) and
-// OrchardComponent_GetGrowth's void*: OrchardComponent.h is COMP-d's, running.
+// LEFT (B4 DLG-c): the tree type crosses SelectResourceUI's int64_t SetResource /
+// void* GetResource (DLG-a).
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *TypeId_ProgressElement) before storing it at +0x38.
@@ -131,18 +132,18 @@ void OrchardUI::OnUpdateLayout() {
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    uint64_t orchardComp = 0;
-    fn_FindComponent_Orchard(checkedEntity, &orchardComp);
+    OrchardComponent* orchard = nullptr;
+    fn_FindComponent_Orchard(checkedEntity, &orchard);
 
     // SA guard (retail unguarded): an entity without an OrchardComponent, or the
     // combo/yield elements not seated yet because Slot4 has not run for this
     // instance. Retail cannot reach either state — the panel is only mounted on
     // Orchard.rsc and Slot4 always precedes the first tick.
-    if (!orchardComp) return;
+    if (!orchard) return;
     if (!internalBasePtr || !yield) return;
 
     // Get average growth ratio (0.0 - 1.0)
-    float growth = OrchardComponent_GetGrowth((void*)orchardComp);   // 0x140051640
+    float growth = orchard->GetGrowth();   // 0x140051640
 
     // Set progress bar value directly (ProgressElement::_currentValue)
     UI::ProgressElement* yieldElem = yield;
@@ -177,22 +178,22 @@ void OrchardUI::SetResource(int64_t param2) {
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    uint64_t orchardComp = 0;
-    fn_FindComponent_Orchard(checkedEntity, &orchardComp);
+    OrchardComponent* orchard = nullptr;
+    fn_FindComponent_Orchard(checkedEntity, &orchard);
 
     // SA guard (retail unguarded): fires from a combo event, which can only be
     // routed to an entity that has an OrchardComponent in retail.
-    if (!orchardComp) return;
+    if (!orchard) return;
 
-    // If currently no resource set (comp+0x60 == 0) and new resource is valid,
-    // call initialization via vtable[14](comp, 2)
-    int64_t currentResource = *(int64_t*)(orchardComp + 0x60);
-    if (currentResource == 0 && param2 != 0) {
-        reinterpret_cast<Component*>(orchardComp)->Command(2);   // B.3.x bridge (slot 14)
+    // If no tree type is set yet and the new one is valid, start production
+    // (Command(2), slot 14). (LEFT: the type arrives as SelectResourceUI's int64_t)
+    ComponentDescription* newType = reinterpret_cast<ComponentDescription*>(param2);
+    if (orchard->treeType == nullptr && param2 != 0) {
+        orchard->Command(2);   // slot 14
     }
 
-    // Set the resource type
-    *(int64_t*)(orchardComp + 0x60) = param2;
+    // Set the tree type (+0x60)
+    orchard->treeType = newType;
 }
 
 // ============================================================
@@ -210,11 +211,12 @@ void* OrchardUI::GetResource(void* param2) {
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    uint64_t orchardComp = 0;
-    fn_FindComponent_Orchard(checkedEntity, &orchardComp);
+    OrchardComponent* orchard = nullptr;
+    fn_FindComponent_Orchard(checkedEntity, &orchard);
 
-    // Return resource type at comp+0x60 (SA guard: see Slot11)
-    *(uint64_t*)param2 = orchardComp ? *(uint64_t*)(orchardComp + 0x60) : 0;
+    // Return the tree type (+0x60) (SA guard: see Slot11).
+    // (LEFT: `out` is SelectResourceUI's void* retslot)
+    *(ComponentDescription**)param2 = orchard ? orchard->treeType : nullptr;
     return param2;
 }
 

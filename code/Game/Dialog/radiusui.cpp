@@ -22,6 +22,7 @@
 #include "Component/exe_bodies.h"   // B3R: DecalComponent_TerrainDecalRemove
 #include "Dialog/RadiusUI.h"
 #include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
 
 // ============================================================
 // RadiusUI::Slot6 (vtable +0x30) — Remove radius overlay
@@ -86,8 +87,7 @@ void RadiusUI::OnOpened() {
 
     // Find the placement component on the entity (0x1401c79e0 — labelled
     // "MapComponent" in reg_economy_typeids; the finder name is a known misnomer).
-    // LEFT: its fields are read raw (MapComponent.h is COMP-d's, running).
-    uint64_t buildComp = 0;
+    MapComponent* buildComp = nullptr;
     fn_FindComponent_Build(checkedEntity, &buildComp);
 
     // SA-only guards (retail derefs both unguarded). Retail reaches Slot5 only from a
@@ -100,13 +100,12 @@ void RadiusUI::OnOpened() {
         return;
     }
 
-    // Calculate center tile index from the placement component's coordinates:
-    // +0x28 = int16 baseX, +0x2a = int16 baseY
-    // +0x2c = int16 sizeX, +0x2e = int16 sizeY
+    // Calculate center tile index from the placement component's footprint rect
+    // (tileX0 / tileY0 the corner, tileX1 / tileY1 the extent, int16 each):
     // LEFT: the map's grid size through GameUpdateLoop::m_game (void*, GAME-a).
     int gridSize = *(int*)GameUpdateLoop::_singleton->m_game;
-    int centerY = (int)*(int16_t*)(buildComp + 0x2a) + ((int)*(int16_t*)(buildComp + 0x2e) >> 1);
-    int centerX = (int)*(int16_t*)(buildComp + 0x28) + ((int)*(int16_t*)(buildComp + 0x2c) >> 1);
+    int centerY = (int)buildComp->tileY0 + ((int)buildComp->tileY1 >> 1);
+    int centerX = (int)buildComp->tileX0 + ((int)buildComp->tileX1 >> 1);
     int tileIndex = centerY * gridSize + centerX;
 
     // Calculate radius and store display index
