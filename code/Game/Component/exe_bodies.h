@@ -20,7 +20,9 @@
 class CitizenComponent;
 
 // ---- ambient_externalptr_serialize.cpp
-extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* serializer);  // 0x1400019a0
+namespace Audio { class SoundEffect; }
+namespace IO { class Serializer; }
+extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0
 
 // ---- ambientemittercomponent.cpp
 extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount);  // 0x140001770
