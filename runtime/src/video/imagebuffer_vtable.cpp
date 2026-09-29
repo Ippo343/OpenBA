@@ -164,6 +164,19 @@ namespace {
 // slot 0 (`Graphics::ReflectionImageBuffer`, `FrameCopyImageBuffer`,
 // `GeneratedImageBuffer` inherit `Destruct`/`Reconstruct`) exactly as it did.)
 
+// One enum field through the UNSIGNED slot (+0x98), which is the slot retail
+// picks for the eight enum fields (see Serialize below). B.4 (R-VIDEO): through a
+// `uint32_t` local and back instead of a `uint32_t&` view of the enum --
+// value-identical on both directions (the writer reads the local; the reader
+// fills it and the store puts the same four bytes in the field; a reader that
+// writes nothing leaves the field's own value).
+template <class Enum>
+void SerializeUnsigned(IO::Serializer& ser, Enum& field) {
+    uint32_t v = static_cast<uint32_t>(field);
+    ser.Serialize(v, nullptr);
+    field = static_cast<Enum>(v);
+}
+
 }  // namespace
 
 // ############################################################################
@@ -348,16 +361,16 @@ Object::External* ImageBuffer::Reconstruct() {
 // invisible; on any other it is not, and the slot number is what the shipped
 // bytes say. With the real `IO::Serializer` the distinction is carried by the
 // OVERLOAD chosen — `Serialize(int&)` reaches +0xa0 and `Serialize(unsigned
-// int&)` reaches +0x98 — which is why the eight unsigned emissions cast through
-// `uint32_t&` on fields the class declares as `int32_t`, exactly as retail does
-// by picking the other slot for the same address.
+// int&)` reaches +0x98 — which is why the seven enum fields go through
+// `SerializeUnsigned` (a `uint32_t` round trip), exactly as retail picks the
+// other slot for the same address.
 //
 // ORACLE: see the file banner — emission prefix oracle, stop at 10.
 // ============================================================================
 bool ImageBuffer::Serialize(void* stream) {
-    // B.3.5 bridge: the slot's parameter is `IO::Stream&` in retail, but
+    // LEFT (B.4 R-VIDEO): the slot's parameter is `IO::Stream&` in retail, but
     // `Object::External::Serialize` is declared `bool(void*)` across the whole
-    // External family and that signature is not this block's to change.
+    // External family (R-OBJ's declaration).
     IO::Stream& s = *reinterpret_cast<IO::Stream*>(stream);
     {
         // Version 0: retail zeroes R8D at 0x1800f2714 for the `CMP [RDX+8],R8D`
@@ -366,16 +379,17 @@ bool ImageBuffer::Serialize(void* stream) {
 
         ser.Serialize(_width, nullptr);                                     // +0x20
         ser.Serialize(_height, nullptr);                                    // +0x24
-        ser.Serialize(reinterpret_cast<uint32_t&>(_dimension), nullptr);    // +0x28
-        ser.Serialize(reinterpret_cast<uint32_t&>(_kind), nullptr);         // +0x2c
-        ser.Serialize(reinterpret_cast<uint32_t&>(_format), nullptr);       // +0x30
+        SerializeUnsigned(ser, _dimension);                                 // +0x28
+        SerializeUnsigned(ser, _kind);                                      // +0x2c
+        SerializeUnsigned(ser, _format);                                    // +0x30
         ser.Serialize(_flags, nullptr);                                     // +0x34
-        ser.Serialize(reinterpret_cast<uint32_t&>(_addressU), nullptr);     // +0x38
-        ser.Serialize(reinterpret_cast<uint32_t&>(_addressV), nullptr);     // +0x3c
-        ser.Serialize(reinterpret_cast<uint32_t&>(_addressW), nullptr);     // +0x40
-        ser.Serialize(reinterpret_cast<uint32_t&>(_filter), nullptr);       // +0x44
+        SerializeUnsigned(ser, _addressU);                                  // +0x38
+        SerializeUnsigned(ser, _addressV);                                  // +0x3c
+        SerializeUnsigned(ser, _addressW);                                  // +0x40
+        SerializeUnsigned(ser, _filter);                                    // +0x44
 
-        // +0x48, a System::String (0x1800c9930). B.3.x bridge: the field is a void*.
+        // +0x48, a System::String (0x1800c9930). LEFT (B.3.x bridge): the field
+        // is a void* for the reason ImageBuffer.h gives at +0x48.
         reinterpret_cast<System::String*>(&_sourceName)->Serialize(&ser);
         ImageBufferDoorAccess::PlatformSerialize(this, ser);
     }   // ~Serializer: `if (rw) rw->slot0(rw, 1)` at 0x1800f2820 .. 0x1800f2832

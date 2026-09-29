@@ -142,7 +142,7 @@ public:
         //   0x1800f4aa0
         void Serialize(IO::Serializer& ser);
 
-        uint8_t  enabled;    // +0x00
+        bool     enabled;    // +0x00  (B.4 R-VIDEO: bool, H4 — the Bool slot)
         uint8_t  _pad01[3];  // +0x01  never written (the ctor stores a BYTE at +0)
         uint32_t srcBlend;   // +0x04  default 1
         uint32_t dstBlend;   // +0x08  default 0
@@ -163,8 +163,8 @@ public:
             : test(1), write(1), _pad02{}, func(4), bias(0.0f), slopeBias(0.0f) {}
         void Serialize(IO::Serializer& ser); // 0x1800f4a00
 
-        uint8_t  test;       // +0x00  default 1
-        uint8_t  write;      // +0x01  default 1
+        bool     test;       // +0x00  default 1 (B.4 R-VIDEO: bool, H4)
+        bool     write;      // +0x01  default 1 (B.4 R-VIDEO: bool, H4)
         uint8_t  _pad02[2];  // +0x02
         uint32_t func;       // +0x04  default 4
         float    bias;       // +0x08  default 0
@@ -190,8 +190,8 @@ public:
               func(0), failOp(0), depthFailOp(0), passOp(0), backFunc(0), reference(0) {}
         void Serialize(IO::Serializer& ser); // 0x1800f48e0
 
-        uint8_t  enabled;      // +0x00
-        uint8_t  twoSided;     // +0x01
+        bool     enabled;      // +0x00  (B.4 R-VIDEO: bool, H4)
+        bool     twoSided;     // +0x01  (B.4 R-VIDEO: bool, H4)
         uint8_t  _pad02[2];    // +0x02
         uint32_t readMask;     // +0x04
         uint8_t  writeMask;    // +0x08  serialized as UChar, not UInt
@@ -295,7 +295,7 @@ public:
     Stencil          _stencil;    // +0x44
     CullMode         _cullMode;   // +0x68  default 1
     FillMode         _fillMode;   // +0x6c  default 0; ==1 means wireframe
-    uint8_t          _flag70;     // +0x70
+    bool             _flag70;     // +0x70  (B.4 R-VIDEO: bool, H4 — Initialize's `_N` flag)
     uint8_t          _pad71[7];   // +0x71  never written
     RenderStateData* _data;       // +0x78  from DeviceData slot 17
 };

@@ -310,6 +310,10 @@ public:
     void SetTime(float time);                                      // 0x18001a330
     void SetFog(float nearZ, float farZ, const Math::Vector4& color);  // 0x18001a360
     void SetViewport(const Viewport& vp);                          // 0x18001a060
+    // LEFT (B.4 R-VIDEO): the mangled names spell `PEBVImageBuffer@2@`,
+    // `PEBVVertexBuffer@2@`, `PEBVRenderBuffer@2@`, `PEAVRenderBuffer@2@`, but
+    // dx11/src/contextdata.cpp and code/Game callers hand these `void*`, so the
+    // parameters stay untyped until those callers type their pointers.
     void SetImageBuffer(const void* image, int32_t slot);          // 0x180019ed0 (const ImageBuffer*)
     void SetVertexBuffer(const void* vb, int32_t slot,
                          int32_t offset, int32_t stride);          // 0x180019f20 (const VertexBuffer*)
@@ -458,7 +462,9 @@ public:
     // ---- the 0x2168 bytes ----------------------------------------------
     // Public for the same reason `Object::External`'s are: the registered doors,
     // the probes and nine files outside this block read and write them by name.
-    void*    _device;                                   // 0x0000
+    // B.4 (R-VIDEO), H4: the pointer members carry the classes the setters'
+    // and getters' mangled names give them (see the member declarations above).
+    Device*  _device;                                   // 0x0000
     int32_t  _frameIndex;                               // 0x0008
     int32_t  _shaderDetail;                             // 0x000c
     uint32_t _dirty;                                    // 0x0010
@@ -467,20 +473,26 @@ public:
     uint32_t _vertexBufferDirty;                        // 0x001c
     int32_t  _transformCount;                           // 0x0020
     int32_t  _unknown0024;                              // 0x0024
+    // LEFT `void*` (B.4 R-VIDEO): graphics/wave21_lane_gfxbody.cpp,
+    // graphics/wave27_lane_gfxbig.cpp (R-GFX, running) and save/saveload_draw.cpp
+    // store untyped pointers into these two by name. Retail: const RenderBuffer*,
+    // const ImageBuffer*[16].
     void*    _renderBuffer;                             // 0x0028
     void*    _imageBuffers[16];                         // 0x0030
-    void*    _vertexLayout;                             // 0x00b0
-    void*    _vertexBuffers[16];                        // 0x00b8
+    const VertexLayout* _vertexLayout;                  // 0x00b0
+    const VertexBuffer* _vertexBuffers[16];             // 0x00b8
     int32_t  _vertexOffsets[16];                        // 0x0138
     int32_t  _vertexStrides[16];                        // 0x0178
+    // LEFT (B.4 R-VIDEO): `const IndexBuffer*` in retail; graphics/meshinstance_draw.cpp
+    // (R-GFX) stores a `const void*` into it by name, so it stays untyped.
     void*    _indexBuffer;                              // 0x01b8
     int32_t  _indexOffset;                              // 0x01c0
     int32_t  _unknown01c4;                              // 0x01c4
-    void*    _renderState;                              // 0x01c8
+    const RenderState* _renderState;                    // 0x01c8
     Viewport _viewport;                                 // 0x01d0
     Viewport _scissor;                                  // 0x01e0
-    void*    _vertexProgram;                            // 0x01f0
-    void*    _pixelProgram;                             // 0x01f8
+    const VertexProgram* _vertexProgram;                // 0x01f0
+    const PixelProgram*  _pixelProgram;                 // 0x01f8
 
     // 0x0200 .. 0x0297. Wave 9 lane CTX: THE FIRST EIGHT BYTES OF THIS ARRAY
     // ARE A POINTER — Context+0x200 is `_videoProgram`, which
@@ -517,8 +529,28 @@ public:
     Math::Matrix _transforms[52];                       // 0x10d8
 
     // 0x1dd8 .. 0x1f77, one 0x1a0-byte block `?Reset@` clears in a single
-    // memset. `?SetLight@` (0x18001a950) writes here.
-    uint8_t  _lightStaging[0x1a0];                      // 0x1dd8
+    // memset and `BindResources` uploads as one source. `?SetLight@`
+    // (0x18001a950) writes its first 0x60 bytes; B.4 (R-VIDEO) names them as
+    // SetLight's stores do (batchc_context_setlight.cpp's banner). The rest is
+    // never written by a ported body and stays bytes.
+    struct LightStaging {
+        uint32_t colour[4];        // +0x00  copied as dwords, never float arithmetic
+        uint32_t position[4];      // +0x10  likewise
+        float    direction[4];     // +0x20  xyz, w = 1.0f
+        float    attenuation[3];   // +0x30
+        float    attenuationDot;   // +0x3c  (att.y*dir.y + att.x*dir.x) + att.z*dir.z
+        float    farPlane;         // +0x40
+        float    negNearPlane;     // +0x44  -nearPlane, by sign-mask XOR
+        float    invRange;         // +0x48  1.0f / (far - near)
+        float    zero4c;           // +0x4c
+        float    shadow[4];        // +0x50  1.0f / shadowResolution, 0, 0, 0
+        uint8_t  _unwritten60[0x40];   // +0x60
+        // +0xa0 (Context+0x1e78): the shadow matrix the Graphics lights'
+        // WriteShadowMatrix stores (graphics/lights_vtable.cpp).
+        Math::Matrix shadowMatrix;     // +0xa0
+        uint8_t  _unwrittenE0[0xc0];   // +0xe0
+    };
+    LightStaging _lightStaging;                         // 0x1dd8
 
     ConstantBuffer _globalConstants;                    // 0x1f78
     ConstantBuffer _instanceConstants;                  // 0x1fc0
@@ -530,23 +562,23 @@ public:
     int32_t  _dynamicVertexStride;                      // 0x20e8
     int32_t  _unknown20ec;                              // 0x20ec
     uint64_t _unknown20f0;                              // 0x20f0
-    void*    _dynamicVertexBuffer;                      // 0x20f8
+    VertexBuffer* _dynamicVertexBuffer;                 // 0x20f8
     uint64_t _unknown2100;                              // 0x2100
     uint64_t _unknown2108;                              // 0x2108
     int32_t  _instanceCount;                            // 0x2110
     int32_t  _unknown2114;                              // 0x2114
-    void*    _dynamicIndexBuffer;                       // 0x2118
+    IndexBuffer* _dynamicIndexBuffer;                   // 0x2118
     uint64_t _unknown2120;                              // 0x2120
     uint64_t _unknown2128;                              // 0x2128
-    void*    _dynamicInstanceBuffer;                    // 0x2130
-    void*    _defaultRenderBuffer;                      // 0x2138
-    void*    _defaultColorImage;                        // 0x2140
-    void*    _defaultDepthImage;                        // 0x2148
+    VertexBuffer* _dynamicInstanceBuffer;               // 0x2130
+    RenderBuffer* _defaultRenderBuffer;                 // 0x2138
+    ImageBuffer*  _defaultColorImage;                   // 0x2140
+    ImageBuffer*  _defaultDepthImage;                   // 0x2148
     int32_t  _trianglesSubmitted;                       // 0x2150
     int32_t  _verticesSubmitted;                        // 0x2154
     int32_t  _drawsSubmitted;                           // 0x2158
     int32_t  _objectsSubmitted;                         // 0x215c
-    void*    _contextData;                              // 0x2160
+    ContextData* _contextData;                          // 0x2160
 };
 
 // Every offset the ported bodies touch, asserted. A mismatch here is a compile
@@ -586,6 +618,19 @@ static_assert(offsetof(Context, _color)                 == 0x0408, "Context::_co
 static_assert(offsetof(Context, _boneAndProjectionStaging) == 0x0418, "Context::_boneAndProjectionStaging");
 static_assert(offsetof(Context, _transforms)            == 0x10d8, "Context::_transforms");
 static_assert(offsetof(Context, _lightStaging)          == 0x1dd8, "Context::_lightStaging");
+static_assert(sizeof(Context::LightStaging) == 0x1a0, "Context::LightStaging is 0x1a0 bytes");
+static_assert(offsetof(Context::LightStaging, position)       == 0x10, "LightStaging::position");
+static_assert(offsetof(Context::LightStaging, direction)      == 0x20, "LightStaging::direction");
+static_assert(offsetof(Context::LightStaging, attenuation)    == 0x30, "LightStaging::attenuation");
+static_assert(offsetof(Context::LightStaging, attenuationDot) == 0x3c, "LightStaging::attenuationDot");
+static_assert(offsetof(Context::LightStaging, farPlane)       == 0x40, "LightStaging::farPlane");
+static_assert(offsetof(Context::LightStaging, negNearPlane)   == 0x44, "LightStaging::negNearPlane");
+static_assert(offsetof(Context::LightStaging, invRange)       == 0x48, "LightStaging::invRange");
+static_assert(offsetof(Context::LightStaging, zero4c)         == 0x4c, "LightStaging::zero4c");
+static_assert(offsetof(Context::LightStaging, shadow)         == 0x50, "LightStaging::shadow");
+static_assert(offsetof(Context::LightStaging, _unwritten60)   == 0x60, "LightStaging +0x60");
+static_assert(offsetof(Context::LightStaging, shadowMatrix)   == 0xa0, "LightStaging::shadowMatrix (Context+0x1e78)");
+static_assert(offsetof(Context::LightStaging, _unwrittenE0)   == 0xe0, "LightStaging tail");
 static_assert(offsetof(Context, _globalConstants)       == 0x1f78, "Context::_globalConstants");
 static_assert(offsetof(Context, _instanceConstants)     == 0x1fc0, "Context::_instanceConstants");
 static_assert(offsetof(Context, _boneConstants)         == 0x2008, "Context::_boneConstants");

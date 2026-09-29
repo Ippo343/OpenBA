@@ -12,41 +12,17 @@
 // a null that `Application::PlatformUpdate` later calls — a crash on the first
 // window resize, long after the code that caused it.
 //
-// The offsets are repeated here as literals rather than by including
-// runtime/types/video/Device.h, for the reason buffers_win.cpp gives: pulling
-// an engine header in behind <windows.h> is the collision PLAN §4.1 is about
-// (<wingdi.h> declares a function called `Rectangle`). The static_asserts that
-// bind them live in the portable half.
+/// B.4 (R-VIDEO): this TU includes runtime/types/video/Device.h AFTER
+// <windows.h> (as buffers_win.cpp does) and the three bodies are the members
+// `Video::Device::SizeWindow` / `MoveWindow` / `GetDefaultResolution` on named
+// fields; the literal offsets and the `extern "C"` C bodies are gone.
 // ============================================================================
 
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
 
-static const size_t kDeviceBackBufferWidth  = 0x04;
-static const size_t kDeviceBackBufferHeight = 0x08;
-static const size_t kDeviceSettingsChanged  = 0x9C;
-static const size_t kDeviceField9D          = 0x9D;
-
-static const size_t kConfigWindowX      = 0x14;
-static const size_t kConfigWindowY      = 0x18;
-static const size_t kConfigFullscreen   = 0x40;
-
-// The two exported DATA singletons. Declared through the same
-// `RtResolveCached`-backed slot accessor the portable half uses; spelled out
-// here because rt_port.h's RT_DATA_SLOT macro is available and mint-aware.
-#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
-
-namespace {
-uint8_t* VideoDevice() {
-    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    return slot ? static_cast<uint8_t*>(*slot) : nullptr;
-}
-uint8_t* VideoConfig() {
-    void** slot = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
-    return slot ? static_cast<uint8_t*>(*slot) : nullptr;
-}
-}  // namespace
+#include "../../types/video/Device.h"   // Video::Device, Video::Configuration
 
 // ============================================================================
 // ?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z   retail 0x1800f7d20, ord 4064
@@ -71,26 +47,25 @@ uint8_t* VideoConfig() {
 //
 // Returns 1 unconditionally (0x1800f7d75), including on both suppressed paths.
 // ============================================================================
-extern "C" int RtVideo_Device_SizeWindow(void* hwnd, unsigned /*msg*/,
-                                         uint64_t /*wParam*/, int64_t /*lParam*/) {
-    uint8_t* dev = VideoDevice();
+int Video::Device::SizeWindow(void* hwnd, unsigned /*msg*/,
+                              uint64_t /*wParam*/, int64_t /*lParam*/) {
+    Device* dev = Device::_singleton;
     if (!dev) return 1;
-    if (*(dev + kDeviceField9D) != 0) return 1;
+    if (dev->field9D != 0) return 1;
 
-    uint8_t* cfg = VideoConfig();
-    if (cfg && *(cfg + kConfigFullscreen) != 0) return 1;
+    Configuration* cfg = Configuration::_singleton;
+    if (cfg && cfg->fullscreen != 0) return 1;
 
     RECT rc;
-    GetClientRect(static_cast<HWND>(hwnd), &rc);
+    GetClientRect(static_cast<HWND>(hwnd), &rc);   // CAST-OK: win32
     const LONG w = rc.right  - rc.left;
     const LONG h = rc.bottom - rc.top;
 
-    int32_t* bw = reinterpret_cast<int32_t*>(dev + kDeviceBackBufferWidth);
-    int32_t* bh = reinterpret_cast<int32_t*>(dev + kDeviceBackBufferHeight);
-    if (*bw != static_cast<int32_t>(w) || *bh != static_cast<int32_t>(h)) {
-        *(dev + kDeviceSettingsChanged) = 1;
-        *bw = static_cast<int32_t>(w);
-        *bh = static_cast<int32_t>(h);
+    if (dev->backBufferWidth != static_cast<int32_t>(w) ||
+        dev->backBufferHeight != static_cast<int32_t>(h)) {
+        dev->settingsChanged  = 1;
+        dev->backBufferWidth  = static_cast<int32_t>(w);
+        dev->backBufferHeight = static_cast<int32_t>(h);
     }
     return 1;
 }
@@ -116,19 +91,20 @@ extern "C" int RtVideo_Device_SizeWindow(void* hwnd, unsigned /*msg*/,
 //
 // Returns 1 unconditionally.
 // ============================================================================
-extern "C" int RtVideo_Device_MoveWindow(void* hwnd, unsigned /*msg*/,
-                                         uint64_t /*wParam*/, int64_t /*lParam*/) {
-    uint8_t* dev = VideoDevice();
+int Video::Device::MoveWindow(void* hwnd, unsigned /*msg*/,
+                              uint64_t /*wParam*/, int64_t /*lParam*/) {
+    Device* dev = Device::_singleton;
     if (!dev) return 1;
-    if (*(dev + kDeviceField9D) != 0) return 1;
+    if (dev->field9D != 0) return 1;
 
-    uint8_t* cfg = VideoConfig();
-    if (cfg && *(cfg + kConfigFullscreen) != 0) return 1;
+    Configuration* cfg = Configuration::_singleton;
+    if (cfg && cfg->fullscreen != 0) return 1;
 
+    HWND const window = static_cast<HWND>(hwnd);   // CAST-OK: win32
     WINDOWPLACEMENT wp;
     std::memset(&wp, 0, sizeof(wp));
     wp.length = 0x2c;                     // 0x1800f7dbb — the literal, = sizeof
-    GetWindowPlacement(static_cast<HWND>(hwnd), &wp);
+    GetWindowPlacement(window, &wp);
 
     // 0x1800f7dc9 reads the DWORD at +0x08 of WINDOWPLACEMENT, which is
     // `showCmd`.
@@ -137,15 +113,15 @@ extern "C" int RtVideo_Device_MoveWindow(void* hwnd, unsigned /*msg*/,
 
     POINT pt;
     pt.x = 0; pt.y = 0;
-    ClientToScreen(static_cast<HWND>(hwnd), &pt);
+    ClientToScreen(window, &pt);
 
     if (cfg) {
-        *reinterpret_cast<int32_t*>(cfg + kConfigWindowX) = pt.x;
+        cfg->windowX = pt.x;
         // Retail RE-READS the configuration singleton between the two stores
         // (0x1800f7df5). Nothing can move it; preserved anyway, because
         // "nothing can move it" is a claim about code this lane does not own.
-        uint8_t* cfg2 = VideoConfig();
-        if (cfg2) *reinterpret_cast<int32_t*>(cfg2 + kConfigWindowY) = pt.y;
+        Configuration* cfg2 = Configuration::_singleton;
+        if (cfg2) cfg2->windowY = pt.y;
     }
     return 1;
 }
@@ -178,8 +154,7 @@ extern "C" int RtVideo_Device_MoveWindow(void* hwnd, unsigned /*msg*/,
 // the reason device_startup.cpp gives for the same pattern in
 // ValidateConfiguration.
 // ============================================================================
-extern "C" int RtVideo_Device_GetDefaultResolution(void* /*self, unread*/,
-                                                   const void* adapterv) {
+int Video::Device::GetDefaultResolution(const Adapter& adapter) const {
     DEVMODEW dm;
     std::memset(&dm, 0, 0xdc);
     dm.dmSize = 0xdc;
@@ -188,19 +163,16 @@ extern "C" int RtVideo_Device_GetDefaultResolution(void* /*self, unread*/,
     const int32_t w = static_cast<int32_t>(dm.dmPelsWidth);
     const int32_t h = static_cast<int32_t>(dm.dmPelsHeight);
 
-    // Adapter+0x08 = DisplayMode* modeData, +0x10 = modeCount; DisplayMode is
-    // 0x18 bytes with width at +0x00 and height at +0x04. Asserted in
-    // runtime/types/video/Device.h.
-    const uint8_t* adapter = static_cast<const uint8_t*>(adapterv);
-    const uint8_t* modeData = *reinterpret_cast<const uint8_t* const*>(adapter + 0x08);
-    const int32_t  modeCount = *reinterpret_cast<const int32_t*>(adapter + 0x10);
+    // Adapter::modeData / modeCount (+0x08 / +0x10); DisplayMode is 0x18 bytes
+    // with width at +0x00 and height at +0x04 (Device.h asserts all four).
+    const DisplayMode* const modeData = adapter.modeData;
+    const int32_t            modeCount = adapter.modeCount;
 
     int32_t index = 0;
     bool found = false;
     for (int32_t i = 0; i < modeCount; ++i) {
-        const uint8_t* m = modeData + static_cast<size_t>(i) * 0x18;
-        if (*reinterpret_cast<const int32_t*>(m)     == w &&
-            *reinterpret_cast<const int32_t*>(m + 4) == h) { index = i; found = true; break; }
+        const DisplayMode& m = modeData[i];
+        if (m.width == w && m.height == h) { index = i; found = true; break; }
     }
     if (!found) index = 0;
     if (index < 0) index = 0;            // 0x1800f75d8 — unreachable, kept

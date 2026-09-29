@@ -53,37 +53,35 @@
 #include <windows.h>
 #include <cstdint>
 
-// The offsets are asserted against runtime/types/video/Device.h in buffers.cpp,
-// which owns the struct. This file deliberately does not include that header:
-// pulling an engine type in behind <windows.h> is the collision PLAN §4.1 is
-// about (<wingdi.h> declares a function called `Rectangle`; <windef.h> #defines
-// `near` and `far` away). The three numbers are repeated here with the
-// static_assert that binds them living in the portable half.
-static const size_t kDeviceLockOffset  = 0x60;
-static const size_t kDeviceOwnerOffset = 0x88;
-static const size_t kDeviceDepthOffset = 0x8C;
+// B.4 (R-VIDEO): this twin includes Device.h after <windows.h> and reads the
+// lock's bookkeeping words by name. Device.h is a leaf header (<cstdint>,
+// <cstddef>, <type_traits> and forward declarations only), so none of the
+// collisions PLAN §4.1 names (<wingdi.h>'s `Rectangle`, <windef.h>'s `near` /
+// `far`) can reach it. The CRITICAL_SECTION stays the opaque 0x28 bytes the
+// header declares (RULE B5-6), so handing it to the Win32 API is the one view
+// left per call.
+#include "../../types/video/Device.h"
 
-static_assert(sizeof(CRITICAL_SECTION) == 0x28,
+static_assert(sizeof(CRITICAL_SECTION) == sizeof(Video::Device::lock),
               "Device's layout puts the owner tid at +0x88, which requires a "
               "40-byte CRITICAL_SECTION at +0x60");
 
 // `deviceSingleton` is the ADDRESS OF the exported `?_singleton@Device@Video@@`
 // slot, not the Device itself — the re-read above is the whole reason it is
 // passed as a slot pointer and not as an already-loaded `Device*`.
-void RtVideoDeviceLock(void** deviceSingleton) {
-    uint8_t* d = static_cast<uint8_t*>(*deviceSingleton);
-    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d + kDeviceLockOffset));
-    *reinterpret_cast<uint32_t*>(d + kDeviceOwnerOffset) = GetCurrentThreadId();
-    *reinterpret_cast<int32_t*>(d + kDeviceDepthOffset) += 1;
+void RtVideoDeviceLock(Video::Device** deviceSingleton) {
+    Video::Device* d = *deviceSingleton;
+    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
+    d->lockOwnerThreadId = GetCurrentThreadId();
+    d->lockRecursionCount += 1;
 }
 
-void RtVideoDeviceUnlock(void** deviceSingleton) {
-    uint8_t* d = static_cast<uint8_t*>(*deviceSingleton);   // retail re-reads
-    int32_t* depth = reinterpret_cast<int32_t*>(d + kDeviceDepthOffset);
-    *depth -= 1;
-    if (*depth == 0)
-        *reinterpret_cast<uint32_t*>(d + kDeviceOwnerOffset) = 0xFFFFFFFFu;
-    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d + kDeviceLockOffset));
+void RtVideoDeviceUnlock(Video::Device** deviceSingleton) {
+    Video::Device* d = *deviceSingleton;   // retail re-reads
+    d->lockRecursionCount -= 1;
+    if (d->lockRecursionCount == 0)
+        d->lockOwnerThreadId = 0xFFFFFFFFu;
+    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
 }
 
 // ============================================================================
@@ -121,19 +119,16 @@ void RtVideoDeviceUnlock(void** deviceSingleton) {
 // Note the predicate: retail tests the ZF from the DEC (depth != 0), which is
 // the same as comparing the decremented value with zero. Reproduced as such.
 // ============================================================================
-void RtVideoDeviceLockThis(void* device) {
-    uint8_t* d = static_cast<uint8_t*>(device);
-    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d + kDeviceLockOffset));
+void RtVideoDeviceLockThis(Video::Device* d) {
+    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
     DWORD tid = GetCurrentThreadId();
-    *reinterpret_cast<int32_t*>(d + kDeviceDepthOffset) += 1;
-    *reinterpret_cast<uint32_t*>(d + kDeviceOwnerOffset) = tid;
+    d->lockRecursionCount += 1;
+    d->lockOwnerThreadId = tid;
 }
 
-void RtVideoDeviceUnlockThis(void* device) {
-    uint8_t* d = static_cast<uint8_t*>(device);
-    int32_t* depth = reinterpret_cast<int32_t*>(d + kDeviceDepthOffset);
-    *depth -= 1;
-    if (*depth == 0)
-        *reinterpret_cast<uint32_t*>(d + kDeviceOwnerOffset) = 0xFFFFFFFFu;
-    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d + kDeviceLockOffset));
+void RtVideoDeviceUnlockThis(Video::Device* d) {
+    d->lockRecursionCount -= 1;
+    if (d->lockRecursionCount == 0)
+        d->lockOwnerThreadId = 0xFFFFFFFFu;
+    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(d->lock));  // CAST-OK: win32
 }

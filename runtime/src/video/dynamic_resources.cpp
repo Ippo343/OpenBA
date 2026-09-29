@@ -114,62 +114,28 @@
 #include "../../types/video/Device.h"
 #include "../../types/video/ImageBuffer.h"
 
-using RtVideo::Device;
-using RtVideo::RenderBuffer;
-// Video::ImageBuffer, ::IndexBuffer and ::VertexBuffer live in the GLOBAL
-// namespace (runtime/types/video/ImageBuffer.h and Buffers.h declare them
-// there); only Device.h puts its types in RtVideo. No `using` for those three.
+using Video::Device;
+using Video::RenderBuffer;
 
-// The Win32 half of Video::Device's recursive render lock. The two
-// singleton-reading forms are buffers_win.cpp's originals (Wave 9 lane W); the
-// two `This` forms are this lane's, and are the bodies of the exported
+// The Win32 half of Video::Device's recursive render lock (buffers_win.cpp,
+// declared in Device.h): the two singleton-reading forms are Wave 9 lane W's
+// inline copies; the two `This` forms are the bodies of the exported
 // Device::Lock / Device::Unlock.
-void RtVideoDeviceLock(void** deviceSingleton);
-void RtVideoDeviceUnlock(void** deviceSingleton);
-void RtVideoDeviceLockThis(void* device);
-void RtVideoDeviceUnlockThis(void* device);
 
 // ENDGAME B.3.5 block VC — the two `Video_ImageBuffer_{Width,Height}` free
 // declarations are GONE. `Video::ImageBuffer::Width()` / `Height()` are MEMBERS
-// (bodies in buffers.cpp, moved this pass), so `RenderBuffer::Recreate` below
-// calls them on the attachment directly. That was the last cross-block edge in
-// this file: the four attribution notes in the banner about "b35-C's class" are
-// answered rather than carried.
+// (bodies in buffers.cpp), so `RenderBuffer::Recreate` below calls them on the
+// attachment directly.
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// The five DATA slots these bodies read.
-//
-// All five are exported and all five are minted, so they keep working with the
-// DLL absent. `_firstRenderBuffer` is the row this lane added to lane C2's mint
-// table — see the banner.
+// B.4 (R-VIDEO): the five `void**` / typed-slot accessors over the class
+// statics (`Device::_singleton` and the four list heads) are gone; the bodies
+// name the statics. Each sweep takes the lock on the ADDRESS of
+// `Device::_singleton` (retail's unlock re-reads it) and re-reads its list head
+// through the static exactly where retail re-reads it.
 // ---------------------------------------------------------------------------
-Device** DeviceSlot() {
-    Device** p = reinterpret_cast<Device**>(&::Video::Device::_singleton);
-    return p;
-}
-// ENDGAME B.3.5 block VC: typed as the REAL `Video::ImageBuffer` now that the
-// two sweeps below are its static members. The slot itself stays an
-// `RT_DATA_SLOT` read (RULE B4b-4 / B35_RULES §9 — three by-name doors; the
-// `MintStorageCell()` redirect that would make it a C++ static is owed at the
-// end of B.3, not here).
-Video::ImageBuffer** FirstSurfaceSlot() {
-    Video::ImageBuffer** p = reinterpret_cast<Video::ImageBuffer**>(&::Video::ImageBuffer::_firstSurface);
-    return p;
-}
-IndexBuffer** FirstIndexBufferSlot() {
-    IndexBuffer** p = reinterpret_cast<IndexBuffer**>(&::Video::IndexBuffer::_firstBuffer);
-    return p;
-}
-VertexBuffer** FirstVertexBufferSlot() {
-    VertexBuffer** p = reinterpret_cast<VertexBuffer**>(&::Video::VertexBuffer::_firstBuffer);
-    return p;
-}
-RenderBuffer** FirstRenderBufferSlot() {
-    RenderBuffer** p = reinterpret_cast<RenderBuffer**>(&::Video::RenderBuffer::_firstRenderBuffer);
-    return p;
-}
 
 // ---------------------------------------------------------------------------
 // The intrusive list link every walker steps through.
@@ -177,62 +143,30 @@ RenderBuffer** FirstRenderBufferSlot() {
 // The offsets are retail's, read off the four disassemblies, and they are NOT
 // the same across the four classes:
 //
-//   ImageBuffer   +0x58   (0x1800f2e35  MOV RBX,[RBX+0x58])
-//   IndexBuffer   +0x18   (0x1800f3584  MOV RBX,[RBX+0x18])
-//   VertexBuffer  +0x18   (0x1800f56e4  MOV RBX,[RBX+0x18])
-//   RenderBuffer  +0x20   (0x1800f4078  MOV RBX,[RBX+0x20])
+//   ImageBuffer   +0x58   (0x1800f2e35  MOV RBX,[RBX+0x58])   `_field58`
+//   IndexBuffer   +0x18   (0x1800f3584  MOV RBX,[RBX+0x18])   `listNext`
+//   VertexBuffer  +0x18   (0x1800f56e4  MOV RBX,[RBX+0x18])   `listNext`
+//   RenderBuffer  +0x20   (0x1800f4078  MOV RBX,[RBX+0x20])   `prev`
 //
-// Two notes on the headers this contradicts, neither of which is a defect in
-// this file:
-//   * ImageBuffer.h calls +0x50/+0x58 `field50` / `field58` ("unknown; copied in
-//     the copy ctor"). They are the list links; the walkers prove it.
-//   * Buffers.h names IndexBuffer/VertexBuffer +0x10 `listPrev` and +0x18
-//     `listNext`, and RenderBuffer's +0x18 `next` / +0x20 `prev`. Retail's four
-//     walkers step through +0x18 for the buffers and +0x20 for RenderBuffer, so
-//     either RenderBuffer's two names are swapped relative to the buffers' or
-//     the two families genuinely walk in opposite directions. The list is
-//     circular, so both terminate; this lane transcribes the OFFSET retail uses
-//     and does not rename anything on the strength of it.
+// B.4 (R-VIDEO): each walker reads its class's field by name. The names are
+// the headers' (guesses); buffers.cpp's ListLink calls +0x10 / +0x18 of the
+// buffers `next` / `prev`, so Buffers.h's `listNext` is ListLink's `prev`.
+// The list is circular, so both directions terminate; the OFFSET is retail's.
 // ---------------------------------------------------------------------------
-template <typename T>
-T* LinkStep(T* p, size_t offset) {
-    return *reinterpret_cast<T**>(reinterpret_cast<uint8_t*>(p) + offset);
-}
-
-constexpr size_t kImageLink  = 0x58;
-constexpr size_t kBufferLink = 0x18;
-constexpr size_t kRenderLink = 0x20;
-
-// A companion object's vtable slot, by BYTE offset — the shipped code dispatches
-// through raw offsets and so does this.
-template <typename Fn>
-Fn CompanionSlot(void* companion, size_t byteOffset) {
-    void** vtable = *reinterpret_cast<void***>(companion);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtable) + byteOffset));
-}
-
-// The DeviceData factory slot every RecreateDynamic calls to rebuild a
-// companion. `deviceData` NULL yields a NULL companion and the shipped code
-// then dispatches through it anyway — see the note at each call site.
-void* MakeCompanion(size_t deviceDataSlot, void* subject) {
-    void* deviceData = (*DeviceSlot())->deviceData;
-    if (deviceData == nullptr)
-        return nullptr;                       // XOR EAX,EAX
-    using Fn = void* (*)(void*, void*);
-    return CompanionSlot<Fn>(deviceData, deviceDataSlot)(deviceData, subject);
-}
+static_assert(offsetof(Video::ImageBuffer, _field58) == 0x58, "ImageBuffer walker link");
+static_assert(offsetof(Video::IndexBuffer, listNext) == 0x18, "IndexBuffer walker link");
+static_assert(offsetof(Video::VertexBuffer, listNext) == 0x18, "VertexBuffer walker link");
+static_assert(offsetof(Video::RenderBuffer, prev) == 0x20, "RenderBuffer walker link");
 
 // The one shape all four ReleaseDynamic walkers share for a single element:
-// destroy the companion through its scalar deleting destructor (vtable slot 0,
-// flag 1) and null the field. Guarded on the companion, exactly as retail is.
-void ReleaseCompanion(void** companionField) {
-    void* companion = *companionField;
-    if (companion != nullptr) {
-        using Fn = void (*)(void*, int);
-        CompanionSlot<Fn>(companion, 0)(companion, 1);
-    }
-    *companionField = nullptr;
+// destroy the companion through its deleting destructor (vtable slot 0, flag 1)
+// and null the field. Guarded on the companion, exactly as retail is.
+template <class Companion>
+void ReleaseCompanion(Companion*& companionField) {
+    Companion* companion = companionField;
+    if (companion != nullptr)
+        (void)companion->DeletingDtor(1);
+    companionField = nullptr;
 }
 
 // ImageBuffer's per-element guard, from 0x1800f2dd0 and 0x1800f2ec8:
@@ -290,9 +224,10 @@ void Video::Device::Unlock() {
 // Video::ImageBuffer::RecreateDynamic  —  retail 0x1800f2d90, ordinal 3523
 //
 // Walks _firstSurface under the Device lock. For each element whose `kind` is a
-// dynamic-resource kind: build a fresh companion through DeviceData vtable
-// +0x50, store it at ImageBuffer+0x60, then poke it once through one of three
-// companion slots selected by ImageBuffer::flags bits 4 and 5.
+// dynamic-resource kind: build a fresh companion through DeviceData slot 10
+// (`CreateImageBufferData`, +0x50), store it at ImageBuffer+0x60, then poke it
+// once through one of three companion slots selected by ImageBuffer::flags bits
+// 4 and 5.
 //
 // THE UNGUARDED COMPANION DEREF IS RETAIL'S. When `Device::deviceData` is null
 // the shipped body stores a null companion at +0x60 and then dispatches through
@@ -305,23 +240,20 @@ void Video::Device::Unlock() {
 // against `[_firstSurface]`, not a cached register), so the loop below re-reads
 // it too.
 // ============================================================================
-// ENDGAME B.3.5 block VC: a real `static` member of `Video::ImageBuffer`, and the
-// three hand-inlined companion slots are VIRTUAL CALLS on block A's real
-// `Video::ImageBufferData` — +0x08/+0x10/+0x18 are its slots 1, 2 and 3, which
-// that header names `AttachColorBuffer`, `AttachDepthBuffer` and `Create`. The
-// third arm passing `0` for `levels` is retail's `CALL [RDX+0x18]` with a zeroed
-// argument register, i.e. "rebuild with no initial pixel data".
+// ENDGAME B.3.5 block VC: +0x08/+0x10/+0x18 are `Video::ImageBufferData`'s
+// slots 1, 2 and 3 (`AttachColorBuffer`, `AttachDepthBuffer`, `Create`). The
+// third arm passing `0` for `levels` is retail's `CALL [RDX+0x18]` with a
+// zeroed argument register, i.e. "rebuild with no initial pixel data".
 void Video::ImageBuffer::RecreateDynamic() {
-    RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceLock(&Device::_singleton);
 
-    Video::ImageBuffer** head = FirstSurfaceSlot();
-    Video::ImageBuffer*  p    = *head;
+    Video::ImageBuffer* p = _firstSurface;
     if (p != nullptr) {
         do {
             if (ImageBufferIsDynamicResource(p)) {
-                // B.3.5 bridge — the DeviceData factory hands back a `void*`.
+                DeviceData* dd = Device::_singleton->deviceData;
                 Video::ImageBufferData* companion =
-                    reinterpret_cast<Video::ImageBufferData*>(MakeCompanion(0x50, p));
+                    dd ? dd->CreateImageBufferData(p) : nullptr;   // XOR EAX,EAX
                 p->_data = companion;
 
                 // Unguarded past retail's own test — see the banner.
@@ -334,11 +266,11 @@ void Video::ImageBuffer::RecreateDynamic() {
                     companion->Create(nullptr);
                 }
             }
-            p = LinkStep(p, kImageLink);
-        } while (p != *head);
+            p = p->_field58;
+        } while (p != _firstSurface);
     }
 
-    RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 // ============================================================================
@@ -350,112 +282,126 @@ void Video::ImageBuffer::RecreateDynamic() {
 // that fails the kind test therefore does not refresh the terminator. That is
 // reproduced literally: `terminator` below is updated in exactly the same place.
 // ============================================================================
-// ENDGAME B.3.5 block VC: a real `static` member. `ReleaseCompanion` stays the
-// shared `void**` helper — it is the same three instructions for all four classes
-// and dispatches slot 0 (the scalar deleting dtor) on whichever `*Data` is there,
-// so typing it to one of the four would be the wrong generalisation.
 void Video::ImageBuffer::ReleaseDynamic() {
-    RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceLock(&Device::_singleton);
 
-    Video::ImageBuffer** head       = FirstSurfaceSlot();
-    Video::ImageBuffer*  terminator = *head;
+    Video::ImageBuffer* terminator = _firstSurface;
     if (terminator != nullptr) {
         Video::ImageBuffer* p = terminator;
         do {
             if (ImageBufferIsDynamicResource(p)) {
-                ReleaseCompanion(reinterpret_cast<void**>(&p->_data));
-                terminator = *head;
+                ReleaseCompanion(p->_data);
+                terminator = _firstSurface;
             }
-            p = LinkStep(p, kImageLink);
+            p = p->_field58;
         } while (p != terminator);
     }
 
-    RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 // ============================================================================
 // Video::IndexBuffer::RecreateDynamic   —  retail 0x1800f3500, ordinal 3524
 // Video::VertexBuffer::RecreateDynamic  —  retail 0x1800f5660, ordinal 3526
 //
-// One shape, two heads, two DeviceData factory slots (+0x60 index, +0x68
-// vertex). The per-element guard is the `dynamic` bool at +0x04, and after the
-// companion is stored at +0x08 retail calls companion vtable +0x08 with
-// (companion, self->size, /*bool*/ true, /*void**/ nullptr) — that is the
-// buffer's Create, with `dynamic` hardcoded true and no initial data.
+// One shape, two heads, two DeviceData factory slots (12 `CreateIndexBufferData`
+// +0x60, 13 `CreateVertexBufferData` +0x68). The per-element guard is the
+// `dynamic` bool at +0x04, and after the companion is stored at +0x08 retail
+// calls companion slot 1 (+0x08, `Create`) with (self->size, /*dynamic*/ true,
+// /*data*/ nullptr) — the buffer's Create, with `dynamic` hardcoded true and no
+// initial data.
 //
 // The head reload sits inside the taken branch here too (0x1800f357d /
 // 0x1800f56dd), so the terminator goes stale for a skipped element exactly as
 // in ReleaseDynamic above.
 // ============================================================================
-namespace {
+void Video::IndexBuffer::RecreateDynamic() {
+    RtVideoDeviceLock(&Device::_singleton);
 
-template <typename Buf>
-void BufferRecreateDynamic(Buf** head, size_t deviceDataSlot) {
-    RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
-
-    Buf* terminator = *head;
+    IndexBuffer* terminator = _firstBuffer;
     if (terminator != nullptr) {
-        Buf* p = terminator;
+        IndexBuffer* p = terminator;
         do {
             if (p->dynamic) {
-                void* companion = MakeCompanion(deviceDataSlot, p);
+                DeviceData* dd = Device::_singleton->deviceData;
+                IndexBufferData* companion = dd ? dd->CreateIndexBufferData(p) : nullptr;
                 p->platformData = companion;
                 // Unguarded, as retail is — see the ImageBuffer note.
-                using Fn = void (*)(void*, int32_t, bool, void*);
-                CompanionSlot<Fn>(companion, 0x08)(companion, p->size, true, nullptr);
-                terminator = *head;
+                companion->Create(static_cast<uint32_t>(p->size), 1, nullptr);
+                terminator = _firstBuffer;
             }
-            p = LinkStep(p, kBufferLink);
+            p = p->listNext;
         } while (p != terminator);
     }
 
-    RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
-template <typename Buf>
-void BufferReleaseDynamic(Buf** head) {
-    RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
+void Video::IndexBuffer::ReleaseDynamic() {
+    RtVideoDeviceLock(&Device::_singleton);
 
-    Buf* terminator = *head;
+    IndexBuffer* terminator = _firstBuffer;
     if (terminator != nullptr) {
-        Buf* p = terminator;
+        IndexBuffer* p = terminator;
         do {
             if (p->dynamic) {
-                ReleaseCompanion(&p->platformData);
-                terminator = *head;
+                ReleaseCompanion(p->platformData);
+                terminator = _firstBuffer;
             }
-            p = LinkStep(p, kBufferLink);
+            p = p->listNext;
         } while (p != terminator);
     }
 
-    RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
-}  // namespace
-
-// ENDGAME B.3.5 block D2: the four class statics are real `static` members now.
-// The two list heads stay `RT_DATA_SLOT` reads (RULE B4b-4 / B35_RULES §9, three
-// by-name doors each) — the `MintStorageCell()` redirect that would make them
-// C++ statics is OWED at the end of B.3, not here.
-void Video::IndexBuffer::RecreateDynamic() {
-    BufferRecreateDynamic(FirstIndexBufferSlot(), 0x60);
-}
-void Video::IndexBuffer::ReleaseDynamic() {
-    BufferReleaseDynamic(FirstIndexBufferSlot());
-}
 void Video::VertexBuffer::RecreateDynamic() {
-    BufferRecreateDynamic(FirstVertexBufferSlot(), 0x68);
+    RtVideoDeviceLock(&Device::_singleton);
+
+    VertexBuffer* terminator = _firstBuffer;
+    if (terminator != nullptr) {
+        VertexBuffer* p = terminator;
+        do {
+            if (p->dynamic) {
+                DeviceData* dd = Device::_singleton->deviceData;
+                VertexBufferData* companion = dd ? dd->CreateVertexBufferData(p) : nullptr;
+                p->platformData = companion;
+                // Unguarded, as retail is — see the ImageBuffer note.
+                companion->Create(static_cast<uint32_t>(p->size), 1, nullptr);
+                terminator = _firstBuffer;
+            }
+            p = p->listNext;
+        } while (p != terminator);
+    }
+
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
+
 void Video::VertexBuffer::ReleaseDynamic() {
-    BufferReleaseDynamic(FirstVertexBufferSlot());
+    RtVideoDeviceLock(&Device::_singleton);
+
+    VertexBuffer* terminator = _firstBuffer;
+    if (terminator != nullptr) {
+        VertexBuffer* p = terminator;
+        do {
+            if (p->dynamic) {
+                ReleaseCompanion(p->platformData);
+                terminator = _firstBuffer;
+            }
+            p = p->listNext;
+        } while (p != terminator);
+    }
+
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 // ============================================================================
 // Video::RenderBuffer::Recreate  —  retail 0x1800f4170, ordinal 3521
 //
-// Rebuild one RenderBuffer's companion (DeviceData vtable +0x98), poke it
-// through companion slot +0x08, then recompute the render buffer's cached
-// width/height from whichever attachment it has.
+// Rebuild one RenderBuffer's companion (DeviceData slot 19,
+// `CreateRenderBufferData`, +0x98), poke it through companion slot 1 (+0x08),
+// then recompute the render buffer's cached width/height from whichever
+// attachment it has.
 //
 // The width/height ladder is `ImageBuffer::Width()` / `Height()` verbatim —
 // bit8 = device backbuffer size, bit9 = half of it, otherwise the buffer's own
@@ -470,23 +416,15 @@ void Video::VertexBuffer::ReleaseDynamic() {
 // reaches this function, because nothing puts one on the list.
 // ============================================================================
 void Video::RenderBuffer::Recreate() {
-    void* companion = MakeCompanion(0x98, this);
+    DeviceData* dd = Device::_singleton->deviceData;
+    RenderBufferData* companion = dd ? dd->CreateRenderBufferData(this) : nullptr;
     platformData = companion;
-    {
-        // Unguarded, as retail is (0x1800f41a0 reads [RAX] with no test).
-        using Fn = void (*)(void*);
-        CompanionSlot<Fn>(companion, 0x08)(companion);
-    }
+    // Unguarded, as retail is (0x1800f41a0 reads [RAX] with no test).
+    (void)companion->Slot1();
 
-    // ENDGAME B.3.5 block VC: direct member calls on `Video::ImageBuffer`. The
-    // two attachment fields stay `void*` (their layout is pinned and dx11 reads
-    // them at +0x00/+0x08), so the receiver takes one marked bridge cast.
-    // `depthBuffer` is dereferenced with no null test when `colorBuffer` is null,
-    // which is retail — see the banner.
-    const Video::ImageBuffer* source =
-        reinterpret_cast<const Video::ImageBuffer*>(colorBuffer);   // B.3.5 bridge
+    const Video::ImageBuffer* source = colorBuffer;
     if (source == nullptr)
-        source = reinterpret_cast<const Video::ImageBuffer*>(depthBuffer);  // B.3.5 bridge
+        source = depthBuffer;
 
     width  = source->Video::ImageBuffer::Width();
     height = source->Video::ImageBuffer::Height();
@@ -502,33 +440,31 @@ void Video::RenderBuffer::Recreate() {
 // unlike the other three classes — so both loops below re-read it too.
 // ============================================================================
 void Video::RenderBuffer::RecreateDynamic() {
-    RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceLock(&Device::_singleton);
 
-    RenderBuffer** head = FirstRenderBufferSlot();
-    RenderBuffer*  p    = *head;
+    RenderBuffer* p = _firstRenderBuffer;
     if (p != nullptr) {
         do {
             p->Video::RenderBuffer::Recreate();
-            p = LinkStep(p, kRenderLink);
-        } while (p != *head);
+            p = p->prev;
+        } while (p != _firstRenderBuffer);
     }
 
-    RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 void Video::RenderBuffer::ReleaseDynamic() {
-    RtVideoDeviceLock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceLock(&Device::_singleton);
 
-    RenderBuffer** head = FirstRenderBufferSlot();
-    RenderBuffer*  p    = *head;
+    RenderBuffer* p = _firstRenderBuffer;
     if (p != nullptr) {
         do {
-            ReleaseCompanion(&p->platformData);
-            p = LinkStep(p, kRenderLink);
-        } while (p != *head);
+            ReleaseCompanion(p->platformData);
+            p = p->prev;
+        } while (p != _firstRenderBuffer);
     }
 
-    RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 // ============================================================================
@@ -542,14 +478,8 @@ void Video::RenderBuffer::ReleaseDynamic() {
 //
 // Note both take NO `this`. They are `QEAAXXZ` — non-static members with a
 // `this` in RCX that neither body reads (0x1800f80b0 goes straight to
-// `SUB RSP,0x28` and never touches RCX). Declaring them with a parameter would
-// be equally correct on the Microsoft x64 ABI; declaring them without one is
-// what the bodies do, and dx11's import table types them as `void (*)(void*)`,
-// which passes an argument the callee ignores. Both spellings interoperate.
+// `SUB RSP,0x28` and never touches RCX).
 // ============================================================================
-// ENDGAME B.3.5 block D2: real members. Block VC: ALL FOUR callees are members
-// now — `Video::ImageBuffer::{Recreate,Release}Dynamic` were the last two free
-// functions here, and the last cross-block edge in this file.
 void Video::Device::RecreateDynamic() {
     Video::IndexBuffer::RecreateDynamic();
     Video::VertexBuffer::RecreateDynamic();

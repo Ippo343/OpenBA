@@ -36,10 +36,6 @@
 #include <cstdint>
 #include <new>       // ENDGAME B.3.9 VS: placement new (the factory pair)
 
-// runtime/src/video/buffers_win.cpp — see the note at their use site below.
-void RtVideoDeviceLock(void** deviceSingleton);
-void RtVideoDeviceUnlock(void** deviceSingleton);
-
 namespace {
 
 // ENDGAME B.3.5 block VC — `ObjectExternalDtor()` IS GONE. It was an
@@ -58,73 +54,25 @@ namespace {
 // `??_7ImageBuffer@Video@@6B@` the ctor door stamped -- is GONE with the door and
 // the minted row. Every ImageBuffer is built by the real constructor and wears
 // the compiler's table (B39_RULES D1).
-// `ImageBufferDataVtable()` used to live here, as the whole body of
-// `??1ImageBufferData@Video@@`. ENDGAME B.3.5 block VC: that door delegates to
-// `Video::ImageBufferData::~ImageBufferData()`, whose body — the same
-// `??_7ImageBufferData@Video@@6B@` re-stamp — is in `companion_data.cpp` with the
-// other eleven, so the second copy of the resolver went with the second copy of
-// the store.
 
-// Video::Device::_singleton / Video::Configuration::_singleton — data
-// exports, resolved once and cached exactly like a function pointer. Both are
-// read verbatim by Width()/Height(); lane B owns Video::Device's own body,
-// not these two field reads.
-void** DeviceSingletonPtr() {
-    void** p = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    return p;
-}
-void** ConfigurationSingletonPtr() {
-    void** p = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
-    return p;
-}
+// B.4 (R-VIDEO): the singleton-slot and list-head accessors that handed out
+// `void**` views of `Device::_singleton`, `Configuration::_singleton` and the
+// four class-static list heads are gone: every body below names the typed class
+// static. The Device lock (buffers_win.cpp, declared in Device.h) takes the
+// ADDRESS of `Device::_singleton` because retail's unlock RE-READS it.
 
-// ----------------------------------------------------------------------------
-// Wave 9 lane W — the three class-static list heads Platform{Construct,Destruct}
-// maintain, and the Device lock they take. See the block comment above
-// Video_ImageBuffer_PlatformConstruct.
-// ----------------------------------------------------------------------------
-
-// ENDGAME B.3.9 VID: the four heads are the class statics (defined in
-// dynamic_resources.cpp beside the walkers), so the links written here and the
-// lists the device-lost sweeps walk are the same four cells by construction.
-// The function-local ResolveExport caches went with the mint rows (B9-10).
-void** ImageBufferFirstSurface() {
-    return reinterpret_cast<void**>(&::Video::ImageBuffer::_firstSurface);
-}
-void** IndexBufferFirstBuffer() {
-    return reinterpret_cast<void**>(&::Video::IndexBuffer::_firstBuffer);
-}
-void** VertexBufferFirstBuffer() {
-    return reinterpret_cast<void**>(&::Video::VertexBuffer::_firstBuffer);
-}
-// Wave 9 lane GFX2. Minted (standalone/rt_data_mint_tables.inc, 0x1801fe790,
-// 8 bytes) and already read PORT-AWARE by runtime/src/video/dynamic_resources.cpp
-// so our linkage and lane VID's walkers agree on ONE list on both sides of the
-// cutover.
-void** RenderBufferFirstRenderBuffer() {
-    return reinterpret_cast<void**>(&::Video::RenderBuffer::_firstRenderBuffer);
-}
-
-// Video::Device's recursive render lock, in runtime/src/video/buffers_win.cpp
-// (PLAN §4.1 decision 1: no <windows.h> in this file). It takes the ADDRESS of
-// the singleton slot, not a loaded Device*, because retail's unlock RE-READS
-// the singleton — see that file's header for why that is reproduced.
-//
-// Declared at NAMESPACE SCOPE, not inside the anonymous namespace above: an
-// anonymous-namespace declaration gives internal linkage, which turns a
-// cross-TU call into an undefined symbol at link time.
-
-// The three offsets buffers_win.cpp hardcodes, bound to the struct HERE so a
-// Device.h layout change breaks the build instead of silently corrupting the
-// lock. buffers_win.cpp cannot include Device.h itself (see its header).
-static_assert(offsetof(RtVideo::Device, lock) == 0x60, "buffers_win.cpp kDeviceLockOffset");
-static_assert(offsetof(RtVideo::Device, lockOwnerThreadId) == 0x88, "buffers_win.cpp kDeviceOwnerOffset");
-static_assert(offsetof(RtVideo::Device, lockRecursionCount) == 0x8C, "buffers_win.cpp kDeviceDepthOffset");
+// The three offsets buffers_win.cpp used to hardcode are its field names now;
+// the asserts stay as the layout's statement of the lock's shape.
+static_assert(offsetof(Video::Device, lock) == 0x60, "Device::lock");
+static_assert(offsetof(Video::Device, lockOwnerThreadId) == 0x88, "Device::lockOwnerThreadId");
+static_assert(offsetof(Video::Device, lockRecursionCount) == 0x8C, "Device::lockRecursionCount");
 
 // The intrusive circular doubly-linked list every Platform{Construct,Destruct}
-// pair maintains, at the two link offsets that class uses (+0x50/+0x58 for
-// ImageBuffer, +0x10/+0x18 for Index/VertexBuffer). `next` is the field written
-// with the list head; `prev` is the one written with the head's own prev.
+// pair maintains, at the two link fields that class uses (+0x50/+0x58 for
+// ImageBuffer, +0x10/+0x18 for Index/VertexBuffer, +0x18/+0x20 for
+// RenderBuffer). `next` is the field written with the list head; `prev` is the
+// one written with the head's own prev. B.4 (R-VIDEO): the two fields are
+// pointer-to-members of the class, so the links are written by name.
 //
 // TRANSCRIBED, not reasoned about: all four decompiles agree instruction for
 // instruction, including the two oddities. In Link, the last write is spelled
@@ -133,112 +81,62 @@ static_assert(offsetof(RtVideo::Device, lockRecursionCount) == 0x8C, "buffers_wi
 // In Unlink, the `if (*first == self) *first = nullptr` AFTER `*first` was
 // already advanced to `self->next` is not dead: for a one-element list
 // `self->next == self`, so the advance puts `self` back and this clears it.
-struct ListLinks { size_t next; size_t prev; };
-
-inline void** LinkField(void* self, size_t off) {
-    return reinterpret_cast<void**>(static_cast<uint8_t*>(self) + off);
-}
-
-// Returns the branch taken.
-enum class LinkBranch { FirstInList, Appended };
-
-LinkBranch ListLink(void* self, void** first, ListLinks L) {
-    if (*first == nullptr) {
-        *first = self;
-        *LinkField(self, L.next) = self;
-        *LinkField(self, L.prev) = self;
-        return LinkBranch::FirstInList;
+template <class T>
+void ListLink(T* self, T*& first, T* T::*next, T* T::*prev) {
+    if (first == nullptr) {
+        first = self;
+        self->*next = self;
+        self->*prev = self;
     } else {
-        void* tail = *LinkField(*first, L.prev);
-        *LinkField(self, L.prev) = tail;
-        *LinkField(self, L.next) = *first;
-        *LinkField(tail, L.next) = self;
-        *LinkField(*LinkField(self, L.next), L.prev) = self;
-        return LinkBranch::Appended;
+        T* tail = first->*prev;
+        self->*prev = tail;
+        self->*next = first;
+        tail->*next = self;
+        (self->*next)->*prev = self;
     }
 }
 
-// NotLinked is a genuine EARLY-OUT: both bodies do nothing at all, so the
-// comparison that follows is vacuous and a call that took it must not be
-// counted as a call that verified anything.
-enum class UnlinkBranch { NotLinked, Unlinked, ListEmptied };
-
-UnlinkBranch ListUnlink(void* self, void** first, ListLinks L) {
-    void* prev = *LinkField(self, L.prev);
-    void* next = *LinkField(self, L.next);
-    if (prev == nullptr || next == nullptr)
-        return UnlinkBranch::NotLinked;
-    if (*first == self)
-        *first = next;
-    *LinkField(prev, L.next) = next;
-    *LinkField(next, L.prev) = prev;
-    *LinkField(self, L.prev) = nullptr;
-    *LinkField(self, L.next) = nullptr;
-    if (*first == self) {
-        *first = nullptr;
-        return UnlinkBranch::ListEmptied;
-    }
-    return UnlinkBranch::Unlinked;
+// A self whose links are null is not on the list: a genuine early-out.
+template <class T>
+void ListUnlink(T* self, T*& first, T* T::*next, T* T::*prev) {
+    T* p = self->*prev;
+    T* n = self->*next;
+    if (p == nullptr || n == nullptr)
+        return;
+    if (first == self)
+        first = n;
+    p->*next = n;
+    n->*prev = p;
+    self->*prev = nullptr;
+    self->*next = nullptr;
+    if (first == self)
+        first = nullptr;
 }
 
-constexpr ListLinks kImageLinks  = { 0x50, 0x58 };
-constexpr ListLinks kBufferLinks = { 0x10, 0x18 };
 // Wave 9 lane GFX2. Read off 0x1800f4381..0x1800f43bd: retail loads the tail as
 // `[head + 0x20]` and writes `this + 0x18 = head`, which is ListLink's
-// `prev = 0x20` / `next = 0x18`. Independently cross-checked against the class's
-// own list WALKER: dynamic_resources.cpp records that all four walkers step the
-// `prev` field (ImageBuffer +0x58, Index/Vertex +0x18, RenderBuffer +0x20), and
-// +0x20 is exactly what this assignment calls `prev`.
-constexpr ListLinks kRenderLinks = { 0x18, 0x20 };
+// `prev = +0x20` / `next = +0x18`. Independently cross-checked against the
+// class's own list WALKER: dynamic_resources.cpp records that all four walkers
+// step the `prev` field (ImageBuffer +0x58, Index/Vertex +0x18, RenderBuffer
+// +0x20), and +0x20 is exactly what this assignment calls `prev`. (Buffers.h
+// names the Index/Vertex +0x10 `listPrev` and +0x18 `listNext`; in ListLink's
+// terms +0x10 is `next` and +0x18 `prev`. The offsets are retail's, the names
+// are guesses and are not changed here.)
+static_assert(offsetof(Video::ImageBuffer, _field50) == 0x50, "ImageBuffer list next");
+static_assert(offsetof(Video::ImageBuffer, _field58) == 0x58, "ImageBuffer list prev");
+static_assert(offsetof(Video::IndexBuffer, listPrev) == 0x10, "IndexBuffer list next");
+static_assert(offsetof(Video::IndexBuffer, listNext) == 0x18, "IndexBuffer list prev");
+static_assert(offsetof(Video::VertexBuffer, listPrev) == 0x10, "VertexBuffer list next");
+static_assert(offsetof(Video::VertexBuffer, listNext) == 0x18, "VertexBuffer list prev");
+static_assert(offsetof(Video::RenderBuffer, next) == 0x18, "RenderBuffer list next");
+static_assert(offsetof(Video::RenderBuffer, prev) == 0x20, "RenderBuffer list prev");
 
-// The five words a Link or an Unlink can write, captured so the diff oracle can
-// restore the pre-state and replay the retail body over it. Everything outside
-// this set is untouched by both bodies, and comparing bytes neither side writes
-// is the trap in reference_oracle_must_not_compare_unwritten_bytes.md.
-struct LinkState {
-    void* first;
-    void* selfNext;
-    void* selfPrev;
-    void* neighbourA;   // *LinkField(prevAtEntry, next)  — 0 when there is no neighbour
-    void* neighbourB;   // *LinkField(headAtEntry, prev)
-    void* prevAtEntry;
-    void* headAtEntry;
-};
-
-bool LinksEqual(const LinkState& a, const LinkState& b) {
-    return a.first == b.first && a.selfNext == b.selfNext && a.selfPrev == b.selfPrev &&
-           a.neighbourA == b.neighbourA && a.neighbourB == b.neighbourB;
-}
-
-// The companion object's slot 0 is its VECTOR DELETING DESTRUCTOR: retail's
-// PlatformDestruct calls `(**pc)(pc, 1)`. The oracle uses the same call to
-// dispose of the companion OUR body created before letting retail create its
-// own — see reference_phantom_dtor_mangling_qeaa_vs_ueaa.md for why slot 0 is
-// ??_E and not ??_G.
-void ReleaseCompanion(void* companion) {
-    if (companion == nullptr)
-        return;
-    using DeletingDtorFn = void (*)(void*, int);
-    DeletingDtorFn slot0 = *reinterpret_cast<DeletingDtorFn*>(*reinterpret_cast<void**>(companion));
-    slot0(companion, 1);
-}
-
-// The Device-side factory call at the head of every PlatformConstruct:
-// `dd = Device::_singleton->deviceData; companion = dd ? dd->vt[SLOT](dd, this) : nullptr`.
-// SLOT is 0x50 for ImageBuffer, 0x60 for IndexBuffer, 0x68 for VertexBuffer —
-// the three companion factories on dx11::DeviceData, which is OUR code
-// (dx11/src/devicedata.cpp), so this dispatch lands in the project on both
-// sides of the port.
-void* MakeCompanion(void* self, size_t vtSlot) {
-    RtVideo::Device* dev = static_cast<RtVideo::Device*>(*DeviceSingletonPtr());
-    void* dd = dev->deviceData;
-    if (dd == nullptr)
-        return nullptr;
-    using FactoryFn = void* (*)(void*, void*);
-    FactoryFn make = *reinterpret_cast<FactoryFn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(dd)) + vtSlot);
-    return make(dd, self);
-}
+// The companion fields the Platform bodies store to (the four descriptors'
+// `companionOff` before B.4).
+static_assert(offsetof(Video::ImageBuffer, _data)          == 0x60, "ImageBuffer companion");
+static_assert(offsetof(Video::IndexBuffer, platformData)   == 0x08, "IndexBuffer companion");
+static_assert(offsetof(Video::VertexBuffer, platformData)  == 0x08, "VertexBuffer companion");
+static_assert(offsetof(Video::RenderBuffer, platformData)  == 0x28, "RenderBuffer companion");
 
 }  // namespace
 
@@ -256,43 +154,6 @@ void* MakeCompanion(void* self, size_t vtSlot) {
 // ============================================================================
 
 // ============================================================================
-// Video::ImageBuffer::CopyToTexture / CopyFromTexture — 0x1800f3380 (slot 5,
-// Update/upload) / 0x1800f33a0 (slot 6, Read/download). Both are two-
-// instruction tail-call trampolines in retail: `this = this->platformData;
-// jmp [this->vtable + N]`. No new behaviour to invent, and no separate
-// oracle is meaningful here: the vtable this dispatches into is
-// dx11::ImageBufferData's, which is ALREADY OURS (dx11/src/imagebufferdata.cpp,
-// slots 5 and 6). Calling "the DLL's original CopyToTexture" and "our
-// CopyToTexture" reach the *same* dx11 vtable slot either way — there is no
-// second implementation on the other side of this trampoline to diverge
-// from. the diff oracle registers the site (so it is visible in the census
-// and the diff summary) without invoking the original a second time, which
-// would upload/download the texture twice.
-// ============================================================================
-
-// ============================================================================
-// Video::ImageBuffer::Create — 0x1800f2680, ordinal 1877. Stamps the ten
-// descriptor fields from its parameters (an ordinary field-store, in scope
-// and fully reproduced), then a genuine two-argument call — not a raw
-// register-preserving trampoline like the pair above — into
-// dx11::ImageBufferData's slot 3 (ImageBufferData_Create in
-// dx11/src/imagebufferdata.cpp). Same "already our own vtable on the far
-// side" situation as CopyToTexture/CopyFromTexture, so the diff oracle rather
-// than a second live call.
-//
-// Enum parameters (ImageType/Usage/Format/FilterMode/AddressMode) are plain
-// `enum` in the retail signature, i.e. 4-byte int underlying type in the
-// MSVC ABI with no special calling-convention handling — passed here as
-// int32_t so this file does not need to invent enumerator names Runtime
-// never exports.
-// ============================================================================
-
-// (The `??1ImageBufferData@Video@@UEAA@XZ` door, retail 0x1800f8e10, is GONE:
-// ENDGAME B.3.9 VID retired it with the RT_DELDTOR row that was its one caller.
-// dx11/src/imagebufferdata.cpp calls `Video::ImageBufferData::~ImageBufferData()`
-// directly, RULE B5-3.)
-
-// ============================================================================
 // Wave 9 lane W — Video::{Image,Index,Vertex}Buffer::Platform{Construct,Destruct}
 //
 //   0x1800f2f40  ?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ    ord 3337
@@ -302,187 +163,42 @@ void* MakeCompanion(void* self, size_t vtSlot) {
 //   0x1800f57e0  ?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ   ord 3345
 //   0x1800f58c0  ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ    ord 3373
 //
-// WHY THEY ARE HERE NOW. Wave 6 lane C left these "out of scope" and called the
-// DLL through the raw DLL door from the three ctors and ~ImageBuffer above.
-// Wave 9 lane V's residue census reads four of the six as REAL DEPENDENCY on
-// the RAW door: at cutover `the raw DLL door` is `GetProcAddress` on a module
-// that is not there, so every one of those becomes a call through null on the
-// first buffer the renderer builds. (The Index/Vertex PlatformDestruct pair is
-// not in lane V's 25 for the only reason that its resolver is DEFINED and never
-// CALLED — the two dead helpers at the top of this file. They are ported here
-// anyway, because the moment ~IndexBuffer or ~VertexBuffer is ported they stop
-// being dead and become two more rows.)
-//
 // ALL SIX ARE THE SAME FUNCTION with three parameters — the companion factory
-// slot on Video::Device's DeviceData vtable, the two link offsets, and which
-// class-static list head. Construct: make the dx11 companion, store it, take
-// Device's lock, splice `this` into the class's circular list, drop the lock.
-// Destruct: release the companion, take the lock, unsplice, drop the lock.
+// slot on Video::Device's DeviceData vtable, the two link fields, and which
+// class-static list head. Construct: make the dx11 companion
+// (`dd = Device::_singleton->deviceData; companion = dd ? dd->Create…Data(this)
+// : nullptr`), store it, take Device's lock, splice `this` into the class's
+// circular list, drop the lock. Destruct: release the companion through its
+// slot-0 deleting destructor with flag 1, take the lock, unsplice, drop the
+// lock.
 //
 // THE COMPANION FACTORY IS ALREADY OURS. Device+0x100 is dx11::DeviceData
-// (dx11/src/devicedata.cpp) and slots 0x50/0x60/0x68 are its Image/Index/Vertex
-// companion factories, so that virtual call lands in this project on both sides
-// of the port and there is nothing on the far side to diverge from.
+// (dx11/src/devicedata.cpp) and slots 10/12/13/19 (+0x50/+0x60/+0x68/+0x98) are
+// its Image/Index/Vertex/Render companion factories. B.4 (R-VIDEO): each is the
+// virtual call on `Video::DeviceData` it always dispatched as, by name.
 //
-// ---------------------------------------------------------------------------
-// THE ORACLE: restore-and-replay, on the LINKAGE only.
-// ---------------------------------------------------------------------------
-// A plain "call ours, call theirs, compare" is wrong twice over here: theirs
-// would splice the same object into the list a second time (a self-loop, and a
-// corrupt list for every later walker) and would create a second companion
-// object nothing frees. So the diff path does this instead:
-//
-//   1. capture the five words a Link/Unlink can write, at the ENTRY-TIME
-//      addresses (the head, `this`'s two links, and the two neighbour slots);
-//   2. run OURS in full — the real body, not a prediction;
-//   3. read those same five words back;
-//   4. rewind: give the companion we just made back to dx11 through its own
-//      slot-0 deleting destructor, restore `this`'s companion field, and write
-//      the five words back to their entry values;
-//   5. run THEIRS in full over the restored state;
-//   6. read the five words again and compare against step 3.
-//
-// The final state is retail's, by construction, which is the safe way round: if
-// our linkage is wrong, the run continues on the DLL's list and the divergence
-// is a log line rather than a crash three frames later.
-//
-// WHAT THIS ORACLE DOES **NOT** COVER, stated rather than buried. The companion
-// create/release itself is not differenced — in the Construct path ours' object
-// is destroyed before theirs runs, and in the Destruct path `this`'s companion
-// field is nulled before theirs runs so that retail's own `if (pc != nullptr)`
-// guard skips a second release of memory we already freed. Both are a single
-// virtual dispatch to code this project owns (dx11::DeviceData's factory slot,
-// and the companion's slot-0 vector deleting destructor), and both are exercised
-// on the ordinary non-diff path where our body is the only one that runs. The
-// LINKAGE — the part that is retail logic we transcribed, with the two branch
-// oddities transcribed with it — is what is compared, on every call.
-//
-// A note on reading the result: the diff oracle here reports on every call that
-// reaches it, so `calls=` counts real work rather than entry
-// (reference_probe_needs_an_effectiveness_control.md). A `calls=0` on these six
-// means the renderer built no buffers, not that the port agreed with retail.
+// The ONE place the classes differ in Destruct: Index/VertexBuffer write
+// `this+8 = 0` after releasing, ImageBuffer and RenderBuffer leave the freed
+// pointer in place. That asymmetry is in the shipped bytes of all four and is
+// reproduced rather than tidied.
 // ============================================================================
-
-namespace {
-
-// One body, three instantiations. `vtSlot == kNoCompanion` is not used; every
-// caller passes a real slot.
-LinkBranch PlatformConstructBody(void* self, size_t vtSlot, size_t companionOff,
-                                 void** first, ListLinks L) {
-    *LinkField(self, companionOff) = MakeCompanion(self, vtSlot);
-    RtVideoDeviceLock(DeviceSingletonPtr());
-    const LinkBranch br = ListLink(self, first, L);
-    RtVideoDeviceUnlock(DeviceSingletonPtr());
-    return br;
-}
-
-// `nullCompanionAfterRelease` is the ONE place the three classes differ:
-// Index/VertexBuffer write `this+8 = 0` after releasing, ImageBuffer leaves the
-// freed pointer at +0x60 in place. That asymmetry is in the shipped bytes of
-// all three and is reproduced rather than tidied.
-UnlinkBranch PlatformDestructBody(void* self, size_t companionOff,
-                                  bool nullCompanionAfterRelease,
-                                  void** first, ListLinks L) {
-    void* companion = *LinkField(self, companionOff);
-    if (companion != nullptr)
-        ReleaseCompanion(companion);
-    if (nullCompanionAfterRelease)
-        *LinkField(self, companionOff) = nullptr;
-    RtVideoDeviceLock(DeviceSingletonPtr());
-    const UnlinkBranch br = ListUnlink(self, first, L);
-    RtVideoDeviceUnlock(DeviceSingletonPtr());
-    return br;
-}
-
-void DescribeLinks(char* buf, size_t n, const LinkState& s) {
-    std::snprintf(buf, n, "first=%p next=%p prev=%p nA=%p nB=%p",
-                  s.first, s.selfNext, s.selfPrev, s.neighbourA, s.neighbourB);
-}
-
-// ============================================================================
-// THE PER-CLASS DESCRIPTOR — one literal, used by the port AND by the probe
-// ============================================================================
-//
-// The six ports differ only in four values: the companion-factory slot on
-// DeviceData's vtable, the offset the companion is stored at, the two link
-// offsets, and whether the destructor nulls the companion field afterwards.
-// They were originally spelled out at each of the six call sites.
-//
-// They are now a single `BufferClass` literal per class, because Wave 9 lane W's
-// execution report left `Video::{Index,Vertex}Buffer::PlatformDestruct`
-// UNVERIFIED with the note "the shared body is verified 10x through ImageBuffer
-// and the link offsets 10x each through the construct siblings, but THE
-// COMPOSITION is unproved" — the composition being exactly this argument tuple.
-// A tuple that appears once, and that the empty-list probe below runs, cannot
-// disagree with itself. That is what turns "unproved composition" into "proved
-// by the probe" rather than leaving two ports registered and untested.
-struct BufferClass {
-    size_t      vtSlot;            // DeviceData vtable slot of the companion factory
-    size_t      companionOff;      // where the companion pointer is stored
-    bool        nullAfterRelease;  // Index/Vertex null it; ImageBuffer does not
-    ListLinks   links;
-    void**    (*head)();           // the exported class-static list head
-};
-
-const BufferClass kImageClass  = { 0x50, 0x60, false, kImageLinks,  &ImageBufferFirstSurface };
-const BufferClass kIndexClass  = { 0x60, 0x08, true,  kBufferLinks, &IndexBufferFirstBuffer };
-const BufferClass kVertexClass = { 0x68, 0x08, true,  kBufferLinks, &VertexBufferFirstBuffer };
-// Wave 9 lane GFX2. Slot 0x98 == dx11::DeviceData vtable index 19, which
-// dx11/src/devicedata.cpp registers as Factory_RenderBufferData — so this
-// dispatch lands in this project on both sides of the port, exactly as the other
-// three do. `nullAfterRelease = false`: 0x1800f4400 releases the companion at
-// +0x28 and leaves the freed pointer there, the ImageBuffer asymmetry, not the
-// Index/Vertex one.
-const BufferClass kRenderClass = { 0x98, 0x28, false, kRenderLinks, &RenderBufferFirstRenderBuffer };
-
-// The descriptors' offsets are the structs', bound here so a header change
-// breaks the build rather than silently mis-linking.
-static_assert(offsetof(ImageBuffer, platformData)  == 0x60, "kImageClass.companionOff");
-static_assert(offsetof(IndexBuffer, platformData)  == 0x08, "kIndexClass.companionOff");
-static_assert(offsetof(VertexBuffer, platformData) == 0x08, "kVertexClass.companionOff");
-static_assert(offsetof(RtVideo::RenderBuffer, platformData) == 0x28, "kRenderClass.companionOff");
-static_assert(offsetof(RtVideo::RenderBuffer, next) == 0x18, "kRenderLinks.next");
-static_assert(offsetof(RtVideo::RenderBuffer, prev) == 0x20, "kRenderLinks.prev");
-
-}  // namespace
 
 // ============================================================================
 // ENDGAME B.3.5 block VC — THE `Video::ImageBuffer` MEMBER BODIES.
-//
-// At `namespace Video` scope and AFTER both anonymous namespaces (B34_BRIEFS
-// A.2); the helpers above stay reachable by unqualified name because an
-// anonymous namespace's members are members of the global namespace's
-// declarative region. `Video::ImageBuffer` was made a real class by b35-C, which
-// had to leave every one of these bodies where it was because this file is
-// b35-D2's; this is the pass that moves them.
-//
-// THE FIELD READS DID NOT CHANGE, and two of them are deliberately still raw:
-// `Width()`/`Height()` read `Device+4`/`+8` and `Configuration+0x2c` through the
-// two singleton slots, as retail's inlined ladder does. Retyping those two
-// receivers is `Video::Device`'s and `Video::Configuration`'s business, not this
-// member's, and both singletons stay `RT_DATA_SLOT` reads (RULE B4b-4).
 // ============================================================================
 namespace Video {
 
 // ??1ImageBuffer@Video@@UEAA@XZ — 0x1800f2610, ordinal 608.
 //
-// POST-STATE only (there is no safe way to run "theirs" a second time over the
-// same refcount). Retail's four steps, and where each one is now:
-//   1. stamp ImageBuffer's own vtable          — written by hand, below, at the
-//      MINTED address, because a live object wears the minted table and GCC's
-//      emitted store would name GCC's
-//   2. PlatformDestruct                        — the qualified member call
+// Retail's four steps, and where each one is now:
+//   1. stamp ImageBuffer's own vtable          — the compiler's entry store
+//   2. PlatformDestruct                        — the member call
 //   3. release the `_sourceName` String by hand — below; `_sourceName` keeps the
 //      `void*` type precisely so the compiler does NOT release it a second time
 //   4. stamp CompiledExternal's vtable, then tail-jump ~External
-//                                              — the DESTRUCTOR CHAIN, which is
-//      what replaced this file's `ObjectExternalDtor()` resolver
-//
-// ENDGAME B.3.8 block RB: step 1's hand-written MINTED stamp is GONE; the
-// compiler's own stamp on entry is retail's step 1. ENDGAME B.3.9 VS: the dtor
-// door is gone too -- this is reached only through slot 0 (`DeletingDtor`) and
-// the subclasses' destructor chains. Steps 2 and 3 are `ReleaseFields`, kept
-// out of line only so the unit tests can link recording stand-ins.
+//                                              — the DESTRUCTOR CHAIN
+// Steps 2 and 3 are `ReleaseFields`, kept out of line only so the unit tests
+// can link recording stand-ins.
 ImageBuffer::~ImageBuffer() { ReleaseFields(); }
 
 // ??0ImageBuffer 0x1800f2580 after the inlined External stores and the stamp
@@ -517,15 +233,17 @@ Object::Base* ImageBuffer::CreateInPlaceObject(void* storage) {
     return storage ? ::new (storage) ImageBuffer() : nullptr;
 }
 
-// ??1ImageBuffer 0x1800f2610 steps 2 and 3 (see above).
+// ??1ImageBuffer 0x1800f2610 steps 2 and 3 (see above). `_sourceName` is a
+// `System::String`'s data pointer kept as `void*` (H5, see the header), so its
+// refcount and allocation base are reached through the marked header views.
 void ImageBuffer::ReleaseFields() {
     PlatformDestruct();
 
     if (_sourceName != nullptr) {
-        int32_t* refcount = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(_sourceName) - 4);
+        int32_t* refcount = static_cast<int32_t*>(_sourceName) - 1;   // CAST-OK: string_header
         *refcount -= 1;
         if (*refcount == 0) {
-            _sourceName = static_cast<uint8_t*>(_sourceName) - 8;
+            _sourceName = static_cast<uint8_t*>(_sourceName) - 8;     // CAST-OK: string_header
             System::MemoryAllocator::MemFree(_sourceName);
         } else {
             _sourceName = nullptr;
@@ -535,18 +253,17 @@ void ImageBuffer::ReleaseFields() {
 
 // ?Width@ImageBuffer@Video@@QEBAHXZ  0x1800f2530
 // Bit 8 = the live device width, bit 9 = half of it, otherwise the stored value
-// right-shifted by `Configuration+0x2c & 0x1f` when bit 6 is set.
+// right-shifted by `Configuration::shadowScalar & 0x1f` when bit 6 is set.
+// Both singletons are read at the point retail reads them.
 int32_t ImageBuffer::Width() const {
-    void** device = DeviceSingletonPtr();
-    void** config = ConfigurationSingletonPtr();
     if ((_flags >> 8) & 1)
-        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 4);
+        return Device::_singleton->backBufferWidth;
     if ((_flags >> 9) & 1)
-        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 4) / 2;
+        return Device::_singleton->backBufferWidth / 2;
     int32_t v = _width;
     if ((_flags >> 6) & 1) {
         const uint32_t shift =
-            *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(*config) + 0x2c) & 0x1f;
+            static_cast<uint32_t>(Configuration::_singleton->shadowScalar) & 0x1f;
         v >>= shift;
     }
     return v;
@@ -554,16 +271,14 @@ int32_t ImageBuffer::Width() const {
 
 // ?Height@ImageBuffer@Video@@QEBAHXZ  0x1800f24e0 — the same ladder on +8.
 int32_t ImageBuffer::Height() const {
-    void** device = DeviceSingletonPtr();
-    void** config = ConfigurationSingletonPtr();
     if ((_flags >> 8) & 1)
-        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 8);
+        return Device::_singleton->backBufferHeight;
     if ((_flags >> 9) & 1)
-        return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*device) + 8) / 2;
+        return Device::_singleton->backBufferHeight / 2;
     int32_t v = _height;
     if ((_flags >> 6) & 1) {
         const uint32_t shift =
-            *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(*config) + 0x2c) & 0x1f;
+            static_cast<uint32_t>(Configuration::_singleton->shadowScalar) & 0x1f;
         v >>= shift;
     }
     return v;
@@ -636,51 +351,59 @@ bool ImageBuffer::Create(ImageType type, Usage usage, Format format, uint32_t fl
 
 // ?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ  0x1800f2f40, ordinal 3337
 // ?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ   0x1800f3020, ordinal 3365
-//
-// The shared `PlatformConstructBody`/`PlatformDestructBody` pair is NOT
-// specialised per class here: it is the ONE argument tuple Wave 9 lane W's
-// empty-list probe proved, and it is also `{Index,Vertex,Render}Buffer`'s. The
-// ImageBuffer arm is the one that does NOT null the companion field after
-// releasing it — that asymmetry is in the shipped bytes of all four and is
-// reproduced rather than tidied.
+// The ImageBuffer arm does NOT null the companion field after releasing it.
 void ImageBuffer::PlatformConstruct() {
-    void** first = ImageBufferFirstSurface();
-    (void)PlatformConstructBody(this, 0x50, offsetof(ImageBuffer, _data), first, kImageLinks);
+    DeviceData* dd = Device::_singleton->deviceData;
+    _data = dd ? dd->CreateImageBufferData(this) : nullptr;       // slot 10, +0x50
+    RtVideoDeviceLock(&Device::_singleton);
+    ListLink(this, _firstSurface, &ImageBuffer::_field50, &ImageBuffer::_field58);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 void ImageBuffer::PlatformDestruct() {
-    void** first = ImageBufferFirstSurface();
-    (void)PlatformDestructBody(this, offsetof(ImageBuffer, _data),
-                               /*nullCompanionAfterRelease=*/false, first, kImageLinks);
+    if (ImageBufferData* companion = _data)
+        (void)companion->DeletingDtor(1);
+    RtVideoDeviceLock(&Device::_singleton);
+    ListUnlink(this, _firstSurface, &ImageBuffer::_field50, &ImageBuffer::_field58);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 }  // namespace Video
 
 // ENDGAME B.3.5 block D2 — the four buffer `Platform*` bodies are members of the
-// real `Video::IndexBuffer` / `Video::VertexBuffer` now. The shared
-// `PlatformConstructBody`/`PlatformDestructBody` pair stays exactly as it is: it
-// is the ONE argument tuple Wave 9 lane W's empty-list probe proved, and it is
-// also ImageBuffer's (b35-C's class), so it is not specialised per class here.
+// real `Video::IndexBuffer` / `Video::VertexBuffer`.
 void Video::IndexBuffer::PlatformConstruct() {
-    void** first = IndexBufferFirstBuffer();
-    (void)PlatformConstructBody(this, 0x60, offsetof(IndexBuffer, platformData), first, kBufferLinks);
+    DeviceData* dd = Device::_singleton->deviceData;
+    platformData = dd ? dd->CreateIndexBufferData(this) : nullptr;   // slot 12, +0x60
+    RtVideoDeviceLock(&Device::_singleton);
+    ListLink(this, _firstBuffer, &IndexBuffer::listPrev, &IndexBuffer::listNext);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 void Video::IndexBuffer::PlatformDestruct() {
-    void** first = IndexBufferFirstBuffer();
-    (void)PlatformDestructBody(this, offsetof(IndexBuffer, platformData),
-                               /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+    if (IndexBufferData* companion = platformData)
+        (void)companion->DeletingDtor(1);
+    platformData = nullptr;
+    RtVideoDeviceLock(&Device::_singleton);
+    ListUnlink(this, _firstBuffer, &IndexBuffer::listPrev, &IndexBuffer::listNext);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 void Video::VertexBuffer::PlatformConstruct() {
-    void** first = VertexBufferFirstBuffer();
-    (void)PlatformConstructBody(this, 0x68, offsetof(VertexBuffer, platformData), first, kBufferLinks);
+    DeviceData* dd = Device::_singleton->deviceData;
+    platformData = dd ? dd->CreateVertexBufferData(this) : nullptr;  // slot 13, +0x68
+    RtVideoDeviceLock(&Device::_singleton);
+    ListLink(this, _firstBuffer, &VertexBuffer::listPrev, &VertexBuffer::listNext);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 void Video::VertexBuffer::PlatformDestruct() {
-    void** first = VertexBufferFirstBuffer();
-    (void)PlatformDestructBody(this, offsetof(VertexBuffer, platformData),
-                               /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
+    if (VertexBufferData* companion = platformData)
+        (void)companion->DeletingDtor(1);
+    platformData = nullptr;
+    RtVideoDeviceLock(&Device::_singleton);
+    ListUnlink(this, _firstBuffer, &VertexBuffer::listPrev, &VertexBuffer::listNext);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 // ============================================================================
@@ -689,55 +412,40 @@ void Video::VertexBuffer::PlatformDestruct() {
 //   0x1800f4320  ?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ   ord 3341
 //   0x1800f4400  ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ    ord 3369
 //
-// The FOURTH instantiation of the family above, and the only one Wave 9 lane W
-// left out. Both names were verified present in the shipped export table before
-// this was written (tools/pe_exports.py against the shipped
-// C:/GOG Games/Banished/Runtime-x64.dll) and both disassemblies were transcribed instruction for
-// instruction against `PlatformConstructBody` / `PlatformDestructBody`; the
-// bodies agree with the other three with no exception at all, which is why this
-// adds a descriptor and two wrappers rather than any new logic.
-//
-// WHY IT IS HERE AND NOT LEFT ON THE DLL. `Graphics::SunLight`'s constructor
-// (0x1801081f0, below in runtime/src/graphics/sunlight.cpp) and its `Set`
-// rebuild paths both call these two by ADDRESS. Wave 9 lane GFX declined the
-// SunLight pair with exactly this as the blocker — "?PlatformConstruct@
-// RenderBuffer@Video@@ and ?PlatformDestruct@ are exported and UNPORTED", and
-// its recommended order was to land these two first so that porting SunLight
-// closes a row rather than moving it one frame deeper. That is what this is.
-//
-// The oracle is the SAME restore-and-replay the other three use, plus the
-// empty-list probe, whose FIRST-IN-LIST branch matters more here than for any
-// of the other three: at cutover the mint owns `_firstRenderBuffer` and it
-// starts NULL, and the SunLight ctor builds the very first RenderBuffer in the
-// process.
+// The FOURTH instantiation of the family above. Slot 0x98 == DeviceData slot
+// 19, `CreateRenderBufferData`. 0x1800f4400 releases the companion at +0x28
+// and leaves the freed pointer there, the ImageBuffer asymmetry, not the
+// Index/Vertex one. `Graphics::SunLight`'s constructor (0x1801081f0) and its
+// `Set` rebuild paths build the very first RenderBuffer in the process, so the
+// FIRST-IN-LIST branch of ListLink runs here.
 // ============================================================================
 
 void Video::RenderBuffer::PlatformConstruct() {
-    void** first = RenderBufferFirstRenderBuffer();
-    (void)PlatformConstructBody(this, 0x98, offsetof(Video::RenderBuffer, platformData),
-                                first, kRenderLinks);
+    DeviceData* dd = Device::_singleton->deviceData;
+    platformData = dd ? dd->CreateRenderBufferData(this) : nullptr;  // slot 19, +0x98
+    RtVideoDeviceLock(&Device::_singleton);
+    ListLink(this, _firstRenderBuffer, &RenderBuffer::next, &RenderBuffer::prev);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 void Video::RenderBuffer::PlatformDestruct() {
-    void** first = RenderBufferFirstRenderBuffer();
-    (void)PlatformDestructBody(this, offsetof(Video::RenderBuffer, platformData),
-                               /*nullCompanionAfterRelease=*/false, first, kRenderLinks);
+    if (RenderBufferData* companion = platformData)
+        (void)companion->DeletingDtor(1);
+    RtVideoDeviceLock(&Device::_singleton);
+    ListUnlink(this, _firstRenderBuffer, &RenderBuffer::next, &RenderBuffer::prev);
+    RtVideoDeviceUnlock(&Device::_singleton);
 }
 
 // ============================================================================
 // Video::IndexBuffer / Video::VertexBuffer — ctors zero the two owned fields
-// then hand off to PlatformConstruct (out of scope — see the resolvers
-// above). Create/Set are pure trampolines into the platform buffer object at
-// +0x08 (dx11::IndexBufferData / VertexBufferData), same reasoning as
-// ImageBuffer's CopyToTexture/CopyFromTexture: nothing on the far side to
-// diverge from, since that vtable is dx11's and dx11 is already ours.
+// then hand off to PlatformConstruct. Create/Set are pure trampolines into the
+// platform buffer object at +0x08 (dx11::IndexBufferData / VertexBufferData).
 // ============================================================================
 
 // ENDGAME B.3.5 block D2. The two constructors stay DOORS and do NOT become real
 // `IndexBuffer()` / `VertexBuffer()`: the `PlatformConstruct` they tail into
-// publishes `this` into the `_firstBuffer` intrusive list, whose head is an
-// `RT_DATA_SLOT` read rather than a C++ static (RULE B4b-4 / B35_RULES §9). What
-// converted inside them is the hand-off, now a qualified member call.
+// publishes `this` into the `_firstBuffer` intrusive list (RULE B4b-4 /
+// B35_RULES §9). What converted inside them is the hand-off, a member call.
 void Video_IndexBuffer_Ctor(IndexBuffer* self) {
     self->size = 0;
     self->dynamic = false;
@@ -750,41 +458,26 @@ void Video_VertexBuffer_Ctor(VertexBuffer* self) {
     self->Video::VertexBuffer::PlatformConstruct();
 }
 
-// Create/Set are pure trampolines into the companion at +0x08. ENDGAME B.3.5:
-// the hand-inlined `*(vtable + 0x08)` / `+ 0x10` dispatches became VIRTUAL CALLS
-// on block A's real `Video::{Index,Vertex}BufferData`, whose slots 1 and 2 are
-// `Create` and `SetData` (runtime/types/video/CompanionData.h, +0x08 and +0x10 —
-// the same two byte offsets, now spelled as the slots they are). `platformData`
-// stays a `void*` field, so each receiver takes one marked bridge cast.
+// Create/Set are pure trampolines into the companion at +0x08, slots 1 and 2 of
+// `Video::{Index,Vertex}BufferData` (`Create` and `SetData`, +0x08 and +0x10).
 bool Video::IndexBuffer::Create(int count, bool isDynamic, void* data) {
-    // B.3.5 bridge — platformData is a pinned void* field.
-    return reinterpret_cast<Video::IndexBufferData*>(platformData)
-               ->Create(static_cast<uint32_t>(count),
-                        static_cast<uint8_t>(isDynamic ? 1 : 0), data);
+    return platformData->Create(static_cast<uint32_t>(count),
+                                static_cast<uint8_t>(isDynamic ? 1 : 0), data);
 }
 
-// ENDGAME B.3.5 closing pass: the two ints are RENAMED, not reordered, to the
-// `(sizeBytes, offsetBytes)` the retail trampoline and dx11's slot-2 consumer both
-// say they are -- Buffers.h carries the evidence. The forwarding was already
-// correct: `SetData`'s own parameters are spelled `(sizeBytes, offsetBytes, src)`
-// in CompanionData.h, so the old names disagreed with the call one line below them.
+// ENDGAME B.3.5 closing pass: the two ints are `(sizeBytes, offsetBytes)`, the
+// retail trampoline's and dx11's slot-2 consumer's reading (Buffers.h).
 bool Video::IndexBuffer::Set(int sizeBytes, int offsetBytes, void* data) {
-    // B.3.5 bridge — platformData is a pinned void* field.
-    return reinterpret_cast<Video::IndexBufferData*>(platformData)
-               ->SetData(sizeBytes, offsetBytes, data);
+    return platformData->SetData(sizeBytes, offsetBytes, data);
 }
 
 bool Video::VertexBuffer::Create(int count, bool isDynamic, void* data) {
-    // B.3.5 bridge — platformData is a pinned void* field.
-    return reinterpret_cast<Video::VertexBufferData*>(platformData)
-               ->Create(static_cast<uint32_t>(count),
-                        static_cast<uint8_t>(isDynamic ? 1 : 0), data);
+    return platformData->Create(static_cast<uint32_t>(count),
+                                static_cast<uint8_t>(isDynamic ? 1 : 0), data);
 }
 
 bool Video::VertexBuffer::Set(int sizeBytes, int offsetBytes, void* data) {
-    // B.3.5 bridge — platformData is a pinned void* field.
-    return reinterpret_cast<Video::VertexBufferData*>(platformData)
-               ->SetData(sizeBytes, offsetBytes, data);
+    return platformData->SetData(sizeBytes, offsetBytes, data);
 }
 
 // ============================================================================

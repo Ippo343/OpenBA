@@ -85,28 +85,20 @@
 #include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
 #include "../../types/system/Debug.h"          // B3R W0-SM M2: System::Debug::_disableHandler
 
-using RtVideo::Adapter;
-using RtVideo::Device;
-using RtVideo::DisplayMode;
-using RtVideo::GraphicsInterface;
-using RtVideo::InterfaceSlot;
+using Adapter           = Video::Device::Adapter;
+using DisplayMode       = Video::Device::DisplayMode;
+using GraphicsInterface = Video::Device::GraphicsInterface;
+using InterfaceSlot     = Video::Device::InterfaceSlot;
 
 extern "C" void RtVideo_SortDisplayModes(DisplayMode* first, int32_t count);
-extern "C" void RtVideo_SortRefreshRates(RtVideo::RefreshRate* first, int32_t count);
+extern "C" void RtVideo_SortRefreshRates(Video::Device::RefreshRate* first, int32_t count);
 
 namespace {
 
-constexpr uintptr_t kSlot0 = 0xb0;
+// Device::dllSlots (+0xB0), three InterfaceSlots.
 constexpr int kSlotCount = 3;
-
-inline InterfaceSlot* SlotAt(Device* self, int i) {
-    return reinterpret_cast<InterfaceSlot*>(
-        reinterpret_cast<uint8_t*>(self) + kSlot0 + static_cast<uintptr_t>(i) * 0x18);
-}
-
-using CreateDeviceDataFn = void* (*)(Device*);
-// (B3X W0: the unused `EnumerateFn` / `DeletingDtorFn` slot typedefs and the
-// `VtblOf` vptr helper are deleted; the DeviceData calls are by name.)
+static_assert(sizeof(Video::Device::dllSlots) / sizeof(InterfaceSlot) == kSlotCount,
+              "Device::dllSlots holds the three interface DLL slots");
 
 }  // namespace
 
@@ -124,12 +116,11 @@ bool Video::Device::EnumerateVideoModes() {
     for (int i = 0; i < kSlotCount; ++i) {              // 0x1800f862e / 0x1800f8635
         InterfaceSlot* const s = &dllSlots[i];
         if (s->module == nullptr)           continue;   // 0x1800f8641
-        CreateDeviceDataFn create =
-            reinterpret_cast<CreateDeviceDataFn>(s->createDeviceData);
+        const CreateDeviceDataFn create = s->createDeviceData;
         if (create == nullptr)              continue;   // 0x1800f8654
         if (s->getDeviceName == nullptr)    continue;   // 0x1800f8659, tested, never called
 
-        void* data = create(this);                      // 0x1800f8667
+        DeviceData* data = create(this);                // 0x1800f8667
         ++created;
 
         System::Debug::_disableHandler = true;          // 0x1800f8671
@@ -137,14 +128,14 @@ bool Video::Device::EnumerateVideoModes() {
         // 0x1800f8678: `MOV RDX,[RAX]` — UNGUARDED. Retail relies on the SEH
         // region here, not on a null test; see the banner. The virtual call keeps
         // that: a null receiver faults on the vptr load exactly as retail does.
-        (void)reinterpret_cast<Video::DeviceData*>(data)->EnumerateInterfaces();  // B.3.5 bridge
+        (void)data->EnumerateInterfaces();
         ++enumerated;
 
         System::Debug::_disableHandler = false;         // 0x1800f8697
 
         if (data != nullptr) {                          // 0x1800f869e — guarded HERE
             // 0x1800f86ab, the deleting flag.
-            (void)reinterpret_cast<Video::DeviceData*>(data)->DeletingDtor(1);   // B.3.5 bridge
+            (void)data->DeletingDtor(1);
         }
     }
 

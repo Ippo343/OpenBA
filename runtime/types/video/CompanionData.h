@@ -192,6 +192,14 @@ static_assert(offsetof(ImageBufferData, imageBuffer) == 0x08, "imageBuffer at +0
 // derive in C++ -- so the call site is not a derived class and a `protected`
 // destructor would be unreachable to it. It must NOT become `DeletingDtor(0)`:
 // that re-enters the derived slot 0.
+//
+// B.4 (R-VIDEO): each slot 0 returns `void*` -- what MSVC's `??_E` returns (the
+// block it freed or `this`) -- and its vector arm reads the element count out of
+// the vector-new cookie in the qword before element 0 through ONE marked cast
+// (marked with the `dx11_seam` category: the arm exists only because these classes keep the
+// hand slot 0 instead of a compiler virtual destructor, and it goes with the
+// seam, plan §4.1). The elements are `this[i]`: `sizeof(XData) == 0x10` is the
+// retail element stride and RT_VIDEO_COMPANION_PINS below asserts it.
 
 extern "C" void _purecall();   // the CRT's (the exe's standalone/main.cpp logs it)
 
@@ -199,6 +207,30 @@ extern "C" void _purecall();   // the CRT's (the exe's standalone/main.cpp logs 
 #pragma GCC diagnostic ignored "-Wunused-parameter"   // the _purecall bodies below
 
 namespace Video {
+
+// The owners and the companions the factory slots below name (B.4 R-VIDEO, H4).
+class Context;
+class ImageBuffer;
+class IndexBuffer;
+class VertexBuffer;
+class VertexLayout;
+class VertexProgram;
+class PixelProgram;
+class RenderState;
+class VideoProgram;
+class RenderBuffer;
+class ContextData;
+class ImageBufferData;
+class ConstantBufferData;
+class IndexBufferData;
+class VertexBufferData;
+class VertexLayoutData;
+class VertexProgramData;
+class PixelProgramData;
+class RenderStateData;
+class VideoProgramData;
+class RenderBufferData;
+
 namespace detail {
 // Retail's body in every Video::*Data slot but 0: `_purecall` (0x18007ec28).
 // Never reached -- a live companion wears dx11's table -- and never returns.
@@ -216,14 +248,14 @@ public:
     // [0] 0x180058b10 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~DeviceData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual DeviceData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<DeviceData*>(self + static_cast<int64_t>(i) * 0x10)->~DeviceData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<DeviceData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~DeviceData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~DeviceData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -243,21 +275,22 @@ public:
     // HCURSOR-shaped: (imageBuffer, hotspotX, hotspotY).
     virtual void SetImageBuffer(void* imageBuffer, int hotX, int hotY) { detail::CompanionPureCall(); }  // [ 8]
     // [ 9]..[19] — the eleven companion factories, in retail slot order. Each
-    // takes the owning Video-side object and returns the new `*Data`. The
-    // Runtime-side callers reach these by BYTE OFFSET: `Video::VertexLayout`'s
-    // constructor uses +0x70 (slot 14) and `Video::ConstantBuffer`'s +0x58
-    // (slot 11).
-    virtual void* CreateContextData(void* owner) { detail::CompanionPureCall(); }            // [ 9] +0x48
-    virtual void* CreateImageBufferData(void* owner) { detail::CompanionPureCall(); }        // [10] +0x50
-    virtual void* CreateConstantBufferData(void* owner) { detail::CompanionPureCall(); }     // [11] +0x58
-    virtual void* CreateIndexBufferData(void* owner) { detail::CompanionPureCall(); }        // [12] +0x60
-    virtual void* CreateVertexBufferData(void* owner) { detail::CompanionPureCall(); }       // [13] +0x68
-    virtual void* CreateVertexLayoutData(void* owner) { detail::CompanionPureCall(); }       // [14] +0x70
-    virtual void* CreateVertexProgramData(void* owner) { detail::CompanionPureCall(); }      // [15] +0x78
-    virtual void* CreatePixelProgramData(void* owner) { detail::CompanionPureCall(); }       // [16] +0x80
-    virtual void* CreateRenderStateData(void* owner) { detail::CompanionPureCall(); }        // [17] +0x88
-    virtual void* CreateVideoProgramData(void* owner) { detail::CompanionPureCall(); }       // [18] +0x90
-    virtual void* CreateRenderBufferData(void* owner) { detail::CompanionPureCall(); }       // [19] +0x98
+    // takes the owning Video-side object and returns the new `*Data`; B.4
+    // (R-VIDEO) types both, as `Video::Device`'s eleven `Create*Data` forwarders'
+    // mangled names spell them (`?CreateImageBufferData@Device@Video@@QEAAPEAVImageBufferData@2@PEAVImageBuffer@2@@Z`
+    // and its ten siblings). Layout-neutral: pointer parameters and returns, and
+    // dx11's table is filled by address (DX11_REGISTER_SLOT), not by signature.
+    virtual ContextData*        CreateContextData(Context* owner) { detail::CompanionPureCall(); }                   // [ 9] +0x48
+    virtual ImageBufferData*    CreateImageBufferData(ImageBuffer* owner) { detail::CompanionPureCall(); }           // [10] +0x50
+    virtual ConstantBufferData* CreateConstantBufferData(ConstantBuffer* owner) { detail::CompanionPureCall(); }     // [11] +0x58
+    virtual IndexBufferData*    CreateIndexBufferData(IndexBuffer* owner) { detail::CompanionPureCall(); }           // [12] +0x60
+    virtual VertexBufferData*   CreateVertexBufferData(VertexBuffer* owner) { detail::CompanionPureCall(); }         // [13] +0x68
+    virtual VertexLayoutData*   CreateVertexLayoutData(VertexLayout* owner) { detail::CompanionPureCall(); }         // [14] +0x70
+    virtual VertexProgramData*  CreateVertexProgramData(VertexProgram* owner) { detail::CompanionPureCall(); }       // [15] +0x78
+    virtual PixelProgramData*   CreatePixelProgramData(PixelProgram* owner) { detail::CompanionPureCall(); }         // [16] +0x80
+    virtual RenderStateData*    CreateRenderStateData(RenderState* owner) { detail::CompanionPureCall(); }           // [17] +0x88
+    virtual VideoProgramData*   CreateVideoProgramData(VideoProgram* owner) { detail::CompanionPureCall(); }         // [18] +0x90
+    virtual RenderBufferData*   CreateRenderBufferData(RenderBuffer* owner) { detail::CompanionPureCall(); }         // [19] +0x98
 
     ~DeviceData();          // ??1DeviceData@Video@@UEAA@XZ  0x1800f8cf0
 
@@ -274,14 +307,14 @@ public:
     // [0] 0x180058a90 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~ContextData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual ContextData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ContextData*>(self + static_cast<int64_t>(i) * 0x10)->~ContextData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<ContextData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~ContextData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~ContextData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -328,14 +361,14 @@ public:
     // [0] 0x180058a10 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~ImageBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual ImageBufferData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ImageBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~ImageBufferData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<ImageBufferData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~ImageBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~ImageBufferData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -381,14 +414,14 @@ public:
     // [0] 0x180058910 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~IndexBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual IndexBufferData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<IndexBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~IndexBufferData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<IndexBufferData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~IndexBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~IndexBufferData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -432,14 +465,14 @@ public:
     // [0] 0x180058890 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VertexBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual VertexBufferData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<VertexBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~VertexBufferData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<VertexBufferData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~VertexBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~VertexBufferData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -471,14 +504,14 @@ public:
     // [0] 0x180058990 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~ConstantBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual ConstantBufferData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ConstantBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~ConstantBufferData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<ConstantBufferData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~ConstantBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~ConstantBufferData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -524,14 +557,14 @@ public:
     // [0] 0x180058590 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~RenderBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual RenderBufferData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<RenderBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~RenderBufferData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<RenderBufferData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~RenderBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~RenderBufferData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -556,14 +589,14 @@ public:
     // [0] 0x180058810 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VertexLayoutData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual VertexLayoutData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<VertexLayoutData*>(self + static_cast<int64_t>(i) * 0x10)->~VertexLayoutData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<VertexLayoutData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~VertexLayoutData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~VertexLayoutData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -589,14 +622,14 @@ public:
     // [0] 0x180058790 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VertexProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual VertexProgramData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<VertexProgramData*>(self + static_cast<int64_t>(i) * 0x10)->~VertexProgramData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<VertexProgramData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~VertexProgramData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~VertexProgramData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -620,14 +653,14 @@ public:
     // [0] 0x180058710 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~PixelProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual PixelProgramData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<PixelProgramData*>(self + static_cast<int64_t>(i) * 0x10)->~PixelProgramData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<PixelProgramData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~PixelProgramData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~PixelProgramData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -651,14 +684,14 @@ public:
     // [0] 0x180058690 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~RenderStateData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual RenderStateData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<RenderStateData*>(self + static_cast<int64_t>(i) * 0x10)->~RenderStateData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<RenderStateData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~RenderStateData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~RenderStateData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
@@ -686,14 +719,14 @@ public:
     // [0] 0x180058610 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VideoProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
     // an object wearing THIS table; a live companion wears dx11's.
-    virtual VideoProgramData* DeletingDtor(unsigned flags) {
+    virtual void* DeletingDtor(unsigned flags) {
         if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<VideoProgramData*>(self + static_cast<int64_t>(i) * 0x10)->~VideoProgramData();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<VideoProgramData*>(self - 8);
+            void* const block = this;   // element 0 of a vector-new block
+            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
+            for (int32_t i = *cookie; --i >= 0;)
+                this[i].~VideoProgramData();
+            if (flags & 1u) Object::detail::InternalMemFree(cookie);
+            return cookie;
         }
         this->~VideoProgramData();
         if (flags & 1u) Object::detail::InternalMemFree(this);
