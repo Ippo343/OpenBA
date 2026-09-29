@@ -38,7 +38,8 @@ extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extR
 void fn_FindComponent_CitizenAI(void* entity, void* retval);
 
 // ---- edittool_select.cpp
-extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv);  // 0x1400fd3b0
+// B4 FORWARD to EditTool::SelectEntity (Player/EditTool.h) for the outside callers.
+extern "C" void EditTool_SelectEntity_Impl(void* self, void* entity);  // 0x1400fd3b0
 
 // ---- entityui.cpp
 // fn_EntityUI_SetEditMode — reimplemented in entityui.cpp as EntityUI_SetEditMode_Impl

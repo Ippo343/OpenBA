@@ -24,6 +24,8 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
+namespace UI { class ImageElement; }
+
 class AutoSaveDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(AutoSaveDialog)
 
@@ -41,15 +43,19 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14005e0f0
 
+    // 0x14005dec0 — the timer-event body: start an autosave (SaveLoad operation 4)
+    // unless the UI pauses the game, the game is blocked or an operation runs.
+    void Autosave();
+
 public:
-    uint64_t dataB8;           // +0xB8: "savingImage" element
-    uint64_t dataC0;           // +0xC0: "animatedImage" element
+    UI::ImageElement* savingImage;  // +0xB8: FindElement("savingImage"), rotated by OnUpdateLayout
+    UI::Element*   animatedImage;  // +0xC0: FindElement("animatedImage")
     float    angle;            // +0xC8: spinner angle, degrees
     uint8_t  _padCC[4];        // +0xCC
 };
 
-static_assert(offsetof(AutoSaveDialog, dataB8) == 0xB8, "AutoSaveDialog +0xb8");
-static_assert(offsetof(AutoSaveDialog, dataC0) == 0xC0, "AutoSaveDialog +0xc0");
+static_assert(offsetof(AutoSaveDialog, savingImage) == 0xB8, "AutoSaveDialog +0xb8");
+static_assert(offsetof(AutoSaveDialog, animatedImage) == 0xC0, "AutoSaveDialog +0xc0");
 static_assert(offsetof(AutoSaveDialog, angle) == 0xC8, "AutoSaveDialog +0xc8");
 static_assert(sizeof(AutoSaveDialog) == 0xD0, "AutoSaveDialog is 0xd0 (create 0x1400106c0)");
 static_assert(alignof(AutoSaveDialog) == 8, "AutoSaveDialog is qword-aligned");

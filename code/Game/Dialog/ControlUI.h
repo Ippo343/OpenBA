@@ -18,6 +18,9 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+class Component;
+namespace UI { class ButtonElement; }
+
 class ControlUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ControlUI)
 
@@ -32,10 +35,12 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x14005f7f0
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
+    // ---- fields (B4 DLG-a; OnCreated 0x14005f9b0 fills both) --------
+    UI::ButtonElement* button = nullptr;   // +0x30 the container, if a ButtonElement (id 50000)
+    Component*         target = nullptr;   // +0x38 the entity's component of the config's type
 };
 
 static_assert(sizeof(ControlUI) == 0x40, "ControlUI is 0x40 (create 0x140010c00 MemAlloc(0x40))");
 static_assert(alignof(ControlUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(ControlUI, button) == 0x30, "ControlUI::button @ +0x30");
+static_assert(offsetof(ControlUI, target) == 0x38, "ControlUI::target @ +0x38");
