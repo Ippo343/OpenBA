@@ -200,9 +200,7 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  
 void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 
 // ---- orchardcomponent.cpp
-void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount);  // 0x140009f80
-void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arrayBase);  // 0x14000a230
-void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830
+void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830 B4 FORWARD to OrchardComponent::ValidateRefs
 
 // ---- pasturecomponent.cpp
 void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20

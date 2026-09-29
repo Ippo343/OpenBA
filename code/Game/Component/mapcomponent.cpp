@@ -270,8 +270,7 @@ void MapComponent::RemoveFromMap() {
     self->_flags = flags & ~0x100000u;
 }
 
-// B4 FORWARD: 2 outside callers (cropfieldcomponent_states.cpp, orchardcomponent_states.cpp
-// until COMP-d converts it).
+// B4 FORWARD: 1 outside caller (cropfieldcomponent_states.cpp).
 // The tree's null test is kept here (the member has none; retail's 0x140124750 has none).
 extern "C" void MapComponent_DetachOccupancy_4750(void* selfV) {
     if (!selfV) return;
