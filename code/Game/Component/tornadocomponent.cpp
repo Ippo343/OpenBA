@@ -73,18 +73,29 @@
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Component/TornadoDescription.h"
 #include "Component/ParticleDescription.h"
+#include "Component/ParticleComponent.h"
+#include "Component/AmbientEmitterComponent.h"
+#include "Component/FireComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/GrowthComponent.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/AnimalComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/DestroyComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/PlayerToolManager.h"
 #include <atomic>
 
 // "[Tornado] STRUCK a building" trace budget (was a function-local static; B6-5).
 static std::atomic<int> s_tornadoStruckTraced{0};
 
-// EventLog::AddEvent (0x140095580) — already ported in code/Game/Game/eventlog.cpp.
-// Reused rather than re-inlined: retail's Startup builds the same 0x28-byte record
-// by hand, and its literals (colour 0xffff6060, icon 4, popup -1) are exactly what
-// that port's severity/icon/popup tables produce for type 0x1e / severity 3.
-// Porting the same retail body a second time here is the trap that
-// reference_one_retail_fn_ported_twice_diverges records.
-extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
+// EventLog::AddEvent (0x140095580) — already ported in code/Game/Game/eventlog.cpp
+// (declared in Game/exe_bodies.h). Reused rather than re-inlined: retail's Startup
+// builds the same 0x28-byte record by hand, and its literals (colour 0xffff6060,
+// icon 4, popup -1) are exactly what that port's severity/icon/popup tables produce
+// for type 0x1e / severity 3. Porting the same retail body a second time here is the
+// trap that reference_one_retail_fn_ported_twice_diverges records.
 
 // 0x140131c90 = sinf, 0x140131090 = cosf, both already ported in
 // code/Game/Component/character_trig.cpp (IEEE arg-reduced in retail).
@@ -152,7 +163,7 @@ bool TraceOn() {
         }                                                        \
     } while (0)
 
-void* GameWorld() {
+GameUpdateLoop* GameWorld() {
     return GameUpdateLoop::_singleton;
 }
 
@@ -162,13 +173,14 @@ void* GameWorld() {
 // and then dereferences `desc` unguarded. The type-id global (0x1401c4aa0) has no
 // storage in standalone, so the id comes from the runtime type registry instead —
 // the standard substitution here (see tornadodescription.cpp).
-void* TornadoDesc(void* self) {
-    void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x18);
+TornadoDescription* TornadoDesc(TornadoComponent* self) {
+    Description* obj = self->_description;
     // GetTypeIdByName returns 0xFFFFFFFF before Object::Factory::Startup has run, so
-    // only latch a real id — otherwise the sentinel gets cached forever.
+    // only latch a real id — otherwise the sentinel gets cached forever. (The
+    // unchecked answer on an unregistered id is the tree's.)
     const uint32_t typeId = TornadoDescription::TypeId();
-    if (typeId == 0 || typeId == 0xFFFFFFFFu) return obj;
-    return Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;
+    if (typeId == 0 || typeId == 0xFFFFFFFFu) return static_cast<TornadoDescription*>(obj);
+    return Object::IsDerivedFromNullSafe(obj, typeId) ? static_cast<TornadoDescription*>(obj) : nullptr;
 }
 
 
@@ -213,7 +225,7 @@ static void Tornado_ReportArmsOnce() {
 
 
 // ============================================================
-// Tornado_PathFractal — 0x140058980
+// TornadoComponent::BuildPathFractal — 0x140058980
 // ============================================================
 // Recursive midpoint displacement between path[lo] and path[hi]:
 //     mid       = (a + b) * 0.5
@@ -230,9 +242,9 @@ static void Tornado_ReportArmsOnce() {
 // The decompiler invented it by mis-modelling Normalize's out-parameters.
 // The one genuine zero is the Z term: perp.z is 0 by construction, so mid.z is the
 // plain average of the endpoints. That one is real and is kept.
-extern "C" void Tornado_PathFractal_58980(void* self, float* path, int lo, int hi) {
-    const float* a = path + static_cast<ptrdiff_t>(lo) * 3;
-    const float* b = path + static_cast<ptrdiff_t>(hi) * 3;
+void TornadoComponent::BuildPathFractal(float* points, int lo, int hi) {
+    const float* a = points + static_cast<ptrdiff_t>(lo) * 3;
+    const float* b = points + static_cast<ptrdiff_t>(hi) * 3;
 
     Math::Vector3 seg(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     Math::Scalar len(0.0f);
@@ -245,35 +257,34 @@ extern "C" void Tornado_PathFractal_58980(void* self, float* path, int lo, int h
     Math::Vector3 perpIn(-dir.y, dir.x, 0.0f);
     Math::Vector3 perp = perpIn.Normalize();
 
-    void* gw = GameWorld();
-    void* rng = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xd8) : nullptr;
-    const float r = rng ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+    GameUpdateLoop* gw = GameWorld();
+    System::Random* rng = gw ? gw->m_random : nullptr;
+    const float r = rng ? rng->RandFloat() : 0.0f;
 
     const int mid = (lo + hi) >> 1;
-    float* m = path + static_cast<ptrdiff_t>(mid) * 3;
+    float* m = points + static_cast<ptrdiff_t>(mid) * 3;
     m[0] = perp.x * len.v * kPathJitter * r + midX;
     m[1] = perp.y * len.v * kPathJitter * r + midY;
     m[2] = perp.z * len.v * kPathJitter * r + midZ;
 
-    if (mid - lo > 1) Tornado_PathFractal_58980(self, path, lo, mid);
-    if (hi - mid > 1) Tornado_PathFractal_58980(self, path, mid, hi);
+    if (mid - lo > 1) BuildPathFractal(points, lo, mid);
+    if (hi - mid > 1) BuildPathFractal(points, mid, hi);
 }
 
 // ============================================================
-// Tornado_PathFindNext — 0x1400a70c0
+// TornadoComponent::Path::FindNext — 0x1400a70c0
 // ============================================================
 // Scan forward from the current index for the first waypoint whose squared XY
 // distance from `pos` is at least `radius * radius`. Returns -1 past the end.
-// `block` is `self + 0x30`, so block+0x10/+0x18/+0x20 are pathData / pathCount /
-// pathIndex. The Z term is `pos.z - 0.0` — retail ignores the waypoint's Z here.
-extern "C" int Tornado_PathFindNext_a70c0(uint8_t* block, const float* pos, float radius) {
-    int i = *reinterpret_cast<int*>(block + 0x20);
+// The Z term is `pos.z - 0.0` — retail ignores the waypoint's Z here.
+int TornadoComponent::Path::FindNext(const float* pos, float radius) const {
+    int i = index;
     for (;;) {
         ++i;
-        if (i >= *reinterpret_cast<int*>(block + 0x18)) return -1;
-        const float* wp = *reinterpret_cast<float**>(block + 0x10) + static_cast<ptrdiff_t>(i) * 3;
-        const float dx = pos[0] - wp[0];
-        const float dy = pos[1] - wp[1];
+        if (i >= count) return -1;
+        const Math::Vector3& wp = points[i];
+        const float dx = pos[0] - wp.x;
+        const float dy = pos[1] - wp.y;
         const float dz = pos[2] - 0.0f;
         // Math::Vector3::Dot, inlined: a pure leaf with no side effects.
         const float d2 = dx * dx + dy * dy + dz * dz;
@@ -282,26 +293,25 @@ extern "C" int Tornado_PathFindNext_a70c0(uint8_t* block, const float* pos, floa
 }
 
 // ============================================================
-// Tornado_PathAdvance — 0x1400a71e0
+// TornadoComponent::Path::Advance — 0x1400a71e0
 // ============================================================
 // If the current waypoint is closer than `arriveRadius`, pick the next waypoint
-// more than `skipRadius` away and latch it into block[0..2] (self+0x30..0x38, with
+// more than `skipRadius` away and latch it into `target` (self+0x30..0x38, with
 // Z forced to 0). Returns false only when the path is exhausted.
-extern "C" bool Tornado_PathAdvance_a71e0(uint8_t* block, const float* pos,
-                                          float skipRadius, float arriveRadius) {
-    Math::Vector3 d(*reinterpret_cast<float*>(block + 0x00) - pos[0],
-                    *reinterpret_cast<float*>(block + 0x04) - pos[1],
+bool TornadoComponent::Path::Advance(const float* pos, float skipRadius, float arriveRadius) {
+    Math::Vector3 d(target.x - pos[0],
+                    target.y - pos[1],
                     0.0f);
     const float len = d.Length().v;
 
     if (len < arriveRadius) {
-        const int next = Tornado_PathFindNext_a70c0(block, pos, skipRadius);
+        const int next = FindNext(pos, skipRadius);
         if (next < 0) return false;
-        *reinterpret_cast<int*>(block + 0x20) = next;
-        const float* wp = *reinterpret_cast<float**>(block + 0x10) + static_cast<ptrdiff_t>(next) * 3;
-        *reinterpret_cast<float*>(block + 0x00) = wp[0];
-        *reinterpret_cast<float*>(block + 0x04) = wp[1];
-        *reinterpret_cast<float*>(block + 0x08) = 0.0f;
+        index = next;
+        const Math::Vector3& wp = points[next];
+        target.x = wp.x;
+        target.y = wp.y;
+        target.z = 0.0f;
     }
     return true;
 }
@@ -314,13 +324,14 @@ extern "C" bool Tornado_PathAdvance_a71e0(uint8_t* block, const float* pos,
 // FAITHFUL ODDITY: `unusedFirstArg` is dead in retail — the prologue stores it to a
 // local that the very next block overwrites, and one of the three call sites passes
 // outright junk (`cellIndex * 6`). It is kept in the signature, and the junk is
-// still passed, so the port matches the binary rather than tidying it.
+// still passed, so the port matches the binary rather than tidying it. (The body
+// reads nothing of its first argument: it stays free, B1.)
 //
-// The building arm ignites via the FIRE lane's 0x14011e7b0 / 0x14011ea10 (ported in
-// firecomponent_smstate.cpp, called by name). The "NOKNOCK" / "NOFIRE" counters counted
-// the unresolved-leaf arms, which cannot happen now that the leaves are direct calls;
+// The building arm ignites via the FIRE lane's 0x14011e7b0 / 0x14011ea10
+// (DestroyComponent's members). The "NOKNOCK" / "NOFIRE" counters counted the
+// unresolved-leaf arms, which cannot happen now that the leaves are direct calls;
 // they stay in the trace line and read 0.
-static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
+static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity** entityIbp,
                                  int* hitTree, int* hitTreeNoKnock,
                                  int* hitBuilding, int* hitBuildingNoFire,
                                  int* hitAnimal, int* hitCitizen) {
@@ -328,18 +339,16 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     (void)hitTreeNoKnock;
     (void)hitBuildingNoFire;
 
-    void* entity = *reinterpret_cast<void**>(entityIbp);
+    ComponentEntity* entity = *entityIbp;
 
-    int64_t fireComp = 0, buildComp = 0, growthComp = 0, natResComp = 0;
-    int64_t citizenComp = 0, animalComp = 0;
-
-    const uintptr_t e = reinterpret_cast<uintptr_t>(entity);
-    Entity_FindComponent_Fire_5840(e, &fireComp);
-    Dialog_FindComponent_d6c0(entity, &buildComp);
-    ActCNR_FindComponent_c460(e, &growthComp);
-    WorkBase_FindComponent_52c0(e, &natResComp);
-    Entity_FindComponent_Citizen_9790(e, &citizenComp);
-    ActHunt_FindComponent_5500(e, &animalComp);
+    // The six finders (0x140005840 / 0x14000d6c0 / 0x14000c460 / 0x1400052c0 /
+    // 0x140009790 / 0x140005500).
+    FireComponent* fireComp = entity->FindComponent<FireComponent>();
+    BuildComponent* buildComp = entity->FindComponent<BuildComponent>();
+    GrowthComponent* growthComp = entity->FindComponent<GrowthComponent>();
+    NaturalResourceComponent* natResComp = entity->FindComponent<NaturalResourceComponent>();
+    CitizenComponent* citizenComp = entity->FindComponent<CitizenComponent>();
+    AnimalComponent* animalComp = entity->FindComponent<AnimalComponent>();
 
     // The first few buildings the funnel touches, and which way the arm went.
     // Unconditional and one-shot: if this never appears, no tornado has swept a
@@ -347,57 +356,49 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     // convey on its own. See the arm-viability report, Tornado_ReportArmsOnce.
     if (buildComp) {
         if (s_tornadoStruckTraced.fetch_add(1, std::memory_order_relaxed) < 4) {
-            std::fprintf(stderr, "[Tornado] STRUCK a building: entity=%p build=%llx fire=%llx"
+            std::fprintf(stderr, "[Tornado] STRUCK a building: entity=%p build=%p fire=%p"
                                  " -> arm %s\n",
-                         entity, (unsigned long long)buildComp, (unsigned long long)fireComp,
+                         static_cast<void*>(entity), static_cast<void*>(buildComp),
+                         static_cast<void*>(fireComp),
                          fireComp ? "TAKEN (igniting)"
                                   : "SKIPPED - entity carries no FireComponent");
             std::fflush(stderr);
         }
     }
 
-    if (natResComp != 0 && growthComp != 0) {
+    if (natResComp != nullptr && growthComp != nullptr) {
         // --- tree / crop: stop it walking its growth queue and knock it down ---
-        int64_t meshIbp = 0;
-        ActCNR_FindComponent_3f60(e, &meshIbp);
-        const bool animating =
-            meshIbp
-                ? reinterpret_cast<const Graphics::MeshInstance*>(
-                      static_cast<uintptr_t>(meshIbp) + 0x28)->IsAnimating()   // B.3.5 bridge
-                : false;
+        ModelComponent* model = entity->FindComponent<ModelComponent>();   // 0x140003f60
+        const bool animating = model ? model->meshInstance.IsAnimating() : false;
         if (!animating) {
-            *reinterpret_cast<int32_t*>(static_cast<uintptr_t>(natResComp) + 0x28) = 0;
+            natResComp->resourceScale = 0.0f;   // retail's dword 0 store
             // 0x140126780 is what actually FELLS the tree: it sets flag bit 0x200000,
             // notifies, and starts fall animation mode 2. Zeroing +0x28 alone only empties
             // the resource.
-            GrowthComponent_ResetGrowthState(reinterpret_cast<void*>(static_cast<uintptr_t>(natResComp)));
+            natResComp->ResetGrowthState();
             if (hitTree) ++*hitTree;
         }
         return;
     }
 
-    if (buildComp != 0 && fireComp != 0) {
+    if (buildComp != nullptr && fireComp != nullptr) {
         // --- building: set it alight (the tornado does NOT demolish) ---
-        int64_t fireOwner = 0;
-        PlayerPath_FindComponent_5780(e, &fireOwner);
-        const bool alreadyBurning =
-            fireOwner
-                ? FireComponent_IsBeingDemolished_11e690(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)))
-                : false;
+        DestroyComponent* fireOwner = entity->FindComponent<DestroyComponent>();   // 0x140005780
+        const bool alreadyBurning = fireOwner ? fireOwner->IsBeingDemolished() : false;
         if (!alreadyBurning) {
-            int64_t zero = 0;
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&zero), 0.0f);
-            const bool lit =
-                FireComponent_BeginBurning_11e7b0(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)), &zero);
+            System::Time zero{0};
+            RtSystem_Time_Ctor(&zero, 0.0f);
+            // The null test is the tree's (the forwarder it called had it; retail has none).
+            const bool lit = fireOwner ? fireOwner->BeginBurning(&zero) : false;
             if (lit) {
-                FireComponent_StopBurning_11ea10(reinterpret_cast<void*>(static_cast<uintptr_t>(fireOwner)));
+                fireOwner->StopBurning();
                 if (hitBuilding) ++*hitBuilding;
             }
         }
         return;
     }
 
-    if (animalComp != 0) {
+    if (animalComp != nullptr) {
         // --- ANIMAL (livestock or wild): remove it from the world ---
         // 0x140005500 matches type id 0x1401c6f98 = AnimalComponent (verified: the
         // finder compares against DAT_1401c6f98, and factory_registrations.csv maps
@@ -408,17 +409,17 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
         // This arm was originally named "loose entity" here, which was wrong and would
         // have mis-read the soak: a tornado crossing a pasture reports its kills here,
         // and filing livestock losses under "debris" hides a herd wipe.
-        void* gw = GameWorld();
-        void* entityMgr = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8)
-                             : nullptr;
-        int64_t ibp = reinterpret_cast<int64_t>(entity);
+        GameUpdateLoop* gw = GameWorld();
+        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): the removal list stays by offset.
+        void* entityMgr = gw ? gw->m_entityList : nullptr;
+        ComponentEntity* ibp = entity;
         // Inlined 0x1400c49d0 (EntityList::QueueDestroy): skip entities already
         // flagged (bit 10 of entity+0x40), else MarkForRemoval + push onto the
         // pending-destroy array at entityList+0xd0 / count +0xd8.
-        if (entityMgr && ibp != 0) {
-            const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(ibp) + 0x40);
+        if (entityMgr && ibp != nullptr) {
+            const uint32_t f = ibp->_entityFlags;
             if (((f >> 10) & 1) == 0) {
-                ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(static_cast<uintptr_t>(ibp)));
+                ActHunt_MarkEntityRemoval_c2ea0(ibp);
                 uintptr_t mgr = reinterpret_cast<uintptr_t>(entityMgr);
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(mgr + 0xd0))
@@ -429,53 +430,50 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
         return;
     }
 
-    if (citizenComp != 0) {
+    if (citizenComp != nullptr) {
         // --- citizen: life event 5 (killed) ---
-        CitizenComponent_HandleLifeEvent(reinterpret_cast<void*>(static_cast<uintptr_t>(citizenComp)),
-                                         5, nullptr);
+        citizenComp->HandleLifeEvent(5, nullptr);   // 0x140116dd0
         if (hitCitizen) ++*hitCitizen;
     }
 }
 
 // ============================================================
-// Tornado_DamageTick — 0x140058040
+// TornadoComponent::DamageTick — 0x140058040
 // ============================================================
 // Runs down a countdown; on each expiry it strikes three sets of entities:
-//   1. one random cell within desc+0x34 of the funnel, but ONLY if that cell's
-//      entity owns a NaturalResourceComponent (retail's own extra guard);
-//   2. everything the quadtree radius query returns within desc+0x30;
+//   1. one random cell within desc->_scatterRadius of the funnel, but ONLY if that
+//      cell's entity owns a NaturalResourceComponent (retail's own extra guard);
+//   2. everything the quadtree radius query returns within desc->_damageRadius;
 //   3. every occupied cell of the (2R+1)^2 square around the funnel.
 // The cell entity raster is map->cells[idx].+8 (stride 0x30) — the cell+8 raster,
 // not the cell+0 zone raster.
-extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* dt) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* desc = TornadoDesc(self);
-    uintptr_t d = reinterpret_cast<uintptr_t>(desc);
+void TornadoComponent::DamageTick(const System::Time* dt) {
+    TornadoDescription* desc = TornadoDesc(this);
 
-    *reinterpret_cast<int64_t*>(s + 0x28) -= *dt;
-    if (*reinterpret_cast<int64_t*>(s + 0x28) > 0) return;
-    *reinterpret_cast<int64_t*>(s + 0x28) += *reinterpret_cast<int64_t*>(d + 0x28);
+    damageCountdown._ticks -= dt->_ticks;
+    if (damageCountdown._ticks > 0) return;
+    damageCountdown._ticks += desc->_damageInterval._ticks;
 
-    void* gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    uintptr_t g = reinterpret_cast<uintptr_t>(gw);
-    void* rng = *reinterpret_cast<void**>(g + 0xd8);
-    int* map = *reinterpret_cast<int**>(g + 0xf8);
+    System::Random* rng = gw->m_random;
+    // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map size and cells stay raw.
+    int* map = reinterpret_cast<int*>(gw->m_game);
 
     // Random point within the scatter radius: angle in [-pi, pi], radius scaled by
     // RandFloat. Z is a genuine hard zero here (`XORPS XMM4,XMM4` at 0x140058110).
     const float angle = fn_Random_RandFloatTol(rng) * kHalfCircleDeg * kDegToRad;
-    const float frac  = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-    const float scatter = static_cast<float>(*reinterpret_cast<int32_t*>(d + 0x34));
+    const float frac  = rng->RandFloat();
+    const float scatter = static_cast<float>(desc->_scatterRadius);
 
     // The Vector3 ctor argument order (XMM1/XMM2/XMM3 at 0x140058121) puts sin on X
     // and cos on Y.
     const float ox = CharacterComponent_Sinf_131c90(angle) * scatter * frac;
     const float oy = CharacterComponent_Cosf_131090(angle) * scatter * frac;
 
-    const float px = ox + *reinterpret_cast<float*>(s + 0x58);
-    const float py = oy + *reinterpret_cast<float*>(s + 0x5c);
-    const float pz = 0.0f + *reinterpret_cast<float*>(s + 0x60);
+    const float px = ox + position.x;
+    const float py = oy + position.y;
+    const float pz = 0.0f + position.z;
 
     int hitTree = 0, hitTreeNoKnock = 0, hitBuilding = 0, hitBuildingNoFire = 0;
     int hitAnimal = 0, hitCitizen = 0;
@@ -494,24 +492,23 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
     {
         const int ix = clampCell(px);
         const int iy = clampCell(py);
-        int64_t cellEntity =
-            *reinterpret_cast<int64_t*>(cells + 8 + static_cast<uintptr_t>(iy * N + ix) * 0x30);
-        if (cellEntity != 0) {
-            int64_t probe = 0;
-            WorkBase_FindComponent_52c0(static_cast<uintptr_t>(cellEntity), &probe);
-            if (probe != 0) {
-                int64_t ibp = cellEntity;
-                Tornado_StrikeEntityCounted(cellEntity, &ibp, &hitTree, &hitTreeNoKnock,
+        ComponentEntity* cellEntity =
+            *reinterpret_cast<ComponentEntity**>(cells + 8 + static_cast<uintptr_t>(iy * N + ix) * 0x30);
+        if (cellEntity != nullptr) {
+            NaturalResourceComponent* probe = cellEntity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
+            if (probe != nullptr) {
+                ComponentEntity* ibp = cellEntity;
+                Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(cellEntity), &ibp, &hitTree, &hitTreeNoKnock,
                                      &hitBuilding, &hitBuildingNoFire, &hitAnimal, &hitCitizen);
             }
         }
     }
 
     // --- 2. the quadtree radius query ---
-    struct { uintptr_t data; int count; int cap; } found = { 0, 0, 0 };
+    struct { Component** data; int count; int cap; } found = { nullptr, 0, 0 };
     const char* queryState = "ran";
     {
-        float radius = static_cast<float>(*reinterpret_cast<int32_t*>(d + 0x30));
+        float radius = static_cast<float>(desc->_damageRadius);
         float pos[3] = { px, py, pz };
         void* scratch = nullptr;
         // The quadtree this query walks is the CHARACTER SPATIAL-HASH MANAGER at
@@ -527,17 +524,17 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
         // (charmanager_seed.cpp), which early-returns unless MoveTickEnabled(). With
         // that gate off gw+0x88 is legitimately null here, so skip the query rather
         // than fault. Every other deref in this function stays unguarded.
-        void* quadtree = *reinterpret_cast<void**>(g + 0x88);
+        void* quadtree = gw->m_characterGrid;
         if (quadtree)
+            // LEFT: Map_RadiusQuery_92990 takes the grid as float* (COMP-b's declaration).
             Map_RadiusQuery_92990(reinterpret_cast<float*>(quadtree), &scratch, pos, &radius, 0, &found);
         else
             queryState = "SKIPPED(GameWorld+0x88 quadtree is null - "
                          "CharManager_Seed gated off by MoveTickEnabled)";
 
         for (int i = 0; i < found.count; i++) {
-            void* slot = reinterpret_cast<void*>(found.data + static_cast<uintptr_t>(i) * 8);
-            int64_t ownerEntity =
-                *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(slot) + 0x10);
+            Component** slot = &found.data[i];
+            ComponentEntity* ownerEntity = (*slot)->_entity;
             Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
@@ -546,21 +543,21 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
 
     // --- 3. the (2R+1)^2 square sweep around the funnel itself ---
     {
-        const int ix = clampCell(*reinterpret_cast<float*>(s + 0x58));
-        const int iy = clampCell(*reinterpret_cast<float*>(s + 0x5c));
+        const int ix = clampCell(position.x);
+        const int iy = clampCell(position.y);
         const int idx = N * iy + ix;
         const int row = idx / N;
         const int col = idx % N;
-        const int R = *reinterpret_cast<int32_t*>(d + 0x30);
+        const int R = desc->_damageRadius;
         for (int dy = -R; dy <= R; dy++) {
             for (int dx = -R; dx <= R; dx++) {
                 const int cx = col + dx;
                 const int cy = row + dy;
                 if (cx < 0 || cy < 0 || cx >= N || cy >= N) continue;
                 const int64_t off = static_cast<int64_t>(N) * cy + cx;
-                int64_t cellEntity =
-                    *reinterpret_cast<int64_t*>(cells + 8 + static_cast<uintptr_t>(off) * 0x30);
-                if (cellEntity == 0) continue;
+                ComponentEntity* cellEntity =
+                    *reinterpret_cast<ComponentEntity**>(cells + 8 + static_cast<uintptr_t>(off) * 0x30);
+                if (cellEntity == nullptr) continue;
                 // Retail passes `off * 6` here — junk into a dead parameter. Kept.
                 Tornado_StrikeEntityCounted(off * 6, &cellEntity, &hitTree, &hitTreeNoKnock,
                                      &hitBuilding, &hitBuildingNoFire, &hitAnimal, &hitCitizen);
@@ -568,24 +565,24 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
         }
     }
 
-    if (found.data) System::MemoryAllocator::MemFree(reinterpret_cast<void*>(found.data));
+    if (found.data) System::MemoryAllocator::MemFree(found.data);
 
     TORNADO_TRACE("damage at (%.1f,%.1f) radius=%d scatter=%d: tree=%d tree-NOKNOCK=%d "
                   "building=%d building-NOFIRE=%d animal=%d citizen=%d "
                   "(quadtree query %s, returned %d)\n",
-                  *reinterpret_cast<float*>(s + 0x58), *reinterpret_cast<float*>(s + 0x5c),
-                  *reinterpret_cast<int32_t*>(d + 0x30), *reinterpret_cast<int32_t*>(d + 0x34),
+                  position.x, position.y,
+                  desc->_damageRadius, desc->_scatterRadius,
                   hitTree, hitTreeNoKnock, hitBuilding, hitBuildingNoFire, hitAnimal,
                   hitCitizen, queryState, found.count);
 }
 
 
 // ============================================================
-// Ported leaves that belong to other classes but had no owner yet
+// Ported leaves that belong to other classes
 // ============================================================
 
-// 0x140053720 — ParticleComponent: flip instance `index`'s playback rate negative
-// so the effect winds down. rate = -(1.0 / desc->entries[index].duration).
+// ParticleComponent::FadeOutEmitter (0x140053720): flip emitter `index`'s fade rate
+// negative so the effect winds down. rate = -(1.0 / desc->emitters[index].fadeTime).
 //
 // CROSS-LANE: this body and 0x140042960 below are LOAD-BEARING FOR THE FIRE LANE TOO.
 // Both lanes independently ported these two (my address grep was clean when I ran it —
@@ -597,47 +594,42 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
 // no test), per the project rule against papering over a faithful crash. If a
 // divide-by-zero ever appears here, a zero-duration particle entry is the upstream bug
 // to find — do not add the guard.
-// Description array stride is 0x28 (duration at +0x20); the component's geometry
-// array stride is 0x18 (rate at +0x10). The mismatch is retail's, not a typo.
-extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
-    uintptr_t p = reinterpret_cast<uintptr_t>(particleComp);
-    void* obj = *reinterpret_cast<void**>(p + 0x18);
+// Description array stride is 0x28 (fadeTime at +0x20); the component's emitter
+// array stride is 0x18 (fadeRate at +0x10). The mismatch is retail's, not a typo.
+void ParticleComponent::FadeOutEmitter(int index) {
+    Description* obj = _description;
     const uint32_t typeId = ParticleDescription::TypeId();
-    void* desc = obj;
+    Description* descObj = obj;
     if (typeId != 0 && typeId != 0xFFFFFFFFu)
-        desc = Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;
+        descObj = Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;
+    ParticleDescription* desc = static_cast<ParticleDescription*>(descObj);
 
-    uintptr_t geoArray = *reinterpret_cast<uintptr_t*>(p + 0x38);
-    uintptr_t entries  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
-    const float duration = reinterpret_cast<const System::Time*>(
-        reinterpret_cast<void*>(entries + static_cast<uintptr_t>(index) * 0x28 + 0x20))->AsSeconds();   // B.3.4b bridge
+    const float duration = desc->_emitters[index].fadeTime.AsSeconds();
     const float rate = 1.0f / duration;
-    uint32_t bits = *reinterpret_cast<const uint32_t*>(&rate);
-    bits ^= 0x80000000u;  // DAT_1401722c0 sign flip
-    *reinterpret_cast<uint32_t*>(geoArray + 0x10 + static_cast<uintptr_t>(index) * 0x18) = bits;
+    emitters[index].fadeRate = -rate;   // DAT_1401722c0 sign flip (XORPS)
 }
 
-// 0x140042960 — AudioComponent: move every live emitter to `newPos`, then latch it
-// into the component's cached position at +0x28. No-op when the position is
-// unchanged (that early-out is retail's, and it is what keeps this cheap per frame).
-extern "C" void Tornado_AudioMoveEmitters_42960(void* audioComp, void* newPos) {
-    uintptr_t a = reinterpret_cast<uintptr_t>(audioComp);
-    float* np = reinterpret_cast<float*>(newPos);
-    float* cached = reinterpret_cast<float*>(a + 0x28);
-    if (*reinterpret_cast<const Math::Vector3*>(np) == *reinterpret_cast<const Math::Vector3*>(cached))   // B.3.1 bridge
+// B4 FORWARD: 1 outside caller (Component/firecomponent_ignite.cpp).
+extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
+    reinterpret_cast<ParticleComponent*>(particleComp)->FadeOutEmitter(index);
+}
+
+// AmbientEmitterComponent::MoveTo (0x140042960): move every live emitter to `newPos`,
+// then latch it into the component's cached position at +0x28. No-op when the position
+// is unchanged (that early-out is retail's, and it is what keeps this cheap per frame).
+void AmbientEmitterComponent::MoveTo(const Math::Vector3& newPos) {
+    if (newPos == position)
         return;
 
-    void* gw = GameUpdateLoop::_singleton;
-    const int count = *reinterpret_cast<int*>(a + 0x40);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(a + 0x38);
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    const int count = slotCount;
     for (int i = 0; i < count; i++) {
-        const uint32_t id = *reinterpret_cast<uint32_t*>(arr + static_cast<uintptr_t>(i) * 0x10);
+        const uint32_t id = slots[i].handle;
         if (id != 0 && gw)
-            reinterpret_cast<Audio::Scene*>(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x78))
-                ->MoveEmitter(id, *reinterpret_cast<const Vector3*>(cached),
-                              *reinterpret_cast<const Vector3*>(np));   // B.3.7 bridge
+            // LEFT: GameUpdateLoop::m_audioScene is void* (GAME-a).
+            reinterpret_cast<Audio::Scene*>(gw->m_audioScene)->MoveEmitter(id, position, newPos);
     }
-    cached[0] = np[0]; cached[1] = np[1]; cached[2] = np[2];
+    position = newPos;
 }
 
 // ============================================================
@@ -657,81 +649,77 @@ extern "C" void Tornado_AudioMoveEmitters_42960(void* audioComp, void* newPos) {
 // the compiler's; +0x28 = 0, the path block {+0x30 = 0, +0x38 (dword) = 0,
 // +0x40 = +0x48 = 0, +0x50 = -1}, +0x58 = 0, +0x60 (dword) = 0; flags |= 0x84.
 TornadoComponent::TornadoComponent()
-    : damageCountdown(0), waypointX(0.0f), waypointY(0.0f), waypointZ(0.0f), _pad3C{},
-      pathData(nullptr), pathCount(0), pathCapacity(0), pathIndex(-1), _pad54{},
-      posX(0.0f), posY(0.0f), posZ(0.0f), _pad64{} {
+    : damageCountdown{0},
+      path{Math::Vector3(0.0f, 0.0f, 0.0f), {}, nullptr, 0, 0, -1, {}},
+      position(0.0f, 0.0f, 0.0f), _pad64{} {
     OrFlagsInCtor(0x84);
 }
 
 // ============================================================
-// TornadoComponent::Serialize — vtable slot 3 (+0x18), 0x140058b80
+// TornadoComponent::Persist — vtable slot 3 (+0x18), 0x140058b80
 // ============================================================
-// Stream order: Vector3 waypoint(+0x30), int pathIndex(+0x50), int pathCount(+0x48),
-// [on load: resize the Vector3 array], each waypoint, Time(+0x28), Vector3 pos(+0x58).
+// Stream order: Vector3 target(+0x30), int index(+0x50), int count(+0x48),
+// [on load: resize the Vector3 array], each waypoint, Time(+0x28), Vector3 position(+0x58).
 void TornadoComponent::Persist(void* stream) {
     Tornado_ReportArmsOnce();
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);   // B.3.8 bridge (Persist takes void*)
+    IO::Serializer ser(*st, 0);
 
-    reinterpret_cast<Math::Vector3*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
+    path.target.Serialize(&ser);
+    ser.Serialize(path.index, nullptr);
 
-    int pathCount = *reinterpret_cast<int*>(s + 0x48);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(pathCount, nullptr);   // B.3.4 bridge
+    int pathCount = path.count;
+    ser.Serialize(pathCount, nullptr);
 
     // stream+8 == 0 means "loading": grow the array before reading the waypoints.
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0)   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40)).SetSize(pathCount);
+    // LEFT: the point array is the raw triple (H5).
+    if (static_cast<int>(st->GetDirection()) == 0)   // IO::Stream::GetDirection, retail 0x180006200
+        GameColl::AsArray<GameColl::Vec3>(&path.points).SetSize(pathCount);
 
-    uint8_t* pVec = *reinterpret_cast<uint8_t**>(s + 0x40);
+    Math::Vector3* pVec = path.points;
     if (pathCount > 0 && pVec) {
         for (int i = 0; i < pathCount; i++) {
-            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
-            pVec += 0xC;  // sizeof(Math::Vector3)
+            pVec->Serialize(&ser);
+            ++pVec;   // sizeof(Math::Vector3) == 0xC
         }
     }
 
-    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-    reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    damageCountdown.Serialize(ser);
+    position.Serialize(&ser);
 }
 // ============================================================
 // TornadoComponent::Startup — vtable slot 4 (+0x20), 0x1400585a0
 // ============================================================
 void TornadoComponent::Startup() {
     Tornado_ReportArmsOnce();
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    void* desc = TornadoDesc(this);
-    uintptr_t d = reinterpret_cast<uintptr_t>(desc);
+    TornadoDescription* desc = TornadoDesc(this);
 
-    void* gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    uintptr_t g = reinterpret_cast<uintptr_t>(gw);
-    void* rng = *reinterpret_cast<void**>(g + 0xd8);
-    uint32_t* map = *reinterpret_cast<uint32_t**>(g + 0xf8);
+    System::Random* rng = gw->m_random;
+    // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map size stays a raw read.
+    uint32_t* map = reinterpret_cast<uint32_t*>(gw->m_game);
 
-    // --- pick two cells at least desc+0x24 apart (at most 100 tries) ---
-    const int minSep = *reinterpret_cast<int32_t*>(d + 0x24);
+    // --- pick two cells at least desc->_minSeparation apart (at most 100 tries) ---
+    const int minSep = desc->_minSeparation;
     uint32_t ax = 0, ay = 0, bx = 0, by = 0;
     int tries = 0;
     do {
-        ax = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
-        ay = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
-        bx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
-        by = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        ax = rng->Rand(static_cast<uint32_t>(*map));
+        ay = rng->Rand(static_cast<uint32_t>(*map));
+        bx = rng->Rand(static_cast<uint32_t>(*map));
+        by = rng->Rand(static_cast<uint32_t>(*map));
         if (tries > 99) break;
         ++tries;
     } while (static_cast<int>((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) < minSep * minSep);
 
     // --- terrain-clamp both endpoints and fractal-fill between them ---
-    float path[kPathNodes * 3];
-    std::memset(path, 0, sizeof(path));
+    float pathBuf[kPathNodes * 3];
+    std::memset(pathBuf, 0, sizeof(pathBuf));
 
     const float half = static_cast<float>(static_cast<int>(*map) >> 1) - kHalf;
 
@@ -749,58 +737,56 @@ void TornadoComponent::Startup() {
         out[0] = clamped[0]; out[1] = clamped[1]; out[2] = clamped[2];
     };
 
-    seedEndpoint(ax, ay, &path[0]);
+    seedEndpoint(ax, ay, &pathBuf[0]);
 
     float endB[3];
     seedEndpoint(bx, by, endB);
     // The tornado STARTS at the first endpoint: retail copies it into +0x58 before
     // overwriting the scratch with the second endpoint.
-    *reinterpret_cast<float*>(s + 0x58) = path[0];
-    *reinterpret_cast<float*>(s + 0x5c) = path[1];
-    *reinterpret_cast<float*>(s + 0x60) = path[2];
-    path[2] = 0.0f;
-    path[kPathLast * 3 + 0] = endB[0];
-    path[kPathLast * 3 + 1] = endB[1];
-    path[kPathLast * 3 + 2] = 0.0f;
+    position.x = pathBuf[0];
+    position.y = pathBuf[1];
+    position.z = pathBuf[2];
+    pathBuf[2] = 0.0f;
+    pathBuf[kPathLast * 3 + 0] = endB[0];
+    pathBuf[kPathLast * 3 + 1] = endB[1];
+    pathBuf[kPathLast * 3 + 2] = 0.0f;
 
-    Tornado_PathFractal_58980(this, path, 0, kPathLast);
+    BuildPathFractal(pathBuf, 0, kPathLast);
 
     // --- push the waypoints; the first one seeds the current target ---
     for (int i = 0; i < kPathNodes; i++) {
-        float* p = &path[i * 3];
-        if (*reinterpret_cast<int*>(s + 0x48) == 0) {
-            *reinterpret_cast<float*>(s + 0x30) = p[0];
-            *reinterpret_cast<float*>(s + 0x34) = p[1];
-            *reinterpret_cast<float*>(s + 0x38) = p[2];
-            *reinterpret_cast<int32_t*>(s + 0x50) = 0;
+        float* p = &pathBuf[i * 3];
+        if (path.count == 0) {
+            path.target.x = p[0];
+            path.target.y = p[1];
+            path.target.z = p[2];
+            path.index = 0;
         }
         // B.3.2 bridge: FUN_14000cf40 is Collection::Array<Vector3>::SetSize(n, fill)
-        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40))
-            .SetSizeFill(*reinterpret_cast<int*>(s + 0x48) + 1, p);
+        // LEFT: the point array is the raw triple (H5).
+        GameColl::AsArray<GameColl::Vec3>(&path.points).SetSizeFill(path.count + 1, p);
     }
 
     // --- post the warning to the event log, and pause if the setting says so ---
-    void* eventLog = *reinterpret_cast<void**>(g + 0x138);
-    int64_t nullIbp = 0;
-    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    void* eventLog = gw->m_eventNotifier;
+    Object::InternalBasePtr nullIbp(nullptr);
     EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
 
-    if (g_gameSettings != nullptr &&
-        *(reinterpret_cast<const char*>(g_gameSettings) + 0x17) != 0) {
-        void* speedObj = *reinterpret_cast<void**>(g + 0x120);
-        if (speedObj) *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(speedObj) + 0x34) = 1;
+    if (g_gameSettings != nullptr && g_gameSettings->autoSlow != 0) {
+        PlayerToolManager* speedObj = gw->m_toolManager;
+        if (speedObj) speedObj->field_0x34 = 1;
     }
 
     // Diagnostic only: whether the fractal actually bent the path. Straight would
     // mean the `* 0.0` reading had been right after all.
     float maxDev = 0.0f;
     {
-        const float sx = path[0], sy = path[1];
-        const float ex = path[kPathLast * 3], ey = path[kPathLast * 3 + 1];
+        const float sx = pathBuf[0], sy = pathBuf[1];
+        const float ex = pathBuf[kPathLast * 3], ey = pathBuf[kPathLast * 3 + 1];
         const float vx = ex - sx, vy = ey - sy;
         const float vlen = vx * vx + vy * vy;
         for (int i = 1; i < kPathLast; i++) {
-            const float wx = path[i * 3] - sx, wy = path[i * 3 + 1] - sy;
+            const float wx = pathBuf[i * 3] - sx, wy = pathBuf[i * 3 + 1] - sy;
             const float cross = (vlen > 0.0f) ? (wx * vy - wy * vx) : 0.0f;
             const float dev = (vlen > 0.0f) ? (cross < 0 ? -cross : cross) : 0.0f;
             if (dev > maxDev) maxDev = dev;
@@ -808,116 +794,103 @@ void TornadoComponent::Startup() {
         if (vlen > 0.0f) maxDev /= (vlen > 0.0f ? __builtin_sqrtf(vlen) : 1.0f);
     }
 
-    int64_t particleIbp = 0;
-    {
-        void* owner = *reinterpret_cast<void**>(s + 0x10);
-        NaturalResourceComponent_FindComponentByType(owner, &particleIbp);   // 0x140005200
-    }
+    ParticleComponent* particle = _entity->FindComponent<ParticleComponent>();   // 0x140005200
 
     TORNADO_TRACE("spawn: start=(%.1f,%.1f) end=(%.1f,%.1f) waypoints=%d "
                   "endpointTries=%d path=%s (maxLateralDeviation=%.2f) "
                   "speed=%.2f damageRadius=%d scatterRadius=%d particleComponent=%s\n",
-                  path[0], path[1], path[kPathLast * 3], path[kPathLast * 3 + 1],
-                  *reinterpret_cast<int*>(s + 0x48), tries,
+                  pathBuf[0], pathBuf[1], pathBuf[kPathLast * 3], pathBuf[kPathLast * 3 + 1],
+                  path.count, tries,
                   (maxDev > 0.01f) ? "FRACTAL" : "STRAIGHT", maxDev,
-                  *reinterpret_cast<float*>(d + 0x20),
-                  *reinterpret_cast<int32_t*>(d + 0x30),
-                  *reinterpret_cast<int32_t*>(d + 0x34),
-                  particleIbp ? "found" : "MISSING (Update will fault on it, as retail would)");
+                  desc->_speed,
+                  desc->_damageRadius,
+                  desc->_scatterRadius,
+                  particle ? "found" : "MISSING (Update will fault on it, as retail would)");
 }
 // ============================================================
-// TornadoComponent::Update — vtable slot 8 (+0x40), 0x140057cd0
+// TornadoComponent::Tick — vtable slot 8 (+0x40), 0x140057cd0
 // ============================================================
 // Every frame: check the particle is still alive (else self-destruct), advance
 // along the path, integrate the position, damage, then push the new transform and
 // audio position out.
 void TornadoComponent::Tick(void* time) {
     Tornado_ReportArmsOnce();
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    const int64_t* dt = reinterpret_cast<const int64_t*>(time);
-    void* desc = TornadoDesc(this);
+    const System::Time* dt = reinterpret_cast<const System::Time*>(time);   // B.3.8 bridge (Tick takes void*)
+    TornadoDescription* desc = TornadoDesc(this);
 
-    void* gw = GameWorld();
+    GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    uintptr_t g = reinterpret_cast<uintptr_t>(gw);
 
-    void* owner = *reinterpret_cast<void**>(s + 0x10);
-    int64_t particleIbp = 0;
-    NaturalResourceComponent_FindComponentByType(owner, &particleIbp);   // 0x140005200
-    int* map = *reinterpret_cast<int**>(g + 0xf8);
+    ParticleComponent* pc = _entity->FindComponent<ParticleComponent>();   // 0x140005200
+    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
+    int* map = reinterpret_cast<int*>(gw->m_game);
 
     // FAITHFUL: retail dereferences the ParticleComponent unguarded — Tornado.rsc
     // always has one, so a null here is an upstream problem, not something to paper
     // over. Startup already logged whether the finder found it.
-    uintptr_t pc = static_cast<uintptr_t>(particleIbp);
     const bool particleAlive =
-        (*reinterpret_cast<int*>(pc + 0x40) > 0) &&
-        (*reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 8) >= 0);
+        (pc->emitterCount > 0) &&
+        (pc->emitters[0].sceneId >= 0);
 
     if (!particleAlive) {
         // --- the funnel is gone: queue the tornado entity for destruction ---
-        int64_t entity = *reinterpret_cast<int64_t*>(s + 0x10);
-        uintptr_t entityMgr = *reinterpret_cast<uintptr_t*>(g + 0xe8);
-        if (entity != 0) {
-            const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(entity) + 0x40);
+        ComponentEntity* entity = _entity;
+        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): the removal list stays by offset.
+        uintptr_t entityMgr = reinterpret_cast<uintptr_t>(gw->m_entityList);
+        if (entity != nullptr) {
+            const uint32_t f = entity->_entityFlags;
             if (((f >> 10) & 1) == 0) {
-                ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
+                ActHunt_MarkEntityRemoval_c2ea0(entity);
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityMgr + 0xd0))
                     .SetSizeFill(*reinterpret_cast<int*>(entityMgr + 0xd8) + 1, &entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "
                               "(pathIndex=%d of %d)\n",
-                              *reinterpret_cast<int32_t*>(s + 0x50),
-                              *reinterpret_cast<int*>(s + 0x48));
+                              path.index, path.count);
             }
         }
         return;
     }
 
     // --- advance along the path ---
-    float pos[3] = { *reinterpret_cast<float*>(s + 0x58),
-                     *reinterpret_cast<float*>(s + 0x5c),
-                     0.0f };
-    const int idxBefore = *reinterpret_cast<int32_t*>(s + 0x50);
-    const bool stillOnPath = Tornado_PathAdvance_a71e0(reinterpret_cast<uint8_t*>(s + 0x30), pos,
-                                                       kSkipRadius, kArriveRadius);
-    const int idxAfter = *reinterpret_cast<int32_t*>(s + 0x50);
+    float pos[3] = { position.x, position.y, 0.0f };
+    const int idxBefore = path.index;
+    const bool stillOnPath = path.Advance(pos, kSkipRadius, kArriveRadius);
+    const int idxAfter = path.index;
 
-    Math::Vector3 dir(*reinterpret_cast<float*>(s + 0x30) - *reinterpret_cast<float*>(s + 0x58),
-                      *reinterpret_cast<float*>(s + 0x34) - *reinterpret_cast<float*>(s + 0x5c),
-                      *reinterpret_cast<float*>(s + 0x38) - *reinterpret_cast<float*>(s + 0x60));
+    Math::Vector3 dir(path.target.x - position.x,
+                      path.target.y - position.y,
+                      path.target.z - position.z);
     Math::Vector3 unit = dir.Normalize();
 
     if (!stillOnPath) {
         // Path exhausted: reverse the particle's playback so the funnel winds down.
-        Tornado_ParticleReverse_53720(reinterpret_cast<void*>(pc), 0);
+        pc->FadeOutEmitter(0);   // 0x140053720
         TORNADO_TRACE("path exhausted at waypoint %d of %d — funnel winding down\n",
-                      idxAfter, *reinterpret_cast<int*>(s + 0x48));
+                      idxAfter, path.count);
     } else {
-        Tornado_DamageTick_58040(this, dt);
+        DamageTick(dt);
         if (idxAfter != idxBefore && (idxAfter % 16) == 0)
             TORNADO_TRACE("waypoint %d of %d at (%.1f,%.1f)\n",
-                          idxAfter, *reinterpret_cast<int*>(s + 0x48),
-                          *reinterpret_cast<float*>(s + 0x58),
-                          *reinterpret_cast<float*>(s + 0x5c));
+                          idxAfter, path.count, position.x, position.y);
     }
 
     // --- integrate the position ---
-    const float secs = reinterpret_cast<const System::Time*>(const_cast<int64_t*>(dt))->AsSeconds();   // B.3.4b bridge
-    const float step = secs * *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
+    const float secs = dt->AsSeconds();
+    const float step = secs * desc->_speed;
     // Math::Vector3::operator+= (slot 0x1401514b8), inlined: a componentwise add
     // with no side effects.
-    *reinterpret_cast<float*>(s + 0x58) += unit.x * step;
-    *reinterpret_cast<float*>(s + 0x5c) += unit.y * step;
-    *reinterpret_cast<float*>(s + 0x60) += unit.z * step;
+    position.x += unit.x * step;
+    position.y += unit.y * step;
+    position.z += unit.z * step;
 
     {
         float out[3] = { 0.0f, 0.0f, 0.0f };
-        float* r = Reimpl_MapGetTerrainPos(map, out, reinterpret_cast<float*>(s + 0x58), 1, nullptr);   // 0x14009f3e0
+        float* r = Reimpl_MapGetTerrainPos(map, out, &position.x, 1, nullptr);   // 0x14009f3e0
         if (r) {
-            *reinterpret_cast<float*>(s + 0x58) = r[0];
-            *reinterpret_cast<float*>(s + 0x5c) = r[1];
-            *reinterpret_cast<float*>(s + 0x60) = r[2];
+            position.x = r[0];
+            position.y = r[1];
+            position.z = r[2];
         }
     }
 
@@ -926,38 +899,41 @@ void TornadoComponent::Tick(void* time) {
         // Transform = { Quaternion(0,0,0,1), Vector3 position }.
         Math::Transform transform;
         transform.rotation = Math::Quaternion(0.0f, 0.0f, 0.0f, 1.0f);
-        transform.translation.x = *reinterpret_cast<float*>(s + 0x58);
-        transform.translation.y = *reinterpret_cast<float*>(s + 0x5c);
-        transform.translation.z = *reinterpret_cast<float*>(s + 0x60);
-        void* geometry = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(pc + 0x38));
-        reinterpret_cast<Graphics::Geometry*>(geometry)->SetTransform(transform);   // B.3.5 bridge
+        transform.translation.x = position.x;
+        transform.translation.y = position.y;
+        transform.translation.z = position.z;
+        // LEFT: the emitter's ParticleInstance is incomplete here; retail calls the
+        // geometry's SetTransform (the instance is-a Graphics::Geometry).
+        reinterpret_cast<Graphics::Geometry*>(pc->emitters[0].instance)->SetTransform(transform);   // B.3.5 bridge
     }
 
     // --- move the audio emitters and refresh the volume ---
     {
         // PORT GAP 0x140002280 Entity_FindAudioComponent: not ported; retail calls it
         // here, twice (FindAudioComponent(owner, &audioIbp) before each step below). The
-        // finder is unregistered, so both IBPs stay null and both audio steps are skipped,
+        // finder is unregistered, so both stay null and both audio steps are skipped,
         // as they are today.
-        int64_t audioIbp = 0;
-        if (audioIbp)
-            Tornado_AudioMoveEmitters_42960(reinterpret_cast<void*>(static_cast<uintptr_t>(audioIbp)),
-                                            reinterpret_cast<void*>(s + 0x58));
+        AmbientEmitterComponent* audio = nullptr;
+        if (audio)
+            audio->MoveTo(position);   // 0x140042960
 
+        // LEFT: the tree reads +0x7c of the emitter ARRAY; retail 0x140057cd0 reads +0x7c of
+        // emitters[0].instance (**(pc+0x38) + 0x7c). The value only feeds the PORT GAP audio
+        // branch below (never taken), so no run can see the difference; listed, not changed.
         const float volume =
-            *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 0x7c);
+            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pc->emitters) + 0x7c);
 
-        int64_t audioIbp2 = 0;   // PORT GAP 0x140002280 (see above)
-        if (audioIbp2) {
-            uintptr_t a = static_cast<uintptr_t>(audioIbp2);
-            uint32_t* emitter = *reinterpret_cast<uint32_t**>(a + 0x38);
+        AmbientEmitterComponent* audio2 = nullptr;   // PORT GAP 0x140002280 (see above)
+        if (audio2) {
+            AmbientEmitterSlot* emitter = audio2->slots;
             if (emitter) {
-                if (*emitter == 0) {
-                    emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
-                } else if (*reinterpret_cast<float*>(&emitter[1]) != volume) {
-                    emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
-                    reinterpret_cast<Audio::Scene*>(*reinterpret_cast<void**>(g + 0x78))->SetEmitterVolume(
-                        *emitter, *reinterpret_cast<const Vector3*>(a + 0x28), volume);   // B.3.7 bridge
+                if (emitter->handle == 0) {
+                    emitter->volume = volume;
+                } else if (emitter->volume != volume) {
+                    emitter->volume = volume;
+                    // LEFT: GameUpdateLoop::m_audioScene is void* (GAME-a).
+                    reinterpret_cast<Audio::Scene*>(gw->m_audioScene)->SetEmitterVolume(
+                        emitter->handle, audio2->position, volume);
                 }
             }
         }

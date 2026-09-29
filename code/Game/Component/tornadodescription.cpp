@@ -34,21 +34,21 @@
 // the defaults.
 TornadoDescription::TornadoDescription()
     : Description(),
-      _f20(1.0f),
-      _i24(10),
-      _i30(1),
-      _i34(2) {
-    _time28._ticks = 0;
+      _speed(1.0f),
+      _minSeparation(10),
+      _damageRadius(1),
+      _scatterRadius(2) {
+    _damageInterval._ticks = 0;
 }
 
 // [5] 0x140058d90: stream order as retail.
 bool TornadoDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_f20, nullptr);
-    ser.Serialize(_i24, nullptr);
-    ser.Serialize(_i30, nullptr);
-    _time28.Serialize(ser);
-    ser.Serialize(_i34, nullptr);
+    ser.Serialize(_speed, nullptr);
+    ser.Serialize(_minSeparation, nullptr);
+    ser.Serialize(_damageRadius, nullptr);
+    _damageInterval.Serialize(ser);
+    ser.Serialize(_scatterRadius, nullptr);
     return true;
 }
 
