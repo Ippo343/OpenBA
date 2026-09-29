@@ -72,6 +72,9 @@ public:
                             uint32_t arg0, uint32_t arg1) override;  // [15] 0x140108710
     int         GetDefaultState() const override { return 1; }  // [16] 0x14002f2f0
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
+    // 0x140109390 (B4 DLG-a; defined in Dialog/entityui.cpp): the description's
+    // +0x30 cost times costMultiplier <= laborProgress (`CMP [RDI+0x48],EDX; SETGE`).
+    bool IsBuildComplete() const;
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
