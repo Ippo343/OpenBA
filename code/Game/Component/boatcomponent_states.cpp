@@ -131,10 +131,9 @@ const float kApproach   = kRdata_1401721f4;           // state 0 -> 1 range (squ
 int NextRoutePoint(BoatComponent* boat, const Math::Vector3* ref);
 
 // The model's world position: the translation of its transform (+0x148 + 0x10).
-// LEFT: ModelComponent::transform / meshInstance are raw storage (H5, W0 header).
 inline const Math::Vector3* ModelPos(ModelComponent* model) {
     if (!model) return nullptr;                     // see the guard note in Steer()
-    return &reinterpret_cast<const Math::Transform*>(model->transform)->translation;
+    return &model->transform.translation;
 }
 
 // The request-transition idiom every boat handler ends with, byte-for-byte:
@@ -325,10 +324,9 @@ void CharacterComponent::DriveToward(const Math::Vector3* target, float heading,
     field_0x2C.z = nrm.z;
     ModelComponent* model2 = modelComponent;
     field_0x3C = heading;
-    // LEFT: ModelComponent::meshInstance is raw storage (H5, W0 header); +0x13c is
-    // the MeshInstance's _color[2], the visual scale AnimalComponent writes.
+    // +0x13c is the MeshInstance's _color[2], the visual scale AnimalComponent writes.
     field_0x38 =
-        model2 ? reinterpret_cast<const Graphics::MeshInstance*>(model2->meshInstance)->_color[2] * speed : 0.0f;
+        model2 ? model2->meshInstance._color[2] * speed : 0.0f;
 }
 
 // 0x14010a1f0 SetAnimation, already ported for the citizen mover (ActMv_SetAnimation_a1f0,
@@ -396,11 +394,10 @@ char BoatComponent::State0Enter() {
             const Math::Vector3 offset(pts[0].x, pts[0].y, 0.0f);
             const Math::Transform xform = Math::Transform::FromYawPitchOffset(
                 Math::Scalar(yaw), Math::Scalar(pitch), offset);
-            // LEFT: ModelComponent::transform / meshInstance are raw storage (H5, W0 header)
-            Math::Transform* modelTransform = reinterpret_cast<Math::Transform*>(m->transform);
+            Math::Transform* modelTransform = &m->transform;
             *modelTransform = xform;
             m->yaw = yaw;
-            reinterpret_cast<Graphics::Geometry*>(m->meshInstance)->SetTransform(*modelTransform);   // B.3.5 bridge
+            m->meshInstance.SetTransform(*modelTransform);   // B.3.5 bridge
         }
     }
 

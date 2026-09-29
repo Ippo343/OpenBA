@@ -45,9 +45,7 @@
 // ??0Time@System@@QEAA@M@Z), ComponentEntity::SendEvent (0x1400c2b70, below),
 // ComponentEntity::RefreshEntityFlags (0x1400c3470).
 //
-// LEFT (B.4 COMP-d): the embedded MeshInstance (+0x28) and Transform (+0x148) are raw
-// storage until the H5 `behaviour:` commit; GameUpdateLoop::m_graphicsScene is void*
-// (W0 header).
+// LEFT (B.4 COMP-d): GameUpdateLoop::m_graphicsScene is void* (W0 header).
 //
 // ENDGAME B.3.9 GFX (coordinator ruling 4, B9-13 foreign site): the
 // embedded Graphics::MeshInstance at +0x28 is built and destroyed by the real
@@ -151,9 +149,7 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
 
     Graphics::GraphicsMesh* mesh = GetMeshFromDescription(desc, meshGroup, meshIndex);
     if (!mesh) return -1;
-    // LEFT: ModelComponent::meshInstance is raw storage (H5).
-    reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
-        ->SetMesh(Graphics::ExternalPtrHandle{mesh});
+    self->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
     return meshGroup;
 }
 
@@ -179,23 +175,19 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
 
 // 0x140124d20: Component() is the CALL 0x1401188b0 (the Object::Internal base
 // registers the object — the dtor's ~Internal must match it); the 0x140163ba0
-// stamp is the compiler's. The body is zeroed, the MeshInstance door builds
-// +0x28, Transform() builds +0x148, variant/scale = 0, modelId = -1,
-// flags |= 0x83.
+// stamp is the compiler's. The members: MeshInstance() on +0x28 (retail CALL
+// [??0MeshInstance]), Transform() on +0x148 (slot 0x140151328), mesh group /
+// index / yaw = 0 (one qword store), modelId = -1; flags |= 0x83.
 ModelComponent::ModelComponent()
-    : meshInstance{}, transform{}, meshGroup(0), meshIndex(0), yaw(0.0f), modelId(-1) {
-    ::new (static_cast<void*>(meshInstance)) Graphics::MeshInstance();   // +0x28, retail CALL [??0MeshInstance] (B.3.9 GFX)
-    ::new (static_cast<void*>(transform)) Math::Transform();   // +0x148 Math::Transform (slot 0x140151328)   // B.3.1 bridge
+    : meshGroup(0), meshIndex(0), yaw(0.0f), modelId(-1) {
     OrFlagsInCtor(0x83);
 }
 
 // 0x140124cd0: ~MeshInstance(+0x28); the compiler then chains ~Component and
 // ~Internal (the old slot 0 guarded ~Internal with ObjAudit::IsRegistered for
 // never-registered instances; the real ctor always registers).
-ModelComponent::~ModelComponent() {
-    // retail CALL [??1MeshInstance] on +0x28 -- a destructor call, no delete (B.3.9 GFX).
-    reinterpret_cast<Graphics::MeshInstance*>(meshInstance)->Graphics::MeshInstance::~MeshInstance();
-}
+// The member's ~MeshInstance is retail's CALL [??1MeshInstance] on +0x28.
+ModelComponent::~ModelComponent() = default;
 
 // ============================================================
 // ModelComponent::Persist (vtable slot [3], 0x140124b70)
@@ -217,13 +209,12 @@ void ModelComponent::Persist(void* stream) {
     ser.Serialize(meshGroup, nullptr);
     ser.Serialize(meshIndex, nullptr);
 
-    // Math::Transform at +0x148 (slot 0x1401522e0). LEFT: raw storage (H5).
-    reinterpret_cast<Math::Transform*>(transform)->Serialize(&ser);
+    // Math::Transform at +0x148 (slot 0x1401522e0).
+    transform.Serialize(&ser);
 
     ser.Serialize(yaw, nullptr);
 
-    // LEFT: ModelComponent::meshInstance is raw storage (H5).
-    Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(meshInstance);
+    Graphics::MeshInstance* mesh = &meshInstance;
 
     // On load: if the mesh index is set, restore the mesh from the description
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
@@ -278,9 +269,7 @@ void ModelComponent::Startup() {
     if (index >= 0) {
         Graphics::GraphicsMesh* meshResource = GetMeshFromDescription(desc, meshGroup, index);
         if (meshResource) {
-            // LEFT: ModelComponent::meshInstance is raw storage (H5).
-            reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
-                ->SetMesh(Graphics::ExternalPtrHandle{meshResource});
+            meshInstance.SetMesh(Graphics::ExternalPtrHandle{meshResource});
         }
     }
 
@@ -306,9 +295,8 @@ void ModelComponent::OnAdded() {
         Description* desc = _description;
         (void)::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId());
 
-        // LEFT: ModelComponent::meshInstance / transform are raw storage (H5).
-        Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(meshInstance);
-        mesh->SetTransform(*reinterpret_cast<const Math::Transform*>(transform));
+        Graphics::MeshInstance* mesh = &meshInstance;
+        mesh->SetTransform(transform);
 
         // MeshInstance::Update with Time(0) (Geometry slot 1)
         {
@@ -374,8 +362,7 @@ void ModelComponent::OnRemove() {
 void ModelComponent::Tick(void* time) {
     // The embedded MeshInstance (+0x28) is always constructed (the ctor builds it), so
     // the old null-slot test of its table is gone with the by-name call.
-    // LEFT: ModelComponent::meshInstance is raw storage (H5).
-    Graphics::MeshInstance* mesh = reinterpret_cast<Graphics::MeshInstance*>(meshInstance);
+    Graphics::MeshInstance* mesh = &meshInstance;
     {
         // [PerfX ANIM_CULL -- NON-RETAIL] On the last speed-iteration retail poses every
         // animated mesh (AnimationState::UpdateNodes). A mesh outside the camera frustum

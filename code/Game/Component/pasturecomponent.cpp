@@ -10,8 +10,8 @@
 //   OnRemove  (0x1401277e0) — release every animal
 //
 // LEFT (B.4 COMP-d): GameUpdateLoop m_game is void* (W0 header) and the Map's 0x30-byte
-// cell (array at +0x80) has no type yet (GAME-b); ModelComponent::transform is raw
-// storage (H5); ComponentDescription::_subDescs is void** (COMP-c); the Pf_* map
+// cell (array at +0x80) has no type yet (GAME-b); ComponentDescription::_subDescs is
+// void** (COMP-c); the Pf_* map
 // helpers take their objects as int64_t (Action's bodies).
 //
 // Decompiled from Application-x64.exe using Ghidra.
@@ -132,8 +132,7 @@ void AnimalComponent::ReleaseToWander() {
     if (GameUpdateLoop::_singleton == nullptr) return;
     // LEFT: GameUpdateLoop::m_game is void* (W0 header).
     int mapW = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game)->size;
-    // LEFT: ModelComponent::transform is raw storage (H5).
-    const Math::Vector3& pos = reinterpret_cast<const Math::Transform*>(model->transform)->translation;
+    const Math::Vector3& pos = model->transform.translation;
     int x = (int)(pos.x + (float)(mapW >> 1));
     int y = (int)(pos.y + (float)(mapW >> 1));
     if (x < 0) x = 0;

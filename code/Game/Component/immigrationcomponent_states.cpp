@@ -50,7 +50,7 @@
 // m_entityList are void* (W0 header); the Map's cell record and CitizenBehavior's
 // +0x160 tree nodes have no type; StateMachineComponent::controllerSelf is void*
 // (COMP-e); PointList / Pf_ / ModelComponent bodies owned by other blocks take int*
-// or int64_t*; ModelComponent's MeshInstance / Transform are raw storage (H5).
+// or int64_t*.
 
 // graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
@@ -267,9 +267,8 @@ void NomadComponent::Init(ComponentEntity* const* hallEntity, const Math::Vector
                                 static_cast<uint16_t>(gender), 0);
     if (ndesc) {
         Graphics::MaterialInstance* mat = (gender == 0) ? ndesc->_materialGender0 : ndesc->_materialGender1;
-        // LEFT: ModelComponent::meshInstance is raw storage (H5).
-        reinterpret_cast<Graphics::MeshInstance*>(model->meshInstance)
-            ->SetMaterialInstance(0, Graphics::ExternalPtrHandle{mat});
+        model->meshInstance
+            .SetMaterialInstance(0, Graphics::ExternalPtrHandle{mat});
     }
 }
 
@@ -439,8 +438,7 @@ CitizenComponent* NomadComponent::ConvertToCitizen(CitizenComponent** out, Citiz
     ModelComponent* model = _entity->FindComponent<ModelComponent>();
     Math::Vector3 pos(0.0f, 0.0f, 0.0f);
     if (model) {
-        // LEFT: ModelComponent::transform is raw storage (H5).
-        pos = reinterpret_cast<const Math::Transform*>(model->transform)->translation;
+        pos = model->transform.translation;
     }
     float age;
     float aLo = cdesc ? cdesc->minPregnancyAge : 0.0f;

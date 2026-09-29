@@ -104,7 +104,6 @@ static ParticleDescription* GetParticleDesc(const ParticleComponent* self) {
 //   0x140053090  Event        — event 2 = fade-in start, 3 = fade-out (b2 set)
 //
 // LEFT (B.4 COMP-d): GameUpdateLoop::m_graphicsScene / m_game are void* (W0);
-// ModelComponent's MeshInstance / Transform are raw storage (H5, later commit);
 // Pathfinding::PointList::Point keeps its name and position raw (runtime header);
 // Component's Persist / Tick take void* (COMP-c's header).
 // ============================================================
@@ -176,8 +175,7 @@ void ParticleComponent::Place(int index) {
 
     Math::Transform tf;   // identity
     if (model && !em.noModelTransform) {
-        // Building/entity model transform (+0x148). LEFT: raw storage (H5).
-        tf = *reinterpret_cast<const Math::Transform*>(model->transform);
+        tf = model->transform;
     } else if (mapc && GameUpdateLoop::_singleton != nullptr) {
         // Centre cell of the entity's map footprint → terrain-height world pos
         void* game = GameUpdateLoop::_singleton->m_game;
@@ -218,9 +216,8 @@ void ParticleComponent::Place(int index) {
         }
     } else if (model) {
         // Mesh-node lookup by emitter name (e.g. a "smoke" node in the building mesh)
-        // LEFT: ModelComponent::meshInstance is raw storage (H5).
         const Graphics::MeshInstance* mi =
-            reinterpret_cast<const Graphics::MeshInstance*>(model->meshInstance);
+            &model->meshInstance;
         const Graphics::GraphicsMesh* mesh = mi->GetMesh().Get();
         const char* name = em.name._data;
         if (mesh && name && em.name.GetLength() != 0) {
@@ -710,9 +707,8 @@ void ParticleComponent::Tick(void* time) {
                     const Pathfinding::PointList::Point* arr = attach->Points().GetData();
                     if (arr) {
                         // Transform copy-ctor (seven dwords) from the ModelComponent's +0x148.
-                        // LEFT: raw storage (H5).
                         const Math::Transform modelTf =
-                            *reinterpret_cast<const Math::Transform*>(model->transform);
+                            model->transform;
                         const float zero = 0.0f;
                         // LEFT: PointList::Point keeps its position raw (runtime header).
                         const Math::Transform ypo = Math::Transform::FromYawPitchOffset(
@@ -724,9 +720,8 @@ void ParticleComponent::Tick(void* time) {
                 } else {
                     // Retail retslot door, body moved to the call site: exactly one
                     // construction into `tf`, the same storage the door wrote.
-                    // LEFT: ModelComponent::meshInstance is raw storage (H5).
-                    tf = reinterpret_cast<const Graphics::MeshInstance*>(model->meshInstance)
-                             ->GetNodeToWorld(ge->nodeIndex);
+                    tf = model->meshInstance
+                             .GetNodeToWorld(ge->nodeIndex);
                     have = true;
                 }
                 if (have)

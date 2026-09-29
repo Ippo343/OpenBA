@@ -75,7 +75,7 @@
 //   0x140128570 PastureComponent::ComputeCapacity
 //   .rdata 0x140172220 yaw spread (180.0f), 0x140172114 half cell (0.5f)
 // LEFT (B.4 COMP-d): GameUpdateLoop m_game / m_citizenList / m_entityList are void* (W0
-// header); ModelComponent::transform is raw storage (H5).
+// header).
 
 // ============================================================
 // Game_helper_8670 (0x140128670) — spawn ONE livestock into this pasture.
@@ -113,9 +113,8 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
         float jitterX = fn_Random_RandFloatTol(rng);
         ModelComponent* model = parentCharacter->modelComponent;
         if (model) {
-            // LEFT: ModelComponent::transform is raw storage (H5).
             const Math::Vector3& p =
-                reinterpret_cast<const Math::Transform*>(model->transform)->translation;
+                model->transform.translation;
             posX = p.x + jitterX;
             posY = p.y + jitterY;
         }

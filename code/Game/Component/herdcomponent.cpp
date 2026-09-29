@@ -92,7 +92,7 @@
 // LEFT (B.4 COMP-d): GameUpdateLoop::m_game / m_citizenList / m_entityList are void*
 // (W0 header): the map, the town manager and the entity list are reached through one
 // cast each. PopulationComponent's fields are untyped (COMP-e): its grid is read through
-// casts. ModelComponent's MeshInstance / Transform are raw storage (H5).
+// casts.
 
 // Reimpl of FUN_140106b10: per-animal "has this animal reached its migration target
 // tile?" test. Finds the CharacterComponent on the owning entity (0x1400012d0), reads
@@ -104,9 +104,8 @@ bool AnimalComponent::IsInWanderBox() const {
     const Map* map = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);
 
     CharacterComponent* character = _entity->FindComponent<CharacterComponent>();   // 0x1400012d0
-    // LEFT: ModelComponent::transform is raw storage (H5).
     const Math::Vector3& pos =
-        reinterpret_cast<const Math::Transform*>(character->modelComponent->transform)->translation;
+        character->modelComponent->transform.translation;
 
     int mapDim = map->size;
     int x = (int)(pos.x + (float)(mapDim >> 1));
@@ -207,9 +206,8 @@ void AnimalComponent::Place(const Math::Vector3* position, float yaw, bool pose)
                 if (groups2) {
                     Graphics::GraphicsMesh** meshList = groups2[model->meshGroup].meshes;
                     Graphics::GraphicsMesh* mesh = meshList ? meshList[model->meshIndex] : nullptr;
-                    // LEFT: ModelComponent::meshInstance is raw storage (H5).
-                    reinterpret_cast<Graphics::MeshInstance*>(model->meshInstance)
-                        ->SetMesh(Graphics::ExternalPtrHandle{mesh});
+                    model->meshInstance
+                        .SetMesh(Graphics::ExternalPtrHandle{mesh});
                 }
 
                 model->OnAdded();   // slot 6
