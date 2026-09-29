@@ -69,6 +69,7 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 #include "Component/GrowthDescription.h"
 #include "Component/NaturalResourceComponent.h"
 #include "Component/MapComponent.h"
+#include "Game/Map.h"
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
 
@@ -76,7 +77,7 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // Helper: do harvest/reset sequence
 // ============================================================
 // Shared by both negative-growth and threshold-harvest paths.
-static void DoHarvestReset(GrowthComponent* comp, uintptr_t resourceMgr, float harvestAmount) {
+static void DoHarvestReset(GrowthComponent* comp, const Map* resourceMgr, float harvestAmount) {
     // Set resource amount
     comp->SetResourceAmount(harvestAmount);   // 0x140120470
 
@@ -93,7 +94,7 @@ static void DoHarvestReset(GrowthComponent* comp, uintptr_t resourceMgr, float h
     // of tile-record 0 and wrote to ~0x10 → access violation (misattributed to a
     // "missing resourceMgr grid"; the grid exists — see maptilegrid.cpp).
     // The Map's cells are untyped (GAME-b's header): LEFT.
-    uintptr_t gridBase = *reinterpret_cast<uintptr_t*>(resourceMgr + 0x80);
+    uintptr_t gridBase = reinterpret_cast<uintptr_t>(resourceMgr->cells);   // Map +0x80
     *reinterpret_cast<ComponentDescription**>(
         gridBase + 0x10 + (int64_t)resIdx * 0x30) = ownerPos;
 
@@ -166,12 +167,12 @@ void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMas
 int GrowthComponent::GetResourceIndex() {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return 0;
-    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): the map width is LEFT.
-    int* mapW = reinterpret_cast<int*>(world->m_game);
+    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): the one bridge is LEFT.
+    const Map* map = reinterpret_cast<const Map*>(world->m_game);
     MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680
     int16_t x = static_cast<int16_t>(res->tileX0);
     int16_t y = static_cast<int16_t>(res->tileY0);
-    return (int)y * (*mapW) + (int)x;
+    return (int)y * map->size + (int)x;
 }
 
 // Reimpl of FUN_140120470 (GrowthComponent set per-tile growth byte at grid +0x2c)
@@ -179,12 +180,12 @@ void GrowthComponent::SetResourceAmount(float amount) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
     // m_game void* (GAME-a) and Map's cells untyped: the grid reads are LEFT.
-    int* mapW = reinterpret_cast<int*>(world->m_game);
+    const Map* map = reinterpret_cast<const Map*>(world->m_game);
     MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680
-    uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapW) + 0x80);
+    uintptr_t grid = reinterpret_cast<uintptr_t>(map->cells);   // Map +0x80
     int16_t x = static_cast<int16_t>(res->tileX0);
     int16_t y = static_cast<int16_t>(res->tileY0);
-    int64_t cell = (int64_t)((int)x + (int)y * (*mapW));
+    int64_t cell = (int64_t)((int)x + (int)y * map->size);
     // DAT_14017222c is the byte<->float scale (255.0)
     const float divisor = RdataF(kRdata_14017222c);
     uint8_t* cellByte = reinterpret_cast<uint8_t*>(grid + 0x2c + cell * 0x30);
@@ -464,7 +465,7 @@ void GrowthComponent::Update(void* time) {
     }
 
     // Get resource manager from world (m_game void*, GAME-a: LEFT)
-    uintptr_t resourceMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
+    const Map* resourceMgr = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);
 
     // Compute time delta in seconds
     float dtSeconds = deltaTime->AsSeconds();
