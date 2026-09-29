@@ -203,13 +203,10 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830 B4 FORWARD to OrchardComponent::ValidateRefs
 
 // ---- pasturecomponent.cpp
-void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20
-uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570
-void PastureComponent_Helper5ed0(void* entityRef);  // 0x140105ed0
-void PastureComponent_ReassignEntityRef(uintptr_t entityPtr);  // 0x1401240a0
+void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20 B4 FORWARD to AnimalComponent::GetWanderBox
+uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570 B4 FORWARD to PastureComponent::ComputeCapacity
 
 // ---- pasturecomponent_spawn.cpp
-extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);  // 0x14002f1d0
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 

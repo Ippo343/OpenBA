@@ -194,8 +194,8 @@ UNIT_TEST(mib_controller_member_fields) {
     CHECK_EQ(offsetof(CropFieldComponent, field58),    (size_t)0x58);
     CHECK_EQ(offsetof(OrchardComponent, lastHarvestYear),(size_t)0x4c);
     CHECK_EQ(offsetof(OrchardComponent, slots),        (size_t)0x50);
-    CHECK_EQ(offsetof(PastureComponent, field28),      (size_t)0x28);
-    CHECK_EQ(offsetof(PastureComponent, field44),      (size_t)0x44);
+    CHECK_EQ(offsetof(PastureComponent, livestockType),(size_t)0x28);
+    CHECK_EQ(offsetof(PastureComponent, production),   (size_t)0x44);
     CHECK_EQ(offsetof(TradeComponent, tradeId),        (size_t)0x2c);
     CHECK_EQ(offsetof(TradeComponent, tradeFlag),      (size_t)0x71);
     CHECK_EQ(offsetof(TradeComponent, field80),        (size_t)0x80);

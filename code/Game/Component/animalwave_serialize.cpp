@@ -207,7 +207,6 @@ void LivestockComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
-    // LEFT: LivestockComponent's fields are untyped words (COMP-d's header)
-    SerializeValidatedIBP(&data28, ser, PastureComponent::TypeId());
-    reinterpret_cast<System::Time*>(&data30)->Serialize(ser);
+    SerializeValidatedIBP(&pasture, ser, PastureComponent::TypeId());
+    productionTimer.Serialize(ser);
 }

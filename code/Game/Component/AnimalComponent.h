@@ -48,6 +48,8 @@ public:
     void SetWanderTimer(uint32_t animId, float seconds);          // 0x140106250
     void Place(const Math::Vector3* position, float yaw, bool pose); // 0x140107400 (body: herdcomponent.cpp)
     bool IsInWanderBox() const;                                   // 0x140106b10 (body: herdcomponent.cpp)
+    void GetWanderBox(int16_t* x, int16_t* y, int16_t* w, int16_t* h, int size) const; // 0x140105e20 (body: pasturecomponent.cpp)
+    void ReleaseToWander();                                       // 0x140105ed0 (body: pasturecomponent.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from
     // Persist 0x140106e40: int (import 0x140152ac8), System::Time::Serialize
