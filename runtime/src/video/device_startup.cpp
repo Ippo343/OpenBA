@@ -100,13 +100,13 @@
 #include "../../types/application/Application.h"  // ENDGAME B.3.7 callers (K5)
 #include "../collection/set_avl.h"
 
-using RtVideo::Adapter;
-using RtVideo::Configuration;
-using RtVideo::Device;
-using RtVideo::DisplayMode;
-using RtVideo::GraphicsInterface;
-using RtVideo::InterfaceSlot;
-using RtVideo::RefreshRate;
+using Video::Configuration;
+using Video::Device;
+using Adapter           = Video::Device::Adapter;
+using DisplayMode       = Video::Device::DisplayMode;
+using GraphicsInterface = Video::Device::GraphicsInterface;
+using InterfaceSlot     = Video::Device::InterfaceSlot;
+using RefreshRate       = Video::Device::RefreshRate;
 
 // The Win32 half (device_startup_win.cpp): the two message callbacks whose
 // ADDRESSES PlatformStartup stores, and the EnumDisplaySettingsW probe.
@@ -115,41 +115,11 @@ extern "C" int  RtVideo_Device_MoveWindow(void* hwnd, unsigned msg, uint64_t w, 
 // Deliberately typed with void* on both sides so this declaration and the
 // definition in the _win twin are textually identical — the twin cannot include
 // Device.h (see its banner), so a typed declaration here could drift from the
-// definition there and C linkage would not catch it.
-extern "C" int  RtVideo_Device_GetDefaultResolution(void* self, const void* adapter);
+// definition there and C linkage would not catch it. `self` is `const`: the
+// member is `QEBA` and the callee never reads it.
+extern "C" int  RtVideo_Device_GetDefaultResolution(const void* self, const void* adapter);
 
 namespace {
-
-// The two exported DATA singletons these bodies read. Both minted, so both keep
-// working with the DLL absent.
-// NOTE there is no `Device::_singleton` accessor here, deliberately. Every body
-// in this file takes its Device as `this` — retail reads the singleton in the
-// SizeWindow/MoveWindow callbacks (which are in the _win twin) and nowhere
-// else in this cluster. An unused accessor would invite a later edit to reach
-// for the singleton where retail uses the parameter, which is the difference
-// between working on the device you were handed and working on whichever one is
-// current.
-Configuration** ConfigSlot() {
-    return reinterpret_cast<Configuration**>(&::Video::Configuration::_singleton);
-}
-void** AppSlot() {
-    // The class static since ENDGAME B.3.9 ENG (the minted row is redirected onto it).
-    return reinterpret_cast<void**>(&::Application::Application::_singleton);
-}
-
-// ---------------------------------------------------------------------------
-// The 16-byte Collection::Array header, {data, size, capacity}.
-// Identical to runtime/src/collection/array.cpp's ArrayHdr; declared here
-// rather than shared because that one is inside `namespace rtcoll` behind
-// array_internal.h, which is documented as being for array.cpp and its probe
-// only.
-// ---------------------------------------------------------------------------
-struct ArrayHdr {
-    void*   data;      // +0x00
-    int32_t size;      // +0x08
-    int32_t capacity;  // +0x0c
-};
-static_assert(sizeof(ArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 
 // ---------------------------------------------------------------------------
 // THE GROWTH RULE, which is identical in all four `operator=` bodies and is
@@ -167,16 +137,22 @@ static_assert(sizeof(ArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 // "simplification" to always triple, or to always take n, changes the
 // allocation pattern and therefore the heap layout — which this project has
 // already paid for once through a boundary-tag defect.
+//
+// B.4 (R-VIDEO): an array is its owner's three named fields, taken by
+// reference — Device.h unrolls every `Collection::Array<T>` of these classes
+// into `{xData, xCount, xCapacity}` members (see the declarations there).
 // ---------------------------------------------------------------------------
-inline void GrowFor(ArrayHdr* dst, const ArrayHdr* src, int stride, int align) {
-    const int n   = src->size;
-    const int old = dst->size;
-    dst->size = n;
-    if (n > dst->capacity) {
-        dst->capacity = n;
-        if (n == old + 1 && old != 0) dst->capacity = n * 3;
-        dst->data = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
-                        static_cast<int64_t>(dst->capacity) * stride), align);
+template <class T>
+inline void GrowFor(T*& data, int32_t& size, int32_t& capacity, int32_t srcSize,
+                    int stride, int align) {
+    const int n   = srcSize;
+    const int old = size;
+    size = n;
+    if (n > capacity) {
+        capacity = n;
+        if (n == old + 1 && old != 0) capacity = n * 3;
+        data = static_cast<T*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
+                   static_cast<int64_t>(capacity) * stride), align));
     }
 }
 
@@ -190,18 +166,19 @@ inline void GrowFor(ArrayHdr* dst, const ArrayHdr* src, int stride, int align) {
 // emitted the same code twice and did NOT fold them). Both:
 //     if (data) MemFree(data);   // the null test is retail's, OUTSIDE the call
 //     data = nullptr; *(uint64*)&size = 0;   // one qword clears size AND capacity
+// The one qword store is written as the two named fields, in address order.
 // ============================================================================
-extern "C" void RtVideo_ArrayRefreshDtor(void* arr) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arr);
-    if (a->data) System::MemoryAllocator::MemFree(a->data);
-    a->data = nullptr;
-    *reinterpret_cast<uint64_t*>(&a->size) = 0;
+void RtVideo_ArrayRefreshDtor(RefreshRate*& data, int32_t& size, int32_t& capacity) {
+    if (data) System::MemoryAllocator::MemFree(data);
+    data = nullptr;
+    size = 0;
+    capacity = 0;
 }
-extern "C" void RtVideo_ArrayBoolDtor(void* arr) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arr);
-    if (a->data) System::MemoryAllocator::MemFree(a->data);
-    a->data = nullptr;
-    *reinterpret_cast<uint64_t*>(&a->size) = 0;
+void RtVideo_ArrayBoolDtor(uint8_t*& data, int32_t& size, int32_t& capacity) {
+    if (data) System::MemoryAllocator::MemFree(data);
+    data = nullptr;
+    size = 0;
+    capacity = 0;
 }
 
 // ============================================================================
@@ -211,30 +188,30 @@ extern "C" void RtVideo_ArrayBoolDtor(void* arr) {
 // walks with a cursor at element+8 (`LEA RBX,[RDX+8]`) and frees each one
 // inline rather than calling 0x180010760.
 //
-// The first parameter is the array object; the callee spills it at [RSP+8] and
-// NEVER READS IT. Unnamed here for that reason.
+// Retail's first parameter is the array object; the callee spills it at
+// [RSP+8] and NEVER READS IT, so it is not passed here.
 // ============================================================================
-extern "C" void RtVideo_ArrayModeElemDestroy(void* /*unused*/, void* data, int32_t count) {
+void RtVideo_ArrayModeElemDestroy(DisplayMode* data, int32_t count) {
     if (count <= 0) return;
-    uint8_t* e = static_cast<uint8_t*>(data) + 8;
+    DisplayMode* e = data;
     for (int64_t i = count; i != 0; --i) {
-        void* p = *reinterpret_cast<void**>(e);
-        if (p) System::MemoryAllocator::MemFree(p);
-        *reinterpret_cast<uint64_t*>(e)     = 0;
-        *reinterpret_cast<uint64_t*>(e + 8) = 0;
-        e += 0x18;
+        if (e->refreshData) System::MemoryAllocator::MemFree(e->refreshData);
+        e->refreshData     = nullptr;
+        e->refreshCount    = 0;
+        e->refreshCapacity = 0;
+        ++e;
     }
 }
 
 // ============================================================================
 // 0x180010830 — Collection::Array<DisplayMode>::~Array
 // ============================================================================
-extern "C" void RtVideo_ArrayModeDtor(void* arr) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arr);
-    RtVideo_ArrayModeElemDestroy(arr, a->data, a->size);
-    if (a->data) System::MemoryAllocator::MemFree(a->data);
-    a->data = nullptr;
-    *reinterpret_cast<uint64_t*>(&a->size) = 0;
+void RtVideo_ArrayModeDtor(DisplayMode*& data, int32_t& size, int32_t& capacity) {
+    RtVideo_ArrayModeElemDestroy(data, size);
+    if (data) System::MemoryAllocator::MemFree(data);
+    data = nullptr;
+    size = 0;
+    capacity = 0;
 }
 
 // ============================================================================
@@ -247,41 +224,40 @@ extern "C" void RtVideo_ArrayModeDtor(void* arr) {
 // produce if MemAlloc fails — that skips element 0 only and copies through null
 // for the rest. Retail's; reproduced rather than "fixed", because a guard here
 // would change which of the two implementations faults first.
+//
+// Retail's self-assignment test compares the two ARRAY objects; an array here
+// is its `data` field and the two after it, so the test compares those fields'
+// addresses.
 // ============================================================================
-extern "C" void* RtVideo_ArrayRefreshAssign(void* dstv, const void* srcv) {
-    ArrayHdr* dst = static_cast<ArrayHdr*>(dstv);
-    const ArrayHdr* src = static_cast<const ArrayHdr*>(srcv);
-    if (dst == src) return dst;
+void RtVideo_ArrayRefreshAssign(RefreshRate*& data, int32_t& size, int32_t& capacity,
+                                RefreshRate* const& srcData, const int32_t& srcSize) {
+    if (&data == &srcData) return;
 
-    RtVideo_ArrayRefreshDtor(dst);
-    GrowFor(dst, src, 8, 4);
+    RtVideo_ArrayRefreshDtor(data, size, capacity);
+    GrowFor(data, size, capacity, srcSize, 8, 4);
 
-    for (int32_t i = 0, off = 0; i < dst->size; ++i, off += 8) {
-        uint8_t* d = static_cast<uint8_t*>(dst->data) + off;
+    for (int32_t i = 0; i < size; ++i) {
+        RefreshRate* d = data + i;
         if (d == nullptr) continue;
-        *reinterpret_cast<uint64_t*>(d) =
-            *reinterpret_cast<const uint64_t*>(static_cast<const uint8_t*>(src->data) + off);
+        *d = srcData[i];
     }
-    return dst;
 }
 
 // ============================================================================
 // 0x180008b00 — Collection::Array<bool>::operator=          (stride 1, align 1)
 // ============================================================================
-extern "C" void* RtVideo_ArrayBoolAssign(void* dstv, const void* srcv) {
-    ArrayHdr* dst = static_cast<ArrayHdr*>(dstv);
-    const ArrayHdr* src = static_cast<const ArrayHdr*>(srcv);
-    if (dst == src) return dst;
+void RtVideo_ArrayBoolAssign(uint8_t*& data, int32_t& size, int32_t& capacity,
+                             uint8_t* const& srcData, const int32_t& srcSize) {
+    if (&data == &srcData) return;
 
-    RtVideo_ArrayBoolDtor(dst);
-    GrowFor(dst, src, 1, 1);
+    RtVideo_ArrayBoolDtor(data, size, capacity);
+    GrowFor(data, size, capacity, srcSize, 1, 1);
 
-    for (int32_t i = 0, off = 0; i < dst->size; ++i, ++off) {
-        uint8_t* d = static_cast<uint8_t*>(dst->data) + off;
+    for (int32_t i = 0; i < size; ++i) {
+        uint8_t* d = data + i;
         if (d == nullptr) continue;
-        *d = static_cast<const uint8_t*>(src->data)[off];
+        *d = srcData[i];
     }
-    return dst;
 }
 
 // ============================================================================
@@ -293,28 +269,27 @@ extern "C" void* RtVideo_ArrayBoolAssign(void* dstv, const void* srcv) {
 // assignment. The zeroing is what makes the nested assign safe and it is
 // retail's, at 0x18000fd71/0x18000fd74.
 // ============================================================================
-extern "C" void* RtVideo_ArrayModeAssign(void* dstv, const void* srcv) {
-    ArrayHdr* dst = static_cast<ArrayHdr*>(dstv);
-    const ArrayHdr* src = static_cast<const ArrayHdr*>(srcv);
-    if (dst == src) return dst;
+void RtVideo_ArrayModeAssign(DisplayMode*& data, int32_t& size, int32_t& capacity,
+                             DisplayMode* const& srcData, const int32_t& srcSize) {
+    if (&data == &srcData) return;
 
-    RtVideo_ArrayModeDtor(dst);
-    GrowFor(dst, src, 0x18, 8);
+    RtVideo_ArrayModeDtor(data, size, capacity);
+    GrowFor(data, size, capacity, srcSize, 0x18, 8);
 
-    for (int32_t i = 0, off = 0; i < dst->size; ++i, off += 0x18) {
-        uint8_t* d = static_cast<uint8_t*>(dst->data) + off;
+    for (int32_t i = 0; i < size; ++i) {
+        DisplayMode* d = data + i;
         if (d == nullptr) continue;
-        const uint8_t* s = static_cast<const uint8_t*>(src->data) + off;
+        const DisplayMode* s = srcData + i;
 
-        *reinterpret_cast<int32_t*>(d)     = *reinterpret_cast<const int32_t*>(s);
-        *reinterpret_cast<int32_t*>(d + 4) = *reinterpret_cast<const int32_t*>(s + 4);
+        d->width  = s->width;
+        d->height = s->height;
 
-        uint8_t* dArr = d + 8;
-        *reinterpret_cast<uint64_t*>(dArr)     = 0;
-        *reinterpret_cast<uint64_t*>(dArr + 8) = 0;
-        RtVideo_ArrayRefreshAssign(dArr, s + 8);
+        d->refreshData     = nullptr;
+        d->refreshCount    = 0;
+        d->refreshCapacity = 0;
+        RtVideo_ArrayRefreshAssign(d->refreshData, d->refreshCount, d->refreshCapacity,
+                                   s->refreshData, s->refreshCount);
     }
-    return dst;
 }
 
 // ============================================================================
@@ -363,7 +338,7 @@ extern "C" void* RtVideo_ArrayModeAssign(void* dstv, const void* srcv) {
 // members.
 // ---------------------------------------------------------------------------
 int Video::Device::GetDefaultResolution(const Adapter& adapter) const {
-    return RtVideo_Device_GetDefaultResolution(const_cast<Video::Device*>(this), &adapter);
+    return RtVideo_Device_GetDefaultResolution(this, &adapter);
 }
 
 int Video::Device::SizeWindow(void* hwnd, unsigned msg, uint64_t wparam, int64_t lparam) {
@@ -378,7 +353,7 @@ bool Video::Device::ValidateConfiguration() {
     const int32_t ifaceTotal = interfaceCount;
     if (ifaceTotal == 0) return false;              // 0x1800f8852
 
-    Configuration* cfg = *ConfigSlot();
+    Configuration* cfg = Configuration::_singleton;
 
     int32_t ifaceIdx   = cfg->interfaceIndex;
     int32_t adapterIdx = cfg->adapterIndex;
@@ -414,8 +389,12 @@ bool Video::Device::ValidateConfiguration() {
             if (adapter->modeData[i].width == width &&
                 adapter->modeData[i].height == height) { modeIdx = i; break; }
         }
-        ArrayHdr tmp = { nullptr, 0, 0 };
-        RtVideo_ArrayRefreshDtor(&tmp);          // 0x1800f8928
+        DisplayMode tmp;
+        tmp.refreshData     = nullptr;
+        tmp.refreshCount    = 0;
+        tmp.refreshCapacity = 0;
+        RtVideo_ArrayRefreshDtor(tmp.refreshData, tmp.refreshCount,
+                                 tmp.refreshCapacity);   // 0x1800f8928
     }
 
     if (modeIdx == -1) {
@@ -492,8 +471,12 @@ bool Video::Device::ValidateConfiguration() {
             if (adapter->modeData[i].width == width &&
                 adapter->modeData[i].height == height) { finalModeIdx = i; break; }
         }
-        ArrayHdr tmp = { nullptr, 0, 0 };
-        RtVideo_ArrayRefreshDtor(&tmp);          // 0x1800f8a90
+        DisplayMode tmp;
+        tmp.refreshData     = nullptr;
+        tmp.refreshCount    = 0;
+        tmp.refreshCapacity = 0;
+        RtVideo_ArrayRefreshDtor(tmp.refreshData, tmp.refreshCount,
+                                 tmp.refreshCapacity);   // 0x1800f8a90
     }
 
     int32_t finalRefreshIdx = -1;
@@ -523,8 +506,11 @@ bool Video::Device::ValidateConfiguration() {
     displayModeIndex = finalModeIdx;               // 0x1800f8b2f
     refreshRateIndex = finalRefreshIdx;            // 0x1800f8b32
 
-    RtVideo_ArrayModeAssign(&modeData, &adapter->modeData);                // 0x1800f8b3d
-    RtVideo_ArrayBoolAssign(&multisampleData, &adapter->multisampleData);  // 0x1800f8b4a
+    RtVideo_ArrayModeAssign(modeData, modeCount, modeCapacity,
+                            adapter->modeData, adapter->modeCount);          // 0x1800f8b3d
+    RtVideo_ArrayBoolAssign(multisampleData, multisampleCount, multisampleCap,
+                            adapter->multisampleData,
+                            adapter->multisampleCount);                      // 0x1800f8b4a
 
     maxAnisotropy = adapter->maxFilterLevel;  // 0x1800f8b52
     return true;
@@ -566,22 +552,20 @@ bool Video::Device::CreateVideoInterface(int index) {
         return false;
     }
 
-    // ENDGAME B.3.5: the two hand-inlined vtable dispatches became virtual calls
-    // on block A's real `Video::DeviceData` — slot 3 `Shutdown` (+0x18) and
-    // slot 0 `DeletingDtor` with the delete flag (+0x00). The receiver keeps its
-    // marked bridge cast because `deviceData` is a pinned `void*` field.
-    if (void* dd = deviceData) {
-        reinterpret_cast<Video::DeviceData*>(dd)->Shutdown();          // B.3.5 bridge
+    // ENDGAME B.3.5: the two hand-inlined vtable dispatches are virtual calls on
+    // block A's real `Video::DeviceData` — slot 3 `Shutdown` (+0x18) and slot 0
+    // `DeletingDtor` with the delete flag (+0x00).
+    if (Video::DeviceData* dd = deviceData) {
+        dd->Shutdown();
         dd = deviceData;                                     // 0x1800f7980 re-read
         if (dd)
-            (void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);  // B.3.5 bridge
+            (void)dd->DeletingDtor(1);
         deviceData = nullptr;
     }
 
     activeInterface = index;                                 // 0x1800f79a4
 
-    using CreateFn = void* (*)(Device*);
-    deviceData = reinterpret_cast<CreateFn>(slot->createDeviceData)(this);
+    deviceData = slot->createDeviceData(this);
     return true;                                             // 0x1800f79b7
 }
 
@@ -612,7 +596,7 @@ bool Video::Device::CreateVideoInterface(int index) {
 // ============================================================================
 bool Video::Device::PlatformStartup() {
     // 0x1800f8266: the HWND comes from Application::_singleton[0].
-    windowHandle = *reinterpret_cast<void**>(*AppSlot());
+    windowHandle = ::Application::Application::_singleton->_windowHandle;
 
     if (!Video::Device::ValidateConfiguration()) {
         // 0x1800f8283 — the shipped string at 0x1801589b0; see
@@ -622,7 +606,7 @@ bool Video::Device::PlatformStartup() {
         return false;
     }
 
-    Configuration* cfg = *ConfigSlot();
+    Configuration* cfg = Configuration::_singleton;
 
     int32_t idx = cfg->interfaceIndex;
     if (static_cast<uint32_t>(idx) > 2u) idx = 1;    // 0x1800f82c5 CMOVA
@@ -646,29 +630,27 @@ bool Video::Device::PlatformStartup() {
             // ENDGAME B.3.5: three hand-inlined `DeviceData` vtable dispatches
             // became virtual calls on block A's real class — slot 2 `CreateDevice`
             // (+0x10), slot 3 `Shutdown` (+0x18) and slot 0 `DeletingDtor`.
-            void* dd = deviceData;
+            Video::DeviceData* dd = deviceData;
 
-            if (reinterpret_cast<Video::DeviceData*>(dd)->CreateDevice()) {  // B.3.5 bridge
+            if (dd->CreateDevice()) {
                 // ---- success path (0x1800f838f) --------------------------
                 if (deviceData == nullptr) break;         // re-read, then fail
                 const int32_t active = activeInterface;
                 if (active < 0) break;
                 cfg->interfaceIndex = active;
 
-                void* app = *AppSlot();
+                ::Application::Application* app = ::Application::Application::_singleton;
                 // ENDGAME B.3.7 callers (K5): members of the real class (the
                 // callback Set lives in runtime/src/application/message_callbacks.cpp).
-                reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
-                    5, &Video::Device::SizeWindow);
-                reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
-                    0x232, &Video::Device::MoveWindow);
+                app->RegisterMessageCallback(5, &Video::Device::SizeWindow);
+                app->RegisterMessageCallback(0x232, &Video::Device::MoveWindow);
                 return true;
             }
 
             // ---- Create failed: tear the companion down and try the next ---
-            reinterpret_cast<Video::DeviceData*>(deviceData)->Shutdown();     // B.3.5 bridge
-            if (void* d2 = deviceData)
-                (void)reinterpret_cast<Video::DeviceData*>(d2)->DeletingDtor(1);  // B.3.5 bridge
+            deviceData->Shutdown();
+            if (Video::DeviceData* d2 = deviceData)
+                (void)d2->DeletingDtor(1);
             deviceData = nullptr;
         }
 
@@ -729,26 +711,29 @@ void Video::Device::PlatformShutdown() {
     // 0x1800f83f6 / 0x1800f842f: the singleton is read, used, and RE-READ
     // between the two removals. Preserved — see buffers_win.cpp's note on the
     // same pattern in Device::Unlock.
+    // LEFT (B.4 R-VIDEO): `Application.h` declares the callback Set at +0x18 as
+    // raw storage (`_messageCallbackRoot`), not as `rtsetavl::Set`; reaching the
+    // Set stays a view over that field until that header types it.
     {
-        void* app = *AppSlot();
+        ::Application::Application* app = ::Application::Application::_singleton;
         UnregisterInline(reinterpret_cast<rtsetavl::Set*>(
-            static_cast<uint8_t*>(app) + 0x18), 5);            // WM_SIZE
+            &app->_messageCallbackRoot), 5);                   // WM_SIZE
     }
     {
-        void* app = *AppSlot();                                // 0x1800f842f
+        ::Application::Application* app = ::Application::Application::_singleton;  // 0x1800f842f
         UnregisterInline(reinterpret_cast<rtsetavl::Set*>(
-            static_cast<uint8_t*>(app) + 0x18), 0x232);        // WM_EXITSIZEMOVE
+            &app->_messageCallbackRoot), 0x232);               // WM_EXITSIZEMOVE
     }
 
     // 0x1800f8464: release the DeviceData — Shutdown (vtable +0x18, slot 3), then
     // the deleting dtor (vtable +0x00, flag 1), with the field re-read between and
     // nulled after. The same two-step CreateVideoInterface uses. ENDGAME B.3.5:
     // both are virtual calls on block A's real `Video::DeviceData` now.
-    if (void* dd = deviceData) {
-        reinterpret_cast<Video::DeviceData*>(dd)->Shutdown();              // B.3.5 bridge
+    if (Video::DeviceData* dd = deviceData) {
+        dd->Shutdown();
         dd = deviceData;                                       // 0x1800f8476
         if (dd)
-            (void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);  // B.3.5 bridge
+            (void)dd->DeletingDtor(1);
         deviceData = nullptr;                                  // 0x1800f848c
     }
 }

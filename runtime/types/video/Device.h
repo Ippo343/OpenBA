@@ -334,10 +334,16 @@ public:
     // +0x10 and GetProcAddress("GetDeviceName") at +0x08 — note the reversed order
     // relative to the field order.
     // ------------------------------------------------------------------------
+    // B.4 (R-VIDEO), H4: the two entry points are typed as the functions they
+    // are — `CreateVideoInterface` calls `createDeviceData(this)` and stores the
+    // result as the DeviceData* (0x1800f79aa..0x1800f79b0); `getDeviceName` is
+    // the plugin's name export, only ever tested for null here.
+    using GetDeviceNameFn    = const char* (*)();
+    using CreateDeviceDataFn = DeviceData* (*)(Device* device);
     struct InterfaceSlot {
-        void* module;            // +0x00  HMODULE. Only ever tested against zero and FreeLibrary'd.
-        void* getDeviceName;     // +0x08  const char* (*)()
-        void* createDeviceData;  // +0x10  DeviceData* (*)(Device*)
+        void*              module;            // +0x00  HMODULE. Only ever tested against zero and FreeLibrary'd.
+        GetDeviceNameFn    getDeviceName;     // +0x08
+        CreateDeviceDataFn createDeviceData;  // +0x10
     };
 
     // ========================================================================
@@ -567,7 +573,7 @@ public:
     InterfaceSlot     dllSlots[3];         // +0xB0  DX9, DX11, GL — standalone/video_interface.cpp writes slot 1 here
     int32_t           activeInterface;     // +0xF8  ctor = -1; Startup copies it back into Configuration::interfaceIndex
     int32_t           gapFC;               // +0xFC
-    void*             deviceData;          // +0x100 DeviceData* — dx11/ reads this at exactly this offset
+    DeviceData*       deviceData;          // +0x100 dx11/ reads this at exactly this offset
 };
 
 // ----------------------------------------------------------------------------
@@ -801,16 +807,15 @@ public:
     bool PlatformCreate();
 
     // ---- data ---------------------------------------------------------------
-    // `colorBuffer`/`depthBuffer` stay `void*` rather than `const ImageBuffer*`:
-    // b35-C owns `ImageBuffer.h` and the retail name is not a complete type here
-    // yet. The accessors above carry the real type.
-    void*    colorBuffer;   // +0x00  const Video::ImageBuffer*   (Create writes)
-    void*    depthBuffer;   // +0x08  const Video::ImageBuffer*   (Create writes)
+    // B.4 (R-VIDEO), H4: the pointer members carry their retail types (the
+    // accessors above and `Create`'s mangled parameters name them).
+    const ImageBuffer* colorBuffer;   // +0x00  (Create writes)
+    const ImageBuffer* depthBuffer;   // +0x08  (Create writes)
     int32_t  width;         // +0x10  (Create writes)
     int32_t  height;        // +0x14  (Create writes)
-    void*    next;          // +0x18  PlatformConstruct / ~RenderBuffer
-    void*    prev;          // +0x20  PlatformConstruct / ~RenderBuffer
-    void*    platformData;  // +0x28  RenderBufferData* — Create tail-calls its vtable slot 1
+    RenderBuffer*      next;          // +0x18  PlatformConstruct / ~RenderBuffer
+    RenderBuffer*      prev;          // +0x20  PlatformConstruct / ~RenderBuffer
+    RenderBufferData*  platformData;  // +0x28  Create tail-calls its vtable slot 1
 };
 
 }  // namespace Video
@@ -997,14 +1002,55 @@ enum ImageBufferSizeFlag : uint32_t {
 void* Video_DisplayMode_Ctor(Video::Device::DisplayMode* self, int width, int height);  // 0x18000d300
 void Video_DisplayMode_Dtor(Video::Device::DisplayMode* self);  // 0x18000cb80
 // ---- video/device_enum_types.cpp
-extern "C" void* RtVideo_GraphicsInterface_Ctor(void* selfv);  // 0x18000cd90
-extern "C" void* RtVideo_GraphicsInterface_CopyCtor(void* dstv, const void* srcv);  // 0x18000ce10
-extern "C" void RtVideo_GraphicsInterface_Dtor(void* selfv);  // 0x18000cdc0
-extern "C" void* RtVideo_Adapter_Ctor(void* selfv);  // 0x1800f7100
-extern "C" void* RtVideo_Adapter_CopyCtor(void* dstv, const void* srcv);  // 0x18000cc70
-extern "C" void RtVideo_Adapter_Dtor(void* selfv);  // 0x18000cc10
-// ---- video/device_startup.cpp
-extern "C" void RtVideo_ArrayRefreshDtor(void* arr);  // 0x180010760
+// The six lifecycle doors stay C bodies (their class takes no
+// real ctor/dtor, see the banner); dx11/src/devicedata.cpp calls them with
+// typed pointers, so the parameters are typed.
+extern "C" Video::Device::GraphicsInterface* RtVideo_GraphicsInterface_Ctor(
+    Video::Device::GraphicsInterface* self);  // 0x18000cd90
+extern "C" Video::Device::GraphicsInterface* RtVideo_GraphicsInterface_CopyCtor(
+    Video::Device::GraphicsInterface* dst, const Video::Device::GraphicsInterface* src);  // 0x18000ce10
+extern "C" void RtVideo_GraphicsInterface_Dtor(Video::Device::GraphicsInterface* self);  // 0x18000cdc0
+extern "C" Video::Device::Adapter* RtVideo_Adapter_Ctor(Video::Device::Adapter* self);  // 0x1800f7100
+extern "C" Video::Device::Adapter* RtVideo_Adapter_CopyCtor(
+    Video::Device::Adapter* dst, const Video::Device::Adapter* src);  // 0x18000cc70
+extern "C" void RtVideo_Adapter_Dtor(Video::Device::Adapter* self);  // 0x18000cc10
+// ---- video/device_startup.cpp, video/device_enum_types.cpp
+// The `Collection::Array<T>` instantiations over the unrolled {data, size,
+// capacity} triples above (B.4 R-VIDEO). Each takes its array as the owner's
+// three named fields BY REFERENCE; an `operator=` takes the source's data and
+// size. They are template instances: they become `Collection::Array<T>` members
+// when these triples become `Array<T>` members (H5 — a real Array would give
+// Device/Adapter/GraphicsInterface/DisplayMode a destructor, and dx11/ and the
+// unit tests read the triples' fields by name).
+void RtVideo_ArrayRefreshDtor(Video::Device::RefreshRate*& data, int32_t& size,
+                              int32_t& capacity);                               // 0x180010760
+void RtVideo_ArrayRefreshAssign(Video::Device::RefreshRate*& data, int32_t& size,
+                                int32_t& capacity,
+                                Video::Device::RefreshRate* const& srcData,
+                                const int32_t& srcSize);                         // 0x18000fbf0
+void RtVideo_ArrayRefreshSetSize(Video::Device::RefreshRate*& data, int32_t& size,
+                                 int32_t& capacity, int32_t n,
+                                 const Video::Device::RefreshRate& fill);        // 0x180057340
+void RtVideo_ArrayBoolDtor(uint8_t*& data, int32_t& size, int32_t& capacity);    // 0x180009560
+void RtVideo_ArrayBoolAssign(uint8_t*& data, int32_t& size, int32_t& capacity,
+                             uint8_t* const& srcData, const int32_t& srcSize);   // 0x180008b00
+void RtVideo_ArrayModeElemDestroy(Video::Device::DisplayMode* data, int32_t count);  // 0x180010cf0
+void RtVideo_ArrayModeDtor(Video::Device::DisplayMode*& data, int32_t& size,
+                           int32_t& capacity);                                  // 0x180010830
+void RtVideo_ArrayModeAssign(Video::Device::DisplayMode*& data, int32_t& size,
+                             int32_t& capacity,
+                             Video::Device::DisplayMode* const& srcData,
+                             const int32_t& srcSize);                            // 0x18000fcd0
+void RtVideo_ArrayModeSetSize(Video::Device::DisplayMode*& data, int32_t& size,
+                              int32_t& capacity, int32_t n,
+                              const Video::Device::DisplayMode& fill);           // 0x180057440
+void RtVideo_ArrayAdapterElemDestroy(Video::Device::Adapter* data, int32_t count);  // 0x180010da0
+void RtVideo_ArrayAdapterDtor(Video::Device::Adapter*& data, int32_t& size,
+                              int32_t& capacity);                               // 0x180010900
+void RtVideo_ArrayAdapterAssign(Video::Device::Adapter*& data, int32_t& size,
+                                int32_t& capacity,
+                                Video::Device::Adapter* const& srcData,
+                                const int32_t& srcSize);                         // 0x18000fe10
 // ---- video/video_resources.cpp
 Video::RenderBuffer* Video_RenderBuffer_Ctor(Video::RenderBuffer* self);  // 0x1800f3ee0
 void Video_RenderBuffer_Dtor(Video::RenderBuffer* self);  // 0x1800f4020
@@ -1012,6 +1058,17 @@ void Video_RenderBuffer_Dtor(Video::RenderBuffer* self);  // 0x1800f4020
 void Video_Configuration_Dtor(void* self);  // 0x1800f6f80  ??1Configuration@Video@@QEAA@XZ
 void Video_Device_Dtor(RtVideo::Device* self);  // 0x1800f7290  ??1Device@Video@@QEAA@XZ
 // ==== end B3R W0-P0c ====
+
+// runtime/src/video/buffers_win.cpp -- Video::Device's recursive render lock.
+// The first pair is the INLINE COPY the Platform{Construct,Destruct} bodies and
+// SaveLoad carry: it takes the ADDRESS of `Device::_singleton` because retail's
+// unlock re-reads the singleton. The second pair is the body of the exported
+// `Device::Lock` / `Device::Unlock` (dynamic_resources.cpp), on the device
+// handed in.
+void RtVideoDeviceLock(Video::Device** deviceSingleton);
+void RtVideoDeviceUnlock(Video::Device** deviceSingleton);
+void RtVideoDeviceLockThis(Video::Device* device);
+void RtVideoDeviceUnlockThis(Video::Device* device);
 
 // runtime/src/video/device_startup.cpp -- prints the run-identity line (this
 // translation unit's build stamp). Called once, from RuntimeInit()
