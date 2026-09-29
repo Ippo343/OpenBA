@@ -47,6 +47,7 @@
 #include "Game/EventLog.h"   // m_eventNotifier's class (B.4 GAME-a)
 #include "Game/WorkScheduler.h"   // m_tutorial's class (B.4 GAME-a)
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
+#include "Game/WeatherSimulation.h"   // m_weather's class (B.4 GAME-a)
 #include "Game/Map.h"        // m_game's class (B.4 GAME-a)
 #include "Game/PlayerToolManager.h"   // m_toolManager's class (B.4 GAME-a)
 #include "Game/PlayerController.h"    // m_playerController's class (B.4 GAME-a)
@@ -1416,13 +1417,13 @@ void GameUpdateLoop::Draw(float alpha) {
         // wired). Set BANISHED_FORCE_SNOW=<float> to override the coverage for
         // testing.
         {
-            uint8_t* weather = reinterpret_cast<uint8_t*>(m_weather);
+            WeatherSimulation* weather = m_weather;
             if (weather && videoCtx) {
-                uint8_t* ctx = reinterpret_cast<uint8_t*>(videoCtx);
-                uint32_t s0 = *reinterpret_cast<uint32_t*>(weather + 0x1c);  // snow coverage
-                uint32_t s1 = *reinterpret_cast<uint32_t*>(weather + 0x20);
-                uint32_t s2 = *reinterpret_cast<uint32_t*>(weather + 0x24);
-                uint32_t s3 = *reinterpret_cast<uint32_t*>(weather + 0x28);
+                // The four floats +0x1c..+0x28 (copied as they are, never computed on).
+                Math::Vector4 params(weather->field_0x1C[0],   // snow coverage
+                                     weather->field_0x1C[1],
+                                     weather->field_0x1C[2],
+                                     weather->field_0x1C[3]);
                 static int s_forceSnow = -1;
                 static float s_snowVal = 0.0f;
                 if (s_forceSnow < 0) {
@@ -1430,16 +1431,12 @@ void GameUpdateLoop::Draw(float alpha) {
                     s_forceSnow = (e && e[0]) ? 1 : 0;
                     if (s_forceSnow) s_snowVal = (float)atof(e);
                 }
-                if (s_forceSnow) s0 = *reinterpret_cast<uint32_t*>(&s_snowVal);
-                *reinterpret_cast<uint32_t*>(ctx + 0x3b8) = s0;
-                *reinterpret_cast<uint32_t*>(ctx + 0x3bc) = s1;
-                *reinterpret_cast<uint32_t*>(ctx + 0x3c0) = s2;
-                *reinterpret_cast<uint32_t*>(ctx + 0x3c4) = s3;
-                *reinterpret_cast<uint32_t*>(ctx + 0x288) = s0;
-                *reinterpret_cast<uint32_t*>(ctx + 0x28c) = s1;
-                *reinterpret_cast<uint32_t*>(ctx + 0x290) = s2;
-                *reinterpret_cast<uint32_t*>(ctx + 0x294) = s3;
-                *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x10800;
+                if (s_forceSnow) params.x = s_snowVal;
+                videoCtx->_unknown03b8 = params;                  // ctx+0x3b8
+                // LEFT: ctx+0x288 lies in the Context's undivided pixel-constant
+                // staging bytes (Video/Context.h, 0x200..0x297).
+                *reinterpret_cast<Math::Vector4*>(&videoCtx->_pixelConstantStaging[0x88]) = params;   // ctx+0x288
+                videoCtx->_dirty |= 0x10800;                      // ctx+0x10
             }
         }
     }
