@@ -227,7 +227,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0 B4 FORWARD: outside callers in 16 files -> StatusIconComponent::SetFlag (moved from citizencomponent.cpp)
 
 // ---- storagecomponent.cpp
-int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70
+int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount);  // 0x14000f090
 
 // ---- storagedisplaycomponent.cpp
@@ -275,7 +275,7 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV);  // 0x140088e20
 //   [8..11] = item quantity count
 // For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
 // then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10
+int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10 B4 FORWARD: outside callers in ~25 files -> StorageComponent::QueryCount
 
 // ---- workcomponent.cpp
 // FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —

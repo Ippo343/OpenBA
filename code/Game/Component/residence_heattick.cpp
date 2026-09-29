@@ -122,13 +122,12 @@ char ResidenceComponent::HeatTick(System::Time* dt) {
         {
             int compCount = stack->_subDescCount;
             for (int j = 0; j < compCount; ++j) {
-                void* comp = stack->_subDescs[j];
+                Description* comp = stack->_subDescs[j];
                 if (!comp) continue;
-                // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
-                uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+                uint32_t tid = comp->Type();   // slot 2
                 if (tid == RawMaterialDescription::TypeId()) {
                     if (Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId()))
-                        mat = reinterpret_cast<RawMaterialDescription*>(comp);   // LEFT: _subDescs is void** (COMP-c)
+                        mat = static_cast<RawMaterialDescription*>(comp);
                     break;
                 }
             }
