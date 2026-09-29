@@ -239,29 +239,27 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
 extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount);  // 0x140028860
 
 // ---- tradecomponent.cpp
-void TradeComponent_Setup(void* selfP);  // 0x14005c220
-void TradeComponent_ResizeNames(int64_t* field, int count);  // 0x14000e760
-void TradeComponent_ResizeItems(int64_t* field, int count);  // 0x14000e8d0
+// B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.
 
 // ---- tradecomponent_livestock.cpp
-extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty);  // 0x14005ace0
+extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, unsigned int qty);  // 0x14005ace0 B4 FORWARD -> TradeComponent::SpawnPurchasedLivestock (Dialog/tradeui_checkout.cpp)
 
 // ---- wellcomponent.cpp
-void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2);  // 0x140091ba0
+// B.4 COMP-f: 0x140091ba0 is CitizenBehavior::UnregisterWell.
 
 // ---- workcomponent.cpp
-bool WorkComponent_CheckWorkSlot(void* selfP);  // 0x14012ead0
-void WorkComponent_RegisterWorkSlot(void* selfP);  // 0x14012eb50
+bool WorkComponent_CheckWorkSlot(void* selfP);  // 0x14012ead0 B4 FORWARD -> WorkComponent::IsWorkPosted (outside callers)
+void WorkComponent_RegisterWorkSlot(void* selfP);  // 0x14012eb50 B4 FORWARD -> WorkComponent::CancelWork (outside callers)
 
 // ---- workplacecomponent.cpp
-void WorkplaceComponent_Detach(int64_t comp, void* workerIbp);  // 0x14012f7e0
-void WorkplaceComponent_Attach(int64_t comp, void* workerIbp);  // 0x14012fa20
-void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0x14012fc00
-void WorkPlaceComponent_OnCreateInit(void* selfP);  // 0x14012ee60
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14012f670
+void WorkplaceComponent_Detach(int64_t comp, void* workerIbp);  // 0x14012f7e0 B4 FORWARD -> WorkPlaceComponent::Detach (citizencomponent.cpp)
+void WorkplaceComponent_Attach(int64_t comp, void* workerIbp);  // 0x14012fa20 B4 FORWARD -> WorkPlaceComponent::Attach (citizencomponent.cpp)
+void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (outside callers)
+void WorkPlaceComponent_OnCreateInit(void* selfP);  // 0x14012ee60 B4 FORWARD -> WorkPlaceComponent::ReleaseWorkers (destroycomponent_workerrelease.cpp)
+extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP);  // 0x14012f670 B4 FORWARD -> WorkPlaceComponent::LeaveBuilderProfession (destroycomponent_states.cpp)
 
 // ---- zonecomponent.cpp
-void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV);  // 0x140088e20
+// B.4 COMP-f: 0x140088e20 is CitizenBehavior::AddZoneEntity.
 
 // ============================================================
 // Moved from engine/funcs/engine_funcs.h's "TO MOVE: Component" section (B3R G-CompD).
@@ -288,7 +286,7 @@ int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10
 // If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
 // Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
 // Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
-int fn_StorageCountQuery(void* component);  // 0x14012e5c0 (NOT the registered body: that is
+int fn_StorageCountQuery(void* component);  // 0x14012e5c0 B4 FORWARD -> WorkComponent::CalcMaxWorkers (NOT the registered body: that is
                                             // WorkComponent_CalcMaxWorkers, tutorial_base.cpp; R5, two bodies)
 
 // ---- componentdescription.cpp

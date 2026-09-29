@@ -27,12 +27,15 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"   // ZoneComponent_sub_d360 (0x14009d360)
 #include "system/MemoryAllocator.h"
+#include "Component/MapComponent.h"
+#include "Entity/CitizenBehavior.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // ============================================================
 // Helpers
 // ============================================================
-// FUN_140088e20 ZoneComponent_ZoneMapAdd — zone map registration (below).
-// FUN_140004680 FloorComponent_FindResData — find the map/tile component on an entity.
+// FUN_140088e20 CitizenBehavior::AddZoneEntity — zone map registration (below).
+// FUN_140004680 FindComponent<MapComponent> — the tile component of an entity.
 // FUN_140017230 ResidenceComponent_impl_7230 — red-black tree node insert/lookup;
 //   returns ptr-to-(ptr-to-node).
 // FUN_140003110 — append an entity ref to a tree node's child list.
@@ -42,17 +45,17 @@
 
 
 // ============================================================
-// Reimpl of FUN_140088e20 (ZoneComponent: register an entity into the zone map).
+// CitizenBehavior::AddZoneEntity (0x140088e20): register an entity in the zone map.
 // ============================================================
-// param_2 is an InternalBasePtr*; key = *(*param_2 + 0x28). Walk the red-black tree
-// at zoneMap+0x160 for that key; if no node matches, insert one via TreeInsert; then
-// append the entity ref to the node's child list (node+8, count = node[2]+1).
-void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
-    uintptr_t zoneMap = reinterpret_cast<uintptr_t>(zoneMapV);
-    void* entityPtr = entityPtrV;
+// `entity` is an InternalBasePtr*; key = the entity's description (+0x28). Walk the
+// red-black tree at +0x160 for that key; if no node matches, insert one via TreeInsert;
+// then append the entity ref to the node's child list (node+8, count = node[2]+1).
+// LEFT: the +0x160 tree (CitizenBehavior::field_0x160) is untyped in WORK-a's header;
+// its node reads stay by offset.
+void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity) {
+    void* entityPtr = entity;
 
-    uint64_t key = *reinterpret_cast<uint64_t*>(
-        *reinterpret_cast<uintptr_t*>(entityPtr) + 0x28);
+    uint64_t key = reinterpret_cast<uint64_t>(entity->Get()->_description);
 
     // Retail (0x140088e20) is `while (puVar3 = 0, puVar1 != 0)` — the reset is part
     // of the loop CONDITION, so it runs before every test including the one that
@@ -73,7 +76,7 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
     // depends on the ordering of heap description pointers — which differs run to
     // run. Reached step 18 by a jump and the tree was small enough to work; reached
     // it organically, with WoodHouse and Clear already registered, and it did not.
-    uint64_t* node = *reinterpret_cast<uint64_t**>(zoneMap + 0x160);
+    uint64_t* node = reinterpret_cast<uint64_t*>(field_0x160);
     uint64_t* found = nullptr;
     for (;;) {
         found = nullptr;
@@ -91,7 +94,7 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
         int64_t outNode[2] = {0, 0};
         int64_t scratch[3] = {0, 0, 0};
         void** ret = static_cast<void**>(ResidenceComponent_impl_7230(
-            reinterpret_cast<int64_t*>(zoneMap + 0x160),
+            reinterpret_cast<int64_t*>(&field_0x160),
             reinterpret_cast<void**>(outNode), &key, scratch));   // 0x140017230
         if (ret) found = reinterpret_cast<uint64_t*>(*ret);
         System::MemoryAllocator::MemFree(nullptr);
@@ -144,19 +147,18 @@ ZoneComponent::ZoneComponent() {
 void ZoneComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Stream& str = *reinterpret_cast<IO::Stream*>(stream);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(str, 1);
 
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-    if (version == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        void* entityPtr = _entity;
+    int version = ser.GetVersion();
+    if (version == 0 && static_cast<int>(str.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+        Object::InternalPtr<ComponentEntity> entityPtr(_entity);
         if (GameUpdateLoop::_singleton != nullptr) {
-            void* zoneMap = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xF0);
-            ZoneComponent_ZoneMapAdd(zoneMap, &entityPtr);   // 0x140088e20
+            // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
+            CitizenBehavior* zoneMap = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+            zoneMap->AddZoneEntity(&entityPtr);   // 0x140088e20
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // ============================================================
 // ZoneComponent::OnAdded (0x1401301F0)
@@ -167,28 +169,23 @@ void ZoneComponent::Persist(void* stream) {
 // into the world grid, then (re)register the entity in the zone map tree.
 
 void ZoneComponent::OnAdded() {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-    int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
-
-
-    int64_t mapIBP = 0;
-    FloorComponent_FindResData(reinterpret_cast<void*>(*ownerSlot), &mapIBP);   // 0x140004680
+    MapComponent* mapIBP = _entity->FindComponent<MapComponent>();   // 0x140004680
     if (!mapIBP) {
         return;   // standalone-defensive: retail data guarantees the map comp
     }
 
-    int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
-    int16_t y = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
-    int16_t w = *reinterpret_cast<int16_t*>(mapIBP + 0x2c);
-    int16_t h = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
-    int kind = *reinterpret_cast<int*>(mapIBP + 0x30);
+    int16_t x = static_cast<int16_t>(mapIBP->tileX0);
+    int16_t y = static_cast<int16_t>(mapIBP->tileY0);
+    int16_t w = static_cast<int16_t>(mapIBP->tileX1);
+    int16_t h = static_cast<int16_t>(mapIBP->tileY1);
+    int kind = mapIBP->extraField;
 
     // Retail gates the description through IsDerivedFrom(DAT_1401c7a18); in
     // standalone's partial factory tree that check rejects valid descriptions
     // (the documented FUN_1401253d0-class landmine, same accommodation as
     // MapComponent_PaintMinimapRect) and d360 would then deref (null+0x28).
     // Trust the linked description — it comes straight from the entity template.
-    void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
+    Description* desc = mapIBP->_description;
     if (!desc) {
         return;
     }
@@ -196,15 +193,19 @@ void ZoneComponent::OnAdded() {
     if (GameUpdateLoop::_singleton == nullptr) {
         return;
     }
-    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
 
-    int64_t entityRef = *ownerSlot;
-    ZoneComponent_sub_d360(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
+    // LEFT: 0x14009d360 takes the Map (GameUpdateLoop::m_game, void*, GAME-a) as int*,
+    // the entity ref as int64_t* and the zone description's +0x28 as an address
+    // (Action block's declaration).
+    Object::InternalPtr<ComponentEntity> entityRef(_entity);
+    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
         reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);   // 0x14009d360
 
-    entityRef = *ownerSlot;
-    ZoneComponent_ZoneMapAdd(*reinterpret_cast<void**>(world + 0xf0), &entityRef);   // 0x140088e20
+    entityRef = _entity;
+    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
+    reinterpret_cast<CitizenBehavior*>(world->m_citizenList)->AddZoneEntity(&entityRef);   // 0x140088e20
 
     // BANISHED_REGENTITY_TRACE — this call is the ONLY writer of the
     // per-description zone registry at (world+0xf0)+0x160, which is what
@@ -222,40 +223,37 @@ void ZoneComponent::OnAdded() {
 // red-black tree for the owner's entity id and finalize the matching node.
 
 void ZoneComponent::OnRemove() {
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-    int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
-
-
-    int64_t mapIBP = 0;
-    FloorComponent_FindResData(reinterpret_cast<void*>(*ownerSlot), &mapIBP);   // 0x140004680
+    MapComponent* mapIBP = _entity->FindComponent<MapComponent>();   // 0x140004680
     if (!mapIBP) return;   // standalone-defensive: retail data guarantees the map comp
 
-    int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
-    int16_t y = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
-    int16_t w = *reinterpret_cast<int16_t*>(mapIBP + 0x2c);
-    int16_t h = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
-    int kind = *reinterpret_cast<int*>(mapIBP + 0x30);
+    int16_t x = static_cast<int16_t>(mapIBP->tileX0);
+    int16_t y = static_cast<int16_t>(mapIBP->tileY0);
+    int16_t w = static_cast<int16_t>(mapIBP->tileX1);
+    int16_t h = static_cast<int16_t>(mapIBP->tileY1);
+    int kind = mapIBP->extraField;
 
     // Same IsDerivedFrom landmine accommodation as Draw above: trust the linked
     // description or d360 derefs (null+0x28).
-    void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
+    Description* desc = mapIBP->_description;
     if (!desc) return;
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
 
-    int64_t entityRef = 0;
-    new (&entityRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    ZoneComponent_sub_d360(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
+    // LEFT: 0x14009d360's untyped parameters (see OnAdded).
+    Object::InternalPtr<ComponentEntity> entityRef(nullptr);
+    ZoneComponent_sub_d360(reinterpret_cast<int*>(world->m_game), reinterpret_cast<int64_t*>(&entityRef),
         (int)x, (int)y, (unsigned int)(int)w, (int)h,
         reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);   // 0x14009d360
 
-    // Walk the zone-map tree for the owner's entity id (key at owner_deref+0x28).
-    int64_t ownerRef = *ownerSlot;
-    uintptr_t zoneMap = *reinterpret_cast<uintptr_t*>(world + 0xf0);
-    uint64_t key = *reinterpret_cast<uint64_t*>(ownerRef + 0x28);
+    // Walk the zone-map tree for the owner's description (the entity's +0x28).
+    // LEFT: the town manager (GameUpdateLoop::m_citizenList, void*, GAME-a) and its
+    // untyped +0x160 tree.
+    Object::InternalPtr<ComponentEntity> ownerRef(_entity);
+    CitizenBehavior* zoneMap = reinterpret_cast<CitizenBehavior*>(world->m_citizenList);
+    uint64_t key = reinterpret_cast<uint64_t>(_entity->_description);
 
-    uint64_t* node = *reinterpret_cast<uint64_t**>(zoneMap + 0x160);
+    uint64_t* node = reinterpret_cast<uint64_t*>(zoneMap->field_0x160);
     uint64_t* found = nullptr;
     while (node != nullptr) {
         if (key < *node) {

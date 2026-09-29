@@ -33,10 +33,15 @@ public:
     // 0x14012e7e0
     ~WorkComponent() override = default;                          // [0]  0x140039fb0
     void     Persist(void* stream) override;                      // [3]  0x14012e710
-    void     OnAdded() override;                                  // [6]  0x14012e6f0 PORT GAP
+    void     OnAdded() override;                                  // [6]  0x14012e6f0
     void     OnRemove() override;                                 // [7]  0x14012e6c0
     uint32_t CommandMask(int command) override;                   // [13] 0x14012e6b0 own ret 0
     void     Command(int command) override;                       // [14] 0x14012e6a0 own RET
+
+    // ---- non-virtual members (retail addresses) ----
+    int  CalcMaxWorkers() const;                                  // 0x14012e5c0 the starting worker count
+    bool IsWorkPosted() const;                                    // 0x14012ead0 workId is in the goals tree
+    void CancelWork();                                            // 0x14012eb50 take the posted work back
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     int32_t  workId;       // +0x28 posted work id (ctor -1 = none posted)

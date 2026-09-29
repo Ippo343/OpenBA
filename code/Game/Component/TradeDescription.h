@@ -20,7 +20,70 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+#include "system/String.h"
 namespace UI { class SpriteSheet; class StringTable; }   // B4 H4 (DLG-e)
+class ComponentDescription;   // Component/ComponentDescription.h
+
+// ---- the element types of TradeDescription's three arrays (B.4 COMP-f) ----
+// Read off Serialize 0x14005c7f0 and its merchant body 0x14000f550.
+
+// +0x38 element (0x18): a goods category of the trade panel. Serialize: +0x00
+// through the uint door, then the two Strings.
+struct TradeGoodsCategory {
+    uint32_t       rawMaterialFlags;   // +0x00 enum (TradeComponent::Setup copies it into the buy orders)
+    uint8_t        _pad04[4];          // +0x04
+    System::String spriteName;         // +0x08 TradeUI: the sprite in _ref20
+    System::String textName;           // +0x10 TradeUI: the string in _ref28
+};
+static_assert(sizeof(TradeGoodsCategory) == 0x18, "TradeGoodsCategory stride 0x18");
+static_assert(offsetof(TradeGoodsCategory, spriteName) == 0x08, "TradeGoodsCategory +0x08");
+static_assert(offsetof(TradeGoodsCategory, textName) == 0x10, "TradeGoodsCategory +0x10");
+
+// +0x48 element (0x48): a merchant. 0x14000f550: ExternalPtr (0x14000bf40, the
+// StringTable door), String, the goods count + ExternalPtr array (0x140001bb0 /
+// 0x1400049c0), the enum array (0x1400021d0 + the uint door), +0x40 int&, then
+// +0x10 / +0x14 / +0x18 through the uint door.
+struct TradeMerchant {
+    UI::StringTable*       stringTable;      // +0x00 ExternalPtr (0x14000bf40)
+    System::String         name;             // +0x08
+    uint32_t               field_0x10;       // +0x10 enum
+    uint32_t               fullPriceFlags;   // +0x14 categories bought at the full price (0x14005a520)
+    uint32_t               discountFlags;    // +0x18 categories bought at the discount (0x14005a520)
+    uint8_t                _pad1C[4];        // +0x1c
+    ComponentDescription** goods;            // +0x20 Array<ExternalPtr<ComponentDescription>> data
+    int32_t                goodsCount;       // +0x28
+    int32_t                goodsCap;         // +0x2c
+    uint32_t*              field_0x30;       // +0x30 Array<enum> data
+    int32_t                field_0x30Count;  // +0x38
+    int32_t                field_0x30Cap;    // +0x3c
+    int32_t                stockRolls;       // +0x40 manifest rolls, divided by the tier's rollDivisor (0x14005b580)
+    uint8_t                _pad44[4];        // +0x44
+};
+static_assert(sizeof(TradeMerchant) == 0x48, "TradeMerchant stride 0x48");
+static_assert(offsetof(TradeMerchant, name) == 0x08, "TradeMerchant +0x08");
+static_assert(offsetof(TradeMerchant, field_0x10) == 0x10, "TradeMerchant +0x10");
+static_assert(offsetof(TradeMerchant, fullPriceFlags) == 0x14, "TradeMerchant +0x14");
+static_assert(offsetof(TradeMerchant, discountFlags) == 0x18, "TradeMerchant +0x18");
+static_assert(offsetof(TradeMerchant, goods) == 0x20, "TradeMerchant +0x20");
+static_assert(offsetof(TradeMerchant, goodsCount) == 0x28, "TradeMerchant +0x28");
+static_assert(offsetof(TradeMerchant, field_0x30) == 0x30, "TradeMerchant +0x30");
+static_assert(offsetof(TradeMerchant, field_0x30Count) == 0x38, "TradeMerchant +0x38");
+static_assert(offsetof(TradeMerchant, stockRolls) == 0x40, "TradeMerchant +0x40");
+
+// +0x58 element (0x14): a merchant tier, picked by the town's population
+// (0x14005b4f0). Serialize: int, float, float, int, int.
+struct TradeTier {
+    int32_t populationLimit;   // +0x00 the tier applies below this population
+    float   delayBase;         // +0x04 merchant delay, x300 s (0x14005b450)
+    float   delayTolerance;    // +0x08
+    int32_t rollDivisor;       // +0x0c divides TradeMerchant::stockRolls
+    int32_t stockDivisor;      // +0x10 divides ValueDescription::_baseValue
+};
+static_assert(sizeof(TradeTier) == 0x14, "TradeTier stride 0x14");
+static_assert(offsetof(TradeTier, delayBase) == 0x04, "TradeTier +0x04");
+static_assert(offsetof(TradeTier, delayTolerance) == 0x08, "TradeTier +0x08");
+static_assert(offsetof(TradeTier, rollDivisor) == 0x0c, "TradeTier +0x0c");
+static_assert(offsetof(TradeTier, stockDivisor) == 0x10, "TradeTier +0x10");
 
 class TradeDescription final : public Description {
     DECLARE_EXE_TYPE(TradeDescription)
@@ -39,14 +102,14 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     UI::SpriteSheet* _ref20;                    // +0x20 ExternalPtr (a raw pointer)
     UI::StringTable* _ref28;                    // +0x28 ExternalPtr (a raw pointer)
-    void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
-    void* _pairs;                               // +0x38 string-pair array data (0x18 stride: enum, String, String)
+    ComponentDescription* _merchantTemplate;    // +0x30 ExternalPtr<ComponentDescription> (0x140002340): the merchant boat
+    TradeGoodsCategory* _pairs;                 // +0x38 goods-category array data
     int32_t _pairCount;                         // +0x40
     int32_t _pairCap;                           // +0x44
-    void* _merchants;                           // +0x48 merchant array data (0x48 stride)
+    TradeMerchant* _merchants;                  // +0x48 merchant array data
     int32_t _merchantCount;                     // +0x50
     int32_t _merchantCap;                       // +0x54
-    void* _prices;                              // +0x58 price array data (0x14 stride)
+    TradeTier* _prices;                         // +0x58 merchant-tier array data
     int32_t _priceCount;                        // +0x60
     int32_t _priceCap;                          // +0x64
     float _f68;                                 // +0x68 ~0.333
@@ -57,7 +120,7 @@ static_assert(sizeof(TradeDescription) == 0x70, "TradeDescription is 0x70 (creat
 static_assert(alignof(TradeDescription) == 8, "TradeDescription alignment");
 static_assert(offsetof(TradeDescription, _ref20) == 0x20, "TradeDescription::_ref20 @ +0x20");
 static_assert(offsetof(TradeDescription, _ref28) == 0x28, "TradeDescription::_ref28 @ +0x28");
-static_assert(offsetof(TradeDescription, _ref30) == 0x30, "TradeDescription::_ref30 @ +0x30");
+static_assert(offsetof(TradeDescription, _merchantTemplate) == 0x30, "TradeDescription::_merchantTemplate @ +0x30");
 static_assert(offsetof(TradeDescription, _pairs) == 0x38, "TradeDescription::_pairs @ +0x38");
 static_assert(offsetof(TradeDescription, _pairCount) == 0x40, "TradeDescription::_pairCount @ +0x40");
 static_assert(offsetof(TradeDescription, _pairCap) == 0x44, "TradeDescription::_pairCap @ +0x44");

@@ -55,6 +55,7 @@ class DiseaseComponent;
 class ComponentDescription;
 class Map;
 namespace IO { class Stream; }
+namespace Object { template <class T> class InternalPtr; }
 
 // ============================================================
 // ProfessionResourceEntry — one element of the +0x170 array (stride 0x20).
@@ -260,6 +261,13 @@ public:
     void PostLoad();                       // 0x14008f580 rebuild the +0x140 coarse water index
     // B4 GAME-a; body in Game/game.cpp: queue a description on the +0x120 list.
     void RemoveEntity(ComponentDescription* entity);   // 0x140091a20
+    // ---- the water-source register (B4 COMP-f; bodies in Component/wellcomponent.cpp) ----
+    void RemoveCellEntry(int x, int y, int value);                    // 0x1400889e0
+    void AddCellEntry(int x, int y, int value);                       // 0x140088a80
+    void UnregisterWell(Object::InternalPtr<WellComponent>* well);    // 0x140091ba0
+    void RegisterWell(Object::InternalPtr<WellComponent>* well);      // 0x140091cb0
+    // The zone registry (+0x160; body in Component/zonecomponent.cpp).
+    void AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity); // 0x140088e20
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

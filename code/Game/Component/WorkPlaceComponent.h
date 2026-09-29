@@ -63,6 +63,24 @@ public:
     void SetMaxWorkers(int newMax);                                     // 0x14012fb00
     void EnterBuilderProfession();                                      // 0x14012f520
 
+    // ---- non-virtual members (retail addresses; B.4 COMP-f) ----
+    void ReleaseWorkers();                                              // 0x14012ee60
+    void LeaveBuilderProfession();                                      // 0x14012f670
+    void Detach(Object::InternalPtr<CitizenComponent>* worker);         // 0x14012f7e0
+    void Attach(Object::InternalPtr<CitizenComponent>* worker);         // 0x14012fa20
+    void SetAccepting(bool accepting);                                  // 0x14012fc00
+    // The controller's state handlers (table 0x14012f3a0; RCX = this).
+    char EnterConstruction();                                           // 0x14012ee40 state 0
+    char EnterBuilt();                                                  // 0x14012edf0 state 2
+    char EnterDemolish();                                               // 0x14012ed60 state 3
+    // The tree's own (no retail body): StartTown's occupied-house visual.
+    void ApplyOccupiedVisual();
+
+private:
+    void EvictRoster();                                                 // 0x14012fc00's pause tail (B5)
+
+public:
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
     Profession* profession;        // +0x48 ExternalPtr<Profession>
