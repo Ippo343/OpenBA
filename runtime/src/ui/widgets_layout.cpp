@@ -59,8 +59,6 @@
 
 namespace {
 
-inline uint8_t* B(void* p, int off) { return reinterpret_cast<uint8_t*>(p) + off; }
-
 // Every mutator in this lane, having changed its own state, walks `this` then
 // its parent chain OR-ing this bit into the dirty-flags word at +0x34. This
 // lane found the field independently (eight bodies: TableElement::SetSize,
