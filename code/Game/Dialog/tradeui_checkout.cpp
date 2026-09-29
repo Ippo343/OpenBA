@@ -113,7 +113,7 @@ namespace {
 // description type exactly.
 void* FindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId) {
     if (!entity) return nullptr;
-    void** objs  = entity->_subDescs;
+    Description** objs = entity->_subDescs;   // COMP-c typed _subDescs (merge fix)
     int    count = entity->_subDescCount;
     if (!objs) return nullptr;
     for (int i = 0; i < count; ++i) {
