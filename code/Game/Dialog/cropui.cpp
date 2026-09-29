@@ -8,7 +8,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/cropui_funcs.h"
+#include "Dialog/CropUI.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Dialog/exe_bodies.h"
@@ -47,166 +47,10 @@
 //   +0x30: sub-components count (int)
 // ============================================================
 
-// Helper: iterate game world resource types, find SelectDescription
-// sub-components matching the category filter, and either count them
-// or populate a combo box.
-//
-// When combo is non-null, adds items to the combo and returns the
-// selected index. When combo is null, just counts matching items.
-//
-// This pattern is shared by CropUI_PopulateCombo (0x140078830)
-// and CropUI_GetExpectedCount (0x140078a40).
-
-static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndexOut) {
-    uintptr_t s = (uintptr_t)self;
-    int count = 0;
-    int selectedIdx = -1;
-
-    // Get resource type list from game world
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t scenarioPtr = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
-    int numTypes = *(int*)(scenarioPtr + 0x128);
-    uintptr_t typeArray = *(uintptr_t*)(scenarioPtr + 0x120);
-
-    // Current resource type: slot 12 GetResource (retslot shape, out at local_80)
-    uint64_t currentResource = 0;
-    self->GetResource(&currentResource);
-
-    // Category filter: slot 13 GetCategory
-    int categoryFilter = self->GetCategory();
-
-    // Bail on a dead / marked-for-removal datasource before probing it (see Slot7);
-    // returns "no resources" (0) for this iterate helper.
-    if (!SA_DialogEntityAlive(self)) return 0;
-    // Wrap entity at +0x28 in InternalBasePtr (base class requirement)
-    void* entity = *(void**)(s + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-
-    int comboIdx = 0;
-
-    for (int i = 0; i < numTypes; i++) {
-        uintptr_t resType = *(uintptr_t*)(typeArray + (uintptr_t)i * 8);
-
-        // Iterate sub-components of this resource type
-        int subCount = *(int*)(resType + 0x30);
-        uintptr_t subArray = *(uintptr_t*)(resType + 0x28);
-
-        for (int j = 0; j < subCount; j++) {
-            uintptr_t subComp = *(uintptr_t*)(subArray + (uintptr_t)j * 8);
-
-            // Check if sub-component's type matches SelectDescription
-            // Virtual call at vtable+0x10 returns type ID
-            int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
-
-            if (subTypeId == (int)SelectDescription::TypeId()) {
-                void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
-                bool isDerived = ::Object::IsDerivedFromNullSafe(subObj, SelectDescription::TypeId());
-                if (isDerived && subObj != nullptr) {
-                    // Check category filter matches
-                    int category = *(int*)((uintptr_t)subObj + 0x40);
-                    if (category == categoryFilter) {
-                        if (combo) {
-                            // Create UI::String from SelectDescription name
-                            uint8_t uiStrBuf[16];
-                            ::new (uiStrBuf) UI::String(
-                                            Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)subObj + 0x30))),
-                                            *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x38));  // B.3.6 bridge
-                            // Convert to System::String
-                            System::String sysStr;
-                            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
-
-                            // Create Sprite from SelectDescription icon
-                            uint8_t spriteBuf[16];
-                            ::new (spriteBuf) UI::Sprite(
-                                          Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)subObj + 0x20))),
-                                          *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x28));  // B.3.6 bridge
-
-                            // Add item to combo with index as userData
-                            reinterpret_cast<UI::ComboElement*>(combo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), sysStr, (void*)(intptr_t)comboIdx);  // B.3.6 bridge
-
-                            // Check if this is the currently selected resource
-                            if (resType == currentResource) {
-                                selectedIdx = count;
-                            }
-                        }
-                        count++;
-                    }
-                }
-                break;  // Found the SelectDescription for this type, move to next
-            }
-        }
-        comboIdx++;
-    }
-
-    if (selectedIndexOut) *selectedIndexOut = selectedIdx;
-    return count;
-}
-
-// ============================================================
-// PopulateCombo (0x140078830): Fill combo with available crops
-// ============================================================
-// Clears the combo, iterates game world resource types, finds
-// SelectDescription sub-components matching the crop category,
-// and adds them as combo items with sprites and names.
-// Sets the current selection to match the entity's current crop.
-//
-// Original: FUN_140078830
-
-void CropUI_PopulateCombo(CropUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Get the selectResource combo element
-    void* comboIBP = (void*)(s + 0x30);
-    void* combo = *(void**)comboIBP;
-
-    // Clear existing items
-    reinterpret_cast<UI::ComboElement*>(combo)->RemoveAllItems();  // B.3.6 bridge
-
-    // Populate combo and get selected index
-    int selectedIdx = -1;
-    CropUI_IterateResources(self, combo, &selectedIdx);
-
-    // Set current selection if we found a match
-    if (selectedIdx >= 0) {
-        reinterpret_cast<UI::ComboElement*>(*(void**)comboIBP)->SetCurrentItem(selectedIdx);  // B.3.6 bridge
-    }
-}
-
-// ============================================================
-// CropUI::Slot4 (vtable +0x20) — Setup/refresh
-// ============================================================
-// Finds the "selectResource" combo element in the dialog,
-// wraps it as InternalBasePtr and stores at +0x30.
-// Sets element ID 500, then calls the populate combo helper
-// to fill it with available crop types.
-//
-// Original: 0x140078BE0.
-
-void CropUI_Slot4(CropUI* self) {
-    // Get dialog instance from DialogController base
-    void* dialogInst = *(void**)((uintptr_t)self + 0x18);
-
-    // Find "selectResource" element
-    System::String nameBuf("selectResource");
-
-    uint8_t elemBuf[8] = {0};
-    ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameBuf));  // B.3.6 bridge
-    void* foundElem = *(void**)elemBuf;
-
-    // Wrap in InternalBasePtr, store at +0x30
-    uint8_t basePtrBuf[8];
-    new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(foundElem));   // B.3.3 bridge
-    self->internalBasePtr = *(uint64_t*)basePtrBuf;
-
-    // Set element ID 500
-    reinterpret_cast<UI::Element*>(self->internalBasePtr)->SetElementId(500);  // B.3.6 bridge
-
-    // Populate the combo with available crop types
-    CropUI_PopulateCombo(self);
-}
+// CropUI_IterateResources / CropUI_PopulateCombo / CropUI_Slot4 were CropUI's
+// copies of SelectResourceUI's 0x140078a40 / 0x140078830 / 0x140078be0 (defined in
+// selectresourceui.cpp). CropUI::OnCreated (0x1400b2b50) calls the base's
+// 0x140078be0, as OrchardUI and PastureUI do (B4 DLG-a, behaviour commit).
 
 // ============================================================
 // CropUI::Slot7 (vtable +0x38) — Update handler

@@ -24,7 +24,7 @@
 // handler behind it. Structure follows orchardui.cpp exactly.
 
 #include "Dialog/ui_panels.h"
-#include "Dialog/cropui_funcs.h"
+#include "Dialog/CropUI.h"
 #include "system/Value.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
@@ -123,7 +123,7 @@ void CropUI::OnCreated() {
     // Needs the DialogInstance (+0x18) the framework seats before dispatch.
     if (!*reinterpret_cast<void**>(s + 0x18)) return;
 
-    CropUI_Slot4(reinterpret_cast<CropUI*>(this));   // = 0x140078be0, the base's idx4
+    SelectResourceUI::OnCreated();   // 0x140078be0, the base's idx4
 
     uint64_t found = 0;
     {
