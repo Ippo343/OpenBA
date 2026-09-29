@@ -129,12 +129,10 @@ void EventLogUI::OnOpened() {
         // Set element ID: 0x67 + index
         btnElem->SetElementId(0x67 + i);
 
-        // Copy the notification flag from the event log into the check box.
-        // LEFT for a behaviour: commit: retail 0x140067640 copies ONE byte,
-        // flags[i] (stride 1) -> CheckElement::_checked; the tree copies a qword
-        // from +0x10 + i*8 over _checked and the seven bytes after it.
-        *(uint64_t*)((uintptr_t)btnElem + 0xd8) =
-            *(uint64_t*)(eventLogSingleton + 0x10 + i * sizeof(uintptr_t));
+        // Copy the notification flag from the event log into the check box:
+        // ONE byte, flags[i] (retail 0x140067a55 / 0x140067a69).
+        static_cast<UI::CheckElement*>(btnElem)->_checked =
+            *(uint8_t*)(eventLogSingleton + 0x10 + i);
 
         // Push button ptr to the notification array.
         ElementArray& notifyBtns = NotifyButtons(this);
