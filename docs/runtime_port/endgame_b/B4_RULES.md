@@ -174,3 +174,40 @@ Runs at most ~5 agents at once, agents build at `-j3`, the gate at `-j4`; agents
 ## 8. Corrections
 
 (appended as the code contradicts this sheet)
+
+1. **M1 and moves (R0-EXE).** Moving a body between files raises the destination file's columns by
+   what left the source. A MOVE is judged on the sum over the source and destination files and is
+   handed in as a list of (body, from, to); everything else is judged per file.
+2. **A3 duplicates are fewer than A counted (R0-EXE).** Where the "defined member" is an empty
+   placeholder, the C body is the real port: it BECOMES the member (B2), it is not deleted (B3).
+   Known: DecalComponent_Serialize 0x14011b7d0, HerdComponent_OnRemove 0x140121e20,
+   MultiObjectComponent_OnCreate 0x1401257c0, NaturalResourceComponent_OnRemove 0x140125c40,
+   RawMaterialComponent_Update 0x140129130, StateMachineComponent_OnUpdate2 0x14012b7d0,
+   StatusIconComponent_OnUpdate2 0x14012bf40, WorkComponent_Draw 0x14012e6f0, MainMenuDialog_Slot5
+   0x1400b3c60, EntityUI_Slot8 0x140066ad0, NoiseUI_Slot4 / _Slot9, SpriteCaptureUI_Serialize /
+   _OnCreate. Eight more DIFFER from their member and need retail read first: MapComponent_Draw,
+   StateMachineComponent_Serialize, TombstoneComponent_Serialize, MainMenuDialog_Slot4 / _Slot8,
+   ResourceLimitUI_Slot4 / _Slot7 / _Slot9.
+3. **Citizen home and workplace (W0-H1; D had them backwards).** CitizenComponent +0x238 is the
+   HOME (+0x240 the household slot), +0x248 the WORKPLACE. The body the tree and Ghidra call
+   `AssignWorkplace` (0x1401163d0) assigns the home; `AssignHousing` (0x140111ee0) assigns the
+   workplace. W1-CIT names the members from what retail does.
+4. **EntityList is 0xE8** (the shutdown flag at +0xE0). Its `updateTreeCount` +0x70 and
+   `postUpdateTreeCount` +0x80 are int32 in retail (0x1400c3fe8 / 0x1400c3ff7), int64 in the tree:
+   an H8 `behaviour:` commit, owed.
+5. **GameUpdateLoop +0x120 is the tool manager** (`m_toolManager`, a 0xB0 object without a vtable),
+   not an EntityUI; +0x130 is not the Weather resource and +0x118 not the Tutorial resource (W0-H2).
+   Members still `void*` and why: W0-H2's hand-in, copied into `b4_session/W0_LEFT.md`.
+6. **Settings flags are `uint8_t`, not `bool`** (W0-H2): retail copies the checkbox byte raw
+   (0x14007248f); a `bool` field would let the compiler drop the tree's `!= 0` in Save. Retail's
+   Save passes the raw byte (0x1400989d7): an H8 `behaviour:` commit, owed.
+7. **H5 raw-storage members owed as `behaviour:` commits** (each makes a ctor / dtor run):
+   CitizenComponent `name` +0x28 (String), `consumedTypes` +0x98 (Array), `meshInstance` +0xB8;
+   Profession's three Strings; ModelComponent `meshInstance` / `transform`; StorageComponent's item
+   array (retail's dtor frees it, the tree's does not); the Build / WorkPlace arrays; Map's picking
+   scene; PlayerController's transform and camera.
+8. **Inventory tables mis-tag receivers** (W0-H1, W0-H2): "Profession" rows at +0x20/+0x28 in the
+   dialogs are ProfessionList; "EntityList" +0x30/+0x38 are ComponentEntity; "StorageComponent"
+   +0x50/+0x58 and "EntityUI" past +0x48 are other classes. B1 stands: the receiver is re-derived.
+9. **Scripts run from a worktree** must not exclude their own path: `scripts/E_floor_and_tests.py`
+   matches `.claude/worktrees` against the absolute path and writes an empty table there.
