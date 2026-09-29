@@ -1595,7 +1595,7 @@ OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui,
                                              const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
     if (!self) return nullptr;
     printf("[OptionsDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
-           self, (void*)ui, (const void*)extRes, (const void*)parentIBP);
+           self, ui, extRes, parentIBP);
     Object::InternalPtr<UI::DialogInstance> parent;
     if (parentIBP)
         parent = *parentIBP;

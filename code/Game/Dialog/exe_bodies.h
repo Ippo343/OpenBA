@@ -74,15 +74,10 @@ extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* u
 OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140075150
 
 // ---- saveloaddialog.cpp
-extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes, void* parentIBP, uint8_t mode, void* enginePtr, void* gameWorldPtr);  // 0x1400b8270
-
-// SaveLoadDialog helper: FUN_1400b6ce0 — populates the file list table
-// NOW REIMPLEMENTED in code/Game/Dialog/saveloaddialog.cpp as SaveLoadDialog_PopulateFileList()
-// Old typedef kept for reference:
-// typedef void (*fn_SaveLoadDialog_PopulateFileList_t)(void* self);
-// extern fn_SaveLoadDialog_PopulateFileList_t fn_SaveLoadDialog_PopulateFileList;
+// B4 FORWARD: 1 outside caller file (Dialog/mainmenudialog.cpp) -> SaveLoadDialog's ctor
 class SaveLoadDialog;
-void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
+class MenuDialogLoopT;
+extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP, uint8_t mode, MenuDialogLoopT* menuLoop, GameUpdateLoop* game);  // 0x1400b8270
 
 // ---- storageui.cpp
 // StorageUI sort function (FUN_1400213f0) — sorts 0x18-byte entries by resource name.
