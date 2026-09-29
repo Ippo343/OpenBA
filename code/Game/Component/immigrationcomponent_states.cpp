@@ -158,11 +158,10 @@ void PostEventToEntity(ComponentEntity* entity, int eventId) {
     if (!entity) return;
     StateMachineComponent* smc = entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
     if (!smc) return;
-    void* node = smc->controllerSelf;
+    ControllerComponent::Controller* node = smc->stateMachine.current;
     if (!node) return;
-    // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e's header).
-    reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(   // slot 2
-        &smc->controllerSelf, static_cast<int8_t>(smc->stateFlags >> 8), eventId);
+    node->PostEvent(   // slot 2
+        &smc->stateMachine, smc->stateMachine.activeState, eventId);
 }
 
 }  // namespace

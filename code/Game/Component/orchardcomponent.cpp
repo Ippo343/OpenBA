@@ -317,8 +317,8 @@ namespace {
 // NB these are offsets on the StateMachineComponent, and the `sm` the state handlers
 // use is that component + 0x48.
 int OrchardCurrentStateId(const StateMachineComponent* smc) {
-    int8_t v = static_cast<int8_t>(smc->stateFlags >> 16);
-    if (v < 0) v = static_cast<int8_t>(smc->stateFlags);
+    int8_t v = smc->stateMachine.pendingState;
+    if (v < 0) v = smc->stateMachine.currentInput;
     return v;
 }
 
@@ -570,16 +570,15 @@ void OrchardComponent::Command(int cmdId) {
     }
 
     if (!smc) return;
-    void* node = smc->controllerSelf;
-    const int curIdx = static_cast<int8_t>(smc->stateFlags >> 8);   // +0x51
+    ControllerComponent::Controller* node = smc->stateMachine.current;
+    const int curIdx = smc->stateMachine.activeState;   // +0x51
     std::fprintf(stderr, "[OrchardCmd] Command(%d) -> post node event %d (node=%p curIdx=%d)\n",
-                 cmdId, eventId, node, curIdx);
+                 cmdId, eventId, static_cast<void*>(node), curIdx);
     std::fflush(stderr);
     if (!node) return;
     // node = the controller member the StateMachineComponent linked (D6); slot 2 PostEvent.
-    // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e's header).
-    reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(
-        &smc->controllerSelf, curIdx, eventId);
+    node->PostEvent(
+        &smc->stateMachine, curIdx, eventId);
 }
 
 // Diagnostic counters of the [OrchardMsg] lines (B6-5: namespace-scope atomics,

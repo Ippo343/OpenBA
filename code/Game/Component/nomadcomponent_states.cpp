@@ -142,12 +142,11 @@ char NomadComponent::TickWalkIn(void* sm) {
     }
     StateMachineComponent* smc = hall->FindComponent<StateMachineComponent>();   // 0x140003ea0
     if (smc) {
-        void* node = smc->controllerSelf;
+        ControllerComponent::Controller* node = smc->stateMachine.current;
         if (node) {
             // node = the controller member the StateMachineComponent linked (D6); slot 2.
-            // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e's header).
-            reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(
-                &smc->controllerSelf, static_cast<int8_t>(smc->stateFlags >> 8), 6);
+            node->PostEvent(
+                &smc->stateMachine, smc->stateMachine.activeState, 6);
         }
     }
     ::ControllerLive::RequestStateTransition(sm, 1);

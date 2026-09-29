@@ -383,13 +383,12 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
                         ::Object::InternalPtr<ComponentEntity> entIBP(newEntity);
 
                         // RawMaterialComponent on the new entity → position + amount.
-                        // Its +0x28 / +0x30 are `void*` in COMP-e's header: LEFT.
                         RawMaterialComponent* rm = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
                         if (rm) {
                             int yaw = random ? random->RandTol(2) : 0;
                             ActRm_PositionEntity_9760(reinterpret_cast<int64_t>(rm), cell, static_cast<float>(yaw) * kYawScale);
-                            *reinterpret_cast<int*>(&rm->field28) = per;
-                            rm->field30 = nullptr;
+                            rm->quantity = per;
+                            rm->profession = nullptr;
                         }
 
                         // Register into the world with the recipe category.

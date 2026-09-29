@@ -435,8 +435,8 @@ void EntityUI::OnUpdateLayout() {
         pageIdx = -1;
     } else {
         // Check build state: the pending byte +0x52 (if negative) use the input +0x50
-        state52 = (int8_t)(buildStateComp->stateFlags >> 16);
-        state50 = (int8_t)buildStateComp->stateFlags;
+        state52 = buildStateComp->stateMachine.pendingState;
+        state50 = buildStateComp->stateMachine.currentInput;
         pageIdx = (state52 < 0) ? (int)state50 : (int)state52;
     }
 

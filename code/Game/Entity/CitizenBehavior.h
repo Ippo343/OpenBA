@@ -252,6 +252,7 @@ public:
     int64_t FindWater(uint32_t centreCell, int extent, float* outA, float* outB);  // 0x1400881d0
     void ScanWaterCell(Map* map, int coarseCell, int ringX, int ringY, uint32_t srcCell,
                        int* bestCost, int* bestId, WellComponent** bestWell);    // 0x140088730
+    void RegisterRawMaterial(ComponentDescription* material);  // 0x140091e60 (defined in Component/rawmaterialcomponent.cpp)
 };
 
 static_assert(sizeof(CitizenBehavior) == 0x1C0, "CitizenBehavior is 0x1C0 (MemAlloc in 0x140096b00)");

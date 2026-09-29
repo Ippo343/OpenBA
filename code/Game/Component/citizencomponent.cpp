@@ -842,7 +842,7 @@ LAB_140113873:
                         // this branch look like a bug. desc+0x24 is the per-household OCCUPANT
                         // cap (distinct from desc+0x20, the household SLOT count).
                         int slotIdx = homeSlot;
-                        bool householdFull = CitizenComp_helper_a4f0(reinterpret_cast<int64_t>(storComp), slotIdx);
+                        bool householdFull = storComp->IsFamilyFull(slotIdx);   // 0x14012a4f0
                         if (!householdFull) {
                             // Room for another occupant — start the pregnancy timer.
                             pregnancyTimer = desc->pregnancyTime;
@@ -1176,18 +1176,6 @@ void CitizenComponent::SetParent(CitizenComponent* parent) {
     }
 }
 
-// Reimpl of CitizenComponent_helper_a4f0 (0x14012a4f0):
-// returns whether the citizen's education level (residence comp +0x24) is <= the
-// storage row capacity at +0x50 + param2*0x10 + 8.
-bool CitizenComp_helper_a4f0(int64_t self, int param2) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    void* obj = *reinterpret_cast<void**>(s + 0x18);
-    void* res = Object::IsDerivedFromNullSafe(obj, ResidenceDescription::TypeId()) ? obj : nullptr;
-    int eduLevel = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x24) : 0;
-    int cap = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(s + 0x50) + 8 + (int64_t)param2 * 0x10);
-    return eduLevel <= cap;
-}
-
 // CitizenComponent::FindWorkplace (0x14010ffc0):
 // find the best workplace for the citizen's profession (one whose field4C is clear),
 // choosing the one with the most free worker slots that the citizen can reach; scans
@@ -1350,94 +1338,6 @@ ComponentEntity* CitizenComponent::FindNewWorkplace() {
         return FindRankedWorkplace();
     }
     return FindWorkplace();
-}
-
-// Reimpl of FUN_14012c3f0 (HealthComponent status-flag setter, citizenComp HealthSetFlag):
-// set/clear bit `flagIndex` in the status mask (+0xf0 == param_1[0x1e]); when the mask
-// becomes empty/non-empty, add/remove the geometry from the scene and toggle the +0x20
-// scene id and the +4 "in scene" flag, then notify the owning entity.
-void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
-    if (((*reinterpret_cast<uint32_t*>(param_1[2] + 0x40) >> 10 & 1) == 0) || (value == '\0')) {
-        uint32_t bit = 1u << (flagIndex & 0x1f);
-        if (value == '\0') {
-            *reinterpret_cast<uint32_t*>(param_1 + 0x1e) &= ~bit;
-        } else {
-            *reinterpret_cast<uint32_t*>(param_1 + 0x1e) |= bit;
-        }
-        uint32_t changed;
-        uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-        // [STANDALONE GUARD D4] geometry (+0x28 == param_1[5]) vtable installed?
-        // See the long note in the clear-branch below: both scene calls depend on it.
-        const bool inited = (param_1[5] != 0);
-
-        // [diag] BANISHED_SI_CENSUS - report BOTH arms. "No bad scene nodes" is only a
-        // fix if the icons still REGISTER; if `inited` were false the guard would suppress
-        // every AddObject and the SceneWatch silence would mean the feature is off, not
-        // healthy. So count uninitialised components separately from suppressed adds.
-        // See [[reference_diagnostics_must_report_outcomes]].
-        if ((int)param_1[0x1e] == 0) {
-            // [STANDALONE GUARD] A StatusIconComponent that never ran StartupInit still
-            // carries the inert factory's zero-fill: the embedded geometry's vtable
-            // (param_1 + 5 == +0x28) is 0 and the scene id (+0x100) is 0. That 0 means
-            // "never registered", NOT scene object 0 — and Scene::RemoveObject(scene, 0)
-            // removes whichever object genuinely owns id 0, after which the engine's list
-            // walk spins: an in-world FREEZE, not a crash (the failure mode fixed at source
-            // for HighlightComponent in 0f97d16). Repair the sentinel instead of removing.
-            // Reachable on the default path since the pause port graduated: SetAccepting's
-            // accepting=false branch CLEARS icon flags 2/3/4, and clearing the last flag on
-            // an uninitialised icon lands exactly here.
-            //
-            // WARNING: the old note here claimed "the AddObject side below needs no guard -
-            // an uninitialised +0x100 == 0 fails its `< 0` test". That was FALSE, and it was
-            // falsified BY THE LINE BELOW: repairing the sentinel to -1 is exactly what makes
-            // `+0x100 < 0` true, so the next time a flag is SET this function registered a
-            // geometry whose vtable is still 0 into the Graphics::Scene.
-            // `[SceneWatch] BAD=1 ... vtable=0000000000000000` on a 21-minute load soak
-            // (2026-08-29) is that node, and it is the `EXEC of <heap>` in Scene::Clean.
-            // The upstream fix is StatusIconComponent_CtorScalars (statusiconcomponent.cpp),
-            // which now builds the geometry at CONSTRUCTION where retail's ctor 0x14012c0c0
-            // has it, so `inited` below is true for loaded icons too. The gate stays as the
-            // same [STANDALONE GUARD D4] its twin StatusIcon_Toggle carries.
-            //
-            // WARNING: THIS FUNCTION IS PORTED TWICE - see
-            // [[reference_one_retail_fn_ported_twice_diverges]]. The other copy is
-            // StatusIcon_Toggle (statusiconcomponent.cpp), which HAD the guard; THIS copy is
-            // the one reg_component_people.cpp registers for 0x14012c3f0, so the guarded
-            // twin never ran. Change both or neither.
-            if (param_1[5] == 0) {
-                if (*reinterpret_cast<int32_t*>(param_1 + 0x20) == 0)
-                    *reinterpret_cast<uint32_t*>(param_1 + 0x20) = 0xffffffff;
-            } else if (-1 < (int)*reinterpret_cast<uint32_t*>(param_1 + 0x20)) {
-                reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
-                    ->RemoveObject(*reinterpret_cast<uint32_t*>(param_1 + 0x20));   // B.3.5 bridge
-                *reinterpret_cast<uint32_t*>(param_1 + 0x20) = 0xffffffff;
-            }
-            uint32_t before = *reinterpret_cast<uint32_t*>(param_1 + 4);
-            uint32_t after = before & 0xfffffffb;
-            *reinterpret_cast<uint32_t*>(param_1 + 4) = after;
-            changed = after ^ before;
-        } else {
-            GameSettings* settings = g_gameSettings;
-            if (inited && settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
-                (int)param_1[0x20] < 0) {
-                uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
-                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(param_1 + 5));   // B.3.5 bridge
-                *reinterpret_cast<uint32_t*>(param_1 + 0x20) = id;
-                SceneWatch_Note(id, reinterpret_cast<void*>(param_1 + 5), "StatusIcon(12c3f0)::Add");
-            }
-            int64_t timeVal = 0;
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), 0.0f);
-            // param_1 is a Component (the +0x10 entity / +0x20 flag-notify idiom below).
-            reinterpret_cast<Component*>(param_1)->Tick(&timeVal);   // B.3.x bridge (slot 8)
-            uint32_t before = *reinterpret_cast<uint32_t*>(param_1 + 4);
-            uint32_t after = before | 4;
-            *reinterpret_cast<uint32_t*>(param_1 + 4) = after;
-            changed = after ^ before;
-        }
-        if ((changed & 0xffff) != 0 && param_1[2] != 0) {
-            ActHunt_NotifyEntityChanged_c3470(reinterpret_cast<void*>(param_1[2]));
-        }
-    }
 }
 
 // CitizenComponent::CanFindHousing (0x140115be0):
