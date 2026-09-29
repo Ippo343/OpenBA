@@ -160,3 +160,7 @@ Metric at `5beafd9a`: **22,834** to remove.
 | 29 | W1-DLG-d | `ee01e975` + `5c6051a0` | Dialog d: StatusBarUI, ScenarioDialog, ToolbarDialog, ToolUI, StorageUI, SelectResourceUI, SpriteCaptureUI, StatusIconUI, the TownHall helpers: 1499 -> 51 in 25 files; `behaviour:` TitleDescToolTipUI finds its texts through the dialog 0x14007b730, SpriteCaptureUI / NoiseUI slots run their bodies, the focus-entity button passes the entity 0x1400b92a0, `~StatusIconUI` frees its icons 0x140014370 | exit 0 · 918 / 0 · 0 (the merge alone had 4 unused-variable warnings in the perf build; `5c6051a0` marks the log-only locals) | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `5c6051a0`: **21,374** to remove.
+
+| 30 | W1-WORK-b | `c8d6a8d6` | Work b: MarketWork, GatherRawMaterials, Forester, Pasture, Herbalist, Hunt, Pickup, LocationWork, HarvestArea, HarvestOrchard: 1784 -> 184 in 43 files; HarvestArea / HarvestOrchard +0x58 is an `Array<bool>` | exit 0 · 918 / 0 · 0 (the retyped `work_act_consume.cpp` warning of row 28 flagged again: the coordinator's baseline file was left unsorted) | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.67 ms/frame, p95 2.31 | 0 |
+
+Metric at `c8d6a8d6`: **19,774** to remove.
