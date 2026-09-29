@@ -44,8 +44,17 @@
 #include "Work/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 
-// Ported leaves (this brick):
-extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
+#include "Component/BuildComponent.h"
+#include "Component/ClearAreaComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/ModelDescription.h"
+#include "Component/MultiObjectComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/ProfessionList.h"
+
 // GatherRawMaterials_Ctor_Impl (0x1400ec710) is declared in Work/exe_bodies.h.
 // town_workplace_registry.cpp — register a workplace into townMgr+0x100 (profession map).
 extern "C" void  TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
@@ -63,20 +72,21 @@ extern "C" void  TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplace
 // Collection::Array<Bytes<0x10,8>>::SetSize monomorphised into the exe
 // (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) — converted below.
 
-// Scan a material entity's component list (+0x28 array, +0x30 count) for the first
-// component whose GetTypeId (vtable+0x10) == tid; verify with IsDerivedFrom. Mirrors
+// Scan a material's ComponentDescription sub-description list (_subDescs / _subDescCount)
+// for the first entry whose Type() (slot 2) == tid; verify with IsDerivedFrom. Mirrors
 // the material-scan the exe does twice in 0x140108290 (and gather Execute's finder).
-static void* BCS1_FindRawMatDesc(uintptr_t matEntity, uint32_t tid) {
+static RawMaterialDescription* BCS1_FindRawMatDesc(ComponentDescription* matEntity, uint32_t tid) {
     if (!matEntity || !tid) return nullptr;
-    int count = *reinterpret_cast<int*>(matEntity + 0x30);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(matEntity + 0x28);
+    int count = matEntity->_subDescCount;
+    void** arr = matEntity->_subDescs;
     if (!arr) return nullptr;
     for (int i = 0; i < count; i++) {
-        void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header)
+        Object::Base* comp = reinterpret_cast<Object::Base*>(arr[i]);
         if (!comp) continue;
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
+        uint32_t t = comp->Type();
         if (t == tid) {
-            if (::Object::IsDerivedFromNullSafe(comp, tid)) return comp;
+            if (::Object::IsDerivedFromNullSafe(comp, tid)) return static_cast<RawMaterialDescription*>(comp);
             return nullptr;
         }
     }
@@ -104,32 +114,33 @@ extern "C" { void* g_pConstructionDemoEntity = nullptr; }
 // Best-effort completion check: a force-completed building has its ModelComponent build
 // variant (+0x166) at the final sub-mesh of a multi-stage group; a genuine foundation
 // sits at variant 0. Foundation / single-mesh buildings -> false (i.e. "build me").
-static bool BCS1_IsModelComplete(uintptr_t buildComp) {
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(buildComp + 0x10);
+static bool BCS1_IsModelComplete(BuildComponent* buildComp) {
+    ComponentEntity* entity = buildComp->_entity;
     if (!entity) return false;
     uint32_t tidModel = ModelComponent::TypeId();
     if (!tidModel) return false;
-    int count = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    if (!arr) return false;
-    void* model = nullptr;
+    int count = entity->_componentCount;
+    if (!entity->_components) return false;
+    ModelComponent* model = nullptr;
     for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* comp = *slot;
+        Component* comp = entity->_components[i].Get();
         if (!comp) continue;
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-        if (t == tidModel) { model = comp; break; }
+        uint32_t t = comp->Type();
+        if (t == tidModel) { model = static_cast<ModelComponent*>(comp); break; }
     }
     if (!model) return false;
-    uint8_t* m = reinterpret_cast<uint8_t*>(model);
-    int16_t modelVariant = *reinterpret_cast<int16_t*>(m + 0x166);
+    int16_t modelVariant = model->meshIndex;
     if (modelVariant <= 0) return false;                      // foundation / not advanced
-    int16_t variantIdx = *reinterpret_cast<int16_t*>(m + 0x164);
-    void* modelDesc = *reinterpret_cast<void**>(m + 0x18);
+    int16_t variantIdx = model->meshGroup;
+    // (read as the ModelDescription it is when the model was found by type; the tree
+    // never checked the description's type here)
+    Description* modelDescription = model->_description;
+    ModelDescription* modelDesc = static_cast<ModelDescription*>(modelDescription);
     if (!modelDesc) return true;                              // advanced but no desc -> treat complete
-    void* groupArray = *reinterpret_cast<void**>((uint8_t*)modelDesc + 0x20);
-    uint32_t groupCount = *reinterpret_cast<uint32_t*>((uint8_t*)modelDesc + 0x28);
+    void* groupArray = modelDesc->_meshGroups;
+    uint32_t groupCount = static_cast<uint32_t>(modelDesc->_meshGroupCount);
     if (!groupArray || variantIdx < 0 || (uint32_t)variantIdx >= groupCount) return true;
+    // LEFT: ModelDescription::_meshGroups is void* (no MeshGroup type yet, COMP-d)
     int subCount = *reinterpret_cast<int32_t*>((uint8_t*)groupArray +
                         (int64_t)variantIdx * 0x18 + 0x10);
     return (subCount > 1 && modelVariant >= subCount - 1);
@@ -168,15 +179,15 @@ static bool BCS1_IsModelComplete(uintptr_t buildComp) {
 // this allocation-free on a path that runs per-frame per-site.
 namespace {
 constexpr int kMaxLiveSites = 64;
-void* s_liveSites[kMaxLiveSites];
+BuildComponent* s_liveSites[kMaxLiveSites];
 }
-extern "C" bool BuildComponent_IsLiveSite(void* bc) {
+static bool BuildComponent_IsLiveSite(BuildComponent* bc) {
     if (!bc) return false;
     for (int i = 0; i < kMaxLiveSites; ++i)
         if (s_liveSites[i] == bc) return true;
     return false;
 }
-extern "C" void BuildComponent_MarkLiveSite(void* bc) {
+static void BuildComponent_MarkLiveSite(BuildComponent* bc) {
     if (!bc || BuildComponent_IsLiveSite(bc)) return;
     for (int i = 0; i < kMaxLiveSites; ++i) {
         if (s_liveSites[i] == nullptr) { s_liveSites[i] = bc; return; }
@@ -184,71 +195,65 @@ extern "C" void BuildComponent_MarkLiveSite(void* bc) {
     // Table full: fall back to the heuristic for this site rather than evicting a
     // live one (worst case = the pre-fix behaviour, never a wrong "is complete").
 }
-extern "C" void BuildComponent_ClearLiveSite(void* bc) {
+void BuildComponent_ClearLiveSite(BuildComponent* bc) {
     if (!bc) return;
     for (int i = 0; i < kMaxLiveSites; ++i)
         if (s_liveSites[i] == bc) { s_liveSites[i] = nullptr; return; }
 }
 
-extern "C" bool BuildComponent_DemoGateSkip(void* buildComp) {
+bool BuildComponent_DemoGateSkip(BuildComponent* buildComp) {
     if (!buildComp) return false;
     if (g_pConstructionDemoSite && buildComp == g_pConstructionDemoSite) return false;
     if (BuildComponent_IsLiveSite(buildComp)) return false;   // genuinely under construction
-    return BCS1_IsModelComplete(reinterpret_cast<uintptr_t>(buildComp));
+    return BCS1_IsModelComplete(buildComp);
 }
 
-// The state-1 ENTER handler. param1 = BuildComponent, param2 = state-machine node.
-extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(buildComp);
-    if (!self) return 1;
-
-
+// 0x140108290, the state-1 ENTER handler (sm = the state machine).
+int BuildComponent::State1Enter(void* smNode) {
     // 0x14000a170 (FindComponent<ClearAreaComponent>) and 0x140118270
-    // (ModelComponent_impl_8270) are unregistered in standalone; both already have
-    // clean C++ ports (fn_FindComponent_SM / ClearArea_Finalize8270), called below.
+    // (ModelComponent_impl_8270): ClearArea_Finalize8270 is the clean C++ port
+    // of the second, called below.
 
     // ---- Construction-demo gate (see g_pConstructionDemoSite header note) ----------
     // Must run BEFORE any mutation (multiplier write / model reset / storage reset).
-    if (BuildComponent_DemoGateSkip(buildComp)) {
+    if (BuildComponent_DemoGateSkip(this)) {
         return 1;
     }
 
     // Past the gate: this is a real construction site. Record it so the state-8
     // handlers keep running once the mesh progression reaches the final sub-mesh
     // (see the live-site table note above). Cleared by the 8->2 completion.
-    BuildComponent_MarkLiveSite(buildComp);
+    BuildComponent_MarkLiveSite(this);
 
     // +0x4c = 1 (default multiplier)
-    *reinterpret_cast<uint32_t*>(self + 0x4c) = 1;
+    costMultiplier = 1;
 
-    // multiplier from workplace component (+0x58)
-    uintptr_t wpIbp = 0;
-    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpIbp);
-    if (wpIbp != 0) {
-        // Retail: bc+0x4c = WorkplaceComponent+0x58 (the build-effort multiplier). In the
-        // standalone exe the WorkPlaceComponent lifecycle is inert so +0x58 stays 0, which
+    // multiplier from the MultiObjectComponent (+0x58), 0x140004740
+    MultiObjectComponent* multi = _entity->FindComponent<MultiObjectComponent>();
+    if (multi != nullptr) {
+        // Retail: bc+0x4c = MultiObjectComponent+0x58 (the build-effort multiplier). In the
+        // standalone exe that component's lifecycle is inert so +0x58 can stay 0, which
         // would clobber the default 1 set just above and make the state-8 build target
         // (matComp[0x30] * mult) collapse to 0 (instant completion, no visible labor). Only
-        // adopt the workplace value when it is a valid positive multiplier.
-        uint32_t wpMult = *reinterpret_cast<uint32_t*>(wpIbp + 0x58);
+        // adopt the value when it is a valid positive multiplier.
+        uint32_t wpMult = multi->multiCount;
         if ((int32_t)wpMult > 0)
-            *reinterpret_cast<uint32_t*>(self + 0x4c) = wpMult;
+            costMultiplier = static_cast<int32_t>(wpMult);
     }
 
     // reset the site ClearAreaComponent build variant (a170 -> 8270)
-    uintptr_t mcIbp = 0;
-    fn_FindComponent_SM(reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(self + 0x10)), &mcIbp);
-    if (mcIbp != 0) {
-        ClearArea_Finalize8270(reinterpret_cast<void*>(mcIbp));
+    ClearAreaComponent* clearArea = _entity->FindComponent<ClearAreaComponent>();
+    if (clearArea != nullptr) {
+        ClearArea_Finalize8270(clearArea);
     }
 
     // register the site into the construction registry (townMgr+0xd0 / count +0xd8)
+    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header): the CitizenBehavior
+    // reads below stay by offset.
     uintptr_t townMgr = 0;
     if (GameUpdateLoop::_singleton != nullptr)
-        townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
-    uintptr_t siteIbp = 0;
-    new (&siteIbp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(buildComp));   // B.3.3 bridge
+        townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
+    Object::InternalPtr<BuildComponent> siteIbp(this);
     if (townMgr) {
         int idx = BuildComponent_FindInQueue(reinterpret_cast<void*>(townMgr + 0xd0), &siteIbp);
         if (idx < 0) {
@@ -262,9 +267,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     // instant-build flag: gw[0xd0] & 1
     uint8_t instant = 0;
     if (GameUpdateLoop::_singleton != nullptr)
-        instant = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd0) & 1;
+        instant = GameUpdateLoop::_singleton->m_gameFlags & 1;
 
-    bool haveAll = BuildComponent_HaveAllMaterials(buildComp);
+    bool haveAll = HaveAllMaterials();
 
     if (!haveAll && instant == 0) {
         // -------- SPAWN branch: build the gather work + configure site storage --------
@@ -272,8 +277,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                         ? ::System::MemoryAllocator::MemAlloc(0x78, 8) : nullptr;
         void* work = nullptr;
         if (mem) {
-            void* entRaw = *reinterpret_cast<void**>(self + 0x10);
-            void* entIbp = entRaw;
+            ComponentEntity* entIbp = _entity;
             work = GatherRawMaterials_Ctor_Impl(mem, &entIbp);
         }
         uintptr_t workIbp = 0;
@@ -281,55 +285,53 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
 
         // find the WorkComponent (0x1401c8070) the work posts under
-        uintptr_t workCompIbp = 0;
-        WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
+        WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
 
         // POST to the reservation ledger (brick 2b): CitizenAI_impl_ec60 inserts the
         // gather work into the gw+0x118 priority AVL (via 0x1400f88a0) keyed by the
         // WorkComponent, so an idle citizen claims it and runs GatherRawMaterials::Execute
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
         // Needs the live-citizen action stack + pathfinder.
-        if (workCompIbp != 0) {
-            CitizenAI_WorkScheduler_Post(workCompIbp, 0x2001, 1, &workIbp);
+        if (workComp != nullptr) {
+            // LEFT: CitizenAI_WorkScheduler_Post takes the component as uintptr_t (COMP-b's declaration)
+            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x2001, 1, &workIbp);
         }
 
         // configure the site StorageComponent accept-mask + capacity
-        void* descObj = *reinterpret_cast<void**>(self + 0x18);
+        Description* descObj = _description;
         uint32_t buildDescTid = BuildDescription::TypeId();
-        void* buildDesc = (descObj && buildDescTid &&
-                           ::Object::IsDerivedFromNullSafe(descObj, buildDescTid)) ? descObj : nullptr;
+        BuildDescription* buildDesc = (descObj && buildDescTid &&
+                           ::Object::IsDerivedFromNullSafe(descObj, buildDescTid))
+                                          ? static_cast<BuildDescription*>(descObj) : nullptr;
 
-        uintptr_t storageIbp = 0;
-        WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x10), &storageIbp);
+        StorageComponent* storage = _entity->FindComponent<StorageComponent>();
 
-        if (storageIbp != 0) {
+        if (storage != nullptr) {
             // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
-            GameColl::AsArray<GameColl::Bytes<0x10, 8>>(
-                reinterpret_cast<void*>(storageIbp + 0x28)).SetSize(0);
+            GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storage->storageSlots).SetSize(0);
 
             uint32_t acceptMask = 0;
             int totalQty = 0;
-            int multiplier = *reinterpret_cast<int*>(self + 0x4c);
+            int multiplier = costMultiplier;
             uint32_t rawMatTid = RawMaterialDescription::TypeId();
 
-            int matCount = buildDesc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(buildDesc) + 0x28) : 0;
-            uintptr_t matArr = buildDesc ? *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(buildDesc) + 0x20) : 0;
+            int matCount = buildDesc ? buildDesc->_costCount : 0;
+            BuildCost* matArr = buildDesc ? buildDesc->_costs : nullptr;
             int found = 0;
             for (int i = 0; i < matCount; i++) {
-                uintptr_t matEntry = matArr + static_cast<uintptr_t>(i) * 0x10;
-                uintptr_t matEntity = *reinterpret_cast<uintptr_t*>(matEntry);      // element @0 = raw material
-                int       costQty   = *reinterpret_cast<int*>(matEntry + 8);        // element @8 = cost qty
-                void* rawMat = BCS1_FindRawMatDesc(matEntity, rawMatTid);
+                ComponentDescription* matEntity = matArr[i].material;   // element @0 = raw material
+                int costQty = matArr[i].quantity;                       // element @8 = cost qty
+                RawMaterialDescription* rawMat = BCS1_FindRawMatDesc(matEntity, rawMatTid);
                 if (rawMat) {
                     ++found;
-                    acceptMask |= *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x5c);
-                    int carryWeight = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMat) + 0x48);
+                    acceptMask |= rawMat->_flags;
+                    int carryWeight = rawMat->_weight;
                     totalQty += costQty * carryWeight * multiplier;
                 }
             }
 
-            *reinterpret_cast<uint32_t*>(storageIbp + 0x3c) = acceptMask;
-            *reinterpret_cast<int*>(storageIbp + 0x38) = totalQty;
+            storage->rawMaterialFlags = acceptMask;
+            storage->capacity = totalQty;
 
         }
 
@@ -383,10 +385,10 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     //       faithful Entity_impl_fc00 (0x14012fc00) port. Sets +0x50 AND drives the
     //       status-icon side effects (clears closed/disabled bits; raises the
     //       "no workers" warning when the roster is empty).
-    //   (b) the RAW FIELD WRITE just below — sets +0x50 only, no icon.
+    //   (b) the `isAccepting = 1` FIELD WRITE just below — sets +0x50 only, no icon.
     // A `grep SetAccepting` CANNOT SEE (b). That blind spot cost a wrong root-cause
     // call on 2026-07-30 ("the only true-setter is starttown.cpp:394"). If you are
-    // auditing who makes a workplace accepting, grep for `0x50` too.
+    // auditing who makes a workplace accepting, grep for `isAccepting` / `0x50` too.
     //
     // Retail does NOT hand-roll this: FUN_14012f520 ("enter Builder profession",
     // ported at destroycomponent_workerrelease.cpp:222 and registered) ends with
@@ -409,52 +411,47 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     // WorkPlaceComponent_SetAccepting also drives a status-icon warning; only the
     // gate-relevant +0x50 is reproduced here — the visual is deferred to the live WPC.)
     {
-        uintptr_t wpcIbp = 0;
-        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
-        if (wpcIbp != 0) {
-            void* wpc = *reinterpret_cast<void**>(&wpcIbp);
-            if (wpc) {
-                *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50) = 1;
-                // 2c-B: mark the site's WorkPlaceComponent as a "Builder workplace" —
-                // WPC+0x48 = Builder marker = *(*(gw+0xb0)+0x38). Retail's construction-start
-                // handler FUN_14012f520 does this (the inert WPC controller never runs it in
-                // standalone). This keeps the seated builders consistent: the employment tick's
-                // Phase-1 housing-sync would RESET a citizen whose +0x1f0 (Builder) != its
-                // workplace's required profession (+0x48), so +0x48 must read Builder.
-                //
-                // NOTE (legacy off-path rationale): registering the site into the
-                // townMgr+0x100 profession BST makes BuildPathGraph (0x1400d70c0) produce
-                // pairs -> ProcessPaths drains -> the employment allocator (0x1400d43b0) runs
-                // its Phase-5B AssignHousing(null) churn over every idle laborer. That churn
-                // was ORIGINALLY believed to deadlock the WPC Scene mesh-visual toggle, which
-                // is why the off-path defers the SEAT to State8Enter (direct CitizenEmploy_
-                // SeatWorkersAt against the site entity) instead of registering. That deadlock
-                // is now neutralized by g_wpcRosterOnly (held across the allocator body, the
-                // builder pool, and the profession spinner), so the NATURAL register path below
-                // is default-on and verified safe: a 30s autostart run with a registered site
-                // stays hang-free and the town-hall Professions panel shows the site's real
-                // Builder capacity ("X of 3" via the CapProbe in builder_pool_driver.cpp — the
-                // same WorkPlaceComponent/WorkComponent/CalcMaxWorkers path ProfessionUI_Slot8
-                // and FindAvailableBuilding use). Seating stays deferred to State8Enter either
-                // way: seating at construction start would convert the idle Laborers that HAUL
-                // the raw materials into Builders before any hauling. Laborers haul; Builders build.
-                uintptr_t gwPtr = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
-                uintptr_t profReg = gwPtr ? *reinterpret_cast<uintptr_t*>(gwPtr + 0xb0) : 0;
-                uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
-                if (builderMarker != 0)
-                    *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) = builderMarker;
-                // NATURAL builder flow (BANISHED_BUILDER_NATURAL): register the site into
-                // the townMgr+0x100 profession BST keyed Builder — the step retail does at
-                // WPC OnCreate (FUN_14012f520 → AddWorkplaceToProfessionTree 0x1400895a0).
-                // This is what makes FindAvailableBuilding (0x14008d100) able to locate the
-                // site, so the tick-driven Builder pool seats idle laborers here. Capacity
-                // (WorkComponent+0x30) is computed lazily by FindAvailableBuilding via
-                // CalcMaxWorkers; accepting (WPC+0x50) was set just above. The employment
-                // allocator's AssignHousing churn (which townMgr+0x100 population activates)
-                // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
-                if (townMgr) {
-                    TownRegistry_RegisterWorkplace(static_cast<int64_t>(townMgr), wpc);
-                }
+        WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
+        if (wpc != nullptr) {
+            wpc->isAccepting = true;
+            // 2c-B: mark the site's WorkPlaceComponent as a "Builder workplace" —
+            // WPC+0x48 = Builder marker = *(*(gw+0xb0)+0x38). Retail's construction-start
+            // handler FUN_14012f520 does this (the inert WPC controller never runs it in
+            // standalone). This keeps the seated builders consistent: the employment tick's
+            // Phase-1 housing-sync would RESET a citizen whose +0x1f0 (Builder) != its
+            // workplace's required profession (+0x48), so +0x48 must read Builder.
+            //
+            // NOTE (legacy off-path rationale): registering the site into the
+            // townMgr+0x100 profession BST makes BuildPathGraph (0x1400d70c0) produce
+            // pairs -> ProcessPaths drains -> the employment allocator (0x1400d43b0) runs
+            // its Phase-5B AssignHousing(null) churn over every idle laborer. That churn
+            // was ORIGINALLY believed to deadlock the WPC Scene mesh-visual toggle, which
+            // is why the off-path defers the SEAT to State8Enter (direct CitizenEmploy_
+            // SeatWorkersAt against the site entity) instead of registering. That deadlock
+            // is now neutralized by g_wpcRosterOnly (held across the allocator body, the
+            // builder pool, and the profession spinner), so the NATURAL register path below
+            // is default-on and verified safe: a 30s autostart run with a registered site
+            // stays hang-free and the town-hall Professions panel shows the site's real
+            // Builder capacity ("X of 3" via the CapProbe in builder_pool_driver.cpp — the
+            // same WorkPlaceComponent/WorkComponent/CalcMaxWorkers path ProfessionUI_Slot8
+            // and FindAvailableBuilding use). Seating stays deferred to State8Enter either
+            // way: seating at construction start would convert the idle Laborers that HAUL
+            // the raw materials into Builders before any hauling. Laborers haul; Builders build.
+            ProfessionList* profReg = GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_professionList : nullptr;
+            Profession* builderMarker = profReg ? profReg->field_0x38 : nullptr;
+            if (builderMarker != nullptr)
+                wpc->profession = builderMarker;
+            // NATURAL builder flow (BANISHED_BUILDER_NATURAL): register the site into
+            // the townMgr+0x100 profession BST keyed Builder — the step retail does at
+            // WPC OnCreate (FUN_14012f520 → AddWorkplaceToProfessionTree 0x1400895a0).
+            // This is what makes FindAvailableBuilding (0x14008d100) able to locate the
+            // site, so the tick-driven Builder pool seats idle laborers here. Capacity
+            // (WorkComponent+0x30) is computed lazily by FindAvailableBuilding via
+            // CalcMaxWorkers; accepting (WPC+0x50) was set just above. The employment
+            // allocator's AssignHousing churn (which townMgr+0x100 population activates)
+            // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
+            if (townMgr) {
+                TownRegistry_RegisterWorkplace(static_cast<int64_t>(townMgr), wpc);
             }
         }
     }

@@ -21,6 +21,22 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
+// One cost entry of the +0x20 array (0x10 stride). Serialize 0x140109140 reads
+// the int +0x08, then the reference +0x00 through 0x140002340 (ExternalPtr,
+// IsDerivedFrom ComponentDescription 0x1401c7318). No key names: the names say
+// what retail does with them (HaveAllMaterials 0x140108630 needs `quantity` x
+// the cost multiplier of `material` in the site's storage).
+struct BuildCost {
+    ComponentDescription* material;   // +0x00 the raw material's entity description
+    int32_t               quantity;   // +0x08
+    uint8_t               _pad0c[4];  // +0x0c
+};
+static_assert(sizeof(BuildCost) == 0x10, "BuildCost stride 0x10 (0x140109140)");
+static_assert(offsetof(BuildCost, material) == 0x00, "BuildCost::material @ +0x00");
+static_assert(offsetof(BuildCost, quantity) == 0x08, "BuildCost::quantity @ +0x08");
+
 class BuildDescription final : public Description {
     DECLARE_EXE_TYPE(BuildDescription)
 
@@ -36,7 +52,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14002f390
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _costs;                               // +0x20 cost array data: {External* material, int qty}, 0x10 stride
+    BuildCost* _costs;                          // +0x20 cost array data (0x10 stride)
     int32_t _costCount;                         // +0x28 NOT initialised by the tree's ctor (only +0x20..+0x27 are)
     int32_t _costCap;                           // +0x2c idem
     int32_t _i30;                               // +0x30

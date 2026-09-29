@@ -56,7 +56,7 @@ public:
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    void*    field48;              // +0x48 the child-entity list (Array<InternalBasePtr> data)
+    Object::InternalPtr<ComponentEntity>* field48; // +0x48 the child-entity list (Array<InternalBasePtr> data)
     void*    field50;              // +0x50 its count (dword) / capacity
     uint32_t multiCount;           // +0x58 1 in retail's ctor
     uint8_t  _pad5C[4];            // +0x5c
