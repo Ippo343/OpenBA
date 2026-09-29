@@ -278,9 +278,9 @@ static_assert(sizeof(BlockDesc12) == 0xC, "matches kSpec_Blk12's stride");
 // them reproduces the exact instruction sequence rather than losing it.
 // `pendingFilename` is a `RtSystem::String` member of the not-yet-converted
 // `Persistence`, reached through the transitional bridge.
-void AssignPendingFilename(Persistence* p, const String* filename) {
+void AssignPendingFilename(Persistence* p, const System::String* filename) {
     System::String tmp;
-    tmp.Set(filename->data);
+    tmp.Set(filename->_data);
     Sys(p->pendingFilename) = tmp;
     // ~tmp is retail's release.
 }
@@ -310,7 +310,7 @@ inline Persistence* FromWorker(void* worker) {
 // `status`. Note the command is written BEFORE the status, and both before the
 // events — so the worker can never observe a fresh command with a stale status.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const String* filename) {
+extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const System::String* filename) {
     Persistence* p = FromWorker(worker);
 
     AssignPendingFilename(p, filename);
@@ -349,7 +349,7 @@ extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const String*
 //      its slot stays the null from step 2. That is the shipped behaviour and
 //      it is the reason step 2 exists at all.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const String* filename,
+extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const System::String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
 
     Persistence* p = FromWorker(worker);
@@ -433,7 +433,7 @@ extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const String* f
 // exactly the kind of algebraically-identical change that hides where terms
 // cancel (reference_moved_term_hides_where_terms_cancel.md).
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* filename,
+extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const System::String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
 
     Persistence* p = FromWorker(worker);

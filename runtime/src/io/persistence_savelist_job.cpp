@@ -212,12 +212,8 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
 
     // ---- 3. one SaveGameInfo per hit --------------------------------------
     for (int32_t i = 0; i < found.size; ++i) {                  // 0x1800b6397
-        SaveGameInfo entry;
+        SaveGameInfo entry;                                     // name: 0x1800b63a8's zero
         entry.sortKey = 0;                                      // 0x1800b63a0
-        // `entry.name` (a `RtSystem::String` field) is placement-constructed
-        // below rather than zeroed here -- the copy ctor's own "adopt if
-        // non-null, else leave null" already produces 0x1800b63a8's effect
-        // for both outcomes.
 
         {
             // `Filename::GetPathFilename(true)` returns a Filename BY VALUE,
@@ -228,12 +224,10 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
             System::Filename baseName(found.data[i].GetPathFilename(true));   // 0x1800b63c5
             System::Filename* const got = &baseName;
             // UNGUARDED deref of the returned pointer, as retail writes it.
-            // `String(const String&)` (retail 0x180006cb0) is exactly "adopt
-            // the buffer, AddRef if non-null" -- what the C body wrote out by
-            // hand at 0x1800b63ce. `entry.name` is a `RtSystem::String`
-            // field of the (not yet converted) `SaveGameInfo`, reached
-            // through the transitional bridge.
-            new (&Sys(entry.name)) System::String(got->AsString());
+            // Adopt the buffer, AddRef if non-null, into the zeroed `name` --
+            // what the C body wrote out by hand at 0x1800b63ce. On a null
+            // String the assignment is the no-op the adopt was.
+            entry.name = got->AsString();
             // ~baseName is retail's release at 0x1800b63da.
         }
 
@@ -247,10 +241,8 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
         rtcoll::AsArray<&rtcoll::kSpec_SaveGameInfo>(&p->saves)
             ->SetSizeFill(p->saveCount + 1, &entry);            // 0x1800b645f
 
-        // `entry` is a plain local (`SaveGameInfo` is not yet converted), so
-        // there is no outer RAII to run this for us; retail's release at
-        // 0x1800b6465 is spelled as the destructor itself through the bridge.
-        Sys(entry.name).~String();
+        // Retail's release at 0x1800b6465 is `entry`'s destructor, as it
+        // leaves the iteration.
     }
 
     // ---- 4. publish ---------------------------------------------------------

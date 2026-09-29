@@ -142,7 +142,6 @@ using RtSave::ModInfo;
 using RtSave::SaveLoad;
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;
-using RtSaveDetail::ReleaseStringSlot;
 using RtSystem::String;
 
 namespace {
@@ -181,8 +180,7 @@ static_assert(sizeof(ModInfoArray) == 0x10, "Collection::Array header is 16 byte
 void ModInfoDestroyRange(ModInfo* data, int32_t count) {
     if (count <= 0) return;
     for (int32_t i = 0; i < count; ++i) {
-        ReleaseStringSlot(&data[i].path);
-        ReleaseStringSlot(&data[i].name);
+        data[i].~ModInfo();   // path, then name: ModInfo's member destructors
     }
 }
 
@@ -232,19 +230,9 @@ void ModInfoArraySetSize(ModInfoArray* a, int32_t newSize, const ModInfo* fill) 
         if (dst == nullptr) continue;
         const ModInfo* src = (i < oldSize) ? (oldData + i) : fill;
 
-        dst->name = nullptr;
-        if (src->name != nullptr) {
-            dst->name = src->name;
-            RtSystem::StringRefCount(const_cast<char*>(src->name)) += 1;
-        }
-        dst->path = nullptr;
-        if (src->path != nullptr) {
-            dst->path = src->path;
-            RtSystem::StringRefCount(const_cast<char*>(src->path)) += 1;
-        }
-        dst->versionMajor = src->versionMajor;
-        dst->gameVersion  = src->gameVersion;
-        dst->versionMinor = src->versionMinor;
+        // The element copy IS ModInfo's copy constructor (SaveLoad.h): name
+        // and path zeroed-then-adopted with an AddRef, the three dwords.
+        new (dst) ModInfo(*src);
     }
 
     if (oldData != a->data) {
@@ -288,23 +276,9 @@ void ModInfoArraySetSize(ModInfoArray* a, int32_t newSize) {
         ModInfo* dst = a->data + i;
         if (dst == nullptr) continue;
         if (i < oldSize) {
-            const ModInfo* src = oldData + i;
-            dst->name = nullptr;
-            if (src->name != nullptr) {
-                dst->name = src->name;
-                RtSystem::StringRefCount(const_cast<char*>(src->name)) += 1;
-            }
-            dst->path = nullptr;
-            if (src->path != nullptr) {
-                dst->path = src->path;
-                RtSystem::StringRefCount(const_cast<char*>(src->path)) += 1;
-            }
-            dst->versionMajor = src->versionMajor;
-            dst->gameVersion  = src->gameVersion;
-            dst->versionMinor = src->versionMinor;
+            new (dst) ModInfo(oldData[i]);   // the copy constructor, as above
         } else {
-            dst->name = nullptr;
-            dst->path = nullptr;
+            new (dst) ModInfo();             // the two String zero stores only
         }
     }
 
@@ -427,8 +401,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // (0x1800c1630, 0x1800c1766). Transcribed as re-reads: String::Set and the
     // array grow both allocate, and hoisting would be a guess about what the
     // allocator cannot do.
-    RtIO::Modification* mods =
-        reinterpret_cast<RtIO::Modification*>(RtSaveDetail::ModificationSingleton());
+    ::IO::Modification* mods = RtSaveDetail::ModificationSingleton();
 
     ModInfoArray arr;
     arr.data     = nullptr;
@@ -438,10 +411,8 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
     // with its one call site — it is `work.Set(...)` below.
 
-    int64_t byteOffset = 0;
-    for (int32_t i = 0; i < mods->count; ++i, byteOffset += 0x80) {
-        RtIO::Mod* entry = reinterpret_cast<RtIO::Mod*>(
-            reinterpret_cast<uint8_t*>(mods->mods) + byteOffset);
+    for (int32_t i = 0; i < mods->_count; ++i) {
+        RtIO::Mod* entry = &mods->_mods[i];
         if (entry->enabled == 0) continue;
 
         // ModInfo's real default ctor IS retail's two stores here (name and
@@ -450,11 +421,10 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // path, then name — after the append (see the end of the loop).
         ModInfo tmp;
 
-        // The display name, adopted straight off the Mod entry with an AddRef.
-        if (entry->name != nullptr) {
-            tmp.name = entry->name;
-            RtSystem::StringRefCount(entry->name) += 1;
-        }
+        // The display name, adopted straight off the Mod entry with an AddRef
+        // (String's adopt, 0x180006cb0's second half; the Mod entry's name is
+        // still the RtIO::Mod POD's raw buffer pointer).
+        System::StringPrivateAccess::Adopt(tmp.name, entry->name);
 
         // The path, with the data-directory prefix stripped. See the banner.
         //
@@ -464,8 +434,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // reverse of the declarations — and not at the end of the iteration.
         {
             System::Filename dataDir(                            // 0x180007bd0
-                static_cast<const ::IO::FileSystem*>(RtSaveDetail::FileSystemSingleton())
-                    ->GetDataDirectory());
+                RtSaveDetail::FileSystemSingleton()->GetDataDirectory());
 
             // GetLength (0x1800063c0) IS the null-guarded stored-length read.
             const int32_t dirLen = dataDir.GetLength();
@@ -475,10 +444,9 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
             System::String work;
             work.Set(entry->file.data + static_cast<int64_t>(dirLen));
 
-            if (work._data != nullptr) {
-                tmp.path = work._data;
-                RtSystem::StringRefCount(work._data) += 1;
-            }
+            // Adopt with an AddRef into the zeroed path: String::operator=
+            // on a null destination.
+            tmp.path = work;
         }
 
         tmp.versionMajor = entry->i2c;   // -> CheckMod status 4
@@ -506,14 +474,11 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
 
     for (int32_t i = 0; i < count; ++i) {
         ModInfo* e = arr.data + i;
-        // `name` and `path` are raw `const char*` members of the unconverted
-        // `ModInfo` that retail serialises AS Strings, so they come through a
-        // transitional cast (B31_RULES, "members of not-yet-converted structs").
-        reinterpret_cast<System::String&>(e->name).Serialize(&ser);
-        reinterpret_cast<System::String&>(e->path).Serialize(&ser);
-        rwc->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->versionMajor), nullptr);   // +0x98
-        rwc->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->gameVersion),  nullptr);   // +0x98
-        rwc->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->versionMinor), nullptr);   // +0x98
+        e->name.Serialize(&ser);
+        e->path.Serialize(&ser);
+        rwc->SerializeUInt(e->versionMajor, nullptr);   // +0x98
+        rwc->SerializeUInt(e->gameVersion,  nullptr);   // +0x98
+        rwc->SerializeUInt(e->versionMinor, nullptr);   // +0x98
     }
 
     ModInfoDestroyRange(arr.data, arr.size);
@@ -556,5 +521,5 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // ---- destroy the BY-VALUE String argument ------------------------------
     // See the banner. This is the callee's half of a contract whose caller half
     // is already written down in saveload_update.cpp's UpdateSave.
-    ReleaseStringSlot(const_cast<const char**>(&name->_data));
+    name->System::String::~String();
 }

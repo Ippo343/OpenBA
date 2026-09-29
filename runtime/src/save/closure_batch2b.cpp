@@ -53,18 +53,6 @@ void GuardedFree(void* p) {
     Rt_GuardedObjectFree(p);
 }
 
-// `System::String`'s adopt-a-reference idiom, inlined by retail at both sites:
-// zero the slot, then take the pointer and bump the refcount at `str-4`.
-//
-// ENDGAME B.3.1 step 2: that idiom IS ??0String@System@@QEAA@AEBV01@@Z
-// (0x180006cb0) — zero, adopt, AddRef, in that order — so the copy constructor
-// is spelled as itself here. `dst` is raw destination bytes inside a struct
-// with no header of its own (see the banner), so it is placement-constructed;
-// the two offsets stay raw because the field MEANINGS are still unknown.
-inline void AdoptString(void* dst, const void* src) {
-    new (dst) System::String(*static_cast<const System::String*>(src));
-}
-
 }  // namespace
 
 // ============================================================================
@@ -96,30 +84,30 @@ inline void AdoptString(void* dst, const void* src) {
 // banner). The transcription above is unchanged; it moved onto the class as the
 // copy constructor, and the registered address door delegates to it.
 //
-// C++ runs the two class-type member initialisers (`thumbnail`, `mods`) before
-// the body, so the +0x48/+0x50 zeroing lands ahead of the scalar copies rather
-// than after +0x44 as in retail. Every one of those stores is into the NEW
-// object, which nothing else can see until the constructor returns, so the
-// reordering is not observable; the String AddRefs and the Array assign — the
-// stores into shared state — keep retail's order.
+// The member initialisers run in declaration order, which IS retail's store
+// order above: the two Strings' zero-adopt-AddRef is ??0String@System@@QEAA@
+// AEBV01@@Z (0x180006cb0), and the +0x48/+0x50 zeroing lands after +0x44 as in
+// retail, ahead of the Array assign.
 Save::SaveLoad::SaveInfo::SaveInfo(const SaveInfo& other)
-    : thumbnail(other.thumbnail),   // +0x00 / +0x08: two qwords verbatim (pad0C too)
-      mods() {                      // +0x48 / +0x50: ZEROED, assigned below
-    AdoptString(&description, &other.description);               // +0x10
-    imageBuffer = other.imageBuffer;                             // +0x18
-    thumbWidth  = other.thumbWidth;                              // +0x20
-    thumbHeight = other.thumbHeight;                             // +0x24
-    thumbPixels = other.thumbPixels;                             // +0x28
-    sortKey     = other.sortKey;                                 // +0x30
-    AdoptString(&name, &other.name);                             // +0x38
-    saveIndex   = other.saveIndex;                               // +0x40
-    field44     = other.field44;                                 // +0x44
+    : thumbnail(other.thumbnail),       // +0x00 / +0x08: two qwords verbatim (pad0C too)
+      description(other.description),  // +0x10
+      imageBuffer(other.imageBuffer),   // +0x18
+      thumbWidth(other.thumbWidth),     // +0x20
+      thumbHeight(other.thumbHeight),   // +0x24
+      thumbPixels(other.thumbPixels),   // +0x28
+      sortKey(other.sortKey),           // +0x30
+      name(other.name),                 // +0x38
+      saveIndex(other.saveIndex),       // +0x40
+      field44(other.field44),           // +0x44
+      mods() {                          // +0x48 / +0x50: ZEROED, assigned below
     // 0x180033f30 — `Array<ModInfo>::operator=`, the ported J4 forwarder
     // (array_destroy.cpp), called directly by name.
     MetaEntryArrayAssign(&mods, &other.mods);
 }
 
 // The registered address door (0x180032f70): `(dst, src)`, `dst` in RAX.
+// B4 FORWARD: 1 outside caller(s) — runtime/src/collection/array.cpp's
+// kSpec_MetaData58 row hands it raw element bytes.
 extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
     return new (self) Save::SaveLoad::SaveInfo(
         *static_cast<const Save::SaveLoad::SaveInfo*>(src));
@@ -142,9 +130,8 @@ extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
 // test on +0x08 is RETAIL's, and it is kept as well. The object's own free is
 // NOT guarded here for the same reason it is not there.
 // ============================================================================
-extern "C" void* RtSave_SavedState_Delete(void* self) {
-    Save::SavedState* const state = static_cast<Save::SavedState*>(self);
-    if (void* buf = state->_data) GuardedFree(buf);
+extern "C" void* RtSave_SavedState_Delete(Save::SavedState* self) {
+    if (void* buf = self->_data) GuardedFree(buf);
     GuardedFree(self);
     return self;   // MOV RAX,<this> — retail returns the (now freed) pointer
 }

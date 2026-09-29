@@ -61,6 +61,20 @@ namespace RtIo {
 // them at +0x80 and ?GetSaveInfo@ returns one BY VALUE.
 struct SaveGameInfo;
 
+// One row of the block-descriptor array at +0x60 (stride 0xc: `ADD RCX,0xc`
+// in ?SetupLoad@SavedState@Save@@ 0x1800c0cb7). The SAVE enqueue (0x1800b75c0)
+// writes all three — +0x00 = the block's id, +0x04 = the running byte offset,
+// +0x08 = the block's size — and SetupLoad matches +0x00 against
+// SavedState::_id and returns +0x08.
+struct BlockDesc {
+    uint32_t id;       // +0x00
+    uint32_t offset;   // +0x04
+    uint32_t size;     // +0x08
+};
+static_assert(offsetof(BlockDesc, offset) == 0x04, "BlockDesc.offset @ 0x04");
+static_assert(offsetof(BlockDesc, size)   == 0x08, "BlockDesc.size @ 0x08");
+static_assert(sizeof(BlockDesc) == 0xc, "the +0x60 array strides 0xc");
+
 struct Persistence {
     void*            settingsMapRoot;   // +0x00 — Set<Pair<String,String>> root
     int32_t          settingsMapCount;  // +0x08 — see below (Wave 9 lane BOOT2)
@@ -263,9 +277,16 @@ static_assert(sizeof(SaveBlock) == 0x10, "sizeof(IO::Persistence::SaveBlock) == 
 // 100 ns ticks since 1601-01-01 UTC, which is exactly why an UNSIGNED
 // DESCENDING sort puts the most recently written save first. The name is kept
 // (it is still what the comparator uses it for) and the type is now known.
+//
+// B.4 R-IO: `name` is the real `System::String`. Every holder of a
+// SaveGameInfo is either a C++ object whose destructor IS retail's release
+// (the by-value temporaries in UpdateList state 1 and the command-4 job) or an
+// element of Persistence's `Array<SaveGameInfo>` at +0x80, whose storage the
+// hand-derived kSpec_SaveGameInfo row manages by offset (array.cpp), never
+// through this type's destructor.
 struct SaveGameInfo {
     uint64_t         sortKey;  // +0x00 — a FILETIME; see the note above
-    RtSystem::String name;     // +0x08
+    System::String   name;     // +0x08
 };
 static_assert(offsetof(SaveGameInfo, name) == 0x08, "SaveGameInfo.name @ 0x08");
 static_assert(sizeof(SaveGameInfo) == 0x10, "sizeof(IO::Persistence::SaveGameInfo) == 0x10");
@@ -377,28 +398,26 @@ public:
     int GetSaveCount() const;
     // ?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z
     //                                                        retail 0x1800b7bd0
-    // Retail returns `SaveGameInfo` BY VALUE. The member keeps the
-    // OUT-PARAMETER, because `RtIo::SaveGameInfo` is a POD holding an
-    // `RtSystem::String` — a by-value return would be a BITWISE copy with no
-    // AddRef and no release. `ret` is raw bytes and the body
-    // placement-constructs the name into it, exactly as retail does.
-    RtIo::SaveGameInfo* GetSaveInfo(RtIo::SaveGameInfo* ret, int index) const;
+    // Retail returns `SaveGameInfo` BY VALUE (retslot, non-virtual: the
+    // compiler's business). Its `name` is a real System::String, so the
+    // by-value return is retail's copy-construct into the hidden slot.
+    RtIo::SaveGameInfo GetSaveInfo(int index) const;
     // ?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@2@@Z
     //                                                        retail 0x1800b7c80
     // `AEBA` — PRIVATE in retail, and exported all the same (this DLL exports
     // its private members). Declared PUBLIC here for the reason `IO::FileSystem`
     // records for its two `Platform*` members: it has its OWN registered door
     // and a door is a free function.
-    System::Filename GetSaveFilename(const RtSystem::String& name) const;
+    System::Filename GetSaveFilename(const System::String& name) const;
     // ?BeginDelete@Persistence@IO@@QEAA_NAEBVString@System@@@Z
     //                                                        retail 0x1800b7ab0
-    bool BeginDelete(const RtSystem::String& name);
+    bool BeginDelete(const System::String& name);
     // ?BeginLoad@Persistence@IO@@…                           retail 0x1800b7970
-    bool BeginLoad(const RtSystem::String& name, int blockCount,
+    bool BeginLoad(const System::String& name, int blockCount,
                    const RtIo::SaveBlock* blocks);
     // ?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z
     //                                                        retail 0x1800b7870
-    bool BeginGetSaveGameInfo(const RtSystem::String& name, int count);
+    bool BeginGetSaveGameInfo(const System::String& name, int count);
 
     // ??1Persistence@IO@@QEAA@XZ                             retail 0x1800b7fb0
     // A REAL destructor — see the banner. It is `QEAA`, non-virtual, and the
@@ -428,7 +447,7 @@ public:
     uint32_t            _fileHeader;         // +0x54
     uint32_t            _magic;              // +0x58
     uint32_t            _crc;                // +0x5C
-    void*               _blockDescData;      // +0x60
+    RtIo::BlockDesc*    _blockDescData;      // +0x60  Array<BlockDesc>._data
     int32_t             _blockDescCount;     // +0x68
     uint8_t             _pad6c[0x04];        // +0x6C — NOT pinned
     void*               _blockPtrData;       // +0x70

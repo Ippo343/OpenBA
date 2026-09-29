@@ -178,33 +178,26 @@ int Persistence::GetSaveCount() const {
     return ours;
 }
 
-RtIo::SaveGameInfo* Persistence::GetSaveInfo(RtIo::SaveGameInfo* ret, int index) const {
+RtIo::SaveGameInfo Persistence::GetSaveInfo(int index) const {
 
-    // `ret` is the hidden return slot -- raw, uninitialised bytes -- so
-    // `ret->name` (a `RtSystem::String` field of `SaveGameInfo`, which stays a
-    // POD) is placement-constructed through the transitional bridge.
-    // `String(const String&)` (retail 0x180006cb0) is exactly "zero, then
-    // AddRef if non-null", which is what the C body wrote out by hand.
+    // The by-value return is built in the hidden slot: `name` is
+    // copy-constructed, and `String(const String&)` (retail 0x180006cb0) is
+    // exactly "zero, then AddRef if non-null", which is what the C body wrote
+    // out by hand.
     //
     // FAITHFUL: there is still NO bounds check on `index`.
     if (_flags & 1u) {
-        ret->sortKey = 0;
-        new (&::Sys(ret->name)) System::String();
-    } else {
-        const RtIo::SaveGameInfo& e = _saves[index];
-        ret->sortKey = e.sortKey;
-        new (&::Sys(ret->name)) System::String(::Sys(e.name));
+        return RtIo::SaveGameInfo{0, System::String()};
     }
-
-    return ret;
+    const RtIo::SaveGameInfo& e = _saves[index];
+    return RtIo::SaveGameInfo{e.sortKey, e.name};
 }
 
-System::Filename Persistence::GetSaveFilename(const RtSystem::String& nameRef) const {
-    const RtSystem::String* const name = &nameRef;
+System::Filename Persistence::GetSaveFilename(const System::String& name) const {
 
     // ?Format@String@System@@SA?AV12@PEBDZZ (retail 0x1800c9730), by name.
     System::String tmp = System::String::Format(
-        ::kRtPersistSaveFilenameFormat, _savePath.data, name->data);
+        ::kRtPersistSaveFilenameFormat, _savePath.data, name._data);
 
     // The manual "zero, AddRef-adopt tmp's buffer, then AdjustDelimiters" IS
     // `Filename(const String&)` (retail 0x18000c780) -- see B31_RULES
@@ -217,8 +210,7 @@ System::Filename Persistence::GetSaveFilename(const RtSystem::String& nameRef) c
     return out;
 }
 
-bool Persistence::BeginDelete(const RtSystem::String& nameRef) {
-    const RtSystem::String* const name = &nameRef;
+bool Persistence::BeginDelete(const System::String& name) {
 
     if (_flags & 1u) return false;
 
@@ -228,24 +220,22 @@ bool Persistence::BeginDelete(const RtSystem::String& nameRef) {
     // object the POD-plus-move round trip produced. `AsString()` is the same
     // eight bytes (Filename IS a String, layout-identically), which is what
     // retail hands the enqueue helper.
-    System::Filename fn(GetSaveFilename(*name));
+    System::Filename fn(GetSaveFilename(name));
     RtIo_PersistenceWorker_EnqueueDelete(&_workerVtable,             // 0x1800b7390
-        reinterpret_cast<const RtSystem::String*>(&fn.AsString()));      // B.3.x bridge
+        &fn.AsString());
     // ~fn is retail's release.
     return true;
 }
 
-bool Persistence::BeginLoad(const RtSystem::String& nameRef, int blockCount,
+bool Persistence::BeginLoad(const System::String& name, int blockCount,
                             const RtIo::SaveBlock* blocks) {
-    const RtSystem::String* const name = &nameRef;
 
     if (_flags & 1u) return false;
 
     // Same shape as BeginDelete above.
-    System::Filename fn(GetSaveFilename(*name));
+    System::Filename fn(GetSaveFilename(name));
     RtIo_PersistenceWorker_EnqueueLoad(&_workerVtable,               // 0x1800b7460
-        reinterpret_cast<const RtSystem::String*>(&fn.AsString()),       // B.3.x bridge
-        blockCount, blocks);
+        &fn.AsString(), blockCount, blocks);
     // ~fn is retail's release.
     return true;
 }

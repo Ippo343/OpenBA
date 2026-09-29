@@ -181,7 +181,6 @@ namespace {
 
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;
-using RtSaveDetail::ReleaseStringSlot;
 
 using RtSave::SaveLoad;
 using RtSave::ModInfo;
@@ -246,18 +245,8 @@ inline Fn VSlot(const void* obj, int byteOffset) {
 // gone with its last caller; `RtSaveDetail::ArrayModInfoDtor` (saveload.cpp) is
 // that body, called directly where it is needed.
 
-// System::String equality by CONTENT. The two sides are two live allocations, so
-// the POINTERS differ by construction and comparing them would fail 100% of
-// calls on a correct port (reference_oracle_must_not_compare_unwritten_bytes,
-// one level over). Length is compared too: String stores it at data[-8], and a
-// content compare alone cannot see an embedded NUL.
-bool StringContentEqual(const char* a, const char* b) {
-    if (a == nullptr || b == nullptr) return a == b;
-    if (RtSystem::RtString_GetLength(reinterpret_cast<const RtSystem::String*>(&a)) !=
-        RtSystem::RtString_GetLength(reinterpret_cast<const RtSystem::String*>(&b)))
-        return false;
-    return std::strcmp(a, b) == 0;
-}
+// (B.4 R-IO: `StringContentEqual`, the retired oracle's content compare, had
+// no caller and is deleted.)
 
 }  // namespace
 
@@ -370,16 +359,12 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
         // 0x1800c1ced: the base pointer is read ONCE. See note 3.
         ModInfo* e = mods->_data;
         for (int i = 0; i < count; ++i, ++e) {
-            // Raw `const char*` members of the unconverted `ModInfo` that
-            // retail serialises AS Strings; transitional cast, as above.
-            reinterpret_cast<System::String&>(e->name).Serialize(&ser);
-            reinterpret_cast<System::String&>(e->path).Serialize(&ser);
+            e->name.Serialize(&ser);
+            e->path.Serialize(&ser);
             // +0x98, the UNSIGNED slot, for all three. See note 4.
-            Rw(rw)->SerializeUInt(
-                *reinterpret_cast<uint32_t*>(&e->versionMajor), nullptr);
+            Rw(rw)->SerializeUInt(e->versionMajor, nullptr);
             Rw(rw)->SerializeUInt(e->gameVersion, nullptr);
-            Rw(rw)->SerializeUInt(
-                *reinterpret_cast<uint32_t*>(&e->versionMinor), nullptr);
+            Rw(rw)->SerializeUInt(e->versionMinor, nullptr);
         }
     }
 

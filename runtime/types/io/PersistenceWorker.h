@@ -133,7 +133,7 @@ static_assert(!std::has_virtual_destructor<PersistenceWorker>::value,
 // address in its trailing comment and read through the registry today. It is
 // declared here, copied from its definition (linkage, namespace, types), so the
 // reader can call it by name. Nothing calls it through this declaration yet.
-namespace RtSystem { struct String; }   // system/String.h
+namespace System { class String; }     // system/String.h
 namespace RtIo { struct SaveBlock; }    // io/Persistence.h
 
 // ---- io/closure_batch2b_win.cpp
@@ -144,7 +144,7 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker);  // 0x1800b65b
 // ---- io/persistence_savelist_job.cpp
 extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker);  // 0x1800b6290
 // ---- io/persistence_worker_win.cpp
-extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const RtSystem::String* filename);  // 0x1800b7390
-extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const RtSystem::String* filename, int blockCount, const RtIo::SaveBlock* blocks);  // 0x1800b7460
-extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const RtSystem::String* filename, int blockCount, const RtIo::SaveBlock* blocks);  // 0x1800b75c0
+extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const System::String* filename);  // 0x1800b7390
+extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const System::String* filename, int blockCount, const RtIo::SaveBlock* blocks);  // 0x1800b7460
+extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const System::String* filename, int blockCount, const RtIo::SaveBlock* blocks);  // 0x1800b75c0
 // ==== end B3R W0-P0c ====
