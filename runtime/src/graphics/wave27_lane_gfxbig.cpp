@@ -104,6 +104,8 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
+#include <functional>   // B.4: std::less, the pointer order DrawItemLess compares by
 
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
@@ -118,6 +120,10 @@
 #include "../../types/graphics/Light.h"   // B3X W0: Light::DrawShadowMap / DrawLight by name
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Context.h"
+#include "../../types/video/Device.h"          // B.4: Video::RenderBuffer::width / height
+#include "../../types/video/ImageBuffer.h"     // B.4: Video::ImageBuffer::_kind
+#include "../../types/video/VideoProgram.h"    // B.4: Video::VideoProgram::_pixelProgram
+#include "../../types/video/ShaderProgram.h"   // B.4: ShaderProgram::_textures / _constants
 #include "../collection/array_internal.h"
 #include "../collection/introsort_msvc.h"
 #include "../system/string.h"
@@ -125,15 +131,7 @@
 namespace rtgfxbig {
 
 using RtGraphics::MaterialBinding;
-using RtGraphics::MaterialInstance;
 using RtGraphics::MaterialParameterSet;
-using RtGraphics::Renderer;
-using RtGraphics::RendererDrawGroup;
-using RtGraphics::RendererDrawable;
-using RtGraphics::RendererDrawItem;
-using RtGraphics::RendererSceneEntry;
-using RtSystem::String;
-using rtcoll::ArrayHdr;
 using rtcoll::ArraySpec;
 
 // ---------------------------------------------------------------------------
@@ -192,7 +190,8 @@ unsigned long long g_animStateExpired = 0;   // RARE ARM: layers removed
 // bound and both data pointers are RE-READ every iteration (`CMP R8D,[RBX+8]`
 // at 0x1800057e9, `MOV RAX,[RDI]` at 0x1800057d8); transcribed unhoisted because
 // that is what the bytes do, not for style.
-void Array8Assign(ArrayHdr* dst, const ArrayHdr* src) {
+void Array8Assign(Collection::Array<MaterialBinding>* dst,
+                  const Collection::Array<MaterialBinding>* src) {
     if (dst == src) return;                       // CMP RCX,RDX / JZ
 
     // ENDGAME B.3.2 step 2 (callers) — `dst` is always `&set->textures` or
@@ -200,7 +199,7 @@ void Array8Assign(ArrayHdr* dst, const ArrayHdr* src) {
     // `Collection::Array<MaterialBinding>` members (Material.h). MaterialBinding
     // is a plain POD, so `Array<MaterialBinding>::~Array` is trait-derived and
     // bit-for-bit `rtcoll::ArrayDtorImpl` (spec->destroy is null either way).
-    reinterpret_cast<Collection::Array<MaterialBinding>*>(dst)->~Array();  // CALL 0x180005800
+    dst->~Array();                                // CALL 0x180005800
 
     const int32_t n       = src->_size;           // MOV ECX,[RDI+8]
     const int32_t oldSize = dst->_size;           // MOV EDX,[RBX+8]  (0 by now)
@@ -214,15 +213,14 @@ void Array8Assign(ArrayHdr* dst, const ArrayHdr* src) {
         // would see the difference.
         if (n == static_cast<int32_t>(oldSize + 1) && oldSize != 0)
             dst->_capacity = static_cast<int32_t>(n * 3);
-        dst->_data = static_cast<uint8_t*>(
+        dst->_data = static_cast<MaterialBinding*>(
             rtcoll::MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 8,
                              4));                 // MOV EDX,0x4 at 0x1800057b0
     }
     for (int32_t i = 0; i < dst->_size; ++i) {    // bound re-read: see above
-        uint8_t* const d = dst->_data + static_cast<int64_t>(i) * 8;
+        MaterialBinding* const d = dst->_data + static_cast<int64_t>(i);
         if (d == nullptr) continue;               // retail tests the COMPUTED address
-        *reinterpret_cast<uint64_t*>(d) =
-            *reinterpret_cast<const uint64_t*>(src->_data + static_cast<int64_t>(i) * 8);
+        *d = src->_data[static_cast<int64_t>(i)];  // one 8-byte copy
     }
 }
 
@@ -231,24 +229,29 @@ void Array8Assign(ArrayHdr* dst, const ArrayHdr* src) {
 // destination is raw MemAlloc memory and operator= starts by DESTROYING the
 // destination — i.e. by freeing whatever pointer it finds there. Skipping the
 // zero would hand MemFree a garbage pointer.
-void PassAssign(uint8_t* dst, const uint8_t* src) {
-    reinterpret_cast<uint64_t*>(dst)[0] = 0;              // MOV [RBX],R8 (R8==0)
-    reinterpret_cast<uint64_t*>(dst)[1] = 0;              // MOV [RBX+8],0
-    Array8Assign(reinterpret_cast<ArrayHdr*>(dst),
-                 reinterpret_cast<const ArrayHdr*>(src));
+//
+// B.4: the ArraySpec callbacks take the element as bytes (array_internal.h's
+// signature); each views it ONCE as the `MaterialParameterSet` it is (LEFT).
+void PassAssign(uint8_t* dstv, const uint8_t* srcv) {
+    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);
+    const MaterialParameterSet* const src = reinterpret_cast<const MaterialParameterSet*>(srcv);
 
-    reinterpret_cast<uint64_t*>(dst + 0x10)[0] = 0;       // LEA RCX,[RBX+0x10] ...
-    reinterpret_cast<uint64_t*>(dst + 0x10)[1] = 0;
-    Array8Assign(reinterpret_cast<ArrayHdr*>(dst + 0x10),
-                 reinterpret_cast<const ArrayHdr*>(src + 0x10));
+    dst->textures._data = nullptr;                        // MOV [RBX],R8 (R8==0)
+    dst->textures._size = 0;                              // MOV [RBX+8],0 (one qword)
+    dst->textures._capacity = 0;
+    Array8Assign(&dst->textures, &src->textures);
+
+    dst->constants._data = nullptr;                       // LEA RCX,[RBX+0x10] ...
+    dst->constants._size = 0;
+    dst->constants._capacity = 0;
+    Array8Assign(&dst->constants, &src->constants);
 }
 
 // The INIT arm, read at 0x180060e1b: four zeroed qwords, nothing else.
-void PassInit(uint8_t* dst) {
-    reinterpret_cast<uint64_t*>(dst)[0] = 0;
-    reinterpret_cast<uint64_t*>(dst)[1] = 0;
-    reinterpret_cast<uint64_t*>(dst)[2] = 0;
-    reinterpret_cast<uint64_t*>(dst)[3] = 0;
+void PassInit(uint8_t* dstv) {
+    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);
+    dst->textures._data  = nullptr;  dst->textures._size  = 0;  dst->textures._capacity  = 0;
+    dst->constants._data = nullptr;  dst->constants._size = 0;  dst->constants._capacity = 0;
 }
 
 // The DESTROY arm — retail 0x180005680, a loop of `ArrayDtorImpl` over the two
@@ -257,12 +260,12 @@ void PassInit(uint8_t* dst) {
 // the allocator in that order and the allocator is shared state.
 void PassDestroy(void* /*ignoredThis*/, uint8_t* base, int count) {
     if (count <= 0) return;                       // TEST R8D,R8D / JLE ret
+    MaterialParameterSet* const sets = reinterpret_cast<MaterialParameterSet*>(base);
     for (int i = 0; i < count; ++i) {
         // `e` is one `MaterialParameterSet` (Material.h): `constants` @ +0x10,
         // `textures` @ +0x00 — trait-equivalent for the same MaterialBinding
         // reason Array8Assign's dtor call gives.
-        MaterialParameterSet* const set =
-            reinterpret_cast<MaterialParameterSet*>(base + static_cast<int64_t>(i) * 0x20);
+        MaterialParameterSet* const set = sets + static_cast<int64_t>(i);
         set->constants.~Array();
         set->textures.~Array();
     }
@@ -270,7 +273,7 @@ void PassDestroy(void* /*ignoredThis*/, uint8_t* base, int count) {
 
 // The element assign for (b): one 8-byte copy.
 void Binding8Assign(uint8_t* dst, const uint8_t* src) {
-    *reinterpret_cast<uint64_t*>(dst) = *reinterpret_cast<const uint64_t*>(src);
+    std::memcpy(dst, src, sizeof(MaterialBinding));
 }
 
 const ArraySpec kSpec_MatPass = {                 // 0x180060d30
@@ -339,23 +342,14 @@ extern "C" void RtCollection_Array_MaterialParameterSet_SetSize(void* a, int n) 
 // ----------------------------------------------------------------------------
 namespace {
 
-// Both return `System::String` by value; RDX is the hidden return slot.
-using GetNameFn = String* (*)(const void* material, String* ret, int pass, int index);
-using FindFn    = int32_t (*)(MaterialInstance* self, const String* name);
-
 // The per-pass texture/constant DESCRIPTION arrays hang off the material's pass
-// object at +0x30. Both are {data, size} pairs and both hold 0x10-byte records:
-//   desc + 0x20 / 0x28   texture descriptions   (0x1801034b0, 0x180103479)
-//   desc + 0x30 / 0x38   constant descriptions  (0x18010377d, 0x1801036ca)
-// Within a record: +0x08 is the shader slot (int32), and for TEXTURES ONLY
-// +0x0c is a SKIP flag (`CMP BYTE PTR [RDX+R12*1+0xc],0x0 / JNZ` at
-// 0x1801034b4). The constant loop has NO such test — checked, not assumed by
-// symmetry.
-constexpr uint32_t kPassDesc      = 0x30;
-constexpr uint32_t kTexDescData   = 0x20;
-constexpr uint32_t kTexDescCount  = 0x28;
-constexpr uint32_t kConDescData   = 0x30;
-constexpr uint32_t kConDescCount  = 0x38;
+// object at +0x30 -- B.4: that is the pass's `Video::VideoProgram::_pixelProgram`,
+// and the two arrays are its `ShaderProgram::_textures` (+0x20, 0x1801034b0 /
+// 0x180103479) and `_constants` (+0x30, 0x18010377d / 0x1801036ca), both of
+// 0x10-byte `ShaderProgram::Parameter`s. Within a record: `dest` (+0x08) is the
+// shader slot, and for TEXTURES ONLY `internal` (+0x0c) is a SKIP flag
+// (`CMP BYTE PTR [RDX+R12*1+0xc],0x0 / JNZ` at 0x1801034b4). The constant loop
+// has NO such test — checked, not assumed by symmetry.
 
 // ENDGAME B.3.5 block GC: the receiver is the REAL `Graphics::MaterialInstance`
 // and the three-step chain is spelled with the two real classes' own members —
@@ -363,11 +357,11 @@ constexpr uint32_t kConDescCount  = 0x38;
 // `_passes` array (+0x28). Retail's `MOV RAX,[R15+0x28] / MOV RCX,[RAX+0x28] /
 // MOV RAX,[RSI+RCX*1]` is unchanged; only the spelling is, and `Material.h`'s
 // `static_assert`s now hold the offsets.
-inline uint8_t* PassObject(const Graphics::MaterialInstance* m, int32_t pass) {
+inline const Video::PixelProgram* PassPixelProgram(const Graphics::MaterialInstance* m,
+                                                   int32_t pass) {
     // Re-read from `this` on EVERY use in retail (five separate reloads inside
     // the two inner loops), so it is a function rather than a hoisted local.
-    return reinterpret_cast<uint8_t*>(                            // B.3.5 bridge
-        m->_material.Get()->_passes._data[pass].Get());
+    return m->_material.Get()->_passes._data[pass].Get()->_pixelProgram.Get();
 }
 
 }  // namespace
@@ -411,22 +405,13 @@ inline uint8_t* PassObject(const Graphics::MaterialInstance* m, int32_t pass) {
 // ----------------------------------------------------------------------------
 namespace {
 
-using ResetFn          = void (*)(Renderer*);
-using AddSceneFn       = void (*)(Renderer*, const void* scene, const void* renderBuffer,
-                                  const void* camera, int32_t, int32_t, int32_t, uint32_t);
-using BeginDrawGroupFn = int32_t (*)(Renderer*, const void* renderBuffer,
-                                     const void* camera, const void* camera2,
-                                     int32_t, uint32_t);
-// ENDGAME B.3.5 caller batch: `AddCulledFn` is gone with its door — the member
-// call in `Renderer::Draw` needs no typedef.
+using Graphics::RendererDrawItem;
 
 // (B3X W0: slot 3 of a scene drawable -- `Geometry::AddDrawItems` -- and slots
 // 9 / 10 of a Renderer drawable -- `Light::DrawShadowMap` / `DrawLight` -- are
-// by-name calls on the real classes now; their typedefs are gone.)
-// slot 4 of Context::_contextData: Clear(flags, colour, depth, stencil)
-using ClearFn = void (*)(void* self, int32_t flags, uint32_t colour, float depth, int32_t stencil);
-
-inline void** VTable(void* obj) { return *reinterpret_cast<void***>(obj); }
+// by-name calls on the real classes now. B.4: Context slot 4, Clear, is
+// `Video::Context::Clear` by name, and the Reset / AddScene / BeginDrawGroup
+// typedefs went with their doors.)
 
 // ============================================================================
 // Graphics::Renderer::DrawItemSort       retail 0x180062d60  (2311 bytes)
@@ -481,60 +466,51 @@ inline void** VTable(void* obj) { return *reinterpret_cast<void***>(obj); }
 // loop). The field ORDER is the order of the compares, not of the struct.
 bool DrawItemLess(const RendererDrawItem& a, const RendererDrawItem& b) {
     // +0x18, MOVZX / CMP AX,CX - UNSIGNED 16-bit.  JB -> less, JA -> not less.
-    if (a.flags != b.flags) return a.flags < b.flags;
+    if (a._flags != b._flags) return a._flags < b._flags;
 
     // +0x1c, COMISS both ways - DESCENDING.  Written as two one-sided tests
     // rather than `!=` so that a NaN (for which both JA arms fail) falls
     // through to the next term exactly as retail's does.
-    if (a.sortKey > b.sortKey) return true;
-    if (b.sortKey > a.sortKey) return false;
+    if (a._sortKey > b._sortKey) return true;
+    if (b._sortKey > a._sortKey) return false;
 
-    // The remaining six are unsigned integer compares, in this order.
-    if (a.material != b.material)
-        return reinterpret_cast<uintptr_t>(a.material) <
-               reinterpret_cast<uintptr_t>(b.material);            // +0x08
-    if (a.instance != b.instance)
-        return reinterpret_cast<uintptr_t>(a.instance) <
-               reinterpret_cast<uintptr_t>(b.instance);            // +0x10
-    if (a.arg5  != b.arg5)  return a.arg5  < b.arg5;               // +0x1a
-    if (a.arg10 != b.arg10) return a.arg10 < b.arg10;              // +0x30
-    if (a.userData != b.userData)
-        return reinterpret_cast<uintptr_t>(a.userData) <
-               reinterpret_cast<uintptr_t>(b.userData);            // +0x28
+    // The remaining six are unsigned integer compares, in this order. The
+    // pointer terms are the address order (`std::less`, which is the unsigned
+    // compare retail's CMP/JB makes).
+    const std::less<> less;
+    if (a._material != b._material) return less(a._material, b._material);   // +0x08
+    if (a._instance != b._instance) return less(a._instance, b._instance);   // +0x10
+    if (a._arg5  != b._arg5)  return a._arg5  < b._arg5;                      // +0x1a
+    if (a._arg10 != b._arg10) return a._arg10 < b._arg10;                     // +0x30
+    if (a._userData != b._userData) return less(a._userData, b._userData);   // +0x28
     // +0x00, the last term: `CMP RAX,[RBP] / JAE <not less>`.
-    return reinterpret_cast<uintptr_t>(a.geometry) <
-           reinterpret_cast<uintptr_t>(b.geometry);
+    return less(a._geometry, b._geometry);
 }
 
 // Retail swaps the 0x38-byte element as SEVEN qword moves (0x180062e87 and the
-// five other swap sites), reading one side into registers first. Self-swap is
-// a no-op either way, which matters because the selection sort can call it
-// with best == last.
+// five other swap sites), reading one side into registers first. The element
+// is trivially copyable (Camera.h asserts it), so the two whole-record copies
+// through a temporary move the same 0x38 bytes. Self-swap is a no-op either
+// way, which matters because the selection sort can call it with best == last.
 void DrawItemSwap(RendererDrawItem* a, RendererDrawItem* b) {
-    uint64_t* const pa = reinterpret_cast<uint64_t*>(a);
-    uint64_t* const pb = reinterpret_cast<uint64_t*>(b);
-    for (int k = 0; k < 7; ++k) {
-        const uint64_t t = pa[k];
-        pa[k] = pb[k];
-        pb[k] = t;
-    }
+    const RendererDrawItem t = *a;
+    *a = *b;
+    *b = t;
 }
 
 }  // namespace
 
 // 0x180063b90 - the small-range pass. `lo`/`hi` are INCLUSIVE bounds, as
 // 0x180062dc1 passes them (`MOV RDX,R15 / MOV RCX,RBP`).
-extern "C" void RtGraphics_Renderer_DrawItemSortSmall(void* lo, void* hi) {
-    rtsort::SelectionSortMaxToHigh(static_cast<RendererDrawItem*>(lo),
-                                   static_cast<RendererDrawItem*>(hi),
-                                   DrawItemLess, DrawItemSwap);
+extern "C" void RtGraphics_Renderer_DrawItemSortSmall(RendererDrawItem* lo,
+                                                      RendererDrawItem* hi) {
+    rtsort::SelectionSortMaxToHigh(lo, hi, DrawItemLess, DrawItemSwap);
 }
 
-// 0x180062d60. Matches the call site's `void(void* data, int32_t count,
-// void* scratch)`; `scratch` is retail's spare register window and the body
-// never reads R8.
-extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void*) {
-    rtsort::Introsort(static_cast<RendererDrawItem*>(data), count,
+// 0x180062d60. Matches the call site's `(data, int32_t count, void* scratch)`;
+// `scratch` is retail's spare register window and the body never reads R8.
+extern "C" void RtGraphics_Renderer_DrawItemSort(RendererDrawItem* data, int32_t count, void*) {
+    rtsort::Introsort(data, count,
                       DrawItemLess, DrawItemSwap,
                       [](RendererDrawItem* lo, RendererDrawItem* hi) {
                           RtGraphics_Renderer_DrawItemSortSmall(lo, hi);
@@ -666,18 +642,15 @@ void MaterialInstance::BuildParameters() {
     // CMP [R15+0x38],R8D / JLE — the bound is `_parameters._size`, and it is
     // RE-READ at the bottom of the loop (0x1801038fe), not hoisted.
     for (int32_t pass = 0; pass < _parameters.GetSize(); ++pass) {
-        uint8_t* const desc0 = *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc);
+        const Video::PixelProgram* const desc0 = rtgfxbig::PassPixelProgram(this, pass);
 
         // ---- textures -----------------------------------------------------
         // `desc ? desc->count : 0` — retail's own null arm (XOR EAX,EAX at
         // 0x180103475), computed ONCE per pass and then used as a DOWN counter.
-        const int32_t texCount =
-            desc0 ? *reinterpret_cast<const int32_t*>(desc0 + rtgfxbig::kTexDescCount) : 0;
+        const int32_t texCount = desc0 ? desc0->_textures._size : 0;
         for (int32_t i = 0; i < texCount; ++i) {
-            uint8_t* const desc =
-                *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc);
-            uint8_t* const recs = *reinterpret_cast<uint8_t**>(desc + rtgfxbig::kTexDescData);
-            if (recs[static_cast<int64_t>(i) * 0x10 + 0xc] != 0) continue;   // skip flag
+            const Video::PixelProgram* const desc = rtgfxbig::PassPixelProgram(this, pass);
+            if (desc->_textures._data[i].internal != 0) continue;   // skip flag
 
             RtSystem::String name;
             name.data = nullptr;
@@ -708,10 +681,7 @@ void MaterialInstance::BuildParameters() {
             // chain (0x180103546..0x18010355f). Retail reloads because
             // FindTexture takes a non-const `this` and could in principle move
             // the material's arrays; transcribed unhoisted for that reason.
-            uint8_t* const recs2 = *reinterpret_cast<uint8_t**>(
-                *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc) + rtgfxbig::kTexDescData);
-            v.shaderSlot =
-                *reinterpret_cast<const int32_t*>(recs2 + static_cast<int64_t>(i) * 0x10 + 8);
+            v.shaderSlot = rtgfxbig::PassPixelProgram(this, pass)->_textures._data[i].dest;
 
             // `_parameters._data` is RE-READ here (MOV RSI,[RBP] at 0x180103563)
             // rather than kept from the top of the pass loop.
@@ -725,11 +695,10 @@ void MaterialInstance::BuildParameters() {
         }
 
         // ---- constants ----------------------------------------------------
-        uint8_t* const desc1 = *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc);
-        const int32_t conCount =
-            desc1 ? *reinterpret_cast<const int32_t*>(desc1 + rtgfxbig::kConDescCount) : 0;
+        const Video::PixelProgram* const desc1 = rtgfxbig::PassPixelProgram(this, pass);
+        const int32_t conCount = desc1 ? desc1->_constants._size : 0;
         for (int32_t i = 0; i < conCount; ++i) {
-            // NO SKIP FLAG on this arm — see the kConDescData note above.
+            // NO SKIP FLAG on this arm — see the PassPixelProgram note above.
             RtSystem::String name;
             name.data = nullptr;
             // block GC item 6, as in the textures arm above.
@@ -739,10 +708,7 @@ void MaterialInstance::BuildParameters() {
             v.sourceIndex = this->Graphics::MaterialInstance::FindConstant(name);
             RtSystem::RtString_ReleaseInline(&name);
 
-            uint8_t* const recs2 = *reinterpret_cast<uint8_t**>(
-                *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc) + rtgfxbig::kConDescData);
-            v.shaderSlot =
-                *reinterpret_cast<const int32_t*>(recs2 + static_cast<int64_t>(i) * 0x10 + 8);
+            v.shaderSlot = rtgfxbig::PassPixelProgram(this, pass)->_constants._data[i].dest;
 
             RtGraphics::MaterialParameterSet* const set = &_parameters[pass];
             // retail 0x1801037ec, kSpec_Binding8 — trait-equivalent, same as
@@ -763,19 +729,18 @@ void MaterialInstance::BuildParameters() {
 
     uint8_t  acc24 = 0;
     uint8_t  acc25 = _hasRenderedTexture;     // NOT reset — retail's asymmetry
-    uint8_t* p     = reinterpret_cast<uint8_t*>(_textures._data) + 8;
+    const RtGraphics::MaterialTexture* p = _textures._data;
     for (int32_t k = 0; k < texN; ++k) {
-        const uint8_t* img = *reinterpret_cast<uint8_t**>(p);
-        acc24 = static_cast<uint8_t>(
-            acc24 | (*reinterpret_cast<const int32_t*>(img + 0x2c) == 4 ? 1 : 0));
+        // `image->_kind` (+0x2c): 4 is a render texture, 5 a rendered one.
+        const Video::ImageBuffer* img = p->image;
+        acc24 = static_cast<uint8_t>(acc24 | (img->_kind == 4 ? 1 : 0));
         _hasRenderTexture = acc24;
 
-        img = *reinterpret_cast<uint8_t**>(p);                 // re-read
-        acc25 = static_cast<uint8_t>(
-            acc25 | (*reinterpret_cast<const int32_t*>(img + 0x2c) == 5 ? 1 : 0));
+        img = p->image;                                        // re-read
+        acc25 = static_cast<uint8_t>(acc25 | (img->_kind == 5 ? 1 : 0));
         _hasRenderedTexture = acc25;
 
-        p += 0x10;
+        ++p;
     }
 }
 
@@ -988,110 +953,92 @@ bool AnimationState::Update(const System::Time& timeRef,
 // ---------------------------------------------------------------------------
 // ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z
 // retail 0x180104bb0 -- ENDGAME B.3.5 block GC. THE WHOLE FRAME. The two passes,
-// the four kinds of virtual call, the field_3c-read-uninitialised-on-frame-one
-// note and the clear colour/flag immediates are in the banner beside the door.//
-// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
-// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
-// indexes are still spelled `RtGraphics::*` through one bridge local, because
-// those PODs have live users in files outside this block and B4b-1 keeps a POD
-// until its LAST user converts. Camera.h cross-asserts every one of their offsets
-// against the real classes', so the two descriptions cannot drift, and renaming
-// ~200 field accesses in a body this size is a second change, not this one.
+// the four kinds of virtual call, the _shaderDetail-read-uninitialised-on-frame-
+// one note and the clear colour/flag immediates are in the banner beside the door.
+//
+// B.4: on the real classes' named fields -- the Renderer's own (`_sceneGroups`,
+// `_drawGroups`, `_drawables`, `_currentSceneGroup` / `_currentDrawGroup`,
+// `_shaderDetail` +0x3c, `_alphaT` +0x40, `_frameIndex` +0x44, `_detailId` +0x48),
+// each `RendererSceneEntry`, the Scene's `_globals` list and each Geometry's
+// `_materialTypeFlags` / `_detailId`; the Context setters and `Clear` by name.
 // ---------------------------------------------------------------------------
 void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
                     const Camera& cameraRef) {
-    RtGraphics::Renderer* const r =
-        reinterpret_cast<RtGraphics::Renderer*>(this);          // B.3.5 bridge
-    RtVideo::Context* const ctx =
-        reinterpret_cast<RtVideo::Context*>(&context);          // B.3.5 bridge
-    const void* const scene  = &sceneRef;
     // Reset FIRST, then the two scalars, then AddScene.
     //
     // BLOCK GC ITEM 6: this was `RT_EXPORT_ONCE("?Reset@Renderer@Graphics@@…")`
     // reaching our own body through the resolver. `Reset` is a member of the real
     // `Graphics::Renderer` (block F), so it is a QUALIFIED non-virtual member call
     // -- retail's own direct CALL to 0x180105110. Same for `AddScene` and
-    // `BeginDrawGroup` below; all three doors stay registered for outside callers.
+    // `BeginDrawGroup` below.
     this->Graphics::Renderer::Reset();
 
-    r->frameAlpha    = alpha;                 // MOVSS [RDI+0x40],XMM6
-    r->contextSerial = ctx->_frameIndex;      // MOV EAX,[RSI+8] / MOV [RDI+0x44],EAX
+    _alphaT     = alpha;                      // MOVSS [RDI+0x40],XMM6
+    _frameIndex = context._frameIndex;        // MOV EAX,[RSI+8] / MOV [RDI+0x44],EAX
 
-    // field_3c is read here UNINITIALISED on the first frame. See the banner.
+    // _shaderDetail is read here UNINITIALISED on the first frame. See the banner.
+    // LEFT: Context::_defaultRenderBuffer is `void*` (Context.h).
     this->Graphics::Renderer::AddScene(
         &sceneRef,
-        reinterpret_cast<const Video::RenderBuffer*>(ctx->_defaultRenderBuffer),  // B.3.5 bridge
+        static_cast<const Video::RenderBuffer*>(context._defaultRenderBuffer),
         cameraRef, _shaderDetail, 0x40, 0, 0x8007u);
 
     // ---------------- PASS 1: cull and collect ----------------------------
-    r->currentScene = 0;
-    if (r->scenes._size > 0) {
+    _currentSceneGroup = 0;
+    if (_sceneGroups._size > 0) {
         do {
-            RtGraphics::RendererSceneEntry* const e = r->scenes._data + r->currentScene;
+            RendererSceneEntry* const e = _sceneGroups._data + _currentSceneGroup;
 
-            r->field_3c  = e->field_e8;
-            r->field_48  = e->field_f8;
+            _shaderDetail = e->_shaderDetail;
+            _detailId     = e->_detailId;
 
             // Retail passes the entry's ONE camera as BOTH the draw camera and
             // the cull camera (`MOV R9,R8` at 0x180104c5f); transcribed.
             const int32_t nextGroup = this->Graphics::Renderer::BeginDrawGroup(
-                reinterpret_cast<const Video::RenderBuffer*>(e->renderBuffer),  // B.3.5 bridge
-                *reinterpret_cast<const Camera*>(&e->camera),                   // B.3.5 bridge
-                *reinterpret_cast<const Camera*>(&e->camera),                   // B.3.5 bridge
-                e->field_ec, e->field_f0);
+                e->_renderBuffer, e->_camera, e->_camera,
+                e->_shader, e->_materialTypeFlags);
 
             // The CURRENT group index is written into the entry, and it is the
             // value from BEFORE this BeginDrawGroup (0x180104c78 reads
             // [RDI+0x34], which is only updated at the bottom of the loop).
-            e->drawGroupIndex = r->currentDrawGroup;
+            e->_drawGroupIndex = _currentDrawGroup;
 
             const uint32_t passMask =
-                r->drawGroups._data[r->currentDrawGroup].passMask;
+                _drawGroups._data[_currentDrawGroup]._materialTypeFlags;
 
-            // The scene's drawable list: head at Scene+0x60, `next` at +0x10,
-            // payload at +0x00. Both the head and every `next` are read as raw
-            // offsets because Graphics::Scene's layout is lane D's, not this
-            // lane's, and this body reads exactly three of its fields.
-            void* node = *reinterpret_cast<void* const*>(
-                static_cast<const uint8_t*>(scene) + 0x60);
-            while (node != nullptr) {
-                void* const obj = *reinterpret_cast<void**>(node);
-                const uint8_t* const o = static_cast<const uint8_t*>(obj);
-                if ((*reinterpret_cast<const uint32_t*>(o + 0x30) & passMask) != 0 &&
-                    *reinterpret_cast<const int32_t*>(o + 0x28) <= r->field_48) {
+            // The scene's global drawable list (`Scene::_globals`, +0x60): each
+            // node's element is the Geometry, `next` the link (+0x10).
+            for (const Collection::LinkedList<Geometry*>::Node* node = sceneRef._globals._head;
+                 node != nullptr; node = node->next) {
+                const Geometry* const obj = node->element;
+                if ((obj->_materialTypeFlags & passMask) != 0 &&
+                    obj->_detailId <= _detailId) {
                     // Slot 3 = ?AddDrawItems@…@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z.
                     // A VIRTUAL DISPATCH through the object's own vtable, NOT a
                     // door: lane GFXMESH owns ??_7MeshInstance@ and this call
-                    // reaches whatever is in the live table. Nothing here
-                    // registers, stamps or reads that slot as an identity token.
-                    // By name since B3X W0.
-                    static_cast<const Geometry*>(obj)->AddDrawItems(sceneRef, *this);  // B.3.x bridge
+                    // reaches whatever is in the live table. By name since B3X W0.
+                    obj->AddDrawItems(sceneRef, *this);
                 }
-                node = *reinterpret_cast<void**>(static_cast<uint8_t*>(node) + 0x10);
             }
 
-            if (r->field_48 != 0) {
+            if (_detailId != 0) {
                 // ENDGAME B.3.5 caller batch: `Graphics::Scene::AddCulledDrawItems`
                 // is a DEFINED member (cull.cpp:363) and the receiver is this
                 // body's own `const Scene&` parameter, so this is the qualified
-                // non-virtual member call retail makes. `AddCulledFn` went with it.
+                // non-virtual member call retail makes.
                 sceneRef.Graphics::Scene::AddCulledDrawItems(*this);
             }
 
             for (int32_t k = 0; k < 3; ++k) {
-                Collection::Array<RtGraphics::RendererDrawItem>& list =
-                    r->drawGroups._data[r->currentDrawGroup].items[k];
+                Collection::Array<RendererDrawItem>& list =
+                    _drawGroups._data[_currentDrawGroup]._items[k];
                 // TWO tests, `> 0` then `> 1` (0x180104cfa, 0x180104cfe). Only
                 // the second can decide anything; the first is retail's and is
                 // kept because a zero-size list with a non-null _data would take
                 // a different path if it were removed.
                 if (list._size > 0 && list._size > 1) {
-                    // ---------------------------------------------------------
-                    // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8b, faithfully):
-                    // RtGraphics_Renderer_DrawItemSort, above, registered at
-                    // the bottom of this file together with its 0x180063b90
-                    // selection-sort callee; called by name (B3R).
-                    // ---------------------------------------------------------
+                    // RtGraphics_Renderer_DrawItemSort, above, with its
+                    // 0x180063b90 selection-sort callee; called by name (B3R).
                     // Retail hands it its OWN unused R8 home slot (X+0x18) as
                     // scratch — a float argument in XMM2 leaves that slot free.
                     // Four qwords is strictly more than the 16 bytes retail's
@@ -1102,82 +1049,77 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
                 }
             }
 
-            ++r->currentScene;
-            r->currentDrawGroup = nextGroup;
+            ++_currentSceneGroup;
+            _currentDrawGroup = nextGroup;
             ++rtgfxbig::g_drawGroups;
-        } while (r->currentScene < r->scenes._size);
+        } while (_currentSceneGroup < _sceneGroups._size);
     }
 
     // ---------------- PASS 2: emit, BACKWARD ------------------------------
-    for (int64_t si = static_cast<int32_t>(r->scenes._size) - 1; si >= 0; --si) {
+    for (int64_t si = static_cast<int32_t>(_sceneGroups._size) - 1; si >= 0; --si) {
         // `_data` is RE-READ at the top of every iteration (MOV RBP,[RDI] at
         // 0x180104d60) while the byte offset is carried in RBX and decremented.
-        RtGraphics::RendererSceneEntry* const e = r->scenes._data + si;
+        RendererSceneEntry* const e = _sceneGroups._data + si;
 
-        r->field_3c = e->field_e8;
-        ctx->_dirty |= 0xc0;                        // OR [RSI+0x10],0xc0
-        ctx->_shaderDetail = e->field_e8;           // MOV [RSI+0xc],EAX
+        _shaderDetail = e->_shaderDetail;
+        context._dirty |= 0xc0;                     // OR [RSI+0x10],0xc0
+        context._shaderDetail = e->_shaderDetail;   // MOV [RSI+0xc],EAX
 
         // Slot 9 on every drawable the entry names. 5th argument is a literal 1.
-        for (int32_t j = 0; j < e->drawableIds._size; ++j) {
-            const int32_t id = e->drawableIds._data[j];
-            RtGraphics::RendererDrawable& d = r->drawables._data[id];
-            static_cast<const Light*>(d.object)->DrawShadowMap(   // B.3.x bridge
-                context, *this, d.value, 1);
+        // LEFT: `RendererDrawable::_object` is `const void*` (Camera.h: it names
+        // a Geometry or a Light); the Draw arms are the Light's.
+        for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
+            const int32_t id = e->_drawableIds._data[j];
+            RendererDrawable& d = _drawables._data[id];
+            static_cast<const Light*>(d._object)->DrawShadowMap(
+                context, *this, d._value, 1);
         }
 
-        // Rebind the render target only on a change.
-        if (ctx->_renderBuffer != e->renderBuffer) {
-            ctx->_dirty |= 1;
-            ctx->_renderBuffer = e->renderBuffer;
-        }
+        // Rebind the render target only on a change: `Context::SetRenderBuffer`
+        // (0x1800f2100) is exactly that compare, the dirty bit 1 and the store.
+        context.SetRenderBuffer(e->_renderBuffer);
 
         // Viewport then scissor, each reconciled against the buffer's full
         // extent. The RenderBuffer pointer is RE-READ for each of the two blocks
-        // (0x180104dec and 0x180104e37) rather than reused.
+        // (0x180104dec and 0x180104e37) rather than reused. `SetViewport`
+        // (0x18001a060) is the viewport's compare / 0x200 / store; the scissor's
+        // setter has no body in the tree, so its identical sequence is spelled.
         {
-            const RtVideo::RenderBufferPrefix* rb =
-                reinterpret_cast<const RtVideo::RenderBufferPrefix*>(e->renderBuffer);
-            const int32_t w = rb->width, h = rb->height;
-            if (!(ctx->_viewport.x == 0 && ctx->_viewport.y == 0 &&
-                  ctx->_viewport.width == w && ctx->_viewport.height == h)) {
-                ctx->_dirty |= 0x200;
-                // MOV QWORD PTR [RSI+0x1d0],0x0 — x and y as ONE 8-byte store.
-                *reinterpret_cast<uint64_t*>(&ctx->_viewport) = 0;
-                ctx->_viewport.width = w;
-                ctx->_viewport.height = h;
-            }
+            const Video::RenderBuffer* const rb = e->_renderBuffer;
+            Video::Viewport vp;
+            vp.x = 0;
+            vp.y = 0;
+            vp.width  = rb->width;
+            vp.height = rb->height;
+            context.SetViewport(vp);
         }
         {
-            const RtVideo::RenderBufferPrefix* rb =
-                reinterpret_cast<const RtVideo::RenderBufferPrefix*>(e->renderBuffer);
+            const Video::RenderBuffer* const rb = e->_renderBuffer;
             const int32_t w = rb->width, h = rb->height;
-            if (!(ctx->_scissor.x == 0 && ctx->_scissor.y == 0 &&
-                  ctx->_scissor.width == w && ctx->_scissor.height == h)) {
-                ctx->_dirty |= 0x400;
-                *reinterpret_cast<uint64_t*>(&ctx->_scissor) = 0;
-                ctx->_scissor.width = w;
-                ctx->_scissor.height = h;
+            if (!(context._scissor.x == 0 && context._scissor.y == 0 &&
+                  context._scissor.width == w && context._scissor.height == h)) {
+                context._dirty |= 0x400;
+                context._scissor.x = 0;             // x and y: retail's one 8-byte store
+                context._scissor.y = 0;
+                context._scissor.width = w;
+                context._scissor.height = h;
             }
         }
 
-        // Clear — slot 4 of Context::_contextData. The colour 0x1184d6 and the
-        // flag word 6 are IMMEDIATES in the instruction stream (0x180104e8d,
+        // Clear — `Context::Clear` (ContextData slot 4). The colour 0x1184d6 and
+        // the flag word 6 are IMMEDIATES in the instruction stream (0x180104e8d,
         // 0x180104e85); the 1.0f depth is XMM6, loaded once at 0x180104d3d from
         // [0x18016169c], whose four bytes were READ (00 00 80 3f) rather than
         // assumed (reference_crt_coefficients_must_be_lifted_not_retyped.md).
-        {
-            void* const cd = ctx->_contextData;
-            reinterpret_cast<rtgfxbig::ClearFn>(rtgfxbig::VTable(cd)[4])(cd, 6, 0x1184d6u, 1.0f, 0);
-        }
+        context.Clear(6, 0x1184d6u, 1.0f, 0);
 
         // Three passes x every drawable. Slot 10.
         for (int32_t k = 0; k < 3; ++k) {
-            for (int32_t j = 0; j < e->drawableIds._size; ++j) {
-                const int32_t id = e->drawableIds._data[j];
-                RtGraphics::RendererDrawable& d = r->drawables._data[id];
-                static_cast<const Light*>(d.object)->DrawLight(   // B.3.x bridge
-                    context, *this, e->drawGroupIndex, d.value, k, e->field_ec);
+            for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
+                const int32_t id = e->_drawableIds._data[j];
+                RendererDrawable& d = _drawables._data[id];
+                static_cast<const Light*>(d._object)->DrawLight(
+                    context, *this, e->_drawGroupIndex, d._value, k, e->_shader);
             }
         }
     }

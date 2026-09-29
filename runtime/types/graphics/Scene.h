@@ -353,9 +353,12 @@ static_assert(offsetof(Scene, _globals)      == 0x60, "Scene::_globals @ +0x60 (
 // ---- graphics/closure_batch2b.cpp
 extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src);  // 0x18001be60
 
+namespace Graphics { class RendererDrawItem; }   // B.4: the sort's element (Camera.h)
+
 namespace rtgfxbig {
 // ---- graphics/wave27_lane_gfxbig.cpp
-extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void*);  // 0x180062d60
+extern "C" void RtGraphics_Renderer_DrawItemSort(Graphics::RendererDrawItem* data,
+                                                 int32_t count, void*);  // 0x180062d60
 }  // namespace rtgfxbig
 
 namespace rtgfxd {

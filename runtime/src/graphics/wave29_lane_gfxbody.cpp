@@ -265,7 +265,7 @@ inline double SecondsPerTick() {
 // rtgfxbig::RtGraphics_Renderer_DrawItemSort (wave27_lane_gfxbig.cpp, declared
 // in Scene.h), called by name (B3R). std::sort(first, last) over stride-0x38
 // elements; `last` is INCLUSIVE: the callee computes `first - 0x38 + count*0x38`.
-inline void DrawItemSort(void* data, int count, void* scratch) {
+inline void DrawItemSort(Graphics::RendererDrawItem* data, int count, void* scratch) {
     rtgfxbig::RtGraphics_Renderer_DrawItemSort(data, count, scratch);
 }
 
@@ -671,7 +671,7 @@ void Renderer::EndDrawGroup(int group) {
         const int32_t n = list.GetSize();
         if (n > 0) {
             if (n > 1) {                                     // both tests, per retail
-                void* data = list.GetData();
+                RendererDrawItem* data = list.GetData();
                 rtgfxbody29::DrawItemSort(data, n, &scratch);
                 ++rtgfxbody29::g_endDrawSorted;
             }
