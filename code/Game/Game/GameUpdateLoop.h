@@ -56,6 +56,7 @@ class Calendar;           // Game/Calendar.h (B4 GAME-a)
 class WeatherSimulation;  // Game/WeatherSimulation.h (B4 GAME-a)
 class WorkScheduler;      // Game/WorkScheduler.h (B4 GAME-a)
 class EventLog;           // Game/EventLog.h (B4 GAME-a)
+class MusicPlayer;        // Game/MusicPlayer.h (B4 GAME-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -116,7 +117,7 @@ public:
     // +0x80: MusicPlayer* — MemAlloc(0x18,4) {+0x00 int32 currentTrackId = -1,
     //   +0x08 MusicTrackList* = Find("Game/MusicTracks.rsc"), +0x10 int64 0};
     //   ticked by 0x1400a40e0 (MusicPlayer::Update).
-    void*    m_musicPlayer;         // +0x80
+    MusicPlayer* m_musicPlayer;     // +0x80
     // +0x88: loose Morton (Z-order) quadtree over characters, MemAlloc(0x60,8),
     //   ctor 0x1400182b0 (8 levels, 0x5555 cells). NOT a MusicPlayer and NOT a
     //   Transform (the +0x80/+0x88 names were swapped until 2026-08-30).

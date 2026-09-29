@@ -44,6 +44,7 @@
 #include "WeatherSimulation.h"       // m_weather's class (B.4 GAME-a)
 #include "WorkScheduler.h"           // m_tutorial's class (B.4 GAME-a)
 #include "EventLog.h"                // m_eventNotifier's class (B.4 GAME-a)
+#include "MusicPlayer.h"             // m_musicPlayer's class (B.4 GAME-a)
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -566,6 +567,8 @@ static_assert(std::is_trivially_default_constructible<Calendar>::value,
               "placement new of Calendar runs no code");
 static_assert(std::is_trivially_default_constructible<EventLog>::value,
               "placement new of EventLog runs no code");
+static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
+              "placement new of MusicPlayer runs no code");
 static void EntityList_Construct(EntityList* list) {
     memset(list, 0, sizeof(EntityList));      // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
     list->processCount[0] = 0x32;             // +0xA8 50
@@ -1182,17 +1185,17 @@ void GameUpdateLoop::Load() {
     // Step 27 — MusicTracks struct (+0x80, 0x18): {idx=-1, res=null (Find deferred), 0}.
     {
         void* mem = AllocSub(0x18, 4);
-        if (mem) {
-            uint8_t* d = (uint8_t*)mem;
-            *(int32_t*)(d + 0x00) = -1;
-            *(void**)(d + 0x08) = nullptr;     // MusicTrackList - DEFERRED.
+        MusicPlayer* player = mem ? new (mem) MusicPlayer : nullptr;
+        if (player) {
+            player->effect = 0xFFFFFFFFu;         // -1
+            player->trackList = nullptr;          // MusicTrackList - DEFERRED.
             // BLOCKER for porting MusicPlayer::Update (0x1400a40e0): that
             // function reads *(int*)(musicPlayer[+0x08] + 0x28) as the track
             // count with no null check, so it MUST NOT be wired until this
             // Find("Game/MusicTracks.rsc") is done. See LANE1 report row 39.
-            *(uint64_t*)(d + 0x10) = 0;
+            player->field_0x10 = 0;
         }
-        m_musicPlayer = mem;
+        m_musicPlayer = player;
     }
 
     // Step 28 — SkyMesh MeshInstance (+0x108): the sky `_clear_` dome (helper above).
