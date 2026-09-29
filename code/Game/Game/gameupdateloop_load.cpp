@@ -784,13 +784,17 @@ static inline void* AllocSub(uint64_t size, int align) {
 // (the same export, `??0Time@System@@QEAA@M@Z`).
 static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     void* mem = AllocSub(0x120, 8);
-    self->m_skyMesh = static_cast<Graphics::MeshInstance*>(mem);
     if (!mem) {
+        self->m_skyMesh = nullptr;
         fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p\n", mem);
         fflush(stderr);
         return;
     }
+    // Retail stores the loop's +0x108 AFTER the MeshInstance ctor and the table
+    // stamp (ctor 0x14009736b, stamp 0x140097378, store 0x140097380), before
+    // the SkyMesh.rsc Find: the main thread never sees an unconstructed sky.
     Graphics::MeshInstance* sky = ::new (mem) Graphics::MeshInstance();
+    self->m_skyMesh = sky;
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;
