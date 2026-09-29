@@ -257,6 +257,8 @@ in the code carries a comment.
 | 10 | `WorkPlaceUI` element finds | unchecked | narrows each with IsDerivedFrom | CONFIRMED (DLG-e) |
 | 11 | Tombstone slot 4 | the tree's form | checks the description type and always writes the timer | CONFIRMED (COMP-e) |
 | 12 | `TerraformComponent_RegionRecalc` | a second copy of `Pf_RegionDirty4_b150` with the tree's zero-chunk guard | one body | CONFIRMED (COMP-e) |
+| 33 | `StatusBarUI` slots 4 and 8; `StorageUI`, `StorageCapacityUI`, `StatusIconUI` slot 8 | overridden: slot 4 runs OnOpened; slot 8 rebuilds the panel and refreshes it (StatusBarUI every 30th frame, counted in the +0x104 gap) | inherits DialogController's (StatusBarUI table 0x14015d810); the refresh is slot 7 (StatusBarUI 0x1400798d0) | CONFIRMED (DLG-d) |
+| 34 | `StatusBarUI::OnOpened` element finds | stores every FindElement result unchecked, the hearts / stars groups and labelTitleParam included | 0x14007a3d0 narrows with IsDerivedFrom; the tree's comment says the group check's id was read as ButtonElement and rejected the element | SUSPECTED (DLG-d; not re-read) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -307,6 +309,14 @@ stated condition.
   every `T` is registered. PastureUI's second copy of ComputeCapacity went with its two guards
   (`behaviour:` 0x140128570).
 - DROPPED WITHOUT READING RETAIL: the MemAlloc-failure path of `TickIdle` (COMP-f). SUSPECTED.
+- KEPT (DLG-d): StatusBarUI's Bound / Ready / TownReady / Built gates on slots 5, 7 and 9, its
+  test of textSeason's string table and of a null `g_gameSettings` (0x1400798d0 has none); the
+  status-icon handler's null game / town / citizen / StatusIconComponent tests and its
+  `count <= 0` return (0x14007a120 has none); ToolUI's dialog-address windows
+  (`ToolUI_DialogHasEntityUI`, OnUpdate); `PlayerToolManager::SelectTool`'s empty-registry return
+  (retail goes straight to Factory::CreateObject) and the game-world / text-element tests in
+  `toolbardialog.cpp`; SpriteCaptureUI's Input::Device, capture-box, FileSystem and edit-element
+  tests; StatusIconUI's EntityUI-pages test. CONFIRMED where the site quotes retail.
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -333,6 +343,10 @@ stated condition.
   ("GetHappiness") is the carry count.
 - Two tree bodies both claim retail 0x1400049c0 (`Reimpl_ExternalPtrArray_Serialize`,
   `Desc_LoadExternalArray`).
+- INVENTORY_A's `ToolUI_ChildDialog` is `UI::DialogInstance` (the exe's copy of its table,
+  0x14015f5a0); `fn_FindComponent_MeshInstance` finds the StatusIconComponent (cell 0x1401c7e08);
+  Ghidra's `Entity_impl_a120` is StatusBarUI's status-icon handler 0x14007a120 and
+  `ToolUI_helper_e100` is `UIDescription::AddControllers` 0x14012e100 (DLG-d).
 
 ### 14g. Commit messages that state something nobody verified
 
