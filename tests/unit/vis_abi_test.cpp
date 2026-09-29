@@ -110,7 +110,7 @@ UNIT_TEST(vis_member_offsets) {
     CHECK_EQ(offsetof(ModelComponent, transform),           (size_t)0x148);
     CHECK_EQ(offsetof(ModelComponent, modelId),             (size_t)0x16c);
     CHECK_EQ(offsetof(PickingComponent, pickingId),         (size_t)0x28);
-    CHECK_EQ(offsetof(RawMaterialComponent, field38),       (size_t)0x38);
+    CHECK_EQ(offsetof(RawMaterialComponent, age),           (size_t)0x38);
     CHECK_EQ(offsetof(StorageComponent, slotCount),         (size_t)0x30);
     CHECK_EQ(offsetof(StorageDisplayComponent, displayData1),(size_t)0x30);
     CHECK_EQ(offsetof(TerraformComponent, tileRecord),      (size_t)0x38);
@@ -119,8 +119,8 @@ UNIT_TEST(vis_member_offsets) {
     CHECK_EQ(offsetof(WorkComponent, workFlags),            (size_t)0x2c);
     // D6: the two embedded members at +0x28.
     CHECK_EQ(offsetof(StateMachineComponent, _controller),  (size_t)0x28);
-    CHECK_EQ(offsetof(StateMachineComponent, controllerSelf),(size_t)0x48);
-    CHECK_EQ(offsetof(StateMachineComponent, currentInput), (size_t)0x50);
+    CHECK_EQ(offsetof(StateMachineComponent, stateMachine),  (size_t)0x48);
+    CHECK_EQ(offsetof(StateMachine, currentInput),           (size_t)0x08);
     CHECK_EQ(offsetof(ControllerComponent::Controller, _owner), (size_t)0x18);  // root node +0x40
     CHECK_EQ(offsetof(StatusIconComponent, _geometry),      (size_t)0x28);
     CHECK_EQ(offsetof(StatusIconComponent, iconId),         (size_t)0x100);

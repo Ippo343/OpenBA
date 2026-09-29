@@ -50,9 +50,9 @@ static StateMachineComponent* DestroyUI_FindStateMachine(ComponentEntity* entity
 // The state byte the StateMachine reports: the pending byte (+0x52) unless it is
 // negative, then the input byte (+0x50).
 static int8_t DestroyUI_StateByte(const StateMachineComponent* buildState) {
-    int8_t stateByte = buildState->pendingState;
+    int8_t stateByte = buildState->stateMachine.pendingState;
     if (stateByte < 0) {
-        stateByte = buildState->currentInput;
+        stateByte = buildState->stateMachine.currentInput;
     }
     return stateByte;
 }
@@ -137,9 +137,9 @@ static void DestroyComponent_Reclaim_Impl(DestroyComponent* destroyComp)
     // Find the StateMachineComponent on the entity (param_1[2] = Component::_entity)
     StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
 
-    int8_t stateFrom = buildState->activeState;
-    ControllerComponent::Controller* node = buildState->controllerSelf;
-    node->PostEvent(&buildState->controllerSelf, (int)stateFrom, 0);
+    int8_t stateFrom = buildState->stateMachine.activeState;
+    ControllerComponent::Controller* node = buildState->stateMachine.current;
+    node->PostEvent(&buildState->stateMachine, (int)stateFrom, 0);
 
     // Also call the component's slot 4 — the "Reclaim" notification
     destroyComp->Startup();
@@ -150,9 +150,9 @@ static void DestroyComponent_Rebuild_Impl(DestroyComponent* destroyComp)
     if (!destroyComp) return;
     StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
 
-    int8_t stateFrom = buildState->activeState;
-    ControllerComponent::Controller* node = buildState->controllerSelf;
-    node->PostEvent(&buildState->controllerSelf, (int)stateFrom, 0);
+    int8_t stateFrom = buildState->stateMachine.activeState;
+    ControllerComponent::Controller* node = buildState->stateMachine.current;
+    node->PostEvent(&buildState->stateMachine, (int)stateFrom, 0);
 }
 
 static void DestroyComponent_Destroy_Impl(DestroyComponent* destroyComp)
@@ -160,9 +160,9 @@ static void DestroyComponent_Destroy_Impl(DestroyComponent* destroyComp)
     if (!destroyComp) return;
     StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
 
-    int8_t stateFrom = buildState->activeState;
-    ControllerComponent::Controller* node = buildState->controllerSelf;
-    node->PostEvent(&buildState->controllerSelf, (int)stateFrom, 1);
+    int8_t stateFrom = buildState->stateMachine.activeState;
+    ControllerComponent::Controller* node = buildState->stateMachine.current;
+    node->PostEvent(&buildState->stateMachine, (int)stateFrom, 1);
 }
 
 // ============================================================
