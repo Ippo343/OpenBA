@@ -81,14 +81,14 @@ UNIT_TEST(cit_component_member_offsets) {
     CHECK_EQ(offsetof(AmbientEnvironmentComponent, field40),   (size_t)0x40);
     CHECK_EQ(offsetof(AnimalComponent, data44),                (size_t)0x44);
     CHECK_EQ(offsetof(AnimalComponent, data50),                (size_t)0x50);
-    CHECK_EQ(offsetof(CharacterComponent, data40),             (size_t)0x40);   // char index
-    CHECK_EQ(offsetof(CharacterComponent, data60),             (size_t)0x60);   // action-stack top
-    CHECK_EQ(offsetof(CharacterComponent, data78),             (size_t)0x78);
+    CHECK_EQ(offsetof(CharacterComponent, characterIndex),     (size_t)0x40);   // char index
+    CHECK_EQ(offsetof(CharacterComponent, currentAction),      (size_t)0x60);   // action index
+    CHECK_EQ(offsetof(CharacterComponent, characterDescription), (size_t)0x78);
     CHECK_EQ(offsetof(CitizenAIComponent, timers),             (size_t)0x40);
     CHECK_EQ(offsetof(CitizenAIComponent, dataC8),             (size_t)0xc8);
     CHECK_EQ(offsetof(CitizenComponent, meshInstance),         (size_t)0xb8);   // Graphics::MeshInstance
-    CHECK_EQ(offsetof(CitizenComponent, data1D8),              (size_t)0x1d8);
-    CHECK_EQ(offsetof(CitizenComponent, data288),              (size_t)0x288);
+    CHECK_EQ(offsetof(CitizenComponent, toolId),               (size_t)0x1d8);
+    CHECK_EQ(offsetof(CitizenComponent, description),          (size_t)0x288);
     CHECK_EQ(offsetof(DiseaseComponent, curedIdentity),        (size_t)0x50);
     CHECK_EQ(offsetof(FireComponent, igniteAccum),             (size_t)0x40);
     CHECK_EQ(offsetof(FruitComponent, fruitFlag),              (size_t)0x34);

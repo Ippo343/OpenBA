@@ -20,6 +20,8 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+namespace UI { class StringTable; class SpriteSheet; }
+
 class Profession final : public Object::External {
     DECLARE_EXE_TYPE(Profession)
 
@@ -35,25 +37,39 @@ public:
     virtual Object::External* Construct();                        // [8] 0x14001e570
 
 public:
-    void*    externalPtr1;       // +0x20: ExternalPtr (serialized via 0x14000bf40)
-    void*    externalPtr2;       // +0x28: ExternalPtr (serialized via 0x14000bd30)
-    uint64_t stringName;         // +0x30: System::String (profession name)
-    uint64_t stringDesc;         // +0x38: System::String (profession description)
-    uint64_t stringTool;         // +0x40: System::String (tool type / animation set)
-    int32_t  field48;            // +0x48: int (serialized)
-    uint8_t  field4C;            // +0x4C: bool (serialized)
-    uint8_t  field4D;            // +0x4D: bool (serialized)
-    uint8_t  isAvailable;        // +0x4E: bool, default 1 (serialized)
-    uint8_t  _pad4F;             // +0x4F: padding
-    int32_t  priority;           // +0x50: 100 (default priority, serialized)
-    float    skillMult1;         // +0x54: 1.0f (primary skill mult, serialized)
-    float    skillMult2;         // +0x58: 1.0f (secondary skill mult, serialized)
-    uint8_t  _pad5C[4];          // +0x5C: padding
+    // B.4 W0-H1: types from the ctor 0x1400a9030 and the serializer 0x1400a8f10
+    // (0x14000bf40 / 0x14000bd30 = ExternalPtr serialize validating the imported
+    // _typeInfo 0x140151488 UI::StringTable / 0x140151480 UI::SpriteSheet (the
+    // latter is the type GameContainer_Init 0x14009a7a3 validates
+    // "Dialog/SpriteSheet.rsc" with); 0x140151238 String; 0x140152ac8 int;
+    // 0x140152a58 bool; 0x140152a60 float). The serializer passes no names.
+    // The three String fields are H5 raw storage: the tree's dtor runs ~String
+    // on them by hand; declaring System::String would run it twice.
+    UI::StringTable* stringTable;  // +0x20: ExternalPtr<UI::StringTable> (0x14000bf40); the table the
+                                   //        profession's text keys are looked up in (PostLifeEvent,
+                                   //        CitizenComponent::Update)
+    UI::SpriteSheet* spriteSheet;  // +0x28: ExternalPtr<UI::SpriteSheet> (0x14000bd30)
+    uint64_t stringName;           // +0x30: System::String (H5 raw): the title key; PostLifeEvent builds
+                                   //        UI::String(stringTable, +0x30) as the citizen's title
+    uint64_t stringDesc;           // +0x38: System::String (H5 raw); name NOT confirmed from retail
+    uint64_t stringTool;           // +0x40: System::String (H5 raw); name NOT confirmed from retail:
+                                   //        CitizenComponent::Update builds UI::String(stringTable,
+                                   //        +0x40) for HandleLifeEvent(7) (a profession change)
+    int32_t  field48;              // +0x48: int (serialized)
+    bool     field4C;              // +0x4C: bool (serialized); CitizenComponent::Update raises the
+                                   //        "no job" icon only when it is 0
+    bool     field4D;              // +0x4D: bool (serialized)
+    bool     isAvailable;          // +0x4E: bool, default 1 (serialized); name NOT confirmed from retail
+    uint8_t  _pad4F;               // +0x4F: padding
+    int32_t  priority;             // +0x50: int, default 100 (serialized); name NOT confirmed from retail
+    float    skillMult1;           // +0x54: float, default 1.0f (serialized); name NOT confirmed
+    float    skillMult2;           // +0x58: float, default 1.0f (serialized); name NOT confirmed
+    uint8_t  _pad5C[4];            // +0x5C: padding
 };
 
 static_assert(sizeof(Profession) == 0x60, "Profession is 0x60");
-static_assert(offsetof(Profession, externalPtr1) == 0x20, "+0x20");
-static_assert(offsetof(Profession, externalPtr2) == 0x28, "+0x28");
+static_assert(offsetof(Profession, stringTable) == 0x20, "+0x20");
+static_assert(offsetof(Profession, spriteSheet) == 0x28, "+0x28");
 static_assert(offsetof(Profession, stringName) == 0x30, "+0x30");
 static_assert(offsetof(Profession, stringDesc) == 0x38, "+0x38");
 static_assert(offsetof(Profession, stringTool) == 0x40, "+0x40");
@@ -61,6 +77,8 @@ static_assert(offsetof(Profession, field48) == 0x48, "+0x48");
 static_assert(offsetof(Profession, field4C) == 0x4C, "+0x4C");
 static_assert(offsetof(Profession, field4D) == 0x4D, "+0x4D");
 static_assert(offsetof(Profession, isAvailable) == 0x4E, "+0x4E");
+static_assert(offsetof(Profession, _pad4F) == 0x4F, "+0x4F");
 static_assert(offsetof(Profession, priority) == 0x50, "+0x50");
 static_assert(offsetof(Profession, skillMult1) == 0x54, "+0x54");
 static_assert(offsetof(Profession, skillMult2) == 0x58, "+0x58");
+static_assert(offsetof(Profession, _pad5C) == 0x5C, "+0x5C");
