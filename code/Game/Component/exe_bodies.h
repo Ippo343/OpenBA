@@ -86,16 +86,11 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(void* param_1, int64_t* param_2, uin
 void CitizenAI_Pathfinding_WalkTowards_bb490(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4, float param_5, uint32_t param_6);  // 0x1400bb490
 void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_t* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0
 
-// ---- citizenai_candidatelist.cpp
-void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param3);  // 0x14010dca0
-int CitizenAI_ValidateAndEnterState(void* selfV, int state);  // 0x14010f1f0
-
 // ---- citizenai_executor.cpp
 extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2);  // 0x1400c4c50
 
 // ---- citizenai_findhelpers.cpp
 bool ResidenceCheck_2ac30(int64_t param_1);  // 0x14012ac30
-uint64_t CitizenAI_helper_db20(int64_t param_1);  // 0x14010db20
 int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, float* param_4);  // 0x14008ec70
 int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t param_3, int64_t* param_4, float* param_5, uint64_t , int64_t* param_7);  // 0x14008e370
 
@@ -105,33 +100,12 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
 
 // ---- citizenai_gather.cpp
 extern "C" int Storage_GetResourceCount2(int64_t param_1);  // 0x14012ab00
-extern "C" uint64_t CitizenAI_State_GatherResources(int64_t param_1);  // 0x14010bc90 (CitizenAI state switch)
-extern "C" uint64_t CitizenAI_State_GatherResources2(int64_t param_1);  // 0x14010b3e0 (CitizenAI state switch)
 
 // ---- citizenai_growup.cpp
 extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1);  // 0x140115e60 (CitizenAI state switch)
-extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1);  // 0x14010c890 (CitizenAI state switch)
-
-// ---- citizenai_handlers.cpp
-bool CitizenAI_State_Wander(int64_t param_1);  // 0x14010a2b0 (CitizenAI state switch)
-
-// ---- citizenai_handlers2.cpp
-extern "C" uint64_t CitizenAI_State_Education(int64_t param_1);  // 0x14010c360 (CitizenAI state switch)
-extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1);  // 0x14010c580 (CitizenAI state switch)
-extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1);  // 0x14010d560 (CitizenAI state switch)
-
-// ---- citizenai_handlers3.cpp
-extern "C" uint64_t CitizenAI_State_ElderTransition(int64_t param_1);  // 0x14010d2c0 (CitizenAI state switch)
-extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1);  // 0x14010cd80 (CitizenAI state switch)
-extern "C" uint64_t CitizenAI_State_Work(int64_t param_1);  // 0x14010d790 (CitizenAI state switch)
 
 // ---- citizenai_housing_idle.cpp
-extern "C" uint64_t CitizenAI_State_FindHousing(int64_t param_1);  // 0x14010b340 (CitizenAI state switch)
-extern "C" uint64_t CitizenAI_State_Idle(int64_t param_1);  // 0x14010b2d0 (CitizenAI state switch)
 extern "C" void CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b);  // 0x14000e360
-
-// ---- citizenai_leisure.cpp
-extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1);  // 0x14010a560 (CitizenAI state switch)
 
 // ---- citizenai_work_scheduler.cpp
 extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
@@ -142,9 +116,6 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId, 
 void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);  // 0x140008090
 int CitizenComp_StorageComponent_QueryCount(int64_t self);  // 0x14012cf10
 int CitizenComp_Storage_GetResourceCount(int64_t self);  // 0x14012a9d0
-void CitizenComp_CitizenAIComponent_TransitionState(int64_t selfV, char param);  // 0x14010db90
-void CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV);  // 0x14010f7a0
-void CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV);  // 0x14010f890
 
 // ---- citizencomponent.cpp
 void CitizenComp_sub_1fa0(int64_t selfV, void* param2);  // 0x140111fa0
@@ -152,10 +123,7 @@ bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2);  // 0x14010ffc0
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2);  // 0x140110470
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0
-char CitizenComp_CanFindHousing(int64_t selfV);  // 0x140115be0
 void CitizenComp_helper_1b90(int64_t selfV);  // 0x140111b90
-void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2);  // 0x1401152e0
-char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2);  // 0x1401158d0
 int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4);  // 0x14008ef40
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2);  // 0x140111ee0
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2);  // 0x140111840

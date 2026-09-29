@@ -6,11 +6,14 @@
 //
 // Functions ported (all faithful to the Ghidra decompile + disassembly):
 //   0x14002fe10  SortByPriority                 -> CitizenAI_SortByPriority
-//   0x1401156e0  CitizenComponent_HasSufficientResources  -> CitizenComp_HasSufficientResources
-//   0x1401157f0  CitizenComponent_HasSufficientResources2 -> CitizenComp_HasSufficientResources2
-//   0x140115de0  CitizenComponent_GetHappiness  -> CitizenComp_GetHappiness
-//   0x14010dca0  CitizenAIComponent_BuildCandidateStateList -> CitizenAI_BuildCandidateStateList
-//   0x14010f1f0  CitizenAIComponent_ValidateAndEnterState   -> CitizenAI_ValidateAndEnterState
+//   0x1401156e0  CitizenComponent::HasSufficientResources
+//   0x1401157f0  CitizenComponent::HasSufficientResources2
+//   0x140115de0  CitizenComponent::CarryCount (Ghidra "GetHappiness")
+//   0x14010dca0  CitizenAIComponent::BuildCandidateStateList
+//   0x14010f1f0  CitizenAIComponent::ValidateAndEnterState
+//
+// Field names (B.4 W1 COMP-b, CitizenComponent.h): +0x238 is the HOME (B4_RULES
+// correction 3), +0x208 the school, +0x1e4 clothingLevel, +0x250 the spouse.
 //
 // Sub-callees reused via ResolveAddr (already registered reimpls):
 //   0x140008090  FindComponent_Residence  (Ghidra: "Entity_FindComponent_Storage")
@@ -30,8 +33,14 @@
 #include <cstring>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/ResidenceComponent.h"
+#include "Component/StorageComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Work/exe_bodies.h"
-#include "Game/exe_constants.h"
+#include "Game/exe_constants.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
@@ -107,60 +116,48 @@ static inline float RdataF(uint32_t bits) {
 }
 
 // ============================================================
-// 2. CitizenComponent_HasSufficientResources (0x1401156e0)
+// 2. CitizenComponent::HasSufficientResources (0x1401156e0)
 // ------------------------------------------------------------
-// self (CitizenComponent) at +0x238 = workplace IBP. Early-false if zero.
-// Counts non-empty inventory rows of the workplace storage, multiplies by the
-// per-slot requirement (storage[+0x50] row at index citizen[+0x240]) and the
-// CitizenDescription[+0xc4] factor (truncated to int), then compares against the
-// workplace's total GetResourceCount.
-//   iVar2 = *(int*)( *(int64*)(storageA[+0x50]) + 8 + citizen[+0x240]*0x10 )
-//   fVar1 = *(float*)( citizen[+0x288] + 0xc4 )   -> CVTTSS2SI (trunc to int)
-//   iVar7 = count of rows in storageA where slot count (+8, stride 0x10) > 0
-//   iVar4 = Storage_GetResourceCount(storageA)
+// Early-false without a home. Counts the occupied household rows of the home's
+// ResidenceComponent, multiplies by this household's row (residentSlots[homeSlot])
+// and the CitizenDescription _fc4 factor (truncated to int), then compares against
+// the home's edible GetResourceCount.
+//   iVar2 = residentSlots[homeSlot].count      (+8, stride 0x10)
+//   fVar1 = description->_fc4                  -> CVTTSS2SI (trunc to int)
+//   iVar7 = count of rows whose count (+8, stride 0x10) > 0
+//   iVar4 = Storage_GetResourceCount(residence)
 //   return  iVar7 * iVar2 * (int)fVar1 <= iVar4
-// (Entity_FindComponent_Storage is called twice on the same workplace; the
-//  first result feeds GetResourceCount, the second feeds the row scan / iVar2.
-//  Both resolve to the same storage component — ported faithfully.)
+// (the finder is called twice on the home; both results are the same component
+//  -- ported faithfully.) residentSlots is ResidenceComponent's untyped array: raw.
 // ============================================================
-int CitizenComp_HasSufficientResources(int64_t self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    if (*reinterpret_cast<int64_t*>(p + 0x238) == 0) return 0;
+int CitizenComponent::HasSufficientResources() {
+    if (home == nullptr) return 0;
 
     // local_res8 = first find (feeds GetResourceCount + row scan)
-    int64_t local_res8 = 0;
-    CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
+    ResidenceComponent* local_res8 = home->FindComponent<ResidenceComponent>();
 
-    int64_t lVar3desc = *reinterpret_cast<int64_t*>(p + 0x288);  // CitizenDescription
+    CitizenDescription* lVar3desc = description;
 
-    // local_res10 = second find (feeds the per-slot requirement read)
-    int64_t local_res10 = 0;
-    void* self2 = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res10);
+    // second find (feeds the per-slot requirement read)
+    ResidenceComponent* storageObj = home->FindComponent<ResidenceComponent>();
 
-    // iVar2 = *(int*)( *(int64*)(*self2 + 0x50) + 8 + citizen[+0x240]*0x10 )
-    // [STANDALONE GUARD] FindComponentStorage returns a non-null IBP wrapper but a
-    // null resolved component when the StorageComponent type-id global is unfilled
-    // (the recurring standalone limitation). Guard storageObj/local_res8 so the
-    // workplace-storage scans can't deref null+0x50/+0x58.
+    // [STANDALONE GUARD] the find returns null when the ResidenceComponent type-id
+    // is unfilled (the recurring standalone limitation). Guard so the scans can't
+    // deref null+0x50/+0x58.
     int iVar2 = 0;
-    if (self2) {
-        int64_t storageObj = *reinterpret_cast<int64_t*>(self2);
-        if (storageObj) {
-            int64_t rows = *reinterpret_cast<int64_t*>(storageObj + 0x50);
-            int idx240 = *reinterpret_cast<int*>(p + 0x240);
-            iVar2 = *reinterpret_cast<int*>(rows + 8 + (int64_t)idx240 * 0x10);
-        }
+    if (storageObj) {
+        int64_t rows = reinterpret_cast<int64_t>(storageObj->residentSlots);
+        iVar2 = *reinterpret_cast<int*>(rows + 8 + (int64_t)homeSlot * 0x10);
     }
-    float fVar1 = *reinterpret_cast<float*>(lVar3desc + 0xc4);   // CVTTSS2SI = trunc
+    float fVar1 = lVar3desc->_fc4;   // CVTTSS2SI = trunc
     int factor = (int)fVar1;
 
     // Row scan over local_res8.
-    int64_t lVar3 = local_res8;  // storage obj (for GetResourceCount)
-    if (local_res8 == 0) return 0;   // no storage resolved -> "insufficient"
-    int rowCount = *reinterpret_cast<int*>(local_res8 + 0x58);
+    if (local_res8 == nullptr) return 0;   // no storage resolved -> "insufficient"
+    int rowCount = local_res8->residentSlotCount;
     int iVar7 = 0;
     if (0 < rowCount) {
-        int* piVar5 = reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(local_res8 + 0x50) + 8);
+        int* piVar5 = reinterpret_cast<int*>(reinterpret_cast<int64_t>(local_res8->residentSlots) + 8);
         int64_t lVar6 = rowCount;
         do {
             if (0 < *piVar5) iVar7++;
@@ -169,34 +166,30 @@ int CitizenComp_HasSufficientResources(int64_t self) {
         } while (lVar6 != 0);
     }
 
-    int iVar4 = CitizenComp_Storage_GetResourceCount(lVar3);
+    int iVar4 = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(local_res8));
     return (iVar7 * iVar2 * factor <= iVar4) ? 1 : 0;
 }
 
 // ============================================================
-// 3. CitizenComponent_HasSufficientResources2 (0x1401157f0)
+// 3. CitizenComponent::HasSufficientResources2 (0x1401157f0)
 // ------------------------------------------------------------
 // Like (2) but a single find, uses Storage_GetResourceCount2, a float threshold
-// at CitizenDescription[+0xd4], and a FLOAT comparison:
+// description->_fd4, and a FLOAT comparison:
 //   iVar6 = count of rows where slot count (+8, stride 0x10) > 0
 //   iVar3 = Storage_GetResourceCount2(storage)
-//   return (float)iVar6 * desc[+0xd4] <= (float)iVar3       (COMISS / SETNC)
+//   return (float)iVar6 * _fd4 <= (float)iVar3       (COMISS / SETNC)
 // ============================================================
-int CitizenComp_HasSufficientResources2(int64_t self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    if (*reinterpret_cast<int64_t*>(p + 0x238) == 0) return 0;
+int CitizenComponent::HasSufficientResources2() {
+    if (home == nullptr) return 0;
 
-    int64_t local_res8 = 0;
-    CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(p + 0x238), &local_res8);
+    ResidenceComponent* local_res8 = home->FindComponent<ResidenceComponent>();
+    CitizenDescription* lVar1desc = description;
 
-    int64_t lVar2 = local_res8;                                   // storage obj
-    int64_t lVar1desc = *reinterpret_cast<int64_t*>(p + 0x288);   // CitizenDescription
-
-    if (local_res8 == 0) return 0;   // [STANDALONE GUARD] no storage resolved
-    int rowCount = *reinterpret_cast<int*>(local_res8 + 0x58);
+    if (local_res8 == nullptr) return 0;   // [STANDALONE GUARD] no storage resolved
+    int rowCount = local_res8->residentSlotCount;
     int iVar6 = 0;
     if (0 < rowCount) {
-        int* piVar4 = reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(local_res8 + 0x50) + 8);
+        int* piVar4 = reinterpret_cast<int*>(reinterpret_cast<int64_t>(local_res8->residentSlots) + 8);
         int64_t lVar5 = rowCount;
         do {
             if (0 < *piVar4) iVar6++;
@@ -205,15 +198,15 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
         } while (lVar5 != 0);
     }
 
-    int iVar3 = Storage_GetResourceCount2(lVar2);
-    float threshold = *reinterpret_cast<float*>(lVar1desc + 0xd4);
+    int iVar3 = Storage_GetResourceCount2(reinterpret_cast<int64_t>(local_res8));
+    float threshold = lVar1desc->_fd4;
     // Distribution diagnostic (firewood-evenness): per-house fuel sufficiency
     // inputs — occupied roster rows x CitizenDesc+0xd4 vs fuel units on hand.
     { static int n = 0;
       const bool early = (n < 12);
       if (early) { ++n;
-        fprintf(stderr, "[HSR2] residence=%llx occupied=%d perOcc=%.1f have=%d -> %s\n",
-                (unsigned long long)local_res8, iVar6, threshold, iVar3,
+        fprintf(stderr, "[HSR2] residence=%p occupied=%d perOcc=%.1f have=%d -> %s\n",
+                (void*)local_res8, iVar6, threshold, iVar3,
                 ((float)iVar6 * threshold <= (float)iVar3) ? "sufficient" : "FETCH");
         fflush(stderr); } }
     // COMISS XMM1(=(float)iVar3), XMM0(=(float)iVar6*threshold); SETNC -> iVar3 >= product
@@ -221,13 +214,13 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
 }
 
 // ============================================================
-// 4. CitizenComponent_GetHappiness (0x140115de0) — MISNAMED: this is CARRY COUNT
+// 4. CitizenComponent::CarryCount (0x140115de0) — Ghidra "GetHappiness", MISNAMED
 // ------------------------------------------------------------
-// Finds the citizen's own-entity StorageComponent (self+0x10 = the owner entity)
-// and tail-returns StorageComponent_QueryCount's result (Ghidra shows void; the
-// function tail-calls QueryCount, whose EAX is the return). Nothing to do with
-// happiness — it answers "how much am I carrying?", and it is the gate on state
-// 0xd (LongTermPlan) = the haul-to-storage leg. Name kept to match Ghidra.
+// Finds the citizen's own-entity StorageComponent and tail-returns
+// StorageComponent_QueryCount's result (Ghidra shows void; the function tail-calls
+// QueryCount, whose EAX is the return). Nothing to do with happiness — it answers
+// "how much am I carrying?", and it is the gate on state 0xd (LongTermPlan) = the
+// haul-to-storage leg.
 //
 // 🐞 The finder here is 0x140006270 (StorageComponent), NOT the 0x140008090
 // (ResidenceComponent) used by (2)/(3) above — see the note at the typedefs. This
@@ -239,24 +232,20 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
 // disassembly, which the decompiler hides (both finders print under one name):
 //   140115dfb: CALL 0x140006270
 // ============================================================
-int CitizenComp_GetHappiness(int64_t self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    void* local_res8[4] = {nullptr, nullptr, nullptr, nullptr};
-
-    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(p + 0x10),
-                                reinterpret_cast<void*>(local_res8));
+int CitizenComponent::CarryCount() {
+    StorageComponent* carry = _entity->FindComponent<StorageComponent>();
     // Standalone: the citizen's own-entity StorageComponent find returns null when
     // its type-id global is unfilled (the recurring keystone-B pattern). The real
     // game always has a carry-inventory storage here; guard so QueryCount(null) -
     // which derefs +0x30 - can't fault. No storage found => count 0.
     //
-    // This is NOT a cosmetic guard: despite the inherited Ghidra name, this function
-    // is the citizen's CARRY COUNT (body = FindComponent_Storage -> QueryCount), and
-    // it is the gate on state 0xd (LongTermPlan) = the haul-to-storage leg. If the
-    // find ever returns null here, every citizen reads as "carrying nothing" and
-    // NOBODY EVER DELIVERS, silently. So say so loudly (once) rather than let a
-    // null-guard mask it -- root-cause the find, do not paper over it.
-    if (!local_res8[0]) {
+    // This is NOT a cosmetic guard: this function is the citizen's CARRY COUNT
+    // (body = FindComponent_Storage -> QueryCount), and it is the gate on state 0xd
+    // (LongTermPlan) = the haul-to-storage leg. If the find ever returns null here,
+    // every citizen reads as "carrying nothing" and NOBODY EVER DELIVERS, silently.
+    // So say so loudly (once) rather than let a null-guard mask it -- root-cause the
+    // find, do not paper over it.
+    if (!carry) {
         static bool s_warned = false;
         if (!s_warned) {
             s_warned = true;
@@ -269,23 +258,16 @@ int CitizenComp_GetHappiness(int64_t self) {
         }
         return 0;
     }
-    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(local_res8[0]));
+    return CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carry));
 }
 
 // ============================================================
-// 5. CitizenAIComponent_BuildCandidateStateList (0x14010dca0)
+// 5. CitizenAIComponent::BuildCandidateStateList (0x14010dca0)
 // ------------------------------------------------------------
 // outList layout: outList[0]=ptr(8B), +8=count(int), +0xc=capacity(int).
 // Appends {id,priority,0} triples (grow rule reproduced exactly), guarded by
 // per-state need conditions, then Fisher-Yates shuffles and SortByPriority.
-//
-// "self" arg is the CitizenAIComponent; self+0x38 = sibling-CitizenComponent IBP
-// (Ghidra "self" local = param_1+0x38). *self38 dereferences to the
-// CitizenComponent; its fields: +0x44 hunger, +0x48 thirst, +0x50/+0x54 work,
-// +0x68 Disease* (NOT a housing link -- see below), +0x80 leisure-accum,
-// +0x208 elder-flag, +0x228 care-building link, +0x238
-// workplace, +0x248 house, +0x250 reservation, +0x288 CitizenDescription, +0x1e4 edu, +0xac,
-// +0x3c age, +0xb0 reservation-kind.  param_1+0xc0 = leisure Time accumulator.
+// The CitizenComponent's fields are read by name (CitizenComponent.h).
 //
 // +0x68 IS THE DISEASE POINTER, NOT A HOUSING LINK (settled 2026-09-06).
 // CitizenComponent::Infect (0x140116b90, ported in citizen_updatehealth.cpp) stores the
@@ -360,73 +342,69 @@ static void AppendCandidate(int64_t* L, int id, int prio) {
     }
 }
 
-void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param3) {
-    uint8_t* base = reinterpret_cast<uint8_t*>(selfV);   // CitizenAIComponent
-    void* self = base + 0x38;                             // sibling CitizenComponent IBP
+void CitizenAIComponent::BuildCandidateStateList(int64_t* outList, char param3) {
+    CitizenComponent* cz = citizen;
 
-    // Census (open C): which exit the function took. Purely observational.
-
-    // --- Special early branch: SICK (+0x68 = Disease*) with a care building (+0x228) ---
-    int64_t cz = *reinterpret_cast<int64_t*>(self);
-    if (cz != 0 && *reinterpret_cast<int64_t*>(cz + 0x68) != 0) {
-        cz = *reinterpret_cast<int64_t*>(self);
-        if (*reinterpret_cast<int64_t*>(cz + 0x228) != 0) {
+    // --- Special early branch: SICK (disease) with a care building ---
+    if (cz != nullptr && cz->disease != nullptr) {
+        cz = citizen;
+        if (cz->careBuilding != nullptr) {
             // Single candidate {5 (Work), 6, 0}, no shuffle/sort (function returns).
             AppendCandidate(outList, 5, 6);
             return;
         }
     }
 
-    // --- hunger (Work-state 6 candidate id 0xe, prio 7) : desc[+0xcc] ---
-    cz = *reinterpret_cast<int64_t*>(self);
+    // --- hunger (state 0xe, prio 7) : desc _fcc ---
+    cz = citizen;
     {
-        float fv = *reinterpret_cast<float*>(cz + 0x44);
-        float* pf = reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xcc);
+        float fv = cz->hunger;
+        float* pf = &cz->description->_fcc;
         if (*pf <= fv && fv != *pf) AppendCandidate(outList, 0xe, 7);
     }
 
-    // --- thirst (id 0xf, prio 7) : desc[+0xec] ---
-    cz = *reinterpret_cast<int64_t*>(self);
+    // --- coldness (id 0xf, prio 7) : desc _fec ---
+    cz = citizen;
     {
-        float fv = *reinterpret_cast<float*>(cz + 0x48);
-        float* pf = reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xec);
+        float fv = cz->coldness;
+        float* pf = &cz->description->_fec;
         if (*pf <= fv && fv != *pf) AppendCandidate(outList, 0xf, 7);
     }
 
-    // --- hunger-other (id 0, prio 6) : desc[+0xc8] ---
-    cz = *reinterpret_cast<int64_t*>(self);
+    // --- hunger-other (id 0, prio 6) : desc _fc8 ---
+    cz = citizen;
     {
-        float fv = *reinterpret_cast<float*>(cz + 0x44);
-        float* pf = reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xc8);
+        float fv = cz->hunger;
+        float* pf = &cz->description->_fc8;
         if (*pf <= fv && fv != *pf) AppendCandidate(outList, 0, 6);
     }
 
-    // --- thirst-other (id 1, prio 6) : desc[+0xe8] ---
-    cz = *reinterpret_cast<int64_t*>(self);
+    // --- coldness-other (id 1, prio 6) : desc _fe8 ---
+    cz = citizen;
     {
-        float fv = *reinterpret_cast<float*>(cz + 0x48);
-        float* pf = reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xe8);
+        float fv = cz->coldness;
+        float* pf = &cz->description->_fe8;
         if (*pf <= fv && fv != *pf) AppendCandidate(outList, 1, 6);
     }
 
-    // --- main branch: HEALTHY (+0x68 == 0) vs SICK (+0x68 != 0) ---
-    cz = *reinterpret_cast<int64_t*>(self);
-    if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {
+    // --- main branch: HEALTHY (no disease) vs SICK ---
+    cz = citizen;
+    if (cz->disease == nullptr) {
         // FindHousing (id 2, prio 7) if CanFindHousing
-        char canHouse = CitizenComp_CanFindHousing(*reinterpret_cast<int64_t*>(self));
+        char canHouse = citizen->CanFindHousing();
         if (canHouse != '\0') AppendCandidate(outList, 2, 7);
 
-        // Education (id 3, prio 3) if cz[+0x1e4] == 0
-        cz = *reinterpret_cast<int64_t*>(self);
-        if (*reinterpret_cast<int*>(cz + 0x1e4) == 0) AppendCandidate(outList, 3, 3);
+        // "Education" (id 3, prio 3) if clothingLevel == 0
+        cz = citizen;
+        if (cz->clothingLevel == 0) AppendCandidate(outList, 3, 3);
 
-        // GrowUp (id 4, prio 3) if desc[+0x74] is in (cz[+0x50], ..] and (cz[+0x54]>>9 & 1)==0
-        cz = *reinterpret_cast<int64_t*>(self);
+        // GrowUp (id 4, prio 3) if desc _f74 is in (health, ..] and (statusFlags>>9 & 1)==0
+        cz = citizen;
         {
-            float fv = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0x74);
-            float work50 = *reinterpret_cast<float*>(cz + 0x50);
+            float fv = cz->description->_f74;
+            float work50 = cz->health;
             if ((work50 <= fv && fv != work50) &&
-                ((*reinterpret_cast<uint32_t*>(cz + 0x54) >> 9 & 1) == 0)) {
+                ((cz->statusFlags >> 9 & 1) == 0)) {
                 AppendCandidate(outList, 4, 3);
             }
         }
@@ -442,103 +420,99 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
 
     // --- Leisure (id 0xc) : prio 2 if leisure-thresholds tripped, else prio 0 ---
     {
-        cz = *reinterpret_cast<int64_t*>(self);
+        cz = citizen;
         bool leisure = false;
-        // (cz.desc[+0xb8] in (cz[+0x80],..] and AsSeconds(self.acc@+0xc0) > DAT_1721fc)
-        float fv1 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xb8);
-        float* pf1 = reinterpret_cast<float*>(cz + 0x80);
+        // (desc _fb8 in (happiness,..] and AsSeconds(leisureTimer) > DAT_1721fc)
+        float fv1 = cz->description->_fb8;
+        float* pf1 = &cz->happiness;
         float c1721fc = kRdata_1401721fc;
         if ((*pf1 <= fv1 && fv1 != *pf1) &&
-            (reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c1721fc)) {   // B.3.4b bridge
+            (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c1721fc)) {   // B.3.4b bridge
             leisure = true;
         }
         if (!leisure) {
-            // OR (cz.desc[+0xb4] in (cz[+0x80],..] and AsSeconds(self.acc) > DAT_172234)
-            cz = *reinterpret_cast<int64_t*>(self);
-            float fv2 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0xb4);
-            float* pf2 = reinterpret_cast<float*>(cz + 0x80);
+            // OR (desc _fb4 in (happiness,..] and AsSeconds(leisureTimer) > DAT_172234)
+            cz = citizen;
+            float fv2 = cz->description->_fb4;
+            float* pf2 = &cz->happiness;
             float c172234 = kRdata_140172234;
             if ((*pf2 <= fv2 && fv2 != *pf2) &&
-                (reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c172234)) {   // B.3.4b bridge
+                (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172234)) {   // B.3.4b bridge
                 leisure = true;
             }
         }
         if (!leisure) {
-            // OR AsSeconds(self.acc) > DAT_172254
+            // OR AsSeconds(leisureTimer) > DAT_172254
             float c172254 = RdataF(kRdata_140172254);
-            if (reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c172254) leisure = true;   // B.3.4b bridge
+            if (reinterpret_cast<const System::Time*>(&leisureTimer)->AsSeconds() > c172254) leisure = true;   // B.3.4b bridge
         }
         // id 0xc both ways; only the priority differs (2 when tripped, 0 otherwise).
         AppendCandidate(outList, 0xc, leisure ? 2 : 0);
     }
 
     // --- age / work-need block ---
-    cz = *reinterpret_cast<int64_t*>(self);
-    float age = *reinterpret_cast<float*>(cz + 0x3c);
-    float ageThresh = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(cz + 0x288) + 0x44);
-    if ((age < ageThresh) || (*reinterpret_cast<int64_t*>(cz + 0x208) != 0)) {
-        // (age >= thresh) OR elder-flag set  [negation of the not-grown branch]
-        cz = *reinterpret_cast<int64_t*>(self);
-        if (*reinterpret_cast<int64_t*>(cz + 0x208) == 0) {
-            // not elder: housing/work candidates
-            cz = *reinterpret_cast<int64_t*>(self);
-            if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {
+    cz = citizen;
+    float age = cz->age;
+    float ageThresh = cz->description->adultAge;
+    if ((age < ageThresh) || (cz->school != nullptr)) {
+        // not adult yet, or at school
+        cz = citizen;
+        if (cz->school == nullptr) {
+            // not at school
+            cz = citizen;
+            if (cz->disease == nullptr) {
                 AppendCandidate(outList, 0xb, 0);   // Wander (id 0xb, prio 0)
             }
 
             // GatherResources (id 6, prio 4) if !HasSufficientResources
-            int hsr = CitizenComp_HasSufficientResources(*reinterpret_cast<int64_t*>(self));
+            int hsr = citizen->HasSufficientResources();
             if ((char)hsr == '\0') AppendCandidate(outList, 6, 4);
 
             // GatherResources2 (id 7, prio 4) if !HasSufficientResources2
-            int hsr2 = CitizenComp_HasSufficientResources2(*reinterpret_cast<int64_t*>(self));
+            int hsr2 = citizen->HasSufficientResources2();
             if ((char)hsr2 == '\0') AppendCandidate(outList, 7, 4);
             // (if hsr2 != 0, original goes to the shuffle/sort tail = LAB_14010f144)
         } else {
-            // elder: FindWork (id 10, prio 2) only while healthy (+0x68 == 0)
-            if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self) + 0x68) == 0) {
+            // at school: FindWork (id 10, prio 2) only while healthy
+            if (citizen->disease == nullptr) {
                 AppendCandidate(outList, 10, 2);
             }
         }
     } else {
-        // not grown up yet (age < thresh, elder-flag clear): adult-with-workplace block
-        cz = *reinterpret_cast<int64_t*>(self);
-        if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
-            // --- hunger gather (id 6) ---
-            int hsr = CitizenComp_HasSufficientResources(*reinterpret_cast<int64_t*>(self));
+        // adult, not at school: the household block
+        cz = citizen;
+        if (cz->home != nullptr) {
+            // --- food gather (id 6) ---
+            int hsr = citizen->HasSufficientResources();
             if ((char)hsr == '\0') {
                 bool reserved6 = false;
-                cz = *reinterpret_cast<int64_t*>(self);
-                if (*reinterpret_cast<int64_t*>(cz + 0x250) != 0) {
-                    int64_t resv = *reinterpret_cast<int64_t*>(
-                        *reinterpret_cast<int64_t*>(self) + 0x250);
-                    if (*reinterpret_cast<int*>(resv + 0xb0) == 1) reserved6 = true;  // skip to LAB_14010e8e7
+                cz = citizen;
+                if (cz->spouse != nullptr) {
+                    CitizenComponent* resv = citizen->spouse;
+                    if (resv->field_0xB0 == 1) reserved6 = true;  // skip to LAB_14010e8e7
                 }
                 if (!reserved6) {
-                    cz = *reinterpret_cast<int64_t*>(self);
-                    float fv = *reinterpret_cast<float*>(cz + 0x44);
-                    float* pf = reinterpret_cast<float*>(
-                        *reinterpret_cast<int64_t*>(cz + 0x288) + 0xcc);
+                    cz = citizen;
+                    float fv = cz->hunger;
+                    float* pf = &cz->description->_fcc;
                     int prio = (*pf <= fv && fv != *pf) ? 6 : 4;
                     AppendCandidate(outList, 6, prio);
                 }
             }
 
-            // --- LAB_14010e8e7: thirst gather (id 7) ---
-            int hsr2 = CitizenComp_HasSufficientResources2(*reinterpret_cast<int64_t*>(self));
+            // --- LAB_14010e8e7: fuel gather (id 7) ---
+            int hsr2 = citizen->HasSufficientResources2();
             if ((char)hsr2 == '\0') {
                 bool reserved7 = false;
-                cz = *reinterpret_cast<int64_t*>(self);
-                if (*reinterpret_cast<int64_t*>(cz + 0x250) != 0) {
-                    int64_t resv = *reinterpret_cast<int64_t*>(
-                        *reinterpret_cast<int64_t*>(self) + 0x250);
-                    if (*reinterpret_cast<int*>(resv + 0xb0) == 2) reserved7 = true;  // skip to LAB_14010ea39
+                cz = citizen;
+                if (cz->spouse != nullptr) {
+                    CitizenComponent* resv = citizen->spouse;
+                    if (resv->field_0xB0 == 2) reserved7 = true;  // skip to LAB_14010ea39
                 }
                 if (!reserved7) {
-                    cz = *reinterpret_cast<int64_t*>(self);
-                    float fv = *reinterpret_cast<float*>(cz + 0x48);
-                    float* pf = reinterpret_cast<float*>(
-                        *reinterpret_cast<int64_t*>(cz + 0x288) + 0xec);
+                    cz = citizen;
+                    float fv = cz->coldness;
+                    float* pf = &cz->description->_fec;
                     int prio = (*pf <= fv && fv != *pf) ? 6 : 4;
                     AppendCandidate(outList, 7, prio);
                 }
@@ -546,24 +520,24 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         }
 
         // --- LAB_14010ea39: idle / happiness / long-term-plan tail ---
-        cz = *reinterpret_cast<int64_t*>(self);
-        if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {   // else -> LAB_14010f144 (shuffle/sort)
-            // SeekHappiness (id 8, prio 5) if cz[+0xac] < 1
-            cz = *reinterpret_cast<int64_t*>(self);
-            if (*reinterpret_cast<int*>(cz + 0xac) < 1) AppendCandidate(outList, 8, 5);
+        cz = citizen;
+        if (cz->disease == nullptr) {   // else -> LAB_14010f144 (shuffle/sort)
+            // SeekHappiness (id 8, prio 5) if field_0xAC < 1
+            cz = citizen;
+            if (cz->field_0xAC < 1) AppendCandidate(outList, 8, 5);
 
             // Idle (id 9, prio 2)  -- unconditional
             AppendCandidate(outList, 9, 2);
 
-            // LongTermPlan (id 0xd) only if GetHappiness > 0
-            int happy = CitizenComp_GetHappiness(*reinterpret_cast<int64_t*>(self));
+            // LongTermPlan (id 0xd) only if the citizen carries something
+            int happy = citizen->CarryCount();
             int ltpPrio = 0;
             if (happy >= 1) {
-                // Time t(DAT_172234); prio = (t < self.acc@+0xc8) ? 3 : 1
+                // Time t(DAT_172234); prio = (t < dataC8) ? 3 : 1
                 int64_t timeBuf = 0;
                 float c172234 = kRdata_140172234;
                 RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeBuf), c172234);
-                int64_t acc = *reinterpret_cast<int64_t*>(base + 0xc8);
+                int64_t acc = dataC8;
                 ltpPrio = (timeBuf < acc) ? 3 : 1;
                 AppendCandidate(outList, 0xd, ltpPrio);
             }
@@ -576,12 +550,11 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     // ============================================================
     int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8);
     if (0 < count) {
-        void* rng = *reinterpret_cast<void**>(
-            (uintptr_t)GameUpdateLoop::_singleton + 0xd8);
+        System::Random* rng = GameUpdateLoop::_singleton->m_random;
         int64_t off = 0;
         int i = 0;
         do {
-            uint32_t r = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(outList) + 8)));   // B.3.4b bridge
+            uint32_t r = rng->Rand(static_cast<uint32_t>(*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(outList) + 8)));
             if (r != (uint32_t)i) {
                 int64_t buf = outList[0];
                 int64_t roff = (int64_t)(int)r * 0xc;
@@ -607,42 +580,37 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
 }
 
 // ============================================================
-// 6. CitizenAIComponent_ValidateAndEnterState (0x14010f1f0)
+// 6. CitizenAIComponent::ValidateAndEnterState (0x14010f1f0)
 // ------------------------------------------------------------
-// if (*(int64*)(self + state*8 + 0x40) < 1) { switch(state){ dispatch handler } }
-// return (low byte). Cooldown gate at self+0x40 indexed by state (8-byte stride).
-// Each case calls its handler directly (all fourteen are ported). Case 0xd passes
-// *(self+0x38), not self.
+// if (timers[id] < 1) { switch(state){ dispatch handler } }
+// return (low byte). Each case calls its handler directly (all fourteen are
+// ported). Case 0xd runs the CitizenComponent's LongTermPlan.
 // ============================================================
 
-int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
-    uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
-
-    // Cooldown gate: *(int64*)(self + state*8 + 0x40) < 1
-    if (*reinterpret_cast<int64_t*>(base + (int64_t)state * 8 + 0x40) < 1) {
-        const int64_t self = reinterpret_cast<int64_t>(base);
+int CitizenAIComponent::ValidateAndEnterState(int id) {
+    // Cooldown gate: timers[id] < 1
+    if (timers[id] < 1) {
         uint64_t r = 0;
-        switch (state) {
-            case 0:  case 0xe: r = CitizenAI_State_AdultTransition(self); break;  // 0x14010cd80 EAT/GetFood (Ghidra "AdultTransition"=MISNOMER; +0x44=hunger, drains via msg2->EatFromStorage 0x1401152e0)
-            case 1:  case 0xf: r = CitizenAI_State_ElderTransition(self); break;  // 0x14010d2c0 DRINK/GetWater (Ghidra "ElderTransition"=MISNOMER; +0x48=thirst)
-            case 2:            r = CitizenAI_State_FindHousing(self); break;      // 0x14010b340
-            case 3:            r = CitizenAI_State_Education(self); break;        // 0x14010c360
-            case 4:            r = CitizenAI_State_GrowUp(self); break;           // 0x14010c890
-            case 5:            r = CitizenAI_State_Work(self); break;             // 0x14010d790
-            case 6:            r = CitizenAI_State_GatherResources(self); break;  // 0x14010bc90
-            case 7:            r = CitizenAI_State_GatherResources2(self); break; // 0x14010b3e0
-            case 8:            r = CitizenAI_State_SeekHappiness(self); break;    // 0x14010c580
-            case 9:            r = CitizenAI_State_Idle(self); break;             // 0x14010b2d0
-            case 10:           r = CitizenAI_State_FindWork(self); break;         // 0x14010d560
+        switch (id) {
+            case 0:  case 0xe: r = State_AdultTransition(); break;  // 0x14010cd80 EAT/GetFood (Ghidra "AdultTransition"=MISNOMER; +0x44=hunger, drains via msg2->EatFromStorage 0x1401152e0)
+            case 1:  case 0xf: r = State_ElderTransition(); break;  // 0x14010d2c0 WARM (Ghidra "ElderTransition"=MISNOMER; +0x48=coldness)
+            case 2:            r = State_FindHousing(); break;      // 0x14010b340
+            case 3:            r = State_Education(); break;        // 0x14010c360
+            case 4:            r = State_GrowUp(); break;           // 0x14010c890
+            case 5:            r = State_Work(); break;             // 0x14010d790
+            case 6:            r = State_GatherResources(); break;  // 0x14010bc90
+            case 7:            r = State_GatherResources2(); break; // 0x14010b3e0
+            case 8:            r = State_SeekHappiness(); break;    // 0x14010c580
+            case 9:            r = State_Idle(); break;             // 0x14010b2d0
+            case 10:           r = State_FindWork(); break;         // 0x14010d560
             case 0xb:
                 // 0x14010a2b0 Wander: returns a bool in the low byte.
-                return CitizenAI_State_Wander(self) ? 1 : 0;
-            case 0xc:          r = CitizenAI_State_Leisure(self); break;          // 0x14010a560
+                return State_Wander() ? 1 : 0;
+            case 0xc:          r = State_Leisure(); break;          // 0x14010a560
             case 0xd: {
-                // 0x140115e60 LongTermPlan: CheckPtr(self+0x38); handler(*(self+0x38));
+                // 0x140115e60 LongTermPlan: CheckPtr(citizen); citizen->LongTermPlan();
                 // the original returns CONCAT71(.., 1) -> low byte always 1.
-                void* internal = *reinterpret_cast<void**>(base + 0x38);
-                CitizenAI_State_LongTermPlan(reinterpret_cast<int64_t>(internal));
+                citizen->LongTermPlan();
                 return 1;
             }
             default: return 0;

@@ -25,6 +25,7 @@
 #include "Component/CitizenDescription.h" // B.4 W1 COMP-b: description fields by name
 #include "Component/CharacterComponent.h"
 #include "Component/AttendanceComponent.h"
+#include "Game/Profession.h"
 #include "Component/ResidenceComponent.h" // B.3.8 CB1a (TypeId)
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "options.h"
@@ -69,71 +70,31 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen);
 //   0x14010db90, _CheckEducation 0x14010f7a0, _CheckAge 0x14010f890.
 // ============================================================
 
-// Globals
-// ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7e78 is StorageComponent's registered
-// type-id cell (INVENTORY_C Table 1). CitizenAIComponent::Update repoints this at
-// &s_caiTidStorage (below) before any reader sees it.
-static uint32_t* s_pStorageTypeId = nullptr;  // DAT_1401c7e78
+// Shared type-id cells (defined below with the callee reimpls).
+static void EnsureCallees();
 
 // ============================================================
-// CitizenAIComponent::Update (vtable slot [9], 0x14010f3e0)
+// CitizenAIComponent::Update (vtable slot [9], 0x14010f3e0) -- the body
 // ============================================================
-// Main citizen AI tick.
-// Parameters: RCX = this, RDX = pointer to Time (int64*)
+// Main citizen AI tick. RDX = pointer to the elapsed System::Time (int64 ticks).
+// timers[14] / timers[15] (+0xB0 / +0xB8) are the cooldowns of states 0xe / 0xf.
+void CitizenAIComponent::Decide(const int64_t* time) {
+    int64_t dt = *time;
 
-void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
-    int64_t dt = *pDeltaTime;
-
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-
-    // --- Phase 1: Decrement 16 cooldown timers at +0x40..+0xBF ---
-    int64_t* timerPtr = reinterpret_cast<int64_t*>(comp + 0x40);
+    // --- Phase 1: count the 16 per-state timers down, clamped at 0 ---
     for (int i = 0; i < 16; i++) {
-        timerPtr[i] -= dt;
-        if (timerPtr[i] < 0) {
-            timerPtr[i] = 0;
+        timers[i] -= dt;
+        if (timers[i] < 0) {
+            timers[i] = 0;
         }
     }
 
-    // --- Phase 2: Increment accumulators ---
-    *reinterpret_cast<int64_t*>(comp + 0xC0) += dt;
-    *reinterpret_cast<int64_t*>(comp + 0xC8) += dt;
+    // --- Phase 2: the two accumulators ---
+    leisureTimer += dt;
+    dataC8 += dt;
 
-    // --- Phase 3: Find storage component, check resource count ---
-    // Navigate: self->data38 (IBP to citizen) -> citizen+0x10 (IBP to entity) -> components
-    void* storageComp = nullptr;
-
-    int64_t citizenRef = *reinterpret_cast<int64_t*>(comp + 0x38);
-
-    int64_t citizenEntity = *reinterpret_cast<int64_t*>(citizenRef + 0x10);
-
-    int componentCount = *reinterpret_cast<int*>(citizenEntity + 0x38);
-    int64_t componentArray = *reinterpret_cast<int64_t*>(citizenEntity + 0x30);
-
-    int idx = 0;
-    int64_t byteOff = 0;
-    for (; idx < componentCount; idx++, byteOff += 8) {
-        void* ibpAddr = reinterpret_cast<void*>(componentArray + byteOff);
-
-        int64_t compRef = *reinterpret_cast<int64_t*>(ibpAddr);
-        uint32_t dVar3 = *s_pStorageTypeId;
-
-        // Object::Base::Type() (slot 2). The old C call dropped `this`; the
-        // by-name call passes it, as retail does.
-        uint32_t typeId = reinterpret_cast<Object::Base*>(compRef)->Type();   // B.3.x bridge (slot 2)
-
-        if (typeId == dVar3) {
-            // Re-read by index with CheckPtr (matches original)
-            void* ibpAddr2 = reinterpret_cast<void*>(componentArray + (int64_t)idx * 8);
-            void* resolved = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(ibpAddr2));
-
-            bool derived = Object::IsDerivedFromNullSafe(resolved, *s_pStorageTypeId);
-            if (derived) {
-                storageComp = resolved;
-            }
-            break;
-        }
-    }
+    // --- Phase 3: the citizen's own StorageComponent (what it carries) ---
+    StorageComponent* storageComp = citizen->_entity->FindComponent<StorageComponent>();
 
     // Use inline fn_StorageComponent_QueryCount (from engine_funcs.h) instead of
     // the exe's StorageComponent_QueryCount (0x14012cf10). The exe version crashes
@@ -144,126 +105,107 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         storageCount = fn_StorageComponent_QueryCount(storageComp);
     }
     if (storageCount == 0) {
-        *reinterpret_cast<int64_t*>(comp + 0xC8) = 0;
+        dataC8 = 0;
     }
 
-    // --- Phase 4: Check hunger/thirst flags ---
-    uint8_t hungerFlag = comp[0x30];
-    uint8_t thirstFlag = comp[0x31];
-    int aiState = *reinterpret_cast<int*>(comp + 0x28);
+    // --- Phase 4: the seeking flags ---
+    uint8_t hungerFlag = seekingFood;
+    uint8_t thirstFlag = seekingWarmth;
+    int aiState = state;
 
     bool isInNeedState = false;
     if ((hungerFlag != 0 && aiState == 0x0E) || (thirstFlag != 0 && aiState == 0x0F)) {
         isInNeedState = true;
     }
 
-    // --- Phase 5: Hunger check ---
-    int64_t citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
+    // --- Phase 5: hunger ---
+    CitizenComponent* citizenData = citizen;
     if (!citizenData) return;  // citizen entity gone, bail out
-    float health = *reinterpret_cast<float*>(citizenData + 0x44);
-    float* pHungerThresh = reinterpret_cast<float*>(
-        *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xCC);
+    float health = citizenData->hunger;
+    float* pHungerThresh = &citizenData->description->_fcc;
 
     if (health <= *pHungerThresh || health == *pHungerThresh || isInNeedState ||
         ((uint32_t)(aiState - 0x0E) < 2) ||
-        *reinterpret_cast<int64_t*>(comp + 0xB0) > 0) {
+        timers[14] > 0) {
         // Not hungry enough to transition, or in special state
         if (hungerFlag != 0) {
-            citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-            health = *reinterpret_cast<float*>(citizenData + 0x44);
-            pHungerThresh = reinterpret_cast<float*>(
-                *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xCC);
+            citizenData = citizen;
+            health = citizenData->hunger;
+            pHungerThresh = &citizenData->description->_fcc;
 
             if (health < *pHungerThresh || health == *pHungerThresh) {
-                comp[0x30] = 0;
+                seekingFood = 0;
             }
         }
     } else {
-        // Hungry — check if has workplace with resources, release if so
-        if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(comp + 0x38) + 0x238) != 0) {
-            int64_t wpEntity = *reinterpret_cast<int64_t*>(
-                *reinterpret_cast<int64_t*>(comp + 0x38) + 0x238);
-
-            int64_t findResult[2] = {};
-            void* pResult = CitizenComp_Entity_FindComponent_Storage(wpEntity, findResult);
-
-            int64_t wpStorage = *reinterpret_cast<int64_t*>(pResult);
-            int resourceCount = CitizenComp_Storage_GetResourceCount(wpStorage);
+        // Hungry: eat at home first when the home has food
+        if (citizen->home != nullptr) {
+            ResidenceComponent* homeStorage = citizen->home->FindComponent<ResidenceComponent>();
+            int resourceCount = CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(homeStorage));
 
             if (resourceCount > 0) {
-                int64_t wpRef = *reinterpret_cast<int64_t*>(
-                    *reinterpret_cast<int64_t*>(comp + 0x38) + 0x238);
-                CitizenComp_ReleaseWorkplace(
-                    *reinterpret_cast<int64_t*>(comp + 0x38),
-                    &wpRef);
+                citizen->EatFrom(citizen->home);
             }
         }
 
-        // Re-check health after potentially releasing workplace
-        citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-        health = *reinterpret_cast<float*>(citizenData + 0x44);
-        pHungerThresh = reinterpret_cast<float*>(
-            *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xCC);
+        // Re-check hunger after eating
+        citizenData = citizen;
+        health = citizenData->hunger;
+        pHungerThresh = &citizenData->description->_fcc;
 
         if (*pHungerThresh <= health && health != *pHungerThresh) {
-            CitizenComp_CitizenAIComponent_TransitionState(reinterpret_cast<int64_t>(self), 1);
-            comp[0x30] = (*reinterpret_cast<int*>(comp + 0x28) == 0x0E) ? 1 : 0;
+            TransitionState(1);
+            seekingFood = (state == 0x0E) ? 1 : 0;
         }
     }
 
-    // --- Phase 6: Thirst check ---
-    citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-    float hydration = *reinterpret_cast<float*>(citizenData + 0x48);
-    float* pThirstThresh = reinterpret_cast<float*>(
-        *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xEC);
+    // --- Phase 6: coldness ---
+    citizenData = citizen;
+    float hydration = citizenData->coldness;
+    float* pThirstThresh = &citizenData->description->_fec;
 
     // Re-read flags (may have been modified above)
-    thirstFlag = comp[0x31];
-    aiState = *reinterpret_cast<int*>(comp + 0x28);
-    isInNeedState = ((comp[0x30] != 0 && aiState == 0x0E) ||
+    thirstFlag = seekingWarmth;
+    aiState = state;
+    isInNeedState = ((seekingFood != 0 && aiState == 0x0E) ||
                      (thirstFlag != 0 && aiState == 0x0F));
 
     if (hydration <= *pThirstThresh || hydration == *pThirstThresh || isInNeedState ||
         ((uint32_t)(aiState - 0x0E) < 2) ||
-        *reinterpret_cast<int64_t*>(comp + 0xB8) > 0) {
-        // Not thirsty enough or in special state
+        timers[15] > 0) {
+        // Not cold enough or in special state
         if (thirstFlag != 0) {
-            citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-            hydration = *reinterpret_cast<float*>(citizenData + 0x48);
-            pThirstThresh = reinterpret_cast<float*>(
-                *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xEC);
+            citizenData = citizen;
+            hydration = citizenData->coldness;
+            pThirstThresh = &citizenData->description->_fec;
 
             if (hydration < *pThirstThresh || hydration == *pThirstThresh) {
-                comp[0x31] = 0;
+                seekingWarmth = 0;
             }
         }
     } else {
-        // Thirsty — transition to thirst state
-        CitizenComp_CitizenAIComponent_TransitionState(reinterpret_cast<int64_t>(self), 1);
-        comp[0x31] = (*reinterpret_cast<int*>(comp + 0x28) == 0x0F) ? 1 : 0;
+        // Cold: transition to the warming state
+        TransitionState(1);
+        seekingWarmth = (state == 0x0F) ? 1 : 0;
     }
 
-    // --- Phase 7: Housing check ---
-    if (comp[0x30] == 0 && comp[0x31] == 0) {
-        citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-        char canFindHouse = CitizenComp_CanFindHousing(citizenData);
-        if (canFindHouse != 0 && *reinterpret_cast<int*>(comp + 0x28) != 2) {
-            CitizenComp_CitizenAIComponent_TransitionState(reinterpret_cast<int64_t>(self), 1);
+    // --- Phase 7: housing check ---
+    if (seekingFood == 0 && seekingWarmth == 0) {
+        char canFindHouse = citizen->CanFindHousing();
+        if (canFindHouse != 0 && state != 2) {
+            TransitionState(1);
         }
     }
 
-    // --- Phase 8: Check health status for education/age ---
-    citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-    int64_t healthComp = *reinterpret_cast<int64_t*>(citizenData + 0x278);
-    if (*reinterpret_cast<int*>(healthComp + 0x60) + 1 > 0) {
-        // Citizen is alive (health > -1), skip education/age checks
+    // --- Phase 8: an action is running -> nothing more to decide ---
+    if (citizen->character->currentAction + 1 > 0) {
         return;
     }
 
-    // Citizen health critical — check education and age transitions
-    CitizenComp_CitizenAIComponent_CheckEducation(reinterpret_cast<int64_t>(self));
-    CitizenComp_CitizenAIComponent_CheckAge(reinterpret_cast<int64_t>(self));
-    CitizenComp_CitizenAIComponent_TransitionState(reinterpret_cast<int64_t>(self), 0);
+    // The action stack is empty: schooling, the age mesh, and a new state
+    CheckEducation();
+    CheckAge();
+    TransitionState(0);
 }
 
 // ============================================================
@@ -452,30 +394,28 @@ int CitizenComp_Storage_GetResourceCount(int64_t self) {
     return total;
 }
 
-// Reimpl of CitizenAIComponent_TransitionState (0x14010db90):
-// state-machine transition. Tries the queued state (+0x2c); if invalid, builds a
-// candidate list and enters the first state whose machine has >0 actions.
-void CitizenComp_CitizenAIComponent_TransitionState(int64_t selfV, char param) {
+// CitizenAIComponent::TransitionState (0x14010db90):
+// state-machine transition. Tries the queued state; if invalid, builds a
+// candidate list and enters the first state whose handler started an action.
+void CitizenAIComponent::TransitionState(char param) {
     EnsureCallees();
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    int queued = *reinterpret_cast<int*>(self + 0x2c);
+    int queued = queuedState;
     char ok = 0;
     if (queued >= 0) {
-        ok = CitizenAI_ValidateAndEnterState(self, queued);
+        ok = ValidateAndEnterState(queued);
     }
     if (queued < 0 || ok == '\0') {
         int idx = 0;
         int64_t list[2] = {0, 0};  // {ptr, count(low32)}
-        CitizenAI_BuildCandidateStateList(self, list, param);
+        BuildCandidateStateList(list, param);
         int* arr = reinterpret_cast<int*>(list[0]);
         int n = static_cast<int>(list[1]);
         int* p = arr;
         if (0 < n) {
             do {
-                CitizenAI_ValidateAndEnterState(self, *p);
-                int64_t cz = *reinterpret_cast<int64_t*>(self + 0x38);
-                if (0 < *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(cz + 0x278) + 0x60) + 1) {
-                    *reinterpret_cast<int*>(self + 0x28) = arr[(int64_t)idx * 3];
+                ValidateAndEnterState(*p);
+                if (0 < citizen->character->currentAction + 1) {
+                    state = arr[(int64_t)idx * 3];
                     break;
                 }
                 idx++;
@@ -484,57 +424,53 @@ void CitizenComp_CitizenAIComponent_TransitionState(int64_t selfV, char param) {
         }
         System::MemoryAllocator::MemFree(arr);
     } else {
-        *reinterpret_cast<int*>(self + 0x28) = *reinterpret_cast<int*>(self + 0x2c);
-        *reinterpret_cast<int*>(self + 0x2c) = -1;
+        state = queuedState;
+        queuedState = -1;
     }
 }
 
-// Reimpl of CitizenAIComponent_CheckEducation (0x14010f7a0):
-// raises a citizen's education level toward the residence cap if storage allows.
-void CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV) {
+// CitizenAIComponent::CheckEducation (0x14010f7a0):
+// raises a capacity toward the citizen's profession value if the storage allows.
+// (Retail 0x14010f7e1 / 0x14010f830 call the StorageComponent finder 0x140006270;
+// the tree calls the residence finder 0x140008090 -- kept, listed in the hand-in.)
+void CitizenAIComponent::CheckEducation() {
     EnsureCallees();
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    void* dataPtr = self + 0x38;
-    int64_t res10 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x10);
-    int64_t res8 = 0;
-    CitizenComp_Entity_FindComponent_Storage(res10, &res8);
-    // [STANDALONE BRING-UP GUARDS] +0x1f0 = profession-list (assigned at gameplay,
-    // not in Startup) and res8 = the residence storage IBP (null if the citizen has
+    ResidenceComponent* res8 = citizen->_entity->FindComponent<ResidenceComponent>();
+    // [STANDALONE BRING-UP GUARDS] the profession (assigned at gameplay,
+    // not in Startup) and res8 = the residence storage (null if the citizen has
     // no home yet). Both are null for a freshly-spawned standalone citizen; the
     // original derefs them unconditionally. Bail (no education update) until live.
-    int64_t profList = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x1f0);
-    if (profList == 0 || res8 == 0) return;
-    int cap = *reinterpret_cast<int*>(profList + 0x50);
-    if (*reinterpret_cast<int*>(res8 + 0x38) != cap) {
-        int64_t d = *reinterpret_cast<int64_t*>(dataPtr);
-        int64_t res10b = 0;
-        CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(d + 0x10), &res10b);
-        int cnt = CitizenComp_StorageComponent_QueryCount(res10b);
+    Profession* profList = citizen->profession;
+    if (profList == nullptr || res8 == nullptr) return;
+    int cap = profList->priority;
+    // +0x38 lies inside ResidenceComponent's embedded controller: raw.
+    int* res8Cap = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res8) + 0x38);
+    if (*res8Cap != cap) {
+        ResidenceComponent* res10b = citizen->_entity->FindComponent<ResidenceComponent>();
+        int cnt = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(res10b));
         if (cnt < cap) {
-            *reinterpret_cast<int*>(res8 + 0x38) = cap;
+            *res8Cap = cap;
         }
     }
 }
 
-// Reimpl of CitizenAIComponent_CheckAge (0x14010f890):
-// routes the citizen to young/adult/elder setup based on age vs description
-// threshold (+0x44) and whether the adult flag (+0x208) is set.
-void CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV) {
+// CitizenAIComponent::CheckAge (0x14010f890):
+// routes the citizen to the young/adult/elder mesh setup from its age against the
+// description's adultAge and whether it attends a school.
+void CitizenAIComponent::CheckAge() {
     EnsureCallees();
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    void* dataPtr = self + 0x38;
-    int64_t d = *reinterpret_cast<int64_t*>(dataPtr);
-    float ageThresh = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(d + 0x288) + 0x44);
-    float age = *reinterpret_cast<float*>(d + 0x3c);
-    if (ageThresh <= age && *reinterpret_cast<int64_t*>(d + 0x208) == 0) {
-        (*reinterpret_cast<CitizenComponent**>(dataPtr))->SetupYoung();
+    CitizenComponent* d = citizen;
+    float ageThresh = d->description->adultAge;
+    float age = d->age;
+    if (ageThresh <= age && d->school == nullptr) {
+        citizen->SetupYoung();
         return;
     }
-    if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x208) != 0) {
-        (*reinterpret_cast<CitizenComponent**>(dataPtr))->SetupAdult();
+    if (citizen->school != nullptr) {
+        citizen->SetupAdult();
         return;
     }
-    (*reinterpret_cast<CitizenComponent**>(dataPtr))->SetupElder();
+    citizen->SetupElder();
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
@@ -578,21 +514,16 @@ void CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV) {
 // find SELF-CONTAINED via Object::GetTypeIdByName — the same real-CRC source the
 // inert/live component factories use for their vtable+0x10 GetTypeId — which is
 // guaranteed to match the spawned component's id without touching any global.
-static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
+static CitizenComponent* CitizenAI_FindSiblingCitizen(ComponentEntity* ownerEntity) {
     if (!ownerEntity) return nullptr;
     // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
     uint32_t want = CitizenComponent::TypeId();
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;  // type id not yet assigned
-    uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
-    int count = *reinterpret_cast<int*>(e + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
-    for (int i = 0; i < count; i++) {
-        void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
-        void* comp = *ibp;
+    for (int i = 0; i < ownerEntity->_componentCount; i++) {
+        Component* comp = ownerEntity->_components[i].Get();
         if (!comp) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-        if (tid == want) {
-            return Object::IsDerivedFromNullSafe(comp, want) ? comp : nullptr;
+        if (comp->Type() == want) {
+            return comp->IsDerivedFrom(want) ? static_cast<CitizenComponent*>(comp) : nullptr;
         }
     }
     return nullptr;
@@ -611,18 +542,18 @@ static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
 #include "Component/CitizenAIComponent.h"
 
 // The private type-id cells CitizenAIComponent::Update repoints its lookups at.
-static uint32_t s_caiTidStorage = 0, s_caiTidResidence = 0;
+static uint32_t s_caiTidResidence = 0;
 static std::atomic<int> s_caiForceWorkLog{0};   // the [ForceWork] trace cap
 
 
 // 0x14010fb70. Component() is the CALL 0x1401188b0; the 0x140162470 stamp is
 // the compiler's; flags |= 0x89. The sixteen System::Time() at +0x40 are zero.
-// +0x28 = 0xc (aiState, 0x14010fba0) and +0x2c = -1 (pending state, 0x14010fba7)
+// +0x28 = 0xc (state, 0x14010fba0) and +0x2c = -1 (queued state, 0x14010fba7)
 // are the ctor's own stores; Startup (CitizenAIComponent_BodyInit) still
 // re-writes them, as it did when the inert factory zero-filled them.
 CitizenAIComponent::CitizenAIComponent()
-    : aiState(0xc), targetId(-1), data30(0), _pad32{}, data38(0), timers{},
-      dataC0(0), dataC8(0) {
+    : state(0xc), queuedState(-1), seekingFood(false), seekingWarmth(false), _pad32{},
+      citizen(nullptr), timers{}, leisureTimer(0), dataC8(0) {
     OrFlagsInCtor(0x89);
 }
 
@@ -631,18 +562,16 @@ CitizenAIComponent::CitizenAIComponent()
 // body, so the ctor-set scalars must be re-applied) + the Startup find from
 // 0x14010f920 (sibling CitizenComponent -> +0x38). Idempotent.
 void CitizenAIComponent::Startup() {
-    uint8_t* base = reinterpret_cast<uint8_t*>(this);
-
     // ctor (0x14010fb70) scalar field init. Flags(0x89) + the 16 Time timers
     // (+0x40..+0xBF) + +0xC0/+0xC8 are already zeroed/flagged by the inert factory.
-    *reinterpret_cast<uint32_t*>(base + 0x28) = 0xc;   // aiState = Leisure (initial)
-    *reinterpret_cast<int32_t*>(base + 0x2c) = -1;     // pending state = none
-    *reinterpret_cast<uint16_t*>(base + 0x30) = 0;
+    state = 0xc;          // Leisure (initial)
+    queuedState = -1;     // none
+    seekingFood = false;  // the ctor's one word store at +0x30, as two (H7)
+    seekingWarmth = false;
 
     // Startup (0x14010f920): find sibling CitizenComponent -> +0x38.
-    void* owner = *reinterpret_cast<void**>(base + 0x10);
-    void* citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
-    *reinterpret_cast<void**>(base + 0x38) = citizen;
+    ComponentEntity* owner = _entity;
+    citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
 }
 
 // [6] 0x14010f880 (`JMP 0x14010f890` CheckAge). PORT GAP (retail 0x14010f880) —
@@ -655,41 +584,29 @@ void CitizenAIComponent::OnAdded() {}
 // Recipe step 1 (Update), routed to slot +0x48. Signature matches the macro's
 // UpdateVSlot adapter: (self, int64_t* time).
 void CitizenAIComponent::Update(void* timeArg) {
-    int64_t* time = static_cast<int64_t*>(timeArg);
-    uint8_t* base = reinterpret_cast<uint8_t*>(this);
+    const int64_t* time = static_cast<const int64_t*>(timeArg);
 
     EnsureCallees();
 
-    // Repoint the type-id globals the Update path derefs to PRIVATE filled copies.
-    // The shared .rdata globals StorageComponent(0x1401c7e78) and
-    // ResidenceComponent(0x1401c7cf0) are unregistered in standalone => their
-    // ResolveAddr returns null => Update's home-storage scan derefs null
-    // (crash at line ~149). Filling the shared globals would un-dormant their many
-    // readers, so keep them this-contained via GetTypeIdByName (same real-CRC the
-    // component factories use). (RawMaterial 0x1401c7cb8 IS already filled.)
     // B.3.8 (spelling 5, B6-5): the function-local lazy by-name caches became the
     // class statics X::TypeId(), copied into namespace-scope cells each call.
-    s_caiTidStorage   = StorageComponent::TypeId();
     s_caiTidResidence = ResidenceComponent::TypeId();
-    s_pStorageTypeId            = &s_caiTidStorage;
     s_TypeId_ResidenceComponent = &s_caiTidResidence;
 
     // Lazy body-init: until the sibling CitizenComponent is found at +0x38, retry
     // the find each tick (it may not have been constructed yet at Startup time).
     // Re-running ctor-init while inert is harmless (the guard below bails before
     // Update); once +0x38 != 0 this never runs again.
-    if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
+    if (citizen == nullptr)
         CitizenAIComponent::Startup();   // the body-init, qualified (was the free call)
 
-    void* citizen = *reinterpret_cast<void**>(base + 0x38);
-    void* czEntity = nullptr;
-    void* czDesc = nullptr;
-    void* czChar = nullptr;
+    ComponentEntity* czEntity = nullptr;
+    CitizenDescription* czDesc = nullptr;
+    CharacterComponent* czChar = nullptr;
     if (citizen) {
-        uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
-        czEntity = *reinterpret_cast<void**>(cz + 0x10);
-        czDesc   = *reinterpret_cast<void**>(cz + 0x288);
-        czChar   = *reinterpret_cast<void**>(cz + 0x278);  // CharacterComponent (alive flag)
+        czEntity = citizen->_entity;
+        czDesc   = citizen->description;
+        czChar   = citizen->character;  // CharacterComponent (alive flag)
     }
 
     // --- FORCE-WORK HARNESS (env BANISHED_FORCE_WORK, default off) -------------
@@ -700,18 +617,18 @@ void CitizenAIComponent::Update(void* timeArg) {
     // (State_Work -> db20 -> NavigateTo -> executor -> PerformWork) BEFORE that
     // registry is brought up, directly point ONE citizen at a real workplace
     // building (the first start-town StorageBarn, captured in starttown.cpp):
-    //   +0x238 = workplace entity (inline InternalBasePtr)   -> State_Work target
-    //   +0x68  = housed flag (non-null)                      -> makes Work a candidate
+    //   +0x238 = home (inline InternalBasePtr)              -> State_Work target
+    //   +0x68  = the Disease* slot (non-null)               -> makes Work a candidate
     // One-shot per citizen (only seeds while +0x238 is still empty).
     if (citizen) {
         const char* e = Opt().forceWork;   // read per call: Options are fixed at boot (B6-5)
         const int s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
         if (s_force == 1 && g_pForceWorkBuilding) {
-            uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
-            if (*reinterpret_cast<int64_t*>(cz + 0x238) == 0) {
-                new (cz + 0x238) ::Object::InternalBasePtr(
+            if (citizen->home == nullptr) {
+                new (&citizen->home) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(g_pForceWorkBuilding));   // B.3.3 bridge
-                *reinterpret_cast<void**>(cz + 0x68) = g_pForceWorkBuilding;  // housed flag
+                // the harness plants a non-disease pointer in the Disease* slot
+                *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;
                 if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
                     fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
                             (void*)citizen, g_pForceWorkBuilding, g_pForceWorkBuilding);
@@ -739,7 +656,7 @@ void CitizenAIComponent::Update(void* timeArg) {
     if (StartTown_ForcePushForesterWork(citizen)) return;
     if (StartTown_ForcePushConstructionWork(citizen)) return;
 
-    CitizenAIComponent_Update(this, time);
+    Decide(time);
 }
 
 // [15] 0x14010f340 (150 B). PORT GAP (retail 0x14010f340) — B38 D9: not ported;

@@ -148,6 +148,10 @@ public:
     void  SetupYoung();                                           // 0x140115110
     void  SetupAdult();                                           // 0x1401151a0
     void  SetupElder();                                           // 0x140115230
+    int   HasSufficientResources();                               // 0x1401156e0 (home food per household)
+    int   HasSufficientResources2();                              // 0x1401157f0 (home fuel per household)
+    int   CarryCount();                                           // 0x140115de0 (Ghidra: "GetHappiness")
+    void  LongTermPlan();                                         // 0x140115e60 (AI state 0xd)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint64_t name;                 // +0x28 System::String (H5 raw storage): the citizen's name;

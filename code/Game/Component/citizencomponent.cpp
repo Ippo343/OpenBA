@@ -2621,15 +2621,3 @@ void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
     return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));
 }
-
-// B4 FORWARD (interim): callers in this block's CitizenAI files until their
-// receivers are typed.
-char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
-    return param_1->CanReach(*reinterpret_cast<ComponentEntity**>(param_2));
-}
-char CitizenComp_CanFindHousing(int64_t selfV) {
-    return reinterpret_cast<CitizenComponent*>(selfV)->CanFindHousing();
-}
-void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
-    reinterpret_cast<CitizenComponent*>(selfV)->EatFrom(*reinterpret_cast<ComponentEntity**>(param2));
-}
