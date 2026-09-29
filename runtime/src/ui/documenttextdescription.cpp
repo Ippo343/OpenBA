@@ -146,9 +146,9 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
     {
         // The hand-rolled int loop, walking the array's data pointer read
         // AFTER the SetSize call (`MOV RBX,[RSI+0xd0]` at 0x1800cfab2).
-        int32_t* q = _colorsData;                              // 1800cfab2
+        uint32_t* q = _colorsData;                             // 1800cfab2
         for (int32_t k = n; k > 0; --k) {                      // 1800cfabc / 1800cfadc
-            rw->SerializeUInt(*reinterpret_cast<uint32_t*>(q), nullptr);  // 1800cfacf (+0x98)
+            rw->SerializeUInt(*q, nullptr);                    // 1800cfacf (+0x98)
             ++q;                                               // 1800cfad5
         }
     }

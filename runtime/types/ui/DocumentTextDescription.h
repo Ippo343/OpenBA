@@ -135,7 +135,7 @@ public:
     SpriteSheet** _sheetsData;      // +0xc0 (B4 H4: typed)  -> element _sheets (+0x120)
     int32_t  _sheetsCount;          // +0xc8
     int32_t  _sheetsCapacity;       // +0xcc
-    int32_t* _colorsData;           // +0xd0  Array<int>, serialized inline -> element _colors (+0x130)
+    uint32_t* _colorsData;          // +0xd0  Array<uint32> (B4: SerializeUInt, retail's type), serialized inline -> element _colors (+0x130)
     int32_t  _colorsCount;          // +0xd8
     int32_t  _colorsCapacity;       // +0xdc
     Object::ExternalList* _resourceList; // +0xe0 (B4 H4: typed)  0x18003dc90 -> element _resourceList (+0x140)

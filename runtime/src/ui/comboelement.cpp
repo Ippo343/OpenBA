@@ -33,6 +33,7 @@
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/ListElement.h"   // B.3.9 TI-UI: X::TypeId()
 #include "../../types/ui/TextElement.h"
+#include "../../types/ui/LabelElement.h"   // B4: the item's +0x100 _sprite
 #include "../../types/ui/UserInterface.h"
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
@@ -44,8 +45,6 @@ namespace {
 
 // UI::TextElement (block C3's class), the per-item element the list is filled
 // with — reached at raw offsets.
-constexpr int kTextSprite      = 0x100;  // UI::Sprite {sheet +0x100, index +0x108}
-constexpr int kTextSpriteIndex = 0x108;
 
 // UI::ListElement (block C4's class)
 
@@ -144,21 +143,17 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
                 item->CacheText();                                    // 0x18011ec10
             }
 
-            // LEFT: `_sprites` holds 0x10-byte UI::Sprite records under an
-            // Array<void*> declaration, and item+0x100 lies past TextElement
-            // (0x100 bytes): the item's own class is not settled.
-            const uint8_t* sp = reinterpret_cast<const uint8_t*>(_sprites._data) +
-                                static_cast<int64_t>(i) * 0x10;
-            uint8_t* const itemBytes = reinterpret_cast<uint8_t*>(item);
-            uint64_t lo = 0, hi = 0;
-            __builtin_memcpy(&lo, sp + 0, 8);
-            __builtin_memcpy(&hi, sp + 8, 8);
-            if (*reinterpret_cast<const uint64_t*>(itemBytes + kTextSprite) != lo ||
-                *reinterpret_cast<const int32_t*>(itemBytes + kTextSpriteIndex) != static_cast<int32_t>(hi)) {
+            // item+0x100 lies past TextElement (0x100 bytes): it is
+            // LabelElement::_sprite {sheet +0x100, index +0x108}, the one
+            // TextElement subclass (LabelElement.h). Retail relies on the item
+            // description making a LabelElement; no check is added.
+            LabelElement* const label = static_cast<LabelElement*>(item);
+            const UI::Sprite& sp = _sprites._data[i];                  // stride 0x10
+            if (label->_sprite.spriteSheet != sp.spriteSheet ||         // the QWORD sheet
+                label->_sprite.spriteIndex != sp.spriteIndex) {         // the DWORD index
                 rtuielem::SetNeedsSizeCalc(item);
             }
-            __builtin_memcpy(itemBytes + kTextSprite + 0, &lo, 8);
-            __builtin_memcpy(itemBytes + kTextSprite + 8, &hi, 8);
+            label->_sprite = sp;                                        // one 16-byte move
 
             Object::InternalPtr<Element> tmp(item);
             list->AddItem(&tmp, nullptr);                             // 0x1800d44b0
