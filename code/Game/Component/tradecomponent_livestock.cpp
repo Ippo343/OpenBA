@@ -70,7 +70,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Component/herdcomponent_funcs.h"     // HerdComponent_Helper7400 (0x140107400)
 #include "Entity/componententity_funcs.h"      // 0x1400c3720 / 0x1400c48a0
 #include "Action/exe_bodies.h"                 // Pf_EntityResolvePos_2e20, ActHunt_NotifyEntityChanged_c3470
 #include "Game/exe_constants.h"                // kRdata_140172220 / kRdata_140172114
@@ -81,8 +80,7 @@ namespace {
 // Leaves, by retail address:
 //   0x140002ed0 FindComponent<InteractComponent> (footprint)   0x140122e20 Pf_EntityResolvePos_2e20
 //   0x1400c3720 ComponentEntity_CtorFromDescription           0x1400c48a0 EntityList_RegisterEntity_Impl
-//   0x140107400 HerdComponent_Helper7400 (the registered row is reg_herd_live.cpp's
-//               one-line thunk to it)                         0x140107320 AnimalComponent::UpdateBehavior
+//   0x140107400 AnimalComponent::Place                      0x140107320 AnimalComponent::UpdateBehavior
 //   0x1400c3470 ActHunt_NotifyEntityChanged_c3470 (model refresh)
 //   .rdata 0x140172220 (yaw spread) / 0x140172114 (phase scale) -> kRdata_ constants.
 
@@ -180,16 +178,14 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
         // exactly as often as retail advances it.
         const float r1 = rng->RandFloat();
         const float r2 = rng->RandFloat();
-        float pos[3] = {
+        const Math::Vector3 pos(
             a[0] + (b[0] - a[0]) * r2,
             a[1] + (b[1] - a[1]) * r1,
-            a[2] + (b[2] - a[2]) * 0.0f,     // XORPS XMM9,XMM9 — always corner-0's Z
-        };
+            a[2] + (b[2] - a[2]) * 0.0f);    // XORPS XMM9,XMM9 — always corner-0's Z
 
         const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
-        // LEFT: 0x140107400 takes the animal as an integer (COMP-d's declaration).
         if (animal)
-            HerdComponent_Helper7400(reinterpret_cast<int64_t>(animal), pos, yaw, (char)female);
+            animal->Place(&pos, yaw, female);   // 0x140107400
         female = !female;   // alternate AFTER placing, as retail does
 
         if (animal) {
