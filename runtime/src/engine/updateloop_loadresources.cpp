@@ -71,6 +71,8 @@
 #include "../../types/io/Modification.h"        // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../system/string.h"
 #include "../system/widestring.h"
+#include "../system/pod_bridge.h"   // B.4 R-ENG: Sys(Mod::file)
+#include "../../types/system/WideString.h"
 #include "../object/external_compiled.h"   // B3R: FindOrLoad / GetCompiledPath by name
 #include "../../types/object/TypeInfo.h"   // B3R: Object::Base::IsDerivedFrom
 #include <new>
@@ -98,21 +100,9 @@ namespace {
 // redirect in their namespace's *PortInit; the RT_DATA_SLOT lazy-cache doors
 // they used to read through are gone (B9-10 — this body runs on the LOADER
 // THREAD, exactly the surface the rule calls out).
-void* ExternalFactorySingleton() {
-    return ::Object::ExternalFactory::_singleton;
-}
-uint8_t* ModificationSingleton() {
-    return reinterpret_cast<uint8_t*>(::IO::Modification::_singleton);
-}
-uint8_t* FileSystemSingleton() {
-    return reinterpret_cast<uint8_t*>(::IO::FileSystem::_singleton);
-}
-// THE ROW THIS FILE IS ABOUT: `?_singleton@Configuration@System@@` is now the
-// class static, read fresh every call (no cache) — this is the "one of the two
-// remaining readers" the file banner discusses; the other is Configuration::Get.
-void* ConfigurationSingleton() {
-    return ::System::Configuration::_singleton;
-}
+// B.4 (R-ENG): each is read by name at its use (ExternalFactory, Modification,
+// FileSystem, and `?_singleton@Configuration@System@@` -- the "one of the two
+// remaining readers" the file banner discusses; the other is Configuration::Get).
 // `MOV EDX,dword ptr [0x1801f9be0]` — BaseTypeInfo's FIRST dword is the typeId.
 // Retail reads +0x00 and nothing else, which is the whole content of
 // reference_basetypeinfo_name_is_content_only.md.
@@ -135,25 +125,21 @@ uint32_t ExternalListTypeId() {
 // packfile first, loose file second, and the two FileSystem bytes at +0x18 and
 // +0x19 gate them independently.
 bool CompiledResourceExists(const System::Filename& compiled) {
-    uint8_t* fs = FileSystemSingleton();
+    const IO::FileSystem* fs = IO::FileSystem::_singleton;
     if (fs == nullptr) return false;
 
-    if (fs[0x18] != 0) {
-        if (reinterpret_cast<const IO::FileSystem*>(fs)->ExistsInPackfile(   // 0x1800ab180
-                reinterpret_cast<const RtSystem::Filename&>(compiled)))
+    if (fs->_existsInPackfileGate != 0) {
+        // ExistsInPackfile's parameter is still the RtSystem::Filename POD
+        // (FileSystem.h, not this block's).
+        if (fs->ExistsInPackfile(reinterpret_cast<const RtSystem::Filename&>(compiled)))   // 0x1800ab180
             return true;
     }
-    if (fs[0x19] == 0) return false;
+    if (fs->_platformExistsGate == 0) return false;
 
-    // `System::WideString` is NOT one of B.3.1's types, so its POD ctor/dtor
-    // pair stays, and the Filename->String argument keeps the pointer cast
-    // retail performs here itself (0x1800dd9b0 passes `this` straight in).
-    WideString w{nullptr};
-    RtSystem_WideString_CtorFromString(
-        &w, reinterpret_cast<const String*>(&compiled));
-    const bool exists = RtEnginePlatformWidePathExists(w.data);
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&w));
-    return exists;
+    // Retail hands the Filename to ??0WideString(const String&) as the String
+    // it is (0x1800dd9b0 passes `this` straight in); ~WideString releases it.
+    System::WideString w(compiled.AsString());
+    return RtEnginePlatformWidePathExists(w._data);
 }
 
 // 0x1800dd850 / 0x1800ddc6f / 0x1800dda9a. Retail calls IsDerivedFrom and
@@ -162,15 +148,13 @@ bool CompiledResourceExists(const System::Filename& compiled) {
 // written: it is a virtual-free call today, but a later build could make it
 // observable, and "simplifying" it away is exactly the class of edit that
 // turns a faithful port into a different function.
-const void* FindAndCheck(const System::Filename& name, bool keep) {
-    const void* ext = RtObject::RtObject_ExternalFactory_FindOrLoad(   // 0x1800bf320
-        static_cast<RtObject::ExternalFactory*>(ExternalFactorySingleton()),
-        reinterpret_cast<const RtSystem::Filename*>(&name));
+const ::Object::ExternalList* FindAndCheck(const System::Filename& name, bool keep) {
+    const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(name);   // 0x1800bf320
     if (ext == nullptr) return nullptr;
-    const bool derived = static_cast<const ::Object::Base*>(ext)          // 0x1800c0390
-                             ->IsDerivedFrom(ExternalListTypeId());
+    const bool derived = ext->IsDerivedFrom(ExternalListTypeId());                           // 0x1800c0390
     if (!keep) return nullptr;
-    return derived ? ext : nullptr;
+    // External::Cast<ExternalList>: the checked downcast.
+    return derived ? static_cast<const ::Object::ExternalList*>(ext) : nullptr;
 }
 
 unsigned g_calls     = 0;
@@ -201,8 +185,8 @@ void Engine::UpdateLoop::LoadResources() {
         System::String spec = System::String::Format("%sResources.rsc", root);
         System::Filename name(spec);       // 0x18000c780: Adopt + AdjustDelimiters
 
-        const void* list = FindAndCheck(name, true);
-        _resourceList = const_cast<void*>(list);
+        const ::Object::ExternalList* list = FindAndCheck(name, true);
+        _resourceList = list;
         if (list) ++g_ownList;
         // `name` then `spec` release here — retail's 0x1800dd8a4 / 0x1800dd8b6,
         // in that order, which is C++'s reverse declaration order.
@@ -212,24 +196,21 @@ void Engine::UpdateLoop::LoadResources() {
     // Retail reads Modification::_singleton here, NOT `Engine::_modification`,
     // and derefs it unguarded. The null test below is ours ONLY for the case
     // the mint leaves the slot empty; with the DLL present it is never taken.
-    if (uint8_t* mods = ModificationSingleton()) {
-        const int32_t count = *reinterpret_cast<int32_t*>(mods + 0x10);
-        uint8_t* base = *reinterpret_cast<uint8_t**>(mods + 8);
+    if (IO::Modification* mods = IO::Modification::_singleton) {
+        const int32_t count = mods->_count;
+        RtIO::Mod* base = mods->_mods;
         for (int32_t i = 0; i < count; ++i) {
-            uint8_t* mod = base + static_cast<size_t>(i) * 0x80;
-            if (mod[0x50] == 0) continue;         // Mod::enabled
+            RtIO::Mod& mod = base[i];
+            if (mod.enabled == 0) continue;
             ++g_modsSeen;
 
-            // Filename::GetPathFilename(&mod->filename, &ret, /*keepSlash*/true).
-            // `mod + 0x58` is a Filename inside the unconverted Mod record, so
-            // that byte offset keeps its cast.
+            // Filename::GetPathFilename(&mod->file, &ret, /*keepSlash*/true).
+            // `Mod::file` is the RtSystem::Filename POD (Modification.h).
             System::String dir;
             {
                 // System::Filename::GetPathFilename (0x1800c6740), by name
                 // (B3R); the by-value result is constructed in `ret`.
-                System::Filename ret(
-                    reinterpret_cast<const System::Filename*>(mod + 0x58)
-                        ->GetPathFilename(true));
+                System::Filename ret(RtSystem::Sys(mod.file).GetPathFilename(true));
                 dir = ret.AsString();   // 0x1800dd95a: AddRef, no delimiter pass
             }
 
@@ -239,10 +220,7 @@ void Engine::UpdateLoop::LoadResources() {
             bool exists;
             {
                 System::Filename probe(spec);
-                System::Filename compiled;
-                RtObject::RtObject_ExternalFactory_GetCompiledPath(       // 0x1800bec10
-                    reinterpret_cast<RtSystem::Filename*>(&compiled),
-                    reinterpret_cast<const RtSystem::Filename*>(&probe));
+                System::Filename compiled = ::Object::ExternalFactory::GetCompiledPath(probe);   // 0x1800bec10
 
                 exists = CompiledResourceExists(compiled);
                 // `compiled` then `probe` release — retail's own order.
@@ -269,8 +247,7 @@ void Engine::UpdateLoop::LoadResources() {
         // (B3R): its by-value result is constructed into `value`, the hidden
         // return slot the door was handed.
         ::new (&value) System::String(
-            static_cast<const System::Configuration*>(ConfigurationSingleton())
-                ->GetCommandLineString(key));
+            ::System::Configuration::_singleton->GetCommandLineString(key));
     }
 
     // 0x1800ddc44: `CMP dword ptr [RAX-0x8],0` — the LENGTH word, not the

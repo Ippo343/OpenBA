@@ -284,6 +284,7 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 namespace System { class Time; class String; }
 namespace Save   { class SavedState; }
 namespace UI     { class DialogInstance; class Dialog; }
+namespace Object { class ExternalList; }
 
 namespace Engine {
 
@@ -343,7 +344,7 @@ private:
 
 public:
     // ---- the 0x20 bytes after the vptr, evidence in the POD above ----------
-    void*   _resourceList;   // +0x08  Object::ExternalList* (LoadResources)
+    const Object::ExternalList* _resourceList;   // +0x08  LoadResources: FindOrLoad (const External*) checked IsDerivedFrom(ExternalList)
     void*   _internalListA;  // +0x10  \ the pair ~UpdateLoop releases through
     void*   _internalListB;  // +0x18  / 0x180010ab0
     int32_t _loadBit;        // +0x20  ?GetLoadBit@
