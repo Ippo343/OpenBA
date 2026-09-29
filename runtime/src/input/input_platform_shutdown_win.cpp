@@ -297,8 +297,3 @@ void Device::PlatformShutdown() {
 }
 
 }  // namespace Input
-
-// The registered DOOR (ENDGAME B.3.7 B5): name and address, one QUALIFIED call.
-extern "C" void RtInput_Device_PlatformShutdown(void* self) {
-    reinterpret_cast<Input::Device*>(self)->Input::Device::PlatformShutdown();
-}

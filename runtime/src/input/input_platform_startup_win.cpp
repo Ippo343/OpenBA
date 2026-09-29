@@ -343,20 +343,3 @@ bool Device::PlatformStartup() {
 }
 
 }  // namespace Input
-
-// ============================================================================
-// The registered DOORS (ENDGAME B.3.7 B5): name and address, one QUALIFIED
-// call each.
-// ============================================================================
-extern "C" bool RtInput_Device_PlatformStartup(void* self) {
-    return reinterpret_cast<Input::Device*>(self)->Input::Device::PlatformStartup();
-}
-extern "C" int RtInput_Device_OnFocusMessage(void* hwnd, unsigned msg, uint64_t wp, int64_t lp) {
-    return Input::Device::OnFocusMessage(hwnd, msg, wp, lp);
-}
-extern "C" int RtInput_Device_OnLostFocusMessage(void* hwnd, unsigned msg, uint64_t wp, int64_t lp) {
-    return Input::Device::OnLostFocusMessage(hwnd, msg, wp, lp);
-}
-extern "C" int RtInput_Device_OnMouseWheelMessage(void* hwnd, unsigned msg, uint64_t wp, int64_t lp) {
-    return Input::Device::OnMouseWheelMessage(hwnd, msg, wp, lp);
-}
