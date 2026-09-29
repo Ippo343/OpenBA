@@ -22,6 +22,10 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
+class CitizenComponent;              // Component/CitizenComponent.h
+class CitizenUI;                     // Dialog/CitizenUI.h
+namespace UI { class TextElement; }
+
 class FollowDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(FollowDialog)
 
@@ -39,14 +43,19 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140069230
 
+    // 0x140068f00: null the CitizenUI's back-reference, then close.
+    void Close();                                                  // 0x140068f00
+
 public:
-    uint64_t dataB8;           // +0xB8: the followed citizen (CitizenAI InternalBasePtr)
-    uint64_t dataC0;           // +0xC0: the owning CitizenUI (back-reference)
-    uint64_t dataC8;           // +0xC8: "textFollow" element
-    uint64_t dataD0;           // +0xD0: "textAction" element
+    CitizenComponent* citizen;   // +0xB8: the followed citizen (CitizenUI's Follow button)
+    CitizenUI*   citizenUI;      // +0xC0: the owning CitizenUI (back-reference)
+    UI::TextElement* textFollow; // +0xC8: "textFollow" element
+    UI::TextElement* textAction; // +0xD0: "textAction" element
 };
 
-static_assert(offsetof(FollowDialog, dataB8) == 0xB8, "FollowDialog +0xb8");
-static_assert(offsetof(FollowDialog, dataD0) == 0xD0, "FollowDialog +0xd0");
+static_assert(offsetof(FollowDialog, citizen) == 0xB8, "FollowDialog +0xb8");
+static_assert(offsetof(FollowDialog, citizenUI) == 0xC0, "FollowDialog +0xc0");
+static_assert(offsetof(FollowDialog, textFollow) == 0xC8, "FollowDialog +0xc8");
+static_assert(offsetof(FollowDialog, textAction) == 0xD0, "FollowDialog +0xd0");
 static_assert(sizeof(FollowDialog) == 0xD8, "FollowDialog is 0xd8 (create 0x140011a20)");
 static_assert(alignof(FollowDialog) == 8, "FollowDialog is qword-aligned");

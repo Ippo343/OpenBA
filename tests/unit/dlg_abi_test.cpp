@@ -176,8 +176,8 @@ UNIT_TEST(dlg_scenario_dialog) {
 
 UNIT_TEST(dlg_follow_dialog) {
     CHECK_EQ(sizeof(FollowDialog), (size_t)0xd8);
-    CHECK_EQ(offsetof(FollowDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(FollowDialog, dataD0), (size_t)0xd0);
+    CHECK_EQ(offsetof(FollowDialog, citizen), (size_t)0xb8);
+    CHECK_EQ(offsetof(FollowDialog, textAction), (size_t)0xd0);
     CheckShape<FollowDialog>();
     CheckDialogInstanceSlots<FollowDialog>();
 }
