@@ -55,6 +55,8 @@ public:
     // the hidden return slot (B8-11 shape: `this` in RCX, `ret` in RDX).
     virtual uint64_t* GetSelected(uint64_t* ret) const { *ret = lastEntityRef; return ret; }
 
+    void SelectEntity(const Object::InternalPtr<class ComponentEntity>* entity);  // 0x1400fd3b0 (B4 DLG-a; body in Dialog/edittool_select.cpp)
+
     uint64_t entityRef;       // +0x28 InternalBasePtr: the open info dialog
     uint64_t lastEntityRef;   // +0x30 InternalBasePtr: the selected entity
 };

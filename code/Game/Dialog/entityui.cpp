@@ -554,11 +554,11 @@ void EntityUI::UpdateInput() {
 
     // Get current tool from the tool manager (IBP at +0x28, needs CheckPtr)
     PlayerToolManager* playerController = GameUpdateLoop::_singleton->m_toolManager;
-    void* currentTool = playerController->currentTool;
+    Tool* currentTool = playerController->currentTool;
 
     // Check if current tool is EditTool
     bool isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
-    void* editTool = isEditTool ? currentTool : nullptr;
+    EditTool* editTool = isEditTool ? static_cast<EditTool*>(currentTool) : nullptr;
 
     if (editTool == nullptr) {
         // No EditTool active — deselect first, then get new EditTool
@@ -567,13 +567,13 @@ void EntityUI::UpdateInput() {
         // Re-read current tool after deselect (with CheckPtr)
         currentTool = playerController->currentTool;
         isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
-        editTool = isEditTool ? currentTool : nullptr;
+        editTool = isEditTool ? static_cast<EditTool*>(currentTool) : nullptr;
     }
 
     // Select the entity in the edit tool
     if (editTool) {
-        void* entityRef = entity;
-        EditTool_SelectEntity_Impl(editTool, &entityRef);   // 0x1400fd3b0
+        Object::InternalPtr<ComponentEntity> entityRef(entity);
+        editTool->SelectEntity(&entityRef);   // 0x1400fd3b0
     }
 }
 
