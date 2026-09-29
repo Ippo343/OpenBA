@@ -21,6 +21,15 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+// One element of HighlightDescription's group array (stride 0x10, Serialize 0x14004c9d0):
+// an Array of External refs (serialized by 0x14001bcc0).
+struct HighlightGroup {
+    Object::External** refs;          // +0x00 Array data
+    int32_t            refCount;      // +0x08
+    int32_t            refCapacity;   // +0x0C
+};
+static_assert(sizeof(HighlightGroup) == 0x10, "HighlightGroup stride 0x10");
+
 class HighlightDescription final : public Description {
     DECLARE_EXE_TYPE(HighlightDescription)
 
@@ -36,7 +45,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140006f10
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _groups;                              // +0x20 group array data (0x10 stride: {External* array, count, cap})
+    HighlightGroup* _groups;                    // +0x20 group array data (0x10 stride)
     int32_t _groupCount;                        // +0x28
     int32_t _groupCap;                          // +0x2c
     void* _ref0;                                // +0x30 ExternalPtr

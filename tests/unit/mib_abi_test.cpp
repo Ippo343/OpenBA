@@ -75,7 +75,7 @@ UNIT_TEST(mib_rp_member_and_fields) {
     CHECK_EQ(offsetof(FishingComponent, fishingFlag),   (size_t)0x50);
     CHECK_EQ(offsetof(FishingComponent, fishingRate),   (size_t)0x54);
     CHECK_EQ(offsetof(ForesterComponent, foresterFlags), (size_t)0x50);
-    CHECK_EQ(offsetof(HuntComponent, huntData),         (size_t)0x50);
+    CHECK_EQ(offsetof(HuntComponent, huntProgress),     (size_t)0x50);
 }
 
 // ===========================================================================

@@ -28,14 +28,6 @@
 #include <cstdint>
 #include <new>
 
-namespace {
-// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
-// (0 == ok on the read leg). The tree's check before it allocates an array.
-inline int SerStreamErr(IO::Serializer& ser) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
-}
-}  // namespace
 
 // ctor (inlined into create 0x140008290 / createInPlace 0x140008300):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -61,17 +53,19 @@ bool MarketDescription::Serialize(void* stream) {
     // array @ +0x28 (count @ +0x30, element stride 8: {enum @+0, float @+4})
     ser.Serialize(_ratioCount, nullptr);
     int n = _ratioCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
-        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
+    // The stream's direction word (serializer+0x00 -> stream+0x08; 0 on the read leg)
+    // gates the allocation.
+    if (static_cast<int>(ser.GetDirection()) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
+        MarketRatio* buf = static_cast<MarketRatio*>(System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
         _ratios = buf;
         _ratioCap = n;
-        if (buf) for (int i = 0; i < n; ++i) static_cast<uint64_t*>(buf)[i] = 0;
+        if (buf) for (int i = 0; i < n; ++i) { buf[i].resourceMask = 0; buf[i].ratio = 0.0f; }
     }
     if (n > 0) {
-        uint8_t* e = static_cast<uint8_t*>(_ratios);
-        for (int i = 0; i < n && e; ++i, e += 8) {
-            ser.Serialize(*reinterpret_cast<unsigned int*>(e + 0), nullptr);   // enum @+0
-            ser.Serialize(*reinterpret_cast<float*>(e + 4), nullptr);          // float @+4
+        MarketRatio* e = _ratios;
+        for (int i = 0; i < n && e; ++i, ++e) {
+            ser.Serialize(e->resourceMask, nullptr);   // enum @+0
+            ser.Serialize(e->ratio, nullptr);          // float @+4
         }
     }
     return true;

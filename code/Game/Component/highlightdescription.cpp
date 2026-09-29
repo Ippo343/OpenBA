@@ -40,16 +40,15 @@
 #include <new>
 
 namespace {
-// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
-void* AllocArray(void* header, int count, int stride) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    *(int32_t*)(h + 8) = count;
-    *(int32_t*)(h + 0xc) = count;
-    void* buf = (count > 0 && System::MemoryAllocator::_singleton)
-                ? System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)stride, 8)
-                : nullptr;
-    *(void**)h = buf;
-    return buf;
+// {data, count, cap}: set count = cap = n and allocate n elements (8-aligned).
+template <class T>
+T* AllocArray(T*& data, int32_t& size, int32_t& capacity, int count) {
+    size = count;
+    capacity = count;
+    data = (count > 0 && System::MemoryAllocator::_singleton)
+           ? static_cast<T*>(System::MemoryAllocator::MemAlloc((uint64_t)count * (uint32_t)sizeof(T), 8))
+           : nullptr;
+    return data;
 }
 }  // namespace
 
@@ -67,11 +66,11 @@ HighlightDescription::HighlightDescription()
 // dtor (slot 0 0x140006fe0 minus the stamps): frees every group's ref array, then the group array.
 // The compiler then chains ~Description -> ~External.
 HighlightDescription::~HighlightDescription() {
-    uint8_t* e = static_cast<uint8_t*>(_groups);
+    HighlightGroup* e = _groups;
     int count = _groupCount;
     if (e) {
         for (int i = 0; i < count; ++i) {
-            void* ref = *(void**)(e + i * 0x10);
+            Object::External** ref = e[i].refs;
             if (ref) System::MemoryAllocator::MemFree(ref);
         }
         System::MemoryAllocator::MemFree(e);
@@ -88,25 +87,26 @@ bool HighlightDescription::Serialize(void* stream) {
     int count = _groupCount;
     
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
-    uint8_t* e;
+    HighlightGroup* e;
     if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(&_groups, count, 0x10));
+        e = AllocArray(_groups, _groupCount, _groupCap, count);
         for (int i = 0; i < count; ++i) {
-            *(uint64_t*)(e + i * 0x10)     = 0;             // refArray
-            *(uint64_t*)(e + i * 0x10 + 8) = 0;             // refCount + cap
+            e[i].refs        = nullptr;   // refArray
+            e[i].refCount    = 0;         // refCount + cap
+            e[i].refCapacity = 0;
         }
     } else {
-        e = static_cast<uint8_t*>(_groups);
+        e = _groups;
     }
-    
-    for (int i = 0; i < count; ++i, e += 0x10) {
-        ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // refCount (elem+8)
-        int refCount = *(int32_t*)(e + 8);
+
+    for (int i = 0; i < count; ++i, ++e) {
+        ser.Serialize(e->refCount, nullptr);   // refCount (elem+8)
+        int refCount = e->refCount;
         if (loading) {
-            uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(e, refCount, 8));
-            for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
+            Object::External** r = AllocArray(e->refs, e->refCount, e->refCapacity, refCount);
+            for (int j = 0; j < refCount; ++j) r[j] = nullptr;
         }
-        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, *(void**)e);
+        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, e->refs);
     }
     Reimpl_ExternalPtr_Serialize_Typed_7140(&_ref0, &ser);
     Reimpl_ExternalPtr_Serialize_Typed_7140(&_ref1, &ser);

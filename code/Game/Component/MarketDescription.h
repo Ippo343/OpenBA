@@ -21,6 +21,13 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+// One element of MarketDescription's per-resource array (stride 8, Serialize 0x14004ebb0).
+struct MarketRatio {
+    uint32_t resourceMask;   // +0x00 enum (serialized as unsigned int)
+    float    ratio;          // +0x04
+};
+static_assert(sizeof(MarketRatio) == 8, "MarketRatio stride 8");
+
 class MarketDescription final : public Description {
     DECLARE_EXE_TYPE(MarketDescription)
 
@@ -37,7 +44,7 @@ public:
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     float _fillRatio;                           // +0x20 global fill ratio
-    void* _ratios;                              // +0x28 array of {enum resource @+0, float ratio @+4}, stride 8
+    MarketRatio* _ratios;                       // +0x28 Array<MarketRatio> data
     int32_t _ratioCount;                        // +0x30
     int32_t _ratioCap;                          // +0x34
 };
