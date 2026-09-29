@@ -135,9 +135,10 @@ int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* mat
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
 int Pf_RegionSpiral_9d0a0(int* param_1, int param_2);  // 0x14009d0a0
-void Pf_QuadtreeSubdivide_18880(uintptr_t param_1);  // 0x140018880
-uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4);  // 0x140018dd0
-int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2);  // 0x140053ca0
+void Pf_QuadtreeSubdivide_18880(uintptr_t param_1);  // 0x140018880 B4 FORWARD -> CharacterGridWalker::Subdivide
+uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4);  // 0x140018dd0 B4 FORWARD -> CharacterGridWalker::Init
+class PopulationComponent;    // Component/PopulationComponent.h
+int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
 void Pf_BstFreeRecursive_d400(uintptr_t param_1, uint64_t* param_2);  // 0x14001d400
@@ -178,9 +179,15 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
 void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4, void* param_5, int64_t param_6, uint32_t param_7);  // 0x1400bbea0 B4 FORWARD -> RemoveAnimalActions
 
 // ---- action_pf_roots_misc.cpp
-int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* param_4, uint32_t param_5);  // 0x14009bd40
-int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float* param_3, void* param_4, int param_5, void* param_6);  // 0x140092260
-void Pf_HerdStartMigration_122340(void* param_1);  // 0x140122340
+class CharacterComponent;     // Component/CharacterComponent.h
+class CharacterGrid;          // Component/CharacterGrid.h
+class HerdComponent;          // Component/HerdComponent.h
+namespace Math { class Scalar; }
+void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* point, const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude);  // 0x140092260
+void HerdStartMigration(HerdComponent* herd);  // 0x140122340
+int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* param_4, uint32_t param_5);  // 0x14009bd40 B4 FORWARD -> Map::FindPlacementCell
+int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float* param_3, void* param_4, int param_5, void* param_6);  // 0x140092260 B4 FORWARD -> QueryNearestCharacter
+void Pf_HerdStartMigration_122340(void* param_1);  // 0x140122340 B4 FORWARD -> HerdStartMigration
 
 // ---- action_pf_roots_road.cpp
 void Pf_ZoneRefresh_9c480(int* param_1);  // 0x14009c480

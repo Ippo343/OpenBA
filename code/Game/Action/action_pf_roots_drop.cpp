@@ -99,8 +99,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
     Map* map = world->m_game;
     // 0x14009bd40's allow slot (retail's local_res20, a null InternalBasePtr; the same stack
     // slot is then reused as the find-component out slots below).
-    int64_t allowIBP = 0;
-    new (&allowIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    ComponentEntity* allow = nullptr;
     const Math::Vector3& position = citizen->character->modelComponent->transform.translation;
     int size = map->size;
     int x = static_cast<int>(position.x + static_cast<float>(size >> 1));
@@ -109,8 +108,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
     if (size <= x) x = size - 1;
     if (y < 0) y = 0;
     if (size <= y) y = size - 1;
-    // LEFT: 0x14009bd40's C declaration (action_pf_roots_misc.cpp) takes the Map as int*.
-    int cell = Pf_FindPlacementCell_bd40(reinterpret_cast<int*>(map), size * y + x, '\0', &allowIBP, 0);   // 0x14009bd40
+    int cell = map->FindPlacementCell(size * y + x, '\0', &allow, 0);   // 0x14009bd40
     if (-1 < cell) {
         ComponentEntity* created = nullptr;
         ComponentEntity* mem = static_cast<ComponentEntity*>(MemAlloc(0x48, 8));

@@ -136,6 +136,7 @@ public:
     void SetMovementCosts(PathfinderThread* pathfinder, int profile);   // 0x14009e550 (Action/action_base_move.cpp, B.4 ACT-a)
     PathTicket* RequestPath(PathTicket* out, uint64_t passFlags, uint32_t destCell, uint32_t srcCell);   // 0x14009cfb0 (Action/action_base_move.cpp)
     void FillZones();                                     // 0x14009c480 (Action/action_pf_roots_road.cpp, B.4 ACT-a)
+    int  FindPlacementCell(int cell, char terrainCheck, ComponentEntity* const* allow, uint32_t walkMask);   // 0x14009bd40 (Action/action_pf_roots_misc.cpp, B.4 ACT-a)
     void SetTerrainType(int cell, uint32_t terrainType);  // 0x14009f2f0 (Action/action_pf_roots_road.cpp, B.4 ACT-a)
     void ResetTerrainHeights(int x0, int y0, int x1, int y1);   // 0x14009e0e0 (Action/action_pf_roots_road.cpp)
     void FinishRoadCell(int cell, uint8_t orientation, uint32_t terrainType);   // 0x14009c640 (Action/action_pf_roots_road.cpp)

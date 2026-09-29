@@ -470,3 +470,48 @@ static_assert(offsetof(RegionPairCache, newest) == 0x10, "RegionPairCache::newes
 static_assert(offsetof(RegionPairCache, oldest) == 0x14, "RegionPairCache::oldest @ +0x14");
 static_assert(offsetof(RegionPairCache, ring) == 0x18, "RegionPairCache::ring @ +0x18");
 static_assert(offsetof(RegionPairCache, index) == 0x28, "RegionPairCache::index @ +0x28");
+
+// ---------------------------------------------------------------------------
+// CharacterGridWalker (B.4 ACT-a): the stack-allocated box walker the
+// CharacterGrid (Component/CharacterGrid.h) queries drive. 0x140018dd0 seeds it
+// (the root node with the grid's half extent) and 0x140018880 pops the top node,
+// pushing its four quadrant children while their depth < the grid's `levels`.
+// Layout from those two bodies: node r lives at +0x24 + r * 0x24; the root
+// pointer at +0x2428 is the highest byte either touches. The query bodies
+// (0x140092260, 0x140092990) build each node's box from center +/- (2ex, 2ey, ez)
+// padded by padLo / padHi.
+struct CharacterGridWalkerNode {             // stride 0x24
+    float    center[3];                      // +0x00
+    float    extent[3];                      // +0x0C
+    int32_t  cell;                           // +0x18 implicit-quadtree cell (children 4i+1..4i+4)
+    int32_t  depth;                          // +0x1C
+    uint32_t flag;                           // +0x20 always written 0
+};
+static_assert(sizeof(CharacterGridWalkerNode) == 0x24, "walker node stride 0x24");
+static_assert(offsetof(CharacterGridWalkerNode, extent) == 0x0C, "walker node extent @ +0x0C");
+static_assert(offsetof(CharacterGridWalkerNode, cell) == 0x18, "walker node cell @ +0x18");
+static_assert(offsetof(CharacterGridWalkerNode, depth) == 0x1C, "walker node depth @ +0x1C");
+static_assert(offsetof(CharacterGridWalkerNode, flag) == 0x20, "walker node flag @ +0x20");
+
+class CharacterGrid;   // Component/CharacterGrid.h
+
+struct CharacterGridWalker {
+    uint8_t  _pad00[8];                      // +0x00 never written by 0x140018dd0
+    int32_t  top;                            // +0x08 index of the top node (-1 = empty)
+    float    padLo[3];                       // +0x0C (0, 0, lo)
+    float    padHi[3];                       // +0x18 (0, 0, hi)
+    CharacterGridWalkerNode nodes[256];      // +0x24
+    uint8_t  _pad2424[4];                    // +0x2424
+    const CharacterGrid* grid;               // +0x2428
+
+    void Init(const CharacterGrid* root, float lo, float hi);   // 0x140018dd0
+    void Subdivide();                                           // 0x140018880
+};
+static_assert(sizeof(CharacterGridWalker) == 0x2430, "walker: the highest touched byte is +0x2430");
+static_assert(offsetof(CharacterGridWalker, top) == 0x08, "walker top @ +0x08");
+static_assert(offsetof(CharacterGridWalker, padLo) == 0x0C, "walker padLo @ +0x0C");
+static_assert(offsetof(CharacterGridWalker, padHi) == 0x18, "walker padHi @ +0x18");
+static_assert(offsetof(CharacterGridWalker, nodes) == 0x24, "walker nodes @ +0x24");
+static_assert(offsetof(CharacterGridWalker, grid) == 0x2428, "walker grid @ +0x2428");
+static_assert(std::is_trivially_default_constructible<CharacterGridWalker>::value,
+              "a stack walker: nothing runs before 0x140018dd0");
