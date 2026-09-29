@@ -23,6 +23,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // Helpers, called by name (B3R): Object::Base::IsDerivedFrom (import slot 0x140152a98),
 // InteractComponent_FindWorkplaceComponent (0x140004740, below). 0x1400032e0 was
@@ -59,26 +60,8 @@ static inline bool SerializerIsLoading(void* serializer) {
 // ============================================================
 // Shared callee: also used from buildcomponent.cpp (BuildComponent::Draw).
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
-    const uint32_t tidWorkplace = MultiObjectComponent::TypeId();   // cell 0x1401c7ac0 (D5)
-
-    void* found = nullptr;
-    {
-        int count = *(int*)(entity + 0x38);
-        int64_t arr = *(int64_t*)(entity + 0x30);
-        for (int i = 0; i < count; i++) {
-            int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-            void* comp = (void*)*slot;
-            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == tidWorkplace) {
-                void* c = (void*)*slot;
-                if (reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(tidWorkplace))   // B.3.x bridge
-                    found = c;
-                break;
-            }
-        }
-    }
-    new (retBuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+    new (retBuf) ::Object::InternalPtr<MultiObjectComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<MultiObjectComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

@@ -41,63 +41,37 @@
 #include "Component/StateMachineComponent.h"
 #include "Component/CreateDragDescription.h"
 #include "Player/exe_bodies.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // ============================================================
-// type-ID storage: 0x1401c75f0/7d98/7430 are these classes' cells (Table 1).
+// type-ID storage: 0x1401c7430 is CreateDragDescription's cell (Table 1).
+// (0x1401c75f0 / 0x1401c7d98 were cached here for the two finders below; those
+// are ComponentEntity::FindComponent<T>, which reads T's cell live as retail does.)
 // ============================================================
-static uint32_t s_pTid_75f0_v, s_pTid_7d98_v, s_pTid_7430_v;
-static const uint32_t* s_pTid_75f0 = &s_pTid_75f0_v;  // DestroyComponent
-static const uint32_t* s_pTid_7d98 = &s_pTid_7d98_v;  // StateMachineComponent
+static uint32_t s_pTid_7430_v;
 static const uint32_t* s_pTid_7430 = &s_pTid_7430_v;  // CreateDragDescription
 static bool s_tidInit = false;
 
 static void InitTypeIds() {
     if (s_tidInit) return;
-    s_pTid_75f0_v = DestroyComponent::TypeId();
-    s_pTid_7d98_v = StateMachineComponent::TypeId();
     s_pTid_7430_v = CreateDragDescription::TypeId();
     s_tidInit = true;
 }
 
 // ============================================================
-// FindComponent leaves — clones of the FUN_140005380 family. Each scans the
-// entity's component list (ptr array at entity+0x30, count at entity+0x38),
-// calls each component's GetTypeId (vtable +0x10), and on the first type match
-// runs an IsDerivedFrom recheck before returning the component through an out
-// InternalBasePtr.  Signature: void* fn(longlong entity, void* retIBP)
+// FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
+// These names stay as B4 FORWARD forwarders until their callers hold a typed entity.
 // ============================================================
-static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTypeId) {
-    void* found = nullptr;
-    if (pTypeId) {
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        int i = 0;
-        for (; i < n; i++) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-            if (t == *pTypeId) {
-                void* c = *slot;
-                found = Object::IsDerivedFromNullSafe(c, *pTypeId) ? c : nullptr;
-                break;
-            }
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
-}
-
 // Reimpl of FUN_140005780 — FindComponent (type-ID DWORD_1401c75f0)
 void* PlayerPath_FindComponent_5780(uintptr_t entity, void* retIBP) {
-    InitTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_75f0);
+    return new (retIBP) ::Object::InternalPtr<DestroyComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<DestroyComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of FUN_140003ea0 — FindComponent (type-ID DWORD_1401c7d98)
 void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP) {
-    InitTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_7d98);
+    return new (retIBP) ::Object::InternalPtr<StateMachineComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StateMachineComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // FUN_1400052c0 (FindComponent, type-ID DAT_1401c7b30) is ported elsewhere
