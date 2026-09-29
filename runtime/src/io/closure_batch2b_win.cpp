@@ -20,10 +20,10 @@
 // the other — exactly as persistence_worker_win.cpp's four bodies do. There is
 // no platform-neutral half worth splitting out (PLAN.md §4.1).
 //
-// THE `worker` ARGUMENT IS `Persistence + 0x10`. Same subobject convention the
-// sibling file documents at length; the bodies below recover the Persistence
-// and use its NAMED fields, so a layout change breaks a static_assert in
-// runtime/types/io/Persistence.h rather than silently shifting a raw offset.
+// THE RECEIVER IS THE WORKER, `Persistence + 0x10`. Same subobject convention
+// the sibling file documents at length. B.4 R-IO: both jobs are
+// `IO::PersistenceWorker` members and read the worker's own fields by name
+// (PersistenceWorker.h cross-asserts them against Persistence.h).
 //
 // ORACLE: none, and the reason is the sibling file's, unchanged. Neither body
 // is pure; the LOAD job opens a file and fills caller-owned buffers, the DELETE
@@ -39,17 +39,14 @@
 #include <windows.h>
 
 #include "../../types/io/Persistence.h"
+#include "../../types/io/PersistenceWorker.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/WideString.h"
 
-using RtIo::Persistence;
-using RtIo::FileStream;
 using RtIO::FileInfo;
-using RtSystem::SysFile;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
@@ -78,9 +75,6 @@ inline void WideRelease(WideStr* w) {
     }
 }
 
-void* FileSystemSingleton() {
-    return ::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
-}
 
 }  // namespace
 
@@ -100,15 +94,10 @@ void* FileSystemSingleton() {
 // if/else: the status codes are the same two values `?GetStatus@Persistence@IO@@`
 // reports for every other job.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_Delete(void* worker) {
-    Persistence* p = reinterpret_cast<Persistence*>(
-        reinterpret_cast<char*>(worker) - 0x10);
-
+void IO::PersistenceWorker::DeleteJob() {
     // ENDGAME B.3.1 step 2: Adopt+AdjustDelimiters on a freshly-nulled dst is
-    // Filename(const String&), retail 0x18000c780. `pendingFilename` is a
-    // RtSystem::String MEMBER of the not-yet-converted Persistence, so it is
-    // read through the one transitional bridge (pod_bridge.h).
-    System::Filename f(SysFile(p->pendingFilename));
+    // Filename(const String&), retail 0x18000c780.
+    System::Filename f(_pendingFilename);
 
     WideStr w;
     ::new (static_cast<void*>(&w)) System::WideString(f.AsString());   // B.3.x bridge
@@ -118,7 +107,7 @@ extern "C" void RtIo_PersistenceWorker_Delete(void* worker) {
     WideRelease(&w);
     // ~f is retail's release of the adopted Filename.
 
-    p->status = static_cast<int32_t>((ok != 1) + 1);
+    _status = static_cast<int32_t>((ok != 1) + 1);
 }
 
 // ============================================================================
@@ -174,61 +163,58 @@ extern "C" void RtIo_PersistenceWorker_Delete(void* worker) {
 // Reproducing the inlined destructor by hand would mean a second, competing
 // copy of ~FileStream's String/FileInfo teardown in this tree.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
-    Persistence* p = reinterpret_cast<Persistence*>(
-        reinterpret_cast<char*>(worker) - 0x10);
+void IO::PersistenceWorker::LoadJob() {
+    ::IO::FileSystem* const fs = ::IO::FileSystem::_singleton;   // the class static
+    const uint8_t savedGate = fs->_platformExistsGate;           // +0x19
+    fs->_platformExistsGate = 1;
 
-    RtIO::FileSystem* fs = static_cast<RtIO::FileSystem*>(FileSystemSingleton());
-    const uint8_t savedGate = fs->platformExistsGate;
-    fs->platformExistsGate = 1;
+    {
+        // ENDGAME B.3.9 IO / B.4 R-IO: the class, on the stack; its
+        // destructor at the close of this block is ??1FileStream.
+        IO::FileStream st;
 
-    // Storage only; the ctor below is what makes it a FileStream.
-    alignas(8) uint8_t storage[sizeof(FileStream)];
-    FileStream* st = reinterpret_cast<FileStream*>(storage);
-    ::new (static_cast<void*>(storage)) IO::FileStream();   // ENDGAME B.3.9 IO: the class
+        bool opened;
+        {
+            // Filename(const String&), 0x18000c780, as the DELETE job above.
+            System::Filename f(_pendingFilename);
+            opened = st.IO::FileStream::Open(f);
+            // ~f is retail's release, right after Open returns.
+        }
 
-    // Filename(const String&), 0x18000c780, as the DELETE job above.
-    System::Filename f(SysFile(p->pendingFilename));
-
-    const bool opened = reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::Open(f);
-
-    // ~f is retail's release, right after Open returns.
-
-    if (opened) {
-        bool failed = false;
-        const uint8_t* desc = static_cast<const uint8_t*>(p->blockDescData);
-        void* const*  ptrs  = static_cast<void* const*>(p->blockPtrData);
-        for (int32_t i = 0; i < p->blockDescCount; ++i) {
-            void* dst = ptrs[i];
-            if (dst != nullptr) {
-                const uint32_t off  = *reinterpret_cast<const uint32_t*>(desc + i * 0xc + 4);
-                const int32_t  size = *reinterpret_cast<const int32_t*>(desc + i * 0xc + 8);
-                st->file.cursor = static_cast<int32_t>(off);
-                if (static_cast<uint32_t>(st->file.handle) > 0xfffffffdu &&
-                    SetFilePointer(st->file.winHandle,
-                                   static_cast<LONG>(off), nullptr, FILE_BEGIN) != off) {
-                    failed = true;
-                    break;
-                }
-                if (!reinterpret_cast<::IO::FileSystem*>(fs)                // B.3.x bridge
-                        ->ReadFile(st->file, size, dst)) {
-                    failed = true;
-                    break;
+        if (opened) {
+            bool failed = false;
+            const RtIo::BlockDesc* const desc = _blockDescs._data;
+            void* const* const           ptrs = _blockPtrs._data;
+            for (int32_t i = 0; i < _blockDescs._size; ++i) {
+                void* dst = ptrs[i];
+                if (dst != nullptr) {
+                    const uint32_t off  = desc[i].offset;                      // +0x04
+                    const int32_t  size = static_cast<int32_t>(desc[i].size);  // +0x08
+                    st._file.cursor = static_cast<int32_t>(off);
+                    if (static_cast<uint32_t>(st._file.handle) > 0xfffffffdu &&
+                        SetFilePointer(st._file.winHandle,
+                                       static_cast<LONG>(off), nullptr, FILE_BEGIN) != off) {
+                        failed = true;
+                        break;
+                    }
+                    if (!fs->ReadFile(st._file, size, dst)) {
+                        failed = true;
+                        break;
+                    }
                 }
             }
-        }
-        if (failed) {
-            p->status = 2;
+            if (failed) {
+                _status = 2;
+            } else {
+                if (st._file.handle != -1)
+                    fs->CloseFile(st._file);
+                _status = 1;
+            }
         } else {
-            if (st->file.handle != -1)
-                reinterpret_cast<::IO::FileSystem*>(fs)->CloseFile(st->file);   // B.3.x bridge
-            p->status = 1;
+            _status = 2;
         }
-    } else {
-        p->status = 2;
     }
 
-    reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::~FileStream();
-    fs->platformExistsGate = savedGate;
+    fs->_platformExistsGate = savedGate;
 }
 

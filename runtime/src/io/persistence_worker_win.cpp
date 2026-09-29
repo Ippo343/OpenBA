@@ -124,33 +124,16 @@
 #include "../../types/io/FileStream.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
-#include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_SaveGameInfo, AsArray
+#include "../../types/io/FileSystem.h"
 
-using RtIo::Persistence;
 using RtIo::SaveBlock;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
-
-// ---- cross-TU doors onto already-ported bodies, BY NAME NOT ADDRESS --------
-// Declared locally rather than by dragging in each file's own header, the
-// same technique modification_refresh.cpp and filesystem_find_win.cpp use.
-// This one's signature is the retail POD shape and is not this file's to
-// change.
-namespace RtIO {
-    void  RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
-}
-using RtIo::BinaryFileStream;
-using RtIo::FileStream;
-using RtSystem::String;
 
 namespace {
 
-// The FileSystem singleton, read exactly where retail reads it (the same
-// accessor file_stream.cpp's anonymous namespace already builds; duplicated
-// rather than shared across TUs — same reasoning as this file's other
-// doors).
-RtIO::FileSystem* Fs() {
-    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
+// The FileSystem singleton, read exactly where retail reads it (the class
+// static, ENDGAME B.3.9 IO D7).
+::IO::FileSystem* Fs() {
+    return ::IO::FileSystem::_singleton;
 }
 
 // ---- CRC-32, reflected table (polynomial 0xEDB88320) -----------------------
@@ -186,7 +169,8 @@ uint32_t* CrcTable() {
 // which chunks identically at the same 0x8000 cap for the same reason: the
 // two must agree bit-for-bit for a save's own writer and reader to concur on
 // its checksum, which is the entire point of the field.
-uint32_t Crc32Chunked(uint32_t crc, const uint8_t* data, uint32_t len, uint32_t chunkCap) {
+uint32_t Crc32Chunked(uint32_t crc, const void* bytes, uint32_t len, uint32_t chunkCap) {
+    const uint8_t* data = static_cast<const uint8_t*>(bytes);   // CAST-OK: byte_io
     const uint32_t* table = CrcTable();
     if (chunkCap == 0) {
         for (uint32_t i = 0; i < len; ++i) crc = table[(crc & 0xFFu) ^ data[i]] ^ (crc >> 8);
@@ -227,13 +211,9 @@ uint32_t Crc32Chunked(uint32_t crc, const uint8_t* data, uint32_t len, uint32_t 
 //                                               trait-equivalent for `void*`)
 //   0x18002a810  Array<BlockDesc12>::SetSize(n) trait-derived (kSpec_Blk12)
 //
-// `blockDescData`/`blockDescCount`, `blockPtrData`/`blockPtrCount` and
-// `saves`/`saveCount` are still loose fields of `Persistence` (not typed
-// `Collection::Array<T>` members — shared with persistence_startup.cpp /
-// closure_batch2b_win.cpp / engine/singleton_ctors.cpp, outside this batch),
-// so every use below is a reinterpret_cast bridge at the call site.
-struct BlockDesc12 { uint32_t id, offset, size; };
-static_assert(sizeof(BlockDesc12) == 0xC, "matches kSpec_Blk12's stride");
+// B.4 R-IO: all three are `IO::PersistenceWorker` members now
+// (`_blockDescs`, `_blockPtrs`, `_saves`, PersistenceWorker.h), so every call
+// site below names the container.
 
 // ---- the String field assignment the three enqueue bodies share -------------
 //
@@ -276,25 +256,29 @@ static_assert(sizeof(BlockDesc12) == 0xC, "matches kSpec_Blk12's stride");
 // that are not cosmetic" the banner calls out (the transient `block` value,
 // the else-arm null store) live INSIDE those two bodies already, so calling
 // them reproduces the exact instruction sequence rather than losing it.
-// `pendingFilename` is a `RtSystem::String` member of the not-yet-converted
-// `Persistence`, reached through the transitional bridge.
-void AssignPendingFilename(Persistence* p, const System::String* filename) {
+// B.4 R-IO: `_pendingFilename` is the worker's System::String member.
+void AssignPendingFilename(IO::PersistenceWorker* w, const System::String* filename) {
     System::String tmp;
     tmp.Set(filename->_data);
-    Sys(p->pendingFilename) = tmp;
+    w->_pendingFilename = tmp;
     // ~tmp is retail's release.
 }
 
 // The two event calls every enqueue body ends with, in retail's order:
-// ResetEvent(doneEvent) then a TAIL JMP to SetEvent(workEvent).
-void SignalWorker(Persistence* p) {
-    ::ResetEvent(static_cast<HANDLE>(p->doneEvent));    // [0x18014b198]
-    ::SetEvent(static_cast<HANDLE>(p->workEvent));      // tail JMP [0x18014b368]
+// ResetEvent(doneEvent) then a TAIL JMP to SetEvent(workEvent). The two
+// events are System::Thread's `_hFinished` (worker+0x28, Persistence+0x38
+// doneEvent) and `_hStart` (worker+0x18, Persistence+0x28 workEvent).
+void SignalWorker(IO::PersistenceWorker* w) {
+    ::ResetEvent(w->_hFinished);    // [0x18014b198]
+    ::SetEvent(w->_hStart);         // tail JMP [0x18014b368]
 }
 
-// worker == Persistence + 0x10 (see banner).
-inline Persistence* FromWorker(void* worker) {
-    return reinterpret_cast<Persistence*>(static_cast<char*>(worker) - 0x10);
+// The enqueue helpers' receiver is `&Persistence::_workerVtable` -- the
+// EMBEDDED worker, which `IO::Persistence` holds as loose fields and not as a
+// typed member (it has no constructor; engine/singleton_ctors.cpp
+// placement-constructs the worker). So the receiver arrives as `void*`.
+IO::PersistenceWorker* AsWorker(void* worker) {
+    return static_cast<IO::PersistenceWorker*>(worker);   // LEFT: see above
 }
 
 }  // namespace
@@ -311,12 +295,12 @@ inline Persistence* FromWorker(void* worker) {
 // events — so the worker can never observe a fresh command with a stale status.
 // ============================================================================
 extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const System::String* filename) {
-    Persistence* p = FromWorker(worker);
+    IO::PersistenceWorker* const w = AsWorker(worker);
 
-    AssignPendingFilename(p, filename);
-    p->command = 2;
-    p->status  = 0;
-    SignalWorker(p);
+    AssignPendingFilename(w, filename);
+    w->_command = 2;
+    w->_status  = 0;
+    SignalWorker(w);
 
     // SHADOW — a SELF-CHECK, not an oracle (banner). It re-reads the object and
     // asserts the two constants this body's whole purpose is to publish. It
@@ -352,33 +336,32 @@ extern "C" void RtIo_PersistenceWorker_EnqueueDelete(void* worker, const System:
 extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const System::String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
 
-    Persistence* p = FromWorker(worker);
+    IO::PersistenceWorker* const w = AsWorker(worker);
 
-    AssignPendingFilename(p, filename);
-    p->command = 1;
-    p->status  = 0;
+    AssignPendingFilename(w, filename);
+    w->_command = 1;
+    w->_status  = 0;
 
-    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();  // 0x180024aa0
-    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)
-        ->SetSize(p->blockDescCount);   // 0x18002a9d0
+    w->_blockPtrs.~Array();                           // 0x180024aa0
+    w->_blockPtrs.SetSize(w->_blockDescs._size);      // 0x18002a9d0
 
-    void** slots = static_cast<void**>(p->blockPtrData);
-    for (int i = 0; i < p->blockPtrCount; ++i) slots[i] = nullptr;
+    void** slots = w->_blockPtrs._data;
+    for (int i = 0; i < w->_blockPtrs._size; ++i) slots[i] = nullptr;
 
     // Counts how many caller blocks actually found a descriptor. This is the
     // EFFECTIVENESS number: a call with blockCount==0, or with ids that match
     // nothing, enters the body and compares clean while having matched nothing
     // (reference_probe_needs_an_effectiveness_control.md).
     int matched = 0;
-    const uint8_t* desc0 = static_cast<const uint8_t*>(p->blockDescData);
+    const RtIo::BlockDesc* const desc0 = w->_blockDescs._data;
     for (int b = 0; b < blockCount; ++b) {
         const SaveBlock& blk = blocks[b];
-        const int n = p->blockDescCount;
+        const int n = w->_blockDescs._size;
         if (n > 0) {
-            const uint8_t* d = desc0;
-            for (int i = 0; i < n; ++i, d += 0xc) {
-                if (*reinterpret_cast<const uint32_t*>(d) == blk.id) {
-                    static_cast<void**>(p->blockPtrData)[i] = blk.data;
+            const RtIo::BlockDesc* d = desc0;
+            for (int i = 0; i < n; ++i, ++d) {        // stride 0xc
+                if (d->id == blk.id) {
+                    w->_blockPtrs._data[i] = blk.data;
                     ++matched;
                     break;
                 }
@@ -386,11 +369,11 @@ extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const System::S
         }
     }
 
-    SignalWorker(p);
+    SignalWorker(w);
 
     char ours[96];
     std::snprintf(ours, sizeof(ours), "command=1 status=0 slots=%d matched=%d",
-                  p->blockPtrCount, matched);
+                  w->_blockPtrs._size, matched);
 }
 
 // ============================================================================
@@ -436,34 +419,33 @@ extern "C" void RtIo_PersistenceWorker_EnqueueLoad(void* worker, const System::S
 extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const System::String* filename,
                                                    int blockCount, const SaveBlock* blocks) {
 
-    Persistence* p = FromWorker(worker);
+    IO::PersistenceWorker* const w = AsWorker(worker);
 
-    AssignPendingFilename(p, filename);
+    AssignPendingFilename(w, filename);
 
     // The single QWORD zero store over status+command. Spelled as two field
     // writes because the header names them separately; the widths add up to
     // the 8 bytes the instruction covers.
-    p->status  = 0;
-    p->command = 0;
+    w->_status  = 0;
+    w->_command = 0;
 
-    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)->~Array();  // 0x18002a930
-    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();         // 0x180024aa0
+    w->_blockDescs.~Array();   // 0x18002a930
+    w->_blockPtrs.~Array();    // 0x180024aa0
 
-    // The 12-byte header at Persistence+0x54..0x5f — BATCH 8 named these three
+    // The 12-byte header at Persistence+0x54..0x5f -- BATCH 8 named these three
     // fields (`fileHeader`/`magic`/`crc`, Persistence.h) from the SAVE job and
     // GET-SAVE-INFO job that read them back; this site is the WRITE side and
     // corroborates the same layout independently: version(u16) then
-    // blockCount(u16) packed into `fileHeader`, then ONE qword store spanning
-    // `magic` (low 32 bits, 0x80808080) and `crc` (high 32 bits, the seed
-    // 0xFFFFFFFF) — exactly retail's single 8-byte store.
-    p->fileHeader = (static_cast<uint32_t>(static_cast<uint16_t>(blockCount)) << 16) | 2u;
-    *reinterpret_cast<uint64_t*>(&p->magic) =
-        static_cast<uint64_t>(static_cast<int64_t>(-0x7f7f7f80));
+    // blockCount(u16) packed into `fileHeader`, then retail's ONE qword store
+    // of 0xFFFFFFFF80808080 spanning `magic` (low 32 bits, 0x80808080) and
+    // `crc` (high 32 bits, the seed 0xFFFFFFFF) -- spelled as the two named
+    // dword stores it covers.
+    w->_fileHeader = (static_cast<uint32_t>(static_cast<uint16_t>(blockCount)) << 16) | 2u;
+    w->_magic = 0x80808080u;
+    w->_crc   = 0xFFFFFFFFu;
 
-    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)
-        ->SetSize(blockCount);   // 0x18002a810
-    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)
-        ->SetSize(blockCount);   // 0x18002a9d0
+    w->_blockDescs.SetSize(blockCount);   // 0x18002a810
+    w->_blockPtrs.SetSize(blockCount);    // 0x18002a9d0
 
     // LEA EAX,[RBP+0x1] / LEA R8D,[RAX+RAX*2] / SHL R8D,0x2  ==  12 * (n + 1).
     // Computed BEFORE the `TEST EBP,EBP / JLE` guard, so it is evaluated even
@@ -472,28 +454,22 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const System::S
 
     int wrote = 0;
     for (int i = 0; i < blockCount; ++i) {
-        uint8_t* d = static_cast<uint8_t*>(p->blockDescData) + static_cast<size_t>(i) * 0xc;
-        *reinterpret_cast<uint32_t*>(d + 0x00) = blocks[i].id;
         // Re-read the base pointer each store, as retail does: three separate
         // `MOV RCX,[RSI+0x50]` loads inside one iteration.
-        d = static_cast<uint8_t*>(p->blockDescData) + static_cast<size_t>(i) * 0xc;
-        *reinterpret_cast<uint32_t*>(d + 0x04) = offset;
-        d = static_cast<uint8_t*>(p->blockDescData) + static_cast<size_t>(i) * 0xc;
-        *reinterpret_cast<uint32_t*>(d + 0x08) = blocks[i].size;
-        static_cast<void**>(p->blockPtrData)[i] = blocks[i].data;
-        d = static_cast<uint8_t*>(p->blockDescData) + static_cast<size_t>(i) * 0xc;
-        offset += *reinterpret_cast<const uint32_t*>(d + 0x08);   // re-read, see banner
+        w->_blockDescs._data[i].id     = blocks[i].id;
+        w->_blockDescs._data[i].offset = offset;
+        w->_blockDescs._data[i].size   = blocks[i].size;
+        w->_blockPtrs._data[i] = blocks[i].data;
+        offset += w->_blockDescs._data[i].size;   // re-read, see banner
         ++wrote;
     }
 
-    SignalWorker(p);
+    SignalWorker(w);
 
     char ours[112];
     std::snprintf(ours, sizeof(ours),
-                  "status=0 command=0 hdr={2,%d,0x%llx} descs=%d endOffset=%u",
-                  blockCount,
-                  (unsigned long long)(*reinterpret_cast<uint64_t*>(&p->magic)),
-                  wrote, offset);
+                  "status=0 command=0 hdr={2,%d,0x%x%08x} descs=%d endOffset=%u",
+                  blockCount, w->_crc, w->_magic, wrote, offset);
 }
 
 // ============================================================================
@@ -541,23 +517,17 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const System::S
 // this body with its own base-vptr store. The fields are read through the
 // Persistence POD view, as every job body here reads them.
 IO::PersistenceWorker::~PersistenceWorker() {
-
-    RtIo::Persistence* p = FromWorker(this);
-
-    // retail 0x18002ac40 — the SAME Array<SaveGameInfo> as
-    // 0x18002ae20/0x18002aae0 (array_destroy.cpp's J2_ENTRY table); NOT
-    // trait-expressible (array_internal.h's kSpec_SaveGameInfo note), so this
-    // is the hand-derived row.
-    rtcoll::AsArray<&rtcoll::kSpec_SaveGameInfo>(&p->saves)->~Array();   // worker+0x70
-    reinterpret_cast<Collection::Array<void*>*>(&p->blockPtrData)->~Array();         // 0x180024aa0, worker+0x60
-    reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)->~Array();  // 0x18002a930, worker+0x50
-
-    // The inline String release on worker+0x30 == pendingFilename IS
-    // `String::Release()` (retail's inline, string.cpp); the field keeps
-    // pointing at the freed block, as in retail.
-    Sys(p->pendingFilename).~String();
-
-    // ~System::Thread follows (the compiler's): see the banner.
+    // B.4 R-IO: the four releases are the members' destructors, which the
+    // compiler runs after this (empty) body in reverse declaration order --
+    //   _saves       worker+0x70  0x18002ac40 (the hand-derived
+    //                             kSpec_SaveGameInfo row, array_destroy.cpp's
+    //                             J2_ENTRY table)
+    //   _blockPtrs   worker+0x60  0x180024aa0
+    //   _blockDescs  worker+0x50  0x18002a930
+    //   _pendingFilename worker+0x30, `String::~String` (retail's inline
+    //                release; the field keeps pointing at the freed block)
+    // -- retail's order. ~System::Thread follows (the compiler's): see the
+    // banner.
 }
 
 // ============================================================================
@@ -597,71 +567,63 @@ IO::PersistenceWorker::~PersistenceWorker() {
 // actually promises — status ends at 1 or 2, never left at whatever it was —
 // which catches a body that returns without touching it at all.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
+void IO::PersistenceWorker::SaveJob() {
 
-    Persistence* p = FromWorker(worker);
-
-    // ENDGAME B.3.9 IO (W2): the REAL class on raw storage; the body keeps
-    // reading it through the RtIo POD view.
-    alignas(8) unsigned char bfsStorage[sizeof(IO::BinaryFileStream)];
-    IO::BinaryFileStream* const bfsObj =
-        ::new (static_cast<void*>(bfsStorage)) IO::BinaryFileStream();
-    BinaryFileStream& bfs = *reinterpret_cast<BinaryFileStream*>(bfsObj);
+    // ENDGAME B.3.9 IO (W2) / B.4 R-IO: the REAL class, a stack object; its
+    // destructor at the close of this body is retail's teardown.
+    IO::BinaryFileStream bfs;
 
     bool created;
     {
         // Set(...) then AdjustDelimiters on the same object IS
         // `Filename(const char*)` (retail 0x180026cf0) -- see B31_RULES
         // DELIMITERS. `Set` COPIES the bytes (it does not adopt
-        // `pendingFilename`'s buffer), exactly as this ctor does.
-        System::Filename f(p->pendingFilename.data);
+        // `_pendingFilename`'s buffer), exactly as this ctor does.
+        System::Filename f(_pendingFilename._data);
 
-        // RtIo_FileStream_Create is a registered entry point owned by another
-        // file and keeps its retail (self, const Filename* POD) signature;
-        // the two types are the same eight bytes (Filename.h).
-        created = bfsObj->IO::FileStream::Create(f);   // ENDGAME B.3.9 IO: the member
+        created = bfs.IO::FileStream::Create(f);   // ENDGAME B.3.9 IO: the member
 
         // ~f is retail's release of the local Filename copy.
     }
 
     bool wroteAll = false;
     if (created) {
-        p->magic = 0x80808080u;
+        _magic = 0x80808080u;
 
-        const int32_t descCount = p->blockDescCount;
-        const uint8_t* descBytes = reinterpret_cast<const uint8_t*>(p->blockDescData);
-        uint32_t crc = p->crc;
+        const int32_t descCount = _blockDescs._size;
+        const RtIo::BlockDesc* const descs = _blockDescs._data;
+        uint32_t crc = _crc;
         if (descCount > 0) {
-            crc = Crc32Chunked(crc, descBytes, static_cast<uint32_t>(descCount) * 0xC, 0);
+            crc = Crc32Chunked(crc, descs, static_cast<uint32_t>(descCount) * 0xC, 0);
         }
-        p->crc = crc;
+        _crc = crc;
 
         if (descCount > 0) {
-            void** blockPtrs = reinterpret_cast<void**>(p->blockPtrData);
+            void* const* const blockPtrs = _blockPtrs._data;
             for (int32_t i = 0; i < descCount; ++i) {
-                const uint32_t size = *reinterpret_cast<const uint32_t*>(descBytes + i * 0xC + 8);
+                const uint32_t size = descs[i].size;
                 if (size > 0) {
-                    crc = Crc32Chunked(p->crc, reinterpret_cast<const uint8_t*>(blockPtrs[i]),
-                                       size, 0x8000);
-                    p->crc = crc;
+                    crc = Crc32Chunked(_crc, blockPtrs[i], size, 0x8000);
+                    _crc = crc;
                 }
             }
         }
 
         DWORD written = 0;
-        RtIO::FileInfo* file = &bfs.base.file;
-        BOOL ok = ::WriteFile(file->winHandle, &p->fileHeader, 4, &written, nullptr);
+        RtIO::FileInfo* file = &bfs._file;
+        BOOL ok = ::WriteFile(file->winHandle, &_fileHeader, 4, &written, nullptr);
         if (ok && written == 4) {
-            ok = ::WriteFile(file->winHandle, &p->magic, 8, &written, nullptr);
+            // `magic` and `crc` are adjacent (+0x48, +0x4c): retail writes the
+            // 8 bytes from &magic in one call.
+            ok = ::WriteFile(file->winHandle, &_magic, 8, &written, nullptr);
             if (ok && written == 8) {
                 const DWORD descBytesLen = static_cast<DWORD>(descCount) * 0xC;
-                ok = ::WriteFile(file->winHandle, p->blockDescData, descBytesLen, &written, nullptr);
+                ok = ::WriteFile(file->winHandle, _blockDescs._data, descBytesLen, &written, nullptr);
                 if (ok && written == descBytesLen) {
                     wroteAll = true;
-                    void** blockPtrs = reinterpret_cast<void**>(p->blockPtrData);
+                    void* const* const blockPtrs = _blockPtrs._data;
                     for (int32_t i = 0; i < descCount; ++i) {
-                        const uint32_t size =
-                            *reinterpret_cast<const uint32_t*>(descBytes + i * 0xC + 8);
+                        const uint32_t size = descs[i].size;
                         ok = ::WriteFile(file->winHandle, blockPtrs[i], size, &written, nullptr);
                         if (!ok || written != size) { wroteAll = false; break; }
                     }
@@ -669,9 +631,9 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
             }
         }
 
-        p->status = wroteAll ? 1 : 2;
+        _status = wroteAll ? 1 : 2;
     } else {
-        p->status = 2;
+        _status = 2;
     }
 
     // Retail's ONE close-if-still-open check sits here, UNCONDITIONALLY,
@@ -681,9 +643,8 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
     // yet, so this is where retail's real close happens); a short write
     // leaves the handle open for this same check to close. One site, not
     // three, exactly as FUN_1800b6e00's tail reads.
-    if (bfs.base.file.handle != -1) RtIO::RtIo_FileSystem_CloseFile(Fs(), &bfs.base.file);
-    bfsObj->IO::BinaryFileStream::~BinaryFileStream();
-
+    if (bfs._file.handle != -1) Fs()->CloseFile(bfs._file);
+    // ~bfs is retail's ~BinaryFileStream.
 }
 
 // ============================================================================
@@ -809,26 +770,21 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 // table's unnamed slot 0 reached it; that table is retired. The four arms that
 // are not this file's are called by name (B3R RT-IO; they were address doors).
 void IO::PersistenceWorker::Run() {
-    void* const worker = this;
-
     switch (_command) {
         case 0:   // SAVE — see the encoding note above (INFERRED, absence-based)
-            // PORTED (BATCH 8): RtIo_PersistenceWorker_SaveJob, above. Called
-            // directly rather than through ResolveAddr — this file both
-            // defines the arm and dispatches to it now.
-            RtIo_PersistenceWorker_SaveJob(worker);
+            SaveJob();          // 0x1800b6e00, above
             return;
         case 1:   // LOAD
-            RtIo_PersistenceWorker_Load(worker);          // 0x1800b6aa0, closure_batch2b_win.cpp
+            LoadJob();          // 0x1800b6aa0, closure_batch2b_win.cpp
             return;   // retail tail-JMPs
         case 2:   // DELETE
-            RtIo_PersistenceWorker_Delete(worker);        // 0x1800b69c0, closure_batch2b_win.cpp
+            DeleteJob();        // 0x1800b69c0, closure_batch2b_win.cpp
             return;   // retail tail-JMPs
         case 3:   // GET SAVE INFO
-            RtIo_PersistenceWorker_GetSaveInfo(worker);   // 0x1800b65b0, persistence_saveinfo_job.cpp
+            GetSaveInfoJob();   // 0x1800b65b0, persistence_saveinfo_job.cpp
             return;   // retail tail-JMPs
         case 4:   // GET SAVE LIST
-            RtIo_PersistenceWorker_GetSaveList(worker);   // 0x1800b6290, persistence_savelist_job.cpp
+            GetSaveListJob();   // 0x1800b6290, persistence_savelist_job.cpp
             return;   // retail tail-JMPs
         default:
             // retail's `repz ret` — every other command value is a no-op.

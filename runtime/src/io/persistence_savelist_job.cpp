@@ -112,16 +112,13 @@
 
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/PersistenceWorker.h"
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
-#include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_SaveGameInfo, AsArray
 #include "../../types/system/MemoryAllocator.h"
 
-using RtIo::Persistence;
 using RtIo::SaveGameInfo;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
@@ -145,12 +142,6 @@ static_assert(offsetof(FilenameArray, capacity) == 0x0c, "Array::_capacity @ +0x
 // FileSystem::GetFileTimeStamp (0x1800ae270), MemoryAllocator::MemFree
 // (0x1800c7ad0).
 
-// `IO::FileSystem::_singleton` — an exported DATA symbol, so the NAME door is
-// the right door and the `0x1801fc6a8` in the listing needs no address door.
-void* FileSystemSingleton() {
-    return ::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
-}
-
 void MemFree(void* p) {   // the null test is INSIDE 0x1800c7ad0
     ::System::MemoryAllocator::MemFree(p);
 }
@@ -167,20 +158,16 @@ const char* const kSaveSubDir  = "\\Save\\";
 //
 // `worker` is `Persistence + 0x10`; see the banner.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
-    Persistence* const p =
-        reinterpret_cast<Persistence*>(reinterpret_cast<char*>(worker) - 0x10);
-
+void IO::PersistenceWorker::GetSaveListJob() {
     // ---- 1. clear the previous list (buffer kept) --------------------------
     // ENDGAME B.3.2 step 2 — 0x18002aae0 is the SAME `Array<SaveGameInfo>` as
     // 0x18002ae20 below with the new size folded to 0 (array.cpp's
     // kSpec_SaveGameInfo banner); NOT trait-expressible (see array_internal.h),
-    // so this is the hand-derived row, bridged through `AsArray` rather than a
-    // re-typed `Persistence::saves` member (shared with files outside this
-    // batch — see persistence_saveinfo_job.cpp's note on the same struct).
-    rtcoll::AsArray<&rtcoll::kSpec_SaveGameInfo>(&p->saves)->SetSize(0);  // 0x1800b62b3
+    // so `_saves` names that hand-derived row as its spec (PersistenceWorker.h).
+    _saves.SetSize(0);                                          // 0x1800b62b3
 
-    void* const fs = FileSystemSingleton();                     // 0x1800b62b8
+    // `IO::FileSystem::_singleton`, the class static (`0x1801fc6a8`).
+    const ::IO::FileSystem* const fs = ::IO::FileSystem::_singleton;   // 0x1800b62b8
 
     FilenameArray found = { nullptr, 0, 0 };                    // [RBP-0x30]
 
@@ -194,13 +181,13 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
         pattern.Set(kSavePattern);                                  // 0x1800c95d0
 
         System::Filename saveDir(                                   // [RBP+0x58]
-            static_cast<const ::IO::FileSystem*>(fs)->GetSaveDirectory());   // 0x1800b62e5
+            fs->GetSaveDirectory());                                // 0x1800b62e5
 
         // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z, 0x1800c92d0. AsString()
         // is the conversion retail performs by pointer cast (Filename.h).
         System::String dir(saveDir.AsString() + kSaveSubDir);       // [RBP+0x50]
 
-        static_cast<const ::IO::FileSystem*>(fs)->FindFiles(         // 0x1800b6315  B.3.x bridge
+        fs->FindFiles(                                              // 0x1800b6315  B.3.x bridge
             *reinterpret_cast<const RtSystem::String*>(&dir),
             *reinterpret_cast<const RtSystem::String*>(&pattern),
             false, reinterpret_cast<RtIO::FilenameArray*>(&found));
@@ -232,21 +219,20 @@ extern "C" void RtIo_PersistenceWorker_GetSaveList(void* worker) {
         }
 
         // THE FULL FOUND PATH, not the base name — see the banner.
-        entry.sortKey = static_cast<const ::IO::FileSystem*>(fs)->GetFileTimeStamp(   // 0x1800b644a
+        entry.sortKey = fs->GetFileTimeStamp(                   // 0x1800b644a
             *reinterpret_cast<const RtSystem::Filename*>(&found.data[i]));
 
         // retail 0x18002ae20 — Array<SaveGameInfo>::SetSize(n, &fill), the
         // append idiom. Hand-derived row (kSpec_SaveGameInfo), bridged the
         // same way as step 1's clear above.
-        rtcoll::AsArray<&rtcoll::kSpec_SaveGameInfo>(&p->saves)
-            ->SetSizeFill(p->saveCount + 1, &entry);            // 0x1800b645f
+        _saves.SetSize(_saves._size + 1, entry);                // 0x1800b645f
 
         // Retail's release at 0x1800b6465 is `entry`'s destructor, as it
         // leaves the iteration.
     }
 
     // ---- 4. publish ---------------------------------------------------------
-    p->status = 1;                                              // 0x1800b64c8
+    _status = 1;                                                // 0x1800b64c8
 
     // ---- 5. tear the FindFiles array down ----------------------------------
     // `found.data` is a raw buffer of `System::Filename` from an external
