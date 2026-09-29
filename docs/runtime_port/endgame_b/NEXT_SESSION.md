@@ -127,6 +127,10 @@ headers). This is ENDGAME B.4; the phase plan's acceptance number is in `../ENDG
 | casts of the shape `reinterpret_cast<T>(p + 0x…)` in `code/Game` | 7,097 |
 | files in `code/Game` with 50 casts or more | 141 files hold 15,890 of 22,169 raw occurrences |
 | `// B.3.x bridge` markers (raw lines) | 6,859 |
+| **casts the metric does NOT see**, PROD: `static_cast`, all | 7,759 |
+| … `static_cast` to a pointer or `uintptr_t` / `intptr_t` | 3,822 |
+| … `const_cast` | 191 |
+| … C-style pointer casts `(T*)expr`, `code/Game` only | ~10,300 (a rough regex: it overcounts; block 0 measures it) |
 | `void*` first parameters in `code/Game` | ~2,970 lines |
 | `code/Game/<Module>/exe_bodies.h` declarations (the C bodies, with their retail address) | Action 145 · Work 83 · Component 172 · Game 67 · Player 51 · Dialog 39 · Tutorial 20 |
 
@@ -153,7 +157,15 @@ on five lines).
 5. **Order and conflict.** A header is shared by every body of the class: blocks own CLASSES' headers
    plus the files that define their members, not directories. Which classes are read from many
    modules (their header must be finished FIRST, alone)?
-6. **The tests.** 526 casts in `tests/unit`, many of them deliberate layout probes: which are the
+6. **The casts the metric does not see.** `(int*)(host + 0x38)` is the same raw offset read as a
+   `reinterpret_cast` and is invisible to a `reinterpret_cast` count; so is
+   `static_cast<T*>(static_cast<uintptr_t>(x) + 0x…)` and a cast through `void*`. Count them
+   properly (a parser or a compiler pass — `-Wold-style-cast` on one build gives the C-style ones
+   exactly; do not leave the flag on), per directory, and classify each `static_cast`: a downcast
+   inside one hierarchy after a type check (stays: it is what retail's compiler had), an arithmetic
+   conversion (stays), or a crossing between unrelated types (goes). The rule sheet defines ONE
+   metric that sums every spelling of a reinterpretation, and W1 is measured on that sum.
+7. **The tests.** 526 casts in `tests/unit`, many of them deliberate layout probes: which are the
    test's subject and stay.
 
 ### 3c. Shape
@@ -185,6 +197,12 @@ Lessons of the teardown that bind here:
 - When retail leaves a register unset, the site is LEFT and listed (B3R_RULES §8.7).
 - Type headers: `.claude/rules/type-headers.md`. A new field is `static_assert`ed.
 - No C-style umbrella header; a caller includes the class's header.
+- **A cast is removed by naming the thing, never by respelling it.** Turning a `reinterpret_cast`
+  into a C-style cast, a `static_cast` through `void*` / `uintptr_t`, a `memcpy`, or a union is not
+  progress and fails the acceptance. A block hands in the count of EVERY spelling in its files,
+  before and after.
+- A downcast after a type check is `static_cast` (or one typed `Cast<T>()` helper) inside the
+  object's OWN hierarchy; the five roots are different hierarchies.
 
 ### 3e. The gate for every merge (coordinator only)
 `b3r_session/gate.sh`; `uiroutes.sh` on Dialog / UI merges; `toolroutes.sh` on Player / Action merges;
@@ -194,8 +212,11 @@ reappears is a regression).
 ### 3f. Acceptance
 Every C body is a member of its class or is listed by name with its reason; `exe_bodies.h` headers
 hold only what has no class; every offset a body reads has a declared, asserted field;
-`reinterpret_cast` in PROD is at the floor block 0 listed (by file); bridge markers 0 outside that
-floor; the gate passes; `stepclose.sh`.
+`reinterpret_cast` in PROD is at the floor block 0 listed (by file) — ENDGAME B.4: zero outside COM
+interop in `dx11/`, the allocator, byte-level serializer reads and the hardware-watchpoint code; the
+SUMMED metric of 3b.6 (C-style pointer casts and casts through `uintptr_t` / `void*` included) is at
+that same floor, so no spelling grew while another fell; no `static_cast` crosses an unrelated type;
+bridge markers 0 outside the floor; the gate passes; `stepclose.sh`.
 
 ## 4. After it
 
