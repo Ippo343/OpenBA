@@ -47,7 +47,7 @@ PickingDescription::PickingDescription()
       _groups(nullptr),
       _groupCount(0),
       _groupCap(0),
-      _meshRef(nullptr),
+      _material(nullptr),
       _enabled(false) {}
 
 // dtor (slot 0 0x140036f40 minus the stamps): frees every group's ref array, then the group array.
@@ -106,7 +106,7 @@ bool PickingDescription::Serialize(void* stream) {
         // Listed: retail 0x140128d00 calls 0x140037000 here; the tree calls 0x14001bcc0.
         Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, e->meshes);
     }
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_meshRef, &ser);
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_material, &ser);   // 0x140007140
     ser.Serialize(_enabled, nullptr);
     return true;
 }

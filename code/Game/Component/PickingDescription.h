@@ -22,6 +22,7 @@
 #include "Object/exe_type.h"
 
 namespace Picking { class PickingMesh; }   // picking/PickingMesh.h
+namespace Graphics { class MaterialInstance; }   // graphics/Material.h
 
 class PickingDescription final : public Description {
     DECLARE_EXE_TYPE(PickingDescription)
@@ -49,7 +50,7 @@ public:
     Group* _groups;                             // +0x20 Array<Group> data
     int32_t _groupCount;                        // +0x28
     int32_t _groupCap;                          // +0x2c
-    void* _meshRef;                             // +0x30 ExternalPtr
+    Graphics::MaterialInstance* _material;      // +0x30 ExternalPtr<Graphics::MaterialInstance> (0x140007140: type cell 0x140151350)
     bool _enabled;                              // +0x38
     uint8_t _pad39[7];                          // +0x39 never written by the ctor
 };
@@ -60,5 +61,5 @@ static_assert(sizeof(PickingDescription::Group) == 0x10, "PickingDescription::Gr
 static_assert(offsetof(PickingDescription, _groups) == 0x20, "PickingDescription::_groups @ +0x20");
 static_assert(offsetof(PickingDescription, _groupCount) == 0x28, "PickingDescription::_groupCount @ +0x28");
 static_assert(offsetof(PickingDescription, _groupCap) == 0x2c, "PickingDescription::_groupCap @ +0x2c");
-static_assert(offsetof(PickingDescription, _meshRef) == 0x30, "PickingDescription::_meshRef @ +0x30");
+static_assert(offsetof(PickingDescription, _material) == 0x30, "PickingDescription::_material @ +0x30");
 static_assert(offsetof(PickingDescription, _enabled) == 0x38, "PickingDescription::_enabled @ +0x38");
