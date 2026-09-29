@@ -23,45 +23,23 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/AnimalComponent.h"
 #include "Component/WildAnimalComponent.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Component/HuntDescription.h"
 
 // ============================================================
-// FindComponent family (same shape as work_base_reimpl.cpp FindComponentByTypeId)
+// FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
+// These names stay as B4 FORWARD forwarders until their callers hold a typed entity.
 // ============================================================
-// FUN_140005500 / HuntAnimal_helper_27e0 are byte-for-byte identical except for the
-// component type-ID global they compare against. Each scans the entity's component
-// list (ptr array at entity+0x30, count at entity+0x38), calls each component's
-// GetTypeId (vtable +0x10), and on the first type match runs an IsDerivedFrom check
-// before returning the component through an out InternalBasePtr.
-//
-// Caller signature: void* fn(uintptr_t entity, void* retIBP)
-static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int i = 0; i < n; i++) {
-        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-        if (t == typeId) {
-            void* c = *slot;
-            found = ::Object::IsDerivedFromNullSafe(c, typeId) ? c : nullptr;
-            break;
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
-}
-
 // Reimpl of FUN_140005500 (FindComponent, type 0x1401c6f98 -> AnimalComponent)
 void* ActHunt_FindComponent_5500(uintptr_t entity, void* retIBP) {
-    return HuntFindComponentByTypeId(entity, retIBP, AnimalComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<AnimalComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<AnimalComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of HuntAnimal_helper_27e0 (FindComponent, type 0x1401c8000 -> WildAnimalComponent)
 void* ActHunt_FindComponent_27e0(uintptr_t entity, void* retIBP) {
-    return HuntFindComponentByTypeId(entity, retIBP, WildAnimalComponent::TypeId());
+    return new (retIBP) ::Object::InternalPtr<WildAnimalComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WildAnimalComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

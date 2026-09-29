@@ -27,6 +27,7 @@
 #include "Component/CitizenComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7158 cell class
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // ============================================================
 // Helpers, called directly (B.3R): FUN_140002e10 AttendanceComponent_GetJobHostComponent
@@ -164,26 +165,8 @@ void AttendanceComponent_ReleaseLink59b0(void* workerP) {
 // Retail returns the return buffer in RAX, as every by-value return does.
 // ============================================================
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
-    void* found = nullptr;
-    {
-        const uint32_t tidJobHost = WorkPlaceComponent::TypeId();
-        int64_t host = (int64_t)entity;
-        int count = *(int*)(host + 0x38);
-        int64_t arr = *(int64_t*)(host + 0x30);
-        for (int i = 0; i < count; i++) {
-            int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
-            void* comp = (void*)*slot;
-            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == tidJobHost) {
-                void* c = (void*)*slot;
-                if (::Object::IsDerivedFromNullSafe(c, tidJobHost)) found = c;
-                break;
-            }
-        }
-    }
-    new (outPtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return outPtr;
+    return new (outPtr) ::Object::InternalPtr<WorkPlaceComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

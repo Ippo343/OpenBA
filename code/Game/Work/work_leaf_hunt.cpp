@@ -33,6 +33,7 @@
 #include "Component/ConsumeProduceDescription.h"     // ENDGAME B.3.9 D5
 #include "Component/AnimalComponent.h"               // ENDGAME B.3.9 D5
 #include "Component/AnimalDescription.h"             // ENDGAME B.3.9 D5
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // ============================================================
 // FindComponent-by-typeId family
@@ -50,91 +51,22 @@
 // FindComponent (+0x30/+0x38, WITH CheckPtr), typeId @0x1401c7890.
 // ABI: InternalBasePtr* fn(longlong entity, InternalBasePtr* retIBP)  (member value-return).
 void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
-    const uint32_t tid = HuntComponent::TypeId(); // 0x1401c7890
-    void* found = nullptr;
-    if (*reinterpret_cast<int*>(entity + 0x38) > 0) {
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        int i = 0;
-        int64_t off = 0;
-        for (;;) {
-            void** slot = reinterpret_cast<void**>(list + off);
-            void* comp = *slot;
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-            if (t == tid) {
-                void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
-                void* c = *slot2;
-                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
-                break;
-            }
-            ++i;
-            off += 8;
-            if (i >= n) { found = nullptr; break; }
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+    return new (retIBP) ::Object::InternalPtr<HuntComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<HuntComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ---- 0x14000a0b0  FindComponent (+0x30/+0x38, WITH CheckPtr) -------------------
 // typeId @0x1401c4250. (HarvestOrchard "DescComp" finder.)
 void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
-    const uint32_t tid = FruitComponent::TypeId(); // 0x1401c4250
-    void* found = nullptr;
-    if (*reinterpret_cast<int*>(entity + 0x38) > 0) {
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        int i = 0;
-        int64_t off = 0;
-        for (;;) {
-            void** slot = reinterpret_cast<void**>(list + off);
-            void* comp = *slot;
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-            if (t == tid) {
-                void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
-                void* c = *slot2;
-                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
-                break;
-            }
-            ++i;
-            off += 8;
-            if (i >= n) { found = nullptr; break; }
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+    return new (retIBP) ::Object::InternalPtr<FruitComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<FruitComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ---- 0x140004fe0  FindComponent (+0x30/+0x38, WITH CheckPtr) -------------------
 // typeId @0x1401c7ba0. (PastureComponent finder.)
 void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
-    const uint32_t tid = PastureComponent::TypeId(); // 0x1401c7ba0
-    void* found = nullptr;
-    if (*reinterpret_cast<int*>(entity + 0x38) > 0) {
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        int i = 0;
-        int64_t off = 0;
-        for (;;) {
-            void** slot = reinterpret_cast<void**>(list + off);
-            void* comp = *slot;
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-            if (t == tid) {
-                void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
-                void* c = *slot2;
-                if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
-                break;
-            }
-            ++i;
-            off += 8;
-            if (i >= n) { found = nullptr; break; }
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+    return new (retIBP) ::Object::InternalPtr<PastureComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<PastureComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ---- 0x1400063d0  HuntWork_helper_63d0  ----------------------------------------
