@@ -33,11 +33,9 @@
 #include "engine/UpdateLoop.h"   // -Iruntime/types: Engine::UpdateLoop
 #include "system/String.h"       // -Iruntime/types: System::String (by value at +0x28)
 
-// B.4 W0-H2 (H4): the pointer members are typed; forward declarations only
-// (layout-neutral, proven by the offset asserts below). The members still
-// `void*` name their class in the comment; W0-H2's hand-in lists why each
-// stays (a void* ctor parameter, a Runtime POD-mirror construction / read, an
-// allocation through a void* helper, or no class in the tree yet).
+// B.4 W0-H2 / GAME-a (H4): every pointer member is typed; forward declarations
+// only (layout-neutral, proven by the offset asserts below). The member names
+// m_tutorial (a WorkScheduler) and m_imageCapture (the Minimap) are the tree's.
 namespace Graphics    { class Material; class SunLight; class MeshInstance;
                         class Scene; class AnimationManager; class Renderer; }
 namespace Picking     { class Scene; }
