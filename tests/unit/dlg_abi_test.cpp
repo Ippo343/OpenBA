@@ -143,8 +143,8 @@ UNIT_TEST(dlg_mainmenu_mapparams_dialogs) {
     CheckShape<MainMenuDialog>();
     CheckDialogInstanceSlots<MainMenuDialog>();
     CHECK_EQ(sizeof(MapParamsDialog), (size_t)0xf8);
-    CHECK_EQ(offsetof(MapParamsDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(MapParamsDialog, dataF0), (size_t)0xf0);
+    CHECK_EQ(offsetof(MapParamsDialog, editName), (size_t)0xb8);
+    CHECK_EQ(offsetof(MapParamsDialog, buttonOk), (size_t)0xf0);
     CheckShape<MapParamsDialog>();
     CheckDialogInstanceSlots<MapParamsDialog>();
 }

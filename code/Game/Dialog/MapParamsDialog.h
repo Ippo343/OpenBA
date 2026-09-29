@@ -23,6 +23,8 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
+namespace UI { class EditElement; class NumberElement; class TextElement; class ButtonElement; }
+
 class MapParamsDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(MapParamsDialog)
 
@@ -39,18 +41,27 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14006b5f0
 
+    void ApplyName();                                              // 0x14006b690
+    void GenerateName();                                           // 0x14006b700
+
 public:
-    uint64_t dataB8;           // +0xB8: editName
-    uint64_t dataC0;           // +0xC0: numberSeed
-    uint64_t dataC8;           // +0xC8: textTerrain
-    uint64_t dataD0;           // +0xD0: textTerrainSize
-    uint64_t dataD8;           // +0xD8: textClimate
-    uint64_t dataE0;           // +0xE0: textCondition
-    uint64_t dataE8;           // +0xE8: textDisaster
-    uint64_t dataF0;           // +0xF0: buttonOk
+    UI::EditElement*   editName;         // +0xB8: "editName"
+    UI::NumberElement* numberSeed;       // +0xC0: "numberSeed"
+    UI::TextElement*   textTerrain;      // +0xC8: "textTerrain"
+    UI::TextElement*   textTerrainSize;  // +0xD0: "textTerrainSize"
+    UI::TextElement*   textClimate;      // +0xD8: "textClimate"
+    UI::TextElement*   textCondition;    // +0xE0: "textCondition"
+    UI::TextElement*   textDisaster;     // +0xE8: "textDisaster"
+    UI::ButtonElement* buttonOk;         // +0xF0: "buttonOk"
 };
 
-static_assert(offsetof(MapParamsDialog, dataB8) == 0xB8, "MapParamsDialog +0xb8");
-static_assert(offsetof(MapParamsDialog, dataF0) == 0xF0, "MapParamsDialog +0xf0");
+static_assert(offsetof(MapParamsDialog, editName) == 0xB8, "MapParamsDialog +0xb8");
+static_assert(offsetof(MapParamsDialog, numberSeed) == 0xC0, "MapParamsDialog +0xc0");
+static_assert(offsetof(MapParamsDialog, textTerrain) == 0xC8, "MapParamsDialog +0xc8");
+static_assert(offsetof(MapParamsDialog, textTerrainSize) == 0xD0, "MapParamsDialog +0xd0");
+static_assert(offsetof(MapParamsDialog, textClimate) == 0xD8, "MapParamsDialog +0xd8");
+static_assert(offsetof(MapParamsDialog, textCondition) == 0xE0, "MapParamsDialog +0xe0");
+static_assert(offsetof(MapParamsDialog, textDisaster) == 0xE8, "MapParamsDialog +0xe8");
+static_assert(offsetof(MapParamsDialog, buttonOk) == 0xF0, "MapParamsDialog +0xf0");
 static_assert(sizeof(MapParamsDialog) == 0xF8, "MapParamsDialog is 0xf8 (create 0x140012100)");
 static_assert(alignof(MapParamsDialog) == 8, "MapParamsDialog is qword-aligned");

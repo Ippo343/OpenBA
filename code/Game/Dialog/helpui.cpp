@@ -88,6 +88,7 @@ void HelpUI::LoadPage() {
 
     // UI::String with text index 2 (help content body)
     UI::String uiString(Object::ExternalPtr<UI::StringTable>(validTable), 2);
+    uiString.pad0C = 0;   // built in a zeroed 16-byte slot before
 
     document->SetText(&uiString);
 
@@ -397,6 +398,7 @@ static void HelpUI_StepHistory(HelpUI* self, int step) {
 
     // UI::String with text index 2 (content), set on document
     UI::String uiString(Object::ExternalPtr<UI::StringTable>(validTable), 2);
+    uiString.pad0C = 0;   // built in a zeroed 16-byte slot before
     self->document->SetText(&uiString);
 
     // Restore scroll position from history
