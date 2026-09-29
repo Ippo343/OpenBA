@@ -58,6 +58,10 @@ public:
     int           GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller*   GetController() override { return &_controller; }  // [17] 0x140004080
 
+    // The controller's state handlers (table 0x14014bc20; RCX = this).
+    char EnterBuilt();                                            // 0x14005cf20 state 2: register
+    char EnterDemolish();                                         // 0x14005cee0 state 3: unregister
+
     // +0x28 — the embedded controller (D6). Public: StateMachineComponent and
     // the controller dispatch read it through slot 17 and at +0x28 raw.
     StateController _controller;

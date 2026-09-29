@@ -7,8 +7,6 @@
 
 // The matching REGISTER half: state-2 "built" enter (0x14005cf20) and the two
 // TownManager leaves it drives.
-extern "C" char WellComponent_EnterBuilt(void* comp, void* sm);
-extern "C" char WellComponent_EnterDemolish(void* comp, void* sm);
-void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp);
-void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value);
+// B4 FORWARD -> CitizenBehavior::AddCellEntry (Game/citizenlist_serialize.cpp)
+void WellComp_AddCellEntry_88a80(int64_t townMgr, int x, int y, int value);   // 0x140088a80
 

@@ -22,8 +22,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
 
-class HerdComponent;
+class HerdComponent;   // Component/HerdComponent.h
 
 class WildAnimalComponent final : public Component {
     DECLARE_EXE_TYPE(WildAnimalComponent)
@@ -38,9 +39,10 @@ public:
     void SetHerd(HerdComponent* const* herd);                     // 0x14012e510 (body: herdcomponent.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint64_t data28;       // +0x28 herd (HerdComponent) back-ref
+    Object::InternalPtr<HerdComponent> herd;   // +0x28 the herd this animal belongs to (Persist
+                                               //       0x14012e300: InternalBasePtr + IsDerivedFrom HerdComponent)
 };
 
 static_assert(sizeof(WildAnimalComponent) == 0x30, "WildAnimalComponent is 0x30 (create 0x140039c20)");
 static_assert(alignof(WildAnimalComponent) == 8, "WildAnimalComponent alignment");
-static_assert(offsetof(WildAnimalComponent, data28) == 0x28, "");
+static_assert(offsetof(WildAnimalComponent, herd) == 0x28, "WildAnimalComponent +0x28 (ctor 0x14012e3c0)");

@@ -106,3 +106,26 @@ Owed, found by the blocks (each a `behaviour:` commit of its own, not yet made):
 - `FindComponent<T>()` does not skip null component slots (retail does not either); the tree's old
   finders did. Safe while `ComponentEntity`'s ctor never stores a null slot (it skips a component
   that has no factory).
+
+| 21 | W1-COMP-d | `34d15139` | Component d: Herd, Particle, Map, MultiObject, Immigration, Nomad, Orchard, Pasture, Model, NaturalResource …: 1934 -> 274 in 85 files; six `behaviour:` commits (Herd OnRemove 0x140121e20, MultiObject OnRemove 0x1401257c0, multiCount 0x140125880, MapComponent rect 0x1401243e0, pasture livestock position 0x140128670, ModelComponent's MeshInstance / Transform real members 0x140124d20 / 0x140124cd0); reconciled with COMP-c on its branch before the merge | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · devlost COMPLETE=188 · `sa-stress` exit 0, update 2.03 ms/frame, p95 3.33 (flagged; agents were building; recorded) | 0 |
+| 22 | W1-COMP-e-shared | `26af0d62` | Component e, shared headers first: StateMachine, StorageComponent::Item, RawMaterial, Residence families and roster members, StatusIcon SetFlag: 1212 -> 728 in 22 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 23 | W1-GAME-a | `bf5c73dd` | Game a: every pointer member of GameUpdateLoop has a class; MapCell; six new headers: 1645 -> 526 in 33 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · devlost COMPLETE=219 · `sa-stress` exit 0, update 1.77 ms/frame, p95 2.57 | 0 |
+| 24 | W1-DLG-c | `1d5b30a6` | Dialog c: Options, SaveLoad, ProfessionUI and seven panels: 1747 -> 170 in 24 files; four `behaviour:` commits (three destructors free what retail frees 0x1400774e0 / 0x1400132b0 / 0x1400b80f0; PastureUI calls ComputeCapacity 0x140128570) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `1d5b30a6`: **25,780** to remove. `acceptance.sh`: accessor definitions 97 -> 33, accessor
+calls 951 -> 440, puns 253 -> 140, bridge lines 6,535 -> 3,140, C-body declarations 783 -> 619,
+`void*`-first functions 1,204 -> 854.
+
+Owed, added:
+- Four differences of the save format the tree has and retail does not (GAME-a; each a
+  `behaviour:` commit that re-cuts the resave golden): `ProfessionResourceEntry`'s Time is written
+  at +0x14, retail 0x14008f760 uses +0x18; retail resizes the +0x150 array to 0x47 with a
+  zero-extend fixup on load; on version 5 the tree clears the +0x160 tree, retail +0x140; the
+  EventLog entry colour goes through the int overload, retail the uint one.
+- `m_tutorial` holds a `WorkScheduler` and `m_imageCapture` the `Minimap`: rename in the second pass.
+- `optionsdialog.cpp:745,748` store `_checked != 0` into `Input::Configuration`'s flags: raw byte
+  copy or not, per retail (R-ENG settles the field type).
+- `TickIdle`'s allocation-failure path was dropped (COMP-f) without reading retail.
+- Commit messages with an UNVERIFIED sentence: COMP-d `9a0c288e` ("the next update re-grounds it
+  either way"), COMP-f `a61be2e2` (the load-time recompute), DLG-b's GoalDialog commit ("46 -> 0":
+  the base was 70).

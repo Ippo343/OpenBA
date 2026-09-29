@@ -50,23 +50,18 @@ namespace {
 inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 }  // namespace
 
-namespace {
-// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
-// (0 == ok on the read leg). The tree's check before it allocates an array.
-inline int SerStreamErr(IO::Serializer& ser) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
-}
-}  // namespace
-
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 namespace {
-// Allocate + zero a count*stride array into *basePtr. Returns the buffer.
-void* TD_AllocArray(void* basePtr, int n, uint64_t stride) {
-    void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * stride, 8);
-    *(void**)basePtr = buf;
-    if (buf) for (uint64_t b = 0; b < (uint64_t)n * stride; ++b) ((uint8_t*)buf)[b] = 0;
+// The tree's allocation of a loaded array: count elements, zeroed, 8-aligned; the
+// capacity field is not written (retail resizes through 0x14000f370 / 0x14000f6a0 /
+// 0x14000f160 / 0x140001bb0 / 0x1400021d0 and keeps its capacity).
+template <class T>
+T* TD_AllocArray(T*& base, int n) {
+    T* buf = static_cast<T*>(System::MemoryAllocator::MemAlloc(
+        static_cast<uint64_t>(n) * sizeof(T), 8));
+    base = buf;
+    if (buf) std::memset(static_cast<void*>(buf), 0, static_cast<size_t>(n) * sizeof(T));   // raw zero fill, as the tree did
     return buf;
 }
 }  // namespace
@@ -78,7 +73,7 @@ TradeDescription::TradeDescription()
     : Description(),
       _ref20(nullptr),
       _ref28(nullptr),
-      _ref30(nullptr),
+      _merchantTemplate(nullptr),
       _pairs(nullptr),
       _pairCount(0),
       _pairCap(0),
@@ -97,22 +92,20 @@ TradeDescription::~TradeDescription() {
     // merchant array (free its inner arrays + strings first; the tree walks
     // the CAPACITY field, which the load path never sets)
     int merchN = _merchantCap;
-    uint8_t* m = static_cast<uint8_t*>(_merchants);
-    if (m) {
-        for (int i = 0; i < merchN; ++i, m += 0x48) {
-            if (*(void**)(m + 0x20)) System::MemoryAllocator::MemFree(*(void**)(m + 0x20));
-            if (*(void**)(m + 0x30)) System::MemoryAllocator::MemFree(*(void**)(m + 0x30));
-            reinterpret_cast<System::String*>(m + 0x08)->~String();  // B.3.1 bridge
+    if (TradeMerchant* m = _merchants) {
+        for (int i = 0; i < merchN; ++i, ++m) {
+            if (m->goods) System::MemoryAllocator::MemFree(m->goods);
+            if (m->field_0x30) System::MemoryAllocator::MemFree(m->field_0x30);
+            m->name.~String();
         }
         System::MemoryAllocator::MemFree(_merchants);
     }
-    // string-pair array (free strings first)
+    // goods-category array (free strings first)
     int spN = _pairCap;
-    uint8_t* sp = static_cast<uint8_t*>(_pairs);
-    if (sp) {
-        for (int i = 0; i < spN; ++i, sp += 0x18) {
-            reinterpret_cast<System::String*>(sp + 0x08)->~String();  // B.3.1 bridge
-            reinterpret_cast<System::String*>(sp + 0x10)->~String();  // B.3.1 bridge
+    if (TradeGoodsCategory* sp = _pairs) {
+        for (int i = 0; i < spN; ++i, ++sp) {
+            sp->spriteName.~String();
+            sp->textName.~String();
         }
         System::MemoryAllocator::MemFree(_pairs);
     }
@@ -125,64 +118,64 @@ TradeDescription::~TradeDescription() {
 // [5] 0x14005c7f0: stream order as retail.
 bool TradeDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);   // ExternalPtr +0x30
-    
-    // merchant array @ +0x48 (count @ +0x50, element stride 0x48)
+    Reimpl_ExternalPtr_Serialize_StringTable(&_merchantTemplate, &ser);   // ExternalPtr +0x30
+
+    // merchant array @ +0x48 (count @ +0x50)
     ser.Serialize(_merchantCount, nullptr);
     int merchN = _merchantCount;
-    if (SerStreamErr(ser) == 0 && merchN > 0) TD_AllocArray(&_merchants, merchN, 0x48);
+    if (static_cast<int>(ser.GetDirection()) == 0 && merchN > 0) TD_AllocArray(_merchants, merchN);
     if (merchN > 0) {
-        uint8_t* m = static_cast<uint8_t*>(_merchants);
-        for (int i = 0; i < merchN && m; ++i, m += 0x48) {
-            Reimpl_ExternalPtr_Serialize_StringTable(m + 0x00, &ser);                      // ExternalPtr
-            reinterpret_cast<System::String*>(m + 0x08)->Serialize(&ser);      // B.3.1 bridge: String
-            // ext-ref array @ m+0x20 (count @ m+0x28, stride 8)
-            ser.Serialize(*reinterpret_cast<int*>(m + 0x28), nullptr);
-            int extN = *(int32_t*)(m + 0x28);
-            if (SerStreamErr(ser) == 0 && extN > 0) TD_AllocArray(m + 0x20, extN, 8);
-            Desc_LoadExternalArray(&ser, extN, *(void**)(m + 0x20));
-            // int array @ m+0x30 (count @ m+0x38, stride 4) per-elem enum vcall +0x98
-            ser.Serialize(*reinterpret_cast<int*>(m + 0x38), nullptr);
-            int intN = *(int32_t*)(m + 0x38);
-            if (SerStreamErr(ser) == 0 && intN > 0) TD_AllocArray(m + 0x30, intN, 4);
-            uint8_t* ia = *(uint8_t**)(m + 0x30);
-            for (int j = 0; j < intN && ia; ++j, ia += 4)
-                ser.Serialize(*reinterpret_cast<unsigned int*>(ia), nullptr);
-            ser.Serialize(*reinterpret_cast<int*>(m + 0x40), nullptr);           // int @+0x40
-            ser.Serialize(*reinterpret_cast<unsigned int*>(m + 0x10), nullptr);  // enum @+0x10
-            ser.Serialize(*reinterpret_cast<unsigned int*>(m + 0x14), nullptr);  // enum @+0x14
-            ser.Serialize(*reinterpret_cast<unsigned int*>(m + 0x18), nullptr);  // enum @+0x18
+        TradeMerchant* m = _merchants;
+        for (int i = 0; i < merchN && m; ++i, ++m) {
+            Reimpl_ExternalPtr_Serialize_StringTable(&m->stringTable, &ser);   // ExternalPtr
+            m->name.Serialize(&ser);
+            // goods: ExternalPtr array (count @ +0x28)
+            ser.Serialize(m->goodsCount, nullptr);
+            int extN = m->goodsCount;
+            if (static_cast<int>(ser.GetDirection()) == 0 && extN > 0) TD_AllocArray(m->goods, extN);
+            Desc_LoadExternalArray(&ser, extN, m->goods);
+            // the enum array @ +0x30 (count @ +0x38) through the uint door
+            ser.Serialize(m->field_0x30Count, nullptr);
+            int intN = m->field_0x30Count;
+            if (static_cast<int>(ser.GetDirection()) == 0 && intN > 0) TD_AllocArray(m->field_0x30, intN);
+            uint32_t* ia = m->field_0x30;
+            for (int j = 0; j < intN && ia; ++j, ++ia)
+                ser.Serialize(*ia, nullptr);
+            ser.Serialize(m->stockRolls, nullptr);       // int @+0x40
+            ser.Serialize(m->field_0x10, nullptr);       // enum @+0x10
+            ser.Serialize(m->fullPriceFlags, nullptr);   // enum @+0x14
+            ser.Serialize(m->discountFlags, nullptr);    // enum @+0x18
         }
     }
-    
-    // price array @ +0x58 (count @ +0x60, element stride 0x14)
+
+    // tier array @ +0x58 (count @ +0x60)
     ser.Serialize(_priceCount, nullptr);
     int priceN = _priceCount;
-    if (SerStreamErr(ser) == 0 && priceN > 0) TD_AllocArray(&_prices, priceN, 0x14);
+    if (static_cast<int>(ser.GetDirection()) == 0 && priceN > 0) TD_AllocArray(_prices, priceN);
     if (priceN > 0) {
-        uint8_t* p = static_cast<uint8_t*>(_prices);
-        for (int i = 0; i < priceN && p; ++i, p += 0x14) {
-            ser.Serialize(*reinterpret_cast<int*>(p + 0x00), nullptr);
-            ser.Serialize(*reinterpret_cast<float*>(p + 0x04), nullptr);
-            ser.Serialize(*reinterpret_cast<float*>(p + 0x08), nullptr);
-            ser.Serialize(*reinterpret_cast<int*>(p + 0x0c), nullptr);
-            ser.Serialize(*reinterpret_cast<int*>(p + 0x10), nullptr);
+        TradeTier* p = _prices;
+        for (int i = 0; i < priceN && p; ++i, ++p) {
+            ser.Serialize(p->populationLimit, nullptr);
+            ser.Serialize(p->delayBase, nullptr);
+            ser.Serialize(p->delayTolerance, nullptr);
+            ser.Serialize(p->rollDivisor, nullptr);
+            ser.Serialize(p->stockDivisor, nullptr);
         }
     }
-    
+
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);   // ExternalPtr +0x20
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);   // ExternalPtr +0x28
-    
-    // string-pair array @ +0x38 (count @ +0x40, element stride 0x18)
+
+    // goods-category array @ +0x38 (count @ +0x40)
     ser.Serialize(_pairCount, nullptr);
     int spN = _pairCount;
-    if (SerStreamErr(ser) == 0 && spN > 0) TD_AllocArray(&_pairs, spN, 0x18);
+    if (static_cast<int>(ser.GetDirection()) == 0 && spN > 0) TD_AllocArray(_pairs, spN);
     if (spN > 0) {
-        uint8_t* sp = static_cast<uint8_t*>(_pairs);
-        for (int i = 0; i < spN && sp; ++i, sp += 0x18) {
-            ser.Serialize(*reinterpret_cast<unsigned int*>(sp + 0x00), nullptr);   // enum @+0x00
-            reinterpret_cast<System::String*>(sp + 0x08)->Serialize(&ser);        // B.3.1 bridge: String @+0x08
-            reinterpret_cast<System::String*>(sp + 0x10)->Serialize(&ser);        // B.3.1 bridge: String @+0x10
+        TradeGoodsCategory* sp = _pairs;
+        for (int i = 0; i < spN && sp; ++i, ++sp) {
+            ser.Serialize(sp->rawMaterialFlags, nullptr);   // enum @+0x00
+            sp->spriteName.Serialize(&ser);                 // String @+0x08
+            sp->textName.Serialize(&ser);                   // String @+0x10
         }
     }
     ser.Serialize(_f68, nullptr);

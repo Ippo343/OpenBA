@@ -232,3 +232,110 @@ the post's tree. Retail has no check at the fault site (`IsA` on the entry): do 
 question for the fix is which retail path removes a dying / leaving citizen from the work's tree
 (the citizen's `OnRemove` 0x140113ca0 and the workplace release 0x140116540 / 0x140115a50 are the
 candidates) and whether the tree's port of it reaches TradeWork. The route is not part of any gate.
+
+## 14. Differences from retail found by the B.4 blocks and left — a list (2026-09-29)
+
+Each was found by a B.4 block while it converted the body, read against retail by that block, and
+deliberately NOT changed inside the conversion. Status `CONFIRMED` means the block quoted retail's
+address; `SUSPECTED` means it did not read retail. Every fix is its own `behaviour:` commit.
+The block's hand-in is summarised in `runtime_port/endgame_b/b4_session/GATE_TABLE.md`; the site
+in the code carries a comment.
+
+### 14a. Wrong callee, wrong object, wrong overload
+
+| # | where | the tree | retail | status |
+|---|---|---|---|---|
+| 1 | `CitizenAIComponent::CheckEducation` (`citizenaicomponent.cpp`) | calls the Residence finder 0x140008090, adds a null-guard bail, and writes Residence+0x38 (inside the embedded controller) | 0x14010f7a0 calls the StorageComponent finder 0x140006270 at 0x14010f7e1 / 0x14010f830 | CONFIRMED (COMP-b, COMP-e) |
+| 2 | `AnimAudioEvent::Serialize` | calls the StringTable serializer | calls 0x1400019a0 at 0x140087efa | CONFIRMED (COMP-a) |
+| 3 | `UpgradeUIConfig::Serialize` | validates the target against `ComponentEntity::TypeId()` | 0x140086fb0 validates against ComponentDescription (cell 0x1401c7318); no runtime effect today: `IsDerivedFromOrTrust` accepts any non-null pointer | CONFIRMED (DLG-e) |
+| 4 | `PickingDescription::Serialize` | calls 0x14001bcc0 | 0x140128d00 calls 0x140037000 | CONFIRMED (COMP-e) |
+| 5 | `NaturalResourceComponent` slot 8 | NOT installed | 0x140125c40 finds a ParticleComponent through 0x140005200 (a 0x48-byte object) and reads its +0x28 as a MeshInstance, while 0x140126440, which sets the tick bit it clears, animates the ModelComponent: needs a ruling on what the receiver really is | CONFIRMED, unresolved (COMP-d) |
+| 6 | `MainMenuDialog` OnOpened / OnClosed | the tree's own bodies | the ports of slots 5 / 4 are 0x1400b3c60 / 0x1400b3cd0; installing them changes what the main menu does on open and close (the gate's UI routes) | CONFIRMED (DLG-b) |
+| 7 | `EventNotifyDialog::OnUpdate` | SubString arguments, the final +0xC4 value and how the popup is built differ | 0x140067c30 | CONFIRMED (DLG-b) |
+| 8 | `EventLogUI` | sizes its display arrays from ChildCount | reads +0xC0 | CONFIRMED (DLG-b) |
+| 9 | `NoiseUI` | stores the five sliders without checking they are EditElements | checks | CONFIRMED (DLG-b) |
+| 10 | `WorkPlaceUI` element finds | unchecked | narrows each with IsDerivedFrom | CONFIRMED (DLG-e) |
+| 11 | Tombstone slot 4 | the tree's form | checks the description type and always writes the timer | CONFIRMED (COMP-e) |
+| 12 | `TerraformComponent_RegionRecalc` | a second copy of `Pf_RegionDirty4_b150` with the tree's zero-chunk guard | one body | CONFIRMED (COMP-e) |
+
+### 14b. The save format (each fix re-cuts the resave golden)
+
+| # | where | the tree | retail | status |
+|---|---|---|---|---|
+| 13 | `CitizenBehavior::Serialize`, `ProfessionResourceEntry` | writes the Time at +0x14 | 0x14008f760 uses +0x18 | CONFIRMED (GAME-a) |
+| 14 | same, after the +0x150 array | no resize | resizes to 0x47 with a zero-extend fixup on load | CONFIRMED (GAME-a) |
+| 15 | same, version 5 | clears the +0x160 tree | clears +0x140 | CONFIRMED (GAME-a) |
+| 16 | `EventLog::Serialize`, entry colour | the int overload | the uint overload | CONFIRMED (GAME-a) |
+| 17 | `SpawnComponent::Persist` | tests the stream as if it were a Serializer, so the load-time reconcile never runs | 0x140055ee0 reconciles on every load | CONFIRMED (COMP-e) |
+| 18 | `StateMachineComponent::Persist` | the uchar overload, through 4 casts | the signed-char overload, 0x14012b940 | CONFIRMED (COMP-e) |
+| 19 | `WorkComponent::workFlags` | `uint32` | serialized through the int door | CONFIRMED (COMP-f) |
+| 20 | `LayoutDescription` enum fields, `FruitComponent::field30` (a float stored as `uint32_t`) | as declared | the overload retail calls decides the type | SUSPECTED (R-UI-a, COMP-d) |
+| 21 | the settings Save | normalises each flag with `!= 0` | passes the raw byte, 0x1400989d7 | CONFIRMED (W0-H2) |
+| 22 | the settings init (`game_main.cpp`) | writes int32 at +0x0C and +0x18 (the pads become 0) | writes one byte (0x140042001, 0x140042013); the pads keep MemAlloc's bytes | CONFIRMED (W0-H2, D) |
+
+### 14c. Construction, destruction, leaks
+
+| # | where | the tree | retail | status |
+|---|---|---|---|---|
+| 23 | `HelpUI` | its history array is a raw pointer, never freed | the dtor frees it, 0x140011cf0 | CONFIRMED (DLG-b) |
+| 24 | `EventLogUI` | its three arrays are raw pointers, never freed | 0x1400114b0 | CONFIRMED (DLG-b) |
+| 25 | `StorageComponent` | the dtor does not free the item array | retail's does | CONFIRMED (W0-H2) |
+| 26 | `TradeDescription::Serialize` | allocates without setting capacity; its dtor walks the capacity | resizes through 0x14000f370 | CONFIRMED (COMP-f) |
+| 27 | `TradeComponent` ctor | writes +0x6c..+0x70 | does not | CONFIRMED (COMP-f) |
+| 28 | `MapComponent` ctor | zero-fills the footprint rect | writes 0xFFFF | CONFIRMED (COMP-d; an older PORT GAP) |
+| 29 | `IO::PackageFile::GetFileInfo` | returns `_file` as a bitwise copy, no AddRef; harmless only while `_name0` / `_name1` are null | the FileInfo copy ctor 0x18000c110; `ReadFile` then releases the names | CONFIRMED (R-IO); needs `FileInfo` to be a real class |
+| 30 | `Graphics::AnimationState` | 0x48 bytes (a unit test pins it) | 0x18, ctor 0x1800fdaf0 | CONFIRMED (R-GFX) |
+| 31 | H5 raw-storage members: CitizenComponent `name` +0x28 (String) and `consumedTypes` +0x98; Profession's three Strings; the Build / WorkPlace arrays; Map's picking scene; PlayerController's transform and camera (`Camera`'s default ctor is protected); the `Collection::Array` headers declared as three fields | raw storage, so no ctor / dtor runs | real members | CONFIRMED per class (W0-H1, W0-H2, GAME-a); B4_RULES correction 7 |
+| 32 | `BeginDrawGroup`, `Render` (runtime graphics) | stack `RendererDrawGroup` / `RendererSceneEntry` objects whose implicit ctors zero memory that is then overwritten | no such stores | CONFIRMED (R-GFX); cost only |
+
+### 14d. Guards the tree has and retail lacks — and guards B.4 dropped
+
+Retail's unguarded derefs are load-bearing (CLAUDE.md). The first group is kept and listed; the
+second group was removed when a typed member replaced a guarded helper, and is safe only under the
+stated condition.
+
+- KEPT: null entity / MapComponent / map tests and null component-slot skips in the Component c
+  bodies; `ClearArea::IsDone` reads the description without IsDerivedFrom; the missing-StateMachine
+  guard in `LeaveDocked` and `SetAccepting`; `EntityList_RegisterEntity_Impl`'s null guards (38
+  callers); the guarded find copies (`fn_FindComponent_*`, `Entity_FindComponentByExeTypeId`, the
+  disaster finders, `Pasture_FindLivestockComp`, `NaturalResourceComponent_FindComponentByType`,
+  `ActMv_FindComponentFamily_12d0`); `(uintptr_t)comp < 0x10000` at `townhallui.cpp`; the standalone
+  `dialogRes != nullptr` skips of EventNotifyDialog / AutoSaveDialog.
+- DROPPED: `ComponentEntity::FindComponent<T>()` does not skip a null component slot and does not
+  test the type id for 0 / -1 (retail's per-type instances do neither: 26 read by block T). Safe
+  while `ComponentEntity`'s ctor never stores a null slot (it skips a component with no factory) and
+  every `T` is registered. PastureUI's second copy of ComputeCapacity went with its two guards
+  (`behaviour:` 0x140128570).
+- DROPPED WITHOUT READING RETAIL: the MemAlloc-failure path of `TickIdle` (COMP-f). SUSPECTED.
+
+### 14e. Stores that may normalise where retail copies
+
+- `optionsdialog.cpp:745,748`: `inputCfg->_mouseClipping = checkMouseClip->_checked != 0;` and
+  `_mouseDisplay` likewise. UI's `EnableCursor` tests `Input::Configuration::_mouseDisplay` as a
+  `bool` where retail compares a byte. Several flags became `bool` in R-UI-b and R-VIDEO
+  (`SpriteSheet::m_field50`, `TextDescription::_b84/_b85`, the ribbon / scroll `_vertical`,
+  RenderState's six flags). Identical only if the byte is always 0 or 1. SUSPECTED; the settings
+  flags were the same question and retail copies raw (0x14007248f), so those are `uint8_t`.
+
+### 14f. Names that mislead (naming only)
+
+- CitizenComponent +0x238 is the HOME and +0x248 the WORKPLACE; the bodies the tree and Ghidra call
+  `AssignWorkplace` (0x1401163d0) and `AssignHousing` (0x140111ee0) are the other way round.
+- `GameUpdateLoop::m_tutorial` holds a `WorkScheduler`, `m_imageCapture` the `Minimap`.
+- `SelectDescription::_ref20` (townhallui reads it by that name); `Profession::priority` (+0x50) is
+  a carry / capacity amount; `ClearAreaComponent` +0x48 `clearState` is used as a capacity;
+  `ToolUI` +0x40 `hasBorderTitle` is the pin flag; CitizenDescription's `min/maxPregnancyAge` are
+  the spawn age range in debugui; the list DebugUI's disaster trigger picks from is
+  `CitizenBehavior::citizens` (the tree called it the building list).
+- Ghidra labels: `0x140112ae0 CitizenComponent_ConsumeFuel` is the happiness update;
+  `0x140114900 CitizenComponent_OnCreate` serializes CitizenDescription; `g_PauseDialog_Vtable`
+  holds MainMenuDialog's slots and `g_ReloadDialog_Vtable` MessageDialog's; `0x140115de0`
+  ("GetHappiness") is the carry count.
+- Two tree bodies both claim retail 0x1400049c0 (`Reimpl_ExternalPtrArray_Serialize`,
+  `Desc_LoadExternalArray`).
+
+### 14g. Commit messages that state something nobody verified
+
+`9a0c288e` (COMP-d: "the next update re-grounds it either way"), `a61be2e2` (COMP-f: the load-time
+recompute), DLG-b's GoalDialog commit ("46 -> 0": the base was 70). The code is as described in
+the hand-ins; the sentences are not evidence.

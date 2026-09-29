@@ -23,7 +23,10 @@
 #include "Component/exe_bodies.h"
 #include "Tutorial/exe_bodies.h"   // WorkComponent_CalcMaxWorkers (0x14012e5c0, the registered body)
 #include "Action/exe_bodies.h"     // ActCt_TaskCleanup_8e30 (0x1400f8e30)
-#include "Work/exe_bodies.h"       // WorkBase_FindComponent_2f90 (0x140002f90)
+#include "Work/exe_bodies.h"
+#include "Entity/ComponentEntity.h"            // ComponentEntity::FindComponent<T>
+#include "Component/MapComponent.h"            // 0x140004680's class
+#include "Component/StatusIconComponent.h"     // 0x140002f90's class
 
 // ============================================================
 // Helpers
@@ -35,16 +38,6 @@
 // FUN_14012ead0 WorkComponent_CheckWorkSlot / FUN_14012eb50
 //   WorkComponent_RegisterWorkSlot — defined below.
 
-
-// ============================================================
-// WorkComponent::Draw (vtable slot [6], 0x14012e6f0)
-// ============================================================
-// Compute the effective work capacity and store it at +0x30.
-
-void WorkComponent_Draw(WorkComponent* self) {
-    int capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(self));   // 0x14012e5c0
-    self->workState = capacity;
-}
 
 
 // ============================================================
@@ -70,11 +63,12 @@ void WorkComponent_Draw(WorkComponent* self) {
 // Left uncorrected in a family that has now paid THREE TIMES for a child-offset or
 // slot mix-up (reference_workarea_bst_bad_entry.md), a comment that contradicts its own
 // code and its four siblings is a defect waiting for the next reader.
-bool WorkComponent_CheckWorkSlot(void* selfP) {
-    uintptr_t self = (uintptr_t)selfP;
+// LEFT: the goals tree hangs off GameUpdateLoop::m_tutorial (+0x118), a void* GAME-a
+// types; its node reads stay by offset.
+bool WorkComponent::IsWorkPosted() const {
     if (GameUpdateLoop::_singleton == nullptr) return false;
-    int key = *(int*)(self + 0x28);
-    int* node = *(int**)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0x118) + 0x30);
+    int key = workId;
+    int* node = *(int**)((uintptr_t)GameUpdateLoop::_singleton->m_tutorial + 0x30);
     while (node != nullptr) {
         if (*node <= key) {
             if (key <= *node) {
@@ -96,14 +90,13 @@ bool WorkComponent_CheckWorkSlot(void* selfP) {
 // Reimpl of FUN_14012eb50 (register/refresh this work slot:
 //   when occupied, sync worker id, poke the AI tree, refresh mesh flags 2 & 3)
 // ============================================================
-void WorkComponent_RegisterWorkSlot(void* selfP) {
-    uintptr_t self = (uintptr_t)selfP;
-    if (!WorkComponent_CheckWorkSlot(selfP)) return;
+void WorkComponent::CancelWork() {
+    if (!IsWorkPosted()) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    int key = *(int*)(self + 0x28);
+    int key = workId;
     int64_t valueIbp[1] = {0};
-    int* node = *(int**)(*(uintptr_t*)((uintptr_t)GameUpdateLoop::_singleton + 0x118) + 0x30);
+    int* node = *(int**)((uintptr_t)GameUpdateLoop::_singleton->m_tutorial + 0x30);
     bool found = false;
     while (node != nullptr) {
         if (key < *node) {
@@ -120,16 +113,28 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
         new (valueIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     }
 
-    *(uint32_t*)(self + 0x2c) = *(uint32_t*)(valueIbp[0] + 0x24);
+    workFlags = *(uint32_t*)(valueIbp[0] + 0x24);   // LEFT: the work's +0x24 (goals-tree value)
 
-    ActCt_TaskCleanup_8e30(*(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x118), key);   // 0x1400f8e30
+    ActCt_TaskCleanup_8e30(GameUpdateLoop::_singleton->m_tutorial, key);   // 0x1400f8e30
 
-    int64_t compIbp[1] = {0};
-    WorkBase_FindComponent_2f90(*(uintptr_t*)(self + 0x10), compIbp);   // 0x140002f90
-    if (compIbp[0] != 0) {
-        CitizenComp_FUN_14012c3f0((int64_t*)compIbp[0], 2, '\0');   // 0x14012c3f0
-        CitizenComp_FUN_14012c3f0((int64_t*)compIbp[0], 3, '\0');
+    // 0x140002f90 FindComponent<StatusIconComponent>; the null test is the tree's.
+    if (StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>()) {
+        // LEFT: 0x14012c3f0 takes the icon as int64_t* (COMP-b's declaration).
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 2, '\0');   // 0x14012c3f0
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 3, '\0');
     }
+}
+
+// B4 FORWARD: outside callers in buildcomponent_state8, citizenai_work_scheduler,
+// citizen_assignworkplace, clearareacomponent_states, cropfieldcomponent_states,
+// destroycomponent_states, firecomponent_ignite, orchardcomponent(_states),
+// pasturecomponent_states, resourceproducecomponent_states, Player/removaltool,
+// Player/keystone_a_removalcalcpath; the closing wave rewires them.
+bool WorkComponent_CheckWorkSlot(void* selfP) {
+    return ((WorkComponent*)selfP)->IsWorkPosted();   // B4 FORWARD: the old receiver cast
+}
+void WorkComponent_RegisterWorkSlot(void* selfP) {
+    ((WorkComponent*)selfP)->CancelWork();   // B4 FORWARD: the old receiver cast
 }
 
 // ============================================================================
@@ -165,11 +170,10 @@ WorkComponent::WorkComponent()
 void WorkComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.8 bridge (stream is void* in Internal::Persist)
 
     // Always serialize workId
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(workId, nullptr);   // B.3.4 bridge
+    ser.Serialize(workId, nullptr);
 
     // Legacy: version < 3 had a bool field (no longer used).
     // ⚠ It is a BOOL, so it must go through the bool overload
@@ -180,32 +184,35 @@ void WorkComponent::Persist(void* stream) {
     // branch is live there): our reader ended 3 bytes PAST the start of the
     // next record. Our own saves hid it because the save leg wrote the same 4
     // bytes it read back -- only a retail-authored save can catch this.
-    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    int version = ser.GetVersion();
     if (version < 3) {
         bool legacyBool = false;
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(legacyBool, nullptr);   // B.3.4 bridge
+        ser.Serialize(legacyBool, nullptr);
     }
 
     // Version >= 1: serialize workState
-    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    version = ser.GetVersion();
     if (version >= 1) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(workState, nullptr);   // B.3.4 bridge
+        ser.Serialize(workState, nullptr);
     }
 
-    // Version >= 2: serialize workFlags
-    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    // Version >= 2: serialize workFlags. Retail calls the int door here
+    // (the flags are an int in the stream); the value is the same bits.
+    version = ser.GetVersion();
     if (version >= 2) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&workFlags), nullptr);   // B.3.4 bridge
+        int flags = static_cast<int>(workFlags);
+        ser.Serialize(flags, nullptr);
+        workFlags = static_cast<uint32_t>(flags);
     }
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
-// [6] 0x14012e6f0. PORT GAP (retail 0x14012e6f0) — B38 D9: the body is ported
-// above (WorkComponent_Draw, capacity -> +0x30) but the tree's table never
-// installed it; the inert stub is kept here. Installing it is its own titled
-// commit.
-void WorkComponent::OnAdded() {}
+// [6] 0x14012e6f0 (Ghidra "Draw"): `CALL 0x14012e5c0; MOV [RBX+0x30],EAX` — the
+// starting worker count is computed when the entity is added. The tree's table never
+// installed this body (it lived as the uncalled WorkComponent_Draw) and every reader
+// computed +0x30 lazily on a 0.
+void WorkComponent::OnAdded() {
+    workState = CalcMaxWorkers();   // 0x14012e5c0
+}
 
 // ============================================================
 // WorkComponent slot [7] = +0x38, 0x14012e6c0 — CANCEL MY WORK ON REMOVAL
@@ -232,9 +239,9 @@ void WorkComponent::OnAdded() {}
 // one per haul, zero exceptions. See [[reference_ported_registered_but_unwired]].
 
 void WorkComponent::OnRemove() {
-    bool available = WorkComponent_CheckWorkSlot(this);   // 0x14012ead0
+    bool available = IsWorkPosted();   // 0x14012ead0
     if (available) {
-        WorkComponent_RegisterWorkSlot(this);             // 0x14012eb50
+        CancelWork();                  // 0x14012eb50
     }
 }
 
@@ -257,25 +264,30 @@ void* WorkComponent::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_TYPE(WorkComponent, "Component")
 
-// moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
-int fn_StorageCountQuery(void* component) {
-    uintptr_t c = (uintptr_t)component;
-    void* base = *(void**)(c + 0x18);
-    void* jobType = Object::IsDerivedFromNullSafe(base, WorkDescription::TypeId()) ? base : nullptr;
+// 0x14012e5c0 — the starting worker count from the WorkDescription (+0x18) and the
+// footprint (0x140004680 FindComponent<MapComponent>). The null-description return
+// is the tree's (retail reads through the null).
+int WorkComponent::CalcMaxWorkers() const {
+    Description* base = _description;
+    WorkDescription* jobType = Object::IsDerivedFromNullSafe(base, WorkDescription::TypeId())
+        ? static_cast<WorkDescription*>(base) : nullptr;
     if (!jobType) return 0;
-    uintptr_t jt = (uintptr_t)jobType;
-    if (*(uint8_t*)(jt + 0x34) == 0) {
-        return *(int*)(jt + 0x24);
+    if (!jobType->_b34) {                        // _scaleWorkersWithSize
+        return jobType->_i24;                    // _defaultWorkers
     }
-    uint64_t buildBP = 0;
-    fn_FindComponent_Build(*(void**)(c + 0x10), &buildBP);
-    uintptr_t build = (uintptr_t)buildBP;
-    int defaultWorkers = *(int*)(jt + 0x24);   // _defaultWorkers (NOT _maxWorkerCount)
-    int maxArea        = *(int*)(jt + 0x30);   // _maxArea (NOT the building's tile area)
-    int width      = (int)*(short*)(build + 0x2c);
-    int height     = (int)*(short*)(build + 0x2e);
+    MapComponent* build = _entity->FindComponent<MapComponent>();
+    int defaultWorkers = jobType->_i24;   // _defaultWorkers (NOT _maxWorkerCount)
+    int maxArea        = jobType->_i30;   // _maxArea (NOT the building's tile area)
+    int width      = static_cast<int16_t>(build->tileX1);
+    int height     = static_cast<int16_t>(build->tileY1);
     int result = (int)(((float)(width * height) / (float)maxArea) * (float)defaultWorkers + 1.0f);
     if (result > defaultWorkers) result = defaultWorkers;
     if (result < 1)              result = 1;
     return result;
+}
+
+// B4 FORWARD: outside callers in Dialog/townhallui.cpp, Dialog/workplaceui.cpp and the
+// inline bodies of Component/exe_bodies.h.
+int fn_StorageCountQuery(void* component) {
+    return ((WorkComponent*)component)->CalcMaxWorkers();   // B4 FORWARD: the old receiver cast
 }
