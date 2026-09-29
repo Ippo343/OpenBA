@@ -74,6 +74,7 @@
 #include "Component/StorageComponent.h"
 #include "Component/StateMachineComponent.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Entity/CitizenBehavior.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -419,8 +420,9 @@ void TradeComponent::BuildMerchantManifest() {
 // array, and adding the purchases first would make the post pay for its new goods with
 // its new goods.
 //
-// LEFT: the storage items (StorageComponent::storageSlots is void*, COMP-e) and the town
-// manager (GameUpdateLoop::m_citizenList is void*, GAME-a) stay by offset; the leaves
+// LEFT: the storage items (StorageComponent::storageSlots is void*, COMP-e) stay by
+// offset; the town manager is one cast of GameUpdateLoop::m_citizenList (void*, GAME-a);
+// the leaves
 // 0x14012cf10 / 0x14012d000 / 0x140088f90 take their operands as integers (their owners'
 // declarations).
 void TradeComponent::AutoTrade() {
@@ -429,7 +431,7 @@ void TradeComponent::AutoTrade() {
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();   // 0x140006270
 
     void* const townMgrP = GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_citizenList : nullptr;
-    const uintptr_t townMgr = reinterpret_cast<uintptr_t>(townMgrP);
+    CitizenBehavior* const townMgr = reinterpret_cast<CitizenBehavior*>(townMgrP);
 
     TradeResourceNode* treeRoot = nullptr;   // the purchase tally
     int treeCount = 0;                       // retail keeps it; nothing reads it back
@@ -529,7 +531,7 @@ void TradeComponent::AutoTrade() {
                     paid += unit;
                     ++sold;
 
-                    *reinterpret_cast<int32_t*>(townMgr + 0x1ac) += unit;
+                    townMgr->field_0x1AC += unit;
                     // Retail passes the unit price where every other caller of 0x140088f90
                     // passes a StorageComponent. The function ignores its first parameter,
                     // so this is harmless — passed through rather than "corrected".
@@ -537,9 +539,7 @@ void TradeComponent::AutoTrade() {
                         reinterpret_cast<void*>(static_cast<uintptr_t>(unit)),
                         static_cast<uintptr_t>(resource));
                     if (cat >= 0) {
-                        const uintptr_t catArray = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);
-                        *reinterpret_cast<int32_t*>(catArray + static_cast<uintptr_t>(cat) * 0x20
-                                                    + 0x0c) += 1;
+                        townMgr->professionResources[cat].field_0x0C += 1;
                     }
 
                     // Take the unit out of storage, by identity. An entry that reaches

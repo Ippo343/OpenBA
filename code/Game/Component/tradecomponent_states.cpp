@@ -81,6 +81,7 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Entity/CitizenBehavior.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -151,8 +152,9 @@ int TradeComponent::PickMerchantTier() {
     const TradeTier* tiers = desc->_prices;
     int idx = 0;
     for (int i = 0; i < count; ++i) {
-        const uintptr_t townState = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);
-        const int pop = *reinterpret_cast<int*>(townState + 0xa8);
+        const CitizenBehavior* townState =
+            reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+        const int pop = townState->citizenCount;   // +0xa8
         if (pop >= 0 && pop < tiers[i].populationLimit)
             return idx;
         ++idx;
@@ -434,9 +436,9 @@ char TradeComponent::Teardown() {
     ComponentEntity* entityIBP = _entity;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
-        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a); its list at +0x30.
-        CemeteryListErase_Reimpl(reinterpret_cast<void*>(
-                        reinterpret_cast<uintptr_t>(gw->m_citizenList) + 0x30),
+        // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): one cast to the town
+        // manager; its trading-post list at +0x30.
+        CemeteryListErase_Reimpl(&reinterpret_cast<CitizenBehavior*>(gw->m_citizenList)->field_0x30,
                     &entityIBP);
     }
 

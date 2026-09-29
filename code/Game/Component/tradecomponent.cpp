@@ -17,6 +17,7 @@
 #include "Component/WorkPlaceComponent.h"
 #include "Component/coll_bridge.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Entity/CitizenBehavior.h"
 #include "Work/tradework_funcs.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
@@ -354,14 +355,13 @@ void TradeComponent::OnAdded() {
 
     ComponentEntity* entityPtr = _entity;
 
-    // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a); its
-    // trading-post list at +0x30 stays by offset.
-    uintptr_t worldMgr = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
+    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): one cast to the town manager.
+    CitizenBehavior* worldMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
 
-    // Add to the trading-post list at worldMgr+0x30
+    // Add to the trading-post list at +0x30
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    int currentCount = *(int*)(worldMgr + 0x38);
-    GameColl::AsArray<GameColl::Ptr8>(worldMgr + 0x30)
+    int currentCount = worldMgr->field_0x38;
+    GameColl::AsArray<GameColl::Ptr8>(&worldMgr->field_0x30)
         .SetSizeFill(currentCount + 1, &entityPtr);
 
     Setup();   // 0x14005c220
@@ -386,11 +386,11 @@ void TradeComponent::OnRemove() {
 
     ComponentEntity* entityPtr = _entity;
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-    uintptr_t worldMgr = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
+    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): one cast to the town manager.
+    CitizenBehavior* worldMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
 
-    // Unregister the entity at worldMgr+0x30 (trade entity list)
-    CemeteryListErase_Reimpl((void*)(worldMgr + 0x30), &entityPtr);   // 0x140002cc0
+    // Unregister the entity from the trading-post list at +0x30
+    CemeteryListErase_Reimpl(&worldMgr->field_0x30, &entityPtr);   // 0x140002cc0
 }
 // [13] 0x14005c140 / [14] 0x14005c000 — the work-enable pair; they go together (a
 // live query over a stub toggle reports a state nothing can change). Neither

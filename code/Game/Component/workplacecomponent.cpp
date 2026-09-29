@@ -39,6 +39,7 @@
 #include "Work/exe_bodies.h"       // WorkBase_FindComponent_2f90 / _3050
 #include "system/Value.h"          // RtSystem_Time_Ctor
 #include "Entity/ComponentEntity.h"            // ComponentEntity::FindComponent<T>
+#include "Entity/CitizenBehavior.h"
 #include "Component/StatusIconComponent.h"     // 0x140002f90's class
 #include "Component/DestroyComponent.h"        // 0x140005780's class
 #include "Component/StateMachineComponent.h"   // 0x140003ea0's class
@@ -503,8 +504,8 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a); its BST
     // node reads stay by offset.
     ComponentEntity* ownerRef = _entity;
-    uintptr_t townMgr = (uintptr_t)gw->m_citizenList;
-    uint64_t* node = townMgr ? *(uint64_t**)(townMgr + 0x100) : nullptr;
+    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(gw->m_citizenList);
+    uint64_t* node = townMgr ? (uint64_t*)townMgr->field_0x100 : nullptr;
     const uint64_t keyBits = (uint64_t)key;
     while (node) {
         if (keyBits < node[0]) {
@@ -868,8 +869,8 @@ void WorkPlaceComponent::OnRemove() {
 
         // LEFT: the town manager (GameUpdateLoop::m_citizenList) is void* (GAME-a); the
         // BST root at +0x100 and its node reads stay by offset.
-        uintptr_t gameState = (uintptr_t)GameUpdateLoop::_singleton->m_citizenList;
-        uint64_t* node = *(uint64_t**)(gameState + 0x100);
+        CitizenBehavior* gameState = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+        uint64_t* node = (uint64_t*)gameState->field_0x100;
         const uint64_t key = (uint64_t)professionId;
 
         bool found = false;
