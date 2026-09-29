@@ -152,3 +152,7 @@ Metric at `59975715`: **24,258** to remove. Floor ceilings raised in `FLOOR.md` 
 read the marked lines: `win32` 34 -> 56 (Win32 handle parameters on NAMED fields: `HWND`,
 `HINSTANCE`, `CRITICAL_SECTION*`, `WAVEFORMATEX*`; the class headers do not include `<windows.h>`),
 `crt` 7 -> 9 (`qsort` comparator parameters).
+
+| 28 | W1-WORK-c | `5beafd9a` | Work c: the Work base, the work_* leaves, accessors and action builders, TradeWork, PlantArea, PlantOrchard, TendArea: 1724 -> 300 in 33 files; `known_port_issues` 13 and 14 updated | exit 0 · 918 / 0 · 0 (one standing perf warning in `work_act_consume.cpp` changed its text when the type was named, `uintptr_t [0]` -> `ConsumeProduceRecipe* [0]`; the gate counted it as new) | ok | 5/5 | tools ok · `sa-stress` exit 0, update 1.80 ms/frame, p95 2.65 | 0 |
+
+Metric at `5beafd9a`: **22,834** to remove.
