@@ -111,6 +111,7 @@
 #include "../../types/graphics/SunLight.h"
 #include "../../types/video/Device.h"      // RtVideo::Device, RtVideo::RenderBuffer
 #include "../../types/video/ImageBuffer.h" // ENDGAME B.3.9 VS: ::new (p) Video::ImageBuffer()
+#include "../../types/video/CompanionData.h" // B.4: Video::DeviceData::Slot6
 #include "../../types/system/MemoryAllocator.h"
 #include <new>
 
@@ -121,71 +122,25 @@
 #include <cstdlib>
 #include <initializer_list>
 
-using RtGraphics::SunLight;
-
 namespace {
 
 // ---------------------------------------------------------------------------
-// Dependencies. PORT-AWARE (RT_EXPORT_ONCE) throughout: every one of these is a
-// dependency call, not an oracle, so it must reach OUR body where one exists
-// and must keep working with the DLL absent
-// (reference_converting_a_door_is_not_satisfying_it.md).
+// Dependencies, all members of the real Video classes (B.4: the wrappers that
+// took `void*` receivers are gone):
+//   `Video::RenderBuffer::Create` / `PlatformConstruct` / `PlatformDestruct`
+//   `Video::ImageBuffer::Create` — vtable slot +0x48, eleven arguments after
+//     `this`, counted against the mangled name
+//     ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHH
+//      W4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z
 // ---------------------------------------------------------------------------
-using PlatformFn          = void  (*)(void*);
 
-// ENDGAME B.3.5 caller batch: `Create`, `PlatformConstruct` and `PlatformDestruct`
-// are DEFINED members of the real `Video::RenderBuffer` (device.cpp / buffers.cpp),
-// so the three by-name doors become member calls. They were spelled as
-// FUNCTION-POINTER GETTERS (`RenderBufferCreate(rb, …)`); a member call has no
-// pointer to hand back, so each is now an ordinary wrapper taking the receiver and
-// the five call sites lost their extra `()`. `RenderBufferCreateFn` went with them.
-bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
-        reinterpret_cast<const Video::ImageBuffer*>(colour),
-        reinterpret_cast<const Video::ImageBuffer*>(depth));           // B.3.5 bridge
-}
-void RenderBufferPlatformConstructPort(void* rb) {
-    reinterpret_cast<Video::RenderBuffer*>(rb)->PlatformConstruct();   // B.3.5 bridge
-}
-void RenderBufferPlatformDestructPort(void* rb) {
-    reinterpret_cast<Video::RenderBuffer*>(rb)->PlatformDestruct();    // B.3.5 bridge
-}
-
-// (ENDGAME B.3.9 pilot: the LightVtable / SunLightVtable accessors -- the MINTED
-// tables the retired doors stamped -- are gone; the compiler stamps both.)
-
-RtVideo::Device** DeviceSlot() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
-    return reinterpret_cast<RtVideo::Device**>(&::Video::Device::_singleton);
-}
-
-// `dd->vtable[6]()` — the capability gate. See the header block: this is
-// `xor al,al; ret` on DX11 and therefore always false in this process, but the
-// call is made rather than folded away, because the answer belongs to the
-// device and not to us.
+// `dd->vtable[6]()` — the capability gate, `Video::DeviceData::Slot6`. See the
+// header block: this is `xor al,al; ret` on DX11 and therefore always false in
+// this process, but the call is made rather than folded away, because the
+// answer belongs to the device and not to us. LEFT: `Device::deviceData` is a
+// `void*` in Device.h (video's header), so the one view of it is here.
 bool DeviceSupportsColourShadowTarget() {
-    RtVideo::Device* dev = *DeviceSlot();
-    void* dd = dev->deviceData;
-    using CapFn = bool (*)(void*);
-    CapFn slot6 = *reinterpret_cast<CapFn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(dd)) + 0x30);
-    return slot6(dd);
-}
-
-// Video::ImageBuffer::Create, vtable slot +0x48. Eleven arguments after `this`,
-// counted against the mangled name
-//   ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHH
-//    W4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z
-// = (ImageType, Usage, Format, unsigned, int, int, FilterMode, AddressMode x3,
-//    Array*), which is exactly the four register slots plus the eight stack
-// slots [RSP+0x20]..[RSP+0x58] the two call sites fill.
-// B3X W0 audit: by name on the real class (it was a raw `+0x48` read).
-bool ImageBufferCreate(void* ib, int imageType, int usage, int format,
-                       unsigned flags, int w, int h,
-                       int filter, int addrU, int addrV, int addrW, void* data) {
-    return reinterpret_cast<Video::ImageBuffer*>(ib)->Create(               // B.3.x bridge
-        imageType, usage, format, flags, w, h, filter, addrU, addrV, addrW,
-        static_cast<Video::ImageBuffer::LevelArray*>(data));
+    return static_cast<Video::DeviceData*>(::Video::Device::_singleton->deviceData)->Slot6();
 }
 
 // `operator new` / `operator delete`, transcribed — see the header block.
@@ -217,12 +172,13 @@ void  OperatorDelete(void* p) { if (p != nullptr) System::MemoryAllocator::MemFr
 // `p` and the returned `this` are the same pointer by construction, so using
 // `p` is byte-faithful to what retail computes while being independent of how
 // any port spells its signature.
-void* NewImageBuffer() {
+Video::ImageBuffer* NewImageBuffer() {
     void* p = OperatorNew(0x68);
     if (p == nullptr)
         return nullptr;
-    ::new (p) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
-    return p;
+    // ENDGAME B.3.9 VS: the ??0 door and the minted row are retired. The
+    // placement-new expression's value IS `p`.
+    return ::new (p) Video::ImageBuffer();
 }
 
 // `rb = operator new(0x30); if (rb) { rb[0]=rb[8]=rb[0x10]=0;
@@ -232,23 +188,27 @@ void* NewImageBuffer() {
 // PlatformConstruct — and it is transcribed as the inline that it is rather
 // than redirected to the ctor export, because the shipped bytes at both sites
 // are the inline.
-void* NewRenderBuffer() {
-    void* rb = OperatorNew(0x30);
-    if (rb == nullptr)
+//
+// LEFT: the raw allocation is viewed once as the RenderBuffer the inlined ctor
+// builds in it (the class's own ctor is not what retail runs here).
+Video::RenderBuffer* NewRenderBuffer() {
+    void* p = OperatorNew(0x30);
+    if (p == nullptr)
         return nullptr;
-    uint64_t* w = static_cast<uint64_t*>(rb);
-    w[0] = 0;   // +0x00 colorBuffer
-    w[1] = 0;   // +0x08 depthBuffer
-    w[2] = 0;   // +0x10 width | height
-    RenderBufferPlatformConstructPort(rb);
+    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(p);
+    rb->colorBuffer = nullptr;   // +0x00
+    rb->depthBuffer = nullptr;   // +0x08
+    rb->width  = 0;              // +0x10 \ one qword store in retail
+    rb->height = 0;              // +0x14 /
+    rb->PlatformConstruct();
     return rb;
 }
 
 // `if (rb) { RenderBuffer::PlatformDestruct(rb); operator delete(rb); }`
-void DeleteRenderBuffer(void* rb) {
+void DeleteRenderBuffer(Video::RenderBuffer* rb) {
     if (rb == nullptr)
         return;
-    RenderBufferPlatformDestructPort(rb);
+    rb->PlatformDestruct();
     OperatorDelete(rb);
 }
 
@@ -256,10 +216,10 @@ void DeleteRenderBuffer(void* rb) {
 // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md: slot 0 is ??_E, not ??_G).
 // B3X W0 audit: by name, through the object's own class (Object::Base root);
 // B3X W1: that call is `delete`.
-void DeleteImageBuffer(void* ib) {
+void DeleteImageBuffer(Video::ImageBuffer* ib) {
     if (ib == nullptr)
         return;
-    delete reinterpret_cast<Video::ImageBuffer*>(ib);   // B.3.x bridge
+    delete ib;
 }
 
 // The two float constants the ctor's bounds block uses, LIFTED AS RAW BITS and
@@ -331,16 +291,16 @@ void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
         // render buffer around it.
         DeleteRenderBuffer(_renderBuffer);
         _colourTarget = NewImageBuffer();
-        ImageBufferCreate(_colourTarget, 0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
+        _colourTarget->Create(0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
         _renderBuffer = NewRenderBuffer();
-        RenderBufferCreate(_renderBuffer, _colourTarget, _depthTarget);
+        _renderBuffer->Create(_colourTarget, _depthTarget);
     } else if (!DeviceSupportsColourShadowTarget() && _colourTarget != nullptr) {
         // The device lost it: drop the colour target and rebuild depth-only.
         DeleteRenderBuffer(_renderBuffer);
         DeleteImageBuffer(_colourTarget);
         _colourTarget = nullptr;
         _renderBuffer = NewRenderBuffer();
-        RenderBufferCreate(_renderBuffer, _colourTarget, _depthTarget);
+        _renderBuffer->Create(_colourTarget, _depthTarget);
     }
     // A rebuild call verifies NOTHING against an oracle here, and the old
     // `float pre[11]` / `bool rebuilt` locals that said so were dead: both were
@@ -366,44 +326,42 @@ void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
 // Graphics::SunLight::InitFields / ReleaseFields (ENDGAME B.3.8 block RB,
 // RULE B8-1): 0x1801081f0 after its two stamps, and 0x180108160 between its
 // restamp and the ~Geometry tail. Shared by the real ctor/dtor (SunLight.h)
-// and the two doors above; MOVED VERBATIM through the field-identical
-// `RtGraphics::SunLight` POD view (cross-asserted in SunLight.h).
+// and the two doors above. B.4: on the class's own fields (the POD view is
+// gone).
 // ============================================================================
 void Graphics::SunLight::InitFields() {
-    RtGraphics::SunLight* const self = reinterpret_cast<RtGraphics::SunLight*>(this);   // B.3.8 bridge (the POD view)
-
-    self->_dirX = 0.0f;  self->_dirY = 0.0f;  self->_dirZ = -1.0f;
-    self->_sunR = 1.0f;  self->_sunG = 1.0f;  self->_sunB = 1.0f;  self->_sunA = 1.0f;
-    self->_ambientR = 0.0f; self->_ambientG = 0.0f; self->_ambientB = 0.0f;
-    self->_ambientA = 1.0f;
+    _dirX = 0.0f;  _dirY = 0.0f;  _dirZ = -1.0f;
+    _sunR = 1.0f;  _sunG = 1.0f;  _sunB = 1.0f;  _sunA = 1.0f;
+    _ambientR = 0.0f; _ambientG = 0.0f; _ambientB = 0.0f;
+    _ambientA = 1.0f;
     // +0xEC is NOT written by retail and is NOT written here.
-    self->_colourTarget = nullptr;
-    self->_depthTarget  = nullptr;
-    self->_renderBuffer = nullptr;
-    self->_base._materialTypeFlags = 0x8000;
+    _colourTarget = nullptr;
+    _depthTarget  = nullptr;
+    _renderBuffer = nullptr;
+    _materialTypeFlags = 0x8000;
 
     if (DeviceSupportsColourShadowTarget()) {
-        self->_colourTarget = NewImageBuffer();
-        ImageBufferCreate(self->_colourTarget, 0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
+        _colourTarget = NewImageBuffer();
+        _colourTarget->Create(0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
     }
 
     // Unconditional — the join label 0x180108325 is BELOW the capability test's
     // JZ target, so the depth target and the render buffer are built whether or
     // not the colour target was.
-    self->_depthTarget = NewImageBuffer();
-    ImageBufferCreate(self->_depthTarget, 0, 1, 7, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
+    _depthTarget = NewImageBuffer();
+    _depthTarget->Create(0, 1, 7, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
 
-    self->_renderBuffer = NewRenderBuffer();
-    RenderBufferCreate(self->_renderBuffer, self->_colourTarget, self->_depthTarget);
+    _renderBuffer = NewRenderBuffer();
+    _renderBuffer->Create(_colourTarget, _depthTarget);
 
     // Inlined Geometry::SetBounds.
-    auto& b = self->_base._localBounds;
+    ::Box& b = _localBounds;
     const bool same = b.min.x == kBoundsMin && b.min.y == kBoundsMin && b.min.z == kBoundsMin &&
                       b.max.x == kBoundsMax && b.max.y == kBoundsMax && b.max.z == kBoundsMax;
     if (!same) {
         b.min.x = kBoundsMin; b.min.y = kBoundsMin; b.min.z = kBoundsMin;
         b.max.x = kBoundsMax; b.max.y = kBoundsMax; b.max.z = kBoundsMax;
-        self->_base._dirtyFlags |= 2u;
+        _dirtyFlags |= 2u;
     }
 
 }

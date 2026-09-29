@@ -151,25 +151,8 @@ namespace {
 // `??2ImageBuffer@Video@@SAPEAX_K@Z` / `??2RenderBuffer@Video@@SAPEAX_K@Z` —
 // the class operator news. CreateTargets INLINES both (Enter(alloc+0x640);
 // Allocate(alloc, n, 8); Leave), which is instruction for instruction what
-// these two exported statics are; imagebuffer_derived.cpp reaches the identical
-// inlining the same way.
-void* ImageBufferOperatorNew(uint64_t n) {
-    return Video::ImageBuffer::operator new(n);    // 0x18001e910
-}
-void* RenderBufferOperatorNew(uint64_t n) {
-    return Video::RenderBuffer::operator new(n);   // 0x18001f2e0
-}
-void ImageBufferCtor(void* p) { ::new (p) Video::ImageBuffer(); }   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
-// ENDGAME B.3.5 caller batch: DEFINED members of the real `Video::RenderBuffer`
-// (buffers.cpp / device.cpp). The `RbCreateFn` typedef went with its door.
-void RenderBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
-}
-bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
-        reinterpret_cast<const Video::ImageBuffer*>(colour),
-        reinterpret_cast<const Video::ImageBuffer*>(depth));           // B.3.5 bridge
-}
+// these two exported statics are; B.4: CreateTargets calls them by name, and
+// the RenderBuffer members (`PlatformConstruct`, `Create`) likewise.
 
 // Video::Context setters DrawItemList drives. Both PORTED (video/context.cpp)
 // and registered by name and address.
@@ -672,47 +655,48 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
 // inlined `operator new` plus an unguarded vtable slot-9 `Create`, and the
 // arithmetic is what the banner above documents.
 // ---------------------------------------------------------------------------
+//
+// B.4: on the class's typed fields (`_shadowMap` / `_shadowDepth` /
+// `_shadowTarget`, Light.h). The placement-new expression's value IS the
+// allocation, which is what retail stores.
 void SpotLight::CreateTargets() {
-    uint8_t* const self = reinterpret_cast<uint8_t*>(this);   // B.3.5 bridge
-
     // ---- +0x148, the shadow colour image ----------------------------------
     {
-        void* p = ImageBufferOperatorNew(0x68);
-        if (p != nullptr) ImageBufferCtor(p);
-        *reinterpret_cast<void**>(self + 0x148) = p;
-        // Slot 9 `Create`, by name (B3X W0); faithful: unguarded.
-        Video::ImageBuffer* const img =
-            *reinterpret_cast<Video::ImageBuffer**>(self + 0x148);   // B.3.x bridge
-        img->Create(0, 0, 5,
-                    0x40u, 0x400, 0x400,
-                    1, 1, 1, 1, nullptr);
+        void* const p = Video::ImageBuffer::operator new(0x68);   // 0x18001e910
+        _shadowMap = (p != nullptr) ? ::new (p) Video::ImageBuffer() : nullptr;
+        // Slot 9 `Create`, by name (B3X W0); faithful: unguarded, and the field
+        // is re-read (`MOV RCX,[RSI+0x148]`).
+        _shadowMap->Create(0, 0, 5,
+                           0x40u, 0x400, 0x400,
+                           1, 1, 1, 1, nullptr);
     }
 
     // ---- +0x150, the shadow depth image ------------------------------------
     {
-        void* p = ImageBufferOperatorNew(0x68);
-        if (p != nullptr) ImageBufferCtor(p);
-        *reinterpret_cast<void**>(self + 0x150) = p;
-        Video::ImageBuffer* const img =
-            *reinterpret_cast<Video::ImageBuffer**>(self + 0x150);   // B.3.x bridge
-        img->Create(0, 1, 7,
-                    0x40u, 0x400, 0x400,
-                    1, 1, 1, 1, nullptr);
+        void* const p = Video::ImageBuffer::operator new(0x68);
+        _shadowDepth = (p != nullptr) ? ::new (p) Video::ImageBuffer() : nullptr;
+        _shadowDepth->Create(0, 1, 7,
+                             0x40u, 0x400, 0x400,
+                             1, 1, 1, 1, nullptr);
     }
 
     // ---- +0x158, the render target -----------------------------------------
-    void* rb = RenderBufferOperatorNew(0x30);
+    // `Video::RenderBuffer::RenderBuffer` INLINED (the three zeroed qwords, then
+    // PlatformConstruct). LEFT: the raw allocation is viewed once as the
+    // RenderBuffer the inlined ctor builds in it.
+    Video::RenderBuffer* const rb =
+        static_cast<Video::RenderBuffer*>(Video::RenderBuffer::operator new(0x30));   // 0x18001f2e0
     if (rb != nullptr) {
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
-        RenderBufferPlatformConstruct(rb);
+        rb->colorBuffer = nullptr;   // +0x00
+        rb->depthBuffer = nullptr;   // +0x08
+        rb->width  = 0;              // +0x10 \ one qword store in retail
+        rb->height = 0;              // +0x14 /
+        rb->PlatformConstruct();
     }
-    *reinterpret_cast<void**>(self + 0x158) = rb;
+    _shadowTarget = rb;
 
-    RenderBufferCreate(rb,
-                       *reinterpret_cast<void**>(self + 0x148),
-                       *reinterpret_cast<void**>(self + 0x150));   // JMP 0x1800f3f10
+    // JMP 0x1800f3f10 -- unguarded, as retail's tail jump is.
+    rb->Create(_shadowMap, _shadowDepth);
 }
 
 // ---------------------------------------------------------------------------

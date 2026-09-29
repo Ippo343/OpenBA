@@ -1072,12 +1072,8 @@ namespace Graphics {
 void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const {
     ++g_sunAddDrawItems;
 
-    // One bridge left, at the one place a foreign object's offsets are read:
-    // `renderer+0x10/+0x3c/+0x48`. The `scenev` and `self` bridges went with the
-    // by-name doors below (ENDGAME B.3.5 caller batch) — the member calls take the
-    // real references this body is already handed.
-    uint8_t* renderer = B(reinterpret_cast<void*>(&rendererRef));          // B.3.5 bridge
-
+    // B.4: `renderer+0x10/+0x3c/+0x48` are `_drawGroups` / `_shaderDetail` /
+    // `_detailId` (Camera.h); the bridge is gone.
     if (_depthTarget == nullptr) return;
     ++g_sunAddDrawEmit;
 
@@ -1089,26 +1085,21 @@ void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const 
     //   GetSunCamera                              -> Graphics::SunLight, RETSLOT
     rendererRef.Graphics::Renderer::AddLight(this);
 
-    // `GetSunCamera` is a HIDDEN-RETSLOT door (B5-12) and converts in the only
-    // shape the brief allows — the DOOR BODY MOVED TO THE CALL SITE: exactly one
-    // `Graphics::Camera` placement-new'd into the SAME 0xd8 caller storage retail
-    // reserves at RSP+0x30, from the member's prvalue. `Camera` is non-virtual, so
-    // an ordinary C++ by-value return is the right shape (Camera.h's own note),
-    // and C++17 guaranteed elision makes this one construction, not two.
-    alignas(16) uint8_t cam[0xd8];
+    // `GetSunCamera` is a HIDDEN-RETSLOT member (B5-12): the one 0xd8
+    // `Graphics::Camera` retail reserves at RSP+0x30 is this local, built from
+    // the member's prvalue (C++17 guaranteed elision: one construction).
     static_assert(sizeof(::Graphics::Camera) == 0xd8, "retail reserves 0xd8 for the sun camera");
-    new (cam) ::Graphics::Camera(                                      // B.3.5 bridge
-        this->::Graphics::SunLight::GetSunCamera(rendererRef));
+    const ::Graphics::Camera sunCamera =
+        this->::Graphics::SunLight::GetSunCamera(rendererRef);
 
-    const void* sceneCam = *reinterpret_cast<uint8_t**>(renderer + 0x10) + 8;
+    // Draw group ZERO's camera (`renderer+0x10` data, +0x08).
+    const ::Graphics::Camera& sceneCam = rendererRef._drawGroups._data[0]._camera;
     const int group = rendererRef.Graphics::Renderer::BeginDrawGroup(
-        reinterpret_cast<const ::Video::RenderBuffer*>(_renderBuffer),
-        *reinterpret_cast<const ::Graphics::Camera*>(sceneCam),
-        *reinterpret_cast<const ::Graphics::Camera*>(cam), 1, 1u);     // B.3.5 bridge
+        _renderBuffer, sceneCam, sunCamera, 1, 1u);
 
-    if (I32(renderer, 0x3c) != 0) {
+    if (rendererRef._shaderDetail != 0) {                 // +0x3c
         sceneRef.Graphics::Scene::AddGlobalDrawItems(rendererRef);
-        if (I32(renderer, 0x48) != 0)
+        if (rendererRef._detailId != 0)                   // +0x48
             sceneRef.Graphics::Scene::AddCulledDrawItems(rendererRef);
     }
 
