@@ -34,10 +34,10 @@
 #include "Component/exe_bodies.h"
 
 
-// ---- internal: serializer "stream error" word (serializer->stream + 8 == 0 ⇒ ok)
-static inline int SerStreamErr(void* serializer) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
+// ---- internal: retail's `*(int*)(*(serializer) + 8) == 0` is the stream's direction
+// word — IO::Serializer::GetDirection (0x180006210) — 0 = reading.
+static inline bool Reading(IO::Serializer& ser) {
+    return static_cast<int>(ser.GetDirection()) == 0;
 }
 
 // ============================================================
@@ -59,25 +59,21 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
         if (!s_warnedUnwired.exchange(true)) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); }
         return;
     }
-    void* factory = ::Object::ExternalFactory::_singleton;
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+    // The callers (AnimalDescription, HerbalistDescription, ImmigrationDescription,
+    // TradeDescription, ComponentDescription) hand in their serializer and their
+    // External* array untyped: the two bridges are the one place they are named.
+    IO::Serializer& ser = *reinterpret_cast<IO::Serializer*>(serializer);
+    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);
 
-    void* encoding = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
-    if (!encoding) return;
-    using EncFn = int (*)(void*);
-    EncFn getState = reinterpret_cast<EncFn>(
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(encoding)) + 0x10));
-    int encState = getState ? getState(encoding) : 0;
+    const int encState = ser.GetEncoding().GetKind();   // Encoding slot 2 (+0x10)
 
-    void** slots = reinterpret_cast<void**>(arrayBase);
     for (int i = 0; i < count; ++i) {
-        void** slot = &slots[i];
+        const ::Object::External** slot = &slots[i];
 
         if (encState == 3) {                       // path-export walk (read-only)
             if (!*slot) continue;
-            System::Filename pathBuf =
-                reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
+            System::Filename pathBuf = (*slot)->GetPath();
             (void)efactory->FindOrLoad(pathBuf);
             continue;
         }
@@ -87,34 +83,33 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
 
         if (refMode) {
             uint32_t refId = 0xFFFFFFFFu;
-            if (*slot) refId = efactory->GetReferenceId(
-                reinterpret_cast<const ::Object::External*>(*slot));  // B.3.3 bridge
+            if (*slot) refId = efactory->GetReferenceId(*slot);
             bool needsPath = false;
-            if (!*slot || SerStreamErr(serializer) != 0 || refId != 0xFFFFFFFFu) {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
+            if (!*slot || !Reading(ser) || refId != 0xFFFFFFFFu) {
+                ser.Serialize(refId, nullptr);
                 if (refId != 0xFFFFFFFFu) {
-                    if (SerStreamErr(serializer) == 0) {
+                    if (Reading(ser)) {
                         System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
                         fnameBuf = tmpFn;
                     }
                     needsPath = true;
                 }
             } else {
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
+                ser.Serialize(refId, nullptr);
             }
-            if (needsPath && SerStreamErr(serializer) == 0) {
-                *slot = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnameBuf)));
+            if (needsPath && Reading(ser)) {
+                *slot = efactory->FindOrLoad(fnameBuf);
             }
         } else {
             bool hasRef = (*slot != nullptr);
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasRef, nullptr);   // B.3.4 bridge
+            ser.Serialize(hasRef, nullptr);
             if (hasRef) {
                 if (*slot) {
-                    fnameBuf = reinterpret_cast<const ::Object::External*>(*slot)->GetPath();  // B.3.3 bridge
+                    fnameBuf = (*slot)->GetPath();
                 }
-                fnameBuf.AsString().Serialize(serializer);
-                if (SerStreamErr(serializer) == 0) {
-                    *slot = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnameBuf)));
+                fnameBuf.AsString().Serialize(&ser);
+                if (Reading(ser)) {
+                    *slot = efactory->FindOrLoad(fnameBuf);
                 }
             }
         }
@@ -156,12 +151,12 @@ bool ComponentDescription::Serialize(void* stream) {
 
     // category enum (+0x20) through the UINT door. `serBuf + 8` was the
     // ReaderWriter, not an Encoding, and vtable +0x98 is rw_vtbl::kScalarUInt.
-    ser.Serialize(*reinterpret_cast<unsigned int*>(&_category), nullptr);   // 0x98 = uint door
+    ser.Serialize(_category, nullptr);   // 0x98 = uint door
 
     // sub-description count (+0x30) + fresh array resize (+0x28, stride 8)
     ser.Serialize(_subDescCount, nullptr);
     int count = _subDescCount;
-    if (SerStreamErr(&ser) == 0 && count > 0 && ::System::MemoryAllocator::_singleton) {
+    if (Reading(ser) && count > 0 && ::System::MemoryAllocator::_singleton) {
         _subDescs = static_cast<Description**>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 8, 8));
         _subDescCap = count;
         if (_subDescs) for (int i = 0; i < count; ++i) _subDescs[i] = nullptr;
@@ -202,27 +197,37 @@ void* ComponentDescription::CreateInPlaceObject(void* storage) {
 DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
+//
+// 0x14001b1d0 resolves a by-name ComponentDescription reference: the template's name,
+// the ExternalFactory generation it was last resolved at, and the cached result.
+struct NamedDescriptionRef {
+    System::String               name;          // +0x00
+    int32_t                      generation;    // +0x08
+    int32_t                      _pad0c;        // +0x0c
+    const ::Object::External*    resolved;      // +0x10
+};
+static_assert(offsetof(NamedDescriptionRef, generation) == 0x08, "NamedDescriptionRef +0x08");
+static_assert(offsetof(NamedDescriptionRef, resolved) == 0x10, "NamedDescriptionRef +0x10");
+
+// B4 FORWARD: founding_spawn.cpp, starttown.cpp hand the reference in untyped.
 void ResolveExternalByName_Impl(void* nameString) {
-    uintptr_t s = (uintptr_t)nameString;
-    void* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
+    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);
+    ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
     if (!factory) return;
 
     // Check generation counter: if matches, cached value is still valid
-    int32_t refGen     = *(int32_t*)(s + 0x08);
-    int32_t factoryGen = *(int32_t*)((uintptr_t)factory + 0x08);
-    if (refGen == factoryGen) return;
+    int32_t factoryGen = factory->_generation;
+    if (ref->generation == factoryGen) return;
 
     // Convert String to Filename, look up in factory.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
-    System::Filename filename(*reinterpret_cast<const System::String*>(s));
-    void* found = const_cast<void*>(static_cast<const void*>(
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory)   // B.3.3 bridge
-            ->Find(filename)));
+    System::Filename filename(ref->name);
+    const ::Object::External* found = factory->Find(filename);
 
     // Validate the found object is a ComponentDescription (cell 0x1401c7318). The
     // null-pointer escape that stood here went with the cell pointer (it was
     // registered, so the escape never ran).
-    void* result = nullptr;
+    const ::Object::External* result = nullptr;
     if (found) {
         if (::Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
             result = found;
@@ -230,6 +235,6 @@ void ResolveExternalByName_Impl(void* nameString) {
     }
 
     // Cache result and update generation
-    *(void**)(s + 0x10)  = result;
-    *(int32_t*)(s + 0x08) = factoryGen;
+    ref->resolved   = result;
+    ref->generation = factoryGen;
 }

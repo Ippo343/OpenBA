@@ -42,7 +42,7 @@ public:
     virtual Object::External* Construct();                                 // [8] 0x140031f90
 
     // ---- fields (PUBLIC: ComponentEntity and the finders read them at raw offsets) ----
-    int32_t  _category;          // +0x20 default 6
+    uint32_t _category;          // +0x20 enum, default 6 (Serialize 0x140118af0: the uint door)
     uint8_t  _pad24[4];          // +0x24 never written by the ctor
     Description** _subDescs;     // +0x28 array of sub-descriptions (stride 8; each answers
                                  //       Description slot 8 GetComponentType, ComponentEntity ctor 0x1400c3720)
