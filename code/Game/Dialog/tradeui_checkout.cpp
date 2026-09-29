@@ -85,6 +85,11 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
 #include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "Dialog/exe_bodies.h"
+#include "Dialog/TradeUI.h"
+#include "Component/TradeComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/ComponentDescription.h"
+#include "runtime/types/ui/NumberElement.h"
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
 // 0x140091e60 — appends into townMgr+0x110 (code/Game/Component/rawmaterialcomponent.cpp)
@@ -106,16 +111,16 @@ namespace {
 // consulted; if it says no, retail breaks out of the loop rather than continuing
 // the scan, so a null return here reproduces the fall-through to the next
 // description type exactly.
-void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
+void* FindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId) {
     if (!entity) return nullptr;
-    void** objs  = *reinterpret_cast<void***>(entity + 0x28);
-    int    count = *reinterpret_cast<int*>(entity + 0x30);
+    void** objs  = entity->_subDescs;
+    int    count = entity->_subDescCount;
     if (!objs) return nullptr;
     for (int i = 0; i < count; ++i) {
-        void* obj = objs[i];
+        Object::Base* obj = reinterpret_cast<Object::Base*>(objs[i]);   // LEFT: _subDescs is void** (COMP-c)
         if (!obj) continue;
         // vtable slot +0x10 = GetTypeId()
-        if (reinterpret_cast<Object::Base*>(obj)->Type() != typeId) continue;  // B.3.8 bridge
+        if (obj->Type() != typeId) continue;
         return ::Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;  // match, derived-or-bust
     }
     return nullptr;
@@ -184,23 +189,22 @@ extern "C" void TradeComponent_RemoveBuyOrder(void* tradeComp, void* resourceEnt
 // The multiplier 300.0f is DAT_140172234, read from the image.
 extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     if (!tradeComp) return;
-    uintptr_t tc = reinterpret_cast<uintptr_t>(tradeComp);
+    TradeComponent* trade = reinterpret_cast<TradeComponent*>(tradeComp);   // LEFT: the C signature (outside caller tradecomponent_dock.cpp)
 
-    void* desc = *reinterpret_cast<void**>(tc + 0x18);
+    void* desc = trade->_description;
     // 0x1401c4bb8 is TradeDescription's type-id cell (Table 1).
     const uint32_t tidTradeDesc = TradeDescription::TypeId();
     if (!desc || !::Object::IsDerivedFromNullSafe(desc, tidTradeDesc)) return;
-    uintptr_t d = reinterpret_cast<uintptr_t>(desc);
+    TradeDescription* d = reinterpret_cast<TradeDescription*>(desc);   // LEFT: Component::_description is void*
 
-    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-                            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    uintptr_t townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenBehavior (WORK-a)
     if (!townMgr) return;
 
-    float weight = *reinterpret_cast<float*>(d + 0x68);
+    float weight = d->_f68;
     float* dstWeight = reinterpret_cast<float*>(townMgr + 0x1a8);
     if (weight > *dstWeight) *dstWeight = weight;
 
-    int32_t units = *reinterpret_cast<int32_t*>(d + 0x6c);
+    int32_t units = d->_i6c;
     int64_t stay = 0;                                  // 8 bytes — the ctor fills all of it
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&stay), static_cast<float>(units) * 300.0f);
     int64_t* dstStay = reinterpret_cast<int64_t*>(townMgr + 0x1a0);
@@ -208,60 +212,43 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
 }
 
 // ============================================================
-// TradeUI_OnTradeButton (0x140081420) — buttonTrade / element id 0x4e20
+// TradeUI::OnTradeButton (0x140081420) — buttonTrade / element id 0x4e20
 // ============================================================
-// p2/p3/p4 are the dispatcher's event arguments. Retail reads none of them: the
-// only place they could surface is the RefreshDisplay tail call, where the
-// compiler happens to forward whatever is left in the argument registers. That
-// is register reuse, not an argument — RefreshDisplay's own ported call sites
-// pass zeroes, and it ignores them.
-extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/, int64_t /*p4*/) {
-    if (!self) return;
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    // The panel's subject entity (self+0x28), narrowed to a ComponentEntity.
-    void* subject = *reinterpret_cast<void**>(s + 0x28);
-    void* entity  = ::Object::IsDerivedFromNullSafe(subject, ComponentEntity::TypeId()) ? subject : nullptr;
-
-    uint64_t entityPtr[2] = {0, 0};
-    new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
+// Retail takes only `this` (0x140081430 reads [RCX+0x28] first; RDX/R8/R9 are
+// never read). The C spelling the harness calls is the B4 FORWARD below.
+void TradeUI::OnTradeButton() {
+    // The panel's subject entity (+0x28), narrowed to a ComponentEntity.
+    ::Object::Base* source = _dataSource;
+    ComponentEntity* entity = ::Object::IsDerivedFromNullSafe(source, ComponentEntity::TypeId())
+        ? static_cast<ComponentEntity*>(source) : nullptr;
 
     // The trading post's own TradeComponent and StorageComponent.
-    uint64_t tradePtr[2] = {0, 0};
-    fn_FindComponent_Building(reinterpret_cast<void*>(entityPtr[0]), &tradePtr);
+    TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    uint64_t storagePtr[2] = {0, 0};
-    fn_FindComponent_Storage(reinterpret_cast<void*>(entityPtr[0]), &storagePtr);
+    StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
-    TradeDescription_ExtendMerchantStay(reinterpret_cast<void*>(tradePtr[0]));
+    TradeDescription_ExtendMerchantStay(trade);
 
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    uintptr_t townMgr   = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf0);
+    uintptr_t townMgr = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_citizenList);   // LEFT: CitizenBehavior (WORK-a)
 
     // OUTCOME counters. A click that commits nothing and a click that commits a full
     // basket look identical from outside this function, and "the button did nothing" is
     // exactly the report this wave was opened on — so the tail below prints what actually
     // moved, not that the handler was entered.
     int soldRows = 0, soldUnits = 0, boughtRows = 0, boughtUnits = 0;
-    const int creditBefore = *reinterpret_cast<int*>(townMgr + 0x1ac);
+    const int creditBefore = *reinterpret_cast<int*>(townMgr + 0x1ac);   // LEFT: WORK-a
 
     // ── Phase 1: sell rows ───────────────────────────────────────────────────
-    // self+0x30 array, self+0x38 count, stride 0x20.
-    //   entry+0x00  purchased/sold resource entity ptr
-    //   entry+0x18  pending quantity (int32)
-    // self+0x60 is the parallel UI row array (stride 0x20, spinner IBP at +0x18).
+    // _sellItems (+0x30, stride 0x20): resource +0x00, pending quantity +0x18.
+    // _sellRows (+0x60) is the parallel UI row array (spinner at +0x18).
     {
-        int sellCount = *reinterpret_cast<int*>(s + 0x38);
+        int sellCount = _sellItems._size;
         for (int i = 0; i < sellCount; ++i) {
-            uintptr_t sellBase = *reinterpret_cast<uintptr_t*>(s + 0x30);
-            uintptr_t entry    = sellBase + static_cast<uintptr_t>(i) * 0x20;
-            int qty = *reinterpret_cast<int*>(entry + 0x18);
+            int qty = _sellItems[i].quantity;
             if (qty == 0) continue;
             ++soldRows; soldUnits += qty;
 
-            void* storage = reinterpret_cast<void*>(storagePtr[0]);
-            void* resEntity = *reinterpret_cast<void**>(entry);
+            ComponentDescription* resEntity = _sellItems[i].resource;
 
             ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storage),
                                        reinterpret_cast<int64_t>(resEntity), qty);   // 0x14012d150
@@ -272,7 +259,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
                 int cat = ActRm_GetResourceCategory_88f90(
                     storage, reinterpret_cast<uintptr_t>(resEntity));   // 0x140088f90
                 if (cat >= 0) {
-                    uintptr_t catArray = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);
+                    uintptr_t catArray = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);   // LEFT: WORK-a
                     int* total = reinterpret_cast<int*>(
                         catArray + static_cast<uintptr_t>(cat) * 0x20 + 0x0c);
                     *total += qty;
@@ -280,90 +267,81 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             }
 
             // Zero the row's spinner and its pending quantity.
-            uintptr_t uiRow = *reinterpret_cast<uintptr_t*>(s + 0x60)
-                            + static_cast<uintptr_t>(i) * 0x20 + 0x18;
-            reinterpret_cast<UI::SpinnerElement*>(*reinterpret_cast<void**>(uiRow))->SetValue(0);  // B.3.6 bridge
-            *reinterpret_cast<int*>(
-                *reinterpret_cast<uintptr_t*>(s + 0x30)
-                + static_cast<uintptr_t>(i) * 0x20 + 0x18) = 0;
+            _sellRows[i].spinner->SetValue(0);
+            _sellItems[i].quantity = 0;
         }
     }
 
     // Bank the sell total. It is read straight off the numberSellTotal element
-    // (self+0x100, current value at element+0xd8) rather than recomputed, so the
+    // (+0x100, current value at element+0xd8) rather than recomputed, so the
     // displayed figure and the credited figure cannot disagree.
     {
-        uintptr_t sellTotalElem = *reinterpret_cast<uintptr_t*>(s + 0x100);
-        *reinterpret_cast<int*>(townMgr + 0x1ac) +=
-            *reinterpret_cast<int*>(sellTotalElem + 0xd8);
+        *reinterpret_cast<int*>(townMgr + 0x1ac) += _numberSellTotal->_intValue;   // LEFT: WORK-a
     }
 
     // ── Phase 2: buy rows ────────────────────────────────────────────────────
-    // self+0x40 array, self+0x48 count, stride 0x18.
-    //   entry+0x00  purchased entity ptr
-    //   entry+0x10  pending quantity (int32)
-    // self+0x70 is the parallel UI row array (stride 0x20, spinner IBP at +0x10).
+    // _buyItems (+0x40, stride 0x18): resource +0x00, pending quantity +0x10.
+    // _buyRows (+0x70) is the parallel UI row array (spinner at +0x10).
     {
-        int buyCount = *reinterpret_cast<int*>(s + 0x48);
+        int buyCount = _buyItems._size;
         for (int i = 0; i < buyCount; ++i) {
-            uintptr_t buyBase = *reinterpret_cast<uintptr_t*>(s + 0x40);
-            uintptr_t entry   = buyBase + static_cast<uintptr_t>(i) * 0x18;
-            int qty = *reinterpret_cast<int*>(entry + 0x10);
+            int qty = _buyItems[i].quantity;
             if (qty == 0) continue;
             ++boughtRows; boughtUnits += qty;
 
-            void* bought = *reinterpret_cast<void**>(entry);
+            ComponentDescription* bought = _buyItems[i].resource;
 
             // Retire this much of the order from the post's buy list.
-            TradeComponent_RemoveBuyOrder(reinterpret_cast<void*>(tradePtr[0]), bought, qty);
-
-            uintptr_t boughtEntity = reinterpret_cast<uintptr_t>(bought);
+            TradeComponent_RemoveBuyOrder(trade, bought, qty);
 
             // Raw material: deliver into the post's storage, and make the
             // material available to the town.
-            if (FindComponentByTypeId(boughtEntity, RawMaterialDescription::TypeId())) {
-                ActRm_StorageAdd_d000(static_cast<uintptr_t>(storagePtr[0]),
+            if (FindComponentByTypeId(bought, RawMaterialDescription::TypeId())) {
+                ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storage),
                                       reinterpret_cast<int64_t>(bought), qty);   // 0x14012d000
                 RawMaterialComponent_RegisterRawMaterial(
                     reinterpret_cast<void*>(townMgr), bought);
             }
             // Natural resource (crop / orchard seed): availability only.
-            else if (FindComponentByTypeId(boughtEntity, NaturalResourceDescription::TypeId())) {
+            else if (FindComponentByTypeId(bought, NaturalResourceDescription::TypeId())) {
                 TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
             }
             // Livestock: availability, plus spawn the animals into the world.
-            else if (FindComponentByTypeId(boughtEntity, LivestockDescription::TypeId())) {
+            else if (FindComponentByTypeId(bought, LivestockDescription::TypeId())) {
                 TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
                 // The door was named fn_Building_AddBuyToStorage; it is bound to
                 // 0x14005ace0 TradeComponent_SpawnPurchasedLivestock (B3R: the binding
                 // decides). The never-taken "did not resolve" arm went with the door.
-                TradeComponent_SpawnPurchasedLivestock(reinterpret_cast<void*>(tradePtr[0]), bought,
+                TradeComponent_SpawnPurchasedLivestock(trade, bought,
                                                        static_cast<unsigned int>(qty));
             }
 
             // Zero the row's spinner and its pending quantity.
-            uintptr_t uiRow = *reinterpret_cast<uintptr_t*>(s + 0x70)
-                            + static_cast<uintptr_t>(i) * 0x20 + 0x10;
-            reinterpret_cast<UI::SpinnerElement*>(*reinterpret_cast<void**>(uiRow))->SetValue(0);  // B.3.6 bridge
-            *reinterpret_cast<int*>(
-                *reinterpret_cast<uintptr_t*>(s + 0x40)
-                + static_cast<uintptr_t>(i) * 0x18 + 0x10) = 0;
+            _buyRows[i].spinner->SetValue(0);
+            _buyItems[i].quantity = 0;
         }
     }
 
     fprintf(stderr, "[TradeCheckout] committed: sold %d unit(s) over %d row(s), "
                     "bought %d unit(s) over %d row(s), town trade credit %d -> %d\n",
             soldUnits, soldRows, boughtUnits, boughtRows,
-            creditBefore, *reinterpret_cast<int*>(townMgr + 0x1ac));
+            creditBefore, *reinterpret_cast<int*>(townMgr + 0x1ac));   // LEFT: WORK-a
     fflush(stderr);
 
     // ── Phase 3: repaint ─────────────────────────────────────────────────────
-    TradeUI_RefreshDisplay(self, 0, 0, 0);
-    TradeUI_RefreshSellTable(self);
-    TradeUI_RefreshBuyTable(self);
-    TradeUI_UpdateSellTotals(self);
+    RefreshDisplay();
+    RefreshSellTable();
+    RefreshBuyTable();
+    UpdateSellTotals();
     // Retail inlines UpdateBuyTotals (0x140082850) here rather than calling it;
     // the inlined body is instruction-for-instruction the same walk, so the
     // existing port stands in for it.
-    TradeUI_UpdateBuyTotals(self);
+    UpdateBuyTotals();
+}
+
+// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp). p2/p3/p4
+// are the dispatcher's register leftovers; retail reads none of them.
+extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/, int64_t /*p4*/) {
+    if (!self) return;
+    self->OnTradeButton();
 }

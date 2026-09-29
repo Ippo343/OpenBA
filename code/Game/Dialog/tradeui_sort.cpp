@@ -289,13 +289,9 @@ void IntroSort(Elem array, int count, void* ctx, LessFn less,
 
 // ── Registered entry points ──────────────────────────────────────────────────
 
-// 0x1400162d0 — sort the trade table by name.
-// Signature keeps the two phantom trailing parameters because the existing call
-// site in tradeui.cpp passes them. They are ignored, exactly as retail ignores
-// R8/R9 here.
-extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count,
-                                               void* /*phantomCtx*/,
-                                               int64_t /*phantom4*/) {
+// 0x1400162d0 — sort the trade table by name. RCX=array, EDX=count: retail
+// never reads R8/R9 (the two "phantom" parameters the caller used to pass are gone).
+extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count) {
     if (!array || count < 2) return;
     IntroSort(static_cast<Elem>(array), count, nullptr, &NameLess, &SmallSort);
 }

@@ -168,21 +168,22 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray);  
 
 // ---- tradeui_checkout.cpp
 extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp);  // 0x14005a490
+// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 
 // ---- tradeui_leaves.cpp
-extern "C" void TradeUI_DynArrayClear_16050(int64_t* header);  // 0x140016050
-extern "C" void TradeUI_DynArrayClear_16130(int64_t* header);  // 0x140016130
-extern "C" void TradeUI_DynArrayClear_16200(int64_t* header);  // 0x140016200
-extern "C" void* TradeUI_GetOrderName_15fd0(int64_t tradeState, void* out);  // 0x140015fd0
-extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState, int64_t resourceEntity, int8_t addFlag);  // 0x140059490
+class TradeComponent;        // code/Game/Component/TradeComponent.h
+class ComponentDescription;  // code/Game/Component/ComponentDescription.h
+namespace System { class String; }
+extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::String* out);  // 0x140015fd0
+extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, ComponentDescription* resourceEntity, int8_t addFlag);  // 0x140059490
 extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree, void** out, const uint64_t* entry);  // 0x14000e1c0
 
 // ---- tradeui_price.cpp
 extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity);  // 0x14005a520
 
 // ---- tradeui_sort.cpp
-extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count, void* , int64_t );  // 0x1400162d0
+extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count);  // 0x1400162d0
 extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count, void* ctx);  // 0x1400165d0
 
 // ---- unreg_lane2_mapparamsdialog_ctor.cpp

@@ -47,41 +47,18 @@
 // These three are the clear-only specialisations retail emitted separately.
 #include "Component/exe_bodies.h"   // B3R: CitizenAI_Reg_helper_e360
 #include "system/String.h"
-#include "Component/coll_bridge.h"
+#include "Component/TradeComponent.h"
 #include <cstdint>
 #include <new>
 #include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
-// ── B.3.2: the three clears are Collection::Array<T>::Clear() ────────────────
+// ── B.4 DLG-e: the three clears are Collection::Array<T>::Clear() ──────────
 // `Clear()` is `SetSize(0)`, and rtcoll::SetSizeCore at newSize == 0 does
-// exactly what the banner above says the retail bodies do and no more: the
-// `newSize == oldSize` early return covers the `count != 0` test, nothing is
-// reallocated (0 is never > capacity), the copy/fill loop does not run, and the
-// blob element's spec has `destroy == nullptr` so no element is torn down. The
-// buffer and the capacity are retained. The strides, which mattered only to the
-// dead grow path, are now the element widths — kept per entry point so the type
-// says which array each one is.
-
-// 0x140016050 — clear the sell-entry array (stride 0x20).
-extern "C" void TradeUI_DynArrayClear_16050(int64_t* header) {
-    if (!header) return;                     // retail derefs unconditionally; callers
-                                             // always pass &self->field, so this guard
-                                             // is standalone-only belt-and-braces.
-    GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(reinterpret_cast<uintptr_t>(header), 0).Clear();
-}
-
-// 0x140016130 — clear the buy-entry array (stride 0x18).
-extern "C" void TradeUI_DynArrayClear_16130(int64_t* header) {
-    if (!header) return;                     // see 16050
-    GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(reinterpret_cast<uintptr_t>(header), 0).Clear();
-}
-
-// 0x140016200 — clear the storage/order-entry array (stride 0x18).
-extern "C" void TradeUI_DynArrayClear_16200(int64_t* header) {
-    if (!header) return;                     // see 16050
-    GameColl::ArrayAt<GameColl::Bytes<0x18, 8>>(reinterpret_cast<uintptr_t>(header), 0).Clear();
-}
+// exactly what the banner above says the retail bodies do and no more. The
+// three arrays are TradeUI members (_sellItems +0x30, _buyItems +0x40,
+// _storageItems +0x50, Dialog/TradeUI.h) and their callers call Clear() on
+// them by name; the three C bodies are gone.
 
 // ── 0x140015fd0 — fn_Building_GetOrderName ───────────────────────────────────
 // Returns (by hidden out-param, MSVC by-value String convention) the name String of
@@ -105,16 +82,14 @@ extern "C" void TradeUI_DynArrayClear_16200(int64_t* header) {
 //
 // Returning `out` matters: callers use the return value, not their own buffer
 // pointer, so dropping the return would leave them reading an uninitialised local.
-extern "C" void* TradeUI_GetOrderName_15fd0(int64_t tradeState, void* out) {
+extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::String* out) {
     if (!out) return out;
-    const int32_t idx = *reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(tradeState) + 0x2c);
+    const int32_t idx = tradeState->tradeId;
     if (idx < 0) {
         new (out) System::String();
         return out;
     }
-    const uintptr_t base = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uint8_t*>(tradeState) + 0x30);
+    const uintptr_t base = reinterpret_cast<uintptr_t>(tradeState->field30);   // LEFT: the order array (COMP-f)
     if (!base) {      // standalone guard: retail derefs blind
         new (out) System::String();
         return out;
@@ -163,14 +138,13 @@ extern "C" void* TradeUI_GetOrderName_15fd0(int64_t tradeState, void* out) {
 // checked against the disassembly rather than trusted from the decompile, because a
 // mis-sized allocation here would corrupt the neighbouring order record instead of
 // faulting.
-extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState,
-                                               int64_t resourceEntity,
+extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
+                                               ComponentDescription* resource,
                                                int8_t  addFlag) {
     if (!tradeState) return;                 // standalone-only; retail derefs blind.
-    const int32_t orderIdx = *reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(tradeState) + 0x2c);
-    const uintptr_t orderBase = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uint8_t*>(tradeState) + 0x30);
+    const int64_t resourceEntity = reinterpret_cast<int64_t>(resource);   // the list holds the pointer bits
+    const int32_t orderIdx = tradeState->tradeId;
+    const uintptr_t orderBase = reinterpret_cast<uintptr_t>(tradeState->field30);   // LEFT: the order array (COMP-f)
     // Retail indexes unconditionally; a negative index (no order selected) would read
     // behind the array. Callers gate on the selection, so this only guards standalone.
     if (orderIdx < 0 || !orderBase) return;
