@@ -291,6 +291,11 @@ in the code carries a comment.
 | 41 | `SpriteCaptureUI::OnElementEvent` (`ui_dialog_stub_factories.cpp`) | a no-op (PORT GAP): the capture button starts nothing, so OnUpdate's save arm is never reached | 0x140079620 (not ported) | CONFIRMED (DLG-d; the gap, not the body) |
 | 43 | the Work bodies' worker cap (Forester, GatherRawMaterials, HarvestArea, HarvestOrchard, Herbalist, Hunt, MarketWork, Pasture Execute) | call `WorkComponent_CalcMaxWorkers` (`tutorial_base.cpp`), a second port of 0x14012e5c0 that differs from the member `WorkComponent::CalcMaxWorkers` (which footprint component it reads, FloorComponent vs MapComponent, and its guards) | one body, 0x14012e5c0 | SUSPECTED (WORK-b; the two ports compared, retail not re-read; row 35 is the same pair seen from WORK-c's callers) |
 | 44 | `PastureWork::OnCancel` (`pasturework.cpp`) | tests the entity's description IsDerivedFrom AnimalDescription and returns when it is not; calls `ActHunt_NotifyEntityChanged` when bit 20 changed. Net: the tree never clears bit 20 of the AnimalComponent's flags | 0x1400f22c0 checks against ComponentEntity (cell 0x1401c5d70) and passes null on failure, finds the AnimalComponent with no null test, always clears bit 20 (`BTR`), and tests `(old ^ new) & 0xFFFF`, always 0 for bit 20, so it never notifies | CONFIRMED (WORK-b, disassembly read) |
+| 45 | `ShowCitizenTool` toolId < 0 (`action_base_complete.cpp`) | reads the qword at ModelDescription +0x28 (`_meshGroupCount` / `_meshGroupCap`) as a pointer and dereferences it once | 0x1401173b0 reads `*(*(desc+0x20)+8)` and dereferences that: mesh 0 of mesh group 0 (one more dereference) | CONFIRMED (ACT-a) |
+| 46 | 0x1400c3470 has two tree bodies | `ComponentEntity::RefreshEntityFlags` (`componententity.cpp`, WORK-a) skips null component slots and appends through `Collection::Array::SetSize`; `NotifyEntityChanged` (`action_base_hunt.cpp`, the `ActHunt_NotifyEntityChanged_c3470` spelling's body) skips nothing and appends through the 0x140003110 port | one body, no null skip | SUSPECTED (ACT-a; retail not re-read for the skip) |
+| 47 | `PathfinderThread::ApplyCommand` case 5 (`action_pf_astar.cpp`) | holds the lock through the ready store | 0x1400a6430 unlocks after the result-array resize (0x1400a658b) | CONFIRMED (ACT-a) |
+| 48 | `PathfinderThread::ApplyCommand`'s 64 KB path buffer | `static` (one worker thread uses it) | on the stack (0x1400a6436) | CONFIRMED (ACT-a) |
+| 49 | `RegionPairCache::Store` (`action_pf_region.cpp`) | writes 0 to `RegionPairEntry::field_0x0C` | 0x1400a5b30 stores a stale stack dword there (never read) | CONFIRMED (ACT-a) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -322,6 +327,7 @@ in the code carries a comment.
 | 31 | H5 raw-storage members: CitizenComponent `name` +0x28 (String) and `consumedTypes` +0x98; Profession's three Strings; the Build / WorkPlace arrays; Map's picking scene; PlayerController's transform and camera (`Camera`'s default ctor is protected); the `Collection::Array` headers declared as three fields | raw storage, so no ctor / dtor runs | real members | CONFIRMED per class (W0-H1, W0-H2, GAME-a); B4_RULES correction 7 |
 | 32 | `BeginDrawGroup`, `Render` (runtime graphics) | stack `RendererDrawGroup` / `RendererSceneEntry` objects whose implicit ctors zero memory that is then overwritten | no such stores | CONFIRMED (R-GFX); cost only |
 | 42 | `NoiseUI` dtor (`NoiseUI.h`, DLG-b's) | `= default`: the ImageBuffer, MaterialInstance and SpriteSheet OnCreated (0x1400714c0, wired by DLG-d) makes are never freed | 0x140071bc0 deletes +0x40, +0x38, +0x30 through slot 0 (ModDialog's dtor has the same three `delete`s) | CONFIRMED (DLG-d); a header line of a finished block, left for the coordinator |
+| 50 | `PathfinderThread` (`PathfinderThread.h`, ACT-a) | the +0x160 result array is a trivially-constructible `RawArray<PathResult>` (H5) and the +0x30 lock a trivially-constructible `System::CriticalSection`, so declaring them runs no ctor / dtor; the tree's ctor / dtor bodies run exactly what they ran before | the class's ctor 0x1400a67f0 / dtor construct and destroy both members | SUSPECTED (ACT-a; the H5 rule of the coordinator's condition 1) |
 
 ### 14d. Guards the tree has and retail lacks — and guards B.4 dropped
 
@@ -381,6 +387,25 @@ stated condition.
   `CitizenComp_StorageComponent_QueryCount`'s null test. SUSPECTED for the last five (retail not
   re-read in B.4).
 
+- KEPT (ACT-a): `InteractNodePosition`'s SA-GUARD zero vector and ModelComponent fallback
+  (0x140122e20 reads both unguarded); `EntityAnchorCell`'s null-entity diagnostic return
+  (0x140087fb0); `InteractNodeCount`'s null-description 0 (0x140123070); the null component-slot
+  skips of `StorageCanAdd` / `PickBestDropTarget` (`FindComponentSkippingNull` /
+  `FindDescriptionSkippingNull`, `action_pf_roots_route.cpp`) and `PickBestDropTarget`'s
+  StorageLocationDescription and source-mask tests (0x14008d590); `StorageCanAdd`'s missing
+  RawMaterialDescription weight 0 (0x14012cd80); `FindCharacterComponent`'s type-id test
+  (0x1400012d0); `HerdStartMigration`'s null-member skip (0x140122340); `PlayModelAnimation`'s
+  null-model and type-miss returns (0x1401250f0); `HuntIsReady`'s null description (0x140122a80);
+  `ResourceCategory`'s missing-description -1 (0x140088f90); `PositionRawMaterial`'s MapComponent /
+  ModelComponent tests (0x140129760); `HeadingToward`'s null world / map (width 1, 0x1400c29a0);
+  `TaskCleanup`'s missing-bucket test (0x1400f8e30, see the WAVE 9 note at the site); the
+  `DropRawMaterialOnGround` Random test. SUSPECTED unless the site quotes retail.
+- DROPPED (ACT-a): 0x140107260, 0x1400c7620 and 0x1400bbea0 find the CharacterComponent through
+  `ComponentEntity::FindComponent<CharacterComponent>` instead of the guarded 0x1400012d0 copy (the
+  type-id test is dead once the type is registered); `StorageCanAdd` sums the stored weight through
+  `StorageComponent::QueryCount` instead of `CitizenComp_StorageComponent_QueryCount`, whose null
+  test is unreachable there (0x14012c560 has already dereferenced the storage).
+
 ### 14e. Stores that may normalise where retail copies
 
 - `optionsdialog.cpp:745,748`: `inputCfg->_mouseClipping = checkMouseClip->_checked != 0;` and
@@ -439,6 +464,14 @@ stated condition.
   ("Position") find the StatusIconComponent and the InteractComponent; `WorkAct_HarvestAreaCtor_c1530`
   is named for its caller. HarvestArea / HarvestOrchard / Herbalist `Cleanup` walks the LEFT child
   (the tree's comments said "rightmost"; corrected in the converted files).
+
+- `Action::_entity` is now `Action::_next` (ACT-a renamed it; the WORK-c row above predates it).
+  `TrackerComponent::displayed` (+0x28) and `produced` (+0x38): 0x140058fd0 upserts into +0x28 and
+  copies it into +0x38 when the year changes, the opposite of the header's comments. The
+  `Pf_EntityResolvePos_2e20` / `Pf_RecursiveChildSum_123070` pair work on the InteractComponent
+  node tree (`InteractNodePosition` / `InteractNodeCount`), and `ActCNR_NR_*` on the ModelComponent
+  mesh selection (`ModelMeshGroupCount`, `ModelMeshCount`, `ModelSelectMesh`), not on a
+  NaturalResourceComponent. (ACT-a)
 
 ### 14g. Commit messages that state something nobody verified
 
