@@ -685,18 +685,14 @@ void Video::Device::PlatformShutdown() {
     // 0x1800f83f6 / 0x1800f842f: the singleton is read, used, and RE-READ
     // between the two removals. Preserved — see buffers_win.cpp's note on the
     // same pattern in Device::Unlock.
-    // LEFT (B.4 R-VIDEO): `Application.h` declares the callback Set at +0x18 as
-    // raw storage (`_messageCallbackRoot`), not as `rtsetavl::Set`; reaching the
-    // Set stays a view over that field until that header types it.
+    // B.4 (R-ENG): `Application::_messageCallbacks` is the rtsetavl::Set at +0x18.
     {
         ::Application::Application* app = ::Application::Application::_singleton;
-        UnregisterInline(reinterpret_cast<rtsetavl::Set*>(
-            &app->_messageCallbackRoot), 5);                   // WM_SIZE
+        UnregisterInline(&app->_messageCallbacks, 5);           // WM_SIZE
     }
     {
         ::Application::Application* app = ::Application::Application::_singleton;  // 0x1800f842f
-        UnregisterInline(reinterpret_cast<rtsetavl::Set*>(
-            &app->_messageCallbackRoot), 0x232);               // WM_EXITSIZEMOVE
+        UnregisterInline(&app->_messageCallbacks, 0x232);       // WM_EXITSIZEMOVE
     }
 
     // 0x1800f8464: release the DeviceData — Shutdown (vtable +0x18, slot 3), then

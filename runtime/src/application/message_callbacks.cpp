@@ -55,9 +55,9 @@ using rtsetavl::Set;
 // keeps `Application` free of runtime/src/ includes by declaring the Set as two
 // raw fields; if either side ever moves, this fails at compile time rather than
 // corrupting a live tree.
-static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, root)
+static_assert(offsetof(App, _messageCallbacks) + offsetof(Set, root)
                   == 0x18, "Application's Set::root must land at +0x18");
-static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, count)
+static_assert(offsetof(App, _messageCallbacks) + offsetof(Set, count)
                   == 0x20, "Application's Set::count must land at +0x20");
 
 namespace {
@@ -77,10 +77,6 @@ struct Element {
 };
 static_assert(sizeof(Element) == 0x10, "Set element is 0x10 bytes (0x18000a5b0 copies two qwords)");
 
-// The Set living inside the Application. Retail reaches it as `this + 0x18`.
-inline Set* CallbackSet(App* app) {
-    return reinterpret_cast<Set*>(reinterpret_cast<uint8_t*>(app) + 0x18);
-}
 
 // ---------------------------------------------------------------------------
 // The allocator boundary.
@@ -182,7 +178,7 @@ extern "C" Node* RtApp_SetAllocNode(void* /*unused, never read*/,
 // ============================================================================
 void Application::Application::RegisterMessageCallback(uint32_t id, MessageCallback callback) {
     App* app = this;
-    Set* set = CallbackSet(app);
+    Set* set = &app->_messageCallbacks;   // retail: this + 0x18
 
     // The element, built on OUR stack exactly as retail builds it on its own —
     // `message` written, `pad04` left alone. See AllocNode's banner.
@@ -247,7 +243,7 @@ void Application::Application::RegisterMessageCallback(uint32_t id, MessageCallb
 // ============================================================================
 void Application::Application::UnregisterMessageCallback(uint32_t id) {
     App* app = this;
-    Set* set = CallbackSet(app);
+    Set* set = &app->_messageCallbacks;   // retail: this + 0x18
     for (Node* n = set->root; n; ) {
         const unsigned key = *reinterpret_cast<const unsigned*>(n);
         if (id < key)       n = n->left;    // 0x18009fa41

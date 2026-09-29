@@ -26,6 +26,7 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"   // Math::Vector3
 
 class TerraformComponent final : public Component {
     DECLARE_EXE_TYPE(TerraformComponent)
@@ -41,11 +42,14 @@ public:
     void OnRemove() override;                                     // [7]  0x140057350
     void OnEvent(int eventId) override;                           // [12] 0x140057310
 
+    void ApplyMesh(bool ceiling);                                 // 0x140056b50 one heightmap pass over a description mesh
+    void ApplyFootprint();                                        // 0x140057120 footprint cells type 10 -> 6
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    heightRecord; // +0x28 Vector3[] of original terrain points (freed by the retail dtor)
+    Math::Vector3* heightRecord; // +0x28 Array<Vector3> of original terrain points (freed by the retail dtor)
     int32_t  heightCount;  // +0x30
     int32_t  heightCap;    // +0x34
-    void*    tileRecord;   // +0x38 int32[] of retyped map cell indices (freed by the retail dtor)
+    int32_t* tileRecord;   // +0x38 Array<int> of retyped map cell indices (freed by the retail dtor)
     int32_t  tileCount;    // +0x40
     int32_t  tileCap;      // +0x44
 };

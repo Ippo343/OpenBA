@@ -245,6 +245,7 @@
 #include "../../types/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
 #include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "../../types/system/Timer.h"              // ENDGAME B.3.9 close: Timer's class statics
+#include "../../types/video/Context.h"             // Video::Context::_time / _dirty
 #include "mainloop_internal.h"
 
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
@@ -306,16 +307,11 @@ int64_t CurrentTimeTicksViaGlobals() {
 
 namespace {
 
-// `Audio::Device` is opaque here on purpose — this file needs the 64x0x28
-// channel block at +0x00 and nothing else, and the class is lane AUDIO's.
-// Every offset below is Frame's own (§4).
+// The 64 `Audio::Device::AudioChannel` records at +0x00 (stride 0x28): the
+// flags dword (bit 1 = needs release), `source` (+0x08, zeroed with the
+// flags), `userData` / `userValue` (+0x10 / +0x18, the callback's 2nd / 3rd
+// arguments) and `onComplete` (+0x20). Every offset is Frame's own (§4).
 constexpr int      kAudioChannelCount  = 0x40;
-constexpr uint32_t kAudioChannelStride = 0x28;
-constexpr uint32_t kChanFlags          = 0x00;   // dword; bit1 = needs release
-constexpr uint32_t kChanClearedQword   = 0x08;   // zeroed with the flags
-constexpr uint32_t kChanCallbackArg    = 0x10;   // qword, 2nd arg of the callback
-constexpr uint32_t kChanCallbackTag    = 0x18;   // dword, 3rd arg
-constexpr uint32_t kChanCallback       = 0x20;   // qword, the stored completion fn
 
 // ENDGAME B.3.7: the three Engine subsystem offsets (+0x6e0 Input::Device,
 // +0x6d0 Audio::Device, +0x690 Application) and Application+0x28 are read as
@@ -326,23 +322,10 @@ static_assert(offsetof(Engine::Engine, _audioDevice) == 0x6d0, "Frame reads +0x6
 static_assert(offsetof(Engine::Engine, _application) == 0x690, "Frame reads +0x690");
 static_assert(offsetof(Application::Application, _quitRequested) == 0x28, "Frame tests +0x28");
 
-// Video::Context — the four floats and the dirty bit Frame's tail writes.
-constexpr uint32_t kContextTimeVec4    = 0x3c8;
-constexpr uint32_t kContextDirtyFlags  = 0x10;
+// Video::Context — the dirty bit Frame's tail sets beside `_time` (+0x3c8).
 constexpr uint32_t kContextDirtyBit    = 0x800;
 
 constexpr uint32_t kWmQuit = 0x12;
-
-// ?Draw@MainLoop@Engine@@QEAAXM@Z — `M` is float, so the second parameter is
-// XMM1 under the MS x64 ABI. See §2d: dropping it was this file's first bug.
-typedef void (*ChannelCompleteFn)(void* chan, void* arg, uint32_t tag);
-
-inline uint8_t* Bytes(void* p) { return reinterpret_cast<uint8_t*>(p); }
-
-template <typename T>
-inline T Field(void* base, uint32_t off) {
-    return *reinterpret_cast<T*>(Bytes(base) + off);
-}
 
 }  // namespace
 
@@ -368,7 +351,7 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // --- 0x1800dd14e..0x1800dd169 : clamp, self-loop and all (§2b) ----------
     const int64_t maxAccum = _maxAccumulator;
     if (_accumulator > maxAccum) {
-        int64_t clamped = _deltaTime;
+        int64_t clamped = _deltaTime._ticks;
         // Retail's `L: CMP RAX,RCX / JG L`. Neither operand changes inside it,
         // so this is retail's hang, reproduced rather than removed. It is
         // unreachable with the ctor's 1/60 and 1/15.
@@ -391,39 +374,36 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // at the BOTTOM (0x1800dd2f0 `JGE` back), so this is a `while`, not a
     // `do/while`: a frame whose accumulator has not reached one step does no
     // updates at all and falls straight through to the tail.
-    while (_accumulator >= _deltaTime) {
+    while (_accumulator >= _deltaTime._ticks) {
         ::Engine::Engine* engine = _engine;
 
         // Input::Device::Update — ENDGAME B.3.7 callers (K5): a member of the
         // real class (was the name door). The argument is retail's
         // `LEA RDX,[RDI+0x48]`, &_deltaTime.
-        reinterpret_cast< ::Input::Device*>(engine->_inputDevice)->Update(  // B.3.7 bridge
-            *reinterpret_cast<const System::Time*>(&_deltaTime));
+        engine->_inputDevice->Update(_deltaTime);
 
         // --- the 64-channel audio sweep (§4) --------------------------------
-        void* audioDevice = engine->_audioDevice;
+        Audio::Device* audioDevice = engine->_audioDevice;
         for (int i = 0; i < kAudioChannelCount; ++i) {
-            uint8_t* chan = Bytes(audioDevice) + static_cast<uint32_t>(i) * kAudioChannelStride;
-            if ((Field<uint32_t>(chan, kChanFlags) & 2u) == 0)
+            Audio::Device::AudioChannel* chan = &audioDevice->_channels[i];
+            if ((chan->flags & 2u) == 0)
                 continue;
 
             // PRIVATE (`AEAA`) in retail but EXPORTED, ordinal 2380; Device.h
             // declares the member public. See §5.
-            reinterpret_cast<Audio::Device*>(audioDevice)->FreeChannelPlatform(i);   // B.3.7 bridge
+            audioDevice->FreeChannelPlatform(i);
 
             // The callback pointer is sampled BEFORE the flags are cleared
             // (0x1800dd1d4 precedes 0x1800dd1d7). Retail's order; a port that
             // read it after would still work today and would differ the moment
             // FreeChannelPlatform starts touching the record.
-            ChannelCompleteFn onComplete = Field<ChannelCompleteFn>(chan, kChanCallback);
+            Audio::Device::Callback onComplete = chan->onComplete;
 
-            *reinterpret_cast<uint32_t*>(chan + kChanFlags) &= 0xFFFFFFFCu;  // AND ~3
-            *reinterpret_cast<uint64_t*>(chan + kChanClearedQword) = 0;
+            chan->flags &= 0xFFFFFFFCu;                  // AND ~3
+            chan->source = nullptr;
 
             if (onComplete) {
-                onComplete(chan,
-                           Field<void*>(chan, kChanCallbackArg),
-                           Field<uint32_t>(chan, kChanCallbackTag));
+                onComplete(chan, chan->userData, chan->userValue);
             }
         }
 
@@ -455,31 +435,27 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
         // internal call at 0x1800dd28e, so this is a direct C++ call to the
         // sibling port, exactly where and how retail calls it.
         if (!skipUpdate) {
-            if (!Update(*reinterpret_cast<const System::Time*>(&_deltaTime)))
+            if (!Update(_deltaTime))
                 _quit = 1;                       // 0x1800dd297
         }
 
         // --- 0x1800dd29b..0x1800dd2d8 : the post-update callbacks (§2a) -----
         // Trip count from _postUpdate._size; FUNCTION from _postUpdate._data;
         // CONTEXT from _postDraw._data. Transcribed, not tidied. See §2a.
-        {
-            uint8_t* self8 = Bytes(this);
-            for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(self8 + 0x98); ++i) {
-                const uint32_t byteOff = static_cast<uint32_t>(i) * 0x10u;
-                uint8_t* ctxArray  = *reinterpret_cast<uint8_t**>(self8 + 0x80);  // _postDraw._data
-                uint8_t* funcArray = *reinterpret_cast<uint8_t**>(self8 + 0x90);  // _postUpdate._data
-                void* context = *reinterpret_cast<void**>(ctxArray + byteOff + 8);
-                auto  fn = *reinterpret_cast<void (**)(const void*, void*)>(funcArray + byteOff);
-                fn(&_deltaTime, context);
-            }
+        for (int32_t i = 0; i < _postUpdate._size; ++i) {
+            void* context = _postDraw._data[i]._context;                   // +0x80's data
+            // LEFT: MainLoopCallback::_func is `void*` for both arrays (UI's
+            // userinterface_showdialog.cpp appends through one element type).
+            auto fn = reinterpret_cast<PostUpdateFunc>(_postUpdate._data[i]._func);
+            fn(_deltaTime, context);
         }
 
         // --- 0x1800dd2d8..0x1800dd2f0 : consume one step --------------------
         // Retail re-reads _deltaTime from memory for each of the three uses
         // (0x1800dd2d8, 0x1800dd2e0, 0x1800dd2e8) rather than caching it, which
         // matters because the callbacks above are free to have changed it.
-        _accumulator -= _deltaTime;
-        _totalTime   += _deltaTime;
+        _accumulator -= _deltaTime._ticks;
+        _totalTime   += _deltaTime._ticks;
     }
 
     // SELF-CHECK, not an oracle (§6): the post-condition this body's own loop
@@ -490,9 +466,9 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // Reached both by falling out of the loop and by the top test skipping it
     // entirely (0x1800dd175 jumps straight here).
     const double spt = *secondsPerTick;
-    void* context = _context;
+    Video::Context* context = _context;
 
-    const float d = static_cast<float>(static_cast<double>(_deltaTime)   * spt);
+    const float d = static_cast<float>(static_cast<double>(_deltaTime._ticks) * spt);
     const float a = static_cast<float>(static_cast<double>(_accumulator) * spt);
     const float T = static_cast<float>(static_cast<double>(_totalTime)   * spt);
 
@@ -502,12 +478,11 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // `alpha` is ALSO MainLoop::Draw's float argument (MOVAPS XMM1,XMM4 at
     // 0x1800dd35e) — see §2d. It is used twice, once here and once below.
 
-    float* timeVec = reinterpret_cast<float*>(Bytes(context) + kContextTimeVec4);
-    timeVec[0] = v;
-    timeVec[1] = 0.0f;
-    timeVec[2] = 0.0f;
-    timeVec[3] = 0.0f;
-    *reinterpret_cast<uint32_t*>(Bytes(context) + kContextDirtyFlags) |= kContextDirtyBit;
+    context->_time.x = v;                      // +0x3c8
+    context->_time.y = 0.0f;
+    context->_time.z = 0.0f;
+    context->_time.w = 0.0f;
+    context->_dirty |= kContextDirtyBit;       // +0x10
 
     // MainLoop::Draw — NOT ported. By NAME (it is exported), so the cutover
     // miss is diagnosable rather than a silent null (§5). The float is `alpha`,

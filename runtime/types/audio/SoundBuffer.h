@@ -112,13 +112,13 @@ public:
     virtual Object::External* Construct();                     // [8] 0x18000bbd0 — B7-1.6
 
     // ?PlatformSerialize@SoundBuffer@Audio@@AEAAXAEAVSerializer@IO@@@Z
-    // 0x1800e05c0 (AEAA = private in retail; public here because its door
-    // calls it, and access control is not ABI). `void*` is an IO::Serializer*.
-    void PlatformSerialize(void* serializer);
+    // 0x1800e05c0 (AEAA = private in retail; public here, access control is
+    // not ABI).
+    void PlatformSerialize(IO::Serializer& serializer);
 
     // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
-    bool          IsLooping() const   { return _loopForever != 0; }          // 0x18000bc80
-    bool          IsStreamed() const  { return _streamed != 0; }             // 0x18000bc90
+    bool          IsLooping() const   { return _loopForever; }               // 0x18000bc80
+    bool          IsStreamed() const  { return _streamed; }                  // 0x18000bc90
     const System::String& GetStreamPath() const { return _streamPath; }     // 0x18000bca0
     const void*   Format() const      { return _format; }                    // 0x18000bcb0  tWAVEFORMATEX const*
     int32_t       GetLength() const   { return _length; }                    // 0x18000bcc0
@@ -145,13 +145,15 @@ private:
 public:
     // ---- the 0x60 bytes SoundBuffer adds (public: the doors, the Device and
     // the Stream worker reach them) ----
-    uint8_t         _loopForever;            // +0x20  IsLooping
-    uint8_t         _streamed;               // +0x21  IsStreamed
+    // `bool`: Serialize streams both through the ReaderWriter's bool slot
+    // (+0x78, 0x1800e0480) and the getters return the byte as the bool.
+    bool            _loopForever;            // +0x20  IsLooping
+    bool            _streamed;               // +0x21  IsStreamed
     uint8_t         _pad22[2];               // +0x22  never written
     float           _durationSeconds;        // +0x24  kScalarFloat, last scalar
     System::String  _string28;               // +0x28  serialized first; no getter
     System::String  _streamPath;             // +0x30  GetStreamPath
-    void*           _data;                   // +0x38  GetData
+    uint8_t*        _data;                   // +0x38  GetData (the audio bytes, XAUDIO2_BUFFER::pAudioData)
     int32_t         _length;                 // +0x40  GetLength
     uint8_t         _pad44[4];               // +0x44  never written
     uint32_t*       _wmaData;                // +0x48  GetWMAData

@@ -50,14 +50,11 @@ extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);  // no retail
 uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amount);  // 0x14008d3c0
 
 // ---- plantorchard_ctor.cpp
-extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
+class ComponentDescription;
+extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- tendarea_ctor.cpp
 extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
-
-// ---- tradework_serialize.cpp
-extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t param_3);  // 0x14002c710 (local extern in tradework.cpp)
-extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2);  // 0x14002c8a0
 
 // ---- work_act_clear.cpp
 void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3, void** param_4, float* param_5, uint32_t param_6, uint32_t);  // 0x1400c1530
@@ -67,7 +64,8 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
 
 // ---- work_act_hunt.cpp
 void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targetInnerPtr, float* worldPos, float performWorkTime, char selectMoveTo);  // 0x1400bbbc0
-void WorkAct_ShowToolCtor3_bdd20(void* citizenIBP, uint32_t workId, uint32_t* createParam3, uint32_t, float* destination, int loopCount, uint32_t* loopBase, uint32_t completeParam8, int64_t* gatePtr9, uint32_t* msgIdPtr10, uint64_t, int64_t param12);  // 0x1400bdd20
+class ComponentDescription;
+void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId, ComponentDescription* plantType, uint32_t, float* destination, int loopCount, const int32_t* cells, uint32_t completeParam8, ComponentEntity** messageTarget, uint32_t* msgIdPtr10, uint64_t, const uint32_t* messageArgs);  // 0x1400bdd20
 
 // ---- work_act_path.cpp
 extern "C" void* WorkAct_GatherRawMatCtor_bf790(void* retval, void* entity, uint32_t pathType, uint64_t* srcLoc, float* srcPos, void** dstLoc, float* dstPos, int64_t materialDesc, int matCount, int completionCode, uint8_t useAnimal, char twoWay, int flags, uint8_t param_14);  // 0x1400bf790
@@ -108,7 +106,7 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer);  // 0x140029
 // ---- work_base_grid.cpp
 int WorkGrid_FindCell_9ccf0(int* mapGrid, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
 uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int cellId, char flag);  // 0x1400f8620
-int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef);  // 0x1400e3db0
+int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef);  // 0x1400e3db0 B4 FORWARD: 6 outside callers (Work::TryAutoPickup)
 
 // ---- work_base_impl2.cpp
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
@@ -119,21 +117,21 @@ void* WorkBase_FindComponent_2f90(uintptr_t entity, void* retIBP);  // 0x140002f
 void* WorkBase_FindComponent_3050(uintptr_t entity, void* retIBP);  // 0x140003050
 void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP);  // 0x1400052c0
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP);  // 0x140006270
-void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP);  // 0x140015140
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 void WorkBase_TaskListCleanup_c5400(void* self);  // 0x1400c5400
-uint8_t WorkBase_ValidateTask_f7100(void* self, void*, void* taskIBP, void** out);  // 0x1400f7100
+uint8_t WorkBase_ValidateTask_f7100(void* self, void*, void* taskIBP, void** out);  // 0x1400f7100 B4 FORWARD: 20 outside callers (Work::ValidateTask)
 int WorkBase_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB);  // 0x140008830
 uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 
 // ---- work_base_walkpos.cpp
 bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2, float* param_3, float* param_4, int* param_5);  // 0x140122be0
 uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2, float* param_3, float* param_4, int* param_5);  // 0x140122b00
-uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP, uint32_t param_3, uint32_t param_4, void* param_5Time);  // 0x1400f6ef0
+uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP, uint32_t param_3, uint32_t param_4, void* param_5Time);  // 0x1400f6ef0 B4 FORWARD: 5 outside callers (Work::StepProgress)
 
 // ---- work_leaf_clear.cpp
-void WorkLeaf_PlantArea_b390(uintptr_t self);  // 0x14011b390
+class CropFieldComponent;
+void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropFieldComponent member; its header is COMP-c's)
 void WorkLeaf_BstRemoveByIBP_298a0(void* treeRootSlot, void* keyIBP);  // 0x1400298a0
 void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* insIBP);  // 0x140029920
 void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser);  // 0x140029c10

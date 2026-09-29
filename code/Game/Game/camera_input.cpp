@@ -341,7 +341,7 @@ void PlayerToolManager::UpdateHotkeys(int /*inputFlag*/, int64_t /*timeTicks*/) 
     if (keyMap->Pressed(0, 0x17)) {  // B.3.7 bridge
         uint32_t worldFlags = GameUpdateLoop::_singleton->m_gameFlags;
         if (((worldFlags >> 10) & 1) == 0)
-            field_0x30 = !field_0x30;
+            paused = !paused;
     }
 
     // Camera presets 0..4 (ids 0x2d..0x31). The original gates these on the active

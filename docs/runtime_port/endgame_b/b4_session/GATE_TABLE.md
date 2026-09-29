@@ -129,3 +129,30 @@ Owed, added:
 - Commit messages with an UNVERIFIED sentence: COMP-d `9a0c288e` ("the next update re-grounds it
   either way"), COMP-f `a61be2e2` (the load-time recompute), DLG-b's GoalDialog commit ("46 -> 0":
   the base was 70).
+
+| 25 | W1-COMP-f | `c544190a` | Component f: TradeComponent arrays and stock tree, TradeDescription merchants, WildAnimal, Well, Work, WorkPlace, Zone: 992 -> 146 in 39 files; `behaviour:` WorkComponent::OnAdded sets the worker count 0x14012e6f0 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.78 ms/frame, p95 2.53 · trade harness: 18 trades through the converted trade component, then the known crash (`known_port_issues` 13) | 0 |
+| 26 | W1-COMP-e | `c7ec34a1` | Component e, the rest: Population, Spawn, StorageDisplay, Terraform, Quarry, Picking, Tombstone, Tracker, ResourceProduce: 1553 -> 207 in its files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.97 ms/frame, p95 3.04 (flagged; five agents were building; recorded) | 0 |
+
+Metric at `c7ec34a1`: **24,792** to remove.
+
+**Scope for this session, set by the user (2026-09-29):** the DANGEROUS casts go completely (any
+spelling of a read by offset or of a `void*` / integer receiver reinterpreted as a class; the
+metric's total); only safe casts stay (the `CAST-OK` floor, the three tier-I shapes, arithmetic and
+same-hierarchy `static_cast`). The differences from retail (`known_port_issues` 14) are a separate
+task for another session: blocks record them and do not schedule `behaviour:` commits for them. A
+cast that can only be removed by changing behaviour is LEFT and listed with the row that blocks it.
+
+`sa-stress` p95, recorded only (the 95th percentile moves with the machine's load; the mean does
+not): base 2.40; COMP-c 2.71; COMP-d 3.33; GAME-a 2.57; COMP-f 2.53; COMP-e 3.04. Mean update:
+1.92 / 1.88 / 2.03 / 1.77 / 1.78 / 1.97 ms.
+
+| 27 | W1-R-ENG | `59975715` | runtime engine / application / achievement / input / audio: 590 -> 65 in 66 files; settles `known_port_issues` 14e from retail (the input flags are `bool`; the options dialog should copy the check box byte raw) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `59975715`: **24,258** to remove. Floor ceilings raised in `FLOOR.md` after the coordinator
+read the marked lines: `win32` 34 -> 56 (Win32 handle parameters on NAMED fields: `HWND`,
+`HINSTANCE`, `CRITICAL_SECTION*`, `WAVEFORMATEX*`; the class headers do not include `<windows.h>`),
+`crt` 7 -> 9 (`qsort` comparator parameters).
+
+| 28 | W1-WORK-c | `5beafd9a` | Work c: the Work base, the work_* leaves, accessors and action builders, TradeWork, PlantArea, PlantOrchard, TendArea: 1724 -> 300 in 33 files; `known_port_issues` 13 and 14 updated | exit 0 · 918 / 0 · 0 (one standing perf warning in `work_act_consume.cpp` changed its text when the type was named, `uintptr_t [0]` -> `ConsumeProduceRecipe* [0]`; the gate counted it as new) | ok | 5/5 | tools ok · `sa-stress` exit 0, update 1.80 ms/frame, p95 2.65 | 0 |
+
+Metric at `5beafd9a`: **22,834** to remove.

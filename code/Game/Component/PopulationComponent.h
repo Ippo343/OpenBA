@@ -27,6 +27,11 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
+
+class PopulationDescription;
+class ComponentEntity;
+class Map;   // Game/Map.h
 
 class PopulationComponent final : public Component {
     DECLARE_EXE_TYPE(PopulationComponent)
@@ -45,28 +50,49 @@ public:
     void Slot11() override;                                       // [11] 0x140054210 (RET)
     float HerdCellFood(int cell) const;                           // 0x140053f20 (body: herdcomponent.cpp)
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 PopulationDescription
-    uint32_t field30;      // +0x30
+    // One habitability cell, 0xC bytes (Persist 0x1400544a0 serializes +0, +8, +4).
+    struct Cell {
+        int32_t density;    // +0x00 ScanHabitability's answer (0: uninhabitable)
+        int32_t smoothed;   // +0x04 the smoothed density (SmoothDensity)
+        int32_t minimum;    // +0x08
+    };
+
+    void SmoothDensity();                                         // 0x1400538c0 5x5 kernel over the cells
+    void ScanHabitability(Map* map, int cellIndex);               // 0x140053b50 one cell's block of map tiles
+    void SetCellCount(int newCount);                              // 0x14000b0d0 Array<Cell>::SetSize on +0x38
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x1400544a0:
+    // ExternalPtr<PopulationDescription> +0x28, int +0x30, int +0x48, the cell array
+    // (+0x38), the herd array (+0x50, InternalPtr<ComponentEntity> elements), Time
+    // +0x60, int +0x68, int +0x6c. Both arrays are freed by the retail dtor (H5:
+    // raw triples).
+    PopulationDescription* description; // +0x28 the component's +0x18, cached by Startup
+    int32_t  habitatDim;   // +0x30 cells per edge (map size / _habitatBlock)
     uint8_t  _pad34[4];    // +0x34
-    void*    field38;      // +0x38 habitability grid data (freed by the retail dtor)
-    void*    field40;      // +0x40 its count / capacity
-    uint32_t field48;      // +0x48 herd grid dimension
+    Cell*    cells;        // +0x38 Array<Cell> data
+    int32_t  cellCount;    // +0x40
+    int32_t  cellCapacity; // +0x44
+    int32_t  herdDim;      // +0x48 herd cells per edge (map size / _herdBlock)
     uint8_t  _pad4C[4];    // +0x4C
-    void*    field50;      // +0x50 density cells data (freed by the retail dtor)
-    void*    field58;      // +0x58 its count / capacity
-    void*    field60;      // +0x60 herd-entity list
-    void*    field68;      // +0x68
+    ComponentEntity** herds; // +0x50 Array<InternalPtr<ComponentEntity>> data
+    int32_t  herdCount;    // +0x58
+    int32_t  herdCapacity; // +0x5C
+    System::Time smoothTimer; // +0x60 SmoothDensity every 300 s
+    int32_t  scanIndex;    // +0x68 the round-robin habitability cursor
+    int32_t  field_0x6c;   // +0x6C serialized, not read by the ported bodies
 };
 
 static_assert(sizeof(PopulationComponent) == 0x70, "PopulationComponent is 0x70 (create 0x14000af50)");
 static_assert(alignof(PopulationComponent) == 8, "PopulationComponent alignment");
-static_assert(offsetof(PopulationComponent, field28) == 0x28, "");
-static_assert(offsetof(PopulationComponent, field30) == 0x30, "");
-static_assert(offsetof(PopulationComponent, field38) == 0x38, "");
-static_assert(offsetof(PopulationComponent, field40) == 0x40, "");
-static_assert(offsetof(PopulationComponent, field48) == 0x48, "");
-static_assert(offsetof(PopulationComponent, field50) == 0x50, "");
-static_assert(offsetof(PopulationComponent, field58) == 0x58, "");
-static_assert(offsetof(PopulationComponent, field60) == 0x60, "");
-static_assert(offsetof(PopulationComponent, field68) == 0x68, "");
+static_assert(sizeof(PopulationComponent::Cell) == 0xC, "cell stride 0xC (0x14000b0d0)");
+static_assert(offsetof(PopulationComponent, description) == 0x28, "");
+static_assert(offsetof(PopulationComponent, habitatDim) == 0x30, "");
+static_assert(offsetof(PopulationComponent, cells) == 0x38, "");
+static_assert(offsetof(PopulationComponent, cellCount) == 0x40, "");
+static_assert(offsetof(PopulationComponent, cellCapacity) == 0x44, "");
+static_assert(offsetof(PopulationComponent, herdDim) == 0x48, "");
+static_assert(offsetof(PopulationComponent, herds) == 0x50, "");
+static_assert(offsetof(PopulationComponent, herdCount) == 0x58, "");
+static_assert(offsetof(PopulationComponent, smoothTimer) == 0x60, "");
+static_assert(offsetof(PopulationComponent, scanIndex) == 0x68, "");
+static_assert(offsetof(PopulationComponent, field_0x6c) == 0x6C, "");

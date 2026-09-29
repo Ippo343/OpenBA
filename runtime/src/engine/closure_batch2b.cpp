@@ -32,10 +32,10 @@ namespace {
 //                +0x20. It is its own caller, so porting it is a separate job.
 //   0x180009c30  the single-node free.
 // B3R: both called by name (application_lifecycle.cpp, allocator.cpp).
-void SetFreeSubtree(void* set, void* node) {
-    RtApp_SetDestroyTree(set, static_cast<rtsetavl::Node*>(node));
+void SetFreeSubtree(rtsetavl::Set* set, rtsetavl::Node* node) {
+    RtApp_SetDestroyTree(set, node);
 }
-void SetFreeNode(void* set, void* node) {
+void SetFreeNode(rtsetavl::Set* set, rtsetavl::Node* node) {
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -65,16 +65,15 @@ void SetFreeNode(void* set, void* node) {
 // +0x18 is a qword: the same Set header shape runtime/types/io/Persistence.h
 // records for its own settings map (root at +0x00, an int32 count at +0x08).
 // ============================================================================
-extern "C" void* RtEngine_Application_ScalarDeletingDtor(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
-    void* set = p + 0x18;
-    if (void* root = *reinterpret_cast<void**>(set)) {
-        SetFreeSubtree(set, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x18));
-        SetFreeSubtree(set, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x20));
+extern "C" void* RtEngine_Application_ScalarDeletingDtor(::Application::Application* self) {
+    rtsetavl::Set* set = &self->_messageCallbacks;   // this + 0x18
+    if (rtsetavl::Node* root = set->root) {
+        SetFreeSubtree(set, root->left);             // root + 0x18
+        SetFreeSubtree(set, root->right);            // root + 0x20
         SetFreeNode(set, root);
     }
-    *reinterpret_cast<void**>(p + 0x18) = nullptr;
-    *reinterpret_cast<uint32_t*>(p + 0x20) = 0;
+    set->root  = nullptr;
+    set->count = 0;
     Rt_GuardedObjectFree(self);                  // 0x180006a10, `operator delete`
     // (This body has no caller: its 0x18004da00 row had no reader.)
     return self;

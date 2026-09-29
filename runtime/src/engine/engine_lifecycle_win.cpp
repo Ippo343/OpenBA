@@ -35,5 +35,5 @@ void RtEngineLifecyclePlatformCoUninit() {
 }
 
 void RtEngineLifecyclePlatformFreeLibrary(void* module) {
-    FreeLibrary(static_cast<HMODULE>(module));
+    FreeLibrary(static_cast<HMODULE>(module));   // CAST-OK: win32
 }

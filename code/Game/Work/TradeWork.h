@@ -29,6 +29,9 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class CitizenComponent;
+class ComponentDescription;
+namespace IO { class Serializer; }
 
 class TradeWork final : public Work {
     DECLARE_EXE_TYPE(TradeWork)
@@ -47,13 +50,57 @@ public:
     void* GetTarget(void* outPtr) override;                         // [10] 0x1400f6c50
     int   GetPriority() override;                                   // [11] 0x140029860
 
+    // One carry the post has handed out: the element of the AVL set at +0x48,
+    // keyed on the citizen (insert 0x14002c710 copies these 0x18 bytes into the
+    // node; serialize 0x14002c8a0 streams them).
+    struct Assignment {
+        CitizenComponent*     citizen;   // +0x00 InternalPtr, the key (0x14002c8a0 validates it
+                                         //       against CitizenComponent)
+        ComponentDescription* resource;  // +0x08 ExternalPtr (serialized by 0x140002340)
+        int32_t               quantity;  // +0x10 < 0 carried out of the post, > 0 carried in
+                                         //       (0x1400f5d40)
+        uint32_t              _pad14;    // +0x14 copied with the record, never read
+    };
+    // The set's node (0x38 bytes: MemAlloc(0x38) in 0x14002c830).
+    struct Node {
+        Assignment value;    // +0x00
+        Node*      parent;   // +0x18
+        Node*      left;     // +0x20
+        Node*      right;    // +0x28
+        int16_t    balance;  // +0x30 right height - left height (one dword store zeroes both)
+        int16_t    height;   // +0x32
+        uint32_t   _pad34;   // +0x34
+    };
+
     // --- TradeWork fields (+0x48) ---
-    void*    bstRoot;            // +0x48: BST root for assigned trade workers
-    uint32_t workerCount;        // +0x50: number of workers in BST
+    Node*    bstRoot;            // +0x48: the assignment set's root
+    int32_t  workerCount;        // +0x50: its count (0x140029860 `CMP [RCX+0x50]; SETG`: signed)
     uint8_t  _pad54[4];          // +0x54: padding
+
+private:
+    // 0x14002c710: insert `rec` keyed on its citizen; returns the new node, or the
+    // node already holding that citizen (the count is not bumped then).
+    Node* InsertAssignment(const Assignment& rec);
+    // 0x14002c830: the insert's node allocation (RCX unused by the body).
+    static Node* AllocNode(const Assignment& rec, Node* parent);
+    // 0x14002c8a0: stream the set (count, then each record in order).
+    void SerializeAssignments(IO::Serializer& ser);
+    // The assignment tail Execute (0x1400f5d40) inlines on both passes: the
+    // citizen's task-state stores and the insert of {citizen, resource, quantity}.
+    int CommitAssignment(CitizenComponent* const* citizenRef, ComponentDescription* resource, int quantity);
 };
 
 static_assert(sizeof(TradeWork) == 0x58, "TradeWork is 0x58 (retail create MemAlloc)");
 static_assert(alignof(TradeWork) == 8, "TradeWork is 8-aligned");
 static_assert(offsetof(TradeWork, bstRoot) == 0x48, "TradeWork +0x48");
 static_assert(offsetof(TradeWork, workerCount) == 0x50, "TradeWork +0x50");
+static_assert(sizeof(TradeWork::Assignment) == 0x18, "the record 0x14002c710 copies is 0x18 bytes");
+static_assert(offsetof(TradeWork::Assignment, citizen) == 0x00, "");
+static_assert(offsetof(TradeWork::Assignment, resource) == 0x08, "");
+static_assert(offsetof(TradeWork::Assignment, quantity) == 0x10, "");
+static_assert(sizeof(TradeWork::Node) == 0x38, "MemAlloc(0x38) in 0x14002c830");
+static_assert(offsetof(TradeWork::Node, parent) == 0x18, "");
+static_assert(offsetof(TradeWork::Node, left) == 0x20, "");
+static_assert(offsetof(TradeWork::Node, right) == 0x28, "");
+static_assert(offsetof(TradeWork::Node, balance) == 0x30, "");
+static_assert(offsetof(TradeWork::Node, height) == 0x32, "");

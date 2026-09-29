@@ -306,3 +306,16 @@ void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
     // Regenerate noise texture from edit values
     self->GenerateNoise();
 }
+
+// B4 DLG-d (correction 2): the class's slots 4 and 9 run the ported bodies
+// (until now PORT GAP no-ops in ui_dialog_stub_factories.cpp).
+// [4] 0x1400714c0
+void NoiseUI::OnCreated() {
+    NoiseUI_Slot4(this);
+}
+// [9] 0x1400714a0
+void NoiseUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a,
+                             int32_t b, int32_t c, int32_t d, int32_t /*e*/,
+                             void* /*userData*/) {
+    NoiseUI_Slot9(this, element, a, b, c, d);
+}

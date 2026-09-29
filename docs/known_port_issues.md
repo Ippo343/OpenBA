@@ -233,6 +233,29 @@ question for the fix is which retail path removes a dying / leaving citizen from
 (the citizen's `OnRemove` 0x140113ca0 and the workplace release 0x140116540 / 0x140115a50 are the
 candidates) and whether the tree's port of it reaches TradeWork. The route is not part of any gate.
 
+WORK-c, 2026-09-29: the removal path, read against retail. Retail removes a citizen from the
+post's tree only through the citizen's action stack: `CharacterComponent::OnRemove` 0x140109980
+clears the stack through 0x1400c5400, which calls slot 8 of every chained action; the
+`CompleteTask` that `TradeWork::Execute` queued (through 0x1400bf790, its +0x20 = the citizen,
++0x30 = the work id `Work+0x20`) answers with `CheckEntity` 0x1400c5ac0 -> 0x1400f8800, which
+finds the work in the scheduler's id map (`WorkScheduler::trees[0]`, +0x30) and calls its slot 7,
+`TradeWork::OnCancel` 0x1400f5d10 = 0x14002c690 find-and-remove keyed on the citizen. Slot 6
+(0x1400f5d20, the CompleteTask's own completion through 0x1400f8760) removes it the same way.
+The tree's port of each link was read and matches retail: `TradeWork::Validate` (0x1400f5ae0),
+`Work::ValidateTask` (0x1400f7100), `CharacterComponent::OnRemove`, the stack clear (it re-reads
+the array and its size every iteration, as retail), `ActCt_TaskReassign_8800`, `FindTaskNode`
+(the same +0x30 tree the scheduler posts into), `TradeWork::OnCancel` / `OnComplete`, and the
+chain `Execute` builds (twoWay = 1: the CompleteTask follows the pickup). The ONE difference on
+the path: the tree's `CompleteTask::CheckEntity` (`completetask.cpp`) returns early when
+`GameUpdateLoop::_singleton` or its +0x118 scheduler is null; retail 0x1400c5ac0 has no such test
+(14d). It cannot drop a removal while a town is running. NOT FOUND: where the stale entry comes
+from. Two open questions for the fix, neither read: whether the tree's death path (the
+`[Burial]` handler in `citizen_lifeevent_handler.cpp` and what destroys the citizen entity after
+it) reaches `CharacterComponent::OnRemove` at all, and whether a citizen can hold a post
+assignment with no CompleteTask left on its stack (a builder that pushes without clearing first,
+e.g. 0x1400c0ad0 with its cancel flag 0, runs on top of the old chain). SUSPECTED, not CONFIRMED.
+No `behaviour:` commit; no check added.
+
 ## 14. Differences from retail found by the B.4 blocks and left — a list (2026-09-29)
 
 Each was found by a B.4 block while it converted the body, read against retail by that block, and
@@ -257,6 +280,15 @@ in the code carries a comment.
 | 10 | `WorkPlaceUI` element finds | unchecked | narrows each with IsDerivedFrom | CONFIRMED (DLG-e) |
 | 11 | Tombstone slot 4 | the tree's form | checks the description type and always writes the timer | CONFIRMED (COMP-e) |
 | 12 | `TerraformComponent_RegionRecalc` | a second copy of `Pf_RegionDirty4_b150` with the tree's zero-chunk guard | one body | CONFIRMED (COMP-e) |
+| 33 | `Audio::Stream::Run` (`vtbatch7b_stream_run_win.cpp`), `IXAudio2SourceVoice::GetState` | mingw's `<xaudio2.h>` is the 2.8 interface, so the call passes a second argument (`Flags = 0` in R8) | XAudio2 2.7's `GetState(pVoiceState)` takes one; slot +0xc8 is the same and 2.7 ignores R8 | SUSPECTED harmless (R-ENG) |
+| 34 | `Engine::PlatformConfigure`'s launcher (`engine_platform_win.cpp`) | reads the two launcher check-box bytes and calls the dialog proc 0x1800a1ae0 at module-relative addresses of a LOADED `Runtime-x64.dll` (`GetModuleHandleW`); the standalone never loads it, so the launcher dialog is never shown and both bytes read 0 | retail runs its own dialog proc 0x1800a1ae0 over resource 0x66 | CONFIRMED from the code, not from retail (R-ENG); a door into the retail binary, LEFT |
+| 35 | the worker-count callers in `tradework.cpp`, `plantarea.cpp`, `plantorchard.cpp`, `tendarea.cpp` | call `WorkComponent_CalcMaxWorkers` (`tutorial_base.cpp`) | one body, 0x14012e5c0; the tree has a second port of it, `WorkComponent::CalcMaxWorkers` (COMP-f), and the two were not compared, so which one differs from retail is unknown | SUSPECTED (WORK-c) |
+| 36 | `StatusBarUI` slots 4 and 8; `StorageUI`, `StorageCapacityUI`, `StatusIconUI` slot 8 | overridden: slot 4 runs OnOpened; slot 8 rebuilds the panel and refreshes it (StatusBarUI every 30th frame, counted in the +0x104 gap) | inherits DialogController's (StatusBarUI table 0x14015d810); the refresh is slot 7 (StatusBarUI 0x1400798d0) | CONFIRMED (DLG-d) |
+| 37 | `StatusBarUI::OnOpened` element finds | stores every FindElement result unchecked, the hearts / stars groups and labelTitleParam included | 0x14007a3d0 narrows with IsDerivedFrom; the tree's comment says the group check's id was read as ButtonElement and rejected the element | SUSPECTED (DLG-d; not re-read) |
+| 38 | `CitizenUI_BuildIconArray_Impl` (`citizen_icon_helpers.h`; CitizenUI and StatusBarUI call it) | a second body of 0x14006abf0: pushes the "whole" / "half" find results without narrowing and returns on a null group | 0x14006abf0 narrows each to ImageElement (null when not one) and reads the group unguarded; `TownHall_GroupRatingInit` (`townhall_helpers.cpp`) is the faithful copy | CONFIRMED (DLG-d) |
+| 39 | `TownHall_InventorySortAsc` / `Desc` (`townhall_helpers.cpp`) | a stable insertion sort | 0x140015200 / 0x140015500 are an introsort: rows with equal keys may come out in another order | SUSPECTED (DLG-d; the tree's note, not re-read) |
+| 40 | `TitleDescToolTipUI::OnCreated` (`titledesctooltipui.cpp`) | takes "textTitle" / "textDesc" and the data source as found | 0x14007b730 narrows both texts with IsDerivedFrom (the id Ghidra labels LabelElement's, read through a mislabelled import) and the data source to UI::Element | CONFIRMED (DLG-d) |
+| 41 | `SpriteCaptureUI::OnElementEvent` (`ui_dialog_stub_factories.cpp`) | a no-op (PORT GAP): the capture button starts nothing, so OnUpdate's save arm is never reached | 0x140079620 (not ported) | CONFIRMED (DLG-d; the gap, not the body) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -287,6 +319,7 @@ in the code carries a comment.
 | 30 | `Graphics::AnimationState` | 0x48 bytes (a unit test pins it) | 0x18, ctor 0x1800fdaf0 | CONFIRMED (R-GFX) |
 | 31 | H5 raw-storage members: CitizenComponent `name` +0x28 (String) and `consumedTypes` +0x98; Profession's three Strings; the Build / WorkPlace arrays; Map's picking scene; PlayerController's transform and camera (`Camera`'s default ctor is protected); the `Collection::Array` headers declared as three fields | raw storage, so no ctor / dtor runs | real members | CONFIRMED per class (W0-H1, W0-H2, GAME-a); B4_RULES correction 7 |
 | 32 | `BeginDrawGroup`, `Render` (runtime graphics) | stack `RendererDrawGroup` / `RendererSceneEntry` objects whose implicit ctors zero memory that is then overwritten | no such stores | CONFIRMED (R-GFX); cost only |
+| 42 | `NoiseUI` dtor (`NoiseUI.h`, DLG-b's) | `= default`: the ImageBuffer, MaterialInstance and SpriteSheet OnCreated (0x1400714c0, wired by DLG-d) makes are never freed | 0x140071bc0 deletes +0x40, +0x38, +0x30 through slot 0 (ModDialog's dtor has the same three `delete`s) | CONFIRMED (DLG-d); a header line of a finished block, left for the coordinator |
 
 ### 14d. Guards the tree has and retail lacks — and guards B.4 dropped
 
@@ -301,18 +334,56 @@ stated condition.
   disaster finders, `Pasture_FindLivestockComp`, `NaturalResourceComponent_FindComponentByType`,
   `ActMv_FindComponentFamily_12d0`); `(uintptr_t)comp < 0x10000` at `townhallui.cpp`; the standalone
   `dialogRes != nullptr` skips of EventNotifyDialog / AutoSaveDialog.
+- KEPT: `UpdateLoop::LoadResources` (`updateloop_loadresources.cpp`) tests `IO::Modification::_singleton`
+  and `IO::FileSystem::_singleton` for null; retail loads both and dereferences them unguarded
+  (0x1800dd8c8 / 0x1800dd8d2, 0x1800dd988 / 0x1800dd98f). CONFIRMED (R-ENG).
+- KEPT: `OptionsDialog::ApplyInputSettings` (`optionsdialog.cpp`) returns early when
+  `Input::Configuration::_singleton` is null; retail 0x140072360 loads it (0x14007237f) and stores
+  through it with no test. CONFIRMED (R-ENG read it; the file is DLG's).
+- KEPT: `Input::Device::PlatformStartup` tests `Application::_singleton` for null before reading
+  `_windowHandle` (twice); `KeyMap::Load`'s settings lookup tests the Persistence pointer before the
+  root; `Input::Device::PlatformShutdown` skips the three callback erases when `Application::_singleton`
+  is null (its comment says why). Retail loads each unguarded. SUSPECTED for the first two (not
+  re-read), CONFIRMED by the file's own banner for the third (R-ENG).
 - DROPPED: `ComponentEntity::FindComponent<T>()` does not skip a null component slot and does not
   test the type id for 0 / -1 (retail's per-type instances do neither: 26 read by block T). Safe
   while `ComponentEntity`'s ctor never stores a null slot (it skips a component with no factory) and
   every `T` is registered. PastureUI's second copy of ComputeCapacity went with its two guards
   (`behaviour:` 0x140128570).
 - DROPPED WITHOUT READING RETAIL: the MemAlloc-failure path of `TickIdle` (COMP-f). SUSPECTED.
+- KEPT (WORK-c): `Work::InitFromEntity`'s null MapComponent / map tests; `Work::TryAutoPickup`'s
+  null AutoPickupComponent and null-singleton returns (0x1400e3db0); the action-chain builders'
+  `derivedTarget` arms (0x1400c1eb0: PerformWork / MoveTo / ShowTool are built empty when the
+  target has no NaturalResourceDescription) and `derived` arms (0x1400c1530), the `targetIBP` and
+  singleton tests of 0x1400c0ad0, the `condPtr8` / `msgIdPtr9` null arms of 0x1400be6e0 and the
+  `param_9` null arm of 0x1400bef70; `CompleteTask::CheckEntity`'s null singleton / scheduler
+  return (retail 0x1400c5ac0 has none; see entry 13). All SUSPECTED except the last (CONFIRMED).
+  0x1400bef70's two reads through the null receiver ([0+0x50], [0+0x28]) stay unguarded, as retail.
+- KEPT (DLG-d): StatusBarUI's Bound / Ready / TownReady / Built gates on slots 5, 7 and 9, its
+  test of textSeason's string table and of a null `g_gameSettings` (0x1400798d0 has none); the
+  status-icon handler's null game / town / citizen / StatusIconComponent tests and its
+  `count <= 0` return (0x14007a120 has none); ToolUI's dialog-address windows
+  (`ToolUI_DialogHasEntityUI`, OnUpdate); `PlayerToolManager::SelectTool`'s empty-registry return
+  (retail goes straight to Factory::CreateObject) and the game-world / text-element tests in
+  `toolbardialog.cpp`; SpriteCaptureUI's Input::Device, capture-box, FileSystem and edit-element
+  tests; StatusIconUI's EntityUI-pages test. CONFIRMED where the site quotes retail.
+- KEPT (DLG-d): `TitleDescToolTipUI::OnCreated`'s unbound-controller return and its null tests of
+  the two texts (0x14007b730 has none).
 
 ### 14e. Stores that may normalise where retail copies
 
 - `optionsdialog.cpp:745,748`: `inputCfg->_mouseClipping = checkMouseClip->_checked != 0;` and
   `_mouseDisplay` likewise. UI's `EnableCursor` tests `Input::Configuration::_mouseDisplay` as a
-  `bool` where retail compares a byte. Several flags became `bool` in R-UI-b and R-VIDEO
+  `bool` where retail compares a byte. SETTLED by R-ENG from retail: the three Input::Configuration
+  flags ARE `bool` -- `Input::Configuration::Startup` reads them through
+  `?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z` (0x1800b8290, `AEA_N` = `bool&`), and `EnableCursor`
+  0x180122580 tests `CMP byte ptr [RAX+0xa],0` / `CMOVNZ` (0x180122599), a bool's zero test.
+  `ApplyInputSettings` 0x140072360 copies the check box's +0xd8 byte RAW: `MOVZX EAX,byte [R8+0xd8]`
+  / `MOV byte [RDX+0x8],AL` (0x140072390 / 0x14007239f) and `MOVZX EAX,byte [RDX+0xd8]` /
+  `MOV byte [RCX+0xa],AL` (0x1400723b9 / 0x1400723c2) -- a bool-to-bool copy in the source, so
+  `CheckElement::_checked` (+0xd8, `uint8_t` in the tree) is the retail `bool`. The tree's `!= 0` is
+  value-identical while `_checked` holds 0 / 1; the faithful spelling is the raw copy
+  `inputCfg->_mouseClipping = checkMouseClip->_checked;` (DLG's file, not changed). CONFIRMED. Several flags became `bool` in R-UI-b and R-VIDEO
   (`SpriteSheet::m_field50`, `TextDescription::_b84/_b85`, the ribbon / scroll `_vertical`,
   RenderState's six flags). Identical only if the byte is always 0 or 1. SUSPECTED; the settings
   flags were the same question and retail copies raw (0x14007248f), so those are `uint8_t`.
@@ -333,6 +404,24 @@ stated condition.
   ("GetHappiness") is the carry count.
 - Two tree bodies both claim retail 0x1400049c0 (`Reimpl_ExternalPtrArray_Serialize`,
   `Desc_LoadExternalArray`).
+- `Video::Device::gap50[0x10]` (+0x50 / +0x58) is not a gap: MainLoop's ctor stores the video-error
+  and video-restart callbacks there (the profile build's `Video::Device::SetVideoErrorFuncs`,
+  0x1800fd860, inlined); `engine.cpp` still writes them as raw bytes because the header (R-VIDEO)
+  has no named fields.
+- `Action::_entity` (+0x10, ACT) is the NEXT action of a chain wherever the action stack is walked
+  (0x1400c5400, the inlined appends of 0x1400c1530 / 0x1400bef70, 0x1400c4f10). (WORK-c)
+- The Work action-chain builders are not constructors: `WorkAct_*Ctor_*` (0x1400c1eb0, 0x1400c0ad0,
+  0x1400c2490, 0x1400bb0a0, 0x1400be6e0, 0x1400ba9f0, 0x1400bffd0, 0x1400bb7b0, 0x1400beae0,
+  0x1400bef70) each clear the citizen's stack and push a chain; Ghidra's `ShowTool_Action_Ctor4`
+  (0x1400c1530) and `Pathfinding_FindPath` (0x1400bf790) are two more.
+  `WorkBase_TaskListCleanup_c5400` is CharacterComponent's action-stack clear, `WorkBase_FindComponent_6270`
+  is FindComponent<StorageComponent>, and `Entity_FindConsumeProduce_b6f0`'s old label
+  "Entity_FindStateMachine" is wrong. `Work::field_20` is the work id the scheduler keys on,
+  `field_28` the target cell. (WORK-c)
+- INVENTORY_A's `ToolUI_ChildDialog` is `UI::DialogInstance` (the exe's copy of its table,
+  0x14015f5a0); `fn_FindComponent_MeshInstance` finds the StatusIconComponent (cell 0x1401c7e08);
+  Ghidra's `Entity_impl_a120` is StatusBarUI's status-icon handler 0x14007a120 and
+  `ToolUI_helper_e100` is `UIDescription::AddControllers` 0x14012e100 (DLG-d).
 
 ### 14g. Commit messages that state something nobody verified
 

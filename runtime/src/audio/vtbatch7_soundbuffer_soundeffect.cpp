@@ -126,6 +126,7 @@
 #include <new>          // placement new of the two SoundBuffer Strings
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../../types/object/External.h"
 #include "../../types/collection/Collection.h"   // rtcoll::MemAlloc / MemFree
 #include "../../types/system/String.h"
@@ -133,36 +134,16 @@
 #include "../../types/audio/SoundEffect.h"
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
-
-extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count, void* basev);
+extern "C" void RtAudio_SoundEffect_SerializeBuffers(IO::Serializer* ser, int32_t count,
+                                                    Audio::SoundEffect::Sample* samples);
 
 namespace {
 
-// The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
-// POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
+// Retail's Serialize bodies build a stack-local `{stream, 0}` Serializer, ask
+// the Encoding for a reader or writer (version 0) and delete it at the end:
+// IO::Serializer's constructor and destructor, inlined.
+bool IsReading(const IO::Stream* s) { return s->_direction == IO::kReading; }
 
-ReaderWriter* MakeReaderWriter(Serializer* ser, Stream* stream) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = IsReading(stream) ? rt::io::encoding_vtbl::kCreateReader
-                                       : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-void DestroyReaderWriter(ReaderWriter* rw) {
-    if (!rw) return;
-    delete AsRw(rw);
-}
 // `?MemFree@MemoryAllocator@System@@` — retail tests for null OUTSIDE the call.
 void MemFreeIfSet(void* p) {
     if (!p) return;
@@ -214,43 +195,42 @@ Object::Base* SoundBuffer::CreateInPlaceObject(void* place) {
 // 0x1800e05c0 — the raw-buffer half of Serialize: two counts, a conditional
 // (re)allocate-on-read of the two owned buffers, then three raw byte streams
 // (seek table, format window, audio data), in that exact order.
-void SoundBuffer::PlatformSerialize(void* serializer) {
-    Serializer* ser = static_cast<Serializer*>(serializer);
-    AsRw(ser->readerWriter)->SerializeInt(_length, nullptr);        // +0xa0
-    AsRw(ser->readerWriter)->SerializeInt(_wmaLength, nullptr);     // +0xa0
+void SoundBuffer::PlatformSerialize(IO::Serializer& ser) {
+    ser._readerWriter->SerializeInt(_length, nullptr);        // +0xa0
+    ser._readerWriter->SerializeInt(_wmaLength, nullptr);     // +0xa0
 
-    if (IsReading(ser->stream)) {
+    if (IsReading(ser._stream)) {
         MemFreeIfSet(_data);
         MemFreeIfSet(_wmaData);
-        _data    = (_length    > 0) ? rtcoll::MemAlloc(_length, 4) : nullptr;
+        _data    = (_length    > 0) ? static_cast<uint8_t*>(rtcoll::MemAlloc(_length, 4)) : nullptr;
         _wmaData = (_wmaLength > 0) ? static_cast<uint32_t*>(rtcoll::MemAlloc(_wmaLength, 4)) : nullptr;
     }
 
-    AsRw(ser->readerWriter)->SerializeBytes(_wmaLength, _wmaData, nullptr);   // +0xc8
-    AsRw(ser->readerWriter)->SerializeBytes(0x28, _format, nullptr);          // +0xc8
-    AsRw(ser->readerWriter)->SerializeBytes(_length, _data, nullptr);         // +0xc8
+    ser._readerWriter->SerializeBytes(_wmaLength, _wmaData, nullptr);   // +0xc8
+    ser._readerWriter->SerializeBytes(0x28, _format, nullptr);          // +0xc8
+    ser._readerWriter->SerializeBytes(_length, _data, nullptr);         // +0xc8
 }
 
 // [5] 0x1800e0480.
 bool SoundBuffer::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-    Serializer ser{};
-    ReaderWriter* rw = MakeReaderWriter(&ser, stream);
+    // LEFT: slot [5] is `Serialize(IO::Stream&)`; Object::External declares
+    // the parameter `void*` (the object block's header).
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(*stream, 0);
 
-    AsRw(rw)->SerializeBool(reinterpret_cast<bool&>(_loopForever), nullptr);   // +0x78, B.3.x bridge
-    AsRw(ser.readerWriter)->SerializeBool(reinterpret_cast<bool&>(_streamed), nullptr);
+    ser._readerWriter->SerializeBool(_loopForever, nullptr);        // +0x78
+    ser._readerWriter->SerializeBool(_streamed, nullptr);
 
     // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930).
     _string28.Serialize(&ser);
     _streamPath.Serialize(&ser);
 
-    AsRw(ser.readerWriter)->SerializeFloat(_durationSeconds, nullptr);        // +0x80
+    ser._readerWriter->SerializeFloat(_durationSeconds, nullptr);   // +0x80
 
-    PlatformSerialize(&ser);
+    PlatformSerialize(ser);
 
-    DestroyReaderWriter(ser.readerWriter);
     return true;
-}
+}   // ~Serializer: `if (rw) delete rw`
 
 // (~SoundBuffer, 0x1800e03b0, is defined in batchc_audio_leaves.cpp next to
 // the Device callback it opens with.)
@@ -402,15 +382,15 @@ Object::External::CompileResult SoundEffect::Compile(const System::Filename&) {
 
 // [5] 0x1800e0aa0.
 bool SoundEffect::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-    Serializer ser{};
-    ReaderWriter* rw = MakeReaderWriter(&ser, stream);
+    // LEFT: slot [5]'s parameter is `void*` in Object::External (object block).
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(*stream, 0);
 
-    AsRw(rw)->SerializeFloat(_radius, nullptr);                     // +0x80
-    AsRw(ser.readerWriter)->SerializeFloat(_innerRadius, nullptr);  // +0x80
+    ser._readerWriter->SerializeFloat(_radius, nullptr);            // +0x80
+    ser._readerWriter->SerializeFloat(_innerRadius, nullptr);       // +0x80
 
     int32_t n = _samples._size;
-    AsRw(ser.readerWriter)->SerializeInt(n, nullptr);               // +0xa0
+    ser._readerWriter->SerializeInt(n, nullptr);                    // +0xa0
     if (IsReading(stream)) {
         // 0x180053190 — kSpec_SfxBuffer18 (array.cpp), unexported Collection code.
         rtcoll::RtColl_ArraySetSize_180053190(&_samples, n);
@@ -422,9 +402,9 @@ bool SoundEffect::Serialize(void* streamv) {
     // and discards one legacy field via a throwaway CreateReader/CreateWriter
     // pair). retail: `if (rw->GetVersion() >= 1) ScalarInt64(self+0x28) else if
     // (writing) {} else { consume-and-release a temp }`.
-    const int32_t version = AsRw(ser.readerWriter)->GetVersion();    // +0x08
+    const int32_t version = ser._readerWriter->GetVersion();        // +0x08
     if (version >= 1) {
-        AsRw(ser.readerWriter)->SerializeInt64(_maxLength, nullptr); // +0x90
+        ser._readerWriter->SerializeInt64(_maxLength, nullptr);     // +0x90
     } else if (IsReading(stream)) {
         // retail (0x1800e0b88..0x1800e0bc3) calls vtable[0x20](this->encoding,
         // &ser, 0) to create ANOTHER throwaway ReaderWriter here, checks it for
@@ -433,9 +413,8 @@ bool SoundEffect::Serialize(void* streamv) {
         // effect; skipped rather than reproduced.
     }
 
-    DestroyReaderWriter(ser.readerWriter);
     return true;
-}
+}   // ~Serializer: `if (rw) delete rw`
 
 // ??1SoundEffect@Audio@@UEAA@XZ  0x1800e0880 -- retail's body, moved here from
 // the retired deleting_dtor_leaves.cpp door (ENDGAME B.3.9 ENG): restamp (the
@@ -467,27 +446,28 @@ SoundEffect::~SoundEffect() {
 // `ser->readerWriter` is re-read before every virtual call, as retail does.
 // 0x180052a50 is the ExternalPtr serialize helper of the sibling batch
 // (object/external_ptr_serialize.cpp), called by name (B3R).
-extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
-                                                    void* basev) {
+extern "C" void RtAudio_SoundEffect_SerializeBuffers(IO::Serializer* ser, int32_t count,
+                                                    Audio::SoundEffect::Sample* e) {
     if (count <= 0) return;                                   // 180053300 TEST/JLE
-    Serializer* ser = static_cast<Serializer*>(serv);
-    uint8_t*    e   = static_cast<uint8_t*>(basev);
 
-    for (int32_t i = 0; i < count; ++i, e += 0x18) {
-        AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(e + 0x00), nullptr);
+    for (int32_t i = 0; i < count; ++i, ++e) {
+        ser->_readerWriter->SerializeFloat(e->startSeconds, nullptr);
 
-        int32_t n = *reinterpret_cast<int32_t*>(e + 0x10);     // 180053344
-        AsRw(ser->readerWriter)->SerializeInt(n, nullptr);     // 18005335a
+        int32_t n = e->variants._size;                         // 180053344
+        ser->_readerWriter->SerializeInt(n, nullptr);          // 18005335a
 
-        if (IsReading(ser->stream))                            // 180053360
-            rtcoll::RtColl_ArraySetSize_180052e60(e + 0x08, n);   // 180053370
+        if (IsReading(ser->_stream))                           // 180053360
+            rtcoll::RtColl_ArraySetSize_180052e60(&e->variants, n);   // 180053370
 
-        uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x08);   // 180053379
-        for (int32_t k = 0; k < n; ++k, p += 0x18) {           // 180053390
-            RtObject_ExternalPtrSerialize_SoundBuffer(reinterpret_cast<RtObject::External**>(p + 0x00), ser);
-            AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x08), nullptr);
-            AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x0c), nullptr);
-            AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x10), nullptr);
+        Audio::SoundEffect::Variant* p = e->variants._data;    // 180053379
+        for (int32_t k = 0; k < n; ++k, ++p) {                 // 180053390
+            // 0x180052a50: ExternalPtr<SoundBuffer>::Serialize, the template's
+            // member. LEFT: it takes the `rt::io::Serializer` POD (External.h).
+            p->buffer.Serialize(*reinterpret_cast<rt::io::Serializer*>(ser),
+                                &Audio::SoundBuffer::GetTypeInfo());
+            ser->_readerWriter->SerializeFloat(p->pitchLow, nullptr);
+            ser->_readerWriter->SerializeFloat(p->pitchHigh, nullptr);
+            ser->_readerWriter->SerializeFloat(p->volume, nullptr);
         }
     }
 }

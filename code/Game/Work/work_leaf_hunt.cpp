@@ -34,6 +34,12 @@
 #include "Component/AnimalComponent.h"               // ENDGAME B.3.9 D5
 #include "Component/AnimalDescription.h"             // ENDGAME B.3.9 D5
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Component/ConsumeProduceComponent.h"
+#include "Component/ResourceProduceComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/LivestockComponent.h"
 
 // ============================================================
 // FindComponent-by-typeId family
@@ -69,29 +75,31 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
         reinterpret_cast<ComponentEntity*>(entity)->FindComponent<PastureComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
+
 // ---- 0x1400063d0  HuntWork_helper_63d0  ----------------------------------------
-// FindComponent (+0x28/+0x30, NO CheckPtr), typeId @0x1401c4870.
-// Returns the raw component pointer directly via *retval (NOT an IBP Ctor).
-// ABI: undefined8* fn(longlong entity, undefined8* retval).
+// The "+0x28/+0x30" variant: RCX is a ComponentDescription (the list is its
+// sub-descriptions, NO CheckPtr), typeId @0x1401c4870 (RadiusDescription).
+// Returns the raw pointer directly via *retval (NOT an IBP Ctor).
+// ABI: undefined8* fn(longlong desc, undefined8* retval).
+// LEFT: the caller (HuntWork, WORK-b) hands the description as an integer.
 void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
+    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(entity);
     const uint32_t tid = RadiusDescription::TypeId(); // 0x1401c4870
     void* found = nullptr;
-    if (*reinterpret_cast<int*>(entity + 0x30) > 0) {
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x28);
-        int n = *reinterpret_cast<int*>(entity + 0x30);
+    if (desc->_subDescCount > 0) {
+        Description** list = desc->_subDescs;
+        int n = desc->_subDescCount;
         int i = 0;
-        int64_t off = 0;
         for (;;) {
             // No CheckPtr in this variant.
-            void* comp = *reinterpret_cast<void**>(off + *reinterpret_cast<uintptr_t*>(entity + 0x28));
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+            Description* comp = desc->_subDescs[i];
+            uint32_t t = comp->Type();
             if (t == tid) {
-                void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
+                Description* c = list[i];
                 if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
                 break;
             }
             ++i;
-            off += 8;
             if (i >= n) break;
         }
     }
@@ -102,102 +110,78 @@ void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
 // ============================================================
 // 0x1401193a0  ConsumeProduceAction_helper_93a0
 // ============================================================
-// Resolves the entity behind the action's IBP at self+0x10, finds a component of type
-// @0x1401c7388 in that entity's list (+0x28/+0x30, NO CheckPtr), then returns a bool:
-//   if (foundComp+0x48) < 0 -> return true
-//   else                    -> return (self+0x68) < (foundComp+0x48)
+// RCX is a ConsumeProduceComponent (the address sits among its bodies; its header
+// is COMP-e's, so this stays free). Finds the ConsumeProduceDescription among the
+// sub-descriptions of the entity's description (+0x28/+0x30, NO CheckPtr), then:
+//   if (found->+0x48) < 0 -> return true
+//   else                  -> return consumeState (+0x68) < (found->+0x48)
 // (matches FUN_1401193a0 disasm: tail compares dword[R15+0x68] with dword[found+0x48])
-// ABI: bool fn(longlong self).
+// LEFT: the caller (ConsumeProduce, WORK-a) hands the component as an integer, and
+// ConsumeProduceDescription +0x48 is read raw (not declared in its header).
 bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self) {
+    ConsumeProduceComponent* comp = reinterpret_cast<ConsumeProduceComponent*>(self);
     const uint32_t tid = ConsumeProduceDescription::TypeId(); // 0x1401c7388
 
     void* found = nullptr;
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(self + 0x10) + 0x28);
-    if (*reinterpret_cast<int*>(entity + 0x30) > 0) {
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x28);
-        int n = *reinterpret_cast<int*>(entity + 0x30);
+    ComponentDescription* desc = comp->_entity->_description;
+    if (desc->_subDescCount > 0) {
+        Description** list = desc->_subDescs;
+        int n = desc->_subDescCount;
         int i = 0;
-        int64_t off = 0;
         for (;;) {
-            void* comp = *reinterpret_cast<void**>(off + *reinterpret_cast<uintptr_t*>(entity + 0x28));
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+            Description* sub = desc->_subDescs[i];
+            uint32_t t = sub->Type();
             if (t == tid) {
-                void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
+                Description* c = list[i];
                 if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
                 break;
             }
             ++i;
-            off += 8;
             if (i >= n) break;
         }
     }
     int capacity = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(found) + 0x48);
     if (capacity < 0) return true;
-    return *reinterpret_cast<int*>(self + 0x68) < capacity;
+    return comp->consumeState < capacity;
 }
 
 // ============================================================
 // 0x140128350  PastureWork_helper_8350
 // ============================================================
-// Scans the work entity's component list (self+0x30/+0x38). For each component it
-// dereferences a nested entity IBP at component+0x10, finds a sub-component of type
-// @0x1401c6f98 in THAT entity (list +0x30/+0x38, WITH CheckPtr per slot), builds an
-// IBP for it, and tracks the index whose sub-component+0x44 (a float "score") is the
-// strict maximum among those that (a) have not got bit 20 of +0x20 set and
-// (b) exceed the derived (@0x1401c6fd0) object's +0x30 threshold.
-// Returns the best outer index, or -1 if none.
+// RCX is a PastureComponent (a member of it; its header is COMP-d's). For each of
+// its livestock, find the AnimalComponent on the animal's entity, and track the
+// index whose age (+0x44) is the strict maximum among those that (a) do not have
+// bit 20 of their flags (+0x20) set and (b) exceed their AnimalDescription's
+// +0x30 threshold. Returns the best index, or -1 if none.
 // ABI: int fn(longlong self).
+// LEFT: the caller (PastureWork, WORK-b) hands the component as an integer.
 int WorkLeaf_Pasture_8350(uintptr_t self) {
-    const uint32_t tidInner = AnimalComponent::TypeId();   // 0x1401c6f98
+    PastureComponent* pasture = reinterpret_cast<PastureComponent*>(self);
     const uint32_t tidThresh = AnimalDescription::TypeId(); // 0x1401c6fd0
 
     int bestIndex = -1;
     float bestScore = 0.0f;
-    int n = *reinterpret_cast<int*>(self + 0x38);
+    int n = pasture->animalCount;
     if (n <= 0) return -1;
 
-    int64_t outerOff = 0;
-    for (int outer = 0; outer < n; ++outer, outerOff += 8) {
-        uintptr_t* compSlot = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(self + 0x30) + outerOff);
+    for (int outer = 0; outer < n; ++outer) {
+        LivestockComponent* livestock = pasture->animals[outer];
 
-        // Nested entity IBP at component+0x10.
-        uintptr_t innerEnt = *reinterpret_cast<uintptr_t*>(*compSlot + 0x10);
+        // The AnimalComponent (0x1401c6f98) of the animal's entity.
+        AnimalComponent* sub = livestock->_entity->FindComponent<AnimalComponent>();
 
-        // Find sub-component of type tidInner in innerEnt's list (+0x30/+0x38).
-        void* sub = nullptr;
-        int innerCount = *reinterpret_cast<int*>(innerEnt + 0x38);
-        if (innerCount > 0) {
-            int64_t innerOff = 0;
-            for (int j = 0; j < innerCount; ++j, innerOff += 8) {
-                uintptr_t* slot = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
-                void* comp = reinterpret_cast<void*>(*slot);
-                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
-                if (t == tidInner) {
-                    uintptr_t* slot2 = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
-                    void* c = reinterpret_cast<void*>(*slot2);
-                    sub = (Object::IsDerivedFromNullSafe(c, tidInner)) ? c : nullptr;
-                    break;
-                }
-            }
-        }
-
-        // Wrap the sub-component in an IBP buffer (matches the exe's local_res8).
-        uintptr_t subIBP = 0;
-        new (&subIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(sub));   // B.3.3 bridge
-
-        // Candidate score = subIBP+0x44. Keep only if strictly greater than current best.
-        if (bestScore < *reinterpret_cast<float*>(subIBP + 0x44)) {
-            // Skip if bit 20 of +0x20 is set.
-            if ((*reinterpret_cast<uint32_t*>(subIBP + 0x20) >> 0x14 & 1) == 0) {
-                float score = *reinterpret_cast<float*>(subIBP + 0x44);
-                void* obj = *reinterpret_cast<void**>(subIBP + 0x18);
-                void* derived = nullptr;
-                if (Object::IsDerivedFromNullSafe(obj, tidThresh)) derived = obj;
-                // Keep only if score strictly exceeds derived+0x30 (threshold).
-                float threshold = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(derived) + 0x30);
+        // Candidate score = the animal's age. Keep only if strictly greater than current best.
+        if (bestScore < sub->age) {
+            // Skip if bit 20 of the flags is set.
+            if ((sub->_flags >> 0x14 & 1) == 0) {
+                float score = sub->age;
+                Description* obj = sub->_description;
+                AnimalDescription* derived = nullptr;
+                if (Object::IsDerivedFromNullSafe(obj, tidThresh)) derived = static_cast<AnimalDescription*>(obj);
+                // Keep only if score strictly exceeds the description's threshold.
+                float threshold = derived->_f30;
                 if (threshold <= score && score != threshold) {
-                    bestScore = *reinterpret_cast<float*>(subIBP + 0x44);
+                    bestScore = sub->age;
                     bestIndex = outer;
                 }
             }
@@ -209,48 +193,42 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
 // ============================================================
 // 0x14012b310  ConsumeProduceAction_helper_b310
 // ============================================================
-// Sets self+0x48 = 1, resolves an entity (FUN_140003ea0) behind self+0x10, then if its
-// "consume" state byte (+0x52, or +0x50 if +0x52 has high bit set) is not 0x0e, runs a
-// state-machine query: optionally tick the SM (StateMachine_Tick @0x1400a9660 with a
-// zero Time when +0x51 has high bit set), then call the SM vtable +0x8 query passing the
-// current event id (+0x51) and an out int (= 0x0e default). On success (>= 0) stores the
-// result event (+0x53) and the queried state (+0x52).
-// Closure: FUN_140003ea0 (registered), StateMachine_Tick 0x1400a9660 (registered),
-//          System::Time::Time float-ctor + InternalBasePtr CheckPtr (engine).
-// ABI: void fn(longlong self).
-// FUN_140003ea0 = PlayerPath_FindComponent_3ea0 (Player/exe_bodies.h), 0x1400a9660 =
-// StateMachine_TickReimpl (Component/controller_state_table.h): called by name (B3R).
+// RCX is a ResourceProduceComponent (+0x48 produceFlag; the address sits among its
+// bodies; its header is COMP-e's, so this stays free). Sets produceFlag = 1, finds the
+// entity's StateMachineComponent (0x140003ea0), then if its state (the pending state,
+// or the input when none is pending) is not 0x0e: when the active state is negative,
+// tick the machine with a zero Time (StateMachine::Tick 0x1400a9660, useAlt 0, run 0),
+// then ask the current controller node for the transition from the active state
+// (Controller slot 1 FindTransition, 0x14012b3a4 `CALL [RAX+0x8]`, out int = 0x0e by
+// default). On success (>= 0) store the transition (+0x53) and the queried state (+0x52).
+// LEFT: the caller (ConsumeProduce, WORK-a) hands the component as an integer.
 void WorkLeaf_ConsumeProduce_b310(uintptr_t self) {
-    *reinterpret_cast<uint8_t*>(self + 0x48) = 1;
+    ResourceProduceComponent* producer = reinterpret_cast<ResourceProduceComponent*>(self);
+    producer->produceFlag = 1;
 
-    uintptr_t ent = 0;
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
+    StateMachineComponent* machine = producer->_entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+    StateMachine& sm = machine->stateMachine;
 
-    char state = *reinterpret_cast<char*>(ent + 0x52);
-    if (state < 0) state = *reinterpret_cast<char*>(ent + 0x50);
+    char state = sm.pendingState;
+    if (state < 0) state = sm.currentInput;
     if (state == 0x0e) return;
 
     int outVal = 0x0e; // local_res8[0]
 
-    // If event byte +0x51 has its high bit set, tick the SM with a zero Time first.
-    if (*reinterpret_cast<char*>(ent + 0x51) < 0) {
-        // Build a zero Time (System::Time::Time(&t, 0.0f)) and tick.
-        uint8_t timeBuf[16] = {0};
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
-        {
-            // StateMachine_Tick(&(ent+0x48), Time, 0, 0). The SM object is at ent+0x48.
-            int64_t t = *reinterpret_cast<int64_t*>(timeBuf);
-            StateMachine_TickReimpl(reinterpret_cast<void*>(ent + 0x48), t, 0, 0);
-        }
+    // If the active state is negative, tick the SM with a zero Time first.
+    if (sm.activeState < 0) {
+        // System::Time::Time(&t, 0.0f), then StateMachine::Tick(&t, 0, 0): retail
+        // passes the Time's ADDRESS (0x14012b380 `LEA RDX,[RSP+0x40]`); with run = 0
+        // Tick never reads it.
+        System::Time timeVal = {0};
+        RtSystem_Time_Ctor(&timeVal, 0.0f);
+        sm.Tick(&timeVal, 0, 0);
     }
 
-    // SM vtable +0x8 query: int (*)(sm, int eventId, int* outVal)
-    void* sm = *reinterpret_cast<void**>(ent + 0x48);
-    typedef int (*SMQuery_t)(void* sm, int eventId, int* outVal);
-    SMQuery_t query = *reinterpret_cast<SMQuery_t*>(*reinterpret_cast<uintptr_t*>(sm) + 0x8);
-    int result = query(sm, static_cast<int>(*reinterpret_cast<char*>(ent + 0x51)), &outVal);
+    // Controller slot 1: int FindTransition(int stateIndex, int* desiredStateId)
+    int result = sm.current->FindTransition(static_cast<int>(sm.activeState), &outVal);
     if (result >= 0) {
-        *reinterpret_cast<char*>(ent + 0x53) = static_cast<char>(result);
-        *reinterpret_cast<uint8_t*>(ent + 0x52) = static_cast<uint8_t>(outVal);
+        sm.transitionState = static_cast<int8_t>(result);
+        sm.pendingState = static_cast<int8_t>(outVal);
     }
 }

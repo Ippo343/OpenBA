@@ -22,7 +22,7 @@ Work::Work()
     : Object::Internal(),
       field_10(nullptr), field_18(nullptr),
       field_20(-1), field_24(0), field_28(-1), field_2c(0),
-      field_30(nullptr), field_38(nullptr), field_40(0) {}
+      field_30{0}, field_38{0}, field_40(0) {}
 
 // 0x1400f72e0 (Work_Ctor25): `??0Internal`, the compiler's stamp, then
 // Work::InitFromEntity (work_base_reimpl.cpp).

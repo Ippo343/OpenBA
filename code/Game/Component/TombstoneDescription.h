@@ -36,11 +36,12 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14000d350
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    float _f20;                                 // +0x20
-    float _f24;                                 // +0x24
+    // Names from TombstoneComponent::Startup 0x140057860: lifetime = rand * range + minimum.
+    float _minLifetime;                         // +0x20 (default 360)
+    float _lifetimeRange;                       // +0x24 (default 24)
 };
 
 static_assert(sizeof(TombstoneDescription) == 0x28, "TombstoneDescription is 0x28 (create 0x14000d2e0 MemAlloc(0x28))");
 static_assert(alignof(TombstoneDescription) == 8, "TombstoneDescription alignment");
-static_assert(offsetof(TombstoneDescription, _f20) == 0x20, "TombstoneDescription::_f20 @ +0x20");
-static_assert(offsetof(TombstoneDescription, _f24) == 0x24, "TombstoneDescription::_f24 @ +0x24");
+static_assert(offsetof(TombstoneDescription, _minLifetime) == 0x20, "TombstoneDescription::_minLifetime @ +0x20");
+static_assert(offsetof(TombstoneDescription, _lifetimeRange) == 0x24, "TombstoneDescription::_lifetimeRange @ +0x24");

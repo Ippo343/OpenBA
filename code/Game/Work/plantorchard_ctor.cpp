@@ -28,6 +28,8 @@
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"   // B3R: OrchardComponent_ValidateRefs
 #include "Component/coll_bridge.h"
+#include "Component/OrchardComponent.h"
+#include "Entity/ComponentEntity.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -51,47 +53,45 @@ extern "C" void OrchardDiag_NotePlantConstructed();
 
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
-PlantOrchard::PlantOrchard(void** entityIBP, void* treeType) : Work(entityIBP) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+PlantOrchard::PlantOrchard(void** entityIBP, ComponentDescription* treeType) : Work(entityIBP) {
+    // PlantOrchard's own fields. Retail writes +0x60 as one 8-byte store, which clears
+    // BOTH the count (+0x60) and the capacity (+0x64) of the array triple at +0x58:
+    // here the two named fields, in address order.
+    field_48 = nullptr;
+    field_50 = 0;
+    field_58 = nullptr;
+    field_60 = 0;
+    field_64 = 0;
+    field_68 = treeType;   // tree type, stored verbatim: no null test, no validation,
+                           // no refcount — as retail does.
 
-    // PlantOrchard's own fields. +0x60 is written as one 8-byte store, which clears BOTH
-    // the count (+0x60) and the capacity (+0x64) of the byte-array triple at +0x58.
-    *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x58) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x60) = 0;
-    *reinterpret_cast<void**>(s + 0x68)    = treeType;   // tree type, stored verbatim:
-                                                         // no null test, no validation,
-                                                         // no refcount — as retail does.
-
-    int64_t orchardIBP = 0;
-    WorkAcc_FindComponent_5440(static_cast<uintptr_t>(*reinterpret_cast<int64_t*>(s + 0x10)), &orchardIBP);
-    if (!orchardIBP) return;          // SA: retail derefs unguarded below; a PlantOrchard is
+    OrchardComponent* orchard = field_10->FindComponent<OrchardComponent>();   // 0x140005440
+    if (!orchard) return;             // SA: retail derefs unguarded below; a PlantOrchard is
                                       // only ever built for an entity that has an orchard, so
                                       // this can only fire if our caller is wrong. Returning
                                       // early keeps the work item well-formed but empty
                                       // rather than faulting on a null component.
 
-    OrchardComponent_ValidateRefs(reinterpret_cast<void*>(orchardIBP));
+    orchard->ValidateRefs();   // 0x140051830
 
     // Size the per-slot validity array from the orchard's CURRENT slot count.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
-    const int slotCount = *reinterpret_cast<int32_t*>(orchardIBP + 0x58);
-    GameColl::AsArray<GameColl::U8>(reinterpret_cast<void*>(s + 0x58)).SetSize(slotCount);
+    const int slotCount = orchard->slotCount;
+    GameColl::AsArray<GameColl::U8>(&field_58).SetSize(slotCount);
 
     // Zero each byte. Retail re-reads orchardComp->+0x58 and re-runs CheckPtr on every
     // iteration; the re-read is preserved because ValidateRefs/CheckPtr can in principle
     // shrink the component's slot array underneath the loop.
-    for (int i = 0; i < *reinterpret_cast<int32_t*>(orchardIBP + 0x58); ++i) {
-        uint8_t* base = *reinterpret_cast<uint8_t**>(s + 0x58);
-        if (!base) break;
-        base[i] = 0;
+    for (int i = 0; i < orchard->slotCount; ++i) {
+        bool* base = field_58;
+        if (!base) break;   // the tree's guard
+        base[i] = false;
     }
 }
 
 // The door OrchardComponent's states 9 and 12 call (orchardcomponent_states.cpp, block
 // MI-B): the real ctor on caller memory (B8-5).
-extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType) {
+extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType) {
     if (!mem) return mem;
     OrchardDiag_NotePlantConstructed();
     return static_cast<Object::Base*>(new (mem) PlantOrchard(entityIBP, treeType));

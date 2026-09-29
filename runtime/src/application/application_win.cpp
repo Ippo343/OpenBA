@@ -218,7 +218,7 @@ void EnableCursorBody(App* self, bool enabled, RtSink& out) {
            "Application._cursorEnabled");                        // 0x18009f809
 
     using rtsetavl::Node;
-    Node* n = static_cast<Node*>(self->_messageCallbackRoot);
+    Node* n = self->_messageCallbacks.root;
     const Node* found = nullptr;
     while (n != nullptr) {
         const unsigned key = reinterpret_cast<const CursorCallbackElement*>(n)->message;
@@ -369,7 +369,7 @@ bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
         RtSystem::RtSystem_WideString_Dtor(&verb);              // 0x18009f78a..7ac (shared epilogue)
         RtSystem::RtSystem_WideString_Dtor(&file);               // 0x18009f694..6b2
 
-        ok = reinterpret_cast<INT_PTR>(result) > 32;             // 0x18009f6b7..6ba
+        ok = reinterpret_cast<INT_PTR>(result) > 32;             // 0x18009f6b7..6ba  CAST-OK: win32
     }
 
     return ok;

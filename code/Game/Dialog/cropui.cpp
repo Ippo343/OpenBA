@@ -3,7 +3,7 @@
 //
 // CropUI (0x60 bytes) — crop selection panel.
 // Extends SelectResourceUI (abstract) > DialogController.
-// data30 (internalBasePtr) = selectResource combo element.
+// +0x30 selectResource = the "selectResource" combo element (SelectResourceUI.h).
 //
 // Decompiled from Application-x64.exe.
 
@@ -72,7 +72,7 @@ void SelectResourceUI::OnUpdateLayout() {
     (void)::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
 
     // The selectResource combo element (+0x30; stored unchecked, read as a ComboElement)
-    UI::ComboElement* combo = static_cast<UI::ComboElement*>(internalBasePtr);
+    UI::ComboElement* combo = selectResource;
 
     // Enable combo if it has items, disable if empty
     int itemCount = combo->GetItemCount();

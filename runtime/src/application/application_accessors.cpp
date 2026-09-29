@@ -47,10 +47,7 @@ using App = Application::Application;
 Application::Application* Application::Application::_singleton = nullptr;   // 0x1801fc678
 
 Application::Application* Application::Application::Get() {
-    App** slot =
-        reinterpret_cast<App**>(&::Application::Application::_singleton);
-    App* ours = slot ? *slot : nullptr;
-    return ours;
+    return ::Application::Application::_singleton;
 }
 
 App* RtApp_Get() {

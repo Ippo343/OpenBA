@@ -33,6 +33,13 @@
 #include <new>
 #include "Component/CropFieldComponent.h"   // ENDGAME B.3.9 D5: CropFieldComponent::TypeId()
 #include "Component/OrchardComponent.h"     // ENDGAME B.3.9 D5: OrchardComponent::TypeId()
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"
 
 // ============================================================
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
@@ -81,38 +88,36 @@
 // 7. Register with CitizenAI
 //
 int TendArea::Execute(void* citizenIBP, void* /*context*/) {
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
+    // LEFT: Work::Execute's citizen reference is untyped (the slot every leaf overrides).
+    CitizenComponent* const* citizenRef = reinterpret_cast<CitizenComponent* const*>(citizenIBP);
 
     // Step 1: Check max workers
-    uintptr_t matDescIBP = 0;
-    WorkBase_FindComponent_3050(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
+    WorkComponent* workComp = field_10->FindComponent<WorkComponent>();   // 0x140003050
 
-    int64_t currentWorkers = (int64_t)selfQ[10]; // self->workerCount at +0x50
+    int currentWorkers = workerCount;
 
-    if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
-        *(int*)(matDescIBP + 0x30) = maxWorkers;
+    if (workComp->workState == 0) {
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: C signature
+        workComp->workState = maxWorkers;
     }
 
-    if ((int)currentWorkers >= *(int*)(matDescIBP + 0x30)) {
+    if (currentWorkers >= workComp->workState) {
         return 1;  // At capacity, no work
     }
 
     // Step 2: Get game world singletons
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
-    void* rng = *(void**)(gameWorld + 0xd8);
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    Map* map = gameWorld->m_game;
+    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees take the Map as its leading int
+    System::Random* rng = gameWorld->m_random;
 
-    // Step 3: Get citizen position
-    uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
+    // Step 3: Get citizen position (the model's translation, character +0x68)
+    CitizenComponent* citizen = *citizenRef;
+    ModelComponent* posComp = citizen->character->modelComponent;
 
-    uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
-
-    int mapSize = *mapGrid;
-    int citizenCellX = (int)(*(float*)(posComp + 0x158) + (float)(mapSize >> 1));
-    int citizenCellY = (int)(*(float*)(posComp + 0x15c) + (float)(mapSize >> 1));
+    int mapSize = map->size;
+    int citizenCellX = (int)(posComp->transform.translation.x + (float)(mapSize >> 1));
+    int citizenCellY = (int)(posComp->transform.translation.y + (float)(mapSize >> 1));
 
     if (citizenCellX < 0) citizenCellX = 0;
     if (citizenCellX >= mapSize) citizenCellX = mapSize - 1;
@@ -122,31 +127,30 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
     uint32_t citizenGridCell = (uint32_t)(mapSize * citizenCellY + citizenCellX);
 
     // Step 4: Choose area component based on tendMode and pick random cell
-    uintptr_t areaCompIBP = 0;
     int targetCell;
     uint32_t typeId;
     int workFlag;
     uint32_t randIdx;
 
     if (tendMode == 0) {
-        // Crop mode: find CropAreaComponent
-        WorkAcc_FindComponent_5380(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
+        // Crop mode: the field's CropFieldComponent (0x140005380)
+        CropFieldComponent* crop = field_10->FindComponent<CropFieldComponent>();
 
-        uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x60);
-        randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(areaSize));   // B.3.4b bridge
+        uint32_t areaSize = static_cast<uint32_t>(crop->slots.count);
+        randIdx = rng->Rand(areaSize);
 
         workFlag = 1;
-        targetCell = *(int*)((int64_t)(int)randIdx * 0x20 + *(int64_t*)(areaCompIBP + 0x58));
+        targetCell = crop->slots.data[(int)randIdx].cell;
         typeId = CropFieldComponent::TypeId();  // DAT_1401c7510
     } else {
-        // Orchard mode: find OrchardAreaComponent
-        WorkAcc_FindComponent_5440(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
+        // Orchard mode: the OrchardComponent (0x140005440)
+        OrchardComponent* orchard = field_10->FindComponent<OrchardComponent>();
 
-        uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x58);
-        randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(areaSize));   // B.3.4b bridge
+        uint32_t areaSize = static_cast<uint32_t>(orchard->slotCount);
+        randIdx = rng->Rand(areaSize);
 
         workFlag = 2;
-        targetCell = *(int*)(*(int64_t*)(areaCompIBP + 0x50) + (int64_t)(int)randIdx * 0x28);
+        targetCell = orchard->slots[(int)randIdx].tile;
         typeId = OrchardComponent::TypeId();  // DWORD_1401c46b0
     }
 
@@ -162,29 +166,29 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
     }
 
     // Step 6: Calculate terrain positions
-    float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
+    float halfOffset = (float)(map->size >> 1) - kRdata_140172114;
     Math::Vector3 targetPos(
-        (float)(targetCell % *mapGrid) - halfOffset,
-        (float)(targetCell / *mapGrid) - halfOffset,
+        (float)(targetCell % map->size) - halfOffset,
+        (float)(targetCell / map->size) - halfOffset,
         0.0f);
     float targetTerrain[3];
-    Reimpl_MapGetTerrainPos(mapGrid, targetTerrain, &targetPos.x, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(map, targetTerrain, &targetPos.x, '\0', nullptr);
 
     Math::Vector3 citizenPos(
-        (float)(nearestCell % *mapGrid) - halfOffset,
-        (float)(nearestCell / *mapGrid) - halfOffset,
+        (float)(nearestCell % map->size) - halfOffset,
+        (float)(nearestCell / map->size) - halfOffset,
         0.0f);
     float citizenTerrain[3];
-    Reimpl_MapGetTerrainPos(mapGrid, citizenTerrain, &citizenPos.x, '\0', nullptr);
+    Reimpl_MapGetTerrainPos(map, citizenTerrain, &citizenPos.x, '\0', nullptr);
 
     // Step 7: Create PerformWork action
-    uintptr_t workEntityRef = *(uintptr_t*)(selfAddr + 0x10);
-    uintptr_t entityBuf[2] = { *(uintptr_t*)citizenIBP, 0 };
+    ComponentEntity* workEntityRef = field_10;
+    CitizenComponent* entityBuf[2] = { *citizenRef, nullptr };
 
     WorkAct_GrazingWorkCtor_bb0a0(
         entityBuf,                  // citizenIBP
-        (int)selfQ[4],             // priority
-        (void*)&workEntityRef,      // work entity
+        field_20,                   // priority
+        &workEntityRef,             // work entity
         0,                          // unused
         citizenTerrain,             // target position
         targetTerrain,              // source position
@@ -193,83 +197,81 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/) {
         randIdx);                   // cell index
 
     // Step 8: Assign work and register with AI
-    int priority = (int)selfQ[4];
-    uintptr_t citEnt = *(uintptr_t*)citizenIBP;
+    int priority = field_20;
+    CitizenComponent* citEnt = *citizenRef;
 
-    // Call vtable Slot10 (GetWorkEntity) to get work entity
-    uintptr_t workEntIBP[2] = {0};
-    uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
-    uintptr_t workEnt = *wResult;
+    // Slot 10 (GetTarget): the workplace's Profession
+    Profession* workEnt = nullptr;
+    GetTarget(&workEnt);
 
-    *(uint32_t*)(citEnt + 0x54) |= 4;
-    *(int32_t*)(citEnt + 0x30) = priority;
-    *(uint32_t*)(citEnt + 0xb0) = 0;
+    citEnt->statusFlags |= 4;
+    citEnt->field_0x30 = priority;
+    citEnt->field_0xB0 = 0;
 
-    if (workEnt == *(uintptr_t*)(citEnt + 0x1f0) && priority >= 0) {
-        *(uint32_t*)(citEnt + 0x88) |= 0x20000;
+    if (workEnt == citEnt->profession && priority >= 0) {
+        citEnt->happinessFlags |= 0x20000;
     }
 
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), workEntIBP, citizenIBP);
+    // LEFT: 0x140021a30's C signature (outside callers) takes the set as uintptr_t*.
+    WorkCitizenSetNode* inserted = nullptr;
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&bstRoot), &inserted, citizenIBP);
     return 2;
 }
 
 
+// LEFT (slots 6 / 7, the validate removal, Persist): the set bodies 0x140025520 /
+// 0x14001a6e0 / 0x1400296b0 keep their C signature (outside callers): the set as
+// uintptr_t*.
+
 // ============================================================
-// TendArea::Slot6 -- BSTFindRemove + return false (0x1400f5470)
+// TendArea::OnComplete [6] -- BSTFindRemove + return false (0x1400f5470)
 // ============================================================
 int TendArea::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);
     return false;
 }
 
 
 // ============================================================
-// TendArea::Slot7 -- BSTFindRemove thunk (0x1400f5460)
+// TendArea::OnCancel [7] -- BSTFindRemove thunk (0x1400f5460)
 // ============================================================
 int TendArea::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&bstRoot), param2);
     return 0;
 }
 
 
 // ============================================================
-// TendArea::Slot8 / CancelAll (0x1400f5830)
-// Loops through BST at +0x48 while count > 0.
-// For each leftmost node, cancels the work item.
+// TendArea::Cleanup [8] / CancelAll (0x1400f5830)
+// While the set is not empty: clear the leftmost citizen's action stack.
 // ============================================================
 int TendArea::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    while (*(int*)(selfAddr + 0x50) > 0) {
-        // Find leftmost node in BST (following +0x10 = left child)
-        void* node = *(void**)(selfAddr + 0x48);
-        void* leftmost = node;
+    while (workerCount > 0) {
+        // Find the leftmost node
+        WorkCitizenSetNode* node = bstRoot;
+        WorkCitizenSetNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
-            node = *(void**)((uintptr_t)node + 0x10);
+            node = node->left;
         }
 
         // Cancel the work item
-        uintptr_t citizenEntity = *(uintptr_t*)leftmost;
+        CitizenComponent* citizen = leftmost->element;
 
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
     }
     return 0;
 }
 
 
 // ============================================================
-// TendArea::Slot9 / RemoveInvalid (0x1400f5230)
-// Iterates BST, validates each entry, removes invalid ones.
+// TendArea::Validate [9] / RemoveInvalid (0x1400f5230)
+// Iterates the set, validates each citizen, removes invalid ones.
 // Returns true if all valid, false otherwise.
-// Simple BST: node +0x08=parent, +0x10=left, +0x18=right
 // ============================================================
 int TendArea::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    void** bstRootPtr = (void**)(selfAddr + 0x48);
-
-    void* root = *bstRootPtr;
-    uintptr_t* removeArr = nullptr;
+    WorkCitizenSetNode* root = bstRoot;
+    CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
 
@@ -278,30 +280,30 @@ int TendArea::Validate() {
     }
 
     // Find leftmost node (minimum)
-    void* node = root;
-    while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-        node = *(void**)((uintptr_t)node + 0x10);
+    WorkCitizenSetNode* node = root;
+    while (node->left != nullptr) {
+        node = node->left;
     }
 
     // In-order traversal
     while (node != nullptr) {
-        uintptr_t entityIBP = *(uintptr_t*)node;
+        CitizenComponent* citizen = node->element;
 
-        // Validate this entity
-        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, (void*)&entityIBP, nullptr);
+        // Validate this entry
+        bool stillValid = ValidateTask(nullptr, &citizen, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed
             uint32_t newCount = removeCount + 1;
             if (newCount != removeCount) {
-                uintptr_t* newArr = removeArr;
+                CitizenComponent** newArr = removeArr;
                 if ((int)removeCapacity < (int)newCount) {
                     uint32_t newCap = newCount;
                     if (removeCount != 0) {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
+                    newArr = static_cast<CitizenComponent**>(System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8));
                 }
 
                 // Copy existing entries if buffer changed
@@ -310,11 +312,11 @@ int TendArea::Validate() {
                     copyStart = removeCount;
                 }
                 for (uint32_t i = copyStart; i < newCount; i++) {
-                    uintptr_t val;
+                    CitizenComponent* val;
                     if (i < removeCount) {
                         val = removeArr[i];
                     } else {
-                        val = entityIBP;
+                        val = citizen;
                     }
                     newArr[i] = val;
                 }
@@ -327,18 +329,18 @@ int TendArea::Validate() {
         }
 
         // In-order successor: right child's leftmost descendant, or parent
-        void* rightChild = *(void**)((uintptr_t)node + 0x18);
+        WorkCitizenSetNode* rightChild = node->right;
         if (rightChild != nullptr) {
             node = rightChild;
-            while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-                node = *(void**)((uintptr_t)node + 0x10);
+            while (node->left != nullptr) {
+                node = node->left;
             }
         } else {
-            void* parent = *(void**)((uintptr_t)node + 0x08);
-            if (parent != nullptr && *(void**)((uintptr_t)parent + 0x10) != node) {
-                while (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) == node) {
+            WorkCitizenSetNode* parent = node->parent;
+            if (parent != nullptr && parent->left != node) {
+                while (parent != nullptr && parent->right == node) {
                     node = parent;
-                    parent = *(void**)((uintptr_t)parent + 0x08);
+                    parent = parent->parent;
                 }
                 node = parent;
             } else {
@@ -347,19 +349,19 @@ int TendArea::Validate() {
         }
     }
 
-    // Remove all invalid entries from BST
+    // Remove all invalid entries from the set
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            void* searchNode = *bstRootPtr;
+            WorkCitizenSetNode* searchNode = bstRoot;
             while (searchNode != nullptr) {
-                if (removeArr[i] < *(uintptr_t*)searchNode) {
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x10);
+                if (removeArr[i] < searchNode->element) {
+                    searchNode = searchNode->left;
                 } else {
-                    if (removeArr[i] <= *(uintptr_t*)searchNode) {
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRootPtr), searchNode);
+                    if (removeArr[i] <= searchNode->element) {
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&bstRoot), searchNode);
                         break;
                     }
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x18);
+                    searchNode = searchNode->right;
                 }
             }
         }
@@ -371,24 +373,14 @@ int TendArea::Validate() {
 
 
 // ============================================================
-// TendArea::Slot10 / GetWorkEntity (0x1400f58a0)
-// Returns entity from this->_field10's sub-object at +0x48.
+// TendArea::GetTarget [10] (0x1400f58a0)
+// The post's WorkPlaceComponent's Profession, through the hidden return slot.
 // ============================================================
 void* TendArea::GetTarget(void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
-
-    uintptr_t subIBP[2] = {0};
-    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
-    // so the returned pointer is the out buffer itself.
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
-    void* result = subIBP;
-
-
-    uintptr_t resolvedEntity = *(uintptr_t*)result;
-    *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
-
+    // 0x140002e10 = FindComponent<WorkPlaceComponent>.
+    WorkPlaceComponent* workplace = field_10->FindComponent<WorkPlaceComponent>();
+    // LEFT: slot 10's return slot is untyped (the slot every leaf overrides).
+    *reinterpret_cast<Profession**>(outPtr) = workplace->profession;
     return outPtr;
 }
 
@@ -399,7 +391,7 @@ void* TendArea::GetTarget(void* outPtr) {
 // ============================================================
 int TendArea::GetPriority() {
     // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
-    return static_cast<int32_t>(workerCount) > 0 ? 1 : 0;
+    return workerCount > 0 ? 1 : 0;
 }
 
 
@@ -407,50 +399,38 @@ int TendArea::GetPriority() {
 
 
 // ============================================================
-// TendArea::Serialize (0x1400f5900)
-// Work::Serialize + Serializer(v0) + BST serialize + int field.
+// TendArea::Persist [3] (0x1400f5900)
+// Work::Persist + Serializer(v0) + the set + tendMode.
 // ============================================================
 void TendArea::Persist(void* stream) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create serializer (version block, version=0)
-    alignas(8) uint8_t serializerBuf[24] = {0};
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
-    // Serialize BST at +0x48
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializerBuf);
+    // The set at +0x48
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&bstRoot), &ser);
 
-    // Serialize int at +0x58 (tendMode)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&tendMode), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-}
+    // tendMode (+0x58)
+    ser.Serialize(tendMode, nullptr);
+}   // ~Serializer
 
 
 // ============================================================
-// TendArea::DtorBody
-// Sets vtable, frees BST nodes, calls base dtor.
+// TendArea dtor (called by slot 0 0x14002c5d0). The stamps and the `~Internal`
+// call are the compiler's chain. Frees the set's nodes.
 // ============================================================
-// TendArea dtor (called by slot 0 0x14002c5d0). The stamps and the `~Internal` call are the compiler's chain.
 TendArea::~TendArea() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    // Free BST nodes at +0x48
-    void* bstRoot = *(void**)(selfAddr + 0x48);
-    if (bstRoot != nullptr) {
-        // Clean up left subtree (simple BST: +0x10=left, +0x18=right)
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
-        WorkBase_TreeNodeFree_14c30((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
-        System::MemoryAllocator::MemFree(bstRoot);
+    WorkCitizenSetNode* root = bstRoot;
+    if (root != nullptr) {
+        WorkBase_TreeNodeFree_14c30(&bstRoot, root->left);
+        WorkBase_TreeNodeFree_14c30(&bstRoot, root->right);
+        System::MemoryAllocator::MemFree(root);
     }
 
-    // Zero out BST root and count
-    *(void**)(selfAddr + 0x48) = nullptr;
-    *(uint32_t*)(selfAddr + 0x50) = 0;
-
+    // Zero out the root and the count
+    bstRoot = nullptr;
+    workerCount = 0;
 }
 
 

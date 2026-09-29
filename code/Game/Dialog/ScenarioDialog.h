@@ -21,7 +21,32 @@
 #include <cstddef>
 #include <cstdint>
 #include "runtime/types/ui/DialogInstance.h"
+#include "runtime/types/collection/Collection.h"
 #include "Object/exe_type.h"
+
+class Scenario;   // Game/Scenario.h
+namespace UI { class Element; class ImageElement; class TextElement; }
+
+// One row of the picker (0x38; OnOpened 0x140078010 builds it, pushes it with
+// 0x140013b60): the table row cloned from the dialog's template and the
+// scenario behind it.
+struct ScenarioDialogEntry {
+    UI::Element*      element;          // +0x00 the cloned row, element id 1000 + row
+    UI::Element*      selectSave;       // +0x08 "selectSave": shown on the selected row only
+    UI::ImageElement* imageIcon;        // +0x10 "imageIcon": the scenario's sprite
+    UI::TextElement*  textTitle;        // +0x18 "textTitle"
+    UI::TextElement*  textDescription;  // +0x20 "textDescription"
+    Scenario*         scenario;         // +0x28 the ScenarioList resource
+    int32_t           resourceIndex;    // +0x30 its index in the ScenarioList
+    uint8_t           _pad34[4];        // +0x34
+};
+static_assert(sizeof(ScenarioDialogEntry) == 0x38, "ScenarioDialogEntry stride 0x38");
+static_assert(offsetof(ScenarioDialogEntry, selectSave) == 0x08, "");
+static_assert(offsetof(ScenarioDialogEntry, imageIcon) == 0x10, "");
+static_assert(offsetof(ScenarioDialogEntry, textTitle) == 0x18, "");
+static_assert(offsetof(ScenarioDialogEntry, textDescription) == 0x20, "");
+static_assert(offsetof(ScenarioDialogEntry, scenario) == 0x28, "");
+static_assert(offsetof(ScenarioDialogEntry, resourceIndex) == 0x30, "");
 
 class ScenarioDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(ScenarioDialog)
@@ -30,10 +55,10 @@ public:
     ScenarioDialog();                                               // create 0x140013970
     ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                    Object::InternalPtr<UI::DialogInstance> parent,
-                   uint64_t parentMenu, uint8_t difficulty);        // 0x1400786b0
+                   UI::DialogInstance* parentMenu, uint8_t difficulty);  // 0x1400786b0
 
-    // 0x140013af0's body
-    ~ScenarioDialog() override;                                    // [0] 0x140013af0
+    // 0x140013af0's body: the entries Array's dtor (MemFree(+0xd8), +0xd8/+0xe0 = 0)
+    ~ScenarioDialog() override = default;                          // [0] 0x140013af0
     void OnOpened() override;                                      // [4] 0x140078010
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x140077be0
@@ -42,26 +67,29 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140077f80
 
+    // 0x140077cb0: start the selected scenario (a new game from its generators,
+    // or the game in its save).
+    void LoadSelected();
+
 public:
-    uint8_t  difficulty;       // +0xB8: 0 scenario, 1 tutorial
-    uint8_t  _padB9[7];        // +0xB9
-    uint64_t dataC0;           // +0xC0: the parent menu's InternalBasePtr
-    int32_t  dataC8;           // +0xC8: selected index, ctor -1
-    uint8_t  _padCC[4];        // +0xCC
-    uint64_t dataD0;           // +0xD0: confirm button
-    uint64_t dataD8;           // +0xD8: scenario entry array data (stride 0x38)
-    uint64_t dataE0;           // +0xE0: scenario entry count / capacity
+    uint8_t  difficulty;                   // +0xB8: 0 scenario, 1 tutorial (Scenario +0x69)
+    uint8_t  _padB9[7];                    // +0xB9
+    UI::DialogInstance* parentMenu;        // +0xC0: InternalPtr, the MainMenuDialog that opened it
+    int32_t  selectedIndex;                // +0xC8: ctor -1
+    uint8_t  _padCC[4];                    // +0xCC
+    UI::Element* buttonOk;                 // +0xD0: "buttonOk", id 101, enabled with a selection
+    Collection::Array<ScenarioDialogEntry> entries;  // +0xD8: the rows
 };
 
 static_assert(offsetof(ScenarioDialog, difficulty) == 0xB8, "ScenarioDialog +0xb8");
-static_assert(offsetof(ScenarioDialog, dataC0) == 0xC0, "ScenarioDialog +0xc0");
-static_assert(offsetof(ScenarioDialog, dataC8) == 0xC8, "ScenarioDialog +0xc8");
-static_assert(offsetof(ScenarioDialog, dataD8) == 0xD8, "ScenarioDialog +0xd8");
-static_assert(offsetof(ScenarioDialog, dataE0) == 0xE0, "ScenarioDialog +0xe0");
+static_assert(offsetof(ScenarioDialog, parentMenu) == 0xC0, "ScenarioDialog +0xc0");
+static_assert(offsetof(ScenarioDialog, selectedIndex) == 0xC8, "ScenarioDialog +0xc8");
+static_assert(offsetof(ScenarioDialog, buttonOk) == 0xD0, "ScenarioDialog +0xd0");
+static_assert(offsetof(ScenarioDialog, entries) == 0xD8, "ScenarioDialog +0xd8");
 static_assert(sizeof(ScenarioDialog) == 0xE8, "ScenarioDialog is 0xe8 (create 0x140013970)");
 static_assert(alignof(ScenarioDialog) == 8, "ScenarioDialog is qword-aligned");
 
-// The ctor DOOR (scenariodialog.cpp), bound by name in engine_funcs.cpp as
-// fn_ScenarioDialog_Ctor (retail 0x1400786b0).
+// B4 FORWARD: 1 outside caller file (mainmenudialog.cpp, two calls) -> the
+// ScenarioDialog ctor (retail 0x1400786b0).
 void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
                           void* parentMenuIBP, uint8_t difficulty);

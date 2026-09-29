@@ -20,6 +20,7 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
 
 class TombstoneComponent final : public Component {
     DECLARE_EXE_TYPE(TombstoneComponent)
@@ -34,9 +35,9 @@ public:
     void Update(void* time) override;                             // [9] 0x1400577d0
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void* field28;   // +0x28 System::Time countdown (lifetime remaining)
+    System::Time lifetime;   // +0x28 the countdown (lifetime remaining; Persist 0x1400578e0)
 };
 
 static_assert(sizeof(TombstoneComponent) == 0x30, "TombstoneComponent is 0x30 (create 0x14000d280)");
 static_assert(alignof(TombstoneComponent) == 8, "TombstoneComponent alignment");
-static_assert(offsetof(TombstoneComponent, field28) == 0x28, "TombstoneComponent +0x28 timer");
+static_assert(offsetof(TombstoneComponent, lifetime) == 0x28, "TombstoneComponent +0x28 timer");

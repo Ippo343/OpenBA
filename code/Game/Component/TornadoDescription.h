@@ -37,17 +37,18 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14000d5a0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    float _f20;                                 // +0x20
-    int32_t _i24;                               // +0x24
-    System::Time _time28;                       // +0x28 System::Time, zeroed
-    int32_t _i30;                               // +0x30
-    int32_t _i34;                               // +0x34
+    // Names from what TornadoComponent does with them (no strings in retail).
+    float _speed;                               // +0x20 units / second along the path (default 1.0)
+    int32_t _minSeparation;                     // +0x24 min endpoint distance, cells (default 10)
+    System::Time _damageInterval;               // +0x28 reload of TornadoComponent::damageCountdown (default 0)
+    int32_t _damageRadius;                      // +0x30 radius query + square sweep, cells (default 1)
+    int32_t _scatterRadius;                     // +0x34 the random single strike, cells (default 2)
 };
 
 static_assert(sizeof(TornadoDescription) == 0x38, "TornadoDescription is 0x38 (create 0x14000d560 MemAlloc(0x38))");
 static_assert(alignof(TornadoDescription) == 8, "TornadoDescription alignment");
-static_assert(offsetof(TornadoDescription, _f20) == 0x20, "TornadoDescription::_f20 @ +0x20");
-static_assert(offsetof(TornadoDescription, _i24) == 0x24, "TornadoDescription::_i24 @ +0x24");
-static_assert(offsetof(TornadoDescription, _time28) == 0x28, "TornadoDescription::_time28 @ +0x28");
-static_assert(offsetof(TornadoDescription, _i30) == 0x30, "TornadoDescription::_i30 @ +0x30");
-static_assert(offsetof(TornadoDescription, _i34) == 0x34, "TornadoDescription::_i34 @ +0x34");
+static_assert(offsetof(TornadoDescription, _speed) == 0x20, "TornadoDescription::_speed @ +0x20");
+static_assert(offsetof(TornadoDescription, _minSeparation) == 0x24, "TornadoDescription::_minSeparation @ +0x24");
+static_assert(offsetof(TornadoDescription, _damageInterval) == 0x28, "TornadoDescription::_damageInterval @ +0x28");
+static_assert(offsetof(TornadoDescription, _damageRadius) == 0x30, "TornadoDescription::_damageRadius @ +0x30");
+static_assert(offsetof(TornadoDescription, _scatterRadius) == 0x34, "TornadoDescription::_scatterRadius @ +0x34");

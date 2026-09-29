@@ -15,6 +15,7 @@
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/CitizenBehavior.h"   // m_citizenList->field_0x120 (B4 DLG-d merge fix)
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -30,10 +31,6 @@
 #include "Component/Component.h"   // B.3.x W0: Component::Command by name
 #include "Component/PastureComponent.h"
 #include "Component/ComponentDescription.h"
-
-// LEFT (B4 DLG-c): the citizen list's resource array (+0xF0 +0x120) is read
-// through GameUpdateLoop::m_citizenList (void*, GAME-a); the resource type
-// crosses SelectResourceUI's int64_t SetResource / void* GetResource (DLG-a).
 
 // ============================================================
 // PastureUI::UpdateSlider (FUN_1400b4fa0)
@@ -142,10 +139,10 @@ void PastureUI::OnUpdateLayout() {
     // SA guard (retail unguarded): entity without a PastureComponent, or the
     // combo/slider elements not seated yet (Slot4 hasn't run) — bail.
     if (!comp) return;
-    if (!internalBasePtr || !slider) return;
+    if (!selectResource || !slider) return;
 
     // Enable combo only if it has items AND pasture has no animals yet
-    UI::ComboElement* comboElem = static_cast<UI::ComboElement*>(internalBasePtr);
+    UI::ComboElement* comboElem = selectResource;
     int itemCount = comboElem->GetItemCount();
     bool enableCombo = (itemCount > 0) && (comp->animalCount == 0);
 
@@ -177,7 +174,7 @@ void PastureUI::OnUpdateLayout() {
 // Original: 0x1400B4C40.
 
 // [11] 0x1400b4c40
-void PastureUI::SetResource(int64_t param2) {
+void PastureUI::SetResource(ComponentDescription* newType) {
     // Bail on a dead / marked-for-removal datasource before probing it (see Slot7).
     if (!SA_DialogEntityAlive(this)) return;
     // Get entity at +0x28, check ComponentEntity
@@ -195,9 +192,7 @@ void PastureUI::SetResource(int64_t param2) {
 
     // If currently no resource set (comp+0x28 == 0) and new resource is valid,
     // set resource first then call initialization via vtable[14](comp, 2)
-    // (LEFT: the type arrives as SelectResourceUI's int64_t)
-    ComponentDescription* newType = reinterpret_cast<ComponentDescription*>(param2);
-    if (pasture->livestockType == nullptr && param2 != 0) {
+    if (pasture->livestockType == nullptr && newType != nullptr) {
         pasture->livestockType = newType;
         pasture->Command(2);   // slot 14
     }
@@ -222,7 +217,7 @@ void PastureUI::SetResource(int64_t param2) {
 // Original: 0x1400B4D00.
 
 // [12] 0x1400b4d00
-void* PastureUI::GetResource(void* param2) {
+ComponentDescription** PastureUI::GetResource(ComponentDescription** param2) {
     // Get entity at +0x28, check ComponentEntity
     Object::Base* entity = _dataSource;
     uint32_t entityTypeId = ComponentEntity::TypeId();
@@ -234,11 +229,11 @@ void* PastureUI::GetResource(void* param2) {
     // Find PastureComponent on entity
     PastureComponent* pasture = nullptr;
     fn_FindComponent_Pasture(checkedEntity, &pasture);
-    // (LEFT: `out` is SelectResourceUI's void* retslot)
-    if (!pasture) { *(ComponentDescription**)param2 = nullptr; return param2; }  // SA guard
+    // (the ExternalPtr retslot)
+    if (!pasture) { *param2 = nullptr; return param2; }  // SA guard
 
     // Return resource type at comp+0x28
-    *(ComponentDescription**)param2 = pasture->livestockType;
+    *param2 = pasture->livestockType;
     return param2;
 }
 
@@ -258,15 +253,14 @@ void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 
     if (param3 == 0x14 && param4 == 500) {
         // Combo selection: get selected resource, call Slot11 via vtable
-        const UI::ComboElement* comboElem = static_cast<const UI::ComboElement*>(internalBasePtr);
+        const UI::ComboElement* comboElem = selectResource;
         int currentItem = comboElem->GetCurrentItem();
         void* itemData = comboElem->GetItemData(currentItem);
         int resourceIndex = (int)(intptr_t)itemData;  // CAST-OK: ptr_int
 
+        // The town's template list (CitizenBehavior +0x120)
         GameUpdateLoop* world = GameUpdateLoop::_singleton;
-        uintptr_t entityList = (uintptr_t)world->m_citizenList;   // LEFT: void* (GAME-a)
-        uintptr_t resourceArray = *(uintptr_t*)(entityList + 0x120);
-        int64_t resourceType = *(int64_t*)(resourceArray + (int64_t)resourceIndex * 8);
+        ComponentDescription* resourceType = world->m_citizenList->field_0x120[resourceIndex];
 
         SetResource(resourceType);   // slot 11, virtual (as retail)
     }
@@ -322,7 +316,7 @@ void PastureUI::OnUpdate(const System::Time& time) {
         PastureUI::OnCreated();
         if (!slider) return;   // still no slider — dialog lacks it
     }
-    if (internalBasePtr)
+    if (selectResource)
         SelectResourceUI::OnUpdate(time);
 }
 

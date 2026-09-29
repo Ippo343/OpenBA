@@ -27,14 +27,14 @@
 // the defaults.
 TombstoneDescription::TombstoneDescription()
     : Description(),
-      _f20(360.0f),
-      _f24(24.0f) {}
+      _minLifetime(360.0f),
+      _lifetimeRange(24.0f) {}
 
 // [5] 0x140057a20: stream order as retail.
 bool TombstoneDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_f20, nullptr);
-    ser.Serialize(_f24, nullptr);
+    ser.Serialize(_minLifetime, nullptr);
+    ser.Serialize(_lifetimeRange, nullptr);
     return true;
 }
 

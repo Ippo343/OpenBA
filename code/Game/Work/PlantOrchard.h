@@ -28,13 +28,15 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+
 
 class PlantOrchard final : public Work {
     DECLARE_EXE_TYPE(PlantOrchard)
 
 public:
     PlantOrchard();                                                 // 0x1400f50b0
-    PlantOrchard(void** entityIBP, void* treeType);                 // 0x1400f5140
+    PlantOrchard(void** entityIBP, ComponentDescription* treeType);   // 0x1400f5140
 
     // 0x1400f5010: frees the slot array and the BST
     ~PlantOrchard() override;                                       // [0]  0x14002c540
@@ -48,18 +50,19 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- PlantOrchard fields (+0x48) ---
-    void*    field_48;           // +0x48: BST root (assigned work items, int-keyed)
-    int32_t  field_50;           // +0x50: BST count (assigned workers)
+    WorkCellSetNode* field_48;   // +0x48: the cell -> citizen set (0x140029a40 / 0x14001ca60 / 0x140029de0)
+    int32_t  field_50;           // +0x50: its count (0x140029860 `CMP [RCX+0x50]; SETG`: signed)
     uint8_t  _pad54[4];          // +0x54: padding
     // +0x58/+0x60/+0x64 are ONE dynamic-array triple {base, count, capacity} — the same
     // shape as OrchardComponent's +0x50/+0x58/+0x5c. 0x14000a590 (the resizer the ctor
-    // calls) reads capacity at +0x0c of the triple, so +0x64 is NOT padding.
-    void*    field_58;           // +0x58: validity byte array base (one byte per orchard slot)
+    // calls) reads capacity at +0x0c of the triple, so +0x64 is NOT padding. Persist
+    // streams it through the bool-array overload (0x140151458): 1 = planted.
+    bool*    field_58;           // +0x58: validity array base (one bool per orchard slot)
     int32_t  field_60;           // +0x60: element count (= OrchardComponent+0x58 slot count)
     int32_t  field_64;           // +0x64: capacity (was mislabelled padding)
-    void*    field_68;           // +0x68: ExternalPtr to the TREE TYPE template chosen in
-                                 //        OrchardUI's combo (copied from OrchardComponent+0x60).
-                                 //        NOT the OrchardDescription — the old comment misled.
+    ComponentDescription* field_68;   // +0x68: ExternalPtr<ComponentDescription> (0x140002340): the
+                                      //        TREE TYPE template chosen in OrchardUI's combo (copied
+                                      //        from OrchardComponent+0x60). NOT the OrchardDescription.
 };
 
 static_assert(sizeof(PlantOrchard) == 0x70, "PlantOrchard is 0x70 (retail create MemAlloc)");

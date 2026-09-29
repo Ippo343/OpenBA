@@ -81,15 +81,15 @@ uint32_t AchievementTypeId() { return Achievement::Achievement::TypeId(); }
 
 // ?_singleton@FileSystem@IO@@0PEAV12@EA (0x1801fc6a8) -- the class static now
 // (ENDGAME B.3.9 SS1, B39_RULES D7): read fresh, no lazy cache.
-RtIO::FileSystem* FileSystemSingleton() {
-    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);
+const ::IO::FileSystem* FileSystemSingleton() {
+    return ::IO::FileSystem::_singleton;
 }
 
 // AchievementManager::Update's gate, inlined in retail as `CMP dword
 // [RAX+0x38],0 / JG done` — `IO::FileSystem::AreUserPackFilesEnabled`
 // (0x1800acfc0): the user (mod) pack-file COUNT is positive.
-bool UserPackFilesEnabled(const RtIO::FileSystem* fs) {
-    return fs->userPackFilenameCount > 0;
+bool UserPackFilesEnabled(const ::IO::FileSystem* fs) {
+    return fs->_userPackFilenameCount > 0;
 }
 
 }  // namespace

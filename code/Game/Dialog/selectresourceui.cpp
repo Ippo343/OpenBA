@@ -2,8 +2,7 @@
 // Clean reimplementation of SelectResourceUI shared methods.
 //
 // SelectResourceUI is the abstract base for CropUI, OrchardUI, PastureUI.
-// +0x28 = entity (ComponentEntity*)
-// +0x30 = combo element (InternalBasePtr, set during Slot4 initialization).
+// Fields: Dialog/SelectResourceUI.h (+0x30 the "selectResource" combo).
 //
 // Decompiled from Application-x64.exe.
 
@@ -29,29 +28,19 @@
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/CitizenBehavior.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
 #include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // ============================================================
-// SelectDescription layout (from Ghidra analysis):
-//   +0x20: SpriteSheet (ExternalPtr, 8 bytes)
-//   +0x28: SpriteName (System::String, 8 bytes)
-//   +0x30: StringTable (ExternalPtr, 8 bytes)
-//   +0x38: StringName (System::String, 8 bytes)
-//   +0x40: categoryId (int)
+// The resource list: the town's template list (CitizenBehavior +0x120 /
+// +0x128, GameUpdateLoop +0xF0). A template is listed when its
+// SelectDescription's category (+0x40) is the leaf's GetCategory().
 // ============================================================
 
-// ============================================================
-// Resource type list in game world (from DAT_1401c3dd8 + 0xF0):
-//   +0x120: resourceTypes array pointer (array of pointers)
-//   +0x128: resourceTypes count (int)
-//
-// Each resource type entry:
-//   +0x28: sub-components array pointer (array of pointers)
-//   +0x30: sub-components count (int)
-// ============================================================
-
-// Helper: iterate game world resource types, find SelectDescription
-// sub-components matching the category filter, and either count them
+// Helper: iterate the town's templates, find their SelectDescription
+// sub-descriptions matching the category filter, and either count them
 // or populate a combo box.
 //
 // When combo is non-null, adds items to the combo and sets selectedIdx
@@ -61,82 +50,64 @@
 // This pattern is shared by PopulateCombo (0x140078830) and
 // GetResourceCount (0x140078a40).
 
-static int SelectResourceUI_IterateResources(void* self, void* combo, int* selectedIndexOut) {
-    uintptr_t s = (uintptr_t)self;
+static int SelectResourceUI_IterateResources(SelectResourceUI* ui, UI::ComboElement* combo, int* selectedIndexOut) {
     int count = 0;
     int selectedIdx = -1;
 
-    // ENDGAME B.3.9 CG2: TypeId_SelectDescription (cell 0x1401c48a8) and
-    // TypeId_ComponentEntity (cell 0x1401c5d70) -> SelectDescription::TypeId()
-    // / ComponentEntity::TypeId(). The lazy-resolve/heal block that patched the
-    // exe-side globals from the class statics is retired with this conversion;
-    // the statics always answer.
+    // ENDGAME B.3.9 CG2: SelectDescription::TypeId() (cell 0x1401c48a8) and
+    // ComponentEntity::TypeId() (cell 0x1401c5d70): the statics always answer.
 
-    // Get resource type list from game world
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t scenarioPtr = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
-    int numTypes = *(int*)(scenarioPtr + 0x128);
-    uintptr_t typeArray = *(uintptr_t*)(scenarioPtr + 0x120);
+    // The town's template list
+    const CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
+    int numTypes = town->field_0x128;
+    ComponentDescription** typeArray = town->field_0x120;
 
-    // Get current resource type via virtual call (vtable +0x60)
-    // Returns the currently selected resource type pointer
-    SelectResourceUI* const ui = reinterpret_cast<SelectResourceUI*>(self);   // B.3.8 bridge
-    uint64_t currentResource = 0;
+    // The current resource type (slot 12, the ExternalPtr retslot)
+    ComponentDescription* currentResource = nullptr;
     if (combo) {
         ui->GetResource(&currentResource);                        // slot 12 (+0x60)
     }
 
-    // Get category filter via virtual call (vtable +0x68)
+    // The category filter (slot 13)
     int categoryFilter = ui->GetCategory();                       // slot 13 (+0x68)
 
-    // Wrap entity at +0x28 in InternalBasePtr (base class requirement)
-    void* entity = *(void**)(s + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
+    // The data source as a ComponentEntity (retail builds this InternalPtr and
+    // does not use it)
+    Object::Base* entity = ui->_dataSource;
+    (void)::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
 
     int comboIdx = 0;
 
     for (int i = 0; i < numTypes; i++) {
-        uintptr_t resType = *(uintptr_t*)(typeArray + (uintptr_t)i * 8);
+        ComponentDescription* resType = typeArray[i];
 
-        // Iterate sub-components of this resource type
-        int subCount = *(int*)(resType + 0x30);
-        uintptr_t subArray = *(uintptr_t*)(resType + 0x28);
+        // Iterate the template's sub-descriptions
+        int subCount = resType->_subDescCount;
 
         for (int j = 0; j < subCount; j++) {
-            uintptr_t subComp = *(uintptr_t*)(subArray + (uintptr_t)j * 8);
+            Description* subComp = resType->_subDescs[j];
 
-            // Check if sub-component's type matches SelectDescription
-            // Virtual call at vtable+0x10 returns type ID
-            int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
+            // Check if the sub-description's type is SelectDescription (slot 2)
+            int subTypeId = subComp->Type();
 
             if (subTypeId == (int)SelectDescription::TypeId()) {
-                void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
+                Description* subObj = resType->_subDescs[j];
                 bool isDerived = ::Object::IsDerivedFromNullSafe(subObj, SelectDescription::TypeId());
                 if (isDerived && subObj != nullptr) {
+                    const SelectDescription* select = static_cast<const SelectDescription*>(subObj);
                     // Check category filter matches
-                    int category = *(int*)((uintptr_t)subObj + 0x40);
+                    int category = (int)select->_u40;
                     if (category == categoryFilter) {
                         if (combo) {
-                            // Create UI::String from SelectDescription name
-                            uint8_t uiStrBuf[16];
-                            ::new (uiStrBuf) UI::String(
-                                            Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)subObj + 0x30))),
-                                            *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x38));  // B.3.6 bridge
-                            // Convert to System::String
-                            System::String sysStr;
-                            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
+                            // The name: a UI::String of the table and key, as System::String
+                            UI::String uiStr(Object::ExternalPtr<UI::StringTable>(select->_ref30), select->_s38);
+                            System::String sysStr(uiStr.operator System::String());
 
-                            // Create Sprite from SelectDescription icon
-                            uint8_t spriteBuf[16];
-                            ::new (spriteBuf) UI::Sprite(
-                                          Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)subObj + 0x20))),
-                                          *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x28));  // B.3.6 bridge
+                            // The icon: a Sprite of the sheet and name
+                            UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(select->_ref20), select->_s28);
 
-                            // Add item to combo with index as userData
-                            reinterpret_cast<UI::ComboElement*>(combo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), sysStr, (void*)(intptr_t)comboIdx);  // B.3.6 bridge
+                            // Add item to combo with the template's index as userData
+                            combo->AddItem(sprite, sysStr, reinterpret_cast<void*>(static_cast<intptr_t>(comboIdx)));  // CAST-OK: ptr_int
 
                             // Check if this is the currently selected resource
                             if (resType == currentResource) {
@@ -159,29 +130,23 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
 // ============================================================
 // SelectResourceUI::PopulateCombo (0x140078830) — Fill combo
 // ============================================================
-// Clears the combo, iterates game world resource types, finds
-// SelectDescription sub-components matching the category filter,
-// and adds them as combo items with sprites and names.
-// Sets the current selection to match the entity's current resource.
-//
-// Original: FUN_140078830 (was fn_SelectResourceUI_PopulateCombo).
+// Clears the combo, lists the templates of the category with their sprites
+// and names, and selects the component's current resource.
 
-void SelectResourceUI_PopulateCombo(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Get the selectResource combo element
-    void* combo = *(void**)(s + 0x30);
+void SelectResourceUI::PopulateCombo() {
+    // The selectResource combo element
+    UI::ComboElement* combo = selectResource;
 
     // Clear existing items
-    reinterpret_cast<UI::ComboElement*>(combo)->RemoveAllItems();  // B.3.6 bridge
+    combo->RemoveAllItems();
 
     // Populate combo and get selected index
     int selectedIdx = -1;
-    SelectResourceUI_IterateResources(self, combo, &selectedIdx);
+    SelectResourceUI_IterateResources(this, combo, &selectedIdx);
 
     // Set current selection if we found a match
     if (selectedIdx >= 0) {
-        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x30))->SetCurrentItem(selectedIdx);  // B.3.6 bridge
+        selectResource->SetCurrentItem(selectedIdx);
     }
 }
 
@@ -189,16 +154,14 @@ void SelectResourceUI_PopulateCombo(void* self) {
 // SelectResourceUI::GetResourceCount (0x140078a40) — Count matching
 // ============================================================
 // Same iteration as PopulateCombo but just counts matching types.
-// Used by Slot8 to detect when the combo needs refreshing.
-//
-// Original: FUN_140078a40 (was fn_SelectResourceUI_GetResourceCount).
+// Used by OnUpdate to detect when the combo needs refreshing.
 
-int SelectResourceUI_GetResourceCount(void* self) {
-    return SelectResourceUI_IterateResources(self, nullptr, nullptr);
+int SelectResourceUI::GetResourceCount() {
+    return SelectResourceUI_IterateResources(this, nullptr, nullptr);
 }
 
 // ============================================================
-// SelectResourceUI::Slot4 (vtable +0x20) — Initialize combo element
+// SelectResourceUI::OnCreated (vtable +0x20) — Initialize combo element
 // ============================================================
 // Finds the "selectResource" combo element in the dialog, stores at +0x30,
 // sets its element ID to 500, and populates it with resources.
@@ -207,31 +170,21 @@ int SelectResourceUI_GetResourceCount(void* self) {
 
 // [4] 0x140078be0.
 void SelectResourceUI::OnCreated() {
-    uintptr_t s = (uintptr_t)this;
-
-    // Find "selectResource" combo element via DialogInstance at +0x18
+    // Find "selectResource" combo element via the owning DialogInstance
     System::String nameBuf("selectResource");
 
-    void* dialogInstance = *(void**)(s + 0x18);
-    uint64_t findResult = 0;
-    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInstance)->FindElement(nameBuf));  // B.3.6 bridge
-
-    // Store combo element at +0x30 (IsDerivedFrom check skipped -- null check only)
-    void* rawElem = (void*)findResult;
-    void* checked = rawElem ? rawElem : nullptr;
-    uint64_t basePtrVal = 0;
-    new (&basePtrVal) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x30) = basePtrVal;
+    // Store the combo element (IsDerivedFrom check skipped -- null check only)
+    selectResource = static_cast<UI::ComboElement*>(_dialog->FindElement(nameBuf).Get());
 
     // Set element ID to 500 (combo selection event ID)
-    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(500);  // B.3.6 bridge
+    selectResource->SetElementId(500);
 
     // Populate combo with available resources
-    SelectResourceUI_PopulateCombo(this);
+    PopulateCombo();
 }
 
 // ============================================================
-// SelectResourceUI::Slot8 (vtable +0x40) — Repopulate combo if count changed
+// SelectResourceUI::OnUpdate (vtable +0x40) — Repopulate combo if count changed
 // ============================================================
 // Checks if the combo element's item count matches the expected resource count.
 // If different, repopulates the combo with current resources.
@@ -240,22 +193,19 @@ void SelectResourceUI::OnCreated() {
 
 // [8] 0x140078d30.
 void SelectResourceUI::OnUpdate(const System::Time& /*time*/) {
-    uintptr_t s = (uintptr_t)this;
-
-    void* comboElem = *(void**)(s + 0x30);
-    int currentCount = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemCount();  // B.3.6 bridge
-    int expectedCount = SelectResourceUI_GetResourceCount(this);
+    int currentCount = selectResource->GetItemCount();
+    int expectedCount = GetResourceCount();
 
     if (currentCount != expectedCount) {
-        SelectResourceUI_PopulateCombo(this);
+        PopulateCombo();
     }
 }
 
 // ============================================================
-// SelectResourceUI::Slot9 (vtable +0x48) — Combo selection handler
+// SelectResourceUI::OnElementEvent (vtable +0x48) — Combo selection handler
 // ============================================================
 // On combo selection (msg=0x14, id=500), looks up the selected resource
-// type from the game world's resource list and calls Slot11 (vtable +0x58)
+// type in the town's template list and calls SetResource (slot 11)
 // to apply it to the component.
 //
 // Original: 0x140078D80 (shared by CropUI and OrchardUI).
@@ -266,21 +216,15 @@ void SelectResourceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
     if (param3 != 0x14 || param4 != 500)
         return;
 
-    uintptr_t s = (uintptr_t)this;
-    void* comboElem = *(void**)(s + 0x30);
-
     // Get current selected item index from combo
-    int currentItem = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetCurrentItem();  // B.3.6 bridge
+    int currentItem = selectResource->GetCurrentItem();
 
-    // Get the item data (resource index) for the current selection
-    void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(currentItem);  // B.3.6 bridge
-    int resourceIndex = (int)(intptr_t)itemData;
+    // The item's user data: the template's index in the town's list
+    void* itemData = selectResource->GetItemData(currentItem);
+    int resourceIndex = (int)reinterpret_cast<intptr_t>(itemData);  // CAST-OK: ptr_int
 
-    // Look up resource type from game world's entity list
-    void* world = GameUpdateLoop::_singleton;
-    uintptr_t entityList = *(uintptr_t*)((uintptr_t)world + 0xf0);
-    uintptr_t resourceArray = *(uintptr_t*)(entityList + 0x120);
-    int64_t resourceType = *(int64_t*)(resourceArray + (int64_t)resourceIndex * 8);
+    // The template
+    ComponentDescription* resourceType = GameUpdateLoop::_singleton->m_citizenList->field_0x120[resourceIndex];
 
     // Slot 11 (polymorphic -- sets resource type on component)
     SetResource(resourceType);   // slot 11, virtual (as retail)

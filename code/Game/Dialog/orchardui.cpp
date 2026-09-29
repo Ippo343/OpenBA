@@ -30,9 +30,6 @@
 #include "Component/ComponentDescription.h"
 #include "Dialog/OrchardUI.h"
 
-// LEFT (B4 DLG-c): the tree type crosses SelectResourceUI's int64_t SetResource /
-// void* GetResource (DLG-a).
-
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *TypeId_ProgressElement) before storing it at +0x38.
 // That exe-.rdata slot (0x1401515b8) is filled ONLY by
@@ -54,7 +51,7 @@ namespace orchardui_sa {
 static void Trace(const char* what, OrchardUI* self) {
     fprintf(stderr, "[OrchardUI] %s self=%p combo(+0x30)=%p yield(+0x38)=%p\n",
             what, self,
-            self ? self->internalBasePtr : nullptr,
+            self ? self->selectResource : nullptr,
             self ? self->yield : nullptr);
     fflush(stderr);
 }
@@ -140,7 +137,7 @@ void OrchardUI::OnUpdateLayout() {
     // instance. Retail cannot reach either state — the panel is only mounted on
     // Orchard.rsc and Slot4 always precedes the first tick.
     if (!orchard) return;
-    if (!internalBasePtr || !yield) return;
+    if (!selectResource || !yield) return;
 
     // Get average growth ratio (0.0 - 1.0)
     float growth = orchard->GetGrowth();   // 0x140051640
@@ -157,7 +154,7 @@ void OrchardUI::OnUpdateLayout() {
     yieldElem->SetProgressTextParameter(0, textStr);
 
     // Enable/disable combo based on item count (SelectResourceUI base logic)
-    UI::ComboElement* combo = static_cast<UI::ComboElement*>(internalBasePtr);
+    UI::ComboElement* combo = selectResource;
     int itemCount = combo->GetItemCount();
     combo->Enable(itemCount > 0);   // Element slot 8 Enable
 }
@@ -172,7 +169,7 @@ void OrchardUI::OnUpdateLayout() {
 // Original: 0x140075380.
 
 // [11] 0x140075380
-void OrchardUI::SetResource(int64_t param2) {
+void OrchardUI::SetResource(ComponentDescription* newType) {
 
     // Get entity at +0x28, check ComponentEntity
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
@@ -186,9 +183,8 @@ void OrchardUI::SetResource(int64_t param2) {
     if (!orchard) return;
 
     // If no tree type is set yet and the new one is valid, start production
-    // (Command(2), slot 14). (LEFT: the type arrives as SelectResourceUI's int64_t)
-    ComponentDescription* newType = reinterpret_cast<ComponentDescription*>(param2);
-    if (orchard->treeType == nullptr && param2 != 0) {
+    // (Command(2), slot 14).
+    if (orchard->treeType == nullptr && newType != nullptr) {
         orchard->Command(2);   // slot 14
     }
 
@@ -205,7 +201,7 @@ void OrchardUI::SetResource(int64_t param2) {
 // Original: 0x140075430.
 
 // [12] 0x140075430
-void* OrchardUI::GetResource(void* param2) {
+ComponentDescription** OrchardUI::GetResource(ComponentDescription** param2) {
 
     // Get entity at +0x28, check ComponentEntity
     ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
@@ -215,8 +211,8 @@ void* OrchardUI::GetResource(void* param2) {
     fn_FindComponent_Orchard(checkedEntity, &orchard);
 
     // Return the tree type (+0x60) (SA guard: see Slot11).
-    // (LEFT: `out` is SelectResourceUI's void* retslot)
-    *(ComponentDescription**)param2 = orchard ? orchard->treeType : nullptr;
+    // (the ExternalPtr retslot)
+    *param2 = orchard ? orchard->treeType : nullptr;
     return param2;
 }
 
@@ -273,7 +269,7 @@ void OrchardUI::OnUpdate(const System::Time& time) {
         OrchardUI::OnCreated();
         if (!yield) return;   // dialog genuinely lacks it
     }
-    if (internalBasePtr)
+    if (selectResource)
         SelectResourceUI::OnUpdate(time);
 }
 

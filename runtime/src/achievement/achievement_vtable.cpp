@@ -165,50 +165,24 @@
 
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"   // B.4 R-ENG: IO::Stream::_direction
 #include "../../types/object/External.h"
 #include "../../types/object/Internal.h"
 
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
 
 // (ENDGAME B.3.9 ENG: the thirteen stores are the real constructor
 // `Achievement()` now; the ??0 door that stamped the MINTED tables is retired.)
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// The codec prologue, WITH the version argument exposed (Persist passes 1 for
-// the outer codec and 0 for the inner one — see the banner).
-// ---------------------------------------------------------------------------
-ReaderWriter* MakeCodecVersioned(Stream* stream, Serializer* ser, int version) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-
-    Encoding* enc = stream->encoding;
-    void** encVt = enc->vtable;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[slot / 8])(enc, ser, version);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-// The `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable (Serializer.h); the members are called by name on the class.
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-// `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor.
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    delete AsRw(rw);
-}
+// B.4 (R-ENG): the codec prologue / epilogue this file spelled out -- stream,
+// null readerWriter, `enc->vtable[+0x18 / +0x20](enc, &ser, version)`, and
+// `if (rw) delete rw` at the end -- IS `IO::Serializer(Stream&, version)` and
+// `~Serializer` (serializer_class.cpp), so each body holds one IO::Serializer.
+// The ExternalPtr serialize bodies still take the `rt::io::Serializer` POD
+// view of the same bytes (object/External.h, not this block's).
+// Persist passes version 1 for the outer codec and 0 for the inner one --
+// see the banner.
 
 // Two unexported template instantiations (no mangled name exists), ours in
 // runtime/src/object/ (external_ptr_serialize.cpp,
@@ -261,42 +235,39 @@ Object::External* Achievement::Construct() {
 // early return when the outer reports version 0 — see the banner.
 // ============================================================================
 void AchievementInstance::Persist(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    // Internal's slot 3 takes the stream as `void*` (object/Internal.h).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
 
     // The OUTER codec, version 1 (MOV R8D,1 at 0x18009e4c9).
-    Serializer outer;
-    ReaderWriter* rwOuter = MakeCodecVersioned(stream, &outer, 1);
+    IO::Serializer outer(stream, 1);
 
-    const int version = AsRw(rwOuter)->GetVersion();
+    const int version = outer._readerWriter->GetVersion();
 
     if (version == 0) {
-        // Absent in this stream's format: skip, destroy only the outer codec.
-        AsRw(rwOuter)->Skip();
-        DestroyCodec(rwOuter);
+        // Absent in this stream's format: skip; only the outer codec exists
+        // to be destroyed (~Serializer at the return).
+        outer._readerWriter->Skip();
         return;
     }
 
-    RtObject_ExternalPtrSerialize_Achievement(
-        reinterpret_cast<RtObject::External**>(&_achievement), &outer);   // 0x180006d10                                       // +0x20
+    RtObject_ExternalPtrSerialize_Achievement(                      // 0x180006d10, +0x20
+        reinterpret_cast<RtObject::External**>(&_achievement),
+        reinterpret_cast<rt::io::Serializer*>(&outer));              // POD views (object/External.h)
 
     // The INNER codec, version 0 (XOR R8D,R8D at 0x18009e522).
-    Serializer inner;
-    ReaderWriter* rwInner = MakeCodecVersioned(stream, &inner, 0);
+    IO::Serializer inner(stream, 0);
 
     int count = _goalList._goals.GetSize();                         // +0x18
-    AsRw(rwInner)->SerializeInt(count, nullptr);                    // +0xA0
+    inner._readerWriter->SerializeInt(count, nullptr);              // +0xA0
 
-    if (stream->direction == rt::io::kDirectionReading) {
+    if (stream._direction == rt::io::kDirectionReading) {
         // retail 0x180009d70 — `_goals` names kSpec_PtrZero in its type.
         _goalList._goals.SetSize(count);
     }
     RtObject_InternalPtrArraySerialize_GoalInstance(                // 0x180009fa0
-        reinterpret_cast<::IO::Serializer*>(&inner), count,          // B.3.x bridge
+        &inner, count,
         reinterpret_cast<RtObject::InternalBasePtr*>(_goalList._goals.GetData()));
-
-    DestroyCodec(rwInner);
-    DestroyCodec(rwOuter);
-}
+}   // ~inner, then ~outer: the two ReaderWriters deleted in retail's order
 
 }  // namespace Achievement
 

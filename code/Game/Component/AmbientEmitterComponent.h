@@ -57,6 +57,9 @@ public:
     void SetSlot(int slot, Audio::SoundEffect* sound, float volume);
     // 0x140042c60: (re)play slot `slot`'s effect and add this emitter to it.
     void PlaySlot(int slot);
+    // 0x140042960: move every playing slot's emitter to `newPos`, then cache it
+    // in `position` (defined in tornadocomponent.cpp, COMP-e).
+    void MoveTo(const Math::Vector3& newPos);
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Persist
     // 0x140042f30: Vector3::Serialize, then the count and per slot the

@@ -309,7 +309,7 @@ void MenuDialogLoopT::Startup() {
         }
     }
 
-    void* dialogExt = _dialogExternal;
+    const void* dialogExt = _dialogExternal;
     printf("[MenuDLT::Startup] self=%p m_dialogExternal=%p\n",
            (void*)this, dialogExt);
     // Original MenuDLT::Startup (exe 0x14009B930) chains Engine::DialogLoopT::Startup
@@ -735,12 +735,12 @@ void MenuDialogLoopT::Load() {
     // a worker thread. The PhaseA scene allocation has been moved to Startup
     // (main thread, runs while screen is fully faded to black so the freeze is
     // invisible to the user — see Startup above).
-    void* dialogExtBefore = _dialogExternal;
+    const void* dialogExtBefore = _dialogExternal;
     printf("[MenuDLT::Load] self=%p m_dialogExternal(before)=%p\n", (void*)this, dialogExtBefore);
     // QUALIFIED (slot 6 is VIRTUAL on the base; this is the class's own Load,
     // dispatched by Loader::Run on the loader thread).
     Engine::DialogLoopT::Load();
-    void* dialogExtAfter = _dialogExternal;
+    const void* dialogExtAfter = _dialogExternal;
     printf("[MenuDLT::Load] m_dialogExternal(after)=%p (PhaseA deferred to Startup)\n",
            dialogExtAfter);
 
