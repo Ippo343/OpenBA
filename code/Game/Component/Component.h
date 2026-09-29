@@ -40,6 +40,7 @@
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class ComponentEntity;   // Entity/ComponentEntity.h (the +0x10 owner)
+class Description;       // Component/Description.h (the +0x18 reference)
 
 class Component : public Object::Internal {
     DECLARE_EXE_TYPE(Component)
@@ -70,7 +71,7 @@ public:
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
     ComponentEntity* _entity; // +0x10 owning ComponentEntity (InternalPtr<ComponentEntity> in
                               //       retail: Persist nulls it unless IsDerivedFrom ComponentEntity)
-    void*    _description;   // +0x18 serialized by 0x140031d10 (the tree's "description ref")
+    Description* _description; // +0x18 ExternalPtr<Description>: 0x140031d10 IsDerivedFrom 0x1401c72e0 (Description)
     uint32_t _flags;         // +0x20 capability flags; the ctor sets 0x80
     uint32_t _pad24;         // +0x24 never written by the ctor
 
