@@ -81,8 +81,6 @@ static_assert(sizeof(WidgetEvent) == 0x30, "");
 // ?UpdateNumber@SliderElement@UI@@AEAAXXZ (0x1800d6c20) — its body is
 // element_bodies_b5.cpp's door (fragment pass); reached by address.
 
-int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
-int32_t SpriteH(const ::Sprite& s) { return SpriteHeight(&s, 0); }
 
 // The thumb travel, computed identically by ComputeLayout, Draw and Update:
 //   span = (_layoutRight - 2*(thumbW/2 + _thumbMargin)) - _layoutLeft
@@ -121,8 +119,8 @@ namespace UI {
 void SliderElement::ComputeSize() {
     if ((_flags & kFlagNeedsSizeCalc) == 0) return;
 
-    const int32_t trackW = SpriteW(_trackStart) + SpriteW(_trackMiddle) + SpriteW(_trackEnd);
-    int32_t width = SpriteW(_thumb);
+    const int32_t trackW = _trackStart.Width() + _trackMiddle.Width() + _trackEnd.Width();
+    int32_t width = _thumb.Width();
 
     int32_t height = 0;
     if (_children.GetSize() > 0) {
@@ -136,8 +134,8 @@ void SliderElement::ComputeSize() {
     if (width < trackW) width = trackW;
     _layoutWidth = width;
 
-    int32_t spriteH = SpriteH(_trackStart);
-    const int32_t thumbH = SpriteH(_thumb);
+    int32_t spriteH = _trackStart.Height();
+    const int32_t thumbH = _thumb.Height();
     if (spriteH < thumbH) spriteH = thumbH;
     if (height  < spriteH) height = spriteH;
 
@@ -186,9 +184,9 @@ void SliderElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
     int32_t cw = 0, ch = 0;
     InlineGetPaddedSize(child, &cw, &ch);
 
-    int32_t pos = _layoutLeft + _thumbMargin + ThumbOffset(*this, SpriteW(_thumb));
+    int32_t pos = _layoutLeft + _thumbMargin + ThumbOffset(*this, _thumb.Width());
 
-    int32_t q = SpriteW(_thumb) + pos;
+    int32_t q = _thumb.Width() + pos;
     if (q + cw < _layoutRight) q = _thumbMargin + q;
     else                       q = pos - cw;
 
@@ -198,7 +196,6 @@ void SliderElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
 
 // [6] 0x1800d6d40
 void SliderElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    void* const ctx = &context;
     if (_border != nullptr)
         reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
@@ -212,21 +209,21 @@ void SliderElement::Draw(SpriteContext& context, uint8_t alpha) const {
     const int32_t ty     = top + _trackOffsetY;
 
     // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackStart, left, ty, c);
+    context.AddSprite(_trackStart, left, ty, c);
 
-    const int32_t midH = SpriteH(_trackMiddle);
-    const int32_t endW = SpriteW(_trackEnd);
-    const int32_t sttW = SpriteW(_trackStart);
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left + sttW, ty, rightX - endW, ty + midH, c);
+    const int32_t midH = _trackMiddle.Height();
+    const int32_t endW = _trackEnd.Width();
+    const int32_t sttW = _trackStart.Width();
+    context.AddSprite(_trackMiddle, left + sttW, ty, rightX - endW, ty + midH, c);
 
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackEnd, rightX - SpriteW(_trackEnd), ty, c);
+    context.AddSprite(_trackEnd, rightX - _trackEnd.Width(), ty, c);
 
     // The thumb's TRAVEL is measured with the idle sprite's width even when
     // the hot sprite is the one drawn (0x1800d6f3d reads +0xF0 before the
     // hover swap at 0x1800d6f5f). Reproduced.
-    const int32_t pos = ThumbOffset(*this, SpriteW(_thumb));
+    const int32_t pos = ThumbOffset(*this, _thumb.Width());
     const ::Sprite& thumb = (_hovered != 0) ? _thumbHot : _thumb;
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(thumb, _thumbMargin + pos + left, top, c);
+    context.AddSprite(thumb, _thumbMargin + pos + left, top, c);
 
     const Element* child = _children.GetData()[0];
     if (child != nullptr)
@@ -244,8 +241,8 @@ void SliderElement::Update(const System::Time& time, UserInterface* ui,
     Object::InternalPtr<DialogInstance> slot = *dialog;
     Element::Update(time, ui, &slot, state);
 
-    const int32_t thumbW = SpriteW(_thumb);
-    const int32_t thumbH = SpriteH(_thumb);
+    const int32_t thumbW = _thumb.Width();
+    const int32_t thumbH = _thumb.Height();
     const float   range  = _maximum - _minimum;
 
     const int32_t pos = _layoutLeft + _thumbMargin + ThumbOffset(*this, thumbW);
@@ -300,7 +297,7 @@ void SliderElement::Update(const System::Time& time, UserInterface* ui,
     }
 
     if (doDrag && isNear && (_flags & kFlagDragging) != 0) {
-        const int32_t w = SpriteW(_thumb);
+        const int32_t w = _thumb.Width();
         const int32_t span = (_layoutRight + ((w >> 1) + _thumbMargin) * -2) - _layoutLeft;
         const float v = _dragAnchor
             - (static_cast<float>(state.dragDx) / static_cast<float>(span))
