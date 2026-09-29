@@ -2702,15 +2702,20 @@ static void* CitizenComp_FindSiblingByTypeId(int64_t ownerEntity, uint32_t want)
 // PORT GAP (retail 0x140114808): retail runs Graphics::MeshInstance::MeshInstance()
 // on +0xb8; the tree keeps those 0x120 bytes zero-filled (CitizenComponent.h).
 CitizenComponent::CitizenComponent()
-    : data28(0), data30(-1), data34(0), data38(0), data3C(0), data40(0), data44(0),
-      data48(0), data4C(0), data50(0), data54(0), data58(0), data60(0), data68(0),
-      data70(0), data78(0), data80(0), _pad84{}, data88(0), _pad8C{}, data90(0),
-      data98(0), dataA0(0), dataA8(-1), dataAC(0), dataB0(0), _padB4{},
-      meshInstance{}, data1D8(~uint64_t(0)), data1E0(4), data1E8(0), data1F0(0),
-      data1F8(0), data200(0), data208(0), data210(0), _pad214{}, data218(0),
-      data220(0), _pad221{}, data228(0), data230(0), data238(0), _pad240{},
-      data248(0), data250(0), data258(0), data260(0), data268(0), data270(0),
-      data278(0), data280(0), data288(0) {
+    : name(0), field_0x30(-1), field_0x34(0), gender(0), age(0), maxAge(0), hunger(0),
+      coldness(0), pregnancyTimer(0), health(0), statusFlags(0), foodTimer(0),
+      field_0x60(0), disease(nullptr), field_0x70(0), field_0x78(0), happiness(0),
+      field_0x84(0), happinessFlags(0), _pad8C{}, happinessTimer(0),
+      consumedTypes(nullptr), consumedTypeCount(0), consumedTypeCapacity(0),
+      field_0xA8(-1), field_0xAC(0), field_0xB0(0), _padB4{},
+      meshInstance{}, toolId(-1), toolSceneId(-1), field_0x1E0(4), clothingLevel(0),
+      clothingTimer(0), profession(nullptr), pendingProfession(nullptr),
+      field_0x200(0), school(nullptr), education(0), _pad214{}, schoolTime(0),
+      field_0x220(false), _pad221{}, careBuilding(nullptr), field_0x230(nullptr),
+      home(nullptr), homeSlot(0), _pad244{}, workplace(nullptr), spouse(nullptr),
+      _parent(nullptr), _firstChild(nullptr), _nextSibling(nullptr),
+      _prevSibling(nullptr), character(nullptr), statusIcon(nullptr),
+      description(nullptr) {
     OrFlagsInCtor(0xcb);
 }
 

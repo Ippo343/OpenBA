@@ -27,6 +27,12 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "math/Math.h"
+
+class Action;
+class ModelComponent;
+class PickingComponent;
+class CharacterDescription;
 
 class CharacterComponent final : public Component {
     DECLARE_EXE_TYPE(CharacterComponent)
@@ -45,37 +51,51 @@ public:
     void Update(void* time) override;                             // [9] 0x140109480
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint8_t  data28;       // +0x28
-    uint8_t  _pad29[3];    // +0x29
-    uint32_t data2C;       // +0x2C
-    uint32_t data30;       // +0x30
-    uint32_t data34;       // +0x34
-    uint32_t data38;       // +0x38
-    uint8_t  _pad3C[4];    // +0x3C
-    int32_t  data40;       // +0x40 char index (-1 = unregistered)
-    uint8_t  _pad44[4];    // +0x44
-    uint64_t data48;       // +0x48 action stack data
-    uint64_t data50;       // +0x50 action stack count / capacity
-    uint64_t data58;       // +0x58
-    int32_t  data60;       // +0x60 action stack top (-1 = empty)
-    uint8_t  _pad64[4];    // +0x64
-    uint64_t data68;       // +0x68 ModelComponent
-    uint64_t data70;       // +0x70 PickingComponent
-    uint64_t data78;       // +0x78 CharacterDescription
+    // Fields (B.4 W0-H1) from ctor 0x140109d20, Persist 0x140109ab0 and the
+    // action-list release 0x1400c5150 the dtor runs on +0x48. Persist's import
+    // slots: 0x140152a68 Math::Vector3::Serialize, 0x140152a60 float,
+    // 0x140152a58 bool, 0x140152ac8 int, 0x140152aa0 InternalBasePtr + an
+    // IsDerivedFrom check against the cell named on the field.
+    bool     field_0x28;          // +0x28 bool, ctor 0; serialized
+    uint8_t  _pad29[3];           // +0x29
+    Math::Vector3 field_0x2C;     // +0x2C serialized by 0x140152a68 (Vector3::Serialize); ctor 0
+                                  //       (the ctor zeroes +0x2C..+0x3B with two qword stores)
+    float    field_0x38;          // +0x38 float, ctor 0; serialized
+    float    field_0x3C;          // +0x3C float, NOT written by the retail ctor (the tree zeroes
+                                  //       it); serialized
+    int32_t  characterIndex;      // +0x40 int, ctor -1; the index the character manager
+                                  //       (GameUpdateLoop+0x88, 0x1400183f0) returns on load
+    uint8_t  _pad44[4];           // +0x44
+    // +0x48..+0x63: one retail sub-object (the ctor takes its address for unwinding and
+    // the dtor releases it through 0x1400c5150): the action list.
+    Action** actions;             // +0x48 Collection::Array<InternalPtr<Action>> data (cell 0x1401c5da8);
+                                  //       0x1400c5150 DeletePtr's every element, then MemFree
+    int32_t  actionCount;         // +0x50 Array count (serialized)
+    int32_t  actionCapacity;      // +0x54 Array capacity
+    Action*  field_0x58;          // +0x58 InternalPtr<Action> (cell 0x1401c5da8); DeletePtr'd by 0x1400c5150
+    int32_t  currentAction;       // +0x60 int, ctor -1: the index into `actions` Update runs (>= 0)
+    uint8_t  _pad64[4];           // +0x64
+    ModelComponent*   modelComponent;   // +0x68 InternalPtr (cell 0x1401c7a50)
+    PickingComponent* pickingComponent; // +0x70 InternalPtr (cell 0x1401c7c10)
+    CharacterDescription* characterDescription; // +0x78 not serialized: _description when it is a
+                                                //       CharacterDescription (cell 0x1401c70b0), on load
 };
 
 static_assert(sizeof(CharacterComponent) == 0x80, "CharacterComponent is 0x80 (create 0x14002f960)");
 static_assert(alignof(CharacterComponent) == 8, "CharacterComponent alignment");
-static_assert(offsetof(CharacterComponent, data28) == 0x28, "");
-static_assert(offsetof(CharacterComponent, data2C) == 0x2C, "");
-static_assert(offsetof(CharacterComponent, data30) == 0x30, "");
-static_assert(offsetof(CharacterComponent, data34) == 0x34, "");
-static_assert(offsetof(CharacterComponent, data38) == 0x38, "");
-static_assert(offsetof(CharacterComponent, data40) == 0x40, "");
-static_assert(offsetof(CharacterComponent, data48) == 0x48, "");
-static_assert(offsetof(CharacterComponent, data50) == 0x50, "");
-static_assert(offsetof(CharacterComponent, data58) == 0x58, "");
-static_assert(offsetof(CharacterComponent, data60) == 0x60, "");
-static_assert(offsetof(CharacterComponent, data68) == 0x68, "");
-static_assert(offsetof(CharacterComponent, data70) == 0x70, "");
-static_assert(offsetof(CharacterComponent, data78) == 0x78, "");
+static_assert(offsetof(CharacterComponent, field_0x28)           == 0x28, "");
+static_assert(offsetof(CharacterComponent, _pad29)               == 0x29, "");
+static_assert(offsetof(CharacterComponent, field_0x2C)           == 0x2C, "");
+static_assert(offsetof(CharacterComponent, field_0x38)           == 0x38, "");
+static_assert(offsetof(CharacterComponent, field_0x3C)           == 0x3C, "");
+static_assert(offsetof(CharacterComponent, characterIndex)       == 0x40, "");
+static_assert(offsetof(CharacterComponent, _pad44)               == 0x44, "");
+static_assert(offsetof(CharacterComponent, actions)              == 0x48, "");
+static_assert(offsetof(CharacterComponent, actionCount)          == 0x50, "");
+static_assert(offsetof(CharacterComponent, actionCapacity)       == 0x54, "");
+static_assert(offsetof(CharacterComponent, field_0x58)           == 0x58, "");
+static_assert(offsetof(CharacterComponent, currentAction)        == 0x60, "");
+static_assert(offsetof(CharacterComponent, _pad64)               == 0x64, "");
+static_assert(offsetof(CharacterComponent, modelComponent)       == 0x68, "");
+static_assert(offsetof(CharacterComponent, pickingComponent)     == 0x70, "");
+static_assert(offsetof(CharacterComponent, characterDescription) == 0x78, "");

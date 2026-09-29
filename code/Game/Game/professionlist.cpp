@@ -43,11 +43,12 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // External() and the 0x14015ef50 stamp are the compiler's; then zero all fields.
 ProfessionList::ProfessionList() {
     arrayData = nullptr;
-    arraySize = 0;
-    profRef1 = nullptr;
-    profRef2 = nullptr;
-    profRef3 = nullptr;
-    profRef4 = nullptr;
+    arrayCount = 0;
+    arrayCapacity = 0;
+    field_0x30 = nullptr;
+    field_0x38 = nullptr;
+    childProfession = nullptr;
+    studentProfession = nullptr;
 }
 
 // ============================================================
@@ -63,8 +64,8 @@ ProfessionList::ProfessionList() {
 // element step). Trait-derived row: byteCopy, no init, no destroy, align 8 —
 // the same row Startup's append below uses.
 ProfessionList::~ProfessionList() {
-    // B.3.2 bridge: the header is still spelled `arrayData` + a 64-bit
-    // `arraySize` covering count and capacity.
+    // B.3.2 bridge: the header is still spelled `arrayData` + `arrayCount` /
+    // `arrayCapacity`, not a Collection::Array member.
     reinterpret_cast<Collection::Array<void*>*>(&arrayData)->~Array();
 }
 
@@ -102,10 +103,10 @@ bool ProfessionList::Serialize(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize four ExternalPtr<Profession> references
-    Reimpl_ExternalPtr_Serialize_StringTable(&profRef1, serializer);  // +0x30
-    Reimpl_ExternalPtr_Serialize_StringTable(&profRef2, serializer);  // +0x38
-    Reimpl_ExternalPtr_Serialize_StringTable(&profRef3, serializer);  // +0x40
-    Reimpl_ExternalPtr_Serialize_StringTable(&profRef4, serializer);  // +0x48
+    Reimpl_ExternalPtr_Serialize_StringTable(&field_0x30, serializer);         // +0x30
+    Reimpl_ExternalPtr_Serialize_StringTable(&field_0x38, serializer);         // +0x38
+    Reimpl_ExternalPtr_Serialize_StringTable(&childProfession, serializer);    // +0x40
+    Reimpl_ExternalPtr_Serialize_StringTable(&studentProfession, serializer);  // +0x48
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return true;
@@ -169,7 +170,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
     }
 
     // Sort ascending by sort priority (Profession+0x48) — FUN_14001e7c0 semantics.
-    int n = static_cast<int32_t>(self->arraySize);               // +0x28 count
+    int n = self->arrayCount;                                    // +0x28 count
     uintptr_t* arr = static_cast<uintptr_t*>(self->arrayData);  // +0x20
     if (n > 1 && arr) {
         for (int i = 1; i < n; i++) {
@@ -186,7 +187,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
 
 #ifdef _DEBUG
     printf("[ProfessionList] Startup: %d professions in array (tid=0x%08x)\n",
-           static_cast<int32_t>(self->arraySize), profTid);
+           self->arrayCount, profTid);
 #endif
 }
 

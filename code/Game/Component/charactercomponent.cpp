@@ -2,8 +2,8 @@
 // Clean reimplementation of CharacterComponent::Update from Application-x64.exe.
 //
 // CharacterComponent (0x80 bytes) manages character animation state.
-// Update checks if a character index (data60) is valid (>= 0),
-// looks up a character object from an array at data48, and calls
+// Update checks if a character index (currentAction) is valid (>= 0),
+// looks up a character object from an array at actions, and calls
 // Character_UpdateAnimation to process the character's animation state.
 //
 // Vtable at 0x140162370. One non-trivial override:
@@ -34,12 +34,12 @@
 // ============================================================
 // CharacterComponent::Update (vtable slot [9], 0x140109480)
 // ============================================================
-// If data60 >= 0, look up object from *(data48)[data60] and call
-// Character_UpdateAnimation with (&this->data48, &obj, deltaTime).
+// If currentAction >= 0, look up object from *(actions)[currentAction] and call
+// Character_UpdateAnimation with (&this->actions, &obj, deltaTime).
 //
 // Original disassembly:
 //   SUB RSP,0x28
-//   MOVSXD RAX,[RCX+0x60]    ; sign-extend data60
+//   MOVSXD RAX,[RCX+0x60]    ; sign-extend currentAction
 //   ADD RCX,0x48              ; arrayBase = this+0x48
 //   TEST EAX,EAX
 //   JS skip                   ; skip if index < 0
@@ -176,9 +176,10 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
 // 0x140109d74) are the ctor's own stores; Startup (CharacterComponent_BodyInit)
 // still re-writes both, as it did when the inert factory zero-filled them.
 CharacterComponent::CharacterComponent()
-    : data28(0), _pad29{}, data2C(0), data30(0), data34(0), data38(0), _pad3C{},
-      data40(-1), _pad44{}, data48(0), data50(0), data58(0), data60(-1), _pad64{},
-      data68(0), data70(0), data78(0) {
+    : field_0x28(false), _pad29{}, field_0x2C(), field_0x38(0), field_0x3C(0),
+      characterIndex(-1), _pad44{}, actions(nullptr), actionCount(0), actionCapacity(0),
+      field_0x58(nullptr), currentAction(-1), _pad64{},
+      modelComponent(nullptr), pickingComponent(nullptr), characterDescription(nullptr) {
     OrFlagsInCtor(0x8f);
 }
 
@@ -311,17 +312,17 @@ void CharacterComponent::Tick(void* time) {
 void CharacterComponent::Update(void* time) {
     const int64_t deltaTime = reinterpret_cast<int64_t>(time);   // forwarded raw (see above)
 
-    if (data60 >= 0) {
-        // data48 is a pointer to an array of object pointers
-        // data60 is the index into that array
-        void** objArray = *reinterpret_cast<void***>(&data48);
-        void* obj = objArray[data60];
+    if (currentAction >= 0) {
+        // actions is a pointer to an array of object pointers
+        // currentAction is the index into that array
+        void** objArray = *reinterpret_cast<void***>(&actions);
+        void* obj = objArray[currentAction];
 
         // Character_UpdateAnimation expects a pointer to the object pointer
         // (InternalBasePtr is just a pointer-sized wrapper)
         void* localPtr = obj;
         Character_UpdateAnimation_Reimpl(
-            reinterpret_cast<void*>(&data48),
+            reinterpret_cast<void*>(&actions),
             &localPtr,
             deltaTime
         );

@@ -42,8 +42,8 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // External() and the 0x14015efa0 stamp are the compiler's; then the defaults.
 Profession::Profession() {
     // ExternalPtr fields
-    externalPtr1 = nullptr;
-    externalPtr2 = nullptr;
+    stringTable = nullptr;
+    spriteSheet = nullptr;
 
     // String fields (zero = empty COW string)
     stringName = 0;
@@ -105,8 +105,8 @@ bool Profession::Serialize(void* stream) {
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize ExternalPtr fields
-    Reimpl_ExternalPtr_Serialize_StringTable(&externalPtr1, serializer);  // +0x20 (0x14000bf40)
-    Reimpl_ExternalPtr_Serialize_StringTable(&externalPtr2, serializer);  // +0x28 (0x14000bd30)
+    Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, serializer);  // +0x20 (0x14000bf40)
+    Reimpl_ExternalPtr_Serialize_StringTable(&spriteSheet, serializer);  // +0x28 (0x14000bd30)
 
     // Serialize String fields
     reinterpret_cast<System::String*>(&stringName)->Serialize(serializer);  // +0x30
