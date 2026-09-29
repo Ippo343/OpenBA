@@ -75,10 +75,10 @@ bool CreateRemovalDescription::Serialize(void* stream) {
     int count = _refCount;
     ser.Serialize(count, nullptr);   // a local copy, as retail
     // On load (stream mode == 0): resize the heap ExternalPtr array at +0x28.
-    if (*reinterpret_cast<void**>(&ser) && static_cast<int>(ser.GetDirection()) == 0) {
+    if (ser._stream && static_cast<int>(ser.GetDirection()) == 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte ExternalPtr slot the ExternalRefArray serializer walks below.
-        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(&_refs)).SetSize(count);
+        GameColl::AsArray<GameColl::Ptr8>(&_refs).SetSize(count);
     }
     Reimpl_ExternalPtrArray_Serialize(&ser, count, reinterpret_cast<long long>(_refs), nullptr);   // ExtPtr[count] (0x1400049c0)
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref38, &ser);

@@ -123,6 +123,11 @@ public:
     void*    field_0xE8;         // +0xE8 BST root (ctor 0)
     int32_t  field_0xF0;         // +0xF0 BST count (ctor 0)
     uint8_t  _padF4[4];          // +0xF4
+
+    void RemoveFloor(uint32_t floorId, int x, int y, int w, int h);   // 0x14009cba0 (defined in Component/floorcomponent.cpp)
+    void StampInfluence(int state, int cx, int cy, int r, short delta);  // 0x14009f990 (defined in Component/happinesscomponent.cpp)
+    bool HasIdentityInRect(int x, int y, int w, int h, const class ComponentDescription* identity) const;  // 0x14009fb60 (Component/diseasecomponent.cpp)
+    void StampDanger(int xMin, int yMin, int xMax, int yMax, short delta);   // 0x14009fa80 (Component/firecomponent_ignite.cpp)
 };
 
 static_assert(sizeof(Map) == 0xF8, "Map is 0xF8 (Load MemAlloc(0xf8, 8))");

@@ -35,6 +35,8 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Game/Map.h"
+#include <cstring>
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
 
@@ -111,89 +113,63 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
         reinterpret_cast<ComponentEntity*>(owner)->FindComponent<MapComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
-// Reimpl of FUN_14009cba0 (decrement per-tile floor counter over w*h footprint, then Scene::RemoveMesh)
-void FloorComponent_RemoveFloorMesh(void* scene, uint32_t floorId,
-                                    int x, int y, int w, int h) {
-    int* mapInfo = reinterpret_cast<int*>(scene);
-    int mapW = *mapInfo;
-    uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapInfo) + 0x80);
+// Map::RemoveFloor — FUN_14009cba0: decrement the per-cell floor counter (cell +0x2d)
+// over the w*h footprint, then Picking::Scene::RemoveMesh. Map's cells (0x30-byte
+// records) and its embedded Picking::Scene are raw storage (GAME-b, H5): LEFT.
+void Map::RemoveFloor(uint32_t floorId, int x, int y, int w, int h) {
+    uint8_t* grid = reinterpret_cast<uint8_t*>(cells);
     for (int j = 0; j < h; ++j) {
         for (int i = 0; i < w; ++i) {
-            int cell = (j + y) * mapW + i;
-            uint8_t* p = reinterpret_cast<uint8_t*>(grid + 0x2d + (uintptr_t)(cell + x) * 0x30);
-            *p = (uint8_t)(*p - 1);
+            int cell = (j + y) * size + i;
+            uint8_t* p = grid + 0x2d + static_cast<uintptr_t>(cell + x) * 0x30;
+            *p = static_cast<uint8_t>(*p - 1);
         }
     }
-    // Picking::Scene is at (mapInfo + 2 ints) = scene + 8.
-    reinterpret_cast<Picking::Scene*>(reinterpret_cast<uintptr_t>(mapInfo) + 8)->RemoveMesh(floorId);   // B.3.7 bridge
+    reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh(floorId);   // +0x08
 }
 
-// Reimpl of FUN_14011f390 (place floor mesh: increment footprint counters, add mesh to Picking::Scene)
-void FloorComponent_SubF390(void* selfV) {
-    uintptr_t* self = reinterpret_cast<uintptr_t*>(selfV);
-    uint8_t* sb = reinterpret_cast<uint8_t*>(selfV);
-
-    // If floorId (+0x2c) >= 0, remove the existing mesh first via vtable slot +0x38.
-    if (*reinterpret_cast<int*>(sb + 0x2c) >= 0) {
-        reinterpret_cast<Component*>(selfV)->OnRemove();   // B.3.x bridge (slot 7)
+// FloorComponent::PlaceFloor — FUN_14011f390: increment the footprint's per-cell floor
+// counters and add the description's pick mesh to the map's Picking::Scene.
+void FloorComponent::PlaceFloor() {
+    // If floorId >= 0, remove the existing mesh first (retail: the virtual slot 7).
+    if (floorId >= 0) {
+        OnRemove();
     }
 
-    uintptr_t world = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int* mapInfo = *reinterpret_cast<int**>(world + 0xF8);
+    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): LEFT.
+    Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
 
-    int64_t resIBP = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(self + 2), &resIBP);   // 0x140004680
+    MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
     // [SA-GUARD] Retail reads the footprint shorts unguarded — its MapComponent is always
     // there. In standalone the find can miss (the type registry can lag), and a null here
     // would stamp cell records at address 0x28.
-    if (resIBP == 0) {
+    if (mc == nullptr) {
         return;
     }
-    int16_t baseX = *reinterpret_cast<int16_t*>(resIBP + 0x28);
-    int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
-    int16_t fw    = *reinterpret_cast<int16_t*>(resIBP + 0x2c);
-    int16_t fh    = *reinterpret_cast<int16_t*>(resIBP + 0x2e);
+    int16_t baseX = static_cast<int16_t>(mc->tileX0);
+    int16_t baseY = static_cast<int16_t>(mc->tileY0);
+    int16_t fw    = static_cast<int16_t>(mc->tileX1);
+    int16_t fh    = static_cast<int16_t>(mc->tileY1);
 
-    int64_t entAcc = 0;
-    ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(self + 2), &entAcc);   // 0x140003f60
-    uintptr_t ent = *reinterpret_cast<uintptr_t*>(&entAcc);
-
-    // [SA-SCOPED FALLBACK] The finder's type id is the shared raw .rdata 0x1401c7a50
-    // (ModelComponent), which reg_pipeline_typeids fills only behind BANISHED_LIVE_DECAL.
-    // Scan the owner ourselves when it comes back empty — the transform below is the
-    // floor mesh's world placement, so a null here parks the deck at address 0x148.
-    if (ent == 0) {
-        static uint32_t s_tidModel = 0;
-        if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
-            s_tidModel = ModelComponent::TypeId();
-        uintptr_t owner = *reinterpret_cast<uintptr_t*>(self + 2);
-        if (owner && s_tidModel && s_tidModel != 0xFFFFFFFFu) {
-            int n = *reinterpret_cast<int*>(owner + 0x38);
-            uintptr_t arr = *reinterpret_cast<uintptr_t*>(owner + 0x30);
-            for (int k = 0; k < n && arr; ++k) {
-                void* c = *reinterpret_cast<void**>(arr + (uintptr_t)k * 8);
-                if (!c) continue;
-                if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidModel) {   // B.3.8 bridge (slot 2)
-                    ent = reinterpret_cast<uintptr_t>(c);
-                    break;
-                }
-            }
-        }
-    }
-    if (ent == 0) {
+    // FindComponent<ModelComponent> (0x140003f60). [SA-GUARD] a missing model returns
+    // before the transform read below (the tree's; retail reads it unguarded).
+    ModelComponent* model = _entity->FindComponent<ModelComponent>();
+    if (model == nullptr) {
         return;
     }
 
-    // Copy the 7-uint transform block from ent+0x148..+0x160.
-    uint32_t xform[7];
-    for (int k = 0; k < 7; ++k)
-        xform[k] = *reinterpret_cast<uint32_t*>(ent + 0x148 + (uintptr_t)k * 4);
+    // Copy the 7-uint transform block from ModelComponent +0x148..+0x160.
+    Math::Transform xform;
+    static_assert(sizeof(xform) == sizeof(model->transform), "Math::Transform is 0x1C");
+    const Math::Transform& modelTransform = model->transform;
+    std::memcpy(&xform, &modelTransform, sizeof(xform));
 
-    void* building = *reinterpret_cast<void**>(self + 3);
+    Description* d = _description;
     const uint32_t descTid = FloorDescription::TypeId();
-    void* meshOwner = (descTid && ::Object::IsDerivedFromNullSafe(building, descTid)) ? building : nullptr;
-    void* mesh = meshOwner ? *reinterpret_cast<void**>((uintptr_t)meshOwner + 0x20) : nullptr;
-    // desc+0x20 is the PickingMesh ExternalPtr (FishermansDockFloor.rsc = the dock's
+    FloorDescription* desc = (descTid && ::Object::IsDerivedFromNullSafe(d, descTid))
+                                 ? static_cast<FloorDescription*>(d) : nullptr;
+    Picking::PickingMesh* mesh = desc ? desc->_mesh : nullptr;
+    // _mesh is the PickingMesh ExternalPtr (FishermansDockFloor.rsc = the dock's
     // "floor" sub-object). Without it there is nothing for the height ray to hit, and
     // bumping the per-cell counters would then make every f3e0 on those cells pay for a
     // ray-cast that can only miss — so bail before touching the grid.
@@ -201,24 +177,27 @@ void FloorComponent_SubF390(void* selfV) {
         return;
     }
 
-    uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapInfo) + 0x80);
-    int mapW = *mapInfo;
+    uint8_t* grid = reinterpret_cast<uint8_t*>(map->cells);   // LEFT (GAME-b)
+    int mapW = map->size;
     for (int j = 0; j < (int)fh; ++j) {
         for (int i = 0; i < (int)fw; ++i) {
             int cell = (j + baseY) * mapW + i + (int)baseX;
-            uint8_t* p = reinterpret_cast<uint8_t*>(grid + 0x2d + (uintptr_t)cell * 0x30);
-            *p = (uint8_t)(*p + 1);
+            uint8_t* p = grid + 0x2d + static_cast<uintptr_t>(cell) * 0x30;
+            *p = static_cast<uint8_t>(*p + 1);
         }
     }
 
-    uint32_t meshId = 0;
-    meshId = reinterpret_cast<Picking::Scene*>(reinterpret_cast<uintptr_t>(mapInfo) + 8)->AddMesh(   // B.3.7 bridge
-        Object::ExternalPtr<Picking::PickingMesh>(reinterpret_cast<Picking::PickingMesh*>(mesh)),
-        *reinterpret_cast<const Math::Transform*>(xform), nullptr, 0, 0, nullptr);
-    *reinterpret_cast<uint8_t*>(self + 5) = 1;
-    *reinterpret_cast<uint32_t*>(sb + 0x2c) = meshId;
-
+    uint32_t meshId = reinterpret_cast<Picking::Scene*>(map->pickingScene)->AddMesh(   // LEFT (Map +0x08 raw, H5)
+        Object::ExternalPtr<Picking::PickingMesh>(mesh), xform, nullptr, 0, 0, nullptr);
+    floorFlag = true;
+    floorId = static_cast<int32_t>(meshId);
 }
+
+// B4 FORWARD: multiobjectcomponent.cpp.
+void FloorComponent_SubF390(void* selfV) {
+    reinterpret_cast<FloorComponent*>(selfV)->PlaceFloor();
+}
+
 
 // ===== Standalone factory =====
 //
@@ -291,7 +270,7 @@ void FloorComponent_SubF390(void* selfV) {
 // 0x14011f600: Component() is the CALL 0x1401188b0; the 0x140163360 stamp is
 // the compiler's; +0x28 = 0, +0x2c = -1 (0x14011f62f), flags |= 0x43.
 // flags |= 0x43 over Component's 0x80 (=> 0xc3), as retail 0x14011f636.
-FloorComponent::FloorComponent() : floorFlag(0), _pad29{}, floorId(-1) {
+FloorComponent::FloorComponent() : floorFlag(false), _pad29{}, floorId(-1) {
     OrFlagsInCtor(0x43);
 }
 
@@ -299,10 +278,8 @@ FloorComponent::FloorComponent() : floorFlag(0), _pad29{}, floorId(-1) {
 void FloorComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&floorFlag), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    ser.Serialize(floorFlag, nullptr);
 }
 // [6] 0x14011f340
 void FloorComponent::OnAdded() {
@@ -311,9 +288,9 @@ void FloorComponent::OnAdded() {
         return;
     }
 
-    void* obj = _description;
-    bool isDerived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(descTid);   // B.3.x bridge
-    void* building = isDerived ? obj : nullptr;
+    Description* obj = _description;
+    bool isDerived = obj->IsDerivedFrom(descTid);
+    FloorDescription* building = isDerived ? static_cast<FloorDescription*>(obj) : nullptr;
 
     // Retail dereferences `building+0x28` unconditionally (CMOVNZ leaves RDX=0 on a
     // failed cast and it reads [0x28]) because its data guarantees a FloorComponent's
@@ -323,34 +300,29 @@ void FloorComponent::OnAdded() {
         return;
     }
 
-    // desc+0x28 is the FloorDescription bool — "this structure has a walkable floor".
-    uint8_t flag = *(uint8_t*)((uintptr_t)building + 0x28);
-    if (flag != 0) {
-        FloorComponent_SubF390(this);   // 0x14011f390
+    // _addOnCreate — "place this structure's walkable floor on creation" (bridges).
+    if (building->_addOnCreate) {
+        PlaceFloor();   // 0x14011f390
     }
 }
 // [7] 0x14011f2a0
 void FloorComponent::OnRemove() {
     if (floorId >= 0) {
-        // Get scene from game state
-        int* pScene = *(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xF8);
+        // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): LEFT.
+        Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
 
-        // Check owner pointer
+        MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 
-        // Get entity data from owner
-        uintptr_t entityData = 0;
-        FloorComponent_FindResData(*(void**)((uintptr_t)this + 0x10), &entityData);   // 0x140004680
-
-        // [SA-GUARD] Same MapComponent-may-be-missing case as f390: without the
+        // [SA-GUARD] Same MapComponent-may-be-missing case as PlaceFloor: without the
         // footprint we cannot decrement the per-cell counters, but we must still drop
         // the mesh and reset the id or the scene keeps a dangling deck.
-        if (entityData != 0) {
-            int16_t x = *(int16_t*)(entityData + 0x28);
-            int16_t y = *(int16_t*)(entityData + 0x2a);
-            int16_t w = *(int16_t*)(entityData + 0x2c);
-            int16_t h = *(int16_t*)(entityData + 0x2e);
+        if (mc != nullptr) {
+            int16_t x = static_cast<int16_t>(mc->tileX0);
+            int16_t y = static_cast<int16_t>(mc->tileY0);
+            int16_t w = static_cast<int16_t>(mc->tileX1);
+            int16_t h = static_cast<int16_t>(mc->tileY1);
 
-            FloorComponent_RemoveFloorMesh(pScene, (uint32_t)floorId,   // 0x14009cba0
+            map->RemoveFloor(static_cast<uint32_t>(floorId),   // 0x14009cba0
                 (int)x, (int)y, (int)w, (int)h);
         }
 
@@ -362,15 +334,15 @@ void FloorComponent::OnRemove() {
 // of f390 — so delegate rather than duplicate the body.
 void FloorComponent::OnEvent(int msgId) {
     if (msgId != 1) return;
-    FloorComponent_SubF390(this);
+    PlaceFloor();
 }
 
 // FloorComponent slot 11 (+0x58, 0x14011f540): the LOAD-TIME re-place. Retail's body is
 // `if (floorFlag == 0) return;` followed by a verbatim inline copy of f390 — so delegate
 // rather than duplicate, exactly as slot 12 does.
 void FloorComponent::Slot11() {
-    if (floorFlag == 0) return;
-    FloorComponent_SubF390(this);
+    if (!floorFlag) return;
+    PlaceFloor();
 }
 
 // create 0x140034600: MemAlloc(0x30, 8), then the ctor.

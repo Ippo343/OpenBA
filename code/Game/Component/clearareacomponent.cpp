@@ -2,16 +2,19 @@
 // Clean reimplementation of ClearAreaComponent lifecycle methods.
 //
 // ClearAreaComponent (0x50 bytes) -- ControllerComponent subclass.
-// Has one extra field: clearState (uint32) at +0x48.
+// Has one extra field: clearState (int32) at +0x48.
 // Handles clearing terrain areas during construction/placement.
 //
 // Vtable at 0x1401626d0. Non-trivial override:
-//   Shutdown (0x140117EC0) -- serialize with clearState
+//   Persist (0x140117EC0) -- serialize with clearState
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/clearareacomponent_funcs.h"
 #include "Component/coll_bridge.h"
+#include "Component/MapComponent.h"
+#include "Game/Map.h"
+#include "Entity/ComponentEntity.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
@@ -23,19 +26,15 @@
 #include "Action/exe_bodies.h"
 
 // ============================================================
-// ClearAreaComponent footprint sweep  (ClearAreaDescription_helper_7d60, 0x140117d60)
+// ClearAreaComponent::FootprintSweep  (ClearAreaDescription_helper_7d60, 0x140117d60)
 // ============================================================
 // The heart of "placing a building marks trees/rocks/iron for removal". Reads the
-// building's footprint rectangle off its BuildComponent (FUN_140004680 =
-// fn_FindComponent_Build), walks every footprint cell, and for each occupying entity
-// (tree/rock/iron) that isn't the building itself and isn't already flagged (+0x40 bit
-// 0x400), marks it for removal (FUN_1400c2ea0) and pushes it onto the EntityList
-// removal-pending list (FUN_140003110 → gw+0xe8,+0xD0). EntityList::Update Step 5 then
-// destroys them. Closure is fully satisfied: fn_FindComponent_Build (inline), and
-// c2ea0/003110 registered by reg_action_hunt.cpp.
-//
-// `self` is the ClearAreaComponent; self+0x10 (owner) holds the building entity IBP.
-// Faithful 1:1 port of 0x140117d60 (verified vs Ghidra disasm).
+// building's footprint rectangle off its MapComponent (FUN_140004680 =
+// FindComponent<MapComponent>), walks every footprint cell, and for each occupying
+// entity (tree/rock/iron) that isn't the building itself and isn't already flagged
+// (+0x40 bit 0x400), marks it for removal (FUN_1400c2ea0) and pushes it onto the
+// EntityList removal-pending list (FUN_140003110 → gw+0xe8,+0xD0). EntityList::Update
+// Step 5 then destroys them.
 //
 // Map/tile layout (verified live + vs the markremoval backend harness):
 //   gw+0xf8 -> map (int*);  *map = grid width;  *(map+0x80 bytes) = tile array base.
@@ -45,36 +44,32 @@
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
-// Returns the number of footprint entities newly marked for removal.
-int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
-    if (!self) {
-        return 0;
-    }
-
-    uintptr_t sAddr = reinterpret_cast<uintptr_t>(self);
-    void* gw = GameUpdateLoop::_singleton;
+// Returns the number of footprint entities newly marked for removal. The tree's null
+// tests (no game loop / owner / MapComponent / map / entity list) are its own; retail
+// reads through each unguarded. Kept (B9).
+int ClearAreaComponent::FootprintSweep() {
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0;
-    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
 
-    void* entity = *reinterpret_cast<void**>(sAddr + 0x10);
+    ComponentEntity* entity = _entity;
     if (!entity) return 0;
 
-    // FindComponent_Build(entity) -> the BuildComponent that holds the footprint rect.
-    uint64_t buildComp = 0;
-    fn_FindComponent_Build(entity, &buildComp);
-    if (!buildComp) return 0;
-    uintptr_t bc = static_cast<uintptr_t>(buildComp);
+    // The MapComponent holds the footprint rect (retail MOVSX: the fields are signed).
+    MapComponent* mc = entity->FindComponent<MapComponent>();   // 0x140004680
+    if (!mc) return 0;
 
-    int16_t startCol = *reinterpret_cast<int16_t*>(bc + 0x28);
-    int16_t startRow = *reinterpret_cast<int16_t*>(bc + 0x2a);
-    int16_t width    = *reinterpret_cast<int16_t*>(bc + 0x2c);
-    int16_t height   = *reinterpret_cast<int16_t*>(bc + 0x2e);
+    int16_t startCol = static_cast<int16_t>(mc->tileX0);
+    int16_t startRow = static_cast<int16_t>(mc->tileY0);
+    int16_t width    = static_cast<int16_t>(mc->tileX1);
+    int16_t height   = static_cast<int16_t>(mc->tileY1);
 
-    int* map = *reinterpret_cast<int**>(gwA + 0xf8);
+    // GameUpdateLoop::m_game (+0xf8) and m_entityList (+0xe8) are still void* (GAME-a)
+    // and Map's cells are untyped (GAME-b): the grid and removal-array reads are LEFT.
+    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
     if (!map) return 0;
-    int gridWidth = *map;
-    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
-    void* entityList = *reinterpret_cast<void**>(gwA + 0xe8);
+    int gridWidth = map->size;
+    uintptr_t tileArray = reinterpret_cast<uintptr_t>(map->cells);
+    uintptr_t entityList = reinterpret_cast<uintptr_t>(gw->m_entityList);
     if (!tileArray || !entityList) return 0;
 
     int marked = 0;
@@ -82,23 +77,19 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
         for (int col = 0; col < width; ++col) {
             int cell = (startRow + row) * gridWidth + (startCol + col);
             // entity ptr slot at cell*0x30 + 0x08 (matches 7d60's "+ 8 + (...)*0x30")
-            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + static_cast<uintptr_t>(cell) * 0x30 + 8);
+            ComponentEntity* occ = *reinterpret_cast<ComponentEntity**>(
+                tileArray + static_cast<uintptr_t>(cell) * 0x30 + 8);
 
             // Skip empty cells and the building's own entity.
-            void* selfEnt = *reinterpret_cast<void**>(sAddr + 0x10);
-            if (occ == 0 || occ == reinterpret_cast<uint64_t>(selfEnt)) continue;
-
-            void* local = reinterpret_cast<void*>(occ);
-            if (!local) continue;
-            uint32_t flags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(local) + 0x40);
-            if (flags & 0x400) continue;   // already marked for removal
+            if (occ == nullptr || occ == _entity) continue;
+            if (occ->_entityFlags & 0x400) continue;   // already marked for removal
 
             // Mark + push (the proven backend).
-            ActHunt_MarkEntityRemoval_c2ea0(local);
-            uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
+            ActHunt_MarkEntityRemoval_c2ea0(occ);
+            uintptr_t rl = entityList + 0xD0;
             int cnt = *reinterpret_cast<int*>(rl + 0x8);
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(rl)).SetSizeFill(cnt + 1, &local);
+            GameColl::AsArray<GameColl::Ptr8>(rl).SetSizeFill(cnt + 1, &occ);
             ++marked;
         }
     }
@@ -155,7 +146,7 @@ void ClearAreaComponent::Persist(void* stream) {
     Component::Persist(stream);
     { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
     IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);       // B.3.8 bridge
-    scope.Serialize(*reinterpret_cast<int*>(&clearState), nullptr);
+    scope.Serialize(clearState, nullptr);
 }
 
 DEFINE_EXE_TYPE(ClearAreaComponent, "ControllerComponent")
@@ -163,23 +154,18 @@ DEFINE_EXE_TYPE(ClearAreaComponent, "ControllerComponent")
 // Harness probe: does this building entity carry a live ClearAreaComponent? Scans the
 // entity's component list for the ClearAreaComponent type-id and returns the component
 // ptr (or null). outFlags gets the component's +0x20 capability flags (bit 0x4 = ticked).
-extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags) {
+extern "C" void* ClearAreaComponent_HarnessFind(void* entityV, uint32_t* outFlags) {
     if (outFlags) *outFlags = 0;
-    if (!entity) return nullptr;
+    if (!entityV) return nullptr;
     uint32_t wantTid = ClearAreaComponent::TypeId();
     if (!wantTid) return nullptr;
-    uintptr_t e = reinterpret_cast<uintptr_t>(entity);
-    e = reinterpret_cast<uintptr_t>(entity);
-    int count = *reinterpret_cast<int*>(e + 0x38);
-    void** comps = *reinterpret_cast<void***>(e + 0x30);
-    if (!comps) return nullptr;
-    for (int i = 0; i < count; ++i) {
-        void* c = comps[i];
+    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // B4 FORWARD (tool_harness.cpp)
+    if (!entity->_components) return nullptr;
+    for (int i = 0; i < entity->_componentCount; ++i) {
+        Component* c = entity->_components[i].Get();
         if (!c) continue;
-        if (!c) continue;
-        uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-        if (tid == wantTid) {
-            if (outFlags) *outFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(c) + 0x20);
+        if (c->Type() == wantTid) {
+            if (outFlags) *outFlags = c->_flags;
             return c;
         }
     }
@@ -189,21 +175,23 @@ extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags
 // Harness entry: run the footprint sweep on a REAL live ClearAreaComponent (reads its
 // own +0x10 owner) — exactly what a de-inerted component's Update tick would do.
 extern "C" int ClearAreaComponent_HarnessSweepComp(void* realComp) {
-    return ClearAreaComponent_FootprintSweep(reinterpret_cast<ClearAreaComponent*>(realComp));
+    return reinterpret_cast<ClearAreaComponent*>(realComp)->FootprintSweep();   // B4 FORWARD (tool_harness.cpp)
 }
 
 // Read a live component's +0x10 owner field (to confirm it's wired to its entity).
 extern "C" void* ClearAreaComponent_HarnessOwner(void* realComp) {
     if (!realComp) return nullptr;
-    return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(realComp) + 0x10);
+    return reinterpret_cast<ClearAreaComponent*>(realComp)->_entity;   // B4 FORWARD (tool_harness.cpp)
 }
 
 // Harness entry: run the footprint sweep for a given building entity. Builds a
 // synthetic ClearAreaComponent whose owner (+0x10) is the building, then sweeps —
 // exactly what the live component's driver does on placement. Returns entities marked.
+// The raw zeroed buffer (no constructor) is the harness's own; it is kept.
 extern "C" int ClearAreaComponent_HarnessSweep(void* ownerEntity) {
-    uint8_t comp[0x50];
-    std::memset(comp, 0, sizeof(comp));
-    *reinterpret_cast<void**>(comp + 0x10) = ownerEntity;
-    return ClearAreaComponent_FootprintSweep(reinterpret_cast<ClearAreaComponent*>(comp));
+    alignas(8) uint8_t buf[sizeof(ClearAreaComponent)];
+    std::memset(buf, 0, sizeof(buf));
+    ClearAreaComponent* comp = reinterpret_cast<ClearAreaComponent*>(buf);        // harness-only
+    comp->_entity = reinterpret_cast<ComponentEntity*>(ownerEntity);             // B4 FORWARD (tool_harness.cpp)
+    return comp->FootprintSweep();
 }

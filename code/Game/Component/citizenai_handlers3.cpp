@@ -326,11 +326,11 @@ uint64_t CitizenAIComponent::State_Work() {
     uint8_t any = WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp), reinterpret_cast<int64_t>(transformSub) + 0x28, pos, walkOut, &bestCost);
     if (posComp != nullptr) {
         // the use locations: field28 array, the count in field30's low half (untyped: raw)
-        int count = *reinterpret_cast<int*>(&posComp->field30);
+        int count = posComp->useLocationCount;
         int i = 0;
         int64_t byteOff = 0;
         while (i < count) {
-            int64_t* childSlot = reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(posComp->field28) + byteOff);
+            int64_t* childSlot = reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(posComp->useLocations) + byteOff);
             uint8_t got = WorkImpl_WalkablePosRecursive_122b00(*childSlot, 0, pos, walkOut, &bestCost);
             any = static_cast<uint8_t>(any | got);
             byteOff += 8;

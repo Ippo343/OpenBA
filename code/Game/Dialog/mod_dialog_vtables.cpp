@@ -69,7 +69,7 @@
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "ui/Dialog.h"   // UI::Dialog::TypeId() (ENDGAME B.3.9 TR)
-#include "Dialog/MainMenuDialog.h"   // B3R: MainMenuDialog_ReturnToMenu
+#include "Dialog/MainMenuDialog.h"   // MainMenuDialog::ReturnToMenu
 #include "save/SaveLoad.h"          // B3R: Save::SavedState
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -101,24 +101,23 @@ namespace {
 // ---------------------------------------------------------------------------
 // Local copy of MainMenuDialog's Dialog/*.rsc loader (that one is file-static).
 // ---------------------------------------------------------------------------
-void* ModDlg_LoadDialogResource(const char* rscPath) {
+const UI::Dialog* ModDlg_LoadDialogResource(const char* rscPath) {
     if (!::Object::ExternalFactory::_singleton) {
         printf("[ModDialog] LoadDialogResource('%s'): loader fns unresolved\n", rscPath);
         return nullptr;
     }
     System::Filename filenameObj(rscPath);
-    void* resource = const_cast<::Object::External*>(
-        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-            ->FindOrLoad(filenameObj));
-    void* extRes = nullptr;
+    const ::Object::External* resource =
+        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameObj);
+    const UI::Dialog* extRes = nullptr;
     if (resource) {
         // UI::Dialog's type id (retail: the import slot 0x140151728; ENDGAME B.3.9 TR).
         const uint32_t typeId = UI::Dialog::TypeId();
         if (typeId && ::Object::IsDerivedFromNullSafe(resource, typeId))
-            extRes = resource;
+            extRes = static_cast<const UI::Dialog*>(resource);
     }
     printf("[ModDialog] LoadDialogResource('%s') -> %p (raw %p)\n",
-                rscPath, extRes, resource);
+                rscPath, (const void*)extRes, (const void*)resource);
     return extRes;
 }
 
@@ -131,49 +130,44 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
 //   RCX=this  RDX=userInterface  R8=externalRes  R9=&parentIBP  [RSP+0x80]=&parentMenuIBP
 //   copy *R9 into a stack local, call DialogInstance::DialogInstance
 //     (this, ui, res, &localIBP, 0, 0, 0)
-//   this->+0xB8 = +0xC0 = +0xC8 = +0xD0 = 0
+//   this->+0xB8 = +0xC0 = +0xC8 = +0xD0 = 0   (the members' own ctors)
 //   this->+0xD0 = *parentMenuIBP            (the owning MainMenuDialog; ModDialog's
 //                                            Apply path reads it for MainMenu::Reload)
 ModDialog::ModDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
-                     Object::InternalPtr<UI::DialogInstance> parent, uint64_t parentMenu)
+                     Object::InternalPtr<UI::DialogInstance> parent,
+                     Object::InternalPtr<MainMenuDialog> menu)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
-      dataB8(0), dataC0(0), dataC8(0), dataD0(parentMenu) {}
+      parentMenu(menu) {}
 
-ModDialog::ModDialog() : dataB8(0), dataC0(0), dataC8(0), dataD0(0) {}
+ModDialog::ModDialog() {}
 
 // ~ModDialog, faithful port of exe 0x14006ff00 (the part before ~DialogInstance):
-//   for each 0x58-stride entry i in [0, count at +0xC0):
-//       entry+0x50 (SpriteSheet), +0x48 (MaterialInstance), +0x40 (ImageBuffer)
+//   for each 0x58-stride entry i in [0, count):
+//       spriteSheet, material, imageBuffer
 //       each: if (p) p->vt[0](p, 1)
-//   MemFree(+0xB8); +0xB8 = 0; +0xC0 = 0
-//   +0xC8 = null IBP; +0xD0 = null IBP
+//   MemFree(entries); zero the header (two qword stores)
+//   tableMods = null IBP; parentMenu = null IBP
+// then the member ~Array (the compiler's): MemFree of the now-null buffer and
+// the same zero stores, as retail's 0x14006ffec..0x140070000.
 ModDialog::~ModDialog() {
     if (this == g_lastModDialog) g_lastModDialog = nullptr;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
-    uintptr_t entries = *reinterpret_cast<uintptr_t*>(s + 0xB8);
-    int count = *reinterpret_cast<int*>(s + 0xC0);
-    for (int i = 0; entries && i < count; ++i) {
-        uintptr_t e = entries + static_cast<uintptr_t>(i) * 0x58;
-        // Retail order +0x50, +0x48, +0x40; each deleted through its own slot 0 (B.3.x bridge).
-        if (void* sheet = *reinterpret_cast<void**>(e + 0x50))
-            delete reinterpret_cast<UI::SpriteSheet*>(sheet);
-        if (void* mat = *reinterpret_cast<void**>(e + 0x48))
-            delete reinterpret_cast<Graphics::MaterialInstance*>(mat);
-        if (void* image = *reinterpret_cast<void**>(e + 0x40))
-            delete reinterpret_cast<Video::ImageBuffer*>(image);
+    for (int i = 0; entries._data && i < entries._size; ++i) {
+        ModDialogEntry& e = entries._data[i];
+        // Retail order +0x50, +0x48, +0x40; each deleted through its own slot 0.
+        if (UI::SpriteSheet* sheet = e.spriteSheet)
+            delete sheet;
+        if (Graphics::MaterialInstance* mat = e.material)
+            delete mat;
+        if (Video::ImageBuffer* image = e.imageBuffer)
+            delete image;
     }
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(entries));
-    *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xC0) = 0;
-    {
-        uint64_t nullIbp = 0;
-        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<uint64_t*>(s + 0xC8) = nullIbp;
-        nullIbp = 0;
-        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<uint64_t*>(s + 0xD0) = nullIbp;
-    }
+    System::MemoryAllocator::MemFree(entries._data);
+    entries._data = nullptr;
+    entries._size = 0;
+    entries._capacity = 0;
+    tableMods = Object::InternalPtr<UI::Element>(nullptr);
+    parentMenu = Object::InternalPtr<MainMenuDialog>(nullptr);
 }
 
 // create 0x140012900: MemAlloc(0xd8, 8), then the ctor.
@@ -192,16 +186,16 @@ void* ModDialog::CreateInPlaceObject(void* storage) {
 // ===========================================================================
 // ModDetailsDialog — construction / destruction / reflection
 // ===========================================================================
-// ModDetailsDialog owns no heap fields (+0xB8 is a borrowed sprite handle,
+// ModDetailsDialog owns no heap fields (+0xB8 is a borrowed sprite sheet,
 // +0xC0 a plain int index), which is why retail's dtor (0x140012890: vtable
 // store, ~DialogInstance, conditional free) has no cleanup of its own.
 ModDetailsDialog::ModDetailsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                                    Object::InternalPtr<UI::DialogInstance> parent,
-                                   uint64_t sprite, int32_t index)
+                                   UI::SpriteSheet* sprite, int32_t index)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
-      dataB8(sprite), modIndex(index) {}
+      spriteSheet(sprite), modIndex(index) {}
 
-ModDetailsDialog::ModDetailsDialog() : dataB8(0), modIndex(0), _padC4(0) {}
+ModDetailsDialog::ModDetailsDialog() : spriteSheet(nullptr), modIndex(0), _padC4(0) {}
 
 ModDetailsDialog::~ModDetailsDialog() {
     if (this == g_lastModDetails) g_lastModDetails = nullptr;
@@ -220,31 +214,18 @@ void* ModDetailsDialog::CreateInPlaceObject(void* storage) {
 }
 
 
-// The ModDialog ctor DOOR (registered by reg_mods.cpp at 0x140070030).
-extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
-                                           void* externalRes, void* parentIBP,
-                                           void* parentMenuIBP) {
-    if (!self) return nullptr;
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
-    return ::new (self) ModDialog(static_cast<UI::UserInterface*>(userInterface),
-                                  static_cast<const UI::Dialog*>(externalRes), parent,
-                                  parentMenuIBP ? *static_cast<const uint64_t*>(parentMenuIBP) : 0);
-}
-
 // ===========================================================================
 // Opener — "Mods" button on the main menu / in-game pause menu
 // ===========================================================================
 // Mirrors MainMenuDialog_OpenMod (exe 0x1400b2ea0) and the shape of
 // mainmenudialog.cpp's StandaloneOpenMapParams: load Dialog/Mod.rsc, allocate
-// 0xD8, run the ported ctor, wrap in an InternalBasePtr, AddDialog. AddDialog is
-// what dispatches +0x20 (OnOpened == ModDialog_Slot4), which builds the list.
+// 0xD8, run the ctor, wrap in an InternalPtr, AddDialog. AddDialog is what
+// dispatches +0x20 (OnOpened), which builds the list.
 //
-// `mainMenuSelf` is the MainMenuDialog; its +0x10 is the UserInterface and it is
-// itself the +0xD0 parent-menu back-pointer the Apply path reloads through.
-extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
-    if (!mainMenuSelf) return;
+// `mainMenu` is the MainMenuDialog; its _ui is the UserInterface and it is
+// itself the parentMenu back-pointer the Apply path reloads through.
+void ModDialog_OpenFromMainMenu(MainMenuDialog* mainMenu) {
+    if (!mainMenu) return;
 
     if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
         printf("[ModDialog] open: core engine fns unresolved\n");
@@ -260,26 +241,21 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
         return;
     }
 
-    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainMenuSelf) + 0x10);
+    UI::UserInterface* ui = mainMenu->_ui;
     if (!ui) { printf("[ModDialog] open: UserInterface null\n"); return; }
 
-    void* extRes = ModDlg_LoadDialogResource("Dialog/Mod.rsc");
+    const UI::Dialog* extRes = ModDlg_LoadDialogResource("Dialog/Mod.rsc");
     if (!extRes) { printf("[ModDialog] open: Dialog/Mod.rsc not loaded\n"); return; }
 
     void* dlgMem = System::MemoryAllocator::MemAlloc(sizeof(ModDialog), 8);
     if (!dlgMem) return;
 
-    uint8_t nullIBP[8] = {};
-    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    uint8_t parentIBP[8] = {};
-    new (parentIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mainMenuSelf));   // B.3.3 bridge
-
-    void* dlg = ModDialog_Ctor_Standalone(dlgMem, ui, extRes, nullIBP, parentIBP);
+    ModDialog* dlg = ::new (dlgMem) ModDialog(ui, extRes, Object::InternalPtr<UI::DialogInstance>(),
+                                              Object::InternalPtr<MainMenuDialog>(mainMenu));
     g_lastModDialog = dlg;
 
-    uint8_t ibp[8] = {};
-    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
-    reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> ibp(dlg);
+    ui->AddDialog(&ibp);
     // ENDGAME B.3.4a closing: the count was computed INSIDE the printf argument
     // list, where the perf build strips it (reference_perf_build_strips_printf_
     // arguments). Hoisted to a local first, then converted; the `? :` guard went
@@ -290,14 +266,13 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     // the whole point of hoisting it out of the argument list.
     [[maybe_unused]] const int modCount =
         ::IO::Modification::_singleton->GetCount();   // B.3.4 bridge
-    printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg, modCount);
+    printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", (void*)dlg, modCount);
 }
 
 // ===========================================================================
 // ModDialog::CloseAndReload — faithful port of exe 0x14006e9b0
 // ===========================================================================
-// Called unguarded from ModDialog_Apply_Impl (the OK/Apply path). It resolved to
-// NULL, so every "enable a mod and press OK" was an EXEC-of-0.
+// Called unguarded from ModDialog::Apply (the OK/Apply path).
 //
 // Disassembly (0x14006e9b0..0x14006ea69):
 //   if ([0x1401c3dd8] == 0)          // *g_pGameWorldSingleton, i.e. at the menu
@@ -314,33 +289,28 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
 // 0x1400b4790` at 0x14006ec46 / `CALL 0x1400b49f0` at 0x14006ecb4). That
 // duplication is in the shipped bytes, and moddialog.cpp's Apply port already
 // mirrors it. Not a bug in our port — do not "fix" it by deleting one leg.
-extern "C" void ModDialog_CloseAndReload(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* gameWorld = GameUpdateLoop::_singleton;
+void ModDialog::CloseAndReload() {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     if (gameWorld == nullptr) {
-        MainMenuDialog_ReturnToMenu(*reinterpret_cast<MainMenuDialog**>(s + 0xD0));   // 0x1400b4790
+        parentMenu->ReturnToMenu();   // 0x1400b4790
         return;
     }
 
-    void* statePtr = nullptr;
+    Save::SavedState* statePtr = nullptr;
     void* savedState = System::MemoryAllocator::MemAlloc(0x10, 4);
     if (savedState) statePtr = ::new (savedState) Save::SavedState();   // ??0SavedState 0x1800c0ee0 (its door placement-news the class)
 
-    void* engine = ::Engine::MainLoop::_singleton;
+    ::Engine::MainLoop* engine = ::Engine::MainLoop::_singleton;
     if (engine) {
-        uintptr_t inner = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(engine) + 0x20);
+        ::Engine::UpdateLoop* inner = engine->_currentLoop;
         if (inner) {
-            reinterpret_cast<Engine::UpdateLoop*>(inner)->SaveRestore(  // B.3.7 bridge
-                true, reinterpret_cast<Save::SavedState*>(statePtr));
+            inner->SaveRestore(true, statePtr);
         }
     }
 
-    uint64_t nullIbp = 0;
-    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    WorldSetup_LoadFromSave(*reinterpret_cast<void**>(s + 0xD0), statePtr,   // 0x1400b49f0
+    Object::InternalPtr<UI::DialogInstance> nullIbp;
+    WorldSetup_LoadFromSave(parentMenu.Get(), statePtr,   // 0x1400b49f0
                             reinterpret_cast<void*>(static_cast<uintptr_t>(-1)),
                             &nullIbp);
 }

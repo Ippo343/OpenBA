@@ -4,11 +4,7 @@
 // MapUI (0x50 bytes): Minimap display panel.
 // Extends DialogController (0x30 base).
 //
-// Layout:
-//   +0x30  materialInstance (ptr): material for map image
-//   +0x38  spriteSheet (ptr): sprite sheet for map image
-//   +0x40  overlayMaterial (ptr): material for overlay image
-//   +0x48  overlaySpriteSheet (ptr): sprite sheet for overlay
+// Layout: Dialog/MapUI.h (the map and overlay images' materials and sheets).
 
 #include "Dialog/ui_panels.h"
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
@@ -21,6 +17,8 @@
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerController.h"
+#include "Game/Map.h"
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -40,7 +38,7 @@
 
 
 // ============================================================
-// SetupImage (0x14006cb00): Create MaterialInstance + SpriteSheet
+// MapUI::SetupImage (0x14006cb00): Create MaterialInstance + SpriteSheet
 // from an ImageBuffer, find the named image element, set sprite.
 // ============================================================
 // Allocates MaterialInstance (0x60) and SpriteSheet (0x58),
@@ -48,11 +46,9 @@
 // adds the ImageBuffer as "diffuse" texture, builds parameters,
 // configures sprite info, finds named element, sets sprite.
 // If useBlend is set, also sets flags and element ID 1000.
-//
-// Original: FUN_14006cb00
-void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
-                      void** materialOut, char useBlend, const char* elementName) {
-    uintptr_t s = (uintptr_t)self;
+void MapUI::SetupImage(Video::ImageBuffer* imageBuffer, UI::SpriteSheet** spriteSheetOut,
+                       Graphics::MaterialInstance** materialOut, char useBlend,
+                       const char* elementName) {
     bool trc = Opt().mapTrace != nullptr;
     #define MAPTRC(msg) do { if (trc) { printf("[SetupImg] " msg " (elem=%s)\n", elementName); fflush(stdout);} } while(0)
     MAPTRC("enter");
@@ -65,7 +61,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     if (!imageBuffer || !System::MemoryAllocator::_singleton) {
         if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p\n",
                elementName, imageBuffer, (void*)&System::MemoryAllocator::MemAlloc,
-               (void*)System::MemoryAllocator::_singleton);
+               System::MemoryAllocator::_singleton);
         *materialOut = nullptr;
         *spriteSheetOut = nullptr;
         return;
@@ -73,10 +69,9 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 
     // --- Allocate and construct MaterialInstance (0x60 bytes) ---
     void* matInst = System::MemoryAllocator::MemAlloc(0x60, 8);
-    void* materialPtr = nullptr;
+    Graphics::MaterialInstance* materialPtr = nullptr;
     if (matInst) {
-        ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
-        materialPtr = matInst;
+        materialPtr = ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
     }
     *materialOut = materialPtr;
 
@@ -85,101 +80,90 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
                                                    : "Material/UI/UIMaterial.rsc");
 
     MAPTRC("material alloc+ctor done");
-    void* ext = const_cast<::Object::External*>(
-        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-            ->FindOrLoad(filenameObj));
-    void* material = nullptr;
+    const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameObj);
+    const Graphics::Material* material = nullptr;
     if (ext) {
         if (::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId())) {
-            material = ext;
+            material = static_cast<const Graphics::Material*>(ext);
         }
     }
-    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->SetMaterial(
-        Object::ExternalPtr<Graphics::Material>(
-            reinterpret_cast<Graphics::Material*>(material)));   // B.3.5 bridge
+    // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
+    (*materialOut)->SetMaterial(
+        Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));
 
     // --- Add ImageBuffer as "diffuse" texture ---
     System::String diffuseStr("diffuse");
     MAPTRC("SetMaterial done, add diffuse texture");
-    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->AddTexture(
+    // LEFT: AddTexture takes the RtSystem::String POD (R-GFX's header).
+    (*materialOut)->AddTexture(
         *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
-        Object::ExternalPtr<Video::ImageBuffer>(
-            reinterpret_cast<Video::ImageBuffer*>(imageBuffer)));   // B.3.5 bridge
+        Object::ExternalPtr<Video::ImageBuffer>(imageBuffer));
 
     MAPTRC("BuildParameters");
-    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)
-        ->BuildParameters();   // B.3.5 bridge
+    (*materialOut)->BuildParameters();
     MAPTRC("BuildParameters done, alloc spritesheet");
 
     // --- Allocate and construct SpriteSheet (0x58 bytes) ---
     void* sheet = System::MemoryAllocator::MemAlloc(0x58, 8);
-    void* spriteSheet = nullptr;
+    UI::SpriteSheet* spriteSheet = nullptr;
     if (sheet) {
-        ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
-        spriteSheet = sheet;
+        spriteSheet = ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
     }
     *spriteSheetOut = spriteSheet;
 
-    // Set material on sprite sheet at +0x30
-    *(void**)((uintptr_t)spriteSheet + 0x30) = *materialOut;
+    // The sheet's material instance (+0x30).
+    // LEFT: SpriteSheet::m_field30 is uint64_t (R-UI's header).
+    spriteSheet->m_field30 = reinterpret_cast<uint64_t>(*materialOut);
 
     // Get image dimensions
-    int imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
-    int imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
+    int imgW = imageBuffer->Width();
+    int imgH = imageBuffer->Height();
 
     // Set sprite sheet name/group strings (empty) and dimensions
-    uintptr_t ss = (uintptr_t)*spriteSheetOut;
+    UI::SpriteSheet* ss = *spriteSheetOut;
     System::String emptyStr1, emptyStr2;
-    *reinterpret_cast<System::String*>(ss + 0x40) = emptyStr1;  // B.3.1 bridge
-    *reinterpret_cast<System::String*>(ss + 0x38) = emptyStr2;  // B.3.1 bridge
-    *(int*)(ss + 0x48) = imgW;
-    *(int*)(ss + 0x4c) = imgH;
-    *(uint8_t*)(ss + 0x50) = 0;
+    // LEFT: SpriteSheet holds them as char* (H5, R-UI's header).
+    *reinterpret_cast<System::String*>(&ss->m_groupName) = emptyStr1;
+    *reinterpret_cast<System::String*>(&ss->m_textureName) = emptyStr2;
+    ss->m_field48 = imgW;
+    ss->m_field4C = imgH;
+    ss->m_field50 = false;
 
     // Add sprite info: empty name, empty group, full image rect
-    imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
-    imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
+    imgW = imageBuffer->Width();
+    imgH = imageBuffer->Height();
     System::String nameEmpty, groupEmpty;
     MAPTRC("AddSpriteInfo");
-    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->AddSpriteInfo(*reinterpret_cast<const System::String*>(&nameEmpty), *reinterpret_cast<const System::String*>(&groupEmpty), 0, 0, imgW, imgH);  // B.3.6 bridge
+    (*spriteSheetOut)->AddSpriteInfo(nameEmpty, groupEmpty, 0, 0, imgW, imgH);
     MAPTRC("AddSpriteInfo done");
 
     // Set sprite info with UV scale
-    imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
-    imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
+    imgW = imageBuffer->Width();
+    imgH = imageBuffer->Height();
     float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
-    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);  // B.3.6 bridge
+    (*spriteSheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);
 
     // --- Find named image element and set sprite ---
     System::String elemNameStr(elementName);
-
-    void* dialogElem = *(void**)(s + 0x20);
-    uint64_t foundElem = 0;
-    ::new (&foundElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(elemNameStr));  // B.3.6 bridge
-
-    void* rawElem = (void*)foundElem;
+    UI::Element* rawElem = _container->FindElement(elemNameStr).Get();
 
     // Cast to ImageElement via IsDerivedFrom
-    void* imageElem = nullptr;
+    UI::ImageElement* imageElem = nullptr;
     if (rawElem && ::Object::IsDerivedFromNullSafe(rawElem, UI::ImageElement::TypeId())) {
-        imageElem = rawElem;
+        imageElem = static_cast<UI::ImageElement*>(rawElem);
     }
     if (Opt().mapTrace)
         printf("[SetupImage] elem '%s': raw=%p imageElem=%p mat=%p sheet=%p\n",
                elementName, rawElem, imageElem, *materialOut, *spriteSheetOut);
-    uint64_t imageElemPtr = 0;
-    new ((void*)&imageElemPtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(imageElem));   // B.3.3 bridge
 
     // Create Sprite from SpriteSheet (index 0) and set on element
-    uint8_t spriteBuf[16];
-    ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)), 0);  // B.3.6 bridge
-    reinterpret_cast<UI::ImageElement*>(imageElemPtr)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+    UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(*spriteSheetOut), 0);
+    imageElem->SetSprite(&sprite);
 
     // If blend mode, set flags and element ID
     if (useBlend != '\0') {
-        reinterpret_cast<UI::Element*>(imageElemPtr)->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(imageElemPtr)->SetElementId(1000);  // B.3.6 bridge
+        imageElem->SetFlagsOnOff(0x10000, 0);
+        imageElem->SetElementId(1000);
     }
 }
 
@@ -190,7 +174,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 // Gets current camera frustum, projects corners to ground plane,
 // and computes new camera position based on click offset.
 //
-// Original: FUN_14006c850
+// Original: FUN_14006c850 (RCX is the clicked element, unused)
 //
 // NOTE: This function relies heavily on camera/frustum internals
 // (Graphics::Camera::GetFrustum, Volume::Frustum::GetCorners,
@@ -209,9 +193,8 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 
 // FUN_14006c5b0 is FrustumOutline_ProjectCorners, called by name (B3R).
 
-void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int mapHeight) {
-    (void)param1;
-
+static void MapUI_HandleClick(Object::InternalPtr<UI::Element>* /*element*/, int clickX, int clickY,
+                              int mapWidth, int mapHeight) {
     if (clickX < 0 || clickX >= mapWidth || clickY < 0 || clickY >= mapHeight)
         return;
 
@@ -228,24 +211,23 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
     // DISCARDS the result — dead code confirmed in the 0x14006c850 disassembly —
     // so the camera move depends only on the click position and map grid size.
 
-    // Get game world and camera data
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t gw = (uintptr_t)gameWorld;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    // Camera controller is at gameWorld+0xE0
-    uintptr_t camCtrl = *(uintptr_t*)(gw + 0xE0);
+    // The camera controller
+    PlayerController* camCtrl = gameWorld->m_playerController;
 
-    // Map grid size from gameWorld+0xF8 (int* -> int)
-    int mapGridSize = **(int**)(gw + 0xF8);
+    // The map's edge in cells.
+    // LEFT: GameUpdateLoop::m_game is void* (GUL's header; it is the Map).
+    int mapGridSize = reinterpret_cast<Map*>(gameWorld->m_game)->size;
 
     // Compute world-space scale factor: mapGridSize / mapWidth
     float worldScale = (float)mapGridSize / (float)mapWidth;
 
-    // Set camera focus at camCtrl+0x1C/0x20/0x24 (same field WASD panning drives).
+    // Set the camera focus (the same field WASD panning drives).
     // Maps click position: X = (clickX - halfWidth) * scale, Y = (halfHeight - clickY) * scale
-    *(float*)(camCtrl + 0x1C) = (float)(clickX - (mapWidth >> 1)) * worldScale;
-    *(float*)(camCtrl + 0x20) = (float)((mapHeight >> 1) - clickY) * worldScale;
-    *(float*)(camCtrl + 0x24) = 0.0f;
+    camCtrl->targetX = (float)(clickX - (mapWidth >> 1)) * worldScale;
+    camCtrl->targetY = (float)((mapHeight >> 1) - clickY) * worldScale;
+    camCtrl->targetZ = 0.0f;
 }
 
 // ---- MapUI: PROMOTED to the real reimpl (map-render bring-up) ----------------
@@ -256,50 +238,45 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
 // The generic stub left both no-ops so the map dialog opened blank. The GPU
 // buffers are created by Minimap_CreateAndUpload (code/Game/Game/minimap_upload.cpp);
 // SetupImage is standalone-guarded (skips if the buffer is null / vtables absent).
-namespace mapui_sa {
-    // ENDGAME B.3.9: Graphics::Material / UI::ImageElement both have a ported TypeId()
-    // now, so the EnsureTypeIds() lazy-cache over the exe .rdata globals is dead.
-}
 
 // ============================================================
 // Slot4 (vtable +0x20): Setup map and overlay images
 // ============================================================
 // Original: 0x14006CA80
 //
-// Gets the map component from game world (+0x148), which holds two
-// ImageBuffers: +0x08 (terrain map) and +0x10 (overlay).
-// For each, calls the helper to create MaterialInstance + SpriteSheet,
-// find the image element, and set the sprite.
+// The image capture holds two ImageBuffers: terrain map and overlay.
+// For each, SetupImage creates MaterialInstance + SpriteSheet,
+// finds the image element, and sets the sprite.
 
 // [4] 0x14006ca80
 void MapUI::OnCreated() {
     static bool s_logged = false;
     if (!s_logged && Opt().mapTrace) {
         s_logged = true;
-        void* gw = GameUpdateLoop::_singleton;
-        [[maybe_unused]] void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
+        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+        // LEFT: GameUpdateLoop::m_imageCapture is void* (no ImageCapture class yet).
+        [[maybe_unused]] Video::ImageBuffer* const* mapObj =
+            gw ? reinterpret_cast<Video::ImageBuffer* const*>(gw->m_imageCapture) : nullptr;
         printf("[MapUI::Slot4] dispatched self=%p mat_tid=%u img_tid=%u "
-               "terrBuf=%p ovrBuf=%p\n", (void*)this,
+               "terrBuf=%p ovrBuf=%p\n", this,
                Graphics::Material::TypeId(), UI::ImageElement::TypeId(),
-               mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x08) : nullptr,
-               mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x10) : nullptr);
+               mapObj ? mapObj[1] : nullptr,
+               mapObj ? mapObj[2] : nullptr);
         fflush(stdout);
     }
-    uintptr_t s = (uintptr_t)this;
-    void* gameWorld = GameUpdateLoop::_singleton;
-    void* mapComponent = *(void**)((uintptr_t)gameWorld + 0x148);
+    // The image capture (GameUpdateLoop +0x148) holds the terrain map (+0x08) and
+    // overlay (+0x10) ImageBuffers.
+    // LEFT: GameUpdateLoop::m_imageCapture is void* (no ImageCapture class yet).
+    Video::ImageBuffer* const* imageCapture =
+        reinterpret_cast<Video::ImageBuffer* const*>(GameUpdateLoop::_singleton->m_imageCapture);
 
     // Setup terrain map image (no blend, element "imageMap")
-    void* terrainBuffer = *(void**)((uintptr_t)mapComponent + 0x08);
-    MapUI_SetupImage(this, terrainBuffer,
-                     (void**)(s + 0x38), (void**)(s + 0x30),
-                     '\0', "imageMap");
+    SetupImage(imageCapture[1], &mapSpriteSheet, &mapMaterial,
+               '\0', "imageMap");
 
     // Setup overlay image (with blend, element "imageOverlay")
-    void* overlayBuffer = *(void**)((uintptr_t)mapComponent + 0x10);
-    MapUI_SetupImage(this, overlayBuffer,
-                     (void**)(s + 0x48), (void**)(s + 0x40),
-                     '\x01', "imageOverlay");
+    SetupImage(imageCapture[2], &overlaySpriteSheet, &overlayMaterial,
+               '\x01', "imageOverlay");
 }
 
 // ============================================================
@@ -314,20 +291,15 @@ void MapUI::OnCreated() {
 // [9] 0x14006c9e0
 void MapUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
                            int32_t clickX, int32_t clickY, int32_t /*e*/, void* /*userData*/) {
-    void* param2 = element;
     if (msg != 2 || id != 1000) return;
 
-    // param2 is an InternalBasePtr to the clicked element
-    uintptr_t elem = *(uintptr_t*)param2;
-
-    // Read element position and size
-    int elemX = *(int*)(elem + 0x68);  // element X position
-    int elemY = *(int*)(elem + 0x6C);  // element Y position
-    int elemW = *(int*)(elem + 0x60);  // element width
-    int elemH = *(int*)(elem + 0x64);  // element height
+    // The clicked element's layout position and size
+    UI::Element* elem = element->Get();
+    int elemX = elem->_layoutLeft;
+    int elemY = elem->_layoutTop;
+    int elemW = elem->_layoutWidth;
+    int elemH = elem->_layoutHeight;
 
     // Translate to map-relative coordinates and move camera
-    MapUI_HandleClick(param2, clickX - elemX, clickY - elemY, elemW, elemH);
+    MapUI_HandleClick(element, clickX - elemX, clickY - elemY, elemW, elemH);
 }
-
-// ============================================================

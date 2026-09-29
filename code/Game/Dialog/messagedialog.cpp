@@ -19,9 +19,8 @@ namespace {
 // UserInterface::CloseDialog(InternalPtr(this)).
 void CloseWithResult(MessageDialog* self, int32_t result) {
     self->_result = result;
-    uint8_t selfIBP[16];
-    new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    static_cast<UI::UserInterface*>(self->_ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> selfIBP(self);
+    self->_ui->CloseDialog(&selfIBP);
 }
 }  // namespace
 
@@ -38,11 +37,10 @@ void MessageDialog::OnOpened() {
 
     for (auto& btn : buttons) {
         System::String nameStr(btn.name);
-        Object::InternalPtr<UI::Element> found = FindElement(nameStr);
-        void* elem = found.Get();
+        UI::Element* elem = FindElement(nameStr).Get();
 
         if (elem) {
-            static_cast<UI::Element*>(elem)->SetElementId(btn.id);
+            elem->SetElementId(btn.id);
         }
     }
 }

@@ -51,29 +51,28 @@
 #include <new>
 
 namespace {
-// Append one 0x18-byte node {6 dwords from src} to array header {ptr,count,cap}.
+// Append one node to a node array {data, count, cap}.
 // Mirrors FUN_140035360 for the incremental (count+1) growth case.
-void AppendNode(void* header, const uint32_t src[6]) {
-    uint8_t* h = reinterpret_cast<uint8_t*>(header);
-    int count = *(int32_t*)(h + 8);
-    int cap   = *(int32_t*)(h + 0xc);
-    void* oldBuf = *(void**)h;
+void AppendNode(InteractDescription::NodeArray* a, const InteractDescription::Node& src) {
+    int count = a->count;
+    int cap   = a->cap;
+    InteractDescription::Node* oldBuf = a->data;
     int newCount = count + 1;
     if (cap < newCount) {
         int newCap = (count != 0) ? newCount * 3 : newCount;  // matches exe growth
-        *(int32_t*)(h + 0xc) = newCap;
-        void* nb = (System::MemoryAllocator::_singleton)
-                   ? System::MemoryAllocator::MemAlloc((uint64_t)newCap * 0x18, 4)
-                   : nullptr;
+        a->cap = newCap;
+        InteractDescription::Node* nb = (System::MemoryAllocator::_singleton)
+            ? static_cast<InteractDescription::Node*>(System::MemoryAllocator::MemAlloc((uint64_t)newCap * 0x18, 4))
+            : nullptr;
         if (oldBuf && nb && count > 0) {
-            memcpy(nb, oldBuf, (size_t)count * 0x18);
+            for (int i = 0; i < count; ++i) nb[i] = oldBuf[i];
         }
-        *(void**)h = nb;
+        a->data = nb;
         if (oldBuf && oldBuf != nb) System::MemoryAllocator::MemFree(oldBuf);
     }
-    *(int32_t*)(h + 8) = newCount;
-    uint8_t* buf = *(uint8_t**)h;
-    if (buf) memcpy(buf + (size_t)count * 0x18, src, 0x18);
+    a->count = newCount;
+    InteractDescription::Node* buf = a->data;
+    if (buf) buf[count] = src;
 }
 }  // namespace
 
@@ -82,7 +81,7 @@ void AppendNode(void* header, const uint32_t src[6]) {
 // the defaults.
 InteractDescription::InteractDescription()
     : Description(),
-      _descRef(nullptr) {
+      _points(nullptr) {
     _useNodes = _buildNodes = _createNodes = NodeArray{nullptr, 0, 0};
 }
 
@@ -101,7 +100,7 @@ InteractDescription::~InteractDescription() {
 bool InteractDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // ---- stream-accurate: single ExternalPtr (+0x20) ----
-    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_points, &ser);
     
     // ---- post-load build (load only; reads from the resolved external) ----
     // Direction flag: retail tests *(int*)(stream + 8) == 0 (FUN_140123500 reads
@@ -110,32 +109,28 @@ bool InteractDescription::Serialize(void* stream) {
     // false -> the use/build/create node lists never built -> ChildSum(interact)==0
     // -> d5d0 found no access point -> the eat/food search rejected every barn
     // (Economy Brick M-D root cause #3).
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-    void* ext = _descRef;
-    if (loading && ext) {
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210 (the stream's +8)
+    const Pathfinding::PointList* pointList = _points;
+    if (loading && pointList) {
         // Pathfinding::PointList::_points (+0x30; Points() is LEA RAX,[RCX+0x30]).
-        const Pathfinding::PointList* pointList = reinterpret_cast<const Pathfinding::PointList*>(ext);   // B.3.7 bridge
-        uint8_t* children = reinterpret_cast<uint8_t*>(pointList->_points._data);
+        const Pathfinding::PointList::Point* children = pointList->_points._data;
         int childCount = pointList->_points._size;
         for (int i = 0; children && i < childCount; ++i) {
-            uint8_t* child = children + (size_t)i * 0x18;  // {String@0, f@8, f@0xc, f@0x10, yaw@0x14}
-            float yaw   = *(float*)(child + 0x14);
+            const Pathfinding::PointList::Point& child = children[i];  // {String name, pos[3], yaw}
+            float yaw   = child.radius;   // +0x14: the point's yaw (PointList calls it radius)
             float pitch = 0.0f;
             // node = {offset.xyz, dir.xyz}
-            uint32_t node[6];
-            node[0] = *(uint32_t*)(child + 0x08);
-            node[1] = *(uint32_t*)(child + 0x0c);
-            node[2] = *(uint32_t*)(child + 0x10);
-            Math::Vector3 dir = Math::Vector3::FromYawPitch(yaw, pitch);
-            node[3] = *(uint32_t*)&dir.x;
-            node[4] = *(uint32_t*)&dir.y;
-            node[5] = *(uint32_t*)&dir.z;
-    
-            if (*reinterpret_cast<System::String*>(child) == "use") {  // B.3.1 bridge
+            InteractDescription::Node node;
+            node.offset = Math::Vector3(child.pos[0], child.pos[1], child.pos[2]);
+            node.direction = Math::Vector3::FromYawPitch(yaw, pitch);
+
+            // LEFT: PointList::Point keeps its name raw (runtime header).
+            const System::String& name = *reinterpret_cast<const System::String*>(&child.name);
+            if (name == "use") {
                 AppendNode(&_useNodes, node);
-            } else if (*reinterpret_cast<System::String*>(child) == "build") {  // B.3.1 bridge
+            } else if (name == "build") {
                 AppendNode(&_buildNodes, node);
-            } else if (*reinterpret_cast<System::String*>(child) == "create") {  // B.3.1 bridge
+            } else if (name == "create") {
                 AppendNode(&_createNodes, node);
             }
         }

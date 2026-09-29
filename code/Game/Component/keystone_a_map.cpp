@@ -7,9 +7,9 @@
 // driving how a small char stamp ('#','_','.') is sampled into a destination cell
 // grid, the same shape as ZoneComponent_sub_d360.
 //
-//   0x1401241b0  MapComponent_sub_41b0            overlay update entry (vtable)
+//   0x1401241b0  MapComponent::AddToMap            overlay update entry
 //   0x14009dc20  MapComponent_overlay_dc20        overlay grid-update worker
-//   0x140124750  CreateNaturalResource_impl_4750  map-init entry (vtable)
+//   0x140124750  CreateNaturalResource_impl_4750  map-init entry
 //   0x14009dee0  CreateNaturalResource_impl_dee0  map-init grid-update worker
 //   0x14009e2c0  CreateNaturalResource_helper_e2c0  per-cell terrain classification
 //
@@ -30,14 +30,21 @@
 //   0x14009f3e0  GridToWorld terrain query  (mapquery, reg)
 //   g_pGameWorldSingleton (+0xe8 / +0xd0 / +0xd8 / +0xf8 / +0x148)
 //
+// LEFT (B.4 COMP-d): the Map (GameUpdateLoop::m_game) is reached as the int* the
+// Map functions take (class name not settled, GAME-b) and its 0x30-byte cell record
+// has no type yet: the cell reads stay by offset. GameUpdateLoop m_entityList /
+// m_imageCapture are void* (W0 header).
 
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // Pf_SetTileRoadFlag_9f2f0, ActHunt_*_c3470 / _c2ea0
+#include "Action/exe_bodies.h"   // Pf_SetTileRoadFlag_9f2f0, ActHunt_*_c2ea0
 #include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
 #include "Component/coll_bridge.h"
 #include "Component/MapDescription.h"
+#include "Component/MapComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
 #include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
 #include "Component/exe_bodies.h"
 
@@ -74,7 +81,7 @@ namespace {
 
 // --- registered exe sub-callees, called by name (B3R) ------------------------
 //   0x14009f2f0 Pf_SetTileRoadFlag_9f2f0        0x1400a4d30 MapTerrainClear_Reimpl
-//   0x1400c3470 ActHunt_NotifyEntityChanged_c3470
+//   0x1400c3470 ComponentEntity::RefreshEntityFlags
 //   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0 0x14009f3e0 Reimpl_MapGetTerrainPos
 
 // e2c0 terrain classification thresholds (named DAT floats, exact bit values).
@@ -107,7 +114,7 @@ int CreateNaturalResource_helper_e2c0(int* param_1, int param_2) {
     // The classifier reads height (local_10) and slope (local_20 == out-mat elem[2]).
     float outVec[3] = {0, 0, 0};       // local_18 / local_10
     float inXY[2];                     // local_38 / local_34
-    uint32_t outMat[3] = {0, 0, 0};    // local_28[0..1] + local_20 (init 0.0)
+    float outMat[3] = {0, 0, 0};       // local_28[0..1] + local_20 (init 0.0)
 
     float half = (float)(*param_1 >> 1) - kHalf;             // local_34 = width/2 - 0.5
     inXY[0] = (float)(param_2 % *param_1) - half;            // local_38 = col - half
@@ -116,7 +123,7 @@ int CreateNaturalResource_helper_e2c0(int* param_1, int param_2) {
     Reimpl_MapGetTerrainPos(param_1, outVec, inXY, '\x01', outMat);   // 0x14009f3e0
 
     float height = outVec[2];                                       // local_10
-    float slope  = *reinterpret_cast<float*>(&outMat[2]);           // local_20
+    float slope  = outMat[2];                                       // local_20
 
     if (height < kT_Ret8) return 8;
     if (height < kT_Ret7) return 7;
@@ -132,14 +139,14 @@ int CreateNaturalResource_helper_e2c0(int* param_1, int param_2) {
 // Overlay grid-update worker. For each cell in the [param_4..+param_6) x
 // [param_5..+param_7) window of the destination grid (param_1, base +0x80, stride
 // 0x30): if the cell currently references an entity (cell+8) different from the
-// overlay's source IBP (*param_2) and that entity's flags bit 10 is clear, mark it
+// overlay's owner (*owner) and that entity's flags bit 10 is clear, mark it
 // for removal and push it to the gameworld removal queue. Then sample the rotated
-// char stamp (param_8) at the rotated coordinate; '#'/'_' => set, '.' => leave,
+// char stamp (footprint) at the rotated coordinate; '#'/'_' => set, '.' => leave,
 // '_' => value 2. Write the resulting road/cost value via 0x14009f2f0 and store the
-// source/null IBP into the cell.
-void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
+// owner / null IBP into the cell.
+void MapComponent_overlay_dc20(int* param_1, ComponentEntity* const* owner, uint8_t param_3,
                                int param_4, int param_5, int param_6, int param_7,
-                               int64_t* param_8, int param_9) {
+                               const System::String* footprint, int param_9) {
     int iVar18 = 0;
     int iVar4 = param_7;
     if (0 < param_7) {
@@ -151,18 +158,22 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                 do {
                     iVar5 = iVar5 + -1;     // descending inner (col)
                     int iVar15 = (param_5 + iVar18) * *param_1 + iVar13 + param_4;
-                    int64_t lVar14 = (int64_t)iVar15 * 0x30 +
-                                     *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(param_1) + 0x80);
+                    // LEFT: the Map's 0x30-byte cell record (array at +0x80) has no type yet (GAME-b).
+                    uint8_t* cell = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(param_1) + 0x80) +
+                                    static_cast<int64_t>(iVar15) * 0x30;
+                    // LEFT: cell +0x08 is the occupant's InternalPtr<ComponentEntity> (no cell type yet).
+                    ComponentEntity** occupant = reinterpret_cast<ComponentEntity**>(cell + 8);
 
                     // Evict any stale entity occupying this cell.
-                    if ((*param_2 != 0) && (*reinterpret_cast<int64_t*>(lVar14 + 8) != 0)) {
-                        int64_t lVar2 = *reinterpret_cast<int64_t*>(lVar14 + 8);
-                        if (*param_2 != lVar2) {
-                            int64_t lVar3 = *reinterpret_cast<int64_t*>(
-                                reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xe8);
-                            int64_t local_68 = lVar2;
-                            if (lVar2 != 0) {
-                                if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) >> 10 & 1) == 0) {
+                    if ((*owner != nullptr) && (*occupant != nullptr)) {
+                        ComponentEntity* lVar2 = *occupant;
+                        if (*owner != lVar2) {
+                            // LEFT: GameUpdateLoop::m_entityList is void* (W0 header).
+                            EntityList* entityList =
+                                reinterpret_cast<EntityList*>(GameUpdateLoop::_singleton->m_entityList);
+                            ComponentEntity* local_68 = lVar2;
+                            if (lVar2 != nullptr) {
+                                if ((local_68->_entityFlags >> 10 & 1) == 0) {
                                     // Always-on tally (the trace above is opt-in AND capped at
                                     // 40 lines, so nothing countable survived a default run).
                                     // This branch DESTROYS an entity, so its rate is the single
@@ -170,7 +181,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                     // spawned entity gets freed while its ModelComponent is
                                     // still linked into Graphics::Scene.
                                     ++g_dc20Evictions;
-                                    if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) & 2) == 0) {
+                                    if ((local_68->_entityFlags & 2) == 0) {
                                         ++g_dc20EvictNoTeardown;   // scene geometry will dangle
                                     } else {
                                         // Entity gate passed — but MarkForRemoval's broadcast
@@ -178,31 +189,29 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                         // If none do, the broadcast is a no-op and the scene
                                         // geometry dangles just the same. Measure that arm too;
                                         // the entity-level counter above cannot see it.
-                                        int n = *reinterpret_cast<int*>(local_68 + 0x38);
-                                        int64_t arr = *reinterpret_cast<int64_t*>(local_68 + 0x30);
+                                        int n = local_68->_componentCount;
+                                        Object::InternalPtr<Component>* arr = local_68->_components;
                                         int participating = 0;
                                         for (int ci = 0; ci < n && arr; ++ci) {
-                                            int64_t c = *reinterpret_cast<int64_t*>(arr + (int64_t)ci * 8);
-                                            if (c && (*reinterpret_cast<uint32_t*>(c + 0x20) >> 1 & 1))
+                                            Component* c = arr[ci].Get();
+                                            if (c && (c->_flags >> 1 & 1))
                                                 ++participating;
                                         }
                                         if (participating == 0) ++g_dc20EvictNoParticipant;
                                     }
-                                    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(local_68));   // 0x1400c2ea0
+                                    ActHunt_MarkEntityRemoval_c2ea0(local_68);   // 0x1400c2ea0
                                     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                                    GameColl::AsArray<GameColl::Ptr8>(
-                                        reinterpret_cast<void*>(lVar3 + 0xd0))
-                                        .SetSizeFill(*reinterpret_cast<int*>(lVar3 + 0xd8) + 1,
-                                                     &local_68);
+                                    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
+                                        .SetSizeFill(entityList->removalList.count + 1, &local_68);
                                 }
                             }
                         }
                     }
 
                     // Sample the rotated char stamp.
-                    int64_t lVar2 = *param_8;
+                    const char* lVar2 = footprint->_data;
                     bool bVar7;
-                    if ((lVar2 == 0) || (*reinterpret_cast<int*>(lVar2 - 8) == 0)) {
+                    if ((lVar2 == nullptr) || (footprint->GetLength() == 0)) {
                         bVar7 = true;
                     } else {
                         bVar7 = false;
@@ -223,8 +232,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                             iVar8 = iVar12;
                             iVar12 = iVar6;
                         }
-                        char cVar1 = *reinterpret_cast<char*>(
-                            (((iVar11 - iVar8) - 1) * (iVar17 + 1) + iVar12) + lVar2);
+                        char cVar1 = lVar2[((iVar11 - iVar8) - 1) * (iVar17 + 1) + iVar12];
                         if ((cVar1 == '#') || (cVar1 == '_')) {
                             bVar7 = true;
                         } else {
@@ -247,24 +255,14 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         }
                     }
 
-                    uint8_t bVar10 = *reinterpret_cast<uint8_t*>(lVar14 + 0x29);
+                    uint8_t bVar10 = cell[0x29];
                     if (bVar7) {
                         bVar10 = bVar16;
                     }
                     Pf_SetTileRoadFlag_9f2f0(param_1, iVar15, (uint32_t)bVar10);
 
-                    int64_t local_60;
-                    int64_t local_58[3];
-                    int64_t* plVar9;
-                    if (bVar19) {
-                        local_60 = *param_2;
-                        plVar9 = &local_60;
-                    } else {
-                        new (local_58) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                        plVar9 = local_58;
-                    }
                     iVar13 = iVar13 + 1;
-                    *reinterpret_cast<int64_t*>(lVar14 + 8) = *plVar9;
+                    *occupant = bVar19 ? *owner : nullptr;   // the owner / a null InternalBasePtr
                 } while (iVar13 < param_6);
             }
             iVar18 = iVar18 + 1;
@@ -276,13 +274,13 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
 // CreateNaturalResource_impl_dee0 (0x14009dee0)
 // ============================================================
 // Map-init grid-update worker. For each cell in the window: sample the rotated char
-// stamp (param_8) — '#'/'_' => set. On a set cell, classify the terrain via
+// stamp (footprint) — '#'/'_' => set. On a set cell, classify the terrain via
 // 0x14009e2c0; if the classification bit is in mask 0x1e0 AND the cell already holds
-// an entity that differs from the overlay source IBP (param_2), force class 2; write
-// the class via 0x14009f2f0. Always (re)initialise the cell's +8 IBP slot to null.
-void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
+// an entity that differs from the owner, force class 2; write the class via
+// 0x14009f2f0. Always (re)initialise the cell's +8 IBP slot to null.
+void CreateNaturalResource_impl_dee0(int* param_1, ComponentEntity* const* owner, int param_3,
                                      int param_4, int param_5, int param_6,
-                                     int64_t* param_7, int param_8) {
+                                     const System::String* footprint, int param_8) {
     int iVar16 = 0;
     int iVar3 = param_6;
     if (0 < param_6) {
@@ -293,11 +291,11 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
             if (0 < param_5) {
                 do {
                     iVar4 = iVar4 + -1;    // descending inner (col)
-                    int64_t lVar2 = *param_7;
+                    const char* lVar2 = footprint->_data;
                     int iVar14 = (iVar16 + param_4) * *param_1 + iVar12 + param_3;
 
                     bool bVar6;
-                    if ((lVar2 == 0) || (*reinterpret_cast<int*>(lVar2 - 8) == 0)) {
+                    if ((lVar2 == nullptr) || (footprint->GetLength() == 0)) {
                         bVar6 = true;
                     } else {
                         bVar6 = false;
@@ -316,8 +314,7 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
                             iVar10 = param_5;
                             iVar7 = iVar5;
                         }
-                        char cVar1 = *reinterpret_cast<char*>(
-                            (((iVar10 - iVar8) - 1) * (iVar15 + 1) + iVar7) + lVar2);
+                        char cVar1 = lVar2[((iVar10 - iVar8) - 1) * (iVar15 + 1) + iVar7];
                         if ((cVar1 == '#') || (cVar1 == '_')) {
                             bVar6 = true;
                         } else {
@@ -325,24 +322,23 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
                         }
                     }
 
-                    int64_t* plVar11 = reinterpret_cast<int64_t*>(
-                        (int64_t)iVar14 * 0x30 +
-                        *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(param_1) + 0x80));
+                    // LEFT: cell +0x00 / +0x08 are InternalPtr<ComponentEntity> (no cell type yet).
+                    ComponentEntity** plVar11 = reinterpret_cast<ComponentEntity**>(
+                        *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(param_1) + 0x80) +
+                        static_cast<int64_t>(iVar14) * 0x30);
                     if (bVar6) {
                         int cls = CreateNaturalResource_helper_e2c0(param_1, iVar14);
                         uint8_t bVar13 = (uint8_t)cls;
-                        if (((1 << (bVar13 & 0x1f) & 0x1e0u) != 0) && (*plVar11 != 0)) {
-                            if (*plVar11 != *reinterpret_cast<int64_t*>(param_2)) {
+                        if (((1 << (bVar13 & 0x1f) & 0x1e0u) != 0) && (*plVar11 != nullptr)) {
+                            if (*plVar11 != *owner) {
                                 bVar13 = 2;
                             }
                         }
                         Pf_SetTileRoadFlag_9f2f0(param_1, iVar14, (uint32_t)bVar13);
                     }
 
-                    int64_t local_40 = 0;
-                    new (&local_40) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                     iVar12 = iVar12 + 1;
-                    plVar11[1] = local_40;
+                    plVar11[1] = nullptr;   // a null InternalBasePtr
                 } while (iVar12 < param_5);
             }
             iVar16 = iVar16 + 1;
@@ -351,51 +347,49 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
 }
 
 // ============================================================
-// MapComponent_sub_41b0 (0x1401241b0)
+// MapComponent::AddToMap (0x1401241b0)
 // ============================================================
-// Overlay-update vtable entry. Guarded by the +0x20 bit-20 flag (must be CLEAR).
-// Resolves the overlay's AreaDescription (IsDerivedFrom DAT_1401c7a18), optionally
-// clears the underlying terrain region via 0x1400a4d30, then runs the overlay
-// grid-update (dc20). Finally sets bit-20 and, if the low-16 flag bits changed and
-// the IBP at +0x10 is non-null, NotifyEntityChanged (0x1400c3470).
-void MapComponent_sub_41b0(int64_t param_1) {
-    if ((*reinterpret_cast<uint32_t*>(param_1 + 0x20) >> 0x14 & 1) != 0) return;
+// Overlay-update entry. Guarded by the +0x20 bit-20 flag (must be CLEAR).
+// Resolves the MapDescription (IsDerivedFrom DAT_1401c7a18), optionally
+// paints the footprint into the minimap overlay via 0x1400a4d30, then runs the
+// grid occupancy update (dc20). Finally sets bit-20 and, if the low-16 flag bits
+// changed and the owner entity at +0x10 is non-null, RefreshEntityFlags (0x1400c3470).
+void MapComponent::AddToMap() {
+    if ((_flags >> 0x14 & 1) != 0) return;
 
-    void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    int* piVar2 = *reinterpret_cast<int**>(
-        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
+    Description* obj = _description;
+    // LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
+    int* piVar2 = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
-    void* pvVar5 = bVar3 ? obj : nullptr;
+    MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
 
-    if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(pvVar5) + 0x32) != '\0') {
-        MapTerrainClear_Reimpl(*reinterpret_cast<void**>(   // 0x1400a4d30
-                                   reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0x148),
-                               static_cast<int>(*reinterpret_cast<uint32_t*>(reinterpret_cast<int64_t>(pvVar5) + 0x34)),
-                               (int)*reinterpret_cast<short*>(param_1 + 0x28),
-                               (int)*reinterpret_cast<short*>(param_1 + 0x2a),
-                               (int)*reinterpret_cast<short*>(param_1 + 0x2c),
-                               (int)*reinterpret_cast<short*>(param_1 + 0x2e));
+    if (pvVar5->_showOnMap) {
+        MapTerrainClear_Reimpl(GameUpdateLoop::_singleton->m_imageCapture,   // 0x1400a4d30 (+0x148)
+                               static_cast<int>(pvVar5->_color._value),
+                               (int)static_cast<int16_t>(tileX0),
+                               (int)static_cast<int16_t>(tileY0),
+                               (int)static_cast<int16_t>(tileX1),
+                               (int)static_cast<int16_t>(tileY1));
     }
 
-    if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(pvVar5) + 0x31) == '\0') {
-        int64_t local_res8 = *reinterpret_cast<int64_t*>(param_1 + 0x10);
+    if (!pvVar5->_noOccupancy) {
+        ComponentEntity* local_res8 = _entity;
         MapComponent_overlay_dc20(
             piVar2, &local_res8,
-            (uint8_t)*reinterpret_cast<uint32_t*>(reinterpret_cast<int64_t>(pvVar5) + 0x20),
-            (int)*reinterpret_cast<short*>(param_1 + 0x28),
-            (int)*reinterpret_cast<short*>(param_1 + 0x2a),
-            (int)*reinterpret_cast<short*>(param_1 + 0x2c),
-            (int)*reinterpret_cast<short*>(param_1 + 0x2e),
-            reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(pvVar5) + 0x28),
-            *reinterpret_cast<int*>(param_1 + 0x30));
+            (uint8_t)pvVar5->_cellType,
+            (int)static_cast<int16_t>(tileX0),
+            (int)static_cast<int16_t>(tileY0),
+            (int)static_cast<int16_t>(tileX1),
+            (int)static_cast<int16_t>(tileY1),
+            &pvVar5->_footprint,
+            extraField);
 
-        uint32_t uVar1 = *reinterpret_cast<uint32_t*>(param_1 + 0x20);
+        uint32_t uVar1 = _flags;
         uint32_t uVar4 = uVar1 | 0x100000;          // BTS 0x14
-        *reinterpret_cast<uint32_t*>(param_1 + 0x20) = uVar4;
-        if ((((uVar4 ^ uVar1) & 0xffff) != 0) &&
-            (*reinterpret_cast<int64_t*>(param_1 + 0x10) != 0)) {
-            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
+        _flags = uVar4;
+        if ((((uVar4 ^ uVar1) & 0xffff) != 0) && (_entity != nullptr)) {
+            _entity->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }
@@ -403,34 +397,36 @@ void MapComponent_sub_41b0(int64_t param_1) {
 // ============================================================
 // CreateNaturalResource_impl_4750 (0x140124750)
 // ============================================================
-// Map-init vtable entry. Guarded by the +0x20 bit-20 flag (must be SET). Resolves
-// the AreaDescription, runs the map-init grid-update (dee0), then CLEARS bit-20 and,
-// if the low-16 flag bits changed and the IBP at +0x10 is non-null, NotifyEntityChanged.
-void CreateNaturalResource_impl_4750(int64_t param_1) {
-    if ((*reinterpret_cast<uint32_t*>(param_1 + 0x20) >> 0x14 & 1) == 0) return;
+// Map-init entry. Guarded by the +0x20 bit-20 flag (must be SET). Resolves the
+// MapDescription, runs the map-init grid-update (dee0), then CLEARS bit-20 and, if
+// the low-16 flag bits changed and the owner entity is non-null, RefreshEntityFlags.
+// LEFT: nothing calls this body; MapComponent's slot 7 reaches 0x140124750 through
+// MapComponent_DetachOccupancy_4750 (mapcomponent.cpp), a different body of the same
+// retail function (it trusts the linked description and unmarks through starttown).
+void CreateNaturalResource_impl_4750(MapComponent* self) {
+    if ((self->_flags >> 0x14 & 1) == 0) return;
 
-    void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    int* piVar2 = *reinterpret_cast<int**>(
-        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf8);
+    Description* obj = self->_description;
+    // LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
+    int* piVar2 = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
-    int64_t local_res8 = *reinterpret_cast<int64_t*>(param_1 + 0x10);
-    void* pvVar5 = bVar3 ? obj : nullptr;
+    ComponentEntity* local_res8 = self->_entity;
+    MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
 
     CreateNaturalResource_impl_dee0(
         piVar2, &local_res8,
-        (int)*reinterpret_cast<short*>(param_1 + 0x28),
-        (int)*reinterpret_cast<short*>(param_1 + 0x2a),
-        (int)*reinterpret_cast<short*>(param_1 + 0x2c),
-        (int)*reinterpret_cast<short*>(param_1 + 0x2e),
-        reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(pvVar5) + 0x28),
-        *reinterpret_cast<int*>(param_1 + 0x30));
+        (int)static_cast<int16_t>(self->tileX0),
+        (int)static_cast<int16_t>(self->tileY0),
+        (int)static_cast<int16_t>(self->tileX1),
+        (int)static_cast<int16_t>(self->tileY1),
+        &pvVar5->_footprint,
+        self->extraField);
 
-    uint32_t uVar1 = *reinterpret_cast<uint32_t*>(param_1 + 0x20);
+    uint32_t uVar1 = self->_flags;
     uint32_t uVar4 = uVar1 & 0xffefffff;            // BTR 0x14
-    *reinterpret_cast<uint32_t*>(param_1 + 0x20) = uVar4;
-    if ((((uVar4 ^ uVar1) & 0xffff) != 0) &&
-        (*reinterpret_cast<int64_t*>(param_1 + 0x10) != 0)) {
-        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(param_1 + 0x10));
+    self->_flags = uVar4;
+    if ((((uVar4 ^ uVar1) & 0xffff) != 0) && (self->_entity != nullptr)) {
+        self->_entity->RefreshEntityFlags();   // 0x1400c3470
     }
 }

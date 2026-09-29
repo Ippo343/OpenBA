@@ -23,6 +23,8 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 
+class HerdComponent;
+
 class WildAnimalComponent final : public Component {
     DECLARE_EXE_TYPE(WildAnimalComponent)
 
@@ -33,6 +35,7 @@ public:
     ~WildAnimalComponent() override = default;                    // [0] 0x140039df0
     void Persist(void* stream) override;                          // [3] 0x14012e300
     void OnRemove() override;                                     // [7] 0x14012e2b0
+    void SetHerd(HerdComponent* const* herd);                     // 0x14012e510 (body: herdcomponent.cpp)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint64_t data28;       // +0x28 herd (HerdComponent) back-ref

@@ -39,6 +39,7 @@ public:
     // 0x1400aad50: the dirty-chunk rebuild slot 1 JMPs to (a non-virtual member;
     // also reached by address through the Reimpl_GeometryChunkUpdate door).
     void RebuildDirtyChunks();
+    void RemoveDecal(int decalId);                                   // 0x1400b0d00 (defined in Component/decalcomponent.cpp)
 
 
 public:

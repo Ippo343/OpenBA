@@ -35,11 +35,14 @@ public:
     void        Command(int command) override;                          // [14] 0x14011f890
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14011f780
 
-    // +0x50 "plant trees" (command 1), +0x51 "cut trees" (command 2), each a bool.
-    uint16_t foresterFlags;     // +0x50: 0x101 from the ctor
+    // Persist 0x14011f960: Serialize(bool&) +0x50, Serialize(bool&) +0x51; the ctor
+    // stores the pair as one word 0x101 (both on).
+    bool     plantTrees;        // +0x50 command 1
+    bool     cutTrees;          // +0x51 command 2
     uint8_t  _pad52[6];         // +0x52
 };
 
 static_assert(sizeof(ForesterComponent) == 0x58, "ForesterComponent is 0x58 (create 0x140034870)");
 static_assert(alignof(ForesterComponent) == 8, "ForesterComponent alignment");
-static_assert(offsetof(ForesterComponent, foresterFlags) == 0x50, "ForesterComponent +0x50");
+static_assert(offsetof(ForesterComponent, plantTrees) == 0x50, "ForesterComponent +0x50");
+static_assert(offsetof(ForesterComponent, cutTrees) == 0x51, "ForesterComponent +0x51");

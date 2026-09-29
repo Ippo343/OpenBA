@@ -69,29 +69,19 @@
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7158 cell class
 #include "Component/AmbientEmitterComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3e60 cell class
 #include "Component/exe_bodies.h"
+#include "Entity/ComponentEntity.h"
 
 namespace {
 
-void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
-    void* found = nullptr;
-    if (entity && typeId) {
-        const int n = *reinterpret_cast<int*>(entity + 0x38);
-        const uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        for (int i = 0; i < n; ++i) {
-            void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
-            void* obj = *ibp;
-            if (!obj) continue;
-            const uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
-            if (t == typeId) {
-                void* o = *ibp;
-                if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
-                break;
-            }
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+// ComponentEntity::FindComponent<T> into the caller's InternalPtr slot. The callers
+// hand the entity in as an integer (B4 FORWARD); the null-entity and zero-type-id
+// answers are the tree's (retail has neither test). Kept (B9).
+template <class T>
+void* FindInto(uintptr_t entity, void* retIBP) {
+    T* found = nullptr;
+    if (entity && T::TypeId())
+        found = reinterpret_cast<ComponentEntity*>(entity)->FindComponent<T>();
+    return ::new (retIBP) ::Object::InternalPtr<T>(found);
 }
 
 }  // namespace
@@ -100,13 +90,13 @@ void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
 // ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c41e0 is FireComponent's registered
 // type-id cell (INVENTORY_C Table 1) -- read BY CELL as the class's static.
 extern "C" void* Entity_FindComponent_Fire_5840(uintptr_t entity, void* retIBP) {
-    return FindByTypeId(entity, retIBP, FireComponent::TypeId());
+    return FindInto<FireComponent>(entity, retIBP);
 }
 
 // FUN_140009790 — Entity::FindComponent<CitizenComponent>
 // 0x1401c7158 is CitizenComponent's registered type-id cell.
 extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIBP) {
-    return FindByTypeId(entity, retIBP, CitizenComponent::TypeId());
+    return FindInto<CitizenComponent>(entity, retIBP);
 }
 
 // FUN_140002280 — Entity::FindComponent<AmbientEmitterComponent>
@@ -121,5 +111,5 @@ extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIB
 // register 0x140002280 only after AmbientEmitterComponent::OnAdded 0x140042e10 is
 // ported), so the conversion is inert.
 extern "C" void* Entity_FindComponent_AmbientEmitter_2280(uintptr_t entity, void* retIBP) {
-    return FindByTypeId(entity, retIBP, AmbientEmitterComponent::TypeId());   // cell 0x1401c3e60
+    return FindInto<AmbientEmitterComponent>(entity, retIBP);   // cell 0x1401c3e60
 }

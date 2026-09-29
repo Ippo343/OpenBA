@@ -107,13 +107,12 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
             const ComponentDescription* desc = static_cast<const ComponentDescription*>(ext);
             // Find SelectDescription sub-component
             int compCount = desc->_subDescCount;    // +0x30
-            void** compArray = desc->_subDescs;     // +0x28
+            Description** compArray = desc->_subDescs;   // +0x28
 
             // First pass: check if entity HAS a SelectDescription
             bool hasSelect = false;
             for (int i = 0; i < compCount; i++) {
-                // LEFT: the sub-descriptions are declared void* (ComponentDescription.h).
-                const Object::Base* comp = reinterpret_cast<const Object::Base*>(compArray[i]);
+                const Description* comp = compArray[i];
                 uint32_t typeId = comp->Type();   // slot 2
                 if (typeId == SelectDescription::TypeId()) {
                     if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId()) && comp != nullptr) {
@@ -127,8 +126,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
                 // Second pass: find the SelectDescription and check type
                 const SelectDescription* selectDesc = nullptr;
                 for (int i = 0; i < compCount; i++) {
-                    // LEFT: as above.
-                    const Object::Base* comp = reinterpret_cast<const Object::Base*>(compArray[i]);
+                    const Description* comp = compArray[i];
                     uint32_t typeId = comp->Type();   // slot 2
                     if (typeId == SelectDescription::TypeId()) {
                         if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId())) {
@@ -172,8 +170,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
             int compIdx = 0;
             if (entityDesc->_subDescCount > 0) {
                 do {
-                    // LEFT: the sub-descriptions are declared void* (ComponentDescription.h).
-                    const Object::Base* comp = reinterpret_cast<const Object::Base*>(entityDesc->_subDescs[compIdx]);
+                    const Description* comp = entityDesc->_subDescs[compIdx];
                     uint32_t typeId = comp->Type();   // slot 2
                     if (typeId == RawMaterialDescription::TypeId()) {
                         bool isDerived = ::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId());

@@ -2,39 +2,28 @@
 // Clean reimplementation of ModDialog vtable methods.
 //
 // ModDialog (0xD8 bytes), vtable at 0x14015c870.
-// Extends DialogInstance (0xB8 base).
-//
-// Layout:
-//   +0xB8: dynamic array ptr (mod entry cache, stride 0x58)
-//   +0xC0: array count
-//   +0xC8: table element (InternalPtr)
-//   +0xD0: zeroed
+// Extends DialogInstance (0xB8 base). Fields and the 0x58-byte row: ModDialog.h.
 //
 // Reimplemented:
-//   Slot4 (0x14006F150) — Setup: populates mod list table, thumbnail pipeline
-//   Slot8 (0x14006ED40) — OnCommand: handles all mod list button clicks
+//   OnOpened (0x14006F150) — populates mod list table, thumbnail pipeline
+//   OnElementEvent (0x14006ED40) — handles all mod list button clicks
+//   RefreshDisplay 0x14006eec0, ToggleMod 0x14006e930, MoveToTop 0x14006e660,
+//   ShowDetails 0x14006e490, Apply 0x14006ea70 (CloseAndReload 0x14006e9b0 is in
+//   mod_dialog_vtables.cpp)
 //
-// Not hookable (Runtime thunks):
-//   Slot7, Slot9 — 6-byte JMP [rip+xx] to Runtime, cannot be hooked
-//
-// Entry struct (0x58 bytes = 11 × 8):
-//   +0x00: textModName   InternalPtr<Element>
-//   +0x08: textModAuthor InternalPtr<Element>
-//   +0x10: textModVersion InternalPtr<Element>
-//   +0x18: textModDescription InternalPtr<Element>
-//   +0x20: imageConflict InternalPtr<Element>
-//   +0x28: checkLoaded   InternalPtr<Element>
-//   +0x30: vtChild       InternalPtr<Element>  (first child via vtable[0x58])
-//   +0x38: imageIcon     ImageElement* (InternalPtr)
-//   +0x40: ImageBuffer*
-//   +0x48: MaterialInstance*
-//   +0x50: SpriteSheet*
+// LEFT (B.4 W1 DLG-b): the RtIO::Mod POD (runtime/types/io/Modification.h, R-IO)
+// holds its three Strings as `char*` and its files Array as `void*`; the reads
+// that view them as System::String / Filename stay casts until that POD is the
+// real class. SpriteSheet::m_field30 is `uint64_t` (R-UI) and
+// MaterialInstance::AddTexture takes the RtSystem::String POD (R-GFX).
 
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ButtonElement.h"
+#include "ui/CheckElement.h"
 #include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -70,7 +59,7 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
-#include "Dialog/MainMenuDialog.h"     // B3R: MainMenuDialog_ReturnToMenu
+#include "Dialog/MainMenuDialog.h"     // MainMenuDialog::ReturnToMenu
 #include "save/SaveLoad.h"             // B3R: Save::SavedState
 #include "system/Configuration.h"      // B3R: System::Configuration::GetVersionString
 #include "Game/exe_constants.h"   // B3R: kRdata_*
@@ -95,57 +84,17 @@
 // (0x00007ffc... on the first Mods click), which ImageBufferData_Create then
 // dereferenced as `levels->count`. The C++ member types it, so that cannot recur.
 
-// ============================================================
-// ModDialog thumbnail array push (was ResolveAddr(Module::Exe, 0x140012a60), FUN_140012a60).
-// ============================================================
-// B3R W2-EZ: moved here, verbatim, from engine/funcs/engine_funcs.cpp (declared in
-// Dialog/exe_bodies.h).
-// {ptr,count:i32,cap:i32} header at +0x00/+0x08/+0x0C, 0x58-byte (11 qword) elements.
-// Byte-faithful: grows (3x over-allocation on a plain +1 append), copies surviving old
-// elements, and fills every newly-uncovered slot [oldCount, newCount) from elementPtr —
-// in the common case that is just the appended slot at index oldCount.
-// Capacity growth: when newCount == oldCount + 1 and oldCount != 0:
-//   new capacity = newCount * 3
-// Otherwise capacity = newCount (exact fit or shrink).
-void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* elementPtr) {
-    uint8_t* base   = (uint8_t*)arrayHeader;
-    void**   pData  = (void**)base;
-    int*     pCount = (int*)(base + 0x08);
-    int*     pCap   = (int*)(base + 0x0C);
-    static constexpr uint64_t kStride = 0x58;
-    static constexpr int kWords = kStride / 8;
-
-    if (newCount == *pCount) return;
-    void* oldData  = *pData;
-    int   oldCount = *pCount;
-    *pCount = newCount;
-
-    if (*pCap < newCount) {
-        *pCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        *pData = System::MemoryAllocator::MemAlloc((uint64_t)*pCap * kStride, 8);
-    }
-
-    int startIdx = (oldData == *pData) ? oldCount : 0;
-    for (int i = startIdx; i < newCount; ++i) {
-        uint64_t* dst = (uint64_t*)((uint8_t*)*pData + (uint64_t)i * kStride);
-        const uint64_t* src = (i < oldCount)
-            ? (const uint64_t*)((uint8_t*)oldData + (uint64_t)i * kStride)
-            : (const uint64_t*)elementPtr;
-        for (int f = 0; f < kWords; ++f) dst[f] = src[f];
-    }
-
-    if (oldData != *pData) {
-        System::MemoryAllocator::MemFree(oldData);
-    }
-}
+// (B.4 W1: the row append is Collection::Array<ModDialogEntry>::SetSize(n, fill),
+// retail 0x140012a60 — the trivially-copyable row is byte-copied, the old buffer
+// freed, capacity trebled on a +1 append, exactly as the transcription here did.)
 
 // ============================================================
 // Filename equality check — compares two System::Filename/String objects
 // by their underlying string data. Both are 8-byte COW pointers.
 // ============================================================
-static bool Filename_Equals(const void* filenameA, const void* filenameB) {
-    const char* a = *(const char**)filenameA;
-    const char* b = *(const char**)filenameB;
+static bool Filename_Equals(const RtSystem::Filename& filenameA, const RtSystem::Filename& filenameB) {
+    const char* a = filenameA.data;
+    const char* b = filenameB.data;
     if (a == b) return true;
     if (!a || !b) return false;
     // Compare using C string comparison (null-terminated)
@@ -153,61 +102,47 @@ static bool Filename_Equals(const void* filenameA, const void* filenameB) {
 }
 
 // ============================================================
-// ModDialog_RefreshDisplay_Impl (was fn_ModDialog_RefreshDisplay, FUN_14006eec0)
+// ModDialog::RefreshDisplay (0x14006eec0)
 //
 // Updates the mod list UI display. For each mod entry in the table:
 //   1. Sets name, author, description, version text parameters
 //   2. Checks for conflicts (same filename dependency in another enabled mod)
 //   3. Shows/hides conflict icon
 //   4. Copies thumbnail texture from mod data
-//
-// Entry struct (0x58 bytes) layout — see file header comment.
 // ============================================================
-static void ModDialog_RefreshDisplay_Impl(ModDialog* self);
+void ModDialog::RefreshDisplay() {
+    IO::Modification* modification = ::IO::Modification::_singleton;
+    if (!modification) return;
 
-static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
-    uintptr_t s = (uintptr_t)self;
-    void* modSingleton = ::IO::Modification::_singleton;
-    if (!modSingleton) return;
-
-    int modCount = reinterpret_cast<const IO::Modification*>(modSingleton)->GetCount();   // B.3.4 bridge
+    int modCount = modification->GetCount();
     if (modCount <= 0) return;
 
-    uintptr_t entriesBase = *(uintptr_t*)(s + 0xB8);  // mod entry array
-
     for (int i = 0; i < modCount; i++) {
-        uintptr_t entry = entriesBase + (uintptr_t)i * 0x58;
+        ModDialogEntry& entry = entries._data[i];
 
-        // Get mod data
-        void* mod = const_cast<RtIO::Mod*>(
-            &reinterpret_cast<const IO::Modification*>(modSingleton)->GetModification(i));   // B.3.4 bridge
-        if (!mod) continue;
-
-        uintptr_t m = (uintptr_t)mod;
+        const RtIO::Mod& mod = modification->GetModification(i);
 
         // Check for conflicts: another enabled mod depends on a file from this mod
         bool hasConflict = false;
-        uint8_t enabled = *(uint8_t*)(m + 0x50);  // mod->m_enabled
+        uint8_t enabled = mod.enabled;
 
         if (enabled != 0) {
             for (int j = 0; j < modCount; j++) {
                 if (j == i) continue;
 
-                void* otherMod = const_cast<RtIO::Mod*>(
-                    &reinterpret_cast<const IO::Modification*>(modSingleton)->GetModification(j));   // B.3.4 bridge
-                uintptr_t om = (uintptr_t)otherMod;
-                uint8_t otherEnabled = *(uint8_t*)(om + 0x50);
+                const RtIO::Mod& otherMod = modification->GetModification(j);
+                uint8_t otherEnabled = otherMod.enabled;
                 if (otherEnabled == 0) continue;
 
                 // Check if this mod's filename appears in the other mod's dependency list
-                int depCount = *(int*)(m + 0x78);  // mod->m_filenameArrayCount
+                int depCount = mod.files.size;
                 if (depCount <= 0) continue;
 
-                uintptr_t depArray = *(uintptr_t*)(m + 0x70);  // mod->m_filenameArrayData
+                // LEFT: RtIO::ModArray::data is void* (R-IO's POD).
+                const RtSystem::Filename* depArray = static_cast<const RtSystem::Filename*>(mod.files.data);
                 for (int k = 0; k < depCount; k++) {
-                    // Compare other mod's filename (+0x58) with this mod's dependency[k]
-                    void* depFilename = (void*)(depArray + (int64_t)k * 8);
-                    if (Filename_Equals((void*)(om + 0x58), depFilename)) {
+                    // Compare other mod's filename with this mod's dependency[k]
+                    if (Filename_Equals(otherMod.file, depArray[k])) {
                         hasConflict = true;
                         goto conflict_done;
                     }
@@ -216,17 +151,18 @@ static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
         }
 conflict_done:
 
-        // Set text parameters: name, author, description
-        reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x00))->SetParameter(0, *reinterpret_cast<const System::String*>((void*)m));  // B.3.6 bridge; mod->m_name
+        // Set text parameters: name, author, description.
+        // LEFT: RtIO::Mod holds the three Strings as char* (R-IO's POD).
+        static_cast<UI::TextElement*>(entry.textModName.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));
 
-        reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x08))->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x08)));  // B.3.6 bridge; mod->m_author
+        static_cast<UI::TextElement*>(entry.textModAuthor.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));
 
-        reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x18))->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x10)));  // B.3.6 bridge; mod->m_description
+        static_cast<UI::TextElement*>(entry.textModDescription.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));
 
         // Format version string: "versionMinor (versionString)"
         {
-            uint32_t versionMajor = *(uint32_t*)(m + 0x18);
-            uint32_t versionMinor = *(uint32_t*)(m + 0x1C);
+            uint32_t versionMajor = (uint32_t)mod.i18;
+            uint32_t versionMinor = (uint32_t)mod.i1c;
 
             // GetVersionString returns a String for the version major (as game build version)
             // ?GetVersionString@Configuration@System@@ is a by-value static; its door
@@ -235,13 +171,13 @@ conflict_done:
 
             System::String formatted = System::String::Format("%i (%s)", (uint64_t)versionMinor, buildStr._data);
 
-            reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x10))->SetParameter(0, formatted);  // B.3.6 bridge
+            static_cast<UI::TextElement*>(entry.textModVersion.Get())->SetParameter(0, formatted);
         }
 
-        // Set enabled checkbox state: entry+0x28 = checkLoaded, element +0xD8 = enabled byte
-        *(uint8_t*)(*(uintptr_t*)(entry + 0x28) + 0xD8) = enabled;
+        // Set enabled checkbox state
+        static_cast<UI::CheckElement*>(entry.checkLoaded.Get())->_checked = enabled;
 
-        // Update vtChild element with color (vtable[10] = offset +0x50)
+        // Colour the row's border (vtable[10] SetColor)
         // Color encodes enabled/conflict state:
         //   0x20c0ffc0 = enabled, no conflict (green)
         //   0x40ff0000 = enabled, has conflict (red)
@@ -252,33 +188,28 @@ conflict_done:
         } else {
             rowColor = 0x10ffffff;
         }
-        {
-            void* elem = *(void**)(entry + 0x30);
-            reinterpret_cast<UI::Element*>(elem)->SetColor(rowColor);  // B.3.6 bridge
-        }
+        entry.rowBorder->SetColor(rowColor);
 
-        // Show/hide conflict icon (entry+0x20 = imageConflict)
-        reinterpret_cast<UI::Element*>(*(void**)(entry + 0x20))->SetFlagsOnOff(  // B.3.6 bridge
+        // Show/hide conflict icon
+        entry.imageConflict->SetFlagsOnOff(
                                   hasConflict ? 0 : 1,    // set bit 0 (hidden) when no conflict
                                   hasConflict ? 1 : 0);   // clear bit 0 (visible) when conflict
 
         // Copy thumbnail texture (48x48)
         {
-            void* videoDevice = ::Video::Device::_singleton;
+            Video::Device* videoDevice = ::Video::Device::_singleton;
             if (videoDevice) {
-                reinterpret_cast<Video::Device*>(videoDevice)->Lock();   // B.3.5 bridge
-                void* imageBuffer = *(void**)(entry + 0x40);
-                void* thumbnailData = *(void**)(m + 0x30);  // mod->m_intArrayData (thumbnail pixels)
-                reinterpret_cast<Video::ImageBuffer*>(imageBuffer)
-                    ->CopyToTexture(thumbnailData, 0x30, 0x30);          // B.3.5 bridge
-                reinterpret_cast<Video::Device*>(videoDevice)->Unlock(); // B.3.5 bridge
+                videoDevice->Lock();
+                // mod.ints: the thumbnail pixels (Array<int32> data)
+                entry.imageBuffer->CopyToTexture(mod.ints.data, 0x30, 0x30);
+                videoDevice->Unlock();
             }
         }
     }
 }
 
 // ============================================================
-// ModDialog::Slot4 — Setup (0x14006F150)
+// ModDialog::OnOpened — Setup (0x14006F150)
 // ============================================================
 //
 // Finds buttonCancel/buttonOk/tableMods, then for each installed mod:
@@ -286,403 +217,322 @@ conflict_done:
 //   2. Finds 10 child elements by name, assigns IDs (1000+/2000+/3000+/4000+/5000+i)
 //   3. Hides buttonUp+buttonTop for first mod, buttonDown for last
 //   4. Builds 48x48 ImageBuffer + MaterialInstance + SpriteSheet thumbnail
-//   5. Pushes 0x58-byte entry struct into self->m_entries array
+//   5. Appends the 0x58-byte row to `entries`
 // After loop: calls RefreshDisplay, loads browser controller, hides browse UI.
 
 void ModDialog::OnOpened() {
     printf("[ModDialog::OnOpened] self=%p building mod list\n", (void*)this);
-    uintptr_t s = (uintptr_t)this;
 
-    // --- buttonCancel (id=100, set +0xC0=8) ---
+    // --- buttonCancel (id=100, key index 8) ---
     {
         System::String retbuf("buttonCancel");
-        uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(retbuf));  // B.3.6 bridge
-        void* elem = *(void**)elemBuf;
-        reinterpret_cast<UI::Element*>(elem)->SetElementId(100);  // B.3.6 bridge
-        *(uint32_t*)(*(uintptr_t*)elemBuf + 0xC0) = 8;
+        Object::InternalPtr<UI::Element> elem = FindElement(retbuf);
+        elem->SetElementId(100);
+        static_cast<UI::ButtonElement*>(elem.Get())->_keyIndex = 8;
     }
 
     // --- buttonOk (id=0x65) ---
-    uint8_t buttonOkBuf[8] = {};
     {
         System::String retbuf("buttonOk");
-        uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(retbuf));  // B.3.6 bridge
-        void* elem = *(void**)elemBuf;
-        reinterpret_cast<UI::Element*>(elem)->SetElementId(0x65);  // B.3.6 bridge
-        *(uint64_t*)buttonOkBuf = *(uint64_t*)elemBuf;
+        Object::InternalPtr<UI::Element> elem = FindElement(retbuf);
+        elem->SetElementId(0x65);
     }
-    (void)buttonOkBuf;
 
-    // --- tableMods: find and store at this+0xC8 ---
+    // --- tableMods ---
     {
         System::String retbuf("tableMods");
-        uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(retbuf));  // B.3.6 bridge
-        void* elem = *(void**)elemBuf;
-        // Store InternalPtr at +0xC8
-        new ((void*)(s + 0xC8)) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
+        tableMods = FindElement(retbuf);
     }
 
-    void* modSingleton = ::IO::Modification::_singleton;
-    int modCount = reinterpret_cast<const IO::Modification*>(modSingleton)->GetCount();   // B.3.4 bridge
+    IO::Modification* modification = ::IO::Modification::_singleton;
+    int modCount = modification->GetCount();
     float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
 
     for (int i = 0; i < modCount; i++) {
         // Clone template element from Dialog, add to tableMods
-        uint8_t templateBuf[8];
-        void* dialog = *(void**)(s + 0x18);
-        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(0));  // B.3.6 bridge
-        void* templateObj = *(void**)templateBuf;
+        const UI::Dialog* dialog = _dialog;
+        Object::ExternalPtr<UI::ElementDescription> templateObj = dialog->GetTemplate(0);
 
-        // Call vtable[8] (offset 0x40) to clone: (templateObj, retbuf, dialog)
-        // (= UI::ElementDescription slot 8 CreateInstance, RETSLOT per B6-2)
-        uint8_t cloneBuf[8];
-        reinterpret_cast<const UI::ElementDescription*>(templateObj)->CreateInstance(  // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
-            reinterpret_cast<const UI::Dialog*>(dialog));
-        void* clonedElem = *(void**)cloneBuf;
+        // ElementDescription slot 8 CreateInstance (RETSLOT per B6-2)
+        Object::InternalPtr<UI::Element> clonedElem;
+        templateObj->CreateInstance(&clonedElem, dialog);
 
         // Add cloned element to tableMods
-        void* tableElem = *(void**)(s + 0xC8);
-
-        reinterpret_cast<UI::Element*>(tableElem)->AddChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&clonedElem));  // B.3.6 bridge
+        tableMods->AddChild(&clonedElem);
 
         // Find child elements by name in the cloned row
-        uint8_t textModNameBuf[8] = {};
-        uint8_t textModAuthorBuf[8] = {};
-        uint8_t textModVersionBuf[8] = {};
-        uint8_t textModDescBuf[8] = {};
-        uint8_t checkLoadedBuf[8] = {};
-        uint8_t imageConflictBuf[8] = {};
-        uint8_t imageIconBuf[8] = {};
-        uint8_t buttonTopBuf[8] = {};
-        uint8_t buttonUpBuf[8] = {};
-        uint8_t buttonDownBuf[8] = {};
-        uint8_t buttonDetailsBuf[8] = {};
+        ModDialogEntry entry = {};
+        Object::InternalPtr<UI::Element> buttonTop;
+        Object::InternalPtr<UI::Element> buttonUp;
+        Object::InternalPtr<UI::Element> buttonDown;
+        Object::InternalPtr<UI::Element> buttonDetails;
 
         struct {
             const char* name;
-            uint8_t* buf;
+            Object::InternalPtr<UI::Element>* slot;
         } findList[] = {
-            { "textModName",        textModNameBuf },
-            { "textModAuthor",      textModAuthorBuf },
-            { "textModDescription", textModDescBuf },
-            { "textModVersion",     textModVersionBuf },
-            { "checkLoaded",        checkLoadedBuf },
-            { "imageConflict",      imageConflictBuf },
-            { "imageIcon",          imageIconBuf },
-            { "buttonTop",          buttonTopBuf },
-            { "buttonUp",           buttonUpBuf },
-            { "buttonDown",         buttonDownBuf },
-            { "buttonDetails",      buttonDetailsBuf },
+            { "textModName",        &entry.textModName },
+            { "textModAuthor",      &entry.textModAuthor },
+            { "textModDescription", &entry.textModDescription },
+            { "textModVersion",     &entry.textModVersion },
+            { "checkLoaded",        &entry.checkLoaded },
+            { "imageConflict",      &entry.imageConflict },
+            { "imageIcon",          &entry.imageIcon },
+            { "buttonTop",          &buttonTop },
+            { "buttonUp",           &buttonUp },
+            { "buttonDown",         &buttonDown },
+            { "buttonDetails",      &buttonDetails },
         };
 
         for (auto& e : findList) {
             System::String strBuf(e.name);
-            uint8_t retBuf[8];
-            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(strBuf));  // B.3.6 bridge
-            void* found = *(void**)retBuf;
-            new (e.buf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+            *e.slot = clonedElem->FindElement(strBuf);
         }
 
-        // Get vtable[0x58] child (Child(0)) of cloned element
-        uint8_t vtChildBuf[8] = {};
+        // The row's border: slot 11 of every UI::Element table is GetBorder
+        // (RETSLOT, B6-2), which takes no index -- the `0` an older call
+        // passed was never read.
         {
-            // vtable[0x58/8] = vtable[11]. The old comment here called it
-            // Element::Child(int); slot 11 of every UI::Element table is
-            // GetBorder (RETSLOT, B6-2), which takes no index -- the `0` the old
-            // call passed was never read.
-            uint8_t childRetBuf[8];
-            reinterpret_cast<UI::Element*>(clonedElem)->GetBorder(  // B.3.6 bridge
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(childRetBuf));
-            void* child = *(void**)childRetBuf;
-            new (vtChildBuf) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(child));   // B.3.3 bridge
+            Object::InternalPtr<UI::Element> border;
+            entry.rowBorder = *clonedElem->GetBorder(&border);
         }
 
         // Assign element IDs
-        reinterpret_cast<UI::Element*>(*(void**)checkLoadedBuf)->SetElementId(i + 1000);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)buttonTopBuf)->SetElementId(i + 4000);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)buttonDownBuf)->SetElementId(i + 3000);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)buttonUpBuf)->SetElementId(i + 2000);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)buttonDetailsBuf)->SetElementId(i + 5000);  // B.3.6 bridge
+        entry.checkLoaded->SetElementId(i + 1000);
+        buttonTop->SetElementId(i + 4000);
+        buttonDown->SetElementId(i + 3000);
+        buttonUp->SetElementId(i + 2000);
+        buttonDetails->SetElementId(i + 5000);
 
-        // Hide Up+Top for first mod (vtable[8], arg=0 matches original). Slot 8 of
-        // every UI::Element table is Enable(bool), not Hide (the old comment's
+        // Up+Top for first mod (vtable[8], arg=0 matches original). Slot 8 of
+        // every UI::Element table is Enable(bool), not Hide (an older comment's
         // name), so what this does is DISABLE the buttons (B36_RULES 2.2).
         if (i == 0) {
-            reinterpret_cast<UI::Element*>(*(void**)buttonUpBuf)->Enable(0);  // B.3.6 bridge
-            reinterpret_cast<UI::Element*>(*(void**)buttonTopBuf)->Enable(0);  // B.3.6 bridge
+            buttonUp->Enable(0);
+            buttonTop->Enable(0);
         }
-        // Hide Down for last mod
+        // Down for last mod
         if (i == modCount - 1) {
-            reinterpret_cast<UI::Element*>(*(void**)buttonDownBuf)->Enable(0);  // B.3.6 bridge
+            buttonDown->Enable(0);
         }
-
-        // Build 0x58-byte entry struct (11 × 8 bytes of InternalPtrs + raw ptrs)
-        struct ModEntry {
-            uint64_t textModName;    // +0x00
-            uint64_t textModAuthor;  // +0x08
-            uint64_t textModVersion; // +0x10
-            uint64_t textModDesc;    // +0x18
-            uint64_t imageConflict;  // +0x20
-            uint64_t checkLoaded;    // +0x28
-            uint64_t vtChild;        // +0x30
-            uint64_t imageIcon;      // +0x38
-            void*    imageBuffer;    // +0x40
-            void*    matInstance;    // +0x48
-            void*    spriteSheet;    // +0x50
-        } entry;
-
-        entry.textModName   = *(uint64_t*)textModNameBuf;
-        entry.textModAuthor = *(uint64_t*)textModAuthorBuf;
-        entry.textModVersion = *(uint64_t*)textModVersionBuf;
-        entry.textModDesc   = *(uint64_t*)textModDescBuf;
-        entry.imageConflict = *(uint64_t*)imageConflictBuf;
-        entry.checkLoaded   = *(uint64_t*)checkLoadedBuf;
-        entry.vtChild       = *(uint64_t*)vtChildBuf;
-        entry.imageIcon     = *(uint64_t*)imageIconBuf;
 
         // --- Create 48x48 ImageBuffer ---
-        void* imgBuf = System::MemoryAllocator::MemAlloc(0x68, 8);
+        void* imgBufMem = System::MemoryAllocator::MemAlloc(0x68, 8);
+        Video::ImageBuffer* imgBuf = nullptr;
         entry.imageBuffer = nullptr;
-        if (imgBuf) {
+        if (imgBufMem) {
             // Retail: `CALL [??0ImageBuffer]` then LEA 0x14015c8c0 — the class's
             // own table, i.e. `new Video::ImageBuffer()` compiled in the exe.
-            ::new (imgBuf) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
-            reinterpret_cast<Video::ImageBuffer*>(imgBuf)->Create(
+            imgBuf = ::new (imgBufMem) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
+            imgBuf->Create(
                 0, 2, 5, 0u, 0x30, 0x30, 1, 1, 1, 1, nullptr);   // B.3.5 bridge
             entry.imageBuffer = imgBuf;
         }
 
         // --- Create MaterialInstance (0x60 bytes) ---
-        void* matInst = System::MemoryAllocator::MemAlloc(0x60, 8);
-        entry.matInstance = nullptr;
-        if (matInst) {
-            ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
-            entry.matInstance = matInst;
+        void* matInstMem = System::MemoryAllocator::MemAlloc(0x60, 8);
+        Graphics::MaterialInstance* matInst = nullptr;
+        entry.material = nullptr;
+        if (matInstMem) {
+            matInst = ::new (matInstMem) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
+            entry.material = matInst;
         }
 
         // Load "Material/UI/UIMaterial.rsc", IsDerivedFrom Material, SetMaterial
         {
             System::Filename filenameBuf("Material/UI/UIMaterial.rsc");
-            void* extFactory = ::Object::ExternalFactory::_singleton;
-            void* ext = const_cast<::Object::External*>(
-                reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
-                    ->FindOrLoad(filenameBuf));
-            void* material = nullptr;
+            const ::Object::External* ext =
+                ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+            const Graphics::Material* material = nullptr;
             if (ext) {
                 bool derived = ::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId());
-                if (derived) material = ext;
+                if (derived) material = static_cast<const Graphics::Material*>(ext);
             }
-            reinterpret_cast<Graphics::MaterialInstance*>(matInst)->SetMaterial(
-                Object::ExternalPtr<Graphics::Material>(
-                    reinterpret_cast<Graphics::Material*>(material)));   // B.3.5 bridge
+            // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
+            matInst->SetMaterial(
+                Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));
         }
 
         // AddTexture("diffuse", imageBuffer)
         {
             System::String strBuf("diffuse");
-            reinterpret_cast<Graphics::MaterialInstance*>(matInst)->AddTexture(
+            // LEFT: AddTexture takes the RtSystem::String POD (R-GFX's header).
+            matInst->AddTexture(
                 *reinterpret_cast<const RtSystem::String*>(&strBuf),
-                Object::ExternalPtr<Video::ImageBuffer>(
-                    reinterpret_cast<Video::ImageBuffer*>(imgBuf)));   // B.3.5 bridge
+                Object::ExternalPtr<Video::ImageBuffer>(imgBuf));
         }
 
-        reinterpret_cast<Graphics::MaterialInstance*>(matInst)
-            ->BuildParameters();   // B.3.5 bridge
+        matInst->BuildParameters();
 
         // --- Create SpriteSheet (0x58 bytes) ---
-        void* sprSheet = System::MemoryAllocator::MemAlloc(0x58, 8);
+        void* sprSheetMem = System::MemoryAllocator::MemAlloc(0x58, 8);
+        UI::SpriteSheet* sprSheet = nullptr;
         entry.spriteSheet = nullptr;
-        if (sprSheet) {
-            ::new (sprSheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
+        if (sprSheetMem) {
+            sprSheet = ::new (sprSheetMem) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
             entry.spriteSheet = sprSheet;
 
-            // Set materialInstance at +0x30
-            *(void**)((uintptr_t)sprSheet + 0x30) = matInst;
+            // The sheet's material instance (+0x30).
+            // LEFT: SpriteSheet::m_field30 is uint64_t (R-UI's header).
+            sprSheet->m_field30 = reinterpret_cast<uint64_t>(matInst);
 
-            // operator= empty strings at +0x38 and +0x40 (raw SpriteSheet fields; not our struct)
+            // operator= empty strings at +0x40 and +0x38 (the two String fields).
+            // LEFT: SpriteSheet holds them as char* (H5, R-UI's header).
             System::String emptyStr1, emptyStr2;
-            *reinterpret_cast<System::String*>((uintptr_t)sprSheet + 0x40) = emptyStr1;  // B.3.1 bridge
-            *reinterpret_cast<System::String*>((uintptr_t)sprSheet + 0x38) = emptyStr2;  // B.3.1 bridge
+            *reinterpret_cast<System::String*>(&sprSheet->m_groupName) = emptyStr1;
+            *reinterpret_cast<System::String*>(&sprSheet->m_textureName) = emptyStr2;
 
-            // Set w/h at +0x48/+0x4c to 48 (0x30)
-            *(uint32_t*)((uintptr_t)sprSheet + 0x48) = 0x30;
-            *(uint32_t*)((uintptr_t)sprSheet + 0x4c) = 0x30;
-            // Zero +0x50
-            *(uint64_t*)((uintptr_t)sprSheet + 0x50) = 0;
+            // w/h at +0x48/+0x4c = 48 (0x30)
+            sprSheet->m_field48 = 0x30;
+            sprSheet->m_field4C = 0x30;
+            // Zero +0x50 (one qword store in the transcription: the flag and its pad)
+            sprSheet->m_field50 = false;
+            for (uint8_t& b : sprSheet->_pad51) b = 0;
 
             // AddSpriteInfo(sheet, empty, empty, 0, 0, 48, 48)
-            uint64_t emptyA = 0, emptyB = 0;
-            reinterpret_cast<UI::SpriteSheet*>(sprSheet)->AddSpriteInfo(  // B.3.6 bridge
-                *reinterpret_cast<const System::String*>(&emptyA),
-                *reinterpret_cast<const System::String*>(&emptyB), 0, 0, 0x30, 0x30);
+            System::String emptyA, emptyB;
+            sprSheet->AddSpriteInfo(emptyA, emptyB, 0, 0, 0x30, 0x30);
 
             // SetSpriteInfo(sheet, 0, 48, 48, 0.0, 0.0, uvScale, uvScale)
-            reinterpret_cast<UI::SpriteSheet*>(sprSheet)->SetSpriteInfo(  // B.3.6 bridge
+            sprSheet->SetSpriteInfo(
                 0, 0x30, 0x30, 0.0f, 0.0f, uvScale, uvScale);
         }
 
         // Create Sprite by index and SetSprite on imageIcon
         {
-            uint8_t spriteBuf[16];
-            ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(sprSheet)), 0);  // B.3.6 bridge
-            void* imageIconElem = *(void**)imageIconBuf;
-            reinterpret_cast<UI::ImageElement*>(imageIconElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+            UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(sprSheet), 0);
+            static_cast<UI::ImageElement*>(entry.imageIcon.Get())->SetSprite(&sprite);
         }
 
-        // Push entry into this->m_entries (array at +0xB8, count at +0xC0)
-        int newCount = *(int*)(s + 0xC0) + 1;
-        fn_ModDialog_ArrayPush58_CppImpl((void*)(s + 0xB8), newCount, &entry);   // 0x140012a60
+        // Append the row (0x140012a60)
+        entries.SetSize(entries._size + 1, entry);
     }
 
     // --- Post-loop: refresh display, add browser controller, hide browse UI ---
-    ModDialog_RefreshDisplay_Impl(this);
+    RefreshDisplay();
 
     // Load "Dialog/Mod.rsc:browser", add as controller with type ModBrowseUI::TypeId()
     // (cell 0x1401c5210; the TypeId_BrowserController name lies -- see Table 1/3)
     {
         System::Filename filenameBuf("Dialog/Mod.rsc:browser");
-        void* extFactory = ::Object::ExternalFactory::_singleton;
-        void* ext = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
-                ->FindOrLoad(filenameBuf));
+        const ::Object::External* ext =
+            ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
 
         // Pass browser external directly; original has IsDerivedFrom check but the
         // _typeInfo_exref is context-dependent (Ghidra merges refs) and the browser
         // controller IS the right type — passing null would silently break the UI.
-        void* browserExt = ext;
+        // LEFT: ExternalPtr<T> wraps a non-const T (FindOrLoad returns const).
+        UI::ElementDescription* browserExt =
+            const_cast<UI::ElementDescription*>(static_cast<const UI::ElementDescription*>(ext));
 
         // AddController(this, typeId, 0, 0, browserExt, "groupBrowse")
         System::String groupStr("groupBrowse");
         uint32_t typeId = ModBrowseUI::TypeId();
-        AddController(  // B.3.6 bridge
+        AddController(
             typeId, static_cast<Object::Base*>(nullptr),
             Object::ExternalPtr<UI::DialogControllerConfig>(nullptr),
-            Object::ExternalPtr<UI::ElementDescription>(
-                reinterpret_cast<UI::ElementDescription*>(browserExt)),
+            Object::ExternalPtr<UI::ElementDescription>(browserExt),
             groupStr);
     }
 
     // Hide "buttonBrowse"
     {
         System::String strBuf("buttonBrowse");
-        uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(strBuf));  // B.3.6 bridge
-        void* elem = *(void**)elemBuf;
-        reinterpret_cast<UI::Element*>(elem)->Hide(true);  // B.3.6 bridge
+        FindElement(strBuf)->Hide(true);
     }
 
     // Hide "groupProgress"
     {
         System::String strBuf("groupProgress");
-        uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(strBuf));  // B.3.6 bridge
-        void* elem = *(void**)elemBuf;
-        reinterpret_cast<UI::Element*>(elem)->Hide(true);  // B.3.6 bridge
+        FindElement(strBuf)->Hide(true);
     }
 }
 
 // ============================================================
-// ModDialog_ToggleMod_Impl (was fn_ModDialog_ToggleMod, FUN_14006e930)
+// ModDialog::ToggleMod (0x14006e930)
 //
 // Pushes the row's checkbox state into the mod list, then refreshes.
 //
 // Retail (0x14006e930) does NOT read the model: it takes row `index` of the
-// entry array (+0xB8, stride 0x58), CheckPtr's the checkLoaded InternalPtr at
-// entry+0x28, and passes THAT element's already-toggled bool at +0xd8 to
-// Modification::Enable. The previous port read Mod::enabled and inverted it,
-// which only agrees while widget and model are in lockstep, and it is why the
-// no-mods crash read 0xd0 (GetModification on an empty list) instead of
-// faulting on the row itself. No null check: with the row present the deref is
-// load-bearing, as in retail; the row's presence is the caller's contract
-// (standalone/autostart.cpp gates its fabricated clicks on the row count).
+// entry array, CheckPtr's the checkLoaded InternalPtr, and passes THAT
+// element's already-toggled bool to Modification::Enable. The previous port
+// read Mod::enabled and inverted it, which only agrees while widget and model
+// are in lockstep, and it is why the no-mods crash read 0xd0 (GetModification
+// on an empty list) instead of faulting on the row itself. No null check: with
+// the row present the deref is load-bearing, as in retail; the row's presence is
+// the caller's contract (standalone/autostart.cpp gates its fabricated clicks on
+// the row count).
 // ============================================================
-static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
-    uintptr_t s = (uintptr_t)self;
-    void* modSingleton = ::IO::Modification::_singleton;
+void ModDialog::ToggleMod(int32_t index) {
+    IO::Modification* modification = ::IO::Modification::_singleton;
 
-    uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)(int64_t)index * 0x58;
-    uintptr_t checkElem = *(uintptr_t*)(entry + 0x28);
-    reinterpret_cast<IO::Modification*>(modSingleton)
-        ->Enable(index, *(uint8_t*)(checkElem + 0xD8) != 0);   // B.3.4 bridge
+    const ModDialogEntry& entry = entries._data[index];
+    UI::CheckElement* checkElem = static_cast<UI::CheckElement*>(entry.checkLoaded.Get());
+    modification->Enable(index, checkElem->_checked != 0);
 
-    ModDialog_RefreshDisplay_Impl(self);
+    RefreshDisplay();
 }
 
 // ============================================================
-// ModDialog_MoveToTop_Impl (was fn_ModDialog_MoveToTop, FUN_14006e660)
+// ModDialog::MoveToTop (0x14006e660)
 //
 // Moves a mod to position 0 by repeatedly swapping with the entry above.
-// Then does a full refresh display (same as ModDialog_RefreshDisplay_Impl).
+// Then does a full refresh display.
 // ============================================================
-static void ModDialog_MoveToTop_Impl(ModDialog* self, int index) {
-    void* modSingleton = ::IO::Modification::_singleton;
+void ModDialog::MoveToTop(int32_t index) {
+    IO::Modification* modification = ::IO::Modification::_singleton;
 
     // Swap up to top
     while (index > 0) {
-        reinterpret_cast<IO::Modification*>(modSingleton)->Swap(index, index - 1);   // B.3.4 bridge
+        modification->Swap(index, index - 1);
         index--;
     }
 
-    ModDialog_RefreshDisplay_Impl(self);
+    RefreshDisplay();
 }
 
 // ============================================================
-// ModDialog_ShowDetails_Impl (was fn_ModDialog_ShowDetails, FUN_14006e490)
+// ModDialog::ShowDetails (0x14006e490)
 //
 // Opens the ModDetailsDialog for a specific mod index.
-// Loads "Dialog/ModDetails.rsc", creates a ModDetailsDialog (0xC8 bytes),
-// sets vtable to PTR_FUN_14015c670, copies sprite handle from entry+0x50,
-// stores mod index at +0xC0, then adds the dialog to the UI.
+// Loads "Dialog/ModDetails.rsc", creates a ModDetailsDialog (0xC8 bytes)
+// with the row's sprite sheet and the mod index, then adds it to the UI.
 // ============================================================
-static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
-    uintptr_t s = (uintptr_t)self;
-
+void ModDialog::ShowDetails(int32_t index) {
     // Load dialog resource
     System::Filename filenameBuf("Dialog/ModDetails.rsc");
-    void* extFactory = ::Object::ExternalFactory::_singleton;
-    void* ext = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
-            ->FindOrLoad(filenameBuf));
+    const ::Object::External* ext =
+        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
     // IsDerivedFrom check — resource is always valid Dialog if load succeeds
-    void* dialog = ext;
+    const UI::Dialog* dialog = static_cast<const UI::Dialog*>(ext);
 
     // Allocate ModDetailsDialog (0xC8 = 200 bytes)
     void* newDialog = System::MemoryAllocator::MemAlloc(0xC8, 8);
-    void* dialogInst = nullptr;
+    ModDetailsDialog* dialogInst = nullptr;
     if (newDialog) {
-        // Get sprite handle from entry+0x50 (SpriteSheet ptr)
-        uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)index * 0x58;
-        uint64_t spriteHandle = *(uint64_t*)(entry + 0x50);
+        UI::SpriteSheet* spriteHandle = entries._data[index].spriteSheet;
 
         // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here):
         // DialogInstance(ui, dialog, nullParent, 0, 0, 0), +0xB8 = sprite
         // handle, +0xC0 = mod index.
         dialogInst = ::new (newDialog) ModDetailsDialog(
-            static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(dialog),
-            Object::InternalPtr<UI::DialogInstance>(), spriteHandle, index);
+            _ui, dialog, Object::InternalPtr<UI::DialogInstance>(), spriteHandle, index);
     }
 
     // Add to UI
-    uint64_t dialogRef;
-    new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
-    reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> dialogRef(dialogInst);
+    _ui->AddDialog(&dialogRef);
 }
 
 // ============================================================
-// ModDialog_Apply_Impl (was fn_ModDialog_Apply, FUN_14006ea70)
+// ModDialog::Apply (0x14006ea70)
 //
 // Applies mod changes: checks if mods have been modified (dirty flag),
 // shows appropriate reload dialog (menu vs in-game), saves mod list,
 // handles reload/restart sequence, then closes the dialog.
 //
 // Flow:
-//   1. Check dirty flag at Modification[0] (first byte of singleton)
+//   1. Check the Modification dirty flag
 //   2. If dirty:
 //      a. If gameWorld == nullptr: menu context -> load "Dialog/Reload.rsc:menu"
 //      b. Else: game context -> load "Dialog/Reload.rsc:game"
@@ -690,43 +540,36 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
 //      d. ShowDialog() — blocks until user responds
 //      e. If result 1 or 2 (OK/confirm):
 //         - SaveList(), CloseAndReload()
-//         - Menu: MainMenu_Reload(self+0xD0)
+//         - Menu: MainMenu_Reload(parentMenu)
 //         - Game: create SavedState, call game reload
 //      f. If other: RefreshList (cancel)
 //   3. Close dialog
 // ============================================================
-static void ModDialog_Apply_Impl(ModDialog* self) {
-    uintptr_t s = (uintptr_t)self;
-    void* modSingleton = ::IO::Modification::_singleton;
+void ModDialog::Apply() {
+    IO::Modification* modification = ::IO::Modification::_singleton;
 
-    // Check dirty flag — first byte of Modification singleton
-    if (*(uint8_t*)modSingleton != 0) {
-        void* gameWorld = GameUpdateLoop::_singleton;
+    if (modification->_dirty != 0) {
+        GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
         // Load reload dialog resource based on context (menu vs in-game)
         System::Filename filenameBuf(gameWorld == nullptr ? "Dialog/Reload.rsc:menu"
                                                             : "Dialog/Reload.rsc:game");
-        void* extFactory = ::Object::ExternalFactory::_singleton;
-        void* ext = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
-                ->FindOrLoad(filenameBuf));
-        void* dialog = ext;  // IsDerivedFrom check always passes for valid .rsc
+        const ::Object::External* ext =
+            ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+        const UI::Dialog* dialog = static_cast<const UI::Dialog*>(ext);  // IsDerivedFrom check always passes for valid .rsc
 
         // Create ReloadDialog (0xC0 bytes)
         void* newDialog = System::MemoryAllocator::MemAlloc(0xC0, 8);
-        void* dialogInst = nullptr;
+        MessageDialog* dialogInst = nullptr;
         if (newDialog) {
             // ENDGAME B.3.8 DLG: a real MessageDialog (retail stamps its
             // table 0x14015c480 after the DialogInstance ctor).
             dialogInst = ::new (newDialog) MessageDialog(
-                static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(dialog),
-                Object::InternalPtr<UI::DialogInstance>());
+                _ui, dialog, Object::InternalPtr<UI::DialogInstance>());
         }
 
         // ShowDialog (modal) — blocks until user responds
-        uint64_t dialogRef;
-        new (&dialogRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
+        Object::InternalPtr<UI::DialogInstance> dialogRef(dialogInst);
         // BANISHED_MODAL_ANSWER=<n>: unattended harness only. ShowDialog pumps its
         // own message loop until a button is pressed, which no driver can reach, so
         // the answer is injected here instead (1/2 = confirm, anything else = cancel).
@@ -734,61 +577,58 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         if (Opt().modalAnswer) {
             result = Opt().modalAnswerValue;
             printf("[ModDialog::Apply] BANISHED_MODAL_ANSWER=%d (reload dialog skipped)\n", result);
-            reinterpret_cast< ::Object::InternalBasePtr*>(&dialogRef)->DeletePtr();   // B.3.3 bridge
+            dialogRef.DeletePtr();
         } else {
-            result = reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->ShowDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
-            reinterpret_cast< ::Object::InternalBasePtr*>(&dialogRef)->DeletePtr();   // B.3.3 bridge
+            result = _ui->ShowDialog(&dialogRef);
+            dialogRef.DeletePtr();
         }
-        printf("[ModDialog::Apply] dirty=1 gameWorld=%p reload answer=%d\n", gameWorld, result);
+        printf("[ModDialog::Apply] dirty=1 gameWorld=%p reload answer=%d\n", (void*)gameWorld, result);
 
         if ((unsigned)(result - 1) < 2) {
             // User confirmed: save and reload
-            reinterpret_cast<IO::Modification*>(modSingleton)->SaveList();   // B.3.4 bridge
-            ModDialog_CloseAndReload((void*)self);   // 0x14006e9b0
+            modification->SaveList();
+            CloseAndReload();   // 0x14006e9b0
 
             if (gameWorld == nullptr) {
-                // Menu context: simple reload via +0xD0 controller
-                MainMenuDialog_ReturnToMenu(*(MainMenuDialog**)(s + 0xD0));   // 0x1400b4790
+                // Menu context: simple reload through the owning menu
+                parentMenu->ReturnToMenu();   // 0x1400b4790
             } else {
                 // Game context: allocate SavedState (0x10 bytes), construct it
                 void* savedState = System::MemoryAllocator::MemAlloc(0x10, 4);
-                void* statePtr = nullptr;
+                Save::SavedState* statePtr = nullptr;
                 if (savedState) {
                     statePtr = ::new (savedState) Save::SavedState();   // ??0SavedState 0x1800c0ee0 (its door placement-news the class)
                 }
 
-                // Call vtable[7] on Engine singleton sub-object at +0x20
-                // to prepare the game for reload (dispatch slot 0x140151440)
-                void* engine = ::Engine::MainLoop::_singleton;
+                // The current loop's slot 7 (SaveRestore) prepares the game for
+                // reload (dispatch slot 0x140151440 is Engine::MainLoop::_singleton).
+                ::Engine::MainLoop* engine = ::Engine::MainLoop::_singleton;
                 if (engine) {
-                    uintptr_t inner = *(uintptr_t*)((uintptr_t)engine + 0x20);
+                    ::Engine::UpdateLoop* inner = engine->_currentLoop;
                     if (inner) {
-                        reinterpret_cast<Engine::UpdateLoop*>(inner)->SaveRestore(  // B.3.7 bridge
-                            true, reinterpret_cast<Save::SavedState*>(statePtr));
+                        inner->SaveRestore(true, statePtr);
                     }
                 }
 
                 // Build null InternalBasePtr
-                uint64_t nullRef2;
-                new (&nullRef2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                Object::InternalPtr<UI::DialogInstance> nullRef2;
 
                 // Trigger game reload with saved state
-                WorldSetup_LoadFromSave(*(void**)(s + 0xD0), statePtr, (void*)(uintptr_t)-1, &nullRef2);   // 0x1400b49f0
+                WorldSetup_LoadFromSave(parentMenu.Get(), statePtr, (void*)(uintptr_t)-1, &nullRef2);   // 0x1400b49f0
             }
         } else {
             // User cancelled: refresh list to undo changes
-            reinterpret_cast<IO::Modification*>(modSingleton)->RefreshList();   // B.3.4 bridge
+            modification->RefreshList();
         }
     }
 
     // Close the mod dialog
-    uint64_t closeRef;
-    new (&closeRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
-    reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> closeRef(this);
+    _ui->CloseDialog(&closeRef);
 }
 
 // ============================================================
-// ModDialog::Slot8 — OnCommand handler (0x14006ED40)
+// ModDialog::OnElementEvent — OnCommand handler (0x14006ED40)
 // ============================================================
 //
 // Dispatches button clicks by element ID ranges:
@@ -805,70 +645,61 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 void ModDialog::OnElementEvent(Object::InternalPtr<UI::Element>* param2, int32_t msg, int32_t id, int32_t p5, int32_t p6, int32_t p7, void* p8) {
     if (msg == 0x12)
         printf("[ModDialog::OnEvent] click id=%d\n", id);
-    uintptr_t s = (uintptr_t)this;
 
     if (msg == 0x12) {  // Button click event
-        void* modSingleton = ::IO::Modification::_singleton;
+        IO::Modification* modification = ::IO::Modification::_singleton;
 
         if (id == 100) {
             // Cancel — refresh list and close
-            reinterpret_cast<IO::Modification*>(modSingleton)->RefreshList();   // B.3.4 bridge
+            modification->RefreshList();
 
-            // Build InternalBasePtr for CloseDialog
-            void* dialogPtr = nullptr;
-            new (&dialogPtr) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
-
-            void* ui = *(void**)(s + 0x10);
-            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogPtr));  // B.3.6 bridge
+            Object::InternalPtr<UI::DialogInstance> dialogPtr(this);
+            _ui->CloseDialog(&dialogPtr);
             goto done;
         }
 
         if (id == 0x65) {
             // OK/Apply
-            ModDialog_Apply_Impl(this);
+            Apply();
             goto done;
         }
 
         if (id >= 1000 && id < 2000) {
             // Toggle mod checkbox
-            ModDialog_ToggleMod_Impl(this, id - 1000);
+            ToggleMod(id - 1000);
             goto done;
         }
 
         if (id >= 2000 && id < 3000) {
             // Move up: swap(id-2000, id-2001)
-            reinterpret_cast<IO::Modification*>(modSingleton)->Swap(id - 2000, id - 2001);   // B.3.4 bridge
-            ModDialog_RefreshDisplay_Impl(this);
+            modification->Swap(id - 2000, id - 2001);
+            RefreshDisplay();
             goto done;
         }
 
         if (id >= 3000 && id < 4000) {
             // Move down: swap(id-3000, id-2999)
-            reinterpret_cast<IO::Modification*>(modSingleton)->Swap(id - 3000, id - 2999);   // B.3.4 bridge
-            ModDialog_RefreshDisplay_Impl(this);
+            modification->Swap(id - 3000, id - 2999);
+            RefreshDisplay();
             goto done;
         }
 
         if (id >= 4000 && id < 5000) {
             // Move to top
-            ModDialog_MoveToTop_Impl(this, id - 4000);
+            MoveToTop(id - 4000);
             goto done;
         }
 
         if (id >= 5000 && id < 6000) {
             // Show details
-            ModDialog_ShowDetails_Impl(this, id - 5000);
+            ShowDetails(id - 5000);
         }
     }
 
 done:
-    // Always call base handler
-    // Need to pass element pointer from param2
-    void* elementPtr = *(void**)param2;
-    // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch through
-    // ModDialog's hand-built table straight back into this slot body.
-    UI::DialogInstance::OnElementEvent(  // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elementPtr),
-        msg, id, p5, p6, p7, reinterpret_cast<void*>(p8));
+    // Always call base handler, with a copy of the element pointer.
+    Object::InternalPtr<UI::Element> elementPtr = *param2;
+    // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch straight
+    // back into this slot body.
+    UI::DialogInstance::OnElementEvent(&elementPtr, msg, id, p5, p6, p7, p8);
 }

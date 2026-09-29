@@ -149,12 +149,10 @@ static CitizenDescription* FoundingCitizenDescription(void* citizenTemplate) {
         // LEFT: starttown.cpp (its block) hands the template as void*.
         const ComponentDescription* t = reinterpret_cast<const ComponentDescription*>(citizenTemplate);
         int count = t->_subDescCount;    // +0x30
-        void** arr = t->_subDescs;       // +0x28
+        Description** arr = t->_subDescs;   // +0x28
         for (int i = 0; i < count && arr; ++i) {
-            void* sub = arr[i];
-            if (!sub) continue;
-            // LEFT: the sub-descriptions are declared void* (ComponentDescription.h).
-            Object::Base* desc = reinterpret_cast<Object::Base*>(sub);
+            Description* desc = arr[i];
+            if (!desc) continue;
             // Slot 2 on a template description-array element.
             if (desc->Type() == want) {
                 // Retail keeps the hit only if IsDerivedFrom agrees; standalone trusts

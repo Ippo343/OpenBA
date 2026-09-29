@@ -22,6 +22,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 
 class FruitComponent final : public Component {
     DECLARE_EXE_TYPE(FruitComponent)
@@ -35,15 +38,17 @@ public:
     void Startup() override;                                      // [4] 0x14004a030
     void Update(void* time) override;                             // [9] 0x140049de0
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 sibling NaturalResourceComponent
-    uint32_t field30;      // +0x30 float ripeness
-    uint8_t  fruitFlag;    // +0x34
+    // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x14004a070:
+    // InternalPtr +0x28 (IsDerivedFrom 0x1401c7b30), Serialize(float&) +0x30,
+    // Serialize(bool&) +0x34.
+    Object::InternalPtr<NaturalResourceComponent> resource;   // +0x28 sibling (Startup 0x14004a030)
+    float    ripeness;     // +0x30 ripening accumulator, clamped [0, 1]
+    bool     fruitFlag;    // +0x34 fruit-bearing-season latch
     uint8_t  _pad35[3];    // +0x35
 };
 
 static_assert(sizeof(FruitComponent) == 0x38, "FruitComponent is 0x38 (create 0x140005920)");
 static_assert(alignof(FruitComponent) == 8, "FruitComponent alignment");
-static_assert(offsetof(FruitComponent, field28)   == 0x28, "");
-static_assert(offsetof(FruitComponent, field30)   == 0x30, "");
+static_assert(offsetof(FruitComponent, resource)  == 0x28, "");
+static_assert(offsetof(FruitComponent, ripeness)  == 0x30, "");
 static_assert(offsetof(FruitComponent, fruitFlag) == 0x34, "");

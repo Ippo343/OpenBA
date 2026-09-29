@@ -78,6 +78,9 @@ static_assert(offsetof(TrackedEntityNode, right) == 0x28, "+0x28");
 static_assert(offsetof(TrackedEntityNode, balance) == 0x30, "+0x30");
 static_assert(offsetof(TrackedEntityNode, height) == 0x32, "TrackedEntityNode::height @ +0x32");
 
+class Tool;
+class ComponentEntity;
+
 class PlayerToolManager {
 public:
     // 0x1401025c0 — the ctor Load runs in the MemAlloc(0xb0, 4) block (body in
@@ -131,6 +134,7 @@ public:
     void UpdateCamera(int inputFlag, int64_t timeTicks);    // 0x1400feec0
     void UpdateHotkeys(int inputFlag, int64_t timeTicks);   // 0x1400ff6e0
     void ApplyCameraView(int index);                        // 0x1400fe8d0 one saved view
+    void OnEntityRemoved(ComponentEntity* const* entity);   // 0x140103480 (body: nomadcomponent.cpp)
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");

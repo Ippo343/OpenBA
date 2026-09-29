@@ -943,7 +943,7 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
             static_cast<UI::UserInterface*>(userInterface),
             static_cast<const UI::Dialog*>(externalRes),
             Object::InternalPtr<UI::DialogInstance>(),
-            reinterpret_cast<void*>(gameWorldPtr), nullptr);
+            reinterpret_cast<GameUpdateLoop*>(gameWorldPtr), nullptr);
     }
 
     // Step 8: Wrap in InternalBasePtr and add to UI

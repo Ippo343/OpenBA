@@ -145,7 +145,7 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
         return;
 
     // The upgrade target: DestroyComponent +0x60 = the config's target template.
-    destroyComp->field60 = upgradeConfig->_target;
+    destroyComp->upgradeTarget = reinterpret_cast<ComponentDescription*>(upgradeConfig->_target);   // LEFT: UpgradeUIConfig::_target stays void* (as line 73); DestroyComponent +0x60 typed by COMP-c (merge fix)
 
     // Start the upgrade: pump the BuildState state machine. 0x14011dfa0 is the
     // generic driver ("StartUpgrade" was a misnomer); the disasm-verified port

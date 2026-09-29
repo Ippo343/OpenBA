@@ -22,7 +22,17 @@
 #include <cstddef>
 #include <cstdint>
 #include "runtime/types/ui/DialogInstance.h"
+#include "runtime/types/collection/Collection.h"
 #include "Object/exe_type.h"
+
+// One goal row (0x18): OnOpened 0x140069810 appends it (the Array's inlined
+// SetSize); OnUpdateLayout 0x140069640 shows / hides the two images.
+struct GoalDialogRow {
+    Object::InternalPtr<UI::Element> imageComplete;   // +0x00 shown when the goal is met
+    Object::InternalPtr<UI::Element> imageFail;       // +0x08 shown when the goal has failed
+    Object::InternalPtr<UI::Element> textGoal;        // +0x10 the goal's text (a TextElement)
+};
+static_assert(sizeof(GoalDialogRow) == 0x18, "GoalDialogRow is 0x18 (the +0xb8 array stride)");
 
 class GoalDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(GoalDialog)
@@ -32,7 +42,8 @@ public:
     GoalDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                Object::InternalPtr<UI::DialogInstance> parent);     // 0x1400b3220 inlined
 
-    ~GoalDialog() override;                                        // [0] 0x140011c10
+    // 0x140011c10: the member ~Array (MemFree, the header zeroed), ~DialogInstance.
+    ~GoalDialog() override = default;                              // [0] 0x140011c10
     void OnOpened() override;                                      // [4] 0x140069810
     // [5] OnClosed: DialogInstance's (SaveSettings), inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x140069640
@@ -42,11 +53,9 @@ public:
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x1400697c0
 
 public:
-    uint64_t dataB8;           // +0xB8: goal entry array data (stride 0x18)
-    uint64_t dataC0;           // +0xC0: goal entry count / capacity
+    Collection::Array<GoalDialogRow> goals;   // +0xB8 one row per scenario goal
 };
 
-static_assert(offsetof(GoalDialog, dataB8) == 0xB8, "GoalDialog +0xb8");
-static_assert(offsetof(GoalDialog, dataC0) == 0xC0, "GoalDialog +0xc0");
+static_assert(offsetof(GoalDialog, goals) == 0xB8, "GoalDialog +0xb8");
 static_assert(sizeof(GoalDialog) == 0xC8, "GoalDialog is 0xc8 (create 0x140011b60)");
 static_assert(alignof(GoalDialog) == 8, "GoalDialog is qword-aligned");

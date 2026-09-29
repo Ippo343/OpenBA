@@ -12,12 +12,29 @@
 //   [7] 0x14006a230  OnUpdateLayout
 //   [9] 0x14006a290  OnElementEvent
 //   every other slot is UI::DialogController's (inherited, not declared).
+//
+// B.4 W1 (DLG-b): the six elements are the typed pointers OnCreated stores
+// after each IsDerivedFrom check; +0x68 is the history array's header.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+
+namespace UI {
+class ScrollElement; class DocumentTextElement; class ComboElement;
+class ButtonElement; class ContainerElement;
+}
+
+// One history entry (8 bytes, align 4): LoadPage 0x140069f20 appends
+// {page, 0.0f}; the link / back / forward arms of OnElementEvent 0x14006a290
+// save the scroll bar's current value into it and restore it from it.
+struct HelpHistoryEntry {
+    int32_t pageIndex;   // +0x00 index into the help topics ExternalList
+    float   scrollY;     // +0x04 the scroll bar's GetCurrentValue()
+};
+static_assert(sizeof(HelpHistoryEntry) == 8, "HelpHistoryEntry is 8 (the +0x68 array stride)");
 
 class HelpUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(HelpUI)
@@ -27,8 +44,8 @@ public:
 
     // 0x140011cf0 minus the free. The compiler chains ~DialogController (and so
     // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String member at +0x68 before
-    // ~DialogController (0x14006a8d0); the tree never did (leak kept).
+    // PORT GAP (B38 D2): retail frees the history Array at +0x68 before
+    // ~DialogController (0x140011d17); the tree never did (leak kept).
     ~HelpUI() override = default;                                 // [0] 0x140011cf0
     void OnCreated() override;   // [4] 0x14006a500
     void OnOpened() override {}   // [5] 0x14006a4f0  RET 0 in retail
@@ -36,18 +53,34 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x14006a290
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
-    uint64_t data40 = 0;           // +0x40: zeroed
-    uint64_t data48 = 0;           // +0x48: zeroed
-    uint64_t data50 = 0;           // +0x50: zeroed
-    uint64_t data58 = 0;           // +0x58: zeroed
-    int64_t data60 = -1;           // +0x60: initialized to -1 (0xFFFFFFFFFFFFFFFF)
-    uint64_t data68 = 0;           // +0x68: zeroed
-    uint64_t data70 = 0;           // +0x70: zeroed
+    void LoadPage();                                     // 0x140069f20
+
+    // ---- fields: OnCreated 0x14006a500 fills the six elements ----------
+    Object::InternalPtr<UI::ScrollElement>       scroll;         // +0x30 the page's scroll bar
+    Object::InternalPtr<UI::DocumentTextElement> document;       // +0x38 id 0xE75
+    Object::InternalPtr<UI::ComboElement>        comboTopics;    // +0x40 id 0xE74
+    Object::InternalPtr<UI::ButtonElement>       buttonBack;     // +0x48 "buttonBack", id 0xE76
+    Object::InternalPtr<UI::ButtonElement>       buttonForward;  // +0x50 "buttonForward", id 0xE77
+    Object::InternalPtr<UI::ContainerElement>    container;      // +0x58 scroll offsets
+    int32_t currentPage = -1;      // +0x60 } the factory writes one qword -1
+    int32_t historyIndex = -1;     // +0x64 }
+    // +0x68: Collection::Array<HelpHistoryEntry> in retail (0x140011cf0 frees it).
+    // H5: declared as its header until the member's ~Array runs (the leak above).
+    HelpHistoryEntry* historyData = nullptr;   // +0x68
+    int32_t historyCount = 0;                  // +0x70
+    int32_t historyCapacity = 0;               // +0x74
 };
 
 static_assert(sizeof(HelpUI) == 0x78, "HelpUI is 0x78 (create 0x140011ca0 MemAlloc(0x78))");
 static_assert(alignof(HelpUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(HelpUI, data60) == 0x60, "data60 @ 0x60");
+static_assert(offsetof(HelpUI, scroll) == 0x30, "HelpUI::scroll @ 0x30");
+static_assert(offsetof(HelpUI, document) == 0x38, "HelpUI::document @ 0x38");
+static_assert(offsetof(HelpUI, comboTopics) == 0x40, "HelpUI::comboTopics @ 0x40");
+static_assert(offsetof(HelpUI, buttonBack) == 0x48, "HelpUI::buttonBack @ 0x48");
+static_assert(offsetof(HelpUI, buttonForward) == 0x50, "HelpUI::buttonForward @ 0x50");
+static_assert(offsetof(HelpUI, container) == 0x58, "HelpUI::container @ 0x58");
+static_assert(offsetof(HelpUI, currentPage) == 0x60, "HelpUI::currentPage @ 0x60");
+static_assert(offsetof(HelpUI, historyIndex) == 0x64, "HelpUI::historyIndex @ 0x64");
+static_assert(offsetof(HelpUI, historyData) == 0x68, "HelpUI::historyData @ 0x68");
+static_assert(offsetof(HelpUI, historyCount) == 0x70, "HelpUI::historyCount @ 0x70");
+static_assert(offsetof(HelpUI, historyCapacity) == 0x74, "HelpUI::historyCapacity @ 0x74");

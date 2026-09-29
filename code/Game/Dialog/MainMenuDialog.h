@@ -26,6 +26,9 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Object/exe_type.h"
 
+class GameUpdateLoop;    // Game/GameUpdateLoop.h
+class MenuDialogLoopT;   // Game/MenuDialogLoopT.h
+
 class MainMenuDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(MainMenuDialog)
 
@@ -33,7 +36,7 @@ public:
     MainMenuDialog();                                               // create 0x140020d10
     MainMenuDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                    Object::InternalPtr<UI::DialogInstance> parent,
-                   void* game, void* loop);                         // 0x14009ba30 / pause
+                   GameUpdateLoop* game, MenuDialogLoopT* loop);    // 0x14009ba30 / pause
 
     ~MainMenuDialog() override = default;                          // [0] 0x140020da0
     // [4] PORT GAP: the tree runs a slim Setup (buttons + BuildId child) where
@@ -47,12 +50,32 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x1400b3b50
 
+    // The button handlers retail's OnElementEvent 0x1400b3b50 calls.
+    void OpenMod();                                                // 0x1400b2ea0
+    void OpenTutorial();                                           // 0x1400b2fe0
+    void OpenMap();                                                // 0x1400b3120
+    void OpenGoal();                                               // 0x1400b3220
+    void OpenScenario();                                           // 0x1400b3380
+    void OpenAchievement();                                        // 0x1400b34c0
+    void OpenNewGame();                                            // 0x1400b3620
+    void OpenLoad();                                               // 0x1400b3770
+    void OpenSave();                                               // 0x1400b38b0
+    void OpenOptions();                                            // 0x1400b3a10
+    void ReturnToMenu();                                           // 0x1400b4790
+
+    // 0x1400b4540: build GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop and
+    // hand it to the menu loop (front end) or the running game as the next loop.
+    // NewGameDialog's OK and ScenarioDialog's Load call it (newgamedialog.cpp).
+    void* StartNewGame(const System::String& name, uint32_t seed, uint32_t terrainSize,
+                       bool disastersOff, void* mapGen, void* terrainGen, void* climateGen,
+                       uint32_t scenarioResIdx, const void* savedStateIBP);  // 0x1400b4540
+
 public:
-    uint64_t dataB8;           // +0xB8: the running game (0 at the front end)
-    uint64_t dataC0;           // +0xC0: the owning MenuDLT loop (front end)
+    GameUpdateLoop*  game;       // +0xB8: the running game (0 at the front end; the pause menu's)
+    MenuDialogLoopT* menuLoop;   // +0xC0: the owning menu loop (front end; 0 in the pause menu)
 };
 
-static_assert(offsetof(MainMenuDialog, dataB8) == 0xB8, "MainMenuDialog +0xb8");
-static_assert(offsetof(MainMenuDialog, dataC0) == 0xC0, "MainMenuDialog +0xc0");
+static_assert(offsetof(MainMenuDialog, game) == 0xB8, "MainMenuDialog +0xb8");
+static_assert(offsetof(MainMenuDialog, menuLoop) == 0xC0, "MainMenuDialog +0xc0");
 static_assert(sizeof(MainMenuDialog) == 0xC8, "MainMenuDialog is 0xc8 (create 0x140020d10)");
 static_assert(alignof(MainMenuDialog) == 8, "MainMenuDialog is qword-aligned");

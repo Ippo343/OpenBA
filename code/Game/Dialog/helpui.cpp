@@ -2,23 +2,11 @@
 // Clean reimplementation of HelpUI game logic.
 //
 // HelpUI (0x78 bytes) — help page navigation panel.
-// Extends DialogController (0x30 base). Fields:
-//   +0x30: first element (InternalBasePtr) — scroll position source at elem+0x160
-//   +0x38: DocumentTextElement (InternalBasePtr), ID=0xE75
-//   +0x40: ComboElement (InternalBasePtr), ID=0xE74
-//   +0x48: buttonBack (InternalBasePtr), ID=0xE76
-//   +0x50: buttonForward (InternalBasePtr), ID=0xE77
-//   +0x58: container element (InternalBasePtr) — scroll offsets
-//   +0x60: current page resource index (int32_t)
-//   +0x64: current history index (int32_t)
-//   +0x68: history array pointer (8-byte entries: int32_t pageIndex + float scrollY)
-//   +0x70: history count (int32_t)
-//   +0x74: history capacity (int32_t)
+// Extends DialogController (0x30 base). Fields: HelpUI.h.
 //
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Component/coll_bridge.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -37,6 +25,7 @@
 #include "runtime/types/ui/DocumentTextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ScrollElement.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "runtime/types/ui/ButtonElement.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "runtime/types/collection/Collection.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
@@ -49,15 +38,29 @@
 // 0x1401c3dd8). Standalone deviation: the singleton is null before the game loop
 // exists (and the list itself can be null if the help resources never loaded), so
 // return null rather than fault; every caller below treats null as "no topics".
-static void* GetHelpExternalList() {
+static ::Object::ExternalList* GetHelpExternalList() {
     if (!GameUpdateLoop::_singleton) return nullptr;
-    void* world = GameUpdateLoop::_singleton;
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return nullptr;
-    return *(void**)((uintptr_t)world + 0xa0);
+    return world->m_helpTopics;
+}
+
+// The topic StringTable at `index` (null when the resource is not one).
+static UI::StringTable* HelpTopicAt(::Object::ExternalList* extList, int index) {
+    ::Object::External* entry = extList->_resources[index];
+    bool isStringTable = ::Object::IsDerivedFromNullSafe(entry, UI::StringTable::TypeId());
+    return isStringTable ? static_cast<UI::StringTable*>(entry) : nullptr;
+}
+
+// The history array as the Collection::Array retail's is.
+// LEFT (H5): the header is declared field by field until the member's ~Array
+// runs (HelpUI.h); this is the one view of it as the class.
+static Collection::Array<HelpHistoryEntry>& History(HelpUI* self) {
+    return *reinterpret_cast<Collection::Array<HelpHistoryEntry>*>(&self->historyData);
 }
 
 // ============================================================
-// HelpUI_LoadPage (FUN_140069f20) — Load help page content
+// HelpUI::LoadPage (FUN_140069f20) — Load help page content
 // ============================================================
 // Gets the currently selected combo item, looks up the corresponding
 // StringTable resource, sets its content (text index 2) on the document
@@ -65,97 +68,74 @@ static void* GetHelpExternalList() {
 //
 // Original: 0x140069f20.
 
-static void HelpUI_LoadPage(HelpUI* self) {
-    uintptr_t s = (uintptr_t)self;
-    void* extList = GetHelpExternalList();
+void HelpUI::LoadPage() {
+    ::Object::ExternalList* extList = GetHelpExternalList();
 
-    // Get currently selected combo item
-    void* comboElem = *(void**)(s + 0x40);
+    UI::ComboElement* comboElem = comboTopics.Get();
 
     // Standalone guard (retail has none — its .rsc always yields both elements and
     // the world always owns the help list). If an element lookup failed (a null
     // element type-id makes FindElementType store null even when the element
     // exists) this would deref null at combo+0x118 / inside SetText.
-    if (!extList || !comboElem || !*(void**)(s + 0x38) || !*(void**)(s + 0x58))
+    if (!extList || !comboElem || !document.Get() || !container.Get())
         return;
-    int currentItem = *(int*)((uintptr_t)comboElem + 0x118);
-    void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(currentItem);  // B.3.6 bridge
-    int pageResIndex = (int)(intptr_t)itemData;
+    int currentItem = comboElem->_currentItem;
+    void* itemData = comboElem->GetItemData(currentItem);
+    int pageResIndex = (int)(intptr_t)itemData;  // CAST-OK: ptr_int
 
-    // Look up StringTable resource from ExternalList
-    void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
-    void* stringTable = *(void**)((uintptr_t)resourceArray + (int64_t)pageResIndex * 8);
+    // Look up StringTable resource from ExternalList (IsDerivedFrom StringTable)
+    UI::StringTable* validTable = HelpTopicAt(extList, pageResIndex);
 
-    // Check IsDerivedFrom (StringTable type)
-    bool isStringTable = ::Object::IsDerivedFromNullSafe(stringTable, UI::StringTable::TypeId());
-    void* validTable = isStringTable ? stringTable : nullptr;
+    // UI::String with text index 2 (help content body)
+    UI::String uiString(Object::ExternalPtr<UI::StringTable>(validTable), 2);
+    uiString.pad0C = 0;   // built in a zeroed 16-byte slot before
 
-    // Construct UI::String with text index 2 (help content body)
-    uint8_t uiString[16] = {0};
-    ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
-
-    // Set document text
-    void* docElem = *(void**)(s + 0x38);
-    reinterpret_cast<UI::DocumentTextElement*>(docElem)->SetText(reinterpret_cast<const UI::String*>(uiString));  // B.3.6 bridge
+    document->SetText(&uiString);
 
     // Reset scroll offsets to (0, 0)
-    void* containerElem = *(void**)(s + 0x58);
-    reinterpret_cast<UI::ContainerElement*>(containerElem)->SetOffsets(0, 0);  // B.3.6 bridge
+    container->SetOffsets(0, 0);
 
-    // Store current page resource index
-    *(int*)(s + 0x60) = pageResIndex;
+    currentPage = pageResIndex;
 
-    // History array at +0x68: Collection::Array<{int32 pageIndex, float scrollY}>
-    // (stride 8, count +0x70, capacity +0x74) inside a struct §B.2 has not
-    // converted, so it is reached at its offset. B.3.2 bridge for both the
-    // truncate (was HelpUI_ArrayResize_Impl, FUN_140011d50) and the append below.
-    //
-    // The element is GameColl::I32Pair and NOT GameColl::Bytes<8, 8>, for the two
-    // reasons its declaration in Component/coll_bridge.h spells out: retail's
-    // helper passed 4 — not 8 — as MemAlloc's alignment argument for this array,
-    // and it left a GROWN tail uninitialised, which only a trivially
-    // default-constructible element reproduces.
-    auto& hist = GameColl::ArrayAt<GameColl::I32Pair>(s, 0x68);
+    // History: truncate (was HelpUI_ArrayResize_Impl, FUN_140011d50) and append.
+    // retail's helper passed 4 — not 8 — as MemAlloc's alignment argument for this
+    // array (alignof(HelpHistoryEntry)), and it left a GROWN tail uninitialised,
+    // which the trivially default-constructible element reproduces.
+    Collection::Array<HelpHistoryEntry>& hist = History(this);
 
     // Truncate history to (historyIndex + 1) entries — removes forward history.
-    int historyIndex = *(int*)(s + 0x64);
     hist.SetSize(historyIndex + 1);
 
     // Push new history entry: {pageResIndex, scrollY=0.0f} at the new end.
-    hist.SetSize(hist.GetSize() + 1, GameColl::I32Pair{pageResIndex, 0});  // scrollY = 0.0f
+    hist.SetSize(hist.GetSize() + 1, HelpHistoryEntry{pageResIndex, 0.0f});
 
-    // Set history index to last entry
-    *(int*)(s + 0x64) = hist.GetSize() - 1;
+    historyIndex = hist.GetSize() - 1;
 }
 
 // ============================================================
 // HelpUI_FindLinkTarget (FUN_14006a140) — Find page by link text
 // ============================================================
-// Iterates the help topics ExternalList, gets text at index 1
-// (topic name) from each StringTable, compares with the search
+// Iterates the help topics ExternalList, gets text at index 0
+// (topic key) from each StringTable, compares with the search
 // string. Returns the matching resource index, or -1 if not found.
 //
-// Note: Destroys the input search string (param_2) on return.
-//
-// Original: 0x14006a140.
-
 // Takes ownership of searchStr (by value) and destroys it on return — the RAII
 // destructor at scope exit reproduces retail's manual release on every path.
+// It reads no field of the HelpUI retail passes in RCX: stays free.
+//
+// Original: 0x14006a140.
 static int HelpUI_FindLinkTarget(System::String searchStr) {
-    void* extList = GetHelpExternalList();
+    ::Object::ExternalList* extList = GetHelpExternalList();
     if (!extList) { return -1; }   // standalone guard
-    int count = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
-                        ->GetResourceCount();
+    int count = extList->GetResourceCount();
 
     for (int i = 0; i < count; i++) {
-        void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
-        void* entry = *(void**)((uintptr_t)resourceArray + (int64_t)i * 8);
+        ::Object::External* entry = extList->_resources[i];
 
         bool isStringTable = ::Object::IsDerivedFromNullSafe(entry, UI::StringTable::TypeId());
         if (isStringTable && entry != nullptr) {
             // GetText at index 0 = topic key/name for matching (non-trivial return)
-            System::String nameStr;
-            ::new (&nameStr) System::String(reinterpret_cast<const UI::StringTable*>(entry)->GetText(0));  // B.3.6 bridge
+            System::String nameStr(static_cast<const UI::StringTable*>(entry)->GetText(0));
 
             bool match = (searchStr == nameStr);
 
@@ -165,8 +145,7 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
         }
 
         // Re-check count each iteration (matches original)
-        count = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
-                        ->GetResourceCount();
+        count = extList->GetResourceCount();
     }
 
     return -1;
@@ -174,22 +153,19 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
 
 // ---- HelpUI: PROMOTED to the real reimpl (help-dialog bring-up 2026-07-31) ----
 // The toolbar "help" utility dialog (Template\UtilityHelp.rsc -> StandardDialog.rsc,
-// content Dialog/Help.rsc). The whole controller is already reimplemented in
-// code/Game/Dialog/helpui.cpp, but the generic stub below left every slot a no-op,
-// so the dialog opened with an empty topic combo and a blank document — the
-// "controllers render NO content" follow-up recorded in GUI_PLAN.md Phase 4.
+// content Dialog/Help.rsc).
 //
 // Slot map, read out of the retail vtable at exe .rdata 0x14015bf30 (qword N =
 // slot N), NOT from our labels:
-//   slot 4 (+0x20) 0x14006a500 Slot4  — setup: find the 4 typed elements + the two
+//   slot 4 (+0x20) 0x14006a500 OnCreated — find the 4 typed elements + the two
 //                                       named buttons, populate the topic combo from
 //                                       the help ExternalList, tail into LoadPage.
-//   slot 5 (+0x28) 0x14006a4f0        — 3-byte RET no-op (left as StubNop).
-//   slot 7 (+0x38) 0x14006a230 Slot7  — enable/disable back+forward per history index.
-//   slot 9 (+0x48) 0x14006a290 Slot9  — combo change (msg 0x14), document link click
+//   slot 5 (+0x28) 0x14006a4f0        — 3-byte RET no-op.
+//   slot 7 (+0x38) 0x14006a230 OnUpdateLayout — enable/disable back+forward per history index.
+//   slot 9 (+0x48) 0x14006a290 OnElementEvent — combo change (msg 0x14), document link click
 //                                       and back/forward (msg 0x12).
-// Slot9's 7th parameter is the clicked link index: retail reads it from
-// [RSP+0xb0] at 0x14006a2ed, which is arg 7 in this frame — hence the 7-arg wrapper.
+// OnElementEvent's 7th parameter is the clicked link index: retail reads it from
+// [RSP+0xb0] at 0x14006a2ed, which is arg 7 in this frame.
 //
 // ── Construction deviation ───────────────────────────────────────────────────
 // HelpUI_Ctor (0x14006a920) zeroes +0x30..+0x58 and +0x68/+0x70 but writes
@@ -197,20 +173,7 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
 // history index (+0x64) start at -1. A plain zero-fill is not equivalent: LoadPage
 // truncates the history to (historyIndex + 1) entries, so a 0 index leaves one
 // uninitialised history slot in front of the first real page and the back button
-// then navigates to a garbage page id. Factory/InPlace stamp the -1 explicitly.
-//
-// ── Type-id dependency ───────────────────────────────────────────────────────
-// Slot4 looks its elements up by type (ScrollElement/ComboElement/
-// DocumentTextElement/ContainerElement, plus ButtonElement for the two named
-// buttons) and checks the topic resources against StringTable. Those ids come from
-// exe .rdata dispatch slots that standalone only fills when
-// BANISHED_LIVE_ELEMENT_TIDS is set (standalone/reg_element_typeids.cpp). Rather
-// than make the help dialog depend on that gate, EnsureTypeIds() points the globals
-// straight at the Runtime DLL's own BaseTypeInfo exports — the same objects retail's
-// name resolution would have written into those slots, so this is a no-op when the
-// gate is on and a self-heal when it is off. A type-id that fails to resolve leaves
-// the element null, and the reimpl's standalone guards then degrade to today's
-// empty-panel behaviour instead of faulting.
+// then navigates to a garbage page id. The member initialisers write the -1.
 namespace helpui_sa {
     // ENDGAME B.3.9: UI::ScrollElement / UI::ComboElement / UI::DocumentTextElement /
     // UI::ContainerElement / UI::ButtonElement / UI::StringTable all have a ported
@@ -233,36 +196,35 @@ namespace helpui_sa {
         }
         return s_ok != 0;
     }
-    void Trace([[maybe_unused]] const char* slot, void* self) {
+    void Trace([[maybe_unused]] const char* slot, [[maybe_unused]] HelpUI* self) {
         static int n=0; if (n>=24) return; ++n;
-        [[maybe_unused]] uintptr_t s=reinterpret_cast<uintptr_t>(self);
-        void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
-        [[maybe_unused]] void* topics = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw)+0xa0) : nullptr;
+        GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+        [[maybe_unused]] ::Object::ExternalList* topics = gw ? gw->m_helpTopics : nullptr;
         printf("[HelpUI] %s self=%p root(+0x20)=%p scroll=%p doc=%p combo=%p back=%p fwd=%p "
                "cont=%p page=%d hist=%d/%d topics=%p n=%d\n", slot, self,
-               *reinterpret_cast<void**>(s+0x20), *reinterpret_cast<void**>(s+0x30),
-               *reinterpret_cast<void**>(s+0x38), *reinterpret_cast<void**>(s+0x40),
-               *reinterpret_cast<void**>(s+0x48), *reinterpret_cast<void**>(s+0x50),
-               *reinterpret_cast<void**>(s+0x58), *reinterpret_cast<int*>(s+0x60),
-               *reinterpret_cast<int*>(s+0x64), *reinterpret_cast<int*>(s+0x70), topics,
+               self->_container, self->scroll.Get(),
+               self->document.Get(), self->comboTopics.Get(),
+               self->buttonBack.Get(), self->buttonForward.Get(),
+               self->container.Get(), self->currentPage,
+               self->historyIndex, self->historyCount, topics,
                topics
-                   ? reinterpret_cast<const ::Object::ExternalList*>(topics)->GetResourceCount()  // B.3.3 bridge
+                   ? topics->GetResourceCount()
                    : -1);
         fflush(stdout);
     }
 }
 
 // ============================================================
-// HelpUI::Slot4 (vtable +0x20) — Setup / initialization
+// HelpUI::OnCreated (vtable +0x20) — Setup / initialization
 // ============================================================
 // Finds typed UI elements from the dialog:
-//   - First generic element stored at +0x30
-//   - DocumentTextElement at +0x38, ID=0xE75
-//   - ComboElement at +0x40, ID=0xE74
-//   - ContainerElement at +0x58
+//   - ScrollElement -> scroll
+//   - DocumentTextElement -> document, ID=0xE75
+//   - ComboElement -> comboTopics, ID=0xE74
+//   - ContainerElement -> container
 // Finds named elements:
-//   - "buttonBack" at +0x48, ID=0xE76
-//   - "buttonForward" at +0x50, ID=0xE77
+//   - "buttonBack" -> buttonBack, ID=0xE76
+//   - "buttonForward" -> buttonForward, ID=0xE77
 // Populates combo with help topic names from ExternalList.
 // Calls LoadPage to display the first topic.
 //
@@ -274,124 +236,97 @@ void HelpUI::OnCreated() {
     // Setup is not idempotent: a second run appends every topic to the combo
     // again and pushes a second history entry. The framework dispatches it once
     // per dialog build; skip if the element cache is already populated.
-    if (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this)+0x40)) {
+    if (comboTopics.Get()) {
         helpui_sa::Trace("Slot4-skip(already set up)", this);
         return;
     }
-    uintptr_t s = (uintptr_t)this;
-    void* dialogElem = *(void**)(s + 0x20);
+    UI::Element* dialogElem = _container;
 
     // FindElementType calls use different type IDs from _typeInfo_exref.
     // Each finds a different typed element in the dialog tree.
-    // Order matches original: +0x30 first, then +0x40, +0x38, +0x58.
-
-    uint8_t retBuf[16] = {0};
-    uint8_t bpBuf[8] = {0};
-    void* elem;
+    // Order matches original: scroll first, then combo, document, container.
+    UI::Element* elem;
     bool derived;
 
-    // 1. Find first element (type 0x1401517e8) -> +0x30
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ScrollElement::TypeId()));  // B.3.6 bridge
-    elem = *(void**)retBuf;
+    // 1. ScrollElement (type 0x1401517e8)
+    elem = dialogElem->FindElementType(UI::ScrollElement::TypeId()).Get();
     derived = ::Object::IsDerivedFromNullSafe(elem, UI::ScrollElement::TypeId());
-    new (bpBuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x30) = *(uint64_t*)bpBuf;
+    scroll = Object::InternalPtr<UI::ScrollElement>(derived ? static_cast<UI::ScrollElement*>(elem) : nullptr);
 
-    // 2. Find ComboElement (type 0x140151690) -> +0x40
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ComboElement::TypeId()));  // B.3.6 bridge
-    elem = *(void**)retBuf;
+    // 2. ComboElement (type 0x140151690)
+    elem = dialogElem->FindElementType(UI::ComboElement::TypeId()).Get();
     derived = ::Object::IsDerivedFromNullSafe(elem, UI::ComboElement::TypeId());
-    new (bpBuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x40) = *(uint64_t*)bpBuf;
+    comboTopics = Object::InternalPtr<UI::ComboElement>(derived ? static_cast<UI::ComboElement*>(elem) : nullptr);
 
-    // 3. Find DocumentTextElement (type 0x1401517f0) -> +0x38
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::DocumentTextElement::TypeId()));  // B.3.6 bridge
-    elem = *(void**)retBuf;
+    // 3. DocumentTextElement (type 0x1401517f0)
+    elem = dialogElem->FindElementType(UI::DocumentTextElement::TypeId()).Get();
     derived = ::Object::IsDerivedFromNullSafe(elem, UI::DocumentTextElement::TypeId());
-    new (bpBuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x38) = *(uint64_t*)bpBuf;
+    document = Object::InternalPtr<UI::DocumentTextElement>(derived ? static_cast<UI::DocumentTextElement*>(elem) : nullptr);
 
-    // 4. Find ContainerElement (type 0x1401517f8) -> +0x58
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ContainerElement::TypeId()));  // B.3.6 bridge
-    elem = *(void**)retBuf;
+    // 4. ContainerElement (type 0x1401517f8)
+    elem = dialogElem->FindElementType(UI::ContainerElement::TypeId()).Get();
     derived = ::Object::IsDerivedFromNullSafe(elem, UI::ContainerElement::TypeId());
-    new (bpBuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(derived ? elem : nullptr));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x58) = *(uint64_t*)bpBuf;
+    container = Object::InternalPtr<UI::ContainerElement>(derived ? static_cast<UI::ContainerElement*>(elem) : nullptr);
 
     // Set element IDs on combo and document elements
     // (standalone guard: SetElementId derefs its `this`, so skip a failed lookup)
-    if (*(void**)(s + 0x40)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x40))->SetElementId(0xE74);  // B.3.6 bridge
-    if (*(void**)(s + 0x38)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x38))->SetElementId(0xE75);  // B.3.6 bridge
+    if (comboTopics.Get()) comboTopics->SetElementId(0xE74);
+    if (document.Get()) document->SetElementId(0xE75);
 
-    // Find "buttonBack" by name -> +0x48, set ID 0xE76
-    void* backBtn;
+    // Find "buttonBack" by name, set ID 0xE76
+    UI::Element* backBtn;
     {
         System::String nameStr("buttonBack");
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-        backBtn = *(void**)retBuf;
+        backBtn = dialogElem->FindElement(nameStr).Get();
     }
     derived = ::Object::IsDerivedFromNullSafe(backBtn, UI::ButtonElement::TypeId());
-    new (bpBuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(derived ? backBtn : nullptr));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x48) = *(uint64_t*)bpBuf;
+    buttonBack = Object::InternalPtr<UI::ButtonElement>(derived ? static_cast<UI::ButtonElement*>(backBtn) : nullptr);
 
-    // Find "buttonForward" by name -> +0x50, set ID 0xE77
-    void* fwdBtn;
+    // Find "buttonForward" by name, set ID 0xE77
+    UI::Element* fwdBtn;
     {
         System::String nameStr("buttonForward");
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-        fwdBtn = *(void**)retBuf;
+        fwdBtn = dialogElem->FindElement(nameStr).Get();
     }
     derived = ::Object::IsDerivedFromNullSafe(fwdBtn, UI::ButtonElement::TypeId());
-    new (bpBuf) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(derived ? fwdBtn : nullptr));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x50) = *(uint64_t*)bpBuf;
+    buttonForward = Object::InternalPtr<UI::ButtonElement>(derived ? static_cast<UI::ButtonElement*>(fwdBtn) : nullptr);
 
-    if (*(void**)(s + 0x48)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x48))->SetElementId(0xE76);  // B.3.6 bridge
-    if (*(void**)(s + 0x50)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetElementId(0xE77);  // B.3.6 bridge
+    if (buttonBack.Get()) buttonBack->SetElementId(0xE76);
+    if (buttonForward.Get()) buttonForward->SetElementId(0xE77);
 
     // Populate combo with help topic names from ExternalList
-    void* extList = GetHelpExternalList();
-    void* comboElem = *(void**)(s + 0x40);
+    ::Object::ExternalList* extList = GetHelpExternalList();
+    UI::ComboElement* comboElem = comboTopics.Get();
     if (!extList || !comboElem) return;    // standalone guard
-    int topicCount = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
-                        ->GetResourceCount();
+    int topicCount = extList->GetResourceCount();
 
     for (int i = 0; i < topicCount; i++) {
-        void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
-        void* entry = *(void**)((uintptr_t)resourceArray + (int64_t)i * 8);
+        ::Object::External* entry = extList->_resources[i];
 
         bool isStringTable = ::Object::IsDerivedFromNullSafe(entry, UI::StringTable::TypeId());
         if (isStringTable && entry != nullptr) {
             // Get topic name (text index 1) — non-trivial return
-            System::String topicName;
-            ::new (&topicName) System::String(reinterpret_cast<const UI::StringTable*>(entry)->GetText(1));  // B.3.6 bridge
+            System::String topicName(static_cast<const UI::StringTable*>(entry)->GetText(1));
 
-            // Create default sprite
-            uint8_t sprite[32];
-            ::new (sprite) UI::Sprite();  // B.3.6 bridge
+            // Default sprite
+            UI::Sprite sprite;
 
             // Add item to combo: (sprite, name, userData=index)
-            reinterpret_cast<UI::ComboElement*>(comboElem)->AddItem(*reinterpret_cast<const UI::Sprite*>(sprite), topicName, (void*)(intptr_t)i);  // B.3.6 bridge
+            comboElem->AddItem(sprite, topicName, (void*)(intptr_t)i);  // CAST-OK: ptr_int
         }
 
         // Re-check count each iteration (matches original)
-        topicCount = reinterpret_cast<const ::Object::ExternalList*>(extList)  // B.3.3 bridge
-                        ->GetResourceCount();
+        topicCount = extList->GetResourceCount();
     }
 
     // Select first item and load its content
-    reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(0);  // B.3.6 bridge
-    HelpUI_LoadPage(this);
+    comboElem->SetCurrentItem(0);
+    LoadPage();
     helpui_sa::Trace("Slot4", this);
 }
 
 // ============================================================
-// HelpUI::Slot7 (vtable +0x38) — Update handler
+// HelpUI::OnUpdateLayout (vtable +0x38) — Update handler
 // ============================================================
 // Enables/disables prev/next buttons based on current page index.
 //
@@ -400,26 +335,26 @@ void HelpUI::OnCreated() {
 // [7] 0x14006a230
 void HelpUI::OnUpdateLayout() {
     if (!helpui_sa::CheckOnce()) return;
-    int pageIndex = *(int*)((uintptr_t)this + 0x64);
-    int pageCount = *(int*)((uintptr_t)this + 0x70);
+    int pageIndex = historyIndex;
+    int pageCount = historyCount;
 
     // Enable prev button if not on first page
     // (standalone guard: a failed "buttonBack"/"buttonForward" lookup leaves the
     // field null, and retail dereferences it unconditionally)
-    void* prevBtn = (void*)this->data48;
+    UI::ButtonElement* prevBtn = buttonBack.Get();
     if (prevBtn) {
-        reinterpret_cast<UI::Element*>(prevBtn)->Enable(pageIndex > 0);  // B.3.6 bridge: Element slot 8 Enable
+        prevBtn->Enable(pageIndex > 0);   // Element slot 8 Enable
     }
 
     // Enable next button if not on last page
-    void* nextBtn = (void*)this->data50;
+    UI::ButtonElement* nextBtn = buttonForward.Get();
     if (nextBtn) {
-        reinterpret_cast<UI::Element*>(nextBtn)->Enable(pageIndex < pageCount - 1);  // B.3.6 bridge: Element slot 8 Enable
+        nextBtn->Enable(pageIndex < pageCount - 1);   // Element slot 8 Enable
     }
 }
 
 // ============================================================
-// HelpUI::Slot9 (vtable +0x48) — Notification handler
+// HelpUI::OnElementEvent (vtable +0x48) — Notification handler
 // ============================================================
 // Handles UI events:
 //   Message 0x12 (button/link click):
@@ -433,26 +368,58 @@ void HelpUI::OnUpdateLayout() {
 // Original: 0x14006A290.
 
 // Standalone guard helper: every navigation branch below (link / back / forward)
-// dereferences the scroll source (+0x30), the document (+0x38), the combo (+0x40),
-// the container (+0x58) and the history array (+0x68) without a null check, exactly
-// as retail does. If setup could not find an element, treat the event as unhandled.
-static bool HelpUI_NavReady(uintptr_t s) {
-    return *(void**)(s + 0x30) && *(void**)(s + 0x38) && *(void**)(s + 0x40) &&
-           *(void**)(s + 0x58) && *(void**)(s + 0x68);
+// dereferences the scroll bar, the document, the combo, the container and the
+// history array without a null check, exactly as retail does. If setup could not
+// find an element, treat the event as unhandled.
+static bool HelpUI_NavReady(const HelpUI* self) {
+    return self->scroll.Get() && self->document.Get() && self->comboTopics.Get() &&
+           self->container.Get() && self->historyData;
+}
+
+// Back / forward: save the scroll value, step the history index by `step`,
+// show that entry's page and restore its scroll value. The two arms of
+// OnElementEvent are the same code with -1 / +1 (retail spells both out).
+static void HelpUI_StepHistory(HelpUI* self, int step) {
+    int histIdx = self->historyIndex;
+
+    // Save current scroll position before navigating
+    self->historyData[histIdx].scrollY = self->scroll->GetCurrentValue();
+
+    // Move one entry
+    histIdx += step;
+    self->historyIndex = histIdx;
+
+    // Page index from history
+    int pageIdx = self->historyData[histIdx].pageIndex;
+
+    // Look up StringTable from ExternalList
+    ::Object::ExternalList* extList = GetHelpExternalList();
+    UI::StringTable* validTable = HelpTopicAt(extList, pageIdx);
+
+    // UI::String with text index 2 (content), set on document
+    UI::String uiString(Object::ExternalPtr<UI::StringTable>(validTable), 2);
+    uiString.pad0C = 0;   // built in a zeroed 16-byte slot before
+    self->document->SetText(&uiString);
+
+    // Restore scroll position from history
+    histIdx = self->historyIndex;
+    float savedScroll = self->historyData[histIdx].scrollY;
+    self->container->SetOffsets(0, (int)savedScroll);
+
+    // Update combo to show current page
+    int comboIdx = self->historyData[histIdx].pageIndex;
+    self->comboTopics->SetCurrentItem(comboIdx);
 }
 
 // [9] 0x14006a290
-void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
-                            int32_t param5, int32_t param6, int32_t linkIndex, void* /*userData*/) {
-    uint64_t param2 = reinterpret_cast<uint64_t>(element);
+void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
+                            int32_t /*param5*/, int32_t /*param6*/, int32_t linkIndex, void* /*userData*/) {
     if (!helpui_sa::CheckOnce()) return;
     helpui_sa::Trace("Slot9", this);
-    (void)param2; (void)param5; (void)param6;
-    uintptr_t s = (uintptr_t)this;
 
     if (msg == 0x14 && id == 0xE74) {
         // Combo selection changed — reload page
-        HelpUI_LoadPage(this);
+        LoadPage();
         return;
     }
 
@@ -461,16 +428,12 @@ void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t m
 
     if (id != 0xE75 && id != 0xE76 && id != 0xE77)
         return;
-    if (!HelpUI_NavReady(s))
+    if (!HelpUI_NavReady(this))
         return;   // standalone guard, see above
 
     if (id == 0xE75) {
         // Document link clicked — navigate to linked page
-        void* docElem = *(void**)(s + 0x38);
-
-        // Get the clicked link's text (non-trivial return)
-        System::String linkStr;
-        ::new (&linkStr) System::String(reinterpret_cast<const UI::DocumentTextElement*>(docElem)->GetLink(linkIndex));  // B.3.6 bridge
+        System::String linkStr(document->GetLink(linkIndex));
 
         // FindLinkTarget takes its own copy (by value) and destroys it; returns
         // the matching index or -1.
@@ -478,16 +441,11 @@ void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t m
 
         if (targetIdx >= 0) {
             // Save current scroll position to history
-            void* firstElem = *(void**)(s + 0x30);
-            int histIdx = *(int*)(s + 0x64);
-            void* histArray = *(void**)(s + 0x68);
-            float scrollPos = *(float*)((uintptr_t)firstElem + 0x160);
-            *(float*)((uintptr_t)histArray + (int64_t)histIdx * 8 + 4) = scrollPos;
+            historyData[historyIndex].scrollY = scroll->GetCurrentValue();
 
             // Navigate to target page
-            void* comboElem = *(void**)(s + 0x40);
-            reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(targetIdx);  // B.3.6 bridge
-            HelpUI_LoadPage(this);
+            comboTopics->SetCurrentItem(targetIdx);
+            LoadPage();
         }
 
         return;
@@ -495,97 +453,17 @@ void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t m
 
     if (id == 0xE76) {
         // Back button — go to previous history entry
-        void* firstElem = *(void**)(s + 0x30);
-        int histIdx = *(int*)(s + 0x64);
-        void* histArray = *(void**)(s + 0x68);
-
-        // Save current scroll position before navigating
-        int scrollVal = *(int*)((uintptr_t)firstElem + 0x160);
-        *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8 + 4) = scrollVal;
-
-        // Move back one entry
-        histIdx--;
-        *(int*)(s + 0x64) = histIdx;
-
-        // Get page index from history
-        int pageIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
-
-        // Look up StringTable from ExternalList
-        void* extList = GetHelpExternalList();
-        void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
-        void* stringTable = *(void**)((uintptr_t)resourceArray + (int64_t)pageIdx * 8);
-
-        bool isStringTable = ::Object::IsDerivedFromNullSafe(stringTable, UI::StringTable::TypeId());
-        void* validTable = isStringTable ? stringTable : nullptr;
-
-        // Construct UI::String with text index 2 (content) and set on document
-        uint8_t uiString[16] = {0};
-        ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
-
-        void* docElem = *(void**)(s + 0x38);
-        reinterpret_cast<UI::DocumentTextElement*>(docElem)->SetText(reinterpret_cast<const UI::String*>(uiString));  // B.3.6 bridge
-
-        // Restore scroll position from history
-        histArray = *(void**)(s + 0x68);
-        histIdx = *(int*)(s + 0x64);
-        float savedScroll = *(float*)((uintptr_t)histArray + (int64_t)histIdx * 8 + 4);
-        void* containerElem = *(void**)(s + 0x58);
-        reinterpret_cast<UI::ContainerElement*>(containerElem)->SetOffsets(0, (int)savedScroll);  // B.3.6 bridge
-
-        // Update combo to show current page
-        int comboIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
-        void* comboElem = *(void**)(s + 0x40);
-        reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(comboIdx);  // B.3.6 bridge
+        HelpUI_StepHistory(this, -1);
         return;
     }
 
     if (id == 0xE77) {
         // Forward button — go to next history entry
-        void* firstElem = *(void**)(s + 0x30);
-        int histIdx = *(int*)(s + 0x64);
-        void* histArray = *(void**)(s + 0x68);
-
-        // Save current scroll position before navigating
-        int scrollVal = *(int*)((uintptr_t)firstElem + 0x160);
-        *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8 + 4) = scrollVal;
-
-        // Move forward one entry
-        histIdx++;
-        *(int*)(s + 0x64) = histIdx;
-
-        // Get page index from history
-        int pageIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
-
-        // Look up StringTable from ExternalList
-        void* extList = GetHelpExternalList();
-        void* resourceArray = *(void**)((uintptr_t)extList + 0x20);
-        void* stringTable = *(void**)((uintptr_t)resourceArray + (int64_t)pageIdx * 8);
-
-        bool isStringTable = ::Object::IsDerivedFromNullSafe(stringTable, UI::StringTable::TypeId());
-        void* validTable = isStringTable ? stringTable : nullptr;
-
-        // Construct UI::String with text index 2 (content) and set on document
-        uint8_t uiString[16] = {0};
-        ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
-
-        void* docElem = *(void**)(s + 0x38);
-        reinterpret_cast<UI::DocumentTextElement*>(docElem)->SetText(reinterpret_cast<const UI::String*>(uiString));  // B.3.6 bridge
-
-        // Restore scroll position from history
-        histArray = *(void**)(s + 0x68);
-        histIdx = *(int*)(s + 0x64);
-        float savedScroll = *(float*)((uintptr_t)histArray + (int64_t)histIdx * 8 + 4);
-        void* containerElem = *(void**)(s + 0x58);
-        reinterpret_cast<UI::ContainerElement*>(containerElem)->SetOffsets(0, (int)savedScroll);  // B.3.6 bridge
-
-        // Update combo to show current page
-        int comboIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
-        void* comboElem = *(void**)(s + 0x40);
-        reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(comboIdx);  // B.3.6 bridge
+        HelpUI_StepHistory(this, +1);
         return;
     }
 }
 
 // ============================================================
-// HelpUI::Slot5 (vtable +0x28) — No-op
+// HelpUI::OnOpened (vtable +0x28) — No-op (HelpUI.h)
 // ============================================================

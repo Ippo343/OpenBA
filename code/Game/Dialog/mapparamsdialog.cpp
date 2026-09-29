@@ -1,6 +1,10 @@
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/EditElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ButtonElement.h"
+#include "Game/MapGenerator.h"
+#include "Game/ClimateGenerator.h"
+#include "Game/TerrainGenerator.h"
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -29,10 +33,27 @@
 
 void MapParamsDialog::OnClosed() {}
 
+// Find an element by name, as its class.
+template <class T>
+static T* FindElementAs(MapParamsDialog* dialog, const char* name) {
+    System::String nameStr(name);
+    return static_cast<T*>(dialog->FindElement(nameStr).Get());
+}
+
+// The UI::String of a generator's name: its StringTable (+0x20) and name key (+0x28).
+// LEFT: the generator headers declare both as void* (block GAME).
+template <class Generator>
+static UI::String GeneratorNameString(const Generator* desc) {
+    UI::String uiStr(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(desc->_field20)),
+                     *reinterpret_cast<const System::String*>(&desc->_field28));
+    uiStr.pad0C = 0;   // built in a zeroed 16-byte slot before
+    return uiStr;
+}
+
 // ============================================================
 // [4] MapParamsDialog::OnOpened (0x14006b810) — Startup
 // ============================================================
-// Finds all UI elements by name, stores element pointers at fixed offsets.
+// Finds all UI elements by name, stores element pointers.
 // Sets button IDs (NewName=0, OK=1, Cancel=2).
 // Populates fields from the game world state: map name, seed,
 // terrain, terrain size, climate, condition, disaster text.
@@ -40,121 +61,46 @@ void MapParamsDialog::OnClosed() {}
 // Original: 0x14006b810
 void MapParamsDialog::OnOpened() {
     printf("[MapParamsDialog::Startup] self=%p\n", (void*)this);
-    uintptr_t s = (uintptr_t)this;
 
     // --- Find and store all named elements ---
-
-    // editName → +0xB8
-    {
-        System::String nameStr("editName");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0xB8) = *(void**)retBuf;
-    }
-
-    // numberSeed → +0xC0
-    {
-        System::String nameStr("numberSeed");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0xC0) = *(void**)retBuf;
-    }
-
-    // textCondition → +0xE0
-    {
-        System::String nameStr("textCondition");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0xE0) = *(void**)retBuf;
-    }
-
-    // textTerrain → +0xC8
-    {
-        System::String nameStr("textTerrain");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0xC8) = *(void**)retBuf;
-    }
-
-    // textTerrainSize → +0xD0
-    {
-        System::String nameStr("textTerrainSize");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0xD0) = *(void**)retBuf;
-    }
-
-    // textClimate → +0xD8
-    {
-        System::String nameStr("textClimate");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0xD8) = *(void**)retBuf;
-    }
-
-    // textDisaster → +0xE8
-    {
-        System::String nameStr("textDisaster");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        *(void**)(s + 0xE8) = *(void**)retBuf;
-    }
+    editName        = FindElementAs<UI::EditElement>(this, "editName");
+    numberSeed      = FindElementAs<UI::NumberElement>(this, "numberSeed");
+    textCondition   = FindElementAs<UI::TextElement>(this, "textCondition");
+    textTerrain     = FindElementAs<UI::TextElement>(this, "textTerrain");
+    textTerrainSize = FindElementAs<UI::TextElement>(this, "textTerrainSize");
+    textClimate     = FindElementAs<UI::TextElement>(this, "textClimate");
+    textDisaster    = FindElementAs<UI::TextElement>(this, "textDisaster");
 
     // --- Find button elements (local vars, not stored on this) ---
-    void* buttonNewName = nullptr;
-    {
-        System::String nameStr("buttonNewName");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        buttonNewName = *(void**)retBuf;
-    }
+    UI::Element* buttonNewName = FindElementAs<UI::Element>(this, "buttonNewName");
+    UI::ButtonElement* buttonCancel = FindElementAs<UI::ButtonElement>(this, "buttonCancel");
+    UI::ButtonElement* ok = FindElementAs<UI::ButtonElement>(this, "buttonOk");
 
-    void* buttonCancel = nullptr;
-    {
-        System::String nameStr("buttonCancel");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        buttonCancel = *(void**)retBuf;
-    }
-
-    void* buttonOk = nullptr;
-    {
-        System::String nameStr("buttonOk");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
-        buttonOk = *(void**)retBuf;
-    }
-
-    // Store OK button at +0xF0
-    *(void**)(s + 0xF0) = buttonOk;
+    buttonOk = ok;
 
     // --- Set element IDs: NewName=0, OK=1, Cancel=2 ---
-    if (buttonNewName) reinterpret_cast<UI::Element*>(buttonNewName)->SetElementId(0);  // B.3.6 bridge
-    if (buttonOk) reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(1);  // B.3.6 bridge
-    if (buttonCancel) reinterpret_cast<UI::Element*>(buttonCancel)->SetElementId(2);  // B.3.6 bridge
+    if (buttonNewName) buttonNewName->SetElementId(0);
+    if (ok) ok->SetElementId(1);
+    if (buttonCancel) buttonCancel->SetElementId(2);
 
-    // Set cancel button close behavior flag (+0xC0 on the element = 8)
+    // The cancel button's hot key index (8)
     if (buttonCancel) {
-        *(uint32_t*)((uintptr_t)buttonCancel + 0xC0) = 8;
+        buttonCancel->_keyIndex = 8;
     }
 
     // --- Populate fields from game world ---
-    void* gameWorld = GameUpdateLoop::_singleton;
-    uintptr_t gw = (uintptr_t)gameWorld;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
-    // Set map name on editName: FUN_140011f90 copies System::String at gameWorld+0x28
+    // Map name on editName: FUN_140011f90 copies the game's save name
     {
-        // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
-        System::String nameBuf(*reinterpret_cast<System::String*>((uintptr_t)gameWorld + 0x28));
-        void* editName = *(void**)(s + 0xB8);
-        if (editName) reinterpret_cast<UI::EditElement*>(editName)->SetText(nameBuf);  // B.3.6 bridge
+        System::String nameBuf(gameWorld->m_saveName);
+        if (editName) editName->SetText(nameBuf);
     }
 
-    // Set seed on numberSeed
+    // Seed on numberSeed
     {
-        int seed = *(int*)(gw + 0x30);
-        void* numberSeed = *(void**)(s + 0xC0);
-        if (numberSeed) reinterpret_cast<UI::NumberElement*>(numberSeed)->SetValue(static_cast<int32_t>(seed));  // B.3.6 bridge
+        int seed = gameWorld->m_seed;
+        if (numberSeed) numberSeed->SetValue(static_cast<int32_t>(seed));
     }
 
     // Set the text fields. Retail uses TWO different UI::String constructors here
@@ -164,198 +110,171 @@ void MapParamsDialog::OnOpened() {
     //     generator resource carries its own table at +0x20 and its name KEY (a
     //     System::String) at +0x28, and the ctor resolves the key to an index.
     //   - terrainSize / disaster take the INDEX ctor UI::String(table, int), with
-    //     the table on the element itself (+0xd8) and a plain integer.
+    //     the table on the element itself (its _text) and a plain integer.
     // These three used to be built by memcpy'ing desc+0x28 into the struct's int
     // field, which copied the low 32 bits of the name String's CHAR POINTER as if
     // it were a string-table index. Always out of range, so all three rendered
     // blank while name/seed/size/disaster (which take other paths) looked fine.
+    //
+    // LEFT: GameUpdateLoop's three generator configs are void* (W0 header).
 
-    // textCondition — from description at gameWorld+0x40, text at desc+0x20/0x28
+    // textCondition — the map generator
     {
-        uintptr_t desc = *(uintptr_t*)(gw + 0x40);
-        void* textElem = *(void**)(s + 0xE0);
-        if (desc && textElem) {
-            uint8_t uiStr[16] = {0};
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+        const MapGenerator* desc = reinterpret_cast<const MapGenerator*>(gameWorld->m_mapConfig);
+        if (desc && textCondition) {
+            UI::String uiStr = GeneratorNameString(desc);
+            textCondition->SetText(&uiStr);
         }
     }
 
-    // textTerrain — from description at gameWorld+0x48, text at desc+0x20/0x28
+    // textTerrain — the terrain generator
     {
-        uintptr_t desc = *(uintptr_t*)(gw + 0x48);
-        void* textElem = *(void**)(s + 0xC8);
-        if (desc && textElem) {
-            uint8_t uiStr[16] = {0};
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+        const TerrainGenerator* desc = reinterpret_cast<const TerrainGenerator*>(gameWorld->m_terrainConfig);
+        if (desc && textTerrain) {
+            UI::String uiStr = GeneratorNameString(desc);
+            textTerrain->SetText(&uiStr);
         }
     }
 
-    // textTerrainSize — uses the element's own StringTable at element+0xd8
-    // and the terrain size int from gameWorld+0x34
+    // textTerrainSize — the element's own StringTable, the game's map size index
     {
-        void* textElem = *(void**)(s + 0xD0);
-        if (textElem) {
-            uintptr_t elem = (uintptr_t)textElem;
-            uint32_t terrainSize = *(uint32_t*)(gw + 0x34);
-            uint8_t uiStr[16] = {0};
-            memcpy(uiStr, (void*)(elem + 0xd8), 8);       // ExternalPtr<StringTable>
-            *(uint32_t*)(uiStr + 8) = terrainSize;         // int index
-            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+        if (textTerrainSize) {
+            UI::String uiStr;
+            uiStr.table = textTerrainSize->_text.table;   // ExternalPtr<StringTable>
+            uiStr.index = gameWorld->m_mapSize;           // int index
+            uiStr.pad0C = 0;
+            textTerrainSize->SetText(&uiStr);
         }
     }
 
-    // textClimate — from description at gameWorld+0x50, text at desc+0x20/0x28
+    // textClimate — the climate generator
     {
-        uintptr_t desc = *(uintptr_t*)(gw + 0x50);
-        void* textElem = *(void**)(s + 0xD8);
-        if (desc && textElem) {
-            uint8_t uiStr[16] = {0};
-            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
-            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+        const ClimateGenerator* desc = reinterpret_cast<const ClimateGenerator*>(gameWorld->m_climateConfig);
+        if (desc && textClimate) {
+            UI::String uiStr = GeneratorNameString(desc);
+            textClimate->SetText(&uiStr);
         }
     }
 
-    // textDisaster — from element's own StringTable, bool from gameWorld+0xD0 bit 6
+    // textDisaster — the element's own StringTable, the game flags' bit 6
     {
-        void* textElem = *(void**)(s + 0xE8);
-        if (textElem) {
-            uintptr_t elem = (uintptr_t)textElem;
-            uint32_t disasterFlags = *(uint32_t*)(gw + 0xD0);
+        if (textDisaster) {
+            uint32_t disasterFlags = gameWorld->m_gameFlags;
             uint32_t disasterEnabled = ((disasterFlags >> 6) & 1) != 0 ? 1 : 0;
-            uint8_t uiStr[16] = {0};
-            memcpy(uiStr, (void*)(elem + 0xd8), 8);
-            *(uint32_t*)(uiStr + 8) = disasterEnabled;
-            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+            UI::String uiStr;
+            uiStr.table = textDisaster->_text.table;
+            uiStr.index = (int32_t)disasterEnabled;
+            uiStr.pad0C = 0;
+            textDisaster->SetText(&uiStr);
         }
     }
 }
 
 // [6] MapParamsDialog::OnUpdateLayout (0x14006b790) — Update
-// Checks if editName field has text; enables/disables OK button accordingly.
-// Calls button vtable[8](button, hasText) which is likely Element::SetEnabled.
+// Checks if editName field has text; enables/disables OK button accordingly
+// (Element slot 8, Enable).
 // ============================================================
 // [8] MapParamsDialog::OnElementEvent (0x14006b5f0) — OnEvent
 // ============================================================
 // Handles button clicks in the Map Parameters dialog.
 // eventType 0x12 = button click:
-//   eventData 0 = buttonNewName → generate random map name
-//   eventData 1 = buttonOk     → save name to game world, close
-//   eventData 2 = buttonCancel → close dialog (handled by engine via close flag)
+//   eventData 0 = buttonNewName → generate random map name (0x14006b700)
+//   eventData 1 = buttonOk     → save name to game world, close (0x14006b690)
+//   eventData 2 = buttonCancel → close dialog
 //
 // Original: 0x14006b5f0.
 
-void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    uintptr_t s = (uintptr_t)this;
+// 0x14006b690: the game's save name = the edit box's text, then close.
+void MapParamsDialog::ApplyName() {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
+    if (editName) {
+        // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
+        const System::String& nameStr = *reinterpret_cast<const System::String*>(&editName->_text);
+        gameWorld->m_saveName = nameStr;
+    }
+
+    // Close dialog
+    Object::InternalPtr<UI::DialogInstance> basePtr(this);
+    _ui->CloseDialog(&basePtr);
+}
+
+// 0x14006b700: a random town name sized from the edit box, into the edit box.
+void MapParamsDialog::GenerateName() {
+    if (editName) {
+        // The edit box's max char count
+        uint32_t maxLen = (uint32_t)editName->_maxLength;
+        int third = (int)maxLen / 3;
+        int signAdj = ((int)maxLen >> 31);
+        int divResult = third + signAdj;
+        int longDivAdj = (int)(((int64_t)(int)maxLen / 3 + ((int64_t)(int)maxLen >> 63)) & 0xFFFFFFFF);
+        int finalAdj = (int)((uint32_t)longDivAdj >> 31);
+        int nameLen = (divResult + finalAdj) * 2;
+
+        // The game's Random
+        System::Random* random = GameUpdateLoop::_singleton->m_random;
+
+        // GenerateTownName — reimpl of FUN_140099ac0
+        // Load NameDatabase, generate name, fix "vill" suffix
+        System::String nameBuf;
+        {
+            System::Filename fnBuf("Game/Names/Cities.ndb");
+            void* nameDB = const_cast<::Object::External*>(
+                ::Object::ExternalFactory::_singleton->FindOrLoad(fnBuf));
+            // The IsDerivedFrom type-check retail runs here is skipped, as in
+            // NewGameDialog's GenerateTownName and citizen_names.cpp: the
+            // standalone factory tree is incomplete so the walk NULL-faults,
+            // and *TypeId_NameDatabase is itself NULL until something
+            // lazy-resolves it. FindOrLoad by exact filename is authoritative.
+
+            NameDB_GenerateName(&nameBuf, nameDB, random, 5, nameLen);   // 0x1400a4b30
+
+            bool endsVill = false;
+            if (nameBuf._data != nullptr) {
+                int slen = nameBuf.GetLength();
+                if (slen > 4) {
+                    System::String sfx = nameBuf.SubString(slen - 4, slen - 1);
+                    endsVill = (sfx == "vill");
+                }
+            }
+            if (endsVill) {
+                // ret is unused (see recipe's Append note): mutate nameBuf directly.
+                nameBuf += "e";
+            }
+        }
+        editName->SetText(nameBuf);
+    }
+}
+
+void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (eventType != 0x12) return;
 
     if (eventData == 1) {
-        // buttonOk: save map name to game world (+0x28) and close
-        // FUN_14006b690: operator=(gameWorld+0x28, editName+0xC8)
-        void* gameWorld = GameUpdateLoop::_singleton;
-        // B.3.1 bridge: raw exe-struct SystemString fields, not owned here.
-        System::String& gameWorldName = *reinterpret_cast<System::String*>((uintptr_t)gameWorld + 0x28);
-
-        // editName element at +0xB8, name String at editName+0xC8
-        void* editName = *(void**)(s + 0xB8);
-        if (editName) {
-            System::String& nameStr = *reinterpret_cast<System::String*>((uintptr_t)editName + 0xC8);
-            gameWorldName = nameStr;
-        }
-
-        // Close dialog
-        void* ui = *(void**)(s + 0x10);
-        uint64_t basePtr[2];
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
+        // buttonOk: save map name to game world and close
+        ApplyName();
         return;
     }
 
     if (eventData == 2) {
         // buttonCancel: close dialog
-        void* ui = *(void**)(s + 0x10);
-        uint64_t basePtr[2];
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
+        Object::InternalPtr<UI::DialogInstance> basePtr(this);
+        _ui->CloseDialog(&basePtr);
         return;
     }
 
     if (eventData == 0) {
-        // buttonNewName: generate random name using game world's random
-        // FUN_14006b700: reads editName element max char count, uses DAT_1401c3dd8+0xD8 as random
-        void* editName = *(void**)(s + 0xB8);
-        if (editName) {
-            // EditElement max char count at +0xD0
-            uint32_t maxLen = *(uint32_t*)((uintptr_t)editName + 0xD0);
-            int third = (int)maxLen / 3;
-            int signAdj = ((int)maxLen >> 31);
-            int divResult = third + signAdj;
-            int longDivAdj = (int)(((int64_t)(int)maxLen / 3 + ((int64_t)(int)maxLen >> 63)) & 0xFFFFFFFF);
-            int finalAdj = (int)((uint32_t)longDivAdj >> 31);
-            int nameLen = (divResult + finalAdj) * 2;
-
-            // Get game random: *g_pGameWorldSingleton + 0xD8
-            void* gameWorld = GameUpdateLoop::_singleton;
-            void* random = *(void**)((uintptr_t)gameWorld + 0xD8);
-
-            // GenerateTownName — reimpl of FUN_140099ac0
-            // Load NameDatabase, generate name, fix "vill" suffix
-            System::String nameBuf;
-            {
-                System::Filename fnBuf("Game/Names/Cities.ndb");
-                void* nameDB = const_cast<::Object::External*>(
-                    ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-                        ->FindOrLoad(fnBuf));
-                // The IsDerivedFrom type-check retail runs here is skipped, as in
-                // NewGameDialog::GenerateTownName and citizen_names.cpp: the
-                // standalone factory tree is incomplete so the walk NULL-faults,
-                // and *TypeId_NameDatabase is itself NULL until something
-                // lazy-resolves it. FindOrLoad by exact filename is authoritative.
-
-                NameDB_GenerateName(&nameBuf, nameDB, random, 5, nameLen);   // 0x1400a4b30
-
-                uint64_t sp = (uint64_t)(uintptr_t)nameBuf._data;
-                bool endsVill = false;
-                if (sp != 0) {
-                    int slen = *(int*)(sp - 8);
-                    if (slen > 4) {
-                        System::String sfx = nameBuf.SubString(slen - 4, slen - 1);
-                        endsVill = (sfx == "vill");
-                    }
-                }
-                if (endsVill) {
-                    // ret is unused (see recipe's Append note): mutate nameBuf directly.
-                    nameBuf += "e";
-                }
-            }
-            reinterpret_cast<UI::EditElement*>(editName)->SetText(nameBuf);  // B.3.6 bridge
-        }
+        // buttonNewName: generate random name using the game's Random
+        GenerateName();
     }
 }
 
 void MapParamsDialog::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
+    // The name edit box's text length (0 when empty).
+    // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
+    int textLen = reinterpret_cast<const System::String*>(&editName->_text)->GetLength();
 
-    // OK button element at this+0xF0
-    void* okButton = *(void**)(s + 0xF0);
-
-    // editName element at this+0xB8
-    void* editName = *(void**)(s + 0xB8);
-
-    // Get text data pointer from editName element (+0xC8 = String internal data)
-    void* textData = *(void**)((uint8_t*)editName + 0xC8);
-
-    // System::String stores length at data-8 (COW refcounted)
-    int textLen = 0;
-    if (textData != nullptr) {
-        textLen = *(int*)((uint8_t*)textData - 8);
-    }
-
-    // Enable/disable OK button based on text length
-    // Virtual call: vtable[8](button, enabled)
-    reinterpret_cast<UI::Element*>(okButton)->Enable(textLen > 0);  // B.3.6 bridge
+    // Enable/disable OK button based on text length (Element slot 8)
+    buttonOk->Enable(textLen > 0);
 }
 
 // ============================================================
@@ -368,12 +287,14 @@ void MapParamsDialog::OnUpdateLayout() {
 // pointers OnOpened fills in.
 
 MapParamsDialog::MapParamsDialog()
-    : dataB8(0), dataC0(0), dataC8(0), dataD0(0), dataD8(0), dataE0(0), dataE8(0), dataF0(0) {}
+    : editName(nullptr), numberSeed(nullptr), textTerrain(nullptr), textTerrainSize(nullptr),
+      textClimate(nullptr), textCondition(nullptr), textDisaster(nullptr), buttonOk(nullptr) {}
 
 MapParamsDialog::MapParamsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                                  Object::InternalPtr<UI::DialogInstance> parent)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
-      dataB8(0), dataC0(0), dataC8(0), dataD0(0), dataD8(0), dataE0(0), dataE8(0), dataF0(0) {}
+      editName(nullptr), numberSeed(nullptr), textTerrain(nullptr), textTerrainSize(nullptr),
+      textClimate(nullptr), textCondition(nullptr), textDisaster(nullptr), buttonOk(nullptr) {}
 
 // create 0x140012100: MemAlloc(0xf8, 8), then the ctor.
 void* MapParamsDialog::CreateNewObject() {

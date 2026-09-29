@@ -39,14 +39,6 @@
 #include <cstdint>
 #include <new>
 
-namespace {
-// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
-// (0 == ok on the read leg). The tree's check before it allocates an array.
-inline int SerStreamErr(IO::Serializer& ser) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
-}
-}  // namespace
 
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
@@ -55,52 +47,53 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
 // the defaults.
 ImmigrationDescription::ImmigrationDescription()
     : Description(),
-      _ref20(nullptr),
-      _i28(0x50),
-      _refs(nullptr),
-      _refCount(0),
-      _refCap(0),
-      _f40(0.05f),
-      _f44(0.15f),
-      _f48(24.0f),
-      _f4c(48.0f),
-      _i50(1),
-      _i54(3),
-      _i58(7),
-      _i5c(10),
-      _f60(1.0f),
-      _i64(6) {}
+      _nomad(nullptr),
+      _minPopulation(0x50),
+      _requiredBuildings(nullptr),
+      _requiredBuildingCount(0),
+      _requiredBuildingCap(0),
+      _groupFractionMin(0.05f),
+      _groupFractionMax(0.15f),
+      _waitMonths(24.0f),
+      _waitRandomMonths(48.0f),
+      _arrivalMonthFirst(1),
+      _arrivalMonthLast(3),
+      _leaveMonth(7),
+      _spawnEdgeDistance(10),
+      _diseaseChance(1.0f),
+      _diseaseMonths(6) {}
 
 // dtor (slot 0 0x140007b00 minus the stamps): frees the External* array buffer.
 // The compiler then chains ~Description -> ~External.
 ImmigrationDescription::~ImmigrationDescription() {
-    if (_refs) System::MemoryAllocator::MemFree(_refs);
-    _refs = nullptr;
+    if (_requiredBuildings) System::MemoryAllocator::MemFree(_requiredBuildings);
+    _requiredBuildings = nullptr;
 }
 
 // [5] 0x14004e7f0: stream order as retail.
 bool ImmigrationDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
-    ser.Serialize(_i28, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_nomad, &ser);
+    ser.Serialize(_minPopulation, nullptr);
     // External*-array @ +0x30 (count @ +0x38, cap @ +0x3c, stride 8)
-    ser.Serialize(_refCount, nullptr);
-    int n = _refCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
-        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
-        _refs = buf;
-        _refCap = n;
-        if (buf) for (int i = 0; i < n; ++i) static_cast<void**>(buf)[i] = nullptr;
+    ser.Serialize(_requiredBuildingCount, nullptr);
+    int n = _requiredBuildingCount;
+    if (static_cast<int>(ser.GetDirection()) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
+        ComponentDescription** buf =
+            static_cast<ComponentDescription**>(System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
+        _requiredBuildings = buf;
+        _requiredBuildingCap = n;
+        if (buf) for (int i = 0; i < n; ++i) buf[i] = nullptr;
     }
-    Desc_LoadExternalArray(&ser, n, _refs);
-    ser.Serialize(_f40, nullptr);
-    ser.Serialize(_f44, nullptr);
-    ser.Serialize(_f48, nullptr);
-    ser.Serialize(_f4c, nullptr);
-    ser.Serialize(_i50, nullptr);
-    ser.Serialize(_i54, nullptr);
-    ser.Serialize(_f60, nullptr);
-    ser.Serialize(_i64, nullptr);
+    Desc_LoadExternalArray(&ser, n, _requiredBuildings);
+    ser.Serialize(_groupFractionMin, nullptr);
+    ser.Serialize(_groupFractionMax, nullptr);
+    ser.Serialize(_waitMonths, nullptr);
+    ser.Serialize(_waitRandomMonths, nullptr);
+    ser.Serialize(_arrivalMonthFirst, nullptr);
+    ser.Serialize(_arrivalMonthLast, nullptr);
+    ser.Serialize(_diseaseChance, nullptr);
+    ser.Serialize(_diseaseMonths, nullptr);
     return true;
 }
 

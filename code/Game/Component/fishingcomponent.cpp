@@ -46,7 +46,7 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void*, uintptr_t*);   // resou
 // `MOV byte [RBX+0x50],0`. Retail leaves +0x54 unwritten; the tree's factory
 // zeroed it and that is kept (no reader precedes the first ProduceTick/Persist).
 FishingComponent::FishingComponent()
-    : ResourceProduceComponent(), fishingFlag(0), _pad51{}, fishingRate(0.0f) {}
+    : ResourceProduceComponent(), fishingFlag(false), _pad51{}, fishingRate(0.0f) {}
 
 // create 0x140034350: MemAlloc(0x58, 8), then the ctor.
 void* FishingComponent::CreateNewObject() {
@@ -66,15 +66,9 @@ void       FishingComponent::Persist(void* stream) {
     ResourceProduceComponent::Persist(stream);
 
     // Serialize FishingComponent's own fields
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    bool* pFishingFlag = reinterpret_cast<bool*>(&fishingFlag);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pFishingFlag, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(fishingRate, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    ser.Serialize(fishingFlag, nullptr);
+    ser.Serialize(fishingRate, nullptr);
 }
 uintptr_t* FishingComponent::CreateWork(uintptr_t* out) { return FishingComponent_CreateWork(this, out); }  // [18] 0x14011efe0
 // [19] 0x14011ee80 / [20] 0x14011ee50 / [21] 0x14011ec10: OnEnterProducing,

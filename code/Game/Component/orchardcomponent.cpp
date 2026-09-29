@@ -2,11 +2,15 @@
 // Clean reimplementation of OrchardComponent lifecycle methods from Application-x64.exe.
 //
 // OrchardComponent (0x68 bytes) extends ControllerComponent with:
-//   +0x48: uint8  orchardFlag, +0x4C: int32 orchardId, +0x50-0x60: arrays
+//   +0x48 bool enabled, +0x4C int32 lastHarvestYear, +0x50 Array<OrchardSlot>,
+//   +0x60 ExternalPtr treeType
 //
-// Vtable at 0x14015a180. One hooked override:
-//   Shutdown (0x140051de0) — Complex entity ref serialization
+// Vtable at 0x14015a180. Persist (0x140051de0) serializes the slot array.
 //
+// LEFT (B.4 COMP-d): GameUpdateLoop m_game / m_dayCounter are void* (W0 header) and
+// the Map's 0x30-byte cell record (array at +0x80, +0x08 = the entity on the cell)
+// has no type yet (GAME-b); the StateMachine at StateMachineComponent+0x48 is a void*
+// (COMP-e's header); WorkPlaceComponent_SetAccepting takes an int64_t (COMP-f).
 
 #include "Component/orchardcomponent_funcs.h"
 #include "Entity/ComponentEntity.h"
@@ -14,14 +18,16 @@
 #include "Component/FruitComponent.h"
 #include "Component/FruitDescription.h"
 #include "Component/OrchardDescription.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
 #include "system/Value.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"              // Map::cells (GameUpdateLoop::m_game)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "Game/exe_constants.h"  // kRdata_*
-#include "Work/exe_bodies.h"     // WorkBase_FindComponent_52c0 / _3050, WorkLeaf_FindComp_a0b0
-#include "Player/exe_bodies.h"   // PlayerPath_FindComponent_3ea0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
@@ -34,9 +40,9 @@
 // ============================================================
 // Helpers, called by name (B3R)
 // ============================================================
-//   0x140051830 OrchardComponent_ValidateRefs   -- validate entity references in orchard
-//   0x140009f80 OrchardComponent_ResizeRefArray -- resize entity ref array at +0x50
-//   0x14000a230 OrchardComponent_SerializeRefEntries -- serialize entity ref array entries
+//   0x140051830 OrchardComponent::ValidateRefs  -- validate entity references in orchard
+//   0x140009f80 OrchardComponent::SetSlotCount  -- resize the slot array at +0x50
+//   0x14000a230 SerializeSlots                  -- serialize the slot array entries
 //   0x140002340 Reimpl_ExternalPtr_Serialize_StringTable -- serialize the ExternalPtr at +0x60
 
 
@@ -51,7 +57,7 @@
 // silently demoting every correctly-bound slot to "unusable" (measured: msg 0 bound
 // entity+natRes+fruit, the very next validate pass tore it back down, and the orchardist
 // replanted the same cell forever).
-// 0x1400052c0 WorkBase_FindComponent_52c0 -- IBP component accessor used by ref validation.
+// 0x1400052c0 is FindComponent<NaturalResourceComponent> -- used by ref validation.
 // Type-id globals referenced by the serializer (entity-ref kind filters).
 // ⚠ This was bound to 0x1401c79e0 (MapComponent) and named accordingly. Both retail sites
 // that use it — the ref serializer (0x14000a230) and ValidateRefs (0x140051830) — read
@@ -60,97 +66,91 @@
 // filter simply rejected everything: reference_wrong_but_nonzero_typeid. The slot the two
 // sites test is a tile record's +0x08, which holds the ENTITY standing on the tile (dc20
 // stores the owner IBP from MapComponent+0x10) — an entity is never a MapComponent.
-// DAT_1401c3dd8 (the game world) is read through g_pGameWorldSingleton, the engine_funcs
-// global bound to the same cell.
 
-// Reimpl of FUN_140009f80 (grow stride-0x28 entity-ref array at +0x50; copy old, zero new, free old)
-void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount) {
-    int64_t* a = reinterpret_cast<int64_t*>(arrayPtr);
-    int oldCount = (int)a[1];
+// 0x140009f80: Array<OrchardSlot>::SetSize on +0x50 (grow: copy old, zero the new
+// entries' three pointers, free old).
+void OrchardComponent::SetSlotCount(int newCount) {
+    const int oldCount = slotCount;
     if (newCount == oldCount) return;
-    void* oldBuf = reinterpret_cast<void*>(a[0]);
-    *reinterpret_cast<int*>(&a[1]) = newCount;
-    int* capPtr = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(arrayPtr) + 0xc);
-    if (*capPtr < newCount) {
-        *capPtr = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) *capPtr = newCount * 3;
-        void* newBuf = (System::MemoryAllocator::_singleton)
-                           ? System::MemoryAllocator::MemAlloc((uint64_t)(*capPtr) * 0x28, 8) : nullptr;
-        a[0] = reinterpret_cast<int64_t>(newBuf);
+    OrchardSlot* oldBuf = slots;
+    slotCount = newCount;
+    if (slotCapacity < newCount) {
+        slotCapacity = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) slotCapacity = newCount * 3;
+        slots = (System::MemoryAllocator::_singleton)
+                    ? static_cast<OrchardSlot*>(System::MemoryAllocator::MemAlloc(
+                          (uint64_t)slotCapacity * sizeof(OrchardSlot), 8))
+                    : nullptr;
     }
-    int keep = (oldBuf == reinterpret_cast<void*>(a[0])) ? oldCount : 0;
-    uintptr_t newBase = (uintptr_t)a[0];
-    uintptr_t oldBase = (uintptr_t)oldBuf;
+    const int keep = (oldBuf == slots) ? oldCount : 0;
     for (int idx = keep; idx < newCount; ++idx) {
-        uint8_t* dst = reinterpret_cast<uint8_t*>(newBase + (uintptr_t)idx * 0x28);
+        OrchardSlot& dst = slots[idx];
         if (idx < oldCount) {
-            uint8_t* src = reinterpret_cast<uint8_t*>(oldBase + (uintptr_t)idx * 0x28);
-            *reinterpret_cast<uint32_t*>(dst + 0)  = *reinterpret_cast<uint32_t*>(src + 0);
-            *reinterpret_cast<uint32_t*>(dst + 4)  = *reinterpret_cast<uint32_t*>(src + 4);
-            *reinterpret_cast<uint64_t*>(dst + 8)  = *reinterpret_cast<uint64_t*>(src + 8);
-            *reinterpret_cast<uint64_t*>(dst + 16) = *reinterpret_cast<uint64_t*>(src + 16);
-            *reinterpret_cast<uint64_t*>(dst + 24) = *reinterpret_cast<uint64_t*>(src + 24);
-            *reinterpret_cast<uint8_t*>(dst + 32)  = *reinterpret_cast<uint8_t*>(src + 32);
+            const OrchardSlot& src = oldBuf[idx];
+            dst.tile     = src.tile;
+            dst.state    = src.state;
+            dst.tree     = src.tree;
+            dst.resource = src.resource;
+            dst.fruit    = src.fruit;
+            dst.picked   = src.picked;
         } else {
-            *reinterpret_cast<uint64_t*>(dst + 8)  = 0;
-            *reinterpret_cast<uint64_t*>(dst + 16) = 0;
-            *reinterpret_cast<uint64_t*>(dst + 24) = 0;
+            dst.tree     = nullptr;
+            dst.resource = nullptr;
+            dst.fruit    = nullptr;
         }
     }
-    if (oldBuf != reinterpret_cast<void*>(a[0])) System::MemoryAllocator::MemFree(oldBuf);
+    if (oldBuf != slots) System::MemoryAllocator::MemFree(oldBuf);
 }
 
-// Reimpl of FUN_14000a230 (serialize stride-0x28 entity-ref array entries: 2 ints, 3 IBPs, 1 bool)
-void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arrayBase) {
+// 0x14000a230: serialize the slot array entries (2 ints, 3 InternalPtrs, 1 bool).
+static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
     if (count <= 0) return;
-    uint8_t* e = reinterpret_cast<uint8_t*>(arrayBase);
-    for (int i = 0; i < count; ++i) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 4), nullptr);   // B.3.4 bridge
+    for (int i = 0; i < count; ++i, ++slot) {
+        ser.Serialize(slot->tile, nullptr);
+        ser.Serialize(slot->state, nullptr);
 
-        reinterpret_cast<Object::InternalBasePtr*>(e + 8)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*reinterpret_cast<void**>(e + 8) != nullptr &&
-            !(::Object::IsDerivedFromNullSafe(*reinterpret_cast<void**>(e + 8), ComponentEntity::TypeId())))
-            *reinterpret_cast<void**>(e + 8) = nullptr;
+        // LEFT: InternalBasePtr has no typed view of a bare pointer member.
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->tree)->Serialize(ser);
+        if (slot->tree != nullptr &&
+            !(::Object::IsDerivedFromNullSafe(slot->tree, ComponentEntity::TypeId())))
+            slot->tree = nullptr;
 
-        reinterpret_cast<Object::InternalBasePtr*>(e + 0x10)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*reinterpret_cast<void**>(e + 0x10) != nullptr &&
-            !(::Object::IsDerivedFromNullSafe(*reinterpret_cast<void**>(e + 0x10), NaturalResourceComponent::TypeId())))
-            *reinterpret_cast<void**>(e + 0x10) = nullptr;
+        // LEFT: as above.
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);
+        if (slot->resource != nullptr &&
+            !(::Object::IsDerivedFromNullSafe(slot->resource, NaturalResourceComponent::TypeId())))
+            slot->resource = nullptr;
 
-        reinterpret_cast<Object::InternalBasePtr*>(e + 0x18)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*reinterpret_cast<void**>(e + 0x18) != nullptr &&
-            !(::Object::IsDerivedFromNullSafe(*reinterpret_cast<void**>(e + 0x18), FruitComponent::TypeId())))
-            *reinterpret_cast<void**>(e + 0x18) = nullptr;
+        // LEFT: as above.
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);
+        if (slot->fruit != nullptr &&
+            !(::Object::IsDerivedFromNullSafe(slot->fruit, FruitComponent::TypeId())))
+            slot->fruit = nullptr;
 
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(e + 0x20), nullptr);   // B.3.4 bridge
-        e += 0x28;
+        ser.Serialize(slot->picked, nullptr);
     }
 }
 
-// Reimpl of FUN_140051830 (validate orchard entity refs against live world entities; clear stale)
-void OrchardComponent_ValidateRefs(void* selfV) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-    uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
+// 0x140051830: validate orchard entity refs against live world entities; clear stale.
+void OrchardComponent::ValidateRefs() {
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    uintptr_t resMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
-    int count = *reinterpret_cast<int*>(self + 0x58);
+    // LEFT: GameUpdateLoop::m_game is void* (W0 header); Map::cells is untyped (GAME-b).
+    const uint8_t* cells = reinterpret_cast<const uint8_t*>(reinterpret_cast<const Map*>(world->m_game)->cells);
+    const int count = slotCount;
     for (int i = 0; i < count; ++i) {
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(self + 0x50);
-        uintptr_t entry = arr + (uintptr_t)i * 0x28;
-        if (*reinterpret_cast<int*>(entry + 4) != 1) continue;
+        OrchardSlot& slot = slots[i];
+        if (slot.state != 1) continue;
 
-        int32_t tile = *reinterpret_cast<int32_t*>(entry + 0);
-        void* live = *reinterpret_cast<void**>(
-            *reinterpret_cast<uintptr_t*>(resMgr + 0x80) + 8 + (uintptr_t)tile * 0x30);
+        const int32_t tile = slot.tile;
+        // LEFT: the cell's +0x08 is the entity standing on it (no cell type yet).
+        ComponentEntity* live = *reinterpret_cast<ComponentEntity* const*>(
+            cells + 8 + (uintptr_t)tile * 0x30);
         bool ok = false;
         if (live) {
-            if (reinterpret_cast<const Object::Base*>(live)->IsA(
-                    ComponentEntity::TypeId())) {   // B.3.x bridge (slot 0x140151410)
-                int64_t accBuf = 0;
-                void* acc = WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(live), &accBuf);   // 0x1400052c0
-                if (acc && *reinterpret_cast<int64_t*>(acc) != 0) {
-                    if (live == *reinterpret_cast<void**>(entry + 8)) ok = true;
+            if (live->IsA(ComponentEntity::TypeId())) {   // slot 0x140151410
+                if (live->FindComponent<NaturalResourceComponent>() != nullptr) {   // 0x1400052c0
+                    if (live == slot.tree) ok = true;
                 }
             }
         }
@@ -161,29 +161,27 @@ void OrchardComponent_ValidateRefs(void* selfV) {
             // one said no.
             static int s_n = 0;
             if (s_n++ < 8) {
-                void* bound = *reinterpret_cast<void**>(entry + 8);
+                ComponentEntity* bound = slot.tree;
                 std::fprintf(stderr, "[OrchardValidate] slot=%d tile=%d DEMOTING 1->2: live=%p "
                              "bound=%p typeIdCompEntity=%u isA=%d liveEqBound=%d\n",
-                             i, tile, live, bound, ComponentEntity::TypeId(),
-                             live
-                                 ? (int)reinterpret_cast<const Object::Base*>(live)->IsA(
-                                       ComponentEntity::TypeId()) : -1,
+                             i, tile, static_cast<void*>(live), static_cast<void*>(bound),
+                             ComponentEntity::TypeId(),
+                             live ? (int)live->IsA(ComponentEntity::TypeId()) : -1,
                              (int)(live == bound));
                 std::fflush(stderr);
             }
         }
         // Stale -> mark removed (kind=2) and null the 3 IBP slots.
-        *reinterpret_cast<int32_t*>(entry + 4) = 2;
-        int64_t z = 0;
-        new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<int64_t*>(entry + 8) = z;
-        z = 0;
-        new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<int64_t*>(entry + 0x10) = z;
-        z = 0;
-        new (&z) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<int64_t*>(entry + 0x18) = z;
+        slot.state    = 2;
+        slot.tree     = nullptr;
+        slot.resource = nullptr;
+        slot.fruit    = nullptr;
     }
+}
+
+// B4 FORWARD: 2 outside caller files (Work/plantorchard.cpp, Work/plantorchard_ctor.cpp).
+void OrchardComponent_ValidateRefs(void* selfV) {
+    reinterpret_cast<OrchardComponent*>(selfV)->ValidateRefs();
 }
 
 // ============================================================
@@ -194,72 +192,61 @@ void OrchardComponent_ValidateRefs(void* selfV) {
 // with it unresolved the percentage rendered blank (and, once the component
 // finder started working, calling the null pointer crashed the frame).
 //
-// Slot array: base = comp+0x50, count = comp+0x58, stride 0x28. Per slot:
-//   +0x00 int32  tile index into the map tile array
-//   +0x04 int32  slot state — only state 1 (a grown/planted tree) counts
-//   +0x08 Base*  the entity this slot believes it owns
-//   +0x18 IBP    the growth-carrying object; its +0x30 is the ratio
-// The tile lookup is `*(map+0x80) + 8 + tileIdx*0x30`, i.e. the entity pointer
-// inside a 0x30-byte tile record, with map = *(gameWorld+0xf8).
+// The tile lookup is the entity pointer inside a 0x30-byte Map cell (+0x08).
 //
-// The `entity == slot+0x08` re-check is retail's staleness test: a slot whose
+// The `entity == slot.tree` re-check is retail's staleness test: a slot whose
 // tile now holds a DIFFERENT entity (tree chopped, something else built) is
 // skipped rather than counted. Note the divisor is the FULL slot count, not the
 // number of slots that scored — an orchard of saplings correctly reads low.
 //
 // The per-slot clamp is against the 1.0f constant at 0x14017214c (Ghidra names
 // that float g_fUVScale; it is a plain 1.0f used here as the growth ceiling).
-float OrchardComponent_GetGrowth(void* selfV) {
-    uintptr_t comp = reinterpret_cast<uintptr_t>(selfV);
-    if (!comp) return 0.0f;
-
-    const int count = *reinterpret_cast<int32_t*>(comp + 0x58);
+float OrchardComponent::GetGrowth() const {
+    const int count = slotCount;
     if (count <= 0) return 0.0f;
 
-    void* world = (GameUpdateLoop::_singleton != nullptr)
-                      ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return 0.0f;
-    uintptr_t map = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(world) + 0xf8);
+    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
+    const Map* map = reinterpret_cast<const Map*>(world->m_game);
     if (!map) return 0.0f;
-    uintptr_t tiles = *reinterpret_cast<uintptr_t*>(map + 0x80);
-    if (!tiles) return 0.0f;
+    // LEFT: Map::cells is untyped (GAME-b).
+    const uint8_t* cells = reinterpret_cast<const uint8_t*>(map->cells);
+    if (!cells) return 0.0f;
 
     const uint32_t tidEntity = ComponentEntity::TypeId();   // cell 0x1401c5d70 (D5)
     const float maxGrowth = kRdata_14017214c;   // 0x14017214c
 
-    // FUN_1400052c0 — FindComponent(NaturalResourceComponent), member ABI
-    // (RCX = entity, RDX = out InternalBasePtr): WorkBase_FindComponent_52c0.
-
-    const uintptr_t slots = *reinterpret_cast<uintptr_t*>(comp + 0x50);
     if (!slots) return 0.0f;
 
     float total = 0.0f;
     for (int i = 0; i < count; ++i) {
-        const uintptr_t slot = slots + static_cast<uintptr_t>(i) * 0x28;
+        const OrchardSlot& slot = slots[i];
 
-        const int tileIdx = *reinterpret_cast<int32_t*>(slot + 0x00);
-        void* entity = *reinterpret_cast<void**>(
-            tiles + 8 + static_cast<uintptr_t>(tileIdx) * 0x30);
+        // LEFT: the cell's +0x08 is the entity standing on it (no cell type yet).
+        ComponentEntity* entity = *reinterpret_cast<ComponentEntity* const*>(
+            cells + 8 + static_cast<uintptr_t>(slot.tile) * 0x30);
         if (!entity) continue;
-        if (!reinterpret_cast<const Object::Base*>(entity)->IsA(tidEntity)) continue;   // B.3.x bridge
+        if (!entity->IsA(tidEntity)) continue;
 
-        uint64_t natRes = 0;
-        WorkBase_FindComponent_52c0(reinterpret_cast<uintptr_t>(entity), &natRes);   // 0x1400052c0
-        if (!natRes) continue;
+        if (entity->FindComponent<NaturalResourceComponent>() == nullptr) continue;   // 0x1400052c0
 
-        void** owned = reinterpret_cast<void**>(slot + 0x08);
-        if (entity != *owned) continue;
-        if (*reinterpret_cast<int32_t*>(slot + 0x04) != 1) continue;
+        if (entity != slot.tree) continue;
+        if (slot.state != 1) continue;
 
-        void** growthObj = reinterpret_cast<void**>(slot + 0x18);
-        if (!*growthObj) continue;   // SA: retail derefs unguarded; state 1 implies it
-        float g = *reinterpret_cast<float*>(
-            reinterpret_cast<uintptr_t>(*growthObj) + 0x30);
+        if (!slot.fruit) continue;   // SA: retail derefs unguarded; state 1 implies it
+        float g = slot.fruit->ripeness;
         if (g > maxGrowth) g = maxGrowth;
         total += g;
     }
 
     return total / static_cast<float>(count);
+}
+
+// B4 FORWARD: 2 outside caller files (Dialog/orchardui.cpp, standalone/orchard_diag.cpp).
+float OrchardComponent_GetGrowth(void* selfV) {
+    if (!selfV) return 0.0f;
+    return reinterpret_cast<const OrchardComponent*>(selfV)->GetGrowth();
 }
 
 // ============================================================
@@ -268,42 +255,41 @@ float OrchardComponent_GetGrowth(void* selfV) {
 // vtable+0x78 as (comp, msgId, srcEntityRef, p1, p2). p1 is the SLOT INDEX.
 //
 // This is the writer the whole planting loop was missing. PlantOrchard::Slot4 skips any
-// slot whose +0x08 already holds an entity and marks its own validity byte, and
+// slot whose tree already holds an entity and marks its own validity byte, and
 // PlantOrchard::OnComplete clears that byte again on completion — so with nothing ever
-// writing slot+0x08 the orchardist replanted the same cell forever (measured: 29 executed
+// writing slot.tree the orchardist replanted the same cell forever (measured: 29 executed
 // plant actions, slot histogram still 12x state 0, nonNullEntity=0).
 //
 //   msg 0 "planted"  — read the tile the slot points at, take the entity standing on it,
 //                      and bind {entity, NaturalResourceComponent, FruitComponent} into the
 //                      slot with state 1. If ANY of the three is missing the slot goes to
 //                      state 2 (removed/unusable) instead — retail's own failure branch.
-//   msg 1 "harvested" — flag the slot (+0x20) and reset the fruit component's yield
+//   msg 1 "harvested" — flag the slot (picked) and reset the fruit component's yield
 //                      (+0x30 = 0, +0x34 = 1).
 //   msg 2 "boost"    — advance the tree's fruit growth by the orchard description's rate.
 //
-// ⚠ Two faithful landmines kept verbatim: msg 2 reads desc+0x2c through a pointer that
-// retail nulls when IsDerivedFrom fails, and helper_9fc0 does the same with desc+0x20. Both
-// are load-bearing — they only fire if a type-id global is unfilled, which is a bug to fix at
-// the registration, not to paper over here (see reg_orchard_typeid.cpp / reg_component_fruit.cpp).
+// ⚠ Two faithful landmines kept verbatim: msg 2 reads the boost rate through a pointer that
+// retail nulls when IsDerivedFrom fails, and BoostFruit does the same with the fruit
+// description's rate. Both are load-bearing — they only fire if a type-id global is unfilled,
+// which is a bug to fix at the registration, not to paper over here (see
+// reg_orchard_typeid.cpp / reg_component_fruit.cpp).
 // ============================================================
 
-// FUN_14000a0b0 — sibling FruitComponent finder (type id DAT_1401c4250):
-// WorkLeaf_FindComp_a0b0. 0x140172234 = 300.0f (kRdata_140172234).
+// 0x14000a0b0 is FindComponent<FruitComponent>. 0x140172234 = 300.0f (kRdata_140172234).
 
-// Reimpl of OrchardComponent_helper_9fc0 (0x140049fc0) — advance a FruitComponent's growth
-// by `scale` worth of its description's rate, by synthesising a Time and calling the
-// component's own Update (vtable +0x48, slot 9).
-static void OrchardComponent_BoostFruit_49fc0(int64_t* fruitComp, float scale) {
-    void* desc = reinterpret_cast<void*>(fruitComp[3]);          // +0x18
-    void* validated = nullptr;
+// 0x140049fc0 — advance a FruitComponent's growth by `scale` worth of its description's
+// rate, by synthesising a Time and calling the component's own Update (slot 9).
+static void BoostFruit(FruitComponent* fruit, float scale) {
+    Description* desc = fruit->_description;
+    FruitDescription* validated = nullptr;
     if (::Object::IsDerivedFromNullSafe(desc, FruitDescription::TypeId()))
-        validated = desc;
-    const float rate  = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(validated) + 0x20);
+        validated = static_cast<FruitDescription*>(desc);
+    const float rate  = validated->_ripenSeasons;
     const float secs  = rate * kRdata_140172234 * scale;
     // System::Time is 8 bytes — a 4-byte target here is the documented clobber trap.
-    uint64_t timeVal = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeVal), secs);
-    reinterpret_cast<Component*>(fruitComp)->Update(&timeVal);   // B.3.8 bridge (slot 9)
+    System::Time timeVal{0};
+    RtSystem_Time_Ctor(&timeVal, secs);
+    fruit->Update(&timeVal);   // slot 9
 }
 
 
@@ -323,29 +309,36 @@ static void OrchardComponent_BoostFruit_49fc0(int64_t* fruitComp, float scale) {
 // same PopulateFn hook.
 namespace {
 
-// Helpers, called by name (B3R): 0x140003ea0 PlayerPath_FindComponent_3ea0 (the
-// StateMachineComponent), 0x140003050 WorkBase_FindComponent_3050 (the WorkComponent),
-// 0x140002e10 AttendanceComponent_GetJobHostComponent (the workplace), 0x14012ead0
-// WorkComponent_CheckWorkSlot, 0x14012fc00 WorkPlaceComponent_SetAccepting.
+// Finders called here: 0x140003ea0 FindComponent<StateMachineComponent>, 0x140003050
+// FindComponent<WorkComponent>, 0x140002e10 FindComponent<WorkPlaceComponent>; leaves
+// 0x14012ead0 WorkComponent_CheckWorkSlot, 0x14012fc00 WorkPlaceComponent_SetAccepting.
 
-// The SM's current state id: sm+0x52 (pending), falling back to sm+0x50 when negative.
+// The SM's current state id: +0x52 (pending), falling back to +0x50 when negative.
 // NB these are offsets on the StateMachineComponent, and the `sm` the state handlers
 // use is that component + 0x48.
-int OrchardCurrentStateId(uintptr_t smc) {
-    int8_t v = *reinterpret_cast<int8_t*>(smc + 0x52);
-    if (v < 0) v = *reinterpret_cast<int8_t*>(smc + 0x50);
+int OrchardCurrentStateId(const StateMachineComponent* smc) {
+    int8_t v = static_cast<int8_t>(smc->stateFlags >> 16);
+    if (v < 0) v = static_cast<int8_t>(smc->stateFlags);
     return v;
 }
 
-int OrchardPlantedCount(uintptr_t s) {
-    const int count = *reinterpret_cast<int32_t*>(s + 0x58);
-    uintptr_t slots = *reinterpret_cast<uintptr_t*>(s + 0x50);
+int OrchardPlantedCount(const OrchardComponent* s) {
+    const int count = s->slotCount;
+    const OrchardSlot* slots = s->slots;
     int n = 0;
     for (int i = 0; slots && i < count; ++i) {
-        const int st = *reinterpret_cast<int32_t*>(slots + static_cast<uintptr_t>(i) * 0x28 + 4);
+        const int st = slots[i].state;
         if (st != 0 && st == 1) ++n;      // retail's redundant pair, kept verbatim
     }
     return n;
+}
+
+// The in-game year: the first int of the day counter at GameUpdateLoop+0x128.
+// LEFT: GameUpdateLoop::m_dayCounter is void* (W0 header; no DayCounter class yet).
+int OrchardYearOrZero() {
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
+    void* cal = world ? world->m_dayCounter : nullptr;
+    return cal ? *reinterpret_cast<const int32_t*>(cal) : 0;
 }
 
 // Reports what the panel was told, and WHY, one line per change of the deciding inputs.
@@ -372,9 +365,10 @@ void TraceCanCommand(int cmdId, int curState, int planted, int slotCount, bool h
         return;
     prev = k;
 
-    uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
-    uintptr_t cal   = world ? *reinterpret_cast<uintptr_t*>(world + 0x128) : 0;
-    const int curYear = cal ? *reinterpret_cast<int32_t*>(cal) : -1;
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
+    void* cal = world ? world->m_dayCounter : nullptr;
+    // LEFT: GameUpdateLoop::m_dayCounter is void* (W0 header; no DayCounter class yet).
+    const int curYear = cal ? *reinterpret_cast<const int32_t*>(cal) : -1;
 
     // Name the gate that actually decided it, so a greyed button reports its own reason.
     const char* why = "enabled";
@@ -429,17 +423,18 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
 // year: -1 means "never harvested". The tree's factory zero-filled it, which read as
 // "already harvested in year 0".
 OrchardComponent::OrchardComponent()
-    : _controller(this), orchardFlag(0), _pad49{}, orchardId(-1), field50(nullptr),
-      field58(nullptr), field60(nullptr) {
+    : _controller(this), enabled(false), _pad49{}, lastHarvestYear(-1), slots(nullptr),
+      slotCount(0), slotCapacity(0), treeType(nullptr) {
     OrFlagsInCtor(0x80);
 }
 
 // 0x140051ed0: MemFree(+0x50), +0x50 = +0x58 = 0, then the restamps and ~Internal
 // (the compiler chain).
 OrchardComponent::~OrchardComponent() {
-    Object::detail::InternalMemFree(field50);
-    field50 = nullptr;
-    field58 = nullptr;
+    Object::detail::InternalMemFree(slots);
+    slots = nullptr;
+    slotCount = 0;
+    slotCapacity = 0;
 }
 
 // create 0x140009870: MemAlloc(0x68, 8), then the ctor.
@@ -460,99 +455,78 @@ void* OrchardComponent::CreateInPlaceObject(void* storage) {
 // OrchardComponent::Persist (vtable slot [3], 0x140051de0)
 // ============================================================
 // Component_Serialize + empty controller serializer + second serializer:
-//   validate refs, serialize orchardFlag, orchardId, entity ref array, resource array
-
+//   validate refs, serialize enabled, lastHarvestYear, the slot array, the tree type
 void OrchardComponent::Persist(void* stream) {
-    // Slot-3 serializers are dispatched straight off the vtable by the entity
-    // stream, so nothing else ever reaches this file. Resolving here is what
-    // keeps the pointers below non-null -- when they were null the whole body
-    // read ZERO bytes and silently desynced every object after it.
-    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
-
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+
     // Empty controller serializer block
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
+    { IO::Serializer scope(*st, 0); }
 
     // Main data serializer
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*st, 0);
 
     // Validate entity references
-    OrchardComponent_ValidateRefs((void*)selfAddr);   // 0x140051830
+    ValidateRefs();   // 0x140051830
 
-    // Serialize orchardFlag (bool at +0x48)
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(selfAddr + 0x48), nullptr);   // B.3.4 bridge
+    ser.Serialize(enabled, nullptr);
+    ser.Serialize(lastHarvestYear, nullptr);
 
-    // Serialize orchardId (int at +0x4C)
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x4C), nullptr);   // B.3.4 bridge
+    // Serialize the slot count, resize the array if loading
+    int localCount = slotCount;
+    ser.Serialize(localCount, nullptr);
 
-    // Serialize entity ref count from +0x58, resize +0x50 if loading
-    int localCount = *(int*)(selfAddr + 0x58);
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
-
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        OrchardComponent_ResizeRefArray((void*)(selfAddr + 0x50), localCount);
+    if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+        SetSlotCount(localCount);   // 0x140009f80
     }
 
-    // Serialize entity ref array entries
-    OrchardComponent_SerializeRefEntries(serializer2, localCount, *(void**)(selfAddr + 0x50));
+    SerializeSlots(ser, localCount, slots);   // 0x14000a230
 
-    // Serialize resource IBP array at +0x60
-    Reimpl_ExternalPtr_Serialize_StringTable((void*)(selfAddr + 0x60), serializer2);   // 0x140002340
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
+    // The tree type ExternalPtr at +0x60
+    Reimpl_ExternalPtr_Serialize_StringTable(&treeType, &ser);   // 0x140002340
 }
 
 // [4] 0x140051dd0: `MOV qword [RCX+0x60],0` — one store, nothing else.
-void OrchardComponent::Startup() { field60 = nullptr; }
+void OrchardComponent::Startup() { treeType = nullptr; }
 
 // [13] 0x140051c90 / [14] 0x140051ba0 / [15] 0x140051990 below; the extern "C" doors
 // of [13]/[14] stay above (standalone/orchard_cut_harness.cpp calls them).
 // idx13 CanCommand — retail 0x140051c90. Returns the button's enabled state.
 //   id 0 WORK    : (no work slot held && planted < slots) || slots == 0, ANDed with hasType
-//   id 1 HARVEST : state == 10 && lastHarvestYear(+0x4c) != current year, ANDed with hasType
-//   id 2 TOGGLE  : bit0 = hasType, bit1 = the +0x48 master switch (a BITFIELD, not a bool —
+//   id 1 HARVEST : state == 10 && lastHarvestYear != current year, ANDed with hasType
+//   id 2 TOGGLE  : bit0 = hasType, bit1 = the enabled switch (a BITFIELD, not a bool —
 //                  the panel reads bit 1 to draw the on/off state)
 //   id 3 CLEAR   : planted > 0 && state != 20
-// `hasType = (*(self+0x60) != 0)` is ANDed into ids 0/1/2 — an untyped orchard is
+// `hasType = (treeType != 0)` is ANDed into ids 0/1/2 — an untyped orchard is
 // correctly inert in retail, which is why an unconfigured orchard shows dead buttons.
 uint32_t OrchardComponent::CommandMask(int cmdId) {
-    const uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    uintptr_t smcIBP = 0;
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(s + 0x10), &smcIBP);   // 0x140003ea0
-    uintptr_t wcIBP = 0;
-    WorkBase_FindComponent_3050(*reinterpret_cast<uintptr_t*>(s + 0x10), &wcIBP);   // 0x140003050
-    if (!smcIBP) return 0;      // SA: retail derefs unguarded; every orchard entity has a
+    StateMachineComponent* smc = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+    WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
+    if (!smc) return 0;         // SA: retail derefs unguarded; every orchard entity has a
                                 // StateMachineComponent, so this can only fire if the
                                 // component was asked before its entity finished building.
-    const int  curState   = OrchardCurrentStateId(smcIBP);
-    const int  planted    = OrchardPlantedCount(s);
-    const int  slotCount  = *reinterpret_cast<int32_t*>(s + 0x58);
-    const bool hasType    = (*reinterpret_cast<uintptr_t*>(s + 0x60) != 0);
+    const int  curState   = OrchardCurrentStateId(smc);
+    const int  planted    = OrchardPlantedCount(this);
+    const bool hasType    = (treeType != nullptr);
 
     uint8_t result = 0;
     switch (cmdId) {
     case 0: {
-        const bool busy = WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(wcIBP)) != 0;   // 0x14012ead0
+        const bool busy = WorkComponent_CheckWorkSlot(wc) != 0;   // 0x14012ead0
         if ((!busy && planted < slotCount) || slotCount == 0) result = hasType ? 1 : 0;
         break;
     }
     case 1: {
         if (curState != 10) break;
-        uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
-        uintptr_t cal   = world ? *reinterpret_cast<uintptr_t*>(world + 0x128) : 0;
-        const int year  = cal ? *reinterpret_cast<int32_t*>(cal) : 0;
-        if (*reinterpret_cast<int32_t*>(s + 0x4c) == year) break;
+        if (lastHarvestYear == OrchardYearOrZero()) break;
         result = hasType ? 1 : 0;
         break;
     }
     case 2:
         result = static_cast<uint8_t>(
-            (static_cast<uint8_t>(-(*reinterpret_cast<char*>(s + 0x48) != 0)) & 2u) |
+            (static_cast<uint8_t>(-(enabled != 0)) & 2u) |
             (hasType ? 1u : 0u));
         break;
     case 3:
@@ -562,23 +536,19 @@ uint32_t OrchardComponent::CommandMask(int cmdId) {
         break;
     }
     TraceCanCommand(cmdId, curState, planted, slotCount, hasType,
-                    *reinterpret_cast<char*>(s + 0x48), *reinterpret_cast<int32_t*>(s + 0x4c),
-                    result);
+                    static_cast<char>(enabled), lastHarvestYear, result);
     return result;
 }
 
 // idx14 Command — retail 0x140051ba0. Maps a button id to a NODE EVENT and posts it.
 //   0 -> event 3 (plant/work)   1 -> event 4 (harvest)   3 -> event 5 (clear)
-//   2 -> no event at all: flip the +0x48 master switch and push it to the workplace.
+//   2 -> no event at all: flip the enabled switch and push it to the workplace.
 // The post itself is node vtable slot 2 (+0x10):
 //   (**(code**)(**(longlong**)(smc+0x48) + 0x10))(node, smc+0x48, (int)*(char*)(smc+0x51), eventId)
 // i.e. curIdx comes from smc+0x51, which is (smc+0x48)+0x09 — the same sm+0x09 field
 // OrchardRequestState reads. ControllerLive::Dispatcher::PostEvent implements that slot.
 void OrchardComponent::Command(int cmdId) {
-    const uintptr_t s = reinterpret_cast<uintptr_t>(this);
-
-    uintptr_t smcIBP = 0;
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(s + 0x10), &smcIBP);   // 0x140003ea0
+    StateMachineComponent* smc = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
 
     int eventId;
     switch (cmdId) {
@@ -588,30 +558,28 @@ void OrchardComponent::Command(int cmdId) {
     case 2: {
         // Toggle the master switch and mirror it onto the workplace. Retail returns here:
         // no event is posted for this command.
-        *reinterpret_cast<char*>(s + 0x48) = (*reinterpret_cast<char*>(s + 0x48) == 0) ? 1 : 0;
-        uintptr_t wpIBP = 0;
-        AttendanceComponent_GetJobHostComponent(*reinterpret_cast<void**>(s + 0x10), &wpIBP);   // 0x140002e10
-        WorkPlaceComponent_SetAccepting(static_cast<int64_t>(wpIBP),   // 0x14012fc00
-                                        *reinterpret_cast<char*>(s + 0x48) != 0);
-        std::fprintf(stderr, "[OrchardCmd] Command(2) toggle -> enabled=%d\n",
-                     (int)*reinterpret_cast<char*>(s + 0x48));
+        enabled = !enabled;
+        WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
+        // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's body).
+        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wp), enabled);   // 0x14012fc00
+        std::fprintf(stderr, "[OrchardCmd] Command(2) toggle -> enabled=%d\n", (int)enabled);
         std::fflush(stderr);
         return;
     }
     default: return;
     }
 
-    if (!smcIBP) return;
-    uintptr_t sm   = smcIBP + 0x48;
-    void*     node = *reinterpret_cast<void**>(sm);
+    if (!smc) return;
+    void* node = smc->controllerSelf;
+    const int curIdx = static_cast<int8_t>(smc->stateFlags >> 8);   // +0x51
     std::fprintf(stderr, "[OrchardCmd] Command(%d) -> post node event %d (node=%p curIdx=%d)\n",
-                 cmdId, eventId, node, (int)*reinterpret_cast<int8_t*>(smcIBP + 0x51));
+                 cmdId, eventId, node, curIdx);
     std::fflush(stderr);
     if (!node) return;
     // node = the controller member the StateMachineComponent linked (D6); slot 2 PostEvent.
-    reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(   // B.3.8 bridge
-        reinterpret_cast<void*>(sm),
-        static_cast<int>(*reinterpret_cast<int8_t*>(smcIBP + 0x51)), eventId);
+    // LEFT: StateMachineComponent::controllerSelf is void* (COMP-e's header).
+    reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(
+        &smc->controllerSelf, curIdx, eventId);
 }
 
 // Diagnostic counters of the [OrchardMsg] lines (B6-5: namespace-scope atomics,
@@ -631,83 +599,74 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
             std::fflush(stderr);
         }
     }
-    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    const uintptr_t idx  = static_cast<uintptr_t>(slotIdx);
-    uintptr_t world = GameUpdateLoop::_singleton ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
+    const uintptr_t idx = static_cast<uintptr_t>(slotIdx);
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
 
     if (msgId == 0) {
-        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x50);
         if (!slots) return;
-        const uintptr_t slot = slots + idx * 0x28;
-        const uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(world + 0xf8);
-        // The tile record is stride 0x30 in *(mapGrid+0x80); its +0x08 is the entity
-        // standing on it — the tree the plant action just created.
-        int64_t entity = *reinterpret_cast<int64_t*>(
-            *reinterpret_cast<uintptr_t*>(mapGrid + 0x80) + 8 +
-            static_cast<int64_t>(*reinterpret_cast<int32_t*>(slot)) * 0x30);
-        int64_t natResIBP = 0;
-        WorkBase_FindComponent_52c0(static_cast<uintptr_t>(entity), &natResIBP);   // 0x1400052c0
-        int64_t fruitIBP = 0;
-        WorkLeaf_FindComp_a0b0(static_cast<uintptr_t>(entity), &fruitIBP);   // 0x14000a0b0
+        OrchardSlot& slot = slots[idx];
+        // LEFT: GameUpdateLoop::m_game is void* (W0 header); Map::cells is untyped (GAME-b).
+        const uint8_t* cells = reinterpret_cast<const uint8_t*>(reinterpret_cast<const Map*>(world->m_game)->cells);
+        // The cell record is stride 0x30; its +0x08 is the entity standing on it — the
+        // tree the plant action just created. LEFT: no cell type yet.
+        ComponentEntity* entity = *reinterpret_cast<ComponentEntity* const*>(
+            cells + 8 + static_cast<int64_t>(slot.tile) * 0x30);
+        NaturalResourceComponent* natRes = entity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
+        FruitComponent* fruit = entity->FindComponent<FruitComponent>();   // 0x14000a0b0
 
         {   // msg 0 is the ONLY writer of the slot's {entity, natRes, fruit} triple, and its
             // two outcomes — bound (state 1) and unusable (state 2) — are indistinguishable
             // from the slot histogram alone. Say which of the three came back null.
             if (s_orchardMsg0Traced.fetch_add(1, std::memory_order_relaxed) < 8) {
                 std::fprintf(stderr, "[OrchardMsg]   msg0 slot=%u tile=%d -> entity=%p "
-                             "natRes=%p fruit=%p => state %d\n", slotIdx,
-                             (int)*reinterpret_cast<int32_t*>(slot),
-                             reinterpret_cast<void*>(entity), reinterpret_cast<void*>(natResIBP),
-                             reinterpret_cast<void*>(fruitIBP),
-                             (entity && natResIBP && fruitIBP) ? 1 : 2);
+                             "natRes=%p fruit=%p => state %d\n", slotIdx, (int)slot.tile,
+                             static_cast<void*>(entity), static_cast<void*>(natRes),
+                             static_cast<void*>(fruit),
+                             (entity && natRes && fruit) ? 1 : 2);
                 std::fflush(stderr);
             }
         }
-        if (entity != 0 && natResIBP != 0 && fruitIBP != 0) {
-            *reinterpret_cast<int32_t*>(slot + 0x04) = 1;          // planted
-            *reinterpret_cast<int64_t*>(slot + 0x08) = entity;
-            *reinterpret_cast<int64_t*>(slot + 0x10) = natResIBP;
-            *reinterpret_cast<int64_t*>(slot + 0x18) = fruitIBP;
+        if (entity != nullptr && natRes != nullptr && fruit != nullptr) {
+            slot.state    = 1;          // planted
+            slot.tree     = entity;
+            slot.resource = natRes;
+            slot.fruit    = fruit;
             return;
         }
-        *reinterpret_cast<int32_t*>(slot + 0x04) = 2;              // unusable
+        slot.state = 2;                 // unusable
         return;
     }
 
     if (msgId == 1) {
-        OrchardComponent_ValidateRefs(this);
-        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x50);
+        ValidateRefs();
         if (!slots) return;
-        const uintptr_t slot = slots + idx * 0x28;
-        *reinterpret_cast<uint8_t*>(slot + 0x20) = 1;
-        if (*reinterpret_cast<int64_t*>(slot + 0x18) != 0 &&
-            *reinterpret_cast<int64_t*>(slot + 0x08) != 0) {
-            const uintptr_t fruit = *reinterpret_cast<uintptr_t*>(slot + 0x18);
-            *reinterpret_cast<uint32_t*>(fruit + 0x30) = 0;
-            *reinterpret_cast<uint8_t*>(fruit + 0x34) = 1;
+        OrchardSlot& slot = slots[idx];
+        slot.picked = true;
+        if (slot.fruit != nullptr && slot.tree != nullptr) {
+            slot.fruit->ripeness  = 0.0f;
+            slot.fruit->fruitFlag = 1;
         }
         return;
     }
 
     if (msgId == 2) {
-        const uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(world + 0xf8);
-        OrchardComponent_ValidateRefs(this);
-        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x50);
+        // LEFT: GameUpdateLoop::m_game is void* (W0 header).
+        const Map* mapGrid = reinterpret_cast<const Map*>(world->m_game);
+        ValidateRefs();
         if (!slots) return;
-        int64_t entity = *reinterpret_cast<int64_t*>(
-            *reinterpret_cast<uintptr_t*>(mapGrid + 0x80) + 8 +
-            static_cast<int64_t>(*reinterpret_cast<int32_t*>(slots + idx * 0x28)) * 0x30);
-        if (entity == 0) return;
-        int64_t fruitIBP = 0;
-        WorkLeaf_FindComp_a0b0(static_cast<uintptr_t>(entity), &fruitIBP);   // 0x14000a0b0
-        if (fruitIBP == 0) return;
-        void* desc = *reinterpret_cast<void**>(self + 0x18);
-        void* validated = nullptr;
+        // LEFT: Map::cells is untyped and the cell's +0x08 is the entity (GAME-b).
+        ComponentEntity* entity = *reinterpret_cast<ComponentEntity* const*>(
+            reinterpret_cast<const uint8_t*>(mapGrid->cells) + 8 +
+            static_cast<int64_t>(slots[idx].tile) * 0x30);
+        if (entity == nullptr) return;
+        FruitComponent* fruit = entity->FindComponent<FruitComponent>();   // 0x14000a0b0
+        if (fruit == nullptr) return;
+        Description* desc = _description;
+        OrchardDescription* validated = nullptr;
         if (::Object::IsDerivedFromNullSafe(desc, OrchardDescription::TypeId()))
-            validated = desc;
-        OrchardComponent_BoostFruit_49fc0(reinterpret_cast<int64_t*>(fruitIBP),
-            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(validated) + 0x2c));
+            validated = static_cast<OrchardDescription*>(desc);
+        BoostFruit(fruit, validated->_boostRate);   // 0x140049fc0
         return;
     }
 }

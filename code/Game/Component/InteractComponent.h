@@ -34,12 +34,16 @@ public:
     void Persist(void* stream) override;                          // [3] 0x140123340
     void OnAdded() override;                                      // [6] 0x140123110
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 use-location IBP array data (freed by the retail dtor)
-    void*    field30;      // +0x30 its count / capacity
+    // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
+    // 0x140123340 (int count +0x30 with the +0x28 IBP array, each validated against
+    // InteractComponent 0x1401c7900) and OnAdded 0x140123110.
+    InteractComponent** useLocations;       // +0x28 the parts' InteractComponents (Array data, freed by the retail dtor)
+    int32_t             useLocationCount;   // +0x30
+    int32_t             useLocationCapacity;// +0x34
 };
 
 static_assert(sizeof(InteractComponent) == 0x38, "InteractComponent is 0x38 (create 0x1400351a0)");
 static_assert(alignof(InteractComponent) == 8, "InteractComponent alignment");
-static_assert(offsetof(InteractComponent, field28) == 0x28, "");
-static_assert(offsetof(InteractComponent, field30) == 0x30, "");
+static_assert(offsetof(InteractComponent, useLocations) == 0x28, "");
+static_assert(offsetof(InteractComponent, useLocationCount) == 0x30, "");
+static_assert(offsetof(InteractComponent, useLocationCapacity) == 0x34, "");

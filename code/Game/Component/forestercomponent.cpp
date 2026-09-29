@@ -50,9 +50,8 @@
 //
 // ⚠ Unlike the ResourceProduce base slot 13, this one DOES read its command-id argument.
 uint32_t ForesterComponent::CommandMask(int cmd) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
-    if (cmd == 1) return *reinterpret_cast<char*>(comp + 0x50) ? 3 : 1;
-    if (cmd == 2) return *reinterpret_cast<char*>(comp + 0x51) ? 3 : 1;
+    if (cmd == 1) return plantTrees ? 3 : 1;
+    if (cmd == 2) return cutTrees ? 3 : 1;
     return 1;
 }
 
@@ -68,18 +67,14 @@ uint32_t ForesterComponent::CommandMask(int cmd) {
 // Command, a direct call: qualified here). The "Herbalist" name is a subclass label
 // Ghidra attached to a base-vtable body; it is not the herbalist's function.
 void ForesterComponent::Command(int cmd) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
-    char* const plant = reinterpret_cast<char*>(comp + 0x50);
-    char* const cut   = reinterpret_cast<char*>(comp + 0x51);
-
-    const char cutBefore = *cut;
-    const bool wasIdle   = (cutBefore == 0 && *plant == 0);
+    const bool cutBefore = cutTrees;
+    const bool wasIdle   = (!cutBefore && !plantTrees);
     const bool wasActive = !wasIdle;
 
-    if (cmd == 1)      *plant = (*plant == 0) ? 1 : 0;
-    else if (cmd == 2) *cut   = (cutBefore == 0) ? 1 : 0;
+    if (cmd == 1)      plantTrees = !plantTrees;
+    else if (cmd == 2) cutTrees   = !cutBefore;
 
-    const bool nowIdle   = (*cut == 0 && *plant == 0);
+    const bool nowIdle   = (!cutTrees && !plantTrees);
     const bool nowActive = !nowIdle;
 
     if ((wasIdle && nowActive) || (wasActive && nowIdle))
@@ -101,7 +96,7 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void*, uintptr_t*);   // reso
 // 0x14011fa40: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
 // `MOV word [RBX+0x50],0x101` — a freshly built lodge plants AND cuts.
 ForesterComponent::ForesterComponent()
-    : ResourceProduceComponent(), foresterFlags(0x101), _pad52{} {}
+    : ResourceProduceComponent(), plantTrees(true), cutTrees(true), _pad52{} {}
 
 // create 0x140034870: MemAlloc(0x58, 8), then the ctor.
 void* ForesterComponent::CreateNewObject() {
@@ -121,16 +116,9 @@ void       ForesterComponent::Persist(void* stream) {
     ResourceProduceComponent::Persist(stream);
 
     // Serialize ForesterComponent's own fields
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // foresterFlags at +0x50 is uint16, serialized as two individual bools
-    bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(this) + 0x50);
-    bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(this) + 0x51);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);  // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
+    ser.Serialize(plantTrees, nullptr);
+    ser.Serialize(cutTrees, nullptr);
 }
 uintptr_t* ForesterComponent::CreateWork(uintptr_t* out) { return ForesterComponent_CreateWork(this, out); } // [18] 0x14011f780
 

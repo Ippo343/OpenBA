@@ -16,10 +16,6 @@ void MainMenuDialog_Slot4(MainMenuDialog* self);
 // Slot5 (vtable +0x28): Shutdown — unpauses audio scenes (channels 2, 3, 4).
 void MainMenuDialog_Slot5(MainMenuDialog* self);
 
-// Slot8 (vtable +0x40): OnCommand — dispatches menu button clicks.
-// Opens sub-dialogs (New Game, Load, Save, Options, etc.) or quits.
-void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int param4);
-
 // ============================================================
 // OptionsDialog
 // ============================================================

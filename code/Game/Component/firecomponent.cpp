@@ -36,10 +36,8 @@
 #include "Component/FireDescription.h"
 #include "Action/exe_bodies.h"
 
-// Leaf bodies (firecomponent_ignite.cpp).
-extern "C" void FireComponent_Ignite_610(void* self);
-extern "C" void FireComponent_Spread_130(void* self);
-extern "C" void FireComponent_Extinguish_4c0(void* self);
+// Leaf bodies (firecomponent_ignite.cpp): FireComponent::Ignite / SpreadToNeighbors /
+// Extinguish.
 
 // FUN_1400a9290 — {rate, weight} probability roll (ActMvDep_TimeCheck_a9290,
 // called directly). Reads BOTH floats of the pair and CLEARS *time on every call,
@@ -61,7 +59,7 @@ extern "C" void FireComponent_Extinguish_4c0(void* self);
 // 0x140049b80. Component() is the CALL 0x1401188b0; the 0x140159380 stamp is
 // the compiler's; +0x28..+0x40 = 0; flags |= 0x08 (0x88).
 FireComponent::FireComponent()
-    : bucketsApplied(0), bucketsAtSpread(0), fireTimer(0), spreadTimer(0), igniteAccum(0) {
+    : bucketsApplied(0), bucketsAtSpread(0), fireTimer{0}, spreadTimer{0}, igniteAccum{0} {
     OrFlagsInCtor(0x08);
 }
 
@@ -75,18 +73,15 @@ FireComponent::FireComponent()
 // This is the third independent body proving +0x28 / +0x2c are two int32s.
 void FireComponent::Persist(void* stream) {
     if (!stream) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0 (was the engine_funcs door)
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (Persist takes void*)
+    fireTimer.Serialize(ser);
+    spreadTimer.Serialize(ser);
+    ser.Serialize(bucketsApplied, nullptr);
+    if (ser.GetVersion() > 0)
+        ser.Serialize(bucketsAtSpread, nullptr);
 }
 
 // [9] 0x140048fb0. RDX is a pointer to the elapsed System::Time (EntityList
@@ -95,19 +90,14 @@ void FireComponent::Persist(void* stream) {
 // FireComponent::Update (vtable slot 9, 0x140048fb0)
 // ============================================================
 void FireComponent::Update(void* time) {
-    int64_t* pDeltaTime = static_cast<int64_t*>(time);
+    System::Time* pDeltaTime = static_cast<System::Time*>(time);
     if (!pDeltaTime) return;
 
-    const int64_t dt = *pDeltaTime;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    int64_t* pFireTimer   = reinterpret_cast<int64_t*>(s + 0x30);
-    int64_t* pSpreadTimer = reinterpret_cast<int64_t*>(s + 0x38);
-    int64_t* pAccum       = reinterpret_cast<int64_t*>(s + 0x40);
+    const int64_t dt = pDeltaTime->_ticks;
 
-    if (*pFireTimer == 0) {
+    if (fireTimer._ticks == 0) {
         // ---- idle: roll for a new fire ----
-        const uintptr_t gw = (GameUpdateLoop::_singleton != nullptr)
-                           ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
+        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         if (!gw) return;
 
         // GameWorld+0xD0 is the debug / new-game flag word: bit0 zeroCost, bit1 noHunger,
@@ -115,38 +105,37 @@ void FireComponent::Update(void* time) {
         // bit7 noTornado. NewGameDialog::StartGame writes the whole word explicitly
         // (newgamedialog.cpp:740): disaster combo index 0 => 0 (fire ON), otherwise
         // 0xF0 (bits 4-7 => fire OFF). It is never left uninitialised.
-        const uint32_t worldFlags = *reinterpret_cast<uint32_t*>(gw + 0xD0);
+        const uint32_t worldFlags = gw->m_gameFlags;
         if ((worldFlags >> 6) & 1) {
             return;
         }
 
-        *pAccum += dt;
+        igniteAccum._ticks += dt;
 
         // Retail: FUN_1400a9290(&accum, (float*)(desc + 0x44), gw->rng) — called
         // UNCONDITIONALLY with the description pointer, which retail always has.
         // No `if (desc)` here: that guard is what used to delete this roll.
-        void* obj = *reinterpret_cast<void**>(s + 0x18);
-        void* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId()))
-                   ? obj : nullptr;
-        void* rng = *reinterpret_cast<void**>(gw + 0xD8);
-        float* pair = reinterpret_cast<float*>(
-            reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::IgniteChance0);
+        Description* obj = _description;
+        FireDescription* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId()))
+                   ? static_cast<FireDescription*>(obj) : nullptr;
+        System::Random* rng = gw->m_random;
+        float* pair = desc->igniteChance;
 
-        const bool fired = ActMvDep_TimeCheck_a9290(pAccum, pair, rng);
+        const bool fired = ActMvDep_TimeCheck_a9290(&igniteAccum, pair, rng);
         if (fired) {
-            FireComponent_Ignite_610(this);
+            Ignite();
             return;
         }
     } else {
         // ---- burning: count down ----
-        *pFireTimer   -= dt;
-        *pSpreadTimer -= dt;
+        fireTimer._ticks   -= dt;
+        spreadTimer._ticks -= dt;
 
-        if (*pFireTimer > 0 && *pSpreadTimer < 1)
-            FireComponent_Spread_130(this);
+        if (fireTimer._ticks > 0 && spreadTimer._ticks < 1)
+            SpreadToNeighbors();
 
-        if (*pFireTimer < 1)
-            FireComponent_Extinguish_4c0(this);
+        if (fireTimer._ticks < 1)
+            Extinguish();
     }
 }
 

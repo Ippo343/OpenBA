@@ -31,6 +31,9 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
+
+class ComponentDescription;   // Component/ComponentDescription.h
 
 struct DestroyCtrlTag {};
 
@@ -51,14 +54,44 @@ public:
     int         GetDefaultState() const override { return 4; }  // [16] 0x140033c00
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
 
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    bool StorageEmpty();                                          // 0x14011da80
+    bool TargetDiffers();                                         // 0x14011e600
+    bool TargetIsCurrent();                                       // 0x14011e5b0
+    bool IsBeingDemolished();                                     // 0x14011e690
+    bool BeginBurning(const System::Time* time);                  // 0x14011e7b0
+    void StopBurning();                                           // 0x14011ea10
+    void ScatterContents(int baseX, int baseY, int width, int depth);  // 0x14011c530
+    void RubbleStep();                                            // 0x14011d5d0
+    // The state handlers of the controller's table (RCX = [node+0x18] = this,
+    // RDX = the state machine, R8 = the elapsed Time for the per-frame column).
+    char State3Enter(void* sm);                                   // 0x14011d7b0
+    char State4Enter(void* sm);                                   // 0x14011cfd0
+    char State4Tick(void* sm);                                    // 0x14011cec0
+    char State5Enter();                                           // 0x14011cc70
+    char State5Tick();                                            // 0x14011c120
+    char State6Enter();                                           // 0x14011d4d0
+    char State6Update();                                          // 0x14011d400
+    char State6Tick(System::Time* elapsed);                       // 0x14011d490
+    char State7Rebuild(void* sm);                                 // 0x14011d2a0 state 7 event 0
+    char State7Remove(void* sm);                                  // 0x14011d1a0 state 7 event 1
+    char CancelDemolition(void* sm);                              // 0x14011bcc0 states 4/5 event 0
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
+    // Types from Persist 0x14011db50: +0x54 / +0x58 Serialize(int&) (IAT 0x140152ac8),
+    // +0x51 / +0x50 Serialize(bool&) (0x140152a58), +0x60 ExternalPtr<ComponentDescription>
+    // (0x140002340), +0x48 Time::Serialize (0x140152aa8).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    void*           field48;       // +0x48
-    uint16_t        destroyFlags;  // +0x50
+    System::Time    burnTime;      // +0x48 the collapse countdown (BeginBurning 0x14011e7b0 seeds it;
+                                   //       state 6's tick 0x14011d490 runs it down)
+    bool            burning;       // +0x50 set by BeginBurning: state 3 enter branches to 6 (collapse)
+    bool            hasBuildComponent; // +0x51 the entity carried a BuildComponent (state 4 enter)
     uint8_t         _pad52[2];     // +0x52
-    uint32_t        field54;       // +0x54 demolition progress (OnMessage credit)
-    void*           field58;       // +0x58 demolition target (low dword)
-    void*           field60;       // +0x60 target description (Startup)
+    int32_t         progress;      // +0x54 demolition progress (OnMessage credit; 0x14011c14f JL)
+    int32_t         progressTarget;// +0x58 the target state 5 enter computes
+    uint8_t         _pad5C[4];     // +0x5c never written by the ctor
+    ComponentDescription* upgradeTarget; // +0x60 the replacement template (Startup: the
+                                         //       DestroyDescription's _replaceEntity)
 };
 
 static_assert(sizeof(DestroyComponent) == 0x68, "DestroyComponent is 0x68 (create 0x140033bc0)");
@@ -67,8 +100,9 @@ static_assert(offsetof(DestroyComponent, _controller) == 0x28,
               "DestroyComponent's controller member at +0x28 (slot 17 0x140004080: LEA RAX,[RCX+0x28])");
 static_assert(offsetof(DestroyComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x14011dc80)");
-static_assert(offsetof(DestroyComponent, field48) == 0x48, "DestroyComponent +0x48");
-static_assert(offsetof(DestroyComponent, destroyFlags) == 0x50, "DestroyComponent +0x50");
-static_assert(offsetof(DestroyComponent, field54) == 0x54, "DestroyComponent +0x54");
-static_assert(offsetof(DestroyComponent, field58) == 0x58, "DestroyComponent +0x58");
-static_assert(offsetof(DestroyComponent, field60) == 0x60, "DestroyComponent +0x60");
+static_assert(offsetof(DestroyComponent, burnTime) == 0x48, "DestroyComponent +0x48");
+static_assert(offsetof(DestroyComponent, burning) == 0x50, "DestroyComponent +0x50");
+static_assert(offsetof(DestroyComponent, hasBuildComponent) == 0x51, "DestroyComponent +0x51");
+static_assert(offsetof(DestroyComponent, progress) == 0x54, "DestroyComponent +0x54");
+static_assert(offsetof(DestroyComponent, progressTarget) == 0x58, "DestroyComponent +0x58");
+static_assert(offsetof(DestroyComponent, upgradeTarget) == 0x60, "DestroyComponent +0x60");
