@@ -7,8 +7,9 @@
 // skipped) unless registered in standalone/address_registry.cpp. This file provides faithful 1:1
 // reimplementations so the standalone exe can fire real logic.
 //
-// SCOPE: this file currently contains ONLY the two closure-safe recursive BST/tree
-// cleanup helpers (0x14002af40 + 0x140014b00). Their ENTIRE exe sub-callee closure is:
+// SCOPE: this file currently contains ONLY the closure-safe recursive tree cleanup
+// helper 0x14002af40 (its unreferenced sibling port of 0x140014b00 went in B.4: the
+// live port is TradeWork_helper_14b00, Player/). Its ENTIRE exe sub-callee closure is:
 //   - recursive self-calls (self-contained)
 //   - System::MemoryAllocator::MemFree (a Runtime export) — reached here via
 //     fn_MemFreeStatic, the canonical static wrapper, so no exe registration is needed.
@@ -48,24 +49,5 @@ void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node) {
     System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(n + 0x08)); // data buffer
     *reinterpret_cast<void**>(n + 0x08) = nullptr;
     *reinterpret_cast<void**>(n + 0x10) = nullptr;
-    System::MemoryAllocator::MemFree(node); // node
-}
-
-// ============================================================
-// 0x140014b00 — recursive extended-BST node cleanup (frees node only)
-// ============================================================
-// __fastcall FUN_140014b00(allocCtx param_1 [RCX], void* node [RDX])
-// Post-order recursion: free left child (node+0x20), free right child (node+0x28),
-// then MemFree the node.  No data-buffer free (unlike 0x14002af40).  param_1 is the
-// alloc context threaded through, unused once frees route through fn_MemFreeStatic.
-// In the original the free is the dispatch-slot call [0x140152b68]
-// (System::MemoryAllocator::MemFree).
-// Verified offset-by-offset against disassembly @0x140014b00.
-void WorkLeaf_TradeTreeCleanup_14b00(void* ctx, void* node) {
-    (void)ctx;
-    if (node == nullptr) return;
-    uintptr_t n = reinterpret_cast<uintptr_t>(node);
-    WorkLeaf_TradeTreeCleanup_14b00(ctx, *reinterpret_cast<void**>(n + 0x20)); // left
-    WorkLeaf_TradeTreeCleanup_14b00(ctx, *reinterpret_cast<void**>(n + 0x28)); // right
     System::MemoryAllocator::MemFree(node); // node
 }
