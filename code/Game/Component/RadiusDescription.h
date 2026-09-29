@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace Graphics { class MaterialInstance; }   // graphics/Material.h
+
 class RadiusDescription final : public Description {
     DECLARE_EXE_TYPE(RadiusDescription)
 
@@ -36,12 +38,12 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x14000ba50
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
+    Graphics::MaterialInstance* _material;      // +0x20 ExternalPtr<Graphics::MaterialInstance> (0x140007140: type cell 0x140151350)
     int32_t _radius;                            // +0x28
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
 };
 
 static_assert(sizeof(RadiusDescription) == 0x30, "RadiusDescription is 0x30 (create 0x14000b9e0 MemAlloc(0x30))");
 static_assert(alignof(RadiusDescription) == 8, "RadiusDescription alignment");
-static_assert(offsetof(RadiusDescription, _ref20) == 0x20, "RadiusDescription::_ref20 @ +0x20");
+static_assert(offsetof(RadiusDescription, _material) == 0x20, "RadiusDescription::_material @ +0x20");
 static_assert(offsetof(RadiusDescription, _radius) == 0x28, "RadiusDescription::_radius @ +0x28");

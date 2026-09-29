@@ -22,6 +22,8 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class TrackerComponent final : public Component {
     DECLARE_EXE_TYPE(TrackerComponent)
 
@@ -34,18 +36,30 @@ public:
     void Persist(void* stream) override;                          // [3] 0x140059130
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 array data (freed by the retail dtor)
-    void*    field30;      // +0x30 its count / capacity
-    void*    field38;      // +0x38 array data (freed by the retail dtor)
-    void*    field40;      // +0x40 its count / capacity
+    // One tracked resource, 0x10 bytes (Persist 0x140059130: ExternalPtr 0x140002340, int).
+    struct Entry {
+        ComponentDescription* _resource;   // +0x00 ExternalPtr<ComponentDescription>
+        int32_t _count;                    // +0x08
+        uint8_t _pad0C[4];                 // +0x0C
+    };
+
+    // Two Array<Entry> (H5: raw triples). ProductionUI 0x140075a50 moves the produced
+    // list into the displayed one when the world's generation changes.
+    Entry*   displayed;           // +0x28 the list the production panel shows (freed by the retail dtor)
+    int32_t  displayedCount;      // +0x30
+    int32_t  displayedCapacity;   // +0x34
+    Entry*   produced;            // +0x38 the list the producers upsert into (freed by the retail dtor)
+    int32_t  producedCount;       // +0x40
+    int32_t  producedCapacity;    // +0x44
     int32_t  trackerId;    // +0x48 game-world item-count generation stamp (ctor -1)
     uint8_t  _pad4C[4];    // +0x4C
 };
 
 static_assert(sizeof(TrackerComponent) == 0x50, "TrackerComponent is 0x50 (create 0x14000d7a0)");
 static_assert(alignof(TrackerComponent) == 8, "TrackerComponent alignment");
-static_assert(offsetof(TrackerComponent, field28) == 0x28, "");
-static_assert(offsetof(TrackerComponent, field30) == 0x30, "");
-static_assert(offsetof(TrackerComponent, field38) == 0x38, "");
-static_assert(offsetof(TrackerComponent, field40) == 0x40, "");
+static_assert(sizeof(TrackerComponent::Entry) == 0x10, "tracker entry stride 0x10 (0x14000da70)");
+static_assert(offsetof(TrackerComponent, displayed) == 0x28, "");
+static_assert(offsetof(TrackerComponent, displayedCount) == 0x30, "");
+static_assert(offsetof(TrackerComponent, produced) == 0x38, "");
+static_assert(offsetof(TrackerComponent, producedCount) == 0x40, "");
 static_assert(offsetof(TrackerComponent, trackerId) == 0x48, "");
