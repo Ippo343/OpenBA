@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+namespace Picking { class PickingMesh; }   // picking/PickingMesh.h
+
 class PickingDescription final : public Description {
     DECLARE_EXE_TYPE(PickingDescription)
 
@@ -36,7 +38,15 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140036e70
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _groups;                              // +0x20 group array data (0x10 stride: {External* array, count, cap})
+    // One mesh group, 0x10 bytes: Array<ExternalPtr<Picking::PickingMesh>> (Serialize
+    // 0x140128d00 -> 0x140037000). ModelComponent::meshGroup / meshIndex index it.
+    struct Group {
+        Picking::PickingMesh** meshes;          // +0x00
+        int32_t meshCount;                      // +0x08
+        int32_t meshCapacity;                   // +0x0c
+    };
+
+    Group* _groups;                             // +0x20 Array<Group> data
     int32_t _groupCount;                        // +0x28
     int32_t _groupCap;                          // +0x2c
     void* _meshRef;                             // +0x30 ExternalPtr
@@ -46,6 +56,7 @@ public:
 
 static_assert(sizeof(PickingDescription) == 0x40, "PickingDescription is 0x40 (create 0x140036e00 MemAlloc(0x40))");
 static_assert(alignof(PickingDescription) == 8, "PickingDescription alignment");
+static_assert(sizeof(PickingDescription::Group) == 0x10, "PickingDescription::Group stride 0x10");
 static_assert(offsetof(PickingDescription, _groups) == 0x20, "PickingDescription::_groups @ +0x20");
 static_assert(offsetof(PickingDescription, _groupCount) == 0x28, "PickingDescription::_groupCount @ +0x28");
 static_assert(offsetof(PickingDescription, _groupCap) == 0x2c, "PickingDescription::_groupCap @ +0x2c");
