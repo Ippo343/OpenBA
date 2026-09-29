@@ -43,7 +43,8 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf);  // 0x140
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0
 
 // ---- charactercomponent.cpp
-void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t deltaTime);  // 0x1400c4f80
+class Action;
+void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* deltaTime);  // 0x1400c4f80
 
 // ---- charmanager.cpp
 extern "C" void CharMgr_sub_8660(float* mgrF, int idx);  // 0x140018660

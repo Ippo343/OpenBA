@@ -48,6 +48,11 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
+#include "Component/CharacterGrid.h"
+#include "Component/CharacterComponent.h"
+#include "Component/CharacterDescription.h"
+#include "Component/ModelComponent.h"
+#include "math/Math.h"
 #include "system/MemoryAllocator.h"
 #include "Game/exe_constants.h"
 
@@ -66,14 +71,16 @@ inline float RadiusEps() { float f; const uint32_t b = kRdata_1401720b8; std::me
 //   param_1 = &slot (slot[0] = InternalBasePtr -> CharacterComponent)
 //   param_2 = out Rectangle {min.x, min.y, max.x, max.y} (4 floats)
 //   rect = char model pos (+0x158/+0x15c) +/- CharacterDescription radius (+0x20).
+// Reads its argument's pointee only: stays free, typed (B1).
 // ===========================================================================
-extern "C" float* CharMgr_helper_28c0(void* slotPtr, float* outRect) {
-    int64_t ch = *reinterpret_cast<int64_t*>(slotPtr);             // CharacterComponent (via IBP)
-    int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);        // ModelComponent
-    float px = *reinterpret_cast<float*>(model + 0x158);
-    float py = *reinterpret_cast<float*>(model + 0x15c);
-    float r = *reinterpret_cast<float*>(
-                  *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(slotPtr) + 0x78) + 0x20);
+static float* CharMgr_helper_28c0(const Object::InternalPtr<CharacterComponent>* slotPtr, float* outRect) {
+    CharacterComponent* ch = slotPtr->Get();
+    ModelComponent* model = ch->modelComponent;
+    // LEFT: ModelComponent::transform is raw storage (H5, W0 header)
+    const Math::Vector3& pos = reinterpret_cast<const Math::Transform*>(model->transform)->translation;
+    float px = pos.x;
+    float py = pos.y;
+    float r = ch->characterDescription->_speedScale;
     outRect[0] = px - r;   // min.x
     outRect[1] = py - r;   // min.y
     outRect[2] = px + r;   // max.x
@@ -85,26 +92,25 @@ extern "C" float* CharMgr_helper_28c0(void* slotPtr, float* outRect) {
 // 0x140018c40  helper_8c40 — insert char-index into its cell's circular list +
 //   bump the subtree occupancy counts up the tree.
 // ===========================================================================
-extern "C" void CharMgr_helper_8c40(int64_t mgr, int idx) {
-    uint8_t* slots    = *reinterpret_cast<uint8_t**>(mgr + 0x10);
-    int*     cellHead = *reinterpret_cast<int**>(mgr + 0x30);
-    int*     occ      = *reinterpret_cast<int**>(mgr + 0x50);
-    uint8_t* slot     = slots + static_cast<int64_t>(idx) * 0x18;
-    int cellIdx = *reinterpret_cast<int*>(slot + 0x10);
+void CharacterGrid::Link(int idx) {
+    CharacterGridSlot* s = slots;
+    int*     occ      = cellOccupancy;
+    CharacterGridSlot* slot = &s[idx];
+    int cellIdx = slot->cell;
     int head    = cellHead[cellIdx];
     if (head < 0) {
         cellHead[cellIdx] = idx;
-        *reinterpret_cast<int*>(slot + 0x08) = idx;   // prev = self
-        *reinterpret_cast<int*>(slot + 0x0c) = idx;   // next = self
+        slot->prev = idx;   // prev = self
+        slot->next = idx;   // next = self
     } else {
-        uint8_t* headSlot = slots + static_cast<int64_t>(head) * 0x18;
-        int headNext = *reinterpret_cast<int*>(headSlot + 0x0c);
-        *reinterpret_cast<int*>(slot + 0x0c) = headNext;   // next = head.next
-        *reinterpret_cast<int*>(slot + 0x08) = head;       // prev = head
-        *reinterpret_cast<int*>(slots + static_cast<int64_t>(headNext) * 0x18 + 0x08) = idx; // head.next.prev = idx
-        *reinterpret_cast<int*>(slots + static_cast<int64_t>(head)     * 0x18 + 0x0c) = idx; // head.next = idx
+        CharacterGridSlot* headSlot = &s[head];
+        int headNext = headSlot->next;
+        slot->next = headNext;   // next = head.next
+        slot->prev = head;       // prev = head
+        s[headNext].prev = idx;  // head.next.prev = idx
+        s[head].next = idx;      // head.next = idx
     }
-    uint32_t c = static_cast<uint32_t>(*reinterpret_cast<int*>(slot + 0x10));
+    uint32_t c = static_cast<uint32_t>(slot->cell);
     occ[static_cast<int>(c)] += 1;
     while (c != 0) {
         c = static_cast<uint32_t>((static_cast<int>(c) - 1) >> 2);
@@ -116,31 +122,29 @@ extern "C" void CharMgr_helper_8c40(int64_t mgr, int idx) {
 // 0x140018d00  helper_8d00 — unlink char-index from its cell's circular list +
 //   decrement the subtree occupancy counts up the tree.
 // ===========================================================================
-extern "C" void CharMgr_helper_8d00(int64_t mgr, int idx) {
-    uint8_t* slots    = *reinterpret_cast<uint8_t**>(mgr + 0x10);
-    int*     cellHead = *reinterpret_cast<int**>(mgr + 0x30);
-    int*     occ      = *reinterpret_cast<int**>(mgr + 0x50);
-    int64_t  off      = static_cast<int64_t>(idx) * 0x18;
-    uint8_t* slot     = slots + off;
+void CharacterGrid::Unlink(int idx) {
+    CharacterGridSlot* s = slots;
+    int*     occ      = cellOccupancy;
+    CharacterGridSlot* slot = &s[idx];
 
-    int cellIdx = *reinterpret_cast<int*>(slot + 0x10);
+    int cellIdx = slot->cell;
     int* headP = &cellHead[cellIdx];
     if (*headP == idx) {
-        *headP = *reinterpret_cast<int*>(slots + static_cast<int64_t>(idx) * 0x18 + 0x08); // head = self.prev
+        *headP = s[idx].prev;   // head = self.prev
     }
     // self.prev.next = self.next ; self.next.prev = self.prev
-    int prev = *reinterpret_cast<int*>(slot + 0x08);
-    int next = *reinterpret_cast<int*>(slot + 0x0c);
-    *reinterpret_cast<int*>(slots + static_cast<int64_t>(prev) * 0x18 + 0x0c) = next;
-    *reinterpret_cast<int*>(slots + static_cast<int64_t>(next) * 0x18 + 0x08) = prev;
-    *reinterpret_cast<int*>(slot + 0x0c) = -1;
-    *reinterpret_cast<int*>(slot + 0x08) = -1;
+    int prev = slot->prev;
+    int next = slot->next;
+    s[prev].next = next;
+    s[next].prev = prev;
+    slot->next = -1;
+    slot->prev = -1;
 
     // if this cell's head still points at idx, clear it (single-element cell)
-    int cIdx2 = *reinterpret_cast<int*>(slot + 0x10);
+    int cIdx2 = slot->cell;
     if (cellHead[cIdx2] == idx) cellHead[cIdx2] = -1;
 
-    uint32_t c = static_cast<uint32_t>(*reinterpret_cast<int*>(slot + 0x10));
+    uint32_t c = static_cast<uint32_t>(slot->cell);
     occ[static_cast<int>(c)] -= 1;
     while (c != 0) {
         c = static_cast<uint32_t>((static_cast<int>(c) - 1) >> 2);
@@ -150,34 +154,32 @@ extern "C" void CharMgr_helper_8d00(int64_t mgr, int idx) {
 
 // ===========================================================================
 // 0x140018660  sub_8660 — compute the global cell for a character's current world
-//   position and, if it changed, move it (8d00 out of old cell, 8c40 into new).
+//   position and, if it changed, move it (Unlink from the old cell, Link into the new).
 // ===========================================================================
-extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
-    uint8_t* mgr = reinterpret_cast<uint8_t*>(mgrF);
-    uint8_t* slots = *reinterpret_cast<uint8_t**>(mgr + 0x10);
-    uint8_t* slot  = slots + static_cast<int64_t>(idx) * 0x18;
+void CharacterGrid::Place(int idx) {
+    CharacterGridSlot* slot = &slots[idx];
 
     float rect[4];
-    CharMgr_helper_28c0(slot, rect);                       // {min.xy, max.xy}
+    CharMgr_helper_28c0(&slot->character, rect);            // {min.xy, max.xy}
 
     // PERF (2026-09-05): the cell is a pure function of (rect, manager constants). Every
     // character re-derives it every tick, but an idle one's rect is bit-identical to the
     // last tick's, and the only effect of the body below is "move the slot to the cell it
     // is already in". Remember the last rect per slot (keyed with the slot's character so
-    // a reused index never matches; CharMgr_impl_8560 also resets +0x10 to -1 on free)
-    // and return early while it is unchanged AND the slot is still registered (+0x10 >= 0).
+    // a reused index never matches; Release also resets the cell to -1 on free)
+    // and return early while it is unchanged AND the slot is still registered (cell >= 0).
     // Identical registration, no divides/Morton/relink for a standing citizen.
     {
-        struct RectMemo { uint64_t who; uint32_t b0, b1, b2, b3; };
+        struct RectMemo { const CharacterComponent* who; uint32_t b0, b1, b2, b3; };
         static std::vector<RectMemo> s_memo;
-        if (static_cast<size_t>(idx) >= s_memo.size()) s_memo.resize(static_cast<size_t>(idx) + 256, RectMemo{0, 0, 0, 0, 0});
+        if (static_cast<size_t>(idx) >= s_memo.size()) s_memo.resize(static_cast<size_t>(idx) + 256, RectMemo{nullptr, 0, 0, 0, 0});
         RectMemo& m = s_memo[static_cast<size_t>(idx)];
         uint32_t b0, b1, b2, b3;
         std::memcpy(&b0, &rect[0], 4); std::memcpy(&b1, &rect[1], 4);
         std::memcpy(&b2, &rect[2], 4); std::memcpy(&b3, &rect[3], 4);
-        const uint64_t who = *reinterpret_cast<const uint64_t*>(slot);
+        const CharacterComponent* who = slot->character.Get();
         if (m.who == who && m.b0 == b0 && m.b1 == b1 && m.b2 == b2 && m.b3 == b3 &&
-            *reinterpret_cast<int*>(slot + 0x10) >= 0)
+            slot->cell >= 0)
             return;
         m.who = who; m.b0 = b0; m.b1 = b1; m.b2 = b2; m.b3 = b3;
     }
@@ -191,11 +193,11 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     float radius = hx > hy ? hx : hy;                      // Scalar::Max
 
     // center += manager center offset (so worldX+offset maps into [0,worldSize))
-    cx += *reinterpret_cast<float*>(mgr + 0x04);
-    cy += *reinterpret_cast<float*>(mgr + 0x08);
+    cx += centerX;
+    cy += centerY;
 
-    float worldSize = *reinterpret_cast<float*>(mgr + 0x00);
-    int levels = *reinterpret_cast<int*>(mgr + 0x0c);
+    float world = worldSize;
+    int lv = levels;
 
     // PERF (2026-09-04): level / cellsPerSide / cellsPerUnit are a pure function of
     // (radius, worldSize, levels) — three float divides that every one of the ~1000
@@ -207,23 +209,23 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     static float s_mCellsPerUnit = 0.0f;
     uint32_t radiusBits, worldBits;
     std::memcpy(&radiusBits, &radius, 4);
-    std::memcpy(&worldBits, &worldSize, 4);
-    if (radiusBits != s_mRadiusBits || worldBits != s_mWorldBits || levels != s_mLevels) {
+    std::memcpy(&worldBits, &world, 4);
+    if (radiusBits != s_mRadiusBits || worldBits != s_mWorldBits || lv != s_mLevels) {
         float eps = RadiusEps();
-        float lr = worldSize / (radius + eps);
+        float lr = world / (radius + eps);
 
         // level = floor(log2(lr)) via float-exponent extraction, clamped to [0, levels-1]
         uint32_t lrBits;
         std::memcpy(&lrBits, &lr, 4);
         int level = static_cast<int>((lrBits >> 0x17) - 0x7f);
-        if (levels <= level) level = levels - 1;
+        if (lv <= level) level = lv - 1;
         if (level < 0) level = 0;
 
         int cellsPerSide = 1 << level;
         float uvScale = kRdata_14017214c;
-        s_mCellsPerUnit = uvScale / (worldSize / static_cast<float>(cellsPerSide));
+        s_mCellsPerUnit = uvScale / (world / static_cast<float>(cellsPerSide));
         s_mLevel = level; s_mCellsPerSide = cellsPerSide;
-        s_mRadiusBits = radiusBits; s_mWorldBits = worldBits; s_mLevels = levels;
+        s_mRadiusBits = radiusBits; s_mWorldBits = worldBits; s_mLevels = lv;
     }
     const int level = s_mLevel;
     const int cellsPerSide = s_mCellsPerSide;
@@ -250,21 +252,26 @@ extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
     uint32_t B = ux & 0x33333333;
     uint32_t E = (ux & 0x22222222) * 2;
     uint32_t morton = ((((A ^ B) & 0x55555555) ^ A) | E);
-    int* offTbl = *reinterpret_cast<int**>(mgr + 0x40);
-    int globalCell = static_cast<int>(morton) + offTbl[level];
+    int globalCell = static_cast<int>(morton) + levelOffsets[level];
 
-    if (*reinterpret_cast<int*>(slot + 0x10) != globalCell) {
-        if (-1 < *reinterpret_cast<int*>(slot + 0x10))
-            CharMgr_helper_8d00(reinterpret_cast<int64_t>(mgr), idx);
-        *reinterpret_cast<int*>(slot + 0x10) = globalCell;
-        CharMgr_helper_8c40(reinterpret_cast<int64_t>(mgr), idx);
+    if (slot->cell != globalCell) {
+        if (-1 < slot->cell)
+            Unlink(idx);
+        slot->cell = globalCell;
+        Link(idx);
     }
+}
+
+// B4 FORWARD: 1 outside caller (citizenai_executor.cpp) holds the grid as float*.
+extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
+    reinterpret_cast<CharacterGrid*>(mgrF)->Place(idx);
 }
 
 // ===========================================================================
 // 0x1400021d0  FUN_1400021d0 — generic int-array resize to `newCount` (grow x3 on
-//   first realloc, copy survivors, free old). Used by sub_83f0 to pop the free-list.
+//   first realloc, copy survivors, free old). Used by Register to pop the free-list.
 //   arr layout: [0]=int* data, +0x08 int count, +0x0c int capacity.
+// LEFT: a Collection::Array<int> instance the tree has not matched to the template.
 // ===========================================================================
 extern "C" void CharMgr_IntArrayResize_21d0(int64_t* arr, int newCount) {
     int oldCount = static_cast<int>(arr[1]);
@@ -290,105 +297,100 @@ extern "C" void CharMgr_IntArrayResize_21d0(int64_t* arr, int newCount) {
 }
 
 // ===========================================================================
-// 0x1400183f0  sub_83f0 — register a character (IBP at *ibp) into the manager and
-//   return its char-index. Pops the free-list if non-empty, else appends (growing the
-//   slot array). Then spatial-places it via sub_8660.
-//   param_1 = manager (float*), param_2 = &IBP-to-CharacterComponent.
+// 0x1400183f0  sub_83f0 — register a character into the grid and return its
+//   char-index. Pops the free-list if non-empty, else appends (growing the slot
+//   array). Then spatial-places it via Place.
 // ===========================================================================
-extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp) {
-    uint8_t* mgr = reinterpret_cast<uint8_t*>(mgrF);
-    int freeCount = *reinterpret_cast<int*>(mgr + 0x28);
+int64_t CharacterGrid::Register(Object::InternalPtr<CharacterComponent>* ibp) {
+    int fc = freeCount;
     uint64_t index;
 
-    if (freeCount < 1) {
+    if (fc < 1) {
         // ---- append path ----
-        int count = *reinterpret_cast<int*>(mgr + 0x18);
+        int count = slotCount;
         index = static_cast<uint32_t>(count);
         int newCount = count + 1;
         if (newCount != count) {
-            void* oldSlots = *reinterpret_cast<void**>(mgr + 0x10);
-            *reinterpret_cast<int*>(mgr + 0x18) = newCount;
-            if (*reinterpret_cast<int*>(mgr + 0x1c) < newCount) {
-                *reinterpret_cast<int*>(mgr + 0x1c) = newCount;
-                if (count != 0) *reinterpret_cast<int*>(mgr + 0x1c) = newCount * 3;
-                void* ns = ::System::MemoryAllocator::MemAlloc(
-                    static_cast<uint64_t>(*reinterpret_cast<int*>(mgr + 0x1c)) * 0x18, 8);
-                *reinterpret_cast<void**>(mgr + 0x10) = ns;
+            CharacterGridSlot* oldSlots = slots;
+            slotCount = newCount;
+            if (slotCapacity < newCount) {
+                slotCapacity = newCount;
+                if (count != 0) slotCapacity = newCount * 3;
+                slots = static_cast<CharacterGridSlot*>(::System::MemoryAllocator::MemAlloc(
+                    static_cast<uint64_t>(slotCapacity) * 0x18, 8));
             }
-            int start = (oldSlots == *reinterpret_cast<void**>(mgr + 0x10)) ? count : 0;
-            uint8_t* slots = *reinterpret_cast<uint8_t**>(mgr + 0x10);
+            int start = (oldSlots == slots) ? count : 0;
+            CharacterGridSlot* s = slots;
             for (int i = start; i < newCount; ++i) {
-                uint8_t* dst = slots + static_cast<int64_t>(i) * 0x18;
+                CharacterGridSlot* dst = &s[i];
                 // source: existing slot (copy) for survivors, else the {ibp,0,-1} template
-                int64_t srcIbp; int64_t srcLinks; int srcCell;
+                Object::InternalPtr<CharacterComponent> srcIbp; int srcPrev; int srcNext; int srcCell;
                 if (i < count) {
-                    uint8_t* src = reinterpret_cast<uint8_t*>(oldSlots) + static_cast<int64_t>(i) * 0x18;
-                    srcIbp   = *reinterpret_cast<int64_t*>(src + 0x00);
-                    srcLinks = *reinterpret_cast<int64_t*>(src + 0x08);
-                    srcCell  = *reinterpret_cast<int*>(src + 0x10);
+                    const CharacterGridSlot* src = &oldSlots[i];
+                    srcIbp  = src->character;
+                    srcPrev = src->prev;
+                    srcNext = src->next;
+                    srcCell = src->cell;
                 } else {
-                    srcIbp   = *ibp;     // the new IBP
-                    srcLinks = 0;        // prev/next = 0
-                    srcCell  = -1;       // cellIdx = -1
+                    srcIbp  = *ibp;      // the new IBP
+                    srcPrev = 0;         // prev/next = 0
+                    srcNext = 0;
+                    srcCell = -1;        // cellIdx = -1
                 }
-                *reinterpret_cast<int64_t*>(dst + 0x00) = 0;
-                *reinterpret_cast<int64_t*>(dst + 0x00) = srcIbp;
-                *reinterpret_cast<int64_t*>(dst + 0x08) = srcLinks;
-                *reinterpret_cast<int*>(dst + 0x10) = srcCell;
+                dst->character = nullptr;
+                dst->character = srcIbp;
+                dst->prev = srcPrev;
+                dst->next = srcNext;
+                dst->cell = srcCell;
             }
-            if (oldSlots != *reinterpret_cast<void**>(mgr + 0x10))
+            if (oldSlots != slots)
                 ::System::MemoryAllocator::MemFree(oldSlots);
         }
     } else {
         // ---- free-list pop path ----
-        int* freeList = *reinterpret_cast<int**>(mgr + 0x20);
-        index = static_cast<uint32_t>(freeList[freeCount - 1]);
-        CharMgr_IntArrayResize_21d0(reinterpret_cast<int64_t*>(mgr + 0x20), freeCount - 1);
-        uint8_t* slots = *reinterpret_cast<uint8_t**>(mgr + 0x10);
-        uint8_t* slot = slots + index * 0x18;
-        *reinterpret_cast<int64_t*>(slot + 0x00) = *ibp;
-        *reinterpret_cast<int64_t*>(slot + 0x08) = 0;
-        *reinterpret_cast<int*>(slot + 0x10) = -1;
+        index = static_cast<uint32_t>(freeList[fc - 1]);
+        CharMgr_IntArrayResize_21d0(reinterpret_cast<int64_t*>(&freeList), fc - 1);
+        CharacterGridSlot* slot = &slots[index];
+        slot->character = *ibp;
+        slot->prev = 0;
+        slot->next = 0;
+        slot->cell = -1;
     }
 
-    CharMgr_sub_8660(mgrF, static_cast<int>(index));
+    Place(static_cast<int>(index));
     return static_cast<int64_t>(index & 0xffffffff);
 }
 
 // ===========================================================================
-// 0x140018560  impl_8560 — release a char-index back to the manager (OnRemove path):
-//   unlink from its cell (8d00), reset the slot to a null IBP, push index onto free-list.
+// 0x140018560  impl_8560 — release a char-index back to the grid (OnRemove path):
+//   unlink from its cell, reset the slot to a null IBP, push index onto free-list.
 // ===========================================================================
-extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
-    uint8_t* m = reinterpret_cast<uint8_t*>(mgr);
-    uint8_t* slot = *reinterpret_cast<uint8_t**>(m + 0x10) + static_cast<int64_t>(idx) * 0x18;
-    CharMgr_helper_8d00(mgr, idx);
-    int64_t nullIbp = 0;
-    new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    *reinterpret_cast<int64_t*>(slot + 0x00) = nullIbp;
-    *reinterpret_cast<int64_t*>(slot + 0x08) = 0;
-    *reinterpret_cast<int*>(slot + 0x10) = -1;
+void CharacterGrid::Release(int idx) {
+    CharacterGridSlot* slot = &slots[idx];
+    Unlink(idx);
+    slot->character = Object::InternalPtr<CharacterComponent>();
+    slot->prev = 0;
+    slot->next = 0;
+    slot->cell = -1;
 
     // push idx onto the free-list (grow by 3x on first realloc)
-    int freeCount = *reinterpret_cast<int*>(m + 0x28);
-    int newCount = freeCount + 1;
-    if (newCount != freeCount) {
-        void* oldFL = *reinterpret_cast<void**>(m + 0x20);
-        *reinterpret_cast<int*>(m + 0x28) = newCount;
-        if (*reinterpret_cast<int*>(m + 0x2c) < newCount) {
-            *reinterpret_cast<int*>(m + 0x2c) = newCount;
-            if (freeCount != 0) *reinterpret_cast<int*>(m + 0x2c) = newCount * 3;
-            void* nf = ::System::MemoryAllocator::MemAlloc(
-                static_cast<uint64_t>(*reinterpret_cast<int*>(m + 0x2c)) << 2, 4);
-            *reinterpret_cast<void**>(m + 0x20) = nf;
+    int fc = freeCount;
+    int newCount = fc + 1;
+    if (newCount != fc) {
+        int32_t* oldFL = freeList;
+        freeCount = newCount;
+        if (freeCapacity < newCount) {
+            freeCapacity = newCount;
+            if (fc != 0) freeCapacity = newCount * 3;
+            freeList = static_cast<int32_t*>(::System::MemoryAllocator::MemAlloc(
+                static_cast<uint64_t>(freeCapacity) << 2, 4));
         }
-        int start = (oldFL == *reinterpret_cast<void**>(m + 0x20)) ? freeCount : 0;
-        int* fl = *reinterpret_cast<int**>(m + 0x20);
+        int start = (oldFL == freeList) ? fc : 0;
+        int32_t* fl = freeList;
         for (int i = start; i < newCount; ++i) {
-            if (fl) fl[i] = (i < freeCount) ? reinterpret_cast<int*>(oldFL)[i] : idx;
+            if (fl) fl[i] = (i < fc) ? oldFL[i] : idx;
         }
-        if (oldFL != *reinterpret_cast<void**>(m + 0x20))
+        if (oldFL != freeList)
             ::System::MemoryAllocator::MemFree(oldFL);
     }
 }
-
