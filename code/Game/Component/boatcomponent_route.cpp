@@ -273,10 +273,8 @@ extern "C" int BoatRoute_FindWaterPath(int64_t terrain, void* /*unused2*/, uint3
 
     static const int kCost[11] = {10, 10, 10, 10, 10, 10, 10, 5, 1, 5, 10};
     for (int i = 0; i < 11; ++i)   // 0x1400a6a30: the cost rides in R8 (read as an int), the ctx in R9
-        Pf_EnqueueCmd1_a6a30(reinterpret_cast<int64_t>(pf), i,
-                             reinterpret_cast<void*>(static_cast<intptr_t>(kCost[i])),
-                             reinterpret_cast<void*>(toCell));
-    Pf_EnqueueCmd4_a68b0(reinterpret_cast<int64_t>(pf), 1, nullptr, nullptr);   // 0x1400a68b0 (1, 0, 0)
+        Pf_EnqueueCmd1_a6a30(reinterpret_cast<int64_t>(pf), i, kCost[i]);
+    Pf_EnqueueCmd4_a68b0(reinterpret_cast<int64_t>(pf), 1, 0, 0);   // 0x1400a68b0 (1, 0, 0)
     const int n = RoadTool_helper_6e30(reinterpret_cast<int64_t>(pf), fromCell, toCell & 0xffffffffu,
                                        reinterpret_cast<void*>(0x380), outBuf, 0x1000);   // 0x1400a6e30
     return n;

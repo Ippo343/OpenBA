@@ -65,6 +65,20 @@ public:
     // name on the Game+0x68 pointer, then MemFrees it.
     ~PathfinderThread();
 
+    // ---- the command API (B.4 ACT-a; bodies in code/Game/Action/action_pf_astar.cpp
+    // unless noted). Each enqueuer compares against its staged copy, stores the new
+    // value, and either applies the command at once (runInline) or queues it and starts
+    // the worker. Arguments are retail's registers.
+    void ApplyCommand(const PathCommandArgs& cmd);          // 0x1400a6430 (RCX, RDX only)
+    void SetPassableTypes(int mask);                        // 0x1400a6b20 command 0
+    void SetStepCost(int terrainType, int cost);            // 0x1400a6a30 command 1
+    void SetCellTerrain(int cell, int terrainType);         // 0x1400a6fe0 command 2
+    void SetSearchFlags(uint8_t diagonal, uint8_t manhattan,
+                        uint8_t respectBlocked);            // 0x1400a68b0 command 4
+    PathTicket* RequestPath(PathTicket* ticket, int start, int goal);  // 0x1400a6c10 command 5
+    PathTicket* AllocResult(PathTicket* ticket);            // 0x1400a6240
+    int  TakePath(PathTicket* ticket, int32_t* path, int maxNodes);    // 0x1400a6d50 (action_base_move.cpp)
+
     // ---- fields -----------------------------------------------------------
     System::CriticalSection lock;          // +0x30
     int32_t      nextToken;                // +0x58
@@ -75,9 +89,7 @@ public:
     int32_t      queueCount;               // +0x70
     uint8_t      _pad74[4];                // +0x74
     GridPathSearch grid;                   // +0x78
-    PathResult*  results;                  // +0x160 Collection::Array<PathResult> data
-    int32_t      resultCount;              // +0x168 ... size
-    int32_t      resultCapacity;           // +0x16C ... capacity
+    RawArray<PathResult> results;          // +0x160 Collection::Array<PathResult>, raw (the dtor frees it)
     int32_t      stagedStepCost[0x20];     // +0x170
     int32_t      stagedPassableTypes;      // +0x1F0
     uint8_t      stagedDiagonal;           // +0x1F4
@@ -95,8 +107,6 @@ static_assert(offsetof(PathfinderThread, queueHead) == 0x68, "PathfinderThread::
 static_assert(offsetof(PathfinderThread, queueCount) == 0x70, "PathfinderThread::queueCount @ +0x70");
 static_assert(offsetof(PathfinderThread, grid) == 0x78, "PathfinderThread::grid @ +0x78");
 static_assert(offsetof(PathfinderThread, results) == 0x160, "PathfinderThread::results @ +0x160");
-static_assert(offsetof(PathfinderThread, resultCount) == 0x168, "PathfinderThread::resultCount @ +0x168");
-static_assert(offsetof(PathfinderThread, resultCapacity) == 0x16C, "PathfinderThread::resultCapacity @ +0x16C");
 static_assert(offsetof(PathfinderThread, stagedStepCost) == 0x170, "PathfinderThread::stagedStepCost @ +0x170");
 static_assert(offsetof(PathfinderThread, stagedPassableTypes) == 0x1F0, "PathfinderThread::stagedPassableTypes @ +0x1F0");
 static_assert(offsetof(PathfinderThread, stagedDiagonal) == 0x1F4, "PathfinderThread::stagedDiagonal @ +0x1F4");

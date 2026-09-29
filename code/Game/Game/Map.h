@@ -122,7 +122,7 @@ public:
     MapCellQueue cellQueue;      // +0xA8 the zone flood fill's pooled work queue (0x14009c170:
                                  //       tail +0xA8, head +0xB0, count +0xB8, node pool +0xC0;
                                  //       ctor: all 0, pool growCount 8). Name unconfirmed.
-    void*    field_0xE8;         // +0xE8 BST root (ctor 0)
+    AvlNode28* field_0xE8;       // +0xE8 BST root (ctor 0): 0x28 nodes keyed by cell (0x14009c640)
     int32_t  field_0xF0;         // +0xF0 BST count (ctor 0)
     uint8_t  _padF4[4];          // +0xF4
 
@@ -130,6 +130,15 @@ public:
     void StampInfluence(int state, int cx, int cy, int r, short delta);  // 0x14009f990 (defined in Component/happinesscomponent.cpp)
     bool HasIdentityInRect(int x, int y, int w, int h, const class ComponentDescription* identity) const;  // 0x14009fb60 (Component/diseasecomponent.cpp)
     void StampDanger(int xMin, int yMin, int xMax, int yMax, short delta);   // 0x14009fa80 (Component/firecomponent_ignite.cpp)
+    void FillZone(uint32_t cell, uint16_t zone);          // 0x14009c170 (Action/action_pf_astar.cpp, B.4 ACT-a)
+    int  NearestRegionId(int cell) const;                 // 0x14009d0a0 (Action/action_pf_geom.cpp, B.4 ACT-a)
+    int  PathDistance(uint32_t from, uint32_t to, char useCache);   // 0x14009f810 (Action/action_pf_roots_route.cpp, B.4 ACT-a)
+    void SetMovementCosts(PathfinderThread* pathfinder, int profile);   // 0x14009e550 (Action/action_base_move.cpp, B.4 ACT-a)
+    PathTicket* RequestPath(PathTicket* out, uint64_t passFlags, uint32_t destCell, uint32_t srcCell);   // 0x14009cfb0 (Action/action_base_move.cpp)
+    void FillZones();                                     // 0x14009c480 (Action/action_pf_roots_road.cpp, B.4 ACT-a)
+    void SetTerrainType(int cell, uint32_t terrainType);  // 0x14009f2f0 (Action/action_pf_roots_road.cpp, B.4 ACT-a)
+    void ResetTerrainHeights(int x0, int y0, int x1, int y1);   // 0x14009e0e0 (Action/action_pf_roots_road.cpp)
+    void FinishRoadCell(int cell, uint8_t orientation, uint32_t terrainType);   // 0x14009c640 (Action/action_pf_roots_road.cpp)
 };
 
 static_assert(sizeof(Map) == 0xF8, "Map is 0xF8 (Load MemAlloc(0xf8, 8))");

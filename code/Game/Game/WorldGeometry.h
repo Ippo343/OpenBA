@@ -40,6 +40,9 @@ public:
     // also reached by address through the Reimpl_GeometryChunkUpdate door).
     void RebuildDirtyChunks();
     void RemoveDecal(int decalId);                                   // 0x1400b0d00 (defined in Component/decalcomponent.cpp)
+    // B.4 ACT-a (bodies in Action/action_pf_road.cpp)
+    void MarkChunksDirty(int x, int y);                              // 0x1400ab150
+    void RebuildRoadMesh(class Map* map);                            // 0x1400af370
 
 
 public:
@@ -49,7 +52,7 @@ public:
     int32_t  _fieldCC;            // +0xCC
     int32_t  _fieldD0;            // +0xD0
     int32_t  _chunkIndexStride;   // +0xD4  index count per chunk (the ctor leaves it)
-    void*    _arrayD8;            // +0xD8  {data,
+    int16_t* _arrayD8;            // +0xD8  {data, (height words: 0x14009e0e0 stores one; B.4 ACT-a H4)
     uint64_t _arrayD8Size;        // +0xE0   count|cap}
     void*    _dirtyTreeRoot;      // +0xE8  tree of dirty chunks (nodes: children +0x10/+0x18)
     int32_t  _dirtyTreeCount;     // +0xF0

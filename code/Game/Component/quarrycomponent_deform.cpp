@@ -60,7 +60,7 @@
 // ------------------------------------------------------------
 void  TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y);            // 0x1400ab150
 void  Pf_FineCellDirty_a8c90(int64_t self, int x, int y);                           // 0x1400a8c90
-void  Pf_EnqueueCmd2_a6fe0(int64_t self, uint32_t idx, void* type, void* p4);       // 0x1400a6fe0
+void  Pf_EnqueueCmd2_a6fe0(int64_t self, int cell, int terrainType);                // 0x1400a6fe0
 int   Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6,
                           float* p7, float* p8, uint32_t* p9);                      // 0x1400aaa20
 extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inXY2,
@@ -376,8 +376,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 }
                 const int64_t pfThread = *reinterpret_cast<int64_t*>(tileGridA + 0x68);
                 if (pfThread)
-                    Pf_EnqueueCmd2_a6fe0(pfThread, static_cast<uint32_t>(cellIdx),
-                                         reinterpret_cast<void*>(static_cast<uintptr_t>(5)), nullptr);
+                    Pf_EnqueueCmd2_a6fe0(pfThread, static_cast<int>(cellIdx), 5);
 
                 // cell+0x08 is the ENTITY raster (cell+0x00 is the ZONE raster) — the
                 // quarry claims the dug cell.

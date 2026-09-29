@@ -57,6 +57,8 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
+#include "Action/PathSearch.h"   // RegionGraph, RegionPairCache
 #include "Work/exe_bodies.h"            // WorkBase_* (a00f0, 8830, 2ed0)
 #include "Game/exe_bodies.h"            // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"         // kRdata_140172114
@@ -107,20 +109,21 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
 // length (a5ac0); on a miss (-1) run the full region A* (a8ba0) and, if useCache, store the
 // result back (a5b30). Returns the path length (or -1 unreachable).
 //
-// Faithfulness: uVar5 = param_3 (the original dstCell) is captured BEFORE param_3 is shadowed
-// and is the value passed to a8ba0 as its 4th (ctx) arg. `BuildStructure_Serialize_sub_d0a0`
-// in the decompile is 0x14009d0a0 (the region spiral) per the disassembly CALL target.
-int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
-    uint64_t uVar5 = (uint64_t)param_3;
-    uint64_t uVar4 = WorkBase_ValidateCell_a00f0(param_1, 0xe1f, param_2, (int)param_3);   // 0x1400a00f0
+// Faithfulness: retail passes the original dstCell to a8ba0 as its 4th arg, which a8ba0 only
+// hands on to 0x14001dc00 (never read). `BuildStructure_Serialize_sub_d0a0` in the decompile
+// is 0x14009d0a0 (the region spiral) per the disassembly CALL target.
+int Map::PathDistance(uint32_t param_2, uint32_t param_3, char param_4) {
+    // LEFT: 0x1400a00f0's C declaration (Work/exe_bodies.h, WORK-c, running) takes the
+    // Map as int*.
+    uint64_t uVar4 = WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(this), 0xe1f, param_2, (int)param_3);   // 0x1400a00f0
     if ((char)uVar4 != '\0') {
-        uint32_t uVar1 = *(uint32_t*)(*(int64_t*)(param_1 + 0x20) + 0x18 + (int64_t)(int)param_2 * 0x30);
-        uint32_t uVar2 = *(uint32_t*)(*(int64_t*)(param_1 + 0x20) + 0x18 + (int64_t)(int)param_3 * 0x30);
+        uint32_t uVar1 = static_cast<uint32_t>(cells[(int)param_2].regionId);
+        uint32_t uVar2 = static_cast<uint32_t>(cells[(int)param_3].regionId);
         if ((int)uVar1 < 0) {
-            uVar1 = (uint32_t)Pf_RegionSpiral_9d0a0(param_1, (int)param_2);
+            uVar1 = (uint32_t)NearestRegionId((int)param_2);   // 0x14009d0a0
         }
         if ((int)uVar2 < 0) {
-            uVar2 = (uint32_t)Pf_RegionSpiral_9d0a0(param_1, (int)param_3);
+            uVar2 = (uint32_t)NearestRegionId((int)param_3);   // 0x14009d0a0
         }
         int iVar3;
         if (((int)uVar1 < 0) || ((int)uVar2 < 0)) {
@@ -128,17 +131,28 @@ int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, cha
         } else if (uVar1 == uVar2) {
             iVar3 = 1;
         } else {
-            iVar3 = (int)Pf_RegionPairLookup_5ac0(*(uintptr_t*)(param_1 + 0x1e), (int)uVar1, (int)uVar2);   // 0x1400a5ac0
+            // LEFT: Map::regionPairCache (+0x78) stays int64_t*: its tick 0x1400a5d10
+            // (Action/region_paircache.cpp, block ACT-b) takes int64_t*.
+            RegionPairCache* cache = reinterpret_cast<RegionPairCache*>(regionPairCache);
+            iVar3 = (int)cache->Find((int)uVar1, (int)uVar2);   // 0x1400a5ac0
             if (iVar3 < 0) {
-                iVar3 = Pf_RegionPathLength_8ba0(*(int**)(param_1 + 0x1c), (int)uVar1, uVar2, uVar5);   // 0x1400a8ba0
+                iVar3 = regionGraph->PathLength((int)uVar1, uVar2);   // 0x1400a8ba0
                 if (param_4 != '\0') {
-                    Pf_RegionPairCacheInsert_5b30(*(uint64_t**)(param_1 + 0x1e), (int)uVar1, (int)uVar2, (uint32_t)iVar3);   // 0x1400a5b30
+                    cache->Store((int)uVar1, (int)uVar2, (uint32_t)iVar3);   // 0x1400a5b30
                 }
             }
         }
         return iVar3;
     }
     return -1;
+}
+
+// B4 FORWARD: 12 outside callers (citizenai_findhelpers, citizenai_findtarget,
+// citizenai_housing_idle, citizenai_leisure, citizen_assign_citizens,
+// citizen_lifeevent_handler, citizenbehavior, buildstructure, firework_search,
+// marketwork, work_base_reimpl, work_base_walkpos)
+int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
+    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);
 }
 
 

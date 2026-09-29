@@ -29,6 +29,9 @@
 //
 
 #include "object/TypeInfo.h"
+#include "Action/PathSearch.h"   // RegionGraph
+#include "Game/Map.h"
+#include "Game/WorldGeometry.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_2ed0, WorkBase_ValidateCell_a00f0, WorkBase_CalcDistance_8830
 #include "Component/exe_bodies.h"     // FloorComponent_FindResData
@@ -402,17 +405,19 @@ float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
 // ============================================================
 // FUN_1400ab150 — enqueue up-to-4 coarse cells into the dirty AVL.
 // ============================================================
-// self (param_1): a region graph. +0xc8 = coarse cell size, +0xc0 = grid width, +0xe8 = the
-// dirty-cell AVL tree. Given a fine (x,y), if x (resp. y) lands on a coarse boundary and the
-// previous coarse column/row exists, insert the 3 adjacent coarse cells; always insert the
-// owning coarse cell. Each insert via 1a4f0(tree, &outNode, &key).
-void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
-    int cs = *reinterpret_cast<int*>(self + 0xc8);     // coarse cell size
+// WorldGeometry::MarkChunksDirty. _chunkSize = cells per chunk edge, _gridSize = the
+// heightmap edge, the dirty-chunk tree at +0xe8. Given a cell (x,y), if x (resp. y) lands on
+// a chunk boundary and the previous chunk column/row exists, insert the adjacent chunks;
+// always insert the owning chunk. Each insert via 0x14001a4f0(tree, &outNode, &key).
+void WorldGeometry::MarkChunksDirty(int x, int y) {
+    int cs = _chunkSize;                // cells per chunk edge
     int qx = x / cs;
     int qy = y / cs;
-    int cw = *reinterpret_cast<int*>(self + 0xc0) / cs; // coarse grid width
+    int cw = _gridSize / cs;            // chunks per row
 
-    int64_t* tree = reinterpret_cast<int64_t*>(self + 0xe8);
+    // LEFT: the dirty-chunk tree is two raw members (_dirtyTreeRoot / _dirtyTreeCount) of
+    // WorldGeometry (block GAME-c); 0x14001a4f0 takes it as one Set header.
+    int64_t* tree = reinterpret_cast<int64_t*>(&_dirtyTreeRoot);
     uint64_t outNode = 0;     // local_res8
     uint32_t key[2] = {0, 0}; // local_res10
 
@@ -432,6 +437,11 @@ void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
     Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
 }
 
+// B4 FORWARD: 1 outside caller (Component/terraformcomponent.cpp)
+void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
+    reinterpret_cast<WorldGeometry*>(self)->MarkChunksDirty(x, y);
+}
+
 // ============================================================
 // FUN_1400a8c90 — mark a fine cell + its 3x3 neighbourhood dirty.
 // ============================================================
@@ -440,60 +450,66 @@ void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
 // (int* ptr), +0x90 count, +0x94 cap. If the owning coarse cell isn't already flagged, flag it,
 // append its index to the dirty list (grow-by-3 on a non-empty append), then walk the 3x3 fine
 // neighbourhood and call a8420 on each in-bounds fine cell.
-void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
-    int cellW = *reinterpret_cast<int*>(self + 0x58);
-    int cellH = *reinterpret_cast<int*>(self + 0x5c);
-    int gridW = *reinterpret_cast<int*>(self + 0x60);
+void RegionGraph::MarkCellDirty(int x, int y) {
+    int cellW = blockWidth;
+    int cellH = blockHeight;
+    int gridW = blocksWide;
     int idx = (y / cellH) * gridW + (x / cellW);
-    int64_t lOff = static_cast<int64_t>(idx) * 0x20;
-    int64_t cellArr = *reinterpret_cast<int64_t*>(self + 0x78);
+    int64_t lOff = static_cast<int64_t>(idx);
+    const RegionBlock* cellArr = blocks.data;
 
-    if (*reinterpret_cast<char*>(cellArr + 8 + lOff) != '\0') return;
-    *reinterpret_cast<uint8_t*>(*reinterpret_cast<int64_t*>(self + 0x78) + 8 + lOff) = 1;
+    if (cellArr[lOff].needsRebuild != '\0') return;
+    blocks.data[lOff].needsRebuild = 1;
 
-    // append idx to dirty list (int array): ptr@+0x88, count@+0x90, cap@+0x94
-    int oldN = *reinterpret_cast<int*>(self + 0x90);
+    // append idx to dirtyRebuild
+    int oldN = dirtyRebuild._size;
     int newN = oldN + 1;
     if (newN != oldN) {
-        void* oldBuf = *reinterpret_cast<void**>(self + 0x88);
-        *reinterpret_cast<int*>(self + 0x90) = newN;
-        if (*reinterpret_cast<int*>(self + 0x94) < newN) {
-            *reinterpret_cast<int*>(self + 0x94) = newN;
-            if (oldN != 0) *reinterpret_cast<int*>(self + 0x94) = newN * 3;
-            void* nb = System::MemoryAllocator::MemAlloc(
-                              static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x94)) << 2, 4);
-            *reinterpret_cast<void**>(self + 0x88) = nb;
+        int32_t* oldBuf = dirtyRebuild._data;
+        dirtyRebuild._size = newN;
+        if (dirtyRebuild._capacity < newN) {
+            dirtyRebuild._capacity = newN;
+            if (oldN != 0) dirtyRebuild._capacity = newN * 3;
+            dirtyRebuild._data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(
+                              static_cast<uint64_t>(dirtyRebuild._capacity) << 2, 4));
         }
-        int srcIdx = (oldBuf == *reinterpret_cast<void**>(self + 0x88)) ? oldN : 0;
+        int srcIdx = (oldBuf == dirtyRebuild._data) ? oldN : 0;
         for (int64_t i = srcIdx; i < newN; i++) {
-            int* dst = reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self + 0x88) + i * 4);
+            int* dst = &dirtyRebuild._data[i];
             if (dst) {
                 int v = idx;
-                if (i < oldN) v = reinterpret_cast<int*>(oldBuf)[i];
+                if (i < oldN) v = oldBuf[i];
                 *dst = v;
             }
         }
-        if (oldBuf != *reinterpret_cast<void**>(self + 0x88))
+        if (oldBuf != dirtyRebuild._data)
             System::MemoryAllocator::MemFree(oldBuf);
     }
 
-    // 3x3 fine neighbourhood: rows (row-1 .. row+1), cols (col-1 .. col+1)
-    int baseCol = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self + 0x78) + lOff);     // [+0]
-    int rowStart = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self + 0x78) + 4 + lOff) - 1; // [+4]-1
-    int gridH = *reinterpret_cast<int*>(self + 0x64);
-    int fineGW = *reinterpret_cast<int*>(self + 0x60);
+    // 3x3 block neighbourhood: rows (row-1 .. row+1), cols (col-1 .. col+1)
+    int baseCol = blocks.data[lOff].x;
+    int rowStart = blocks.data[lOff].y - 1;
+    int gridH = blocksHigh;
+    int fineGW = blocksWide;
     for (int r = 0; r < 3; r++) {
         int rr = rowStart + r;
         if (-1 < rr && rr < gridH) {
             int cc = baseCol - 1;
             for (int c = 0; c < 3; c++) {
                 if (-1 < cc && cc < fineGW) {
-                    Pf_DirtyCoarseCellB_8420(self, rr * fineGW + cc);   // 0x1400a8420
+                    MarkAdjacencyDirty(rr * fineGW + cc);   // 0x1400a8420
                 }
                 cc++;
             }
         }
     }
+}
+
+// B4 FORWARD: 7 outside callers (cemeterycomponent, citizen_lifeevent_handler,
+// pasturecomponent, quarrycomponent_deform, terraformcomponent, starttown,
+// keystone_a_removalcalcpath)
+void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
+    reinterpret_cast<RegionGraph*>(self)->MarkCellDirty(x, y);
 }
 
 // ============================================================
@@ -814,12 +830,15 @@ static void Pf_AppendShortA_f370(uintptr_t recBase, short valueForNew) {
     if (oldBuf != *pPtr) System::MemoryAllocator::MemFree(oldBuf);
 }
 
-void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
+void WorldGeometry::RebuildRoadMesh(Map* map) {
+    // LEFT: the road batch arrays at +0x200 / +0x210 / +0x220 are the raw `_arrays` of
+    // WorldGeometry (block GAME-c); their element (the 0x60 road batch) is undeclared.
+    const int64_t param_1 = reinterpret_cast<int64_t>(this);
 
     int64_t* meshRecArr = reinterpret_cast<int64_t*>(param_1 + 0x200);   // local_a8
     Reimpl_Struct60B_Resize(meshRecArr, 0);                                // f250(local_a8, 0)
 
-    int vtxOff = (*reinterpret_cast<int*>(param_1 + 0xc0) - *reinterpret_cast<int*>(param_1 + 0xc4)) >> 1; // iVar12
+    int vtxOff = (_gridSize - _fieldC4) >> 1; // iVar12
 
     // Phase 1: counter array length sync (+0x228 vs +0x218) then zero every counter.
     if (*reinterpret_cast<int*>(param_1 + 0x228) != *reinterpret_cast<int*>(param_1 + 0x218)) {
@@ -841,8 +860,8 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
     Reimpl_Struct60B_Resize(local_108, *reinterpret_cast<uint32_t*>(param_1 + 0x218));   // 0x14001f250
 
     int batchCount = static_cast<int>(local_108[1]);          // (int)local_100
-    int gridDim = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_2));  // MOVSXD R13,[RDI]
-    int cellSize = *reinterpret_cast<int*>(param_1 + 0xc8);   // +0xc8 = 200 dec (block dim)
+    int gridDim = map->size;                                  // MOVSXD R13,[RDI]
+    int cellSize = _chunkSize;                                // +0xc8 (block dim)
 
     // local_c8 corner-offset table (16 shorts), used by the per-vertex push.
     static const short kCornerOff[16] = {0,0,0,0,1,0,1,0, 0,0,1,0,1,0,0,0};
@@ -873,8 +892,8 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                         // = +0x2c/+0x30/+0x34/+0x38.
                         *reinterpret_cast<int*>(recBase + 0x2c) = seedColMin;
                         *reinterpret_cast<int*>(recBase + 0x30) = seedRowMin;
-                        *reinterpret_cast<int*>(recBase + 0x34) = *reinterpret_cast<int*>(param_1 + 200) + local_f4 + vtxOff;
-                        *reinterpret_cast<int*>(recBase + 0x38) = *reinterpret_cast<int*>(param_1 + 200) + local_f8 + vtxOff;
+                        *reinterpret_cast<int*>(recBase + 0x34) = _chunkSize + local_f4 + vtxOff;
+                        *reinterpret_cast<int*>(recBase + 0x38) = _chunkSize + local_f8 + vtxOff;
                         recBase += 0x60;
                         lVar13 += 8;
                     }
@@ -891,9 +910,8 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                             do {               // fine col within block (local_e0)
                                 int fineCol = local_e0 + local_f4; // iVar20 (local_cc)
                                 uint64_t cellIdx = static_cast<uint64_t>(rowBase + fineCol);
-                                int64_t fineGrid = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x80); // *(param_2+0x20)
-                                uint8_t batchId = *reinterpret_cast<uint8_t*>(fineGrid + 0x2a + cellIdx * 0x30);
-                                uint8_t blendId = *reinterpret_cast<uint8_t*>(fineGrid + 0x2b + cellIdx * 0x30);
+                                uint8_t batchId = map->cells[cellIdx].field_0x2A;
+                                uint8_t blendId = map->cells[cellIdx].field_0x2B;
 
                                 if (batchId != 0xff) {
                                     if (blendId == 0xff) {
@@ -917,9 +935,7 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                                                     if (iVar1 < 0 || iVar1 >= gridDim || row < 0 || row >= gridDim) {
                                                         local_f0[slot] = 0;
                                                     } else {
-                                                        int64_t fg = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x80);
-                                                        local_f0[slot] = (*reinterpret_cast<uint8_t*>(
-                                                            fg + 0x2a + (static_cast<int64_t>(iVar1) + rowOff) * 0x30) != 0xff) ? 1 : 0;
+                                                        local_f0[slot] = (map->cells[static_cast<int64_t>(iVar1) + rowOff].field_0x2A != 0xff) ? 1 : 0;
                                                     }
                                                 }
                                                 slot++;
@@ -978,10 +994,10 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                                     }
                                 }
                                 local_e0++;
-                            } while (local_e0 < *reinterpret_cast<int*>(param_1 + 0xc8));
+                            } while (local_e0 < _chunkSize);
                         }
                         local_d4++;
-                    } while (local_d4 < *reinterpret_cast<int*>(param_1 + 0xc8));
+                    } while (local_d4 < _chunkSize);
                 }
 
                 // ---- flush each batch's buffer B into its mesh record (fa80) when counter>0 ----
@@ -995,9 +1011,9 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
                     }
                 }
 
-                local_f4 += *reinterpret_cast<int*>(param_1 + 0xc8);
+                local_f4 += _chunkSize;
             } while (local_f4 < gridDim);
-            local_f8 += *reinterpret_cast<int*>(param_1 + 0xc8);
+            local_f8 += _chunkSize;
         } while (local_f8 < gridDim);
     }
 
@@ -1016,4 +1032,9 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
         }
         System::MemoryAllocator::MemFree(reinterpret_cast<void*>(local_108[0]));
     }
+}
+
+// B4 FORWARD: 2 outside callers (Game/gamegrid_serialize.cpp, Player/keystone_a_removalcalcpath.cpp)
+void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
+    reinterpret_cast<WorldGeometry*>(param_1)->RebuildRoadMesh(reinterpret_cast<Map*>(param_2));
 }

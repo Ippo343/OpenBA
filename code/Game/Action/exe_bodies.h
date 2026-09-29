@@ -92,13 +92,12 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x1400
 uint64_t WeightedRandomIndex_119470(int64_t param_1);  // 0x140119470
 
 // ---- action_pf_astar.cpp
-int Pf_RegionAstarRun_dc00(int* param_1, int param_2, unsigned int param_3, void* param_4, int64_t param_5);  // 0x14001dc00
-void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, void* param_4);  // 0x1400a6430
-void Pf_EnqueueCmd2_a6fe0(int64_t param_1, uint32_t param_2, void* param_3, void* param_4);  // 0x1400a6fe0
-void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t param_2, void* param_3, void* param_4);  // 0x1400a68b0
-void Pf_EnqueueCmd1_a6a30(int64_t param_1, int param_2, void* param_3, void* param_4);  // 0x1400a6a30
-void Pf_EnqueueCmd0_a6b20(int64_t param_1, int param_2, void* param_3, void* param_4);  // 0x1400a6b20
-int* Pf_EnqueueTradeRoute_a6c10(int64_t param_1, int* param_2, void* param_3, void* param_4);  // 0x1400a6c10
+void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2);  // 0x1400a6430 -> PathfinderThread::ApplyCommand
+void Pf_EnqueueCmd2_a6fe0(int64_t param_1, int cell, int terrainType);  // 0x1400a6fe0 -> PathfinderThread::SetCellTerrain
+void Pf_EnqueueCmd4_a68b0(int64_t param_1, uint8_t diagonal, uint8_t manhattan, uint8_t respectBlocked);  // 0x1400a68b0 -> PathfinderThread::SetSearchFlags
+void Pf_EnqueueCmd1_a6a30(int64_t param_1, int terrainType, int cost);  // 0x1400a6a30 -> PathfinderThread::SetStepCost
+void Pf_EnqueueCmd0_a6b20(int64_t param_1, int mask);  // 0x1400a6b20 -> PathfinderThread::SetPassableTypes
+int* Pf_EnqueueTradeRoute_a6c10(int64_t param_1, int* ticket, int start, int goal);  // 0x1400a6c10 -> PathfinderThread::RequestPath
 void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3);  // 0x14009c170
 
 // ---- action_pf_avl.cpp
@@ -108,9 +107,6 @@ extern "C" int64_t Pf_AvlRotateL_14c70(int64_t* root, int64_t node);  // 0x14001
 extern "C" int64_t Pf_AvlRotateR_14da0(int64_t* root, int64_t node);  // 0x140014da0
 extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node);  // 0x140013480
 extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
-extern "C" uint32_t* Pf_AvlNewNodeA_a680(uint64_t, uint32_t* param_2, uint64_t param_3);  // 0x14001a680
-extern "C" uint32_t* Pf_AvlNewNodeB_cc40(uint64_t, uint32_t* param_2, uint64_t param_3);  // 0x14001cc40
-extern "C" uint64_t* Pf_BstInsertB_c940(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x14001c940
 extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x14001a4f0
 extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3);  // 0x140025a10
 extern "C" void PathPairs_Clear_25b30(int64_t* param_1);  // 0x140025b30
@@ -129,9 +125,6 @@ void Pf_StorageDropOff_116760(int64_t param_1, int64_t param_2, int param_3);  /
 int Pf_StorageCountDelta_1167c0(int64_t param_1, int64_t param_2);  // 0x1401167c0
 
 // ---- action_pf_geom.cpp
-uint32_t Pf_RegionPairLookup_5ac0(uintptr_t self, int a, int b);  // 0x1400a5ac0
-int Pf_NeighbourTile_5ec0(uintptr_t self, int index, uint32_t dir);  // 0x1400a5ec0
-int Pf_MoveHeuristic_6030(uintptr_t self, int from, int to);  // 0x1400a6030
 int Pf_RayTriIntersect_aa810(void*, const float* P, const float* D, const float* maxT, const float* V0, const float* V1, const float* V2, float* outT, float* outNormal);  // 0x1400aa810
 int Pf_TileShapeLut_ae180(void*, char p2, char p3, char p4, char p5, char p6, char p7, char p8, char p9);  // 0x1400ae180
 int Pf_RegionSpiral_9d0a0(int* param_1, int param_2);  // 0x14009d0a0
@@ -140,22 +133,15 @@ uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t para
 int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
-void* Pf_NodePoolAlloc18_a9b0(uintptr_t param_1, uint32_t* param_2);  // 0x14001a9b0
-void* Pf_NodePoolAlloc30_d730(uintptr_t param_1, uint32_t* param_2, uint64_t param_3);  // 0x14001d730
-void* Pf_WorklistAlloc_df40(uintptr_t param_1, uint64_t* param_2);  // 0x14001df40
 void Pf_BstFreeRecursive_d400(uintptr_t param_1, uint64_t* param_2);  // 0x14001d400
 void Pf_ArrayResize18_d830(int64_t* param_1, int param_2);  // 0x14001d830
-void Pf_FreeArray18_db40(uint64_t param_1, uintptr_t param_2, int param_3);  // 0x14001db40
 void Pf_FreeArray30_e490(uint64_t param_1, uintptr_t param_2, int param_3);  // 0x14001e490
 void Pf_VectorResize14_ee40(int64_t* param_1, int param_2);  // 0x14001ee40
 void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001f8d0
-void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3);  // 0x14001d940
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001fa80
-void Pf_VectorResize30_e210(int64_t* param_1, uint32_t param_2, uint32_t* param_3);  // 0x14001e210
 int64_t* Pf_IntArrayClone_f9e0(int64_t* param_1, int64_t* param_2);  // 0x14000f9e0
 
 // ---- action_pf_region.cpp
-void Pf_DirtyCoarseCellB_8420(int64_t param_1, int param_2);  // 0x1400a8420
 void Pf_FlushDirtyChunks_8a90(int64_t param_1);  // 0x1400a8a90 (local extern in code/Game/Game/region_seed.cpp (reg_pf_region.cpp prototype registers nothing))
 int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64_t param_4);  // 0x1400a8ba0
 void Pf_RegionPairCacheInsert_5b30(uint64_t* param_1, int param_2, int param_3, uint32_t param_4);  // 0x1400a5b30

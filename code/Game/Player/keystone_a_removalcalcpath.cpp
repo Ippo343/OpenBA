@@ -539,11 +539,9 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
             Pf_FineCellDirty_a8c90(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x70),
                                    param_2 % div, param_2 / div);
         }
-        // The door typed args 3/4 as (int, uint64_t); the body takes (void*, void*):
-        // the same register values are passed.
+        // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only; retail's R9 is not read.
         Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x68),
-                             static_cast<uint32_t>(param_2), reinterpret_cast<void*>(uintptr_t{2}),
-                             reinterpret_cast<void*>(retLow));
+                             static_cast<int>(param_2), 2);
         result = 0;  // uVar8 & 0xff..00
     } else {
         if (found) {

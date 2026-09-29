@@ -14,6 +14,9 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
+#include "Game/PathfinderThread.h"
+#include "Action/PathSearch.h"
 #include "Game/exe_bodies.h"       // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"   // kRdata_140172114
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -386,110 +389,98 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
 //   param_2 = pathfinder (Thread*).
 // Caller signature: void fn(void* mapGrid, void* pathfinder, int profile, void* param4)
 //
-// B3R: FUN_1400a6a30 is Pf_EnqueueCmd1_a6a30(int64_t, int, void* param_3, void* param_4)
-// and FUN_1400a68b0 is Pf_EnqueueCmd4_a68b0(int64_t, uint8_t, void*, void*). The doors
-// this file used typed the third / fourth arguments as ints (the cost; the two zeros);
-// the bodies take them as pointer-width values and truncate. The call passes the same
-// bits the door passed (the int zero-extended).
-static inline void SetCost_a6a30(void* pathfinder, int slot, int cost, void* p4) {
-    Pf_EnqueueCmd1_a6a30(reinterpret_cast<int64_t>(pathfinder), slot,   // 0x1400a6a30
-                         reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<uint32_t>(cost))), p4);
-}
-
-void ActMv_SetTerrainCosts_e550(void* mapGrid, void* pathfinder, int profile, void* param4) {
-    auto set = SetCost_a6a30;
+// B.4 ACT-a: Map::SetMovementCosts. Retail reads RCX (the Map), RDX (the pathfinder) and
+// R8D (the profile) only (0x14009e55a / 0x14009e55d / 0x14009e560); the tree's fourth
+// argument was never read.
+void Map::SetMovementCosts(PathfinderThread* pathfinder, int profile) {
+    PathfinderThread* pf = pathfinder;
     uint8_t roadFlag;
 
     if (profile == 0) {
-        set(pathfinder, 0, 3, param4);
-        set(pathfinder, 1, 3, param4);
-        set(pathfinder, 2, 4, param4);
-        set(pathfinder, 3, 8, param4);
-        set(pathfinder, 4, 0x10, param4);
-        set(pathfinder, 5, 0x10, param4);
-        set(pathfinder, 6, 0x10, param4);
-        set(pathfinder, 7, 0x10, param4);
-        set(pathfinder, 8, 0x10, param4);
-        set(pathfinder, 9, 3, param4);
-        set(pathfinder, 10, 4, param4);
+        pf->SetStepCost(0, 3);
+        pf->SetStepCost(1, 3);
+        pf->SetStepCost(2, 4);
+        pf->SetStepCost(3, 8);
+        pf->SetStepCost(4, 0x10);
+        pf->SetStepCost(5, 0x10);
+        pf->SetStepCost(6, 0x10);
+        pf->SetStepCost(7, 0x10);
+        pf->SetStepCost(8, 0x10);
+        pf->SetStepCost(9, 3);
+        pf->SetStepCost(10, 4);
         roadFlag = 1;
     } else if (profile == 1) {
-        set(pathfinder, 0, 0x10, param4);
-        set(pathfinder, 1, 0x10, param4);
-        set(pathfinder, 2, 4, param4);
-        set(pathfinder, 3, 4, param4);
-        set(pathfinder, 4, 0x10, param4);
-        set(pathfinder, 5, 0x10, param4);
-        set(pathfinder, 6, 0x10, param4);
-        set(pathfinder, 7, 4, param4);
-        set(pathfinder, 8, 4, param4);
-        set(pathfinder, 9, 4, param4);
-        set(pathfinder, 10, 4, param4);
+        pf->SetStepCost(0, 0x10);
+        pf->SetStepCost(1, 0x10);
+        pf->SetStepCost(2, 4);
+        pf->SetStepCost(3, 4);
+        pf->SetStepCost(4, 0x10);
+        pf->SetStepCost(5, 0x10);
+        pf->SetStepCost(6, 0x10);
+        pf->SetStepCost(7, 4);
+        pf->SetStepCost(8, 4);
+        pf->SetStepCost(9, 4);
+        pf->SetStepCost(10, 4);
         roadFlag = 1;
     } else if (profile == 2) {
         for (int i = 0; i <= 10; i++)
-            set(pathfinder, i, 1, param4);
+            pf->SetStepCost(i, 1);
         roadFlag = 0;
     } else if (profile == 3) {
-        set(pathfinder, 0, 10, param4);
-        set(pathfinder, 1, 10, param4);
-        set(pathfinder, 2, 10, param4);
-        set(pathfinder, 3, 10, param4);
-        set(pathfinder, 4, 10, param4);
-        set(pathfinder, 5, 10, param4);
-        set(pathfinder, 6, 10, param4);
-        set(pathfinder, 7, 5, param4);
-        set(pathfinder, 8, 1, param4);
-        set(pathfinder, 9, 5, param4);
-        set(pathfinder, 10, 10, param4);
+        pf->SetStepCost(0, 10);
+        pf->SetStepCost(1, 10);
+        pf->SetStepCost(2, 10);
+        pf->SetStepCost(3, 10);
+        pf->SetStepCost(4, 10);
+        pf->SetStepCost(5, 10);
+        pf->SetStepCost(6, 10);
+        pf->SetStepCost(7, 5);
+        pf->SetStepCost(8, 1);
+        pf->SetStepCost(9, 5);
+        pf->SetStepCost(10, 10);
         roadFlag = 1;
     } else {
         return;
     }
 
-    {
-        uintptr_t sub = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x68);
-        Pf_EnqueueCmd4_a68b0(static_cast<int64_t>(sub), roadFlag, nullptr, nullptr);   // 0x1400a68b0
-    }
+    this->pathfinder->SetSearchFlags(roadFlag, 0, 0);   // 0x1400a68b0 (DL, R8B = 0, R9B = 0)
+}
+
+// B4 FORWARD: 1 outside caller (Action/moveto.cpp)
+void ActMv_SetTerrainCosts_e550(void* mapGrid, void* pathfinder, int profile, void*) {
+    reinterpret_cast<Map*>(mapGrid)->SetMovementCosts(reinterpret_cast<PathfinderThread*>(pathfinder), profile);
 }
 
 // ============================================================
 // FUN_1400a6d50 — MoveTo_helper_6d50 (CopyPathFromFinder)
 // ============================================================
-// Copies up to maxNodes path cells from the pathfinder result slot into the caller's
-// path array, then resets that result slot.
-//   param_1+0x160 -> result-slot array base; slot stride 0x18, slot = *param_2 (slotId).
-//     slot+0x10 = node count, slot+0x08 = source cell array, slot+0x04 reset to 0,
-//     slot+0x00 byte reset to 0, slot+0x08(+0) IBP reset via FUN_1400021d0(slot+8, 0).
-//   Returns the number of cells actually copied (min(count, maxNodes)).
-//   param_2 (int*) is reset: [0]=-1, [1]=0.
-// Caller signature: int fn(void* pathfinder, void* slotIdPtr, void* pathArray, int maxNodes)
-int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* pathArray, int maxNodes) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(pathfinder);
-    int* slotId = reinterpret_cast<int*>(slotIdPtr);
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(self + 0x160);
-    int64_t off = static_cast<int64_t>(*slotId) * 0x18;
-
-    int count = *reinterpret_cast<int*>(base + 0x10 + off);
+// PathfinderThread::TakePath: copies up to maxNodes path cells from the ticket's result
+// slot into the caller's path array (retail re-reads the ticket and the slot table on
+// every element), then frees the slot (token 0, ready 0, path emptied) and resets the
+// ticket to {-1, 0}. Returns the number of cells copied (min(count, maxNodes)). No lock.
+int PathfinderThread::TakePath(PathTicket* ticket, int32_t* path, int maxNodes) {
+    int count = results.data[ticket->slot].path._size;
     if (maxNodes < count) count = maxNodes;
 
     if (count > 0) {
-        const int* src = *reinterpret_cast<const int**>(base + 8 + off);
-        int* dst = reinterpret_cast<int*>(pathArray);
         for (int i = 0; i < count; i++)
-            dst[i] = src[i];
+            path[i] = results.data[ticket->slot].path._data[i];
     }
 
-    *reinterpret_cast<int*>(base + 4 + off) = 0;
-    *reinterpret_cast<uint8_t*>(base + off) = 0;
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize. I32NoInit — a
-    // grown tail is left as the allocation found it, like retail's helper (1400a6df3).
-    // SetSize(0) never grows, so the two element types agree at this site.
-    GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(base + 8 + off)).SetSize(0);
+    results.data[ticket->slot].token = 0;
+    results.data[ticket->slot].ready = 0;
+    // 0x1400021d0 == Collection::Array<int32>::SetSize (1400a6df3); SetSize(0) never grows.
+    results.data[ticket->slot].path.SetSize(0);
 
-    slotId[0] = -1;
-    slotId[1] = 0;
+    ticket->slot = -1;                 // one qword store of {-1, 0} in retail (H7)
+    ticket->token = 0;
     return count;
+}
+
+// B4 FORWARD: 2 outside callers (Action/keystone_a_zone.cpp, Action/moveto.cpp)
+int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* pathArray, int maxNodes) {
+    return reinterpret_cast<PathfinderThread*>(pathfinder)->TakePath(reinterpret_cast<PathTicket*>(slotIdPtr),
+                                                                reinterpret_cast<int32_t*>(pathArray), maxNodes);
 }
 
 // ============================================================
@@ -505,29 +496,21 @@ int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* path
 //   param_3 (uint64) = terrain pass flags. param_4 = destCell, param_5 = srcCell.
 // Caller signature: void* fn(void* grid, void* outResult, uint64_t flags, uint32_t dest, uint32_t src)
 //
-// B3R: 0x14009c480 Pf_ZoneRefresh_9c480, 0x1400a6b20 Pf_EnqueueCmd0_a6b20 and 0x1400a6c10
-// Pf_EnqueueTradeRoute_a6c10 take their third / fourth arguments as pointer-width values;
-// the doors this file used passed the flags / record addresses / cells there as integers.
-// The calls pass the same bits (cells zero-extended, as the uint64 door did).
-void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
-                                  uint32_t destCell, uint32_t srcCell) {
-    int* grid = reinterpret_cast<int*>(gridp);
-    int* out = reinterpret_cast<int*>(outResultp);
+// B.4 ACT-a: Map::RequestPath. The zone refresh 0x14009c480 is Map::FillZones; the two
+// pathfinder calls are PathfinderThread::SetPassableTypes / ::RequestPath.
+PathTicket* Map::RequestPath(PathTicket* out, uint64_t flags, uint32_t destCell, uint32_t srcCell) {
+    FillZones();   // 0x14009c480 (RCX only)
 
-    Pf_ZoneRefresh_9c480(grid);   // 0x14009c480 (RCX only)
+    const MapCell* recSrc  = &cells[static_cast<int>(srcCell)];
+    const MapCell* recDest = &cells[static_cast<int>(destCell)];
 
-    // Cell-record array base: *(grid + 0x20 int-units) == *(uintptr_t*)((char*)grid + 0x80).
-    uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
-    uintptr_t recSrc  = cellArr + static_cast<uintptr_t>(static_cast<int>(srcCell)) * 0x30;
-    uintptr_t recDest = cellArr + static_cast<uintptr_t>(static_cast<int>(destCell)) * 0x30;
-
-    uint32_t typeSrc  = 1u << (*reinterpret_cast<const uint8_t*>(recSrc  + 0x29) & 0x1f);
-    uint32_t typeDest = 1u << (*reinterpret_cast<const uint8_t*>(recDest + 0x29) & 0x1f);
+    uint32_t typeSrc  = 1u << (recSrc->terrainType & 0x1f);
+    uint32_t typeDest = 1u << (recDest->terrainType & 0x1f);
     uint32_t mask = static_cast<uint32_t>(flags) | typeDest | typeSrc;
 
     bool reachable = (mask & typeDest) && (mask & typeSrc);
-    int16_t rd = *reinterpret_cast<const int16_t*>(recDest + 0x26);
-    int16_t rs = *reinterpret_cast<const int16_t*>(recSrc + 0x26);
+    int16_t rd = static_cast<int16_t>(recDest->zone);
+    int16_t rs = static_cast<int16_t>(recSrc->zone);
     if (reachable && (mask & 0x1e0u) == 0) {
         if (rd == 0 || rs == 0 || rd != rs)
             reachable = false;
@@ -535,22 +518,24 @@ void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
 
 
     if (!reachable) {
-        out[1] = 0;
-        out[0] = -1;
+        out->token = 0;
+        out->slot = -1;
         return out;
     }
 
     if ((mask & 0x180u) != 0)
         mask |= 0x180u;
 
-    // owner = *(grid + 0x1a int-units) == *(void**)((char*)grid + 0x68).
-    void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(grid) + 0x68);
-    Pf_EnqueueCmd0_a6b20(reinterpret_cast<int64_t>(owner), static_cast<int>(mask),   // 0x1400a6b20
-                         reinterpret_cast<void*>(recDest), reinterpret_cast<void*>(recSrc));
-    Pf_EnqueueTradeRoute_a6c10(reinterpret_cast<int64_t>(owner), out,   // 0x1400a6c10
-                               reinterpret_cast<void*>(static_cast<uint64_t>(destCell)),
-                               reinterpret_cast<void*>(static_cast<uint64_t>(srcCell)));
+    // Retail leaves R8 / R9 holding the two cell records here; 0x1400a6b20 reads EDX only.
+    pathfinder->SetPassableTypes(static_cast<int>(mask));   // 0x1400a6b20
+    pathfinder->RequestPath(out, static_cast<int>(destCell), static_cast<int>(srcCell));   // 0x1400a6c10
     return out;
+}
+
+// B4 FORWARD: 2 outside callers (Action/moveto.cpp, Player/pathtool_setselected.cpp)
+void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
+                                  uint32_t destCell, uint32_t srcCell) {
+    return reinterpret_cast<Map*>(gridp)->RequestPath(reinterpret_cast<PathTicket*>(outResultp), flags, destCell, srcCell);
 }
 
 // ============================================================
@@ -564,11 +549,11 @@ void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
 //   self+0x470 = movement profile, self+0x5c = terrain flags, self+0x20 = result store.
 // Caller signature: void* fn(void* self, void* worldPos, void* param3, void* param4)
 //   (returns a truthy nonzero; original returns (1 in low byte) | high garbage.)
-void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void* param4) {
+void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void* /*param4*/) {
     uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
     float* worldPos = reinterpret_cast<float*>(worldPosp);
-    int* grid = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(GameWorld() + 0xf8));
-    int width = grid[0];
+    Map* grid = GameUpdateLoop::_singleton->m_game;
+    int width = grid->size;
     float center = static_cast<float>(width >> 1);
 
     auto clamp = [&](float f) -> int {
@@ -593,16 +578,12 @@ void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void
         *reinterpret_cast<uint32_t*>(self + 0x68) = destCell;
         *reinterpret_cast<int*>(self + 0x60) = 0;
     } else {
-        // grid+0x1a int-units == (char*)grid + 0x68 = pathfinder owner (Thread*).
-        void* owner = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(grid) + 0x68);
-        ActMv_SetTerrainCosts_e550(reinterpret_cast<void*>(grid), owner,
-                                   *reinterpret_cast<int*>(self + 0x470), param4);
+        grid->SetMovementCosts(grid->pathfinder, *reinterpret_cast<int*>(self + 0x470));   // 0x14009e550
         // Original writes the query result into a 2-int stack scratch (local_res8),
         // then copies the 8-byte result into self+0x20.
-        int32_t scratch[2] = {0, 0};
-        void* res = ActMv_PathfinderQuery_9cfb0(
-            grid, scratch, *reinterpret_cast<uint32_t*>(self + 0x5c), destCell, srcCell);
-        *reinterpret_cast<uint64_t*>(self + 0x20) = *reinterpret_cast<uint64_t*>(res);
+        PathTicket scratch = {0, 0};
+        PathTicket* res = grid->RequestPath(&scratch, *reinterpret_cast<uint32_t*>(self + 0x5c), destCell, srcCell);   // 0x14009cfb0
+        *reinterpret_cast<PathTicket*>(self + 0x20) = *res;
     }
     return reinterpret_cast<void*>(static_cast<uintptr_t>(1));
 }

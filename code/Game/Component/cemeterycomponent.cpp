@@ -233,8 +233,7 @@ char CemeteryComponent::EnterBuilt() {
             // fourth parameter reaches only Pf_WorkerApplyCmd_a6430's cmd-5 arm; this is
             // cmd 2, so it is never read (quarrycomponent_deform.cpp / starttown.cpp pass
             // nullptr the same way).
-            if (pf) Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(pf), static_cast<uint32_t>(cellIdx),
-                                         reinterpret_cast<void*>(static_cast<uintptr_t>(2)), nullptr);
+            if (pf) Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(pf), cellIdx, 2);
         }
 
         *reinterpret_cast<ComponentEntity**>(cell + 0x08) = nullptr;   // a null InternalBasePtr

@@ -4587,7 +4587,7 @@ static int StartTown_ClassifyCell(void* game, int dim, int idx) {
 
 // f2f0 notify targets (ported + registered elsewhere; linked by name).
 extern void Pf_FineCellDirty_a8c90(int64_t self, int x, int y);                       // action_pf_road.cpp
-extern void Pf_EnqueueCmd2_a6fe0(int64_t self, uint32_t idx, void* type, void* p4);   // action_pf_astar.cpp
+extern void Pf_EnqueueCmd2_a6fe0(int64_t self, int cell, int terrainType);           // action_pf_astar.cpp
 
 // FUN_14009f2f0 — write cell+0x29 = `type`, set the Game+0xa2 dirty flag, and run the
 // two notify calls: a8c90 (region-dirty, subsystem @ game+0x70, boundary-flip only) and
@@ -4617,8 +4617,7 @@ static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint
         Pf_FineCellDirty_a8c90(regionObj, idx % dim, idx / dim);
     int64_t pfThread = *(int64_t*)(game + 0x68);
     if (pfThread)
-        Pf_EnqueueCmd2_a6fe0(pfThread, (uint32_t)idx,
-                             (void*)(uintptr_t)newType, nullptr);
+        Pf_EnqueueCmd2_a6fe0(pfThread, (int)idx, (int)newType);
 }
 
 // G3 — the resource entity is written into its map cell (cell+0x08) so the

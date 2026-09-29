@@ -28,8 +28,23 @@
 #include <cstddef>
 #include <type_traits>
 #include "collection/Collection.h"
+#include "Action/PathAvl.h"          // AvlTreeHead, AvlNode30
 
 class Map;
+
+// ---------------------------------------------------------------------------
+// Collection::Array<T> as its three raw fields, for arrays embedded in a record
+// whose owner frees them by hand (see OWNERSHIP above): no ctor, no dtor.
+// ---------------------------------------------------------------------------
+template <class T>
+struct RawArray {
+    T*      data;                // +0x00
+    int32_t size;                // +0x08
+    int32_t capacity;            // +0x0C
+};
+static_assert(sizeof(RawArray<int32_t>) == 0x10, "RawArray is Collection::Array's 0x10");
+static_assert(offsetof(RawArray<int32_t>, size) == 0x08, "RawArray::size @ +0x08");
+static_assert(offsetof(RawArray<int32_t>, capacity) == 0x0C, "RawArray::capacity @ +0x0C");
 
 // ---------------------------------------------------------------------------
 // The node pool: nodes carved out of chunks, a free list threaded through the
@@ -53,6 +68,18 @@ struct PathNodePool {
     int32_t  inUse;              // +0x1C +1 on a pop, -1 on a push back
     int32_t  available;          // +0x20 -1 on a pop, +1 on a push back
     uint8_t  _pad24[4];          // +0x24
+
+    // Give a node back: its first qword becomes the free-list link. Retail inlines
+    // these four stores, in this order, at every release (0x14001d550, 0x14001d400,
+    // 0x14001d040, 0x14001dcd0, 0x14009c170, 0x1400a7ad0).
+    template <class Node>
+    void Push(Node* node) {
+        inUse = inUse - 1;
+        available = available + 1;
+        PathPoolLink* link = reinterpret_cast<PathPoolLink*>(node);  // CAST-OK: elem_stride
+        link->next = freeList;
+        freeList = link;
+    }
 };
 static_assert(sizeof(PathNodePool) == 0x28, "PathNodePool is 0x28");
 static_assert(offsetof(PathNodePool, chunks) == 0x00, "PathNodePool::chunks @ +0x00");
@@ -84,6 +111,12 @@ struct PathCellQueue {
     int32_t  count;              // +0x10
     uint8_t  _pad14[4];          // +0x14
     PathNodePool pool;           // +0x18
+
+    // Take a node from the pool (growing it first when the free list is empty) and
+    // initialise it: value, next = prev = 0. One retail body per element
+    // (specialised below): 0x14001a9b0 (Map's cell queue), 0x14001df40 (the region
+    // graph's (x, y) queue). Null when the pop found no node.
+    Node* NewNode(const T* value);
 };
 
 // The (x, y) pair 0x1400a7ad0 queues: x in the low dword, y in the high dword.
@@ -103,6 +136,8 @@ static_assert(sizeof(PathCellIndex) == 8, "PathCellIndex is one qword");
 
 using MapCellQueue    = PathCellQueue<PathCellIndex>;
 using RegionCellQueue = PathCellQueue<PathCellXY>;
+template <> MapCellQueue::Node* MapCellQueue::NewNode(const PathCellIndex* value);      // 0x14001a9b0
+template <> RegionCellQueue::Node* RegionCellQueue::NewNode(const PathCellXY* value);   // 0x14001df40
 
 static_assert(sizeof(MapCellQueue) == 0x40, "the pooled queue is 0x40 (Map +0xA8..+0xE8)");
 static_assert(offsetof(MapCellQueue, tail) == 0x00, "queue tail @ +0x00");
@@ -154,6 +189,12 @@ struct PathOpenSet {
     int32_t       count;         // +0x08
     uint8_t       _pad0C[4];     // +0x0C
     PathNodePool  pool;          // +0x10
+
+    // Bodies in action_pf_pools.cpp (NewNode, FreeSubtree) and action_pf_astar.cpp.
+    PathOpenNode*  NewNode(const PathOpenKey* key, PathOpenNode* parent);   // 0x14001d730
+    void           FreeSubtree(PathOpenNode* node);                         // 0x14001d400
+    PathOpenNode** Insert(PathOpenNode** out, const PathOpenKey* key);      // 0x14001d450
+    void           Delete(PathOpenNode* node);                              // 0x14001d550
 };
 static_assert(sizeof(PathOpenSet) == 0x38, "PathOpenSet is 0x38");
 static_assert(offsetof(PathOpenSet, root) == 0x00, "PathOpenSet::root @ +0x00");
@@ -189,17 +230,16 @@ static_assert(offsetof(PathSearchNode, gCost) == 0x14, "PathSearchNode::gCost @ 
 struct PathSearch {
     int32_t         generation;    // +0x00 bumped before each run
     int32_t         sequence;      // +0x04 open-set tie-break counter
-    PathSearchNode* nodes;         // +0x08 Collection::Array<PathSearchNode> data
-    int32_t         nodeCount;     // +0x10 ... size
-    int32_t         nodeCapacity;  // +0x14 ... capacity
+    RawArray<PathSearchNode> nodes;  // +0x08 one per vertex (resized by 0x14001d830)
     PathOpenSet     open;          // +0x18
+
+    // 0x14001d320: (re)open `vertex` with its predecessor and costs (action_pf_astar.cpp).
+    void Relax(int vertex, int parent, int gCost, int fCost);
 };
 static_assert(sizeof(PathSearch) == 0x50, "PathSearch is 0x50");
 static_assert(offsetof(PathSearch, generation) == 0x00, "PathSearch::generation @ +0x00");
 static_assert(offsetof(PathSearch, sequence) == 0x04, "PathSearch::sequence @ +0x04");
 static_assert(offsetof(PathSearch, nodes) == 0x08, "PathSearch::nodes @ +0x08");
-static_assert(offsetof(PathSearch, nodeCount) == 0x10, "PathSearch::nodeCount @ +0x10");
-static_assert(offsetof(PathSearch, nodeCapacity) == 0x14, "PathSearch::nodeCapacity @ +0x14");
 static_assert(offsetof(PathSearch, open) == 0x18, "PathSearch::open @ +0x18");
 static_assert(std::is_trivially_copyable<PathSearch>::value, "raw record");
 
@@ -220,6 +260,14 @@ struct GridPathSearch {
     int32_t    width;             // +0xD8 grid edge in cells
     uint8_t    _padDC[4];         // +0xDC
     uint8_t*   cellFlags;         // +0xE0 per cell: terrain type (bits 0-6), blocked (bit 7)
+
+    // action_pf_geom.cpp
+    int      Neighbour(int cell, uint32_t direction) const;   // 0x1400a5ec0, -1 when not walkable
+    int      Heuristic(int from, int to) const;               // 0x1400a6030
+    // action_pf_astar.cpp. FindPath returns retail's RAX: bit 0 = found, the upper
+    // bytes whatever the last write left (the caller tests the low byte only).
+    uint64_t FindPath(int start, int goal);                   // 0x14001d040
+    int      Run(int start, int goal, int32_t* path);          // 0x14001ce00, path cap 0x4000
 };
 static_assert(sizeof(GridPathSearch) == 0xE8, "GridPathSearch is 0xE8 (PathfinderThread +0x78..+0x160)");
 static_assert(offsetof(GridPathSearch, search) == 0x00, "GridPathSearch::search @ +0x00");
@@ -328,17 +376,32 @@ struct RegionGraph {
     int32_t     blockHeight;                 // +0x5C (ctor 8)
     int32_t     blocksWide;                  // +0x60 blocks per map row
     int32_t     blocksHigh;                  // +0x64
-    RegionNode* regions;                     // +0x68 Collection::Array<RegionNode> data
-    int32_t     regionCount;                 // +0x70 ... size
-    int32_t     regionCapacity;              // +0x74 ... capacity
-    RegionBlock* blocks;                     // +0x78 Collection::Array<RegionBlock> data
-    int32_t     blockCount;                  // +0x80
-    int32_t     blockCapacity;               // +0x84
+    RawArray<RegionNode>  regions;           // +0x68 resized by 0x14001e210; its size is the id high-water
+    RawArray<RegionBlock> blocks;            // +0x78 resized by 0x14001e060
     Collection::Array<int32_t> dirtyRebuild;     // +0x88 blocks whose regions are rebuilt
     Collection::Array<int32_t> dirtyAdjacency;   // +0x98 blocks whose adjacency is rebuilt
     Collection::Array<int32_t> freeRegions;      // +0xA8 recycled region ids
     Collection::Array<int32_t> labels;           // +0xB8 per cell of one block: flood label
     RegionCellQueue queue;                   // +0xC8 the label flood fill's work queue
+
+    // action_pf_astar.cpp: the region A* (Euclidean heuristic between centroids).
+    uint64_t FindPath(int start, int goal);                   // 0x14001dcd0 (RAX as GridPathSearch::FindPath)
+    int      Run(int start, int goal, int32_t* path);          // 0x14001dc00, path cap 0x2000
+
+    // action_pf_region.cpp: rebuilding the graph block by block.
+    void     FreeRegion(int region);                          // 0x1400a8200
+    int      AllocRegion();                                   // 0x1400a8350
+    void     MarkAdjacencyDirty(int block);                   // 0x1400a8420
+    void     MarkCellDirty(int x, int y);                     // 0x1400a8c90 (action_pf_road.cpp)
+    void     RebuildAdjacency(int block);                     // 0x1400a7480
+    void     StampRegionIds(int block);                       // 0x1400a7670
+    void     AddBorderCells(int region, int blockX0, int blockY0, int x, int y);   // 0x1400a7750
+    uint64_t BuildRegion(int block, int label);               // 0x1400a7950 (the id, zero-extended)
+    void     FloodLabel(int blockX0, int blockY0, uint32_t x, uint32_t y, uint16_t label);   // 0x1400a7ad0
+    int      LabelBlock(int block);                           // 0x1400a7f20
+    void     RebuildBlock(uint32_t block);                    // 0x1400a80a0
+    void     Flush();                                         // 0x1400a8a90
+    int      PathLength(int start, uint32_t goal);            // 0x1400a8ba0
 };
 static_assert(sizeof(RegionGraph) == 0x108, "RegionGraph is MemAlloc(0x108)");
 static_assert(offsetof(RegionGraph, search) == 0x00, "RegionGraph::search @ +0x00");
@@ -348,13 +411,62 @@ static_assert(offsetof(RegionGraph, blockHeight) == 0x5C, "RegionGraph::blockHei
 static_assert(offsetof(RegionGraph, blocksWide) == 0x60, "RegionGraph::blocksWide @ +0x60");
 static_assert(offsetof(RegionGraph, blocksHigh) == 0x64, "RegionGraph::blocksHigh @ +0x64");
 static_assert(offsetof(RegionGraph, regions) == 0x68, "RegionGraph::regions @ +0x68");
-static_assert(offsetof(RegionGraph, regionCount) == 0x70, "RegionGraph::regionCount @ +0x70");
-static_assert(offsetof(RegionGraph, regionCapacity) == 0x74, "RegionGraph::regionCapacity @ +0x74");
 static_assert(offsetof(RegionGraph, blocks) == 0x78, "RegionGraph::blocks @ +0x78");
-static_assert(offsetof(RegionGraph, blockCount) == 0x80, "RegionGraph::blockCount @ +0x80");
-static_assert(offsetof(RegionGraph, blockCapacity) == 0x84, "RegionGraph::blockCapacity @ +0x84");
 static_assert(offsetof(RegionGraph, dirtyRebuild) == 0x88, "RegionGraph::dirtyRebuild @ +0x88");
 static_assert(offsetof(RegionGraph, dirtyAdjacency) == 0x98, "RegionGraph::dirtyAdjacency @ +0x98");
 static_assert(offsetof(RegionGraph, freeRegions) == 0xA8, "RegionGraph::freeRegions @ +0xA8");
 static_assert(offsetof(RegionGraph, labels) == 0xB8, "RegionGraph::labels @ +0xB8");
 static_assert(offsetof(RegionGraph, queue) == 0xC8, "RegionGraph::queue @ +0xC8");
+
+// ---------------------------------------------------------------------------
+// The array resizes and frees of the records above (action_pf_pools.cpp). Each is
+// retail's Collection::Array<T>::SetSize / destroy for that element, monomorphised
+// into the exe; the element copies and frees are retail's, field by field.
+// ---------------------------------------------------------------------------
+void SearchNodesResize(RawArray<PathSearchNode>* nodes, int newSize);               // 0x14001d830
+void PathResultsResize(RawArray<PathResult>* results, int newSize, const PathResult* fill);   // 0x14001d940
+void PathResultsFree(PathResult* first, int count);                                  // 0x14001db40
+void RegionNodesResize(RawArray<RegionNode>* regions, int newSize, const RegionNode* fill);   // 0x14001e210
+void RegionNodesFree(RegionNode* first, int count);                                  // 0x14001e490
+Collection::Array<int32_t>* IntArrayAssign(Collection::Array<int32_t>* dst,
+                                           const Collection::Array<int32_t>* src);  // 0x14000f9e0
+
+// ---------------------------------------------------------------------------
+// The region-pair distance cache (Map +0x78; MemAlloc(0x38), built by the e8c0
+// tail the tree calls Pf_RegionPairCache_Build): a ring of the last 0x20000
+// (larger id, smaller id) -> distance results, indexed by an AVL tree of 0x30
+// nodes (key0 = larger id, key1 = smaller id, key2 = ring slot). Entries expire
+// after `lifetime` (0x1400a5d10).
+// ---------------------------------------------------------------------------
+struct RegionPairEntry {                     // stride 0x18 (0x14001cca0)
+    int32_t regionA;                         // +0x00 the larger id, -1 = empty
+    int32_t regionB;                         // +0x04 the smaller id
+    int32_t distance;                        // +0x08
+    uint32_t field_0x0C;                     // +0x0C never read; 0x1400a5b30 stores a stale stack dword
+    int64_t time;                            // +0x10 System::Time ticks of `now` when stored
+};
+static_assert(sizeof(RegionPairEntry) == 0x18, "RegionPairEntry stride 0x18");
+static_assert(offsetof(RegionPairEntry, regionA) == 0x00, "RegionPairEntry::regionA @ +0x00");
+static_assert(offsetof(RegionPairEntry, regionB) == 0x04, "RegionPairEntry::regionB @ +0x04");
+static_assert(offsetof(RegionPairEntry, distance) == 0x08, "RegionPairEntry::distance @ +0x08");
+static_assert(offsetof(RegionPairEntry, field_0x0C) == 0x0C, "RegionPairEntry +0x0C");
+static_assert(offsetof(RegionPairEntry, time) == 0x10, "RegionPairEntry::time @ +0x10");
+
+struct RegionPairCache {
+    int64_t newestTime;                      // +0x00 System::Time, advanced by 0x1400a5d10
+    int64_t lifetime;                        // +0x08 System::Time(120 s)
+    int32_t newest;                          // +0x10 ring write index
+    int32_t oldest;                          // +0x14 ring expiry index
+    RawArray<RegionPairEntry> ring;          // +0x18 (0x20000 entries; its size is the modulus)
+    AvlTreeHead<AvlNode30> index;            // +0x28
+
+    uint32_t Find(int a, int b) const;       // 0x1400a5ac0, 0xffffffff when absent
+    void     Store(int a, int b, uint32_t distance);   // 0x1400a5b30
+};
+static_assert(sizeof(RegionPairCache) == 0x38, "RegionPairCache is MemAlloc(0x38)");
+static_assert(offsetof(RegionPairCache, newestTime) == 0x00, "RegionPairCache::newestTime @ +0x00");
+static_assert(offsetof(RegionPairCache, lifetime) == 0x08, "RegionPairCache::lifetime @ +0x08");
+static_assert(offsetof(RegionPairCache, newest) == 0x10, "RegionPairCache::newest @ +0x10");
+static_assert(offsetof(RegionPairCache, oldest) == 0x14, "RegionPairCache::oldest @ +0x14");
+static_assert(offsetof(RegionPairCache, ring) == 0x18, "RegionPairCache::ring @ +0x18");
+static_assert(offsetof(RegionPairCache, index) == 0x28, "RegionPairCache::index @ +0x28");

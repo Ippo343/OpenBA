@@ -1,440 +1,263 @@
 // code/Game/Action/action_pf_avl.cpp
-// Pathfinding/Action closure — AVL/BST node-pool + rotation family.
+// Pathfinding/Action closure — AVL/BST node + rotation family.
 //
-// Shared by the road A*, region graph, and work BST. 10 exe sub-helpers, faithfully
+// Shared by the pathfinder's open set, the region-pair cache, the path-cost cache
+// and the trees of other modules (through the C forwarders at the bottom). Transcribed
+// 1:1 from the Ghidra decompile (cross-checked against disassembly for the rotation
+// pointer surgery, the insert child-pointer offsets, and the balance-factor / height
+// fixups); none of this is exercised on the autostart path, so it stays a LITERAL
+// transcription, not an "improvement".
+//
+// B.4 ACT-a: the bodies run over a NODE TYPE (code/Game/Action/PathAvl.h). Retail's two
+// copies of each primitive (one per element width, the link offsets baked in) are one
+// template here, instantiated for every node the tree uses:
+//   0x14000e450 / 0x140014c70  AvlRotateLeft      0x14000e580 / 0x140014da0  AvlRotateRight
+//   0x140013480 / 0x14001a8c0  AvlRebalance
 #include "Action/exe_bodies.h"
-// transcribed 1:1 from the Ghidra decompile (cross-checked against disassembly for the
-// rotation pointer surgery, the insert child-pointer offsets, and the balance-factor /
-// height fixups). None of this is exercised on the autostart path — a wrong port would be
-// undetectable silent corruption — so it is a LITERAL transcription, not an "improvement".
-//
-// The rebalance drivers and inserts call the rotations / allocators / rebalances of this
-// batch by name (Action/exe_bodies.h, B3R) rather than inlining them; the registration
-// (standalone/reg_pf_avl.cpp -> RegisterPfAvlBatch()) stays for readers other blocks have.
-//
-// ===========================================================================
-// TWO node layouts (both AVL, different field offsets):
-//
-//   Layout A — 0x28-byte node  (a4f0 / a680 / a8c0 / 14c70 / 14da0):
-//     +0x00  int    key           (single int key)
-//     +0x08  ptr    parent
-//     +0x10  ptr    left
-//     +0x18  ptr    right
-//     +0x20  short  balance       (= height(right) - height(left))
-//     +0x22  short  height        (= 1 + max(height(left), height(right)); leaf-relative)
-//
-//   Layout B — 0x30-byte node  (c940 / cc40 / 13480 / e450 / e580):
-//     +0x00  int    key1          (3-int key prefix: key1, key2, key3)
-//     +0x04  int    key2
-//     +0x08  int    key3
-//     +0x10  ptr    parent
-//     +0x18  ptr    left
-//     +0x20  ptr    right
-//     +0x28  short  balance
-//     +0x2a  short  height
-//
-// Height convention (both): a node's "subtree height as seen from its parent" is read as
-//   child ? (child->height + 1) : 0
-// and stored at the node as height = max(leftH, rightH); balance = rightH - leftH.
-// ===========================================================================
+#include "Action/PathAvl.h"
+#include "Action/PathSearch.h"          // PathOpenNode
 
 #include "Component/exe_bodies.h"      // CitizenAI_Reg_helper_e360
+#include "Entity/CitizenBehavior.h"    // PathGraph
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
 
 namespace {
 
-// ---- byte-offset field accessors -----------------------------------------
-static inline int64_t&  P64(uintptr_t base, uintptr_t off) { return *reinterpret_cast<int64_t*>(base + off); }
-static inline int32_t&  P32(uintptr_t base, uintptr_t off) { return *reinterpret_cast<int32_t*>(base + off); }
-static inline int16_t&  P16(uintptr_t base, uintptr_t off) { return *reinterpret_cast<int16_t*>(base + off); }
+// A child's contribution to its parent's height: child->height + 1, or 0 for none.
+template <class Node>
+inline int16_t ChildHeight(const Node* child) {
+    return (child == nullptr) ? 0 : static_cast<int16_t>(child->height + 1);
+}
 
 } // namespace
 
 // ===========================================================================
-// Layout B rotations (0x30-node: parent +0x10, left +0x18, right +0x20,
-//                                  balance +0x28, height +0x2a)
+// Rotations (0x14000e450 / 0x14000e580 for the 0x30 node, 0x140014c70 / 0x140014da0 for
+// the 0x28 node). Each re-derives the balance / height of the promoted node's two
+// children, then of the promoted node itself, in that order.
 // ===========================================================================
 
-// 0x14000e450 — rotate subtree (left child promoted up the right link).
-// Returns the promoted node (the old right child, lVar1).
-extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node)
+// 0x14000e450 / 0x140014c70 — the right child is promoted. Returns it.
+template <class Node>
+Node* AvlRotateLeft(Node** root, Node* node)
 {
-    int64_t pivot;   // lVar1
-    int64_t tmp;     // lVar2
+    Node* pivot;
+    Node* tmp;
     int16_t s3, s4, s5, s6;
 
     if (node == *root) {
-        *root = P64((uintptr_t)node, 0x20);
+        *root = node->right;
     }
-    pivot = P64((uintptr_t)node, 0x10);            // parent
-    if (pivot != 0) {
-        if (P64((uintptr_t)pivot, 0x18) == node) {
-            P64((uintptr_t)pivot, 0x18) = P64((uintptr_t)node, 0x20);
+    pivot = node->parent;
+    if (pivot != nullptr) {
+        if (pivot->left == node) {
+            pivot->left = node->right;
         } else {
-            P64((uintptr_t)pivot, 0x20) = P64((uintptr_t)node, 0x20);
+            pivot->right = node->right;
         }
     }
-    pivot = P64((uintptr_t)node, 0x20);            // right child -> becomes new subtree root
-    P64((uintptr_t)pivot, 0x10) = P64((uintptr_t)node, 0x10);
-    tmp = P64((uintptr_t)pivot, 0x18);             // pivot->left
-    P64((uintptr_t)node, 0x20) = tmp;
-    if (tmp != 0) {
-        P64((uintptr_t)tmp, 0x10) = node;
+    pivot = node->right;                   // becomes the new subtree root
+    pivot->parent = node->parent;
+    tmp = pivot->left;
+    node->right = tmp;
+    if (tmp != nullptr) {
+        tmp->parent = node;
     }
-    P64((uintptr_t)pivot, 0x18) = node;
-    P64((uintptr_t)node, 0x10) = pivot;
+    pivot->left = node;
+    node->parent = pivot;
 
     // height/balance fixup for pivot->left
-    tmp = P64((uintptr_t)pivot, 0x18);
+    tmp = pivot->left;
     s5 = 0;
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x2a) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x20) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x20), 0x2a) + 1);
+    if (tmp != nullptr) {
+        s6 = ChildHeight(tmp->left);
+        s4 = ChildHeight(tmp->right);
         s3 = s4;
         if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x28) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x2a) = s3;
+        tmp->balance = static_cast<int16_t>(s4 - s6);
+        tmp->height = s3;
     }
     // height/balance fixup for pivot->right
-    tmp = P64((uintptr_t)pivot, 0x20);
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x2a) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x20) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x20), 0x2a) + 1);
+    tmp = pivot->right;
+    if (tmp != nullptr) {
+        s6 = ChildHeight(tmp->left);
+        s4 = ChildHeight(tmp->right);
         s3 = s4;
         if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x28) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x2a) = s3;
+        tmp->balance = static_cast<int16_t>(s4 - s6);
+        tmp->height = s3;
     }
     // height/balance fixup for pivot itself
-    s6 = (P64((uintptr_t)pivot, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)pivot, 0x18), 0x2a) + 1);
-    if (P64((uintptr_t)pivot, 0x20) != 0) {
-        s5 = (int16_t)(P16(P64((uintptr_t)pivot, 0x20), 0x2a) + 1);
+    s6 = ChildHeight(pivot->left);
+    if (pivot->right != nullptr) {
+        s5 = static_cast<int16_t>(pivot->right->height + 1);
     }
     s4 = s5;
     if (s5 < s6) s4 = s6;
-    P16((uintptr_t)pivot, 0x28) = (int16_t)(s5 - s6);
-    P16((uintptr_t)pivot, 0x2a) = s4;
+    pivot->balance = static_cast<int16_t>(s5 - s6);
+    pivot->height = s4;
     return pivot;
 }
 
-// 0x14000e580 — rotate subtree (mirror of e450: right child promoted up the left link).
-extern "C" int64_t Pf_AvlRotateB_e580(int64_t* root, int64_t node)
+// 0x14000e580 / 0x140014da0 — the left child is promoted. Returns it.
+template <class Node>
+Node* AvlRotateRight(Node** root, Node* node)
 {
-    int64_t pivot;
-    int64_t tmp;
+    Node* pivot;
+    Node* tmp;
     int16_t s3, s4, s5, s6;
 
     if (node == *root) {
-        *root = P64((uintptr_t)node, 0x18);
+        *root = node->left;
     }
-    pivot = P64((uintptr_t)node, 0x10);            // parent
-    if (pivot != 0) {
-        if (P64((uintptr_t)pivot, 0x18) == node) {
-            P64((uintptr_t)pivot, 0x18) = P64((uintptr_t)node, 0x18);
+    pivot = node->parent;
+    if (pivot != nullptr) {
+        if (pivot->left == node) {
+            pivot->left = node->left;
         } else {
-            P64((uintptr_t)pivot, 0x20) = P64((uintptr_t)node, 0x18);
+            pivot->right = node->left;
         }
     }
-    pivot = P64((uintptr_t)node, 0x18);            // left child -> becomes new subtree root
-    P64((uintptr_t)pivot, 0x10) = P64((uintptr_t)node, 0x10);
-    tmp = P64((uintptr_t)pivot, 0x20);             // pivot->right
-    P64((uintptr_t)node, 0x18) = tmp;
-    if (tmp != 0) {
-        P64((uintptr_t)tmp, 0x10) = node;
+    pivot = node->left;                    // becomes the new subtree root
+    pivot->parent = node->parent;
+    tmp = pivot->right;
+    node->left = tmp;
+    if (tmp != nullptr) {
+        tmp->parent = node;
     }
-    P64((uintptr_t)pivot, 0x20) = node;
-    P64((uintptr_t)node, 0x10) = pivot;
+    pivot->right = node;
+    node->parent = pivot;
 
-    tmp = P64((uintptr_t)pivot, 0x18);
+    tmp = pivot->left;
     s5 = 0;
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x2a) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x20) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x20), 0x2a) + 1);
+    if (tmp != nullptr) {
+        s6 = ChildHeight(tmp->left);
+        s4 = ChildHeight(tmp->right);
         s3 = s4;
         if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x28) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x2a) = s3;
+        tmp->balance = static_cast<int16_t>(s4 - s6);
+        tmp->height = s3;
     }
-    tmp = P64((uintptr_t)pivot, 0x20);
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x2a) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x20) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x20), 0x2a) + 1);
+    tmp = pivot->right;
+    if (tmp != nullptr) {
+        s6 = ChildHeight(tmp->left);
+        s4 = ChildHeight(tmp->right);
         s3 = s4;
         if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x28) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x2a) = s3;
+        tmp->balance = static_cast<int16_t>(s4 - s6);
+        tmp->height = s3;
     }
-    s6 = (P64((uintptr_t)pivot, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)pivot, 0x18), 0x2a) + 1);
-    if (P64((uintptr_t)pivot, 0x20) != 0) {
-        s5 = (int16_t)(P16(P64((uintptr_t)pivot, 0x20), 0x2a) + 1);
+    s6 = ChildHeight(pivot->left);
+    if (pivot->right != nullptr) {
+        s5 = static_cast<int16_t>(pivot->right->height + 1);
     }
     s4 = s5;
     if (s5 < s6) s4 = s6;
-    P16((uintptr_t)pivot, 0x28) = (int16_t)(s5 - s6);
-    P16((uintptr_t)pivot, 0x2a) = s4;
+    pivot->balance = static_cast<int16_t>(s5 - s6);
+    pivot->height = s4;
     return pivot;
 }
 
 // ===========================================================================
-// Layout A rotations (0x28-node: parent +0x08, left +0x10, right +0x18,
-//                                  balance +0x20, height +0x22)
+// 0x140013480 / 0x14001a8c0 — rebalance driver. Walks from *cursor up to the root,
+// recomputing balance/height and rotating, with the double-rotation pre-step when the
+// child leans the opposite way.
 // ===========================================================================
-
-// 0x140014c70 — AVL left rotation + height fixup (right child promoted up the right link).
-extern "C" int64_t Pf_AvlRotateL_14c70(int64_t* root, int64_t node)
+template <class Node>
+void AvlRebalance(Node** root, Node** cursor)
 {
-    int64_t pivot;
-    int64_t tmp;
-    int16_t s3, s4, s5, s6;
-
-    if (node == *root) {
-        *root = P64((uintptr_t)node, 0x18);
-    }
-    pivot = P64((uintptr_t)node, 0x08);            // parent
-    if (pivot != 0) {
-        if (P64((uintptr_t)pivot, 0x10) == node) {
-            P64((uintptr_t)pivot, 0x10) = P64((uintptr_t)node, 0x18);
-        } else {
-            P64((uintptr_t)pivot, 0x18) = P64((uintptr_t)node, 0x18);
-        }
-    }
-    pivot = P64((uintptr_t)node, 0x18);            // right child
-    P64((uintptr_t)pivot, 0x08) = P64((uintptr_t)node, 0x08);
-    tmp = P64((uintptr_t)pivot, 0x10);             // pivot->left
-    P64((uintptr_t)node, 0x18) = tmp;
-    if (tmp != 0) {
-        P64((uintptr_t)tmp, 0x08) = node;
-    }
-    P64((uintptr_t)pivot, 0x10) = node;
-    P64((uintptr_t)node, 0x08) = pivot;
-
-    tmp = P64((uintptr_t)pivot, 0x10);
-    s5 = 0;
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x10) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x10), 0x22) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x22) + 1);
-        s3 = s4;
-        if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x20) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x22) = s3;
-    }
-    tmp = P64((uintptr_t)pivot, 0x18);
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x10) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x10), 0x22) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x22) + 1);
-        s3 = s4;
-        if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x20) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x22) = s3;
-    }
-    s6 = (P64((uintptr_t)pivot, 0x10) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)pivot, 0x10), 0x22) + 1);
-    if (P64((uintptr_t)pivot, 0x18) != 0) {
-        s5 = (int16_t)(P16(P64((uintptr_t)pivot, 0x18), 0x22) + 1);
-    }
-    s4 = s5;
-    if (s5 < s6) s4 = s6;
-    P16((uintptr_t)pivot, 0x20) = (int16_t)(s5 - s6);
-    P16((uintptr_t)pivot, 0x22) = s4;
-    return pivot;
-}
-
-// 0x140014da0 — AVL right rotation + height fixup (left child promoted up the left link).
-extern "C" int64_t Pf_AvlRotateR_14da0(int64_t* root, int64_t node)
-{
-    int64_t pivot;
-    int64_t tmp;
-    int16_t s3, s4, s5, s6;
-
-    if (node == *root) {
-        *root = P64((uintptr_t)node, 0x10);
-    }
-    pivot = P64((uintptr_t)node, 0x08);            // parent
-    if (pivot != 0) {
-        if (P64((uintptr_t)pivot, 0x10) == node) {
-            P64((uintptr_t)pivot, 0x10) = P64((uintptr_t)node, 0x10);
-        } else {
-            P64((uintptr_t)pivot, 0x18) = P64((uintptr_t)node, 0x10);
-        }
-    }
-    pivot = P64((uintptr_t)node, 0x10);            // left child
-    P64((uintptr_t)pivot, 0x08) = P64((uintptr_t)node, 0x08);
-    tmp = P64((uintptr_t)pivot, 0x18);             // pivot->right
-    P64((uintptr_t)node, 0x10) = tmp;
-    if (tmp != 0) {
-        P64((uintptr_t)tmp, 0x08) = node;
-    }
-    P64((uintptr_t)pivot, 0x18) = node;
-    P64((uintptr_t)node, 0x08) = pivot;
-
-    tmp = P64((uintptr_t)pivot, 0x10);
-    s5 = 0;
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x10) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x10), 0x22) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x22) + 1);
-        s3 = s4;
-        if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x20) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x22) = s3;
-    }
-    tmp = P64((uintptr_t)pivot, 0x18);
-    if (tmp != 0) {
-        s6 = (P64((uintptr_t)tmp, 0x10) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x10), 0x22) + 1);
-        s4 = (P64((uintptr_t)tmp, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)tmp, 0x18), 0x22) + 1);
-        s3 = s4;
-        if (s4 < s6) s3 = s6;
-        P16((uintptr_t)tmp, 0x20) = (int16_t)(s4 - s6);
-        P16((uintptr_t)tmp, 0x22) = s3;
-    }
-    s6 = (P64((uintptr_t)pivot, 0x10) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)pivot, 0x10), 0x22) + 1);
-    if (P64((uintptr_t)pivot, 0x18) != 0) {
-        s5 = (int16_t)(P16(P64((uintptr_t)pivot, 0x18), 0x22) + 1);
-    }
-    s4 = s5;
-    if (s5 < s6) s4 = s6;
-    P16((uintptr_t)pivot, 0x20) = (int16_t)(s5 - s6);
-    P16((uintptr_t)pivot, 0x22) = s4;
-    return pivot;
-}
-
-// ===========================================================================
-// Rebalance drivers — walk up from the inserted node toward the root, recompute
-// height/balance, and apply rotations on imbalance. The rotations are called by name:
-// Layout B (0x30-node) 0x14000e450 Pf_AvlRotateB_e450 / 0x14000e580 Pf_AvlRotateB_e580,
-// Layout A (0x28-node) 0x140014c70 Pf_AvlRotateL_14c70 / 0x140014da0 Pf_AvlRotateR_14da0.
-// ===========================================================================
-
-// 0x140013480 — AVL rebalance driver for Layout B (0x30-node). Walks from *node up to
-// the root, recomputing balance/height and applying e450 (left) / e580 (right) rotations,
-// with the double-rotation pre-step when the child leans the opposite way.
-extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node)
-{
-    int64_t lVar1;
-    int64_t lVar2;
+    Node* up;
+    Node* child;
     int16_t s3, s4, s5;
-    int64_t cur;   // lVar6
+    Node* cur;
 
-
-    lVar1 = *node;
-    while (lVar1 != 0) {
-        cur = *node;
-        lVar1 = P64((uintptr_t)cur, 0x10);          // parent (next step up)
-        s5 = (P64((uintptr_t)cur, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)cur, 0x18), 0x2a) + 1);
-        s4 = (P64((uintptr_t)cur, 0x20) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)cur, 0x20), 0x2a) + 1);
+    up = *cursor;
+    while (up != nullptr) {
+        cur = *cursor;
+        up = cur->parent;                  // next step up
+        s5 = ChildHeight(cur->left);
+        s4 = ChildHeight(cur->right);
         s3 = s4;
         if (s4 < s5) s3 = s5;
-        P16((uintptr_t)cur, 0x28) = (int16_t)(s4 - s5);
-        P16((uintptr_t)cur, 0x2a) = s3;
+        cur->balance = static_cast<int16_t>(s4 - s5);
+        cur->height = s3;
 
-        cur = *node;
-        if (1 < P16((uintptr_t)cur, 0x28)) {
-            lVar2 = P64((uintptr_t)cur, 0x20);      // right child
-            if (lVar2 != 0) {
-                if ((P16((uintptr_t)lVar2, 0x28) < 1) && (P16((uintptr_t)lVar2, 0x28) < 0)) {
-                    Pf_AvlRotateB_e580(root, lVar2);
-                    cur = *node;
+        cur = *cursor;
+        if (1 < cur->balance) {
+            child = cur->right;
+            if (child != nullptr) {
+                if ((child->balance < 1) && (child->balance < 0)) {
+                    AvlRotateRight(root, child);
+                    cur = *cursor;
                 }
-                Pf_AvlRotateB_e450(root, cur);
+                AvlRotateLeft(root, cur);
             }
         }
-        cur = *node;
-        if (P16((uintptr_t)cur, 0x28) < -1) {
-            lVar2 = P64((uintptr_t)cur, 0x18);      // left child
-            if (lVar2 != 0) {
-                if ((-1 < P16((uintptr_t)lVar2, 0x28)) && (0 < P16((uintptr_t)lVar2, 0x28))) {
-                    Pf_AvlRotateB_e450(root, lVar2);
-                    cur = *node;
+        cur = *cursor;
+        if (cur->balance < -1) {
+            child = cur->left;
+            if (child != nullptr) {
+                if ((-1 < child->balance) && (0 < child->balance)) {
+                    AvlRotateLeft(root, child);
+                    cur = *cursor;
                 }
-                Pf_AvlRotateB_e580(root, cur);
+                AvlRotateRight(root, cur);
             }
         }
-        *node = lVar1;
+        *cursor = up;
     }
 }
 
-// 0x14001a8c0 — AVL rebalance loop for Layout A (0x28-node). Mirror of 13480 but with
-// the 0x28-node offsets and the 14c70 (left) / 14da0 (right) rotations.
-extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node)
-{
-    int64_t lVar1;
-    int64_t lVar2;
-    int16_t s3, s4, s5;
-    int64_t cur;
-
-
-    lVar1 = *node;
-    while (lVar1 != 0) {
-        cur = *node;
-        lVar1 = P64((uintptr_t)cur, 0x08);          // parent (next step up)
-        s5 = (P64((uintptr_t)cur, 0x10) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)cur, 0x10), 0x22) + 1);
-        s4 = (P64((uintptr_t)cur, 0x18) == 0) ? 0 : (int16_t)(P16(P64((uintptr_t)cur, 0x18), 0x22) + 1);
-        s3 = s4;
-        if (s4 < s5) s3 = s5;
-        P16((uintptr_t)cur, 0x20) = (int16_t)(s4 - s5);
-        P16((uintptr_t)cur, 0x22) = s3;
-
-        cur = *node;
-        if (1 < P16((uintptr_t)cur, 0x20)) {
-            lVar2 = P64((uintptr_t)cur, 0x18);      // right child
-            if (lVar2 != 0) {
-                if ((P16((uintptr_t)lVar2, 0x20) < 1) && (P16((uintptr_t)lVar2, 0x20) < 0)) {
-                    Pf_AvlRotateR_14da0(root, lVar2);
-                    cur = *node;
-                }
-                Pf_AvlRotateL_14c70(root, cur);
-            }
-        }
-        cur = *node;
-        if (P16((uintptr_t)cur, 0x20) < -1) {
-            lVar2 = P64((uintptr_t)cur, 0x10);      // left child
-            if (lVar2 != 0) {
-                if ((-1 < P16((uintptr_t)lVar2, 0x20)) && (0 < P16((uintptr_t)lVar2, 0x20))) {
-                    Pf_AvlRotateL_14c70(root, lVar2);
-                    cur = *node;
-                }
-                Pf_AvlRotateR_14da0(root, cur);
-            }
-        }
-        *node = lVar1;
-    }
-}
+// The node types the tree hands these primitives.
+template PathOpenNode* AvlRotateLeft<PathOpenNode>(PathOpenNode**, PathOpenNode*);
+template PathOpenNode* AvlRotateRight<PathOpenNode>(PathOpenNode**, PathOpenNode*);
+template void AvlRebalance<PathOpenNode>(PathOpenNode**, PathOpenNode**);
+template AvlNode30* AvlRotateLeft<AvlNode30>(AvlNode30**, AvlNode30*);
+template AvlNode30* AvlRotateRight<AvlNode30>(AvlNode30**, AvlNode30*);
+template void AvlRebalance<AvlNode30>(AvlNode30**, AvlNode30**);
+template AvlNode28* AvlRotateLeft<AvlNode28>(AvlNode28**, AvlNode28*);
+template AvlNode28* AvlRotateRight<AvlNode28>(AvlNode28**, AvlNode28*);
+template void AvlRebalance<AvlNode28>(AvlNode28**, AvlNode28**);
 
 // ===========================================================================
 // Node allocators
 // ===========================================================================
 
-// 0x14001a680 — alloc+init a 0x28 AVL node (Layout A). param_2 -> int key, param_3 -> parent.
-// Returns the new node, or null on OOM.
-extern "C" uint32_t* Pf_AvlNewNodeA_a680(uint64_t /*param_1*/, uint32_t* param_2, uint64_t param_3)
+// 0x14001a680 — alloc+init a 0x28 node. RCX is never read (retail keeps the caller's
+// value); RDX -> key, R8 = parent. Returns the new node, or null on OOM.
+AvlNode28* AvlNewNode28(const int32_t* key, AvlNode28* parent)
 {
-    uint32_t* node = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+    AvlNode28* node = static_cast<AvlNode28*>(System::MemoryAllocator::MemAlloc(0x28, 8));
     if (node == nullptr) {
         return nullptr;
     }
-    uint32_t key = *param_2;
-    *reinterpret_cast<uint64_t*>(node + 2) = param_3;   // +0x08 parent
-    *node = key;                                          // +0x00 key
-    *reinterpret_cast<uint64_t*>(node + 4) = 0;          // +0x10 left
-    *reinterpret_cast<uint64_t*>(node + 6) = 0;          // +0x18 right
-    node[8] = 0;                                          // +0x20 balance/height (4 bytes)
+    int32_t k = *key;
+    node->parent = parent;                 // +0x08
+    node->key = k;                         // +0x00
+    node->left = nullptr;                  // +0x10
+    node->right = nullptr;                 // +0x18
+    node->balance = 0;                     // +0x20 / +0x22: one dword store (H7: two stores)
+    node->height = 0;
     return node;
 }
 
-// 0x14001cc40 — alloc+init a 0x30 AVL node (Layout B). param_2 -> 3-int key prefix,
-// param_3 -> parent. Returns the new node, or null on OOM.
-extern "C" uint32_t* Pf_AvlNewNodeB_cc40(uint64_t /*param_1*/, uint32_t* param_2, uint64_t param_3)
+// 0x14001cc40 — alloc+init a 0x30 node. RCX is never read; RDX -> the 3-int key,
+// R8 = parent. Returns the new node, or null on OOM.
+AvlNode30* AvlNewNode30(const int32_t* key, AvlNode30* parent)
 {
-    uint32_t* node = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+    AvlNode30* node = static_cast<AvlNode30*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (node == nullptr) {
         return nullptr;
     }
-    node[0] = param_2[0];                                // +0x00 key1
-    node[1] = param_2[1];                                // +0x04 key2
-    node[2] = param_2[2];                                // +0x08 key3
-    *reinterpret_cast<uint64_t*>(node + 4) = param_3;    // +0x10 parent
-    *reinterpret_cast<uint64_t*>(node + 6) = 0;          // +0x18 left
-    *reinterpret_cast<uint64_t*>(node + 8) = 0;          // +0x20 right
-    node[10] = 0;                                        // +0x28 balance/height (4 bytes)
+    node->key0 = key[0];                   // +0x00
+    node->key1 = key[1];                   // +0x04
+    node->key2 = key[2];                   // +0x08
+    node->parent = parent;                 // +0x10
+    node->left = nullptr;                  // +0x18
+    node->right = nullptr;                 // +0x20
+    node->balance = 0;                     // +0x28 / +0x2a: one dword store (H7: two stores)
+    node->height = 0;
     return node;
 }
 
@@ -442,214 +265,230 @@ extern "C" uint32_t* Pf_AvlNewNodeB_cc40(uint64_t /*param_1*/, uint32_t* param_2
 // Inserts
 // ===========================================================================
 
-// The inserts call 0x14001cc40 Pf_AvlNewNodeB_cc40 / 0x140013480 Pf_AvlRebalanceB_13480
-// (Layout B) and 0x14001a680 Pf_AvlNewNodeA_a680 / 0x14001a8c0 Pf_AvlRebalanceA_a8c0
-// (Layout A) by name.
-
-// 0x14001c940 — BST insert + rebalance for Layout B (0x30-node). param_1 = tree head
-// (root ptr at [0], count int at [1] == +0x08); param_2 = out-node; param_3 = key prefix
-// (uint key1, key2, key3). Ordered by (key1, key2). Calls cc40 (alloc) and 13480 (rebalance).
-extern "C" uint64_t* Pf_BstInsertB_c940(int64_t* param_1, uint64_t* param_2, uint32_t* param_3)
+// 0x14001c940 — insert-or-find for a 0x30 node tree ordered by (key0, key1). tree =
+// {root, count}; out = the node found or made; key = {key0, key1, key2}. Calls
+// 0x14001cc40 (alloc) and 0x140013480 (rebalance).
+AvlNode30** AvlInsert30(AvlTreeHead<AvlNode30>* tree, AvlNode30** out, const int32_t* key)
 {
-    uint32_t  key;     // uVar1
-    int32_t   curKey;  // iVar2
-    int32_t*  cur;     // piVar3
-    int32_t*  walk;    // piVar4
-    uint32_t* fresh;   // puVar5
-    uint32_t* nn;      // puVar6
-    int32_t*  local_res8;
+    int32_t    k;
+    int32_t    curKey;
+    AvlNode30* cur;
+    AvlNode30* walk;
+    AvlNode30* fresh;
+    AvlNode30* nn;
+    AvlNode30* local_res8;
 
-
-    if (reinterpret_cast<int32_t*>(*param_1) == nullptr) {
-        fresh = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+    if (tree->root == nullptr) {
+        fresh = static_cast<AvlNode30*>(System::MemoryAllocator::MemAlloc(0x30, 8));
         if (fresh == nullptr) {
-            *param_1 = 0;
-            *param_2 = 0;
+            tree->root = nullptr;
+            *out = nullptr;
         } else {
-            key = *param_3;
-            *param_2 = reinterpret_cast<uint64_t>(fresh);
-            fresh[0] = key;
-            fresh[1] = param_3[1];
-            fresh[2] = param_3[2];
-            fresh[4] = 0;   // +0x10 parent
-            fresh[5] = 0;
-            fresh[6] = 0;   // +0x18 left
-            fresh[7] = 0;
-            fresh[8] = 0;   // +0x20 right
-            fresh[9] = 0;
-            fresh[10] = 0;  // +0x28 balance/height
-            *param_1 = reinterpret_cast<int64_t>(fresh);
+            k = key[0];
+            *out = fresh;
+            fresh->key0 = k;
+            fresh->key1 = key[1];
+            fresh->key2 = key[2];
+            fresh->parent = nullptr;
+            fresh->left = nullptr;
+            fresh->right = nullptr;
+            fresh->balance = 0;            // +0x28 / +0x2a: one dword store (H7: two stores)
+            fresh->height = 0;
+            tree->root = fresh;
         }
     } else {
-        key = *param_3;
-        walk = reinterpret_cast<int32_t*>(*param_1);
+        k = key[0];
+        walk = tree->root;
         do {
-            while (local_res8 = walk, cur = local_res8, curKey = *local_res8,
-                   curKey <= (int32_t)key) {
-                if ((int32_t)key <= curKey) {
-                    if ((int32_t)param_3[1] < local_res8[1]) break;
-                    if (((int32_t)key <= curKey) &&
-                        (((int32_t)key < curKey) || ((int32_t)param_3[1] <= local_res8[1]))) {
-                        *param_2 = reinterpret_cast<uint64_t>(local_res8);
-                        return param_2;
+            while (local_res8 = walk, cur = local_res8, curKey = local_res8->key0,
+                   curKey <= k) {
+                if (k <= curKey) {
+                    if (key[1] < local_res8->key1) break;
+                    if ((k <= curKey) &&
+                        ((k < curKey) || (key[1] <= local_res8->key1))) {
+                        *out = local_res8;
+                        return out;
                     }
                 }
-                walk = *reinterpret_cast<int32_t**>(local_res8 + 8);   // +0x20 right
-                if (*reinterpret_cast<int32_t**>(local_res8 + 8) == nullptr) {
-                    nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
-                    *reinterpret_cast<uint32_t**>(cur + 8) = nn;       // cur->right = nn
+                walk = local_res8->right;
+                if (local_res8->right == nullptr) {
+                    nn = AvlNewNode30(key, local_res8);
+                    cur->right = nn;
                     goto LAB_14001ca2a;
                 }
             }
-            walk = *reinterpret_cast<int32_t**>(local_res8 + 6);       // +0x18 left
-        } while (*reinterpret_cast<int32_t**>(local_res8 + 6) != nullptr);
-        nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
-        *reinterpret_cast<uint32_t**>(cur + 6) = nn;                   // cur->left = nn
+            walk = local_res8->left;
+        } while (local_res8->left != nullptr);
+        nn = AvlNewNode30(key, local_res8);
+        cur->left = nn;
 LAB_14001ca2a:
-        Pf_AvlRebalanceB_13480(param_1, reinterpret_cast<int64_t*>(&local_res8));
-        *param_2 = reinterpret_cast<uint64_t>(nn);
+        AvlRebalance(&tree->root, &local_res8);
+        *out = nn;
     }
-    *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08
-    return param_2;
+    tree->count = tree->count + 1;
+    return out;
 }
 
-// 0x14001a4f0 — AVL insert recursive + rebalance for Layout A (0x28-node). param_1 = tree
-// head (root ptr at [0], count int at +0x08); param_2 = out-node; param_3 = single uint key.
-// Calls a680 (alloc) and a8c0 (rebalance).
-extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3)
+// 0x14001a4f0 — insert-or-find for a 0x28 node tree ordered by its int key. Calls
+// 0x14001a680 (alloc) and 0x14001a8c0 (rebalance).
+AvlNode28** AvlInsert28(AvlTreeHead<AvlNode28>* tree, AvlNode28** out, const int32_t* key)
 {
-    uint32_t  key;     // uVar1
-    int32_t*  cur;     // piVar2
-    int32_t*  walk;    // piVar3
-    uint32_t* fresh;   // puVar4
-    uint32_t* nn;      // puVar5
-    int32_t*  local_res8;
+    int32_t    k;
+    AvlNode28* cur;
+    AvlNode28* walk;
+    AvlNode28* fresh;
+    AvlNode28* nn;
+    AvlNode28* local_res8;
 
-
-    if (reinterpret_cast<int32_t*>(*param_1) == nullptr) {
-        fresh = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+    if (tree->root == nullptr) {
+        fresh = static_cast<AvlNode28*>(System::MemoryAllocator::MemAlloc(0x28, 8));
         if (fresh == nullptr) {
-            *param_1 = 0;
-            *param_2 = 0;
+            tree->root = nullptr;
+            *out = nullptr;
         } else {
-            fresh[0] = *param_3;   // +0x00 key
-            fresh[2] = 0;          // +0x08 parent
-            fresh[3] = 0;
-            fresh[4] = 0;          // +0x10 left
-            fresh[5] = 0;
-            fresh[6] = 0;          // +0x18 right
-            fresh[7] = 0;
-            fresh[8] = 0;          // +0x20 balance/height
-            *param_1 = reinterpret_cast<int64_t>(fresh);
-            *param_2 = reinterpret_cast<uint64_t>(fresh);
+            fresh->key = *key;
+            fresh->parent = nullptr;
+            fresh->left = nullptr;
+            fresh->right = nullptr;
+            fresh->balance = 0;            // +0x20 / +0x22: one dword store (H7: two stores)
+            fresh->height = 0;
+            tree->root = fresh;
+            *out = fresh;
         }
     } else {
-        key = *param_3;
-        walk = reinterpret_cast<int32_t*>(*param_1);
+        k = *key;
+        walk = tree->root;
         do {
-            while (local_res8 = walk, cur = local_res8, *local_res8 <= (int32_t)key) {
-                if ((int32_t)key <= *local_res8) {
-                    *param_2 = reinterpret_cast<uint64_t>(local_res8);
-                    return param_2;
+            while (local_res8 = walk, cur = local_res8, local_res8->key <= k) {
+                if (k <= local_res8->key) {
+                    *out = local_res8;
+                    return out;
                 }
-                walk = *reinterpret_cast<int32_t**>(local_res8 + 6);   // +0x18 right
-                if (*reinterpret_cast<int32_t**>(local_res8 + 6) == nullptr) {
-                    nn = Pf_AvlNewNodeA_a680((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
-                    *reinterpret_cast<uint32_t**>(cur + 6) = nn;       // cur->right = nn
+                walk = local_res8->right;
+                if (local_res8->right == nullptr) {
+                    nn = AvlNewNode28(key, local_res8);
+                    cur->right = nn;
                     goto LAB_14001a5b5;
                 }
             }
-            walk = *reinterpret_cast<int32_t**>(local_res8 + 4);       // +0x10 left
-        } while (*reinterpret_cast<int32_t**>(local_res8 + 4) != nullptr);
-        nn = Pf_AvlNewNodeA_a680((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
-        *reinterpret_cast<uint32_t**>(cur + 4) = nn;                   // cur->left = nn
+            walk = local_res8->left;
+        } while (local_res8->left != nullptr);
+        nn = AvlNewNode28(key, local_res8);
+        cur->left = nn;
 LAB_14001a5b5:
-        Pf_AvlRebalanceA_a8c0(param_1, reinterpret_cast<int64_t*>(&local_res8));
-        *param_2 = reinterpret_cast<uint64_t>(nn);
+        AvlRebalance(&tree->root, &local_res8);
+        *out = nn;
     }
-    *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08
-    return param_2;
+    tree->count = tree->count + 1;
+    return out;
 }
 
 // ===========================================================================
-// PathGraph cost-cache helpers (CitizenBehavior path-distance graph)
+// PathGraph cost cache (CitizenBehavior path-distance graph)
 // ===========================================================================
-// These two live with the AVL/BST family because they operate on the same
-// Layout-B (0x30) nodes and the pairs scratch header used by the pathgraph.
-// Consumed by CitizenBehavior_ProcessPaths / _BuildPathGraph
-// (code/Game/Entity/citizenbehavior.cpp), registered via
-// standalone/reg_citizen_25_tick.cpp.
-
-// PathBST_Insert calls 0x14001cc40 Pf_AvlNewNodeB_cc40 and 0x14000e360
-// CitizenAI_Reg_helper_e360 (the AVL rebalance walker, Layout B) by name.
-
-// 0x140025a10 — PathBST_Insert: insert-or-find in the region-pair cost-cache tree
-// at pg+0x18 (Layout B 0x30-node). param_1 = tree head {root@+0, count@+8};
-// param_2 = out-node; param_3 = 3-int key {regionHigh, regionLow, cost}. Ordered by
-// (key0, key1). Structurally identical to Pf_BstInsertB_c940 but allocates via cc40
-// and rebalances via TradeDescription_impl_e360 (0x14000e360) rather than 13480.
-extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3)
+// 0x140025a10 — insert-or-find in the region-pair cost tree at pathGraph+0x18 (0x30
+// nodes). key = {regionHigh, regionLow, cost}, ordered by (key0, key1). Structurally
+// 0x14001c940, but it rebalances through 0x14000e360 instead of 0x140013480.
+AvlNode30** PathCostTreeInsert(AvlTreeHead<AvlNode30>* tree, AvlNode30** out, const int32_t* key)
 {
-    uint32_t  key;
-    int32_t   curKey;
-    int32_t*  cur;
-    int32_t*  walk;
-    uint32_t* fresh;
-    uint32_t* nn;
-    int32_t*  local_res8;
+    int32_t    k;
+    int32_t    curKey;
+    AvlNode30* cur;
+    AvlNode30* walk;
+    AvlNode30* fresh;
+    AvlNode30* nn;
+    AvlNode30* local_res8;
 
-
-    if (reinterpret_cast<int32_t*>(*param_1) == nullptr) {
-        fresh = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x30, 8));
+    if (tree->root == nullptr) {
+        fresh = static_cast<AvlNode30*>(System::MemoryAllocator::MemAlloc(0x30, 8));
         if (fresh == nullptr) {
-            *param_1 = 0;
-            *param_2 = 0;
+            tree->root = nullptr;
+            *out = nullptr;
         } else {
-            key = *param_3;
-            *param_2 = reinterpret_cast<uint64_t>(fresh);
-            fresh[0] = key;
-            fresh[1] = param_3[1];
-            fresh[2] = param_3[2];
-            fresh[4] = 0;   // +0x10 parent
-            fresh[5] = 0;
-            fresh[6] = 0;   // +0x18 left
-            fresh[7] = 0;
-            fresh[8] = 0;   // +0x20 right
-            fresh[9] = 0;
-            fresh[10] = 0;  // +0x28 balance/height
-            *param_1 = reinterpret_cast<int64_t>(fresh);
+            k = key[0];
+            *out = fresh;
+            fresh->key0 = k;
+            fresh->key1 = key[1];
+            fresh->key2 = key[2];
+            fresh->parent = nullptr;
+            fresh->left = nullptr;
+            fresh->right = nullptr;
+            fresh->balance = 0;            // +0x28 / +0x2a: one dword store (H7: two stores)
+            fresh->height = 0;
+            tree->root = fresh;
         }
     } else {
-        key = *param_3;
-        walk = reinterpret_cast<int32_t*>(*param_1);
+        k = key[0];
+        walk = tree->root;
         do {
-            while (local_res8 = walk, cur = local_res8, curKey = *local_res8,
-                   curKey <= (int32_t)key) {
-                if ((int32_t)key <= curKey) {
-                    if ((int32_t)param_3[1] < local_res8[1]) break;
-                    if (((int32_t)key <= curKey) &&
-                        (((int32_t)key < curKey) || ((int32_t)param_3[1] <= local_res8[1]))) {
-                        *param_2 = reinterpret_cast<uint64_t>(local_res8);
-                        return param_2;
+            while (local_res8 = walk, cur = local_res8, curKey = local_res8->key0,
+                   curKey <= k) {
+                if (k <= curKey) {
+                    if (key[1] < local_res8->key1) break;
+                    if ((k <= curKey) &&
+                        ((k < curKey) || (key[1] <= local_res8->key1))) {
+                        *out = local_res8;
+                        return out;
                     }
                 }
-                walk = *reinterpret_cast<int32_t**>(local_res8 + 8);   // +0x20 right
-                if (*reinterpret_cast<int32_t**>(local_res8 + 8) == nullptr) {
-                    nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
-                    *reinterpret_cast<uint32_t**>(cur + 8) = nn;       // cur->right = nn
+                walk = local_res8->right;
+                if (local_res8->right == nullptr) {
+                    nn = AvlNewNode30(key, local_res8);
+                    cur->right = nn;
                     goto LAB_140025afa;
                 }
             }
-            walk = *reinterpret_cast<int32_t**>(local_res8 + 6);       // +0x18 left
-        } while (*reinterpret_cast<int32_t**>(local_res8 + 6) != nullptr);
-        nn = Pf_AvlNewNodeB_cc40((uint64_t)key, param_3, reinterpret_cast<uint64_t>(local_res8));
-        *reinterpret_cast<uint32_t**>(cur + 6) = nn;                   // cur->left = nn
+            walk = local_res8->left;
+        } while (local_res8->left != nullptr);
+        nn = AvlNewNode30(key, local_res8);
+        cur->left = nn;
 LAB_140025afa:
-        CitizenAI_Reg_helper_e360(param_1, reinterpret_cast<int64_t*>(&local_res8));   // 0x14000e360
-        *param_2 = reinterpret_cast<uint64_t>(nn);
+        // LEFT: 0x14000e360's C declaration (Component/exe_bodies.h, block COMP) takes
+        // int64_t*; the two arguments are the tree root slot and the cursor.
+        CitizenAI_Reg_helper_e360(reinterpret_cast<int64_t*>(&tree->root),
+                                  reinterpret_cast<int64_t*>(&local_res8));   // 0x14000e360
+        *out = nn;
     }
-    *reinterpret_cast<int32_t*>(param_1 + 1) = (int32_t)param_1[1] + 1;   // ++count at +0x08
-    return param_2;
+    tree->count = tree->count + 1;
+    return out;
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+// B4 FORWARD: 1 outside caller (Component/citizenai_housing_idle.cpp)
+extern "C" int64_t Pf_AvlRotateB_e450(int64_t* root, int64_t node) {
+    return reinterpret_cast<int64_t>(AvlRotateLeft(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));
+}
+// B4 FORWARD: 1 outside caller (Component/citizenai_housing_idle.cpp)
+extern "C" int64_t Pf_AvlRotateB_e580(int64_t* root, int64_t node) {
+    return reinterpret_cast<int64_t>(AvlRotateRight(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30*>(node)));
+}
+// B4 FORWARD: 1 outside caller (Player/pathtool_setselected.cpp)
+extern "C" int64_t Pf_AvlRotateL_14c70(int64_t* root, int64_t node) {
+    return reinterpret_cast<int64_t>(AvlRotateLeft(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28*>(node)));
+}
+// B4 FORWARD: 1 outside caller (Player/pathtool_setselected.cpp)
+extern "C" int64_t Pf_AvlRotateR_14da0(int64_t* root, int64_t node) {
+    return reinterpret_cast<int64_t>(AvlRotateRight(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28*>(node)));
+}
+// B4 FORWARD: 4 outside callers (citizenai_work_scheduler.cpp, townhallui.cpp,
+// goals_serialize.cpp, work_leaf_clear.cpp)
+extern "C" void Pf_AvlRebalanceB_13480(int64_t* root, int64_t* node) {
+    AvlRebalance(reinterpret_cast<AvlNode30**>(root), reinterpret_cast<AvlNode30**>(node));
+}
+// B4 FORWARD: 4 outside callers (citizenai_leisure.cpp, citizenai_work_scheduler.cpp,
+// goals_serialize.cpp, keystone_a_removalcalcpath.cpp)
+extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node) {
+    AvlRebalance(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28**>(node));
+}
+// B4 FORWARD: 2 outside callers (Component/terraformcomponent.cpp, Player/roadtool_calcpath.cpp)
+extern "C" uint64_t* Pf_AvlInsertA_a4f0(int64_t* param_1, uint64_t* param_2, uint32_t* param_3) {
+    return reinterpret_cast<uint64_t*>(AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(param_1), reinterpret_cast<AvlNode28**>(param_2), reinterpret_cast<const int32_t*>(param_3)));
+}
+// B4 FORWARD: 1 outside caller (Entity/citizenbehavior.cpp)
+extern "C" uint64_t* PathBST_Insert_25a10(int64_t* param_1, uint64_t* param_2, uint32_t* param_3) {
+    return reinterpret_cast<uint64_t*>(PathCostTreeInsert(reinterpret_cast<AvlTreeHead<AvlNode30>*>(param_1), reinterpret_cast<AvlNode30**>(param_2), reinterpret_cast<const int32_t*>(param_3)));
 }
 
 // 0x140025b30 — PathPairs_Clear: reset the pairs scratch array (pg+0x00 header
@@ -659,7 +498,9 @@ LAB_140025afa:
 // a single count reset — capacity (>=0) is never < newCount(0), so there is no
 // realloc/copy/free and the decompiled `< 0` growth loops are pure signedness
 // artifacts of the lost argument (intentionally NOT transcribed).
+// B4 FORWARD: 1 outside caller (Entity/citizenbehavior.cpp), which hands the PathGraph as
+// int64_t*.
 extern "C" void PathPairs_Clear_25b30(int64_t* param_1)
 {
-    *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(param_1) + 0x8) = 0;
+    reinterpret_cast<PathGraph*>(param_1)->m_pairCount = 0;
 }

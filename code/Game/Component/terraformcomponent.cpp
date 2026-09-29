@@ -340,12 +340,10 @@ void TerraformComponent_FootprintPass(TerraformComponent* self) {
             Pf_FineCellDirty_a8c90(*reinterpret_cast<int64_t*>(
                     reinterpret_cast<uintptr_t>(tileGrid) + 0x70),
                 idx % *tileGrid, idx / *tileGrid);   // 0x1400a8c90
-            // The door typed args 3/4 as (int, uint64_t); the body declares them void*:
-            // the same register values, cast at the call.
+            // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only.
             Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(
                     reinterpret_cast<uintptr_t>(tileGrid) + 0x68),
-                static_cast<uint32_t>(idx), reinterpret_cast<void*>(static_cast<uintptr_t>(6)),
-                nullptr);   // 0x1400a6fe0
+                static_cast<int>(idx), 6);   // 0x1400a6fe0
             TerraformArrayPush(&self->tileRecord, &self->tileCount, &self->tileCap, &idx, 4);
             ++converted;
         }
@@ -498,8 +496,7 @@ void TerraformComponent::OnRemove() {
             // Set terrain type (0x1400a6fe0; args 3/4 cast as above)
             {
                 uintptr_t threadPtr = *(uintptr_t*)((uintptr_t)tileGrid + 0x68);
-                Pf_EnqueueCmd2_a6fe0(static_cast<int64_t>(threadPtr), static_cast<uint32_t>(tileIndex),
-                                     reinterpret_cast<void*>(static_cast<uintptr_t>(10)), nullptr);
+                Pf_EnqueueCmd2_a6fe0(static_cast<int64_t>(threadPtr), static_cast<int>(tileIndex), 10);
             }
         }
     }

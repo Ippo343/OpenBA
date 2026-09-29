@@ -12,9 +12,9 @@
 // simplify, or reorder. None of these are exercised on the autostart path, so a
 // wrong port is undetectable silent corruption — strictly worse than unregistered.
 //
-//   0x1400a5ac0  region-pair BST lookup (key0,key1) -> value index             [loop]
-//   0x1400a5ec0  neighbour tile index by 8-direction code
-//   0x1400a6030  movement-cost octile/diagonal heuristic
+//   0x1400a5ec0  neighbour tile index by 8-direction code   (GridPathSearch::Neighbour)
+//   0x1400a6030  movement-cost octile/diagonal heuristic    (GridPathSearch::Heuristic)
+//   (0x1400a5ac0, the region-pair lookup, is RegionPairCache::Find in action_pf_region.cpp)
 //   0x1400aa810  ray/triangle (Moller-Trumbore) barycentric intersect (float)
 //   0x1400ae180  edge-mask -> tile-shape LUT index (DAT_1401c22d0)
 //   0x14009d0a0  expanding-ring spiral search for nearest valid region cell     [loop]
@@ -22,6 +22,8 @@
 //   0x140018dd0  quadtree/box-walker init (zeroes ~0xFF*0x24 stack records)
 //   0x140053ca0  pasture/migration target picker (collect+random-pick cells)    [loop]
 
+#include "Action/PathSearch.h"     // GridPathSearch
+#include "Game/Map.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -52,54 +54,14 @@ static inline float C_one()    { return 1.0f; }
 } // namespace
 
 // ============================================================
-// 0x1400a5ac0 — region-pair BST lookup: (a,b) ordered -> value index
+// 0x1400a5ec0 — neighbour cell by 8-direction code
 // ============================================================
-// Self+0x28 = BST root; nodes: +0x00 key0(int,hi), +0x04 key1(int,lo),
-// +0x08 valueIdx(int), +0x18 left, +0x20 right. Self+0x18 = value array base
-// (stride 0x18); result = *(int*)(arr + valueIdx*0x18 + 8). Orders (a,b) so
-// hi >= lo before the descent. Returns 0xffffffff if not found.
-uint32_t Pf_RegionPairLookup_5ac0(uintptr_t self, int a, int b) {
-    int hi = a, lo = b;
-    if (a < b) { hi = b; lo = a; }
-    uint8_t* node = *reinterpret_cast<uint8_t**>(self + 0x28);
-    while (true) {
-        if (node == nullptr) return 0xffffffffu;
-        int key0 = *reinterpret_cast<int*>(node + 0x00);
-        if (hi < key0) {                       // go left
-            node = *reinterpret_cast<uint8_t**>(node + 0x18);
-            continue;
-        }
-        if (hi > key0) {                       // go right
-            node = *reinterpret_cast<uint8_t**>(node + 0x20);
-            continue;
-        }
-        // hi == key0: compare lo against key1
-        int key1 = *reinterpret_cast<int*>(node + 0x04);
-        if (lo < key1) {                       // go left
-            node = *reinterpret_cast<uint8_t**>(node + 0x18);
-            continue;
-        }
-        if (lo > key1) {                       // go right
-            node = *reinterpret_cast<uint8_t**>(node + 0x20);
-            continue;
-        }
-        // exact match (hi==key0 && lo==key1)
-        if (node == nullptr) return 0xffffffffu;
-        int idx = *reinterpret_cast<int*>(node + 0x08);
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(self + 0x18);
-        return *reinterpret_cast<uint32_t*>(arr + (int64_t)idx * 0x18 + 8);
-    }
-}
-
-// ============================================================
-// 0x1400a5ec0 — neighbour tile index by 8-direction code
-// ============================================================
-// self+0xd8 = grid width (square). Decompose linear index into (row,col);
-// apply the direction delta (case 0..7); bounds-check; optional blocked-bit
-// gate at self+0xd6 (mask 0x80 in the byte map at self+0xe0); finally only
-// return the cell if its passable bit (self+0xd0 >> (cellByte&0x1f) & 1) is set.
-int Pf_NeighbourTile_5ec0(uintptr_t self, int index, uint32_t dir) {
-    int w = *reinterpret_cast<int*>(self + 0xd8);
+// Decompose the cell into (row, col) on the square grid of `width`; apply the direction
+// delta (case 0..7); bounds-check; skip a cell whose blocked bit (0x80) is set while
+// respectBlocked; finally only return the cell if its terrain type's bit is set in
+// passableTypes.
+int GridPathSearch::Neighbour(int index, uint32_t dir) const {
+    int w = width;
     int row = index / w;
     int col = index % w;
     switch (dir) {
@@ -115,10 +77,10 @@ int Pf_NeighbourTile_5ec0(uintptr_t self, int index, uint32_t dir) {
     }
     if ((-1 < col) && (col < w) && (-1 < row) && (row < w)) {
         int cell = w * row + col;
-        char gateFlag = *reinterpret_cast<char*>(self + 0xd6);
-        uint8_t* byteMap = *reinterpret_cast<uint8_t**>(self + 0xe0);
+        char gateFlag = static_cast<char>(respectBlocked);
+        const uint8_t* byteMap = cellFlags;
         if (gateFlag == 0 || (byteMap[cell] & 0x80) == 0) {
-            uint32_t passMask = *reinterpret_cast<uint32_t*>(self + 0xd0);
+            uint32_t passMask = passableTypes;
             uint8_t cb = byteMap[cell];
             if (((passMask >> (cb & 0x1f)) & 1) != 0)
                 return cell;
@@ -131,11 +93,10 @@ int Pf_NeighbourTile_5ec0(uintptr_t self, int index, uint32_t dir) {
 // ============================================================
 // 0x1400a6030 — movement-cost octile / diagonal heuristic
 // ============================================================
-// self+0xd8 = grid width. dx,dy = |col delta|,|row delta|. If self+0xd4 set:
-// octile (10*(dx+dy) - 6*min). If self+0xd5 set: Manhattan*10 ((dx+dy)*10).
-// Else: Chebyshev*10 (max*10).
-int Pf_MoveHeuristic_6030(uintptr_t self, int from, int to) {
-    int w = *reinterpret_cast<int*>(self + 0xd8);
+// dx,dy = |col delta|,|row delta| on the grid of `width`. allowDiagonal: octile
+// (10*(dx+dy) - 6*min). manhattan: (dx+dy)*10. Else: Chebyshev*10 (max*10).
+int GridPathSearch::Heuristic(int from, int to) const {
+    int w = width;
     uint32_t udx = (uint32_t)(from % w - to % w);
     uint32_t udy = (uint32_t)(from / w - to / w);
     uint32_t s;
@@ -143,12 +104,12 @@ int Pf_MoveHeuristic_6030(uintptr_t self, int from, int to) {
     int dx = (int)((udx ^ s) - s);          // abs(dx)
     s = (uint32_t)((int)udy >> 0x1f);
     int dy = (int)((udy ^ s) - s);          // abs(dy)
-    if (*reinterpret_cast<char*>(self + 0xd4) != 0) {
+    if (static_cast<char>(allowDiagonal) != 0) {
         int mn = dy;
         if (dx < dy) mn = dx;
         return (dy + dx) * 10 + mn * -6;
     }
-    if (*reinterpret_cast<char*>(self + 0xd5) != 0) {
+    if (static_cast<char>(manhattan) != 0) {
         return (dy + dx) * 10;
     }
     if (dy < dx) dy = dx;
@@ -271,17 +232,16 @@ int Pf_TileShapeLut_ae180(void* /*self*/, char p2, char p3, char p4, char p5,
 // neighbour's regionId. Returns the start cell's regionId if it was already >= 0,
 // else -1 after exhausting radius 3.
 // Literal transcription of the Ghidra decompile (index aliasing preserved).
-int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
-    int iVar5 = *param_1;
+int Map::NearestRegionId(int param_2) const {
+    int iVar5 = size;
     int64_t lVar16 = (int64_t)iVar5;
-    // FIX (was `param_1 + 0x20/4` = byte 0x20, a NULL field → the documented "null
-    // Game+0x20 region-cell array" crash). Ghidra `param_1 + 0x20` on int* = byte 0x80;
-    // this is the populated cell array. Matches Pf_IsDstReachable_f810's read exactly.
-    int64_t lVar6 = *reinterpret_cast<int64_t*>(param_1 + 0x20);
+    // Ghidra's `param_1 + 0x20` on int* is byte 0x80: the cell array (the same array
+    // Pf_IsDstReachable_f810 reads).
+    const MapCell* lVar6 = cells;
     uint32_t uVar8 = (uint32_t)(param_2 / iVar5);
     int iVar11 = param_2 % iVar5;
     uint64_t uVar18 = (uint64_t)(int)uVar8;
-    int iVar9 = *reinterpret_cast<int*>(lVar6 + 0x18 + (int64_t)param_2 * 0x30);
+    int iVar9 = lVar6[param_2].regionId;
     if (iVar9 < 0) {
         int64_t lVar21 = (int64_t)iVar11;
         iVar9 = 1;
@@ -308,17 +268,13 @@ int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
                     if ((-1 < lVar17) && (iVar3 < iVar5)) {
                         if ((-1 < lVar4) &&
                             ((iVar2 < iVar5 &&
-                              (-1 < *reinterpret_cast<int*>(
-                                        lVar6 + 0x18 + (lVar16 * lVar17 + lVar4) * 0x30))))) {
-                            return *reinterpret_cast<int*>(
-                                lVar6 + 0x18 + (lVar16 * iVar3 + (int64_t)iVar2) * 0x30);
+                              (-1 < lVar6[(lVar16 * lVar17 + lVar4)].regionId)))) {
+                            return lVar6[(lVar16 * iVar3 + (int64_t)iVar2)].regionId;
                         }
                         int64_t lVar12 = (lVar21 - uVar18) + uVar13;
                         if (((-1 < lVar12) && (iVar1 < iVar5)) &&
-                            (-1 < *reinterpret_cast<int*>(
-                                      lVar6 + 0x18 + (lVar16 * lVar17 + lVar12) * 0x30))) {
-                            return *reinterpret_cast<int*>(
-                                lVar6 + 0x18 + (lVar16 * iVar3 + (int64_t)iVar1) * 0x30);
+                            (-1 < lVar6[(lVar16 * lVar17 + lVar12)].regionId)) {
+                            return lVar6[(lVar16 * iVar3 + (int64_t)iVar1)].regionId;
                         }
                     }
                     uint32_t uVar7 = 0;
@@ -326,15 +282,12 @@ int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
                         (((-1 < (int64_t)uVar15 &&
                            (((int)uVar23 < iVar5 &&
                              (uVar7 = uVar23,
-                              -1 < *reinterpret_cast<int*>(
-                                       lVar6 + 0x18 + (lVar16 * (int64_t)uVar15 + lVar10) * 0x30))))) ||
+                              -1 < lVar6[(lVar16 * (int64_t)uVar15 + lVar10)].regionId)))) ||
                           ((-1 < (int64_t)uVar13 &&
                             (((int)uVar22 < iVar5 &&
                               (uVar7 = uVar22,
-                               -1 < *reinterpret_cast<int*>(
-                                        lVar6 + 0x18 + (lVar16 * (int64_t)uVar13 + lVar10) * 0x30))))))))) {
-                        return *reinterpret_cast<int*>(
-                            lVar6 + 0x18 + ((int)uVar7 * lVar16 + (int64_t)iVar20) * 0x30);
+                               -1 < lVar6[(lVar16 * (int64_t)uVar13 + lVar10)].regionId)))))))) {
+                        return lVar6[((int)uVar7 * lVar16 + (int64_t)iVar20)].regionId;
                     }
                     lVar10 = lVar10 + 1;
                     iVar20 = iVar20 + 1;
@@ -575,4 +528,12 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
     }
     System::MemoryAllocator::MemFree(pvVar5);
     return iVar2_result;
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+// B4 FORWARD: 1 outside caller (Work/buildstructure.cpp)
+int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
+    return reinterpret_cast<Map*>(param_1)->NearestRegionId(param_2);
 }
