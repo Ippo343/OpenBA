@@ -33,7 +33,6 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll);  // 0x1
 void AttendanceComponent_ReleaseLink1650(void* workerP);  // 0x140111650
 void AttendanceComponent_ReleaseLink59b0(void* workerP);  // 0x1401159b0
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0x140002e10 (returns outPtr)
-void AttendanceComponent_ProcessQueue(void* selfP);  // 0x140043f60
 
 // ---- buildcomponent.cpp
 int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);  // 0x140017550
