@@ -262,7 +262,7 @@ public:
     void* GetPreviewData(RtIO::ModArray* ret) const;    // 0x180025580
 
     // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z 0x1800b46b0
-    bool ReadPackfile(const RtSystem::Filename& path);
+    bool ReadPackfile(const System::Filename& path);
 
     // ---- ENDGAME B.3.4a closing: the last two PackageFile bodies ----------
     // Both lived in FileSystem's files (filesystem_openfile_win.cpp,

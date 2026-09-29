@@ -708,7 +708,7 @@ void Modification::RefreshList() {
         alignas(16) uint8_t pkgStorage[0xF0];
         IO::PackageFile* const pkgObj = ::new (static_cast<void*>(pkgStorage)) IO::PackageFile();
 
-        const bool read = pkgObj->IO::PackageFile::ReadPackfile(foundData[i]);   // 0x1800b46b0
+        const bool read = pkgObj->IO::PackageFile::ReadPackfile(Sys(foundData[i]));   // 0x1800b46b0
         // 0x1800af923 — `platform` (+0x74) non-zero means the package is not for
         // this build, and retail CLOSES THE FILE before discarding it. The
         // ReadPackfile-failed path does NOT close: there the file never opened.

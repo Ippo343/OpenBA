@@ -225,10 +225,6 @@ void RtSystem_Filename_AdjustDelimiters(Filename* self);
 // to reach the shipped body by accident
 // (reference_bypassed_port_needs_a_source_checker.md).
 namespace RtIO {
-extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem*, FileInfo*,
-                                              const RtSystem::Filename*);   // 0x1800ac880
-extern "C" bool      RtIo_FileSystem_ReadFile(FileSystem*, FileInfo*,
-                                              int32_t, void*);              // 0x1800ace00
 extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo*, const FileInfo*);      // 0x18000c200
 }  // namespace RtIO
 
@@ -253,9 +249,6 @@ constexpr size_t kOutCap        = 0x800;    // = 0x860 - 0x60
 
 // `?_singleton@FileSystem@IO@@0PEAV12@EA`  (0x1801fc6a8) — the global retail
 // loads into RSI at 0x1800b46e8 and RELOADS at 0x1800b478b.
-FileSystem** FileSystemSingletonCell() {
-    return reinterpret_cast<FileSystem**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-}
 
 // B3R RT-IO: the per-file MemAlloc / MemFree (0x1800c7a50 / 0x1800c7ad0) and
 // Array SetSize / SetSizeFill (0x180029510, 0x180029630, 0x1800298f0) helpers
@@ -440,7 +433,7 @@ bool ReadStringRaw(IO::CompressedStream* cs, uint8_t* buf60, String* tmp) {
 // ============================================================================
 namespace IO {
 
-bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
+bool PackageFile::ReadPackfile(const System::Filename& name) {
     // A member of `IO::X` must be DEFINED in a namespace ENCLOSING the class
     // (B34_BRIEFS section A.2), so this body cannot live inside `namespace
     // RtIO` where its helpers, typedefs and using-declarations do. ONE
@@ -451,23 +444,17 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // the line that was in the door, except the field reads that became
     // members and the parameter that became a reference.
     using namespace RtIO;
-    const Filename* const name = &nameRef;
 
     // ---- the re-entrancy flag (0x1800b46e8..0x1800b4795) -------------------
-    // `fs->platformExistsGate` (+0x19) is Exists()'s second gate. ReadPackfile
+    // `fs->_platformExistsGate` (+0x19) is Exists()'s second gate. ReadPackfile
     // forces it to 1 across the OPEN so the file is found on disk rather than
     // through the (still empty) packfile index, then restores the SAVED byte.
     // Retail RE-READS the singleton before restoring; reproduced.
-    // *** `RtIO::` IN FULL, AND THE COMPILER IS WHY. *** Inside this
-    // `namespace IO` block a bare `FileSystem` binds to the REAL CLASS
-    // `IO::FileSystem` (B.3.4 PACKAGE+FS commit 4) instead of to the POD the
-    // singleton cell and the two OpenFile/ReadFile doors are typed with. That
-    // is B34_RULES section 7.2's grep hazard, and it presents here as a build
-    // error rather than a silent rebind -- which is the whole reason the rule
-    // says to spell the POD namespace out.
-    RtIO::FileSystem* fs = *FileSystemSingletonCell();          // 1800b46e8
-    const uint8_t savedGate = fs->platformExistsGate;          // 1800b46ef
-    fs->platformExistsGate = 1;                                // 1800b46f9
+    // B.4 R-IO: the class, spelled `IO::` in full because the using-directive
+    // above also brings in the `RtIO::FileSystem` POD (B34_RULES section 7.2).
+    IO::FileSystem* fs = IO::FileSystem::_singleton;           // 1800b46e8
+    const uint8_t savedGate = fs->_platformExistsGate;         // 1800b46ef
+    fs->_platformExistsGate = 1;                               // 1800b46f9
 
     FileInfo* const fi =
         &_file   /* +0xC0, the embedded FileInfo */;
@@ -476,15 +463,15 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         // Deliberately uninitialised: retail hands OpenFile an untouched
         // `[RBP+0x10]` as the hidden return slot and OpenFile writes it.
         FileInfo opened;
-        RtIo_FileSystem_OpenFile(fs, &opened, name);           // 1800b4707
+        fs->OpenFile(&opened, name);                           // 1800b4707
         RtIo_FileInfo_Assign(fi, &opened);                     // 1800b471a
         // Retail releases +0x38 (_name1) FIRST, then +0x30 (_name0).
         RtString_ReleaseInline(&opened._name1);                // 1800b472e..4757
         RtString_ReleaseInline(&opened._name0);                // 1800b4762..478b
     }
 
-    fs = *FileSystemSingletonCell();                           // 1800b478b
-    fs->platformExistsGate = savedGate;                        // 1800b4792
+    fs = IO::FileSystem::_singleton;                           // 1800b478b
+    fs->_platformExistsGate = savedGate;                       // 1800b4792
 
     if (fi->handle == -1) {                                    // 1800b4795  CMP [RDI],-1
         return false;                                          // 1800b479a  XOR AL,AL
@@ -492,7 +479,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
 
     // ---- the header word, its sign bit, and the seek (§69) -----------------
     int32_t hdr = 0;
-    RtIo_FileSystem_ReadFile(fs, fi, 4, &hdr);                 // 1800b47b1
+    fs->ReadFile(*fi, 4, &hdr);                                // 1800b47b1
     const int32_t compressed = (hdr & static_cast<int32_t>(0x80000000)) ? 1 : 0;
                                                                // 1800b47b9  BT/CMOVC
     hdr &= 0x7fffffff;                                         // 1800b47ca  BTR
@@ -505,10 +492,10 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
 
     // ---- the compressed blob -----------------------------------------------
     int32_t blobLen = 0;
-    RtIo_FileSystem_ReadFile(fs, fi, 4, &blobLen);             // 1800b47f9
+    fs->ReadFile(*fi, 4, &blobLen);                            // 1800b47f9
     void* const blob = ::System::MemoryAllocator::MemAlloc(
         static_cast<uint64_t>(static_cast<int64_t>(blobLen)), 4);   // 1800b47fe MOVSXD
-    RtIo_FileSystem_ReadFile(fs, fi, blobLen, blob);           // 1800b4820
+    fs->ReadFile(*fi, blobLen, blob);                          // 1800b4820
 
     // ---- ONE CompressedMemoryStream, built in halves (§48) -----------------
     // Not two objects: the CompressedStream base ctor, then the class's own

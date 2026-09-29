@@ -248,9 +248,8 @@ FsCreateCounters g_fcc{};
 // registration lines, and delegates. No qualified `IO::` call is needed:
 // `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
 // B34_BRIEFS section A.1's re-entry hazard cannot arise.
-bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(self)->CreatePath(*path);
-}
+// B.4 R-IO: the `RtIo_FileSystem_CreatePath` door is gone; its caller calls
+// the member.
 
 // ============================================================================
 // IO::FileSystem::PlatformCreateFile(FileInfo&, Filename const&)
@@ -294,14 +293,8 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
 // path) form and `CloseFile` is called cross-file by file_stream.cpp,
 // text_file_stream_win.cpp, persistence_saveinfo_job.cpp and
 // persistence_worker_win.cpp — and its registration lines, unchanged.
-FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
-                                      const Filename* path) {
-    return reinterpret_cast<IO::FileSystem*>(self)->CreateFileW(ret, *path);
-}
-
-void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
-    reinterpret_cast<IO::FileSystem*>(self)->CloseFile(*info);
-}
+// B.4 R-IO: the `RtIo_FileSystem_CreateFileW` / `RtIo_FileSystem_CloseFile`
+// doors are gone; every caller calls the member on `IO::FileSystem::_singleton`.
 
 // Read by file_stream_cutover_probe.cpp, which prints attendance beside the
 // door verdicts so a reader cannot see one without the other.
@@ -368,9 +361,8 @@ bool FileSystem::CreatePath(const RtSystem::Filename& pathRef) const {
 }
 
 bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
-                                    const RtSystem::Filename& pathRef) {
+                                    const System::Filename& path) {
     RtIO::FileInfo* const info = &infoRef;
-    const RtSystem::Filename* const path = &pathRef;
     ++RtIO::g_fcc.platCreate;
 
     wchar_t tempDir[MAX_PATH];
@@ -424,7 +416,7 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     }
 
     // the CALLER's path -> _name1
-    RtIO::SysFile(info->_name1) = RtIO::Sys(*path);          // 1800adfea/f1
+    RtIO::SysFile(info->_name1) = path;                      // 1800adfea/f1
 
     ++RtIO::g_fcc.createOk;
     return true;                                             // 1800adff6
@@ -448,8 +440,7 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
 // by the bool.
 // ============================================================================
 RtIO::FileInfo* FileSystem::CreateFileW(RtIO::FileInfo* ret,
-                                        const RtSystem::Filename& pathRef) {
-    const RtSystem::Filename* const path = &pathRef;
+                                        const System::Filename& path) {
     ++RtIO::g_fcc.createFileW;
 
     ret->handle      = -1;          // 1800acc6c
@@ -464,7 +455,7 @@ RtIO::FileInfo* FileSystem::CreateFileW(RtIO::FileInfo* ret,
     ret->winHandle   = INVALID_HANDLE_VALUE;          // 1800acc91
     // +0x04 deliberately untouched, exactly as in ??0FileStream's prologue.
 
-    PlatformCreateFile(*ret, *path);         // 1800acca4 — result discarded
+    PlatformCreateFile(*ret, path);          // 1800acca4 — result discarded
 
     return ret;                              // 1800acca9
 }

@@ -433,6 +433,10 @@ static_assert(offsetof(FileSystem, packfileIndexCount)   == 0x48, "see field com
 
 namespace IO {
 
+// The packfile array's element (runtime/types/io/PackageFile.h, which includes
+// this header, so the class is declared here rather than included).
+class PackageFile;
+
 class FileSystem {
 public:
     // ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z        0x1800ab310
@@ -501,7 +505,7 @@ public:
     // private member would not let in. Making the doors `friend`s instead would
     // hide a real fact — that these two are reachable from outside the class in
     // our tree — behind a keyword.
-    bool PlatformCreateFile(RtIO::FileInfo& info, const RtSystem::Filename& path);
+    bool PlatformCreateFile(RtIO::FileInfo& info, const System::Filename& path);
     void PlatformCloseFile(RtIO::FileInfo& info);
     // ?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
     //                                                             0x1800acc50
@@ -512,7 +516,7 @@ public:
     // release — the `RtSystem::String` double-free trap from the other side.
     // The slot is raw bytes and the body placement-constructs the two Filenames
     // into it, exactly as retail's 0x1800acc82/8e do.
-    RtIO::FileInfo* CreateFileW(RtIO::FileInfo* ret, const RtSystem::Filename& path);
+    RtIO::FileInfo* CreateFileW(RtIO::FileInfo* ret, const System::Filename& path);
     // ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z            0x1800accc0
     void CloseFile(RtIO::FileInfo& info);
     // ---- commit 5b: the members whose doors live in the THREE §D-BOUND files
@@ -528,7 +532,7 @@ public:
     //                                                             0x1800ac880
     // Retail returns FileInfo by value; the member keeps the out-parameter for
     // the same reason `CreateFileW` does — see that declaration.
-    RtIO::FileInfo* OpenFile(RtIO::FileInfo* ret, const RtSystem::Filename& name);
+    RtIO::FileInfo* OpenFile(RtIO::FileInfo* ret, const System::Filename& name);
     // ?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z       0x1800ace00
     // RECURSIVE (0x1800ace7e re-enters itself with the containing package's
     // FileInfo). `ReadFile` is a plain function name in <windows.h>, not a
@@ -538,7 +542,7 @@ public:
     // ?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
     //                                                             0x1800adce0
     // `AEAA`, private in retail, public here for the door reason above.
-    bool PlatformOpenFile(RtIO::FileInfo& fi, const RtSystem::Filename& name);
+    bool PlatformOpenFile(RtIO::FileInfo& fi, const System::Filename& name);
 
     // -- filesystem_packages.cpp --------------------------------------------
     // ?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ  0x180007c10
@@ -591,7 +595,7 @@ public:
     uint8_t            _existsInPackfileGate;  // +0x18
     uint8_t            _platformExistsGate;    // +0x19
     uint8_t            _unknown1A[0x20 - 0x1A];
-    RtIO::PackageFileView**  _packfiles;       // +0x20
+    PackageFile**      _packfiles;             // +0x20  Collection::Array<PackageFile*>
     int32_t            _packfileCount;         // +0x28
     int32_t            _packfileCapacity;      // +0x2c
     RtSystem::String*  _userPackFilenames;     // +0x30
