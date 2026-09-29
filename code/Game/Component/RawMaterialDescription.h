@@ -38,6 +38,8 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140037340
     virtual Object::External* Construct();                                 // [9] 0x140037310
 
+    uint32_t GetPickupCategory() const;   // 0x140129480: the Pickup work's category bits from _flags
+
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     UI::SpriteSheet* _spriteSheet;              // +0x20 SpriteSheet* (.rsc _spriteSheet)
     UI::StringTable* _stringTable;              // +0x28 StringTable* (.rsc _stringTable)

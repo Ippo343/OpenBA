@@ -229,8 +229,7 @@ void PopulationComponent_SmoothDensity_Reimpl(void* selfV);  // 0x1400538c0
 void PopulationComponent_ScanHabitability_Reimpl(void* selfV, void* terrainGridV, int cellIndex);  // 0x140053b50
 
 // ---- rawmaterialcomponent.cpp
-void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60
-uint64_t RawMaterialComponent_GetPickupCategory(uintptr_t rawMatDesc);  // 0x140129480
+void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial
 
 // ---- residencecomponent.cpp
 void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP);  // 0x140007960
