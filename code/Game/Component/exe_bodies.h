@@ -211,8 +211,7 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w,
 void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain);  // 0x140091e60 B4 FORWARD: 4 outside caller(s) -> CitizenBehavior::RegisterRawMaterial
 
 // ---- residencecomponent.cpp
-void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP);  // 0x140007960
-void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);  // 0x140037ad0
+void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);  // 0x140037ad0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::SetFamilyCount
 void ResidenceComponent_ResidenceInit(void* selfP);  // 0x140129ef0 B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> ResidenceComponent::EvictResidents
 bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0 B4 FORWARD: 1 outside caller (standalone/death_harness.cpp) -> ResidenceComponent::IsFamilyFull (moved from citizencomponent.cpp)
 

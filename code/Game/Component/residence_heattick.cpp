@@ -39,6 +39,7 @@
 #include "Component/StatusIconComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"   // CitizenBehavior::professionResources
 #include "Component/ResidenceDescription.h"
 #include "Component/RawMaterialDescription.h"
 #include "system/Value.h"
@@ -60,7 +61,7 @@
 //   0x14012a9d0 CitizenComp_Storage_GetResourceCount  edible count
 //   0x14012ab00 Storage_GetResourceCount2    fuel count
 //   0x140002f90 FindComponent<StatusIconComponent>
-//   0x14012c3f0 CitizenComp_FUN_14012c3f0    status-icon bit toggle
+//   0x14012c3f0 StatusIconComponent::SetFlag  status-icon bit toggle
 
 // The state-2 per-frame handler (the table's thunk in residencecomponent.cpp passes
 // the Time* dt of the Trans38 dispatcher tail-call).
@@ -79,11 +80,11 @@ char ResidenceComponent::HeatTick(System::Time* dt) {
         // LEFT: the two count bodies take the residence as int64_t (COMP-b's declarations).
         if (CitizenComp_Storage_GetResourceCount(reinterpret_cast<int64_t>(this)) > 0) {
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
-            if (icon) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 6, 0);   // LEFT: B4 FORWARD's old signature
+            if (icon) icon->SetFlag(6, 0);   // 0x14012c3f0
         }
         if (Storage_GetResourceCount2(reinterpret_cast<int64_t>(this)) > 0) {
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
-            if (icon) CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(icon), 7, 0);   // LEFT: B4 FORWARD's old signature
+            if (icon) icon->SetFlag(7, 0);   // 0x14012c3f0
         }
     }
 
@@ -145,16 +146,15 @@ char ResidenceComponent::HeatTick(System::Time* dt) {
             // LEFT: ActRm_StorageSubtract_d150 takes the storage and the item as integers (ACT-b's declaration).
             ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(store), reinterpret_cast<int64_t>(stack), 1);
 
-            // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a): its +0x170 rows stay by offset.
-            int64_t townMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_citizenList);
+            // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
+            CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
             if (townMgr) {
                 int cat = ActRm_GetResourceCategory_88f90(store, reinterpret_cast<uintptr_t>(stack));   // LEFT: ACT-b's declaration takes the item as uintptr_t
                 if (cat >= 0) {
-                    // +0x170 holds a POINTER to the counter rows (0x20 stride,
-                    // consumed count at +0xC) — same deref as the eat loop.
-                    int64_t rows = *reinterpret_cast<int64_t*>(townMgr + 0x170);
+                    // The counter rows (consumed count at +0xC) — same deref as the eat loop.
+                    ProfessionResourceEntry* rows = townMgr->professionResources;
                     if (rows)
-                        *reinterpret_cast<int*>(rows + static_cast<int64_t>(cat) * 0x20 + 0xc) += 1;
+                        rows[cat].field_0x0C += 1;
                 }
             }
 
