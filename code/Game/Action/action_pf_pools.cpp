@@ -2,27 +2,26 @@
 // Pathfinder/Action node-pool grow + dynamic-array resize family.
 //
 // Faithful 1:1 ports of the A*/pathfinder node-pool free-list grow helpers and the
-// associated dynamic-array (vector) resize/copy/free helpers. The pathfinder /
-// trade-component / build-structure closures call them by name through
-// Action/exe_bodies.h (B3R).
-#include "Action/exe_bodies.h"
+// associated dynamic-array (vector) resize/copy/free helpers.
 // None of this is on the autostart path, so a *wrong* port is undetectable
 // latent corruption — every line below is transcribed literally from the Ghidra
 // decompile (cross-checked against the disassembly for the intricate index math). Do
 // NOT "improve" or simplify.
 //
+// B.4 ACT-a: the bodies read their records by name (code/Game/Action/PathSearch.h).
 // Allocation: the original passes (size, align) to the static
 // System::MemoryAllocator::MemAlloc and frees through MemoryAllocator::MemFree; so do we.
 //
-// CLOSURE NOTES (see RegisterPfPoolsBatch in standalone/reg_pf_pools.cpp):
-//   * Pf_VectorResize18Dup_d940 (0x14001d940) calls Pf_IntArrayClone_f9e0 (in-batch) and
-//     Pf_FreeArray18_db40 (in-batch) — closure satisfied.
-//   * Pf_VectorResize30_e210 (0x14001e210) calls Pf_IntArrayClone_f9e0 (in-batch) and
-//     Pf_FreeArray30_e490 (in-batch) — closure satisfied.
-//   * Pf_VectorResize60_fa80 (0x14001fa80) calls TradeWork_impl_sub_f5e0 (0x14001f5e0,
-//     element copy-ctor; recurses into fdb0/fe60) and TradeWork_impl_sub_f250_sub_fb80
-//     (0x14001fb80, 0x60-stride element free) — neither is in this batch; both are now
-//     Reimpl_Struct60B_CopyCtor / Reimpl_Struct60B_DtorRange (Game), called by name.
+// The three pool allocators (0x14001a9b0, 0x14001d730, 0x14001df40) carve nodes out of
+// a raw chunk: the first qword of a chunk links the chunk list, the nodes follow, and
+// a free node's first qword is the free-list link (PathPoolLink). Those casts are the
+// pool's own raw memory becoming a node (each carries an elem_stride marker).
+//
+// Pf_VectorResize60_fa80 (0x14001fa80) calls TradeWork_impl_sub_f5e0 (0x14001f5e0, element
+// copy-ctor) and TradeWork_impl_sub_f250_sub_fb80 (0x14001fb80, 0x60-stride element free),
+// now Reimpl_Struct60B_CopyCtor / Reimpl_Struct60B_DtorRange (Game), called by name.
+#include "Action/exe_bodies.h"
+#include "Action/PathSearch.h"
 
 #include "Game/exe_bodies.h"          // Reimpl_Struct60B_CopyCtor, Reimpl_Struct60B_DtorRange
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -31,294 +30,266 @@
 #include <cstdlib>
 
 namespace {
-// Exe sub-callees that live in OTHER functions in this closure, called by name (B3R):
-//   0x14001db40 Pf_FreeArray18_db40   0x14001e490 Pf_FreeArray30_e490
-//   0x14000f9e0 Pf_IntArrayClone_f9e0  0x14001f5e0 Reimpl_Struct60B_CopyCtor
-//   0x14001fb80 Reimpl_Struct60B_DtorRange
-
 // MemAlloc helper mirroring System::MemoryAllocator::MemAlloc(size, align) (static).
 static inline void* PfMemAlloc(uint64_t size, uint64_t align) {
     return System::MemoryAllocator::MemAlloc(size, static_cast<int>(align));
 }
+
+// The chunk size every pool grow allocates: growCount * stride + 0xf (the chunk link
+// and the rounding), rounded down to 8 with retail's signed-division idiom.
+static inline uint64_t PoolChunkBytes(const PathNodePool* pool) {
+    int bytes = pool->stride * pool->growCount + 0xf;
+    return static_cast<uint64_t>(static_cast<int>((bytes + (bytes >> 0x1f & 7U)) & static_cast<int>(0xfffffff8)));
+}
 } // namespace
 
 // ============================================================
-// FUN_14001a9b0 — A* node-pool alloc: grow free-list of 0x18-byte nodes.
+// 0x14001a9b0 — Map's cell queue: take a node (growing the pool first).
 // ============================================================
-// Pool object: +0x18 chunk-list head, +0x20 free-list head, +0x28 grow-count (doubles each
-// grow), +0x2c node stride (init 0x18), +0x30 total nodes, +0x34 free count, +0x38 used
-// count. If the free-list (+0x20) is empty, allocate a chunk of (stride*2*growCount) nodes
-// (8-aligned, rounded), link it onto the chunk list (+0x18), and push each new node onto the
-// free-list. Then pop one node from the free-list, zero its [+8]/[+0x10] tail, write
-// param_2's first dword into [+0], return it. Returns null if pop yielded null.
-void* Pf_NodePoolAlloc18_a9b0(uintptr_t param_1, uint32_t* param_2) {
-    if (*reinterpret_cast<int64_t*>(param_1 + 0x20) == 0) {
-        if (*reinterpret_cast<int*>(param_1 + 0x2c) == 0) {
-            *reinterpret_cast<int*>(param_1 + 0x2c) = 0x18;
+// If the free list is empty, double growCount, allocate a chunk of growCount nodes
+// (stride 0x18 when unset), link it onto the chunk list and push each new node onto
+// the free list. Then pop one node, zero next/prev, write the cell (one DWORD), return
+// it. Null if the pop yielded null.
+template <>
+MapCellQueue::Node* MapCellQueue::NewNode(const PathCellIndex* value) {
+    PathNodePool* p = &pool;
+    if (p->freeList == nullptr) {
+        if (p->stride == 0) {
+            p->stride = 0x18;
         }
-        int iVar2 = *reinterpret_cast<int*>(param_1 + 0x28) * 2;
-        *reinterpret_cast<int*>(param_1 + 0x28) = iVar2;
-        iVar2 = *reinterpret_cast<int*>(param_1 + 0x2c) * iVar2 + 0xf;
-        uint64_t* puVar3 = reinterpret_cast<uint64_t*>(
-            PfMemAlloc(static_cast<uint64_t>(static_cast<int>((iVar2 + (iVar2 >> 0x1f & 7U)) & static_cast<int>(0xfffffff8))), 8));
+        p->growCount = p->growCount * 2;
+        PathPoolLink* chunk = static_cast<PathPoolLink*>(System::MemoryAllocator::MemAlloc(PoolChunkBytes(p), 8));
         int iVar4 = 0;
-        *puVar3 = *reinterpret_cast<uint64_t*>(param_1 + 0x18);
-        iVar2 = *reinterpret_cast<int*>(param_1 + 0x28);
-        *reinterpret_cast<uint64_t**>(param_1 + 0x18) = puVar3;
-        *reinterpret_cast<int*>(param_1 + 0x30) = *reinterpret_cast<int*>(param_1 + 0x30) + iVar2;
-        *reinterpret_cast<int*>(param_1 + 0x34) = *reinterpret_cast<int*>(param_1 + 0x34) + iVar2;
-        puVar3 = puVar3 + 1;
+        chunk->next = p->chunks;
+        int iVar2 = p->growCount;
+        p->chunks = chunk;
+        p->total = p->total + iVar2;
+        p->inUse = p->inUse + iVar2;
+        PathPoolLink* link = chunk + 1;
         if (0 < iVar2) {
             do {
-                *reinterpret_cast<int*>(param_1 + 0x34) = *reinterpret_cast<int*>(param_1 + 0x34) + -1;
-                *reinterpret_cast<int*>(param_1 + 0x38) = *reinterpret_cast<int*>(param_1 + 0x38) + 1;
-                *puVar3 = *reinterpret_cast<uint64_t*>(param_1 + 0x20);
-                *reinterpret_cast<uint64_t**>(param_1 + 0x20) = puVar3;
+                p->inUse = p->inUse + -1;
+                p->available = p->available + 1;
+                link->next = p->freeList;
+                p->freeList = link;
                 iVar4 = iVar4 + 1;
-                puVar3 = reinterpret_cast<uint64_t*>(
-                    reinterpret_cast<uintptr_t>(puVar3) + static_cast<uintptr_t>(*reinterpret_cast<int*>(param_1 + 0x2c)));
-            } while (iVar4 < *reinterpret_cast<int*>(param_1 + 0x28));
+                link = reinterpret_cast<PathPoolLink*>(reinterpret_cast<uint8_t*>(link) + p->stride);  // CAST-OK: elem_stride
+            } while (iVar4 < p->growCount);
         }
     }
-    uint64_t* puVar3 = *reinterpret_cast<uint64_t**>(param_1 + 0x20);
-    *reinterpret_cast<int*>(param_1 + 0x34) = *reinterpret_cast<int*>(param_1 + 0x34) + 1;
-    *reinterpret_cast<int*>(param_1 + 0x38) = *reinterpret_cast<int*>(param_1 + 0x38) + -1;
-    *reinterpret_cast<uint64_t*>(param_1 + 0x20) = *puVar3;
-    if (puVar3 != nullptr) {
-        uint32_t uVar1 = *param_2;
-        puVar3[1] = 0;
-        puVar3[2] = 0;
-        *reinterpret_cast<uint32_t*>(puVar3) = uVar1;
-        return puVar3;
+    PathPoolLink* link = p->freeList;
+    p->inUse = p->inUse + 1;
+    p->available = p->available + -1;
+    p->freeList = link->next;
+    if (link != nullptr) {
+        Node* node = reinterpret_cast<Node*>(link);  // CAST-OK: elem_stride
+        int32_t cell = value->cell;
+        node->next = nullptr;
+        node->prev = nullptr;
+        node->value.cell = cell;
+        return node;
     }
     return nullptr;
 }
 
 // ============================================================
-// FUN_14001d730 — node-pool alloc: grow free-list of 0x30-byte nodes.
+// 0x14001d730 — the open set: take a node (growing the pool first).
 // ============================================================
-// Same free-list-grow shape as a9b0 but for a pool whose head fields sit at +0x10
-// (chunk-list head), +0x18 (free-list head), +0x20 (grow-count, doubles), +0x24 (node
-// stride, init 0x30), +0x28 (total), +0x2c (free), +0x30 (used). After popping a node it
-// writes a richer record from param_2 (a 3-dword src) + param_3 (a pointer), then zeros the
-// remaining fields:
-//   node[+0]   = param_2[0] (dword)
-//   node[+4]   = param_2[1] (dword)
-//   node[+8]   = param_3 (8 bytes, puVar3[2])
-//   node[+0x10]= 0, node[+0x18]=0, node[+0x28]=0 (dword)
-//   node[+0x20]= param_2[2] (dword, written as *(puVar3+1) low dword via +8 layout)
-// Faithfully transcribed from the decompile's exact field writes.
-void* Pf_NodePoolAlloc30_d730(uintptr_t param_1, uint32_t* param_2, uint64_t param_3) {
+// Same grow as 0x14001a9b0 with stride 0x30. The popped node gets the key's cell and
+// seq, the parent, zeroed children and balance/height, then the key's fcost.
+PathOpenNode* PathOpenSet::NewNode(const PathOpenKey* key, PathOpenNode* parent) {
+    PathNodePool* p = &pool;
     int iVar4 = 0;
-    if (*reinterpret_cast<int64_t*>(param_1 + 0x18) == 0) {
-        if (*reinterpret_cast<int*>(param_1 + 0x24) == 0) {
-            *reinterpret_cast<int*>(param_1 + 0x24) = 0x30;
+    if (p->freeList == nullptr) {
+        if (p->stride == 0) {
+            p->stride = 0x30;
         }
-        int iVar2 = *reinterpret_cast<int*>(param_1 + 0x20) * 2;
-        *reinterpret_cast<int*>(param_1 + 0x20) = iVar2;
-        iVar2 = *reinterpret_cast<int*>(param_1 + 0x24) * iVar2 + 0xf;
-        uint64_t* puVar3 = reinterpret_cast<uint64_t*>(
-            PfMemAlloc(static_cast<uint64_t>(static_cast<int>((iVar2 + (iVar2 >> 0x1f & 7U)) & static_cast<int>(0xfffffff8))), 8));
-        *puVar3 = *reinterpret_cast<uint64_t*>(param_1 + 0x10);
-        iVar2 = *reinterpret_cast<int*>(param_1 + 0x20);
-        *reinterpret_cast<uint64_t**>(param_1 + 0x10) = puVar3;
-        *reinterpret_cast<int*>(param_1 + 0x28) = *reinterpret_cast<int*>(param_1 + 0x28) + iVar2;
-        *reinterpret_cast<int*>(param_1 + 0x2c) = *reinterpret_cast<int*>(param_1 + 0x2c) + iVar2;
-        puVar3 = puVar3 + 1;
+        p->growCount = p->growCount * 2;
+        PathPoolLink* chunk = static_cast<PathPoolLink*>(System::MemoryAllocator::MemAlloc(PoolChunkBytes(p), 8));
+        chunk->next = p->chunks;
+        int iVar2 = p->growCount;
+        p->chunks = chunk;
+        p->total = p->total + iVar2;
+        p->inUse = p->inUse + iVar2;
+        PathPoolLink* link = chunk + 1;
         if (0 < iVar2) {
             do {
-                *reinterpret_cast<int*>(param_1 + 0x2c) = *reinterpret_cast<int*>(param_1 + 0x2c) + -1;
-                *reinterpret_cast<int*>(param_1 + 0x30) = *reinterpret_cast<int*>(param_1 + 0x30) + 1;
-                *puVar3 = *reinterpret_cast<uint64_t*>(param_1 + 0x18);
-                *reinterpret_cast<uint64_t**>(param_1 + 0x18) = puVar3;
+                p->inUse = p->inUse + -1;
+                p->available = p->available + 1;
+                link->next = p->freeList;
+                p->freeList = link;
                 iVar4 = iVar4 + 1;
-                puVar3 = reinterpret_cast<uint64_t*>(
-                    reinterpret_cast<uintptr_t>(puVar3) + static_cast<uintptr_t>(*reinterpret_cast<int*>(param_1 + 0x24)));
-            } while (iVar4 < *reinterpret_cast<int*>(param_1 + 0x20));
+                link = reinterpret_cast<PathPoolLink*>(reinterpret_cast<uint8_t*>(link) + p->stride);  // CAST-OK: elem_stride
+            } while (iVar4 < p->growCount);
         }
     }
-    uint64_t* puVar3 = *reinterpret_cast<uint64_t**>(param_1 + 0x18);
-    *reinterpret_cast<int*>(param_1 + 0x2c) = *reinterpret_cast<int*>(param_1 + 0x2c) + 1;
-    *reinterpret_cast<int*>(param_1 + 0x30) = *reinterpret_cast<int*>(param_1 + 0x30) + -1;
-    *reinterpret_cast<uint64_t*>(param_1 + 0x18) = *puVar3;
-    if (puVar3 == nullptr) {
+    PathPoolLink* link = p->freeList;
+    p->inUse = p->inUse + 1;
+    p->available = p->available + -1;
+    p->freeList = link->next;
+    if (link == nullptr) {
         return nullptr;
     }
-    *reinterpret_cast<uint32_t*>(puVar3) = param_2[0];
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(puVar3) + 4) = param_2[1];
-    uint32_t uVar1 = param_2[2];
-    puVar3[2] = param_3;
-    puVar3[3] = 0;
-    puVar3[4] = 0;
-    *reinterpret_cast<uint32_t*>(puVar3 + 5) = 0;
-    *reinterpret_cast<uint32_t*>(puVar3 + 1) = uVar1;
-    return puVar3;
+    PathOpenNode* node = reinterpret_cast<PathOpenNode*>(link);  // CAST-OK: elem_stride
+    node->cell = key->cell;
+    node->seq = key->seq;
+    int32_t fcost = key->fcost;
+    node->parent = parent;
+    node->left = nullptr;
+    node->right = nullptr;
+    node->balance = 0;                     // +0x28 / +0x2a: one dword store (H7: two stores)
+    node->height = 0;
+    node->fcost = fcost;
+    return node;
 }
 
 // ============================================================
-// FUN_14001df40 — node-pool alloc: grow worklist free-list (0x18-byte nodes).
+// 0x14001df40 — the region graph's (x, y) queue: take a node (growing the pool first).
 // ============================================================
-// Identical free-list-grow + pop shape to a9b0 (same +0x18/+0x20/.../+0x38 layout, init
-// stride 0x18), but the popped node is initialized from param_2 as a full 8-byte value:
-// node[+0]=param_2[0] (8 bytes), node[+8]=0, node[+0x10]=0. Returns null on null pop.
-void* Pf_WorklistAlloc_df40(uintptr_t param_1, uint64_t* param_2) {
-    if (*reinterpret_cast<int64_t*>(param_1 + 0x20) == 0) {
-        if (*reinterpret_cast<int*>(param_1 + 0x2c) == 0) {
-            *reinterpret_cast<int*>(param_1 + 0x2c) = 0x18;
+// Identical grow + pop to 0x14001a9b0; the popped node gets the whole (x, y) qword.
+template <>
+RegionCellQueue::Node* RegionCellQueue::NewNode(const PathCellXY* value) {
+    PathNodePool* p = &pool;
+    if (p->freeList == nullptr) {
+        if (p->stride == 0) {
+            p->stride = 0x18;
         }
-        int iVar2 = *reinterpret_cast<int*>(param_1 + 0x28) * 2;
-        *reinterpret_cast<int*>(param_1 + 0x28) = iVar2;
-        iVar2 = *reinterpret_cast<int*>(param_1 + 0x2c) * iVar2 + 0xf;
-        uint64_t* puVar3 = reinterpret_cast<uint64_t*>(
-            PfMemAlloc(static_cast<uint64_t>(static_cast<int>((iVar2 + (iVar2 >> 0x1f & 7U)) & static_cast<int>(0xfffffff8))), 8));
+        p->growCount = p->growCount * 2;
+        PathPoolLink* chunk = static_cast<PathPoolLink*>(System::MemoryAllocator::MemAlloc(PoolChunkBytes(p), 8));
         int iVar4 = 0;
-        *puVar3 = *reinterpret_cast<uint64_t*>(param_1 + 0x18);
-        iVar2 = *reinterpret_cast<int*>(param_1 + 0x28);
-        *reinterpret_cast<uint64_t**>(param_1 + 0x18) = puVar3;
-        *reinterpret_cast<int*>(param_1 + 0x30) = *reinterpret_cast<int*>(param_1 + 0x30) + iVar2;
-        *reinterpret_cast<int*>(param_1 + 0x34) = *reinterpret_cast<int*>(param_1 + 0x34) + iVar2;
-        puVar3 = puVar3 + 1;
+        chunk->next = p->chunks;
+        int iVar2 = p->growCount;
+        p->chunks = chunk;
+        p->total = p->total + iVar2;
+        p->inUse = p->inUse + iVar2;
+        PathPoolLink* link = chunk + 1;
         if (0 < iVar2) {
             do {
-                *reinterpret_cast<int*>(param_1 + 0x34) = *reinterpret_cast<int*>(param_1 + 0x34) + -1;
-                *reinterpret_cast<int*>(param_1 + 0x38) = *reinterpret_cast<int*>(param_1 + 0x38) + 1;
-                *puVar3 = *reinterpret_cast<uint64_t*>(param_1 + 0x20);
-                *reinterpret_cast<uint64_t**>(param_1 + 0x20) = puVar3;
+                p->inUse = p->inUse + -1;
+                p->available = p->available + 1;
+                link->next = p->freeList;
+                p->freeList = link;
                 iVar4 = iVar4 + 1;
-                puVar3 = reinterpret_cast<uint64_t*>(
-                    reinterpret_cast<uintptr_t>(puVar3) + static_cast<uintptr_t>(*reinterpret_cast<int*>(param_1 + 0x2c)));
-            } while (iVar4 < *reinterpret_cast<int*>(param_1 + 0x28));
+                link = reinterpret_cast<PathPoolLink*>(reinterpret_cast<uint8_t*>(link) + p->stride);  // CAST-OK: elem_stride
+            } while (iVar4 < p->growCount);
         }
     }
-    uint64_t* puVar3 = *reinterpret_cast<uint64_t**>(param_1 + 0x20);
-    *reinterpret_cast<int*>(param_1 + 0x34) = *reinterpret_cast<int*>(param_1 + 0x34) + 1;
-    *reinterpret_cast<int*>(param_1 + 0x38) = *reinterpret_cast<int*>(param_1 + 0x38) + -1;
-    *reinterpret_cast<uint64_t*>(param_1 + 0x20) = *puVar3;
-    if (puVar3 != nullptr) {
-        uint64_t uVar1 = *param_2;
-        puVar3[1] = 0;
-        puVar3[2] = 0;
-        *puVar3 = uVar1;
-        return puVar3;
+    PathPoolLink* link = p->freeList;
+    p->inUse = p->inUse + 1;
+    p->available = p->available + -1;
+    p->freeList = link->next;
+    if (link != nullptr) {
+        Node* node = reinterpret_cast<Node*>(link);  // CAST-OK: elem_stride
+        PathCellXY xy = *value;
+        node->next = nullptr;
+        node->prev = nullptr;
+        node->value = xy;
+        return node;
     }
     return nullptr;
 }
 
 // ============================================================
-// FUN_14001d400 — recursive free of an A* BST: return all nodes to the pool free-list.
+// 0x14001d400 — give an open-set subtree back to the pool.
 // ============================================================
-// param_1 = pool object; param_2 = subtree root. Post-order: recurse left child (node[+0x18],
-// = param_2[3]) then right child (node[+0x20], = param_2[4]), then push this node back onto
-// the pool's free-list (+0x18), bumping free/used counters at +0x2c/+0x30. Recursion
-// preserved exactly (children freed before the node).
-void Pf_BstFreeRecursive_d400(uintptr_t param_1, uint64_t* param_2) {
-    if (param_2 != nullptr) {
-        Pf_BstFreeRecursive_d400(param_1, reinterpret_cast<uint64_t*>(param_2[3]));
-        Pf_BstFreeRecursive_d400(param_1, reinterpret_cast<uint64_t*>(param_2[4]));
-        *reinterpret_cast<int*>(param_1 + 0x2c) = *reinterpret_cast<int*>(param_1 + 0x2c) + -1;
-        *reinterpret_cast<int*>(param_1 + 0x30) = *reinterpret_cast<int*>(param_1 + 0x30) + 1;
-        *param_2 = *reinterpret_cast<uint64_t*>(param_1 + 0x18);
-        *reinterpret_cast<uint64_t**>(param_1 + 0x18) = param_2;
+// Post-order: the left child's subtree, the right child's, then this node (children
+// freed before the node).
+void PathOpenSet::FreeSubtree(PathOpenNode* node) {
+    if (node != nullptr) {
+        FreeSubtree(node->left);
+        FreeSubtree(node->right);
+        pool.Push(node);
     }
 }
 
 // ============================================================
-// FUN_14001d830 — resize a 0x18-stride dynamic array (3-qword element), copy + zero-fill.
+// 0x14001d830 — resize the search-node array (element 0x18), copy + fill.
 // ============================================================
-// arr = {ptr@+0, count@+8(int), cap@+0xc(int)}. Resize to newCount: grow buffer (3x on a +1
-// growth from non-empty) via MemAlloc(cap*0x18, 8), copy existing 0x18-byte elements, and for
-// new slots write the empty-element pattern: [+0]=0, [+8]=0xffffffff, [+0xc]=0 (8 bytes),
-// [+0x14]=0. MemFree old buffer. The new-slot init writes [+8] as a dword 0xffffffff then an
-// 8-byte zero at [+0xc] and a dword zero at [+0x14] — transcribed exactly.
-void Pf_ArrayResize18_d830(int64_t* param_1, int param_2) {
-    int iVar1 = static_cast<int>(param_1[1]);
-    if (param_2 != iVar1) {
-        void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
-        *reinterpret_cast<int*>(param_1 + 1) = param_2;
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) < param_2) {
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2;
-            if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2 * 3;
+// Grow (3x on a +1 growth from non-empty) via MemAlloc(cap*0x18, 8), copy existing
+// elements, and give new slots the empty node {openNode 0, parent -1, 0, 0, 0}.
+// MemFree the old buffer. The new-slot init writes parent as a dword, then one qword
+// over openStamp / closedStamp and a dword gCost — two named stores for the qword (H7).
+void SearchNodesResize(RawArray<PathSearchNode>* nodes, int newSize) {
+    int iVar1 = nodes->size;
+    if (newSize != iVar1) {
+        PathSearchNode* old = nodes->data;
+        nodes->size = newSize;
+        if (nodes->capacity < newSize) {
+            nodes->capacity = newSize;
+            if ((newSize == iVar1 + 1) && (iVar1 != 0)) {
+                nodes->capacity = newSize * 3;
             }
-            void* pvVar4 = PfMemAlloc(
-                static_cast<uint64_t>(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc)) * 0x18, 8);
-            param_1[0] = reinterpret_cast<int64_t>(pvVar4);
+            nodes->data = static_cast<PathSearchNode*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(nodes->capacity) * 0x18, 8));
         }
         int iVar3 = 0;
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
+        if (old == nodes->data) {
             iVar3 = iVar1;
         }
         int64_t lVar6 = iVar3;
-        if (lVar6 < param_2) {
-            int64_t lVar5 = lVar6 * 0x18;
+        if (lVar6 < newSize) {
             do {
+                PathSearchNode* dst = &nodes->data[lVar6];
                 if (lVar6 < iVar1) {
-                    uint64_t* puVar7 = reinterpret_cast<uint64_t*>(param_1[0] + lVar5);
-                    if (puVar7 != nullptr) {
-                        puVar7[0] = *reinterpret_cast<uint64_t*>(lVar5 + reinterpret_cast<int64_t>(pvVar2));
-                        puVar7[1] = *reinterpret_cast<uint64_t*>(lVar5 + 8 + reinterpret_cast<int64_t>(pvVar2));
-                        puVar7[2] = *reinterpret_cast<uint64_t*>(lVar5 + 0x10 + reinterpret_cast<int64_t>(pvVar2));
+                    if (dst != nullptr) {
+                        *dst = old[lVar6];
                     }
                 } else {
-                    uint64_t* puVar7 = reinterpret_cast<uint64_t*>(param_1[0] + lVar5);
-                    if (puVar7 != nullptr) {
-                        puVar7[0] = 0;
-                        *reinterpret_cast<uint32_t*>(puVar7 + 1) = 0xffffffff;
-                        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(puVar7) + 0xc) = 0;
-                        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(puVar7) + 0x14) = 0;
+                    if (dst != nullptr) {
+                        dst->openNode = nullptr;
+                        dst->parent = -1;
+                        dst->openStamp = 0;
+                        dst->closedStamp = 0;
+                        dst->gCost = 0;
                     }
                 }
                 lVar6 = lVar6 + 1;
-                lVar5 = lVar5 + 0x18;
-            } while (lVar6 < param_2);
+            } while (lVar6 < newSize);
         }
-        if (pvVar2 != reinterpret_cast<void*>(param_1[0])) {
-            System::MemoryAllocator::MemFree(pvVar2);
+        if (old != nodes->data) {
+            System::MemoryAllocator::MemFree(old);
         }
     }
 }
 
 // ============================================================
-// FUN_14001db40 — free a 0x18-stride array's owned pointers (MemFree loop).
+// 0x14001db40 — free the path arrays of `count` result slots.
 // ============================================================
-// For each of param_3 elements at param_2 (stride 0x18), the element owns a heap pointer at
-// [+8]: MemFree it, then zero [+8] and [+0x10]. param_1 is unused (a count-shaped arg the
-// caller passes; preserved in the signature for ABI fidelity). Walks puVar1 = param_2+8,
-// stride 3 qwords.
-void Pf_FreeArray18_db40(uint64_t param_1, uintptr_t param_2, int param_3) {
-    (void)param_1;
-    if (0 < param_3) {
-        int64_t lVar2 = param_3;
-        uint64_t* puVar1 = reinterpret_cast<uint64_t*>(param_2 + 8);
+// Each slot owns its path buffer: MemFree it, then zero data and size/capacity.
+// Retail's RCX (a count-shaped value the caller leaves there) is never read.
+void PathResultsFree(PathResult* first, int count) {
+    if (0 < count) {
+        int64_t lVar2 = count;
+        PathResult* r = first;
         do {
-            System::MemoryAllocator::MemFree(reinterpret_cast<void*>(*puVar1));
-            puVar1[0] = 0;
-            puVar1[1] = 0;
-            puVar1 = puVar1 + 3;
+            System::MemoryAllocator::MemFree(r->path._data);
+            r->path._data = nullptr;
+            r->path._size = 0;             // +0x10 / +0x14: one qword store (H7: two stores)
+            r->path._capacity = 0;
+            r = r + 1;
             lVar2 = lVar2 + -1;
         } while (lVar2 != 0);
     }
 }
 
 // ============================================================
-// FUN_14001e490 — free a 0x30-stride array's two owned pointers per element.
+// 0x14001e490 — free the two int arrays of `count` region nodes.
 // ============================================================
-// For each of param_3 elements at param_2 (stride 0x30), two owned heap pointers live at
-// [+0x20] and [+0x10] (the loop walks lVar1 = param_2+0x2c and uses lVar1-0xc => +0x20 and
-// lVar1-0x1c => +0x10). MemFree each, then zero the {ptr, ptr+8} pairs. param_1 unused.
-void Pf_FreeArray30_e490(uint64_t param_1, uintptr_t param_2, int param_3) {
-    (void)param_1;
-    if (0 < param_3) {
-        int64_t lVar2 = param_3;
-        uintptr_t lVar1 = param_2 + 0x2c;
+// borderCells (+0x20) first, then neighbours (+0x10); each: MemFree, zero data, one
+// qword over size/capacity. Retail's RCX is never read.
+void RegionNodesFree(RegionNode* first, int count) {
+    if (0 < count) {
+        int64_t lVar2 = count;
+        RegionNode* n = first;
         do {
-            System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(lVar1 + -0xc));
-            *reinterpret_cast<uint64_t*>(lVar1 + -0xc) = 0;
-            *reinterpret_cast<uint64_t*>(lVar1 + -4) = 0;
-            System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(lVar1 + -0x1c));
-            *reinterpret_cast<uint64_t*>(lVar1 + -0x1c) = 0;
-            *reinterpret_cast<uint64_t*>(lVar1 + -0x14) = 0;
-            lVar1 = lVar1 + 0x30;
+            System::MemoryAllocator::MemFree(n->borderCells._data);
+            n->borderCells._data = nullptr;
+            n->borderCells._size = 0;      // one qword store (H7: two stores)
+            n->borderCells._capacity = 0;
+            System::MemoryAllocator::MemFree(n->neighbours._data);
+            n->neighbours._data = nullptr;
+            n->neighbours._size = 0;       // one qword store (H7: two stores)
+            n->neighbours._capacity = 0;
+            n = n + 1;
             lVar2 = lVar2 + -1;
         } while (lVar2 != 0);
     }
@@ -332,6 +303,8 @@ void Pf_FreeArray30_e490(uint64_t param_1, uintptr_t param_2, int param_3) {
 // two qwords + a dword) from old buffer or leave new slots untouched (this variant copies
 // only the existing range; new slots are NOT written because lVar5<iVar1 guards the copy and
 // there is no else branch). MemFree old.
+// LEFT (B.4 ACT-a): the element is the Player tessellation's / DecalComponent's 0x14
+// record (align 2), declared by neither block yet; its callers are in PLAYER / COMP.
 void Pf_VectorResize14_ee40(int64_t* param_1, int param_2) {
     int iVar1 = static_cast<int>(param_1[1]);
     if (param_2 != iVar1) {
@@ -380,6 +353,7 @@ void Pf_VectorResize14_ee40(int64_t* param_1, int param_2) {
 // or past the old count, copy from param_3. MemFree old. The loop counts (param_2-iVar4)
 // iterations and walks both the dst (param_1[0]+lVar6) and the old-buffer cursor
 // (puVar9 = pvVar2+lVar6) in lockstep.
+// LEFT (B.4 ACT-a): the 0x14 element is undeclared (see Pf_VectorResize14_ee40).
 void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3) {
     int iVar1 = static_cast<int>(param_1[1]);
     if (param_2 != iVar1) {
@@ -427,77 +401,70 @@ void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3
 }
 
 // ============================================================
-// FUN_14001d940 — resize a vector<0x18-byte element> with owned int-array + dup/free.
+// 0x14001d940 — resize the result-slot array (element 0x18, owns its path array).
 // ============================================================
-// Each 0x18 element = {dword@+0, dword@+4, int-vector@+8 (ptr/count/cap, 0x10 bytes)}. Resize:
-// grow (3x on +1 from non-empty) via MemAlloc(cap*0x18, 8). Copy existing or fill from
-// template *param_3: copy the two leading dwords, zero the element's int-vector (+8/+0x10),
-// then deep-copy the source int-vector via Pf_IntArrayClone_f9e0 (element[+8] <- src[+8]).
-// On shrink-in-place (no realloc) free the tail elements' int-vectors via Pf_FreeArray18_db40;
-// on realloc, free the whole OLD buffer's int-vectors (inline loop, walks old+8 stride 3
-// qwords) then MemFree the old buffer. Closure: f9e0 + db40 (both in-batch).
-void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3) {
-    int iVar1 = static_cast<int>(param_1[1]);
+// Grow (3x on +1 from non-empty) via MemAlloc(cap*0x18, 8). Each slot is copied from the
+// old buffer (or the fill for appended slots): ready (a byte), token, then the path
+// array zeroed and deep-copied (0x14000f9e0). On an in-place shrink the tail slots' paths
+// are freed (0x14001db40); on a realloc the whole old buffer's paths are freed (inline
+// loop) and the old buffer is MemFreed.
+void PathResultsResize(RawArray<PathResult>* results, int newSize, const PathResult* fill) {
+    int iVar1 = results->size;
     int64_t lVar8 = iVar1;
-    if (param_2 != iVar1) {
-        void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
-        *reinterpret_cast<int*>(param_1 + 1) = param_2;
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) < param_2) {
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2;
-            if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2 * 3;
+    if (newSize != iVar1) {
+        PathResult* old = results->data;
+        results->size = newSize;
+        if (results->capacity < newSize) {
+            results->capacity = newSize;
+            if ((newSize == iVar1 + 1) && (iVar1 != 0)) {
+                results->capacity = newSize * 3;
             }
-            void* pvVar3 = PfMemAlloc(
-                static_cast<uint64_t>(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc)) * 0x18, 8);
-            param_1[0] = reinterpret_cast<int64_t>(pvVar3);
+            results->data = static_cast<PathResult*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(results->capacity) * 0x18, 8));
         }
         int iVar4 = 0;
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
+        if (old == results->data) {
             iVar4 = iVar1;
         }
         int64_t lVar12 = iVar4;
-        if (iVar4 < param_2) {
-            int64_t lVar11 = lVar12 * 0x18;
-            uint8_t* puVar9 = reinterpret_cast<uint8_t*>(reinterpret_cast<int64_t>(pvVar2) + lVar11);
-            uint64_t uVar10 = static_cast<uint64_t>(static_cast<uint32_t>(param_2 - iVar4));
+        if (iVar4 < newSize) {
+            const PathResult* src9 = old + lVar12;
+            uint64_t uVar10 = static_cast<uint64_t>(static_cast<uint32_t>(newSize - iVar4));
             do {
-                uint8_t* puVar5 = reinterpret_cast<uint8_t*>(param_1[0] + lVar11);
-                if (puVar5 != nullptr) {
-                    uint8_t* puVar6 = param_3;
+                PathResult* dst = &results->data[lVar12];
+                if (dst != nullptr) {
+                    const PathResult* src = fill;
                     if (lVar12 < lVar8) {
-                        puVar6 = puVar9;
+                        src = src9;
                     }
-                    *reinterpret_cast<uint8_t*>(puVar5) = *reinterpret_cast<uint8_t*>(puVar6);
-                    *reinterpret_cast<uint32_t*>(puVar5 + 4) = *reinterpret_cast<uint32_t*>(puVar6 + 4);
-                    *reinterpret_cast<int64_t*>(puVar5 + 8) = 0;
-                    *reinterpret_cast<uint64_t*>(puVar5 + 0x10) = 0;
-                    Pf_IntArrayClone_f9e0(reinterpret_cast<int64_t*>(puVar5 + 8),
-                                      reinterpret_cast<int64_t*>(puVar6 + 8));
+                    dst->ready = src->ready;
+                    dst->token = src->token;
+                    dst->path._data = nullptr;
+                    dst->path._size = 0;   // +0x10 / +0x14: one qword store (H7: two stores)
+                    dst->path._capacity = 0;
+                    IntArrayAssign(&dst->path, &src->path);
                 }
-                puVar9 = puVar9 + 0x18;
+                src9 = src9 + 1;
                 lVar12 = lVar12 + 1;
-                lVar11 = lVar11 + 0x18;
                 uVar10 = uVar10 - 1;
             } while (uVar10 != 0);
         }
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
-            if (param_2 < iVar1) {
-                Pf_FreeArray18_db40(static_cast<uint64_t>(static_cast<int64_t>(param_2) * 3),   // 0x14001db40
-                                     reinterpret_cast<int64_t>(pvVar2) + static_cast<int64_t>(param_2) * 0x18,
-                                     iVar1 - param_2);
+        if (old == results->data) {
+            if (newSize < iVar1) {
+                PathResultsFree(old + newSize, iVar1 - newSize);   // 0x14001db40
             }
         } else {
             if (0 < lVar8) {
-                uint64_t* puVar7 = reinterpret_cast<uint64_t*>(reinterpret_cast<int64_t>(pvVar2) + 8);
+                PathResult* r = old;
                 do {
-                    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(*puVar7));
-                    puVar7[0] = 0;
-                    puVar7[1] = 0;
-                    puVar7 = puVar7 + 3;
+                    System::MemoryAllocator::MemFree(r->path._data);
+                    r->path._data = nullptr;
+                    r->path._size = 0;     // one qword store (H7: two stores)
+                    r->path._capacity = 0;
+                    r = r + 1;
                     lVar8 = lVar8 + -1;
                 } while (lVar8 != 0);
             }
-            System::MemoryAllocator::MemFree(pvVar2);
+            System::MemoryAllocator::MemFree(old);
         }
     }
 }
@@ -510,9 +477,8 @@ void Pf_VectorResize18Dup_d940(int64_t* param_1, int param_2, uint8_t* param_3) 
 // grow (3x on +1 from non-empty) via MemAlloc(cap*0x60, 8). For each slot, copy-construct from
 // the old buffer (or template *param_3 for appended slots). On shrink-in-place, destruct the
 // tail; on realloc, destruct the whole old buffer then MemFree it.
-//
-// *** CLOSURE NOT SATISFIED: f5e0 and fb80 are NOT in this batch and are unregistered; this
-// function is therefore NOT registered in RegisterPfPoolsBatch. Ported for completeness. ***
+// LEFT (B.4 ACT-a): the 0x60 element (the highlight tool's tile entry) and its copy / free
+// bodies belong to PLAYER / GAME; the only caller is Player/tool_base_highlight.cpp.
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
     int iVar1 = static_cast<int>(param_1[1]);
     if (param_2 != iVar1) {
@@ -560,110 +526,120 @@ void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3) {
 }
 
 // ============================================================
-// FUN_14001e210 — resize a vector<0x30-byte element> with TWO owned int-arrays.
+// 0x14001e210 — resize the region-node array (element 0x30, owns two int arrays).
 // ============================================================
-// Each 0x30 element = {3 dwords@+0/+4/+8, int-vector@+0x10 (0x10 bytes), int-vector@+0x20
-// (0x10 bytes)}. Resize: grow (3x on +1 from non-empty) via MemAlloc(cap*0x30, 8). Copy the
-// three leading dwords, zero+deep-copy BOTH int-vectors (element[+0x10] and element[+0x20])
-// via Pf_IntArrayClone_f9e0. On shrink-in-place free the tail's two int-arrays via
-// Pf_FreeArray30_e490; on realloc free the whole old buffer's int-arrays (e490) then MemFree.
-// Closure: f9e0 + e490 (both in-batch).
-void Pf_VectorResize30_e210(int64_t* param_1, uint32_t param_2, uint32_t* param_3) {
-    uint32_t uVar1 = *reinterpret_cast<uint32_t*>(param_1 + 1);
-    if (param_2 != uVar1) {
-        void* pvVar2 = reinterpret_cast<void*>(param_1[0]);
-        *reinterpret_cast<uint32_t*>(param_1 + 1) = param_2;
-        if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) < static_cast<int>(param_2)) {
-            *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2;
-            if ((param_2 == uVar1 + 1) && (uVar1 != 0)) {
-                *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = param_2 * 3;
+// Grow (3x on +1 from non-empty) via MemAlloc(cap*0x30, 8). Each node gets x, y, block
+// from the old buffer (or the fill), then both arrays zeroed and deep-copied
+// (0x14000f9e0). On an in-place shrink the tail's arrays are freed (0x14001e490); on a
+// realloc the whole old buffer's (0x14001e490), then the buffer is MemFreed.
+void RegionNodesResize(RawArray<RegionNode>* regions, int newSize, const RegionNode* fill) {
+    int uVar1 = regions->size;
+    if (newSize != uVar1) {
+        RegionNode* old = regions->data;
+        regions->size = newSize;
+        if (regions->capacity < newSize) {
+            regions->capacity = newSize;
+            if ((newSize == uVar1 + 1) && (uVar1 != 0)) {
+                regions->capacity = newSize * 3;
             }
-            void* pvVar3 = PfMemAlloc(
-                static_cast<uint64_t>(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc)) * 0x30, 8);
-            param_1[0] = reinterpret_cast<int64_t>(pvVar3);
+            regions->data = static_cast<RegionNode*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(regions->capacity) * 0x30, 8));
         }
-        uint64_t uVar5 = 0;
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
-            uVar5 = static_cast<uint64_t>(uVar1);
+        int iVar4 = 0;
+        if (old == regions->data) {
+            iVar4 = uVar1;
         }
-        int iVar4 = static_cast<int>(uVar5);
         int64_t lVar8 = iVar4;
-        if (iVar4 < static_cast<int>(param_2)) {
-            int64_t lVar10 = lVar8 * 0x30;
-            uint32_t* puVar9 = reinterpret_cast<uint32_t*>(lVar10 + reinterpret_cast<int64_t>(pvVar2));
-            uVar5 = static_cast<uint64_t>(param_2 - static_cast<uint32_t>(iVar4));
+        if (iVar4 < newSize) {
+            const RegionNode* src9 = old + lVar8;
+            uint32_t uVar5 = static_cast<uint32_t>(newSize - iVar4);
             do {
-                uint32_t* puVar7 = reinterpret_cast<uint32_t*>(param_1[0] + lVar10);
-                if (puVar7 != nullptr) {
-                    uint32_t* puVar6 = param_3;
-                    if (lVar8 < static_cast<int>(uVar1)) {
-                        puVar6 = puVar9;
+                RegionNode* dst = &regions->data[lVar8];
+                if (dst != nullptr) {
+                    const RegionNode* src = fill;
+                    if (lVar8 < uVar1) {
+                        src = src9;
                     }
-                    puVar7[0] = puVar6[0];
-                    puVar7[1] = puVar6[1];
-                    puVar7[2] = puVar6[2];
-                    *reinterpret_cast<int64_t*>(puVar7 + 4) = 0;
-                    *reinterpret_cast<uint64_t*>(puVar7 + 6) = 0;
-                    Pf_IntArrayClone_f9e0(reinterpret_cast<int64_t*>(puVar7 + 4),
-                                      reinterpret_cast<int64_t*>(puVar6 + 4));
-                    *reinterpret_cast<int64_t*>(puVar7 + 8) = 0;
-                    *reinterpret_cast<uint64_t*>(puVar7 + 10) = 0;
-                    Pf_IntArrayClone_f9e0(reinterpret_cast<int64_t*>(puVar7 + 8),
-                                      reinterpret_cast<int64_t*>(puVar6 + 8));
+                    dst->x = src->x;
+                    dst->y = src->y;
+                    dst->block = src->block;
+                    dst->neighbours._data = nullptr;
+                    dst->neighbours._size = 0;       // one qword store (H7: two stores)
+                    dst->neighbours._capacity = 0;
+                    IntArrayAssign(&dst->neighbours, &src->neighbours);
+                    dst->borderCells._data = nullptr;
+                    dst->borderCells._size = 0;      // one qword store (H7: two stores)
+                    dst->borderCells._capacity = 0;
+                    IntArrayAssign(&dst->borderCells, &src->borderCells);
                 }
-                puVar9 = puVar9 + 0xc;
+                src9 = src9 + 1;
                 lVar8 = lVar8 + 1;
-                lVar10 = lVar10 + 0x30;
                 uVar5 = uVar5 - 1;
             } while (uVar5 != 0);
-            uVar5 = 0;
         }
-        if (pvVar2 == reinterpret_cast<void*>(param_1[0])) {
-            if (static_cast<int>(param_2) < static_cast<int>(uVar1)) {
-                Pf_FreeArray30_e490(static_cast<uint64_t>(uVar5),   // 0x14001e490
-                                     static_cast<int64_t>(static_cast<int>(param_2)) * 0x30 + reinterpret_cast<int64_t>(pvVar2),
-                                     uVar1 - param_2);
+        if (old == regions->data) {
+            if (newSize < uVar1) {
+                RegionNodesFree(old + newSize, uVar1 - newSize);   // 0x14001e490
             }
         } else {
-            Pf_FreeArray30_e490(static_cast<uint64_t>(uVar5), reinterpret_cast<int64_t>(pvVar2), uVar1);   // 0x14001e490
-            System::MemoryAllocator::MemFree(pvVar2);
+            RegionNodesFree(old, uVar1);   // 0x14001e490
+            System::MemoryAllocator::MemFree(old);
         }
     }
 }
 
 // ============================================================
-// FUN_14000f9e0 — deep-copy an int-vector (dst <- src), MemAlloc.
+// 0x14000f9e0 — Collection::Array<int>'s deep assign (dst <- src), MemAlloc.
 // ============================================================
-// vec = {ptr@+0, count@+8(int), cap@+0xc(int)}. Frees dst's old buffer, resets ptr/count/cap
-// to 0, sets count=src.count, and (if count>0) cap=count + allocates count*4 bytes (align 4),
-// then copies each 4-byte element from src. No-op if dst==src. Returns dst. Leaf (alloc/free
-// only — used by d940 and e210 above).
-int64_t* Pf_IntArrayClone_f9e0(int64_t* param_1, int64_t* param_2) {
-    if (param_1 != param_2) {
-        System::MemoryAllocator::MemFree(reinterpret_cast<void*>(param_1[0]));
-        uint64_t uVar3 = 0;
-        param_1[1] = 0;
-        param_1[0] = 0;
-        int iVar1 = static_cast<int>(param_2[1]);
-        *reinterpret_cast<int*>(param_1 + 1) = iVar1;
+// Frees dst's old buffer, resets ptr/count/cap to 0, sets count=src.count, and (if
+// count>0) cap=count + allocates count*4 bytes (align 4), then copies each element from
+// src. No-op if dst==src. Returns dst.
+Collection::Array<int32_t>* IntArrayAssign(Collection::Array<int32_t>* dst,
+                                           const Collection::Array<int32_t>* src) {
+    if (dst != src) {
+        System::MemoryAllocator::MemFree(dst->_data);
+        dst->_size = 0;                    // one qword store over size / capacity (H7)
+        dst->_capacity = 0;
+        dst->_data = nullptr;
+        int iVar1 = src->_size;
+        dst->_size = iVar1;
         if (0 < iVar1) {
-            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_1) + 0xc) = iVar1;
-            void* pvVar2 = PfMemAlloc(static_cast<uint64_t>(iVar1) << 2, 4);
-            param_1[0] = reinterpret_cast<int64_t>(pvVar2);
+            dst->_capacity = iVar1;
+            dst->_data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(iVar1) << 2, 4));
         }
-        uint64_t uVar5 = uVar3;
-        if (0 < static_cast<int>(param_1[1])) {
-            uint32_t uVar4;
+        int64_t i = 0;
+        if (0 < dst->_size) {
+            int32_t uVar4;
             do {
-                if (reinterpret_cast<uint32_t*>(param_1[0] + uVar3) != nullptr) {
-                    *reinterpret_cast<uint32_t*>(param_1[0] + uVar3) = *reinterpret_cast<uint32_t*>(uVar3 + param_2[0]);
+                int32_t* slot = &dst->_data[i];
+                if (slot != nullptr) {
+                    *slot = src->_data[i];
                 }
-                uVar4 = static_cast<uint32_t>(uVar5) + 1;
-                uVar3 = uVar3 + 4;
-                uVar5 = static_cast<uint64_t>(uVar4);
-            } while (static_cast<int>(uVar4) < static_cast<int>(param_1[1]));
+                uVar4 = static_cast<int32_t>(i) + 1;
+                i = i + 1;
+            } while (uVar4 < dst->_size);
         }
-        return param_1;
+        return dst;
     }
-    return param_1;
+    return dst;
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+// B4 FORWARD: 1 outside caller (Game/keystone_a_gamedtor.cpp)
+void Pf_BstFreeRecursive_d400(uintptr_t param_1, uint64_t* param_2) {
+    reinterpret_cast<PathOpenSet*>(param_1)->FreeSubtree(reinterpret_cast<PathOpenNode*>(param_2));
+}
+// B4 FORWARD: 1 outside caller (Game/pathfinder_seed.cpp)
+void Pf_ArrayResize18_d830(int64_t* param_1, int param_2) {
+    SearchNodesResize(reinterpret_cast<RawArray<PathSearchNode>*>(param_1), param_2);
+}
+// B4 FORWARD: 1 outside caller (Game/keystone_a_gamedtor.cpp); retail's RCX is not read.
+void Pf_FreeArray30_e490(uint64_t, uintptr_t param_2, int param_3) {
+    RegionNodesFree(reinterpret_cast<RegionNode*>(param_2), param_3);
+}
+// B4 FORWARD: 1 outside caller (Action/region_graph_build.cpp, a local extern)
+int64_t* Pf_IntArrayClone_f9e0(int64_t* param_1, int64_t* param_2) {
+    return reinterpret_cast<int64_t*>(IntArrayAssign(reinterpret_cast<Collection::Array<int32_t>*>(param_1),
+                                                     reinterpret_cast<const Collection::Array<int32_t>*>(param_2)));
 }

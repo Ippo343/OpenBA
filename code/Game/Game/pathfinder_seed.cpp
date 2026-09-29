@@ -85,7 +85,7 @@ void PathfinderThread::Run() {
         System::MemoryAllocator::MemFree(node);
         uint64_t cmd[2] = { cmdLo, cmdHi };
         reinterpret_cast<System::CriticalSection*>(p + 0x30)->Unlock();   // B.3.4b bridge
-        Pf_WorkerApplyCmd_a6430(self, reinterpret_cast<uint32_t*>(cmd), nullptr, nullptr);
+        Pf_WorkerApplyCmd_a6430(self, reinterpret_cast<uint32_t*>(cmd));
         count = *reinterpret_cast<int*>(p + 0x70);
     }
 }
@@ -151,12 +151,12 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     // --- e8c0 priming (synchronous: every cmd applies inline via a6430) ---
     // cmd type 4 — walkability sub-flags {arg0=1, arg1=0, arg2=0}.
     uint32_t cmd4[4] = { 4, 1, 0, 0 };
-    Pf_WorkerApplyCmd_a6430(pf, cmd4, nullptr, nullptr);
+    Pf_WorkerApplyCmd_a6430(pf, cmd4);
 
     // terrain step-cost table (idx 0..10) — a6a30 applies inline (+0x5c != 0).
     static const int kCosts[11] = { 3, 3, 4, 8, 0x10, 0x10, 0x10, 0x10, 0x10, 3, 4 };
     for (int i = 0; i < 11; ++i)
-        Pf_EnqueueCmd1_a6a30(pf, i, reinterpret_cast<void*>(static_cast<intptr_t>(kCosts[i])), nullptr);
+        Pf_EnqueueCmd1_a6a30(pf, i, kCosts[i]);
 
     // per-cell terrain flags: low 7 bits = cell terrain type (mapCell+0x29),
     // bit 7 = blocked (mapCell+0x00 first qword != 0). mapCell grid @ game+0x80, stride 0x30.

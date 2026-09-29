@@ -12,9 +12,9 @@
 // simplify, or reorder. None of these are exercised on the autostart path, so a
 // wrong port is undetectable silent corruption — strictly worse than unregistered.
 //
-//   0x1400a5ac0  region-pair BST lookup (key0,key1) -> value index             [loop]
-//   0x1400a5ec0  neighbour tile index by 8-direction code
-//   0x1400a6030  movement-cost octile/diagonal heuristic
+//   0x1400a5ec0  neighbour tile index by 8-direction code   (GridPathSearch::Neighbour)
+//   0x1400a6030  movement-cost octile/diagonal heuristic    (GridPathSearch::Heuristic)
+//   (0x1400a5ac0, the region-pair lookup, is RegionPairCache::Find in action_pf_region.cpp)
 //   0x1400aa810  ray/triangle (Moller-Trumbore) barycentric intersect (float)
 //   0x1400ae180  edge-mask -> tile-shape LUT index (DAT_1401c22d0)
 //   0x14009d0a0  expanding-ring spiral search for nearest valid region cell     [loop]
@@ -22,11 +22,16 @@
 //   0x140018dd0  quadtree/box-walker init (zeroes ~0xFF*0x24 stack records)
 //   0x140053ca0  pasture/migration target picker (collect+random-pick cells)    [loop]
 
+#include "Action/PathSearch.h"     // GridPathSearch
+#include "Game/Map.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/CharacterGrid.h"
+#include "Component/PopulationComponent.h"
+#include "Component/PopulationDescription.h"
 #include <cstdint>
 
 namespace {
@@ -52,54 +57,14 @@ static inline float C_one()    { return 1.0f; }
 } // namespace
 
 // ============================================================
-// 0x1400a5ac0 — region-pair BST lookup: (a,b) ordered -> value index
+// 0x1400a5ec0 — neighbour cell by 8-direction code
 // ============================================================
-// Self+0x28 = BST root; nodes: +0x00 key0(int,hi), +0x04 key1(int,lo),
-// +0x08 valueIdx(int), +0x18 left, +0x20 right. Self+0x18 = value array base
-// (stride 0x18); result = *(int*)(arr + valueIdx*0x18 + 8). Orders (a,b) so
-// hi >= lo before the descent. Returns 0xffffffff if not found.
-uint32_t Pf_RegionPairLookup_5ac0(uintptr_t self, int a, int b) {
-    int hi = a, lo = b;
-    if (a < b) { hi = b; lo = a; }
-    uint8_t* node = *reinterpret_cast<uint8_t**>(self + 0x28);
-    while (true) {
-        if (node == nullptr) return 0xffffffffu;
-        int key0 = *reinterpret_cast<int*>(node + 0x00);
-        if (hi < key0) {                       // go left
-            node = *reinterpret_cast<uint8_t**>(node + 0x18);
-            continue;
-        }
-        if (hi > key0) {                       // go right
-            node = *reinterpret_cast<uint8_t**>(node + 0x20);
-            continue;
-        }
-        // hi == key0: compare lo against key1
-        int key1 = *reinterpret_cast<int*>(node + 0x04);
-        if (lo < key1) {                       // go left
-            node = *reinterpret_cast<uint8_t**>(node + 0x18);
-            continue;
-        }
-        if (lo > key1) {                       // go right
-            node = *reinterpret_cast<uint8_t**>(node + 0x20);
-            continue;
-        }
-        // exact match (hi==key0 && lo==key1)
-        if (node == nullptr) return 0xffffffffu;
-        int idx = *reinterpret_cast<int*>(node + 0x08);
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(self + 0x18);
-        return *reinterpret_cast<uint32_t*>(arr + (int64_t)idx * 0x18 + 8);
-    }
-}
-
-// ============================================================
-// 0x1400a5ec0 — neighbour tile index by 8-direction code
-// ============================================================
-// self+0xd8 = grid width (square). Decompose linear index into (row,col);
-// apply the direction delta (case 0..7); bounds-check; optional blocked-bit
-// gate at self+0xd6 (mask 0x80 in the byte map at self+0xe0); finally only
-// return the cell if its passable bit (self+0xd0 >> (cellByte&0x1f) & 1) is set.
-int Pf_NeighbourTile_5ec0(uintptr_t self, int index, uint32_t dir) {
-    int w = *reinterpret_cast<int*>(self + 0xd8);
+// Decompose the cell into (row, col) on the square grid of `width`; apply the direction
+// delta (case 0..7); bounds-check; skip a cell whose blocked bit (0x80) is set while
+// respectBlocked; finally only return the cell if its terrain type's bit is set in
+// passableTypes.
+int GridPathSearch::Neighbour(int index, uint32_t dir) const {
+    int w = width;
     int row = index / w;
     int col = index % w;
     switch (dir) {
@@ -115,10 +80,10 @@ int Pf_NeighbourTile_5ec0(uintptr_t self, int index, uint32_t dir) {
     }
     if ((-1 < col) && (col < w) && (-1 < row) && (row < w)) {
         int cell = w * row + col;
-        char gateFlag = *reinterpret_cast<char*>(self + 0xd6);
-        uint8_t* byteMap = *reinterpret_cast<uint8_t**>(self + 0xe0);
+        char gateFlag = static_cast<char>(respectBlocked);
+        const uint8_t* byteMap = cellFlags;
         if (gateFlag == 0 || (byteMap[cell] & 0x80) == 0) {
-            uint32_t passMask = *reinterpret_cast<uint32_t*>(self + 0xd0);
+            uint32_t passMask = passableTypes;
             uint8_t cb = byteMap[cell];
             if (((passMask >> (cb & 0x1f)) & 1) != 0)
                 return cell;
@@ -131,11 +96,10 @@ int Pf_NeighbourTile_5ec0(uintptr_t self, int index, uint32_t dir) {
 // ============================================================
 // 0x1400a6030 — movement-cost octile / diagonal heuristic
 // ============================================================
-// self+0xd8 = grid width. dx,dy = |col delta|,|row delta|. If self+0xd4 set:
-// octile (10*(dx+dy) - 6*min). If self+0xd5 set: Manhattan*10 ((dx+dy)*10).
-// Else: Chebyshev*10 (max*10).
-int Pf_MoveHeuristic_6030(uintptr_t self, int from, int to) {
-    int w = *reinterpret_cast<int*>(self + 0xd8);
+// dx,dy = |col delta|,|row delta| on the grid of `width`. allowDiagonal: octile
+// (10*(dx+dy) - 6*min). manhattan: (dx+dy)*10. Else: Chebyshev*10 (max*10).
+int GridPathSearch::Heuristic(int from, int to) const {
+    int w = width;
     uint32_t udx = (uint32_t)(from % w - to % w);
     uint32_t udy = (uint32_t)(from / w - to / w);
     uint32_t s;
@@ -143,12 +107,12 @@ int Pf_MoveHeuristic_6030(uintptr_t self, int from, int to) {
     int dx = (int)((udx ^ s) - s);          // abs(dx)
     s = (uint32_t)((int)udy >> 0x1f);
     int dy = (int)((udy ^ s) - s);          // abs(dy)
-    if (*reinterpret_cast<char*>(self + 0xd4) != 0) {
+    if (static_cast<char>(allowDiagonal) != 0) {
         int mn = dy;
         if (dx < dy) mn = dx;
         return (dy + dx) * 10 + mn * -6;
     }
-    if (*reinterpret_cast<char*>(self + 0xd5) != 0) {
+    if (static_cast<char>(manhattan) != 0) {
         return (dy + dx) * 10;
     }
     if (dy < dx) dy = dx;
@@ -168,7 +132,7 @@ int Pf_MoveHeuristic_6030(uintptr_t self, int from, int to) {
 int Pf_RayTriIntersect_aa810(void* /*self*/, const float* P, const float* D,
                              const float* maxT, const float* V0, const float* V1,
                              const float* V2, float* outT, float* outNormal) {
-    const Math::Vector3& Dv = *reinterpret_cast<const Math::Vector3*>(D);   // B.3.1 bridge
+    const Math::Vector3 Dv(D[0], D[1], D[2]);   // the ray direction (a copy of the three floats)
     // edge1 = V1 - V0
     Math::Vector3 edge1(V1[0] - V0[0], V1[1] - V0[1], V1[2] - V0[2]);
     // edge2 = V2 - V0
@@ -237,27 +201,26 @@ int Pf_TileShapeLut_ae180(void* /*self*/, char p2, char p3, char p4, char p5,
     // PORT GAP 0x1401c22d0 tile-shape variant LUT (256 x int8): not registered; retail
     // reads the .rdata table here. The resolve always returned NULL, so this file always
     // fell back to its own copy of the retail bytes -- that fallback is the code (B3R R4).
-    // 0xFF (== -1) marks an invalid edge combination.
-    static const uint8_t kTileShapeLut[256] = {
+    // -1 (0xFF) marks an invalid edge combination.
+    static const int8_t kTileShapeLut[256] = {
         0,1,2,5,3,6,7,11,4,8,9,12,10,13,14,19,
-        255,255,255,255,255,15,255,20,255,255,255,255,255,21,255,28,
-        255,255,255,255,255,255,16,22,255,255,255,255,255,255,23,29,
-        255,255,255,255,255,255,255,30,255,255,255,255,255,255,255,36,
-        255,255,255,255,255,255,255,255,255,17,255,24,255,25,255,31,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,32,255,37,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,38,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,42,
-        255,255,255,255,255,255,255,255,255,255,18,26,255,255,27,33,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,39,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,34,40,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,43,
-        255,255,255,255,255,255,255,255,255,255,255,35,255,255,255,41,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,44,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,45,
-        255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,46,
+        -1,-1,-1,-1,-1,15,-1,20,-1,-1,-1,-1,-1,21,-1,28,
+        -1,-1,-1,-1,-1,-1,16,22,-1,-1,-1,-1,-1,-1,23,29,
+        -1,-1,-1,-1,-1,-1,-1,30,-1,-1,-1,-1,-1,-1,-1,36,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,17,-1,24,-1,25,-1,31,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,32,-1,37,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,38,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,42,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,18,26,-1,-1,27,33,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,39,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,34,40,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,43,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,35,-1,-1,-1,41,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,44,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,45,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,46,
     };
-    const int8_t* lut = reinterpret_cast<const int8_t*>(kTileShapeLut);
-    return (int)lut[idx];
+    return (int)kTileShapeLut[idx];
 }
 
 // ============================================================
@@ -271,17 +234,16 @@ int Pf_TileShapeLut_ae180(void* /*self*/, char p2, char p3, char p4, char p5,
 // neighbour's regionId. Returns the start cell's regionId if it was already >= 0,
 // else -1 after exhausting radius 3.
 // Literal transcription of the Ghidra decompile (index aliasing preserved).
-int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
-    int iVar5 = *param_1;
+int Map::NearestRegionId(int param_2) const {
+    int iVar5 = size;
     int64_t lVar16 = (int64_t)iVar5;
-    // FIX (was `param_1 + 0x20/4` = byte 0x20, a NULL field → the documented "null
-    // Game+0x20 region-cell array" crash). Ghidra `param_1 + 0x20` on int* = byte 0x80;
-    // this is the populated cell array. Matches Pf_IsDstReachable_f810's read exactly.
-    int64_t lVar6 = *reinterpret_cast<int64_t*>(param_1 + 0x20);
+    // Ghidra's `param_1 + 0x20` on int* is byte 0x80: the cell array (the same array
+    // Pf_IsDstReachable_f810 reads).
+    const MapCell* lVar6 = cells;
     uint32_t uVar8 = (uint32_t)(param_2 / iVar5);
     int iVar11 = param_2 % iVar5;
     uint64_t uVar18 = (uint64_t)(int)uVar8;
-    int iVar9 = *reinterpret_cast<int*>(lVar6 + 0x18 + (int64_t)param_2 * 0x30);
+    int iVar9 = lVar6[param_2].regionId;
     if (iVar9 < 0) {
         int64_t lVar21 = (int64_t)iVar11;
         iVar9 = 1;
@@ -308,17 +270,13 @@ int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
                     if ((-1 < lVar17) && (iVar3 < iVar5)) {
                         if ((-1 < lVar4) &&
                             ((iVar2 < iVar5 &&
-                              (-1 < *reinterpret_cast<int*>(
-                                        lVar6 + 0x18 + (lVar16 * lVar17 + lVar4) * 0x30))))) {
-                            return *reinterpret_cast<int*>(
-                                lVar6 + 0x18 + (lVar16 * iVar3 + (int64_t)iVar2) * 0x30);
+                              (-1 < lVar6[(lVar16 * lVar17 + lVar4)].regionId)))) {
+                            return lVar6[(lVar16 * iVar3 + (int64_t)iVar2)].regionId;
                         }
                         int64_t lVar12 = (lVar21 - uVar18) + uVar13;
                         if (((-1 < lVar12) && (iVar1 < iVar5)) &&
-                            (-1 < *reinterpret_cast<int*>(
-                                      lVar6 + 0x18 + (lVar16 * lVar17 + lVar12) * 0x30))) {
-                            return *reinterpret_cast<int*>(
-                                lVar6 + 0x18 + (lVar16 * iVar3 + (int64_t)iVar1) * 0x30);
+                            (-1 < lVar6[(lVar16 * lVar17 + lVar12)].regionId)) {
+                            return lVar6[(lVar16 * iVar3 + (int64_t)iVar1)].regionId;
                         }
                     }
                     uint32_t uVar7 = 0;
@@ -326,15 +284,12 @@ int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
                         (((-1 < (int64_t)uVar15 &&
                            (((int)uVar23 < iVar5 &&
                              (uVar7 = uVar23,
-                              -1 < *reinterpret_cast<int*>(
-                                       lVar6 + 0x18 + (lVar16 * (int64_t)uVar15 + lVar10) * 0x30))))) ||
+                              -1 < lVar6[(lVar16 * (int64_t)uVar15 + lVar10)].regionId)))) ||
                           ((-1 < (int64_t)uVar13 &&
                             (((int)uVar22 < iVar5 &&
                               (uVar7 = uVar22,
-                               -1 < *reinterpret_cast<int*>(
-                                        lVar6 + 0x18 + (lVar16 * (int64_t)uVar13 + lVar10) * 0x30))))))))) {
-                        return *reinterpret_cast<int*>(
-                            lVar6 + 0x18 + ((int)uVar7 * lVar16 + (int64_t)iVar20) * 0x30);
+                               -1 < lVar6[(lVar16 * (int64_t)uVar13 + lVar10)].regionId)))))))) {
+                        return lVar6[((int)uVar7 * lVar16 + (int64_t)iVar20)].regionId;
                     }
                     lVar10 = lVar10 + 1;
                     iVar20 = iVar20 + 1;
@@ -350,157 +305,145 @@ int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
 }
 
 // ============================================================
-// 0x140018880 — quadtree node subdivide / push 4 children
+// 0x140018880 — CharacterGridWalker::Subdivide: pop the top node; if the next depth is
+// below the grid's `levels`, push its four quadrant children (cell = parent * 4 +
+// 1..4), each with half the parent's x/y extent. DAT_140172114 = 0.5, DAT_140172280 =
+// -1.0, g_fUVScale = 1.0. Faithful transcription of the decompile.
 // ============================================================
-// Box-walker stack at param_1: +0x08 = top index (int). Each record (stride 0x24)
-// holds a 3-float min(+0x00), 3-float ... and at +0x30/+0x34/+0x38 a 3-float
-// extent + at +0x3c childId, +0x40 depth, +0x44 flag. Pops the top record, and if
-// the next depth < tree maxDepth (*(int*)(*(param_1+0x2428)+0xc)), pushes the four
-// quadrant children (childId = parentId*4 + {1,2,3,4}). DAT_140172114 = 0.5,
-// DAT_140172280 = -1.0, g_fUVScale = 1.0. Faithful transcription of the decompile.
-void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
+void CharacterGridWalker::Subdivide() {
     const float c_half   = C_half();    // DAT_140172114
     const float c_negone = C_negone();  // DAT_140172280
 
-    int iVar5 = *reinterpret_cast<int*>(param_1 + 8);
-    int64_t lVar8 = (int64_t)iVar5 + 1;
-    *reinterpret_cast<int*>(param_1 + 8) = iVar5 - 1;
-    int iVar9 = *reinterpret_cast<int*>(param_1 + 0x1c + lVar8 * 0x24) + 1;
-    if (iVar9 < *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(param_1 + 0x2428) + 0xc)) {
-        int iVar6   = *reinterpret_cast<int*>(param_1 + 0x18 + lVar8 * 0x24);
-        float fVar1 = *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24);
-        float fVar2 = *reinterpret_cast<float*>(param_1 + 0x14 + lVar8 * 0x24);
-        float fVar3 = *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24);
-        float fVar4 = *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24);
-        float fVar13 = *reinterpret_cast<float*>(param_1 + 0x0c + lVar8 * 0x24);
-        float fVar12 = *reinterpret_cast<float*>(param_1 + 0x10 + lVar8 * 0x24) * c_half;
-        *reinterpret_cast<int*>(param_1 + 8) = iVar5;
-        lVar8 = (int64_t)iVar5 + 1;
+    int iVar5 = top;
+    top = iVar5 - 1;
+    const CharacterGridWalkerNode& parent = nodes[iVar5];
+    int iVar9 = parent.depth + 1;
+    if (iVar9 < grid->levels) {
+        int iVar6   = parent.cell;
+        float fVar1 = parent.center[2];
+        float fVar2 = parent.extent[2];
+        float fVar3 = parent.center[0];
+        float fVar4 = parent.center[1];
+        float fVar13 = parent.extent[0];
+        float fVar12 = parent.extent[1] * c_half;
+        top = iVar5;
         fVar13 = fVar13 * c_half;
         float fVar10 = fVar12 * c_negone;
         float fVar11 = fVar13 * c_negone;
-        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = fVar3 + fVar11;
-        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = fVar4 + fVar10;
-        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = fVar1 + fVar2;
-        lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
-        *reinterpret_cast<float*>(param_1 + 0x30 + lVar8 * 0x24) = fVar13;
-        *reinterpret_cast<float*>(param_1 + 0x34 + lVar8 * 0x24) = fVar12;
-        *reinterpret_cast<float*>(param_1 + 0x38 + lVar8 * 0x24) = fVar2;
-        *reinterpret_cast<int*>(param_1 + 0x3c + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar6 * 4 + 1;
-        *reinterpret_cast<int*>(param_1 + 0x40 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar9;
-        *reinterpret_cast<uint32_t*>(param_1 + 0x44 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
+        CharacterGridWalkerNode* n = &nodes[top];
+        n->center[0] = fVar3 + fVar11;
+        n->center[1] = fVar4 + fVar10;
+        n->center[2] = fVar1 + fVar2;
+        n = &nodes[top];
+        n->extent[0] = fVar13;
+        n->extent[1] = fVar12;
+        n->extent[2] = fVar2;
+        nodes[top].cell = iVar6 * 4 + 1;
+        nodes[top].depth = iVar9;
+        nodes[top].flag = 0;
 
         // Vector3 stack slots local_a8 (A) and local_9c (B) — each a contiguous
-        // 3-float record the ctor writes through. Mapping: a8->A[0],a4->A[1],a0->A[2],
-        // 9c->B[0],98->B[1],94->B[2].
+        // 3-float record the ctor writes through.
         Math::Vector3 A(fVar13, fVar10, fVar2);
         Math::Vector3 B(A.x + fVar3, A.y + fVar4, A.z + fVar1);
-        *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
-        lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = B.x;
-        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = B.y;
-        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = B.z;
-        lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
-        *reinterpret_cast<float*>(param_1 + 0x30 + lVar8 * 0x24) = fVar13;
-        *reinterpret_cast<float*>(param_1 + 0x34 + lVar8 * 0x24) = fVar12;
-        *reinterpret_cast<float*>(param_1 + 0x38 + lVar8 * 0x24) = fVar2;
-        *reinterpret_cast<int*>(param_1 + 0x3c + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar6 * 4 + 2;
-        *reinterpret_cast<int*>(param_1 + 0x40 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar9;
-        *reinterpret_cast<uint32_t*>(param_1 + 0x44 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
+        top = top + 1;
+        n = &nodes[top];
+        n->center[0] = B.x;
+        n->center[1] = B.y;
+        n->center[2] = B.z;
+        n->extent[0] = fVar13;
+        n->extent[1] = fVar12;
+        n->extent[2] = fVar2;
+        nodes[top].cell = iVar6 * 4 + 2;
+        nodes[top].depth = iVar9;
+        nodes[top].flag = 0;
 
         B = Math::Vector3(fVar11, fVar12, fVar2);
         A = Math::Vector3(B.x + fVar3, B.y + fVar4, B.z + fVar1);
-        *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
+        top = top + 1;
         float fVar10b = kRdata_14017214c;  // g_fUVScale loaded here in the original
-        lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = A.x;
-        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = A.y;
-        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = A.z;
-        lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
-        *reinterpret_cast<float*>(param_1 + 0x30 + lVar8 * 0x24) = fVar13;
-        *reinterpret_cast<float*>(param_1 + 0x34 + lVar8 * 0x24) = fVar12;
-        *reinterpret_cast<float*>(param_1 + 0x38 + lVar8 * 0x24) = fVar2;
-        *reinterpret_cast<int*>(param_1 + 0x3c + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar6 * 4 + 3;
-        *reinterpret_cast<int*>(param_1 + 0x40 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar9;
-        *reinterpret_cast<uint32_t*>(param_1 + 0x44 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
+        n = &nodes[top];
+        n->center[0] = A.x;
+        n->center[1] = A.y;
+        n->center[2] = A.z;
+        n->extent[0] = fVar13;
+        n->extent[1] = fVar12;
+        n->extent[2] = fVar2;
+        nodes[top].cell = iVar6 * 4 + 3;
+        nodes[top].depth = iVar9;
+        nodes[top].flag = 0;
 
         Math::Vector3 scaleVec(fVar10b, fVar10b, fVar10b);
         B = Math::Vector3(fVar13 * scaleVec.x, fVar12 * scaleVec.y, fVar2 * scaleVec.z);
         A = Math::Vector3(B.x + fVar3, B.y + fVar4, B.z + fVar1);
-        *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
-        lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-        *reinterpret_cast<float*>(param_1 + 0x00 + lVar8 * 0x24) = A.x;
-        *reinterpret_cast<float*>(param_1 + 0x04 + lVar8 * 0x24) = A.y;
-        *reinterpret_cast<float*>(param_1 + 0x08 + lVar8 * 0x24) = A.z;
-        lVar8 = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
-        *reinterpret_cast<float*>(param_1 + 0x30 + lVar8 * 0x24) = fVar13;
-        *reinterpret_cast<float*>(param_1 + 0x34 + lVar8 * 0x24) = fVar12;
-        *reinterpret_cast<float*>(param_1 + 0x38 + lVar8 * 0x24) = fVar2;
-        *reinterpret_cast<int*>(param_1 + 0x3c + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar6 * 4 + 4;
-        *reinterpret_cast<int*>(param_1 + 0x40 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = iVar9;
-        *reinterpret_cast<uint32_t*>(param_1 + 0x44 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
+        top = top + 1;
+        n = &nodes[top];
+        n->center[0] = A.x;
+        n->center[1] = A.y;
+        n->center[2] = A.z;
+        n->extent[0] = fVar13;
+        n->extent[1] = fVar12;
+        n->extent[2] = fVar2;
+        nodes[top].cell = iVar6 * 4 + 4;
+        nodes[top].depth = iVar9;
+        nodes[top].flag = 0;
     }
 }
 
 // ============================================================
-// 0x140018dd0 — quadtree / box-walker init (zeroes ~0xFF*0x24 stack records)
+// 0x140018dd0 — CharacterGridWalker::Init: empty stack (top = -1), padLo = (0, 0, lo),
+// padHi = (0, 0, hi), every node's center/extent zeroed (256 nodes, three qword clears
+// each), the grid stored at +0x2428; then push the root node (center 0, extent half the
+// grid's worldSize on x/y, cell 0, depth 0).
 // ============================================================
-// Initialises the walker struct at param_1: +0x08 top=-1, +0x14=param_3,
-// +0x0c..0x14 zero, +0x18..0x20 zero, +0x20=param_4. Then zeroes the record array
-// (256 records of stride 0x24, three 8-byte clears at -0x14/-0xc/-4 of each).
-// param_1+0x2428 = root box (param_2). Pushes the root record (childId=0, depth=0)
-// with extents (0.5*param_2[0]) on x/y. Returns param_1.
-uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4) {
-    *reinterpret_cast<uint32_t*>(param_1 + 0x08) = 0xffffffffu;
-    *reinterpret_cast<uint32_t*>(param_1 + 0x14) = param_3;
-    *reinterpret_cast<uint64_t*>(param_1 + 0x0c) = 0;
-    uintptr_t lVar2 = param_1 + 0x38;
-    *reinterpret_cast<uint64_t*>(param_1 + 0x18) = 0;
-    *reinterpret_cast<uint32_t*>(param_1 + 0x20) = param_4;
-    int iVar3 = 0xff;
-    do {
-        iVar3 = iVar3 - 1;
-        *reinterpret_cast<uint64_t*>(lVar2 - 0x14) = 0;
-        *reinterpret_cast<uint64_t*>(lVar2 - 0x0c) = 0;
-        *reinterpret_cast<uint64_t*>(lVar2 - 0x04) = 0;
-        lVar2 = lVar2 + 0x24;
-    } while (-1 < iVar3);
-    *reinterpret_cast<float**>(param_1 + 0x2428) = param_2;
+void CharacterGridWalker::Init(const CharacterGrid* root, float lo, float hi) {
+    top = -1;
+    padLo[2] = lo;
+    padLo[0] = 0.0f;
+    padLo[1] = 0.0f;
+    padHi[0] = 0.0f;
+    padHi[1] = 0.0f;
+    padHi[2] = hi;
+    for (int i = 0; i < 256; ++i) {
+        nodes[i].center[0] = 0.0f;
+        nodes[i].center[1] = 0.0f;
+        nodes[i].center[2] = 0.0f;
+        nodes[i].extent[0] = 0.0f;
+        nodes[i].extent[1] = 0.0f;
+        nodes[i].extent[2] = 0.0f;
+    }
+    grid = root;
 
     float local_res18 = 0.0f;
-    float fVar4 = *param_2 * C_half();   // DAT_140172114 = 0.5
+    float fVar4 = root->worldSize * C_half();   // DAT_140172114 = 0.5
     Math::Vector3 local_38((Math::Scalar(local_res18)));   // splat 0 -> (0,0,0)
-    *reinterpret_cast<int*>(param_1 + 8) = *reinterpret_cast<int*>(param_1 + 8) + 1;
-    int64_t lVar2b = (int64_t)*reinterpret_cast<int*>(param_1 + 8) + 1;
-    *reinterpret_cast<float*>(param_1 + 0x00 + lVar2b * 0x24) = local_38.x;
-    *reinterpret_cast<float*>(param_1 + 0x04 + lVar2b * 0x24) = local_38.y;
-    *reinterpret_cast<float*>(param_1 + 0x08 + lVar2b * 0x24) = local_38.z;
-    lVar2b = (int64_t)*reinterpret_cast<int*>(param_1 + 8);
-    *reinterpret_cast<float*>(param_1 + 0x30 + lVar2b * 0x24) = fVar4;
-    *reinterpret_cast<float*>(param_1 + 0x34 + lVar2b * 0x24) = fVar4;
-    *reinterpret_cast<uint32_t*>(param_1 + 0x38 + lVar2b * 0x24) = 0;
-    *reinterpret_cast<uint32_t*>(param_1 + 0x3c + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
-    *reinterpret_cast<uint32_t*>(param_1 + 0x40 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
-    *reinterpret_cast<uint32_t*>(param_1 + 0x44 + (int64_t)*reinterpret_cast<int*>(param_1 + 8) * 0x24) = 0;
-    return param_1;
+    top = top + 1;
+    CharacterGridWalkerNode& n = nodes[top];
+    n.center[0] = local_38.x;
+    n.center[1] = local_38.y;
+    n.center[2] = local_38.z;
+    n.extent[0] = fVar4;
+    n.extent[1] = fVar4;
+    n.extent[2] = 0.0f;
+    n.cell = 0;
+    n.depth = 0;
+    n.flag = 0;
 }
 
 // ============================================================
 // 0x140053ca0 — pasture/migration target picker (collect + random-pick cells)
 // ============================================================
-// param_1+0x30 = grid width; param_1+0x48 = sub-grid divisor; param_1+0x38 = cell
-// array base (stride 0xc; +0x00 = first int, a >0 = "valid" flag). Walks the
-// (iVar2 x iVar2) block at the (param_2)-th sub-tile, collecting valid cell indices
-// into a dynamically-grown int array (System::MemoryAllocator::MemAlloc, growth *3
-// past the first). If any collected, picks one uniformly (System::Random::Rand on
-// g_pGameWorldSingleton+0xd8) and maps it to a world coordinate via the +0x28 cell
-// size from param_1+0x28 and the world stride at g_pGameWorldSingleton+0xf8.
-// Returns the world index or -1. Frees the temp array. 1:1 transcription.
-int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
-    int iVar2 = *reinterpret_cast<int*>(param_1 + 0x30) / *reinterpret_cast<int*>(param_1 + 0x48);
-    int iVar13 = iVar2 * (param_2 % *reinterpret_cast<int*>(param_1 + 0x48));
-    int iVar12 = iVar2 * (param_2 / *reinterpret_cast<int*>(param_1 + 0x48));
-    void* pvVar5 = nullptr;
+// The population's herd cell `herdCell` (herdDim per edge) covers a block of
+// habitatDim / herdDim habitat cells; collect the ones whose density > 0 into a
+// dynamically-grown int array (MemAlloc, growth *3 past the first), pick one uniformly
+// (the world's System::Random), and map it to the map tile at the centre of that habitat
+// cell (PopulationDescription::_habitatBlock tiles per edge). Returns the tile or -1.
+// Frees the temp array. 1:1 transcription.
+int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int param_2) {
+    int iVar2 = population->habitatDim / population->herdDim;
+    int iVar13 = iVar2 * (param_2 % population->herdDim);
+    int iVar12 = iVar2 * (param_2 / population->herdDim);
+    int* pvVar5 = nullptr;
     uint32_t uVar16 = 0;
     uint32_t uVar4 = 0;
     int64_t lVar8 = (int64_t)iVar12;
@@ -509,14 +452,12 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
     if (0 < iVar2) {
         do {
             int64_t lVar15 = 0;
-            void* pvVar11 = pvVar5;
+            int* pvVar11 = pvVar5;
             int iVar14 = iVar13;
             do {
-                int iVar1 = *reinterpret_cast<int*>(param_1 + 0x30);
+                int iVar1 = population->habitatDim;
                 pvVar5 = pvVar11;
-                if (0 < *reinterpret_cast<int*>(
-                            *reinterpret_cast<int64_t*>(param_1 + 0x38) +
-                            ((int64_t)iVar1 * (lVar8 + local_88) + iVar13 + lVar15) * 0xc)) {
+                if (0 < population->cells[(int64_t)iVar1 * (lVar8 + local_88) + iVar13 + lVar15].density) {
                     uint32_t uVar10 = uVar16 + 1;
                     if (uVar10 != uVar16) {
                         if ((int)uVar4 < (int)uVar10) {
@@ -524,7 +465,7 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
                             if (uVar16 != 0) {
                                 uVar4 = uVar10 * 3;
                             }
-                            pvVar5 = System::MemoryAllocator::MemAlloc((uint64_t)(int)uVar4 << 2, 4);
+                            pvVar5 = static_cast<int*>(System::MemoryAllocator::MemAlloc((uint64_t)(int)uVar4 << 2, 4));
                         }
                         uint32_t uVar6 = 0;
                         if (pvVar11 == pvVar5) {
@@ -532,13 +473,12 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
                         }
                         int64_t lVar9 = (int64_t)(int)uVar6;
                         if (lVar9 < (int)uVar10) {
-                            int* piVar7 = reinterpret_cast<int*>((int64_t)pvVar5 + lVar9 * 4);
+                            int* piVar7 = pvVar5 + lVar9;
                             do {
                                 if (piVar7 != nullptr) {
                                     int iVar3 = iVar12 * iVar1 + iVar14;
                                     if (lVar9 < (int)uVar16) {
-                                        iVar3 = *reinterpret_cast<int*>(
-                                            ((int64_t)pvVar11 - (int64_t)pvVar5) + (int64_t)piVar7);
+                                        iVar3 = pvVar11[lVar9];   // the old array's element
                                     }
                                     *piVar7 = iVar3;
                                 }
@@ -560,19 +500,41 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
             local_88 = local_88 + 1;
         } while (local_88 < iVar2);
         if (uVar16 != 0) {
-            uintptr_t game = (uintptr_t)GameUpdateLoop::_singleton;
-            void* randomObj = *reinterpret_cast<void**>(game + 0xd8);
-            uint32_t uVar4r = reinterpret_cast<System::Random*>(randomObj)->Rand(static_cast<uint32_t>(uVar16));   // B.3.4b bridge
-            int picked = *reinterpret_cast<int*>((int64_t)pvVar5 + (int64_t)(int)uVar4r * 4);
-            int64_t lVar8b = *reinterpret_cast<int64_t*>(param_1 + 0x28);
-            int cellSize = *reinterpret_cast<int*>(lVar8b + 0x28);
-            int worldStride = **reinterpret_cast<int**>(game + 0xf8);
+            GameUpdateLoop* game = GameUpdateLoop::_singleton;
+            uint32_t uVar4r = game->m_random->Rand(static_cast<uint32_t>(uVar16));
+            int picked = pvVar5[(int)uVar4r];
+            int cellSize = population->description->_habitatBlock;
+            int worldStride = game->m_game->size;
             iVar2_result =
                 worldStride *
-                    (cellSize * (picked / *reinterpret_cast<int*>(param_1 + 0x30)) + (cellSize >> 1)) +
-                cellSize * (picked % *reinterpret_cast<int*>(param_1 + 0x30)) + (cellSize >> 1);
+                    (cellSize * (picked / population->habitatDim) + (cellSize >> 1)) +
+                cellSize * (picked % population->habitatDim) + (cellSize >> 1);
         }
     }
     System::MemoryAllocator::MemFree(pvVar5);
     return iVar2_result;
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+// B4 FORWARD: 1 outside caller (Work/buildstructure.cpp)
+int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
+    return reinterpret_cast<Map*>(param_1)->NearestRegionId(param_2);
+}
+
+// B4 FORWARD: 1 outside caller (Component/citizen_updatehealth.cpp)
+void Pf_QuadtreeSubdivide_18880(uintptr_t param_1) {
+    reinterpret_cast<CharacterGridWalker*>(param_1)->Subdivide();
+}
+
+// B4 FORWARD: 1 outside caller (Component/citizen_updatehealth.cpp); the two floats
+// arrive as their bits.
+uintptr_t Pf_QuadtreeInit_18dd0(uintptr_t param_1, float* param_2, uint32_t param_3, uint32_t param_4) {
+    float lo;
+    float hi;
+    __builtin_memcpy(&lo, &param_3, 4);
+    __builtin_memcpy(&hi, &param_4, 4);
+    reinterpret_cast<CharacterGridWalker*>(param_1)->Init(reinterpret_cast<const CharacterGrid*>(param_2), lo, hi);
+    return param_1;
 }

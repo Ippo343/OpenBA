@@ -128,9 +128,7 @@ static void WCP_AppendInline(CharacterComponent* character, Action* ibpVal) {
                 node->_status = false;
                 node->Exit(&character->actions);               // slot 7 (vtable +0x38)
             }
-            // LEFT: the +0x10 InternalBasePtr is the chained action (Action.h declares it
-            // as the base pointer).
-            node = reinterpret_cast<Action*>(node->_entity.Get());
+            node = node->_next.Get();   // Action::_next (+0x10), the chained action
         }
     }
 

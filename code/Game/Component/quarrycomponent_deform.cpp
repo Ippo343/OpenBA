@@ -325,13 +325,12 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (takes the cell's bytes)
 
                 if (dirty) {
-                    const int64_t regionObj = reinterpret_cast<int64_t>(tileGrid->field_0x70);
+                    const int64_t regionObj = reinterpret_cast<int64_t>(tileGrid->regionGraph);
                     if (regionObj) Pf_FineCellDirty_a8c90(regionObj, cellIdx % gw, cellIdx / gw);
                 }
-                const int64_t pfThread = reinterpret_cast<int64_t>(tileGrid->field_0x68);
+                const int64_t pfThread = reinterpret_cast<int64_t>(tileGrid->pathfinder);
                 if (pfThread)
-                    Pf_EnqueueCmd2_a6fe0(pfThread, static_cast<uint32_t>(cellIdx),
-                                         reinterpret_cast<void*>(static_cast<uintptr_t>(5)), nullptr);
+                    Pf_EnqueueCmd2_a6fe0(pfThread, static_cast<int>(cellIdx), 5);
 
                 // MapCell::occupant (+0x08) is the ENTITY raster — the quarry claims the dug cell.
                 cell->occupant = entity;

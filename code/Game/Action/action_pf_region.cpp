@@ -2,67 +2,40 @@
 // Wave 3 (Action) / Cluster A — region-graph build/merge/flood-fill family.
 //
 // Faithful 1:1 ports of the coarse-region connectivity-graph helpers used by
-// long-distance routing. Each Pf_*_xxxx is a literal transcription of the Ghidra
-// decompile for the exe function 0x1400aXXXX; none is runtime-exercised on the
-// autostart path, so faithfulness is everything (a wrong port is undetectable silent
-// corruption, strictly worse than leaving the addr unregistered).
-#include "Action/exe_bodies.h"
+// long-distance routing. Each body is a literal transcription of the Ghidra decompile
+// for the exe function 0x1400aXXXX; none is runtime-exercised on the autostart path,
+// so faithfulness is everything (a wrong port is undetectable silent corruption).
 //
-// Sub-callees are called by name (B3R):
-//   0x1400021d0  int-array resize (stride 4)        — REGISTERED (Reimpl_Array_Resize_Stride04)
-//   0x14001e210  Vector resize stride 0x30          — Pf_VectorResize30_e210
-//   0x14001df40  worklist-node pool alloc           — Pf_WorklistAlloc_df40
-//   0x14001d830  array resize stride 0x18           — Pf_ArrayResize18_d830
-//   0x14001ca60  cell-BST AVL delete                — WorkCellBST_Remove_ca60
-//   0x14001c940  BST insert (variant B)             — Pf_BstInsertB_c940
-//   0x140132010  sqrtf (NaN/Inf-aware)              — WorkImpl_Sqrtf_132010
-//   0x14001dc00  region A* run                      — Pf_RegionAstarRun_dc00
+// B.4 ACT-a: the bodies are RegionGraph's members (code/Game/Action/PathSearch.h) and
+// read it by name:
+//   +0x50 map (size = its edge, cells = the MapCell array: regionId +0x18, terrainType +0x29)
+//   +0x58/+0x5c blockWidth / blockHeight (cells per block), +0x68 regions (stride 0x30:
+//   centroid x/y, owning block, neighbours, borderCells), +0x78 blocks (stride 0x20: x, y,
+//   needsRebuild, needsAdjacency, regions), +0x88/+0x98 the two dirty block lists, +0xa8
+//   freeRegions, +0xb8 labels (one int per cell of a block), +0xc8 the label flood fill's
+//   work queue.
+// The region-pair cache (0x1400a5b30) is RegionPairCache::Store.
 //
-// CLOSURE NOTE (a8ba0): 0x1400a8ba0 calls 0x14001dc00 (BuildStructure_helper_dc00,
-// Pf_RegionAstarRun_dc00 in action_pf_astar.cpp, which calls 0x14001dcd0). Both have
-// landed; a8ba0 is registered (reg_pf_region.cpp).
-//
-// Region-node + region-graph struct field offsets (reverse-engineered, for verification):
-//   regionGraph object = param_1 (the long-distance-router / GameWorld sub-object), with:
-//     +0x08  cell-BST root (param_1+8 passed to 1d830/cellbst families)
-//     +0x50  -> Map object; *(+0x50)         = mapDimX (grid stride), *(+0x50)+0x20 = cell array base
-//     +0x58  int  blockW (coarse cell width in fine cells)
-//     +0x5c  int  blockH (coarse cell height)
-//     +0x68  region-node array base (stride 0x30): per node
-//              +0x00 int centroidX, +0x04 int centroidY, +0x08 int regionId(=-1 free),
-//              +0x10 int-array {ptr,count,cap} adjacency list,
-//              +0x20 int-array {ptr,count,cap} border-edge cell list, +0x28 count, +0x2c cap
-//     +0x70  int  regionNodeCount (high-water id)
-//     +0x78  coarse-grid cell array base (stride 0x20): per coarse cell
-//              +0x00 int blockX, +0x04 int blockY, +0x08 byte dirtyA, +0x09 byte dirtyB,
-//              +0x10 int-array {ptr,count,cap} member-region list, +0x18 count
-//     +0x88  int-array {ptr,count,cap} dirty-coarse-cell list A, +0x90 countA
-//     +0x98  int-array {ptr,count,cap} dirty-coarse-cell list B, +0xa0 countB
-//     +0xa8  int free-list array (region ids), +0xb0 count, +0xb4 cap  (8350/8200 stack)
-//     +0xb8  int  region-label grid (stride 4, blockW*blockH per coarse cell)
-//     +0xc0  int  region-label grid cell count
-//     +0xc8  worklist BST root (a7ad0 flood-fill), +0xd0 head, +0xd8 count,
-//              +0xe8 worklist free-list, +0xfc/+0x100 stats
-//   region-pair cache (a5b30) = param_1 as undefined8*: [0]=seqId, [2]=ringHead/cap ints,
-//     [3]=ring buffer base (stride 0x18), [5]=pair BST root.
+// Sub-callees are called by name:
+//   0x1400021d0  Collection::Array<int>::SetSize     — the arrays' SetSize
+//   0x14001e210  RegionNodesResize                   0x14001df40  RegionCellQueue::NewNode
+//   0x14001d830  SearchNodesResize                   0x14001ca60  WorkCellBST_Remove_ca60
+//   0x14001c940  AvlInsert30                         0x140132010  WorkImpl_Sqrtf_132010
+//   0x14001dc00  RegionGraph::Run
 
+#include "Action/exe_bodies.h"
+#include "Action/PathSearch.h"
+#include "Action/PathAvl.h"
+#include "Game/Map.h"
 #include "Work/exe_bodies.h"          // WorkCellBST_Remove_ca60, WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "hw_watch.h"
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
 namespace {
 
-// ---- exe sub-callees (called by name, B3R) ----
-// 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its call sites below to
-// GameColl::AsArray<GameColl::I32NoInit> member calls, so its resolved-pointer stand-in
-// is gone. I32NoInit, not I32: 0x1400021d0's loop body only copies the OLD prefix, so a
-// grown tail keeps whatever the allocation held. Every call site here is SetSize(0) or a
-// pop, so none of them actually grows.
 // MemAlloc/MemFree shorthands matching the decompile's
 // System::MemoryAllocator::MemAlloc(size, align) / MemFree(ptr) free-function form.
 static inline void* MemAlloc(int64_t size, int align) {
@@ -70,127 +43,120 @@ static inline void* MemAlloc(int64_t size, int align) {
 }
 static inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
+// The walkable terrain types the flood fills spread over (retail's 0xe1f mask).
+inline bool Walkable(uint8_t terrainType) {
+    return ((1 << (terrainType & 0x1f)) & 0xe1fU) != 0;
+}
+
 } // namespace
 
 // ============================================================
-// 0x1400a8200 — Pf_RegionNodeFree_8200(graph, nodeIdx)
+// 0x1400a8200 — free a region
 // ============================================================
-// Reset region node `nodeIdx` (stride 0x30 at graph+0x68): id/-1, clear its two int
-// vectors (+0x10,+0x20) via 1400021d0(...,0), centroid/blockfields -1, then push nodeIdx
-// onto the free-list int-array at graph+0xa8 (count +0xb0, cap +0xb4) with the standard
-// exe grow-and-copy. Leaf except 0x1400021d0 (registered).
-void Pf_RegionNodeFree_8200(int64_t param_1, int param_2) {
-    int64_t lVar7 = (int64_t)param_2 * 0x30;
-    *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 8 + lVar7) = 0xffffffff;
-    // 0x1400021d0 leaves a GROWN tail as the allocation found it, so the element type is
-    // I32NoInit. SetSize(0) never grows, so the two types agree here.
-    GameColl::AsArray<GameColl::I32NoInit>((void*)(*(int64_t*)(param_1 + 0x68) + 0x10 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-    GameColl::AsArray<GameColl::I32NoInit>((void*)(*(int64_t*)(param_1 + 0x68) + 0x20 + lVar7)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-    *(uint32_t*)(lVar7 + *(int64_t*)(param_1 + 0x68)) = 0xffffffff;
-    *(uint32_t*)(*(int64_t*)(param_1 + 0x68) + 4 + lVar7) = 0xffffffff;
-    int iVar2 = *(int*)(param_1 + 0xb0);
+// Reset region `region`: block -1, clear its two int arrays via 0x1400021d0(..., 0),
+// centroid -1, then append the id to freeRegions with the standard exe grow-and-copy.
+void RegionGraph::FreeRegion(int region) {
+    int64_t lVar7 = static_cast<int64_t>(region);
+    regions.data[lVar7].block = -1;
+    // 0x1400021d0 leaves a GROWN tail as the allocation found it (a trivial element);
+    // SetSize(0) never grows.
+    regions.data[lVar7].neighbours.SetSize(0);    // 0x1400021d0
+    regions.data[lVar7].borderCells.SetSize(0);   // 0x1400021d0
+    regions.data[lVar7].x = -1;
+    regions.data[lVar7].y = -1;
+    int iVar2 = freeRegions._size;
     int iVar6 = iVar2 + 1;
     if (iVar6 != iVar2) {
-        void* pvVar3 = *(void**)(param_1 + 0xa8);
-        *(int*)(param_1 + 0xb0) = iVar6;
-        if (*(int*)(param_1 + 0xb4) < iVar6) {
-            *(int*)(param_1 + 0xb4) = iVar6;
+        int32_t* pvVar3 = freeRegions._data;
+        freeRegions._size = iVar6;
+        if (freeRegions._capacity < iVar6) {
+            freeRegions._capacity = iVar6;
             if (iVar2 != 0) {
-                *(int*)(param_1 + 0xb4) = iVar6 * 3;
+                freeRegions._capacity = iVar6 * 3;
             }
-            void* pvVar5 = MemAlloc((int64_t)*(int*)(param_1 + 0xb4) << 2, 4);
-            *(void**)(param_1 + 0xa8) = pvVar5;
+            freeRegions._data = static_cast<int32_t*>(MemAlloc(static_cast<int64_t>(freeRegions._capacity) << 2, 4));
         }
         int iVar4 = 0;
-        if (pvVar3 == *(void**)(param_1 + 0xa8)) {
+        if (pvVar3 == freeRegions._data) {
             iVar4 = iVar2;
         }
-        for (int64_t lVar7b = (int64_t)iVar4; lVar7b < iVar6; lVar7b = lVar7b + 1) {
-            int* piVar1 = (int*)(*(int64_t*)(param_1 + 0xa8) + lVar7b * 4);
-            if (piVar1 != (int*)0x0) {
-                int v = param_2;
+        for (int64_t lVar7b = static_cast<int64_t>(iVar4); lVar7b < iVar6; lVar7b = lVar7b + 1) {
+            int* piVar1 = &freeRegions._data[lVar7b];
+            if (piVar1 != nullptr) {
+                int v = region;
                 if (lVar7b < iVar2) {
-                    v = *(int*)((int64_t)pvVar3 + lVar7b * 4);
+                    v = pvVar3[lVar7b];
                 }
                 *piVar1 = v;
             }
         }
-        if (pvVar3 != *(void**)(param_1 + 0xa8)) {
+        if (pvVar3 != freeRegions._data) {
             MemFree(pvVar3);
         }
     }
 }
 
 // ============================================================
-// 0x1400a8350 — Pf_RegionFreeId_8350(graph) -> regionId
+// 0x1400a8350 — allocate a region id
 // ============================================================
-// Pop a region id from the free-list (graph+0xa8 / count +0xb0). If the list is empty
-// (count < 1), GROW the region-node array: id = graph+0x70, call 1e210(graph+0x68, id+1,
-// &stack tmp-region-template) to size the node array to id+1, free the temp template's two
-// vectors, and return the old graph+0x70 value. Otherwise pop the last id (and resize -1
-// via 1400021d0). Returns the region id (undefined4 -> int).
-//
-// Faithfulness: the empty-list branch builds a zeroed 0x20-byte template on the stack
-// (local_40[4]=ptrs/sizes pairs at +0x10/+0x20 of the node) and passes &local_40 as the
-// fill arg to 1e210; afterwards it MemFrees local_20 then local_30 (the template's two
-// vector ptrs). Transcribed literally.
-int Pf_RegionFreeId_8350(int64_t param_1) {
-    int iVar1 = *(int*)(param_1 + 0xb0);
+// Pop an id from freeRegions. If it is empty, GROW the region array: id = its size,
+// resized (0x14001e210) to id+1 from a stack template region whose two arrays are
+// released afterwards. Otherwise pop the last id (0x1400021d0 with size-1).
+int RegionGraph::AllocRegion() {
+    int iVar1 = freeRegions._size;
     uint32_t uVar2;
     if (iVar1 < 1) {
-        uVar2 = *(uint32_t*)(param_1 + 0x70);
-        // local template: layout matches Ghidra local_40[4]; local_30/_28/_20/_18.
-        struct { uint32_t local_40[4]; void* local_30; uint64_t local_28; void* local_20; uint64_t local_18; } t;
-        t.local_30 = (void*)0x0; t.local_28 = 0; t.local_20 = (void*)0x0; t.local_18 = 0;
-        Pf_VectorResize30_e210((int64_t*)(param_1 + 0x68), *(uint32_t*)(param_1 + 0x70) + 1, t.local_40);
-        MemFree(t.local_20); t.local_20 = (void*)0x0; t.local_18 = 0;
-        MemFree(t.local_30);
+        uVar2 = static_cast<uint32_t>(regions.size);
+        {
+            // The stack template: its two arrays start empty (x / y / block are not
+            // written). Retail releases borderCells then neighbours at the end of the
+            // block: the inlined ~Array of each (MemFree(data); data = 0; size/cap = 0).
+            RegionNode t;
+            RegionNodesResize(&regions, regions.size + 1, &t);   // 0x14001e210
+        }
     } else {
-        uVar2 = *(uint32_t*)(*(int64_t*)(param_1 + 0xa8) + -4 + (int64_t)iVar1 * 4);
-        // I32NoInit: 0x1400021d0 leaves a grown tail as-found. This is a pop (n-1), a
-        // pure shrink, so nothing is grown and the two element types agree.
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0xa8)).SetSize(iVar1 + -1);  // B.3.2 bridge: 0x1400021d0
+        uVar2 = static_cast<uint32_t>(freeRegions._data[static_cast<int64_t>(iVar1) + -1]);
+        // A pop (n-1), a pure shrink: nothing is grown.
+        freeRegions.SetSize(iVar1 + -1);   // 0x1400021d0
     }
-    return (int)uVar2;
+    return static_cast<int>(uVar2);
 }
 
 // ============================================================
-// 0x1400a8420 — Pf_DirtyCoarseCellB_8420(graph, coarseCellIdx)
+// 0x1400a8420 — queue a block for an adjacency rebuild
 // ============================================================
-// Mark coarse-grid cell `coarseCellIdx` (stride 0x20 at graph+0x78) dirty-flag-B (byte +9);
-// if it was not already set, push the cell index onto dirty-list-B (graph+0x98 / count
-// +0xa0 / cap +0xa4) with the standard exe grow-and-copy. Leaf (MemAlloc/MemFree only).
-void Pf_DirtyCoarseCellB_8420(int64_t param_1, int param_2) {
-    if (*(char*)((int64_t)param_2 * 0x20 + 9 + *(int64_t*)(param_1 + 0x78)) == '\0') {
-        *(uint8_t*)((int64_t)param_2 * 0x20 + 9 + *(int64_t*)(param_1 + 0x78)) = 1;
-        int iVar2 = *(int*)(param_1 + 0xa0);
+// Set the block's needsAdjacency byte; if it was not already set, append the block to
+// dirtyAdjacency with the standard exe grow-and-copy. Leaf (MemAlloc/MemFree only).
+void RegionGraph::MarkAdjacencyDirty(int block) {
+    if (blocks.data[block].needsAdjacency == '\0') {
+        blocks.data[block].needsAdjacency = 1;
+        int iVar2 = dirtyAdjacency._size;
         int iVar7 = iVar2 + 1;
         if (iVar7 != iVar2) {
-            void* pvVar3 = *(void**)(param_1 + 0x98);
-            *(int*)(param_1 + 0xa0) = iVar7;
-            if (*(int*)(param_1 + 0xa4) < iVar7) {
-                *(int*)(param_1 + 0xa4) = iVar7;
+            int32_t* pvVar3 = dirtyAdjacency._data;
+            dirtyAdjacency._size = iVar7;
+            if (dirtyAdjacency._capacity < iVar7) {
+                dirtyAdjacency._capacity = iVar7;
                 if (iVar2 != 0) {
-                    *(int*)(param_1 + 0xa4) = iVar7 * 3;
+                    dirtyAdjacency._capacity = iVar7 * 3;
                 }
-                void* pvVar5 = MemAlloc((int64_t)*(int*)(param_1 + 0xa4) << 2, 4);
-                *(void**)(param_1 + 0x98) = pvVar5;
+                dirtyAdjacency._data = static_cast<int32_t*>(MemAlloc(static_cast<int64_t>(dirtyAdjacency._capacity) << 2, 4));
             }
             int iVar4 = 0;
-            if (pvVar3 == *(void**)(param_1 + 0x98)) {
+            if (pvVar3 == dirtyAdjacency._data) {
                 iVar4 = iVar2;
             }
-            for (int64_t lVar6 = (int64_t)iVar4; lVar6 < iVar7; lVar6 = lVar6 + 1) {
-                int* piVar1 = (int*)(*(int64_t*)(param_1 + 0x98) + lVar6 * 4);
-                if (piVar1 != (int*)0x0) {
-                    int v = param_2;
+            for (int64_t lVar6 = static_cast<int64_t>(iVar4); lVar6 < iVar7; lVar6 = lVar6 + 1) {
+                int* piVar1 = &dirtyAdjacency._data[lVar6];
+                if (piVar1 != nullptr) {
+                    int v = block;
                     if (lVar6 < iVar2) {
-                        v = *(int*)((int64_t)pvVar3 + lVar6 * 4);
+                        v = pvVar3[lVar6];
                     }
                     *piVar1 = v;
                 }
             }
-            if (pvVar3 != *(void**)(param_1 + 0x98)) {
+            if (pvVar3 != dirtyAdjacency._data) {
                 MemFree(pvVar3);
             }
         }
@@ -198,37 +164,32 @@ void Pf_DirtyCoarseCellB_8420(int64_t param_1, int param_2) {
 }
 
 // ============================================================
-// 0x1400a7480 — Pf_RegionRebuildAdjacency_7480(graph, coarseCellIdx)
+// 0x1400a7480 — rebuild the adjacency of a block's regions
 // ============================================================
-// For each member region of coarse cell `coarseCellIdx` (cell at graph+0x78, member list
-// +0x10/+0x18): clear that region node's adjacency list (+0x10 -> 1400021d0(,0)); then for
-// each of its border-edge cells (+0x20/+0x28) look up the neighbour region id from the Map
-// cell array (*(graph+0x50)+0x80, stride 0x30, +0x18 = regionId), and if >= 0 and not
-// already present in the adjacency list, append it (standard exe grow-and-copy at +0x10/
-// +0x18/+0x1c). Pure pointer/array logic; calls 1400021d0 (registered). The duplicate
-// scan uses the `iVar8 < 0` early-out exactly as decompiled.
-void Pf_RegionRebuildAdjacency_7480(int64_t param_1, int param_2) {
+// For each region of the block: clear its neighbour list (0x1400021d0(, 0)); then for
+// each of its border cells look up the cell's region id in the Map, and if >= 0 and not
+// already listed, append it (standard exe grow-and-copy). The duplicate scan uses the
+// `iVar8 < 0` early-out exactly as decompiled.
+void RegionGraph::RebuildAdjacency(int block) {
     int local_res10 = 0;
-    int64_t lVar4 = (int64_t)param_2 * 0x20 + *(int64_t*)(param_1 + 0x78);
-    if (0 < *(int*)(lVar4 + 0x18)) {
+    RegionBlock* lVar4 = &blocks.data[block];
+    if (0 < lVar4->regions._size) {
         int64_t local_res18 = 0;
         do {
-            int64_t lVar11 = (int64_t)*(int*)(*(int64_t*)(lVar4 + 0x10) + local_res18) * 0x30 +
-                             *(int64_t*)(param_1 + 0x68);
-            // I32NoInit: tail as-found, like 0x1400021d0. SetSize(0) never grows.
-            GameColl::AsArray<GameColl::I32NoInit>((void*)(lVar11 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
+            RegionNode* lVar11 = &regions.data[lVar4->regions._data[local_res18]];
+            // A trivial element; SetSize(0) never grows.
+            lVar11->neighbours.SetSize(0);   // 0x1400021d0
             int iVar12 = 0;
-            if (0 < *(int*)(lVar11 + 0x28)) {
+            if (0 < lVar11->borderCells._size) {
                 int64_t lVar10 = 0;
                 do {
-                    int iVar1 = *(int*)(*(int64_t*)(*(int64_t*)(param_1 + 0x50) + 0x80) + 0x18 +
-                                        (int64_t)*(int*)(lVar10 + *(int64_t*)(lVar11 + 0x20)) * 0x30);
+                    int iVar1 = map->cells[lVar11->borderCells._data[lVar10]].regionId;
                     if (-1 < iVar1) {
-                        int iVar9 = *(int*)(lVar11 + 0x18);
+                        int iVar9 = lVar11->neighbours._size;
                         int iVar8 = 0;
                         int64_t lVar7 = 0;
                         if (0 < iVar9) {
-                            int* piVar5 = *(int**)(lVar11 + 0x10);
+                            int* piVar5 = lVar11->neighbours._data;
                             do {
                                 if (*piVar5 == iVar1) {
                                     if (-1 < iVar8) goto LAB_1400a75f8;
@@ -239,110 +200,103 @@ void Pf_RegionRebuildAdjacency_7480(int64_t param_1, int param_2) {
                                 piVar5 = piVar5 + 1;
                             } while (lVar7 < iVar9);
                         }
-                        iVar8 = *(int*)(lVar11 + 0x18);
+                        iVar8 = lVar11->neighbours._size;
                         iVar9 = iVar9 + 1;
                         if (iVar9 != iVar8) {
-                            void* pvVar2 = *(void**)(lVar11 + 0x10);
-                            *(int*)(lVar11 + 0x18) = iVar9;
-                            if (*(int*)(lVar11 + 0x1c) < iVar9) {
-                                *(int*)(lVar11 + 0x1c) = iVar9;
+                            int32_t* pvVar2 = lVar11->neighbours._data;
+                            lVar11->neighbours._size = iVar9;
+                            if (lVar11->neighbours._capacity < iVar9) {
+                                lVar11->neighbours._capacity = iVar9;
                                 if ((iVar9 == iVar8 + 1) && (iVar8 != 0)) {
-                                    *(int*)(lVar11 + 0x1c) = iVar9 * 3;
+                                    lVar11->neighbours._capacity = iVar9 * 3;
                                 }
-                                void* pvVar6 = MemAlloc((int64_t)*(int*)(lVar11 + 0x1c) << 2, 4);
-                                *(void**)(lVar11 + 0x10) = pvVar6;
+                                lVar11->neighbours._data = static_cast<int32_t*>(MemAlloc(static_cast<int64_t>(lVar11->neighbours._capacity) << 2, 4));
                             }
                             int iVar3 = 0;
-                            if (pvVar2 == *(void**)(lVar11 + 0x10)) {
+                            if (pvVar2 == lVar11->neighbours._data) {
                                 iVar3 = iVar8;
                             }
-                            for (int64_t lVar7b = (int64_t)iVar3; lVar7b < iVar9; lVar7b = lVar7b + 1) {
-                                int* piVar5 = (int*)(*(int64_t*)(lVar11 + 0x10) + lVar7b * 4);
-                                if (piVar5 != (int*)0x0) {
+                            for (int64_t lVar7b = static_cast<int64_t>(iVar3); lVar7b < iVar9; lVar7b = lVar7b + 1) {
+                                int* piVar5 = &lVar11->neighbours._data[lVar7b];
+                                if (piVar5 != nullptr) {
                                     int v = iVar1;
                                     if (lVar7b < iVar8) {
-                                        v = *(int*)((int64_t)pvVar2 + lVar7b * 4);
+                                        v = pvVar2[lVar7b];
                                     }
                                     *piVar5 = v;
                                 }
                             }
-                            if (pvVar2 != *(void**)(lVar11 + 0x10)) {
+                            if (pvVar2 != lVar11->neighbours._data) {
                                 MemFree(pvVar2);
                             }
                         }
                     }
 LAB_1400a75f8:
                     iVar12 = iVar12 + 1;
-                    lVar10 = lVar10 + 4;
-                } while (iVar12 < *(int*)(lVar11 + 0x28));
+                    lVar10 = lVar10 + 1;
+                } while (iVar12 < lVar11->borderCells._size);
             }
             local_res10 = local_res10 + 1;
-            local_res18 = local_res18 + 4;
-        } while (local_res10 < *(int*)(lVar4 + 0x18));
+            local_res18 = local_res18 + 1;
+        } while (local_res10 < lVar4->regions._size);
     }
 }
 
 // ============================================================
-// 0x1400a7670 — Pf_StampRegionIdBlock_7670(graph, coarseCellIdx)
+// 0x1400a7670 — write a block's region ids into the Map
 // ============================================================
-// Write the final region-id for every fine cell of coarse cell `coarseCellIdx` into the
-// Map cell array (*(graph+0x50)+0x20, stride 0x30, +0x18 = regionId). The coarse cell
-// (graph+0x78, stride 0x20) supplies blockX (+0x00) and a member-region-id remap array
-// (+0x04). For each (row 0..blockH, col 0..blockW): read the label grid (graph+0xb8)
-// value-1; if <0 write -1, else map through the +0x04 array; destination flat index =
-// ((row + blockY*blockH) * mapStride + col) + blockX*blockW. Pure index math, leaf.
+// For each (row 0..blockHeight, col 0..blockWidth) of the block: read the label grid
+// value-1; if < 0 write -1, else map it through the block's region list; destination
+// cell = ((row + y*blockHeight) * map->size + col) + x*blockWidth.
 //
 // NOTE (faithfulness trap): the decompile reuses `iVar4` as both the inner loop bound
-// (reloaded from param_1+0x58 each col) and the block stride; transcribed verbatim.
-void Pf_StampRegionIdBlock_7670(int64_t param_1, int param_2) {
-    int iVar1 = *(int*)(param_1 + 0x5c);
-    int iVar4 = *(int*)(param_1 + 0x58);
+// (reloaded from blockWidth each col) and the label; transcribed verbatim.
+void RegionGraph::StampRegionIds(int block) {
+    int iVar1 = blockHeight;
+    int iVar4 = blockWidth;
     int iVar7 = 0;
     int64_t lVar6 = 0;
-    int* piVar11 = (int*)((int64_t)param_2 * 0x20 + *(int64_t*)(param_1 + 0x78));
-    int iVar2 = piVar11[1];
-    int iVar5 = *piVar11 * iVar4;
+    const RegionBlock* piVar11 = &blocks.data[block];
+    int iVar2 = piVar11->y;
+    int iVar5 = piVar11->x * iVar4;
     if (0 < iVar1) {
         do {
             int iVar9 = 0;
             int64_t lVar10 = 0;
             if (0 < iVar4) {
                 do {
-                    int iVar3 = (iVar7 + iVar2 * iVar1) * **(int**)(param_1 + 0x50) + iVar9;
-                    iVar4 = *(int*)(*(int64_t*)(param_1 + 0xb8) + (iVar4 * lVar6 + lVar10) * 4) + -1;
+                    int iVar3 = (iVar7 + iVar2 * iVar1) * map->size + iVar9;
+                    iVar4 = labels._data[iVar4 * lVar6 + lVar10] + -1;
                     uint32_t uVar8;
                     if (iVar4 < 0) {
                         uVar8 = 0xffffffff;
                     } else {
-                        uVar8 = *(uint32_t*)(*(int64_t*)(piVar11 + 4) + (int64_t)iVar4 * 4);
+                        uVar8 = static_cast<uint32_t>(piVar11->regions._data[iVar4]);
                     }
                     iVar9 = iVar9 + 1;
                     lVar10 = lVar10 + 1;
-                    *(uint32_t*)(*(int64_t*)(*(int**)(param_1 + 0x50) + 0x20) + 0x18 +
-                                 (int64_t)(iVar3 + iVar5) * 0x30) = uVar8;
-                    iVar4 = *(int*)(param_1 + 0x58);
+                    map->cells[static_cast<int64_t>(iVar3 + iVar5)].regionId = static_cast<int32_t>(uVar8);
+                    iVar4 = blockWidth;
                 } while (iVar9 < iVar4);
             }
             iVar7 = iVar7 + 1;
             lVar6 = lVar6 + 1;
-        } while (iVar7 < *(int*)(param_1 + 0x5c));
+        } while (iVar7 < blockHeight);
     }
 }
 
 // ============================================================
-// 0x1400a7750 — Pf_AddBorderEdge_7750(graph, regionNode, blockX, blockY, fineX, fineY)
+// 0x1400a7750 — add a cell's outward border cells to a region
 // ============================================================
-// For the 3x3-minus-interior border ring around (fineX-1..fineX+1, fineY-1..fineY+1):
-// for each ring cell that is in-bounds and OUTSIDE the coarse block [blockX..blockX+blockW)
-// x [blockY..blockY+blockH), append its flat Map index (mapStride*y + x) to region node
-// `regionNode`'s border-edge list (node at graph+0x68 stride 0x30, list +0x20/+0x28/+0x2c)
-// with the standard grow-and-copy and a duplicate-skip scan. Two nested do/while (outer
-// 3 rows via local_64=-1..1, inner 3 cols via lVar14=3 countdown). Leaf (MemAlloc/MemFree).
-void Pf_AddBorderEdge_7750(int64_t param_1, int param_2, int param_3, int param_4,
-                           int param_5, int param_6) {
-    int iVar1 = *(int*)(param_1 + 0x58);
-    int iVar2 = *(int*)(param_1 + 0x5c);
-    int iVar3 = **(int**)(param_1 + 0x50);
+// For the 3x3 ring around (x-1..x+1, y-1..y+1): each ring cell that is on the map and
+// OUTSIDE the block [blockX0 .. blockX0+blockWidth) x [blockY0 .. blockY0+blockHeight)
+// has its flat index (map->size*y + x) appended to the region's borderCells, with the
+// standard grow-and-copy and a duplicate-skip scan. Outer 3 rows via local_64=-1..1,
+// inner 3 cols via lVar14=3 countdown. Leaf (MemAlloc/MemFree).
+void RegionGraph::AddBorderCells(int region, int param_3, int param_4, int param_5, int param_6) {
+    int iVar1 = blockWidth;
+    int iVar2 = blockHeight;
+    int iVar3 = map->size;
     int local_64 = -1;
     do {
         int64_t lVar14 = 3;
@@ -354,10 +308,10 @@ void Pf_AddBorderEdge_7750(int64_t param_1, int param_2, int param_3, int param_
                   ((param_3 + -1 + iVar1 < iVar15 || (param_4 + -1 + iVar2 < iVar13)))))) {
                 int iVar9 = 0;
                 int64_t lVar8 = 0;
-                int64_t lVar12 = (int64_t)param_2 * 0x30 + *(int64_t*)(param_1 + 0x68);
-                int iVar11 = **(int**)(param_1 + 0x50) * iVar13 + iVar15;
-                if (0 < (int64_t)*(int*)(lVar12 + 0x28)) {
-                    int* piVar6 = *(int**)(lVar12 + 0x20);
+                RegionNode* lVar12 = &regions.data[region];
+                int iVar11 = map->size * iVar13 + iVar15;
+                if (0 < static_cast<int64_t>(lVar12->borderCells._size)) {
+                    int* piVar6 = lVar12->borderCells._data;
                     do {
                         if (*piVar6 == iVar11) {
                             if (-1 < iVar9) goto LAB_1400a7906;
@@ -366,36 +320,35 @@ void Pf_AddBorderEdge_7750(int64_t param_1, int param_2, int param_3, int param_
                         lVar8 = lVar8 + 1;
                         iVar9 = iVar9 + 1;
                         piVar6 = piVar6 + 1;
-                    } while (lVar8 < *(int*)(lVar12 + 0x28));
+                    } while (lVar8 < lVar12->borderCells._size);
                 }
-                iVar9 = *(int*)(lVar12 + 0x28);
-                int iVar10 = *(int*)(lVar12 + 0x28) + 1;
+                iVar9 = lVar12->borderCells._size;
+                int iVar10 = lVar12->borderCells._size + 1;
                 if (iVar10 != iVar9) {
-                    void* pvVar4 = *(void**)(lVar12 + 0x20);
-                    *(int*)(lVar12 + 0x28) = iVar10;
-                    if (*(int*)(lVar12 + 0x2c) < iVar10) {
-                        *(int*)(lVar12 + 0x2c) = iVar10;
+                    int32_t* pvVar4 = lVar12->borderCells._data;
+                    lVar12->borderCells._size = iVar10;
+                    if (lVar12->borderCells._capacity < iVar10) {
+                        lVar12->borderCells._capacity = iVar10;
                         if ((iVar10 == iVar9 + 1) && (iVar9 != 0)) {
-                            *(int*)(lVar12 + 0x2c) = iVar10 * 3;
+                            lVar12->borderCells._capacity = iVar10 * 3;
                         }
-                        void* pvVar7 = MemAlloc((int64_t)*(int*)(lVar12 + 0x2c) << 2, 4);
-                        *(void**)(lVar12 + 0x20) = pvVar7;
+                        lVar12->borderCells._data = static_cast<int32_t*>(MemAlloc(static_cast<int64_t>(lVar12->borderCells._capacity) << 2, 4));
                     }
                     int iVar5 = 0;
-                    if (pvVar4 == *(void**)(lVar12 + 0x20)) {
+                    if (pvVar4 == lVar12->borderCells._data) {
                         iVar5 = iVar9;
                     }
-                    for (lVar8 = (int64_t)iVar5; lVar8 < iVar10; lVar8 = lVar8 + 1) {
-                        int* piVar6 = (int*)(*(int64_t*)(lVar12 + 0x20) + lVar8 * 4);
-                        if (piVar6 != (int*)0x0) {
+                    for (lVar8 = static_cast<int64_t>(iVar5); lVar8 < iVar10; lVar8 = lVar8 + 1) {
+                        int* piVar6 = &lVar12->borderCells._data[lVar8];
+                        if (piVar6 != nullptr) {
                             int v = iVar11;
                             if (lVar8 < iVar9) {
-                                v = *(int*)((int64_t)pvVar4 + lVar8 * 4);
+                                v = pvVar4[lVar8];
                             }
                             *piVar6 = v;
                         }
                     }
-                    if (pvVar4 != *(void**)(lVar12 + 0x20)) {
+                    if (pvVar4 != lVar12->borderCells._data) {
                         MemFree(pvVar4);
                     }
                 }
@@ -412,170 +365,155 @@ LAB_1400a7906:
 }
 
 // ============================================================
-// 0x1400a7950 — Pf_RegionCentroidAndEdges_7950(graph, coarseCellIdx, labelValue) -> regionId
+// 0x1400a7950 — build one region of a block -> region id
 // ============================================================
-// Allocate a fresh region id (a8350), stamp it into the coarse cell member array, then scan
-// every fine cell of the coarse block; for each cell whose label grid (graph+0xb8) == the
-// flood-fill `labelValue`, accumulate the centroid sums and, if it sits on the block border
-// (col/row == 0 or == blockW/H-1), call a7750 to add its outward border edges. Finally write
-// the integer-averaged centroid to the region node (+0x00,+0x04) and store the coarse cell
-// index at node+0x08 (regionId field reuse: piVar4[2]=param_2). Returns the new region id
-// (zero-extended). Calls a8350 + a7750.
+// Allocate a region id (0x1400a8350), store the block in it, then scan every cell of the
+// block; for each cell whose label == `label`, accumulate the centroid sums and, if it
+// sits on the block border (col/row == 0 or == width/height-1), add its outward border
+// cells (0x1400a7750). Finally write the integer-averaged centroid. Returns the id
+// (zero-extended).
 //
-// Faithfulness traps: a8350 (TradeComponent_impl_8350) returns the new id as undefined4;
-// uVar2 (the id) is used both as the region-node selector (uVar12*0x30) and passed to a7750.
-// The averages use integer division (iVar10/iVar16). Decompiler's `iVar9` is reloaded from
-// +0x5c inside the inner loop; transcribed verbatim. Member-array stamp: piVar4[2]=param_2
-// stores the coarse cell index into node+0x08 BEFORE the scan.
-uint64_t Pf_RegionCentroidAndEdges_7950(int64_t param_1, int param_2, int param_3) {
-    uint32_t uVar2 = (uint32_t)Pf_RegionFreeId_8350(param_1);
-    uint64_t uVar12 = (uint64_t)(int)uVar2;
+// Faithfulness traps: the id is used both as the region selector and passed to 0x1400a7750.
+// The averages use integer division. `iVar9` is reloaded from blockHeight inside the inner
+// loop; transcribed verbatim.
+uint64_t RegionGraph::BuildRegion(int block, int label) {
+    uint32_t uVar2 = static_cast<uint32_t>(AllocRegion());   // 0x1400a8350
+    uint64_t uVar12 = static_cast<uint64_t>(static_cast<int>(uVar2));
     int iVar10 = 0;
     int iVar11 = 0;
-    int* piVar5 = (int*)((int64_t)param_2 * 0x20 + *(int64_t*)(param_1 + 0x78));
+    const RegionBlock* piVar5 = &blocks.data[block];
     int iVar16 = 0;
-    int* piVar4 = (int*)(uVar12 * 0x30 + *(int64_t*)(param_1 + 0x68));
+    RegionNode* piVar4 = &regions.data[uVar12];
     int iVar15 = 0;
     int64_t lVar7 = 0;
-    piVar4[2] = param_2;
-    int iVar9 = *(int*)(param_1 + 0x5c);
-    int iVar13 = *piVar5 * *(int*)(param_1 + 0x58);
-    int iVar14 = piVar5[1] * iVar9;
-    if (0 < *(int*)(param_1 + 0x58)) {
+    piVar4->block = block;
+    int iVar9 = blockHeight;
+    int iVar13 = piVar5->x * blockWidth;
+    int iVar14 = piVar5->y * iVar9;
+    if (0 < blockWidth) {
         do {
             int iVar6 = 0;
             int64_t lVar8 = 0;
             if (0 < iVar9) {
                 do {
-                    if (*(int*)(*(int64_t*)(param_1 + 0xb8) +
-                                (*(int*)(param_1 + 0x58) * lVar7 + lVar8) * 4) == param_3) {
+                    if (labels._data[blockWidth * lVar7 + lVar8] == label) {
                         int iVar3 = iVar6 + iVar13;
                         iVar16 = iVar16 + 1;
                         iVar10 = iVar10 + iVar3;
                         int iVar1 = iVar15 + iVar14;
                         iVar11 = iVar11 + iVar1;
-                        if ((((lVar8 == 0) || (lVar7 == 0)) || (iVar6 == *(int*)(param_1 + 0x58) + -1)) ||
+                        if ((((lVar8 == 0) || (lVar7 == 0)) || (iVar6 == blockWidth + -1)) ||
                             (iVar15 == iVar9 + -1)) {
-                            Pf_AddBorderEdge_7750(param_1, uVar2, iVar13, iVar14, iVar3, iVar1);
+                            AddBorderCells(static_cast<int>(uVar2), iVar13, iVar14, iVar3, iVar1);   // 0x1400a7750
                         }
                     }
-                    uVar12 = (uint64_t)uVar2;
-                    iVar9 = *(int*)(param_1 + 0x5c);
+                    uVar12 = static_cast<uint64_t>(uVar2);
+                    iVar9 = blockHeight;
                     iVar6 = iVar6 + 1;
                     lVar8 = lVar8 + 1;
                 } while (iVar6 < iVar9);
             }
             iVar15 = iVar15 + 1;
             lVar7 = lVar7 + 1;
-        } while (iVar15 < *(int*)(param_1 + 0x58));
+        } while (iVar15 < blockWidth);
     }
-    *piVar4 = iVar10 / iVar16;
-    piVar4[1] = iVar11 / iVar16;
+    piVar4->x = iVar10 / iVar16;
+    piVar4->y = iVar11 / iVar16;
     return uVar12 & 0xffffffff;
 }
 
 // ============================================================
-// 0x1400a7ad0 — Pf_FloodFillLabel_7ad0(graph, blockX, blockY, fineX, fineY, label)
+// 0x1400a7ad0 — flood-fill one label over a block
 // ============================================================
-// Worklist flood-fill: seed the worklist BST/list (graph+0xc8 root, +0xd0 head, +0xd8
-// count, +0xe8 free-list) with the start cell (fineX,fineY) via 1df40, then pop-and-process
-// in a do/while(true) loop. For each popped (x,y): if the label grid (graph+0xb8) is 0 and
-// the Map cell flags (*(graph+0x50)+0x20, stride 0x30, +0x29 byte) test passable
-// (mask 0xe1f), expand the contiguous passable horizontal run [x-... x+...], paint that run
-// of label-grid cells with `label`, then enqueue the row above (y-1) and below (y+1) for
-// every passable+unlabelled cell in the run. Calls 1df40 (registered) repeatedly to
-// allocate worklist nodes; the BST-link bookkeeping (head/prev/next/free-list) is inlined
-// exactly as decompiled. Heavy worklist do/while(true) — transcribed literally.
+// Seed the work queue with (x, y) via 0x14001df40, then pop-and-process until it is
+// empty. For each popped (x, y): if its label is 0 and its Map cell is walkable (mask
+// 0xe1f on the terrain type), expand the contiguous walkable run [x-... x+...], paint
+// that run of labels, then queue the row above (y-1) and below (y+1) for every walkable,
+// unlabelled cell in the run. The queue link bookkeeping is inlined exactly as decompiled.
 //
-// Faithfulness traps: local_res8 packs (x in low32, y in high32). Map flag passability test
-// is `(1 << (flagByte & 0x1f) & 0xe1f) != 0`. The run scan walks the cell array by -0x30 /
-// +0x30 byte strides reading the flag byte at +0x29 (offsets -7 and +0x59 are flagByte at
-// the prev/next cell). The two enqueue loops (row above / row below) re-read param_2/param_3
+// Faithfulness traps: the queued value packs (x low, y high). The run scan walks the Map
+// cells by -1 / +1 reading the terrain type. The two enqueue loops re-read param_2/param_3
 // from local_res10/local_res18 at each iteration, exactly as the decompiler shows.
-void Pf_FloodFillLabel_7ad0(int64_t param_1, int param_2, int param_3,
-                            uint32_t param_4, uint32_t param_5, uint16_t param_6) {
-    uint64_t* puVar1 = (uint64_t*)(param_1 + 200);   // graph+0xc8 worklist root
-    uint64_t local_res8 = ((uint64_t)param_5 << 32) | (uint64_t)param_4;
+void RegionGraph::FloodLabel(int param_2, int param_3, uint32_t param_4, uint32_t param_5, uint16_t param_6) {
+    PathCellXY local_res8;
+    local_res8.x = static_cast<int32_t>(param_4);
+    local_res8.y = static_cast<int32_t>(param_5);
     int local_res10 = param_2;
     int local_res18 = param_3;
-    uint64_t* puVar3 = (uint64_t*)Pf_WorklistAlloc_df40((uintptr_t)puVar1, &local_res8);
-    if (*puVar1 == 0) {
-        *(uint64_t**)(param_1 + 0xd0) = puVar3;
+    RegionCellQueue::Node* puVar3 = queue.NewNode(&local_res8);   // 0x14001df40
+    if (queue.tail == nullptr) {
+        queue.head = puVar3;
     } else {
-        *(uint64_t**)(*puVar1 + 8) = puVar3;
-        puVar3[2] = *puVar1;
+        queue.tail->next = puVar3;
+        puVar3->prev = queue.tail;
     }
-    *(int*)(param_1 + 0xd8) = *(int*)(param_1 + 0xd8) + 1;
-    *puVar1 = (uint64_t)puVar3;
-    int iVar12 = *(int*)(param_1 + 0xd8);
+    queue.count = queue.count + 1;
+    queue.tail = puVar3;
+    int iVar12 = queue.count;
     do {
         if (iVar12 < 1) {
             return;
         }
-        uint64_t* puVar2 = *(uint64_t**)(param_1 + 0xd0);
-        local_res8 = *puVar2;
-        if (puVar2 == (uint64_t*)*puVar1) {
-            *puVar1 = puVar2[2];
+        RegionCellQueue::Node* puVar2 = queue.head;
+        local_res8 = puVar2->value;
+        if (puVar2 == queue.tail) {
+            queue.tail = puVar2->prev;
         }
-        *(uint64_t*)(param_1 + 0xd0) = puVar2[1];
-        if (puVar2[1] != 0) {
-            *(uint64_t*)(puVar2[1] + 0x10) = puVar2[2];
+        queue.head = puVar2->next;
+        if (puVar2->next != nullptr) {
+            puVar2->next->prev = puVar2->prev;
         }
-        if (puVar2[2] != 0) {
-            *(uint64_t*)(puVar2[2] + 8) = puVar2[1];
+        if (puVar2->prev != nullptr) {
+            puVar2->prev->next = puVar2->next;
         }
-        puVar2[1] = 0;
-        puVar2[2] = 0;
-        *(int*)(param_1 + 0xd8) = *(int*)(param_1 + 0xd8) + -1;
-        *(int*)(param_1 + 0xfc) = *(int*)(param_1 + 0xfc) + -1;
-        *(int*)(param_1 + 0x100) = *(int*)(param_1 + 0x100) + 1;
-        *puVar2 = *(uint64_t*)(param_1 + 0xe8);
-        *(uint64_t**)(param_1 + 0xe8) = puVar2;
-        int iVar7 = *(int*)(param_1 + 0x58) + -1;
-        uint32_t uVar14 = (uint32_t)local_res8;
-        int64_t lVar10 = (int64_t)(int)uVar14;
-        iVar12 = (int)(local_res8 >> 0x20);
-        if (*(int*)(*(int64_t*)(param_1 + 0xb8) +
-                    ((int64_t)*(int*)(param_1 + 0x58) * (int64_t)iVar12 + lVar10) * 4) == 0) {
-            int64_t lVar13 = (int64_t)param_3;
-            int64_t lVar15 = (int64_t)param_2;
-            int64_t lVar11 = (int64_t)**(int**)(param_1 + 0x50);
-            int64_t lVar5 = *(int64_t*)(*(int**)(param_1 + 0x50) + 0x20);
-            if ((1 << (*(uint8_t*)(lVar5 + 0x29 + ((iVar12 + lVar13) * lVar11 + lVar15 + lVar10) * 0x30) &
-                       0x1f) & 0xe1fU) != 0) {
-                uint64_t uVar4 = local_res8 & 0xffffffff;
+        puVar2->next = nullptr;
+        puVar2->prev = nullptr;
+        queue.count = queue.count + -1;
+        queue.pool.Push(puVar2);
+        int iVar7 = blockWidth + -1;
+        uint32_t uVar14 = static_cast<uint32_t>(local_res8.x);
+        int64_t lVar10 = static_cast<int64_t>(static_cast<int>(uVar14));
+        iVar12 = local_res8.y;
+        if (labels._data[static_cast<int64_t>(blockWidth) * static_cast<int64_t>(iVar12) + lVar10] == 0) {
+            int64_t lVar13 = static_cast<int64_t>(param_3);
+            int64_t lVar15 = static_cast<int64_t>(param_2);
+            int64_t lVar11 = static_cast<int64_t>(map->size);
+            const MapCell* lVar5 = map->cells;
+            if (Walkable(lVar5[(iVar12 + lVar13) * lVar11 + lVar15 + lVar10].terrainType)) {
+                uint64_t uVar4 = static_cast<uint64_t>(static_cast<uint32_t>(local_res8.x));
                 uint32_t uVar6 = uVar14;
-                if (-1 < (int)(uVar14 - 1)) {
-                    uint8_t* pbVar9 = (uint8_t*)(lVar5 + -7 + ((iVar12 + lVar13) * lVar11 + lVar15 + lVar10) * 0x30);
+                if (-1 < static_cast<int>(uVar14 - 1)) {
+                    const MapCell* pbVar9 = &lVar5[(iVar12 + lVar13) * lVar11 + lVar15 + lVar10] - 1;
                     do {
-                        uVar6 = (uint32_t)uVar4;
-                        if ((1 << (*pbVar9 & 0x1f) & 0xe1fU) == 0) break;
-                        uVar6 = (uint32_t)uVar4 - 1;
-                        uVar4 = (uint64_t)uVar6;
-                        pbVar9 = pbVar9 + -0x30;
-                    } while (0 < (int)uVar6);
+                        uVar6 = static_cast<uint32_t>(uVar4);
+                        if (!Walkable(pbVar9->terrainType)) break;
+                        uVar6 = static_cast<uint32_t>(uVar4) - 1;
+                        uVar4 = static_cast<uint64_t>(uVar6);
+                        pbVar9 = pbVar9 - 1;
+                    } while (0 < static_cast<int>(uVar6));
                 }
                 int iVar8 = uVar14 + 1;
-                uVar4 = local_res8;
+                uVar4 = static_cast<uint64_t>(static_cast<uint32_t>(local_res8.x)) |
+                        (static_cast<uint64_t>(static_cast<uint32_t>(local_res8.y)) << 32);
                 if (iVar8 <= iVar7) {
-                    uint8_t* pbVar9 = (uint8_t*)(lVar5 + 0x59 + ((iVar12 + lVar13) * lVar11 + lVar15 + lVar10) * 0x30);
+                    const MapCell* pbVar9 = &lVar5[(iVar12 + lVar13) * lVar11 + lVar15 + lVar10] + 1;
                     do {
-                        if ((1 << (*pbVar9 & 0x1f) & 0xe1fU) == 0) break;
+                        if (!Walkable(pbVar9->terrainType)) break;
                         iVar8 = iVar8 + 1;
-                        uVar4 = (uint64_t)((int)uVar4 + 1);
-                        pbVar9 = pbVar9 + 0x30;
+                        uVar4 = static_cast<uint64_t>(static_cast<int>(uVar4) + 1);
+                        pbVar9 = pbVar9 + 1;
                     } while (iVar8 <= iVar7);
                 }
-                lVar10 = (int64_t)(int)uVar6;
-                iVar8 = (int)uVar4;
+                lVar10 = static_cast<int64_t>(static_cast<int>(uVar6));
+                iVar8 = static_cast<int>(uVar4);
                 if (lVar10 <= iVar8) {
                     do {
-                        int64_t lVar5b = (int64_t)*(int*)(param_1 + 0x58) * (int64_t)iVar12 + lVar10;
+                        int64_t lVar5b = static_cast<int64_t>(blockWidth) * static_cast<int64_t>(iVar12) + lVar10;
                         lVar10 = lVar10 + 1;
-                        *(uint32_t*)(*(int64_t*)(param_1 + 0xb8) + lVar5b * 4) = (uint32_t)param_6;
+                        labels._data[lVar5b] = static_cast<int32_t>(static_cast<uint32_t>(param_6));
                     } while (lVar10 <= iVar8);
                 }
-                if (-1 < (int)(uVar6 - 1)) {
+                if (-1 < static_cast<int>(uVar6 - 1)) {
                     uVar6 = uVar6 - 1;
                 }
                 if (iVar8 + 1 <= iVar7) {
@@ -584,52 +522,48 @@ void Pf_FloodFillLabel_7ad0(int64_t param_1, int param_2, int param_3,
                 if (0 < iVar12) {
                     iVar12 = iVar12 + -1;
                     uVar14 = uVar6;
-                    for (lVar10 = (int64_t)(int)uVar6; lVar10 <= iVar8; lVar10 = lVar10 + 1) {
-                        if ((*(int*)(*(int64_t*)(param_1 + 0xb8) +
-                                     ((int64_t)*(int*)(param_1 + 0x58) * (int64_t)iVar12 + lVar10) * 4) == 0)
-                            && ((1 << (*(uint8_t*)(*(int64_t*)(*(int**)(param_1 + 0x50) + 0x20) + 0x29 +
-                                       ((iVar12 + lVar13) * (int64_t)**(int**)(param_1 + 0x50) +
-                                        (int64_t)local_res10 + lVar10) * 0x30) & 0x1f) & 0xe1fU) != 0)) {
-                            uint32_t local_50 = uVar14;
-                            int local_4c = iVar12;
-                            uint64_t pack = ((uint64_t)(uint32_t)local_4c << 32) | (uint64_t)local_50;
-                            puVar3 = (uint64_t*)Pf_WorklistAlloc_df40((uintptr_t)puVar1, &pack);
-                            if (*puVar1 == 0) {
-                                *(uint64_t**)(param_1 + 0xd0) = puVar3;
+                    for (lVar10 = static_cast<int64_t>(static_cast<int>(uVar6)); lVar10 <= iVar8; lVar10 = lVar10 + 1) {
+                        if ((labels._data[static_cast<int64_t>(blockWidth) * static_cast<int64_t>(iVar12) + lVar10] == 0)
+                            && Walkable(map->cells[(iVar12 + lVar13) * static_cast<int64_t>(map->size) +
+                                                   static_cast<int64_t>(local_res10) + lVar10].terrainType)) {
+                            PathCellXY pack;
+                            pack.x = static_cast<int32_t>(uVar14);
+                            pack.y = iVar12;
+                            puVar3 = queue.NewNode(&pack);   // 0x14001df40
+                            if (queue.tail == nullptr) {
+                                queue.head = puVar3;
                             } else {
-                                *(uint64_t**)(*puVar1 + 8) = puVar3;
-                                puVar3[2] = *puVar1;
+                                queue.tail->next = puVar3;
+                                puVar3->prev = queue.tail;
                             }
-                            *(int*)(param_1 + 0xd8) = *(int*)(param_1 + 0xd8) + 1;
-                            *puVar1 = (uint64_t)puVar3;
+                            queue.count = queue.count + 1;
+                            queue.tail = puVar3;
                         }
                         uVar14 = uVar14 + 1;
                     }
-                    iVar12 = (int)(local_res8 >> 0x20);
+                    iVar12 = local_res8.y;
                 }
                 param_2 = local_res10;
                 param_3 = local_res18;
-                if (iVar12 < *(int*)(param_1 + 0x5c) + -1) {
+                if (iVar12 < blockHeight + -1) {
                     iVar12 = iVar12 + 1;
-                    for (lVar10 = (int64_t)(int)uVar6; ((local_res10 = param_2), (local_res18 = param_3),
+                    for (lVar10 = static_cast<int64_t>(static_cast<int>(uVar6)); ((local_res10 = param_2), (local_res18 = param_3),
                          lVar10 <= iVar8); lVar10 = lVar10 + 1) {
-                        if ((*(int*)(*(int64_t*)(param_1 + 0xb8) +
-                                     ((int64_t)*(int*)(param_1 + 0x58) * (int64_t)iVar12 + lVar10) * 4) == 0)
-                            && ((1 << (*(uint8_t*)(*(int64_t*)(*(int**)(param_1 + 0x50) + 0x20) + 0x29 +
-                                       ((iVar12 + lVar13) * (int64_t)**(int**)(param_1 + 0x50) +
-                                        (int64_t)param_2 + lVar10) * 0x30) & 0x1f) & 0xe1fU) != 0)) {
-                            uint32_t local_48 = uVar6;
-                            int local_44 = iVar12;
-                            uint64_t pack = ((uint64_t)(uint32_t)local_44 << 32) | (uint64_t)local_48;
-                            puVar3 = (uint64_t*)Pf_WorklistAlloc_df40((uintptr_t)puVar1, &pack);
-                            if (*puVar1 == 0) {
-                                *(uint64_t**)(param_1 + 0xd0) = puVar3;
+                        if ((labels._data[static_cast<int64_t>(blockWidth) * static_cast<int64_t>(iVar12) + lVar10] == 0)
+                            && Walkable(map->cells[(iVar12 + lVar13) * static_cast<int64_t>(map->size) +
+                                                   static_cast<int64_t>(param_2) + lVar10].terrainType)) {
+                            PathCellXY pack;
+                            pack.x = static_cast<int32_t>(uVar6);
+                            pack.y = iVar12;
+                            puVar3 = queue.NewNode(&pack);   // 0x14001df40
+                            if (queue.tail == nullptr) {
+                                queue.head = puVar3;
                             } else {
-                                *(uint64_t**)(*puVar1 + 8) = puVar3;
-                                puVar3[2] = *puVar1;
+                                queue.tail->next = puVar3;
+                                puVar3->prev = queue.tail;
                             }
-                            *(int*)(param_1 + 0xd8) = *(int*)(param_1 + 0xd8) + 1;
-                            *puVar1 = (uint64_t)puVar3;
+                            queue.count = queue.count + 1;
+                            queue.tail = puVar3;
                         }
                         uVar6 = uVar6 + 1;
                         param_2 = local_res10;
@@ -638,194 +572,184 @@ void Pf_FloodFillLabel_7ad0(int64_t param_1, int param_2, int param_3,
                 }
             }
         }
-        iVar12 = *(int*)(param_1 + 0xd8);
+        iVar12 = queue.count;
     } while (true);
 }
 
 // ============================================================
-// 0x1400a7f20 — Pf_SeedFloodFills_7f20(graph, coarseCellIdx) -> regionCount
+// 0x1400a7f20 — label every region of a block -> region count
 // ============================================================
-// Clear the label grid (graph+0xb8, graph+0xc0 cells) to 0, then sweep every fine cell of
-// the coarse block; for each passable+unlabelled cell, start a new flood-fill (a7ad0) with
-// an incrementing label. Returns (label-1) = number of distinct regions found in the block.
-// Calls a7ad0. Map flag test identical to a7ad0 (mask 0xe1f on +0x29 byte).
-int Pf_SeedFloodFills_7f20(int64_t param_1, int param_2) {
+// Clear the label grid, then sweep every cell of the block; for each walkable,
+// unlabelled cell start a flood fill (0x1400a7ad0) with the next label. Returns
+// (label-1) = the number of regions found in the block.
+int RegionGraph::LabelBlock(int block) {
     int iVar5 = 0;
-    if (0 < *(int*)(param_1 + 0xc0)) {
+    if (0 < labels._size) {
         int64_t lVar8 = 0;
         do {
             iVar5 = iVar5 + 1;
-            *(uint32_t*)(lVar8 + *(int64_t*)(param_1 + 0xb8)) = 0;
-            lVar8 = lVar8 + 4;
-        } while (iVar5 < *(int*)(param_1 + 0xc0));
+            labels._data[lVar8] = 0;
+            lVar8 = lVar8 + 1;
+        } while (iVar5 < labels._size);
     }
-    iVar5 = *(int*)(param_1 + 0x5c);
+    iVar5 = blockHeight;
     int iVar9 = 0;
-    int* piVar1 = (int*)((int64_t)param_2 * 0x20 + *(int64_t*)(param_1 + 0x78));
+    const RegionBlock* piVar1 = &blocks.data[block];
     int64_t lVar8 = 0;
     uint16_t uVar2 = 1;
-    int iVar6 = *piVar1 * *(int*)(param_1 + 0x58);
-    int iVar7 = piVar1[1] * iVar5;
-    if (0 < *(int*)(param_1 + 0x58)) {
+    int iVar6 = piVar1->x * blockWidth;
+    int iVar7 = piVar1->y * iVar5;
+    if (0 < blockWidth) {
         do {
             int iVar4 = 0;
             int64_t lVar3 = 0;
             if (0 < iVar5) {
                 do {
-                    if (((1 << (*(uint8_t*)(*(int64_t*)(*(int**)(param_1 + 0x50) + 0x20) + 0x29 +
-                                ((iVar7 + lVar8) * (int64_t)**(int**)(param_1 + 0x50) +
-                                 (int64_t)iVar6 + lVar3) * 0x30) & 0x1f) & 0xe1fU) != 0) &&
-                        (*(int*)(*(int64_t*)(param_1 + 0xb8) +
-                                 (*(int*)(param_1 + 0x58) * lVar8 + lVar3) * 4) == 0)) {
-                        Pf_FloodFillLabel_7ad0(param_1, iVar6, iVar7, iVar4, iVar9, uVar2);
+                    if (Walkable(map->cells[(iVar7 + lVar8) * static_cast<int64_t>(map->size) +
+                                            static_cast<int64_t>(iVar6) + lVar3].terrainType) &&
+                        (labels._data[blockWidth * lVar8 + lVar3] == 0)) {
+                        FloodLabel(iVar6, iVar7, iVar4, iVar9, uVar2);   // 0x1400a7ad0
                         uVar2 = uVar2 + 1;
                     }
-                    iVar5 = *(int*)(param_1 + 0x5c);
+                    iVar5 = blockHeight;
                     iVar4 = iVar4 + 1;
                     lVar3 = lVar3 + 1;
                 } while (iVar4 < iVar5);
             }
             iVar9 = iVar9 + 1;
             lVar8 = lVar8 + 1;
-        } while (iVar9 < *(int*)(param_1 + 0x58));
+        } while (iVar9 < blockWidth);
     }
     return uVar2 - 1;
 }
 
 // ============================================================
-// 0x1400a80a0 — Pf_RebuildRegionChunk_80a0(graph, coarseCellIdx)
+// 0x1400a80a0 — rebuild one block
 // ============================================================
-// Rebuild the region graph for one coarse cell: free all current member region nodes
-// (a8200 each, from member list +0x10/+0x18), clear that list (1400021d0), seed+run the
-// flood-fills (a7f20) which yields a region count, then for each region (1..count) compute
-// its centroid+border-edges (a7950, returns the new region id) and append that id to the
-// coarse cell's member list (+0x10/+0x18/+0x1c, standard grow-and-copy). Finally stamp the
-// region ids into the Map cell array (a7670). Calls a8200, a7f20, a7950, a7670, 1400021d0.
-void Pf_RebuildRegionChunk_80a0(int64_t param_1, uint32_t param_2) {
-    uint64_t uVar13 = (uint64_t)(int)param_2;
+// Free every region of the block (0x1400a8200 each), clear its region list
+// (0x1400021d0), label the block (0x1400a7f20), then for each label build its region
+// (0x1400a7950) and append the id to the block's list (standard grow-and-copy).
+// Finally stamp the region ids into the Map (0x1400a7670).
+void RegionGraph::RebuildBlock(uint32_t block) {
+    uint64_t uVar13 = static_cast<uint64_t>(static_cast<int>(block));
     int iVar10 = 0;
-    int64_t lVar8 = uVar13 * 0x20 + *(int64_t*)(param_1 + 0x78);
-    if (0 < *(int*)(lVar8 + 0x18)) {
+    RegionBlock* lVar8 = &blocks.data[uVar13];
+    if (0 < lVar8->regions._size) {
         int64_t lVar7 = 0;
         do {
-            Pf_RegionNodeFree_8200(param_1, *(int*)(lVar7 + *(int64_t*)(lVar8 + 0x10)));
+            FreeRegion(lVar8->regions._data[lVar7]);   // 0x1400a8200
             iVar10 = iVar10 + 1;
-            lVar7 = lVar7 + 4;
-        } while (iVar10 < *(int*)(lVar8 + 0x18));
+            lVar7 = lVar7 + 1;
+        } while (iVar10 < lVar8->regions._size);
     }
-    // I32NoInit: tail as-found, like 0x1400021d0. SetSize(0) never grows.
-    GameColl::AsArray<GameColl::I32NoInit>((void*)(lVar8 + 0x10)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-    iVar10 = Pf_SeedFloodFills_7f20(param_1, param_2);
+    // A trivial element; SetSize(0) never grows.
+    lVar8->regions.SetSize(0);   // 0x1400021d0
+    iVar10 = LabelBlock(static_cast<int>(block));   // 0x1400a7f20
     int iVar14 = 0;
-    uint32_t uVar12 = param_2;
+    uint32_t uVar12 = block;
     if (0 < iVar10) {
         do {
             iVar14 = iVar14 + 1;
-            uint64_t uVar5 = Pf_RegionCentroidAndEdges_7950(param_1, (int)uVar13, iVar14);
-            int iVar2 = *(int*)(lVar8 + 0x18);
+            uint64_t uVar5 = BuildRegion(static_cast<int>(uVar13), iVar14);   // 0x1400a7950
+            int iVar2 = lVar8->regions._size;
             int iVar11 = iVar2 + 1;
             if (iVar11 != iVar2) {
-                void* pvVar3 = *(void**)(lVar8 + 0x10);
-                *(int*)(lVar8 + 0x18) = iVar11;
-                if (*(int*)(lVar8 + 0x1c) < iVar11) {
-                    *(int*)(lVar8 + 0x1c) = iVar11;
+                int32_t* pvVar3 = lVar8->regions._data;
+                lVar8->regions._size = iVar11;
+                if (lVar8->regions._capacity < iVar11) {
+                    lVar8->regions._capacity = iVar11;
                     if (iVar2 != 0) {
-                        *(int*)(lVar8 + 0x1c) = iVar11 * 3;
+                        lVar8->regions._capacity = iVar11 * 3;
                     }
-                    void* pvVar6 = MemAlloc((int64_t)*(int*)(lVar8 + 0x1c) << 2, 4);
-                    *(void**)(lVar8 + 0x10) = pvVar6;
+                    lVar8->regions._data = static_cast<int32_t*>(MemAlloc(static_cast<int64_t>(lVar8->regions._capacity) << 2, 4));
                 }
                 int iVar4 = 0;
-                if (pvVar3 == *(void**)(lVar8 + 0x10)) {
+                if (pvVar3 == lVar8->regions._data) {
                     iVar4 = iVar2;
                 }
-                for (int64_t lVar7 = (int64_t)iVar4; lVar7 < iVar11; lVar7 = lVar7 + 1) {
-                    uint32_t* puVar1 = (uint32_t*)(*(int64_t*)(lVar8 + 0x10) + lVar7 * 4);
-                    if (puVar1 != (uint32_t*)0x0) {
-                        uint32_t uVar9;
+                for (int64_t lVar7 = static_cast<int64_t>(iVar4); lVar7 < iVar11; lVar7 = lVar7 + 1) {
+                    int32_t* puVar1 = &lVar8->regions._data[lVar7];
+                    if (puVar1 != nullptr) {
+                        int32_t uVar9;
                         if (lVar7 < iVar2) {
-                            uVar9 = *(uint32_t*)((int64_t)pvVar3 + lVar7 * 4);
+                            uVar9 = pvVar3[lVar7];
                         } else {
-                            uVar9 = (uint32_t)uVar5;
+                            uVar9 = static_cast<int32_t>(uVar5);
                         }
                         *puVar1 = uVar9;
                     }
                 }
-                if (pvVar3 != *(void**)(lVar8 + 0x10)) {
+                if (pvVar3 != lVar8->regions._data) {
                     MemFree(pvVar3);
                 }
-                uVar13 = (uint64_t)param_2;
+                uVar13 = static_cast<uint64_t>(block);
             }
-            uVar12 = (uint32_t)uVar13;
+            uVar12 = static_cast<uint32_t>(uVar13);
         } while (iVar14 < iVar10);
     }
-    Pf_StampRegionIdBlock_7670(param_1, uVar12);
+    StampRegionIds(static_cast<int>(uVar12));   // 0x1400a7670
 }
 
 // ============================================================
-// 0x1400a8a90 — Pf_FlushDirtyChunks_8a90(graph)
+// 0x1400a8a90 — rebuild every dirty block
 // ============================================================
-// Process the two dirty-coarse-cell lists. List A (graph+0x88/+0x90): for each cell call
-// a80a0 (full rebuild) and clear its dirty-flag-A (coarse cell +0x08). List B
-// (graph+0x98/+0xa0): for each cell call a7480 (adjacency rebuild only) and clear dirty-
-// flag-B (+0x09). Then clear both dirty lists (1400021d0(,0)) and call 1d830 on the cell-BST
-// at graph+8 with graph+0x70 (region count) to size it. Calls a80a0, a7480, 1400021d0, 1d830.
-void Pf_FlushDirtyChunks_8a90(int64_t param_1) {
-    if ((0 < *(int*)(param_1 + 0x90)) || (0 < *(int*)(param_1 + 0xa0))) {
+// dirtyRebuild: for each block RebuildBlock (0x1400a80a0) and clear its needsRebuild.
+// dirtyAdjacency: for each block RebuildAdjacency (0x1400a7480) and clear its
+// needsAdjacency. Then clear both lists (0x1400021d0(, 0)) and size the search nodes
+// to the region count (0x14001d830).
+void RegionGraph::Flush() {
+    if ((0 < dirtyRebuild._size) || (0 < dirtyAdjacency._size)) {
         uint64_t uVar5 = 0;
         uint64_t uVar3 = uVar5;
-        uint64_t uVar4 = uVar5;
+        int64_t uVar4 = 0;
         uint32_t uVar2;
-        if (0 < *(int*)(param_1 + 0x90)) {
+        if (0 < dirtyRebuild._size) {
             do {
-                Pf_RebuildRegionChunk_80a0(param_1, *(uint32_t*)(uVar4 + *(int64_t*)(param_1 + 0x88)));
-                uVar2 = (int)uVar3 + 1;
-                *(uint8_t*)((int64_t)*(int*)(uVar4 + *(int64_t*)(param_1 + 0x88)) * 0x20 + 8 +
-                            *(int64_t*)(param_1 + 0x78)) = 0;
-                uVar3 = (uint64_t)uVar2;
-                uVar4 = uVar4 + 4;
-            } while ((int)uVar2 < *(int*)(param_1 + 0x90));
+                RebuildBlock(static_cast<uint32_t>(dirtyRebuild._data[uVar4]));   // 0x1400a80a0
+                uVar2 = static_cast<int>(uVar3) + 1;
+                blocks.data[dirtyRebuild._data[uVar4]].needsRebuild = 0;
+                uVar3 = static_cast<uint64_t>(uVar2);
+                uVar4 = uVar4 + 1;
+            } while (static_cast<int>(uVar2) < dirtyRebuild._size);
         }
         uVar3 = uVar5;
-        if (0 < *(int*)(param_1 + 0xa0)) {
+        int64_t i5 = 0;
+        if (0 < dirtyAdjacency._size) {
             do {
-                Pf_RegionRebuildAdjacency_7480(param_1, *(int*)(uVar5 + *(int64_t*)(param_1 + 0x98)));
-                uVar2 = (int)uVar3 + 1;
-                int* piVar1 = (int*)(uVar5 + *(int64_t*)(param_1 + 0x98));
-                uVar5 = uVar5 + 4;
-                *(uint8_t*)((int64_t)*piVar1 * 0x20 + 9 + *(int64_t*)(param_1 + 0x78)) = 0;
-                uVar3 = (uint64_t)uVar2;
-            } while ((int)uVar2 < *(int*)(param_1 + 0xa0));
+                RebuildAdjacency(dirtyAdjacency._data[i5]);   // 0x1400a7480
+                uVar2 = static_cast<int>(uVar3) + 1;
+                int* piVar1 = &dirtyAdjacency._data[i5];
+                i5 = i5 + 1;
+                blocks.data[*piVar1].needsAdjacency = 0;
+                uVar3 = static_cast<uint64_t>(uVar2);
+            } while (static_cast<int>(uVar2) < dirtyAdjacency._size);
         }
-        // I32NoInit: tail as-found, like 0x1400021d0. Both are SetSize(0) — no growth.
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0x88)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(param_1 + 0x98)).SetSize(0);  // B.3.2 bridge: 0x1400021d0
-        Pf_ArrayResize18_d830((int64_t*)(param_1 + 8), *(int*)(param_1 + 0x70));   // 0x14001d830
+        // Both are SetSize(0) of a trivial element — no growth.
+        dirtyRebuild.SetSize(0);     // 0x1400021d0
+        dirtyAdjacency.SetSize(0);   // 0x1400021d0
+        SearchNodesResize(&search.nodes, regions.size);   // 0x14001d830
     }
 }
 
 // ============================================================
-// 0x1400a8ba0 — Pf_RegionPathLength_8ba0(graph, start, goal, ctx) -> length
+// 0x1400a8ba0 — region path length
 // ============================================================
-// First flush any dirty region chunks (a8a90) if dirty, then run the A* helper 1dc00 into a
-// LARGE local int array local_8008[8190] (32KB-ish stack buffer — declared at full size per
-// the brief), which returns the node count of the resulting region path. Sum the Euclidean
-// edge lengths between successive region-node centroids (node array at graph+0x68, stride
-// 0x30; centroid x=+0x00, y=+0x04) via sqrtf (140132010), accumulating into an int. Returns
-// the summed integer length (0 if path < 2 nodes).
+// Flush any dirty blocks, then run the region A* (0x14001dc00) into a LARGE local int
+// array local_8008[8190] (declared at full size per the brief), which returns the node
+// count of the region path. Sum the Euclidean distances between successive region
+// centroids via sqrtf (0x140132010), accumulating into an int. Returns the sum (0 if the
+// path has < 2 nodes).
 //
 // FAITHFULNESS / STACK: local_8008 is declared as int[8190] to match the decompile's
-// auStack frame exactly (do NOT shrink). __chkstk/alloca_probe is the compiler's stack-probe
-// injection and needs no port.
-//
-// 0x14001dc00 (BuildStructure_helper_dc00) is Pf_RegionAstarRun_dc00; its fourth argument
-// (param_4, the ctx) is pointer-width and passed through unchanged.
-int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64_t param_4) {
+// frame exactly (do NOT shrink). __chkstk/alloca_probe is the compiler's stack-probe
+// injection and needs no port. Retail passes its fourth argument through to 0x14001dc00,
+// which never reads it.
+int RegionGraph::PathLength(int start, uint32_t goal) {
     int local_8008[8190];
-    if ((0 < param_1[0x24]) || (0 < param_1[0x28])) {
-        Pf_FlushDirtyChunks_8a90((int64_t)param_1);
+    if ((0 < dirtyRebuild._size) || (0 < dirtyAdjacency._size)) {
+        Flush();   // 0x1400a8a90
     }
-    int iVar2 = Pf_RegionAstarRun_dc00(param_1, param_2, param_3, reinterpret_cast<void*>(param_4), (int64_t)local_8008);   // 0x14001dc00
+    int iVar2 = Run(start, static_cast<int>(goal), local_8008);   // 0x14001dc00
     int iVar3;
     if (iVar2 < 2) {
         iVar3 = 0;
@@ -833,15 +757,13 @@ int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64
         iVar3 = 0;
         int64_t lVar5 = 0;
         if (0 < iVar2 + -1) {
-            int64_t lVar1 = *(int64_t*)(param_1 + 0x1a);
+            const RegionNode* lVar1 = regions.data;
             do {
-                int iVar4 = *(int*)(lVar1 + 4 + (int64_t)local_8008[lVar5] * 0x30) -
-                            *(int*)(lVar1 + 4 + (int64_t)local_8008[lVar5 + 1] * 0x30);
-                int iVar6 = *(int*)(lVar1 + (int64_t)local_8008[lVar5] * 0x30) -
-                            *(int*)(lVar1 + (int64_t)local_8008[lVar5 + 1] * 0x30);
-                float fVar7 = WorkImpl_Sqrtf_132010((float)(iVar4 * iVar4 + iVar6 * iVar6));   // 0x140132010
+                int iVar4 = lVar1[local_8008[lVar5]].y - lVar1[local_8008[lVar5 + 1]].y;
+                int iVar6 = lVar1[local_8008[lVar5]].x - lVar1[local_8008[lVar5 + 1]].x;
+                float fVar7 = WorkImpl_Sqrtf_132010(static_cast<float>(iVar4 * iVar4 + iVar6 * iVar6));   // 0x140132010
                 lVar5 = lVar5 + 1;
-                iVar3 = iVar3 + (int)fVar7;
+                iVar3 = iVar3 + static_cast<int>(fVar7);
             } while (lVar5 < iVar2 + -1);
         }
     }
@@ -849,24 +771,18 @@ int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64
 }
 
 // ============================================================
-// 0x1400a5b30 — Pf_RegionPairCacheInsert_5b30(cache, regionA, regionB, value)
+// 0x1400a5b30 — store a region-pair distance
 // ============================================================
-// Insert/update a region-pair -> value entry in a fixed-size ring buffer + BST cache.
-// cache = undefined8*: [5] = pair-BST root, [3] = ring buffer base (stride 0x18:
-// +0x00 keyA, +0x04 keyB, +0x08 value, +0x0c.. links), [2] int = ring write head,
-// (long+0x14) int = ring tail, [4] int = ring capacity, [0] = seq/prev link.
-// First normalize (a,b) so a>=b, look it up in the BST (left=+6 dword-units, right=+8): if
-// found, just overwrite its value (+0x08 of its ring slot via slot index piVar4[2]) and
-// return. Else advance the ring head (wrap at capacity); if head == tail, evict the tail
-// slot from the BST (ca60) and bump tail. Write the new slot, link prev via cache[0], and
-// insert into the BST (c940). Calls ca60 (registered) + c940 (registered).
+// Normalise (a,b) so a>=b, look the pair up in the index: if found, overwrite its ring
+// slot's distance and return. Else advance the newest index (wrapping at the ring size);
+// if it caught up with the oldest, evict the oldest entry from the index (0x14001ca60)
+// and advance the oldest. Write the new entry (stamped with newestTime) and insert it
+// into the index (0x14001c940).
 //
-// Faithfulness traps: param_1 is undefined8*, but several fields are int (+0x10 = param_1+2
-// dword 0 = ring head; +0x14 = (char*)param_1+0x14 = ring tail; +0x20 = param_1+4 = cap).
-// The (a,b) normalization (swap so a>=b) is applied THREE times exactly as decompiled
-// (lookup key, slot store, c940 insert key). uStack_3c is an uninitialized pad qword the
-// decompiler reads into the high half of two CONCAT44 stores; transcribed as a local pad.
-void Pf_RegionPairCacheInsert_5b30(uint64_t* param_1, int param_2, int param_3, uint32_t param_4) {
+// Faithfulness traps: the (a,b) normalisation is applied THREE times exactly as decompiled
+// (lookup key, slot store, index key). The slot's +0x0C dword is an uninitialised stack
+// dword in retail (the high half of two CONCAT44 stores); the tree writes 0.
+void RegionPairCache::Store(int param_2, int param_3, uint32_t param_4) {
     uint32_t uStack_3c = 0; // decompiler-visible pad (high half of CONCAT44 stores)
     int iVar7 = param_2;
     int iVar8 = param_3;
@@ -874,87 +790,129 @@ void Pf_RegionPairCacheInsert_5b30(uint64_t* param_1, int param_2, int param_3, 
         iVar7 = param_3;
         iVar8 = param_2;
     }
-    int* piVar6 = (int*)param_1[5];
-    int* piVar4 = piVar6;
-    while (piVar4 != (int*)0x0) {
-        int iVar2 = *piVar4;
+    AvlNode30* piVar6 = index.root;
+    AvlNode30* piVar4 = piVar6;
+    while (piVar4 != nullptr) {
+        int iVar2 = piVar4->key0;
         if (iVar7 < iVar2) {
 LAB_1400a5b88:
-            piVar4 = *(int**)(piVar4 + 6);
+            piVar4 = piVar4->left;
         } else {
             if (iVar7 <= iVar2) {
-                if (iVar8 < piVar4[1]) goto LAB_1400a5b88;
-                if ((iVar7 <= iVar2) && ((iVar7 < iVar2 || (iVar8 <= piVar4[1])))) {
-                    if (piVar4 != (int*)0x0) {
-                        *(uint32_t*)(param_1[3] + 8 + (int64_t)piVar4[2] * 0x18) = param_4;
+                if (iVar8 < piVar4->key1) goto LAB_1400a5b88;
+                if ((iVar7 <= iVar2) && ((iVar7 < iVar2 || (iVar8 <= piVar4->key1)))) {
+                    if (piVar4 != nullptr) {
+                        ring.data[piVar4->key2].distance = static_cast<int32_t>(param_4);
                         return;
                     }
                     break;
                 }
             }
-            piVar4 = *(int**)(piVar4 + 8);
+            piVar4 = piVar4->right;
         }
     }
-    iVar7 = *(int*)(param_1 + 2);
+    iVar7 = newest;
     iVar8 = iVar7 + 1;
-    if (*(int*)(param_1 + 4) <= iVar7 + 1) {
+    if (ring.size <= iVar7 + 1) {
         iVar8 = 0;
     }
-    *(int*)(param_1 + 2) = iVar8;
-    if (*(int*)(param_1 + 2) == *(int*)((int64_t)param_1 + 0x14)) {
-        piVar4 = (int*)(param_1[3] + (int64_t)*(int*)((int64_t)param_1 + 0x14) * 0x18);
-        if (piVar6 != (int*)0x0) {
-            int iVar8b = *piVar4;
+    newest = iVar8;
+    if (newest == oldest) {
+        RegionPairEntry* evict = &ring.data[oldest];
+        if (piVar6 != nullptr) {
+            int iVar8b = evict->regionA;
             do {
-                int iVar2 = *piVar6;
+                int iVar2 = piVar6->key0;
                 if (iVar8b < iVar2) {
 LAB_1400a5c1b:
-                    piVar6 = *(int**)(piVar6 + 6);
+                    piVar6 = piVar6->left;
                 } else {
                     if (iVar8b <= iVar2) {
-                        int iVar3 = piVar4[1];
-                        if (iVar3 < piVar6[1]) goto LAB_1400a5c1b;
-                        if ((iVar8b <= iVar2) && ((iVar8b < iVar2 || (iVar3 <= piVar6[1])))) {
-                            WorkCellBST_Remove_ca60((uintptr_t*)(param_1 + 5), piVar6);   // 0x14001ca60
+                        int iVar3 = evict->regionB;
+                        if (iVar3 < piVar6->key1) goto LAB_1400a5c1b;
+                        if ((iVar8b <= iVar2) && ((iVar8b < iVar2 || (iVar3 <= piVar6->key1)))) {
+                            // LEFT: 0x14001ca60's C declaration (Work/exe_bodies.h, WORK-c,
+                            // running) takes the index as uintptr_t* and the node as int*.
+                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&index), &piVar6->key0);   // 0x14001ca60
                             break;
                         }
                     }
-                    piVar6 = *(int**)(piVar6 + 8);
+                    piVar6 = piVar6->right;
                 }
-            } while (piVar6 != (int*)0x0);
+            } while (piVar6 != nullptr);
         }
-        uint64_t* puVar1 = (uint64_t*)(param_1[3] + (int64_t)*(int*)((int64_t)param_1 + 0x14) * 0x18);
-        *puVar1 = 0xffffffffffffffff;
-        puVar1[1] = ((uint64_t)uStack_3c << 32) | (uint64_t)0xffffffff;
-        puVar1[2] = 0;
-        *(int*)((int64_t)param_1 + 0x14) = *(int*)((int64_t)param_1 + 0x14) + 1;
-        int iVar8c = *(int*)((int64_t)param_1 + 0x14);
-        if (*(int*)(param_1 + 4) <= *(int*)((int64_t)param_1 + 0x14)) {
+        RegionPairEntry* e = &ring.data[oldest];
+        e->regionA = -1;                   // one qword store of -1 over regionA / regionB
+        e->regionB = -1;
+        e->distance = -1;
+        e->field_0x0C = uStack_3c;         // the CONCAT44 high half
+        e->time = 0;
+        oldest = oldest + 1;
+        int iVar8c = oldest;
+        if (ring.size <= oldest) {
             iVar8c = 0;
         }
-        *(int*)((int64_t)param_1 + 0x14) = iVar8c;
+        oldest = iVar8c;
     }
-    uint64_t local_48 = ((uint64_t)(uint32_t)param_3 << 32) | (uint64_t)(uint32_t)param_2;
+    int32_t keyHi = param_2;
+    int32_t keyLo = param_3;
     if (param_2 < param_3) {
-        local_48 = ((uint64_t)(uint32_t)param_2 << 32) | (uint64_t)(uint32_t)param_3;
+        keyHi = param_3;
+        keyLo = param_2;
     }
-    uint64_t uVar5 = *param_1;
-    uint64_t* puVar1 = (uint64_t*)(param_1[3] + (int64_t)iVar7 * 0x18);
-    *puVar1 = local_48;
-    puVar1[1] = ((uint64_t)uStack_3c << 32) | (uint64_t)param_4;
-    puVar1[2] = uVar5;
+    int64_t uVar5 = newestTime;
+    RegionPairEntry* puVar1 = &ring.data[iVar7];
+    puVar1->regionA = keyHi;
+    puVar1->regionB = keyLo;
+    puVar1->distance = static_cast<int32_t>(param_4);
+    puVar1->field_0x0C = uStack_3c;
+    puVar1->time = uVar5;
     int local_res8 = param_2;
     int iStackX_c = param_3;
     if (param_2 < param_3) {
         local_res8 = param_3;
         iStackX_c = param_2;
     }
-    // local_res8 / iStackX_c are passed as the BST key pair (a>=b). local_48 is reused as the
-    // value-key pair (a,b) for c940; local_40 = iVar7 = the ring slot index.
-    struct { int local_res8; int iStackX_c; uint64_t local_48b; int local_40; uint32_t pad; } k;
-    k.local_res8 = local_res8;
-    k.iStackX_c = iStackX_c;
-    k.local_48b = ((uint64_t)(uint32_t)iStackX_c << 32) | (uint64_t)(uint32_t)local_res8;
-    k.local_40 = iVar7;
-    Pf_BstInsertB_c940((int64_t*)(param_1 + 5), (uint64_t*)&k.local_res8, (uint32_t*)&k.local_48b);   // 0x14001c940
+    // The index key {larger, smaller, ring slot}; the out slot is a stack qword.
+    int32_t key[3] = { local_res8, iStackX_c, iVar7 };
+    AvlNode30* out = nullptr;
+    AvlInsert30(&index, &out, key);   // 0x14001c940
 }
+
+// ============================================================
+// 0x1400a5ac0 — look a region pair up -> distance
+// ============================================================
+// Orders (a,b) so hi >= lo, descends the index; returns the ring slot's distance, or
+// 0xffffffff if the pair is absent.
+uint32_t RegionPairCache::Find(int a, int b) const {
+    int hi = a, lo = b;
+    if (a < b) { hi = b; lo = a; }
+    const AvlNode30* node = index.root;
+    while (true) {
+        if (node == nullptr) return 0xffffffffu;
+        int key0 = node->key0;
+        if (hi < key0) {                       // go left
+            node = node->left;
+            continue;
+        }
+        if (hi > key0) {                       // go right
+            node = node->right;
+            continue;
+        }
+        // hi == key0: compare lo against key1
+        int key1 = node->key1;
+        if (lo < key1) {                       // go left
+            node = node->left;
+            continue;
+        }
+        if (lo > key1) {                       // go right
+            node = node->right;
+            continue;
+        }
+        // exact match (hi==key0 && lo==key1)
+        if (node == nullptr) return 0xffffffffu;
+        int idx = node->key2;
+        return static_cast<uint32_t>(ring.data[idx].distance);
+    }
+}
+// The B4 FORWARD C spellings of these members are defined in action_pf_astar.cpp.

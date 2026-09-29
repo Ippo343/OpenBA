@@ -104,13 +104,11 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
     int& slotKey   = slot[1];
 
     // FUN_1400a6b20(param_1, (int)param_4, param_3, param_4)
-    Pf_EnqueueCmd0_a6b20(param_1, static_cast<int>(reinterpret_cast<uint64_t>(param_4)),
-                         reinterpret_cast<void*>(param_3), param_4);
+    Pf_EnqueueCmd0_a6b20(param_1, static_cast<int>(reinterpret_cast<uint64_t>(param_4)));
 
     // TradeComponent_impl_6c10(param_1, slot, param_2, param_3 & 0xffffffff)
-    Pf_EnqueueTradeRoute_a6c10(param_1, slot,
-                               reinterpret_cast<void*>(static_cast<uint64_t>(param_2)),
-                               reinterpret_cast<void*>(param_3 & 0xffffffff));
+    Pf_EnqueueTradeRoute_a6c10(param_1, slot, static_cast<int>(param_2),
+                               static_cast<int>(param_3 & 0xffffffff));
 
     do {
         if (slotIndex < *reinterpret_cast<int*>(param_1 + 0x168)) {
@@ -138,7 +136,7 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
 //   Same shape as a6fe0 but cmd[0]=3, cmd[2]=(uint)param3.
 // signature: (Thread* param_1, uint32 param_2, uint64 param_3, void* param_4)
 // ============================================================================
-void Pf_EnqueueCmd3_a6f00(int64_t param_1, uint32_t param_2, uint64_t param_3, void* param_4) {
+void Pf_EnqueueCmd3_a6f00(int64_t param_1, uint32_t param_2, uint64_t param_3, void* /*param_4*/) {
     uint32_t local[4];
     local[0] = 3;
     local[1] = param_2;
@@ -149,7 +147,7 @@ void Pf_EnqueueCmd3_a6f00(int64_t param_1, uint32_t param_2, uint64_t param_3, v
     } else {
         // FUN_1400a6430(param_1, &local, param_3, param_4) — apply directly on worker.
         // a6430 lives in action_pf_astar.cpp.
-        Pf_WorkerApplyCmd_a6430(param_1, local, reinterpret_cast<void*>(param_3), param_4);
+        Pf_WorkerApplyCmd_a6430(param_1, local);
     }
 }
 
@@ -270,28 +268,23 @@ LAB_clear:
 int RoadTool_sub_ce00(int64_t param_1, uint param_2, uint param_3, uint64_t param_4,
                        void* param_5, int64_t param_6, uint8_t param_7, uint8_t param_8) {
     int64_t pTVar1 = *reinterpret_cast<int64_t*>(param_1 + 0x68);
-    uint64_t uVar2 = param_4;
-    void* p4 = reinterpret_cast<void*>(param_4);
-    void* p4b = reinterpret_cast<void*>(uVar2);
     {
-        Pf_EnqueueCmd1_a6a30(pTVar1, 0, reinterpret_cast<void*>(1), p4);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 1, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 2, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 3, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 4, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 5, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 6, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 7, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 8, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 9, reinterpret_cast<void*>(1), p4b);
-        Pf_EnqueueCmd1_a6a30(pTVar1, 10, reinterpret_cast<void*>(1), p4b);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 0, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 1, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 2, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 3, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 4, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 5, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 6, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 7, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 8, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 9, 1);
+        Pf_EnqueueCmd1_a6a30(pTVar1, 10, 1);
     }
     // RoadTool_sub_ce00_sub_68b0(self, 0, 0, 0)
-    Pf_EnqueueCmd4_a68b0(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0, nullptr, nullptr);
+    Pf_EnqueueCmd4_a68b0(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0, 0, 0);
     // RoadTool_sub_ce00_sub_68b0(self, 0, param_7, param_8)
-    Pf_EnqueueCmd4_a68b0(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0,
-                         reinterpret_cast<void*>(static_cast<uint64_t>(param_7)),
-                         reinterpret_cast<void*>(static_cast<uint64_t>(param_8)));
+    Pf_EnqueueCmd4_a68b0(*reinterpret_cast<int64_t*>(param_1 + 0x68), 0, param_7, param_8);
     // RoadTool_helper_6e30(self, param_3, param_4 & 0xffffffff, param_2, param_6, 0x800)
     return RoadTool_helper_6e30(*reinterpret_cast<int64_t*>(param_1 + 0x68),
                          param_3, param_4 & 0xffffffff,

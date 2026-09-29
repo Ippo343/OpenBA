@@ -301,13 +301,10 @@ void TerraformComponent::ApplyFootprint() {
 
             map->field_0xA2 |= 1;
             *type = 6;
-            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->field_0x70),
+            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->regionGraph),
                 idx % map->size, idx / map->size);   // 0x1400a8c90
-            // The door typed args 3/4 as (int, uint64_t); the body declares them void*:
-            // the same register values, cast at the call.
-            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->field_0x68),
-                static_cast<uint32_t>(idx), reinterpret_cast<void*>(static_cast<uintptr_t>(6)),
-                nullptr);   // 0x1400a6fe0
+            // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only.
+            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->pathfinder), idx, 6);   // 0x1400a6fe0
             TerraformArrayPush(tileRecord, tileCount, tileCap, static_cast<int32_t>(idx));
             ++converted;
         }
@@ -430,13 +427,12 @@ void TerraformComponent::OnRemove() {
 
             // Update terrain visuals if was buildable
             if (isBuildable) {
-                Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->field_0x70),
+                Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->regionGraph),
                                        tileIndex % gridWidth, tileIndex / gridWidth);   // 0x1400a8c90
             }
 
             // Set terrain type (0x1400a6fe0; args 3/4 cast as above)
-            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->field_0x68), static_cast<uint32_t>(tileIndex),
-                                 reinterpret_cast<void*>(static_cast<uintptr_t>(10)), nullptr);
+            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->pathfinder), static_cast<int>(tileIndex), 10);
         }
     }
 }

@@ -44,186 +44,199 @@
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 #include "Component/InteractDescription.h"
 #include "Component/RawMaterialDescription.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/InteractComponent.h"
+#include "Component/StorageComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Action/PathSearch.h"   // RawArray (the drop-target lists)
+#include "Game/Map.h"
 // For the BANISHED_LIVE_STORAGE eat-message typeid heal in the
 // SendComponentMessage copy-ctor (see Pf_SendComponentMessageCopyCtor_b1d0).
 #include "Object/factory_registration.h"           // ::Object::GetTypeIdByName
 
 // ============================================================
-// FUN_1400c4f10 — action-stack: walk the linked entry list, clear an in-use flag
-// and call vtable+0x38 (Exit?) on each entry whose +0x18 byte is set.
-// param_1 = action-stack/context passed through to the vcall; param_2 = InternalBasePtr
-// holding the current entry. CheckPtr before every field access; advance via [obj+0x10].
+// FUN_1400c4f10 — action-stack: walk the chain from the entry the cursor holds; each node
+// whose _status is set has it cleared and its Exit (slot 7) called with the stack; advance
+// through Action::_next, writing each step back through the cursor.
 // ============================================================
-void Pf_ActStackWalkClear_4f10(void* param_1, void* param_2) {
-    int64_t lVar1 = *reinterpret_cast<int64_t*>(param_2);
-    while (lVar1 != 0) {
-        int64_t obj = *reinterpret_cast<int64_t*>(param_2);
-        if (*reinterpret_cast<char*>(obj + 0x18) != '\0') {
-            int64_t* plVar2 = *reinterpret_cast<int64_t**>(param_2);
-            *reinterpret_cast<uint8_t*>(plVar2 + 3) = 0;  // byte at obj+0x18
-            reinterpret_cast<Action*>(plVar2)->Exit(param_1);   // B.3.x bridge (slot 7)
+void ActionStackWalkClear(ActionStack* stack, ::Object::InternalPtr<Action>* cursor) {
+    while (cursor->Get() != nullptr) {
+        Action* node = cursor->Get();
+        if (node->_status) {
+            node->_status = false;
+            node->Exit(stack);   // slot 7
         }
-        lVar1 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_2) + 0x10);
-        *reinterpret_cast<int64_t*>(param_2) = lVar1;
+        *cursor = node->_next;
     }
 }
 
 // ============================================================
-// FUN_1400c54e0 — action-stack push: grow backing array if full, clear the slot
-// being overwritten (via 4f10), then store the new entry pointer and bump the count.
-// param_1 = stack object ([0]=array, [1]=capacity, [3]=count); param_2 = src entry ptr.
+// FUN_1400c54e0 — action-stack push: grow the entry array when the running index is its
+// last slot (0x10 on an empty array, else double), walk-clear the old top (0x1400c4f10),
+// then store the new entry at ++current.
 // ============================================================
-void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_) {
-    uint64_t* param_2 = reinterpret_cast<uint64_t*>(param_2_);
-    int iVar1 = static_cast<int>(param_1[1]);
-    if (iVar1 == 0) {
-        iVar1 = 0x10;
+void ActionStackPush(ActionStack* stack, const ::Object::InternalPtr<Action>* action) {
+    int newCount = stack->count;
+    if (newCount == 0) {
+        newCount = 0x10;
     } else {
-        if (static_cast<int>(param_1[3]) + 1 != iVar1) goto LAB_550e;
-        iVar1 = iVar1 * 2;
+        if (stack->current + 1 != newCount) goto LAB_550e;
+        newCount = newCount * 2;
     }
     // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize (stride 8,
     // zero tail; ImmigrationComp_DynArrayResize in immigrationcomponent.cpp). It only
-    // touches bytes [0x00,0x10) at the pointer it is given -- the array header
-    // embedded at the front of this action-stack struct -- so this call is
-    // unaffected by whatever the surrounding struct keeps at param_1[3] (+0x18).
-    GameColl::AsArray<GameColl::Ptr8>(param_1).SetSize(iVar1);
+    // touches the array header at the front of the stack (+0x00..+0x10).
+    GameColl::AsArray<GameColl::Ptr8>(stack).SetSize(newCount);
 LAB_550e:
-    if (-1 < static_cast<int>(param_1[3])) {
-        uint64_t local_res8 = *reinterpret_cast<uint64_t*>(
-            param_1[0] + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
-        Pf_ActStackWalkClear_4f10(param_1, &local_res8);
+    if (-1 < stack->current) {
+        ::Object::InternalPtr<Action> top = stack->actions[stack->current];
+        ActionStackWalkClear(stack, &top);
     }
-    *reinterpret_cast<int*>(param_1 + 3) = static_cast<int>(param_1[3]) + 1;
-    *reinterpret_cast<uint64_t*>(
-        param_1[0] + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8) = *param_2;
+    stack->current = stack->current + 1;
+    stack->actions[stack->current] = *action;
 }
 
 // ============================================================
-// FUN_140107260 — set flag bit 0x100000 at +0x20, and if the masked-low-16 bits changed
-// notify the entity (c3470) on the IBP at +0x10. Then find the family component on that
-// entity; if its +0x60 count+1 > 0, clean its task list (+0x48) and vcall Update(+0x48)
-// with Time(0).
-// param_1: object whose +0x10 is the entity IBP, +0x20 the flag dword.
+// FUN_140107260 — set flag bit 0x100000 in the component's _flags, and if the low 16 bits
+// changed refresh the entity's flags (0x1400c3470). Then find the entity's
+// CharacterComponent (0x1400012d0); if its action stack has a running entry
+// (current + 1 > 0), clear the stack (0x1400c5400) and run the component's Update
+// (slot 9) with Time(0).
 // ============================================================
-void Pf_SetFlagRefreshUpdate_107260(int64_t* param_1) {
-    uint32_t uVar1 = *reinterpret_cast<uint32_t*>(param_1 + 4);  // +0x20
+void Pf_SetFlagRefreshUpdate_107260(Component* self) {
+    uint32_t uVar1 = self->_flags;
     uint32_t uVar2 = uVar1 | 0x100000;
-    *reinterpret_cast<uint32_t*>(param_1 + 4) = uVar2;
-    if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (param_1[2] != 0)) {
-        ActHunt_NotifyEntityChanged_c3470(reinterpret_cast<void*>(param_1[2]));   // 0x1400c3470
+    self->_flags = uVar2;
+    if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (self->_entity != nullptr)) {
+        NotifyEntityChanged(self->_entity);   // 0x1400c3470
     }
-    int64_t local_res8 = 0;
-    ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(param_1[2]), &local_res8);   // 0x1400012d0
-    if (0 < *reinterpret_cast<int*>(local_res8 + 0x60) + 1) {
-        WorkBase_TaskListCleanup_c5400(reinterpret_cast<void*>(local_res8 + 0x48));   // 0x1400c5400
-        uint64_t timeStore = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStore), 0.0f);
-        reinterpret_cast<Component*>(param_1)->Update(&timeStore);   // B.3.x bridge (slot 9)
+    CharacterComponent* character = self->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
+    if (0 < character->currentAction + 1) {
+        WorkBase_TaskListCleanup_c5400(&character->actions);   // 0x1400c5400
+        System::Time time = {};
+        RtSystem_Time_Ctor(&time, 0.0f);
+        self->Update(&time);   // slot 9
     }
 }
 
 // ============================================================
-// FUN_140123070 — recursive sum of a per-entity counter over the entity's child tree.
-// obj = [param_1+0x18]; if IsDerivedFrom(obj, DAT_1401c7938) base=obj else 0. Seed value
-// = *(int*)(base + (param_2+3)*0x10). Then for each child IBP in [param_1+0x28] (count
-// [param_1+0x30], stride 8) recurse on *child and add the result.
+// FUN_140123070 — the node count of an interact tree: the component's InteractDescription
+// node array `kind` (0 use, 1 build, 2 create: the three {data, count, cap} records at
+// +0x28/+0x38/+0x48, the count read at +0x30 + kind * 0x10) plus, recursively, every
+// sub-location's count.
 // ============================================================
-int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
-    void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    bool derived = ::Object::IsDerivedFromNullSafe(obj, InteractDescription::TypeId());
-    void* base = derived ? obj : nullptr;
-    // [STANDALONE GUARD] base is null when obj is not an InteractDescription OR the
-    // type-id global (0x1401c7938) is unfilled/unregistered in standalone. The real
-    // game always resolves it; guard so the seed read can't deref null+0x30 (the
-    // counter simply contributes 0). Surfaced via the BANISHED_FORCE_WORK harness
-    // (Leisure/Work anchor a citizen on an inert workplace building's position comp).
-    int iVar3 = base ? *reinterpret_cast<int*>(
-        reinterpret_cast<uintptr_t>(base) + (static_cast<int64_t>(param_2) + 3) * 0x10) : 0;
-    int iVar5 = 0;
-    if (0 < *reinterpret_cast<int*>(param_1 + 0x30)) {
-        int64_t lVar4 = 0;
-        do {
-            int64_t* self = reinterpret_cast<int64_t*>(
-                *reinterpret_cast<int64_t*>(param_1 + 0x28) + lVar4);
-            int iVar2 = Pf_RecursiveChildSum_123070(*self, param_2);
-            iVar5 = iVar5 + 1;
-            lVar4 = lVar4 + 8;
-            iVar3 = iVar3 + iVar2;
-        } while (iVar5 < *reinterpret_cast<int*>(param_1 + 0x30));
+int InteractNodeCount(const InteractComponent* self, int kind) {
+    Description* desc = self->_description;
+    const InteractDescription* interact =
+        ::Object::IsDerivedFromNullSafe(desc, InteractDescription::TypeId())
+            ? static_cast<const InteractDescription*>(desc) : nullptr;
+    // [STANDALONE GUARD] interact is null when the description is not an
+    // InteractDescription OR the type-id global (0x1401c7938) is unfilled/unregistered in
+    // standalone. The real game always resolves it; guard so the seed read can't deref
+    // null+0x30 (the counter simply contributes 0). Surfaced via the BANISHED_FORCE_WORK
+    // harness (Leisure/Work anchor a citizen on an inert workplace building's position comp).
+    int total = interact ? (&interact->_useNodes)[kind].count : 0;
+    for (int i = 0; i < self->useLocationCount; ++i) {
+        total = total + InteractNodeCount(self->useLocations[i], kind);
     }
-    return iVar3;
+    return total;
 }
 
 // ============================================================
-// FUN_14012c560 — ResourceLimit flag-mask test.
-// Walk param_2's component array (ptr [param_2+0x28], count [param_2+0x30], stride 8);
-// find the child whose GetTypeId (vtable+0x10) == DWORD_1401c7cb8, IsDerivedFrom-confirm
-// it, then return (*(uint*)(param_1+0x3c) & *(uint*)(found+0x5c)) != 0. If no match,
-// `found` stays null and +0x5c reads from address 0 — faithful to the original.
+// FUN_14012c560 — does the storage take this material: find the material template's
+// RawMaterialDescription (Type() compare, then IsDerivedFrom) and test its _flags against
+// the storage's rawMaterialFlags. If no match, `found` stays null and _flags reads from
+// address 0x5c — faithful to the original.
 // ============================================================
-int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2) {
-    void* found = nullptr;
-    int iVar = 0;
-    if (0 < *reinterpret_cast<int*>(param_2 + 0x30)) {
-        int64_t byteOff = 0;  // R14 = iVar*8
-        for (;;) {
-            int64_t arr = *reinterpret_cast<int64_t*>(param_2 + 0x28);
-            uint32_t wantTid = RawMaterialDescription::TypeId();
-            void* child = *reinterpret_cast<void**>(arr + byteOff);
-            uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
-            if (tid == wantTid) {
-                int64_t arr2 = *reinterpret_cast<int64_t*>(param_2 + 0x28);
-                void* match = *reinterpret_cast<void**>(arr2 + static_cast<int64_t>(iVar) * 8);
-                bool derived = ::Object::IsDerivedFromNullSafe(match, RawMaterialDescription::TypeId());
-                if (derived) found = match;
-                break;
-            }
-            iVar = iVar + 1;
-            byteOff = byteOff + 8;
-            if (iVar >= *reinterpret_cast<int*>(param_2 + 0x30)) break;
+bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material) {
+    const RawMaterialDescription* found = nullptr;
+    for (int i = 0; i < material->_subDescCount; ++i) {
+        Description* child = material->_subDescs[i];
+        if (child->Type() == RawMaterialDescription::TypeId()) {
+            Description* match = material->_subDescs[i];
+            if (::Object::IsDerivedFromNullSafe(match, RawMaterialDescription::TypeId()))
+                found = static_cast<const RawMaterialDescription*>(match);
+            break;
         }
     }
-    uint32_t foundFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(found) + 0x5c);
-    return ((*reinterpret_cast<uint32_t*>(param_1 + 0x3c) & foundFlags) != 0) ? 1 : 0;
+    return (storage->rawMaterialFlags & found->_flags) != 0;
 }
 
 // ============================================================
-// FUN_140116760 — storage drop-off: find the Storage component on the entity IBP at
-// (param_1+0x10) and subtract `param_3` of resource `param_2` from it (via 12d150).
+// FUN_140116760 — storage drop-off: take `count` of `material` out of the owning entity's
+// StorageComponent (0x140006270, then 0x14012d150).
 // ============================================================
-void Pf_StorageDropOff_116760(int64_t param_1, int64_t param_2, int param_3) {
-    int64_t local_res8 = 0;
-    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &local_res8);   // 0x140006270
-    ActRm_StorageSubtract_d150(static_cast<uintptr_t>(local_res8), param_2, param_3);   // 0x14012d150
+void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count) {
+    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
+    StorageSubtract(storage, material, count);   // 0x14012d150
 }
 
 // ============================================================
-// FUN_1401167c0 — storage count delta for a resource id: find the Storage component on
-// the entity IBP at (param_1+0x10), walk its inventory (ptr [stor+0x28], count
-// [stor+0x30], stride 0x10: [+0]=resType u64, [+8]=count int, [+0xc]=reserved int).
-// For the matching resType return count - reserved (i.e. plVar1[idx*2+1] minus the dword
-// at +0xc). Returns 0 if not found.
+// FUN_1401167c0 — the free count of `material` in the owning entity's StorageComponent:
+// the matching item's _count - _reserve, 0 if none.
 // ============================================================
-int Pf_StorageCountDelta_1167c0(int64_t param_1, int64_t param_2) {
-    int64_t local_res8 = 0;
-    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &local_res8);   // 0x140006270
-    int iVar4 = 0;
-    int64_t lVar3 = 0;
-    if (0 < static_cast<int64_t>(*reinterpret_cast<int*>(local_res8 + 0x30))) {
-        int64_t* plVar1 = *reinterpret_cast<int64_t**>(local_res8 + 0x28);
-        int64_t* plVar2 = plVar1;
-        do {
-            if (*plVar2 == param_2) {
-                if (iVar4 < 0) return 0;
-                return static_cast<int>(plVar1[static_cast<int64_t>(iVar4) * 2 + 1]) -
-                       *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(plVar1) +
-                                               static_cast<int64_t>(iVar4) * 0x10 + 0xc);
-            }
-            lVar3 = lVar3 + 1;
-            iVar4 = iVar4 + 1;
-            plVar2 = plVar2 + 2;
-        } while (lVar3 < *reinterpret_cast<int*>(local_res8 + 0x30));
+int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material) {
+    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
+    for (int i = 0; i < storage->slotCount; ++i) {
+        const StorageComponent::Item& item = storage->storageSlots[i];
+        if (item._resource == material) {
+            return item._count - item._reserve;
+        }
     }
     return 0;
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+
+// B4 FORWARD: outside callers in animalcomponent, citizenai_actionctors, citizenai_handlers,
+// nomadcomponent_states, build_actions, work_act_clear, work_act_consume, work_act_hunt,
+// work_act_path, work_act_perform, work_act_rawmat, work_base_actionctor
+void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_) {
+    ActionStackPush(reinterpret_cast<ActionStack*>(param_1),
+                    reinterpret_cast<const ::Object::InternalPtr<Action>*>(param_2_));
+}
+
+// B4 FORWARD: outside callers in ~20 files (Component, Dialog, Entity, Game, Player, Work)
+int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
+    return InteractNodeCount(reinterpret_cast<const InteractComponent*>(param_1), param_2);
+}
+
+// ---- action_pf_roots_route.cpp's C spellings (kept here: that file's reinterpret column
+// has no room for them).
+
+// B4 FORWARD: 12 outside callers (citizenai_findhelpers, citizenai_findtarget,
+// citizenai_housing_idle, citizenai_leisure, citizen_assign_citizens,
+// citizen_lifeevent_handler, citizenbehavior, buildstructure, firework_search,
+// marketwork, work_base_reimpl, work_base_walkpos)
+int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, char param_4) {
+    return reinterpret_cast<Map*>(param_1)->PathDistance(param_2, param_3, param_4);
+}
+
+// B4 FORWARD: outside callers in absorbresourcecomponent, citizen_reassign_workers,
+// citizenai_growup, game, pickup, pickup_gate, tradework
+uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3) {
+    return StorageCanAdd(reinterpret_cast<StorageComponent*>(param_1),
+                         reinterpret_cast<const ComponentDescription*>(param_2), param_3);
+}
+
+// B4 FORWARD: outside callers in citizenai_findhelpers, citizenai_findtarget, clearstorage,
+// consumeproduce, marketwork. Retail's fourth argument is never read.
+int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param_3, int64_t /*param_4*/) {
+    return FindBestAdjacentCell(reinterpret_cast<const Component*>(param_1), param_2, param_3);
+}
+
+// B4 FORWARD: outside callers in buildroad, citizenai_growup, clearstorage, consumeproduce,
+// gatherrawmaterials, marketwork, pickup, tradework
+int64_t* Pf_PickBestDropTarget_8d590(int64_t** param_1, int64_t* param_2, uint32_t param_3,
+                                     uint64_t param_4, int param_5, char param_6,
+                                     uint32_t* param_7, void* param_8) {
+    PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(param_1),
+                       reinterpret_cast<ComponentEntity**>(param_2), param_3,
+                       reinterpret_cast<const ComponentDescription*>(param_4), param_5, param_6,
+                       reinterpret_cast<float*>(param_7),
+                       reinterpret_cast<ComponentEntity* const*>(param_8));
+    return param_2;
 }

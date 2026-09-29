@@ -50,216 +50,199 @@
 #include <windows.h>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Work/Work.h"         // B.3.x W0: Work slots 6/7/8/10 by name
+#include "Action/PathAvl.h"      // AvlNode28 (the order tree)
+#include "Component/CharacterComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"
+#include "Component/ComponentDescription.h"
+#include "Component/ModelComponent.h"
+#include "Component/StorageComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/WorkScheduler.h"
 
 // ============================================================
 // CompleteTask task-manager BST helpers
 // ============================================================
-// The task manager (gameState+0x118) holds an intrusive binary search tree of task
-// nodes rooted at taskMgr+0x30. Node layout (verified in disassembly):
+// The work scheduler (GameUpdateLoop::m_tutorial, +0x118) holds an intrusive binary search
+// tree of task nodes rooted at trees[0] (+0x30). Node layout (verified in disassembly):
 //   +0x00 int   key (task index)
-//   +0x08 IBP   task-owner object (CheckPtr'd before use)
+//   +0x08 IBP   the Work (CheckPtr'd before use)
 //   +0x18 ptr   left child
 //   +0x20 ptr   right child
-// Each helper walks the tree to the node whose key == taskIdx, then invokes a vtable
-// method on the owner object with copies of the two ref args.
-//
-// Caller copies (decompiled):
-//   entityCopy = *param_2  (entityRef ptr, passed as RDX = &copy)
-//   targetCopy = *param_4  (targetRef ptr, passed as R8  = &copy)
-//   vtable(owner)(owner, &entityCopy, &targetCopy, taskParam)
+// Each helper walks the tree to the node whose key == taskIdx, then invokes a Work slot
+// with copies of the two ref args.
 
 namespace {
-// Walk the taskMgr+0x30 BST; return the node whose key == taskIdx, else null.
-static void* FindTaskNode(uintptr_t taskMgr, int taskIdx) {
-    int* node = *reinterpret_cast<int**>(taskMgr + 0x30);
+struct WorkIdNode {
+    int32_t     key;        // +0x00
+    uint8_t     _pad04[4];  // +0x04
+    Work*       work;       // +0x08 InternalPtr<Work>
+    WorkIdNode* parent;     // +0x10
+    WorkIdNode* left;       // +0x18
+    WorkIdNode* right;      // +0x20
+};
+static_assert(offsetof(WorkIdNode, work) == 0x08, "WorkIdNode::work @ +0x08");
+static_assert(offsetof(WorkIdNode, left) == 0x18, "WorkIdNode::left @ +0x18");
+static_assert(offsetof(WorkIdNode, right) == 0x20, "WorkIdNode::right @ +0x20");
+
+// A node of the +0x120 bucket tree: a 64-bit key (the Work's slot-10 target), the
+// bucket's own id tree, children at +0x20 / +0x28.
+struct WorkBucketNode {
+    uint64_t        key;       // +0x00
+    WorkSchedulerTree entries; // +0x08 {root, count}
+    WorkBucketNode* parent;    // +0x18
+    WorkBucketNode* left;      // +0x20
+    WorkBucketNode* right;     // +0x28
+};
+static_assert(offsetof(WorkBucketNode, entries) == 0x08, "WorkBucketNode::entries @ +0x08");
+static_assert(offsetof(WorkBucketNode, left) == 0x20, "WorkBucketNode::left @ +0x20");
+static_assert(offsetof(WorkBucketNode, right) == 0x28, "WorkBucketNode::right @ +0x28");
+
+// LEFT: WorkSchedulerTree::root (Game/WorkScheduler.h) is declared void*.
+static WorkIdNode* IdRoot(const WorkSchedulerTree& tree) {
+    return reinterpret_cast<WorkIdNode*>(tree.root);
+}
+
+// Walk the id tree; return the node whose key == taskIdx, else null.
+static WorkIdNode* FindTaskNode(const WorkScheduler* sched, int taskIdx) {
+    WorkIdNode* node = IdRoot(sched->trees[0]);
     while (node != nullptr) {
-        int key = *node;
+        int key = node->key;
         if (taskIdx < key) {
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x18);  // left
+            node = node->left;
         } else if (key < taskIdx) {
-            node = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(node) + 0x20);  // right
+            node = node->right;
         } else {
             return node;  // exact match
         }
     }
     return nullptr;
 }
+
+// LEFT: 0x14001ca60 / 0x14001a6e0's C declarations (Work/exe_bodies.h, WORK-a's header)
+// take the tree header as uintptr_t*.
+static uintptr_t* TreeHeader(WorkSchedulerTree* tree) {
+    return reinterpret_cast<uintptr_t*>(tree);
+}
 } // namespace
 
 // Reimpl of CompleteTask_helper_8760 — try-complete a task: walk to the matching node,
-// CheckPtr the owner IBP, invoke owner vtable +0x30 with (entityCopy, targetCopy, param).
-// Returns the vtable call result (bool-ish in low byte). Caller signature:
-//   bool fn(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam)
-bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
-                                void* targetRef, uint32_t taskParam) {
-    void* node = FindTaskNode(reinterpret_cast<uintptr_t>(taskMgr), taskIdx);
+// CheckPtr the Work, invoke slot 6 with (entityCopy, targetCopy, param). Returns the low
+// byte of the result.
+bool TryCompleteTask(const WorkScheduler* sched, void* const* entityRef, int taskIdx,
+                     void* const* targetRef, uint32_t taskParam) {
+    WorkIdNode* node = FindTaskNode(sched, taskIdx);
     if (node == nullptr) return false;
 
-    void* ibp = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(node) + 0x8);
-    void* targetCopy = *reinterpret_cast<void**>(targetRef);
-    uintptr_t* owner = *reinterpret_cast<uintptr_t**>(ibp);
-    void* entityCopy = *reinterpret_cast<void**>(entityRef);
+    void* targetCopy = *targetRef;
+    Work* owner = node->work;
+    void* entityCopy = *entityRef;
 
-    // Work slot 6. The receiver is the scheduler's work IBP (node+0x08 of the id map
-    // CitizenAI_impl_88a0 0x1400f88a0 fills with the posted Work leaves).
-    int r = reinterpret_cast<Work*>(owner)->OnComplete(&entityCopy, &targetCopy,
-                                                       static_cast<int>(taskParam));   // B.3.x bridge (slot 6)
+    int r = owner->OnComplete(&entityCopy, &targetCopy, static_cast<int>(taskParam));   // slot 6
     return (r & 0xff) != 0;
 }
 
-// Reimpl of CompleteTask_helper_8800 — task reassign: same BST walk, but invokes owner
-// vtable +0x38 instead of +0x30 (void return). Caller signature:
-//   void fn(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam)
-void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx,
-                             void* targetRef, uint32_t taskParam) {
-    void* node = FindTaskNode(reinterpret_cast<uintptr_t>(taskMgr), taskIdx);
+// Reimpl of CompleteTask_helper_8800 — task reassign: same walk, slot 7 (void).
+void TaskReassign(const WorkScheduler* sched, void* const* entityRef, int taskIdx,
+                  void* const* targetRef, uint32_t taskParam) {
+    WorkIdNode* node = FindTaskNode(sched, taskIdx);
     if (node == nullptr) return;
 
-    void* ibp = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(node) + 0x8);
-    void* targetCopy = *reinterpret_cast<void**>(targetRef);
-    uintptr_t* owner = *reinterpret_cast<uintptr_t**>(ibp);
-    void* entityCopy = *reinterpret_cast<void**>(entityRef);
+    void* targetCopy = *targetRef;
+    Work* owner = node->work;
+    void* entityCopy = *entityRef;
 
-    reinterpret_cast<Work*>(owner)->OnCancel(&entityCopy, &targetCopy,
-                                             static_cast<int>(taskParam));   // B.3.x bridge (slot 7)
+    owner->OnCancel(&entityCopy, &targetCopy, static_cast<int>(taskParam));   // slot 7
 }
 
 // ============================================================
 // CitizenAI_impl_8e30 — task cleanup after completion.
-// Walks the task-manager BST (param_1+0x30) to the matching task node, then:
-//  1. For each of the 14 action-list BSTs at param_1+0x40 (stride 0x10), find and
-//     remove (TradeDescription_impl_ca60 = node remove/rebalance) the node whose key
-//     == taskIdx.
-//  2. Find/remove the matching node in the param_1+0x10 ORDER tree (key compared
-//     against the task IBP's +0x24 field; this tree uses the 0x28-node layout:
-//     parent@+0x08, less@+0x10, greater@+0x18 — NOT the 0x30-node layout the id map
-//     and category buckets use; remove via CitizenAI_impl_a6e0). A long-lived offset
-//     inversion here (fixed 2026-07-26) meant the order-tree node was never found, so
-//     sched+0x10/+0x18 grew monotonically and re-posted work got ever-earlier queue
-//     positions.
-//  3. Call owner vtable +0x50 (returns a key ptr); look that key up in the param_1+0x120
-//     BST (left@+0x20, right@+0x28; entry list at node+0x8) and remove the matching
-//     entry via ca60.
-//  4. Call owner vtable +0x48 then +0x40 (cancel/cleanup), DeletePtr the task IBP, then
-//     remove the task node itself from the param_1+0x30 BST via ca60.
-// Caller signature: void fn(void* taskMgr, int taskIdx)
+// Walks the id tree (trees[0]) to the matching task node, then:
+//  1. For each of the 14 action-list trees (trees[1..14]), find and remove (ca60) the node
+//     whose key == taskIdx.
+//  2. Find/remove the matching node in the field_0x10 ORDER tree (key compared against the
+//     Work's +0x24 field; this tree uses the 0x28-node layout: parent@+0x08,
+//     less@+0x10, greater@+0x18 — remove via a6e0). A long-lived offset inversion here
+//     (fixed 2026-07-26) meant the order-tree node was never found.
+//  3. The Work's slot 10 (GetTarget) gives a key; look it up in the field_0x120 bucket
+//     tree and remove the task's entry from that bucket (ca60).
+//  4. Work slots 9 then 8, DeletePtr the Work, then remove the task node itself (ca60).
 //
-// ca60 (0x14001ca60, WorkCellBST_Remove_ca60 -- TradeDescription_impl_ca60, the generic
-// BST remove) / a6e0 (0x14001a6e0, WorkBST_BSTRemove_a6e0 -- CitizenAI_impl_a6e0, the
-// BST_Remove variant) are the Work wave's intrusive-BST removes, called by name.
-
-namespace {
-
-// ---------------------------------------------------------------------------
-// WAVE 9 LANE N — THE PROFESSION-BUCKET INVARIANT PROBE (Finding 3)
-// ---------------------------------------------------------------------------
-// Step 4 unfiles this task from the profession bucket named by the work object's
-// OWN vtable slot 10 (+0x50) key, read at REMOVAL time. Step 5 then destroys the
-// work object UNCONDITIONALLY. So if the key has drifted since the insert filed
-// it (CitizenAI_WorkScheduler_Insert, 0x1400f88a0, files under the same slot-10
-// key read at POST time), step 4 silently unfiles nothing and step 5 destroys the
-// object anyway — leaving a bucket entry whose payload is a freed work object.
-// That is the "freed without being erased" shape lane N's crash has.
-//
-// *** RETAIL DOES NOT TOLERATE ONE HALF OF THAT, AND THIS PORT DOES. ***
-// Retail 0x1400F8F2D-0x1400F8F5E:
-//     mov  rcx,[r14+0x120]      ; bucket tree root
-//     test rcx,rcx / je  f8f5c  ; empty  ->
-//     ...search...
-//     jne  f8f40                ; not found falls through ->
-//   f8f5c: xor  ecx,ecx         ;   rcx = 0
-//   f8f5e: mov  rdx,[rcx+0x8]   ;   *** READ OF ADDRESS 0x8 — a hard fault ***
-// i.e. retail ASSERTS that the work's own slot-10 key always names an existing
-// bucket, and dies immediately and loudly if it does not. Our port has an
-// `if (node != nullptr)` guard there and continues. That guard is not wrong to
-// have — removing it would only move the crash — but it converts retail's
-// immediate failure into a silent one, and nothing has ever measured whether the
-// condition occurs. Note the asymmetry: retail DOES tolerate the entry not being
-// present inside a bucket that exists (`test rdx,rdx / je f8f90`), so only the
-// missing-BUCKET case is retail-fatal.
-//
-} // namespace
-
-// The BANISHED_WORKSCHED_PROBE erase-outcome probe this reported was deleted with the
-// flag (ENDGAME C). standalone/main.cpp's crash handler still calls this; the stub goes
-// when that call does.
-
-
-void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-
-    // 1. Locate the task node in the param_1+0x30 BST.
-    int* task = *reinterpret_cast<int**>(self + 0x30);
+// Retail does not tolerate a missing bucket in step 3 (0x1400F8F5E reads address 0x8);
+// the tree's `if (node != nullptr)` guard continues instead (kept; WAVE 9 LANE N).
+// ============================================================
+void TaskCleanup(WorkScheduler* sched, int taskIdx) {
+    // 1. Locate the task node in the id tree.
+    WorkIdNode* task = IdRoot(sched->trees[0]);
     while (task != nullptr) {
-        int key = *task;
+        int key = task->key;
         if (taskIdx < key) {
-            task = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(task) + 0x18);
+            task = task->left;
             continue;
         }
         if (key < taskIdx) {
-            task = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(task) + 0x20);
+            task = task->right;
             continue;
         }
         break;  // key == taskIdx
     }
     if (task == nullptr) return;
 
-    // 2. Remove the matching node (key == taskIdx) from each of the 14 action-list BSTs.
-    uintptr_t listSlot = self + 0x40;
+    // 2. Remove the matching node (key == taskIdx) from each of the 14 action-list trees.
     for (int li = 0; li < 14; li++) {
-        int* n = *reinterpret_cast<int**>(listSlot);
+        WorkSchedulerTree* list = &sched->trees[1 + li];
+        WorkIdNode* n = IdRoot(*list);
         while (n != nullptr) {
-            int k = *n;
+            int k = n->key;
             if (taskIdx < k) {
-                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x18);
+                n = n->left;
             } else if (k < taskIdx) {
-                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x20);
+                n = n->right;
             } else {
-                WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(listSlot), n);   // 0x14001ca60
+                WorkCellBST_Remove_ca60(TreeHeader(list), n);   // 0x14001ca60
                 break;
             }
         }
-        listSlot += 0x10;
     }
 
-    // 3. Remove from the param_1+0x10 BST keyed on the task IBP's +0x24 field.
+    // 3. Remove from the order tree (field_0x10) keyed on the Work's +0x24 field.
     {
-        uintptr_t taskObj = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(task) + 0x8);
-        int wantKey = *reinterpret_cast<int*>(taskObj + 0x24);
-        int* n = *reinterpret_cast<int**>(self + 0x10);
+        // LEFT: the Work's +0x24 key field (Work/Work.h, WORK-c's header) is not named.
+        const uint8_t* taskObj = reinterpret_cast<const uint8_t*>(task->work);
+        int wantKey = *reinterpret_cast<const int*>(taskObj + 0x24);
+        // LEFT: WorkScheduler::field_0x10 is declared void*.
+        AvlNode28* n = reinterpret_cast<AvlNode28*>(sched->field_0x10);
         while (n != nullptr) {
-            int k = *n;
+            int k = n->key;
             // Retail 8e30 step: `want < nodeKey -> node+0x10`, `nodeKey < want ->
-            // node+0x18` (0x28-node order tree: less@+0x10, greater@+0x18). These two
-            // offsets were inverted here until 2026-07-26, which made this search
-            // descend the wrong subtree and the erase below effectively never run.
+            // node+0x18` (0x28-node order tree: less@+0x10, greater@+0x18).
             if (wantKey < k) {
-                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x10);  // less
+                n = n->left;    // less
             } else if (k < wantKey) {
-                n = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(n) + 0x18);  // greater
+                n = n->right;   // greater
             } else {
-                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(self + 0x10), n);   // 0x14001a6e0
+                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),
+                                       n);   // 0x14001a6e0
                 break;
             }
         }
     }
 
-    // 4. owner vtable +0x50 → key ptr; look up in the param_1+0x120 BST and remove entry.
+    // 4. Work slot 10 -> key; look it up in the field_0x120 bucket tree and remove the entry.
     {
-        uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
+        Work* owner = task->work;
         uint64_t keyTmp = 0;
-        uint64_t* keyPtr = static_cast<uint64_t*>(
-            reinterpret_cast<Work*>(owner)->GetTarget(&keyTmp));   // B.3.x bridge (slot 10, retslot)
+        uint64_t* keyPtr = static_cast<uint64_t*>(owner->GetTarget(&keyTmp));   // slot 10, retslot
 
-        // Walk the +0x120 BST (value@+0, left@+0x20, right@+0x28; entry list at node+0x8).
-        uint64_t* node = *reinterpret_cast<uint64_t**>(self + 0x120);
+        // LEFT: WorkScheduler::field_0x120 is declared void*.
+        WorkBucketNode* node = reinterpret_cast<WorkBucketNode*>(sched->field_0x120);
         if (node != nullptr) {
             while (true) {
-                uint64_t v = *node;
+                uint64_t v = node->key;
                 if (*keyPtr < v) {
-                    node = reinterpret_cast<uint64_t*>(node[4]);  // +0x20 left
+                    node = node->left;    // +0x20
                 } else if (v < *keyPtr) {
-                    node = reinterpret_cast<uint64_t*>(node[5]);  // +0x28 right
+                    node = node->right;   // +0x28
                 } else {
                     break;
                 }
@@ -268,249 +251,222 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
         }
 
         if (node != nullptr) {
-            // entry sub-BST rooted at node[1] (node+0x8); key compared against taskIdx.
-            int* e = reinterpret_cast<int*>(node[1]);
-            void* entryTreeOwner = reinterpret_cast<void*>(node + 1);  // node+0x8
+            // the bucket's entry tree (node+0x8); key compared against taskIdx.
+            WorkIdNode* e = IdRoot(node->entries);
             while (e != nullptr) {
-                int k = *e;
+                int k = e->key;
                 if (taskIdx < k) {
-                    e = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(e) + 0x18);
+                    e = e->left;
                 } else if (k < taskIdx) {
-                    e = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(e) + 0x20);
+                    e = e->right;
                 } else {
-                    WorkCellBST_Remove_ca60(static_cast<uintptr_t*>(entryTreeOwner), e);   // 0x14001ca60
+                    WorkCellBST_Remove_ca60(TreeHeader(&node->entries), e);   // 0x14001ca60
                     break;
                 }
             }
         }
     }
 
-    // 5. owner vtable +0x48 then +0x40 (cancel/cleanup); DeletePtr the task IBP; then
-    //    remove the task node from the param_1+0x30 BST.
-    {
-        uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
-        reinterpret_cast<Work*>(owner)->Validate();   // B.3.x bridge (slot 9, RCX only)
-    }
-    {
-        uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
-        reinterpret_cast<Work*>(owner)->Cleanup();   // B.3.x bridge (slot 8)
-    }
-    reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8))->DeletePtr(
-            );   // B.3.3 bridge
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(self + 0x30), task);   // 0x14001ca60
+    // 5. Work slots 9 then 8; DeletePtr the Work; then remove the task node.
+    task->work->Validate();   // slot 9, RCX only
+    task->work->Cleanup();    // slot 8
+    // LEFT: WorkIdNode::work is the InternalPtr slot; DeletePtr is InternalBasePtr's.
+    reinterpret_cast< ::Object::InternalBasePtr*>(&task->work)->DeletePtr();   // B.3.3 bridge
+    WorkCellBST_Remove_ca60(TreeHeader(&sched->trees[0]), task);   // 0x14001ca60
 }
 
 // ============================================================
 // ShowTool helpers (Entity_impl_73b0 / FUN_1401176e0)
 // ============================================================
-// These attach/detach a "tool" mesh to a citizen entity. They call several Runtime
-// graphics functions, each as a member of its real class.
+// These attach/detach a "tool" mesh to a citizen. The citizen's tool MeshInstance is the
+// raw storage CitizenComponent::meshInstance (+0xB8; H5, block COMP-b's header).
 
 namespace {
-// ENDGAME B.3.5 batch K1: the six Video/Graphics caches this block used to hold —
-// MeshInstance::SetMesh (exe slot 0x140151498), Scene::AddObject (0x140151370),
-// Geometry::Attach / Geometry::Detach / Scene::RemoveObject /
-// GraphicsMesh::GetNodeIndexFromName (all four by mangled name) — went with their
-// last callers below, which now call the members directly. What stays:
-// the System::Time ctor door (a System class, not this step's) -- B3R: now
-// RtSystem_Time_Ctor by name -- and the MeshInstance default-CTOR door (no Video/Graphics
-// class has a real ctor, B35_RULES section 11 / B4b-2). g_fUVScale (DAT_14017214c) is
-// kRdata_14017214c.
-//
-// ⚠ 0x140152970 is NOT a Vector4 ctor — the disasm at 0x14011765b shows that slot
-// family is Graphics: 0x140152970 = GraphicsMesh::GetNodeIndexFromName (returns int
-// in EAX). Do NOT register 0x140152970 as a ctor. Retail's Time(0.0) at 0x14011766c
-// goes through 0x140152b00 (the Time-from-float slot), not 0x140152968 (Geometry::Attach).
-// The `Geometry::Attach` / `Geometry::Detach` pointers used to be resolved by the
-// PHANTOM names `AEAV12@`; both are members of the real `Graphics::Geometry` now, so
-// the phantom cannot come back.
-
-// g_pGameWorldSingleton is the DAT_1401c3dd8 singleton (declared in engine_funcs.h).
+// LEFT: CitizenComponent::meshInstance is raw storage (H5).
+static Graphics::MeshInstance* ToolMesh(CitizenComponent* citizen) {
+    return reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);
+}
 } // namespace
 
-// Reimpl of FUN_1401176e0 — hide/detach the current tool mesh from the entity.
-// Reads the active scene-object id at entity+0x1dc; if valid (>=0), detaches the tool
-// geometry from the citizen's model geometry (entity+0x278's +0x68 model, +0x28 geom)
-// and removes the scene object, then marks the id slot invalid (-1).
-// Caller signature: void fn(void* entity)
-void ActCt_HideTool_1176e0(void* entityV) {
-    uintptr_t e = reinterpret_cast<uintptr_t>(entityV);
-    if (*reinterpret_cast<int*>(e + 0x1dc) < 0) return;
+// Reimpl of FUN_1401176e0 — hide/detach the current tool mesh: if toolSceneId is valid
+// (>= 0), detach the tool geometry from the citizen's model geometry and remove the scene
+// object, then mark toolId / toolSceneId invalid (one qword store of -1).
+void HideCitizenTool(CitizenComponent* citizen) {
+    if (citizen->toolSceneId < 0) return;
 
-    uintptr_t model = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(e + 0x278) + 0x68);
-    reinterpret_cast<Graphics::Geometry*>(model + 0x28)
-        ->Detach(reinterpret_cast<Graphics::Geometry*>(e + 0xb8));   // B.3.5 bridge
+    ModelComponent* model = citizen->character->modelComponent;
+    model->meshInstance.Detach(ToolMesh(citizen));
 
     if (GameUpdateLoop::_singleton) {
-        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x60);
-        reinterpret_cast<Graphics::Scene*>(scene)
-            ->RemoveObject(*reinterpret_cast<uint32_t*>(e + 0x1dc));   // B.3.5 bridge
+        Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
+        scene->RemoveObject(static_cast<uint32_t>(citizen->toolSceneId));
     }
-    *reinterpret_cast<int64_t*>(e + 0x1d8) = -1;
+    citizen->toolId = -1;          // one qword store of -1 in retail (H7)
+    citizen->toolSceneId = -1;
 }
 
-// Reimpl of Entity_impl_73b0 — show a tool mesh on the entity.
-//   - If a tool is already shown (entity+0x1dc >= 0), hide it first (FUN_1401176e0).
-//   - toolId >= 0: pick the mesh from the model's mesh table (entity+0x288 → +0x138 array)
-//     using g_fUVScale.
-//   - toolId < 0: "find best material from storage" path — find StorageComponent on the
-//     parent entity, pick the inventory slot with the highest count, then locate a
-//     FenceDescription (DAT_1401c7a88) component for the mesh and a RawMaterialDescription
-//     (DAT_1401c7cb8) component for the UV scale. (This is the crash-prone path the
-//     ShowTool call site deliberately guards off; ported faithfully for completeness.)
-//   - Set the mesh on the MeshInstance (entity+0xb8), write the UV scale vector to
-//     entity+0x1c4..+0x1d0, attach the geometry at the model's "tool" node, then add the
-//     geometry to the game world scene and record the resulting object id.
-// Caller signature: void fn(void* entity, int toolId)
-void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
-    uintptr_t e = reinterpret_cast<uintptr_t>(entityV);
+// Reimpl of Entity_impl_73b0 — show a tool mesh on the citizen.
+//   - If a tool is already shown (toolSceneId >= 0), hide it first (FUN_1401176e0).
+//   - toolId >= 0: the mesh from the citizen description's _refs table, with g_fUVScale.
+//   - toolId < 0: the storage's largest stack: its ModelDescription for the mesh and its
+//     RawMaterialDescription for the UV scale. (The crash-prone path the ShowTool call
+//     site deliberately guards off; ported faithfully.)
+//   - Set the mesh on the tool MeshInstance, write the UV-scale vector (its _color),
+//     attach it at the model's "tool" node, then add it to the scene and record the ids.
+void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
+    ComponentEntity* parent = citizen->_entity;
+    if (((parent->_entityFlags >> 10) & 1) != 0) return;  // removed flag
 
-    // [diag] BANISHED_SHOWTOOL_TRACE — dump every link 73b0 is about to deref, BEFORE it
-    // derefs them. The post-load re-show (CitizenComponent slot 11, +0x1d8 != -1) faults
-    // on this path with a READ of 0x100000001, and a crash log alone cannot say WHICH
-    // link is bad: the toolId>=0 branch chains desc(+0x288) -> meshArray(+0x138) ->
-    // element[toolId], and the tail chains charComp(+0x278) -> model(+0x68) -> +0xe8.
-    // Printing both chains turns the next run into a measurement instead of a repro.
-    // Reports the value it READ at each step, so a link that is merely null is
-    // distinguishable from one holding stream garbage. See
-    // [[reference_diagnostics_must_report_outcomes]].
-    uintptr_t parent = *reinterpret_cast<uintptr_t*>(e + 0x10);
-    if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) != 0) return;  // removed flag
+    if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);
 
-    if (*reinterpret_cast<int*>(e + 0x1dc) >= 0) ActCt_HideTool_1176e0(entityV);
-
-    uintptr_t model = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(e + 0x278) + 0x68);
+    ModelComponent* model = citizen->character->modelComponent;
 
     void* meshPtr = nullptr;
     float uvScale = 0.0f;
 
     if (toolId < 0) {
-        // find best material from storage on parent entity
-        uint64_t storageIBP = 0;
-        fn_FindComponent_Storage(*reinterpret_cast<void**>(e + 0x10), &storageIBP);
-        uintptr_t storage = static_cast<uintptr_t>(storageIBP);
-        if (*reinterpret_cast<int*>(storage + 0x30) < 1) return;
+        // find best material from storage on the citizen's entity
+        StorageComponent* storage = nullptr;
+        fn_FindComponent_Storage(citizen->_entity, &storage);
+        if (storage->slotCount < 1) return;
 
-        // pick inventory slot (stride 0x10, count field at +8) with the highest count
-        void* bestItem = nullptr;
+        // pick the item with the highest count
+        ComponentDescription* bestItem = nullptr;
         int bestCount = 0;
         int idx = 0;
         do {
-            storage = static_cast<uintptr_t>(storageIBP);
-            uintptr_t inv = *reinterpret_cast<uintptr_t*>(storage + 0x28);
-            uintptr_t slot = inv + static_cast<uintptr_t>(idx) * 0x10;
-            int c = *reinterpret_cast<int*>(slot + 8);
+            const StorageComponent::Item& slot = storage->storageSlots[idx];
+            int c = slot._count;
             if (bestCount < c) {
-                bestItem = *reinterpret_cast<void**>(slot);
+                bestItem = slot._resource;
                 bestCount = c;
             }
             idx++;
-            storage = static_cast<uintptr_t>(storageIBP);
-        } while (idx < *reinterpret_cast<int*>(storage + 0x30));
+        } while (idx < storage->slotCount);
 
         if (bestItem == nullptr) return;
-        uintptr_t item = reinterpret_cast<uintptr_t>(bestItem);
+        ComponentDescription* item = bestItem;
 
-        // locate the ModelDescription component for the mesh (cell 0x1401c7a88 --
-        // the old "FenceDesc" name lied, INVENTORY_C Table 1)
+        // locate the ModelDescription for the mesh (cell 0x1401c7a88)
         const uint32_t tidModelDesc = ModelDescription::TypeId();
-        void* fenceComp = nullptr;
-        if (*reinterpret_cast<int*>(item + 0x30) > 0) {
-            int n = *reinterpret_cast<int*>(item + 0x30);
-            uintptr_t arr = *reinterpret_cast<uintptr_t*>(item + 0x28);
+        const ModelDescription* fenceComp = nullptr;
+        if (item->_subDescCount > 0) {
+            int n = item->_subDescCount;
+            Description** arr = item->_subDescs;
             for (int i = 0; i < n; i++) {
-                void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+                Description* comp = arr[i];
+                uint32_t t = comp->Type();   // slot 2
                 if (t == tidModelDesc) {
-                    void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                    if (::Object::IsDerivedFromNullSafe(c, tidModelDesc)) fenceComp = c;
+                    Description* c = arr[i];
+                    if (::Object::IsDerivedFromNullSafe(c, tidModelDesc)) fenceComp = static_cast<const ModelDescription*>(c);
                     break;
                 }
             }
         }
-        meshPtr = **reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(fenceComp) + 0x20 + 8);
+        // LEFT: the tree reads the qword at ModelDescription +0x28 (_meshGroupCount /
+        // _meshGroupCap) as a pointer and dereferences it; retail 0x1401173b0 reads
+        // _meshGroups[0].meshes[0] (one more dereference). Recorded in known_port_issues
+        // entry 14; kept as the tree's (no behaviour change here).
+        meshPtr = **reinterpret_cast<void* const* const*>(&fenceComp->_meshGroupCount);
 
-        // locate RawMaterialDescription component for the UV scale
+        // locate the RawMaterialDescription for the UV scale
         const uint32_t tidRawMat = RawMaterialDescription::TypeId();
-        void* rawComp = nullptr;
-        if (*reinterpret_cast<int*>(item + 0x30) > 0) {
-            int n = *reinterpret_cast<int*>(item + 0x30);
-            uintptr_t arr = *reinterpret_cast<uintptr_t*>(item + 0x28);
+        const RawMaterialDescription* rawComp = nullptr;
+        if (item->_subDescCount > 0) {
+            int n = item->_subDescCount;
+            Description** arr = item->_subDescs;
             for (int i = 0; i < n; i++) {
-                void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+                Description* comp = arr[i];
+                uint32_t t = comp->Type();   // slot 2
                 if (t == tidRawMat) {
-                    void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                    if (::Object::IsDerivedFromNullSafe(c, tidRawMat)) rawComp = c;
+                    Description* c = arr[i];
+                    if (::Object::IsDerivedFromNullSafe(c, tidRawMat)) rawComp = static_cast<const RawMaterialDescription*>(c);
                     break;
                 }
             }
         }
-        uvScale = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(rawComp) + 0x50);
+        uvScale = rawComp->_carryScale;
     } else {
-        // mesh table lookup from the model description at entity+0x288 → +0x138
-        uintptr_t descArr = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(e + 0x288) + 0x138);
-        meshPtr = *reinterpret_cast<void**>(descArr + static_cast<uintptr_t>(toolId) * 8);
+        // the mesh table of the citizen description (_refs, +0x138)
+        // LEFT: CitizenDescription::_refs (block COMP-b's header) is declared void*.
+        meshPtr = reinterpret_cast<void* const*>(citizen->description->_refs)[toolId];
         uvScale = kRdata_14017214c;   // g_fUVScale, 0x14017214c
     }
 
-    // Ensure the held-item MeshInstance (entity+0xb8) is a constructed object before
-    // any SetMesh/Attach/Update/AddObject. Retail treats +0xb8 as an embedded, already-
-    // constructed Graphics::MeshInstance; in standalone a builder/worker showing its
-    // first tool has never had that slot initialized (zeroed vtable), so MeshInstance::
-    // Update calls a null vtable and Scene::AddObject faults on the uninitialized geometry
-    // (READ of +0x40). Default-construct it in place with sceneId(+0x120) = -1 — the same
-    // guard showtool.cpp uses for carried items. (This was missing from the registered
-    // ActCt_ variant, crashing the FIRST build-labor ShowTool.)
-    if (*reinterpret_cast<void**>(e + 0xb8) == nullptr) {
-        ::new (reinterpret_cast<void*>(e + 0xb8)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
-        *reinterpret_cast<uint32_t*>(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1
+    Graphics::MeshInstance* tool = ToolMesh(citizen);
+    // Ensure the held-item MeshInstance is a constructed object before any
+    // SetMesh/Attach/Update/AddObject. Retail treats +0xb8 as an embedded, already-
+    // constructed Graphics::MeshInstance; in standalone a builder/worker showing its first
+    // tool has never had that slot initialized (zeroed vtable). Default-construct it in
+    // place with sceneId(+0x120) = -1 — the same guard showtool.cpp uses for carried items.
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {   // LEFT: the vptr of the raw storage
+        ::new (citizen->meshInstance) Graphics::MeshInstance();   // B.3.9 EXA: the real class
+        citizen->toolId = -1;   // +0x1D8 = +0xb8 + 0x120: sceneId = -1
     }
 
-    // set mesh on the MeshInstance (entity+0xb8)
-    reinterpret_cast<Graphics::MeshInstance*>(e + 0xb8)
-        ->SetMesh(Graphics::ExternalPtrHandle{meshPtr});   // B.3.5 bridge
+    tool->SetMesh(Graphics::ExternalPtrHandle{meshPtr});
 
-    // write the UV-scale vector (Vector4 broadcast of uvScale) to entity+0x1c4..+0x1d0
-    // Retail 0x1401173b0 (Entity_impl_73b0): Math::Vector4::Vector4(local_58, &scalar)
-    // then four dword stores at +0x1c4/+0x1c8/+0x1cc/+0x1d0. B.3.1: this block used to be
-    // skipped behind a permanently-null s_Vector4Ctor (the slot it named, 0x140152970, is
-    // GetNodeIndexFromName); with Math::Vector4 a real class it now runs as retail does.
+    // write the UV-scale vector (Vector4 broadcast of uvScale) into the tool's _color
+    // (+0x1c4..+0x1d0). Retail 0x1401173b0: Math::Vector4::Vector4(local_58, &scalar) then
+    // four dword stores.
     Math::Vector4 vec4((Math::Scalar(uvScale)));
-    *reinterpret_cast<float*>(e + 0x1c4) = vec4.x;
-    *reinterpret_cast<float*>(e + 0x1c8) = vec4.y;
-    *reinterpret_cast<float*>(e + 0x1cc) = vec4.z;
-    *reinterpret_cast<float*>(e + 0x1d0) = vec4.w;
+    tool->_color[0] = vec4.x;
+    tool->_color[1] = vec4.y;
+    tool->_color[2] = vec4.z;
+    tool->_color[3] = vec4.w;
 
     // attach the tool geometry to the model's "tool" node
-    void* graphicsMesh = *reinterpret_cast<void**>(model + 0xe8);
-    int nodeIdx = graphicsMesh
-                ? reinterpret_cast<const Graphics::GraphicsMesh*>(graphicsMesh)
-                      ->GetNodeIndexFromName("tool")   // B.3.5 bridge
-                : -1;
-    reinterpret_cast<Graphics::Geometry*>(model + 0x28)
-        ->Attach(reinterpret_cast<Graphics::Geometry*>(e + 0xb8), nodeIdx);   // B.3.5 bridge
+    // LEFT: MeshInstance::_mesh (Runtime) is an untyped ExternalPtr handle.
+    const Graphics::GraphicsMesh* graphicsMesh = static_cast<const Graphics::GraphicsMesh*>(model->meshInstance._mesh.p);
+    int nodeIdx = graphicsMesh ? graphicsMesh->GetNodeIndexFromName("tool") : -1;
+    model->meshInstance.Attach(tool, nodeIdx);
 
-    // MeshInstance::Update(time=0) via vtable +0x8 (skip if the instance has no vtable)
-    uint8_t timeVal[8];
-    if (*reinterpret_cast<uintptr_t*>(e + 0xb8) != 0) {
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 0.0f);   // slot 0x140152b00
-        // B.3.5 bridge — vtable +0x8 is slot 1 of `Graphics::Geometry`, i.e.
-        // `Update(const System::Time&)`. The receiver is a PROVED
-        // `Graphics::MeshInstance`: entity+0xb8 was run through
-        // `??0MeshInstance@Graphics@@` just above and SetMesh'd as one. The
-        // `*(uintptr_t*)(e + 0xb8) != 0` test stays — it tests the OBJECT.
-        reinterpret_cast<Graphics::Geometry*>(e + 0xb8)->Update(
-            *reinterpret_cast<const System::Time*>(timeVal));   // B.3.5 bridge
+    // MeshInstance::Update(time=0) via slot 1 (skip if the instance has no vtable)
+    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {   // LEFT: the vptr of the raw storage
+        System::Time timeVal;
+        RtSystem_Time_Ctor(&timeVal, 0.0f);   // slot 0x140152b00
+        static_cast<Graphics::Geometry*>(tool)->Update(timeVal);
     }
 
     // add to scene + record object id
     if (GameUpdateLoop::_singleton) {
-        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x60);
-        uint32_t objId = reinterpret_cast<Graphics::Scene*>(scene)
-            ->AddObject(reinterpret_cast<Graphics::Geometry*>(e + 0xb8));   // B.3.5 bridge
-        *reinterpret_cast<int*>(e + 0x1d8) = toolId;
-        *reinterpret_cast<uint32_t*>(e + 0x1dc) = objId;
-        SceneWatch_Note(objId, reinterpret_cast<void*>(e + 0xb8), "ShowTool 0x1401173b0");
+        Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
+        uint32_t objId = scene->AddObject(tool);
+        citizen->toolId = toolId;
+        citizen->toolSceneId = static_cast<int32_t>(objId);
+        SceneWatch_Note(objId, tool, "ShowTool 0x1401173b0");
     }
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+
+// B4 FORWARD: outside callers (Action/completetask.cpp; Component, Work files)
+bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
+                                void* targetRef, uint32_t taskParam) {
+    return TryCompleteTask(reinterpret_cast<const WorkScheduler*>(taskMgr), reinterpret_cast<void* const*>(entityRef),
+                           taskIdx, reinterpret_cast<void* const*>(targetRef), taskParam);
+}
+
+// B4 FORWARD: outside callers (Action/completetask.cpp; Component, Work files)
+void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx,
+                             void* targetRef, uint32_t taskParam) {
+    TaskReassign(reinterpret_cast<const WorkScheduler*>(taskMgr), reinterpret_cast<void* const*>(entityRef),
+                 taskIdx, reinterpret_cast<void* const*>(targetRef), taskParam);
+}
+
+// B4 FORWARD: outside callers (Component, Work files)
+void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
+    TaskCleanup(reinterpret_cast<WorkScheduler*>(selfV), taskIdx);
+}
+
+// B4 FORWARD: outside callers (Action/showtool.cpp; Component files)
+void ActCt_HideTool_1176e0(void* entityV) {
+    HideCitizenTool(reinterpret_cast<CitizenComponent*>(entityV));
+}
+
+// B4 FORWARD: outside callers (Action/showtool.cpp; Component files)
+void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
+    ShowCitizenTool(reinterpret_cast<CitizenComponent*>(entityV), toolId);
 }

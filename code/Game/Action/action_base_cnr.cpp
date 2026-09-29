@@ -42,6 +42,17 @@
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Component/ModelDescription.h"
 #include "Component/NaturalResourceDescription.h"
+#include "Component/AutoPickupComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/GrowthDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/RawMaterialComponent.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/WorkComponent.h"
+#include "Entity/CitizenBehavior.h"
+#include "Entity/EntityList.h"
+#include "Game/Map.h"
 
 // ============================================================
 // Exe sub-helpers and constants (shared by this batch), called by name (B3R).
@@ -94,57 +105,52 @@ void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP) {
 
 // ============================================================
 // Reimpl of CreateNaturalResource_helper_cb00 (FUN_14009cb00) — cell terrain
-// availability check. Returns 1 (true) if the cell is unavailable (occupied /
-// wrong pass type / pending in the +0xe8 BST), else 0.
-// Cell record: array at mapGrid+0x80, stride 0x30; pass byte +0x29, status byte +0x2a.
-// The +0xe8 field is the root of a BST of "pending" cell ints (key at node[0],
-// children at node[4]=+0x10 and node[6]=+0x18).
+// availability check. Returns 1 (true) in the low byte if the cell is unavailable
+// (terrain bit 0/1, field_0x2A set, or pending in the field_0xE8 tree), else 0.
 // ============================================================
-uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex) {
-    uintptr_t mg = reinterpret_cast<uintptr_t>(mapGrid);
-    uintptr_t rec = static_cast<int64_t>(cellIndex) * 0x30 + *reinterpret_cast<int64_t*>(mg + 0x80);
-    uint32_t passBits = 1u << (*reinterpret_cast<uint8_t*>(rec + 0x29) & 0x1f);
-    int* node = reinterpret_cast<int*>(static_cast<uintptr_t>(passBits));
-    if (((passBits & 2) == 0) && ((passBits & 1) == 0) &&
-        (*reinterpret_cast<int8_t*>(rec + 0x2a) == -1)) {
-        node = *reinterpret_cast<int**>(mg + 0xe8);
+uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
+    const MapCell& rec = map->cells[cellIndex];
+    uint32_t passBits = 1u << (rec.terrainType & 0x1f);
+    uint64_t high = passBits;   // retail's RAX before the tree walk
+    if (((passBits & 2) == 0) && ((passBits & 1) == 0) && (rec.field_0x2A == 0xff)) {
+        const AvlNode28* node = map->field_0xE8;
         while (true) {
             while (true) {
                 if (node == nullptr) return 0;
-                if (*node <= cellIndex) break;
-                node = *reinterpret_cast<int**>(node + 4);   // +0x10
+                if (node->key <= cellIndex) break;
+                node = node->left;    // +0x10
             }
-            if (cellIndex <= *node) break;
-            node = *reinterpret_cast<int**>(node + 6);       // +0x18
+            if (cellIndex <= node->key) break;
+            node = node->right;       // +0x18
         }
+        // LEFT: retail returns the node pointer's bits with the low byte replaced by 1
+        // (callers read only the low byte as the bool).
+        high = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(node));
     }
-    // CONCAT71(node>>8, 1): top 7 bytes = node>>8, low byte = 1 — i.e. node with its
-    // low byte replaced by 1 (callers read only the low byte as the bool).
-    return (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(node)) & ~0xffull) | 1u;
+    // CONCAT71(high>>8, 1)
+    return (high & ~0xffull) | 1u;
 }
 
 // ============================================================
-// Reimpl of FUN_140120db0 — GrowthComponent::SetGrowthProgress(progress).
-// self (param_1) = GrowthComponent; entity-IBPs at +0x10 (parent), +0x28, +0x38.
+// Reimpl of FUN_140120db0 — GrowthComponent: set the growth progress.
 // ============================================================
-void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
-    uintptr_t s = static_cast<uintptr_t>(self);
-    float growth = progress * *reinterpret_cast<float*>(s + 0x4c);
+void SetGrowthProgress(GrowthComponent* self, float progress) {
+    float growth = progress * self->growthScale;
     float uvScale = kRdata_14017214c;
-    *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x28) = growth;
+    self->resource.Get()->resourceScale = growth;
     float clamped = (uvScale < growth) ? uvScale : growth;
-    *reinterpret_cast<float*>(s + 0x48) = clamped;
+    self->displayScale = clamped;
 
-    if (*reinterpret_cast<int8_t*>(*reinterpret_cast<int64_t*>(s + 0x38) + 100) == 0) {
+    ModelComponent* target = self->model.Get();
+    if (!self->config->_b64) {
         float g = (growth <= uvScale) ? growth : uvScale;
-        int64_t target = *reinterpret_cast<int64_t*>(s + 0x30);
         float scalar = g;
         {
             Math::Vector4 vec4((Math::Scalar(scalar)));   // slot 0x140152958
-            *reinterpret_cast<float*>(target + 0x134) = vec4.x;
-            *reinterpret_cast<float*>(target + 0x138) = vec4.y;
-            *reinterpret_cast<float*>(target + 0x13c) = vec4.z;
-            *reinterpret_cast<float*>(target + 0x140) = vec4.w;
+            target->meshInstance._color[0] = vec4.x;
+            target->meshInstance._color[1] = vec4.y;
+            target->meshInstance._color[2] = vec4.z;
+            target->meshInstance._color[3] = vec4.w;
         }
     } else {
         float divisor = RdataF(kRdata_1401720f4);   // 0x1401720f4
@@ -153,356 +159,337 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
         if ((0.0f <= scaled) && (lo = scaled, uvScale < scaled)) lo = uvScale;
         float hi = growth;
         if (uvScale < growth) hi = uvScale;
-        int64_t target = *reinterpret_cast<int64_t*>(s + 0x30);
-        *reinterpret_cast<float*>(target + 0x134) = lo;
-        *reinterpret_cast<float*>(target + 0x138) = lo;
-        *reinterpret_cast<float*>(target + 0x13c) = hi;
-        *reinterpret_cast<float*>(target + 0x140) = uvScale;
+        target->meshInstance._color[0] = lo;
+        target->meshInstance._color[1] = lo;
+        target->meshInstance._color[2] = hi;
+        target->meshInstance._color[3] = uvScale;
     }
 
-    int64_t desc = *reinterpret_cast<int64_t*>(s + 0x38);
-    void* rng = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
-    float rf = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+    const GrowthDescription* desc = self->config;
+    float rf = GameUpdateLoop::_singleton->m_random->RandFloat();
     float timeScale = kRdata_140172234;   // 0x140172234
-    uint8_t timeObj[8] = {0};
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeObj), rf * static_cast<float>(*reinterpret_cast<int*>(desc + 0x50)) * timeScale);   // slot 0x140152b00
+    System::Time timeObj = {};
+    RtSystem_Time_Ctor(&timeObj, rf * static_cast<float>(desc->_i50) * timeScale);   // slot 0x140152b00
 
-    uint32_t flagsOld = *reinterpret_cast<uint32_t*>(s + 0x20);
-    *reinterpret_cast<uint64_t*>(s + 0x40) = *reinterpret_cast<uint64_t*>(timeObj);
+    uint32_t flagsOld = self->_flags;
+    self->spawnTimer = timeObj;
     uint32_t flagsNew = flagsOld & 0xffffffef;
-    *reinterpret_cast<uint32_t*>(s + 0x20) = flagsNew;
-    if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (*reinterpret_cast<int64_t*>(s + 0x10) != 0)) {
-        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(s + 0x10));   // 0x1400c3470
+    self->_flags = flagsNew;
+    if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
+        NotifyEntityChanged(self->_entity);   // 0x1400c3470
     }
 }
 
 // ============================================================
-// Reimpl of CreateNaturalResource_helper_52f0 (FUN_1401252f0) — NR variant count.
-// Reads description at comp+0x18, type-gates against 0x1401c7a88, returns desc+0x28.
+// Reimpl of CreateNaturalResource_helper_52f0 (FUN_1401252f0) — the model's mesh-group
+// count: the ModelDescription (type-gated) _meshGroupCount.
 // ============================================================
-uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp) {
-    void* desc = *reinterpret_cast<void**>(static_cast<uintptr_t>(comp) + 0x18);
-    void* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId())) ? desc : nullptr;
-    return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(d) + 0x28);
+uint32_t ModelMeshGroupCount(const ModelComponent* model) {
+    Description* desc = model->_description;
+    const ModelDescription* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId()))
+                                    ? static_cast<const ModelDescription*>(desc) : nullptr;
+    return static_cast<uint32_t>(d->_meshGroupCount);
 }
 
 // ============================================================
-// Reimpl of FUN_140125320 — NR sub-variant count for a given variant index.
-// desc at comp+0x18, type-gated; reads *(desc+0x20) + 0x10 + variant*0x18.
+// Reimpl of FUN_140125320 — the mesh count of mesh group `group`.
 // ============================================================
-uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant) {
-    void* desc = *reinterpret_cast<void**>(static_cast<uintptr_t>(comp) + 0x18);
-    void* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId())) ? desc : nullptr;
-    int64_t arr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
-    return *reinterpret_cast<uint32_t*>(arr + 0x10 + static_cast<int64_t>(variant) * 0x18);
+uint32_t ModelMeshCount(const ModelComponent* model, int group) {
+    Description* desc = model->_description;
+    const ModelDescription* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId()))
+                                    ? static_cast<const ModelDescription*>(desc) : nullptr;
+    return static_cast<uint32_t>(d->_meshGroups[group].meshCount);
 }
 
 // ============================================================
-// Reimpl of FUN_1401253d0 — NaturalResourceComponent::SetVariant(variant, subVariant).
-// comp (param_1) = int64_t* base. Writes variant @+0x164, subVariant @+0x166, and on
-// transitions (de)activates the model: vtable +0x38 (hide) when an old subVariant was
-// active; sets the mesh + vtable +0x30 (show) when the new subVariant is valid;
-// finally refreshes the model child at comp[2] via ModelComponent_helper_2b70(.,0).
+// Reimpl of FUN_1401253d0 — ModelComponent: select the mesh (group, index).
+// Writes meshGroup and meshIndex, and on transitions (de)activates the model: slot 7
+// (hide) when an old index was active; sets the mesh + slot 6 (show) when the new index is
+// valid; finally notifies the entity (0x1400c2b70, 0).
 // ============================================================
-void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant) {
-    uintptr_t c = reinterpret_cast<uintptr_t>(comp);
-    // type-gate the description at comp+0x18 (RDI[0x18]); return value unused here.
-    void* desc = *reinterpret_cast<void**>(c + 0x18);
-    ::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId());
+void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant) {
+    // type-gate the description; the result is unused here.
+    ::Object::IsDerivedFromNullSafe(model->_description, ModelDescription::TypeId());
 
-    *reinterpret_cast<uint16_t*>(c + 0x164) = variant;
-    if (*reinterpret_cast<int16_t*>(c + 0x166) >= 0) {
-        // vtable +0x38 — hide/deactivate current model (RCX = comp)
-        reinterpret_cast<Component*>(comp)->OnRemove();   // B.3.x bridge (slot 7)
+    model->meshGroup = static_cast<int16_t>(variant);
+    if (model->meshIndex >= 0) {
+        model->OnRemove();   // slot 7
     }
-    *reinterpret_cast<int16_t*>(c + 0x166) = subVariant;
+    model->meshIndex = subVariant;
     if (subVariant >= 0) {
-        // Re-gate the description and resolve the mesh ExternalPtr for (variant, subVariant):
-        //   d   = IsDerivedFrom(desc, c7a88) ? desc : 0
-        //   arr = *(d + 0x20)
-        //   sub = *(arr + variant*0x18 + 8)   (per-variant sub-array)
-        //   mesh= *(sub + subVariant*8)
-        void* descMesh = *reinterpret_cast<void**>(c + 0x18);
-        void* d = (::Object::IsDerivedFromNullSafe(descMesh, ModelDescription::TypeId())) ? descMesh : nullptr;
-        int16_t sub = *reinterpret_cast<int16_t*>(c + 0x166);
-        int16_t var = *reinterpret_cast<int16_t*>(c + 0x164);
-        int64_t arr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
-        int64_t subArr = *reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(var) * 0x18 + 8);
-        void* mesh = *reinterpret_cast<void**>(subArr + static_cast<int64_t>(sub) * 8);
-        // Graphics::MeshInstance::SetMesh(this = comp+0x28, mesh)
-        reinterpret_cast<Graphics::MeshInstance*>(c + 0x28)
-            ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
-        // vtable +0x30 — show/activate model (RCX = comp)
-        reinterpret_cast<Component*>(comp)->OnAdded();   // B.3.x bridge (slot 6)
+        Description* descMesh = model->_description;
+        const ModelDescription* d = (::Object::IsDerivedFromNullSafe(descMesh, ModelDescription::TypeId()))
+                                        ? static_cast<const ModelDescription*>(descMesh) : nullptr;
+        int16_t sub = model->meshIndex;
+        int16_t var = model->meshGroup;
+        Graphics::GraphicsMesh* mesh = d->_meshGroups[var].meshes[sub];
+        model->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
+        model->OnAdded();   // slot 6
     }
-    ModelComponentNotify_Reimpl(*reinterpret_cast<void**>(c + 0x10), 0);   // 0x1400c2b70
+    ModelComponentNotify_Reimpl(model->_entity, 0);   // 0x1400c2b70
 }
 
 // ============================================================
-// Reimpl of AnimateNaturalResource_helper_6440 (FUN_140126440) — NaturalResource
-// SetAnimIndex(animIdx). self (param_1) = NaturalResourceComponent.
-// If the description (self+0x18, type-gated 0x1401c7b68) byte +100 == 0:
-//   if "removed" bit (+0x20 bit 21) set, run RemoveNatRes (FUN_1401260f0) with a null IBP.
-// else (byte +100 != 0): get model component (Entity_ClearPathQueue on parent at +0x10),
-//   AnimalComponent_helper_50f0(model, animIdx, 0,0, g_fUVScale), set bit 2 (+0x20 |= 4),
-//   and on a low-16-bit flag change with non-null parent, notify changed.
+// Reimpl of AnimateNaturalResource_helper_6440 (FUN_140126440) — NaturalResourceComponent:
+// set the animation index.
+// If the description (type-gated 0x1401c7b68) _b64 == 0: if the dead bit (_flags bit 21) is
+// set, run RemoveNatRes (FUN_1401260f0) with a null IBP. Else: play the animation on the
+// entity's ModelComponent, set _flags bit 2, and on a low-16-bit flag change with a
+// non-null entity, notify the entity.
 // ============================================================
-void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
-    uintptr_t s = static_cast<uintptr_t>(self);
-    void* desc = *reinterpret_cast<void**>(s + 0x18);
-    void* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
+void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animIdx) {
+    Description* desc = self->_description;
+    const NaturalResourceDescription* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId()))
+                                              ? static_cast<const NaturalResourceDescription*>(desc) : nullptr;
 
-    if (*reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(d) + 100) == 0) {
-        if (((*reinterpret_cast<uint32_t*>(s + 0x20) >> 0x15) & 1) != 0) {
-            int64_t nullIBP = 0;
-            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            ActCNR_RemoveNatRes_1260f0(self, &nullIBP, 0);
+    if (!d->_b64) {
+        if (((self->_flags >> 0x15) & 1) != 0) {
+            ComponentEntity* nullIBP = nullptr;
+            RemoveNaturalResourceCore(self, &nullIBP, 0);
         }
     } else {
-        int64_t modelIBP = 0;
-        ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);   // 0x140003f60
+        ModelComponent* model = self->_entity->FindComponent<ModelComponent>();   // 0x140003f60
         float uvScale = kRdata_14017214c;
-        ActMvDep_AnimHelper_50f0(static_cast<uintptr_t>(modelIBP), animIdx, 0.0f, 0.0f, uvScale);   // 0x1401250f0
-        uint32_t flagsOld = *reinterpret_cast<uint32_t*>(s + 0x20);
+        PlayModelAnimation(model, animIdx, 0.0f, 0.0f, uvScale);   // 0x1401250f0
+        uint32_t flagsOld = self->_flags;
         uint32_t flagsNew = flagsOld | 4;
-        *reinterpret_cast<uint32_t*>(s + 0x20) = flagsNew;
-        if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (*reinterpret_cast<int64_t*>(s + 0x10) != 0)) {
-            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(s + 0x10));   // 0x1400c3470
+        self->_flags = flagsNew;
+        if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
+            NotifyEntityChanged(self->_entity);   // 0x1400c3470
         }
     }
 }
 
 // ============================================================
 // Reimpl of Entity_impl_6540 (FUN_140126540) — CreateNaturalResource model placement.
-// self (param_1) = NaturalResourceComponent; param_2 = cell index. Positions the
-// model + transform component at the cell, with per-resource jitter.
+// Positions the entity's MapComponent and ModelComponent at the cell, with jitter.
 // ============================================================
-uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
-    uintptr_t s = static_cast<uintptr_t>(self);
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    void* desc = *reinterpret_cast<void**>(s + 0x18);
-    int* mapGrid = *reinterpret_cast<int**>(gameWorld + 0xf8);
-    void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
-    int gridW = *mapGrid;
+uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex) {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    Description* desc = self->_description;
+    Map* map = gameWorld->m_game;
+    System::Random* rng = gameWorld->m_random;
+    int gridW = map->size;
 
-    void* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
-    float jitter = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(d) + 0x60);
+    const NaturalResourceDescription* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId()))
+                                              ? static_cast<const NaturalResourceDescription*>(desc) : nullptr;
+    float jitter = d->_f60;
 
     float halfBias = kRdata_140172114;   // 0x140172114
-    float half = static_cast<float>(*mapGrid >> 1) - halfBias;
-    float cellX = static_cast<float>(cellIndex % *mapGrid) - half;
-    float cellY = static_cast<float>(cellIndex / *mapGrid) - half;
+    float half = static_cast<float>(map->size >> 1) - halfBias;
+    float cellX = static_cast<float>(cellIndex % map->size) - half;
+    float cellY = static_cast<float>(cellIndex / map->size) - half;
 
-    // CharacterComponent_impl_f3e0 fills a Vector3 (local_a8/a4/a0) for the cell.
     float inCell[2] = { cellX, cellY };
     float outPos[3] = { 0.0f, 0.0f, 0.0f };
-    Reimpl_MapGetTerrainPos(mapGrid, outPos, inCell, '\0', nullptr);   // 0x14009f3e0
+    Reimpl_MapGetTerrainPos(map, outPos, inCell, '\0', nullptr);   // 0x14009f3e0
 
-    float r1 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
-    float r2 = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
+    float r1 = rng->RandFloatTol();
+    float r2 = rng->RandFloatTol();
     float worldX = r1 * jitter + outPos[1];
     float worldY = r2 * jitter + outPos[0];
     float worldZ = outPos[2] + 0.0f;
     float yawScale = kRdata_140172220;   // 0x140172220
-    float yaw = reinterpret_cast<System::Random*>(rng)->RandFloatTol() * yawScale;   // B.3.4b bridge
+    float yaw = rng->RandFloatTol() * yawScale;
 
-    int64_t posIBP = 0;
-    int64_t modelIBP = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(s + 0x10), &posIBP);   // 0x140004680
-    ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(s + 0x10), &modelIBP);   // 0x140003f60
+    MapComponent* pos = self->_entity->FindComponent<MapComponent>();       // 0x140004680
+    ModelComponent* model = self->_entity->FindComponent<ModelComponent>(); // 0x140003f60
 
-    *reinterpret_cast<int16_t*>(posIBP + 0x28) = static_cast<int16_t>(cellIndex % gridW);
-    *reinterpret_cast<int16_t*>(posIBP + 0x2a) = static_cast<int16_t>(cellIndex / gridW);
-    *reinterpret_cast<uint64_t*>(posIBP + 0x2c) = 0x10001;
+    pos->tileX0 = static_cast<int16_t>(cellIndex % gridW);
+    pos->tileY0 = static_cast<int16_t>(cellIndex / gridW);
+    // One qword store of 0x10001 in retail (H7): width 1, height 1, extraField 0.
+    pos->tileX1 = 1;
+    pos->tileY1 = 1;
+    pos->extraField = 0;
 
-    // Math::Transform::FromYawPitchOffset(out, &yaw, &pitch(=0), &offset(worldX,worldY,worldZ))
     float pitch = 0.0f;
     Math::Vector3 offset(worldY, worldX, worldZ);  // FromYawPitchOffset offset = {local_98, local_94, local_90}
-    // NOTE: the original passes local_res8[0]=yaw as the Scalar and local_res10 (Vector3
-    // zero-ish) — see disasm; we mirror the documented FromYawPitchOffset ABI.
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yaw, pitch, offset);
-    // 7 dwords -> modelIBP +0x148..+0x160
-    *reinterpret_cast<Math::Transform*>(modelIBP + 0x148) = xform;   // B.3.1 bridge
-    *reinterpret_cast<float*>(modelIBP + 0x168) = yaw;
-    reinterpret_cast<Graphics::Geometry*>(modelIBP + 0x28)
-        ->SetTransform(*reinterpret_cast<const Math::Transform*>(modelIBP + 0x148));   // B.3.5 bridge
+    model->transform = xform;
+    model->yaw = yaw;
+    model->meshInstance.SetTransform(model->transform);
     return 1;
 }
 
 // ============================================================
 // Reimpl of FUN_1401260f0 — RemoveNaturalResource core removal/harvest.
-// self (param_1) = NaturalResourceComponent, param_2 = citizen/work IBP, param_3 = harvest flag.
-// Detaches the model from the build queue, then (if harvestable, byte +0x2d) spawns a
-// raw-material entity at the cell, transfers the harvest amount to the citizen, and
-// registers the new entity.
+// `citizenIBP` = the harvesting citizen's entity IBP, `harvestFlag`.
+// Marks the entity for removal, then (if harvestable) spawns a raw-material entity at the
+// cell, registers the harvest amount, and claims the cell for the pile.
 // ============================================================
-void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag) {
-    // Removal census. Crops vanish from their tiles between planting and harvest --
-    // measured tiles==growing exactly, with the difference showing up as slots that
-    // ValidateEntityRefs demoted to state 2. This is the only path that removes a
-    // natural resource, so counting it (and its harvest flag) says whether something is
-    // actively clearing the field's own crops and whether it produces anything.
-    uintptr_t s = static_cast<uintptr_t>(self);
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int64_t parent = *reinterpret_cast<int64_t*>(s + 0x10);
-    int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
+void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag) {
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    ComponentEntity* parent = self->_entity;
+    EntityList* entityList = gameWorld->m_entityList;
 
-    // Detach model from the build queue when not already queued (bit 10 of +0x40).
-    if (parent != 0) {
-        if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) == 0) {
-            ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(parent));   // 0x1400c2ea0
-            ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(entityList + 0xd0),   // 0x140003110
-                                          *reinterpret_cast<int*>(entityList + 0xd8) + 1, &parent);
+    // Mark the entity for removal unless already marked (bit 10 of its flags).
+    if (parent != nullptr) {
+        if (((parent->_entityFlags >> 10) & 1) == 0) {
+            MarkEntityForRemoval(parent);   // 0x1400c2ea0
+            ActHunt_DynArraySetCount_3110(&entityList->removalList,   // 0x140003110
+                                          entityList->removalList.count + 1, &parent);
         }
     }
 
-    if (*reinterpret_cast<int8_t*>(s + 0x2d) == 0) {   // not harvestable
+    if (!self->harvestable) {   // not harvestable
         return;
     }
 
-    void* desc = *reinterpret_cast<void**>(s + 0x18);
-    void* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
-    int64_t descArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
-    if (descArr == 0) {
+    Description* desc = self->_description;
+    const NaturalResourceDescription* d = (::Object::IsDerivedFromNullSafe(desc, NaturalResourceDescription::TypeId()))
+                                              ? static_cast<const NaturalResourceDescription*>(desc) : nullptr;
+    ComponentDescription* material = d->_building;
+    if (material == nullptr) {
         return;
     }
 
     float uvScale = kRdata_14017214c;
     float frac = uvScale;
-    if (*reinterpret_cast<float*>(s + 0x28) <= uvScale) frac = *reinterpret_cast<float*>(s + 0x28);
+    if (self->resourceScale <= uvScale) frac = self->resourceScale;
 
     int amount;
-    if (*reinterpret_cast<int8_t*>(s + 0x2c) == 0) {
-        void* meshDesc[4] = {0};
-        void** pd = reinterpret_cast<void**>(WorkAcc_FindComponent_6330(static_cast<uintptr_t>(descArr), meshDesc));   // 0x140006330
-        amount = pd ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(*pd) + 0x40) : 0;
+    // LEFT: 0x140006330's C declaration (Work/exe_bodies.h, WORK-a's header) takes the
+    // template as an integer.
+    const RawMaterialDescription* raw = nullptr;
+    WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(material), &raw);   // 0x140006330
+    if (!self->mature) {
+        amount = raw->_lowCreateCount;
     } else {
-        int64_t tmp = 0;
-        void** pd = reinterpret_cast<void**>(WorkAcc_FindComponent_6330(static_cast<uintptr_t>(descArr), &tmp));   // 0x140006330
-        amount = pd ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(*pd) + 0x44) : 0;
+        amount = raw->_highCreateCount;
     }
     amount = static_cast<int>(static_cast<float>(amount) * frac);
     if (amount <= 0) {
         return;
     }
 
-    // Compute the cell index from the model's grid position.
-    int64_t posIBP = 0;
-    FloorComponent_FindResData(*reinterpret_cast<void**>(s + 0x10), &posIBP);   // 0x140004680
-    int cell = static_cast<int>(*reinterpret_cast<int16_t*>(posIBP + 0x2a)) *
-                   **reinterpret_cast<int**>(gameWorld + 0xf8) +
-               static_cast<int>(*reinterpret_cast<int16_t*>(posIBP + 0x28));
-    // Mirrors the original's reused stack slot (local_res8 low32 = cell). 022480 reads
-    // this slot by pointer (see the PORT GAP below).
-    int64_t cellSlot = static_cast<int64_t>(static_cast<uint32_t>(cell));
+    // The cell index from the entity's MapComponent tile.
+    const MapComponent* pos = self->_entity->FindComponent<MapComponent>();   // 0x140004680
+    int cell = static_cast<int>(pos->tileY0) * gameWorld->m_game->size + static_cast<int>(pos->tileX0);
 
     // ── ECONOMY ACCOUNTING (always) ─────────────────────────────────────────
     // Increment the town raw-material stock — the essential produce effect the economy loop
-    // consumes. RegisterRawMaterial needs only the citizen/work IBP, the resource description
-    // and the yield amount; NOT the spawned physical item entity, so it runs unconditionally.
-    int64_t regIBP = *reinterpret_cast<int64_t*>(citizenIBP);
-    ActRm_RegisterRawMaterial_88ef0(*reinterpret_cast<int64_t*>(gameWorld + 0xf0), &regIBP, harvestFlag,   // 0x140088ef0
-                                    *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20), amount);
+    // consumes. It needs only the citizen, the material and the yield, NOT the spawned
+    // item entity, so it runs unconditionally.
+    ComponentEntity* regIBP = *citizenIBP;
+    RegisterRawMaterial(gameWorld->m_citizenList, &regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
 
-    // Query the existing surface tile at the cell (for its material id at +0x24).
+    // Query the existing surface work at the cell (for its id at +0x24).
+    // LEFT: 0x1400f8d50's C declaration (Player/exe_bodies.h) takes the scheduler as an
+    // integer; the object it returns (+0x24 read) has no settled class.
     int64_t surfIBP = 0;
-    RemovalCalc_helper_8d50(*reinterpret_cast<int64_t*>(gameWorld + 0x118), reinterpret_cast<void**>(&surfIBP), cell);   // 0x1400f8d50
+    RemovalCalc_helper_8d50(reinterpret_cast<int64_t>(gameWorld->m_tutorial), reinterpret_cast<void**>(&surfIBP), cell);   // 0x1400f8d50
     uint32_t surfMatId = 0xffffffff;
     if (surfIBP != 0) {
         surfMatId = *reinterpret_cast<uint32_t*>(surfIBP + 0x24);
     }
 
     // Spawn a new raw-material entity cloned from the resource description's template.
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* newEntity = mem
-                      ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),   // 0x1400c3720
-                            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(d) + 0x20))
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* newEntity = mem
+                      ? ComponentEntity_CtorFromDescription(mem, d->_building)   // 0x1400c3720
                       : nullptr;
-    int64_t newIBP = 0;
-    new (&newIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
-    int64_t rawMatIBP = 0;
-    ActRm_FindComponent_223c0(static_cast<uintptr_t>(newIBP), &rawMatIBP);   // 0x1400223c0
-    void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
-    int rt = reinterpret_cast<System::Random*>(rng)->RandTol(2);   // B.3.4b bridge
+    RawMaterialComponent* rawMat = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
+    int rt = gameWorld->m_random->RandTol(2);
     // DAT_140172204 = 90.0f (rotation scale).
     float amtScale = kRdata_140172204;   // 0x140172204
-    if (rawMatIBP != 0) ActRm_PositionEntity_9760(rawMatIBP, cell, static_cast<float>(rt) * amtScale);   // 0x140129760
+    if (rawMat != nullptr) PositionRawMaterial(rawMat, cell, static_cast<float>(rt) * amtScale);   // 0x140129760
 
-    if (*reinterpret_cast<int64_t*>(citizenIBP) != 0) {
-        int64_t cit28 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(citizenIBP) + 0x28);
+    if (*citizenIBP != nullptr) {
         // PORT GAP 0x140022480 FUN_140022480: not ported; retail calls it here,
         // FUN_140022480(*(citizen+0x28), &local_res8) where local_res8 = cell. It was never
-        // registered, so this file's pointer to it was always null and the call was skipped:
-        // the null arm (no call) is the code.
-        (void)cit28;
-        (void)cellSlot;
+        // registered, so the call was always skipped: the null arm (no call) is the code.
     }
 
-    if (rawMatIBP != 0) {
-        *reinterpret_cast<int*>(rawMatIBP + 0x28) = amount;
-        *reinterpret_cast<int64_t*>(rawMatIBP + 0x30) = 0;
+    if (rawMat != nullptr) {
+        rawMat->quantity = amount;
+        rawMat->profession = nullptr;
     }
 
     if (surfIBP != 0) {
-        int64_t nrIBP = 0;
-        void* p = WorkBase_FindComponent_3050(static_cast<uintptr_t>(newIBP), &nrIBP);   // 0x140003050
-        if (p) *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(p) + 0x2c) = surfMatId;
+        WorkComponent* work = newEntity->FindComponent<WorkComponent>();   // 0x140003050
+        work->workFlags = surfMatId;
     }
 
-    int64_t listIBP = newIBP;
-    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(gameWorld + 0xe8), &listIBP,   // 0x1400c48a0
-                   *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20) + 0x20));
+    ComponentEntity* listIBP = newEntity;
+    EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &listIBP,   // 0x1400c48a0
+                   static_cast<int>(d->_building->_category));
 
     // ── GRID CLAIM (dc20's net effect, scoped to this pile) ──────────────────
     // Retail claims the cell via c48a0 -> ComponentEntity_OnAddedPass -> the pile
     // MapComponent's vtable+0x30 (MapComponent::Draw 0x140124370) -> sub_41b0
-    // (0x1401241b0) -> dc20 (0x14009dc20), whose net effect is cell+0x08 = the owner
-    // entity plus comp+0x20 bit 0x100000 ("occupancy currently written"). Standalone's
-    // MapComponent is inert, so the pile spawned with cell+0x08 still null — and
-    // GetTilesInArea (FUN_14009fc00) only reports a cell whose +0x08 is non-null, so the
-    // pile was invisible to every tile scan, including the ClearArea::Execute Phase 3
-    // gather that posts the haul work. That is why piles were never picked up.
-    //
-    // This is the same spawn-site collapse starttown.cpp already applies to worldgen
-    // resources (StartTown_MarkResourceCellGrid), kept SCOPED to the pile: driving the
-    // attach from MapComponent's slot for every entity regressed the RemovalTool, because
-    // dc20 also marks any pre-existing cell occupant for removal. That hazard cannot fire
-    // here — 1260f0 marks the tree at its top via c2ea0, which dispatches the tree
-    // MapComponent's vtable+0x38 (-> impl_4750 -> dee0) IMMEDIATELY, nulling cell+0x08
-    // before we get here. So the cell is already empty and there is no occupant to mark.
-    // For the same reason the tree's later removal-drain cannot wipe this write.
-    //
-    // Only cell+0x08 is written: dc20 would also stamp the terrain type from
-    // MapDescription+0x20, but the tree's dee0 detach has already reclassified the cell to
-    // its natural (passable) type, which is what a walkable pile wants — the same
-    // deliberate divergence documented at the starttown.cpp collapse. Bit 0x100000 is set
-    // so the removal-side un-mark (MapComponent_DetachOccupancy_4750) stays symmetric and
-    // the grid cannot keep pointing at a freed pile.
-    if (newIBP != 0) {
-        uintptr_t mapIBP = 0;
-        FloorComponent_FindResData(reinterpret_cast<void*>(newIBP), &mapIBP);   // 0x140004680
-        uint8_t* mc = reinterpret_cast<uint8_t*>(mapIBP);
-        uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf8);
-        uint8_t* cells = mapGrid ? *reinterpret_cast<uint8_t**>(mapGrid + 0x80) : nullptr;
-        const int dim = mapGrid ? *reinterpret_cast<int32_t*>(mapGrid) : 0;
+    // (0x1401241b0) -> dc20 (0x14009dc20), whose net effect is MapCell::occupant = the
+    // entity plus the component's _flags bit 0x100000. Standalone's MapComponent is inert,
+    // so the pile spawned with the occupant still null — and GetTilesInArea
+    // (FUN_14009fc00) only reports a cell whose occupant is non-null, so the pile was
+    // invisible to every tile scan (the ClearArea::Execute Phase 3 haul gather). The same
+    // spawn-site collapse starttown.cpp applies to worldgen resources, kept SCOPED to the
+    // pile (1260f0 marked the tree at its top via c2ea0, which nulls the occupant first).
+    // Bit 0x100000 is set so the removal-side un-mark stays symmetric.
+    if (newEntity != nullptr) {
+        MapComponent* mc = newEntity->FindComponent<MapComponent>();   // 0x140004680
+        Map* map = gameWorld->m_game;
+        MapCell* cells = map ? map->cells : nullptr;
+        const int dim = map ? map->size : 0;
         // 41b0's own gate: skip when occupancy is already written for this component.
         if (mc && cells && dim > 0 && cell >= 0 && cell < dim * dim &&
-            ((*reinterpret_cast<uint32_t*>(mc + 0x20) >> 20) & 1) == 0) {
-            *reinterpret_cast<uintptr_t*>(cells + static_cast<size_t>(cell) * 0x30 + 0x08) = newIBP;
-            *reinterpret_cast<uint32_t*>(mc + 0x20) |= 0x100000u;
+            ((mc->_flags >> 20) & 1) == 0) {
+            cells[cell].occupant = newEntity;
+            mc->_flags |= 0x100000u;
         }
     }
 
-    if ((harvestFlag != 0) && (*reinterpret_cast<int64_t*>(citizenIBP) != 0)) {
-        int64_t out = 0;
-        WorkAcc_FindComponent_22520(*reinterpret_cast<uintptr_t*>(citizenIBP), &out);   // 0x140022520
-        if (out != 0) {
-            int64_t nrIBP2 = 0;
-            void* p = WorkBase_FindComponent_3050(static_cast<uintptr_t>(newIBP), &nrIBP2);   // 0x140003050
-            uint32_t v = p ? *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(p) + 0x28) : 0;
-            ActRm_DynArrayPush4_44810(static_cast<uintptr_t>(out), v);   // 0x140044810
+    if ((harvestFlag != 0) && (*citizenIBP != nullptr)) {
+        AutoPickupComponent* out = (*citizenIBP)->FindComponent<AutoPickupComponent>();   // 0x140022520
+        if (out != nullptr) {
+            WorkComponent* work = newEntity->FindComponent<WorkComponent>();   // 0x140003050
+            uint32_t v = static_cast<uint32_t>(work->workId);
+            AutoPickupAppend(out, v);   // 0x140044810
         }
     }
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+
+// B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Component/spawncomponent.cpp)
+uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex) {
+    return CheckCellTerrain(reinterpret_cast<const Map*>(mapGrid), cellIndex);
+}
+
+// B4 FORWARD: outside callers (Component/growthcomponent.cpp)
+void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
+    SetGrowthProgress(reinterpret_cast<GrowthComponent*>(self), progress);
+}
+
+// B4 FORWARD: outside callers (Action/createnaturalresource.cpp)
+uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp) {
+    return ModelMeshGroupCount(reinterpret_cast<const ModelComponent*>(comp));
+}
+
+// B4 FORWARD: outside callers (Action/createnaturalresource.cpp)
+uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant) {
+    return ModelMeshCount(reinterpret_cast<const ModelComponent*>(comp), variant);
+}
+
+// B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Component files)
+void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant) {
+    ModelSelectMesh(reinterpret_cast<ModelComponent*>(comp), variant, subVariant);
+}
+
+// B4 FORWARD: outside callers (Action/animatenaturalresource.cpp; Component files)
+void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
+    NaturalResourceSetAnimation(reinterpret_cast<NaturalResourceComponent*>(self), animIdx);
+}
+
+// B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Game/starttown.cpp)
+uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
+    return NaturalResourcePlaceAtCell(reinterpret_cast<NaturalResourceComponent*>(self), cellIndex);
+}
+
+// B4 FORWARD: outside callers (Action/removenaturalresource.cpp; Component, Work files)
+void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag) {
+    RemoveNaturalResourceCore(reinterpret_cast<NaturalResourceComponent*>(self),
+                              reinterpret_cast<ComponentEntity* const*>(citizenIBP), harvestFlag);
 }

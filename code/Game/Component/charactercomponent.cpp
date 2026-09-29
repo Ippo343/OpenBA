@@ -72,9 +72,7 @@ void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* de
             // (0x1401094a8 `MOV R8,RDX`), passed through as retail's R8.
             (*ptrRef)->Enter(arrayBase, deltaTime);   // slot 6
         }
-        // LEFT: Action's +0x10 is declared as the InternalBasePtr `_entity` (ACT's header);
-        // this walk reads it as the next node.
-        node = reinterpret_cast<Action*>((*ptrRef)->_entity.Get());
+        node = (*ptrRef)->_next.Get();   // Action::_next (+0x10), the next node
         *ptrRef = node;
     }
 }

@@ -240,7 +240,7 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
 // cemComp = cemetery component, cell = grave cell index, citizenCell unused
 // (matches retail), worldArg = game-world singleton (passed to the pathfinder cmd).
 extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
-                                             uint64_t /*citizenCell*/, void* worldArg) {
+                                             uint64_t /*citizenCell*/, void* /*worldArg*/) {
     uint8_t* cem = reinterpret_cast<uint8_t*>(cemCompV);
     uint8_t* world = GameUpdateLoop::_singleton ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr;
     if (!world || !cem) return;
@@ -255,8 +255,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
     int size = *reinterpret_cast<int*>(map);
     if (stateWasWalk)
         Pf_FineCellDirty_a8c90(*reinterpret_cast<int64_t*>(map + 0x70), cell % size, cell / size);
-    Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(map + 0x68), static_cast<uint32_t>(cell),
-                         reinterpret_cast<void*>(2), worldArg);
+    Pf_EnqueueCmd2_a6fe0(*reinterpret_cast<int64_t*>(map + 0x68), cell, 2);
     *reinterpret_cast<int64_t*>(cellRec + 8 + static_cast<int64_t>(cell) * 0x30) = nullIBP;  // = null
     // Tombstone yaw = the cemetery's own placed rotation (position component +0x30).
     int64_t resIBP = 0;

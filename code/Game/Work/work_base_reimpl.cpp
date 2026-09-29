@@ -200,9 +200,7 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
         do {
             // 0x1400c5444: RCX = cur only.
             cur->CheckEntity();   // slot 8
-            // LEFT: the +0x10 InternalBasePtr is the chained action (Action.h declares
-            // it as the base pointer).
-            cur = reinterpret_cast<Action*>(cur->_entity.Get());   // node[2] = next
+            cur = cur->_next.Get();   // node[2] = next (Action::_next, +0x10)
         } while (cur != nullptr);
         // Slot address recomputed from the CURRENT array pointer (may have moved).
         Action** slot = &stack->actions[i];

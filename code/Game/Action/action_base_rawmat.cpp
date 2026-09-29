@@ -46,6 +46,15 @@
 #include "Component/RawMaterialDescription.h"
 #include "Component/TrackerComponent.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Component/AutoPickupComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/StorageComponent.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Calendar.h"
+#include "Game/Map.h"
+#include "Action/PathSearch.h"   // RawArray
 
 // Exe sub-helpers / engine constants used by the PositionEntity port below, called by
 // name (B3R):
@@ -58,204 +67,185 @@
 // resolved had no reader here -- FindPlacementCell lives in action_pf_roots_misc.cpp.)
 
 // ============================================================
-// FUN_14012d150 — StorageComponent::SubtractItem(storage, resType, count)
+// FUN_14012d150 — StorageComponent::SubtractItem(material, count)
 // ============================================================
-// Inventory array at storage+0x28 (stride 0x10: [+0]=resType(8), [+8]=count(int)),
-// element count at storage+0x30. Walk to the matching resType, subtract count; if the
-// slot's count reaches 0, compact the array down one and decrement the count. Pure
-// pointer/array ops — leaf.
-void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count) {
-    int n = *reinterpret_cast<int*>(storage + 0x30);
+// Walk the items to the material, subtract count; if the item's count reaches 0, compact
+// the array down one and decrement the count. Pure array ops — leaf.
+void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count) {
+    int n = storage->slotCount;
     if (n <= 0) return;
-    int64_t* p = *reinterpret_cast<int64_t**>(storage + 0x28);
+    const StorageComponent::Item* p = storage->storageSlots;
     int idx = 0;
-    while (*p != resType) {
+    while (p->_resource != material) {
         idx++;
-        p += 2;
-        if (*reinterpret_cast<int*>(storage + 0x30) <= idx) return;
+        p += 1;
+        if (storage->slotCount <= idx) return;
     }
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(storage + 0x28);
-    int* cntField = reinterpret_cast<int*>(base + static_cast<uintptr_t>(idx) * 0x10 + 8);
-    *cntField -= count;
-    if (*reinterpret_cast<int*>(base + static_cast<uintptr_t>(idx) * 0x10 + 8) == 0) {
+    StorageComponent::Item* items = storage->storageSlots;
+    items[idx]._count -= count;
+    if (items[idx]._count == 0) {
         int i = idx;
-        uintptr_t off = static_cast<uintptr_t>(idx) * 0x10;
-        if (i < *reinterpret_cast<int*>(storage + 0x30)) {
+        int at = idx;
+        if (i < storage->slotCount) {
             do {
                 i++;
-                if (i < *reinterpret_cast<int*>(storage + 0x30)) {
-                    uint64_t* dst = reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(storage + 0x28) + off);
-                    dst[0] = dst[2];   // [idx] = [idx+1]
-                    dst[1] = dst[3];
+                if (i < storage->slotCount) {
+                    storage->storageSlots[at] = storage->storageSlots[at + 1];   // [idx] = [idx+1]
                 }
-                off += 0x10;
-            } while (i < *reinterpret_cast<int*>(storage + 0x30));
+                at += 1;
+            } while (i < storage->slotCount);
         }
-        *reinterpret_cast<int*>(storage + 0x30) -= 1;
+        storage->slotCount -= 1;
     }
 }
 
 // ============================================================
-// FUN_14012d000 — StorageComponent::AddItem(storage, resType, count)
+// FUN_14012d000 — StorageComponent::AddItem(material, count)
 // ============================================================
-// If resType already present, add to its count. Else append a {resType, count, 0}
-// entry, growing the 16-byte-element array (capacity at storage+0x34; grows to 3x on a
-// non-first append) via MemAlloc + copy + MemFree. Leaf (alloc only).
-void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count) {
+// If the material is already present, add to its count. Else append a {material, count, 0}
+// item, growing the array (grows to 3x on a non-first append) via MemAlloc + copy +
+// MemFree. Leaf (alloc only).
+void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count) {
     // DIAGNOSTIC, not a guard — appending a count<=0 entry is legal here in retail too, but
-    // it creates a stack that Pf_SpillAllStorage_7570 (action_pf_roots_drop.cpp:250) can
-    // never drain: that loop's exit test is the stack COUNT at +0x30 while its work is gated
-    // on the entry's own count, so a {resType, 0} entry spins the game forever (observed
-    // 2026-07-31 after the first pasture cull, confirmed by gdb: +0x30 == 1, entry count 0).
-    // Retail shipped assertions on exactly this invariant — the profile build carries
-    // "_count >= 0 && _reserve >= 0 && _count - _reserve >= 0" and "_items[index]._count >= 0"
-    // on StorageComponent::Draw — so naming the caller at the moment of the write is
-    // retail-shaped. Do NOT turn this into `if (count <= 0) return;`: that would silently
-    // drop a real deposit on the default path and hide whichever caller is passing 0.
+    // it creates a stack that SpillAllStorage (action_pf_roots_drop.cpp) can never drain:
+    // that loop's exit test is the stack COUNT while its work is gated on the entry's own
+    // count, so a {material, 0} entry spins the game forever (observed 2026-07-31 after the
+    // first pasture cull). Retail shipped assertions on exactly this invariant — the profile
+    // build carries "_count >= 0 && _reserve >= 0 && _count - _reserve >= 0" and
+    // "_items[index]._count >= 0" on StorageComponent::Draw — so naming the caller at the
+    // moment of the write is retail-shaped. Do NOT turn this into `if (count <= 0) return;`.
     if (count <= 0) {
         std::fprintf(stderr, "[StorageAdd] ZERO/NEG COUNT: storage=%p resType=%p count=%d "
                      "stacks(+0x30)=%d capacity(+0x38)=%d — this entry will hang the spill loop\n",
-                     reinterpret_cast<void*>(storage), reinterpret_cast<void*>(resType), count,
-                     *reinterpret_cast<int*>(storage + 0x30),
-                     *reinterpret_cast<int*>(storage + 0x38));
+                     static_cast<const void*>(storage), static_cast<const void*>(material), count,
+                     storage->slotCount, storage->capacity);
         std::fflush(stderr);
     }
     int idx = 0;
-    int n = *reinterpret_cast<int*>(storage + 0x30);
+    int n = storage->slotCount;
     if (n > 0) {
-        int64_t* p = *reinterpret_cast<int64_t**>(storage + 0x28);
+        const StorageComponent::Item* p = storage->storageSlots;
         do {
-            if (*p == resType) {
-                int64_t* slot = *reinterpret_cast<int64_t**>(storage + 0x28) + static_cast<int64_t>(idx) * 2 + 1;
-                *reinterpret_cast<int*>(slot) = *reinterpret_cast<int*>(slot) + count;
+            if (p->_resource == material) {
+                storage->storageSlots[idx]._count = storage->storageSlots[idx]._count + count;
                 return;
             }
             idx++;
-            p += 2;
-        } while (idx < *reinterpret_cast<int*>(storage + 0x30));
+            p += 1;
+        } while (idx < storage->slotCount);
     }
 
-    int oldN = *reinterpret_cast<int*>(storage + 0x30);
+    int oldN = storage->slotCount;
     int newN = oldN + 1;
     if (newN == oldN) return;  // never, but mirror the guard
 
-    void* oldBuf = *reinterpret_cast<void**>(storage + 0x28);
-    *reinterpret_cast<int*>(storage + 0x30) = newN;
-    if (*reinterpret_cast<int*>(storage + 0x34) < newN) {
-        *reinterpret_cast<int*>(storage + 0x34) = newN;
-        if (oldN != 0) *reinterpret_cast<int*>(storage + 0x34) = newN * 3;
-        void* nb = System::MemoryAllocator::MemAlloc(
-                          static_cast<uint64_t>(*reinterpret_cast<int*>(storage + 0x34)) << 4, 8);
-        *reinterpret_cast<void**>(storage + 0x28) = nb;
+    StorageComponent::Item* oldBuf = storage->storageSlots;
+    storage->slotCount = newN;
+    if (storage->slotCapacity < newN) {
+        storage->slotCapacity = newN;
+        if (oldN != 0) storage->slotCapacity = newN * 3;
+        storage->storageSlots = static_cast<StorageComponent::Item*>(System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(storage->slotCapacity) << 4, 8));
     }
-    int srcIdx = (oldBuf == *reinterpret_cast<void**>(storage + 0x28)) ? oldN : 0;
+    int srcIdx = (oldBuf == storage->storageSlots) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        uint64_t* dst = reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(storage + 0x28) + static_cast<uintptr_t>(i) * 0x10);
+        StorageComponent::Item* dst = storage->storageSlots + i;
         if (!dst) continue;
         if (i < oldN) {
-            uint64_t* src = reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(oldBuf) + static_cast<uintptr_t>(i) * 0x10);
-            dst[0] = src[0];
-            dst[1] = src[1];
+            *dst = oldBuf[i];
         } else {
-            dst[0] = static_cast<uint64_t>(resType);
-            dst[1] = static_cast<uint64_t>(static_cast<uint32_t>(count));  // {count, 0}
+            dst->_resource = material;
+            dst->_count = count;   // {count, 0}
+            dst->_reserve = 0;
         }
     }
-    if (oldBuf != *reinterpret_cast<void**>(storage + 0x28))
+    if (oldBuf != storage->storageSlots)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
-// FUN_14000da70 — resize a 16-byte-element dynamic array.
+// FUN_14000da70 — Array<{material, count}>::SetSize (a 16-byte element).
 // ============================================================
-// arr = {ptr@+0, count@+8(int), capacity@+0xc(int)}. Resize to newCount: grow buffer
-// (3x on a +1 growth from non-empty) via MemAlloc, copy existing entries, zero new
-// entries (the original zeroes only bytes [+0..+12) of each new 16-byte slot), MemFree
-// old. Leaf (alloc only).
-void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
-    int oldCount = static_cast<int>(arr[1]);
+// Resize to newCount: grow buffer (3x on a +1 growth from non-empty) via MemAlloc, copy
+// existing entries, zero new entries (the original zeroes only bytes [+0..+12) of each new
+// 16-byte slot), MemFree old. Leaf (alloc only).
+static void MaterialCountArraySetSize(RawArray<TrackerComponent::Entry>* arr, int newCount) {
+    int oldCount = arr->size;
     if (newCount == oldCount) return;
 
-    void* oldBuf = reinterpret_cast<void*>(arr[0]);
-    *reinterpret_cast<int*>(&arr[1]) = newCount;
-    int* cap = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(arr) + 0xc);
-    if (*cap < newCount) {
-        *cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) *cap = newCount * 3;
-        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*cap) << 4, 8);
-        arr[0] = reinterpret_cast<int64_t>(nb);
+    TrackerComponent::Entry* oldBuf = arr->data;
+    arr->size = newCount;
+    if (arr->capacity < newCount) {
+        arr->capacity = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) arr->capacity = newCount * 3;
+        arr->data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) << 4, 8));
     }
-    int srcIdx = (oldBuf == reinterpret_cast<void*>(arr[0])) ? oldCount : 0;
+    int srcIdx = (oldBuf == arr->data) ? oldCount : 0;
     for (int i = srcIdx; i < newCount; i++) {
-        uint64_t* dst = reinterpret_cast<uint64_t*>(static_cast<uintptr_t>(arr[0]) + static_cast<uintptr_t>(i) * 0x10);
+        TrackerComponent::Entry* dst = arr->data + i;
         if (!dst) continue;
         if (i < oldCount) {
-            uint64_t* src = reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(oldBuf) + static_cast<uintptr_t>(i) * 0x10);
-            dst[0] = src[0];
-            dst[1] = src[1];
+            *dst = oldBuf[i];
         } else {
-            dst[0] = 0;
-            *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(dst) + 8) = 0;
+            dst->_resource = nullptr;
+            dst->_count = 0;
         }
     }
-    if (oldBuf != reinterpret_cast<void*>(arr[0]))
+    if (oldBuf != arr->data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
-// FUN_140044810 — append a 4-byte (int) element to a dynamic array.
+// FUN_140044810 — AutoPickupComponent: append a value to the +0x30 int array.
 // ============================================================
-// Gated on *(char*)(self+0x28) != 0. arr = {ptr@+0x30, count@+0x38, capacity@+0x3c}.
-// Append value: grow buffer (3x on a +1 growth from non-empty) via MemAlloc, copy
-// existing ints, write value at the new slot, MemFree old. Leaf (alloc only).
-void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value) {
-    if (*reinterpret_cast<char*>(self + 0x28) == '\0') return;
+// Gated on isEnabled. Append value: grow buffer (3x on a +1 growth from non-empty) via
+// MemAlloc, copy existing ints, write value at the new slot, MemFree old. Leaf.
+void AutoPickupAppend(AutoPickupComponent* self, uint32_t value) {
+    if (!self->isEnabled) return;
 
-    int oldN = *reinterpret_cast<int*>(self + 0x38);
+    int oldN = self->field30Count;
     int newN = oldN + 1;
     if (newN == oldN) return;
 
-    void* oldBuf = *reinterpret_cast<void**>(self + 0x30);
-    *reinterpret_cast<int*>(self + 0x38) = newN;
-    if (*reinterpret_cast<int*>(self + 0x3c) < newN) {
-        *reinterpret_cast<int*>(self + 0x3c) = newN;
-        if (oldN != 0) *reinterpret_cast<int*>(self + 0x3c) = newN * 3;
-        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x3c)) << 2, 4);
-        *reinterpret_cast<void**>(self + 0x30) = nb;
+    int32_t* oldBuf = self->field30;
+    self->field30Count = newN;
+    if (self->field30Capacity < newN) {
+        self->field30Capacity = newN;
+        if (oldN != 0) self->field30Capacity = newN * 3;
+        self->field30 = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->field30Capacity) << 2, 4));
     }
-    int srcIdx = (oldBuf == *reinterpret_cast<void**>(self + 0x30)) ? oldN : 0;
+    int srcIdx = (oldBuf == self->field30) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        uint32_t* dst = reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(self + 0x30) + static_cast<uintptr_t>(i) * 4);
+        int32_t* dst = self->field30 + i;
         if (!dst) continue;
-        *dst = (i < oldN) ? reinterpret_cast<uint32_t*>(oldBuf)[i] : value;
+        *dst = (i < oldN) ? oldBuf[i] : static_cast<int32_t>(value);
     }
-    if (oldBuf != *reinterpret_cast<void**>(self + 0x30))
+    if (oldBuf != self->field30)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
-// FUN_140088f90 — resource category index from a RawMaterialDescription's flags.
+// FUN_140088f90 — resource category index from a material's RawMaterialDescription flags.
 // ============================================================
-// int fn(void* /*unused*/, entity) : find the RawMaterialDescription component
-// (DAT_1401c7cb8) in entity's component array (ptr@+0x28, count@+0x30) via GetTypeId
-// (vtable+0x10) + IsDerivedFrom, then map the first set bit of comp+0x5c to a category
-// index (faithful bit->index table). Returns -1 if none. Leaf (engine_funcs only).
-int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
+// Find the RawMaterialDescription among the material template's sub-descriptions (Type()
+// then IsDerivedFrom), then map the first set bit of its _flags to a category index
+// (faithful bit->index table). Returns -1 if none. Leaf.
+int ResourceCategory(const ComponentDescription* material) {
     uint32_t typeId = RawMaterialDescription::TypeId();
-    void* comp = nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x30);
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x28);
+    const RawMaterialDescription* comp = nullptr;
+    int n = material->_subDescCount;
+    Description** base = material->_subDescs;
     for (int idx = 0; idx < n; idx++) {
-        void* c = *reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
+        Description* c = base[idx];
+        uint32_t t = c->Type();   // slot 2
         if (t == typeId) {
-            if (::Object::IsDerivedFromNullSafe(c, typeId)) comp = c;
+            if (::Object::IsDerivedFromNullSafe(c, typeId)) comp = static_cast<const RawMaterialDescription*>(c);
             break;
         }
     }
     if (!comp) return -1;  // defensive: the original derefs the (always-present) comp directly
 
-    uint32_t f = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(comp) + 0x5c);
+    uint32_t f = comp->_flags;
     if ((f >> 10) & 1) return 0;
     if ((f >> 11) & 1) return 1;
     if ((f >> 12) & 1) return 2;
@@ -281,185 +271,141 @@ int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
 }
 
 // ============================================================
-// FUN_1400223c0 — FindComponent (member-style) over an IBP array.
+// FUN_14000d9d0 — Array<{material, count}> copy-assign (dst <- src).
 // ============================================================
-// void* fn(entity, retIBP) : scan the InternalBasePtr array at entity+0x30 (count
-// +0x38), CheckPtr each slot, GetTypeId (vtable+0x10) vs DAT_1401c7c80, on the first
-// match re-CheckPtr + IsDerivedFrom, then construct retIBP from the found object (or
-// null). Returns retIBP. Leaf (engine_funcs only).
-void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<RawMaterialComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<RawMaterialComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// ============================================================
-// FUN_140013320 — FindComponent (member-style) over an IBP array, type 0x1401c4b10.
-// ============================================================
-// Identical to FUN_1400223c0 (above) and the other registered FindComponent accessors,
-// differing only by the type-ID global (DWORD_1401c4b10). void* fn(self, retIBP): scan
-// the InternalBasePtr array at self+0x30 (count +0x38), CheckPtr each slot, GetTypeId
-// (vtable+0x10) vs the target, on first match re-CheckPtr + IsDerivedFrom, construct
-// retIBP from the found object (or null). Returns retIBP. Leaf (engine_funcs only).
-void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<TrackerComponent>(
-        reinterpret_cast<ComponentEntity*>(self)->FindComponent<TrackerComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
-
-// ============================================================
-// FUN_14000d9d0 — deep-copy a 16-byte-element dynamic array (dst <- src).
-// ============================================================
-// arr = {ptr@+0, count@+8(int), cap@+0xc(int)}. Frees dst's buffer, resets count/cap to
-// 0, sets count=cap=src.count, allocs a fresh src.count*0x10 buffer, copies each 16-byte
-// element from src. No-op if dst==src. Leaf (alloc only).
-void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
+// Frees dst's buffer, resets count/cap to 0, sets count=cap=src.count, allocs a fresh
+// src.count*0x10 buffer, copies each 16-byte element from src. No-op if dst==src.
+static void MaterialCountArrayAssign(RawArray<TrackerComponent::Entry>* dst, const RawArray<TrackerComponent::Entry>* src) {
     if (dst == src) return;
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dst[0]));
-    dst[1] = 0;          // clears count(+8) and cap(+0xc) together (8-byte write)
-    dst[0] = 0;
-    int srcN = static_cast<int>(src[1]);
-    *reinterpret_cast<int*>(&dst[1]) = srcN;
+    System::MemoryAllocator::MemFree(dst->data);
+    dst->size = 0;          // count(+8) and cap(+0xc): one 8-byte write in retail (H7)
+    dst->capacity = 0;
+    dst->data = nullptr;
+    int srcN = src->size;
+    dst->size = srcN;
     if (srcN > 0) {
-        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dst) + 0xc) = srcN;
-        void* nb = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(srcN) << 4, 8);
-        dst[0] = reinterpret_cast<int64_t>(nb);
+        dst->capacity = srcN;
+        dst->data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(srcN) << 4, 8));
     }
-    int n = *reinterpret_cast<int*>(&dst[1]);
+    int n = dst->size;
     for (int i = 0; i < n; i++) {
-        uint64_t* d = reinterpret_cast<uint64_t*>(static_cast<uintptr_t>(dst[0]) + static_cast<uintptr_t>(i) * 0x10);
+        TrackerComponent::Entry* d = dst->data + i;
         if (!d) continue;
-        uintptr_t s = static_cast<uintptr_t>(src[0]) + static_cast<uintptr_t>(i) * 0x10;
-        d[0] = *reinterpret_cast<uint64_t*>(s);
-        d[1] = *reinterpret_cast<uint64_t*>(s + 8);
+        *d = src->data[i];
     }
 }
 
 // ============================================================
-// FUN_140058fd0 (CreateRawMaterial_helper_8fd0) — generation-aware {key,value} upsert.
+// FUN_140058fd0 (CreateRawMaterial_helper_8fd0) — TrackerComponent: year-aware {material,
+// count} upsert.
 // ============================================================
-// self holds a per-generation resource-count cache:
-//   +0x28 array ptr (stride 0x10: [+0]=key(8), [+8]=value(int)), +0x30 count, +0x34 cap,
-//   +0x38 archive array (snapshot target), +0x48 generation epoch.
-// If the world generation (**(int**)(g_pGameWorldSingleton+0x128)) changed, archive the
-// current array into +0x38 (d9d0) and reset the live array. Then upsert {key, value}:
-// if key present add value, else append (grow 3x on a non-first append). Leaf.
-void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
-    int gen = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x128);
-    if (gen != *reinterpret_cast<int*>(self + 0x48)) {
-        ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(self + 0x38),
-                               reinterpret_cast<int64_t*>(self + 0x28));
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(self + 0x28));
-        *reinterpret_cast<void**>(self + 0x28) = nullptr;
+// If the calendar year changed since trackerId, copy the +0x28 list into +0x38 (d9d0) and
+// reset the +0x28 list. Then upsert {material, count} into +0x28: if present add, else
+// append (grow 3x on a non-first append). Leaf.
+void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value) {
+    // LEFT: TrackerComponent (block COMP-? header) keeps its two lists as raw
+    // {data, count, capacity} triples.
+    RawArray<TrackerComponent::Entry>* live = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->displayed);
+    RawArray<TrackerComponent::Entry>* archive = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->produced);
+    int gen = GameUpdateLoop::_singleton->m_dayCounter->year;
+    if (gen != tracker->trackerId) {
+        MaterialCountArrayAssign(archive, live);   // 0x14000d9d0
+        System::MemoryAllocator::MemFree(live->data);
+        live->data = nullptr;
         // Retail stores EIGHT bytes here -- `*(undefined8 *)(param_1 + 0x30) = 0;` --
-        // which clears the count (+0x30) AND the capacity (+0x34) in one write. This was
-        // ported as a 4-byte int store, so the stale capacity survived the generation
-        // reset. That desync is fatal on the next upsert: with cap still, say, 3 the
-        // `cap < newN` grow test below is false, so the array pointer (+0x28) stays NULL
-        // while the count is committed to 1; the copy loop's `if (!d) continue` then
-        // silently drops the entry, and the *following* upsert walks `*p` off a NULL
-        // array -- an ACCESS_VIOLATION reading 0 inside the kill->raw-material chain.
-        *reinterpret_cast<uint64_t*>(self + 0x30) = 0;
-        *reinterpret_cast<int*>(self + 0x48) = gen;
+        // clearing the count AND the capacity (an earlier 4-byte port left a stale capacity:
+        // the next upsert then committed a count over a NULL array -> ACCESS_VIOLATION).
+        live->size = 0;
+        live->capacity = 0;
+        tracker->trackerId = gen;
     }
 
-    int n = *reinterpret_cast<int*>(self + 0x30);
+    int n = live->size;
     if (n > 0) {
-        int64_t* p = *reinterpret_cast<int64_t**>(self + 0x28);
+        const TrackerComponent::Entry* p = live->data;
         int idx = 0;
         do {
-            if (*p == key) {
-                int64_t* slot = *reinterpret_cast<int64_t**>(self + 0x28) + static_cast<int64_t>(idx) * 2 + 1;
-                *reinterpret_cast<int*>(slot) = *reinterpret_cast<int*>(slot) + value;
+            if (p->_resource == material) {
+                live->data[idx]._count = live->data[idx]._count + value;
                 return;
             }
             idx++;
-            p += 2;
-        } while (idx < *reinterpret_cast<int*>(self + 0x30));
+            p += 1;
+        } while (idx < live->size);
     }
 
-    int oldN = *reinterpret_cast<int*>(self + 0x30);
+    int oldN = live->size;
     int newN = oldN + 1;
-    void* oldBuf = *reinterpret_cast<void**>(self + 0x28);
-    *reinterpret_cast<int*>(self + 0x30) = newN;
-    if (*reinterpret_cast<int*>(self + 0x34) < newN) {
-        *reinterpret_cast<int*>(self + 0x34) = newN;
-        if (oldN != 0) *reinterpret_cast<int*>(self + 0x34) = newN * 3;
-        void* nb = System::MemoryAllocator::MemAlloc(
-                          static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x34)) << 4, 8);
-        *reinterpret_cast<void**>(self + 0x28) = nb;
+    TrackerComponent::Entry* oldBuf = live->data;
+    live->size = newN;
+    if (live->capacity < newN) {
+        live->capacity = newN;
+        if (oldN != 0) live->capacity = newN * 3;
+        live->data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(live->capacity) << 4, 8));
     }
-    int srcIdx = (oldBuf == *reinterpret_cast<void**>(self + 0x28)) ? oldN : 0;
+    int srcIdx = (oldBuf == live->data) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        uint64_t* d = reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(self + 0x28) + static_cast<uintptr_t>(i) * 0x10);
+        TrackerComponent::Entry* d = live->data + i;
         if (!d) continue;
         if (i < oldN) {
-            uint64_t* s = reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(oldBuf) + static_cast<uintptr_t>(i) * 0x10);
-            d[0] = s[0];
-            d[1] = s[1];
+            *d = oldBuf[i];
         } else {
-            d[0] = static_cast<uint64_t>(key);
-            d[1] = static_cast<uint64_t>(static_cast<uint32_t>(value));
+            d->_resource = material;
+            d->_count = value;
+            d->_pad0C[0] = 0; d->_pad0C[1] = 0; d->_pad0C[2] = 0; d->_pad0C[3] = 0;   // the qword store's high dword
         }
     }
-    if (oldBuf != *reinterpret_cast<void**>(self + 0x28))
+    if (oldBuf != live->data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
-
-void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
-                                     char placeNear, int64_t descEntity, int quantity) {
-    int64_t target = entityList;  // lVar3
-    if (sourceIBP && *reinterpret_cast<int64_t*>(sourceIBP) != 0 && placeNear != '\0') {
-        int64_t srcObj = *reinterpret_cast<int64_t*>(sourceIBP);
-        uintptr_t foundIBP[2] = {0, 0};
-        ActRm_FindComp_013320(static_cast<uintptr_t>(srcObj), &foundIBP);
-        if (foundIBP[0] != 0) {
-            ActRm_ArrayUpsert_58fd0(static_cast<uintptr_t>(foundIBP[0]), descEntity, quantity);
-            target = static_cast<int64_t>(foundIBP[0]);
+// ============================================================
+// FUN_140088ef0 — register produced raw material: the source entity's TrackerComponent (when
+// placeNear) gets the upsert, and the town's per-category resource count grows.
+// ============================================================
+void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
+                         char placeNear, ComponentDescription* material, int quantity) {
+    if (source && *source != nullptr && placeNear != '\0') {
+        TrackerComponent* tracker = (*source)->FindComponent<TrackerComponent>();   // 0x140013320
+        if (tracker != nullptr) {
+            TrackerUpsert(tracker, material, quantity);   // 0x140058fd0
         }
     }
-    int cat = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(target),
-                                              static_cast<uintptr_t>(descEntity));
+    int cat = ResourceCategory(material);   // 0x140088f90
     if (cat >= 0) {
-        int* bucket = reinterpret_cast<int*>(static_cast<int64_t>(cat) * 0x20 + 0x10 +
-                                             *reinterpret_cast<int64_t*>(entityList + 0x170));
-        *bucket += quantity;
+        town->professionResources[cat]._field10 += quantity;
     }
 }
 
 // ============================================================
-// FUN_140129760 (CreateRawMaterial_helper_9760) — PositionEntity.
+// FUN_140129760 (CreateRawMaterial_helper_9760) — place a raw-material entity.
 // ============================================================
-// Place the raw-material entity (param_1) at cell `cellIndex` with `rotation`. self =
-// param_1+0x10 (an IBP field). Two components are found on *self:
-//   A (004680): receives cell col/row (+0x28/+0x2a), 0x10001 (+0x2c), normalized rotation
-//       in [0,360) (+0x30).
-//   B (003f60): receives a Transform built from (yaw=rotation, pitch=0, offset=worldPos)
-//       at +0x148, the raw rotation at +0x168, then Geometry::SetTransform(B+0x28,B+0x148).
-// worldPos comes from GridToWorld (f3e0). Instruction-verified against the disassembly
-// (RBX reloads to B after the 003f60 IBP resolve). All callees registered/exported.
-void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
-    void** self = reinterpret_cast<void**>(param_1 + 0x10);
-    int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
-    int mapWidth = *mapGrid;
+// Place the component's entity at cell `cellIndex` with `rotation`: its MapComponent gets
+// the tile (col/row), a 1x1 footprint and the rotation normalized to [0,360); its
+// ModelComponent gets the Transform built from (yaw=rotation, pitch=0, offset=worldPos),
+// the raw rotation as yaw, then its MeshInstance's SetTransform. worldPos comes from
+// GridToWorld (f3e0). Instruction-verified against the disassembly.
+void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
+    ComponentEntity* entity = self->_entity;
+    Map* map = GameUpdateLoop::_singleton->m_game;
+    int mapWidth = map->size;
     int col = cellIndex % mapWidth;   // EDI (remainder)
     int row = cellIndex / mapWidth;   // ESI (quotient)
 
-    uintptr_t ibpA[2] = {0, 0};
-    FloorComponent_FindResData(*self, &ibpA);   // 0x140004680
+    MapComponent* objA = entity->FindComponent<MapComponent>();       // 0x140004680
+    ModelComponent* objB = entity->FindComponent<ModelComponent>();   // 0x140003f60
 
-    uintptr_t ibpB[2] = {0, 0};
-    ActCNR_FindComponent_3f60(reinterpret_cast<uintptr_t>(*self), &ibpB);   // 0x140003f60
-
-    uint8_t* objA = reinterpret_cast<uint8_t*>(ibpA[0]);
     int rot = static_cast<int>(rotation);   // CVTTSS2SI = truncate toward zero
     if (rot < 0) { do { rot += 0x168; } while (rot < 0); }
     // [standalone] objA = the spawned item entity's MapComponent (tile placement). On a freshly
     // cloned raw-material entity in standalone this can be inert/absent; guard the tile writes.
     if (objA) {
-        *reinterpret_cast<int16_t*>(objA + 0x28) = static_cast<int16_t>(col);
-        *reinterpret_cast<int16_t*>(objA + 0x2a) = static_cast<int16_t>(row);
-        *reinterpret_cast<int32_t*>(objA + 0x2c) = 0x10001;
-        *reinterpret_cast<int32_t*>(objA + 0x30) = rot;
+        objA->tileX0 = static_cast<int16_t>(col);
+        objA->tileY0 = static_cast<int16_t>(row);
+        objA->tileX1 = 1;                         // one dword store of 0x10001 in retail (H7)
+        objA->tileY1 = 1;
+        objA->extraField = rot;
     }
 
     // GridToWorld: localPos = ((cellIndex%w) - half, (cellIndex/w) - half, 0).
@@ -469,20 +415,85 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     localPos[1] = static_cast<float>(cellIndex / mapWidth) - half;
     localPos[2] = 0.0f;
     float worldPos[3] = {0, 0, 0};
-    Reimpl_MapGetTerrainPos(mapGrid, worldPos, localPos, '\0', nullptr);   // 0x14009f3e0
+    Reimpl_MapGetTerrainPos(map, worldPos, localPos, '\0', nullptr);   // 0x14009f3e0
 
-    uint8_t* objB = reinterpret_cast<uint8_t*>(ibpB[0]);
-    // [standalone] objB = the spawned item entity's Geometry/model component (visual transform).
-    // Inert/absent on the freshly cloned raw-material entity in standalone → guard the transform
-    // writes (this is the inert rendering layer; the economy accounting in the caller is unaffected).
+    // [standalone] objB = the spawned item entity's ModelComponent (visual transform).
+    // Inert/absent on the freshly cloned raw-material entity in standalone → guard the
+    // transform writes (the economy accounting in the caller is unaffected).
     if (objB) {
         float yaw = rotation, pitch = 0.0f;
         // FromYawPitchOffset out (7 dwords copied to +0x148..+0x160)
         Math::Transform xform = Math::Transform::FromYawPitchOffset(
-            yaw, pitch, *reinterpret_cast<const Math::Vector3*>(worldPos));           // B.3.1 bridge
-        *reinterpret_cast<Math::Transform*>(objB + 0x148) = xform;                    // B.3.1 bridge
-        *reinterpret_cast<float*>(objB + 0x168) = rotation;
-        reinterpret_cast<Graphics::Geometry*>(objB + 0x28)
-            ->SetTransform(*reinterpret_cast<const Math::Transform*>(objB + 0x148));   // B.3.5 bridge
+            yaw, pitch, Math::Vector3(worldPos[0], worldPos[1], worldPos[2]));
+        objB->transform = xform;
+        objB->yaw = rotation;
+        objB->meshInstance.SetTransform(objB->transform);
     }
+}
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+
+// B4 FORWARD: outside callers in ~8 files (Action, Component, Dialog)
+void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count) {
+    StorageSubtract(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<const ComponentDescription*>(resType), count);
+}
+
+// B4 FORWARD: outside callers in ~12 files (Action, Component, Dialog, Game)
+void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count) {
+    StorageAdd(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<ComponentDescription*>(resType), count);
+}
+
+// B4 FORWARD: outside callers (Action/consumerawmaterial, pickupstoredrawmaterial;
+// Component/trackercomponent; Work/marketwork_bst_b290)
+void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
+    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);
+}
+
+// B4 FORWARD: outside callers (Action/action_base_cnr.cpp, Component/pasturecomponent_states.cpp)
+void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value) {
+    AutoPickupAppend(reinterpret_cast<AutoPickupComponent*>(self), value);
+}
+
+// B4 FORWARD: outside callers in ~8 files; the first argument is never read.
+int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity) {
+    return ResourceCategory(reinterpret_cast<const ComponentDescription*>(entity));
+}
+
+// B4 FORWARD: outside callers (Work/marketwork_bst_a9f0, marketwork_bst_b290)
+void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
+    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),
+                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));
+}
+
+// B4 FORWARD: 1 outside caller (Component/pasturecomponent_states.cpp)
+void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
+    TrackerUpsert(reinterpret_cast<TrackerComponent*>(self), reinterpret_cast<ComponentDescription*>(key), value);
+}
+
+// B4 FORWARD: outside callers (Action/action_base_cnr.cpp, Action/createrawmaterial.cpp)
+void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
+                                     char placeNear, int64_t descEntity, int quantity) {
+    RegisterRawMaterial(reinterpret_cast<CitizenBehavior*>(entityList),
+                        reinterpret_cast<ComponentEntity* const*>(sourceIBP), placeNear,
+                        reinterpret_cast<ComponentDescription*>(descEntity), quantity);
+}
+
+// B4 FORWARD: outside callers (Action/createrawmaterial, action_base_cnr; Component files)
+void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
+    PositionRawMaterial(reinterpret_cast<Component*>(param_1), cellIndex, rotation);
+}
+
+// B4 FORWARD: FUN_1400223c0 == ComponentEntity::FindComponent<RawMaterialComponent>
+// (outside callers: Action/action_base_cnr.cpp, Action/pickuprawmaterial.cpp)
+void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
+    return new (retIBP) ::Object::InternalPtr<RawMaterialComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<RawMaterialComponent>());
+}
+
+// B4 FORWARD: FUN_140013320 == ComponentEntity::FindComponent<TrackerComponent>
+void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
+    return new (retIBP) ::Object::InternalPtr<TrackerComponent>(
+        reinterpret_cast<ComponentEntity*>(self)->FindComponent<TrackerComponent>());
 }

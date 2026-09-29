@@ -621,9 +621,10 @@ static void CitizenBehavior_Construct(CitizenBehavior* cb) {
 // (raw storage, H5: constructed by hand, as the tree always has).
 Map::Map() {
     RtPicking_Scene_Ctor(pickingScene);
-    memset(&field_0x68, 0, sizeof(Map) - offsetof(Map, field_0x68));   // zero +0x68..+0xf8 (keeps the Scene at +8)
+    memset(&pathfinder, 0, sizeof(Map) - offsetof(Map, pathfinder));   // zero +0x68..+0xf8 (keeps the Scene at +8)
     field_0xA2 = true;
-    field_0xD0 = 8;
+    cellQueue.pool.growCount = 8;             // +0xD0 / +0xD4: one qword store of 8 (H7: two stores)
+    cellQueue.pool.stride = 0;
 }
 
 // 0x1400f9180 — the WorkScheduler ctor's body (+0x118, 0x138).

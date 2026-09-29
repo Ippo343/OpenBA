@@ -112,11 +112,10 @@ static void WAC_AppendInline(CharacterComponent* character, Action* actionIbpVal
 
     // Drain any pending nodes from the current index slot (cancel/detach chain).
     if (character->currentAction >= 0) {
-        // LEFT (the step): the +0x10 InternalBasePtr is the chained action (Action.h
-        // declares it as the base pointer).
+        // The step: Action::_next (+0x10), the chained action.
         for (Action* node = character->actions[character->currentAction];
              node != nullptr;
-             node = reinterpret_cast<Action*>(node->_entity.Get())) {
+             node = node->_next.Get()) {
             if (node->_status) {
                 node->_status = false;
                 // slot 7 (vtable +0x38) Action::Exit(list): the node is an action on the

@@ -171,7 +171,7 @@ void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targ
     WAH_IbpCtor(&ibpC, hunt);
     // plVar8 = &actions[currentAction] ; CheckPtr(plVar8) ; (*plVar8)->+0x10 = ibpC
     Action* running = character->actions[character->currentAction];
-    WAH_IbpCtor(&running->_entity, ibpC);
+    WAH_IbpCtor(&running->_next, ibpC);   // Action::_next (+0x10)
     (void)ibpB;
 }
 
