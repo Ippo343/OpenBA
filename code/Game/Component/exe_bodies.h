@@ -182,7 +182,6 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2);  // 0x14004a300
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  // 0x140004740
 
 // ---- keystone_a_map.cpp
-void MapComponent_sub_41b0(int64_t param_1);  // 0x1401241b0
 
 // ---- keystone_a_restree.cpp
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, uint64_t* param_3, int64_t* param_4);  // 0x140017230

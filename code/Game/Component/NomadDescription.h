@@ -21,6 +21,9 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+namespace Graphics { class MaterialInstance; }
+
 class NomadDescription final : public Description {
     DECLARE_EXE_TYPE(NomadDescription)
 
@@ -35,14 +38,15 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400091c0
     virtual Object::External* Construct();                                 // [9] 0x140009100
 
-    // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
-    void* _ref28;                               // +0x28 ExternalPtr (a raw pointer)
-    void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
+    // ---- fields (B.4 COMP-d: from what NomadComponent does with them, Init
+    // 0x140050030 / ConvertToCitizen 0x1400501a0) ----
+    ComponentDescription*       _citizen;          // +0x20 ExternalPtr: the citizen entity a nomad becomes
+    Graphics::MaterialInstance* _materialGender0;  // +0x28 ExternalPtr: MeshInstance material 0 when gender == 0
+    Graphics::MaterialInstance* _materialGender1;  // +0x30 ExternalPtr: material 0 otherwise
 };
 
 static_assert(sizeof(NomadDescription) == 0x38, "NomadDescription is 0x38 (create 0x140009090 MemAlloc(0x38))");
 static_assert(alignof(NomadDescription) == 8, "NomadDescription alignment");
-static_assert(offsetof(NomadDescription, _ref20) == 0x20, "NomadDescription::_ref20 @ +0x20");
-static_assert(offsetof(NomadDescription, _ref28) == 0x28, "NomadDescription::_ref28 @ +0x28");
-static_assert(offsetof(NomadDescription, _ref30) == 0x30, "NomadDescription::_ref30 @ +0x30");
+static_assert(offsetof(NomadDescription, _citizen) == 0x20, "NomadDescription::_citizen @ +0x20");
+static_assert(offsetof(NomadDescription, _materialGender0) == 0x28, "NomadDescription::_materialGender0 @ +0x28");
+static_assert(offsetof(NomadDescription, _materialGender1) == 0x30, "NomadDescription::_materialGender1 @ +0x30");

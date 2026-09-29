@@ -183,7 +183,7 @@ UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
     CHECK_SLOT(MarketLocationComponent, OnRemove, 7);   // 0x14004ef60
     CheckCtlLeaf<MultiObjectComponent>(0x28);      // slot 17 0x140004080 (D9 #8: the tree had none)
     CHECK_EQ(sizeof(MultiObjectComponent), (size_t)0x60);      // create 0x140035ef0
-    CHECK_EQ(offsetof(MultiObjectComponent, field48),    (size_t)0x48);
+    CHECK_EQ(offsetof(MultiObjectComponent, children),    (size_t)0x48);
     CHECK_EQ(offsetof(MultiObjectComponent, multiCount), (size_t)0x58);
     CHECK_SLOT(MultiObjectComponent, OnRemove, 7);      // 0x1401257c0
     CHECK_SLOT(MultiObjectComponent, OnEvent,  12);     // 0x140125490

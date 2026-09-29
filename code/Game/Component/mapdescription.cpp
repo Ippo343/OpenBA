@@ -43,21 +43,21 @@
 // the defaults.
 MapDescription::MapDescription()
     : Description(),
-      _overlayType(2),
-      _b30(false),
-      _b31(false),
-      _b32(false) {
+      _cellType(2),
+      _claimOnAdd(false),
+      _noOccupancy(false),
+      _showOnMap(false) {
     _color._value = 0xff000000u;
 }
 
 // [5] 0x140124560: stream order as retail.
 bool MapDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_overlayType, nullptr);
-    _label.Serialize(&ser);
-    ser.Serialize(_b30, nullptr);
-    ser.Serialize(_b31, nullptr);
-    ser.Serialize(_b32, nullptr);
+    ser.Serialize(_cellType, nullptr);
+    _footprint.Serialize(&ser);
+    ser.Serialize(_claimOnAdd, nullptr);
+    ser.Serialize(_noOccupancy, nullptr);
+    ser.Serialize(_showOnMap, nullptr);
     _color.Serialize(ser);
     return true;
 }

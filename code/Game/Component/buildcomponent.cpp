@@ -185,14 +185,14 @@ void BuildComponent::FillModelLists() {
     if (_entity->FindComponent<MultiObjectComponent>() != nullptr) {
         MultiObjectComponent* multiObj = _entity->FindComponent<MultiObjectComponent>();
         // LEFT: the child count is the low dword of the untyped +0x50 (MultiObjectComponent.h, COMP-d)
-        int jobCount = *reinterpret_cast<int*>(&multiObj->field50);
+        int jobCount = multiObj->childCount;
         for (int j = 0; j < jobCount; j++) {
-            ComponentEntity* host = multiObj->field48[j].Get();
+            ComponentEntity* host = multiObj->children[j].Get();
             Component* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             Object::InternalPtr<Component> ib1(buildComp);
             GameColl::AsArray<GameColl::Ptr8>(&modelComponents).SetSizeFill(modelComponentCount + 1, &ib1);
 
-            ComponentEntity* host2 = multiObj->field48[j].Get();
+            ComponentEntity* host2 = multiObj->children[j].Get();
             Component* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             Object::InternalPtr<Component> ib2(storeComp);
             GameColl::AsArray<GameColl::Ptr8>(&pickingComponents).SetSizeFill(pickingComponentCount + 1, &ib2);

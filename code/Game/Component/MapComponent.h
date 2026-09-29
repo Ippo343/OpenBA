@@ -38,6 +38,10 @@ public:
     void OnRemove() override;                                     // [7]  0x1401242f0
     void OnEvent(int eventId) override;                           // [12] 0x1401243c0
 
+    // ---- non-virtual members (retail addresses) ----
+    void AddToMap();                                              // 0x1401241b0 (keystone_a_map.cpp)
+    void RemoveFromMap();                                         // 0x140124750 (the tree's body; mapcomponent.cpp)
+
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint16_t tileX0;       // +0x28 footprint rect x (retail ctor 0xFFFF)
     uint16_t tileY0;       // +0x2A footprint rect y (retail ctor 0xFFFF)
