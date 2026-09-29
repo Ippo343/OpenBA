@@ -19,6 +19,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class ButtonElement; }
+
 class UpgradeUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(UpgradeUI)
 
@@ -35,9 +37,12 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140086c90
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
+    // ---- fields (B4 H1-H8: OnCreated 0x140086d90) ------------------------
+    // InternalPtr<ButtonElement>: the container narrowed with IsDerivedFrom on
+    // exref 0x1401514f8 (ButtonElement), element id 33000.
+    UI::ButtonElement* button = nullptr;   // +0x30
 };
 
 static_assert(sizeof(UpgradeUI) == 0x38, "UpgradeUI is 0x38 (create 0x140016b30 MemAlloc(0x38))");
 static_assert(alignof(UpgradeUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(UpgradeUI, button) == 0x30, "button +0x30 (0x140086d90)");
