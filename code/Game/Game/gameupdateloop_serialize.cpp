@@ -44,6 +44,7 @@
 //   0x1400b04d0 (WorldGeometry).
 
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestoreOut, the named fields
+#include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
 #include "Entity/ComponentEntity.h"   // caller batch CB6: TypeId()
 #include "Component/Component.h"      // caller batch CB6: slot 11
 #include "math/Math.h"
@@ -759,11 +760,11 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.
     {
-        uint8_t* dc = static_cast<uint8_t*>(self->m_dayCounter);
+        Calendar* dc = self->m_dayCounter;
         alignas(8) uint8_t ser0[24];
         ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser0)->Serialize(*reinterpret_cast<int*>(dc), nullptr);   // B.3.4 bridge
-        reinterpret_cast<System::Time*>(dc + 0x8)->Serialize(*reinterpret_cast<IO::Serializer*>(ser0));   // B.3.4b bridge
+        reinterpret_cast<IO::Serializer*>(ser0)->Serialize(dc->year, nullptr);   // B.3.4 bridge
+        dc->yearTime.Serialize(*reinterpret_cast<IO::Serializer*>(ser0));   // B.3.4b bridge
         reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
     }
 

@@ -52,6 +52,7 @@ class Map;                // Game/Map.h (B4 GAME-a)
 class EntityList;         // Entity/EntityList.h (block WORK-a)
 class CitizenBehavior;    // Entity/CitizenBehavior.h (block WORK-a)
 class CharacterGrid;      // Component/CharacterGrid.h (block COMP-a)
+class Calendar;           // Game/Calendar.h (B4 GAME-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -160,7 +161,7 @@ public:
     //   through the tool's slots, +0x30 the paused byte, +0x34 the game speed
     //   (ctor 1), a 5-entry Array at +0x70). Renamed from m_entityUI (B.4 W0-H2).
     PlayerToolManager* m_toolManager; // +0x120 player tool manager (0xB0 bytes)
-    void*    m_dayCounter;          // +0x128 DayCounter* (0x18 bytes: {day, accumulated, dayLength})
+    Calendar* m_dayCounter;         // +0x128 the year clock (0x18 bytes: {year, yearTime, yearLength})
     void*    m_weather;             // +0x130 Weather* (0x78 bytes)
     void*    m_eventNotifier;       // +0x138 EventNotifier* (0x28 bytes)
     Save::SaveLoad* m_saveLoad;     // +0x140 MemAlloc(0x90) in Load

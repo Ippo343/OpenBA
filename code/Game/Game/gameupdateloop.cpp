@@ -43,6 +43,7 @@
 #include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "system/String.h"
@@ -809,14 +810,12 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
 
                 // 3d. Day counter increment
                 {
-                    int32_t* dayCounter = (int32_t*)m_dayCounter;
-                    int64_t* accumulated = (int64_t*)(dayCounter + 2); // +0x08
-                    int64_t* dayLength = (int64_t*)(dayCounter + 4);   // +0x10
-                    *accumulated += *(int64_t*)time;
-                    if (*accumulated >= *dayLength) {
-                        *dayCounter = *dayCounter + 1;
-                        *accumulated -= *dayLength;
-                        TRACE("[GameUpdateLoop::Update] day counter incremented to %d\n", *dayCounter);
+                    Calendar* dayCounter = m_dayCounter;
+                    dayCounter->yearTime._ticks += *(int64_t*)time;
+                    if (dayCounter->yearTime._ticks >= dayCounter->yearLength._ticks) {
+                        dayCounter->year = dayCounter->year + 1;
+                        dayCounter->yearTime._ticks -= dayCounter->yearLength._ticks;
+                        TRACE("[GameUpdateLoop::Update] day counter incremented to %d\n", dayCounter->year);
                     }
                 }
 
@@ -2394,7 +2393,8 @@ GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t s
     m_worldGeometry = nullptr;
     m_tutorial    = nullptr;
     m_toolManager = nullptr;
-    m_dayCounter = m_weather = nullptr;
+    m_weather = nullptr;       // the chained store's order: +0x130, +0x128
+    m_dayCounter = nullptr;
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;

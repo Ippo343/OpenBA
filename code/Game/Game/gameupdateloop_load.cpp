@@ -40,6 +40,7 @@
 #include "Entity/EntityList.h"       // m_entityList's class (B.4 GAME-a)
 #include "Entity/CitizenBehavior.h"  // m_citizenList's class (B.4 GAME-a)
 #include "Component/CharacterGrid.h"  // m_characterGrid's class (B.4 GAME-a)
+#include "Calendar.h"                // m_dayCounter's class (B.4 GAME-a)
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -558,6 +559,8 @@ static_assert(std::is_trivially_default_constructible<EntityList>::value,
               "placement new of EntityList runs no code");
 static_assert(std::is_trivially_default_constructible<CitizenBehavior>::value,
               "placement new of CitizenBehavior runs no code");
+static_assert(std::is_trivially_default_constructible<Calendar>::value,
+              "placement new of Calendar runs no code");
 static void EntityList_Construct(EntityList* list) {
     memset(list, 0, sizeof(EntityList));      // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
     list->processCount[0] = 0x32;             // +0xA8 50
@@ -1014,13 +1017,13 @@ void GameUpdateLoop::Load() {
     // Step 14 — DayCounter Time struct (+0x128, 0x18): flag=1, Time(+8,0.0), Time(+0x10,3600.0).
     {
         void* mem = AllocSub(0x18, 8);
-        if (mem) {
-            uint8_t* d = (uint8_t*)mem;
-            *(uint32_t*)d = 1;
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(d + 8), 0.0f);
-            RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(d + 0x10), 3600.0f);
+        Calendar* calendar = mem ? new (mem) Calendar : nullptr;
+        if (calendar) {
+            calendar->year = 1;
+            RtSystem_Time_Ctor(&calendar->yearTime, 0.0f);
+            RtSystem_Time_Ctor(&calendar->yearLength, 3600.0f);
         }
-        m_dayCounter = mem;
+        m_dayCounter = calendar;
     }
 
     // Step 15 — Weather sim (+0x130, 0x78).

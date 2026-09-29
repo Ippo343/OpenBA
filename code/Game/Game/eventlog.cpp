@@ -27,6 +27,7 @@
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
 #include "Game/Map.h"   // m_game's class (B.4 GAME-a)
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "system/String.h"
@@ -127,18 +128,18 @@ extern "C" void EventLog_EventArray_Destroy(void* arrBase) {
 
 // YearString (0x1400951d0): String::Format("%i", *(int*)clock), clock = *(gw+0x128).
 static System::String EventLog_YearString(void* gameWorld) {
-    void* clock = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_dayCounter;   // B.3.8 bridge
-    int year = clock ? *(int*)clock : 0;
+    Calendar* clock = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_dayCounter;   // B.3.8 bridge
+    int year = clock ? clock->year : 0;
     return System::String::Format("%i", year);
 }
 
 // SeasonString (0x140095230): monthIdx = (int)(AsSeconds(clock+8) / 3600 * 12);
 // if monthIdx >= 12 -> 0. seasons table = *(eventlog+0x08). GetText(table, ret, idx).
 static System::String EventLog_SeasonString(void* gameWorld, void* eventLog) {
-    void* clock = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_dayCounter;   // B.3.8 bridge
+    Calendar* clock = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_dayCounter;   // B.3.8 bridge
     int idx = 0;
     if (clock) {
-        float secs = reinterpret_cast<const System::Time*>((char*)clock + 8)->AsSeconds();   // B.3.4b bridge
+        float secs = clock->yearTime.AsSeconds();
         idx = (int)(secs / 3600.0f * 12.0f);
         if (idx >= 12) idx = 0;
     }
