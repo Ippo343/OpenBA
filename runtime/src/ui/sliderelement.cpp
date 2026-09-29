@@ -62,21 +62,6 @@ static_assert(kSteps       == offsetof(UI::SliderElement, _steps), "");
 static_assert(kHovered     == offsetof(UI::SliderElement, _hovered), "");
 static_assert(kValue       == offsetof(UI::SliderElement, _value), "");
 
-constexpr int kUiEvents     = 0x48;
-constexpr int kUiEventCount = 0x50;
-
-struct WidgetEvent {
-    void*    dialog;
-    void*    element;
-    int32_t  kind;
-    int32_t  elementId;
-    int32_t  mouseX;
-    int32_t  mouseY;
-    int32_t  value;
-    int32_t  pad24;
-    int64_t  tail;
-};
-static_assert(sizeof(WidgetEvent) == 0x30, "");
 
 // ?UpdateNumber@SliderElement@UI@@AEAAXXZ (0x1800d6c20) — its body is
 // element_bodies_b5.cpp's door (fragment pass); reached by address.
@@ -94,21 +79,19 @@ int32_t ThumbOffset(const UI::SliderElement& s, int32_t thumbW) {
                                 * ((s._value - s._minimum) / range));
 }
 
-void QueueEvent(UI::SliderElement* self, void* ui,
+void QueueEvent(UI::SliderElement* self, UI::UserInterface* ui,
                 Object::InternalPtr<UI::DialogInstance>* dialog,
                 const UI::Element::UpdateState& state) {
-    WidgetEvent ev;
-    ev.dialog    = dialog->Get();
-    ev.element   = self;
-    ev.kind      = 0x17;
-    ev.elementId = self->_elementId;
-    ev.mouseX    = state.mouseX;
-    ev.mouseY    = state.mouseY;
-    ev.value     = 0;
-    ev.tail      = 0;
-    // UserInterface's event array (block E's class): raw offsets, by address.
-    rtcoll::RtColl_ArraySetSizeFill_180033690(
-        B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
+    UI::UserInterface::Event ev;
+    ev.dialog   = dialog->Get();
+    ev.element  = self;
+    ev.eventId  = 0x17;
+    ev.arg14    = self->_elementId;
+    ev.arg18    = state.mouseX;
+    ev.arg1C    = state.mouseY;
+    ev.arg20    = 0;
+    ev.userData = nullptr;
+    rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events, ui->_events._size + 1, &ev);
 }
 
 }  // namespace

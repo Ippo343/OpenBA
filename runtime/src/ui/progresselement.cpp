@@ -139,7 +139,7 @@ void ProgressElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t
 
     uint32_t color;
     if (_currentValue == 0.0f) {
-        if (I32(this, kFillLeft + kSpriteIndex) < 0) {
+        if (_fillLeft.spriteIndex < 0) {
             color = 0xffffffffu;
         } else {
             left += _fillLeft.Width();
