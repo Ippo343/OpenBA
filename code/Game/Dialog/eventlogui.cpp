@@ -2,11 +2,7 @@
 // Clean reimplementation of EventLogUI game logic.
 //
 // EventLogUI (0x80 bytes) — event log panel.
-// Extends DialogController (0x30 base).
-// +0x30 = buttonBottom, +0x38 = buttonPrevious, +0x40 = buttonNext,
-// +0x48 = scroll offset (int), +0x50/+0x58 = display text element array (ptrs),
-// +0x60/+0x68 = display button element array (ptrs),
-// +0x70/+0x78 = notification button array (ptrs, dynamic).
+// Extends DialogController (0x30 base). Fields: EventLogUI.h.
 //
 // Element IDs: buttonPrevious=100, buttonNext=0x65, buttonBottom=0x66,
 //              notification buttons=0x67..0x6B, display rows>=0x6C.
@@ -14,7 +10,9 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
-#include "Component/coll_bridge.h"
+#include "runtime/types/collection/Collection.h"
+#include "runtime/types/ui/CheckElement.h"
+#include "Game/PlayerController.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
@@ -27,8 +25,30 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
+// The three element arrays as the Collection::Array retail's are.
+// LEFT (H5): their headers are declared field by field until the members'
+// ~Array runs (EventLogUI.h); these are the views of them as the class.
+using ElementArray = Collection::Array<Object::InternalPtr<UI::Element>>;
+static ElementArray& DisplayTexts(EventLogUI* self) {
+    return *reinterpret_cast<ElementArray*>(&self->displayTextData);
+}
+static ElementArray& DisplayButtons(EventLogUI* self) {
+    return *reinterpret_cast<ElementArray*>(&self->displayButtonData);
+}
+static ElementArray& NotifyButtons(EventLogUI* self) {
+    return *reinterpret_cast<ElementArray*>(&self->notifyButtonData);
+}
+
+// The event log (GameUpdateLoop +0x138).
+// LEFT: m_eventNotifier is void* — the event log has no class yet (block GAME);
+// its +0x10 category filter bytes, +0x18 entry array (0x28 stride) and +0x20
+// count stay offset reads.
+static uintptr_t EventLogAddress() {
+    return (uintptr_t)GameUpdateLoop::_singleton->m_eventNotifier;
+}
+
 // ============================================================
-// EventLogUI::Slot5 (vtable +0x28) — Setup event log display
+// EventLogUI::OnOpened (vtable +0x28) — Setup event log display
 // ============================================================
 // Finds navigation buttons, "display" container, notification buttons.
 // Stores button ptrs, resizes display arrays, sets element IDs.
@@ -37,275 +57,225 @@
 
 // [5] 0x140067640
 void EventLogUI::OnOpened() {
-    uintptr_t s = (uintptr_t)this;
-    void* dialogElem = *(void**)(s + 0x20);
-    void* dialogInst = *(void**)(s + 0x18);
+    UI::Element* dialogElem = _container;
+    UI::DialogInstance* dialogInst = _dialog;
 
     // --- Find navigation buttons ---
-    // "buttonPrevious" -> +0x38
     {
         System::String nameStr("buttonPrevious");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-        void* elem = *(void**)retBuf;
-        uint8_t bpBuf[8];
-        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
-        *(uint64_t*)(s + 0x38) = *(uint64_t*)bpBuf;
+        buttonPrevious = dialogElem->FindElement(nameStr);
     }
-
-    // "buttonNext" -> +0x40
     {
         System::String nameStr("buttonNext");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-        void* elem = *(void**)retBuf;
-        uint8_t bpBuf[8];
-        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
-        *(uint64_t*)(s + 0x40) = *(uint64_t*)bpBuf;
+        buttonNext = dialogElem->FindElement(nameStr);
     }
-
-    // "buttonBottom" -> +0x30
     {
         System::String nameStr("buttonBottom");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-        void* elem = *(void**)retBuf;
-        uint8_t bpBuf[8];
-        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
-        *(uint64_t*)(s + 0x30) = *(uint64_t*)bpBuf;
+        buttonBottom = dialogElem->FindElement(nameStr);
     }
 
     // Set element IDs on buttons
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0x38))->SetElementId(100);   // B.3.6 bridge; buttonPrevious = 100
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0x40))->SetElementId(0x65);  // B.3.6 bridge; buttonNext = 0x65
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0x30))->SetElementId(0x66);  // B.3.6 bridge; buttonBottom = 0x66
+    buttonPrevious->SetElementId(100);   // buttonPrevious = 100
+    buttonNext->SetElementId(0x65);      // buttonNext = 0x65
+    buttonBottom->SetElementId(0x66);    // buttonBottom = 0x66
 
     // --- Find "display" container element ---
-    void* displayElem;
+    UI::Element* displayElem;
     {
         System::String nameStr("display");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-        void* elem = *(void**)retBuf;
-        uint8_t bpBuf[8];
-        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
-        displayElem = *(void**)bpBuf;
+        displayElem = dialogElem->FindElement(nameStr).Get();
     }
 
-    // Resize display text array (+0x50) and display button array (+0x60) to row count
-    int displayRowCount = reinterpret_cast<const UI::Element*>(displayElem)->ChildCount();  // B.3.6 bridge
-    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
-    // new tail zeroed. Both elements are 8-byte InternalBasePtr handles (byte-copy).
-    GameColl::ArrayAt<GameColl::Ptr8>(s, 0x50).SetSize(displayRowCount);
-    GameColl::ArrayAt<GameColl::Ptr8>(s, 0x60).SetSize(displayRowCount);
+    // Resize display text array and display button array to the row count.
+    // Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
+    // new tail zeroed. Both elements are 8-byte InternalPtr handles (byte-copy).
+    int displayRowCount = displayElem->ChildCount();
+    DisplayTexts(this).SetSize(displayRowCount);
+    DisplayButtons(this).SetSize(displayRowCount);
 
-    // Iterate display rows: store child text element in +0x50 array,
-    // find button child, store in +0x60 array, set element IDs
-    int rowCount = *(int*)(s + 0x58);
+    // Iterate display rows: store child text element, store the row as a
+    // button, set element IDs
+    int rowCount = displayTextCount;
     for (int i = 0; i < rowCount; i++) {
-        // Get child text element (direct child at index i)
-        uint8_t childBuf[8];
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(displayElem)->Child(i));  // B.3.6 bridge
-        *(uint64_t*)(*(uintptr_t*)(s + 0x50) + i * 8) = *(uint64_t*)childBuf;
+        // Child text element (direct child at index i)
+        displayTextData[i] = displayElem->Child(i);
 
-        // Get button child: Child(display, i) -> find typed element in that child
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(displayElem)->Child(i));  // B.3.6 bridge
-        void* rowChild = *(void**)childBuf;
-        // The button child is obtained by IsDerivedFrom check (generic element type)
-        uint8_t bpBuf[8];
-        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rowChild));   // B.3.3 bridge
-        *(uint64_t*)(*(uintptr_t*)(s + 0x60) + i * 8) = *(uint64_t*)bpBuf;
+        // The same child, as the row's button (the retail check is against
+        // Object::Internal, i.e. any element)
+        displayButtonData[i] = displayElem->Child(i);
 
         // Set element ID on the button: 0x6C + index
-        reinterpret_cast<UI::Element*>(*(void**)(*(uintptr_t*)(s + 0x60) + i * 8))->SetElementId(0x6C + i);  // B.3.6 bridge
+        displayButtonData[i]->SetElementId(0x6C + i);
     }
 
     // Reset scroll offset to 0
-    *(int*)(s + 0x48) = 0;
+    scrollOffset = 0;
 
-    // --- Find "notifybuttons" container in dialog instance ---
-    void* notifyContainer;
+    // --- Find "notifybuttons" container in the dialog instance ---
+    UI::Element* notifyContainer;
     {
         System::String nameStr("notifybuttons");
-        uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        notifyContainer = *(void**)retBuf;
+        notifyContainer = dialogInst->FindElement(nameStr).Get();
     }
 
-    // Iterate notification button children, store in dynamic array at +0x70, set IDs
-    int notifyCount = reinterpret_cast<const UI::Element*>(notifyContainer)->ChildCount();  // B.3.6 bridge
-    void* eventLogSingleton = *(void**)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
+    // Iterate notification button children, store them in the notify array, set IDs
+    int notifyCount = notifyContainer->ChildCount();
+    uintptr_t eventLogSingleton = EventLogAddress();
 
     for (int i = 0; i < notifyCount; i++) {
-        // Get child button element
-        uint8_t childBuf[8];
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(notifyContainer)->Child(i));  // B.3.6 bridge
-        void* childElem = *(void**)childBuf;
-        uint8_t bpBuf[8];
-        new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(childElem));   // B.3.3 bridge
-        void* btnElem = *(void**)bpBuf;
+        // Child button element
+        UI::Element* btnElem = notifyContainer->Child(i).Get();
 
         // Set element ID: 0x67 + index
-        reinterpret_cast<UI::Element*>(btnElem)->SetElementId(0x67 + i);  // B.3.6 bridge
+        btnElem->SetElementId(0x67 + i);
 
-        // Copy notification flag from event log singleton: singleton[i] + 0x10 -> button element +0xD8
-        *(uint64_t*)((uintptr_t)btnElem + 0xd8) =
-            *(uint64_t*)((uintptr_t)eventLogSingleton + 0x10 + i * sizeof(uintptr_t));
+        // Copy the notification flag from the event log into the check box:
+        // ONE byte, flags[i] (retail 0x140067a55 / 0x140067a69).
+        static_cast<UI::CheckElement*>(btnElem)->_checked =
+            *(uint8_t*)(eventLogSingleton + 0x10 + i);
 
-        // Push button ptr to notification array at +0x70.
-        // B.3.2 bridge: EventLogUI+0x70 is Collection::Array<{InternalBasePtr}>
-        // (stride 8, count +0x78, capacity +0x7C) inside a struct §B.2 has not
-        // converted, so it is reached at its offset.
-        auto& notifyBtns = GameColl::ArrayAt<GameColl::Bytes<8, 8>>(s, 0x70);
-        notifyBtns.SetSize(notifyBtns.GetSize() + 1,
-                           GameColl::Bytes<8, 8>((uint64_t)btnElem));
+        // Push button ptr to the notification array.
+        ElementArray& notifyBtns = NotifyButtons(this);
+        notifyBtns.SetSize(notifyBtns.GetSize() + 1, Object::InternalPtr<UI::Element>(btnElem));
     }
 }
 
 // ============================================================
-// EventLogUI::Slot7 (vtable +0x38) — Update event log entries
+// EventLogUI::OnUpdateLayout (vtable +0x38) — Update event log entries
 // ============================================================
 // Iterates display rows from bottom to top, filling each with event
-// data from the event log singleton. Updates text parameters and
-// button visibility based on scroll offset. Enables/disables
-// prev/next scroll buttons.
+// data from the event log. Updates text parameters and button state
+// based on scroll offset. Enables/disables the bottom / next buttons.
 //
 // Original: 0x140067440.
 
 // [7] 0x140067440
 void EventLogUI::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
-
-    // Event log singleton: g_pGameWorldSingleton -> +0x138
-    uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
+    uintptr_t eventLog = EventLogAddress();
     int totalEvents = *(int*)(eventLog + 0x20);  // total event count
 
-    int displayCount = *(int*)(s + 0x58);  // number of display rows
-    int scrollOffset = *(int*)(s + 0x48);
+    int displayCount = displayTextCount;  // number of display rows
+    int scroll = scrollOffset;
 
     // Rows are filled bottom-up: the newest visible event lands in the BOTTOM row.
     // Entry index for row `row` = firstIdx - (displayCount-1) + row, where
     // firstIdx = totalEvents - scrollOffset - 1 (the newest visible entry). The exe
     // skips the whole fill if firstIdx < 0 (no events yet). (0x140067471..)
-    int firstIdx = totalEvents - scrollOffset - 1;
+    int firstIdx = totalEvents - scroll - 1;
     if (firstIdx >= 0) {
         int base = firstIdx - (displayCount - 1);
         uintptr_t eventArray = *(uintptr_t*)(eventLog + 0x18);
         for (int row = displayCount - 1; row >= 0; row--) {
             int eventIdx = base + row;
 
-            void* textElem = *(void**)(*(uintptr_t*)(s + 0x50) + row * 8);
-            void* btnElem  = *(void**)(*(uintptr_t*)(s + 0x60) + row * 8);
+            UI::TextElement* textElem = static_cast<UI::TextElement*>(displayTextData[row].Get());
+            UI::Element* btnElem = displayButtonData[row].Get();
 
             int enabled;
             if (eventIdx < 0) {
                 // No event for this row — blank the text.
                 System::String emptyStr("");
-                reinterpret_cast<UI::TextElement*>(textElem)->SetParameter(0, emptyStr);  // B.3.6 bridge
+                textElem->SetParameter(0, emptyStr);
                 enabled = 0;
             } else {
+                // LEFT: the event-log entry (0x28 bytes) has no class (block GAME).
                 uintptr_t eventEntry = eventArray + (uintptr_t)eventIdx * 0x28;
                 // Text = event entry +0x08.
-                reinterpret_cast<UI::TextElement*>(textElem)->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));  // B.3.6 bridge
-                // Colour = entry +0x00 via text element vtable[+0x50] (SetColor).
-                reinterpret_cast<UI::Element*>(textElem)->SetColor(*(uint32_t*)eventEntry);  // B.3.6 bridge: Element slot 10 SetColor
+                textElem->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));
+                // Colour = entry +0x00 (Element slot 10 SetColor).
+                textElem->SetColor(*(uint32_t*)eventEntry);
                 // The nav button is enabled only if the event has a map location
                 // (tileIdx at entry+0x18 >= 0).
                 enabled = (*(int*)(eventEntry + 0x18) >= 0) ? 1 : 0;
             }
-            // btnElem vtable[+0x40] (SetEnabled) — DL = enabled. Common to both branches.
-            reinterpret_cast<UI::Element*>(btnElem)->Enable(enabled != 0);  // B.3.6 bridge: Element slot 8 Enable
+            // Element slot 8 Enable — common to both branches.
+            btnElem->Enable(enabled != 0);
         }
     }
 
-    // Enable/disable buttonBottom (+0x30) based on scroll offset > 0
-    {
-        void* btnBottom = *(void**)(s + 0x30);
-        reinterpret_cast<UI::Element*>(btnBottom)->Enable(scrollOffset > 0);  // B.3.6 bridge: Element slot 8 Enable
-    }
+    // Enable/disable buttonBottom based on scroll offset > 0 (slot 8 Enable)
+    buttonBottom->Enable(scroll > 0);
 
-    // Enable/disable buttonNext (+0x40) based on scroll offset > 0
-    {
-        void* btnNext = *(void**)(s + 0x40);
-        reinterpret_cast<UI::Element*>(btnNext)->Enable(scrollOffset > 0);  // B.3.6 bridge: Element slot 8 Enable
+    // Enable/disable buttonNext based on scroll offset > 0
+    buttonNext->Enable(scroll > 0);
+}
+
+// ============================================================
+// EventLogUI::ToggleNotification (0x140067320)
+// ============================================================
+// Reads the check box's state and writes it into the event log's category
+// filter byte (+0x10 + index).
+void EventLogUI::ToggleNotification(int32_t btnIdx) {
+    UI::CheckElement* btnElem = static_cast<UI::CheckElement*>(notifyButtonData[btnIdx].Get());
+    uintptr_t eventLog = EventLogAddress();
+    *(uint8_t*)(eventLog + 0x10 + btnIdx) = btnElem->_checked;
+}
+
+// ============================================================
+// EventLogUI::NavigateToRow (0x140067370)
+// ============================================================
+// Computes the row's event, its tile index, picks the terrain there and sets
+// the camera's look-at target.
+void EventLogUI::NavigateToRow(int32_t rowIdx) {
+    GameUpdateLoop* game = GameUpdateLoop::_singleton;
+    uintptr_t eventLog = EventLogAddress();
+    int totalEvents = *(int*)(eventLog + 0x20);
+    int eventIdx = (totalEvents - displayTextCount - scrollOffset) + rowIdx;
+    // Tile index from the event entry at entryArray + eventIdx*0x28 + 0x18
+    uintptr_t entryArray = *(uintptr_t*)(eventLog + 0x18);
+    int tileIdx = *(int*)(entryArray + 0x18 + (uintptr_t)eventIdx * 0x28);
+    if (tileIdx >= 0) {
+        // LEFT: GameUpdateLoop::m_game is void* (W0 header); Map::size at +0.
+        int* mapGrid = (int*)game->m_game;
+        int gridSize = *mapGrid;
+        float halfSize = (float)(gridSize >> 1) - 0.5f;
+        float inXY[3] = {
+            (float)(tileIdx % gridSize) - halfSize,
+            (float)(tileIdx / gridSize) - halfSize,
+            0.0f
+        };
+        float outPos[3] = {};
+        Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
+        PlayerController* camTarget = game->m_playerController;
+        camTarget->targetX = outPos[0];
+        camTarget->targetY = outPos[1];
+        camTarget->targetZ = outPos[2];
     }
 }
 
 // ============================================================
-// EventLogUI::Slot9 (vtable +0x48) — Button dispatch
+// EventLogUI::OnElementEvent (vtable +0x48) — Button dispatch
 // ============================================================
 // Handles scroll buttons, notification toggles, and row click navigation.
 //
 // Original: 0x1400675D0.
 
 // [9] 0x1400675d0
-void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
+void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
                                 int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    void* param2 = element;
-    (void)param2;
     if (msg != 0x12) return;
-
-    uintptr_t s = (uintptr_t)this;
-    int* scrollOffset = (int*)(s + 0x48);
 
     if (id == 100) {
         // buttonPrevious — scroll to older events
-        (*scrollOffset)++;
+        scrollOffset++;
     } else if (id == 0x65) {
         // buttonNext — scroll to newer events
-        (*scrollOffset)--;
+        scrollOffset--;
     } else if (id == 0x66) {
         // buttonBottom — jump to most recent
-        *scrollOffset = 0;
+        scrollOffset = 0;
     } else if (id >= 0x67 && id <= 0x6B) {
         // Notification toggle buttons (5 categories)
-        // FUN_140067320: reads flag from button element at +0xD8, copies to event log global +0x10+index
-        {
-            int btnIdx = id - 0x67;
-            // Button ptr is stored in the notification array at +0x70 (array of 8-byte ptrs)
-            void* ibp = (void*)(*(uintptr_t*)(s + 0x70) + (uintptr_t)btnIdx * 8);
-            void* btnElem = *(void**)ibp;
-            // Read button's flag from +0xD8 and write to event log singleton +0x10+btnIdx
-            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
-            *(uint8_t*)(eventLog + 0x10 + btnIdx) = *(uint8_t*)((uintptr_t)btnElem + 0xD8);
-        }
+        ToggleNotification(id - 0x67);
         return;
     } else if (id >= 0x6C) {
         // Display row click — navigate camera to event location
-        // FUN_140067370: computes tile index from event log, calls terrain pick, sets camera target
-        {
-            int rowIdx = id - 0x6C;
-            // Get event log
-            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0x138);
-            int totalEvents = *(int*)(eventLog + 0x20);
-            int displayCount = *(int*)(s + 0x58);
-            int scrollOffset = *(int*)(s + 0x48);
-            int eventIdx = (totalEvents - displayCount - scrollOffset) + rowIdx;
-            // Get tile index from event entry at entryArray + eventIdx*0x28 + 0x18
-            uintptr_t entryArray = *(uintptr_t*)(eventLog + 0x18);
-            int tileIdx = *(int*)(entryArray + 0x18 + (uintptr_t)eventIdx * 0x28);
-            if (tileIdx >= 0) {
-                int* mapGrid = *(int**)((uintptr_t)(GameUpdateLoop::_singleton) + 0xF8);
-                int gridSize = *mapGrid;
-                float halfSize = (float)(gridSize >> 1) - 0.5f;
-                float inXY[3] = {
-                    (float)(tileIdx % gridSize) - halfSize,
-                    (float)(tileIdx / gridSize) - halfSize,
-                    0.0f
-                };
-                float outPos[3] = {};
-                Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
-                uintptr_t camTarget = *(uintptr_t*)((uintptr_t)(GameUpdateLoop::_singleton) + 0xE0);
-                *(float*)(camTarget + 0x1C) = outPos[0];
-                *(float*)(camTarget + 0x20) = outPos[1];
-                *(float*)(camTarget + 0x24) = outPos[2];
-            }
-        }
+        NavigateToRow(id - 0x6C);
         return;
     }
 
     // Clamp scroll offset to >= 0
-    if (*scrollOffset < 0) *scrollOffset = 0;
+    if (scrollOffset < 0) scrollOffset = 0;
 }
 
 // [6] 0x140067630 (3-byte no-op) is EventLogUI::OnClosed, inline in EventLogUI.h.

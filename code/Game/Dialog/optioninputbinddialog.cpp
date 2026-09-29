@@ -37,11 +37,11 @@
 // the key index at +0xC0, input type (1=keyboard, 2=mouse) at +0xC4,
 // and calls [10] OnOk (through the vtable) to close with result=1.
 void OptionInputBindDialog::OnUpdate(const System::Time& /*time*/) {
-    void* inputDevice = ::Input::Device::_singleton;
+    const Input::Device* inputDevice = ::Input::Device::_singleton;
 
     // Scan keyboard keys (InputDevice=1, keys 0..0x68)
     for (int key = 0; key < 0x69; key++) {
-        if (reinterpret_cast<const Input::Device*>(inputDevice)->Released(Input::Device::InputDevice::Keyboard, 0, key)) {  // B.3.7 bridge
+        if (inputDevice->Released(Input::Device::InputDevice::Keyboard, 0, key)) {
             inputType = 1;  // keyboard
             keyIndex = key;
             OnOk();
@@ -51,7 +51,7 @@ void OptionInputBindDialog::OnUpdate(const System::Time& /*time*/) {
 
     // Scan mouse buttons (InputDevice=2, buttons 4..0xB)
     for (int btn = 4; btn <= 0xB; btn++) {
-        if (reinterpret_cast<const Input::Device*>(inputDevice)->Released(Input::Device::InputDevice::Mouse, 0, btn)) {  // B.3.7 bridge
+        if (inputDevice->Released(Input::Device::InputDevice::Mouse, 0, btn)) {
             inputType = 2;  // mouse
             keyIndex = btn;
             OnOk();

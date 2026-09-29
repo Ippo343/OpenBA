@@ -37,7 +37,7 @@ public:
     void OnUpdate(const System::Time& time) override;              // [7] 0x1400b2d50
 
 public:
-    void*    loadingImage;     // +0xB8: "loadingImage" element
+    Object::InternalPtr<UI::Element> loadingImage;   // +0xB8: "loadingImage" (an ImageElement)
     float    rotation;         // +0xC0: spinner angle, degrees
     uint8_t  _padC4[4];        // +0xC4
 };

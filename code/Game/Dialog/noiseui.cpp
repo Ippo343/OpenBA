@@ -4,16 +4,8 @@
 // NoiseUI (0x70 bytes): Noise/terrain visualization debug panel.
 // Extends DialogController (0x30 base).
 //
-// Layout:
-//   +0x20 = dialog element (InternalBasePtr, from DialogController)
-//   +0x30 = imageBuffer ptr (Video::ImageBuffer*)
-//   +0x38 = materialInstance ptr (void*)
-//   +0x40 = spriteSheet ptr (void*)
-//   +0x48 = noisePersistance element (InternalBasePtr)
-//   +0x50 = noiseOctaves element (InternalBasePtr)
-//   +0x58 = noiseScale element (InternalBasePtr)
-//   +0x60 = noiseCutOff element (InternalBasePtr)
-//   +0x68 = noiseGradient element (InternalBasePtr)
+// Layout: Dialog/NoiseUI.h (the preview image, its material and sheet, the
+// five noise edits).
 //
 // Decompiled from Application-x64.exe.
 
@@ -33,6 +25,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
+#include "runtime/types/ui/EditElement.h"
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
@@ -43,48 +36,31 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
-// Helper: find element by name in parent element, cast to InternalBasePtr
-static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
-    uint8_t retBuf[16], bpBuf[8];
-
+// Helper: the named element under the panel's root, as the EditElement it is.
+// Retail (0x1400714c0) keeps it only when IsDerivedFrom(EditElement); the tree
+// never checked (kept, listed: every noise*.rsc slider IS an EditElement).
+static UI::EditElement* NoiseUI_FindEdit(UI::Element* root, const char* name) {
     System::String nameStr(name);
-
-    // fn_FindElement: member function, RCX=parentElem, RDX=retBuf, R8=nameStr
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
-
-    // Check the InternalBasePtr result
-    void* raw = *(void**)retBuf;
-
-    // Cast to specific type via IsDerivedFrom check
-    // (Ghidra shows the pattern: CheckPtr -> deref -> IsDerivedFrom -> InternalBasePtr_Ctor)
-    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
-    uint64_t result = *(uint64_t*)bpBuf;
-
-    return result;
+    return static_cast<UI::EditElement*>(root->FindElement(nameStr).Get());
 }
 
 // ============================================================
-// SetupImage (0x140071890): Create MaterialInstance + SpriteSheet
+// NoiseUI::SetupImage (0x140071890): Create MaterialInstance + SpriteSheet
 // for the noise preview, hardcoded to "UIMaterialNoBlend.rsc"
 // and "noiseImage" element name.
 // ============================================================
-// Nearly identical to MapUI_SetupImage but without blend option.
+// Nearly identical to MapUI's SetupImage but without blend option.
 // Allocates MaterialInstance (0x60) and SpriteSheet (0x58),
 // loads UIMaterialNoBlend material, adds ImageBuffer as "diffuse",
 // builds parameters, configures sprite info, finds "noiseImage"
 // element and sets the sprite.
-//
-// Original: FUN_140071890
-void NoiseUI_SetupImage(void* self, void* imageBuffer,
-                        void** spriteSheetOut, void** materialOut) {
-    uintptr_t s = (uintptr_t)self;
-
+void NoiseUI::SetupImage(Video::ImageBuffer* image, UI::SpriteSheet** sheetOut,
+                         Graphics::MaterialInstance** materialOut) {
     // --- Allocate and construct MaterialInstance (0x60 bytes) ---
     void* matInst = System::MemoryAllocator::MemAlloc(0x60, 8);
-    void* materialPtr = nullptr;
+    Graphics::MaterialInstance* materialPtr = nullptr;
     if (matInst) {
-        ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
-        materialPtr = matInst;
+        materialPtr = ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
     }
     *materialOut = materialPtr;
 
@@ -93,142 +69,114 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     // AdjustDelimiters call retail made on the raw buffer is redundant here.
     System::Filename filename("Material/UI/UIMaterialNoBlend.rsc");
 
-    void* ext = const_cast<::Object::External*>(
-        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-            ->FindOrLoad(filename));
-    void* material = nullptr;
+    const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
+    const Graphics::Material* material = nullptr;
     if (ext) {
         if (::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId())) {
-            material = ext;
+            material = static_cast<const Graphics::Material*>(ext);
         }
     }
-    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->SetMaterial(
-        Object::ExternalPtr<Graphics::Material>(
-            reinterpret_cast<Graphics::Material*>(material)));   // B.3.5 bridge
+    // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
+    (*materialOut)->SetMaterial(
+        Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));
 
     // --- Add ImageBuffer as "diffuse" texture ---
     System::String diffuseStr("diffuse");
-    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)->AddTexture(
+    // LEFT: AddTexture takes the RtSystem::String POD (R-GFX's header).
+    (*materialOut)->AddTexture(
         *reinterpret_cast<const RtSystem::String*>(&diffuseStr),
-        Object::ExternalPtr<Video::ImageBuffer>(
-            reinterpret_cast<Video::ImageBuffer*>(imageBuffer)));   // B.3.5 bridge
+        Object::ExternalPtr<Video::ImageBuffer>(image));
 
-    reinterpret_cast<Graphics::MaterialInstance*>(*materialOut)
-        ->BuildParameters();   // B.3.5 bridge
+    (*materialOut)->BuildParameters();
 
     // --- Allocate and construct SpriteSheet (0x58 bytes) ---
     void* sheet = System::MemoryAllocator::MemAlloc(0x58, 8);
-    void* spriteSheet = nullptr;
+    UI::SpriteSheet* newSheet = nullptr;
     if (sheet) {
-        ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
-        spriteSheet = sheet;
+        newSheet = ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
     }
-    *spriteSheetOut = spriteSheet;
+    *sheetOut = newSheet;
 
-    // Set material on sprite sheet at +0x30
-    *(void**)((uintptr_t)spriteSheet + 0x30) = *materialOut;
+    // The sheet's material instance (+0x30).
+    // LEFT: SpriteSheet::m_field30 is uint64_t (R-UI's header).
+    (*sheetOut)->m_field30 = reinterpret_cast<uint64_t>(*materialOut);
 
     // Get image dimensions
-    int imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
-    int imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
+    int imgW = image->Width();
+    int imgH = image->Height();
 
     // Set sprite sheet name/group strings (empty) and dimensions
-    uintptr_t ss = (uintptr_t)*spriteSheetOut;
+    UI::SpriteSheet* ss = *sheetOut;
     System::String emptyStr1;
     System::String emptyStr2;
-    *reinterpret_cast<System::String*>(ss + 0x40) = emptyStr1;  // B.3.1 bridge
-    *reinterpret_cast<System::String*>(ss + 0x38) = emptyStr2;  // B.3.1 bridge
-    *(int*)(ss + 0x48) = imgW;
-    *(int*)(ss + 0x4c) = imgH;
-    *(uint8_t*)(ss + 0x50) = 0;
+    // LEFT: SpriteSheet holds them as char* (H5, R-UI's header).
+    *reinterpret_cast<System::String*>(&ss->m_groupName) = emptyStr1;
+    *reinterpret_cast<System::String*>(&ss->m_textureName) = emptyStr2;
+    ss->m_field48 = imgW;
+    ss->m_field4C = imgH;
+    ss->m_field50 = false;
 
     // Add sprite info: empty name, empty group, full image rect
-    imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
-    imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
+    imgW = image->Width();
+    imgH = image->Height();
     System::String nameEmpty;
     System::String groupEmpty;
-    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->AddSpriteInfo(nameEmpty, groupEmpty, 0, 0, imgW, imgH);  // B.3.6 bridge
+    (*sheetOut)->AddSpriteInfo(nameEmpty, groupEmpty, 0, 0, imgW, imgH);
 
     // Set sprite info with UV scale
-    imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
-    imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
+    imgW = image->Width();
+    imgH = image->Height();
     float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
-    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);  // B.3.6 bridge
+    (*sheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);
 
     // --- Find "noiseImage" element and set sprite ---
     System::String elemNameStr("noiseImage");
+    UI::Element* rawElem = _container->FindElement(elemNameStr).Get();
 
-    void* dialogElem = *(void**)(s + 0x20);
-    uint64_t foundElem = 0;
-    ::new (&foundElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(elemNameStr));  // B.3.6 bridge
-
-    void* rawElem = (void*)foundElem;
-
-    void* imageElem = nullptr;
+    UI::ImageElement* imageElem = nullptr;
     if (rawElem && ::Object::IsDerivedFromNullSafe(rawElem, UI::ImageElement::TypeId())) {
-        imageElem = rawElem;
+        imageElem = static_cast<UI::ImageElement*>(rawElem);
     }
-    uint64_t imageElemPtr = 0;
-    new ((void*)&imageElemPtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(imageElem));   // B.3.3 bridge
 
     // Create Sprite from SpriteSheet (index 0) and set on element
-    uint8_t spriteBuf[16];
-    ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)), 0);  // B.3.6 bridge
-    reinterpret_cast<UI::ImageElement*>(imageElemPtr)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+    UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(*sheetOut), 0);
+    imageElem->SetSprite(&sprite);
 }
 
 // ============================================================
-// GenerateNoise (0x1400711D0): Generate Perlin noise texture
+// NoiseUI::GenerateNoise (0x1400711D0): Generate Perlin noise texture
 // ============================================================
-// Reads 5 slider values (persistance, octaves, scale, cutOff, gradient),
+// Reads 5 edit values (persistance, octaves, scale, cutOff, gradient),
 // creates a PerlinNoise generator with random seeds, renders a 256x256
 // grayscale texture, and copies it to the ImageBuffer.
-//
-// PerlinNoise struct (0x10 bytes):
-//   +0x00: float persistance
-//   +0x04: float octaves
-//   +0x08: int seed1
-//   +0x0C: int seed2
-//
-// Original: FUN_1400711D0
 
-// PerlinNoise and Random: their registered bodies RtUtility_PerlinNoise_Ctor /
-// RtUtility_PerlinNoise_Generate / RtSystem_Random_Ctor, called by name (B3R).
-// Float parsing now goes through System::String::ToFloat directly.
-
-// Helper: read float value from a slider element's text (+0xC8)
-static float NoiseUI_ReadSliderFloat(uintptr_t sliderPtr) {
-    uintptr_t elem = *(uintptr_t*)&sliderPtr;
-    const char* text = *(const char**)(elem + 0xC8);
-    return System::String::ToFloat(text);
+// Helper: an edit element's text as a float
+static float NoiseUI_ReadEditFloat(const UI::EditElement* edit) {
+    return System::String::ToFloat(edit->_text);
 }
 
-void NoiseUI_GenerateNoise(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Read slider values
-    float persistance = NoiseUI_ReadSliderFloat(*(uint64_t*)(s + 0x48));
-    float octaves     = NoiseUI_ReadSliderFloat(*(uint64_t*)(s + 0x50));
-    float scale       = NoiseUI_ReadSliderFloat(*(uint64_t*)(s + 0x58));
-    float cutOff      = NoiseUI_ReadSliderFloat(*(uint64_t*)(s + 0x60));
-    float gradient    = NoiseUI_ReadSliderFloat(*(uint64_t*)(s + 0x68));
+void NoiseUI::GenerateNoise() {
+    // Read edit values
+    float persistance = NoiseUI_ReadEditFloat(noisePersistance);
+    float octaves     = NoiseUI_ReadEditFloat(noiseOctaves);
+    float scale       = NoiseUI_ReadEditFloat(noiseScale);
+    float cutOff      = NoiseUI_ReadEditFloat(noiseCutOff);
+    float gradient    = NoiseUI_ReadEditFloat(noiseGradient);
 
     // Compute inverse scale (uvScale / scale)
     float uvScale = kRdata_14017214c;   // 0x14017214c = 1.0f (was g_fUVScale; its fallback never ran)
     float invScale = uvScale / scale;
 
-    // Create Random with time-based seed, get two random seeds
-    // Random is ~0xA60 bytes (Mersenne Twister state)
-    uint8_t randomBuf[0xA80];
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(randomBuf));   // ??0Random@System@@QEAA@XZ
-    int seed1 = reinterpret_cast<System::Random*>(randomBuf)->RandTol(static_cast<int32_t>(0x7ffffff));   // B.3.4 bridge
-    int seed2 = reinterpret_cast<System::Random*>(randomBuf)->RandTol(static_cast<int32_t>(0x7ffffff));   // B.3.4 bridge
+    // Create Random with time-based seed, get two random seeds.
+    // System::Random declares no ctor: the object is storage until its ctor body runs.
+    System::Random random;
+    RtSystem_Random_Ctor(&random);   // ??0Random@System@@QEAA@XZ
+    int seed1 = random.RandTol(static_cast<int32_t>(0x7ffffff));
+    int seed2 = random.RandTol(static_cast<int32_t>(0x7ffffff));
 
     // Create PerlinNoise (0x10 bytes)
-    uint8_t noiseBuf[0x10];
-    RtUtility_PerlinNoise_Ctor(reinterpret_cast<RtUtility::PerlinNoise*>(noiseBuf),
-                               persistance, octaves, seed2, seed1);   // ??0PerlinNoise@Utility@@QEAA@MMHH@Z
+    RtUtility::PerlinNoise noise;
+    RtUtility_PerlinNoise_Ctor(&noise, persistance, octaves, seed2, seed1);   // ??0PerlinNoise@Utility@@QEAA@MMHH@Z
 
     // Allocate 256*256 pixel buffer
     uint32_t* pixels = (uint32_t*)System::MemoryAllocator::MemAlloc(0x40000, 4);
@@ -245,8 +193,7 @@ void NoiseUI_GenerateNoise(void* self) {
         for (int x = 0; x < 0x100; x++) {
             // Generate noise value at scaled position
             float noiseVal = RtUtility_PerlinNoise_Generate(
-                reinterpret_cast<const RtUtility::PerlinNoise*>(noiseBuf),
-                (float)x * invScale, (float)y * invScale);   // ?Generate@PerlinNoise@Utility@@
+                &noise, (float)x * invScale, (float)y * invScale);   // ?Generate@PerlinNoise@Utility@@
 
             // Map from [-1,1] to [0,1], subtract cutoff, clamp
             float val = (noiseVal * halfVal + halfVal) - cutOff;
@@ -270,8 +217,7 @@ void NoiseUI_GenerateNoise(void* self) {
     }
 
     // Copy to ImageBuffer texture
-    reinterpret_cast<Video::ImageBuffer*>(*(void**)(s + 0x30))
-        ->CopyToTexture(pixels, 0x100, 0x100);   // B.3.5 bridge
+    imageBuffer->CopyToTexture(pixels, 0x100, 0x100);
     System::MemoryAllocator::MemFree(pixels);
 }
 
@@ -281,36 +227,25 @@ void NoiseUI_GenerateNoise(void* self) {
 // Original: 0x1400714C0
 //
 // Allocates a 256x256 ImageBuffer, fills with black, creates
-// MaterialInstance + SpriteSheet via helper, finds 5 slider
+// MaterialInstance + SpriteSheet via SetupImage, finds 5 edit
 // elements and the "buttonGenerate" button (ID 1000).
 
 void NoiseUI_Slot4(NoiseUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
     // Allocate ImageBuffer (0x68 bytes)
     void* imgBuf = System::MemoryAllocator::MemAlloc(0x68, 8);
-    void* imageBuffer = nullptr;
+    Video::ImageBuffer* image = nullptr;
     if (imgBuf != nullptr) {
-        ::new (imgBuf) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
-        imageBuffer = imgBuf;
+        image = ::new (imgBuf) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
     }
-    *(void**)(s + 0x30) = imageBuffer;
+    self->imageBuffer = image;
 
-    // Call ImageBuffer::Create virtual (vtable +0x48)
-    // Signature: Create(ImageType=0, Usage=2, Format=5, mip=0, width=256,
-    //                    height=256, FilterMode=1, AddressMode=1,1,1,
-    //                    Array<Array<uchar>>* levels=null)
+    // ImageBuffer::Create (slot 9, vtable +0x48):
+    //   Create(ImageType=0, Usage=2, Format=5, mip=0, width=256,
+    //          height=256, FilterMode=1, AddressMode=1,1,1,
+    //          Array<Array<uchar>>* levels=null)
     // The last parameter is a POINTER in a stack slot -- passing it as an int
     // leaves the high dword uninitialised (that exact bug crashed ModDialog).
-    //
-    // B.3.5 bridge — 0x48/8 == slot 9 of `Video::ImageBuffer`, which IS `Create`
-    // (B35_RULES 2.3 item 5). The receiver is PROVED a `Video::ImageBuffer`: the
-    // block above takes 0x68 bytes (== sizeof(Video::ImageBuffer)) from MemAlloc,
-    // runs them through `??0ImageBuffer@Video@@`, then stamps the exe's own NoiseUI
-    // ImageBuffer vtable — so the virtual call reads that live table at exactly the
-    // +0x48 the slot read did. Same shape as minimap_paint.cpp and
-    // serialize_image_upload.cpp (batch I1).
-    reinterpret_cast<Video::ImageBuffer*>(imageBuffer)->Create(
+    image->Create(
         /*type     */ 0,
         /*usage    */ 2,
         /*format   */ 5,
@@ -321,7 +256,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
         /*addressU */ 1,
         /*addressV */ 1,
         /*addressW */ 1,
-        /*levels   */ nullptr);   // B.3.5 bridge
+        /*levels   */ nullptr);
 
     // Allocate 256*256 ARGB pixel buffer, fill with black (0xFF000000)
     uint32_t* pixels = (uint32_t*)System::MemoryAllocator::MemAlloc(0x40000, 4);
@@ -332,33 +267,24 @@ void NoiseUI_Slot4(NoiseUI* self) {
     }
 
     // Copy pixel data to ImageBuffer texture
-    reinterpret_cast<Video::ImageBuffer*>(*(void**)(s + 0x30))
-        ->CopyToTexture(pixels, 0x100, 0x100);   // B.3.5 bridge
+    self->imageBuffer->CopyToTexture(pixels, 0x100, 0x100);
     System::MemoryAllocator::MemFree(pixels);
 
     // Setup MaterialInstance + SpriteSheet, find "noiseImage" element
-    NoiseUI_SetupImage((void*)s, *(void**)(s + 0x30),
-                       (void**)(s + 0x40), (void**)(s + 0x38));
+    self->SetupImage(self->imageBuffer, &self->spriteSheet, &self->material);
 
-    // Find slider elements and store as InternalBasePtrs
-    void* dialogElem = *(void**)(s + 0x20);
-    *(uint64_t*)(s + 0x48) = NoiseUI_FindElemAsBasePtr(dialogElem, "noisePersistance");
-    *(uint64_t*)(s + 0x50) = NoiseUI_FindElemAsBasePtr(dialogElem, "noiseOctaves");
-    *(uint64_t*)(s + 0x58) = NoiseUI_FindElemAsBasePtr(dialogElem, "noiseScale");
-    *(uint64_t*)(s + 0x60) = NoiseUI_FindElemAsBasePtr(dialogElem, "noiseCutOff");
-    *(uint64_t*)(s + 0x68) = NoiseUI_FindElemAsBasePtr(dialogElem, "noiseGradient");
+    // The five edits
+    UI::Element* root = self->_container;
+    self->noisePersistance = NoiseUI_FindEdit(root, "noisePersistance");
+    self->noiseOctaves     = NoiseUI_FindEdit(root, "noiseOctaves");
+    self->noiseScale       = NoiseUI_FindEdit(root, "noiseScale");
+    self->noiseCutOff      = NoiseUI_FindEdit(root, "noiseCutOff");
+    self->noiseGradient    = NoiseUI_FindEdit(root, "noiseGradient");
 
     // Find "buttonGenerate" button, set element ID to 1000
-    uint8_t retBuf[16], bpBuf[8];
     System::String nameStr("buttonGenerate");
-
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
-    void* raw = *(void**)retBuf;
-    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
-
-    // Set element ID on the button
-    void* buttonElem = *(void**)bpBuf;
-    reinterpret_cast<UI::Element*>(buttonElem)->SetElementId(1000);  // B.3.6 bridge
+    UI::Element* buttonElem = root->FindElement(nameStr).Get();
+    buttonElem->SetElementId(1000);
 }
 
 // ============================================================
@@ -367,7 +293,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
 // Original: 0x1400714A0
 //
 // When msg==0x12 (button click) and id==1000 (buttonGenerate),
-// regenerates the Perlin noise texture using current slider values.
+// regenerates the Perlin noise texture using current edit values.
 
 void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
                    int param5, int param6) {
@@ -377,8 +303,6 @@ void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
 
     if (msg != 0x12 || id != 1000) return;
 
-    // Regenerate noise texture from slider values
-    NoiseUI_GenerateNoise((void*)self);
+    // Regenerate noise texture from edit values
+    self->GenerateNoise();
 }
-
-// ============================================================

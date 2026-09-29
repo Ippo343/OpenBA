@@ -18,66 +18,44 @@
 
 // [4] OnOpened (0x140068C20) — Setup
 // Finds imageIcon, textEvent, buttonOk elements.
-// Reads event entry from world event list using index at self+0xB8.
+// Reads the event log entry at eventIndex.
 // Sets imageIcon sprite to "EventIcon<N>", sets textEvent parameter 0
 // to event text, sets buttonOk element ID to 200.
 void EventPopupDialog::OnOpened() {
-    uintptr_t s = (uintptr_t)this;
-
-    // Find imageIcon element
-    uint8_t retBuf[16];
+    UI::ImageElement* imageIcon = nullptr;
     { System::String nameStr("imageIcon");
-      ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr)); }  // B.3.6 bridge
-    void* imageIcon = *(void**)retBuf;
+      imageIcon = static_cast<UI::ImageElement*>(FindElement(nameStr).Get()); }
 
-    // Find textEvent element
+    UI::TextElement* textEvent = nullptr;
     { System::String nameStr("textEvent");
-      ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr)); }  // B.3.6 bridge
-    void* textEvent = *(void**)retBuf;
+      textEvent = static_cast<UI::TextElement*>(FindElement(nameStr).Get()); }
 
-    // Find buttonOk element
+    UI::Element* buttonOk = nullptr;
     { System::String nameStr("buttonOk");
-      ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr)); }  // B.3.6 bridge
-    void* buttonOk = *(void**)retBuf;
+      buttonOk = FindElement(nameStr).Get(); }
 
-    // Get event entry from world event list
-    // world->+0x138 -> event manager, +0x18 -> event array
-    // Each entry is 0x28 bytes; event index at self+0xB8
-    void* world = GameUpdateLoop::_singleton;
-    uint8_t* eventMgr = *(uint8_t**)((uint8_t*)world + 0x138);
+    // The event log entry (0x28 bytes) at eventIndex.
+    // LEFT: the event log has no class (m_eventNotifier is void*, block GAME):
+    // its +0x18 entry array, the entry's +0x08 text and +0x20 icon stay offset reads.
+    uint8_t* eventMgr = (uint8_t*)GameUpdateLoop::_singleton->m_eventNotifier;
     uint8_t* eventArray = *(uint8_t**)(eventMgr + 0x18);
-    int32_t eventIndex = *(int32_t*)(s + 0xB8);
     uint8_t* eventEntry = eventArray + (int64_t)eventIndex * 0x28;
 
     // Format sprite name "EventIcon<iconIdx>"
     uint32_t iconIdx = *(uint32_t*)(eventEntry + 0x20);
     System::String fmtStr = System::String::Format("EventIcon%i", iconIdx);
 
-    // Get current sprite from imageIcon (16 bytes: sheetPtr + index)
-    uint8_t oldSprite[16];
-    ::new (oldSprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(imageIcon)->GetSprite());  // B.3.6 bridge
-    void* sheetPtr = *(void**)oldSprite;
+    // The same sheet, the index named fmtStr (-1 without a sheet)
+    UI::Sprite oldSprite(imageIcon->GetSprite());
+    UI::Sprite newSprite(oldSprite.GetSpriteSheet(), fmtStr);
+    newSprite.pad0C = 0;   // built in a zeroed slot before
+    imageIcon->SetSprite(&newSprite);
 
-    // Build new sprite: same sheet, new index from name
-    int newIndex = -1;
-    if (sheetPtr) {
-        newIndex = reinterpret_cast<const UI::SpriteSheet*>(sheetPtr)->GetSpriteIndexFromName(fmtStr);  // B.3.6 bridge
-    }
-
-    // Construct 16-byte Sprite: {sheetPtr, index(4b) + pad(4b)}
-    uint8_t newSprite[16];
-    *(void**)newSprite = sheetPtr;
-    *(int32_t*)(newSprite + 8) = newIndex;
-    *(int32_t*)(newSprite + 12) = 0;
-
-    // Set new sprite on imageIcon
-    reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(newSprite));  // B.3.6 bridge
-
-    // Set text parameter 0 on textEvent to event text string at eventEntry+0x08
-    reinterpret_cast<UI::TextElement*>(textEvent)->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));  // B.3.6 bridge
+    // Set text parameter 0 on textEvent to the event's text
+    textEvent->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));
 
     // Set button ID 200 on buttonOk
-    reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(200);  // B.3.6 bridge
+    buttonOk->SetElementId(200);
 }
 
 // ============================================================
@@ -92,9 +70,8 @@ void EventPopupDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
                                       int32_t param3, int32_t param4, int32_t /*c*/,
                                       int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 == 0x12 && param4 == 200) {
-        uint8_t selfIBP[16];
-        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-        static_cast<UI::UserInterface*>(_ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
+        Object::InternalPtr<UI::DialogInstance> selfIBP(this);
+        _ui->CloseDialog(&selfIBP);
     }
 }
 
