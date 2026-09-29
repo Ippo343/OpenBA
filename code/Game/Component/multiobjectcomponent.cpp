@@ -193,8 +193,8 @@ void MultiObjectComponent::Persist(void* stream) {
         }
     }
 
-    // Serialize multiCount at +0x58. LEFT: the field is uint32 until it takes retail's int.
-    ser.Serialize(*reinterpret_cast<int*>(&multiCount), nullptr);
+    // Serialize multiCount at +0x58 (retail Serialize(int&)).
+    ser.Serialize(multiCount, nullptr);
 
     // On load: compact array — remove null entries
     if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200

@@ -61,7 +61,7 @@ public:
     Object::InternalPtr<ComponentEntity>* children; // +0x48 the child-entity list (Array<InternalBasePtr> data)
     int32_t  childCount;           // +0x50
     int32_t  childCapacity;        // +0x54
-    uint32_t multiCount;           // +0x58 1 in retail's ctor (Persist: Serialize(int&))
+    int32_t  multiCount;           // +0x58 1 in retail's ctor (Persist: Serialize(int&))
     uint8_t  _pad5C[4];            // +0x5c
 };
 
