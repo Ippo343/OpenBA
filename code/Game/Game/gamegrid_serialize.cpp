@@ -51,6 +51,7 @@
 
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"              // B4 GAME-a: Map::Serialize, MapCell
 #include "perf_terrain.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -140,151 +141,147 @@ using MapCellArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 
 }  // namespace
 
-void GameGrid_ResizeCellArray_aa90(int64_t* header, int32_t newCount) {
-    // B.3.2 bridge: Game+0x80 is still a raw 0x10-byte header in an
-    // unconverted exe struct.
+static void GameGrid_ResizeCellArray_aa90(MapCell** header, int32_t newCount) {
+    // B.3.2 bridge: Map+0x80 is the Array<MapCell> header {cells, cellCount,
+    // cellCapacity}, declared as three fields (the Array's explicit spec above).
     reinterpret_cast<MapCellArray*>(header)->SetSize(newCount);
 }
 
 // ============================================================
 // GameGrid_SerializeCellArray_ac10 (0x14001ac10)
 //
-// Bulk-serializes `count` cells starting at `arrayBase` (stride 0x30 bytes).
+// Bulk-serializes `count` cells starting at `cells` (stride 0x30 bytes).
 // Per element: two InternalBasePtr refs (each nulled if not derived from
 // ComponentEntity after load), one string-table ExternalPtr ref, a 9-byte raw
 // block, a ushort, five bytes, and a signed char.
 // ============================================================
-void GameGrid_SerializeCellArray_ac10(void* serializer, int32_t count, int64_t arrayBase) {
+static void GameGrid_SerializeCellArray_ac10(IO::Serializer* serializer, int32_t count, MapCell* cells) {
     if (count <= 0) return;
 
-    uint8_t* elem = reinterpret_cast<uint8_t*>(arrayBase);
+    MapCell* elem = cells;
     for (int32_t i = 0; i < count; ++i) {
-        reinterpret_cast<Object::InternalBasePtr*>(elem + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        void* refA = *reinterpret_cast<void**>(elem + 0x00);
+        // LEFT: the two refs are InternalBasePtr slots (an IBP's raw pointer).
+        reinterpret_cast<Object::InternalBasePtr*>(&elem->blocker)->Serialize(*serializer);   // B.3.4 bridge
+        ComponentEntity* refA = elem->blocker;
         if (refA != nullptr && !::Object::IsDerivedFromNullSafe(refA, ComponentEntity::TypeId())) {
-            *reinterpret_cast<void**>(elem + 0x00) = nullptr;
+            elem->blocker = nullptr;
         }
 
-        reinterpret_cast<Object::InternalBasePtr*>(elem + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        void* refB = *reinterpret_cast<void**>(elem + 0x08);
+        reinterpret_cast<Object::InternalBasePtr*>(&elem->occupant)->Serialize(*serializer);   // B.3.4 bridge
+        ComponentEntity* refB = elem->occupant;
         if (refB != nullptr && !::Object::IsDerivedFromNullSafe(refB, ComponentEntity::TypeId())) {
-            *reinterpret_cast<void**>(elem + 0x08) = nullptr;
+            elem->occupant = nullptr;
         }
 
-        Reimpl_ExternalPtr_Serialize_StringTable(elem + 0x10, serializer);
+        Reimpl_ExternalPtr_Serialize_StringTable(&elem->field_0x10, serializer);
 
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(9, elem + 0x1c, nullptr);   // B.3.4 bridge
+        serializer->Serialize(9, elem->field_0x1C, nullptr);
 
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<uint16_t*>(elem + 0x26), nullptr);   // B.3.4 bridge
+        serializer->Serialize(elem->zone, nullptr);
 
-        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+        int version = serializer->GetVersion();
         if (version < 3) {
             // Retail reads/writes a throwaway ushort here for old save versions
             // (a field that no longer exists past version 3); we mirror that
             // with a scratch local so the stream position stays in sync.
             uint16_t scratch = 0;
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(scratch, nullptr);   // B.3.4 bridge
+            serializer->Serialize(scratch, nullptr);
         }
 
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x28], nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x29], nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2a], nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2b], nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(elem[0x2c], nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<signed char*>(elem + 0x2d), nullptr);   // B.3.4 bridge
+        serializer->Serialize(elem->footprintCount, nullptr);
+        serializer->Serialize(elem->terrainType, nullptr);
+        serializer->Serialize(elem->field_0x2A, nullptr);
+        serializer->Serialize(elem->field_0x2B, nullptr);
+        serializer->Serialize(elem->field_0x2C, nullptr);
+        serializer->Serialize(elem->floorCount, nullptr);
 
-        elem += 0x30;
+        ++elem;
     }
 }
 
 // ============================================================
-// GameGrid_Serialize_9f100 (0x14009f100) -- top-level entry point.
+// Map::Serialize (0x14009f100) -- top-level entry point.
 // ============================================================
-extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfPtr);
+void Map::Serialize(IO::Stream& stream) {
+    IO::Serializer serializer(stream, 4);
 
-    alignas(8) uint8_t serializerStorage[24];
-    void* serializer = serializerStorage;
-    ::new (static_cast<void*>(serializerStorage)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 4);   // B.3.4 bridge
+    serializer.Serialize(size, nullptr);
 
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(self + 0x00), nullptr);   // B.3.4 bridge
+    // Cell-array header at +0x80: cells, cellCount, cellCapacity.
+    int32_t count = cellCount;
+    serializer.Serialize(count, nullptr);
 
-    // Cell-array header at self+0x80: +0x00 base ptr, +0x08 count, +0x0c capacity.
-    uint8_t* header = self + 0x80;
-    int32_t cellCount = *reinterpret_cast<int32_t*>(header + 0x08);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cellCount, nullptr);   // B.3.4 bridge
-
-    bool isSaving = static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) != 0;   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+    bool isSaving = static_cast<int>(stream.GetDirection()) != 0;   // IO::Stream::GetDirection, retail 0x180006200
     if (!isSaving) {
-        GameGrid_ResizeCellArray_aa90(reinterpret_cast<int64_t*>(header), cellCount);
+        GameGrid_ResizeCellArray_aa90(&cells, count);
     }
 
-    int64_t arrayBase = *reinterpret_cast<int64_t*>(header);
-    GameGrid_SerializeCellArray_ac10(serializer, cellCount, arrayBase);
+    GameGrid_SerializeCellArray_ac10(&serializer, count, cells);
 
-    // 9 shorts at self+0x90.
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(9, reinterpret_cast<short*>(self + 0x90), nullptr);   // B.3.4 bridge
+    // 9 shorts at +0x90.
+    serializer.Serialize(9, field_0x90, nullptr);
 
     if (!isSaving) {
         // ---- LOAD-only fixup block ----
-        self[0xa2] = 1;
+        field_0xA2 = true;
 
-        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+        int version = serializer.GetVersion();
 
         if (version < 2) {
-            int32_t width = *reinterpret_cast<int32_t*>(self + 0x00);
+            int32_t width = size;
             for (int32_t i = 0; i < width * width; ++i) {
-                uint8_t* base = *reinterpret_cast<uint8_t**>(header);
-                uint8_t* e = base + static_cast<int64_t>(i) * 0x30;
-                if (*reinterpret_cast<int64_t*>(e + 0x00) == 0 &&
-                    *reinterpret_cast<int64_t*>(e + 0x08) == 0) {
-                    bool occupied = ActCNR_CheckTerrain_cb00(selfPtr, i) != 0;
+                MapCell* e = &cells[i];
+                if (e->blocker == nullptr &&
+                    e->occupant == nullptr) {
+                    bool occupied = ActCNR_CheckTerrain_cb00(this, i) != 0;
                     if (!occupied) {
+                        // LEFT: the classify helper takes the map as int* (Component/exe_bodies.h).
                         int cls = CreateNaturalResource_helper_e2c0(
-                            reinterpret_cast<int*>(selfPtr), i);
-                        e[0x29] = static_cast<uint8_t>(cls);
+                            reinterpret_cast<int*>(this), i);
+                        e->terrainType = static_cast<uint8_t>(cls);
                     }
                 }
                 // Faithful to retail: the width*width bound is re-read from
-                // self+0x00 every iteration (loop-invariant unless a helper
+                // +0x00 every iteration (loop-invariant unless a helper
                 // above mutates the grid width, which none do here).
-                width = *reinterpret_cast<int32_t*>(self + 0x00);
+                width = size;
             }
         }
 
         // Per-cell flag normalize pass (runs regardless of version).
         {
-            int32_t width = *reinterpret_cast<int32_t*>(self + 0x00);
+            int32_t width = size;
             for (int32_t i = 0; i < width * width; ++i) {
-                uint8_t* base = *reinterpret_cast<uint8_t**>(header);
-                uint8_t* e = base + static_cast<int64_t>(i) * 0x30;
+                MapCell* e = &cells[i];
 
-                if (e[0x28] == 0xff) {
-                    e[0x28] = 0;
+                if (e->footprintCount == 0xff) {
+                    e->footprintCount = 0;
                 }
 
-                if (e[0x28] == 0) {
-                    uint8_t mask = static_cast<uint8_t>(1u << (e[0x29] & 0x1f));
-                    if ((mask & 2) == 0 && (mask & 1) == 0 && e[0x2a] == 0xff) {
-                        // Walk the AVL tree rooted at self+0xe8 for key == i.
-                        uint8_t* node = *reinterpret_cast<uint8_t**>(self + 0xe8);
+                if (e->footprintCount == 0) {
+                    uint8_t mask = static_cast<uint8_t>(1u << (e->terrainType & 0x1f));
+                    if ((mask & 2) == 0 && (mask & 1) == 0 && e->field_0x2A == 0xff) {
+                        // Walk the AVL tree rooted at +0xe8 for key == i.
+                        // LEFT: the +0xE8 tree's node has no declared type (int key +0,
+                        // left +0x10, right +0x18; its size is not settled).
+                        uint8_t* node = reinterpret_cast<uint8_t*>(field_0xE8);
                         while (node != nullptr) {
                             int32_t key = *reinterpret_cast<int32_t*>(node);
                             if (i < key) {
                                 node = *reinterpret_cast<uint8_t**>(node + 0x10);  // left
                             } else if (key >= i) {
-                                e[0x28] = 1;
+                                e->footprintCount = 1;
                                 break;
                             } else {
                                 node = *reinterpret_cast<uint8_t**>(node + 0x18);  // right
                             }
                         }
                     } else {
-                        e[0x28] = 1;
+                        e->footprintCount = 1;
                     }
                 }
 
-                width = *reinterpret_cast<int32_t*>(self + 0x00);
+                width = size;
             }
         }
 
@@ -295,19 +292,18 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
         // (0x14009c170) spills R9D to a home slot that is rewritten before it is read
         // (0x14009c365 / 0x14009c3e8) and overwrites R9D at 0x14009c26f. The body takes
         // this one argument.
-        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(selfPtr));
+        // LEFT: the zone refresh takes the map as int* (Action/exe_bodies.h).
+        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(this));
 
         // PORT GAP 0x14009e8c0 RegionSystem build: not ported; retail calls it here
         // (0x14009f2a6, RCX = this grid). The null arm is: nothing.
 
         if (GameUpdateLoop::_singleton != nullptr) {
-            void* gameWorld = GameUpdateLoop::_singleton;
-            void* worldGeometry = *reinterpret_cast<void**>(
-                reinterpret_cast<uint8_t*>(gameWorld) + 0x110);
+            GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+            WorldGeometry* worldGeometry = gameWorld->m_worldGeometry;
+            // LEFT: the road mesh rebuild takes (int64_t, uint32_t*) (Action/exe_bodies.h).
             Pf_RoadMeshRebuild_f370(reinterpret_cast<int64_t>(worldGeometry),
-                                     reinterpret_cast<uint32_t*>(selfPtr));
+                                     reinterpret_cast<uint32_t*>(this));
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }

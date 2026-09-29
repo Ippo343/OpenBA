@@ -762,7 +762,7 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
         void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
-            void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
+            Save::SavedState* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
             // Retail (0x1400b7b1b): `MOV [RSP+0xc0],RBX` with RBX = 0 — an EMPTY
             // String (null COW pointer), not String("") (a 1-byte "" buffer).
             const System::String nameStr;

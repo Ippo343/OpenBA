@@ -679,7 +679,7 @@ static void StartTown_SeedAvailableAgriculture(uint8_t* sc, void* game,
                                                int spawnX, int spawnY) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-    uint8_t* townMgr = static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
+    uint8_t* townMgr = reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
     void*    rng     = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
     if (!townMgr) return;
 
@@ -1039,7 +1039,7 @@ static struct {
 static void StartTown_RecountGatherable() {
     if (!g_demoGatherer.valid) return;
     void* gws = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
-    uint8_t* mapObj = gws ? static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gws)->m_game) : nullptr;   // B.3.8 bridge
+    uint8_t* mapObj = gws ? reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gws)->m_game) : nullptr;   // B.3.8 bridge
     const int width = mapObj ? *(int32_t*)mapObj : 0;
     uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
     if (!grid || width <= 0 || !g_demoGatherer.acceptList || g_demoGatherer.acceptN <= 0) return;
@@ -1114,7 +1114,7 @@ static inline char ST_CanPathTo(int* grid, uint32_t mask, uint32_t destCell, int
 
 static bool ST_SiteIsWorkable(int tx, int ty, int fw, int fh) {
     if (GameUpdateLoop::_singleton == nullptr) return true;
-    int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    int* grid = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
     if (!grid) return true;
     const int mapW = *grid;
     for (int yy = 0; yy < fh; ++yy) {
@@ -1591,7 +1591,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // Reported unconditionally when non-zero, because a silent residue reads exactly
         // like a clean placement right up until something walks the cell.
         if (GameUpdateLoop::_singleton != nullptr) {
-            uint8_t* mapObj = static_cast<uint8_t*>(GameUpdateLoop::_singleton->m_game);
+            uint8_t* mapObj = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton->m_game);
             uint8_t* grid   = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
             const int mw    = mapObj ? *(int32_t*)mapObj : 0;
             const uint32_t tidNat = NaturalResourceComponent::TypeId();   // caller batch CB6: was a lazy cache
@@ -2387,7 +2387,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         // 8-neighbour (0x1400a5ec0's admissibility test). The searcher keeps
                         // its own copy of these bytes and it is a verified byte-exact mirror.
                         int* navMap = (gw && reinterpret_cast<GameUpdateLoop*>(gw)->m_game)   // B.3.8 bridge
-                                    ? static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_game) : nullptr;   // B.3.8 bridge
+                                    ? reinterpret_cast<int*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_game) : nullptr;   // B.3.8 bridge
                         uintptr_t cellBase = navMap
                                            ? *(uintptr_t*)((uint8_t*)navMap + 0x80) : 0;
                         std::vector<uint8_t> reach;          // empty = test unavailable
@@ -2990,7 +2990,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
 
                 void* gws = (GameUpdateLoop::_singleton != nullptr)
                           ? GameUpdateLoop::_singleton : nullptr;
-                uint8_t* mapObj = gws ? static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gws)->m_game) : nullptr;   // B.3.8 bridge
+                uint8_t* mapObj = gws ? reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gws)->m_game) : nullptr;   // B.3.8 bridge
                 const int width = mapObj ? *(int32_t*)mapObj : 0;
                 uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
 
@@ -3188,7 +3188,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
 
             void* gw = (GameUpdateLoop::_singleton != nullptr)
                      ? GameUpdateLoop::_singleton : nullptr;
-            uint8_t* mapObj = gw ? static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_game) : nullptr;   // B.3.8 bridge
+            uint8_t* mapObj = gw ? reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_game) : nullptr;   // B.3.8 bridge
             const int width = mapObj ? *(int32_t*)mapObj : 0;
             uint8_t* grid = mapObj ? *(uint8_t**)(mapObj + 0x80) : nullptr;
 

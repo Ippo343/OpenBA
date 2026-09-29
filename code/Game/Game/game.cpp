@@ -18,6 +18,9 @@
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/CitizenBehavior.h"   // m_citizenList's class (B.4 GAME-a)
+#include "Entity/ComponentEntity.h"
+#include "Component/Component.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/StorageComponent.h"   // ENDGAME B.3.9 TR
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 TR
@@ -50,32 +53,67 @@ extern "C" GameContainer* Game_Ctor(GameContainer* self) {
 // The exe cell 0x1401c3de8 (B3R STORAGE; game.h).
 GameContainer* g_gameContainer = nullptr;
 
+// 0x140091a20 — queue a ComponentDescription for removal: appended to the
+// +0x120 list unless it is already there (the tree's Game_RemoveEntity).
+void CitizenBehavior::RemoveEntity(ComponentDescription* entity) {
+    // Check if entity is already in the removal queue
+    int count = field_0x128;
+    ComponentDescription** arr = field_0x120;
+    for (int i = 0; i < count; i++) {
+        if (arr[i] == entity) return;  // already queued
+    }
+
+    // Dynamic array push
+    int newCount = count + 1;
+    if (newCount != count) {
+        ComponentDescription** oldArr = arr;
+        field_0x128 = newCount;
+        int capacity = field_0x12C;
+        if (capacity < newCount) {
+            // Grow: triple capacity if non-empty, else use newCount
+            capacity = (count != 0) ? newCount * 3 : newCount;
+            field_0x12C = capacity;
+            field_0x120 = static_cast<ComponentDescription**>(
+                System::MemoryAllocator::MemAlloc((uint64_t)capacity * 8, 8));
+        }
+        ComponentDescription** newArr = field_0x120;
+        int copyStart = (oldArr == newArr) ? count : 0;
+        for (int i = copyStart; i < newCount; i++) {
+            if (i < count) {
+                newArr[i] = oldArr[i];  // copy existing
+            } else {
+                newArr[i] = entity;     // append new
+            }
+        }
+        if (oldArr != newArr) {
+            System::MemoryAllocator::MemFree(oldArr);
+        }
+    }
+}
+
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void Game_TriggerDisasterByType_Impl(int disasterType) {
     if (!::Object::ExternalFactory::_singleton) return;   // ENDGAME B.3.9 SS2 (merged)
 
-    void* factory = ::Object::ExternalFactory::_singleton;
-    void* gameWorld = GameUpdateLoop::_singleton;
+    const ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return;
-    void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
+    CitizenBehavior* citizenList = gameWorld->m_citizenList;   // gw+0xf0
 
     // Iterate all ComponentDescription-type externals
-    const ::Object::ExternalFactory* efactory =
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-    void* ext = const_cast<void*>(static_cast<const void*>(
-        efactory->FindNext(ComponentDescription::TypeId(), nullptr)));
+    const ::Object::External* ext = efactory->FindNext(ComponentDescription::TypeId(), nullptr);
     while (ext != nullptr) {
-        uintptr_t e = (uintptr_t)ext;
         if (::Object::IsDerivedFromNullSafe(ext, ComponentDescription::TypeId())) {
+            const ComponentDescription* desc = static_cast<const ComponentDescription*>(ext);
             // Find SelectDescription sub-component
-            int compCount = *(int*)(e + 0x30);
-            uintptr_t compArray = *(uintptr_t*)(e + 0x28);
+            int compCount = desc->_subDescCount;    // +0x30
+            Description** compArray = desc->_subDescs;   // +0x28
 
             // First pass: check if entity HAS a SelectDescription
             bool hasSelect = false;
             for (int i = 0; i < compCount; i++) {
-                void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+                const Description* comp = compArray[i];
+                uint32_t typeId = comp->Type();   // slot 2
                 if (typeId == SelectDescription::TypeId()) {
                     if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId()) && comp != nullptr) {
                         hasSelect = true;
@@ -86,66 +124,64 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
 
             if (hasSelect) {
                 // Second pass: find the SelectDescription and check type
-                void* selectDesc = nullptr;
+                const SelectDescription* selectDesc = nullptr;
                 for (int i = 0; i < compCount; i++) {
-                    void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+                    const Description* comp = compArray[i];
+                    uint32_t typeId = comp->Type();   // slot 2
                     if (typeId == SelectDescription::TypeId()) {
                         if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId())) {
-                            selectDesc = comp;
+                            selectDesc = static_cast<const SelectDescription*>(comp);
                         }
                         break;
                     }
                 }
                 // Check if SelectDescription.type (+0x40) matches requested disaster type
-                if (selectDesc && *(int*)((uintptr_t)selectDesc + 0x40) == disasterType) {
-                    Game_RemoveEntity_Impl(entityList, ext);
+                if (selectDesc && static_cast<int>(selectDesc->_u40) == disasterType) {
+                    citizenList->RemoveEntity(const_cast<ComponentDescription*>(desc));   // 0x140091a20
                 }
             }
         }
-        ext = const_cast<void*>(static_cast<const void*>(
-            efactory->FindNext(ComponentDescription::TypeId(),
-                               reinterpret_cast<const ::Object::External*>(ext))));
+        ext = efactory->FindNext(ComponentDescription::TypeId(), ext);
     }
 }
 
 void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count) {
-    int64_t* param_1 = (int64_t*)citizenListPtr;
+    // LEFT: the debug UI (Dialog/debugui.cpp) hands the citizen list as void*.
+    CitizenBehavior* citizenList = reinterpret_cast<CitizenBehavior*>(citizenListPtr);
 
     // Dynamic array for matching entities
     // Ghidra uses local_48 = array ptr, local_40 = packed CONCAT44(capacity, count)
-    void* matchArr = nullptr;
+    int64_t* matchArr = nullptr;
     int matchCount = 0;
     int matchCapacity = 0;
 
-    // Phase 1: Build array of entity pointers whose NaturalResourceComponent flags match resourceFlag
-    // Entity array is raw pointers: param_1[0x22] = array ptr, param_1[0x23] = count
-    if ((int)param_1[0x23] > 0) {
-        int64_t entityOffset = 0;
+    // Phase 1: Build array of entity pointers whose RawMaterialDescription flags match
+    // resourceFlag. The description array is +0x110 (data) / +0x118 (count).
+    if (citizenList->field_0x118 > 0) {
         int entityIdx = 0;
         do {
-            int64_t entity = *(int64_t*)(entityOffset + param_1[0x22]);
+            ComponentDescription* entityDesc = citizenList->field_0x110[entityIdx];
+            // The match array carries the description as the int64 the storage
+            // helpers take (Pf_StorageCanAccept_cd80 / ActRm_StorageAdd_d000).
+            int64_t entity = reinterpret_cast<int64_t>(entityDesc);
 
-            // Find NaturalResourceComponent on this entity (raw component array at +0x28/+0x30)
-            void* natResComp = nullptr;
+            // Find the RawMaterialDescription among its sub-descriptions (+0x28/+0x30)
+            const RawMaterialDescription* natResComp = nullptr;
             int compIdx = 0;
-            int64_t compOffset = 0;
-            if (*(int*)(entity + 0x30) > 0) {
+            if (entityDesc->_subDescCount > 0) {
                 do {
-                    void* comp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
-                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+                    const Description* comp = entityDesc->_subDescs[compIdx];
+                    uint32_t typeId = comp->Type();   // slot 2
                     if (typeId == RawMaterialDescription::TypeId()) {
-                        void* foundComp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
-                        bool isDerived = ::Object::IsDerivedFromNullSafe(foundComp, RawMaterialDescription::TypeId());
+                        bool isDerived = ::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId());
                         natResComp = nullptr;
                         if (isDerived) {
-                            natResComp = foundComp;
+                            natResComp = static_cast<const RawMaterialDescription*>(comp);
                         }
                         goto phase1_found;
                     }
                     compIdx++;
-                    compOffset++;
-                } while (compIdx < *(int*)(entity + 0x30));
+                } while (compIdx < entityDesc->_subDescCount);
             }
             natResComp = nullptr;
 
@@ -153,9 +189,9 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
             {
                 // Check resource flags match (natResComp+0x5c & resourceFlag)
                 // Original code does NOT null-check — relies on entities always having the component
-                void* oldArr = matchArr;
+                int64_t* oldArr = matchArr;
                 int oldCount = matchCount;
-                if ((*(uint32_t*)((uintptr_t)natResComp + 0x5c) & resourceFlag) != 0) {
+                if ((natResComp->_flags & resourceFlag) != 0) {
                     int newCount = matchCount + 1;
                     if (newCount != matchCount) {  // overflow guard (matches original JZ)
                         matchCount = newCount;
@@ -165,7 +201,8 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                             if (oldArr != nullptr) {
                                 matchCapacity = newCount * 3;
                             }
-                            matchArr = System::MemoryAllocator::MemAlloc((uint64_t)matchCapacity * 8, 8);
+                            matchArr = static_cast<int64_t*>(
+                                System::MemoryAllocator::MemAlloc((uint64_t)matchCapacity * 8, 8));
                         }
 
                         // Copy old entries + append new entity
@@ -177,8 +214,8 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                         }
                         int copyIdx = (int)copyStart;
                         if (copyIdx < newCount) {
-                            int64_t* dstSlot = (int64_t*)((int64_t)matchArr + (int64_t)copyIdx * 8);
-                            int64_t* srcSlot = (int64_t*)((int64_t)oldArr + (int64_t)copyIdx * 8);
+                            int64_t* dstSlot = matchArr + copyIdx;
+                            int64_t* srcSlot = oldArr + copyIdx;
                             do {
                                 if (dstSlot != nullptr) {
                                     int64_t* source = &entity;
@@ -202,40 +239,36 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
             }
 
             entityIdx++;
-            entityOffset += 8;
-        } while (entityIdx < (int)param_1[0x23]);
+        } while (entityIdx < citizenList->field_0x118);
 
         // Phase 2: Round-robin distribute items across citizens' StorageComponents
-        // Citizens are InternalBasePtr entries: param_1[0] = array ptr, param_1[1] = count
+        // Citizens are InternalBasePtr entries: +0x00 = array ptr, +0x08 = count
         if (matchCount > 0 && count > 0) {
             int spawned = 0;
 
             while (true) {
                 bool anyAdded = false;
                 int citizenIdx = 0;
-                if ((int)param_1[1] < 1) break;
+                if (citizenList->field_0x08 < 1) break;
 
-                int64_t citizenOffset = 0;
                 do {
                     // Each citizen entry is an InternalBasePtr — load then CheckPtr
-                    int64_t citizenIBP = *(int64_t*)(citizenOffset + *param_1);
-                    int64_t citizen = citizenIBP;
+                    ComponentEntity* citizen = citizenList->field_0x00[citizenIdx];
 
                     // Find StorageComponent on citizen
                     // Citizen component array is IBP entries at citizen+0x30, count at citizen+0x38
-                    void* storageComp = nullptr;
+                    Component* storageComp = nullptr;
                     int cCompIdx = 0;
-                    int64_t cCompOffset = 0;
-                    if (*(int*)(citizen + 0x38) > 0) {
+                    if (citizen->_componentCount > 0) {
                         do {
                             // Each component entry is an InternalBasePtr — CheckPtr before reading
-                            void* compIBP = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
+                            const Object::InternalPtr<Component>* compIBP = &citizen->_components[cCompIdx];
 
-                            uint32_t typeId = reinterpret_cast<Object::Base*>(*(void**)compIBP)->Type();   // B.3.x bridge (slot 2)
+                            uint32_t typeId = compIBP->Get()->Type();   // slot 2
                             if (typeId == StorageComponent::TypeId()) {
                                 // Re-CheckPtr the IBP slot and read again
-                                void* compIBP2 = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
-                                void* compVal = *(void**)compIBP2;
+                                const Object::InternalPtr<Component>* compIBP2 = &citizen->_components[cCompIdx];
+                                Component* compVal = compIBP2->Get();
 
                                 bool isDerived = ::Object::IsDerivedFromNullSafe(compVal, StorageComponent::TypeId());
                                 storageComp = nullptr;
@@ -245,21 +278,19 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                                 goto phase2_found;
                             }
                             cCompIdx++;
-                            cCompOffset++;
-                        } while (cCompIdx < *(int*)(citizen + 0x38));
+                        } while (cCompIdx < citizen->_componentCount);
                     }
                     storageComp = nullptr;
 
                 phase2_found:
                     {
-                        // Wrap found storage component in an InternalBasePtr
-                        int64_t storageIBP = 0;
-                        new (&storageIBP) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
+                        // Wrap found storage component in an InternalBasePtr: the
+                        // storage helpers take its value as an int64.
+                        int64_t storageIBP = reinterpret_cast<int64_t>(storageComp);
 
                         // Try to add one item via round-robin
                         if (spawned < count) {
-                            int64_t* matchSlot = (int64_t*)((int64_t)matchArr + (int64_t)(spawned % matchCount) * 8);
+                            int64_t* matchSlot = matchArr + (spawned % matchCount);
 
                             // CheckPtr the storage IBP before use
 
@@ -277,8 +308,7 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
                     }
 
                     citizenIdx++;
-                    citizenOffset += 8;
-                } while (citizenIdx < (int)param_1[1]);
+                } while (citizenIdx < citizenList->field_0x08);
 
                 if (!anyAdded || spawned >= count) break;
             }

@@ -33,12 +33,13 @@
 #include "engine/UpdateLoop.h"   // -Iruntime/types: Engine::UpdateLoop
 #include "system/String.h"       // -Iruntime/types: System::String (by value at +0x28)
 
-// B.4 W0-H2 (H4): the pointer members are typed; forward declarations only
-// (layout-neutral, proven by the offset asserts below). The members still
-// `void*` name their class in the comment; W0-H2's hand-in lists why each
-// stays (a void* ctor parameter, a Runtime POD-mirror construction / read, an
-// allocation through a void* helper, or no class in the tree yet).
-namespace Graphics    { class Material; class SunLight; class MeshInstance; }
+// B.4 W0-H2 / GAME-a (H4): every pointer member is typed; forward declarations
+// only (layout-neutral, proven by the offset asserts below). The member names
+// m_tutorial (a WorkScheduler) and m_imageCapture (the Minimap) are the tree's.
+namespace Graphics    { class Material; class SunLight; class MeshInstance;
+                        class Scene; class AnimationManager; class Renderer; }
+namespace Picking     { class Scene; }
+namespace Audio       { class Scene; }
 namespace UI          { class UserInterface; }
 namespace System      { class Random; }
 namespace Save        { class SaveLoad; }
@@ -48,15 +49,30 @@ class ProfessionList;     // Game/ProfessionList.h (block W0-H1)
 class WorldGeometry;      // Game/WorldGeometry.h
 class PlayerController;   // Game/PlayerController.h
 class PlayerToolManager;  // Game/PlayerToolManager.h
+class Map;                // Game/Map.h (B4 GAME-a)
+class EntityList;         // Entity/EntityList.h (block WORK-a)
+class CitizenBehavior;    // Entity/CitizenBehavior.h (block WORK-a)
+class CharacterGrid;      // Component/CharacterGrid.h (block COMP-a)
+class Calendar;           // Game/Calendar.h (B4 GAME-a)
+class WeatherSimulation;  // Game/WeatherSimulation.h (B4 GAME-a)
+class WorkScheduler;      // Game/WorkScheduler.h (B4 GAME-a)
+class EventLog;           // Game/EventLog.h (B4 GAME-a)
+class MusicPlayer;        // Game/MusicPlayer.h (B4 GAME-a)
+class Minimap;            // Game/Minimap.h (B4 GAME-a)
+class MapGenerator;       // Game/MapGenerator.h
+class TerrainGenerator;   // Game/TerrainGenerator.h
+class ClimateGenerator;   // Game/ClimateGenerator.h
+namespace Save        { class SavedState; }
+namespace IO          { class Stream; }
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
     // 0x140098060. `scenarioIbp` is the InternalBasePtr's 8 bytes (retail copies
     // `*param_3`); `disasters` is retail's char p8: +0xD0 = p8 ? 0 : 0xF0.
-    GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
+    GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
                    const System::String& saveName, int32_t seed,
-                   int32_t mapSize, bool disasters, void* mapConfig,
-                   void* terrainConfig, void* climateConfig);
+                   int32_t mapSize, bool disasters, MapGenerator* mapConfig,
+                   TerrainGenerator* terrainConfig, ClimateGenerator* climateConfig);
 
     // [0] 0x140019dd0's body: g_pGameWorldSingleton = 0; then ~String(+0x28) and
     // ~UpdateLoop are the compiler's member/base chain, in retail's order.
@@ -82,6 +98,11 @@ public:
 
     void OnScenarioComplete();                                   // 0x140096830
 
+    // 0x140095a90: the master serializer SaveRestore (0x1400959c0) calls with
+    // the stream, the SavedState and the out int (B4 GAME-a: a member; retail's
+    // is non-virtual and unnamed). Body in gameupdateloop_serialize.cpp.
+    void SerializeAll(IO::Stream& stream, Save::SavedState* state, int* outParam);
+
     static const void* Vtable();
 
     // The exe cell 0x1401c3dd8 (B3R STORAGE): the live loop. Load stores `this`
@@ -95,25 +116,30 @@ public:
     int32_t  m_seed;                // +0x30  map seed (seeds the Random at +0xD8; newgamedialog writes it)
     int32_t  m_mapSize;             // +0x34  map size index (the terrain size-table row)
     int64_t  m_gameTime;            // +0x38  accumulated game time (Time)
-    void*    m_mapConfig;           // +0x40  ExternalPtr<MapGenerator> (ctor p9; serializer 0x140019ec0)
-    void*    m_terrainConfig;       // +0x48  ExternalPtr<TerrainGenerator> (ctor p10; serializer 0x14001a0c0)
-    void*    m_climateConfig;       // +0x50  ExternalPtr<ClimateGenerator> (ctor p11; serializer 0x1400194a0)
-    void*    m_savedState;          // +0x58  Save::SavedState*, non-null = loading from save (ctor p2)
+    MapGenerator*     m_mapConfig;     // +0x40  ExternalPtr<MapGenerator> (ctor p9; serializer 0x140019ec0)
+    TerrainGenerator* m_terrainConfig; // +0x48  ExternalPtr<TerrainGenerator> (ctor p10; serializer 0x14001a0c0)
+    ClimateGenerator* m_climateConfig; // +0x50  ExternalPtr<ClimateGenerator> (ctor p11; serializer 0x1400194a0)
+    Save::SavedState* m_savedState;    // +0x58  non-null = loading from save (ctor p2)
 
     // Rendering subsystems (created in Load, destroyed in Shutdown)
-    void*    m_graphicsScene;       // +0x60  Graphics::Scene*, MemAlloc(0x78) in Load
-    void*    m_animationManager;    // +0x68  Graphics::AnimationManager*, MemAlloc(0x9d8) in Load
-    void*    m_pickingScene;        // +0x70  Picking::Scene*, MemAlloc(0x60) in Load
-    void*    m_audioScene;          // +0x78  Audio::Scene*, MemAlloc(0x38) in Load
+    // B.4 GAME-a (H4): typed. Load / Shutdown still build and destroy the
+    // Graphics three and Audio::Scene through the Runtime ctor / dtor doors
+    // (RtGraphics_* on the POD mirrors, RtAudio_Scene_*): the real classes'
+    // ctors / dtors are declared and undefined (runtime/types/graphics/Scene.h,
+    // Camera.h, AnimationManager.h), so the order of calls is main's.
+    Graphics::Scene*            m_graphicsScene;    // +0x60  MemAlloc(0x78) in Load
+    Graphics::AnimationManager* m_animationManager; // +0x68  MemAlloc(0x9d8) in Load
+    Picking::Scene*             m_pickingScene;     // +0x70  MemAlloc(0x60) in Load
+    Audio::Scene*               m_audioScene;       // +0x78  MemAlloc(0x38) in Load
     // +0x80: MusicPlayer* — MemAlloc(0x18,4) {+0x00 int32 currentTrackId = -1,
     //   +0x08 MusicTrackList* = Find("Game/MusicTracks.rsc"), +0x10 int64 0};
     //   ticked by 0x1400a40e0 (MusicPlayer::Update).
-    void*    m_musicPlayer;         // +0x80
+    MusicPlayer* m_musicPlayer;     // +0x80
     // +0x88: loose Morton (Z-order) quadtree over characters, MemAlloc(0x60,8),
     //   ctor 0x1400182b0 (8 levels, 0x5555 cells). NOT a MusicPlayer and NOT a
     //   Transform (the +0x80/+0x88 names were swapped until 2026-08-30).
-    void*    m_characterGrid;       // +0x88
-    void*    m_renderer;            // +0x90  Graphics::Renderer*, MemAlloc(0x50) in Load
+    CharacterGrid* m_characterGrid; // +0x88
+    Graphics::Renderer* m_renderer; // +0x90  MemAlloc(0x50) in Load
     UI::UserInterface* m_userInterface; // +0x98  MemAlloc(0x128) in Load
 
     // Resource references (looked up in Load from the ExternalList). Retail's
@@ -138,9 +164,9 @@ public:
     // Game systems (created in Load, destroyed in Shutdown)
     System::Random* m_random;       // +0xD8  MemAlloc(0x9c4) + Random(seed +0x30) in Load
     PlayerController* m_playerController; // +0xE0  camera controller, MemAlloc(0x10c) + ctor 0x1400985b0
-    void*    m_entityList;          // +0xE8  EntityList*, MemAlloc(0xe8) + ctor 0x1400c3f90 in Load
-    void*    m_citizenList;         // +0xF0  CitizenBehavior* (town manager), MemAlloc(0x1c0) + ctor 0x140090a30 in Load
-    void*    m_game;                // +0xF8  Map* (Game/Map.h): the world map (tile grid), MemAlloc(0xf8) + ctor 0x14009ee70
+    EntityList* m_entityList;       // +0xE8  MemAlloc(0xe8) + ctor 0x1400c3f90 in Load
+    CitizenBehavior* m_citizenList; // +0xF0  town manager, MemAlloc(0x1c0) + ctor 0x140090a30 in Load
+    Map*     m_game;                // +0xF8  the world map (tile grid), MemAlloc(0xf8) + ctor 0x14009ee70
 
     // Scene geometry objects (added to Graphics::Scene as globals)
     Graphics::SunLight*     m_sunLight;      // +0x100 MemAlloc(0x108) in Load (exe table 0x14015e290)
@@ -148,7 +174,9 @@ public:
     WorldGeometry*          m_worldGeometry; // +0x110 terrain, MemAlloc(0x230) + ctor 0x1400b00e0
 
     // Game managers
-    void*    m_tutorial;            // +0x118 Tutorial* (0x138 bytes)
+    // +0x118: the work scheduler (0x138 bytes), NOT a Tutorial: the member keeps
+    //   the tree's name until the coordinator renames it (other blocks read it).
+    WorkScheduler* m_tutorial;      // +0x118
     // +0x120: NOT an EntityUI (that is a 0x48-byte UI::DialogController). Load
     //   builds it with MemAlloc(0xb0, 4) + ctor 0x1401025c0 (no vtable: an
     //   InternalBasePtr at +0x00, the CURRENT TOOL InternalBasePtr at +0x28 that
@@ -156,15 +184,17 @@ public:
     //   through the tool's slots, +0x30 the paused byte, +0x34 the game speed
     //   (ctor 1), a 5-entry Array at +0x70). Renamed from m_entityUI (B.4 W0-H2).
     PlayerToolManager* m_toolManager; // +0x120 player tool manager (0xB0 bytes)
-    void*    m_dayCounter;          // +0x128 DayCounter* (0x18 bytes: {day, accumulated, dayLength})
-    void*    m_weather;             // +0x130 Weather* (0x78 bytes)
-    void*    m_eventNotifier;       // +0x138 EventNotifier* (0x28 bytes)
+    Calendar* m_dayCounter;         // +0x128 the year clock (0x18 bytes: {year, yearTime, yearLength})
+    WeatherSimulation* m_weather;   // +0x130 the weather simulation (0x78 bytes; not the Weather resource)
+    EventLog* m_eventNotifier;      // +0x138 the event log (0x28 bytes)
     Save::SaveLoad* m_saveLoad;     // +0x140 MemAlloc(0x90) in Load
-    void*    m_imageCapture;        // +0x148 ImageCapture* (0x38 bytes)
+    // +0x148: the minimap image (0x38 bytes), not an image capture: the member
+    //   keeps the tree's name until the coordinator renames it.
+    Minimap* m_imageCapture;        // +0x148
 
     // Scenario/achievement
     Achievement::AchievementInstance* m_scenarioInstance; // +0x150 InternalBasePtr<AchievementInstance> (ctor: *p3)
-    uint8_t  m_scenarioCompleted;   // +0x158 set to 1 when scenario met/failed
+    bool     m_scenarioCompleted;   // +0x158 set to 1 when scenario met/failed (Serialize bool, 0x140095a90)
     uint8_t  _pad159[3];            // +0x159
     int32_t  m_scenarioIndex;       // +0x15C index into scenario list (-1 = none)
 };

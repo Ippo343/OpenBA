@@ -37,6 +37,8 @@
 #include <initializer_list>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Game/Minimap.h"             // Game_ImageCaptureDtor's class (B.4 GAME-a)
+#include "Game/WeatherSimulation.h"   // Game_WeatherDtor's class (B.4 GAME-a)
 #include "Work/exe_bodies.h"   // WorkBase_TreeNodeFree_e320
 
 // ------------------------------------------------------------------
@@ -174,23 +176,22 @@ void Game_MusicPlayerDtor(void* self) {
 // FUN_1400a4fc0 (gameupdateloop.cpp, ImageCapture_Dtor) — virtual scalar-dtor
 // of the two sub-objects at +8/+0x10, then frees the two buffers at +0x28/+0x18.
 // ------------------------------------------------------------------
-void Game_ImageCaptureDtor(void* self) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(self);
+void Game_ImageCaptureDtor(Minimap* self) {
     // Retail is (**(code **)*puVar1)(puVar1, 1): deref the object to get its
     // vtable, deref THAT to get slot 0, then call. This port had only one deref
     // and so called the vtable's own address as if it were code — EXEC of
     // g_NoiseUI_ImageBufferVtable_Standalone when GameUpdateLoop::Shutdown
     // finally reached the minimap ImageBuffers.
-    for (int off : {8, 0x10}) {
-        void* obj = *reinterpret_cast<void**>(b + off);
+    for (Video::ImageBuffer* obj : {self->terrainImage, self->overlayImage}) {   // +0x08, +0x10
         if (!obj) continue;
-        delete reinterpret_cast<Video::ImageBuffer*>(obj);   // B.3.x bridge (slot 0, free)
+        delete obj;   // slot 0, free
     }
     // ENDGAME B.3.2 step 2: two trivial-element `~Array`s (headers at +0x28 and
     // +0x18, in that order — re-decompiled 2026-09-13: MemFree, data = 0, one
-    // qword over size+capacity), element types not pinned; see MusicPlayerDtor.
-    reinterpret_cast<rtcoll::ArrayHdr*>(b + 0x28)->~Array();   // B.3.2 bridge
-    reinterpret_cast<rtcoll::ArrayHdr*>(b + 0x18)->~Array();   // B.3.2 bridge
+    // qword over size+capacity).
+    // LEFT: the pixel arrays are declared as the Array's three fields (H5).
+    reinterpret_cast<rtcoll::ArrayHdr*>(&self->overlayPixels)->~Array();   // B.3.2 bridge
+    reinterpret_cast<rtcoll::ArrayHdr*>(&self->terrainPixels)->~Array();   // B.3.2 bridge
 }
 
 // ------------------------------------------------------------------
@@ -220,22 +221,20 @@ void Game_MenuSceneArrayDtor(void* self) {
 // array at +0x50 (count +0x58) from the global scene and virtual-dtor it, then
 // free the two arrays at +0x60 / +0x50. Scene = (*g_pGameWorldSingleton)+0x60.
 // ------------------------------------------------------------------
-void Game_WeatherDtor(void* self) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(self);
-    int count = *reinterpret_cast<int*>(b + 0x58);
-    void** arr = *reinterpret_cast<void***>(b + 0x50);
-    void* gw = GameUpdateLoop::_singleton;
-    void* scene = gw ? reinterpret_cast<GameUpdateLoop*>(gw)->m_graphicsScene : nullptr;   // B.3.8 bridge
+void Game_WeatherDtor(WeatherSimulation* self) {
+    int count = self->effectCount;                 // +0x58
+    Graphics::Geometry** arr = self->effects;      // +0x50
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    Graphics::Scene* scene = gw ? gw->m_graphicsScene : nullptr;
     if (arr && count > 0) {
         for (int i = 0; i < count; ++i) {
-            void* geom = arr[i];
+            Graphics::Geometry* geom = arr[i];
             if (geom) {
                 if (scene)
-                    reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
-                        reinterpret_cast<Graphics::Geometry*>(geom));   // B.3.5 bridge
+                    scene->RemoveGlobalObject(geom);   // B.3.5 bridge
                 // Retail: (**(code **)*puVar2)(puVar2, 1) — object -> vtable ->
                 // slot 0. Same one-deref-short bug as Game_ImageCaptureDtor above.
-                delete reinterpret_cast<Graphics::Geometry*>(geom);   // B.3.x bridge (slot 0, free)
+                delete geom;   // slot 0, free
             }
         }
     }
@@ -245,8 +244,9 @@ void Game_WeatherDtor(void* self) {
     // (re-decompiled 2026-09-13: MemFree, data = 0, one qword over
     // size+capacity). +0x50 holds Geometry* — `Array<void*>`, trait-derived:
     // byteCopy, no init, no destroy, align 8. +0x60's element is not pinned.
-    reinterpret_cast<rtcoll::ArrayHdr*>(b + 0x60)->~Array();          // B.3.2 bridge
-    reinterpret_cast<Collection::Array<void*>*>(b + 0x50)->~Array();  // B.3.2 bridge
+    // LEFT: both arrays are declared as the Array's three fields (H5).
+    reinterpret_cast<rtcoll::ArrayHdr*>(&self->emitters)->~Array();          // B.3.2 bridge
+    reinterpret_cast<Collection::Array<void*>*>(&self->effects)->~Array();  // B.3.2 bridge
 }
 
 // ------------------------------------------------------------------

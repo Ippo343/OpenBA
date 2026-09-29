@@ -149,7 +149,7 @@ static constexpr float kRayMaxDist = 100.0f;   // DAT_140172208
 // grid from the singleton and only refine when param_1 agrees (or is null).
 static int* CanonicalMapGrid(void* game) {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
-    int* canonical = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    int* canonical = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
     if (!canonical) return nullptr;
     if (game && game != (void*)canonical) {
         static bool warned = false;
