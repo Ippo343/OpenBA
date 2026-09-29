@@ -575,9 +575,8 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
             FollowDialog* fd = ::new (followMem) FollowDialog(
                 _dialog->_ui, checkedRes, Object::InternalPtr<UI::DialogInstance>());
 
-            fd->dataB8 = citizenAIRef;                 // entity to follow (the citizen IBP)
-            // LEFT: FollowDialog::dataC0 is uint64_t (DLG-b's header).
-            fd->dataC0 = reinterpret_cast<uint64_t>(this);   // controller back-reference
+            fd->citizen = reinterpret_cast<CitizenComponent*>(citizenAIRef);   // entity to follow (the citizen IBP)
+            fd->citizenUI = this;                      // controller back-reference
             // +0xC8 textFollow / +0xD0 textAction: zeroed by the ctor, set by slot 4.
 
             resultPtr = fd;

@@ -4,7 +4,7 @@
 // HotKeyToolTipUI (0x30 bytes) is the per-element DialogController attached to
 // toolbar (and other) buttons that displays a button's keyboard shortcut. Each
 // time the dialog refreshes (Slot4 / "Serialize") it:
-//   1. reads the controlled element's shortcut id at element+0xC0 (set by
+//   1. reads the controlled button's shortcut id, _keyIndex (set by
 //      ToolbarDialog_Ctor_Impl when it auto-assigns Toolbar0..8 / Tool0..9 ids),
 //   2. resolves that id to a (device, keyCode) pair via Input::KeyMap,
 //   3. formats "<deviceName><keyCode>" (e.g. "Keyboard1") and looks it up in the
@@ -41,30 +41,22 @@
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/ButtonElement.h"
 #include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
 
 namespace Game {
 
 
 // Controller layout (shared DialogController base, see buildrequirementui.cpp):
-//   +0x18 = dialog instance (InternalBasePtr<DialogInstance>)
-//   +0x28 = controlled element / datasource (InternalBasePtr<Object::Internal>)
+//   _dialog     = the dialog instance
+//   _dataSource = the controlled element (the button)
 
-// Live Input::KeyMap (maps shortcut id -> device/key). Triple-deref of the
-// exref slot — identical to optionsdialog.cpp's GetActualKeyMap. Proven path:
-// SetStandaloneKeyMap publishes the Engine[+0x6d8] keymap into this chain.
-static void* GetActualKeyMap() {
+// Live Input::KeyMap (maps shortcut id -> device/key): the Configuration's
+// first field. Proven path: SetStandaloneKeyMap publishes the Engine[+0x6d8]
+// keymap into this chain.
+static const Input::KeyMap* GetActualKeyMap() {
     if (Input::Configuration::_singleton == nullptr) return nullptr;
-    void* step2 = Input::Configuration::_singleton;
-    if (!step2) return nullptr;
-    return *(void**)step2;
-}
-
-// The Game container object (holds the keyNames StringTable at +0xD0). Single
-// deref of g_pKeyMapSingleton (the slot holds the container pointer).
-static void* GetKeyMapContainer() {
-    if (g_gameContainer == nullptr) return nullptr;
-    return g_gameContainer;
+    return Input::Configuration::_singleton->_keyMap;
 }
 
 // Port of FUN_140099c20: build a UI::String for the (device,key) pair by
@@ -79,7 +71,7 @@ static void* GetKeyMapContainer() {
 // the substitution is exact.
 void Hotkey_BuildKeyName(void* retval, int device, int keyIndex);
 void Hotkey_BuildKeyName(void* retval, int device, int keyIndex) {
-    void* container = GetKeyMapContainer();
+    GameContainer* container = g_gameContainer;
     if (!container) return;
 
     System::String tempStr;
@@ -91,34 +83,29 @@ void Hotkey_BuildKeyName(void* retval, int device, int keyIndex) {
         tempStr = System::String::Format("%s%i", devName, keyIndex);
     }
 
-    uint64_t keyNamesTable = *(uint64_t*)((uintptr_t)container + 0xD0);
-    ::new (retval) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(keyNamesTable)), tempStr);  // B.3.6 bridge; (retbuf, table, name)
+    ::new (retval) UI::String(container->keyNames, tempStr);   // (retbuf, table, name)
 }
 
 // Find the named TextElement in the controller's dialog, resolve the bound key
 // into a localized System::String, and set it as the element's parameter.
-static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
-                           void* keyMap, int shortcutId) {
+static void FillHotKeyText(HotKeyToolTipUI* self, const char* elemName, int paramIndex,
+                           const Input::KeyMap* keyMap, int shortcutId) {
     System::String nameStr(elemName);
-    void* dlgInst = *(void**)((uintptr_t)self + 0x18);
-    uint64_t retval = 0;
-    ::new (&retval) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dlgInst)->FindElement(nameStr));  // B.3.6 bridge
-
-    void* textElem = (void*)retval;
+    UI::TextElement* textElem =
+        static_cast<UI::TextElement*>(self->_dialog->FindElement(nameStr).Get());
     if (!textElem) return;
 
-    int input  = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetInputForId(shortcutId, 0);  // B.3.7 bridge
-    int device = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetDeviceForId(shortcutId, 0);  // B.3.7 bridge
+    int input  = keyMap->GetInputForId(shortcutId, 0);
+    int device = keyMap->GetDeviceForId(shortcutId, 0);
 
-    uint8_t uiStr[16];
-    Hotkey_BuildKeyName(uiStr, device, input);
+    UI::String uiStr;
+    Hotkey_BuildKeyName(&uiStr, device, input);
 
     // UI::String -> System::String (member, hidden retval). TextElement params
     // take a System::String; the converted string owns a ref released by its dtor.
-    System::String sysStr;
-    ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
+    System::String sysStr(uiStr.operator System::String());
 
-    reinterpret_cast<UI::TextElement*>(textElem)->SetParameter(paramIndex, sysStr);  // B.3.6 bridge
+    textElem->SetParameter(paramIndex, sysStr);
 }
 
 }  // namespace Game
@@ -126,9 +113,9 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
 // ---- HotKeyToolTipUI: PROMOTED to the real reimpl (2026-06-28) ---------------
 // This controller is bound to the "textHotKey"/"textToolTip" TextElements of
 // every toolbar button. Its Slot4 (Serialize, +0x20) reads the button's
-// auto-assigned shortcut id (element+0xC0), resolves it through Input::KeyMap +
-// the keyNames StringTable, and fills the hotkey text. The generic stub left
-// Slot4 a no-op, so the buttons showed the .rsc placeholder "[]" (empty
+// auto-assigned shortcut id (ButtonElement::_keyIndex), resolves it through
+// Input::KeyMap + the keyNames StringTable, and fills the hotkey text. The generic
+// stub left Slot4 a no-op, so the buttons showed the .rsc placeholder "[]" (empty
 // brackets). Wiring Slot4 to the real HotKeyToolTipUI_Slot4 restores the key
 // display. Construction stays the stub alloc+zero+vtable; the engine fills the
 // base fields (dialog +0x18, datasource +0x28) afterward. Same shape as the
@@ -144,17 +131,15 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
 // [4] 0x14006a980.
 void HotKeyToolTipUI::OnCreated() {
     // Resolve the controlled element (the button) and read its shortcut id.
-    void* obj = *(void**)((uintptr_t)this + 0x28);
-    void* elem = (obj && ::Object::IsDerivedFromNullSafe(obj, UI::Element::TypeId())) ? obj : nullptr;
+    Object::Base* obj = _dataSource;
+    if (!(obj && ::Object::IsDerivedFromNullSafe(obj, UI::Element::TypeId()))) return;
+    // The IsDerivedFrom check is UI::Element's; the shortcut id is the button's.
+    UI::ButtonElement* button = static_cast<UI::ButtonElement*>(obj);
 
-    uint64_t elemIbp = 0;
-    new (&elemIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
-    if (!elemIbp) return;
-
-    int shortcutId = *(int*)((uintptr_t)elemIbp + 0xC0);
+    int shortcutId = button->_keyIndex;
     if (shortcutId < 0) return;  // no shortcut assigned -> leave default
 
-    void* keyMap = Game::GetActualKeyMap();
+    const Input::KeyMap* keyMap = Game::GetActualKeyMap();
     if (!keyMap) return;
 
 

@@ -110,8 +110,8 @@ UNIT_TEST(dlg_message_dialog_slots) {
 UNIT_TEST(dlg_event_dialogs) {
     CHECK_EQ(sizeof(EventNotifyDialog), (size_t)0xf0);
     CHECK_EQ(sizeof(EventPopupDialog),  (size_t)0xc0);
-    CHECK_EQ(offsetof(EventNotifyDialog, dataC4), (size_t)0xc4);
-    CHECK_EQ(offsetof(EventNotifyDialog, dataE8), (size_t)0xe8);
+    CHECK_EQ(offsetof(EventNotifyDialog, lastEventIndex), (size_t)0xc4);
+    CHECK_EQ(offsetof(EventNotifyDialog, ribbonNotify), (size_t)0xe8);
     CHECK_EQ(offsetof(EventPopupDialog, eventIndex), (size_t)0xb8);
     CheckShape<EventNotifyDialog>();
     CheckShape<EventPopupDialog>();
@@ -138,13 +138,13 @@ UNIT_TEST(dlg_loader_autosave_dialogs) {
 
 UNIT_TEST(dlg_mainmenu_mapparams_dialogs) {
     CHECK_EQ(sizeof(MainMenuDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(MainMenuDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(MainMenuDialog, dataC0), (size_t)0xc0);
+    CHECK_EQ(offsetof(MainMenuDialog, game), (size_t)0xb8);
+    CHECK_EQ(offsetof(MainMenuDialog, menuLoop), (size_t)0xc0);
     CheckShape<MainMenuDialog>();
     CheckDialogInstanceSlots<MainMenuDialog>();
     CHECK_EQ(sizeof(MapParamsDialog), (size_t)0xf8);
-    CHECK_EQ(offsetof(MapParamsDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(MapParamsDialog, dataF0), (size_t)0xf0);
+    CHECK_EQ(offsetof(MapParamsDialog, editName), (size_t)0xb8);
+    CHECK_EQ(offsetof(MapParamsDialog, buttonOk), (size_t)0xf0);
     CheckShape<MapParamsDialog>();
     CheckDialogInstanceSlots<MapParamsDialog>();
 }
@@ -157,8 +157,8 @@ UNIT_TEST(dlg_achievement_goal_dialogs) {
     CheckShape<AchievementDialog>();
     CheckDialogInstanceSlots<AchievementDialog>();
     CHECK_EQ(sizeof(GoalDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(GoalDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(GoalDialog, dataC0), (size_t)0xc0);
+    CHECK_EQ(offsetof(GoalDialog, goals), (size_t)0xb8);
+    CHECK_EQ(offsetof(GoalDialog, goals) + 8, (size_t)0xc0);
     CheckShape<GoalDialog>();
     CheckDialogInstanceSlots<GoalDialog>();
 }
@@ -176,8 +176,8 @@ UNIT_TEST(dlg_scenario_dialog) {
 
 UNIT_TEST(dlg_follow_dialog) {
     CHECK_EQ(sizeof(FollowDialog), (size_t)0xd8);
-    CHECK_EQ(offsetof(FollowDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(FollowDialog, dataD0), (size_t)0xd0);
+    CHECK_EQ(offsetof(FollowDialog, citizen), (size_t)0xb8);
+    CHECK_EQ(offsetof(FollowDialog, textAction), (size_t)0xd0);
     CheckShape<FollowDialog>();
     CheckDialogInstanceSlots<FollowDialog>();
 }
@@ -186,7 +186,7 @@ UNIT_TEST(dlg_newgame_dialog) {
     CHECK_EQ(sizeof(NewGameDialog), (size_t)0xae8);
     CHECK_EQ(offsetof(NewGameDialog, comboTerrain), (size_t)0xb8);
     CHECK_EQ(offsetof(NewGameDialog, random), (size_t)0x118);
-    CHECK_EQ(offsetof(NewGameDialog, worldSetup), (size_t)0xae0);
+    CHECK_EQ(offsetof(NewGameDialog, mainMenu), (size_t)0xae0);
     CheckShape<NewGameDialog>();
     CheckDialogInstanceSlots<NewGameDialog>();
 }
@@ -216,12 +216,12 @@ UNIT_TEST(dlg_saveload_dialog) {
 
 UNIT_TEST(dlg_mod_dialogs) {
     CHECK_EQ(sizeof(ModDialog), (size_t)0xd8);
-    CHECK_EQ(offsetof(ModDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(ModDialog, dataD0), (size_t)0xd0);
+    CHECK_EQ(offsetof(ModDialog, entries), (size_t)0xb8);
+    CHECK_EQ(offsetof(ModDialog, parentMenu), (size_t)0xd0);
     CheckShape<ModDialog>();
     CheckDialogInstanceSlots<ModDialog>();
     CHECK_EQ(sizeof(ModDetailsDialog), (size_t)0xc8);
-    CHECK_EQ(offsetof(ModDetailsDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(ModDetailsDialog, spriteSheet), (size_t)0xb8);
     CHECK_EQ(offsetof(ModDetailsDialog, modIndex), (size_t)0xc0);
     CheckShape<ModDetailsDialog>();
     CheckDialogInstanceSlots<ModDetailsDialog>();

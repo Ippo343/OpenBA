@@ -18,6 +18,10 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace Video    { class ImageBuffer; }
+namespace Graphics { class MaterialInstance; }
+namespace UI       { class EditElement; class SpriteSheet; }
+
 class NoiseUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(NoiseUI)
 
@@ -34,16 +38,33 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400714a0  PORT GAP
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint8_t _pad30[8] = {};        // +0x30: gap (not initialized by factory)
-    uint64_t data38 = 0;           // +0x38: zeroed
-    uint64_t data40 = 0;           // +0x40
-    uint64_t data48 = 0;           // +0x48
-    uint64_t data50 = 0;           // +0x50
-    uint64_t data58 = 0;           // +0x58
-    uint64_t data60 = 0;           // +0x60
-    uint64_t data68 = 0;           // +0x68
+    // SetupImage 0x140071890: the preview's MaterialInstance and SpriteSheet
+    // (UIMaterialNoBlend + `image` as "diffuse"), set on "noiseImage".
+    void SetupImage(Video::ImageBuffer* image, UI::SpriteSheet** sheetOut,
+                    Graphics::MaterialInstance** materialOut);
+    // GenerateNoise 0x1400711d0: the five edits' values drive a 256x256 Perlin image.
+    void GenerateNoise();
+
+    // ---- fields ---------------------------------------------------------
+    // The factory leaves +0x30 unwritten; the tree zeroes it (kept).
+    Video::ImageBuffer*         imageBuffer = nullptr;       // +0x30 the 256x256 preview
+    Graphics::MaterialInstance* material = nullptr;          // +0x38
+    UI::SpriteSheet*            spriteSheet = nullptr;       // +0x40
+    UI::EditElement*            noisePersistance = nullptr;  // +0x48
+    UI::EditElement*            noiseOctaves = nullptr;      // +0x50
+    UI::EditElement*            noiseScale = nullptr;        // +0x58
+    UI::EditElement*            noiseCutOff = nullptr;       // +0x60
+    UI::EditElement*            noiseGradient = nullptr;     // +0x68
 };
+
+static_assert(offsetof(NoiseUI, imageBuffer) == 0x30, "NoiseUI +0x30");
+static_assert(offsetof(NoiseUI, material) == 0x38, "NoiseUI +0x38");
+static_assert(offsetof(NoiseUI, spriteSheet) == 0x40, "NoiseUI +0x40");
+static_assert(offsetof(NoiseUI, noisePersistance) == 0x48, "NoiseUI +0x48");
+static_assert(offsetof(NoiseUI, noiseOctaves) == 0x50, "NoiseUI +0x50");
+static_assert(offsetof(NoiseUI, noiseScale) == 0x58, "NoiseUI +0x58");
+static_assert(offsetof(NoiseUI, noiseCutOff) == 0x60, "NoiseUI +0x60");
+static_assert(offsetof(NoiseUI, noiseGradient) == 0x68, "NoiseUI +0x68");
 
 static_assert(sizeof(NoiseUI) == 0x70, "NoiseUI is 0x70 (create 0x140012d30 MemAlloc(0x70))");
 static_assert(alignof(NoiseUI) == 8, "qword-aligned (the vptr)");
