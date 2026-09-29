@@ -100,8 +100,8 @@ UNIT_TEST(cit_component_member_offsets) {
     CHECK_EQ(offsetof(PopulationComponent, field68),           (size_t)0x68);
     CHECK_EQ(offsetof(SpawnComponent, field30),                (size_t)0x30);
     CHECK_EQ(offsetof(TombstoneComponent, field28),            (size_t)0x28);
-    CHECK_EQ(offsetof(TornadoComponent, pathIndex),            (size_t)0x50);
-    CHECK_EQ(offsetof(TornadoComponent, posZ),                 (size_t)0x60);
+    CHECK_EQ(offsetof(TornadoComponent, path.index),           (size_t)0x50);
+    CHECK_EQ(offsetof(TornadoComponent, position.z),           (size_t)0x60);
     CHECK_EQ(offsetof(WildAnimalComponent, data28),            (size_t)0x28);
 }
 
