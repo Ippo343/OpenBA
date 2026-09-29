@@ -53,15 +53,9 @@
 #include "Game/exe_bodies.h"   // BucketTree_Serialize_21ba0
 #include "Work/exe_bodies.h"   // WorkBST_RegisterWork_1a30, WorkBST_BSTRemove_a6e0
 
-// Forward declaration (non-static: address registered for standalone exe resolution)
-void EntityList_PostUpdateStaging(EntityList* self);
-
-// One-frame-deferred removal drain (relocated retail step-5 tail — see
-// EntityList_Update Step 0). Defined below EntityList_Update, used at its top.
-void EntityList_DrainRemovals(EntityList* self);
 
 // ============================================================
-// EntityList::TreeNodeHandler (0x1400c2de0)
+// ComponentEntity::TickComponents (0x1400c2de0)
 // ============================================================
 // Per-entity handler during update tree walk.
 // Checks entity flag bit 2 (0x4) and calls component vtable +0x40
@@ -80,39 +74,37 @@ long long g_elProfTreeNodes = 0, g_elProfBucketVisits = 0, g_elProfBucketTicked 
 extern "C" int  CompProf_BeginKind(void* comp, int kind);
 extern "C" void CompProf_End(int slot, long long qpcTicks);
 
-void EntityList_TreeNodeHandler(int64_t entity, void* time) {
-    uint32_t entityFlags = *(uint32_t*)(entity + 0x40);
+void ComponentEntity::TickComponents(void* time) {
+    uint32_t entityFlags = _entityFlags;
 
     // Check entity has "needs tree tick" flag (bit 2) and is not deleted (bit 10)
     if ((entityFlags & 0x4) == 0) return;
     if ((entityFlags >> 10) & 1) return;
 
-    int32_t compCount = *(int32_t*)(entity + 0x38);
+    int32_t compCount = _componentCount;
     int64_t ci = 0;
 
     if (compCount <= 0) return;
 
     do {
         // Read component IBP and CheckPtr
-        void* compIBP = (void*)(*(uintptr_t*)(entity + 0x30) + ci * 8);
-        int64_t comp = *(int64_t*)compIBP;
+        Component* c = _components[ci].Get();
 
         // Component flags at byte offset +0x20 from component base.
         // Verified from disassembly at 0x1400c2e42: MOV ECX,dword ptr [RAX + 0x20]
         // Then SHR ECX,0x2; TEST CL,0x1 checks bit 2.
-        uint32_t compFlags = *(uint32_t*)((uintptr_t)comp + 0x20);
+        uint32_t compFlags = c->_flags;
 
         if ((compFlags >> 2) & 1) {
             // CheckPtr again before vtable call
-            comp = *(int64_t*)compIBP;
+            c = _components[ci].Get();
 
             // Component slot 8 (+0x40) Tick, by name.
-            Component* c = reinterpret_cast<Component*>(comp);   // B.3.x bridge
             if (g_compProfOn >= 2) {
                 // [STRESS] BANISHED_STRESS_COMPPROF=2: attribute the per-frame (slot 8) tick
                 // per component type, separately from the slot-9 bucket Update (kind 1 =
                 // "/tree"). Opt-in: ~30k QPC pairs per frame at 800x10 (~+0.8 ms/frame).
-                const int slot = CompProf_BeginKind((void*)(uintptr_t)comp, 1);
+                const int slot = CompProf_BeginKind(c, 1);
                 const long long q0 = CompProf_Now();
                 c->Tick(time);
                 CompProf_End(slot, CompProf_Now() - q0);
@@ -124,13 +116,13 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time) {
         ci++;
 
         // Break if entity was deleted during component processing
-        if (*(uint32_t*)(entity + 0x40) & 0x400) break;
+        if (_entityFlags & 0x400) break;
 
     } while (ci < compCount);
 }
 
 // ============================================================
-// EntityList::PostUpdateNodeHandler (0x1400c2c70)
+// ComponentEntity::PostUpdateComponents (0x1400c2c70)
 // ============================================================
 // Per-entity handler during post-update tree walk.
 // Checks entity flag bit 4 (0x10) and calls component vtable +0x50
@@ -142,38 +134,34 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time) {
 //       if (comp+0x20 >> 4 & 1)  // component flag bit 4
 //         call comp->vtable[+0x50](comp)
 //       break if entity deleted (entity+0x40 & 0x400)
-void EntityList_PostUpdateNodeHandler(int64_t entity) {
-    uint32_t entityFlags = *(uint32_t*)(entity + 0x40);
+void ComponentEntity::PostUpdateComponents() {
+    uint32_t entityFlags = _entityFlags;
 
     // Check entity has "needs post-update" flag (bit 4) and is not deleted (bit 10)
     if ((entityFlags & 0x10) == 0) return;
     if ((entityFlags >> 10) & 1) return;
 
-    int32_t compCount = *(int32_t*)(entity + 0x38);
+    int32_t compCount = _componentCount;
     int64_t ci = 0;
 
     if (compCount <= 0) return;
 
     do {
         // Read component IBP and CheckPtr
-        void* compIBP = (void*)(*(uintptr_t*)(entity + 0x30) + ci * 8);
-        int64_t comp = *(int64_t*)compIBP;
+        Component* c = _components[ci].Get();
 
         // Component flags at +0x20, bit 4 = "needs post-update"
-        uint32_t compFlags = *(uint32_t*)((uintptr_t)comp + 0x20);
+        uint32_t compFlags = c->_flags;
 
         if ((compFlags >> 4) & 1) {
-            // CheckPtr again before vtable call
-            comp = *(int64_t*)compIBP;
-
-            // Component slot 10 (+0x50) PostUpdate, by name.
-            reinterpret_cast<Component*>(comp)->PostUpdate();   // B.3.x bridge
+            // CheckPtr again before vtable call; slot 10 (+0x50) PostUpdate, by name.
+            _components[ci].Get()->PostUpdate();
         }
 
         ci++;
 
         // Break if entity was deleted during component processing
-        if (*(uint32_t*)(entity + 0x40) & 0x400) break;
+        if (_entityFlags & 0x400) break;
 
     } while (ci < compCount);
 }
@@ -204,8 +192,9 @@ static const bool g_treeGuards = [] {
     const char* e = Opt().treeGuards;
     return !(e && e[0] == '0');
 }();
-static inline bool PtrCorrupt(uintptr_t p) {
+static inline bool PtrCorrupt(const void* pv) {
     if (!g_treeGuards) return false;
+    const uintptr_t p = reinterpret_cast<uintptr_t>(pv);  // CAST-OK: ptr_int
     if (p == 0) return false;                 // null = legitimate terminator / cleared slot
     if (p & 0x7) return true;                 // heap objects are 8-byte aligned
     if ((uint32_t)(p >> 32) != 0 && (uint32_t)p < 0x10000) return true; // half-written
@@ -214,7 +203,7 @@ static inline bool PtrCorrupt(uintptr_t p) {
 
 // A non-null pointer that cannot be a live tree node.
 static inline bool NodeCorrupt(const EntityTreeNode* n) {
-    return PtrCorrupt((uintptr_t)n);
+    return PtrCorrupt(n);
 }
 
 // Set when a walk refuses a corrupt pointer; caller logs + continues.
@@ -228,13 +217,13 @@ static const bool       g_treePrefetch = [] {
 }();
 static const char*      g_treeCorruptSite = nullptr;   // which deref tripped
 static EntityTreeNode*  g_treeCorruptFrom = nullptr;   // node holding the bad field
-static uintptr_t        g_treeCorruptBad  = 0;         // the refused pointer value
+static const void*      g_treeCorruptBad  = nullptr;   // the refused pointer value
 
 static void FlagTreeCorrupt(const char* site, EntityTreeNode* from, const void* bad) {
     g_treeCorrupt = true;
     g_treeCorruptSite = site;
     g_treeCorruptFrom = from;
-    g_treeCorruptBad = (uintptr_t)bad;
+    g_treeCorruptBad = bad;
 }
 
 // Dump the captured corruption context. `from` is a live node whose child/parent
@@ -267,10 +256,10 @@ static void FlagTreeCorrupt(const char* site, EntityTreeNode* from, const void* 
 // Returns true when the node is safe to hand to the AVL delete.
 static bool StagingNodeRemovable(EntityTreeNode* node) {
     if (NodeCorrupt(node)) return false;
-    if (PtrCorrupt((uintptr_t)node->parent)) return false;
-    if (PtrCorrupt((uintptr_t)node->left))   return false;
-    if (PtrCorrupt((uintptr_t)node->right))  return false;
-    if (PtrCorrupt((uintptr_t)node->entityIBP)) return false;
+    if (PtrCorrupt(node->parent)) return false;
+    if (PtrCorrupt(node->left))   return false;
+    if (PtrCorrupt(node->right))  return false;
+    if (PtrCorrupt(node->entityIBP)) return false;
     return true;
 }
 
@@ -284,8 +273,9 @@ static void ReportStagingCorrupt(const char* which, EntityList* self, EntityTree
     printf("[TreeGuard] CORRUPT node refused during %s staging REMOVE: node=%p\n", which, (void*)node);
     if (node && !NodeCorrupt(node)) {
         printf("[TreeGuard]   node entityIBP=%p parent=%p left=%p right=%p bal=%d ht=%d\n",
-               (void*)node->entityIBP, (void*)node->parent, (void*)node->left,
-               (void*)node->right, (int)node->balance, (int)node->height);
+               static_cast<void*>(node->entityIBP), static_cast<void*>(node->parent),
+               static_cast<void*>(node->left), static_cast<void*>(node->right),
+               (int)node->balance, (int)node->height);
     }
     printf("[TreeGuard]   postUpdateRoot=%p (cnt=%lld)  updateRoot=%p (cnt=%lld)\n",
            (void*)self->postUpdateTreeRoot, (long long)self->postUpdateTreeCount,
@@ -298,7 +288,7 @@ static void ReportTreeCorrupt(const char* walk, EntityList* self, EntityTreeNode
     // full context only when the (site, from-node, bad-ptr) tuple changes.
     static const char*     lastSite = nullptr;
     static EntityTreeNode*  lastFrom = nullptr;
-    static uintptr_t        lastBad  = 0;
+    static const void*      lastBad  = nullptr;
     if (g_treeCorruptSite == lastSite && g_treeCorruptFrom == lastFrom &&
         g_treeCorruptBad == lastBad) {
         return;
@@ -306,17 +296,19 @@ static void ReportTreeCorrupt(const char* walk, EntityList* self, EntityTreeNode
     lastSite = g_treeCorruptSite; lastFrom = g_treeCorruptFrom; lastBad = g_treeCorruptBad;
 
     printf("[TreeGuard] CORRUPT node refused during %s walk: site=%s bad=%p\n",
-           walk, g_treeCorruptSite ? g_treeCorruptSite : "?", (void*)g_treeCorruptBad);
+           walk, g_treeCorruptSite ? g_treeCorruptSite : "?", g_treeCorruptBad);
     EntityTreeNode* f = g_treeCorruptFrom;
     if (f && !NodeCorrupt(f)) {
         printf("[TreeGuard]   from-node=%p  entityIBP=%p parent=%p left=%p right=%p bal=%d ht=%d\n",
-               (void*)f, (void*)f->entityIBP, (void*)f->parent, (void*)f->left,
-               (void*)f->right, (int)f->balance, (int)f->height);
+               static_cast<void*>(f), static_cast<void*>(f->entityIBP),
+               static_cast<void*>(f->parent), static_cast<void*>(f->left),
+               static_cast<void*>(f->right), (int)f->balance, (int)f->height);
     }
     if (prev && !NodeCorrupt(prev) && prev != f) {
         printf("[TreeGuard]   prev-node=%p  entityIBP=%p parent=%p left=%p right=%p\n",
-               (void*)prev, (void*)prev->entityIBP, (void*)prev->parent,
-               (void*)prev->left, (void*)prev->right);
+               static_cast<void*>(prev), static_cast<void*>(prev->entityIBP),
+               static_cast<void*>(prev->parent), static_cast<void*>(prev->left),
+               static_cast<void*>(prev->right));
     }
     printf("[TreeGuard]   postUpdateRoot=%p (cnt=%lld)  updateRoot=%p (cnt=%lld)\n",
            (void*)self->postUpdateTreeRoot, (long long)self->postUpdateTreeCount,
@@ -400,7 +392,7 @@ static EntityTreeNode* TreeSuccessor(EntityTreeNode* node) {
 // flat array and rebuilt when either mutation site marks it dirty or the tree's node
 // count no longer matches. The flat walk also prefetches the next entities' headers
 // and component arrays. Kill-switch: BANISHED_PERF_TREE_SNAPSHOT=0.
-static std::vector<int64_t> s_walkSnap;
+static std::vector<ComponentEntity*> s_walkSnap;
 static bool    s_walkDirty = true;
 static int64_t s_walkCountAtBuild = -1;
 static const EntityList* s_walkOwner = nullptr;
@@ -417,8 +409,8 @@ static bool RebuildWalkSnapshot(EntityList* self) {
     EntityTreeNode* prev = nullptr;
     s_walkSnap.reserve((size_t)(self->updateTreeCount > 0 ? self->updateTreeCount : 16));
     while (node && !g_treeCorrupt) {
-        int64_t entity = (int64_t)node->entityIBP;
-        if (PtrCorrupt((uintptr_t)entity)) { FlagTreeCorrupt("snap.entityIBP", node, (void*)entity); break; }
+        ComponentEntity* entity = node->entityIBP;
+        if (PtrCorrupt(entity)) { FlagTreeCorrupt("snap.entityIBP", node, entity); break; }
         s_walkSnap.push_back(entity);
         prev = node;
         node = TreeSuccessor(node);
@@ -435,39 +427,39 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, void* time, bool prof) {
         if (!RebuildWalkSnapshot(self)) return false;   // corrupt: fall back to the tree walk
     }
     const size_t n = s_walkSnap.size();
-    const int64_t* arr = s_walkSnap.data();
+    ComponentEntity* const* arr = s_walkSnap.data();
     for (size_t i = 0; i < n; ++i) {
         // Three-deep prefetch pipeline: entity header (i+3) -> its component IBP array
         // (i+2, header already resident) -> the component objects' flag words (i+1,
         // array already resident). Each level only touches memory the previous level
         // pulled in, so no prefetch ever waits on a miss.
-        if (i + 3 < n) __builtin_prefetch((const char*)arr[i + 3] + 0x30);
+        if (i + 3 < n) __builtin_prefetch(&arr[i + 3]->_components);
         if (i + 2 < n) {
-            const char* comps = *(const char* const*)((const char*)arr[i + 2] + 0x30);
+            const Object::InternalPtr<Component>* comps = arr[i + 2]->_components;
             if (comps) __builtin_prefetch(comps);
         }
         if (i + 1 < n) {
-            const char* pe1 = (const char*)arr[i + 1];
-            const int64_t* comps = *(const int64_t* const*)(pe1 + 0x30);
-            int cc = *(const int32_t*)(pe1 + 0x38);
+            const ComponentEntity* pe1 = arr[i + 1];
+            const Object::InternalPtr<Component>* comps = pe1->_components;
+            int cc = pe1->_componentCount;
             if (comps && cc > 0) {
                 if (cc > 6) cc = 6;
                 for (int k = 0; k < cc; ++k) {
-                    const char* c = (const char*)comps[k];
-                    if (c) __builtin_prefetch(c + 0x20);
+                    const Component* c = comps[k].Get();
+                    if (c) __builtin_prefetch(&c->_flags);
                 }
             }
         }
-        int64_t entity = arr[i];
-        if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
-            EntityList_TreeNodeHandler(entity, time);
+        ComponentEntity* entity = arr[i];
+        if (!((entity->_entityFlags >> 10) & 1)) {
+            entity->TickComponents(time);
         }
         if (prof) ++g_elProfTreeNodes;
     }
     return true;
 }
 
-void EntityList_Update(EntityList* self, void* time) {
+void EntityList::Update(void* time) {
     // Step 0 (SA DEVIATION — one-frame removal deferral): drain the removal list
     // that was BUILT LAST FRAME, at the TOP of this frame's update, instead of at
     // the bottom of the same frame it was built (retail drains at the end — the
@@ -493,19 +485,19 @@ void EntityList_Update(EntityList* self, void* time) {
     LARGE_INTEGER pq0, pq1;
     const bool prof = g_compProfOn != 0;
     if (prof) QueryPerformanceCounter(&pq0);
-    EntityList_DrainRemovals(self);
+    DrainRemovals();
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfDrainTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 1: Accumulate time
-    self->accumulatedTime += *(int64_t*)time;
+    accumulatedTime._ticks += *(int64_t*)time;
 
     // Step 2: PreUpdate — process staging arrays into update tree
-    EntityList_PreUpdate(self);
+    PreUpdate();
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfPreTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 3: In-order traversal of update tree (+0x68)
-    EntityTreeNode* treeRoot = self->updateTreeRoot;
-    if (treeRoot && WalkUpdateTreeSnapshot(self, time, prof)) {
+    EntityTreeNode* treeRoot = updateTreeRoot;
+    if (treeRoot && WalkUpdateTreeSnapshot(this, time, prof)) {
         treeRoot = nullptr;   // [PerfX] flat snapshot walk ran -- identical order, no tree chase
     }
     if (treeRoot) {
@@ -519,9 +511,9 @@ void EntityList_Update(EntityList* self, void* time) {
             // CheckPtr on the node (it's an IBP)
 
             // Guard the node's entity-IBP key against a freelist link (UAF node).
-            int64_t entity = (int64_t)node->entityIBP;
-            if (PtrCorrupt((uintptr_t)entity)) {
-                FlagTreeCorrupt("entityIBP", node, (void*)entity);
+            ComponentEntity* entity = node->entityIBP;
+            if (PtrCorrupt(entity)) {
+                FlagTreeCorrupt("entityIBP", node, entity);
                 break;
             }
 
@@ -533,18 +525,18 @@ void EntityList_Update(EntityList* self, void* time) {
             // inserts as our successor is not skipped; this is a hint only.
             if (g_treePrefetch) {
                 EntityTreeNode* pf = TreeSuccessor(node);
-                if (pf && !PtrCorrupt((uintptr_t)pf->entityIBP)) {
-                    const char* pe = (const char*)pf->entityIBP;
-                    __builtin_prefetch(pe + 0x30);
-                    const char* comps = *(const char* const*)(pe + 0x30);
+                if (pf && !PtrCorrupt(pf->entityIBP)) {
+                    const ComponentEntity* pe = pf->entityIBP;
+                    __builtin_prefetch(&pe->_components);
+                    const Object::InternalPtr<Component>* comps = pe->_components;
                     if (comps) __builtin_prefetch(comps);
                 }
             }
 
             // Check entity not deleted (bit 10 of flags at entity+0x40)
-            if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
+            if (!((entity->_entityFlags >> 10) & 1)) {
                 // Call tree node handler (inline for Update, calls vtable +0x40)
-                EntityList_TreeNodeHandler(entity, time);
+                entity->TickComponents(time);
             }
 
             // Move to in-order successor
@@ -553,22 +545,22 @@ void EntityList_Update(EntityList* self, void* time) {
             if (prof) ++g_elProfTreeNodes;
         }
 
-        if (g_treeCorrupt) ReportTreeCorrupt("Update", self, prev);
+        if (g_treeCorrupt) ReportTreeCorrupt("Update", this, prev);
     }
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfTreeTicks += pq1.QuadPart - pq0.QuadPart; pq0 = pq1; }
 
     // Step 4: 5-bucket round-robin
     g_samplerTag = 8;   // [Sampler] sub-tag: bucket (slot-9) ticks; restored to 4 at the end
     struct BucketTagReset { ~BucketTagReset() { g_samplerTag = 4; } } bucketTagReset;
-    int64_t currentTime = self->accumulatedTime;
+    int64_t currentTime = accumulatedTime._ticks;
 
     for (int bucket = 0; bucket < 5; bucket++) {
-        UpdateBucket* bkt = &self->buckets[bucket];
+        UpdateBucket* bkt = &buckets[bucket];
         int32_t count = bkt->count;
         if (count == 0) continue;
 
-        uint32_t toProcess = self->processCount[bucket];
-        uint32_t cursorVal = self->cursor[bucket];
+        uint32_t toProcess = processCount[bucket];
+        uint32_t cursorVal = cursor[bucket];
         if ((int32_t)cursorVal >= count) cursorVal = 0;
 
         uint32_t startIdx = cursorVal;
@@ -578,42 +570,44 @@ void EntityList_Update(EntityList* self, void* time) {
         if ((int32_t)toProcess > 0) {
             do {
                 // Re-read bucket data pointer each iteration (may be reallocated)
-                int64_t* arrBase = bkt->data;
+                ComponentEntity** arrBase = bkt->data;
 
                 // Read entity IBP and CheckPtr
-                int64_t entIBP = arrBase[idx];
+                ComponentEntity* entIBP = arrBase[idx];
                 if (prof) ++g_elProfBucketVisits;
 
                 // Check not deleted (bit 10)
-                if (!((*(uint32_t*)(entIBP + 0x40) >> 10) & 1)) {
-                    int64_t delta = currentTime - *(int64_t*)(entIBP + 0x20);
+                if (!((entIBP->_entityFlags >> 10) & 1)) {
+                    // +0x20 is the entity's last-update System::Time (Serialize below
+                    // writes it through Time::Serialize); ComponentEntity.h still names
+                    // it `_externals` (void*): LEFT for the header's owner.
+                    int64_t delta = currentTime - *(int64_t*)&entIBP->_externals;
 
                     if (delta > 0) {
                         if (prof) ++g_elProfBucketTicked;
-                        int64_t ent = entIBP;
+                        ComponentEntity* ent = entIBP;
 
                         // Check entity has "needs bucket update" flag (bit 3)
                         // and is not deleted (bit 10)
-                        if ((*(uint32_t*)(ent + 0x40) & 0x8) != 0 &&
-                            (*(uint32_t*)(ent + 0x40) & 0x400) == 0) {
+                        if ((ent->_entityFlags & 0x8) != 0 &&
+                            (ent->_entityFlags & 0x400) == 0) {
 
-                            int32_t compCount = *(int32_t*)(ent + 0x38);
+                            int32_t compCount = ent->_componentCount;
                             int64_t deltaTime[1] = { delta };
 
                             for (int64_t ci = 0; ci < compCount; ci++) {
                                 // Read component IBP and CheckPtr
-                                int64_t compIBP = *(int64_t*)(*(int64_t*)(ent + 0x30) + ci * 8);
+                                Component* comp = ent->_components[ci].Get();
 
                                 // Component flags at byte +0x20, bit 3 = "needs Update tick"
                                 // Verified from disassembly: MOV ECX,[RAX+0x20]; SHR ECX,3
-                                if ((*(uint32_t*)(compIBP + 0x20) >> 3) & 1) {
+                                if ((comp->_flags >> 3) & 1) {
 
                                     // Component slot 9 (+0x48) Update, by name.
-                                    Component* comp = reinterpret_cast<Component*>(compIBP);   // B.3.x bridge
                                     if (g_compProfOn) {
                                         // [STRESS] per-component-type Update cost. Keyed by
                                         // vtable, so the only per-call cost is two QPC reads.
-                                        const int slot = CompProf_Begin((void*)(uintptr_t)compIBP);
+                                        const int slot = CompProf_Begin(comp);
                                         const long long q0 = CompProf_Now();
                                         comp->Update(deltaTime);
                                         CompProf_End(slot, CompProf_Now() - q0);
@@ -626,15 +620,15 @@ void EntityList_Update(EntityList* self, void* time) {
                                 // The entity list pointer is stored in GameUpdateLoop and
                                 // component updates may cause reallocation. In the original,
                                 // param_1 is reloaded from a local. We just re-read current time.
-                                currentTime = self->accumulatedTime;
+                                currentTime = accumulatedTime._ticks;
 
                                 // Check if entity deleted during component update
-                                if (*(uint32_t*)(ent + 0x40) & 0x400) break;
+                                if (ent->_entityFlags & 0x400) break;
                             }
                         }
 
                         // Update entity timestamp
-                        *(int64_t*)(entIBP + 0x20) = currentTime;
+                        *(int64_t*)&entIBP->_externals = currentTime;
                     }
                 }
 
@@ -652,7 +646,7 @@ void EntityList_Update(EntityList* self, void* time) {
         }
 
         // Save cursor position
-        self->cursor[bucket] = cursorVal;
+        cursor[bucket] = cursorVal;
     }
     if (prof) { QueryPerformanceCounter(&pq1); g_elProfBucketTicks += pq1.QuadPart - pq0.QuadPart; }
 
@@ -677,10 +671,10 @@ void EntityList_Update(EntityList* self, void* time) {
 // the standalone dialog holds only a weak ref, so we close explicitly. Fixes every
 // entity panel (pinned or not), not just ResidenceUI.
 static void EntityList_CloseDialogsForDyingEntities() {
-    void* gw = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw)
         return;
-    void* ui = reinterpret_cast<GameUpdateLoop*>(gw)->m_userInterface;   // B.3.8 bridge
+    UI::UserInterface* ui = gw->m_userInterface;
     if (!ui) return;
 
     // EntityUI is the shared frame controller on every entity info dialog; its +0x28 is
@@ -697,7 +691,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
     // `*(void**)retval = _dialogs._head`. Walking the container by name replaces the
     // raw head-fetch + `node + 0x10` next-pointer arithmetic; the node layout it read
     // (element +0x00, prev +0x08, next +0x10) is exactly LinkedList<T>::Node.
-    auto& dialogs = reinterpret_cast<UI::UserInterface*>(ui)->_dialogs;
+    auto& dialogs = ui->_dialogs;
     for (auto it = dialogs.GetFirst(); it && nClose < 16; ++it) {
         void* dialog = *it;                                        // node[0] = DialogInstance*
         if (dialog) {
@@ -736,9 +730,9 @@ static void EntityList_CloseDialogsForDyingEntities() {
 // frame there is nothing dangling to follow. Reaches the tool the same way the tool tick
 // does: EntityUI == GameWorld+0x120, active-tool IBP at EntityUI+0x28 (EntityUI_ToolTick_SA).
 static void EntityList_ClearToolSelectionForDyingEntities() {
-    void* gw = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    void* entityUI = reinterpret_cast<GameUpdateLoop*>(gw)->m_toolManager;   // B.3.8 bridge
+    void* entityUI = gw->m_toolManager;
     if (!entityUI) return;
     void* toolSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(entityUI) + 0x28);
     if (*reinterpret_cast<void**>(toolSlot) == nullptr) return;
@@ -801,36 +795,37 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
 // rather than as a guard inside a byte-faithful function: re-fire the component's
 // own +0x38 handler, which is a no-op unless modelId >= 0 — i.e. unless something
 // really did re-register after the mark.
-static void AuditDyingEntity(int64_t entity) {
-    if (entity < 0x10000) return;
+static void AuditDyingEntity(ComponentEntity* entity) {
+    if (reinterpret_cast<uintptr_t>(entity) < 0x10000) return;  // CAST-OK: ptr_int
 
     const uint32_t s_tidModel = ModelComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
 
 
     int models = 0, live = 0;
-    int   n   = *reinterpret_cast<int*>(entity + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
+    int   n   = entity->_componentCount;
+    Object::InternalPtr<Component>* arr = entity->_components;
     if (s_tidModel && s_tidModel != 0xFFFFFFFFu) {
         for (int i = 0; i < n && arr; ++i) {
-            int64_t c = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
-            if (c < 0x10000) continue;
-            if (!::Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(c), s_tidModel)) continue;
+            Component* c = arr[i].Get();
+            if (reinterpret_cast<uintptr_t>(c) < 0x10000) continue;  // CAST-OK: ptr_int
+            if (!::Object::IsDerivedFromNullSafe(c, s_tidModel)) continue;
+            ModelComponent* model = static_cast<ModelComponent*>(c);
             ++models;
-            if (*reinterpret_cast<int32_t*>(c + 0x16c) < 0) continue;
+            if (model->modelId < 0) continue;
             ++live;
             // Unlink it (vtable +0x38 = the removed-from-world handler; on
             // ModelComponent that is Scene::RemoveObject + modelId = -1). Dispatched
             // virtually so derived overrides (NaturalResourceComponent) still apply.
             // Caller batch CB6: slot 7 `OnRemove` of the proved ModelComponent (the
             // IsDerivedFrom test above); a compiler table's slot is never null.
-            reinterpret_cast<ModelComponent*>(c)->OnRemove();   // B.3.8 bridge
+            model->OnRemove();
         }
     }
 
 }
 
-void EntityList_DrainRemovals(EntityList* self) {
-    int32_t removalCount = self->removalList.count;
+void EntityList::DrainRemovals() {
+    int32_t removalCount = removalList.count;
     if (removalCount <= 0) return;
 
     // Close dialogs + clear tool selection bound to the entities we're about to free
@@ -838,18 +833,18 @@ void EntityList_DrainRemovals(EntityList* self) {
     EntityList_CloseDialogsForDyingEntities();
     EntityList_ClearToolSelectionForDyingEntities();
 
-    EntityList_PreUpdate(self);
-    EntityList_PostUpdateStaging(self);
+    PreUpdate();
+    PostUpdateStaging();
 
     for (int64_t i = 0; i < removalCount; i++) {
-        void* entityIBP = (void*)(*(int64_t*)((uintptr_t)self->removalList.data + i * 8));
-        AuditDyingEntity(reinterpret_cast<int64_t>(entityIBP));
-        EntityList_RemoveEntity(self, &entityIBP);
+        ComponentEntity* entityIBP = removalList.data[i];
+        AuditDyingEntity(entityIBP);
+        RemoveEntity(&entityIBP);
     }
 
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&self->removalList).SetSize(0);
+    GameColl::AsArray<GameColl::Ptr8>(&removalList).SetSize(0);
 
 }
 
@@ -863,38 +858,33 @@ void EntityList_DrainRemovals(EntityList* self) {
 // Then clears the staging array.
 //
 // Decompiled from 0x1400c3bd0.
-void EntityList_PreUpdate(EntityList* self) {
-    int32_t stagingCount = self->stagingUpdate.count;
+void EntityList::PreUpdate() {
+    int32_t stagingCount = stagingUpdate.count;
     if (stagingCount <= 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(&self->stagingUpdate).SetSize(0);
+        GameColl::AsArray<GameColl::Ptr8>(&stagingUpdate).SetSize(0);
         return;
     }
 
     for (int i = 0; i < stagingCount; i++) {
-        int64_t offset = (int64_t)i * 8;
-        void* ibpPtr = (void*)((uintptr_t)self->stagingUpdate.data + offset);
+        ComponentEntity** ibpPtr = &stagingUpdate.data[i];
 
-        int64_t entityVal = *(int64_t*)ibpPtr;
-
-        uint32_t entityFlags = *(uint32_t*)(entityVal + 0x40);
+        uint32_t entityFlags = (*ibpPtr)->_entityFlags;
         bool hasUpdateFlag = (entityFlags & 0x4) != 0;
         bool isDeleted = ((entityFlags >> 10) & 1) != 0;
 
         if (hasUpdateFlag && !isDeleted) {
             // Insert into update tree
             uint64_t outBuf = 0;
-            void* srcIBP = (void*)((uintptr_t)self->stagingUpdate.data + offset);
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->updateTreeRoot), &outBuf, srcIBP);
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&updateTreeRoot), &outBuf, ibpPtr);
             EntityList_MarkUpdateTreeDirty();
         } else {
             // Search for entity in update tree, remove if found
-            EntityTreeNode* node = self->updateTreeRoot;
-            void* ibpSrc = (void*)((uintptr_t)self->stagingUpdate.data + offset);
+            EntityTreeNode* node = updateTreeRoot;
 
             while (node != nullptr) {
-                uint64_t ibpVal = *(uint64_t*)ibpSrc;
+                ComponentEntity* ibpVal = *ibpPtr;
 
                 if (ibpVal < node->entityIBP) {
                     node = node->left;
@@ -904,10 +894,10 @@ void EntityList_PreUpdate(EntityList* self) {
                         // Validate first: the AVL delete derefs node->parent
                         // unguarded (faithful to retail 0x14001a6e0).
                         if (!StagingNodeRemovable(node)) {
-                            ReportStagingCorrupt("PreUpdate", self, node);
+                            ReportStagingCorrupt("PreUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->updateTreeRoot), node);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), node);
                         EntityList_MarkUpdateTreeDirty();
                         break;
                     }
@@ -919,7 +909,7 @@ void EntityList_PreUpdate(EntityList* self) {
 
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&self->stagingUpdate).SetSize(0);
+    GameColl::AsArray<GameColl::Ptr8>(&stagingUpdate).SetSize(0);
 }
 
 // ============================================================
@@ -929,37 +919,32 @@ void EntityList_PreUpdate(EntityList* self) {
 // and staging array (+0x98/+0xa0), checking flag bit 4 (0x10).
 //
 // Decompiled from 0x1400c3ab0.
-void EntityList_PostUpdateStaging(EntityList* self) {
-    int32_t stagingCount = self->stagingPostUpdate.count;
+void EntityList::PostUpdateStaging() {
+    int32_t stagingCount = stagingPostUpdate.count;
     if (stagingCount <= 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(&self->stagingPostUpdate).SetSize(0);
+        GameColl::AsArray<GameColl::Ptr8>(&stagingPostUpdate).SetSize(0);
         return;
     }
 
     for (int i = 0; i < stagingCount; i++) {
-        int64_t offset = (int64_t)i * 8;
-        void* ibpPtr = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
+        ComponentEntity** ibpPtr = &stagingPostUpdate.data[i];
 
-        int64_t entityVal = *(int64_t*)ibpPtr;
-
-        uint32_t entityFlags = *(uint32_t*)(entityVal + 0x40);
+        uint32_t entityFlags = (*ibpPtr)->_entityFlags;
         bool hasPostUpdateFlag = (entityFlags & 0x10) != 0;
         bool isDeleted = ((entityFlags >> 10) & 1) != 0;
 
         if (hasPostUpdateFlag && !isDeleted) {
             // Insert into post-update tree
             uint64_t outBuf = 0;
-            void* srcIBP = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
-            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&self->postUpdateTreeRoot), &outBuf, srcIBP);
+            WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), &outBuf, ibpPtr);
         } else {
             // Search for entity in post-update tree, remove if found
-            EntityTreeNode* node = self->postUpdateTreeRoot;
-            void* ibpSrc = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
+            EntityTreeNode* node = postUpdateTreeRoot;
 
             while (node != nullptr) {
-                uint64_t ibpVal = *(uint64_t*)ibpSrc;
+                ComponentEntity* ibpVal = *ibpPtr;
 
                 if (ibpVal < node->entityIBP) {
                     node = node->left;
@@ -969,10 +954,10 @@ void EntityList_PostUpdateStaging(EntityList* self) {
                         // Same guard as PreUpdate. This is the path that actually
                         // crashed on the 2026-09-04 tutorial run.
                         if (!StagingNodeRemovable(node)) {
-                            ReportStagingCorrupt("PostUpdate", self, node);
+                            ReportStagingCorrupt("PostUpdate", this, node);
                             break;
                         }
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->postUpdateTreeRoot), node);
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), node);
                         break;
                     }
                     node = node->right;
@@ -983,7 +968,7 @@ void EntityList_PostUpdateStaging(EntityList* self) {
 
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&self->stagingPostUpdate).SetSize(0);
+    GameColl::AsArray<GameColl::Ptr8>(&stagingPostUpdate).SetSize(0);
 }
 
 // ============================================================
@@ -993,12 +978,12 @@ void EntityList_PostUpdateStaging(EntityList* self) {
 // of the post-update tree (+0x78), calling PostUpdateNodeHandler per entity.
 //
 // Decompiled from 0x1400c43d0.
-void EntityList_PostUpdate(EntityList* self) {
+void EntityList::PostUpdate() {
     // Step 1: Process staging post-update array
-    EntityList_PostUpdateStaging(self);
+    PostUpdateStaging();
 
     // Step 2: In-order traversal of post-update tree (+0x78)
-    EntityTreeNode* treeRoot = self->postUpdateTreeRoot;
+    EntityTreeNode* treeRoot = postUpdateTreeRoot;
     if (!treeRoot) return;
 
     g_treeCorrupt = false;
@@ -1012,15 +997,15 @@ void EntityList_PostUpdate(EntityList* self) {
 
         // Guard the node's entity-IBP key: a freed-but-still-linked node has a
         // freelist link written over +0x00, so dereferencing it faults.
-        int64_t entity = (int64_t)node->entityIBP;
-        if (PtrCorrupt((uintptr_t)entity)) {
-            FlagTreeCorrupt("entityIBP", node, (void*)entity);
+        ComponentEntity* entity = node->entityIBP;
+        if (PtrCorrupt(entity)) {
+            FlagTreeCorrupt("entityIBP", node, entity);
             break;
         }
 
         // Check entity not deleted (bit 10 of flags at entity+0x40)
-        if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
-            EntityList_PostUpdateNodeHandler(entity);
+        if (!((entity->_entityFlags >> 10) & 1)) {
+            entity->PostUpdateComponents();
         }
 
         // Move to in-order successor
@@ -1028,7 +1013,7 @@ void EntityList_PostUpdate(EntityList* self) {
         node = TreeSuccessor(node);
     }
 
-    if (g_treeCorrupt) ReportTreeCorrupt("PostUpdate", self, prev);
+    if (g_treeCorrupt) ReportTreeCorrupt("PostUpdate", this, prev);
 }
 
 // ============================================================
@@ -1043,74 +1028,71 @@ void EntityList_PostUpdate(EntityList* self) {
 //   +0x1F: int8 — bucket index (0-5, where 6 means "not in any bucket")
 //
 // Decompiled from 0x1400c38e0.
-void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
-    int64_t entity = *(int64_t*)entityIBP;
+void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
+    ComponentEntity* entity = *entityIBP;
 
 
-    // Read bucket index from entity+0x1F
-    int8_t bucketIdx = *(int8_t*)(entity + 0x1F);
+    // Read bucket index from entity+0x1F (the category byte of _handle)
+    int8_t bucketIdx = static_cast<int8_t>(entity->_handle >> 24);
 
     // Step 1: Remove from bucket (if in one; bucket 6 means "none")
     if (bucketIdx != 6) {
-        // Get bucket array pointer: self + 0x18 + bucketIdx * 0x10
-        uintptr_t bucketBase = (uintptr_t)self + 0x18 + (int64_t)bucketIdx * 0x10;
+        // The entity's bucket: buckets[bucketIdx] (retail `param_1 + 0x18 + idx * 0x10`)
+        UpdateBucket* bucket = &buckets[bucketIdx];
 
         // Last element index in bucket
-        uint32_t lastIdx = *(int32_t*)(bucketBase + 0x08) - 1;
+        uint32_t lastIdx = bucket->count - 1;
 
-        entity = *(int64_t*)entityIBP;
+        entity = *entityIBP;
 
         // Entity's index within bucket (low 24 bits of +0x1C)
-        uint32_t entityBucketIdx = (*(uint32_t*)(entity + 0x1C) << 8) >> 8;
+        uint32_t entityBucketIdx = (entity->_handle << 8) >> 8;
 
         if (lastIdx != entityBucketIdx) {
             // Swap last element into removed element's slot
-            int64_t* bucketData = *(int64_t**)bucketBase;
-            *(int64_t*)(bucketData + entityBucketIdx) = *(int64_t*)(bucketData + lastIdx);
+            ComponentEntity** bucketData = bucket->data;
+            bucketData[entityBucketIdx] = bucketData[lastIdx];
 
             // Update swapped entity's bucket index field
-            void* swappedIBP = (void*)(*(int64_t**)bucketBase + entityBucketIdx);
-            int64_t swappedEntity = *(int64_t*)swappedIBP;
+            ComponentEntity* swappedEntity = bucket->data[entityBucketIdx];
 
             // Update low 24 bits of +0x1C with new index
-            uint32_t* packedField = (uint32_t*)(swappedEntity + 0x1C);
-            *packedField = *packedField ^ ((*(uint32_t*)(swappedEntity + 0x1C) ^ entityBucketIdx) & 0xFFFFFF);
+            swappedEntity->_handle = swappedEntity->_handle ^ ((swappedEntity->_handle ^ entityBucketIdx) & 0xFFFFFF);
         }
 
         // Shrink bucket array.
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(bucketBase).SetSize((int)lastIdx);
+        GameColl::AsArray<GameColl::Ptr8>(bucket).SetSize((int)lastIdx);
     }
 
     // Step 2: Remove from master array (+0x08)
-    int32_t lastMasterIdx = self->masterArray.count - 1;
+    int32_t lastMasterIdx = masterArray.count - 1;
 
-    entity = *(int64_t*)entityIBP;
-    int32_t entityMasterIdx = *(int32_t*)(entity + 0x18);
+    entity = *entityIBP;
+    int32_t entityMasterIdx = entity->_entityId;
 
     if (lastMasterIdx != entityMasterIdx) {
         // Swap last element into removed element's slot
-        int64_t* masterData = (int64_t*)self->masterArray.data;
+        ComponentEntity** masterData = masterArray.data;
         masterData[entityMasterIdx] = masterData[lastMasterIdx];
 
         // Update swapped entity's master array index
-        void* swappedIBP = (void*)&masterData[entityMasterIdx];
-        *(int32_t*)(*(int64_t*)swappedIBP + 0x18) = entityMasterIdx;
+        masterData[entityMasterIdx]->_entityId = entityMasterIdx;
     }
 
     // Shrink master array.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&self->masterArray).SetSize(lastMasterIdx);
+    GameColl::AsArray<GameColl::Ptr8>(&masterArray).SetSize(lastMasterIdx);
 
     // Step 3: Search and remove from update tree (+0x68)
-    EntityTreeNode* updateNode = self->updateTreeRoot;
+    EntityTreeNode* updateNode = updateTreeRoot;
     while (updateNode != nullptr) {
-        if (*(uint64_t*)entityIBP < updateNode->entityIBP) {
+        if (*entityIBP < updateNode->entityIBP) {
             updateNode = updateNode->left;
         } else {
-            if (*(uint64_t*)entityIBP <= updateNode->entityIBP) {
+            if (*entityIBP <= updateNode->entityIBP) {
                 break;  // Found
             }
             updateNode = updateNode->right;
@@ -1118,12 +1100,12 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     }
 
     // Step 4: Search and remove from post-update tree (+0x78)
-    EntityTreeNode* postUpdateNode = self->postUpdateTreeRoot;
+    EntityTreeNode* postUpdateNode = postUpdateTreeRoot;
     while (postUpdateNode != nullptr) {
-        if (*(uint64_t*)entityIBP < postUpdateNode->entityIBP) {
+        if (*entityIBP < postUpdateNode->entityIBP) {
             postUpdateNode = postUpdateNode->left;
         } else {
-            if (*(uint64_t*)entityIBP <= postUpdateNode->entityIBP) {
+            if (*entityIBP <= postUpdateNode->entityIBP) {
                 break;  // Found
             }
             postUpdateNode = postUpdateNode->right;
@@ -1132,15 +1114,20 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
 
     // Remove found nodes from trees
     if (updateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->updateTreeRoot), updateNode);
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&updateTreeRoot), updateNode);
         EntityList_MarkUpdateTreeDirty();
     }
     if (postUpdateNode != nullptr) {
-        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&self->postUpdateTreeRoot), postUpdateNode);
+        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&postUpdateTreeRoot), postUpdateNode);
     }
 
-    // Step 5: Delete the entity IBP reference
-    reinterpret_cast< ::Object::InternalBasePtr*>(entityIBP)->DeletePtr();   // B.3.3 bridge
+    // Step 5: Delete the entity IBP reference. Object::InternalBasePtr::DeletePtr
+    // (0x1800c0150) on the slot: delete the object through its virtual dtor, then
+    // null the slot.
+    if (ComponentEntity* dying = *entityIBP) {
+        delete dying;
+        *entityIBP = nullptr;
+    }
 }
 
 // ============================================================
@@ -1159,65 +1146,62 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
 //
 // Decompiled from 0x1400c44a0.
 
-void EntityList_Serialize(EntityList* self, void* stream) {
-    // Step 1: Construct Serializer (local buffer, 0x18 bytes)
-    alignas(8) uint8_t serializerBuf[0x18];
-    void* serializer = serializerBuf;
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+void EntityList::Serialize(IO::Stream& stream) {
+    // Step 1: Construct Serializer (version 0; destroyed at the end, as retail)
+    IO::Serializer serializer(stream, 0);
 
     // Step 2: Flush staging arrays
-    EntityList_PreUpdate(self);
-    EntityList_PostUpdateStaging(self);
+    PreUpdate();
+    PostUpdateStaging();
 
     // Step 3: On save (stream+0x08 == 1), process removal list
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 1) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        int32_t removalCount = self->removalList.count;
+    if (static_cast<int>(stream.GetDirection()) == 1) {   // IO::Stream::GetDirection, retail 0x180006200
+        int32_t removalCount = removalList.count;
         if (removalCount > 0) {
             for (int64_t i = 0; i < removalCount; i++) {
-                uint64_t ibpVal = *((uint64_t*)self->removalList.data + i);
-                uint64_t localIBP = ibpVal;
-                EntityList_RemoveEntity(self, &localIBP);
+                ComponentEntity* localIBP = removalList.data[i];
+                RemoveEntity(&localIBP);
             }
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
             // align 8, new tail zeroed. Element is the entity InternalBasePtr.
-            GameColl::AsArray<GameColl::Ptr8>(&self->removalList).SetSize(0);
+            GameColl::AsArray<GameColl::Ptr8>(&removalList).SetSize(0);
         }
     }
 
-    reinterpret_cast<System::Time*>(self)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+    accumulatedTime.Serialize(serializer);
 
     // Step 5: Serialize master array count
-    int32_t masterCount = self->masterArray.count;
+    int32_t masterCount = masterArray.count;
     int32_t serializedCount = masterCount;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&serializedCount), nullptr);   // B.3.4 bridge
+    serializer.Serialize(serializedCount, nullptr);
 
     // On load (mode == 0): resize master array to deserialized count
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(&self->masterArray).SetSize(serializedCount);
+        GameColl::AsArray<GameColl::Ptr8>(&masterArray).SetSize(serializedCount);
     }
 
     // Serialize each entity IBP in master array
-    void* ibpIter = self->masterArray.data;
+    ComponentEntity** ibpIter = masterArray.data;
     int64_t ibpCount = (int64_t)serializedCount;
     if (ibpCount > 0) {
         for (int64_t j = 0; j < ibpCount; j++) {
-            void* currentIBP = (void*)((uintptr_t)ibpIter + j * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            ComponentEntity** currentIBP = &ibpIter[j];
+            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge
 
             // After loading, verify it's a ComponentEntity
-            if (*(void**)currentIBP != nullptr) {
-                bool isDerived = ::Object::IsDerivedFromNullSafe(*(void**)currentIBP, ComponentEntity::TypeId());
+            if (*currentIBP != nullptr) {
+                bool isDerived = ::Object::IsDerivedFromNullSafe(*currentIBP, ComponentEntity::TypeId());
                 if (!isDerived) {
-                    *(uint64_t*)currentIBP = 0;
+                    *currentIBP = nullptr;
                 }
             }
         }
     }
 
     // Step 6: Serialize bucket trees via helper (5 buckets starting at +0x18)
-    BucketTree_Serialize_21ba0(serializer, nullptr, &self->buckets[0]);   // 0x140021ba0
+    BucketTree_Serialize_21ba0(&serializer, nullptr, &buckets[0]);   // 0x140021ba0
 
     // Step 7: Serialize processCount[5] and cursor[5] as bulk arrays
     // Retail (0x1400c45d0 / 0x1400c45e8) calls dispatch slot 0x140151278 =
@@ -1227,53 +1211,58 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     // each and left the stream 30 bytes short for every load — silently
     // desyncing Geometry and everything after it. The offsets prove the width:
     // processCount is at +0xA8 and cursor at +0xBC, exactly 5 ints apart.
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->processCount), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->cursor), nullptr);   // B.3.4 bridge
+    serializer.Serialize(5, processCount, nullptr);
+    serializer.Serialize(5, cursor, nullptr);
 
     // Step 8: Per-entity metadata serialization
     int32_t entityIdx = 0;
-    int64_t ibpOffset = 0;
-    if (self->masterArray.count > 0) {
+    if (masterArray.count > 0) {
         do {
-            uintptr_t masterData = (uintptr_t)self->masterArray.data;
-
             // Read master array index from entity+0x18
-            int32_t masterIdxField = *(int32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x18);
+            int32_t masterIdxField = masterArray.data[entityIdx]->_entityId;
 
             // Read bucket index (low 24 bits of entity+0x1C)
-            masterData = (uintptr_t)self->masterArray.data;
-            uint32_t bucketIdxField = (*(uint32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1C) << 8) >> 8;
+            int32_t bucketIdxField = static_cast<int32_t>((masterArray.data[entityIdx]->_handle << 8) >> 8);
 
-            // Read bucket ID from entity+0x1F
-            masterData = (uintptr_t)self->masterArray.data;
-            int32_t bucketId = (int32_t)*(int8_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1F);
+            // Read bucket ID from entity+0x1F (the category byte of _handle)
+            int32_t bucketId = (int32_t)static_cast<int8_t>(masterArray.data[entityIdx]->_handle >> 24);
 
             // Serialize the three metadata fields
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&masterIdxField), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((int32_t*)&bucketIdxField), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&bucketId), nullptr);   // B.3.4 bridge
+            serializer.Serialize(masterIdxField, nullptr);
+            serializer.Serialize(bucketIdxField, nullptr);
+            serializer.Serialize(bucketId, nullptr);
 
             // Serialize entity's timestamp at +0x20 (System::Time)
-            masterData = (uintptr_t)self->masterArray.data;
-            reinterpret_cast<System::Time*>((void*)(*(int64_t*)(masterData + ibpOffset) + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            // (+0x20 is a System::Time the header still declares `void* _externals`: LEFT)
+            reinterpret_cast<System::Time*>(&masterArray.data[entityIdx]->_externals)->Serialize(serializer);
 
             // Write back deserialized metadata to entity
-            masterData = (uintptr_t)self->masterArray.data;
-            *(int32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x18) = masterIdxField;
+            masterArray.data[entityIdx]->_entityId = masterIdxField;
 
-            masterData = (uintptr_t)self->masterArray.data;
-            int64_t ent = *(int64_t*)(masterData + ibpOffset);
-            uint32_t* packedField = (uint32_t*)(ent + 0x1C);
-            *packedField = *packedField ^ ((bucketIdxField ^ *(uint32_t*)(ent + 0x1C)) & 0xFFFFFF);
+            ComponentEntity* ent = masterArray.data[entityIdx];
+            ent->_handle = ent->_handle ^ ((static_cast<uint32_t>(bucketIdxField) ^ ent->_handle) & 0xFFFFFF);
 
-            masterData = (uintptr_t)self->masterArray.data;
-            *(int8_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1F) = (int8_t)bucketId;
+            // The category byte +0x1F: retail stores the BYTE. ComponentEntity.h declares
+            // +0x1C..+0x1F as one uint32 `_handle`: LEFT for the header's owner.
+            reinterpret_cast<int8_t*>(&masterArray.data[entityIdx]->_handle)[3] = (int8_t)bucketId;
 
             entityIdx++;
-            ibpOffset += 8;
-        } while (entityIdx < self->masterArray.count);
+        } while (entityIdx < masterArray.count);
     }
 
-    // Step 9: Destroy Serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    // Step 9: the Serializer's destructor runs here
+}
+
+// ============================================================
+// B4 FORWARD: the C entry points of the four members with callers outside this
+// block's files (entitylist_funcs.h lists them). One line each; the closing wave
+// rewires the callers and deletes these.
+// ============================================================
+void EntityList_Update(EntityList* self, void* time) { self->Update(time); }
+void EntityList_PostUpdate(EntityList* self) { self->PostUpdate(); }
+void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
+    self->RemoveEntity(reinterpret_cast<ComponentEntity**>(entityIBP));
+}
+void EntityList_Serialize(EntityList* self, void* stream) {
+    self->Serialize(*reinterpret_cast<IO::Stream*>(stream));
 }

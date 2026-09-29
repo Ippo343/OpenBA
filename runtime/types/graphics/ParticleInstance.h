@@ -37,6 +37,68 @@
 #include "Particle.h"      // the RtGraphics PODs these are asserted against
 #include "Geometry.h"      // Graphics::Geometry, the real base
 
+// ============================================================================
+// B.4: the pool record and the live-particle record, NAMED FIELD BY FIELD.
+// Both were described by offset constants in the two files that read them
+// (wave27_lane_gfxpart.cpp's kPool_* / kRec_*, wave28_lane_partsys.cpp's, which
+// measured the rest); the names are the readers', and every offset below is one
+// of those constants. Neither type has a retail name (no mangled symbol names
+// either -- Particle.h's banner); `ParticleBoundsRecord` is this tree's.
+//
+// The 0x58-byte LIVE PARTICLE, element of `ParticleBoundsRecord::_records`
+// (SetSize 0x180061bb0). ParticleSystemInstance::Update writes it and both
+// particle Draws read it; each pair is {current, previous}.
+// ============================================================================
+namespace RtGraphics {
+
+struct ParticleRecord {
+    int64_t       _lifetime;    // +0x00  ticks
+    int64_t       _age;         // +0x08  ticks
+    Math::Vector3 _pos;         // +0x10  current
+    Math::Vector3 _posPrev;     // +0x1c
+    Math::Vector3 _color;       // +0x28  rgb, current (Wave 27: "PosB")
+    Math::Vector3 _colorPrev;   // +0x34
+    float         _alpha;       // +0x40  current (Wave 27: "Scroll")
+    float         _alphaPrev;   // +0x44
+    float         _rot;         // +0x48  DEGREES, current
+    float         _rotPrev;     // +0x4c
+    float         _size;        // +0x50  current
+    float         _sizePrev;    // +0x54
+};
+static_assert(sizeof(ParticleRecord) == 0x58, "the live-particle stride is 0x58");
+static_assert(offsetof(ParticleRecord, _pos)       == 0x10, "ParticleRecord::_pos @ +0x10");
+static_assert(offsetof(ParticleRecord, _posPrev)   == 0x1c, "ParticleRecord::_posPrev @ +0x1c");
+static_assert(offsetof(ParticleRecord, _color)     == 0x28, "ParticleRecord::_color @ +0x28");
+static_assert(offsetof(ParticleRecord, _colorPrev) == 0x34, "ParticleRecord::_colorPrev @ +0x34");
+static_assert(offsetof(ParticleRecord, _alpha)     == 0x40, "ParticleRecord::_alpha @ +0x40");
+static_assert(offsetof(ParticleRecord, _alphaPrev) == 0x44, "ParticleRecord::_alphaPrev @ +0x44");
+static_assert(offsetof(ParticleRecord, _rot)       == 0x48, "ParticleRecord::_rot @ +0x48");
+static_assert(offsetof(ParticleRecord, _rotPrev)   == 0x4c, "ParticleRecord::_rotPrev @ +0x4c");
+static_assert(offsetof(ParticleRecord, _size)      == 0x50, "ParticleRecord::_size @ +0x50");
+static_assert(offsetof(ParticleRecord, _sizePrev)  == 0x54, "ParticleRecord::_sizePrev @ +0x54");
+
+// The 0x40-byte POOL RECORD (`ParticleInstance::_boundsPtr`, element of
+// `Particle::_records`). Built by the unexported ctor 0x180103bf0, never by a
+// C++ constructor: `_bounds` seeded (+1e8 x3, -1e8 x3), `_records` zeroed and
+// then sized to `particle->_subCount`, `_liveCount` 0, `frameTag` -1, the two
+// tick counters 0.
+struct ParticleBoundsRecord {
+    ::Box    _bounds;                             // +0x00  handed to SetBounds as `const Box&`
+    Collection::Array<ParticleRecord> _records;   // +0x18  {_data, _size@0x20, _capacity@0x24}
+    int32_t  _liveCount;                          // +0x28  read by both Draws and AddDrawItems
+    int32_t  frameTag;                            // +0x2c  ctor -1; vs ParticleInstance::_frameIndex
+    int64_t  _spawnAccum;                         // +0x30  ticks (Update)
+    int64_t  _totalTicks;                         // +0x38  ticks (Update)
+};
+static_assert(sizeof(ParticleBoundsRecord) == 0x40, "both allocation sites ask for 0x40");
+static_assert(offsetof(ParticleBoundsRecord, _records)    == 0x18, "ParticleBoundsRecord::_records @ +0x18");
+static_assert(offsetof(ParticleBoundsRecord, _liveCount)  == 0x28, "ParticleBoundsRecord::_liveCount @ +0x28");
+static_assert(offsetof(ParticleBoundsRecord, frameTag)    == 0x2c, "ParticleBoundsRecord::frameTag @ +0x2c");
+static_assert(offsetof(ParticleBoundsRecord, _spawnAccum) == 0x30, "ParticleBoundsRecord::_spawnAccum @ +0x30");
+static_assert(offsetof(ParticleBoundsRecord, _totalTicks) == 0x38, "ParticleBoundsRecord::_totalTicks @ +0x38");
+
+}  // namespace RtGraphics
+
 // ############################################################################
 // ENDGAME B.3 step 5 (block E) — `Graphics::ParticleInstance` and
 // `Graphics::ParticleSystemInstance`, the REAL C++ classes
@@ -180,7 +242,9 @@ protected:
     }
 
 public:
-    RtGraphics::ParticleResource*     _resource;   // +0xc0  null until attached
+    // B.4: the resource IS a `Graphics::Particle` (`_active` +0x20, `_records`
+    // +0x38 -- the POD `RtGraphics::ParticleResource` describes those two).
+    Particle*                         _resource;   // +0xc0  null until attached
     RtGraphics::ParticleBoundsRecord* _boundsPtr;  // +0xc8  cached by Update
     int32_t                           _index;      // +0xd0  ctor -1
     int32_t                           _pad_d4;     // +0xd4  not written by the ctor
@@ -251,7 +315,11 @@ public:
     ParticleSystemInstance() { _f_d8 = nullptr; }
 
 public:
-    void* _f_d8;     // +0xd8  UNVERIFIED beyond "zeroed by the ctor"
+    // +0xd8  B.4: typed -- the emitter record (Particle.h); the name stays,
+    // tests/unit/graphics_geometry_abi_test.cpp pins it. Borrowed from
+    // `ParticleSystem::_pool[_index]` when the resource is active, owned
+    // (built by SetParticle, freed by ~ParticleSystemInstance) when it is not.
+    RtGraphics::ParticleEmitter* _f_d8;
 };
 
 static_assert(sizeof(ParticleSystemInstance) == 0xe0,

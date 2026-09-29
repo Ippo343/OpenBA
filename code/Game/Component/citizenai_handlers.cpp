@@ -30,6 +30,8 @@
 #include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -39,7 +41,7 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
-#include "Game/exe_constants.h"
+#include "Game/exe_constants.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
@@ -53,46 +55,44 @@ namespace {
 // 0x1400c26c0 — PlayAnimation_Action_Ctor5
 // ------------------------------------------------------------
 // Builds the citizen's wander/animation action triple and installs it:
-//   (1) FUN_1400c5400 clears the action stack at CharacterComponent+0x48.
+//   (1) FUN_1400c5400 clears the action list at CharacterComponent::actions.
 //   (2) Allocates a SendComponentMessage action (0x40 bytes), CopyCtor'd from the
 //       entity IBP + msg-id DWORD_1401c70e8, and stores its IBP at
-//       CharacterComponent+0x58 (DeletePtr the old one first).
+//       CharacterComponent::field_0x58 (DeletePtr the old one first).
 //   (3) If animTime > 0: allocates a PlayAnimation action (0x40 bytes), inits its
 //       vtable/entity(+0x20)/index(+0x28=0)/Time(+0x30)/+0x38=0, and PUSHES it.
 //   (4) Allocates a MoveTo action (0x480 bytes), constructs it via MoveTo_Action_Ctor
 //       toward `dest`, and PUSHES it.
 //
-// param_1 = InternalBasePtr* whose [0] = the CitizenComponent.
+// param_1 = the InternalPtr<CitizenComponent> (by address).
 // param_2 = float* destination (world XY+; z filled by terrain query upstream).
 // param_3 = animation time in seconds.
-//
-// chain: citizen = *param_1 ; character = *(citizen+0x278) ; stack = character+0x48.
 // ============================================================
-void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTime) {
-    int64_t citizen = *reinterpret_cast<int64_t*>(param_1);
-    int64_t character = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    int64_t* stack = reinterpret_cast<int64_t*>(character + 0x48);
+static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1, float* dest, float animTime) {
+    CitizenComponent* citizen = *param_1;
+    CharacterComponent* character = citizen->character;
+    int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);
 
     WorkBase_TaskListCleanup_c5400(stack);
 
-    // (2) SendComponentMessage action -> CharacterComponent+0x58
+    // (2) SendComponentMessage action -> CharacterComponent::field_0x58
     void* msgAction = nullptr;
     void* mem = System::MemoryAllocator::MemAlloc(0x40, 8);
     if (mem) {
         int64_t destIBP = 0;
         new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
+        uint64_t entityIBP = reinterpret_cast<uint64_t>(citizen->_entity);
         msgAction = Pf_SendComponentMessageCopyCtor_b1d0(mem, &entityIBP, msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0);
     }
-    int64_t msgIBP = 0;
+    Action* msgIBP = nullptr;
     new (&msgIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(msgAction));   // B.3.3 bridge
-    if (*reinterpret_cast<int64_t*>(character + 0x58) != 0) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(character + 0x58))->DeletePtr(
+    if (character->field_0x58 != nullptr) {
+        reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr(
             );   // B.3.3 bridge
     }
-    *reinterpret_cast<int64_t*>(character + 0x58) = msgIBP;
+    character->field_0x58 = msgIBP;
 
     // (3) PlayAnimation action (only when animTime > 0)
     if (0.0f < animTime) {
@@ -101,7 +101,7 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
         if (pmem) {
             int64_t timeStore = 0;
             RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStore), animTime);
-            uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
+            uint64_t entityIBP = reinterpret_cast<uint64_t>(citizen->_entity);
             // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
             // two stamps); then retail's inlined leaf stores.
             PlayAnimation* a = ::new (pmem) PlayAnimation();
@@ -121,13 +121,13 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
     void* moveAction = nullptr;
     void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
-        int64_t entityVal = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
+        int64_t entityVal = reinterpret_cast<int64_t>(citizen->_entity);
         int64_t familyOut = 0;
         ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(entityVal), &familyOut);
         if (familyOut == 0) {
             // Standalone: the CharacterComponent type-id global (DAT_1401c7078) read by
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The
-            // "family" component IS the citizen's own CharacterComponent (citizen+0x278),
+            // "family" component IS the citizen's own CharacterComponent,
             // populated by Brick 2/4a — use it directly (Brick self-contained pattern).
             new (&familyOut) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(character));   // B.3.3 bridge
@@ -142,17 +142,17 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
 }
 
 // ============================================================
-// 0x14010a2b0 — CitizenAI_State_Wander
+// 0x14010a2b0 — CitizenAIComponent::State_Wander
 // ------------------------------------------------------------
 // Picks a nearby walkable cell and queues a MoveTo (+ animation) toward it.
-//   self        = param_1 + 0x38                  (sibling CitizenComponent IBP)
-//   target      = *(citizen + 0x258)              (wander anchor; bail if 0)
-//   if (*(target + 0x250) != 0 && Rand(1)==0) target = *(target + 0x250)  (reservation)
-//   grid        = *(gameWorld + 0xf8)
+//   target      = citizen->_parent                (bail if none)
+//   if (target->spouse != 0 && Rand(1)==0) target = target->spouse
+//   grid        = the world Map (GameUpdateLoop::m_game, untyped: raw)
 //   mapSize     = *grid
-//   For both `target` and `self` read their ModelComponent world pos
-//   (component+0x278 -> +0x68 model, +0x158 x / +0x15c y), add (mapSize>>1), clamp to
-//   [0, mapSize-1], form a cell index mapSize*yCell + xCell.
+//   For both `target` and the citizen read their ModelComponent world pos
+//   (character -> modelComponent, +0x158 x / +0x15c y: ModelComponent's raw
+//   transform), add (mapSize>>1), clamp to [0, mapSize-1], form a cell index
+//   mapSize*yCell + xCell.
 //   cell = WorkGrid_FindCell(grid, targetCell, selfCell, 0xe1f); bail if < 0.
 //   Build a world Vector3 from the found cell { (cell%mapSize)-K, (cell/mapSize)-K, 0 }
 //   where K = (float)(mapSize>>1) - 0.5, terrain-resolve it, then queue the action
@@ -163,19 +163,17 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
 // so the original's `extraout_XMM0_Da` is the stale (float)(mapSize>>1) left in XMM0
 // by the position math — reproduced here as `halfMapF`.
 // ============================================================
-bool CitizenAI_State_Wander(int64_t param_1) {
-    int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
+bool CitizenAIComponent::State_Wander() {
+    CitizenComponent* target = citizen->_parent;
+    if (target == nullptr) return false;
 
-    int64_t target = *reinterpret_cast<int64_t*>(*self + 0x258);
-    if (target == 0) return false;
-
-    void* rng = (GameUpdateLoop::_singleton != nullptr)
-                ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8)
+    System::Random* rng = (GameUpdateLoop::_singleton != nullptr)
+                ? GameUpdateLoop::_singleton->m_random
                 : nullptr;
 
-    if (*reinterpret_cast<int64_t*>(target + 0x250) != 0 &&
-        rng && reinterpret_cast<System::Random*>(rng)->Rand(1u) == 0) {   // B.3.4b bridge
-        target = *reinterpret_cast<int64_t*>(target + 0x250);
+    if (target->spouse != nullptr &&
+        rng && rng->Rand(1u) == 0) {
+        target = target->spouse;
     }
 
     int* grid = (GameUpdateLoop::_singleton != nullptr)
@@ -184,9 +182,7 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     if (!grid) return false;
 
     // --- cell coords from `target` model position ---
-    int64_t tChar = target;
-    tChar = *reinterpret_cast<int64_t*>(tChar + 0x278);
-    int64_t tModel = *reinterpret_cast<int64_t*>(tChar + 0x68);
+    int64_t tModel = reinterpret_cast<int64_t>(target->character->modelComponent);
     int mapSize = *grid;
     int half = mapSize >> 1;
     int tx = static_cast<int>(*reinterpret_cast<float*>(tModel + 0x158) + static_cast<float>(half));
@@ -196,10 +192,8 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     if (ty < 0) ty = 0;
     if (mapSize <= ty) ty = mapSize - 1;
 
-    // --- cell coords from `self` (the citizen) model position ---
-    int64_t sChar = *self;
-    sChar = *reinterpret_cast<int64_t*>(sChar + 0x278);
-    int64_t sModel = *reinterpret_cast<int64_t*>(sChar + 0x68);
+    // --- cell coords from the citizen's model position ---
+    int64_t sModel = reinterpret_cast<int64_t>(citizen->character->modelComponent);
     int sx = static_cast<int>(*reinterpret_cast<float*>(sModel + 0x158) + static_cast<float>(half));
     int sy = static_cast<int>(*reinterpret_cast<float*>(sModel + 0x15c) + static_cast<float>(half));
     if (sx < 0) sx = 0;
@@ -220,8 +214,8 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     float worldPos[3] = { 0.0f, 0.0f, 0.0f };
     Reimpl_MapGetTerrainPos(grid, worldPos, inVec, '\0', nullptr);
 
-    int64_t citizenIBP = *self;   // raw CitizenComponent ptr in a stack IBP holder
-    float r = rng ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
+    CitizenComponent* citizenIBP = citizen;   // the CitizenComponent in a stack IBP holder
+    float r = rng ? rng->RandFloat() : 0.0f;
     float animTime = r * kRdata_1401721a0 + kRdata_140172180;
     CitizenAI_PlayAnimationActionCtor5(&citizenIBP, worldPos, animTime);
 

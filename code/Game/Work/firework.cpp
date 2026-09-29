@@ -31,6 +31,13 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/CitizenDescription.h"   // ENDGAME B.3.9 D5: CitizenDescription::TypeId()
 #include "Component/InteractDescription.h"  // ENDGAME B.3.9 D5: InteractDescription::TypeId()
+#include "Component/InteractComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/ProfessionList.h"
 #include <cstdint>
 #include <cstring>
 #include <cstddef>
@@ -80,35 +87,31 @@ static uint32_t WorldToCell(int gridSize, float x, float z) {
 // 7. Register work with citizen AI (CitizenAI_impl_1a30)
 // Returns: 0 = no fire, 1 = at capacity, 2 = work assigned.
 // ============================================================
-int FireWork::Execute(void* citizenIBP, void* time) {
-    uintptr_t s = (uintptr_t)this;
+int FireWork::Execute(void* citizenIBPArg, void* time) {
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenIBP = reinterpret_cast<CitizenComponent**>(citizenIBPArg);
 
-    // CheckPtr on the entity IBP at +0x10
-
-    // Find PositionComponent on building entity
-    uintptr_t posCompIBP = 0;
-    WorkBase_FindComponent_2ed0(*(uintptr_t*)(s + 0x10), &posCompIBP);
+    // CheckPtr on the entity IBP at +0x10; its InteractComponent
+    InteractComponent* posCompIBP = field_10->FindComponent<InteractComponent>();
 
     // Check capacity: _field48 (max capacity) vs _field58 (assigned count)
     // Original: if ((int)param_1[9] <= (int)param_1[0xb]) return 1;
     // i.e. if max_capacity <= assigned_count, we're at capacity.
-    int32_t maxCap   = *(int32_t*)(s + 0x48);
-    int32_t assigned = *(int32_t*)(s + 0x58);
+    int32_t maxCap   = _field48;
+    int32_t assigned = _field58;
     if (maxCap <= assigned) {
         return 1;
     }
 
-    // Get map data
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t mapData = *(uintptr_t*)(gameWorld + 0xf0);
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
+    // Get map data (GameUpdateLoop m_citizenList / m_game are still void*: LEFT)
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    CitizenBehavior* townMgr = (CitizenBehavior*)gameWorld->m_citizenList;
+    int* mapGrid = (int*)gameWorld->m_game;
 
-    // Get citizen entity -> StateMachineComponent -> PositionComponent -> world pos
-    uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
-
-    uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
-
-    uintptr_t posData = *(uintptr_t*)(smComp + 0x68);
+    // Citizen -> CharacterComponent (+0x278) -> ModelComponent (+0x68) -> world pos
+    // (the transform is raw storage, H5: the float reads are LEFT)
+    uintptr_t posData = reinterpret_cast<uintptr_t>((*citizenIBP)->character->modelComponent);
 
     // Original reads posData+0x160 (citizenY) but only uses it for dead-store
     // to local_60[2] which is zeroed before FindFire — skip it.
@@ -116,20 +119,21 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     uint32_t centerCell = WorldToCell(gridSize,
         *(float*)(posData + 0x158), *(float*)(posData + 0x15c));
 
-    // Check if citizen is a CitizenComponent (type check)
-    void* citizenObj = *(void**)(*(uintptr_t*)citizenIBP + 0x18);
+    // The citizen's description (+0x18), type-checked
+    void* citizenObj = (*citizenIBP)->_description;
     // DWORD_1401c7190 = CitizenDescription (ENDGAME B.3.9 D5: by cell, not by the
     // legacy variable name "CitizenComponent").
     bool isCitizen = Object::IsDerivedFromNullSafe(citizenObj, CitizenDescription::TypeId());
-    void* citizenComp = isCitizen ? citizenObj : nullptr;
+    // Component::_description is void*: LEFT for Component.h's owner
+    CitizenDescription* citizenComp = isCitizen ? reinterpret_cast<CitizenDescription*>(citizenObj) : nullptr;
 
     // Initialize position buffers (all zeroed — original zeros local_60 before FindFire)
     float srcPos[3] = {0.0f, 0.0f, 0.0f};
     float destPos[3] = {0.0f, 0.0f, 0.0f};
 
     // Search for a burning entity (spiral search from citizen position)
-    int searchRadius = *(int*)((uintptr_t)citizenComp + 0xf8);
-    bool found = static_cast<uint8_t>(FireWork_SpiralSearch_81d0(static_cast<int64_t>(mapData), centerCell, searchRadius, srcPos, destPos)) != 0;
+    int searchRadius = citizenComp->_if8;
+    bool found = static_cast<uint8_t>(townMgr->FindWater(centerCell, searchRadius, srcPos, destPos)) != 0;
 
     // Outcome of the TownManager water search (0x1400881d0). This is the ONLY place
     // that walks townMgr+0x140, so it is also the only place that proves the coarse
@@ -148,7 +152,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
         if (s_fwCalls <= 4 || (s_fwCalls % 250) == 0) {
             fprintf(stderr, "[FireWork] water search #%d: townMgr=%p buckets=%p "
                     "centerCell=%u radius=%d -> found=%d  (census: found=%d missed=%d)\n",
-                    s_fwCalls, (void*)mapData, *(void**)(mapData + 0x140), centerCell,
+                    s_fwCalls, (void*)townMgr, (void*)townMgr->field_0x140, centerCell,
                     searchRadius, (int)found, s_fwFound, s_fwMissed);
             fflush(stderr);
         }
@@ -159,7 +163,7 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     }
 
     // Check pathfinding accessibility
-    void* posComp = *(void**)(posCompIBP + 0x18);
+    void* posComp = posCompIBP->_description;
     // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell, not by the
     // legacy variable name "PositionComponent").
     bool isPositionComp = Object::IsDerivedFromNullSafe(posComp, InteractDescription::TypeId());
@@ -170,11 +174,11 @@ int FireWork::Execute(void* citizenIBP, void* time) {
 
     // Check main entity path
     bool pathFound = WorkImpl_WalkablePos_122be0(
-        posCompIBP, (uintptr_t)posCompTyped + 0x28,
+        reinterpret_cast<uintptr_t>(posCompIBP), (uintptr_t)posCompTyped + 0x28,
         srcPos, bestPos, &bestDist);
 
-    // Check child entities
-    uintptr_t posCompVal = *(uintptr_t*)&posCompIBP;
+    // Check child entities (InteractComponent keeps its +0x28 array raw: LEFT)
+    uintptr_t posCompVal = reinterpret_cast<uintptr_t>(posCompIBP);
     if (*(int32_t*)(posCompVal + 0x30) > 0) {
         uintptr_t childOffset = 0;
         for (int i = 0; i < *(int32_t*)(posCompVal + 0x30); i++) {
@@ -182,7 +186,6 @@ int FireWork::Execute(void* citizenIBP, void* time) {
             bool childResult = WorkImpl_WalkablePosRecursive_122b00(
                 *childIBP, 0, srcPos, bestPos, &bestDist);
             pathFound = pathFound || childResult;
-            citizenIBP = citizenIBP; // preserve param register (Ghidra artifact)
             childOffset += 8;
         }
     }
@@ -202,9 +205,9 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     uint32_t destCell = (uint32_t)(gridSize * cz + cx);
 
     // Validate work assignment (checks timing, distance, etc.)
-    uintptr_t citizenIBPVal = *(uintptr_t*)citizenIBP;
+    CitizenComponent* citizenIBPVal = *citizenIBP;
     bool valid = static_cast<uint8_t>(WorkImpl_BuildStructureStep_6ef0(
-        s, (void*)&citizenIBPVal, destCell, centerCell, time)) != 0;
+        reinterpret_cast<uintptr_t>(this), &citizenIBPVal, destCell, centerCell, time)) != 0;
 
     if (!valid) {
         return 0;
@@ -213,33 +216,32 @@ int FireWork::Execute(void* citizenIBP, void* time) {
     // Set up fire suppression action queue
     // Original: local_res8 = param_1[2]; local_88 = *(int**)param_2;
     // local_88 is REASSIGNED from mapGrid to citizen entity ptr here.
-    uintptr_t workEntityIBP = *(uintptr_t*)(s + 0x10);
-    int priority = *(int32_t*)(s + 0x20);
-    uintptr_t citizenPtr = *(uintptr_t*)citizenIBP;
+    ComponentEntity* workEntityIBP = field_10;
+    int priority = field_20;
+    CitizenComponent* citizenPtr = *citizenIBP;
     WorkAct_PerformWorkCopyCtor_ba9f0(
-        (void*)&citizenPtr,
+        &citizenPtr,
         priority,
-        srcPos, destPos, bestPos, reinterpret_cast<int64_t*>((void*)&workEntityIBP));
+        srcPos, destPos, bestPos, reinterpret_cast<int64_t*>(&workEntityIBP));
 
     // Update citizen entity state
-    uintptr_t citizenVal = *(uintptr_t*)citizenIBP;
+    CitizenComponent* citizenVal = *citizenIBP;
 
-    // Get target entity via vtable slot 10 (+0x50)
+    // Get target via vtable slot 10 (+0x50): a profession
     uintptr_t targetIBP = 0;
-    void* targetResult = GetTarget(&targetIBP);
-    uintptr_t targetVal = *(uintptr_t*)targetResult;
+    Profession* targetVal = *(Profession**)GetTarget(&targetIBP);
 
     // Set citizen flags
-    *(uint32_t*)(citizenVal + 0x54) |= 4;
-    *(int32_t*)(citizenVal + 0x30) = priority;
-    *(int32_t*)(citizenVal + 0xb0) = 0;
+    citizenVal->statusFlags |= 4;
+    citizenVal->field_0x30 = priority;
+    citizenVal->field_0xB0 = 0;
 
-    if (targetVal == *(uintptr_t*)(citizenVal + 0x1f0) && priority >= 0) {
-        *(uint32_t*)(citizenVal + 0x88) |= 0x20000;
+    if (targetVal == citizenVal->profession && priority >= 0) {
+        citizenVal->happinessFlags |= 0x20000;
     }
 
-    // Register with citizen AI BST at +0x50
-    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>((void*)(s + 0x50)), &targetIBP, citizenIBP);
+    // Register with citizen AI BST at +0x50 (the tree helpers take the root as uintptr_t*: LEFT)
+    WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&_field50), &targetIBP, citizenIBP);
 
     return 2;
 }
@@ -257,11 +259,8 @@ int FireWork::Execute(void* citizenIBP, void* time) {
 // Returns: 1 if BST is now empty, 0 otherwise.
 // ============================================================
 int FireWork::Validate() {
-    uintptr_t s = (uintptr_t)this;
-
     // BST root is at +0x50
-    void** bstRoot = (void**)(s + 0x50);
-    void* root = *bstRoot;
+    AssignmentNode* root = _field50;
 
     // Dynamic array of entities to remove
     uintptr_t* removeArr = nullptr;
@@ -283,18 +282,18 @@ int FireWork::Validate() {
     //   +0x22: height (short)
 
     // Find leftmost node (minimum)
-    void* node = root;
-    while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-        node = *(void**)((uintptr_t)node + 0x10);
+    AssignmentNode* node = root;
+    while (node->left != nullptr) {
+        node = node->left;
     }
 
     // Traverse in-order
     while (node != nullptr) {
-        // Read entity IBP from node key
-        uintptr_t entityIBP = *(uintptr_t*)node;
+        // Read the citizen IBP from the node key
+        uintptr_t entityIBP = (uintptr_t)node->element;
 
-        // Check if this entity still needs fire work
-        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(s), nullptr, (void*)&entityIBP, nullptr);
+        // Check if this citizen still has the fire work's task
+        bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
 
         if (!stillValid) {
             // Need to add to removal list -- grow array if needed
@@ -339,22 +338,21 @@ int FireWork::Validate() {
         }
 
         // Move to in-order successor
-        void* right = *(void**)((uintptr_t)node + 0x18);
+        AssignmentNode* right = node->right;
         if (right != nullptr) {
             // Go right, then all the way left
             node = right;
-            while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-                node = *(void**)((uintptr_t)node + 0x10);
+            while (node->left != nullptr) {
+                node = node->left;
             }
         } else {
             // Go up until we come from a left child
-            void* parent = *(void**)((uintptr_t)node + 0x08);
-            if (parent != nullptr && *(void**)((uintptr_t)parent + 0x10) != node) {
+            AssignmentNode* parent = node->parent;
+            if (parent != nullptr && parent->left != node) {
                 // We came from the right -- keep going up
-                while (parent != nullptr &&
-                       *(void**)((uintptr_t)parent + 0x18) == node) {
+                while (parent != nullptr && parent->right == node) {
                     node = parent;
-                    parent = *(void**)((uintptr_t)node + 0x08);
+                    parent = node->parent;
                 }
                 node = parent;
             } else {
@@ -367,18 +365,18 @@ int FireWork::Validate() {
     if ((int)removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
             // Find the BST node matching this entity key
-            void* bstNode = *bstRoot;
+            AssignmentNode* bstNode = _field50;
             while (bstNode != nullptr) {
-                uintptr_t nodeKey = *(uintptr_t*)bstNode;
+                uintptr_t nodeKey = (uintptr_t)bstNode->element;
                 if (removeArr[i] < nodeKey) {
-                    bstNode = *(void**)((uintptr_t)bstNode + 0x10); // left
+                    bstNode = bstNode->left; // left
                 } else {
                     if (removeArr[i] <= nodeKey) {
-                        // Found -- remove it
-                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(bstRoot), bstNode);
+                        // Found -- remove it (the tree helpers take the root as uintptr_t*: LEFT)
+                        WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&_field50), bstNode);
                         break;
                     }
-                    bstNode = *(void**)((uintptr_t)bstNode + 0x18); // right
+                    bstNode = bstNode->right; // right
                 }
             }
         }
@@ -402,9 +400,8 @@ int FireWork::Validate() {
 // CitizenAI_impl_5520 (0x140025520) = WorkBST_BSTFindRemove_25520: BST lookup + remove by key.
 
 int FireWork::OnComplete(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
-    uintptr_t s = (uintptr_t)this;
     // Remove citizen entry from BST at +0x50
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(s + 0x50)), citizenIBP);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);
     return 0;
 }
 
@@ -417,9 +414,8 @@ int FireWork::OnComplete(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
 // identical to Slot6 without the SUB RSP / return false wrapper.
 // ============================================================
 int FireWork::OnCancel(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
-    uintptr_t s = (uintptr_t)this;
     // Remove citizen entry from BST at +0x50
-    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>((void*)(s + 0x50)), citizenIBP);
+    WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field50), citizenIBP);
     return 0;
 }
 
@@ -437,54 +433,43 @@ int FireWork::OnCancel(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
 // FUN_1400c5400 = WorkBase_TaskListCleanup_c5400: remove pending action from state machine.
 
 int FireWork::Cleanup() {
-    uintptr_t s = (uintptr_t)this;
-    void** bstRoot = (void**)(s + 0x50);
-
     while (true) {
-        void* root = *bstRoot;
+        AssignmentNode* root = _field50;
         if (root == nullptr) return 0;
 
         // Find leftmost node in BST
-        void* node = root;
-        void* leftChild = *(void**)((uintptr_t)node + 0x10);
+        AssignmentNode* node = root;
+        AssignmentNode* leftChild = node->left;
         while (leftChild != nullptr) {
             node = leftChild;
-            leftChild = *(void**)((uintptr_t)node + 0x10);
+            leftChild = node->left;
         }
 
         if (node == nullptr) return 0;
 
         // Double-traverse to find leftmost again (matches decompilation pattern)
-        void* node2 = root;
+        AssignmentNode* node2 = root;
         while (node2 != nullptr) {
-            void* left2 = *(void**)((uintptr_t)node2 + 0x10);
+            AssignmentNode* left2 = node2->left;
             if (left2 == nullptr) break;
             node2 = left2;
         }
 
-        // CheckPtr on the node, read entity
-        uintptr_t entityPtr = *(uintptr_t*)node2;
-
-        // Get StateMachineComponent at entity+0x278
-        uintptr_t smComp = *(uintptr_t*)(entityPtr + 0x278);
-
-        // Remove pending action from SMC+0x48
-        WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
+        // CheckPtr on the node, read the citizen; its CharacterComponent's action list (+0x48)
+        CitizenComponent* citizen = node2->element;
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
     }
 }
 
 // ============================================================
 // Slot10 (0x1400e9a30): GetTarget.
 //
-// Returns the map entity from gameWorld singleton:
-//   gameWorld->field_b0->field_30
+// Returns the profession list's +0x30 profession (GameUpdateLoop::m_professionList).
 // Uses hidden return pointer ABI (member function returning
 // non-trivial InternalBasePtr): RCX=this, RDX=retbuf.
 // ============================================================
 void* FireWork::GetTarget(void* retbuf) {
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
-    *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
+    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 
@@ -510,16 +495,13 @@ void* FireWork::GetTarget(void* retbuf) {
 extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer);
 void FireWork::Persist(void* stream) {
     if (!stream) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(s + 0x50), ser);   // 0x1400296b0 (work_base_bst.cpp)
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge (Persist's stream is void*)
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(&_field50), &ser);   // 0x1400296b0 (work_base_bst.cpp)
+    ser.Serialize(_field48, nullptr);
 }
 
 // ============================================================
@@ -532,21 +514,20 @@ void FireWork::Persist(void* stream) {
 // which is why work_base_standalone.h's Work_Slot11_HasActiveTasks helper is
 // explicitly documented as unusable here.
 int FireWork::GetPriority() {
-    return *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(this) + 0x58) > 0 ? 1 : 0;
+    return _field58 > 0 ? 1 : 0;
 }
 
 // ============================================================
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The stamps are the compiler's.
 // ============================================================
-FireWork::FireWork() : Work(), _field48(nullptr), _field50(nullptr), _field58(0) {
+FireWork::FireWork() : Work(), _field48(0), _field4C(0), _field50(nullptr), _field58(0) {
 }
 
-// 0x1400e9bd0: `MOV dword [RDI+0x48],EBX` -- a DWORD store into the qword
-// field, so its upper half keeps whatever the allocation held (retail's).
+// 0x1400e9bd0: `MOV dword [RDI+0x48],EBX` -- a DWORD store; +0x4C keeps whatever
+// the allocation held (retail's).
 FireWork::FireWork(void* pEntityIBP, uint32_t capacity)
-    : Work(pEntityIBP), _field50(nullptr), _field58(0) {
-    std::memcpy(&_field48, &capacity, sizeof capacity);
+    : Work(pEntityIBP), _field48(static_cast<int32_t>(capacity)), _field50(nullptr), _field58(0) {
 }
 
 // ============================================================

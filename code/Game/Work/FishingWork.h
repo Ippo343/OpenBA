@@ -27,6 +27,8 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class CitizenComponent;
+
 
 class FishingWork final : public Work {
     DECLARE_EXE_TYPE(FishingWork)
@@ -49,10 +51,11 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- FishingWork fields (+0x48) ---
-    void*    citizenRefs;        // +0x48: InternalBasePtr[] array (citizen entity refs)
+    CitizenComponent** citizenRefs; // +0x48: Array<InternalPtr<CitizenComponent>> data (Persist
+                                    //        0x1400ea910 validates each against CitizenComponent)
     int32_t  citizenCount;       // +0x50: count of citizenRefs array
     int32_t  citizenCapacity;    // +0x54: capacity of citizenRefs array
-    void*    spotStates;         // +0x58: int32_t[] array (0=avail, 1=assigned, 2=done)
+    int32_t* spotStates;         // +0x58: Array<int> data (0=avail, 1=assigned, 2=done)
     int32_t  spotCount;          // +0x60: count of spotStates array
     int32_t  spotCapacity;       // +0x64: capacity of spotStates array
     int32_t  retryCount;         // +0x68: retry counter for fishing spot search

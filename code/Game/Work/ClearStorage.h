@@ -28,6 +28,9 @@
 #include <cstddef>
 #include "Work/Work.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Set<T>::Node
+
+class CitizenComponent;
 
 
 class ClearStorage final : public Work {
@@ -54,7 +57,11 @@ public:
     // --- ClearStorage fields (+0x48) ---
     void*    _field48;           // +0x48: auxiliary data ptr (freed in dtor)
     void*    _field50;           // +0x50: auxiliary data ptr (zeroed in dtor)
-    void*    _field58;           // +0x58: BST root — tree of citizen InternalBasePtrs
+    // +0x58: the root of Collection::Set<InternalPtr<CitizenComponent>> (node 0x28: element,
+    // parent +0x08, left +0x10, right +0x18; Cleanup 0x1400e72a0 reads the element's +0x278).
+    // The container stays two raw fields (H5: Set has a dtor).
+    using AssignmentNode = Collection::Set<CitizenComponent*>::Node;
+    AssignmentNode* _field58;
     uint32_t _field60;           // +0x60: item count remaining to clear
     uint8_t  _pad64[4];         // +0x64: padding
 };

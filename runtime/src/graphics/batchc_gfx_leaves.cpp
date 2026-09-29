@@ -94,13 +94,18 @@
 #include <cstring>
 
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/Animation.h"          // B.4: Graphics::Animation (the copy ctor / dtor doors)
 #include "../../types/graphics/GeneratedImageBuffer.h"  // ENDGAME B.3.5 block GC
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 #include "../../types/graphics/Light.h"          // Graphics::SpotLight -- block GC
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Mesh.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"                  // B.4: IO::Stream::_encoding / _direction
+#include "../../types/video/CompanionData.h"        // B.4: Video::{Index,Vertex}BufferData::Serialize
 #include "../../types/video/Context.h"           // ENDGAME B.3.5 block GC
+#include "../../types/video/VideoProgram.h"      // B.4: Video::VideoProgram (DrawItemList)
+#include "../../types/video/ShaderProgram.h"     // B.4: Video::{Vertex,Pixel}Program::_byteCode
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
 #include "../../types/graphics/ParticleInstance.h"  // Graphics::ParticleInstance
 #include "../../types/video/Buffers.h"              // Video::{Index,Vertex}Buffer
@@ -110,16 +115,6 @@
 #include "../picking/scene_grid.h"                  // rtpickgrid::TransformArrayAssign / ArrayDtorTransform
 
 namespace rtcoll { void MemFree(void* p); }   // runtime/src/collection/array.cpp
-
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
-using RtGraphics::Camera;
-using RtGraphics::MaterialInstance;
-using RtGraphics::Renderer;
-using RtGraphics::RendererDrawGroup;
-using RtGraphics::RendererDrawItem;
-using RtGraphics::EdgeMesh;
 
 namespace {
 
@@ -143,70 +138,24 @@ namespace {
 // (ENDGAME B.3.9 GFX: `ExternalDtor`, the ??1External door the retired ??1EdgeMesh
 // door tail-called, is gone; the real ~EdgeMesh chains ~External.)
 
-// Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
-// both PORTED (video/buffers.cpp) and registered by name and address.
-// ENDGAME B.3.5 caller batch: both are DEFINED members, so both are member calls.
-void IndexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::IndexBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge
-}
-void VertexBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::VertexBuffer*>(p)->PlatformDestruct();  // B.3.5 bridge
-}
+// Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0:
+// member calls on EdgeMesh's typed buffers (B.4; the two wrappers are gone).
 
 // `??2ImageBuffer@Video@@SAPEAX_K@Z` / `??2RenderBuffer@Video@@SAPEAX_K@Z` —
 // the class operator news. CreateTargets INLINES both (Enter(alloc+0x640);
 // Allocate(alloc, n, 8); Leave), which is instruction for instruction what
-// these two exported statics are; imagebuffer_derived.cpp reaches the identical
-// inlining the same way.
-void* ImageBufferOperatorNew(uint64_t n) {
-    return Video::ImageBuffer::operator new(n);    // 0x18001e910
-}
-void* RenderBufferOperatorNew(uint64_t n) {
-    return Video::RenderBuffer::operator new(n);   // 0x18001f2e0
-}
-void ImageBufferCtor(void* p) { ::new (p) Video::ImageBuffer(); }   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
-// ENDGAME B.3.5 caller batch: DEFINED members of the real `Video::RenderBuffer`
-// (buffers.cpp / device.cpp). The `RbCreateFn` typedef went with its door.
-void RenderBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
-}
-bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
-        reinterpret_cast<const Video::ImageBuffer*>(colour),
-        reinterpret_cast<const Video::ImageBuffer*>(depth));           // B.3.5 bridge
-}
+// these two exported statics are; B.4: CreateTargets calls them by name, and
+// the RenderBuffer members (`PlatformConstruct`, `Create`) likewise.
 
-// Video::Context setters DrawItemList drives. Both PORTED (video/context.cpp)
-// and registered by name and address.
-// ENDGAME B.3.5 caller batch: both are DEFINED members. THE DOOR DECIDED THE
-// OVERLOAD — `?SetTransform@…QEAAXHAEBVMatrix@Math@@@Z` 0x18001a6b0 is the
-// two-argument setter, NOT `SetTransformScale` (0x18001a400).
-void ContextSetCamera(void* ctx, const void* view, const void* proj) {
-    reinterpret_cast<Video::Context*>(ctx)->SetCamera(
-        *reinterpret_cast<const Math::Matrix*>(view),
-        *reinterpret_cast<const Math::Matrix*>(proj));                 // B.3.5 bridge
-}
-void ContextSetTransform(void* ctx, int32_t slot, const void* m) {
-    reinterpret_cast<Video::Context*>(ctx)->SetTransform(
-        slot, *reinterpret_cast<const Math::Matrix*>(m));              // B.3.5 bridge
-}
-
-// `?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z` 0x180102c90 —
-// PORTED (wave21_lane_gfxbody.cpp), and a DEFINED member since block GC, so this
-// is a member call (ENDGAME B.3.5 caller batch).
-void MaterialInstanceSetup(const void* mi, void* ctx, int32_t shader) {
-    reinterpret_cast<const Graphics::MaterialInstance*>(mi)
-        ->Setup(*reinterpret_cast<Video::Context*>(ctx), shader);       // B.3.5 bridge
-}
-
-// The `1.0f` at 0x18016169c, as a BIT PATTERN read out of the image rather
-// than converted from decimal (lights_vtable.cpp's rule).
-constexpr uint32_t kBits_one = 0x3f800000u;
-float AsFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
+// Video::Context setters DrawItemList drives, and
+// `?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z` 0x180102c90:
+// DEFINED members, called by name (B.4: the `void*` wrappers are gone). THE
+// DOOR DECIDED THE OVERLOAD — `?SetTransform@…QEAAXHAEBVMatrix@Math@@@Z`
+// 0x18001a6b0 is the two-argument setter, NOT `SetTransformScale` (0x18001a400).
 
 // ---------------------------------------------------------------------------
-// The System::String release idiom, spelled once. Retail open-codes it at four
-// sites in this file.
+// The System::String release idiom, spelled once. Retail open-codes it at the
+// three name slots of ~Animation.
 //
 //   if (!s) return;
 //   if (--s[-1] != 0) { *slot = nullptr; return; }     // a reference survives
@@ -215,19 +164,18 @@ float AsFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
 //
 // THE SLOT IS DELIBERATELY LEFT DANGLING ON THE FREE ARM. That is what
 // 0x1800fb2c2/0x1800e040e/0x180103e17 do, and vtbatch7b_stream_run_win.cpp's
-// ReleaseString already records the same shape. `checkZeroAfterAdjust` is
-// ~Particle's extra twist: it branches on the ZF of the `ADD qword [slot],-8`
-// and skips the free when the adjusted pointer is zero.
+// ReleaseString already records the same shape. (~Particle's extra ZF twist
+// lives with ~Particle in animation.cpp.) B.4: the slot is the `char*` field
+// itself and the count is `RtSystem::StringRefCount` (String.h).
 // ---------------------------------------------------------------------------
-void ReleaseString(void** slot, bool checkZeroAfterAdjust) {
-    uint8_t* s = static_cast<uint8_t*>(*slot);
+void ReleaseString(char** slot) {
+    char* const s = *slot;
     if (s == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(s - 4);
-    --(*rc);
-    if (*rc != 0) { *slot = nullptr; return; }
-    uint8_t* blk = s - 8;
+    int32_t& rc = RtSystem::StringRefCount(s);
+    --rc;
+    if (rc != 0) { *slot = nullptr; return; }
+    char* const blk = s - 8;
     *slot = blk;                                 // ADD qword [slot],-8
-    if (checkZeroAfterAdjust && blk == nullptr) return;   // JZ on that ADD's ZF
     rtcoll::MemFree(blk);
 }
 
@@ -265,12 +213,9 @@ void ReleaseString(void** slot, bool checkZeroAfterAdjust) {
 // in wave9_lane_gfx.cpp: `const bool didWork = …` had no reader anywhere in the
 // tree. The banner above still calls it "the diff oracle", and that sentence was
 // describing a variable nothing printed.
-extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
-                                                             void* ctx, int32_t arg) {
-    reinterpret_cast<const Graphics::MaterialInstance*>(selfv)      // B.3.5 bridge
-        ->Graphics::MaterialInstance::GenerateTextures(
-            *reinterpret_cast<Video::Context*>(ctx), arg);          // B.3.5 bridge
-}
+//
+// B.4: the door's one caller (DrawItemList below) calls the member by name;
+// the `void*` door has no other reader and is gone.
 
 // ############################################################################
 // Graphics::ParticleSystemInstance::~ParticleSystemInstance
@@ -278,7 +223,7 @@ extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
 // ############################################################################
 //
 //   this->vtable = ??_7ParticleSystemInstance@
-//   if (this->_resource->[0x20] == 0 && this->_f_d8)      // UNGUARDED deref
+//   if (this->_resource->[0x20] == 0 && this->_f_d8)    // UNGUARDED deref
 //       { ArrayDtor(_f_d8); operator delete(_f_d8); }
 //   this->vtable = ??_7ParticleInstance@
 //   ParticleInstance::RemoveState(this)
@@ -295,15 +240,14 @@ extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
 // `~ParticleSystemInstance()` below. The two restamps, RemoveState
 // (~ParticleInstance) and the ~Geometry tail are the compiler's chain.
 Graphics::ParticleSystemInstance::~ParticleSystemInstance() {
-    const uint8_t* const resource = reinterpret_cast<const uint8_t*>(_resource);
-    if (resource[0x20] == 0) {                          // UNGUARDED, as retail
-        void* const owned = _f_d8;
+    if (_resource->_active == 0) {                      // +0x20, UNGUARDED, as retail
+        RtGraphics::ParticleEmitter* const owned = _f_d8;
         if (owned != nullptr) {
             // 0x180021490: ~Array<T> for a trivially destructible T — frees
             // [0] and zeroes [0]/[8]. 0x180020600: the matching class
             // operator delete. Both unexported template instantiations,
             // called by their body names.
-            rtcoll::RtColl_ArrayDtor_180021490(owned);
+            rtcoll::RtColl_ArrayDtor_180021490(&owned->_extra);
             RtGraphics_Emitter_OperatorDelete(owned);
         }
     }
@@ -345,46 +289,57 @@ Graphics::ParticleSystemInstance::~ParticleSystemInstance() {
 // back. Left alone here for the reason Camera.h's `_pad24` note gives: zeroing
 // it would make our copy differ from retail's on a byte retail never writes.
 // ############################################################################
+//
+// B.4: on `Graphics::Animation`'s named fields. The door keeps its `void*`
+// signature (array.cpp's element ops and the unit test's link stub hold it),
+// so each side is viewed once as the class (LEFT); ??0 stays a door, not a
+// real ctor (W1 brief: Animation's ctors change only with object-identical
+// proof). The float fields are plain 4-byte moves either way.
 extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
-    const uint8_t* const src = static_cast<const uint8_t*>(srcv);
+    Graphics::Animation* const self = static_cast<Graphics::Animation*>(selfv);
+    const Graphics::Animation* const src = static_cast<const Graphics::Animation*>(srcv);
 
-    *reinterpret_cast<uint64_t*>(self + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x08) = 0;
-    rtcoll::RtColl_ArrayAssign_18001b270(self, src);   // 0x18001b270
+    self->_events._data     = nullptr;           // +0x00 \ both qwords zero
+    self->_events._size     = 0;                 // +0x08 |
+    self->_events._capacity = 0;                 //       /
+    rtcoll::RtColl_ArrayAssign_18001b270(&self->_events, &src->_events);   // 0x18001b270
 
     // The three refcounted names, ASCENDING — the mirror of the destructor's
     // descending release. Each slot is zeroed first and only then overwritten,
     // exactly as retail does it (`MOV [RBX+off],RSI` with RSI == 0, then the
     // conditional store and `INC dword [RAX-4]`).
-    const uint32_t kStrOffsets[3] = { 0x10u, 0x18u, 0x20u };
+    char* Graphics::Animation::* const kNames[3] = {
+        &Graphics::Animation::_name,             // +0x10
+        &Graphics::Animation::_meshName,         // +0x18
+        &Graphics::Animation::_sourceName,       // +0x20
+    };
     for (int k = 0; k < 3; ++k) {
-        const uint32_t off = kStrOffsets[k];
-        *reinterpret_cast<void**>(self + off) = nullptr;
-        uint8_t* s = *reinterpret_cast<uint8_t* const*>(src + off);
+        self->*kNames[k] = nullptr;
+        char* const s = src->*kNames[k];
         if (s != nullptr) {
-            *reinterpret_cast<uint8_t**>(self + off) = s;
-            ++(*reinterpret_cast<int32_t*>(s - 4));
+            self->*kNames[k] = s;
+            ++RtSystem::StringRefCount(s);
         }
     }
 
-    *reinterpret_cast<int32_t*>(self + 0x28) = *reinterpret_cast<const int32_t*>(src + 0x28);
-    self[0x2c] = src[0x2c];
-    *reinterpret_cast<int32_t*>(self + 0x30) = *reinterpret_cast<const int32_t*>(src + 0x30);
-    *reinterpret_cast<int32_t*>(self + 0x34) = *reinterpret_cast<const int32_t*>(src + 0x34);
-    *reinterpret_cast<int32_t*>(self + 0x38) = *reinterpret_cast<const int32_t*>(src + 0x38);
-    self[0x3c] = src[0x3c];
-    *reinterpret_cast<int32_t*>(self + 0x40) = *reinterpret_cast<const int32_t*>(src + 0x40);
-    *reinterpret_cast<int32_t*>(self + 0x44) = *reinterpret_cast<const int32_t*>(src + 0x44);
-    *reinterpret_cast<int32_t*>(self + 0x48) = *reinterpret_cast<const int32_t*>(src + 0x48);
-    *reinterpret_cast<int32_t*>(self + 0x4c) = *reinterpret_cast<const int32_t*>(src + 0x4c);
-    *reinterpret_cast<int32_t*>(self + 0x50) = *reinterpret_cast<const int32_t*>(src + 0x50);
+    self->_instanceCount = src->_instanceCount;  // +0x28
+    self->_instanced     = src->_instanced;      // +0x2c
+    self->_startFrame    = src->_startFrame;     // +0x30
+    self->_endFrame      = src->_endFrame;       // +0x34
+    self->_rate          = src->_rate;           // +0x38
+    self->_looping       = src->_looping;        // +0x3c
+    self->_loopFrame     = src->_loopFrame;      // +0x40
+    self->_frameRate     = src->_frameRate;      // +0x44
+    self->_loopScale     = src->_loopScale;      // +0x48
+    self->_boneCount     = src->_boneCount;      // +0x4c
+    self->_frameCount    = src->_frameCount;     // +0x50
     // +0x54 deliberately untouched — see the banner.
-    *reinterpret_cast<uint64_t*>(self + 0x58) = *reinterpret_cast<const uint64_t*>(src + 0x58);
+    self->_duration      = src->_duration;       // +0x58
 
-    *reinterpret_cast<uint64_t*>(self + 0x60) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x68) = 0;
-    rtpickgrid::TransformArrayAssign(self + 0x60, src + 0x60);   // 0x18001b360
+    self->_keys._data     = nullptr;             // +0x60 \ both qwords zero
+    self->_keys._size     = 0;                   // +0x68 |
+    self->_keys._capacity = 0;                   //       /
+    rtpickgrid::TransformArrayAssign(&self->_keys, &src->_keys);   // 0x18001b360
 
     return self;                                          // MOV RAX,RBX
 }
@@ -403,16 +358,19 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
 // NO VTABLE: `??1Animation@...QEAA@XZ` is a Q, not a U, and the body stamps
 // nothing. Graphics::Animation is plain data, like AnimationManager.
 // ############################################################################
+//
+// B.4: on the named fields; the door keeps its `void*` signature (LEFT, as
+// the copy ctor's).
 extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
+    Graphics::Animation* const self = static_cast<Graphics::Animation*>(selfv);
 
-    rtpickgrid::ArrayDtorTransform(self + 0x60);          // 0x18001c100
+    rtpickgrid::ArrayDtorTransform(&self->_keys);         // 0x18001c100, +0x60
 
-    ReleaseString(reinterpret_cast<void**>(self + 0x20), /*checkZeroAfterAdjust=*/false);
-    ReleaseString(reinterpret_cast<void**>(self + 0x18), /*checkZeroAfterAdjust=*/false);
-    ReleaseString(reinterpret_cast<void**>(self + 0x10), /*checkZeroAfterAdjust=*/false);
+    ReleaseString(&self->_sourceName);                    // +0x20
+    ReleaseString(&self->_meshName);                      // +0x18
+    ReleaseString(&self->_name);                          // +0x10
 
-    rtcoll::RtColl_ArrayDtor_18001c020(self);             // JMP 0x18001c020
+    rtcoll::RtColl_ArrayDtor_18001c020(&self->_events);   // JMP 0x18001c020, +0x00
 
 }
 
@@ -437,23 +395,24 @@ extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
 // ENDGAME B.3.9 block GFX: the door is RETIRED with the RT_DELDTOR row
 // 0x1800134b0 it served; its body is the real protected `~EdgeMesh()`. The
 // restamp and the tail ~External are the compiler's chain.
+//
+// B.4: the members by name. The two explicit ~Array calls zero their headers,
+// so the typed members' implicit `~Array<TriangleList>` that follows is the
+// same no-op the raw headers' was.
 Graphics::EdgeMesh::~EdgeMesh() {
-    RtGraphics::EdgeMesh* const self =
-        reinterpret_cast<RtGraphics::EdgeMesh*>(this);                 // B.3.9 bridge (the POD view)
-
     // 0x180013e70 — Array<T>::~Array for the two list arrays. An unexported
     // template instantiation, called by its body name.
-    rtcoll::RtColl_ArrayDtor_180013e70(&self->_edgeLists);
-    rtcoll::RtColl_ArrayDtor_180013e70(&self->_triangleLists);
+    rtcoll::RtColl_ArrayDtor_180013e70(&_edgeLists);
+    rtcoll::RtColl_ArrayDtor_180013e70(&_triangleLists);
 
-    IndexBufferPlatformDestruct(&self->_extraIndices);
-    VertexBufferPlatformDestruct(&self->_extraVerts);
-    IndexBufferPlatformDestruct(&self->_capIndices);
-    VertexBufferPlatformDestruct(&self->_capVerts);
-    IndexBufferPlatformDestruct(&self->_edgeIndices);
-    VertexBufferPlatformDestruct(&self->_edgeVerts);
-    IndexBufferPlatformDestruct(&self->_triIndices);
-    VertexBufferPlatformDestruct(&self->_triVerts);
+    _edgeSkinIndexBuffer.PlatformDestruct();    // +0x128
+    _edgeSkinVertexBuffer.PlatformDestruct();   // +0x108
+    _edgeIndexBuffer.PlatformDestruct();        // +0x0e8
+    _edgeVertexBuffer.PlatformDestruct();       // +0x0c8
+    _skinIndexBuffer.PlatformDestruct();        // +0x0a8
+    _skinVertexBuffer.PlatformDestruct();       // +0x088
+    _indexBuffer.PlatformDestruct();            // +0x068
+    _vertexBuffer.PlatformDestruct();           // +0x048
 }
 
 // ############################################################################
@@ -518,67 +477,16 @@ Graphics::EdgeMesh::~EdgeMesh() {
 // ############################################################################
 namespace {
 
-constexpr uint32_t kLvlStride   = 0xb0;
-constexpr uint32_t kLvlBuf20    = 0x20;
-constexpr uint32_t kLvlBuf40    = 0x40;
-constexpr uint32_t kLvlBuf60    = 0x60;
-constexpr uint32_t kLvlBuf80    = 0x80;
-constexpr uint32_t kLvlTriData  = 0x98;
-constexpr uint32_t kLvlTriCount = 0xa0;
-constexpr uint32_t kLvlTail     = 0xa8;
-static_assert(kLvlTail + 4 <= kLvlStride, "detail-level fields must fit the 0xb0 stride");
-static_assert(kLvlTriCount == kLvlTriData + 8,
-              "the triangle Array's _size must follow its _data, Collection::Array shape");
-
-using BufSerFn   = void (*)(void*, Serializer*);
-
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+// The four buffer calls: `MOV RCX,[level+X] ; MOV RAX,[RCX] ; CALL [RAX+0x30]`
+// -- slot 6 `Serialize` of the buffer's companion (`_deviceData`, what
+// PlatformConstruct wrote). The dereference is unguarded, which is faithful.
+// LEFT: `DetailLevel::Buffer::_deviceData` is a `void*` (the unit test pins
+// the `Buffer` struct), so the one view of it as its companion is here.
+void SerializeIndexBuffer(void* deviceData, IO::Serializer& sub) {
+    static_cast<Video::IndexBufferData*>(deviceData)->Serialize(&sub);
 }
-void RwInt(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeInt(*static_cast<int32_t*>(p), nullptr);
-}
-int RwVersion(ReaderWriter* rw) {
-    return AsRw(rw)->GetVersion();
-}
-void DeleteRw(ReaderWriter* rw) {
-    if (rw == nullptr) return;
-    delete AsRw(rw);
-}
-bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
-
-ReaderWriter* MakeReaderWriter(Serializer* ser) {
-    Stream* stream = ser->stream;
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = IsReading(stream) ? rt::io::encoding_vtbl::kCreateReader
-                                       : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-// `?_singleton@Device@Video@@0PEAV12@EA` @ 0x1801fe7a8; Device+0xF8 is
-// `activeInterface` (runtime/types/video/Device.h). ENDGAME B.3.9 SS1
-// (B39_RULES D7): the class static now -- the null test this used to carry
-// was, by its own comment, justified only because RT_DATA_SLOT could hand
-// back an unfilled mint slot ("retail's own static could not be null"); that
-// reason is gone, so the guard goes with it and retail's unguarded deref is
-// restored.
-int32_t ActiveInterface() {
-    void* device = ::Video::Device::_singleton;
-    return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0xF8);
-}
-
-// ENDGAME B.3.5 block G: it now takes the OBJECT the caller loaded instead of a
-// (base, byte offset) pair, because `GraphicsMesh::DetailLevel` names all four
-// `_deviceData` qwords. The dereference is still unguarded, which is faithful.
-void SerializeBufferSlot(void* obj, Serializer* sub) {
-    void** vt = *reinterpret_cast<void***>(obj);            // faithful: unguarded
-    reinterpret_cast<BufSerFn>(vt[0x30 / 8])(obj, sub);
+void SerializeVertexBuffer(void* deviceData, IO::Serializer& sub) {
+    static_cast<Video::VertexBufferData*>(deviceData)->Serialize(&sub);
 }
 
 }  // namespace
@@ -625,53 +533,49 @@ void MaterialInstance::GenerateTextures(Video::Context& context, int32_t arg) co
     }
 
     for (int32_t i = 0; i < _textures._size; ++i) {
-        void* obj = _textures._data[i].image;
+        const Video::ImageBuffer* const obj = _textures._data[i].image;
 
-        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 4)
+        if (obj->_kind != 4)                     // +0x2c, the usage
             continue;
         if (obj == nullptr)                      // retail's order: after the deref
             continue;
 
-        // Slot 10 (0x50/8) — a virtual call on the real class.
-        reinterpret_cast<const GeneratedImageBuffer*>(obj)           // B.3.5 bridge
-            ->Generate(&context, arg);
+        // Slot 10 (0x50/8) — a virtual call on the real class. LEFT: usage 4
+        // is what makes the image a `GeneratedImageBuffer`; the texture array
+        // holds the base pointer, so the downcast is the one view.
+        static_cast<const GeneratedImageBuffer*>(obj)->Generate(&context, arg);
     }
 }
 
 void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
-    // The ported bodies in this file speak the `rt::io::Serializer` POD; the
-    // member takes retail's own `IO::Serializer&` so the header names the retail
-    // signature. The two describe the same bytes.
-    Serializer* const outer = reinterpret_cast<Serializer*>(&serializer);  // B.3.5 bridge
-
-    // `if (!stream->encoding->vtable[0](encoding)) return;` — the encoding
-    // policy object's "does this stream carry platform data at all" slot.
-    {
-        void** encVt = *reinterpret_cast<void***>(outer->stream->encoding);
-        using CarriesPlatformDataFn = bool (*)(void*);
-        if (!reinterpret_cast<CarriesPlatformDataFn>(encVt[0])(outer->stream->encoding)) {
-            return;
-        }
+    // `if (!stream->encoding->vt[0](encoding)) return;` — slot 0 of the
+    // stream's `IO::Encoding`, `IsBinary`: only a binary stream carries
+    // platform data at all.
+    if (!serializer._stream->_encoding->IsBinary()) {
+        return;
     }
 
     const int32_t levelCount = _detailLevels._size;                  // +0x58
 
     for (int arm = 0; arm < 2; ++arm) {
-        Serializer sub = { outer->stream, nullptr };
-        ReaderWriter* rw = MakeReaderWriter(&sub);
+        // Each arm's own ReaderWriter: `{ stream, 0 }` then the encoding's
+        // CreateReader / CreateWriter (version 0), and `if (rw) delete rw` at
+        // the end of the arm -- IO::Serializer's ctor and dtor, inlined.
+        IO::Serializer sub(*serializer._stream, 0);
+        IO::ReaderWriter* const rw = sub._readerWriter;
 
-        const int32_t iface = ActiveInterface();
+        // `Video::Device::_singleton->activeInterface` (+0xF8), unguarded.
+        const int32_t iface = ::Video::Device::_singleton->activeInterface;
         const bool active = (arm == 0) ? (iface == 0) : (iface == 1 || iface == 2);
         if (!active) {
-            AsRw(rw)->Skip();
-            DeleteRw(rw);
+            rw->Skip();
             continue;
         }
 
         // The gate reads the OUTER reader/writer — see the banner.
-        if (RwVersion(outer->readerWriter) >= 1) {
+        if (serializer._readerWriter->GetVersion() >= 1) {
             int32_t discarded = 0;
-            RwInt(rw, &discarded);
+            rw->SerializeInt(discarded, nullptr);
         }
 
         for (int32_t i = 0; i < levelCount; ++i) {
@@ -679,47 +583,45 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
             // 0x1800a4b30), so a slot-0x30 handler that reallocates the level
             // array is seen. Not hoisted.
             DetailLevel* const level =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
 
             int32_t n = level->_triangleLists._size;                  // +0xa0
-            RwInt(rw, &n);
-            if (IsReading(sub.stream))
+            rw->SerializeInt(n, nullptr);
+            if (sub._stream->_direction == IO::kReading)
                 rtcoll::RtColl_ArraySetSize_1800136f0(&level->_triangleLists, n);  // +0x98
 
-            void* triData = level->_triangleLists._data;
+            TriangleList* const triData = level->_triangleLists._data;
             if (arm == 0) {
                 // 0x180014850 SerializeTriangleListArray(ctx, count, data) —
-                // PORTED (closure_batch2b.cpp) and registered by address.
-                RtGraphics_EdgeMesh_SerializeTriangleListArray(&sub, n, triData);   // 0x180014850
+                // PORTED (closure_batch2b.cpp).
+                RtGraphics_EdgeMesh_SerializeTriangleListArray(sub, n, triData);   // 0x180014850
             } else {
                 // The same six dwords per element, emitted inline by retail on
                 // this arm (0x1800a4b90..0x1800a4c0e, stride 0x18).
-                uint8_t* e = static_cast<uint8_t*>(triData);
-                for (int32_t j = 0; j < n; ++j, e += 0x18) {
-                    RwInt(rw, e + 0x00);
-                    RwInt(rw, e + 0x04);
-                    RwInt(rw, e + 0x08);
-                    RwInt(rw, e + 0x0c);
-                    RwInt(rw, e + 0x10);
-                    RwInt(rw, e + 0x14);
+                TriangleList* e = triData;
+                for (int32_t j = 0; j < n; ++j, ++e) {
+                    rw->SerializeInt(e->_f00, nullptr);
+                    rw->SerializeInt(e->_f04, nullptr);
+                    rw->SerializeInt(e->_f08, nullptr);
+                    rw->SerializeInt(e->_f0c, nullptr);
+                    rw->SerializeInt(e->_f10, nullptr);
+                    rw->SerializeInt(e->_f14, nullptr);
                 }
             }
 
             // The four buffers, INDEX BEFORE VERTEX in each pair, retail's
             // order (+0x40, +0x20, +0x80, +0x60 = each header's +0x08).
             DetailLevel* const lvl2 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
-            SerializeBufferSlot(lvl2->_indexBuffer._deviceData,      &sub);
-            SerializeBufferSlot(lvl2->_vertexBuffer._deviceData,     &sub);
-            SerializeBufferSlot(lvl2->_skinIndexBuffer._deviceData,  &sub);
-            SerializeBufferSlot(lvl2->_skinVertexBuffer._deviceData, &sub);
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+            SerializeIndexBuffer (lvl2->_indexBuffer._deviceData,      sub);
+            SerializeVertexBuffer(lvl2->_vertexBuffer._deviceData,     sub);
+            SerializeIndexBuffer (lvl2->_skinIndexBuffer._deviceData,  sub);
+            SerializeVertexBuffer(lvl2->_skinVertexBuffer._deviceData, sub);
 
             DetailLevel* const lvl3 =
-                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;
-            RwInt(rw, &lvl3->_maxInstances);                          // +0xa8
+                reinterpret_cast<DetailLevel*>(_detailLevels._data) + i;   // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
+            rw->SerializeInt(lvl3->_maxInstances, nullptr);            // +0xa8
         }
-
-        DeleteRw(rw);
     }
 }
 
@@ -734,97 +636,87 @@ void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
 // inlined `operator new` plus an unguarded vtable slot-9 `Create`, and the
 // arithmetic is what the banner above documents.
 // ---------------------------------------------------------------------------
+//
+// B.4: on the class's typed fields (`_shadowMap` / `_shadowDepth` /
+// `_shadowTarget`, Light.h). The placement-new expression's value IS the
+// allocation, which is what retail stores.
 void SpotLight::CreateTargets() {
-    uint8_t* const self = reinterpret_cast<uint8_t*>(this);   // B.3.5 bridge
-
     // ---- +0x148, the shadow colour image ----------------------------------
     {
-        void* p = ImageBufferOperatorNew(0x68);
-        if (p != nullptr) ImageBufferCtor(p);
-        *reinterpret_cast<void**>(self + 0x148) = p;
-        // Slot 9 `Create`, by name (B3X W0); faithful: unguarded.
-        Video::ImageBuffer* const img =
-            *reinterpret_cast<Video::ImageBuffer**>(self + 0x148);   // B.3.x bridge
-        img->Create(0, 0, 5,
-                    0x40u, 0x400, 0x400,
-                    1, 1, 1, 1, nullptr);
+        void* const p = Video::ImageBuffer::operator new(0x68);   // 0x18001e910
+        _shadowMap = (p != nullptr) ? ::new (p) Video::ImageBuffer() : nullptr;
+        // Slot 9 `Create`, by name (B3X W0); faithful: unguarded, and the field
+        // is re-read (`MOV RCX,[RSI+0x148]`).
+        _shadowMap->Create(0, 0, 5,
+                           0x40u, 0x400, 0x400,
+                           1, 1, 1, 1, nullptr);
     }
 
     // ---- +0x150, the shadow depth image ------------------------------------
     {
-        void* p = ImageBufferOperatorNew(0x68);
-        if (p != nullptr) ImageBufferCtor(p);
-        *reinterpret_cast<void**>(self + 0x150) = p;
-        Video::ImageBuffer* const img =
-            *reinterpret_cast<Video::ImageBuffer**>(self + 0x150);   // B.3.x bridge
-        img->Create(0, 1, 7,
-                    0x40u, 0x400, 0x400,
-                    1, 1, 1, 1, nullptr);
+        void* const p = Video::ImageBuffer::operator new(0x68);
+        _shadowDepth = (p != nullptr) ? ::new (p) Video::ImageBuffer() : nullptr;
+        _shadowDepth->Create(0, 1, 7,
+                             0x40u, 0x400, 0x400,
+                             1, 1, 1, 1, nullptr);
     }
 
     // ---- +0x158, the render target -----------------------------------------
-    void* rb = RenderBufferOperatorNew(0x30);
+    // `Video::RenderBuffer::RenderBuffer` INLINED (the three zeroed qwords, then
+    // PlatformConstruct). LEFT: the raw allocation is viewed once as the
+    // RenderBuffer the inlined ctor builds in it.
+    Video::RenderBuffer* const rb =
+        static_cast<Video::RenderBuffer*>(Video::RenderBuffer::operator new(0x30));   // 0x18001f2e0
     if (rb != nullptr) {
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
-        RenderBufferPlatformConstruct(rb);
+        rb->colorBuffer = nullptr;   // +0x00
+        rb->depthBuffer = nullptr;   // +0x08
+        rb->width  = 0;              // +0x10 \ one qword store in retail
+        rb->height = 0;              // +0x14 /
+        rb->PlatformConstruct();
     }
-    *reinterpret_cast<void**>(self + 0x158) = rb;
+    _shadowTarget = rb;
 
-    RenderBufferCreate(rb,
-                       *reinterpret_cast<void**>(self + 0x148),
-                       *reinterpret_cast<void**>(self + 0x150));   // JMP 0x1800f3f10
+    // JMP 0x1800f3f10 -- unguarded, as retail's tail jump is.
+    rb->Create(_shadowMap, _shadowDepth);
 }
 
 // ---------------------------------------------------------------------------
 // ?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z 0x180105240
 // ENDGAME B.3.5 block GC. The five-value argument list, the two stack-built 4x4
-// matrices and the instancing batch are documented in the banner above.//
-// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
-// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
-// indexes are still spelled `RtGraphics::*` through one bridge local, because
-// those PODs have live users in files outside this block and B4b-1 keeps a POD
-// until its LAST user converts. Camera.h cross-asserts every one of their offsets
-// against the real classes', so the two descriptions cannot drift, and renaming
-// ~200 field accesses in a body this size is a second change, not this one.
+// matrices and the instancing batch are documented in the banner below.
+//
+// B.4: on the real classes' named fields -- the draw group (`_cullCamera`,
+// `_items[list]`), each `RendererDrawItem` (Camera.h), the item's Material
+// (`_passes`), the selected `Video::VideoProgram` (`_vertexLayout` /
+// `_vertexProgram` / `_pixelProgram`) and each program's `_byteCode._size`
+// (+0x48) -- and the Context setters by name. The POD bridge is gone.
 // ---------------------------------------------------------------------------
 void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listIndex,
                             int shaderIndex) const {
-    const RtGraphics::Renderer* const self =
-        reinterpret_cast<const RtGraphics::Renderer*>(this);   // B.3.5 bridge
-    void* const ctx = &context;
-    uint8_t* const groupBase = reinterpret_cast<uint8_t*>(self->drawGroups._data);
-    const int64_t groupOffset = static_cast<int64_t>(groupIndex) * sizeof(RtGraphics::RendererDrawGroup);
-    const RtGraphics::Camera* const cam =
-        reinterpret_cast<const RtGraphics::Camera*>(groupBase + groupOffset +
-                                        offsetof(RtGraphics::RendererDrawGroup, cullCamera));
+    const RendererDrawGroup& group = _drawGroups._data[groupIndex];
+    const Camera& cam = group._cullCamera;
 
     // ---- the two matrices, built on the stack ------------------------------
     // view = the cull camera's Transform3 expanded to a 4x4 with an explicit
     // (0,0,0,1) fourth column: three zeroed floats and the 1.0f at 0x18016169c.
-    float view[16];
+    Math::Matrix view;
     {
-        const float* t = reinterpret_cast<const float*>(cam) + (0x64 / 4);
-        view[0] = t[0];  view[1] = t[1];  view[2]  = t[2];  view[3]  = 0.0f;
-        view[4] = t[3];  view[5] = t[4];  view[6]  = t[5];  view[7]  = 0.0f;
-        view[8] = t[6];  view[9] = t[7];  view[10] = t[8];  view[11] = 0.0f;
-        view[12] = t[9]; view[13] = t[10]; view[14] = t[11];
-        view[15] = AsFloat(kBits_one);
+        const Math::Transform3& t = cam._cameraToWorld;
+        view.m[0]  = t.axisX.x;       view.m[1]  = t.axisX.y;       view.m[2]  = t.axisX.z;       view.m[3]  = 0.0f;
+        view.m[4]  = t.axisY.x;       view.m[5]  = t.axisY.y;       view.m[6]  = t.axisY.z;       view.m[7]  = 0.0f;
+        view.m[8]  = t.axisZ.x;       view.m[9]  = t.axisZ.y;       view.m[10] = t.axisZ.z;       view.m[11] = 0.0f;
+        view.m[12] = t.translation.x; view.m[13] = t.translation.y; view.m[14] = t.translation.z;
+        view.m[15] = 1.0f;
     }
     // proj = the camera's projection matrix, sixteen dwords copied verbatim.
-    uint32_t proj[16];
-    std::memcpy(proj, reinterpret_cast<const uint8_t*>(cam) + 0x94, sizeof proj);
+    const Math::Matrix proj = cam._projection;
 
-    ContextSetCamera(ctx, view, proj);
+    context.SetCamera(view, proj);
 
     // ---- the item list ------------------------------------------------------
-    const Collection::Array<RtGraphics::RendererDrawItem>* const items =
-        reinterpret_cast<const Collection::Array<RtGraphics::RendererDrawItem>*>(
-            groupBase + groupOffset + offsetof(RtGraphics::RendererDrawGroup, items) +
-            static_cast<int64_t>(listIndex) * 0x10);
+    const Collection::Array<RendererDrawItem>& items = group._items[listIndex];
 
-    const int32_t count = items->_size;
+    const int32_t count = items._size;
     if (count <= 0) {
         return;
     }
@@ -833,30 +725,25 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
     int32_t drawn = 0;
     int64_t i = 0;
     while (i < count) {
-        const uint8_t* const itemBase = reinterpret_cast<const uint8_t*>(items->_data);
-        int64_t itemOff = i * 0x38;
-        const RtGraphics::RendererDrawItem* const item =
-            reinterpret_cast<const RtGraphics::RendererDrawItem*>(itemBase + itemOff);
+        int64_t itemIndex = i;
+        const RendererDrawItem& item = items._data[itemIndex];
 
         int32_t step = 1;
         int32_t batchCount = 1;
 
-        // `item->material` is dereferenced BEFORE the shader-index tests
+        // `item._material` is dereferenced BEFORE the shader-index tests
         // (0x1801054f5 vs 0x1801054f9). Faithful.
-        const uint8_t* const material = static_cast<const uint8_t*>(item->material);
+        const Material* const material = item._material;
         bool draw = false;
 
-        if (shaderIndex >= 0 &&
-            shaderIndex < *reinterpret_cast<const int32_t*>(material + 0x30)) {
-            const uint8_t* const* const programs =
-                *reinterpret_cast<const uint8_t* const* const*>(material + 0x28);
-            const uint8_t* const prog = programs[shaderIndex];
+        if (shaderIndex >= 0 && shaderIndex < material->_passes._size) {
+            const Video::VideoProgram* const prog = material->_passes._data[shaderIndex].Get();
 
-            const uint8_t* const sub28 = *reinterpret_cast<const uint8_t* const*>(prog + 0x28);
-            const uint8_t* const sub30 = *reinterpret_cast<const uint8_t* const*>(prog + 0x30);
-            if (*reinterpret_cast<const void* const*>(prog + 0x20) != nullptr &&
-                sub28 != nullptr && *reinterpret_cast<const int32_t*>(sub28 + 0x48) > 0 &&
-                sub30 != nullptr && *reinterpret_cast<const int32_t*>(sub30 + 0x48) > 0) {
+            const Video::VertexProgram* const vp = prog->_vertexProgram.Get();
+            const Video::PixelProgram*  const pp = prog->_pixelProgram.Get();
+            if (prog->_vertexLayout.Get() != nullptr &&
+                vp != nullptr && vp->_byteCode._size > 0 &&
+                pp != nullptr && pp->_byteCode._size > 0) {
                 draw = true;
             }
         }
@@ -864,49 +751,40 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
         if (draw) {
             // shader 0 only, and only when the instance has a render texture:
             // `CMP byte [instance+0x24], R15B` with R15B known zero.
-            if (shaderIndex == 0 &&
-                *(static_cast<const uint8_t*>(item->instance) + 0x24) != 0) {
-                RtGraphics_MaterialInstance_GenerateTextures(item->instance, ctx,
-                                                             self->contextSerial);
+            if (shaderIndex == 0 && item._instance->_hasRenderTexture != 0) {
+                item._instance->GenerateTextures(context, _frameIndex);
             }
-            MaterialInstanceSetup(item->instance, ctx, shaderIndex);
+            item._instance->Setup(context, shaderIndex);
 
-            if (item->arg8 > 1) {
+            if (item._arg8 > 1) {
                 // ---- the instancing batch ---------------------------------
                 // Geometry slot 7 `SetSharedInstanceData`, by name (B3X W0).
-                const Geometry* const geom0 =
-                    static_cast<const Geometry*>(item->geometry);   // B.3.x bridge
-                int32_t slotIndex = geom0->SetSharedInstanceData(
-                    context, item->arg5, self->frameAlpha);
+                int32_t slotIndex = item._geometry->SetSharedInstanceData(
+                    context, item._arg5, _alphaT);
                 const int32_t base = emitted - slotIndex;
 
                 batchCount = 0;
                 for (;;) {
-                    const uint8_t* const cur =
-                        reinterpret_cast<const uint8_t*>(items->_data) + itemOff;
+                    const RendererDrawItem& cur = items._data[itemIndex];
                     ++batchCount;
-                    itemOff += 0x38;
+                    ++itemIndex;
 
                     // Geometry slot 6 `GetInstanceTransform`, by name (B3X W0).
                     // Its hidden return slot is `view` -- the stack matrix is
                     // the storage, exactly as the raw call passed it.
-                    const Geometry* const g =
-                        *reinterpret_cast<const Geometry* const*>(cur);   // B.3.x bridge
-                    const uint16_t sub = *reinterpret_cast<const uint16_t*>(cur + 0x1a);
-                    const void* m = g->GetInstanceTransform(
-                        reinterpret_cast<Math::Matrix*>(view), sub, self->frameAlpha);
-                    ContextSetTransform(ctx, slotIndex, m);
+                    const Math::Matrix* const m =
+                        cur._geometry->GetInstanceTransform(&view, cur._arg5, _alphaT);
+                    context.SetTransform(slotIndex, *m);
 
                     ++slotIndex;
                     if (base + slotIndex >= count) break;
-                    if (batchCount >= item->arg8) break;
+                    if (batchCount >= item._arg8) break;
 
-                    const uint8_t* const nxt =
-                        reinterpret_cast<const uint8_t*>(items->_data) + itemOff;
-                    if (*reinterpret_cast<const void* const*>(nxt + 0x10) != item->instance) break;
-                    if (*reinterpret_cast<const uint16_t*>(nxt + 0x1a) != item->arg5) break;
-                    if (*reinterpret_cast<const void* const*>(nxt + 0x28) != item->userData) break;
-                    if (*reinterpret_cast<const uint32_t*>(nxt + 0x30) != item->arg10) break;
+                    const RendererDrawItem& nxt = items._data[itemIndex];
+                    if (nxt._instance != item._instance) break;
+                    if (nxt._arg5 != item._arg5) break;
+                    if (nxt._userData != item._userData) break;
+                    if (nxt._arg10 != item._arg10) break;
                 }
                 // ESI and R15 are the SAME count in retail (both bumped once
                 // per consumed item at 0x1801055c4/0x1801055c6), and both are
@@ -920,16 +798,14 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
 
             // Geometry slot 2 `Draw`, by name (B3X W0). The material handle is
             // the 8-byte `ExternalPtr` passed by value in its register, as the
-            // raw call passed the pointer.
-            const Geometry* const geom =
-                static_cast<const Geometry*>(item->geometry);   // B.3.x bridge
-            geom->Draw(
+            // raw call passed the pointer. LEFT: `ExternalPtrHandle` holds a
+            // non-const `void*` (Mesh.h's handle, code/Game's `SetMesh` shape).
+            item._geometry->Draw(
                 context,
-                *reinterpret_cast<const ::Graphics::Camera*>(                // B.3.x bridge
-                    groupBase + groupOffset + offsetof(RtGraphics::RendererDrawGroup, cullCamera)),
-                ExternalPtrHandle{ const_cast<void*>(item->instance) },
-                self->frameAlpha,
-                static_cast<int32_t>(item->arg5),
+                group._cullCamera,
+                ExternalPtrHandle{ const_cast<MaterialInstance*>(item._instance) },
+                _alphaT,
+                static_cast<int32_t>(item._arg5),
                 shaderIndex,
                 batchCount);
             ++drawn;

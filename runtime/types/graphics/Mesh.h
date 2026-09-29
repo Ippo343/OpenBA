@@ -39,6 +39,9 @@
 // file derives from `Object::External` and holds four `Object::ExternalPtr<T>`.
 #include "../object/External.h"
 #include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
+#include "../video/Buffers.h"      // B.4: Video::{Vertex,Index}Buffer, EdgeMesh's eight buffers
+#include "GraphicsMesh.h"          // B.4: Graphics::GraphicsMesh (MeshInstance::GetMesh),
+                                   //      GraphicsMesh::TriangleList (EdgeMesh's lists)
 
 namespace RtGraphics {
 
@@ -131,10 +134,20 @@ static_assert(sizeof(InterpolatedTransform) == 0x38,
 // The 0x38 layer stride and the field roles are documented in
 // standalone/perf_experimental.cpp and are consistent with every read here.
 // ============================================================================
+//
+// B.4: retail's own `Graphics::AnimationState` IS these 0x18 bytes -- its ctor
+// 0x1800fdaf0 writes +0x00 (byte) and the two qwords at +0x08 / +0x10 and
+// stops, its copy ctor 0x1800168d0 copies the byte and assigns the Array, and
+// `?IsInstanced@AnimationState@` 0x1800168a0 is `MOVZX EAX,byte [RCX]`. The
+// tree's 0x48 `Graphics::AnimationState` is the AnimationManager's per-frame
+// record that EMBEDS one (a class-shape correction owed; the unit test pins
+// the 0x48 shape). The fields are typed: `_instanced` is the bool IsInstanced
+// returns and `_layers` is `Array<AnimationState::Layer>` (a trivially
+// destructible element: the implicit member dtor is the same Clear-then-J1).
 struct MeshAnimationState {
-    uint8_t _instanced;                     // +0x00
+    bool    _instanced;                     // +0x00
     uint8_t _pad01[7];                      // +0x01
-    Collection::Array<uint8_t> _layers;     // +0x08 data, +0x10 size, +0x14 capacity
+    Collection::Array<Graphics::AnimationState::Layer> _layers;  // +0x08 data, +0x10 size
 };
 static_assert(sizeof(MeshAnimationState) == 0x18, "Graphics::AnimationState (as embedded) must be 0x18 bytes");
 static_assert(offsetof(MeshAnimationState, _layers) == 0x08, "AnimationState::_layers @ +0x08");
@@ -550,7 +563,14 @@ public:
     //                `animationstate_transforms.cpp` — block GC moved it.
     // Both keep their registered doors, which delegate. Every OTHER declaration
     // under this heading really is undefined on purpose.
-    ExternalPtrHandle GetMesh() const;                       // 0x180016a20
+    // 0x180016a20: the ExternalPtr at +0xc0 through the hidden return slot.
+    // B.4: PORTED, inline, with retail's return type. The ONE view of the
+    // untyped `_mesh` handle as the GraphicsMesh it holds: `_mesh` stays the
+    // `RtGraphics::ExternalPtr` handle because `SetMesh(ExternalPtrHandle)` is
+    // the signature ~20 callers in code/Game hold (LEFT).
+    Object::ExternalPtr<GraphicsMesh> GetMesh() const {
+        return static_cast<GraphicsMesh*>(_mesh.p);
+    }
     int      GetNodeCount() const;                           // 0x180016a30
     void     SetVisualScale(const Math::Vector4& scale);     // 0x180016fa0
     Math::Vector4 GetVisualScale() const;                    // 0x180016fd0 RETSLOT
@@ -595,9 +615,15 @@ public:
 
 public:
     RtGraphics::ExternalPtr                        _mesh;         // +0xc0  ExternalPtr<GraphicsMesh>
-    Collection::Array<RtGraphics::ExternalPtr>     _materials;    // +0xc8
+    // B.4: typed. `Object::ExternalPtr<T>` is one trivially copyable,
+    // trivially destructible pointer (External.h), so the implicit member dtor
+    // is the same Clear-then-J1 and the element bytes are the same.
+    Collection::Array<Object::ExternalPtr<MaterialInstance> > _materials;  // +0xc8
     RtGraphics::MeshAnimationState                 _animation;    // +0xd8 .. +0xef
-    Collection::Array<RtGraphics::InterpolatedTransform> _nodes;  // +0xf0
+    // B.4: the element is `Graphics::InterpolatedState<Math::Transform>` (the
+    // type `?GetInstanceTransforms@` / UpdateHierarchy name); trivially
+    // destructible, so the member dtor is unchanged.
+    Collection::Array<InterpolatedState<Math::Transform>> _nodes;  // +0xf0
     Vector3                                        _rootAnimationOffset; // +0x100
     float                                          _color[4];     // +0x10c ctor 1,1,1,1
     int16_t                                        _sortBias;     // +0x11c ctor 0
@@ -908,8 +934,8 @@ public:
     const Video::IndexBuffer&  GetEdgeSkinIndexBuffer() const;    // 0x180012eb0  +0x128
     const Video::VertexBuffer& GetEdgeSkinVertexBuffer() const;   // 0x180012ec0  +0x108
 
-    const Collection::Array<uint8_t>& GetTriangleLists() const;   // 0x180012ed0  +0x148
-    const Collection::Array<uint8_t>& GetEdgeLists() const;       // 0x180012ee0  +0x158
+    const Collection::Array<GraphicsMesh::TriangleList>& GetTriangleLists() const;   // 0x180012ed0  +0x148
+    const Collection::Array<GraphicsMesh::TriangleList>& GetEdgeLists() const;       // 0x180012ee0  +0x158
     const ::Box& GetAABB() const;                                 // 0x180012f30  +0x168
 
     // The four material getters. Each is two instructions plus a HIDDEN RETSLOT
@@ -945,28 +971,31 @@ public:
 public:
     // ---- the 0x160 bytes EdgeMesh adds after Object::External ---------------
     // PUBLIC for the reason `Object::External`'s are: unconverted bodies reach
-    // them at these offsets through a cast. The four buffer pairs are spelled
-    // with the POD's `VideoBufferHeader`, which is in this same header and is
-    // already the pinned description of those 0x20 bytes.
+    // them at these offsets through a cast. B.4: the four buffer pairs are the
+    // REAL `Video::VertexBuffer` / `Video::IndexBuffer` (Buffers.h: 0x20 bytes,
+    // trivially copyable, no ctor or dtor of their own -- `PlatformConstruct` /
+    // `PlatformDestruct` are the explicit calls ~EdgeMesh and EdgeMesh() make),
+    // the types the eight getters return; the POD's `VideoBufferHeader` is the
+    // same 0x20 bytes.
     void* _reserved20;                                    // +0x20  ctor 0; no body reads it
     Object::ExternalPtr<MaterialInstance> _maskMaterial;      // +0x28  ?GetMaskMaterial@
     Object::ExternalPtr<MaterialInstance> _skinMaskMaterial;  // +0x30  ?GetSkinMaskMaterial@
     Object::ExternalPtr<MaterialInstance> _edgeMaterial;      // +0x38  ?GetEdgeMaterial@
     Object::ExternalPtr<MaterialInstance> _skinEdgeMaterial;  // +0x40  ?GetSkinEdgeMaterial@
-    RtGraphics::VideoBufferHeader _vertexBuffer;           // +0x48   ?GetVertexBuffer@
-    RtGraphics::VideoBufferHeader _indexBuffer;            // +0x68   ?GetIndexBuffer@
-    RtGraphics::VideoBufferHeader _skinVertexBuffer;       // +0x88   ?GetSkinVertexBuffer@
-    RtGraphics::VideoBufferHeader _skinIndexBuffer;        // +0xa8   ?GetSkinIndexBuffer@
-    RtGraphics::VideoBufferHeader _edgeVertexBuffer;       // +0xc8   ?GetEdgeVertexBuffer@
-    RtGraphics::VideoBufferHeader _edgeIndexBuffer;        // +0xe8   ?GetEdgeIndexBuffer@
-    RtGraphics::VideoBufferHeader _edgeSkinVertexBuffer;   // +0x108  ?GetEdgeSkinVertexBuffer@
-    RtGraphics::VideoBufferHeader _edgeSkinIndexBuffer;    // +0x128  ?GetEdgeSkinIndexBuffer@
-    // Both are `Array<GraphicsMesh::TriangleList>` (stride 0x18), spelled as RAW
-    // 16-byte headers for `AnimationGroup.h`'s reason: `SetSize` is the
-    // registered row at 0x1800136f0 (`rtcoll::kSpec_Tri18A4`) and the typed form
-    // would make the compiler emit a second element lifecycle beside it.
-    Collection::Array<uint8_t> _triangleLists;            // +0x148  ?GetTriangleLists@
-    Collection::Array<uint8_t> _edgeLists;                // +0x158  ?GetEdgeLists@
+    Video::VertexBuffer _vertexBuffer;           // +0x48   ?GetVertexBuffer@
+    Video::IndexBuffer  _indexBuffer;            // +0x68   ?GetIndexBuffer@
+    Video::VertexBuffer _skinVertexBuffer;       // +0x88   ?GetSkinVertexBuffer@
+    Video::IndexBuffer  _skinIndexBuffer;        // +0xa8   ?GetSkinIndexBuffer@
+    Video::VertexBuffer _edgeVertexBuffer;       // +0xc8   ?GetEdgeVertexBuffer@
+    Video::IndexBuffer  _edgeIndexBuffer;        // +0xe8   ?GetEdgeIndexBuffer@
+    Video::VertexBuffer _edgeSkinVertexBuffer;   // +0x108  ?GetEdgeSkinVertexBuffer@
+    Video::IndexBuffer  _edgeSkinIndexBuffer;    // +0x128  ?GetEdgeSkinIndexBuffer@
+    // Both are `Array<GraphicsMesh::TriangleList>` (stride 0x18). `SetSize` is
+    // the registered row at 0x1800136f0 (`rtcoll::kSpec_Tri18A4`). B.4: typed;
+    // TriangleList is trivially destructible, so `~EdgeMesh`'s implicit member
+    // dtors are the same Clear-then-J1 the raw headers ran.
+    Collection::Array<GraphicsMesh::TriangleList> _triangleLists;   // +0x148  ?GetTriangleLists@
+    Collection::Array<GraphicsMesh::TriangleList> _edgeLists;       // +0x158  ?GetEdgeLists@
     ::Box _aabb;                                          // +0x168  ?GetAABB@; ctor +/-1e8
 };
 
@@ -1026,7 +1055,10 @@ static_assert(sizeof(EdgeMesh::EdgeVertex)     == 16, "EdgeMesh::EdgeVertex is 1
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- graphics/closure_batch2b.cpp
-extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int count, void* data);  // 0x180014850
+// B.4: typed -- the context is the `IO::Serializer`, the data the
+// `GraphicsMesh::TriangleList` array (all three callers are graphics bodies).
+void RtGraphics_EdgeMesh_SerializeTriangleListArray(IO::Serializer& ser, int count,
+                                                    Graphics::GraphicsMesh::TriangleList* data);  // 0x180014850
 // ==== end B3R W0-P0c ====
 
 // ==== B3R RT-VG: the two EdgeMesh vertex constructors (graphics/mesh.cpp) ====
@@ -1040,8 +1072,11 @@ void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void*
 // ==== B3R W2-RES: the body the 0x180100f20 address row held (graphics/mesh.cpp) ====
 // ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
 // standalone/scene_watch.cpp's IsMeshInstance compares a vtable entry with it.
-extern "C" void RtGraphics_MeshInstance_AddDrawItems(const void* self, const void* scene,
-                                                     void* renderer);  // 0x180100f20
+// B.4: typed; standalone takes only its address.
+namespace Graphics { class MeshInstance; class Scene; class Renderer; }
+extern "C" void RtGraphics_MeshInstance_AddDrawItems(const Graphics::MeshInstance* self,
+                                                     const Graphics::Scene* scene,
+                                                     Graphics::Renderer* renderer);  // 0x180100f20
 
 // runtime/src/graphics/wave29_lane_slots.cpp -- prints the `[SLOTS29]` attendance
 // line (MeshInstance::Update / SetSharedInstanceData counters). Called once at

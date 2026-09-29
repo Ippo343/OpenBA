@@ -28,6 +28,8 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class CitizenComponent;
+
 
 class ConsumeProduce final : public Work {
     DECLARE_EXE_TYPE(ConsumeProduce)
@@ -53,10 +55,11 @@ public:
     int32_t  field_4c;           // +0x4C: int (serialized)
     int32_t  field_50;           // +0x50: Type (zeroed, serialized)
     int32_t  field_54;           // +0x54: int (serialized)
-    void*    field_58;           // +0x58: InternalBasePtr DynArray data ptr (zeroed)
+    CitizenComponent** field_58; // +0x58: Array<InternalPtr<CitizenComponent>> data (zeroed; Persist
+                                 //        0x1400e9020 validates each element against CitizenComponent)
     int32_t  field_60;           // +0x60: DynArray count (zeroed)
     int32_t  field_64;           // +0x64: DynArray capacity (zeroed)
-    void*    field_68;           // +0x68: int DynArray data ptr (zeroed)
+    int32_t* field_68;           // +0x68: Array<int> data (zeroed; Persist's int-array overload)
     int32_t  field_70;           // +0x70: DynArray count (zeroed)
     int32_t  field_74;           // +0x74: DynArray capacity (zeroed)
 };

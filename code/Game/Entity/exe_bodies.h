@@ -27,6 +27,7 @@
 
 #include <cstdint>
 #include "object/TypeInfo.h"   // ::Object::Base (FindComponentByTypeId)
+#include "Entity/ComponentEntity.h"   // FindComponentByTypeId reads _components by name
 
 // ---- entity_findcomponent.cpp
 // Entity::FindComponent — generic implementation (moved from engine/funcs/engine_funcs.h
@@ -115,18 +116,19 @@ void fn_FindComponent_Unknown7ee8(void* entity, void* retval);
 // Reimplemented from FUN_1400c3680: iterates entity+0x30 array (count at +0x38),
 // calls Object::Base::Type() (retail slot 2, +0x10) on each component, returns first match.
 // Original used hidden return pointer (InternalBasePtr); this inline returns void* directly.
+// B4: the entity is void* for the callers of other blocks (LEFT); inside, the
+// ComponentEntity's _components / _componentCount are read by name.
 inline void* FindComponentByTypeId(void* entity, int typeId) {
     if (!entity) return nullptr;
-    uintptr_t e = (uintptr_t)entity;
-    int count = *(int*)(e + 0x38);
-    uintptr_t arr = *(uintptr_t*)(e + 0x30);  // array of InternalBasePtr (8 bytes each)
+    ComponentEntity* e = (ComponentEntity*)entity;
+    int count = e->_componentCount;
+    Object::InternalPtr<Component>* arr = e->_components;  // array of InternalPtr (8 bytes each)
     for (int i = 0; i < count; i++) {
-        void* compPtr = *(void**)(arr + (uintptr_t)i * 8);  // InternalBasePtr value = Internal*
+        Component* compPtr = arr[i].Get();  // InternalBasePtr value = Internal*
         if (!compPtr) continue;
         // CheckPtr validates the pointer; for our purposes we just null-check above.
         // Object::Base::Type() (retail slot 2, +0x10), by name on the real class.
-        int id = static_cast<int>(
-            static_cast<const ::Object::Base*>(compPtr)->Type());   // B.3.x bridge
+        int id = static_cast<int>(compPtr->Type());
         if (id == typeId) {
             return compPtr;
         }

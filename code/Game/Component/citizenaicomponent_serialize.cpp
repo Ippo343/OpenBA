@@ -50,10 +50,6 @@
 
 namespace {
 
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
-}
-
 uint32_t CitizenAISer_TidCitizenComponent() {
     // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
     return CitizenComponent::TypeId();
@@ -66,41 +62,40 @@ void CitizenAIComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 5);   // B.3.4 bridge
+    IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 5);   // B.3.4 bridge
 
-    reinterpret_cast<Object::InternalBasePtr*>(At(this, 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    void* sibling = *reinterpret_cast<void**>(At(this, 0x38));
-    if (sibling) {
+    // citizen is an InternalPtr<CitizenComponent> (eight bytes): its serializer.
+    reinterpret_cast<Object::InternalBasePtr*>(&citizen)->Serialize(*s);   // B.3.4 bridge
+    if (citizen) {
         uint32_t tid = CitizenAISer_TidCitizenComponent();
-        if (tid && !Object::IsDerivedFromNullSafe(sibling, tid))
-            *reinterpret_cast<void**>(At(this, 0x38)) = nullptr;
+        if (tid && !citizen->IsDerivedFrom(tid))
+            citizen = nullptr;
     }
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x2c)), nullptr);   // B.3.4 bridge
+    s->Serialize(queuedState, nullptr);
 
-    int version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    uint8_t* timer = At(this, 0x40);
+    int version = s->GetVersion();
     if (version < 5) {
-        for (int i = 0; i < 14; ++i, timer += 8)
-            reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(At(this, 0xb0)), 0.0f);
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(At(this, 0xb8)), 0.0f);
+        for (int i = 0; i < 14; ++i)
+            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[14]), 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timers[15]), 0.0f);
     } else {
-        for (int i = 0; i < 16; ++i, timer += 8)
-            reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        for (int i = 0; i < 16; ++i)
+            reinterpret_cast<System::Time*>(&timers[i])->Serialize(*s);   // B.3.4b bridge
     }
 
-    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
+    version = s->GetVersion();
     if (version > 0) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x31)), nullptr);   // B.3.4 bridge
+        s->Serialize(seekingFood, nullptr);
+        s->Serialize(seekingWarmth, nullptr);
     }
-    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    if (version > 1) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
-    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    if (version > 2) reinterpret_cast<System::Time*>(At(this, 0xc0))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    if (version > 3) reinterpret_cast<System::Time*>(At(this, 0xc8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    version = s->GetVersion();
+    if (version > 1) s->Serialize(state, nullptr);
+    version = s->GetVersion();
+    if (version > 2) reinterpret_cast<System::Time*>(&leisureTimer)->Serialize(*s);   // B.3.4b bridge
+    version = s->GetVersion();
+    if (version > 3) reinterpret_cast<System::Time*>(&dataC8)->Serialize(*s);   // B.3.4b bridge
 
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    s->~Serializer();   // B.3.4 bridge
 }

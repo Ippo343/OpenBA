@@ -201,12 +201,12 @@ public:
     // WHAT THE THREE OWNED POINTERS ARE FOR: the POD's banner at the top of this
     // file, which is the byte read. `_backBufferImage` is typed
     // `Video::ImageBuffer*` now, which is what lets its teardown be
-    // `delete _backBufferImage` instead of a hand-indexed slot 0; the
-    // two `Video::RenderBuffer*` stay `void*` because `Video::RenderBuffer` is
-    // still a POD in `Device.h` and is block D2's to convert.
-    Video::ImageBuffer* _backBufferImage;  // +0x70  owned; deleted via ITS slot 0, flags 1
-    void*               _sourceTarget;     // +0x78  Video::RenderBuffer* (owned; colour = _backBufferImage)
-    void*               _destTarget;       // +0x80  Video::RenderBuffer* (owned; colour = this)
+    // `delete _backBufferImage` instead of a hand-indexed slot 0. B.4: the two
+    // render buffers are the real `Video::RenderBuffer` (Device.h) -- pointers,
+    // so the bytes and the ctor's stores are unchanged.
+    Video::ImageBuffer*  _backBufferImage;  // +0x70  owned; deleted via ITS slot 0, flags 1
+    Video::RenderBuffer* _sourceTarget;     // +0x78  owned; colour = _backBufferImage
+    Video::RenderBuffer* _destTarget;       // +0x80  owned; colour = this
 };
 
 static_assert(sizeof(FrameCopyImageBuffer) == 0x88,

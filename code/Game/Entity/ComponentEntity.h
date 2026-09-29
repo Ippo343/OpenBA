@@ -50,6 +50,10 @@ public:
     void ShutdownComponents();                                    // 0x1400c3000
     void RegisterUpdateDraw(uint32_t oldFlags);                   // 0x1400c33e0
     void OnAddedPass();                                           // 0x1400c2f60
+    // The EntityList tree walks' per-entity bodies (B4 WORK-a; no retail symbol:
+    // named from what they do). Defined in entitylist.cpp.
+    void TickComponents(void* time);                              // 0x1400c2de0 slot 8 on flag-bit-2 components
+    void PostUpdateComponents();                                  // 0x1400c2c70 slot 10 on flag-bit-4 components
 
     // ---- FindComponent<T> (the template retail instantiates per component class)
     // Every instance has one shape (read 2026-09-28 at 0x140003f60 ModelComponent,

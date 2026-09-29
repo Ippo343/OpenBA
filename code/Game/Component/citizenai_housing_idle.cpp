@@ -83,9 +83,12 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Work/Work.h"      // B.3.x W0 G-B: Work::Validate / Execute by name
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
-#include "Work/exe_bodies.h"
+#include "Work/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
@@ -623,7 +626,7 @@ uint64_t Helper_7550(int64_t param_1, void** param_2) {
     Helper_3f010(buf, 0xffffffff, 0x78);
     char allFlag = 0;        // cVar9 / R15B
 
-    char canHouse = CitizenComp_CanFindHousing(*reinterpret_cast<int64_t*>(param_2));
+    char canHouse = reinterpret_cast<CitizenComponent* const*>(param_2)[0]->CanFindHousing();
 
     uint32_t n;  // candidate count -> Rand range
     if (canHouse != 0) {
@@ -762,37 +765,35 @@ void Helper_7830(int64_t param_1, void** param_2) {
     }
 }
 
-// return expression shared by both handlers:
-//   CONCAT71(citizen>>8, 0 < *(int*)(*(citizen+0x278) + 0x60) + 1)
-static uint64_t HandlerEpilogue(int64_t param_1) {
-    int64_t citizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
-    int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    int truth = (0 < *reinterpret_cast<int*>(ch + 0x60) + 1) ? 1 : 0;
-    return (static_cast<uint64_t>(ch) & 0xffffffffffffff00ULL) | static_cast<uint64_t>(truth);
-}
-
 } // namespace
 
-// ============================================================
-// 0x14010b340 — CitizenAI_State_FindHousing  (state id 2)
-// ============================================================
-extern "C" uint64_t CitizenAI_State_FindHousing(int64_t param_1) {
-    int64_t citizenHolder = *reinterpret_cast<int64_t*>(param_1 + 0x38);  // local_res8[0]
-    int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
-    void* holder = reinterpret_cast<void*>(citizenHolder);
-    Helper_7550(treeBase, reinterpret_cast<void**>(&holder));
-    return HandlerEpilogue(param_1);
+// return expression shared by both handlers:
+//   CONCAT71(character>>8, 0 < character->currentAction + 1)
+// (the caller reads the low byte)
+static uint64_t HandlerEpilogue(CitizenComponent* citizen) {
+    CharacterComponent* ch = citizen->character;
+    int truth = (0 < ch->currentAction + 1) ? 1 : 0;
+    return static_cast<uint64_t>(truth);
 }
 
 // ============================================================
-// 0x14010b2d0 — CitizenAI_State_Idle  (state id 9)
+// 0x14010b340 — CitizenAIComponent::State_FindHousing  (state id 2)
 // ============================================================
-extern "C" uint64_t CitizenAI_State_Idle(int64_t param_1) {
-    int64_t citizenHolder = *reinterpret_cast<int64_t*>(param_1 + 0x38);  // local_res8[0]
+uint64_t CitizenAIComponent::State_FindHousing() {
     int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
-    void* holder = reinterpret_cast<void*>(citizenHolder);
-    Helper_7830(treeBase, reinterpret_cast<void**>(&holder));
-    return HandlerEpilogue(param_1);
+    void* holder = citizen;   // local_res8[0]
+    Helper_7550(treeBase, &holder);
+    return HandlerEpilogue(citizen);
+}
+
+// ============================================================
+// 0x14010b2d0 — CitizenAIComponent::State_Idle  (state id 9)
+// ============================================================
+uint64_t CitizenAIComponent::State_Idle() {
+    int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
+    void* holder = citizen;   // local_res8[0]
+    Helper_7830(treeBase, &holder);
+    return HandlerEpilogue(citizen);
 }
 
 // ============================================================

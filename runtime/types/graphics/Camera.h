@@ -377,7 +377,7 @@ static_assert(offsetof(Renderer, contextSerial)    == 0x44, "Renderer::contextSe
 // The classes other blocks own. Taken by pointer / reference only; the bridge,
 // where one is needed, happens at the use site and never in this header.
 namespace Video    { class Context; class RenderBuffer; }
-namespace Graphics { class Geometry; class Light; class MaterialInstance; class Scene; }
+namespace Graphics { class Geometry; class Light; class Material; class MaterialInstance; class Scene; }
 
 namespace Graphics {
 
@@ -513,9 +513,11 @@ static_assert(offsetof(RendererDrawable, _pad0c) == 0x0c, "Drawable::_pad0c @ +0
 // ============================================================
 class RendererDrawItem {
 public:
-    const void* _geometry;   // +0x00
-    const void* _material;   // +0x08  MaterialInstance::material (+0x28), by value
-    const void* _instance;   // +0x10  the MaterialInstance*
+    // B.4: the three object pointers carry their classes (pointers: the bytes
+    // and trivial copyability are unchanged).
+    const Geometry*         _geometry;   // +0x00
+    const Material*         _material;   // +0x08  MaterialInstance::_material (+0x28), by value
+    const MaterialInstance* _instance;   // +0x10
     uint16_t    _flags;      // +0x18
     uint16_t    _arg5;       // +0x1a
     float       _sortKey;    // +0x1c
@@ -758,8 +760,9 @@ static_assert(offsetof(Renderer, _pad_4c)            == 0x4c, "Renderer::+0x4c i
 // (the defaulted `Graphics::Camera` copy ctor would copy the hole too).
 namespace rtgfxd {
 // ---- graphics/wave9_lane_gfxd.cpp
-RtGraphics::Camera* RtGraphics_Camera_CopyCtor(RtGraphics::Camera* self,
-                                               const RtGraphics::Camera* src);  // 0x180017a70
+// B.4: typed on the real class (the POD describes the same 0xd8 bytes).
+Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
+                                             const Graphics::Camera* src);  // 0x180017a70
 }  // namespace rtgfxd
 // ==== end B3R RT-VG ====
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
