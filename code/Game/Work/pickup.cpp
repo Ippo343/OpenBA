@@ -217,7 +217,7 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
 // (the descent retail inlines twice). (WorkSchedulerTree::root is void* in
 // WorkScheduler.h: LEFT.)
 static Work* Pickup_FindTypeWork(WorkScheduler* scheduler, int typeId) {
-    PickupWorkNode* node = static_cast<PickupWorkNode*>(scheduler->trees[0].root);
+    PickupWorkNode* node = (PickupWorkNode*)scheduler->trees[0].root;
     while (node != nullptr) {
         if (typeId < node->element.typeId) {
             node = node->left;
@@ -247,7 +247,7 @@ int Pickup::Execute(void* citizenSlot, void* time) {
 
     // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
     // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenRef = static_cast<CitizenComponent**>(citizenSlot);
+    CitizenComponent** citizenRef = (CitizenComponent**)citizenSlot;
 
     const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
     // 0x1401c6be0 (Pickup's own cell) is UNREGISTERED -- Pickup_Tid's raw-.rdata read
@@ -511,7 +511,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
     }
 
     // The citizen slot (void* in Work.h's slot: LEFT); its profession (+0x1f0)
-    CitizenComponent** citizenSlot = static_cast<CitizenComponent**>(entityIBP);
+    CitizenComponent** citizenSlot = (CitizenComponent**)entityIBP;
     Profession* citizenProfession = (*citizenSlot)->profession;
 
     CitizenComponent* storedCitizen = citizenIBP;
@@ -620,7 +620,7 @@ int Pickup::Validate() {
 // slot: LEFT.)
 // ============================================================
 void* Pickup::GetTarget(void* outPtr) {
-    *static_cast<Profession**>(outPtr) = GameUpdateLoop::_singleton->m_professionList->field_0x30;
+    *(Profession**)outPtr = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return outPtr;
 }
 

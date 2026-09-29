@@ -100,7 +100,7 @@
 // (The slot's key parameter is void* in Work.h: LEFT.)
 //
 int MarketWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    MarketBst_aaa0(&_field48, static_cast<CitizenComponent**>(param2));
+    MarketBst_aaa0(&_field48, (CitizenComponent**)param2);
     return false;
 }
 
@@ -118,7 +118,7 @@ int MarketWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Verified by decompiling 0x1400eff50 and 0x1400eff60 — both call 0x14002aaa0.
 //
 int MarketWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    MarketBst_aaa0(&_field48, static_cast<CitizenComponent**>(param2));
+    MarketBst_aaa0(&_field48, (CitizenComponent**)param2);
     return 0;
 }
 
@@ -276,7 +276,7 @@ int MarketWork::Validate() {
 //
 void* MarketWork::GetTarget(void* outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *static_cast<Profession**>(outPtr) = workPlace->profession;
+    *(Profession**)outPtr = workPlace->profession;
     return outPtr;
 }
 
@@ -566,7 +566,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
 
     // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
     // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenSlot = static_cast<CitizenComponent**>(citizenHolder);
+    CitizenComponent** citizenSlot = (CitizenComponent**)citizenHolder;
 
     // --- 0x1400effd0..0x1400efffc: hauler-slot cap ------------------------
     // EDI = MarketWork+0x50, the claim count = citizens already claimed by this
@@ -576,7 +576,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // Work.h: LEFT. The tree has two ports of 0x14012e5c0 that differ; the one
     // called here takes the component as an integer: LEFT.)
     const int claimed = _field50;
-    WorkComponent* workComp = static_cast<WorkComponent*>(field_18);
+    WorkComponent* workComp = (WorkComponent*)field_18;
     if (workComp->workState == 0) {
         workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));
     }

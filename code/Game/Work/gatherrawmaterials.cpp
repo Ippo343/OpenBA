@@ -176,7 +176,7 @@ void GatherRawMaterials::Persist(void* stream) {
 int GatherRawMaterials::Execute(void* entityIBPArg, void* context) {
     // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
     // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** entityIBP = static_cast<CitizenComponent**>(entityIBPArg);
+    CitizenComponent** entityIBP = (CitizenComponent**)entityIBPArg;
     // retail's param3 (R8) is a by-value scratch slot whose address the body takes:
     // it becomes the out slot of the WorkPlaceComponent find below, and that value
     // is what 0x1400f6ef0 receives as its fifth argument.
@@ -645,7 +645,7 @@ int GatherRawMaterials::Validate() {
 // Work.h: LEFT.)
 // ============================================================
 void* GatherRawMaterials::GetTarget(void* retbuf) {
-    *static_cast<Profession**>(retbuf) = GameUpdateLoop::_singleton->m_professionList->field_0x30;
+    *(Profession**)retbuf = GameUpdateLoop::_singleton->m_professionList->field_0x30;
     return retbuf;
 }
 

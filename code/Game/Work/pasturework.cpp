@@ -123,7 +123,7 @@
 int PastureWork::Execute(void* entityIBP, void* /*context*/) {
     // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
     // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = static_cast<CitizenComponent**>(entityIBP);
+    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
 
     // local_res20 = *(longlong*)param_2;  local_res10 = param_2
     CitizenComponent* local_res20 = *citizenIBP;
@@ -472,7 +472,7 @@ int PastureWork::OnCancel(void* param2, void* param3, int /*arg3*/) {
     WorkBST_BSTFindRemove_25520(reinterpret_cast<uintptr_t*>(&_field48), param2);
 
     // Check if param3 entity is valid (the slot's parameter is void* in Work.h: LEFT)
-    ComponentEntity* entity = *static_cast<ComponentEntity**>(param3);
+    ComponentEntity* entity = *(ComponentEntity**)param3;
     if (entity == nullptr) {
         return 0;
     }
@@ -642,7 +642,7 @@ int PastureWork::Validate() {
 // ============================================================
 void* PastureWork::GetTarget(void* outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *static_cast<Profession**>(outPtr) = workPlace->profession;
+    *(Profession**)outPtr = workPlace->profession;
     return outPtr;
 }
 
@@ -719,7 +719,7 @@ PastureWork::PastureWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
 // (The entity slot is void*, the caller's ABI: LEFT.)
 // ============================================================
 PastureWork::PastureWork(void* entityIBP) : AutoPickupWork(), _field48(nullptr), _field50(0) {
-    field_10 = *static_cast<ComponentEntity**>(entityIBP);
+    field_10 = *(ComponentEntity**)entityIBP;
     if (field_10 != nullptr &&
         GameUpdateLoop::_singleton != nullptr) {
         MapComponent* a = field_10->FindComponent<MapComponent>();

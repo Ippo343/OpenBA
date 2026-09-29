@@ -118,7 +118,7 @@ static HarvestOrchard::ClaimNode* BST_Find(HarvestOrchard::ClaimNode* root, int 
 int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
     // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
     // parameter as void*: LEFT for Work.h's owner).
-    CitizenComponent** citizenIBP = static_cast<CitizenComponent**>(entityIBP);
+    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
 
     CitizenComponent* citizenRef = *citizenIBP;
 
@@ -573,7 +573,7 @@ cleanup:
 // ============================================================
 void* HarvestOrchard::GetTarget(void* outPtr) {
     WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
-    *static_cast<Profession**>(outPtr) = workPlace->profession;
+    *(Profession**)outPtr = workPlace->profession;
     return outPtr;
 }
 
