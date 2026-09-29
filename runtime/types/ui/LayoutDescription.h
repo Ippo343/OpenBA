@@ -71,7 +71,7 @@ public:
 
     // One child entry, `Array<Entry>` stride 0x38 (0x180043d80's spec).
     struct Entry {
-        void*            desc;         // +0x00  ExternalPtr<UI::ElementDescription>
+        ElementDescription* desc;      // +0x00  ExternalPtr<UI::ElementDescription> (B4 H4)
         char*            name;         // +0x08  System::String — what siblings look up
         char*            relativeToX;  // +0x10  System::String — gated by `horizontal`
         char*            relativeToY;  // +0x18  System::String — gated by `vertical`
@@ -146,5 +146,6 @@ static_assert(offsetof(LayoutDescription, _entries) == 0x68, "");
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- ui/layoutdescription.cpp
-extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t count, UI::LayoutDescription::Entry* e);  // 0x180043f50
+namespace IO { class Serializer; }
+extern "C" void RtUi_LayoutDescription_SerializeEntries(IO::Serializer* ser, int32_t count, UI::LayoutDescription::Entry* e);  // 0x180043f50
 // ==== end B3R W0-P0c ====

@@ -54,30 +54,19 @@
 #include "../../types/ui/NumberEditDescription.h"
 #include "../../types/ui/NumberEditElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
+#include "description_common.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
 #include <new>
 
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;              // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;   // +0x10
-};
-struct Serializer {
-    Stream* stream;            // +0x00
-    void*   readerWriter;      // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
+// (B4: the file-local IO::Stream / IO::Serializer shadows are gone -- H10;
+// the Serialize body builds a real IO::Serializer.)
 
 void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
-int32_t& RefCount(char* s) { return *reinterpret_cast<int32_t*>(s - 4); }
+int32_t& RefCount(char* s) { return RtSystem::StringRefCount(s); }
 
 // `System::String::operator=` INLINED, as retail has it at both of this file's
 // two assignment sites (0x1800d4d8f and 0x1800d4e37). The `field = nullptr` arm
@@ -136,20 +125,15 @@ void NumberEditDescription::Destruct() { this->~NumberEditDescription(); }
 //
 // THE FOUR INTS ARE EMITTED 0x70, 0x78, 0x7c, 0x74. The order is the format.
 bool NumberEditDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::ElementDescription::Serialize(stream);                 // 1800d4efa
 
-    Serializer ser = { stream, nullptr };
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800d4f2a
+    IO::ReaderWriter* rw = ser._readerWriter;                                     // 1800d4f2a
 
-    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 1800d4f38
+    RtObject_ExternalPtrSerialize_Font(rtdesc::ExtField(&_font), rtdesc::IoSer(&ser));          // 1800d4f38
 
     rw->SerializeInt(_i70, nullptr);
     rw->SerializeInt(_i78, nullptr);
@@ -157,9 +141,7 @@ bool NumberEditDescription::Serialize(void* streamv) {
     rw->SerializeInt(_i74, nullptr);
     rw->SerializeBool(reinterpret_cast<bool&>(_b80), nullptr);
 
-    if (rw != nullptr) {                                       // 1800d4faf
-        delete rw;
-    }
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                                       // 1800d4faf
     return true;
 }
 
@@ -189,15 +171,15 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* /*dialog*/) const {
     void* raw = System::MemoryAllocator::MemAlloc(0x100, 8);   // 1800d4cff (inlined)
 
-    NumberEditElement* elem = static_cast<NumberEditElement*>(raw);
+    NumberEditElement* elem = nullptr;   // retail: RDI = the null allocation
     if (raw != nullptr)                                        // 1800d4d2c
         elem = ::new (raw) NumberEditElement();                // 1800d4d31..1800d4d4b inlined ctor
 
-    void* slot = elem;                                         // 1800d4d5a
+    Object::InternalPtr<Element> slot(elem);                                         // 1800d4d5a
     // The non-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0) — a QUALIFIED member call since fragment pass F2.
     UI::ElementDescription::CreateInstance(                   // 1800d4d67
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     elem->_font = _font;                                       // 1800d4d70
 
@@ -246,7 +228,7 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
     elem->_min = _i78;                                         // 1800d4ea7
     elem->_max = _i7c;                                         // 1800d4eb0
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 1800d4eb6
+    *ret = Object::InternalPtr<Element>(elem);                     // 1800d4eb6
     return ret;
 }
 

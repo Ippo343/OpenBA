@@ -46,6 +46,9 @@
 #include "../../types/system/String.h"           // B3R RT-UI: String::Serialize, direct
 #include "../../types/collection/Collection.h"   // B3R RT-UI: the rtcoll bodies, direct
 #include "../../types/io/Serializer.h"           // B3R RT-UI: RtIo_SerializeStringArray
+#include "../../types/io/Stream.h"               // B4: IO::Stream (the Serializer's stream)
+#include "../../types/ui/Element.h"              // B4: fragments 4/5 by field name
+#include "../../types/ui/Sprite.h"               // B4: SpriteFromName
 #include <new>
 
 namespace rtdesc {
@@ -53,10 +56,13 @@ namespace rtdesc {
 // ---- the IO::Serializer pair -----------------------------------------------
 // [RSP+0x28] = the Stream*, [RSP+0x30] = the ReaderWriter the encoding factory
 // returns, and `LEA RDX,[RSP+0x28]` is what every field serializer receives.
-// Keeping the PAIR on the stack is load-bearing: a first draft of
-// runtime/src/graphics/wave24_lane_gfxmat.cpp passed the address of a lone
-// Stream* and every callee then read its reader from whatever slot happened to
-// sit next to it.
+// Every Serialize in this family inlines `??0Serializer@IO@@` (0x1800b9960,
+// version 0) and `??1Serializer@IO@@` (0x1800b99b0): B4 bodies build a real
+// `IO::Serializer ser(stream, 0)` for exactly those stores and that teardown.
+//
+// B4 FORWARD: `Stream`, `Serializer`, `VTableOf`, `MakeReaderWriter` and
+// `DialogCreateElement` below are the pre-B4 shapes; their remaining callers
+// are block R-UI-b's (pagedescription.cpp, radiodescription.cpp).
 struct Stream {
     uint8_t _head00[0x08];
     int32_t mode;              // +0x08  0 == reading
@@ -77,10 +83,7 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 constexpr int kEncCreateReader = 0x18;
 constexpr int kEncCreateWriter = 0x20;
 
-// Element layout constants these bodies reach through. Element.h pins them.
-constexpr int kElemFlags    = 0x34;   // OR dword [RCX+0x34],0x8000000
-constexpr int kElemParent   = 0x98;   // MOV [RCX+0x98],<parent>
-constexpr int kElemChildren = 0xa0;   // Array<Element*>: _data +0xa0, _size +0xa8
+// UI::Element::_flags bit 27 (Element.h kElementFlagNeedsSizeCalc).
 constexpr uint32_t kElementFlagNeedsSizeCalc = 0x08000000u;
 
 inline void** VTableOf(const void* o) {
@@ -101,29 +104,26 @@ inline void* MemAlloc(uint64_t bytes, int align) {
 }
 
 // ---- B3R RT-UI: the argument bridges of the direct field-serializer calls ---
-// The `Object::ExternalPtr<T>::Serialize` bodies (runtime/types/object/External.h)
-// take the field as `RtObject::External**` and the PAIR as `rt::io::Serializer*`;
-// every caller here holds them as the raw field and this file's `Serializer`.
+// The `Object::ExternalPtr<T>::Serialize` bodies (runtime/types/object/External.h,
+// block R-IO) take the field as `RtObject::External**` and the PAIR as
+// `rt::io::Serializer*`; every caller here holds them as the typed field and an
+// `IO::Serializer`. LEFT until External.h takes the real types.
 inline RtObject::External** ExtField(void* field) {
     return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
 }
 inline RtObject::External** ExtArray(void* data) {
     return reinterpret_cast<RtObject::External**>(data);                   // B.3.x bridge
 }
-inline rt::io::Serializer* IoSer(Serializer* ser) {
+inline rt::io::Serializer* IoSer(IO::Serializer* ser) {
     return reinterpret_cast<rt::io::Serializer*>(ser);                     // B.3.x bridge
 }
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930) on a
-// raw System::String field.
-inline void StringSerialize(void* field, Serializer* ser) {
-    static_cast<System::String*>(field)->Serialize(ser);                   // B.3.x bridge
+// System::String field held as raw char* storage (H5).
+inline void StringSerialize(char** field, IO::Serializer* ser) {
+    reinterpret_cast<System::String*>(field)->Serialize(ser);             // B.3.x bridge (H5)
 }
 
-// ---- fragment 1/2: the reader-writer the encoding factory hands back --------
-// Returned as the class it is; each caller dispatches the ReaderWriter's
-// members by name (`rw->SerializeInt(v, nullptr)`, and the teardown
-// `if (rw) rw->`delete` (slot 0, flags 1)`). The encoding factory call itself stays a
-// byte-offset read: IO::Encoding has no destructor slot (B3X_RULES X1).
+// ---- fragment 1/2 (pre-B4 shape; B4 FORWARD, see the banner above) ----------
 inline IO::ReaderWriter* MakeReaderWriter(Stream* stream, Serializer* ser) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
@@ -136,11 +136,10 @@ inline IO::ReaderWriter* MakeReaderWriter(Stream* stream, Serializer* ser) {
 
 // ---- fragment 3: the refcounted System::String release ---------------------
 // See the banner: the asymmetry is retail's and is kept.
-inline void ReleaseStringField(uint8_t* p, size_t off) {
-    char*& s = *reinterpret_cast<char**>(p + off);
+inline void ReleaseStringField(char*& s) {
     if (s != nullptr) {
-        --*reinterpret_cast<int32_t*>(s - 4);
-        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {
+        --RtSystem::StringRefCount(s);
+        if (RtSystem::StringRefCount(s) == 0) {
             s = s - 8;             // the FIELD moves, then that is what is freed
             MemFree(s);
         } else {
@@ -150,29 +149,26 @@ inline void ReleaseStringField(uint8_t* p, size_t off) {
 }
 
 // ---- fragment 4: the needs-size-calc walk, as a DO-WHILE -------------------
-inline void MarkNeedsSizeCalc(uint8_t* n) {
+inline void MarkNeedsSizeCalc(UI::Element* n) {
     do {
-        *reinterpret_cast<uint32_t*>(n + kElemFlags) |= kElementFlagNeedsSizeCalc;
-        n = *reinterpret_cast<uint8_t**>(n + kElemParent);
+        n->_flags |= kElementFlagNeedsSizeCalc;
+        n = n->_parent;
     } while (n != nullptr);
 }
 
 // ---- fragment 5: attach the new child and push it into the parent ----------
-inline void AttachAndPushChild(uint8_t* parent, void** made) {
-    uint8_t* child = *reinterpret_cast<uint8_t**>(made);
+inline void AttachAndPushChild(UI::Element* parent, Object::InternalPtr<UI::Element>* made) {
+    UI::Element* child = made->Get();
     if (child != nullptr)
-        *reinterpret_cast<void**>(child + kElemParent) = parent;
+        child->_parent = parent;
     rtcoll::RtColl_ArraySetSizeFill_180076900(
-        parent + kElemChildren,
-        *reinterpret_cast<int32_t*>(parent + kElemChildren + 8) + 1,
-        made);
+        &parent->_children, parent->_children._size + 1, made);
     MarkNeedsSizeCalc(parent);
 }
 
 // ---- the base-class entry point every CreateInstance goes through ---------
-// ?CreateElement@Dialog@UI@@ (0x180112ed0). Fragment pass F2: block B defined
-// the member; the RETSLOT is kept for the callers (placement-new of the
-// member's prvalue, exactly the door's shape in dialog.cpp).
+// ?CreateElement@Dialog@UI@@ (0x180112ed0). B4 FORWARD for R-UI-b's callers;
+// this block's callers call `dialog->CreateElement(...)` by name.
 inline void** DialogCreateElement(const void* dialog, void** retSlot, void* desc) {
     new (retSlot) Object::InternalPtr<UI::Element>(
         reinterpret_cast<const UI::Dialog*>(dialog)                         // B.3.6 bridge
@@ -183,32 +179,25 @@ inline void** DialogCreateElement(const void* dialog, void** retSlot, void* desc
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z, reached
 // by rel32 from every one of these appliers. Fragment pass F2: block D's
 // member (sprite.cpp), called directly instead of by address.
-inline int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    return reinterpret_cast<const UI::SpriteSheet*>(sheet)                  // B.3.6 bridge
-        ->UI::SpriteSheet::GetSpriteIndexFromName(
-            *static_cast<const System::String*>(nameStr));
+inline int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, char* const* name) {
+    // LEFT (H5): the name is a System::String held as raw char* storage.
+    return sheet->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(name));
 }
 
 // *** THE SPRITE INDEX IS STORED AS A QWORD READ FROM A SLOT ONLY A DWORD WAS
 // WRITTEN TO. *** Every applier in this family writes `dword [RSP+n]` and then
 // reads `qword [RSP+n]` and stores all eight bytes into the element. So the
 // element's index+4 receives four bytes of whatever was on retail's stack. That
-// is reproduced with an uninitialised local rather than "cleaned up" to a
-// 4-byte store: a 4-byte store would leave the high dword holding the element
-// constructor's own value, and this body's whole observable effect there is
-// that it overwrites it with something arbitrary. Our arbitrary value is ours,
-// not retail's; what is faithful is the WIDTH.
+// is reproduced by building the sprite on the stack and COPYING it whole: its
+// `pad0C` is never written (UI::Sprite's ctor leaves it), so the copy's +0x0c
+// is an unwritten stack dword exactly as retail's is. Our arbitrary value is
+// ours, not retail's; what is faithful is the WIDTH.
 // (Identical finding, same words, in runtime/src/ui/imagedescription.cpp.)
-inline uint64_t SpriteIndexSlot(const void* sheet, const void* nameStr) {
-    uint64_t slot;                                 // deliberately uninitialised
-    if (sheet != nullptr) {
-        const int32_t idx = GetSpriteIndexFromName(sheet, nameStr);
-        __builtin_memcpy(&slot, &idx, sizeof idx); // DWORD store
-    } else {
-        const int32_t minusOne = -1;
-        __builtin_memcpy(&slot, &minusOne, sizeof minusOne);  // DWORD store
-    }
-    return slot;                                   // read back as a QWORD
+inline UI::Sprite SpriteFromName(UI::SpriteSheet* sheet, char* const* name) {
+    UI::Sprite s;
+    s.spriteSheet = sheet;
+    s.spriteIndex = (sheet != nullptr) ? GetSpriteIndexFromName(sheet, name) : -1;
+    return s;
 }
 
 }  // namespace rtdesc

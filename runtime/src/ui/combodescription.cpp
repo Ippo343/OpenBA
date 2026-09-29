@@ -52,6 +52,7 @@
 #include "../../types/ui/ComboDescription.h"
 #include "../../types/ui/ComboElement.h"
 #include "../../types/ui/String.h"
+#include "../../types/ui/StringTable.h"   // B4: StringTable::_size
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/DialogInstance.h"
 
@@ -85,18 +86,18 @@ void ComboDescription::Destruct() { this->~ComboDescription(); }
 // Description> then ONE ExternalPtr<StringTable> — a DIFFERENT serializer
 // (0x1800042a0, not 0x180038f90), which is how the +0xb0 field's type is known.
 bool ComboDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ButtonDescription::Serialize(stream);                   // 1801129da
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_listDesc), IoSer(&ser));    // 180112a1b
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_itemDesc), IoSer(&ser));    // 180112a2c
     RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), IoSer(&ser)); // 180112a3d
 
-    if (rw != nullptr) delete rw;                 // 180112a55
+    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                 // 180112a55
     return true;
 }
 
@@ -139,63 +140,55 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
     if (raw != nullptr)                                     // 180112ae4
         elem = ::new (raw) ComboElement();                  // 180112ae9 ??0ComboElement
 
-    void* slot = static_cast<ButtonElement*>(elem);         // 180112af6  [RSP+0x90]
-    ButtonDescription::CreateInstance(
-        reinterpret_cast<Object::InternalPtr<ButtonElement>*>(&slot), dialog);   // 180112b0c
+    // Retail keeps ONE stack slot ([RSP+0x90]) for the applier's handle, the
+    // converted System::String and the CloseDialog argument; nothing reads one
+    // use's value in another, so here they are three typed locals.
+    Object::InternalPtr<ButtonElement> slot(elem);          // 180112af6  [RSP+0x90]
+    ButtonDescription::CreateInstance(&slot, dialog);       // 180112b0c
 
     elem->_listDesc = _listDesc;                            // 180112b18 QWORD
     elem->_itemDesc = _itemDesc;                            // 180112b26 QWORD
 
-    const uint8_t* table = static_cast<const uint8_t*>(_stringTable);
+    StringTable* table = _stringTable;
     if (table != nullptr) {                                 // 180112b37
         int32_t i = 0;
-        if (*reinterpret_cast<const int32_t*>(table + 0x28) > 0) {   // 180112b40
+        if (table->_size > 0) {                             // 180112b40
             void* userDataFill = nullptr;                   // 180112b4a  [RSP+0x98]
             do {
                 // UI::String{ StringTable*, index } built in place, then
-                // converted; the System::String lands in the SAME slot the
-                // applier used, which is why it has to be one variable.
-                struct UiString { const void* table; int32_t index; int32_t _pad; };
-                UiString key = { table, i, 0 };             // [RSP+0x28]/[RSP+0x30]
-                new (static_cast<void*>(&slot)) System::String(       // 180112b68 retslot
-                    reinterpret_cast<const UI::String*>(&key)->operator System::String());  // B.3.x bridge
+                // converted into the slot.
+                UI::String key;                             // [RSP+0x28]/[RSP+0x30]
+                key.table = table;
+                key.index = i;
+                key.pad0C = 0;
+                // LEFT (H5): the String is held as raw char* storage.
+                char* str = nullptr;
+                new (static_cast<void*>(&str)) System::String(key.operator System::String());   // 180112b68 retslot
 
-                struct SpriteFill { void* sheet; int32_t index; int32_t _pad; };
-                SpriteFill spriteFill = { nullptr, -1, 0 }; // 180112b6e / 180112b73
+                UI::Sprite spriteFill;                      // 180112b6e / 180112b73: {0, -1}
+                spriteFill.pad0C = 0;
 
                 rtcoll::RtColl_ArraySetSizeFill_180034860(
-                    &elem->_strings, elem->_strings._size + 1, &slot);          // 180112b92
+                    &elem->_strings, elem->_strings._size + 1, &str);           // 180112b92
                 rtcoll::RtColl_ArraySetSizeFill_18004bfc0(
                     &elem->_sprites, elem->_sprites._size + 1, &spriteFill);    // 180112bab
                 rtcoll::RtColl_ArraySetSizeFill_180024fe0(
                     &elem->_userData, elem->_userData._size + 1, &userDataFill); // 180112bc7
 
-                // The temporary System::String, released in place in the slot.
-                {
-                    char*& s = *reinterpret_cast<char**>(&slot);
-                    if (s != nullptr) {                     // 180112bd5
-                        --*reinterpret_cast<int32_t*>(s - 4);
-                        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {
-                            s = s - 8;                      // 180112beb
-                            MemFree(s);
-                        } else {
-                            s = nullptr;                    // 180112bfe
-                        }
-                    }
-                }
+                // The temporary System::String, released in place.
+                ReleaseStringField(str);                    // 180112bd5 .. 180112bfe
 
                 ++i;                                        // 180112c06
-                table = static_cast<const uint8_t*>(_stringTable);  // 180112c08
-            } while (i < *reinterpret_cast<const int32_t*>(table + 0x28));
+                table = _stringTable;                       // 180112c08
+            } while (i < table->_size);
         }
 
         // 180112c18: close any dialog the element is still showing.
-        void* open = elem->_openDialog;
+        // LEFT: ComboElement::_openDialog stays void* (widgets_input.cpp, R-UI-b).
+        DialogInstance* const open = static_cast<DialogInstance*>(elem->_openDialog);
         if (open != nullptr) {                              // 180112c1f
-            slot = open;                                    // 180112c24
-            reinterpret_cast<UserInterface*>(                   // B.3.x bridge
-                *reinterpret_cast<void**>(static_cast<uint8_t*>(open) + 0x10))
-                ->CloseDialog(reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&slot));  // 180112c38
+            Object::InternalPtr<DialogInstance> dlgSlot(open);   // 180112c24
+            open->_ui->CloseDialog(&dlgSlot);               // 180112c38
             elem->_openDialog = nullptr;                    // 180112c3d
         }
 

@@ -84,6 +84,9 @@
 
 namespace UI {
 
+class ComboDialog;
+class ElementDescription;
+
 class ComboElement : public ButtonElement {
 public:
     // ??0ComboElement@UI@@QEAA@XZ 0x1801123f0 — the REAL constructor: the
@@ -147,18 +150,18 @@ public:
 private:
 
 public:
-    void* _listDesc;                    // +0xD8  ExternalPtr<UI::ElementDescription>: the
+    ElementDescription* _listDesc;      // +0xD8 (B4 H4: typed)  ExternalPtr<UI::ElementDescription>: the
                                         //        popup LIST. ComboDescription::CreateInstance
                                         //        copies its +0xa0 here (0x180112b18);
                                         //        Update calls its slot 8.
-    void* _itemDesc;                    // +0xE0  ExternalPtr<UI::ElementDescription>: one
+    ElementDescription* _itemDesc;      // +0xE0 (B4 H4: typed)  ExternalPtr<UI::ElementDescription>: one
                                         //        popup ITEM (desc +0xa8, 0x180112b26).
     Collection::Array<void*> _strings;  // +0xE8  element = System::String (see above)
     Collection::Array<void*> _sprites;  // +0xF8  element = UI::Sprite (see above)
     Collection::Array<void*> _userData; // +0x108 element = void*
     int32_t  _currentItem;              // +0x118 ctor -1 (dword); ?GetCurrentItem@
     uint32_t _pad11c;                   // +0x11C written by nothing
-    void*    _openDialog;               // +0x120 InternalPtr<UI::ComboDialog> the popup;
+    void*    _openDialog;               // +0x120 (stays void*: widgets_input.cpp, R-UI-b, casts it to uint8_t*) InternalPtr<UI::ComboDialog> the popup;
                                         //        ctor 0; Update stores the new dialog
 };
 

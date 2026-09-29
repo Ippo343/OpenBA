@@ -51,6 +51,11 @@
 
 namespace UI {
 
+class SpriteSheet;
+class StringTable;
+class Font;
+class ElementDescription;
+
 class CheckDescription : public ButtonDescription {
 public:
     // ??0CheckDescription@UI@@QEAA@XZ 0x1801115e0 — the REAL constructor, the
@@ -91,7 +96,7 @@ public:
 private:
 
 public:
-    void* _checkDesc;              // +0xa0  ExternalPtr<ElementDescription>, the tick.
+    ElementDescription* _checkDesc; // +0xa0 (B4 H4: typed)  ExternalPtr<ElementDescription>, the tick.
                                    //        Construct: MOV [RBX+0xa0],0 @ 0x1800488cc
 };
 

@@ -51,6 +51,11 @@ namespace UI {
 
 class DocumentTextElement;
 
+class SpriteSheet;
+class StringTable;
+class Font;
+class ElementDescription;
+
 class DocumentTextDescription : public ElementDescription {
 public:
     // ??0DocumentTextDescription@UI@@QEAA@XZ 0x1800cfc30 -- the REAL ctor:
@@ -108,12 +113,12 @@ private:
 public:
     // (named apart from ElementDescription's own _stringTable/_textName at
     // +0x58/+0x60, which they would otherwise hide)
-    void*    _documentStringTable;  // +0x68  ExternalPtr<UI::StringTable> -> element text's table
+    StringTable* _documentStringTable; // +0x68 (B4 H4: typed)  ExternalPtr<UI::StringTable> -> element text's table
     char*    _documentTextName;     // +0x70  System::String -> the text's string-table index
-    void*    _spriteSheet;          // +0x78  ExternalPtr<UI::SpriteSheet> -> element +0xd0
+    SpriteSheet* _spriteSheet;      // +0x78 (B4 H4: typed)  ExternalPtr<UI::SpriteSheet> -> element +0xd0
     char*    _underlineSpriteName;  // +0x80  System::String -> element _underlineSprite
     // +0x88 Array<System::String>: one sprite name per frame-table slot (^li).
-    void*    _frameNamesData;       // +0x88
+    char**   _frameNamesData;       // +0x88 (B4 H4: Array<System::String>, each a char*)
     int32_t  _frameNamesCount;      // +0x90
     int32_t  _frameNamesCapacity;   // +0x94
     uint32_t _linkColor;            // +0x98  kScalarUInt -> element +0xf8
@@ -124,16 +129,16 @@ public:
     int32_t  _padAC;                // +0xac
     // Three arrays and a container the applier hands on whole (0x18003ce30,
     // 0x18003cf20, the open-coded Array<int> copy, and a qword copy).
-    void*    _fontsData;            // +0xb0  -> element _fonts (+0x110)
+    Font**   _fontsData;            // +0xb0 (B4 H4: typed)  -> element _fonts (+0x110)
     int32_t  _fontsCount;           // +0xb8
     int32_t  _fontsCapacity;        // +0xbc
-    void*    _sheetsData;           // +0xc0  -> element _sheets (+0x120)
+    SpriteSheet** _sheetsData;      // +0xc0 (B4 H4: typed)  -> element _sheets (+0x120)
     int32_t  _sheetsCount;          // +0xc8
     int32_t  _sheetsCapacity;       // +0xcc
     int32_t* _colorsData;           // +0xd0  Array<int>, serialized inline -> element _colors (+0x130)
     int32_t  _colorsCount;          // +0xd8
     int32_t  _colorsCapacity;       // +0xdc
-    void*    _resourceList;         // +0xe0  0x18003dc90 -> element _resourceList (+0x140)
+    Object::ExternalList* _resourceList; // +0xe0 (B4 H4: typed)  0x18003dc90 -> element _resourceList (+0x140)
 };
 
 static_assert(sizeof(DocumentTextDescription) == 0xe8,

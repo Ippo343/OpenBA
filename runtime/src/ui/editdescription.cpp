@@ -102,12 +102,12 @@ void EditDescription::Destruct() { this->~EditDescription(); }
 // two this batch otherwise uses — which is how its pointee type (UI::Font) is
 // distinguished.
 bool EditDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::ElementDescription::Serialize(stream);               // 1800d112a
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_Font(ExtField(&_ptr68), IoSer(&ser));       // 1800d1168
     StringSerialize(&_string70, &ser);    // 1800d1176
@@ -117,7 +117,7 @@ bool EditDescription::Serialize(void* streamv) {
 
     StringSerialize(&_string80, &ser);    // 1800d11ae
 
-    if (rw != nullptr) delete rw;                  // 1800d11c6
+    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                  // 1800d11c6
     return true;
 }
 
@@ -142,9 +142,9 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
     if (raw != nullptr)                                      // 1800d0ffc
         elem = ::new (raw) EditElement();                    // 1800d1001 ??0EditElement
 
-    void* slot = elem;                                       // 1800d100d
+    Object::InternalPtr<Element> slot(elem);                                       // 1800d100d
     UI::ElementDescription::CreateInstance(                   // 1800d101a
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     elem->_font = _ptr68;                                    // 1800d1023 QWORD
     AssignStringField(elem->_text, _string70);               // 1800d102a
@@ -152,7 +152,7 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
     AssignStringField(elem->_filter, _string80);             // 1800d1082
     elem->_password = _flag7c;                               // 1800d10d7 BYTE
 
-    *reinterpret_cast<void**>(ret) = elem;                   // 1800d10e1
+    *ret = Object::InternalPtr<Element>(elem);                   // 1800d10e1
     return ret;
 }
 

@@ -44,21 +44,14 @@ namespace {
 
 // UI::TextElement (block C3's class), the per-item element the list is filled
 // with — reached at raw offsets.
-constexpr int kTextParams      = 0xc8;   // Array<System::String>::_data
-constexpr int kTextParamCount  = 0xd0;   // Array<System::String>::_size
 constexpr int kTextSprite      = 0x100;  // UI::Sprite {sheet +0x100, index +0x108}
 constexpr int kTextSpriteIndex = 0x108;
 
 // UI::ListElement (block C4's class)
-constexpr int kListSelected = 0xd8;
-constexpr int kListCount    = 0xe8;
 
 // UI::DialogInstance (block B's class)
-constexpr int kDlgInstFlags = 0x20;
 
 // UI::UserInterface (block E's): the open-dialog array at +0x28 {data, size, capacity}.
-constexpr int kUiDialogs      = 0x28;
-constexpr int kUiDialogCount  = 0x30;
 
 constexpr int kDialogSize = 0xd0;
 
@@ -130,71 +123,68 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         Dialog* const stackDialog = ::new (static_cast<void*>(dialogBuf)) Dialog();   // ??0Dialog
 
         Object::InternalPtr<Element> listSlot;
-        Object::InternalPtr<Element>* made =
-            reinterpret_cast<const ElementDescription*>(_listDesc)       // B.3.6 bridge
-                ->CreateInstance(&listSlot, stackDialog);
-        void* madeList = *reinterpret_cast<void**>(made);
-        void* list = reinterpret_cast<const Object::Base*>(madeList)          // B.3.x bridge
-                         ->IsDerivedFrom(UI::ListElement::TypeId()) ? madeList : nullptr;
+        Object::InternalPtr<Element>* made = _listDesc->CreateInstance(&listSlot, stackDialog);
+        Element* const madeList = made->Get();
+        ListElement* list = madeList->IsDerivedFrom(UI::ListElement::TypeId())
+                                ? static_cast<ListElement*>(madeList) : nullptr;
 
         const int32_t count = _strings._size;
         for (int32_t i = 0; i < count; ++i) {
             Object::InternalPtr<Element> itemSlot;
-            Object::InternalPtr<Element>* madeItem =
-                reinterpret_cast<const ElementDescription*>(_itemDesc)   // B.3.6 bridge
-                    ->CreateInstance(&itemSlot, stackDialog);
-            void* madeItemRaw = *reinterpret_cast<void**>(madeItem);
-            void* item = reinterpret_cast<const Object::Base*>(madeItemRaw)   // B.3.x bridge
-                             ->IsDerivedFrom(UI::TextElement::TypeId()) ? madeItemRaw : nullptr;
+            Object::InternalPtr<Element>* madeItem = _itemDesc->CreateInstance(&itemSlot, stackDialog);
+            Element* const madeItemRaw = madeItem->Get();
+            TextElement* item = madeItemRaw->IsDerivedFrom(UI::TextElement::TypeId())
+                                    ? static_cast<TextElement*>(madeItemRaw) : nullptr;
 
-            const uint8_t* strings = reinterpret_cast<const uint8_t*>(_strings._data);
-            if (I32(item, kTextParamCount) > 0) {
+            if (item->_params._size > 0) {
                 rtuielem::SetNeedsSizeCalc(item);
-                *static_cast<System::String*>(P(item, kTextParams)) =        // 0x1800c9810
-                    *reinterpret_cast<const System::String*>(strings + static_cast<int64_t>(i) * 8);
-                static_cast<TextElement*>(item)->CacheText();                 // 0x18011ec10
+                // LEFT (H5): both Strings are held as raw char* storage.
+                *reinterpret_cast<System::String*>(item->_params._data) =        // 0x1800c9810
+                    *reinterpret_cast<const System::String*>(&_strings._data[i]);
+                item->CacheText();                                    // 0x18011ec10
             }
 
+            // LEFT: `_sprites` holds 0x10-byte UI::Sprite records under an
+            // Array<void*> declaration, and item+0x100 lies past TextElement
+            // (0x100 bytes): the item's own class is not settled.
             const uint8_t* sp = reinterpret_cast<const uint8_t*>(_sprites._data) +
                                 static_cast<int64_t>(i) * 0x10;
+            uint8_t* const itemBytes = reinterpret_cast<uint8_t*>(item);
             uint64_t lo = 0, hi = 0;
             __builtin_memcpy(&lo, sp + 0, 8);
             __builtin_memcpy(&hi, sp + 8, 8);
-            if (*reinterpret_cast<const uint64_t*>(static_cast<uint8_t*>(item) + kTextSprite) != lo ||
-                I32(item, kTextSpriteIndex) != static_cast<int32_t>(hi)) {
+            if (*reinterpret_cast<const uint64_t*>(itemBytes + kTextSprite) != lo ||
+                *reinterpret_cast<const int32_t*>(itemBytes + kTextSpriteIndex) != static_cast<int32_t>(hi)) {
                 rtuielem::SetNeedsSizeCalc(item);
             }
-            __builtin_memcpy(static_cast<uint8_t*>(item) + kTextSprite + 0, &lo, 8);
-            __builtin_memcpy(static_cast<uint8_t*>(item) + kTextSprite + 8, &hi, 8);
+            __builtin_memcpy(itemBytes + kTextSprite + 0, &lo, 8);
+            __builtin_memcpy(itemBytes + kTextSprite + 8, &hi, 8);
 
-            void* tmp = item;
-            static_cast<ListElement*>(list)->AddItem(                         // 0x1800d44b0
-                reinterpret_cast<Object::InternalPtr<Element>*>(&tmp), nullptr);   // B.3.x bridge
+            Object::InternalPtr<Element> tmp(item);
+            list->AddItem(&tmp, nullptr);                             // 0x1800d44b0
         }
 
         const int32_t cur = _currentItem;
-        if (cur < 0 || cur >= I32(list, kListCount)) I32(list, kListSelected) = 0;
-        else                                        I32(list, kListSelected) = cur;
-        I32(list, kElemAlignment) = 0;
+        if (cur < 0 || cur >= list->_userData._size) list->_selectedIndex = 0;
+        else                                         list->_selectedIndex = cur;
+        list->_alignment = 0;
 
         void* combo = RtUi_ComboDialog_OperatorNew(kDialogSize);   // ??2ComboDialog 0x180074770
-        void* made2 = nullptr;
+        ComboDialog* made2 = nullptr;
         if (combo != nullptr) {
-            // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0ComboDialog, the real ctor.
             made2 = ::new (combo) ComboDialog(
-                ui, Object::InternalPtr<Element>(static_cast<Element*>(list)),
+                ui, Object::InternalPtr<Element>(list),
                 *dialog, Object::InternalPtr<ComboElement>(this));
         }
         _openDialog = made2;
 
-        static_cast<DialogInstance*>(made2)->SetUpperLeft(_layoutLeft, _layoutBottom, false);   // 0x180114a60
-        U32(_openDialog, kDlgInstFlags) |= 2u;
+        made2->SetUpperLeft(_layoutLeft, _layoutBottom, false);    // 0x180114a60
+        made2->_flags |= 2u;                                        // == _openDialog
 
-        void* pushed = _openDialog;
-        static_cast<DialogInstance*>(pushed)->OnOpened();              // DialogInstance slot 4
-        uint8_t* u = reinterpret_cast<uint8_t*>(ui);
-        rtcoll::RtColl_ArraySetSizeFill_18007a0d0(u + kUiDialogs,
-                                               I32(u, kUiDialogCount) + 1, &pushed);
+        DialogInstance* pushed = made2;
+        pushed->OnOpened();                                         // DialogInstance slot 4
+        rtcoll::RtColl_ArraySetSizeFill_18007a0d0(&ui->_addDialogs,
+                                                  ui->_addDialogs._size + 1, &pushed);
 
         stackDialog->UI::Dialog::~Dialog();                          // ??1Dialog
     }
@@ -219,16 +209,15 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 // chains ~ButtonElement / ~Element.
 namespace UI {
 ComboElement::~ComboElement() {
-    uint8_t* self = reinterpret_cast<uint8_t*>(this);
-    void* open = _openDialog;
+    // LEFT: _openDialog stays void* (widgets_input.cpp, R-UI-b).
+    ComboDialog* const open = static_cast<ComboDialog*>(_openDialog);
     if (open != nullptr) {
-        void* slot = open;
-        static_cast<UserInterface*>(Pc(open, 0x10))->CloseDialog(          // 0x180120f20
-            reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&slot));   // B.3.x bridge
+        Object::InternalPtr<DialogInstance> slot(open);
+        open->_ui->CloseDialog(&slot);                                   // 0x180120f20
     }
-    rtcoll::RtColl_ArrayDtor_180024aa0(self + offsetof(ComboElement, _userData));
-    rtcoll::RtColl_ArrayDtor_180037310(self + offsetof(ComboElement, _sprites));
-    rtcoll::RtColl_ArrayDtorElem_180010ab0(self + offsetof(ComboElement, _strings));
+    rtcoll::RtColl_ArrayDtor_180024aa0(&_userData);
+    rtcoll::RtColl_ArrayDtor_180037310(&_sprites);
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_strings);
 }
 }  // namespace UI
 

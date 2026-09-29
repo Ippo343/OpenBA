@@ -131,7 +131,7 @@ public:
     // `ElementDescription::_childDesc` (+0x48) inside this class and its two
     // subclasses. Every body in this class means the five; spell the base's
     // one `ElementDescription::_childDesc` if it is ever needed.
-    void*   _childDesc[5];         // +0x68 .. +0x88  ExternalPtr<ElementDescription>:
+    ElementDescription* _childDesc[5]; // +0x68 .. +0x88 (B4 H4: typed)  ExternalPtr<ElementDescription>:
                                    //   [0..3] the four state backgrounds, [4] the label
     int32_t _word90;               // +0x90  state-0 colour; also the label's slot-10 arg
     int32_t _word94;               // +0x94  state-1 colour

@@ -60,13 +60,13 @@ void GraphDescription::Destruct() { this->~GraphDescription(); }
 // while +0x68/+0x6c/+0x70 go through kScalarInt (+0xa0); the split is read off
 // 0x1800d1acd versus 0x1800d1a8e/0x1800d1aa3/0x1800d1ab8, not assumed.
 bool GraphDescription::Serialize(void* streamArg) {
-    Stream* stream = static_cast<Stream*>(streamArg);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
     ElementDescription::Serialize(stream);                              // 1800d1a4a
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     rw->SerializeInt(_width, nullptr);                                  // 1800d1a8e
     rw->SerializeInt(_height, nullptr);                                 // 1800d1aa3
@@ -76,7 +76,7 @@ bool GraphDescription::Serialize(void* streamArg) {
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));            // 1800d1adc ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);             // 1800d1aed System::String
 
-    if (rw != nullptr) delete rw;                             // 1800d1b05
+    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                             // 1800d1b05
     return true;
 }
 
@@ -95,28 +95,24 @@ Object::InternalPtr<Element>* GraphDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog*) const {
     void* raw = MemAlloc(0x100, 8);                                     // 1800d1961
 
-    GraphElement* elem = static_cast<GraphElement*>(raw);
+    GraphElement* elem = nullptr;                                       // the null allocation stays null
     if (raw != nullptr)                                                 // 1800d198c
         elem = ::new (raw) GraphElement();                              // 1800d1991 ??0 (out of line)
 
-    void* slot = elem;                                                  // 1800d1999
+    Object::InternalPtr<Element> slot(elem);                                                  // 1800d1999
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
     UI::ElementDescription::CreateInstance(                   // 1800d19a6
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     elem->_width     = _width;                                          // 1800d19ae
     elem->_height    = _height;                                         // 1800d19b7
     elem->_unknownCC = static_cast<int32_t>(_unknown74);                // 1800d19c0
     elem->_tickSize  = _tickSize;                                       // 1800d19c9
 
-    {
-        void* sheet = _spriteSheet;                                     // 1800d19cf
-        const uint64_t idxSlot = SpriteIndexSlot(sheet, &_spriteName);  // 1800d19e2
-        uint8_t* sprite = reinterpret_cast<uint8_t*>(&elem->_lineSprite);
-        *reinterpret_cast<void**>(sprite + 0x00)    = sheet;            // 1800d19f5
-        *reinterpret_cast<uint64_t*>(sprite + 0x08) = idxSlot;          // 1800d1a01 QWORD store
-    }
+    // 1800d19cf..1800d19e2 the sheet and the index slot; 1800d19f5 / 1800d1a01
+    // the sheet and a QWORD store of the slot (rtdesc::SpriteFromName).
+    elem->_lineSprite = SpriteFromName(_spriteSheet, &_spriteName);
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d1a08
     return ret;
@@ -130,7 +126,7 @@ namespace UI {
 // retired door (ENDGAME B.3.9 UI-B): the +0x80 String; the base restamp, the
 // base's +0x60 String and the tail JMP into ~External are the compiler's chain.
 GraphDescription::~GraphDescription() {
-    ReleaseStringField(reinterpret_cast<uint8_t*>(this), 0x80);        // 1800d1b50
+    ReleaseStringField(_spriteName);                                  // 1800d1b50 (+0x80)
 }
 
 // ?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ 0x180040180 --

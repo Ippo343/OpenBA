@@ -116,7 +116,7 @@ public:
     // ExternalPtr<UI::ElementDescription> x3 (0x180038f90 each). CreateInstance
     // hands [2] to the clip region, then [1] and [0] to the container, in that
     // DESCENDING order.
-    void*    _partDescs[3];       // +0x78, +0x80, +0x88
+    ElementDescription* _partDescs[3]; // +0x78, +0x80, +0x88 (B4 H4: typed)
 };
 
 static_assert(sizeof(ContainerDescription) == 0x90,

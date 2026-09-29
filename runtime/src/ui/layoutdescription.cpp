@@ -68,6 +68,8 @@
 #include "../../types/ui/LayoutDescription.h"
 #include "../../types/ui/LayoutElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
+#include "description_common.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/system/String.h"
 #include "../../types/system/MemoryAllocator.h"
@@ -75,21 +77,8 @@
 
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
+// (B4: the file-local IO::Stream / IO::Serializer shadows are gone -- H10;
+// the Serialize body builds a real IO::Serializer.)
 
 // Retail's String comparison, inlined at FOUR places in CreateInstance and
 // written once here. It is NOT strcmp: the two cached LENGTHS at `data[-8]` are
@@ -99,10 +88,10 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // A zero-length table entry short-circuits to "equal" the moment the lengths
 // match, which is what makes an empty name match another empty name.
 bool StringEquals(const char* have, const char* want) {
-    const int32_t haveLen = have ? *reinterpret_cast<const int32_t*>(have - 8) : 0;
-    const int32_t wantLen = want ? *reinterpret_cast<const int32_t*>(want - 8) : 0;
+    const int32_t haveLen = have ? RtSystem::StringLength(have) : 0;
+    const int32_t wantLen = want ? RtSystem::StringLength(want) : 0;
     if (haveLen != wantLen) return false;
-    if (have == nullptr || *reinterpret_cast<const int32_t*>(have - 8) == 0) return true;
+    if (have == nullptr || RtSystem::StringLength(have) == 0) return true;
     if (want == nullptr) return false;
 
     int64_t k = 0;
@@ -120,7 +109,7 @@ bool StringEquals(const char* have, const char* want) {
 }
 
 bool NamesNothing(const char* s) {
-    return s == nullptr || *reinterpret_cast<const int32_t*>(s - 8) == 0;
+    return s == nullptr || RtSystem::StringLength(s) == 0;
 }
 
 }  // namespace
@@ -144,21 +133,20 @@ bool NamesNothing(const char* s) {
 // The READER is read out of the pair (`MOV RCX,[RDI+8]`) ONCE PER FIELD, not
 // hoisted, and the body returns immediately when count <= 0 (`TEST EDX,EDX;
 // JLE` is the first instruction, before the prologue).
-extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t count,
+extern "C" void RtUi_LayoutDescription_SerializeEntries(IO::Serializer* ser, int32_t count,
                                                         UI::LayoutDescription::Entry* e) {
     if (count <= 0) return;                                    // 180043f50
-    Serializer* ser = static_cast<Serializer*>(serv);
 
     // The ReaderWriter is re-read from the Serializer for every field, as retail does.
-    auto rw = [ser]() { return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter); };  // B.3.x bridge
+    auto rw = [ser]() { return ser->_readerWriter; };
 
     for (int32_t i = 0; i < count; ++i, ++e) {
         RtObject_ExternalPtrSerialize_ElementDescription(                       // 180043f77
-            reinterpret_cast<RtObject::External**>(&e->desc),                   // B.3.x bridge
-            reinterpret_cast<rt::io::Serializer*>(ser));                        // B.3.x bridge
-        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);         // 180043f83
-        reinterpret_cast<System::String*>(&e->relativeToX)->Serialize(ser);  // 180043f8e
-        reinterpret_cast<System::String*>(&e->relativeToY)->Serialize(ser);  // 180043f9a
+            rtdesc::ExtField(&e->desc),                   // B.3.x bridge
+            rtdesc::IoSer(ser));
+        rtdesc::StringSerialize(&e->name, ser);                // 180043f83
+        rtdesc::StringSerialize(&e->relativeToX, ser);         // 180043f8e
+        rtdesc::StringSerialize(&e->relativeToY, ser);         // 180043f9a
 
         rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->horizontal), nullptr);          // +0x98
         rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->vertical), nullptr);            // +0x98
@@ -192,31 +180,24 @@ void LayoutDescription::Destruct() { this->~LayoutDescription(); }
 // ?Serialize@LayoutDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d3940
 // ============================================================================
 bool LayoutDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::ElementDescription::Serialize(stream);                 // 1800d395a (qualified)
 
-    Serializer ser = { stream, nullptr };
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800d398a
+    IO::ReaderWriter* rw = ser._readerWriter;                                     // 1800d398a
 
     int32_t n = _entries._size;                                // 1800d398f
     rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->mode == 0) {                               // 1800d39b1 (re-read)
+    if (ser._stream->_direction == 0) {                               // 1800d39b1 (re-read)
         rtcoll::RtColl_ArraySetSize_180043d80(&_entries, n);       // 1800d39bf
     }
 
     RtUi_LayoutDescription_SerializeEntries(&ser, n, _entries._data);   // 1800d39d1 0x180043f50
 
-    if (rw != nullptr) {                                       // 1800d39df
-        delete rw;
-    }
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                                       // 1800d39df
     return true;
 }
 
@@ -271,9 +252,9 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
     if (raw != nullptr)                                        // 1800d341c
         elem = ::new (raw) LayoutElement();                    // 1800d3421 ??0Element + stores
 
-    void* slot = elem;                                         // 1800d344e
+    Object::InternalPtr<Element> slot(elem);                                         // 1800d344e
     UI::ElementDescription::CreateInstance(                   // 1800d3459
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     // The order table: one uint32 per entry, all -1.
     struct { int32_t* data; int32_t size; int32_t capacity; } order = { nullptr, 0, 0 };
@@ -292,15 +273,13 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
         order.data[index] = elem->_childRecords._size;          // 1800d34e9
         ++placed;                                              // 1800d34f4
 
-        void* childDesc = entriesBase[index].desc;             // 1800d3500
+        ElementDescription* childDesc = entriesBase[index].desc;   // 1800d3500
         // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
         // placed in the caller's slot.
-        void** made = &slot;
-        new (static_cast<void*>(made)) Object::InternalPtr<Element>(
-            dialog->CreateElement(Object::ExternalPtr<ElementDescription>(
-                static_cast<ElementDescription*>(childDesc))));
+        Object::InternalPtr<Element>* made = &slot;
+        *made = dialog->CreateElement(Object::ExternalPtr<ElementDescription>(childDesc));
 
-        Element* child = static_cast<Element*>(*made);         // 1800d3514
+        Element* child = made->Get();                          // 1800d3514
         if (child != nullptr) child->_parent = elem;           // 1800d351c
 
         rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children,
@@ -401,7 +380,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
         }
     }
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 1800d38cf
+    *ret = Object::InternalPtr<Element>(elem);                     // 1800d38cf
 
     // The order table's buffer is freed through MemoryAllocator::Free under the
     // allocator's own critical section (0x1800d38d7..0x1800d3906), the same

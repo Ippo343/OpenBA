@@ -117,18 +117,18 @@ Object::Base* BorderDescription::CreateInPlaceObject(void* place) {
 // serializers take the PAIR, not the reader (`LEA RDX,[RSP+0x28]`), which is
 // why it has to live on this frame.
 bool BorderDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ElementDescription::Serialize(stream);                  // 18010fe3a
 
-    Serializer ser = { stream, nullptr };                   // [RSP+0x28], [RSP+0x30]
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);  // 18010fe62 / 18010fe67
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined                   // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* rw = ser._readerWriter;  // 18010fe62 / 18010fe67
 
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 18010fe78
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
         StringSerialize(&_spriteName[i], &ser);             // 0x1800c9930
 
-    if (rw != nullptr) delete rw;                 // 18010ff23
+    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                 // 18010ff23
     return true;                                            // MOV AL,1
 }
 
@@ -161,21 +161,23 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* /*dialog*/) const {
     void* raw = MemAlloc(0x150, 8);                        // 18010ff80
 
-    BorderElement* elem = static_cast<BorderElement*>(raw);
+    BorderElement* elem = nullptr;                         // the null allocation stays null
     if (raw != nullptr)                                    // 18010ffaa
         elem = ::new (raw) BorderElement();                // 18010ffaf ??0BorderElement
 
-    void* slot = static_cast<Element*>(elem);              // 18010ffb7  [RBP+0x20]
+    Object::InternalPtr<Element> slot(elem);               // 18010ffb7  [RBP+0x20]
     UI::ElementDescription::CreateInstance(                   // 18010ffc2
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
-    uint8_t* sprites = reinterpret_cast<uint8_t*>(elem) + offsetof(BorderElement, _topLeft);
-    for (int i = 0; i < 9; ++i) {                          // 18010ffc7 .. 1801101a0
-        void* sheet = _spriteSheet;
-        const uint64_t idxSlot = SpriteIndexSlot(sheet, &_spriteName[i]);
-        *reinterpret_cast<void**>(sprites + i * 0x10)        = sheet;
-        *reinterpret_cast<uint64_t*>(sprites + i * 0x10 + 8) = idxSlot;
-    }
+    // The nine sprites are consecutive 0x10-byte members from +0xc0; retail
+    // walks them with one cursor. Each gets {sheet, index} with the index slot
+    // stored as a QWORD (rtdesc::SpriteFromName).
+    ::Sprite* const sprites[9] = {
+        &elem->_topLeft, &elem->_top, &elem->_topRight,
+        &elem->_left, &elem->_centre, &elem->_right,
+        &elem->_bottomLeft, &elem->_bottom, &elem->_bottomRight };
+    for (int i = 0; i < 9; ++i)                            // 18010ffc7 .. 1801101a0
+        *sprites[i] = SpriteFromName(_spriteSheet, &_spriteName[i]);
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1801101a7
     return ret;                                            // MOV RAX,R14

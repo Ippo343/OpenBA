@@ -102,12 +102,12 @@ void ImageDescription::Destruct() { this->~ImageDescription(); }
 // `LEA RDX,[RSP+0x28]` (0x180118503, 0x180118511), the {stream, readerWriter}
 // pair, which is why it has to live on this frame.
 bool ImageDescription::Serialize(void* streamv) {
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ElementDescription::Serialize(stream);                     // 1801184ca
 
-    rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1801184fa
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined              // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* rw = ser._readerWriter; // 1801184fa
 
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser));   // 180118508 ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);    // 180118516 String
@@ -115,7 +115,7 @@ bool ImageDescription::Serialize(void* streamv) {
     rw->SerializeInt(_width, nullptr);
     rw->SerializeInt(_height, nullptr);
 
-    if (rw != nullptr) delete rw;                    // 18011854b
+    // ~Serializer (0x1800b99b0) inlined here: rw\'s scalar deleting dtor                    // 18011854b
     return true;
 }
 

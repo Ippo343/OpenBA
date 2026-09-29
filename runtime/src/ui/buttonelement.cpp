@@ -54,8 +54,6 @@ constexpr int kChildLabel = 4;
 // UI::UserInterface (block E's class, still a struct): the pending-event array
 // at +0x48 {data, size, capacity} (runtime/types/ui/UserInterface.h,
 // `Collection::Array<Event> _events`).
-constexpr int kUiEvents     = 0x48;
-constexpr int kUiEventCount = 0x50;
 
 // UI::UserInterface::Event, 0x30 bytes (the stride UserInterface.h pins from
 // CleanRemovedDialogs). The seven stores at 0x180111356..0x18011139e.
@@ -272,7 +270,7 @@ void ButtonElement::Update(const System::Time& time, UserInterface* ui,
     StoreFlags(this, _flags |  kElementFlagWasActivated);
 
     ::Event ev;                                // this file's record, not UI::Event
-    ev.dialog    = *reinterpret_cast<void* const*>(dialog);
+    ev.dialog    = dialog->Get();
     ev.element   = this;
     ev.kind      = kEventActivated;
     ev.elementId = _elementId;
@@ -280,8 +278,7 @@ void ButtonElement::Update(const System::Time& time, UserInterface* ui,
     ev.y         = state.mouseY;
     ev.index     = 0;
     ev.tail      = 0;
-    uint8_t* u = reinterpret_cast<uint8_t*>(ui);
-    rtcoll::RtColl_ArraySetSizeFill_180033690(u + kUiEvents, I32(u, kUiEventCount) + 1, &ev);
+    rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events, ui->_events._size + 1, &ev);
     static_cast<UI::UserInterface*>(ui)->Play(5);
 }
 
