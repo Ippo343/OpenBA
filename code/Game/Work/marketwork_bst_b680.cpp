@@ -70,18 +70,15 @@
 
 namespace {
 
-// One sorted element.  0x20 bytes; retail moves it as 8 dwords
-// (e.g. 0x14002be4a..0x14002beb8), so a POD copy is byte-identical.
-struct MwSortRec {
-    uint32_t w[8];
-};
-static_assert(sizeof(MwSortRec) == 0x20, "market sort record must be 0x20 bytes");
+// One sorted element: MarketWork::Demand, 0x20 bytes; retail moves it as 8 dwords
+// (e.g. 0x14002be4a..0x14002beb8), so a whole-record copy is byte-identical.
+using MwSortRec = MarketWork::Demand;
 
-// The sort key: the float at record+0x14.
+// The sort key: the float at record+0x14 (satisfaction).
 // Disassembly: every comparison is `MOVSS XMM0,[reg + 0x14]` — 0x14002bde0,
 // 0x14002b6f4, 0x14002b708, 0x14002b8c9, 0x14002b8fe, 0x14002b9a9, ...
 inline float Key(const MwSortRec* r) {
-    return *reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(r) + 0x14);
+    return r->satisfaction;
 }
 
 // comp(a, b) > 0.  Retail spells this COMISS Key(a), Key(b) + JA, i.e. an
@@ -131,9 +128,9 @@ constexpr int kStackDepth = 62;
 //
 // Pointer comparisons are unsigned in retail (JBE/JA); pointers into one array
 // compare the same either way.
-extern "C" void MarketBst_bd80(void* first, void* last) {
-    MwSortRec* lo = static_cast<MwSortRec*>(first);
-    MwSortRec* hi = static_cast<MwSortRec*>(last);
+extern "C" void MarketBst_bd80(MarketWork::Demand* first, MarketWork::Demand* last) {
+    MwSortRec* lo = first;
+    MwSortRec* hi = last;
 
     while (hi > lo) {
         MwSortRec* max = lo;
@@ -157,8 +154,8 @@ extern "C" void MarketBst_bd80(void* first, void* last) {
 // (0x14002b6c0 recurse head, 0x14002b6dc pop, 0x14002b8b6 partition head,
 // 0x14002b9e3 the recurse-smaller-half decision) so the port can be diffed
 // against the listing line for line.
-extern "C" void MarketBst_b680(void* base, int count) {
-    MwSortRec* lo = static_cast<MwSortRec*>(base);
+extern "C" void MarketBst_b680(MarketWork::Demand* base, int count) {
+    MwSortRec* lo = base;
     // 0x14002b69f: MOVSXD RAX,EDX / SHL RAX,5 / LEA RBP,[RCX-0x20] / ADD RBP,RAX
     // i.e. hi = base + (count - 1) records.  count == 0 leaves hi = base - 1
     // record; the size test below then routes to bd80, which returns at once.

@@ -35,6 +35,7 @@
 #pragma once
 
 #include <cstdint>
+#include "Work/MarketWork.h"   // MarketWork::Take
 
 extern "C" {
 
@@ -48,6 +49,6 @@ extern "C" {
 //                 count <= 1; passing 0 here would underflow `last` exactly as
 //                 retail would.  This port keeps that faithful -- no guard added.
 // Returns nothing (RAX is left holding scratch at the RET at 0x14002bd74).
-void MarketBst_ba70(void* base, int count);
+void MarketBst_ba70(MarketWork::Take* base, int count);
 
 } // extern "C"

@@ -56,6 +56,17 @@
 #include "Component/InteractDescription.h"   // ENDGAME B.3.8 CB3: InteractDescription::TypeId()
 #include "Component/MapComponent.h"   // ENDGAME B.3.8 CB3: MapComponent::TypeId()
 #include "Component/StorageLocationComponent.h"   // ENDGAME B.3.8 CB3: StorageLocationComponent::TypeId()
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
+#include "collection/Collection.h"
 
 // ============================================================
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
@@ -86,9 +97,10 @@
 // i.e. ERASE the entry keyed by param_2, and return false. It is NOT an "add" —
 // the old comment here said "Add entity to BST" purely because sub_aaa0 was
 // mis-named "insert". Verified 2026-08-22 by decompiling 0x1400eff60.
+// (The slot's key parameter is void* in Work.h: LEFT.)
 //
 int MarketWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
-    MarketBst_aaa0(reinterpret_cast<int64_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    MarketBst_aaa0(&_field48, static_cast<CitizenComponent**>(param2));
     return false;
 }
 
@@ -106,66 +118,50 @@ int MarketWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
 // Verified by decompiling 0x1400eff50 and 0x1400eff60 — both call 0x14002aaa0.
 //
 int MarketWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
-    MarketBst_aaa0(reinterpret_cast<int64_t*>((void*)((uintptr_t)this + 0x48)), param2);
+    MarketBst_aaa0(&_field48, static_cast<CitizenComponent**>(param2));
     return 0;
 }
 
 
 // ============================================================
-// MarketWork::Slot8 / CancelAll
+// MarketWork::Slot8 / CancelAll -- retail 0x1400f1ca0
 // ============================================================
-// Loops through BST at +0x48 while count (+0x50) > 0.
-// For each leftmost node, cancels the work item via engine call.
-//
-// CRITICAL: Uses DIFFERENT BST offsets from HerbalistWork!
-// - Left child at node+0x20 (not +0x10)
-// - node[4] in longlong* terms = byte offset 0x20
+// Loops while the claim count (+0x50, signed: JLE / JG) > 0: the leftmost node's
+// citizen, its CharacterComponent (+0x278), the action list (+0x48) is cleared.
 //
 int MarketWork::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    int count = *(int*)(selfAddr + 0x50);
+    int count = _field50;
 
     while (count > 0) {
-        // Find leftmost node in BST (follow left children at +0x20)
-        void* node = *(void**)(selfAddr + 0x48);
-        void* leftmost = node;
+        // Find leftmost node in the claim tree
+        ClaimNode* node = _field48;
+        ClaimNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
-            // Follow left child at +0x20 (MarketWork BST layout)
-            node = *(void**)((uintptr_t)node + 0x20);
+            node = node->left;
         }
 
-        // Cancel the work item: get citizen entity from node key
-        uintptr_t citizenEntity = *(uintptr_t*)leftmost;
+        // Cancel the work item: the claiming citizen's action list
+        CitizenComponent* citizen = leftmost->element.citizen;
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
 
-        // Navigate to citizen AI subsystem and cancel
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
-
-        count = *(int*)(selfAddr + 0x50);
+        count = _field50;
     }
     return 0;
 }
 
 
 // ============================================================
-// MarketWork::Slot9 / RemoveInvalid
+// MarketWork::Slot9 / RemoveInvalid -- retail 0x1400efd20
 // ============================================================
-// Iterates BST, validates each entry via FUN_1400f7100,
+// Iterates the claim tree, validates each entry via FUN_1400f7100,
 // collects invalid ones, removes them from tree.
 // Returns true if all entries are valid (none removed).
-//
-// CRITICAL: Uses DIFFERENT BST node offsets from HerbalistWork!
-// - Left child:  +0x20 (not +0x10)
-// - Right child: +0x28 (not +0x18)
-// - Parent:      +0x18 (not +0x08)
-// Uses MarketWork_sub_ac40 for BST removal (not CitizenAI_impl_a6e0).
+// Uses MarketWork_sub_ac40 for the removal (not CitizenAI_impl_a6e0).
 //
 int MarketWork::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
-
-    void* root = *bstRootPtr;
-    uintptr_t* removeArr = nullptr;
+    ClaimNode* root = _field48;
+    CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
 
@@ -173,31 +169,31 @@ int MarketWork::Validate() {
         return true;  // Empty tree -- nothing to validate
     }
 
-    // Find leftmost node (minimum) -- left child at +0x20
-    void* node = root;
-    while (*(void**)((uintptr_t)node + 0x20) != nullptr) {
-        node = *(void**)((uintptr_t)node + 0x20);
+    // Find leftmost node (minimum)
+    ClaimNode* node = root;
+    while (node->left != nullptr) {
+        node = node->left;
     }
 
-    // In-order traversal using MarketWork BST offsets
+    // In-order traversal
     while (node != nullptr) {
-        uintptr_t entityIBP = *(uintptr_t*)node;
+        CitizenComponent* entityIBP = node->element.citizen;
 
         // Validate this entity
-        bool stillValid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), nullptr, (void*)&entityIBP, nullptr);
+        bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed
             uint32_t newCount = removeCount + 1;
             if (newCount != removeCount) {
-                uintptr_t* newArr = removeArr;
+                CitizenComponent** newArr = removeArr;
                 if ((int)removeCapacity < (int)newCount) {
                     uint32_t newCap = newCount;
                     if (removeCount != 0) {
                         newCap = newCount * 3;
                     }
                     removeCapacity = newCap;
-                    newArr = (uintptr_t*)System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8);
+                    newArr = static_cast<CitizenComponent**>(System::MemoryAllocator::MemAlloc((int64_t)newCap * 8, 8));
                 }
 
                 // Copy existing entries if buffer changed
@@ -206,7 +202,7 @@ int MarketWork::Validate() {
                     copyStart = removeCount;
                 }
                 for (uint32_t i = copyStart; i < newCount; i++) {
-                    uintptr_t val;
+                    CitizenComponent* val;
                     if (i < removeCount) {
                         val = removeArr[i];
                     } else {
@@ -222,23 +218,22 @@ int MarketWork::Validate() {
             }
         }
 
-        // In-order successor using MarketWork BST offsets:
-        // Right child at +0x28, left child at +0x20, parent at +0x18
-        void* rightChild = *(void**)((uintptr_t)node + 0x28);
+        // In-order successor
+        ClaimNode* rightChild = node->right;
         if (rightChild != nullptr) {
             // Go right, then all the way left
             node = rightChild;
-            while (*(void**)((uintptr_t)node + 0x20) != nullptr) {
-                node = *(void**)((uintptr_t)node + 0x20);
+            while (node->left != nullptr) {
+                node = node->left;
             }
         } else {
             // Go up until we come from a left child
-            void* parent = *(void**)((uintptr_t)node + 0x18);
-            if (parent != nullptr && *(void**)((uintptr_t)parent + 0x20) != node) {
+            ClaimNode* parent = node->parent;
+            if (parent != nullptr && parent->left != node) {
                 // We came from the right -- keep going up
-                while (parent != nullptr && *(void**)((uintptr_t)parent + 0x28) == node) {
+                while (parent != nullptr && parent->right == node) {
                     node = parent;
-                    parent = *(void**)((uintptr_t)parent + 0x18);
+                    parent = parent->parent;
                 }
                 node = parent;
             } else {
@@ -247,22 +242,20 @@ int MarketWork::Validate() {
         }
     }
 
-    // Remove all invalid entries from BST using MarketWork's BST remove
+    // Remove all invalid entries from the tree (the key compare is unsigned)
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            // Find and remove the node with this key from BST
-            void* searchNode = *bstRootPtr;
+            // Find and remove the node with this key
+            ClaimNode* searchNode = _field48;
             while (searchNode != nullptr) {
-                if (removeArr[i] < *(uintptr_t*)searchNode) {
-                    // Go left (+0x20 for MarketWork BST)
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x20);
+                if (removeArr[i] < searchNode->element.citizen) {
+                    searchNode = searchNode->left;
                 } else {
-                    if (removeArr[i] <= *(uintptr_t*)searchNode) {
-                        MarketBst_ac40(reinterpret_cast<int64_t*>(bstRootPtr), searchNode);
+                    if (removeArr[i] <= searchNode->element.citizen) {
+                        MarketBst_ac40(&_field48, searchNode);
                         break;
                     }
-                    // Go right (+0x28 for MarketWork BST)
-                    searchNode = *(void**)((uintptr_t)searchNode + 0x28);
+                    searchNode = searchNode->right;
                 }
             }
         }
@@ -275,36 +268,21 @@ int MarketWork::Validate() {
 
 
 // ============================================================
-// MarketWork::Slot10 / GetWorkEntity
+// MarketWork::Slot10 / GetWorkEntity -- retail 0x1400f1d10
 // ============================================================
-// Returns entity from this->_field10's sub-object at +0x48.
-// IDENTICAL pattern to other Work classes.
+// The entity's (+0x10) WorkPlaceComponent (FindComponent 0x140002e10), its
+// profession (+0x48) into the return slot. IDENTICAL pattern to other Work classes.
+// (The return slot is void* in Work.h's slot: LEFT.)
 //
 void* MarketWork::GetTarget(void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    // CheckPtr on self+0x10
-    uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
-
-    // Find sub-entity via FUN_140002e10
-    uintptr_t subIBP[2] = {0};
-    // 0x140002e10 returns its out IBP (RDX) in RAX; the ported body is declared void,
-    // so the returned pointer is the out buffer itself.
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entityRef), subIBP);
-    void* result = subIBP;
-
-    // CheckPtr on the result
-
-    // Read +0x48 from the resolved entity and store in output
-    uintptr_t resolvedEntity = *(uintptr_t*)result;
-    *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
-
+    WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
+    *static_cast<Profession**>(outPtr) = workPlace->profession;
     return outPtr;
 }
 
 
 // ============================================================
-// MarketWork::Serialize
+// MarketWork::Serialize -- retail 0x1400f1d70
 // ============================================================
 // Work::Serialize + IO::Serializer(version=1) with version migration.
 //
@@ -318,33 +296,33 @@ void* MarketWork::GetTarget(void* outPtr) {
 //   Call MarketWork_helper_b290 directly on self+0x48.
 //
 void MarketWork::Persist(void* stream) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Call Work::Serialize base
     Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
-    // Create serializer with version=1
-    alignas(8) uint8_t serializer[24] = {0};
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    // Create serializer with version=1 (Persist's stream is void* in Work.h: LEFT)
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 1);
 
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    int version = serializer.GetVersion();
 
 
     if (version == 0) {
         // OLD format: deserialize into temp simple BST, then migrate
+        // (Set<InternalPtr<CitizenComponent>>, the T = 8 node; the helper takes the
+        // container as uintptr_t*: LEFT)
+        using SimpleNode = Collection::Set<CitizenComponent*>::Node;
         uintptr_t tempBST[2] = {0, 0};  // root=0, count=0
 
         // Deserialize using simple BST format
-        WorkBST_BST_Serialize_296b0(tempBST, serializer);
+        WorkBST_BST_Serialize_296b0(tempBST, &serializer);
 
-        // In-order traverse temp BST (simple layout: +0x08=parent, +0x10=left, +0x18=right)
+        // In-order traverse temp BST
         // For each entry, re-insert into MarketWork's BST using market insert
-        void* tempRoot = (void*)tempBST[0];
+        SimpleNode* tempRoot = reinterpret_cast<SimpleNode*>(tempBST[0]);
         if (tempRoot != nullptr) {
-            // Find leftmost in temp (simple BST: left at +0x10)
-            void* node = tempRoot;
-            while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-                node = *(void**)((uintptr_t)node + 0x10);
+            // Find leftmost in temp
+            SimpleNode* node = tempRoot;
+            while (node->left != nullptr) {
+                node = node->left;
             }
 
             // In-order traversal of simple BST
@@ -357,25 +335,26 @@ void MarketWork::Persist(void* stream) {
                 //          i.e. the migrated entry starts with an EMPTY payload; retail then
                 //          "frees" it with MemFree(nullptr), a deliberate no-op on the
                 //          always-null data pointer of that temporary.
-                uintptr_t outIbp[2] = {0, 0};
-                uintptr_t vecDesc[2] = {0, 0};
-                MarketBst_a9f0(reinterpret_cast<int64_t*>((void*)(selfAddr + 0x48)), reinterpret_cast<int64_t*>(outIbp), reinterpret_cast<int64_t*>(node), reinterpret_cast<int64_t*>(vecDesc));
-                vecDesc[0] = 0;
-                vecDesc[1] = 0;
+                ClaimNode* outIbp = nullptr;
+                CarryList vecDesc = {nullptr, 0, 0};
+                MarketBst_a9f0(&_field48, &outIbp, &node->element, &vecDesc);
+                vecDesc.data = nullptr;
+                vecDesc.count = 0;
+                vecDesc.capacity = 0;
 
-                // In-order successor (simple BST offsets)
-                void* rightChild = *(void**)((uintptr_t)node + 0x18);
+                // In-order successor
+                SimpleNode* rightChild = node->right;
                 if (rightChild != nullptr) {
                     node = rightChild;
-                    while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
-                        node = *(void**)((uintptr_t)node + 0x10);
+                    while (node->left != nullptr) {
+                        node = node->left;
                     }
                 } else {
-                    void* parent = *(void**)((uintptr_t)node + 0x08);
-                    if (parent != nullptr && *(void**)((uintptr_t)parent + 0x10) != node) {
-                        while (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) == node) {
+                    SimpleNode* parent = node->parent;
+                    if (parent != nullptr && parent->left != node) {
+                        while (parent != nullptr && parent->right == node) {
                             node = parent;
-                            parent = *(void**)((uintptr_t)parent + 0x08);
+                            parent = parent->parent;
                         }
                         node = parent;
                     } else {
@@ -386,16 +365,14 @@ void MarketWork::Persist(void* stream) {
 
             // Clean up temp simple BST
             // Free left subtree, then right subtree, then root
-            WorkBase_TreeNodeFree_14c30(tempBST, *(void**)((uintptr_t)tempRoot + 0x10));
-            WorkBase_TreeNodeFree_14c30(tempBST, *(void**)((uintptr_t)tempRoot + 0x18));
+            WorkBase_TreeNodeFree_14c30(tempBST, tempRoot->left);
+            WorkBase_TreeNodeFree_14c30(tempBST, tempRoot->right);
             System::MemoryAllocator::MemFree(tempRoot);
         }
     } else {
         // NEW format: call MarketWork_helper_b290 directly
-        MarketBst_b290(reinterpret_cast<int64_t*>((void*)(selfAddr + 0x48)), serializer);
+        MarketBst_b290(&_field48, &serializer);
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 
@@ -428,33 +405,21 @@ void MarketWork::Persist(void* stream) {
 // 0xFFFFFFFF) is gone: the class static IS that cell's value once Factory::Startup
 // has run, and nothing here runs before Startup.
 
-// Retail's S5 builds each FindPath argument as
-//     Object::InternalBasePtr::InternalBasePtr(&tmp);        [slot 0x140152ac0]
-//     Object::InternalBasePtr::Copy(&tmp, &src);             [slot 0x140152ab8]
-// i.e. "give me a reference to the same Internal".
-static void MW_MakeStrongRef(uintptr_t* dst, uintptr_t* src) {
-    // 0x140152ac0 (??0InternalBasePtr, `mov [rcx],0`) then 0x140152ab8 (Copy,
-    // `mov rax,[rdx]; mov [rcx],rax`): an 8-byte copy, not refcounted. dst[1] is
-    // not touched.
-    auto* d = new (dst) ::Object::InternalBasePtr();
-    *d = *reinterpret_cast<const ::Object::InternalBasePtr*>(src);   // = Copy (trivial)
-}
-
-// Retail inlines this component scan at every site; slot 4 alone contains eight
-// copies of it. Entity layout: component InternalBasePtr array at entity+0x30,
-// int32 count at entity+0x38. Retail re-loads the array base inside the loop and
-// re-CheckPtrs the slot after the match, which is reproduced here.
-static void* MW_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
-    const int count = *reinterpret_cast<int32_t*>(entity + 0x38);
+// Retail inlines FindComponent<T> at every component scan of slot 4 (eight copies);
+// those are ComponentEntity::FindComponent<T>() here.
+//
+// The other inlined scan shape in this function: a ComponentDescription's
+// sub-description array (+0x28 data, +0x30 count) -- no InternalBasePtr, hence no
+// CheckPtr (verified at 0x1400f0450). Retail reads it for RawMaterialDescription.
+static RawMaterialDescription* MW_FindRawMaterial(ComponentDescription* resource) {
+    const uint32_t typeId = RawMaterialDescription::TypeId();
+    const int count = resource->_subDescCount;
     for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(
-            *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
-        if (reinterpret_cast<Object::Base*>(comp)->Type() == typeId) {   // B.3.8 bridge
-            slot = reinterpret_cast<void**>(
-                *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-            comp = *slot;
-            return Object::IsDerivedFromNullSafe(comp, typeId) ? comp : nullptr;
+        Description* child = resource->_subDescs[i];
+        if (child->Type() == typeId) {
+            child = resource->_subDescs[i];
+            return Object::IsDerivedFromNullSafe(child, typeId)
+                ? static_cast<RawMaterialDescription*>(child) : nullptr;
         }
     }
     return nullptr;
@@ -473,46 +438,32 @@ static void* MW_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
 // separate MemAlloc(0x38,8) sites at 0x1400f02d1 / 0x1400f0363 / 0x1400f03a6.
 // Routing stage 2 through a9f0 would write the town's demand nodes into the live
 // claim registry.
-// (the three function pointers themselves are declared with the stage-1 set
-// above, so MarketWork_Slot4_ResolveFuncs can fill them in one place)
 //
-// The element type of the afb0 array. afb0's default-init deliberately leaves
-// +0x00..+0x03 untouched and zeroes +0x04..+0x1f, which is exactly why retail
-// writes the resource mask into +0x00 itself immediately after the grow.
-struct MW_DemandRecord {
-    uint32_t resourceMask;   // +0x00 from MarketDescription+0x28 entry+0x00
-    uint32_t inMarket;       // +0x04 loop A: unitSize * available, this market
-    uint32_t inTransit;      // +0x08 loop B: unitSize * qty already claimed
-    uint32_t inTown;         // +0x0c loop C: unitSize * available, town-wide
-    float    stockedFrac;    // +0x10 stage 3
-    float    satisfaction;   // +0x14 stage 3 -- the b680 qsort key
-    uint32_t stage4Scratch;  // +0x18 stage 4 (zeroed per candidate)
-    int32_t  shortfall;      // +0x1c stage 3
-};
-static_assert(sizeof(MW_DemandRecord) == 0x20, "demand record stride is 0x20");
-
-// The 0x10-byte {data,count,capacity} descriptor afb0 takes in RCX.
-struct MW_ArrayDesc {
-    uint8_t* data;
-    int32_t  count;
-    int32_t  capacity;
-};
-static_assert(sizeof(MW_ArrayDesc) == 0x10, "array descriptor is 0x10 bytes");
+// The demand records and their header are MarketWork::Demand / DemandList (MarketWork.h).
 
 // The function-local supply/demand tree. Same 0x38-byte node shape as
-// MarketWork's own BST, but +0x08..+0x17 are three uint32 accumulators instead
-// of a payload array. Retail zeroes that span with two 8-byte stores.
-namespace {
-constexpr uintptr_t kNodeKey     = 0x00;
-constexpr uintptr_t kNodeAccumA  = 0x08;  // loop A, weighted (see below)
-constexpr uintptr_t kNodeAccumC  = 0x0c;  // loop C, town-wide available
-constexpr uintptr_t kNodeAccumB  = 0x10;  // loop B, in-transit quantity
-constexpr uintptr_t kNodeParent  = 0x18;
-constexpr uintptr_t kNodeLeft    = 0x20;
-constexpr uintptr_t kNodeRight   = 0x28;
-constexpr uintptr_t kNodeBalance = 0x30;
-constexpr int64_t   kNodeSize    = 0x38;
-}
+// MarketWork's own tree (a Set of a 0x18 element), but +0x08..+0x17 are three
+// accumulators instead of a payload array. Retail zeroes that span with two
+// 8-byte stores (here the four named fields, in address order).
+struct MW_Supply {
+    ComponentDescription* resource;  // +0x00 the key: a town resource type
+    int32_t accumA;                  // +0x08 loop A, weighted (see below)
+    int32_t accumC;                  // +0x0c loop C, town-wide available
+    int32_t accumB;                  // +0x10 loop B, in-transit quantity
+    int32_t _pad14;                  // +0x14 zeroed with accumB
+};
+using MW_SupplyNode = Collection::Set<MW_Supply>::Node;
+static_assert(sizeof(MW_SupplyNode) == 0x38, "supply node is 0x38 (MemAlloc 0x1400f02d1)");
+static_assert(offsetof(MW_SupplyNode, left) == 0x20, "supply node left @ +0x20");
+static_assert(offsetof(MW_SupplyNode, balance) == 0x30, "supply node balance @ +0x30");
+// The tree header {root, int32 count} the shared retrace 0x140014b40 takes in RCX.
+struct MW_SupplyTree {
+    MW_SupplyNode* root;
+    int32_t        count;
+    int32_t        _pad0C;
+};
+
+// The stage 5 take list is MarketWork::Take / TakeList (MarketWork.h).
 
 // Retail inlines this descent at all three accumulation sites (0x1400f04c0,
 // 0x1400f0607, 0x1400f08e8).
@@ -520,13 +471,13 @@ constexpr int64_t   kNodeSize    = 0x38;
 // unconditionally executes ADD [cursor+off],reg. That deref is load-bearing: it
 // relies on every resource type reachable from a storage list also being present
 // in the town resource registry the tree was built from. Callers below reproduce
-// the unguarded write; do not add a null check here.
-static uint8_t* MW_TreeFind(uint8_t* root, uintptr_t key) {
-    uint8_t* cur = root;
+// the unguarded write; do not add a null check here. (Keys compare unsigned.)
+static MW_SupplyNode* MW_TreeFind(MW_SupplyNode* root, ComponentDescription* key) {
+    MW_SupplyNode* cur = root;
     while (cur != nullptr) {
-        const uintptr_t k = *reinterpret_cast<uintptr_t*>(cur + kNodeKey);
-        if (key < k)      cur = *reinterpret_cast<uint8_t**>(cur + kNodeLeft);
-        else if (k < key) cur = *reinterpret_cast<uint8_t**>(cur + kNodeRight);
+        ComponentDescription* k = cur->element.resource;
+        if (key < k)      cur = cur->left;
+        else if (k < key) cur = cur->right;
         else              return cur;
     }
     return nullptr;
@@ -538,13 +489,13 @@ static uint8_t* MW_TreeFind(uint8_t* root, uintptr_t key) {
 // list was registered"; when it breaks here the culprit is whatever deposited the
 // material without RawMaterialComponent_RegisterRawMaterial, not this walk. First seen
 // in the BANISHED_STRESS town (2026-09-03) at loop C, frame ~8400.
-static void MW_ReportTreeMiss(const char* site, int entityIdx, uintptr_t entityIBP,
-                              uintptr_t resType, void* rawMat, uintptr_t town) {
+static void MW_ReportTreeMiss(const char* site, int entityIdx, const void* entityIBP,
+                              ComponentDescription* resType, RawMaterialDescription* rawMat,
+                              CitizenBehavior* town) {
     char path[160] = "?";
     if (resType) {
         // the hidden return slot GetPath constructs into
-        System::Filename fnPath =
-            reinterpret_cast<const ::Object::External*>(resType)->GetPath();  // B.3.3 bridge
+        System::Filename fnPath = resType->GetPath();
         const char* s = fnPath._data;
         if (s) {
             size_t i = 0;
@@ -552,57 +503,37 @@ static void MW_ReportTreeMiss(const char* site, int entityIdx, uintptr_t entityI
             path[i] = '\0';
         }
     }
-    const int regCount = *reinterpret_cast<int32_t*>(town + 0x118);
+    const int regCount = town->field_0x118;
     fprintf(stderr, "[MarketWork::Execute] TREE MISS at %s: storage entity[%d]=%p holds resType=%p "
             "(%s) rawMatDesc=%p flags=0x%x -- not among the %d types in townMgr+0x110; "
             "about to fault faithfully\n",
-            site, entityIdx, reinterpret_cast<void*>(entityIBP), reinterpret_cast<void*>(resType),
-            path, rawMat,
-            rawMat ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x5c) : 0,
+            site, entityIdx, entityIBP, static_cast<void*>(resType),
+            path, static_cast<void*>(rawMat),
+            rawMat ? rawMat->_flags : 0,
             regCount);
     fflush(stderr);
-}
-
-// The other inlined scan shape in this function: a Description's CHILD array,
-// which is a raw pointer array at obj+0x28 with an int32 count at obj+0x30 --
-// no InternalBasePtr, hence no CheckPtr (verified at 0x1400f0450).
-// Distinct from MW_FindComponentByTypeId, which walks an Entity's +0x30/+0x38
-// array of InternalBasePtrs.
-static void* MW_FindChildByTypeId(uintptr_t obj, uint32_t typeId) {
-    const int count = *reinterpret_cast<int32_t*>(obj + 0x30);
-    for (int i = 0; i < count; ++i) {
-        void* child = *reinterpret_cast<void**>(
-            *reinterpret_cast<uintptr_t*>(obj + 0x28) + static_cast<int64_t>(i) * 8);
-        if (reinterpret_cast<Object::Base*>(child)->Type() == typeId) {   // B.3.8 bridge
-            child = *reinterpret_cast<void**>(
-                *reinterpret_cast<uintptr_t*>(obj + 0x28) + static_cast<int64_t>(i) * 8);
-            return Object::IsDerivedFromNullSafe(child, typeId) ? child : nullptr;
-        }
-    }
-    return nullptr;
 }
 
 // Retail's shared epilogue at 0x1400f1c15: free the local tree (two recursive
 // subtree frees plus the root) and the record array, then return. Stage 2 runs
 // it on its own exit path because retail runs it on EVERY exit path from
 // 0x1400f021f onward -- skipping it would leak a tree and an array per call.
-static void MW_Stage2Teardown(int64_t* treeDesc, MW_ArrayDesc* records) {
-    uint8_t* root = *reinterpret_cast<uint8_t**>(treeDesc);
+// (0x140014b00 takes the tree header as an integer: LEFT.)
+static void MW_Stage2Teardown(MW_SupplyTree* tree, MarketWork::DemandList* records) {
+    MW_SupplyNode* root = tree->root;
     if (root != nullptr) {
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(treeDesc),
-                      *reinterpret_cast<void**>(root + kNodeLeft));
-        TradeWork_helper_14b00(reinterpret_cast<int64_t>(treeDesc),
-                      *reinterpret_cast<void**>(root + kNodeRight));
+        TradeWork_helper_14b00(reinterpret_cast<int64_t>(tree), root->left);
+        TradeWork_helper_14b00(reinterpret_cast<int64_t>(tree), root->right);
         System::MemoryAllocator::MemFree(root);
     }
-    treeDesc[0] = 0;
-    *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(treeDesc) + 8) = 0;
+    tree->root = nullptr;
+    tree->count = 0;
     System::MemoryAllocator::MemFree(records->data);
 }
 
 
 // ============================================================
-// MarketWork::Execute -- returns false (3 bytes, unhookable)
+// MarketWork::Execute -- slot 4, retail 0x1400eff80
 // ============================================================
 // ⚠ THIS IS THE REAL SLOT 4 — vtable index 4 (+0x20), retail 0x1400eff80.
 // A second body, MarketWork_Slot4_Impl, used to sit above claiming the same retail
@@ -629,27 +560,27 @@ static void MW_Stage2Teardown(int64_t* treeDesc, MW_ArrayDesc* records) {
 // claim-driven, so it fires only when a citizen whose profession key (+0x1f0) matches
 // this workplace's WPC+0x48 enters AI state Idle.
 // ---- STAGE 1 (retail 0x1400eff80 .. 0x1400f021f) --------------------------
-// Returns 1 at two sites and 2 at one site, all faithful. Falls through to 0
-// ("keep walking") where stage 2 will begin.
 int MarketWork::Execute(void* citizenHolder, void* ctx) {
     (void)ctx;   // sched+0x130; retail slot 4 never reads param_3 -- it is only a
                  // decompiler artefact of a caller-saved stack slot reused as a temp.
 
-
-    const uintptr_t a = reinterpret_cast<uintptr_t>(this);
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenSlot = static_cast<CitizenComponent**>(citizenHolder);
 
     // --- 0x1400effd0..0x1400efffc: hauler-slot cap ------------------------
-    // EDI = MarketWork+0x50, the BST node count = citizens already claimed by
-    // this market. self+0x18 is the market's work Component; its int32 at +0x30
-    // is a lazily-filled cache of "how many haulers may work here at once",
-    // computed by CalcMaxWorkers (0x14012e5c0) from the WorkDescription at
-    // component+0x18. Full -> 1 = examined but declined.
-    const int claimed = *reinterpret_cast<int32_t*>(a + 0x50);
-    const uintptr_t workComp = *reinterpret_cast<uintptr_t*>(a + 0x18);
-    if (*reinterpret_cast<int32_t*>(workComp + 0x30) == 0) {
-        *reinterpret_cast<int32_t*>(workComp + 0x30) = WorkComponent_CalcMaxWorkers(workComp);
+    // EDI = MarketWork+0x50, the claim count = citizens already claimed by this
+    // market. self+0x18 is the market's WorkComponent; its +0x30 is a lazily-filled
+    // cache of "how many haulers may work here at once", computed by CalcMaxWorkers
+    // (0x14012e5c0). Full -> 1 = examined but declined. (Work::field_18 is void* in
+    // Work.h: LEFT. The tree has two ports of 0x14012e5c0 that differ; the one
+    // called here takes the component as an integer: LEFT.)
+    const int claimed = _field50;
+    WorkComponent* workComp = static_cast<WorkComponent*>(field_18);
+    if (workComp->workState == 0) {
+        workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));
     }
-    const int maxHaulers = *reinterpret_cast<int32_t*>(workComp + 0x30);
+    const int maxHaulers = workComp->workState;
     if (maxHaulers <= claimed) {
         return 1;
     }
@@ -658,85 +589,62 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // *citizenHolder is the CitizenComponent; its +0x10 is the citizen Entity.
     // If that entity's own StorageComponent holds anything, the citizen must go
     // dump it first: push AI state LongTermPlan and report 2 = CLAIMED, which
-    // stops the caller's claim-walk.
-    const uintptr_t citizen = *reinterpret_cast<uintptr_t*>(citizenHolder);
-    uintptr_t carriedIBP[2] = {0, 0};
-    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(citizen + 0x10), carriedIBP);
-    const int carried = CitizenComp_StorageComponent_QueryCount(static_cast<int64_t>(carriedIBP[0]));
+    // stops the caller's claim-walk. (0x14012cf10 takes the storage as an integer: LEFT.)
+    CitizenComponent* citizen = *citizenSlot;
+    StorageComponent* carriedStorage = citizen->_entity->FindComponent<StorageComponent>();
+    const int carried = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(carriedStorage));
     if (carried > 0) {
-        CitizenAI_State_LongTermPlan(*reinterpret_cast<uintptr_t*>(citizenHolder));
+        (*citizenSlot)->LongTermPlan();
         return 2;
     }
 
     // --- 0x1400f0061..0x1400f0118: the market's MarketDescription ---------
-    // self+0x10 is the market Entity. Scan it for the MarketComponent, wrap the
-    // hit in an InternalBasePtr (retail keeps a strong ref for the rest of the
-    // body), then take component+0x18 = its Description, narrowed to
-    // MarketDescription. MarketDescription layout (marketdescription.cpp):
-    //   +0x20 float  global fill ratio (defaults to 1.0)
-    //   +0x28 array  per-resource {enum @+0, float ratio @+4}, stride 8
-    //   +0x30 int32  element count
-    const uint32_t tidMarketComponent = MarketComponent::TypeId();
-    const uint32_t tidMarketDescription = MarketDescription::TypeId();
-    const uint32_t tidRawMaterialDescription = RawMaterialDescription::TypeId();
-    const uint32_t tidStorageComponent = StorageComponent::TypeId();
-    const uint32_t tidConsumeProduceComponent = ConsumeProduceComponent::TypeId();
-    const uint32_t tidInteractComponent = InteractComponent::TypeId();
-    const uint32_t tidInteractDescription = InteractDescription::TypeId();
-    const uint32_t tidMapComponent = MapComponent::TypeId();
-    const uint32_t tidStorageLocationComponent = StorageLocationComponent::TypeId();
-
-    const uintptr_t marketEntity = *reinterpret_cast<uintptr_t*>(a + 0x10);
-    void* marketComp = MW_FindComponentByTypeId(marketEntity, tidMarketComponent);
-
-    uintptr_t marketCompIBP[2] = {0, 0};
-    new (marketCompIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(marketComp));   // B.3.3 bridge
-    void* descRaw = *reinterpret_cast<void**>(marketCompIBP[0] + 0x18);
-    void* marketDesc = Object::IsDerivedFromNullSafe(descRaw, tidMarketDescription) ? descRaw : nullptr;
+    // self+0x10 is the market Entity: its MarketComponent (retail keeps a strong ref
+    // for the rest of the body), then the component's Description narrowed to
+    // MarketDescription.
+    MarketComponent* marketComp = field_10->FindComponent<MarketComponent>();
+    Description* descRaw = marketComp->_description;
+    MarketDescription* marketDesc = Object::IsDerivedFromNullSafe(descRaw, MarketDescription::TypeId())
+        ? static_cast<MarketDescription*>(descRaw) : nullptr;
 
     // --- 0x1400f011c..0x1400f0132: the market's own StorageComponent ------
-    uintptr_t marketStorageIBP[2] = {0, 0};
-    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(a + 0x10), marketStorageIBP);
+    StorageComponent* marketStorage = field_10->FindComponent<StorageComponent>();
 
     // --- 0x1400f0132..0x1400f01c5: the citizen's terrain cell index -------
-    // gameWorld+0xf8 is the terrain; its int32 at +0 is the map edge length.
-    // citizen+0x278 is the CitizenAIComponent, whose +0x68 object carries the
-    // world position at +0x158/+0x15c. Both axes are biased by dim/2, truncated
-    // and clamped, then folded into a single cell index. Stage 1 computes it
-    // because retail does, and because the value is load-bearing for stage 3/4
-    // (it is the origin handed to the resource query and to FindPath).
-    const uintptr_t terrain =
-        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
-    const uintptr_t citizen2 = *reinterpret_cast<uintptr_t*>(citizenHolder);
-    const uintptr_t citizenAI = *reinterpret_cast<uintptr_t*>(citizen2 + 0x278);
-    const uintptr_t pos = *reinterpret_cast<uintptr_t*>(citizenAI + 0x68);
+    // The map's size is the edge length; the citizen's CharacterComponent (+0x278)
+    // -> ModelComponent (+0x68) carries the world position (transform translation
+    // +0x158/+0x15c). Both axes are biased by dim/2, truncated and clamped, then
+    // folded into a single cell index. Stage 1 computes it because retail does, and
+    // because the value is load-bearing for stage 3/4 (it is the origin handed to
+    // the resource query and to FindPath).
+    Map* map = GameUpdateLoop::_singleton->m_game;
+    // The map helpers (0x14009c480, 0x14009f810) take the map as int*: LEFT.
+    int* mapGrid = reinterpret_cast<int*>(map);
+    const Math::Vector3& pos = (*citizenSlot)->character->modelComponent->transform.translation;
 
-    const int dim = *reinterpret_cast<int32_t*>(terrain);
+    const int dim = map->size;
     const float half = static_cast<float>(dim >> 1);
-    int cellX = static_cast<int>(half + *reinterpret_cast<float*>(pos + 0x158));
-    int cellY = static_cast<int>(half + *reinterpret_cast<float*>(pos + 0x15c));
+    int cellX = static_cast<int>(half + pos.x);
+    int cellY = static_cast<int>(half + pos.y);
     if (cellX < 0)    cellX = 0;
     if (cellX >= dim) cellX = dim - 1;
     if (cellY < 0)    cellY = 0;
     if (cellY >= dim) cellY = dim - 1;
     const int cellIdx = cellY * dim + cellX;
-    (void)cellIdx;   // consumed by stage 3 (FUN_14008d590) and stage 4 (FUN_14012d5d0)
 
     // --- 0x1400f01c8..0x1400f01da: how much the citizen can still carry ---
-    const int freeCarry = WorkLeaf_FreeStorageCapacity_116540(*reinterpret_cast<uintptr_t*>(citizenHolder));
-    (void)freeCarry; // consumed by stage 3/4
+    // (0x140116540 takes the citizen as an integer: LEFT.)
+    const int freeCarry = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(*citizenSlot));
 
     // --- 0x1400f01dd..0x1400f0219: market already full enough -------------
-    // fill = QueryCount(marketStorage) / (float)marketStorage+0x38 (capacity).
-    // COMISS/JNC: if fill >= MarketDescription+0x20 the market does not want any
-    // more stock at all -> 1 = examined but declined.
+    // fill = QueryCount(marketStorage) / (float)capacity.
+    // COMISS/JNC: if fill >= MarketDescription::_fillRatio the market does not want
+    // any more stock at all -> 1 = examined but declined.
     const float stocked = static_cast<float>(
-        CitizenComp_StorageComponent_QueryCount(static_cast<int64_t>(marketStorageIBP[0])));
-    const float capacity =
-        static_cast<float>(*reinterpret_cast<int32_t*>(marketStorageIBP[0] + 0x38));
+        CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(marketStorage)));
+    const float capacity = static_cast<float>(marketStorage->capacity);
     const float fill = stocked / capacity;
-    if (*reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(marketDesc) + 0x20) <= fill) {
+    if (marketDesc->_fillRatio <= fill) {
         return 1;
     }
 
@@ -746,71 +654,65 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // ======================================================================
 
     // --- 0x1400f021f..0x1400f0267: the demand record array ----------------
-    // One 0x20-byte record per entry in MarketDescription's per-resource array
-    // (+0x28 data, +0x30 count, element stride 8 = {mask @+0, float ratio @+4}).
+    // One 0x20-byte record per entry in MarketDescription's per-resource array.
     // afb0 grows the array; retail then seeds only record+0x00 from each
-    // description entry's +0x00, because afb0's default-init leaves +0x00 alone.
-    const uintptr_t descAddr = reinterpret_cast<uintptr_t>(marketDesc);
-    MW_ArrayDesc records = {nullptr, 0, 0};
-    MarketBst_afb0(reinterpret_cast<int64_t*>(&records),
-                   *reinterpret_cast<int32_t*>(descAddr + 0x30));
-    const uintptr_t descEntries = *reinterpret_cast<uintptr_t*>(descAddr + 0x28);
+    // description entry's mask, because afb0's default-init leaves +0x00 alone.
+    DemandList records = {nullptr, 0, 0};
+    MarketBst_afb0(&records, marketDesc->_ratioCount);
+    const MarketRatio* descEntries = marketDesc->_ratios;
     for (int i = 0; i < records.count; ++i) {
-        reinterpret_cast<MW_DemandRecord*>(records.data)[i].resourceMask =
-            *reinterpret_cast<uint32_t*>(descEntries + static_cast<int64_t>(i) * 8);
+        records.data[i].resourceMask = descEntries[i].resourceMask;
     }
-    MW_DemandRecord* const rec = reinterpret_cast<MW_DemandRecord*>(records.data);
+    Demand* const rec = records.data;
 
     // --- 0x1400f0267..0x1400f0406: one tree node per town resource type ---
-    // gameWorld+0xf0 is the town object: entity array at +0x00 / int32 count at
-    // +0x08, and the resource-type registry at +0x110 / int32 count at +0x118.
-    // ⚠ Ghidra prints these as pplVar40[0x22] and [0x23] on a longlong** -- those
-    // are ELEMENT subscripts, i.e. bytes 0x110 and 0x118. Byte offsets confirmed
-    // in the disassembly (MOV RBX,[R13+0x110] / CMP dword [R13+0x118],EDI).
-    const int marketEntryCount = *reinterpret_cast<int32_t*>(marketStorageIBP[0] + 0x30);
-    const uintptr_t town =
-        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf0);
+    // The town (CitizenBehavior): entity array +0x00 / count +0x08, and the
+    // resource-type registry +0x110 / count +0x118.
+    const int marketEntryCount = marketStorage->slotCount;
+    CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
 
-    int64_t treeDesc[2] = {0, 0};   // {root @+0x00, int32 nodeCount @+0x08}
+    MW_SupplyTree tree = {nullptr, 0, 0};
     {
-        const int typeCount = *reinterpret_cast<int32_t*>(town + 0x118);
+        const int typeCount = town->field_0x118;
         for (int i = 0; i < typeCount; ++i) {
-            const uintptr_t key = *reinterpret_cast<uintptr_t*>(
-                *reinterpret_cast<uintptr_t*>(town + 0x110) + static_cast<int64_t>(i) * 8);
+            ComponentDescription* key = town->field_0x110[i];
 
-            uint8_t* root = *reinterpret_cast<uint8_t**>(&treeDesc[0]);
+            MW_SupplyNode* root = tree.root;
             if (root == nullptr) {
                 // 0x1400f02c9: first node.
-                uint8_t* n = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(kNodeSize, 8));
-                uint8_t* stored = nullptr;
+                MW_SupplyNode* n = static_cast<MW_SupplyNode*>(System::MemoryAllocator::MemAlloc(sizeof(MW_SupplyNode), 8));
+                MW_SupplyNode* stored = nullptr;
                 if (n != nullptr) {
-                    *reinterpret_cast<uintptr_t*>(n + kNodeKey)     = key;
-                    *reinterpret_cast<uint64_t*>(n + kNodeAccumA)   = 0;  // +0x08/+0x0c
-                    *reinterpret_cast<uint64_t*>(n + kNodeAccumB)   = 0;  // +0x10/+0x14
-                    *reinterpret_cast<uint64_t*>(n + kNodeParent)   = 0;
-                    *reinterpret_cast<uint64_t*>(n + kNodeLeft)     = 0;
-                    *reinterpret_cast<uint64_t*>(n + kNodeRight)    = 0;
-                    *reinterpret_cast<uint32_t*>(n + kNodeBalance)  = 0;
+                    n->element.resource = key;
+                    n->element.accumA   = 0;   // +0x08/+0x0c: one qword store in retail
+                    n->element.accumC   = 0;
+                    n->element.accumB   = 0;   // +0x10/+0x14: one qword store in retail
+                    n->element._pad14   = 0;
+                    n->parent  = nullptr;
+                    n->left    = nullptr;
+                    n->right   = nullptr;
+                    n->balance = 0;            // +0x30: one dword store in retail
+                    n->height  = 0;
                     stored = n;
                 }
-                *reinterpret_cast<uint8_t**>(&treeDesc[0]) = stored;
+                tree.root = stored;
             } else {
                 // 0x1400f030f: descend to the insertion point. A key that is
                 // already present is a no-op AND skips the count increment
                 // (retail jumps straight to 0x1400f03f2).
-                uint8_t* cur = root;
-                uint8_t* parent = cur;
+                MW_SupplyNode* cur = root;
+                MW_SupplyNode* parent = cur;
                 bool duplicate = false;
                 bool goLeft = false;
                 for (;;) {
                     parent = cur;
-                    const uintptr_t k = *reinterpret_cast<uintptr_t*>(cur + kNodeKey);
+                    ComponentDescription* k = cur->element.resource;
                     if (key < k) {
-                        uint8_t* l = *reinterpret_cast<uint8_t**>(cur + kNodeLeft);
+                        MW_SupplyNode* l = cur->left;
                         if (l == nullptr) { goLeft = true; break; }
                         cur = l;
                     } else if (k < key) {
-                        uint8_t* r = *reinterpret_cast<uint8_t**>(cur + kNodeRight);
+                        MW_SupplyNode* r = cur->right;
                         if (r == nullptr) { goLeft = false; break; }
                         cur = r;
                     } else {
@@ -820,36 +722,40 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
                 }
                 if (duplicate) continue;
 
-                uint8_t* n = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(kNodeSize, 8));
-                uint8_t* stored = nullptr;
+                MW_SupplyNode* n = static_cast<MW_SupplyNode*>(System::MemoryAllocator::MemAlloc(sizeof(MW_SupplyNode), 8));
+                MW_SupplyNode* stored = nullptr;
                 if (n != nullptr) {
-                    *reinterpret_cast<uintptr_t*>(n + kNodeKey)    = key;
-                    *reinterpret_cast<uint64_t*>(n + kNodeAccumA)  = 0;
-                    *reinterpret_cast<uint64_t*>(n + kNodeAccumB)  = 0;
-                    *reinterpret_cast<uint8_t**>(n + kNodeParent)  = parent;
-                    *reinterpret_cast<uint64_t*>(n + kNodeLeft)    = 0;
-                    *reinterpret_cast<uint64_t*>(n + kNodeRight)   = 0;
-                    *reinterpret_cast<uint32_t*>(n + kNodeBalance) = 0;
+                    n->element.resource = key;
+                    n->element.accumA   = 0;
+                    n->element.accumC   = 0;
+                    n->element.accumB   = 0;
+                    n->element._pad14   = 0;
+                    n->parent  = parent;
+                    n->left    = nullptr;
+                    n->right   = nullptr;
+                    n->balance = 0;
+                    n->height  = 0;
                     stored = n;
                 }
-                *reinterpret_cast<uint8_t**>(parent + (goLeft ? kNodeLeft : kNodeRight)) = stored;
+                if (goLeft) parent->left = stored;
+                else        parent->right = stored;
 
                 // 0x1400f03ea: shared AVL retrace, cursor starts at the PARENT
                 // (retail keeps the descent cursor in a stack slot and hands its
-                // address over, so the retrace can walk and rewrite it).
-                int64_t cursor = reinterpret_cast<int64_t>(parent);
-                TradeWork_impl_4b40(treeDesc, &cursor);
+                // address over, so the retrace can walk and rewrite it). The retrace
+                // takes the header and the cursor slot as int64_t*: LEFT.
+                MW_SupplyNode* cursor = parent;
+                TradeWork_impl_4b40(reinterpret_cast<int64_t*>(&tree), reinterpret_cast<int64_t*>(&cursor));
             }
             // 0x1400f03ef
-            *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(treeDesc) + 8) += 1;
+            tree.count += 1;
         }
     }
-    uint8_t* const treeRoot = *reinterpret_cast<uint8_t**>(&treeDesc[0]);
+    MW_SupplyNode* const treeRoot = tree.root;
 
     // --- 0x1400f0406..0x1400f0525: LOOP A, what this market already holds --
-    // StorageComponent entry layout: array @+0x28, int32 count @+0x30, stride
-    // 0x10 = {resource type ptr @+0x00, total @+0x08, reserved @+0x0c}.
-    // available = total - reserved; unitSize = RawMaterialDescription+0x48.
+    // StorageComponent items: {resource, count, reserve}.
+    // available = count - reserve; unitSize = RawMaterialDescription::_weight.
     // ⚠ The tree accumulator is available * (unitSize * available) -- QUADRATIC.
     // That is not a decompiler artefact: 0x1400f04df is IMUL R10D,R9D where R10D
     // is the available count and R9D is already unitSize*available. The record
@@ -857,76 +763,65 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // asymmetry is retail's, and it is what makes a market that already stocks a
     // resource outrank the town's supply of it super-linearly.
     for (int i = 0; i < marketEntryCount; ++i) {
-        const uintptr_t entries = *reinterpret_cast<uintptr_t*>(marketStorageIBP[0] + 0x28);
-        const uintptr_t entry   = entries + static_cast<int64_t>(i) * 0x10;
-        const uintptr_t resType = *reinterpret_cast<uintptr_t*>(entry + 0x00);
+        const StorageComponent::Item& entry = marketStorage->storageSlots[i];
+        ComponentDescription* resType = entry._resource;
 
-        void* rawMat = MW_FindChildByTypeId(resType, tidRawMaterialDescription);
-        const int available = *reinterpret_cast<int32_t*>(entry + 0x08) -
-                              *reinterpret_cast<int32_t*>(entry + 0x0c);
-        const int32_t mass =
-            *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x48) * available;
+        RawMaterialDescription* rawMat = MW_FindRawMaterial(resType);
+        const int available = entry._count - entry._reserve;
+        const int32_t mass = rawMat->_weight * available;
 
-        uint8_t* node = MW_TreeFind(treeRoot, resType);
-        if (!node) MW_ReportTreeMiss("loopA(market)", -1, marketStorageIBP[0], resType, rawMat, town);
-        *reinterpret_cast<int32_t*>(node + kNodeAccumA) += available * mass;
+        MW_SupplyNode* node = MW_TreeFind(treeRoot, resType);
+        if (!node) MW_ReportTreeMiss("loopA(market)", -1, marketStorage, resType, rawMat, town);
+        node->element.accumA += available * mass;
 
-        const uint32_t mask = *reinterpret_cast<uint32_t*>(
-            reinterpret_cast<uintptr_t>(rawMat) + 0x5c);
+        const uint32_t mask = rawMat->_flags;
         for (int r = 0; r < records.count; ++r) {
             if ((rec[r].resourceMask & mask) != 0) rec[r].inMarket += mass;
         }
     }
 
     // --- 0x1400f0525..0x1400f06c3: LOOP B, what haulers are already bringing
-    // In-order walk of MarketWork's OWN BST at self+0x48. Each node's payload is
-    // an array at node+0x08 with an int32 count at node+0x10, stride 0x10 =
-    // {resource type ptr @+0x00, qty @+0x08}. Note the tree accumulator here
-    // takes the RAW qty (+0x10) while the records take unitSize*qty -- checked at
-    // 0x1400f0626 (ADD [RAX+0x10],R8D) versus 0x1400f0648 (ADD [RDX],R9D).
+    // In-order walk of MarketWork's OWN claim tree. Each claim's carry list is
+    // {resource, count}. Note the tree accumulator here takes the RAW qty while the
+    // records take unitSize*qty -- checked at 0x1400f0626 (ADD [RAX+0x10],R8D)
+    // versus 0x1400f0648 (ADD [RDX],R9D).
     {
-        uint8_t* node = *reinterpret_cast<uint8_t**>(a + 0x48);
+        ClaimNode* node = _field48;
         if (node != nullptr) {
-            while (*reinterpret_cast<uint8_t**>(node + kNodeLeft) != nullptr)
-                node = *reinterpret_cast<uint8_t**>(node + kNodeLeft);
+            while (node->left != nullptr)
+                node = node->left;
         }
         while (node != nullptr) {
-            const int n = *reinterpret_cast<int32_t*>(node + 0x10);
+            const int n = node->element.carries.count;
             for (int i = 0; i < n; ++i) {
-                const uintptr_t elem =
-                    *reinterpret_cast<uintptr_t*>(node + 0x08) + static_cast<int64_t>(i) * 0x10;
-                const uintptr_t resType = *reinterpret_cast<uintptr_t*>(elem + 0x00);
-                const int32_t   qty     = *reinterpret_cast<int32_t*>(elem + 0x08);
+                const Carry& elem = node->element.carries.data[i];
+                ComponentDescription* resType = elem.resource;
+                const int32_t   qty     = elem.count;
 
-                void* rawMat = MW_FindChildByTypeId(resType, tidRawMaterialDescription);
-                const int32_t mass =
-                    *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x48) * qty;
+                RawMaterialDescription* rawMat = MW_FindRawMaterial(resType);
+                const int32_t mass = rawMat->_weight * qty;
 
-                uint8_t* tn = MW_TreeFind(treeRoot, resType);
-                if (!tn) MW_ReportTreeMiss("loopB(haulers)", -1, 0, resType, rawMat, town);
-                *reinterpret_cast<int32_t*>(tn + kNodeAccumB) += qty;
+                MW_SupplyNode* tn = MW_TreeFind(treeRoot, resType);
+                if (!tn) MW_ReportTreeMiss("loopB(haulers)", -1, nullptr, resType, rawMat, town);
+                tn->element.accumB += qty;
 
-                const uint32_t mask = *reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uintptr_t>(rawMat) + 0x5c);
+                const uint32_t mask = rawMat->_flags;
                 for (int r = 0; r < records.count; ++r) {
                     if ((rec[r].resourceMask & mask) != 0) rec[r].inTransit += mass;
                 }
             }
-            // in-order successor, MarketWork BST offsets (left +0x20, right
-            // +0x28, parent +0x18) -- same shape as Slot9's walk.
-            uint8_t* right = *reinterpret_cast<uint8_t**>(node + kNodeRight);
+            // in-order successor -- same shape as Slot9's walk.
+            ClaimNode* right = node->right;
             if (right != nullptr) {
                 node = right;
-                while (*reinterpret_cast<uint8_t**>(node + kNodeLeft) != nullptr)
-                    node = *reinterpret_cast<uint8_t**>(node + kNodeLeft);
+                while (node->left != nullptr)
+                    node = node->left;
             } else {
-                uint8_t* parent = *reinterpret_cast<uint8_t**>(node + kNodeParent);
-                if (parent != nullptr &&
-                    *reinterpret_cast<uint8_t**>(parent + kNodeLeft) != node) {
-                    while (parent != nullptr &&
-                           *reinterpret_cast<uint8_t**>(parent + kNodeRight) == node) {
+                ClaimNode* parent = node->parent;
+                if (parent != nullptr && parent->left != node) {
+                    while (parent != nullptr && parent->right == node) {
                         node = parent;
-                        parent = *reinterpret_cast<uint8_t**>(parent + kNodeParent);
+                        parent = parent->parent;
                     }
                 }
                 node = parent;
@@ -940,43 +835,30 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // available stock. Tree and records both take the plain unitSize*available
     // here (0x1400f0907 / 0x1400f0928).
     {
-        const int entityCount = *reinterpret_cast<int32_t*>(town + 0x08);
+        const int entityCount = town->field_0x08;
         for (int e = 0; e < entityCount; ++e) {
-            uintptr_t entityIBP = *reinterpret_cast<uintptr_t*>(
-                *reinterpret_cast<uintptr_t*>(town + 0x00) + static_cast<int64_t>(e) * 8);
-            void* storage = MW_FindComponentByTypeId(entityIBP, tidStorageComponent);
-            uintptr_t storageIBP[2] = {0, 0};
-            new (storageIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(storage));   // B.3.3 bridge
+            ComponentEntity* entity = town->field_0x00[e];
+            StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
-            entityIBP = *reinterpret_cast<uintptr_t*>(
-                *reinterpret_cast<uintptr_t*>(town + 0x00) + static_cast<int64_t>(e) * 8);
-            void* consumeProduce =
-                MW_FindComponentByTypeId(entityIBP, tidConsumeProduceComponent);
-            uintptr_t cpIBP[2] = {0, 0};
-            new (cpIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(consumeProduce));   // B.3.3 bridge
+            entity = town->field_0x00[e];
+            ConsumeProduceComponent* consumeProduce = entity->FindComponent<ConsumeProduceComponent>();
 
-            if (cpIBP[0] != 0) continue;   // 0x1400f0812: has a consumer -> skip
+            if (consumeProduce != nullptr) continue;   // 0x1400f0812: has a consumer -> skip
 
-            const int n = *reinterpret_cast<int32_t*>(storageIBP[0] + 0x30);
+            const int n = storage->slotCount;
             for (int i = 0; i < n; ++i) {
-                const uintptr_t entries = *reinterpret_cast<uintptr_t*>(storageIBP[0] + 0x28);
-                const uintptr_t entry   = entries + static_cast<int64_t>(i) * 0x10;
-                const uintptr_t resType = *reinterpret_cast<uintptr_t*>(entry + 0x00);
+                const StorageComponent::Item& entry = storage->storageSlots[i];
+                ComponentDescription* resType = entry._resource;
 
-                void* rawMat = MW_FindChildByTypeId(resType, tidRawMaterialDescription);
-                const int available = *reinterpret_cast<int32_t*>(entry + 0x08) -
-                                      *reinterpret_cast<int32_t*>(entry + 0x0c);
-                const int32_t mass = available * *reinterpret_cast<int32_t*>(
-                    reinterpret_cast<uintptr_t>(rawMat) + 0x48);
+                RawMaterialDescription* rawMat = MW_FindRawMaterial(resType);
+                const int available = entry._count - entry._reserve;
+                const int32_t mass = available * rawMat->_weight;
 
-                uint8_t* tn = MW_TreeFind(treeRoot, resType);
-                if (!tn) MW_ReportTreeMiss("loopC(town)", e, entityIBP, resType, rawMat, town);
-                *reinterpret_cast<int32_t*>(tn + kNodeAccumC) += mass;
+                MW_SupplyNode* tn = MW_TreeFind(treeRoot, resType);
+                if (!tn) MW_ReportTreeMiss("loopC(town)", e, entity, resType, rawMat, town);
+                tn->element.accumC += mass;
 
-                const uint32_t mask = *reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uintptr_t>(rawMat) + 0x5c);
+                const uint32_t mask = rawMat->_flags;
                 for (int r = 0; r < records.count; ++r) {
                     if ((rec[r].resourceMask & mask) != 0) rec[r].inTown += mass;
                 }
@@ -997,7 +879,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     const float kOne = kRdata_14017214c;
     const float invCapacity = kOne / capacity;            // 0x1400f0978 DIVSS XMM6,XMM10
     for (int r = 0; r < records.count; ++r) {
-        const float want = *reinterpret_cast<float*>(descEntries + static_cast<int64_t>(r) * 8 + 4);
+        const float want = descEntries[r].ratio;
         // (inTransit + inMarket) as a SIGNED int32 before the float convert
         // (CVTDQ2PS at 0x1400f09a5), then scaled by 1/capacity.
         const float stocked =
@@ -1025,7 +907,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     constexpr float kSurplusKeep    = 1.25f;   // DAT_140172158
 
     for (int r = 0; r < records.count; ++r) {
-        const float want = *reinterpret_cast<float*>(descEntries + static_cast<int64_t>(r) * 8 + 4);
+        const float want = descEntries[r].ratio;
         if (!(want * kSurplusTrigger <
               static_cast<float>(static_cast<int32_t>(rec[r].inMarket)) * invCapacity))
             continue;
@@ -1034,20 +916,17 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
         const int keep = static_cast<int32_t>(want * kSurplusKeep * capacity);
 
         for (int i = 0; i < marketEntryCount; ++i) {
-            const uintptr_t entries = *reinterpret_cast<uintptr_t*>(marketStorageIBP[0] + 0x28);
-            const uintptr_t entry   = entries + static_cast<int64_t>(i) * 0x10;
-            const uintptr_t resType = *reinterpret_cast<uintptr_t*>(entry + 0x00);
+            const StorageComponent::Item& entry = marketStorage->storageSlots[i];
+            ComponentDescription* resType = entry._resource;
 
-            void* rawMat = MW_FindChildByTypeId(resType, tidRawMaterialDescription);
-            const uintptr_t rawMatAddr = reinterpret_cast<uintptr_t>(rawMat);
-            if ((*reinterpret_cast<uint32_t*>(rawMatAddr + 0x5c) & rec[r].resourceMask) == 0)
+            RawMaterialDescription* rawMat = MW_FindRawMaterial(resType);
+            if ((rawMat->_flags & rec[r].resourceMask) == 0)
                 continue;
 
             // 0x1400f0b02 / 0x1400f0b0c: two signed IDIVs by the unit size.
-            const int unitSize   = *reinterpret_cast<int32_t*>(rawMatAddr + 0x48);
+            const int unitSize   = rawMat->_weight;
             const int surplus    = (static_cast<int32_t>(rec[r].inMarket) - keep) / unitSize;
-            const int entryAvail = *reinterpret_cast<int32_t*>(entry + 0x08) -
-                                   *reinterpret_cast<int32_t*>(entry + 0x0c);
+            const int entryAvail = entry._count - entry._reserve;
             int take = freeCarry / unitSize;
             if (entryAvail < take) take = entryAvail;   // CMOVL  0x1400f0b1e
             if (take > surplus)    take = surplus;      // CMOVG  0x1400f0b25
@@ -1058,81 +937,75 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
             // local from the a9f0 payload descriptor below: retail reuses one
             // stack slot for both and re-zeroes 16 bytes before the a9f0 call, so
             // aliasing them here would leave 4 bytes of position data in the
-            // descriptor's capacity field.
+            // descriptor's capacity field. (0x14008d590 takes the town, the resource
+            // and the position as integers: LEFT.)
             float destPos[3] = {0.0f, 0.0f, 0.0f};
-            uintptr_t excludeIBP = *reinterpret_cast<uintptr_t*>(a + 0x10);  // this market
+            ComponentEntity* exclude = field_10;  // this market
             int64_t found = 0;
             Pf_PickBestDropTarget_8d590(reinterpret_cast<int64_t**>(town), &found,
-                                static_cast<uint32_t>(cellIdx), resType, take, '\x01',
-                                reinterpret_cast<uint32_t*>(destPos), &excludeIBP);
+                                static_cast<uint32_t>(cellIdx), reinterpret_cast<uint64_t>(resType), take, '\x01',
+                                reinterpret_cast<uint32_t*>(destPos), &exclude);
             if (found == 0) continue;   // 0x1400f0b86: nobody will take it, keep scanning
 
             // ============ THE CLAIM (retail returns 2 from here) ============
             // 0x1400f0be3: a random interact point on the MARKET, weighted by the
-            // InteractComponent's own +0x30 plus each child's recursive sum.
-            const uintptr_t marketEntity2 = *reinterpret_cast<uintptr_t*>(a + 0x10);
-            void* interact = MW_FindComponentByTypeId(marketEntity2, tidInteractComponent);
-            uintptr_t interactIBP[2] = {0, 0};
-            new (interactIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
-            const uintptr_t ic = interactIBP[0];
-            void* icDescRaw = *reinterpret_cast<void**>(ic + 0x18);
-            void* icDesc = Object::IsDerivedFromNullSafe(icDescRaw, tidInteractDescription) ? icDescRaw : nullptr;
-            uint32_t weight = *reinterpret_cast<uint32_t*>(
-                reinterpret_cast<uintptr_t>(icDesc) + 0x30);
-            const int icChildren = *reinterpret_cast<int32_t*>(ic + 0x30);
+            // InteractDescription's use-node count plus each part's recursive sum.
+            InteractComponent* interact = field_10->FindComponent<InteractComponent>();
+            Description* icDescRaw = interact->_description;
+            InteractDescription* icDesc = Object::IsDerivedFromNullSafe(icDescRaw, InteractDescription::TypeId())
+                ? static_cast<InteractDescription*>(icDescRaw) : nullptr;
+            uint32_t weight = static_cast<uint32_t>(icDesc->_useNodes.count);
+            const int icChildren = interact->useLocationCount;
             for (int k = 0; k < icChildren; ++k) {
-                void** slot = reinterpret_cast<void**>(
-                    *reinterpret_cast<uintptr_t*>(ic + 0x28) + static_cast<int64_t>(k) * 8);
-                weight += Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(*slot), 0);
+                // (0x140123070 takes the part as an integer: LEFT.)
+                weight += Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(interact->useLocations[k]), 0);
             }
-            void* rng = *reinterpret_cast<void**>(
-                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
-            const uint32_t roll = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(weight));   // B.3.4b bridge
+            const uint32_t roll = GameUpdateLoop::_singleton->m_random->Rand(weight);
             float marketPos[3] = {0.0f, 0.0f, 0.0f};
-            Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(interactIBP[0]), marketPos, 0,
-                                  static_cast<int>(roll), nullptr);
+            Pf_EntityResolvePos_2e20(interact, marketPos, 0, static_cast<int>(roll), nullptr);
 
             // 0x1400f0d57..0x1400f0ddc: build the citizen's action chain.
             // Arg 8 is the resource TYPE ENTITY POINTER, full 64 bits -- see the
             // engine_funcs.h note; it was truncated to 32 once before and crashed.
-            uintptr_t pathDest   = static_cast<uintptr_t>(found);          // where to deliver
-            uintptr_t pathSrc    = *reinterpret_cast<uintptr_t*>(a + 0x10);// this market
-            uintptr_t pathWalker = *reinterpret_cast<uintptr_t*>(citizenHolder);
+            // (0x1400bf790 takes the locations and the material as integers: LEFT.)
+            uint64_t pathDest = static_cast<uint64_t>(found);   // where to deliver
+            ComponentEntity* pathSrc = field_10;                  // this market
+            CitizenComponent* pathWalker = *citizenSlot;
             uintptr_t pathOut[2] = {0, 0};   // retail discards this handle on this arm
-            const int pathType = *reinterpret_cast<int32_t*>(a + 0x20);
+            const int pathType = field_20;
             WorkAct_GatherRawMatCtor_bf790(pathOut, &pathWalker, pathType, &pathDest, destPos,
-                          reinterpret_cast<void**>(&pathSrc), marketPos, static_cast<int64_t>(resType), take,
+                          reinterpret_cast<void**>(&pathSrc), marketPos, reinterpret_cast<int64_t>(resType), take,
                           0, 1, '\0', 0, 1);
 
             // 0x1400f0de1..0x1400f0e2a: stamp the citizen.
-            const int pathTypeAfter = *reinterpret_cast<int32_t*>(a + 0x20);
-            const uintptr_t citizen3 = *reinterpret_cast<uintptr_t*>(citizenHolder);
-            int64_t* tgt = reinterpret_cast<int64_t*>(GetTarget(&pathSrc));
-            const int64_t tgtVal = *tgt;               // 0x1400f0e03 MOV RAX,[RAX]
-            *reinterpret_cast<int32_t*>(citizen3 + 0x30)   = pathTypeAfter;
-            *reinterpret_cast<uint32_t*>(citizen3 + 0x54) |= 4;
-            *reinterpret_cast<int32_t*>(citizen3 + 0xb0)   = 0;
-            if (tgtVal == *reinterpret_cast<int64_t*>(citizen3 + 0x1f0) && pathTypeAfter >= 0) {
-                *reinterpret_cast<uint32_t*>(citizen3 + 0x88) |= 0x20000;
+            const int pathTypeAfter = field_20;
+            CitizenComponent* citizen3 = *citizenSlot;
+            Profession* tgtVal = nullptr;
+            GetTarget(&tgtVal);                     // 0x1400f0e03 MOV RAX,[RAX]
+            citizen3->field_0x30   = pathTypeAfter;
+            citizen3->statusFlags |= 4;
+            citizen3->field_0xB0   = 0;
+            if (tgtVal == citizen3->profession && pathTypeAfter >= 0) {
+                citizen3->happinessFlags |= 0x20000;
             }
 
-            // 0x1400f0e2a..0x1400f0e51: record the claim in MarketWork's OWN BST.
+            // 0x1400f0e2a..0x1400f0e51: record the claim in MarketWork's OWN tree.
             // ⚠ The payload descriptor is ZEROED on this arm -- 0x1400f0e2a writes
             // two qwords of 0 into the slot before LEA R9. It is the S5 arm at
             // 0x1400f1bd4 that passes a real take list (&local_100). Passing a real
             // payload here would be wrong. The MemFree(nullptr) that follows at
             // 0x1400f0e51 is retail's deliberate no-op on that always-null pointer,
             // exactly as in the v0 save-migration path in Serialize above.
-            uintptr_t vecDesc[2] = {0, 0};
-            MarketBst_a9f0(reinterpret_cast<int64_t*>(a + 0x48), reinterpret_cast<int64_t*>(&pathSrc),
-                                      reinterpret_cast<int64_t*>(citizenHolder), reinterpret_cast<int64_t*>(vecDesc));
+            CarryList vecDesc = {nullptr, 0, 0};
+            ClaimNode* claimNode = nullptr;
+            MarketBst_a9f0(&_field48, &claimNode, citizenSlot, &vecDesc);
             System::MemoryAllocator::MemFree(nullptr);
-            vecDesc[0] = 0;
-            vecDesc[1] = 0;
+            vecDesc.data = nullptr;
+            vecDesc.count = 0;
+            vecDesc.capacity = 0;
 
 
-            MW_Stage2Teardown(treeDesc, &records);
+            MW_Stage2Teardown(&tree, &records);
             return 2;
         }
     }
@@ -1152,50 +1025,38 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     int  result     = 1;      // uVar29 / R10D
     int  bestIndex  = -1;     // local_160, 0x1400f0e87 MOV dword [RBP-0x68],0xffffffff
     float bestScore = 0.0f;   // 0x1400f0e8e XORPS XMM6,XMM6
-    const int townEntityCount = *reinterpret_cast<int32_t*>(town + 0x08);
+    const int townEntityCount = town->field_0x08;
 
     for (int e = 0; e < townEntityCount; ++e) {
-        const uintptr_t townEntities = *reinterpret_cast<uintptr_t*>(town + 0x00);
+        ComponentEntity** const townEntities = town->field_0x00;
 
-        uintptr_t entIBP = *reinterpret_cast<uintptr_t*>(
-            townEntities + static_cast<int64_t>(e) * 8);
-        uintptr_t candStorage[2] = {0, 0};
-        new (candStorage) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidStorageComponent)));   // B.3.3 bridge
-
-        entIBP = *reinterpret_cast<uintptr_t*>(townEntities + static_cast<int64_t>(e) * 8);
-        uintptr_t candMap[2] = {0, 0};
-        new (candMap) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidMapComponent)));   // B.3.3 bridge
+        StorageComponent* candStorage = townEntities[e]->FindComponent<StorageComponent>();
+        MapComponent* candMap = townEntities[e]->FindComponent<MapComponent>();
+        (void)candMap;
 
         // 0x1400f1013: the candidate's anchor cell index.
-        uintptr_t anchorIBP = *reinterpret_cast<uintptr_t*>(
-            townEntities + static_cast<int64_t>(e) * 8);
+        ComponentEntity* anchorIBP = townEntities[e];
         const int candCell = Pf_EntityAnchorCell_7fb0(&anchorIBP, nullptr);
 
-        entIBP = *reinterpret_cast<uintptr_t*>(townEntities + static_cast<int64_t>(e) * 8);
-        uintptr_t candCP[2] = {0, 0};
-        new (candCP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(entIBP, tidConsumeProduceComponent)));   // B.3.3 bridge
+        ConsumeProduceComponent* candCP = townEntities[e]->FindComponent<ConsumeProduceComponent>();
 
         // 0x1400f10bc: a building that consumes its own stock is not a source.
         // (Ghidra renders the other side of this branch as an empty
         // `else { LAB_1400f135b: }` -- there is no else body, it is the loop
         // increment falling through.)
-        if (candCP[0] != 0) continue;
+        if (candCP != nullptr) continue;
 
         // 0x1400f10ce: recompute the region ids at cell+0x26. ⚠ ONE argument --
         // RCX only. Ghidra prints a 4-arg prototype; the extra three are stale
         // registers, and the body takes only param_1.
-        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(terrain));
+        Pf_ZoneRefresh_9c480(mapGrid);
 
         // --- 0x1400f10d3..0x1400f1156: the passability / region test ---------
-        // Cell records live at terrain+0x80, stride 0x30 (LEA r,[r+r*2]; SHL 4).
-        const uintptr_t cells = *reinterpret_cast<uintptr_t*>(terrain + 0x80);
-        const uintptr_t cellSrc = cells + static_cast<int64_t>(cellIdx)  * 0x30;
-        const uintptr_t cellDst = cells + static_cast<int64_t>(candCell) * 0x30;
-        const uint32_t bitDst = 1u << (*reinterpret_cast<uint8_t*>(cellDst + 0x29) & 0x1f);
-        const uint32_t bitSrc = 1u << (*reinterpret_cast<uint8_t*>(cellSrc + 0x29) & 0x1f);
+        // Cell records live at map->cells, stride 0x30 (LEA r,[r+r*2]; SHL 4).
+        const MapCell& cellSrc = map->cells[cellIdx];
+        const MapCell& cellDst = map->cells[candCell];
+        const uint32_t bitDst = 1u << (cellDst.terrainType & 0x1f);
+        const uint32_t bitSrc = 1u << (cellSrc.terrainType & 0x1f);
         const uint32_t mask   = (bitSrc | bitDst) | 0xe1fu;
         // ⚠ These two tests are PROVABLY DEAD in retail: `mask` is OR'd with both
         // bits before being TESTed against each of them, so TEST is always
@@ -1207,11 +1068,11 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
         // 0x1400f112a: 0xe1f contributes no bits to 0x1e0, so this is non-zero
         // only when one of the two cells' own layer bit lands in 5..8. When it
         // does, the pair is accepted outright; otherwise both cells must carry a
-        // non-zero region id at +0x26 and the two ids must match.
+        // non-zero zone and the two zones must match.
         if ((mask & 0x1e0u) == 0) {
-            const uint16_t regionSrc = *reinterpret_cast<uint16_t*>(cellSrc + 0x26);
+            const uint16_t regionSrc = cellSrc.zone;
             if (regionSrc == 0) continue;
-            const uint16_t regionDst = *reinterpret_cast<uint16_t*>(cellDst + 0x26);
+            const uint16_t regionDst = cellDst.zone;
             if (regionDst == 0) continue;
             if (regionSrc != regionDst) continue;
         }
@@ -1219,20 +1080,15 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
         // --- 0x1400f1156..0x1400f127f: how much this candidate could supply ---
         // record+0x18 is scratch, zeroed per candidate then filled with the
         // candidate's own stock of each demand resource.
-        const int candEntries = *reinterpret_cast<int32_t*>(candStorage[0] + 0x30);
+        const int candEntries = candStorage->slotCount;
         for (int r = 0; r < records.count; ++r) rec[r].stage4Scratch = 0;
 
         for (int i = 0; i < candEntries; ++i) {
-            const uintptr_t centries = *reinterpret_cast<uintptr_t*>(candStorage[0] + 0x28);
-            const uintptr_t centry   = centries + static_cast<int64_t>(i) * 0x10;
-            void* crm = MW_FindChildByTypeId(*reinterpret_cast<uintptr_t*>(centry + 0x00),
-                                             tidRawMaterialDescription);
-            const uintptr_t crmAddr = reinterpret_cast<uintptr_t>(crm);
+            const StorageComponent::Item& centry = candStorage->storageSlots[i];
+            RawMaterialDescription* crm = MW_FindRawMaterial(centry._resource);
             const uint32_t cmass = static_cast<uint32_t>(
-                (*reinterpret_cast<int32_t*>(centry + 0x08) -
-                 *reinterpret_cast<int32_t*>(centry + 0x0c)) *
-                *reinterpret_cast<int32_t*>(crmAddr + 0x48));
-            const uint32_t cmask = *reinterpret_cast<uint32_t*>(crmAddr + 0x5c);
+                (centry._count - centry._reserve) * crm->_weight);
+            const uint32_t cmask = crm->_flags;
             for (int r = 0; r < records.count; ++r) {
                 if ((rec[r].resourceMask & cmask) != 0) rec[r].stage4Scratch += cmass;
             }
@@ -1241,11 +1097,11 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
         // --- 0x1400f127f..0x1400f1355: distance-weighted score ----------------
         // f810 is the real path cost; a negative result means "no path known", and
         // retail falls back to map-edge + euclidean cell distance.
-        int dist = Pf_IsDstReachable_f810(reinterpret_cast<int*>(terrain),
+        int dist = Pf_IsDstReachable_f810(mapGrid,
                                        static_cast<uint32_t>(candCell),
                                        static_cast<uint32_t>(cellIdx), '\x01');
         if (dist < 0) {
-            const int dim2 = *reinterpret_cast<int32_t*>(terrain);
+            const int dim2 = map->size;
             const int dx = (candCell % dim2) - (cellIdx % dim2);
             const int dy = (candCell / dim2) - (cellIdx / dim2);
             dist = static_cast<int>(WorkImpl_Sqrtf_132010(static_cast<float>(dy * dy + dx * dx))) + dim2;
@@ -1275,26 +1131,20 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // STAGE 5 -- take list, path, transfer, claim.  retail 0x1400f13a3..0x1400f1c15
     // ======================================================================
     if (bestIndex >= 0) {   // 0x1400f0e8a-era check: local_160 < 0 -> straight to epilogue
-        const uintptr_t winner = *reinterpret_cast<uintptr_t*>(
-            *reinterpret_cast<uintptr_t*>(town + 0x00) + static_cast<int64_t>(bestIndex) * 8);
-        uintptr_t winnerIBP = winner;
-        uintptr_t winStorage[2] = {0, 0};
-        new (winStorage) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(winnerIBP, tidStorageComponent)));   // B.3.3 bridge
+        ComponentEntity* const winner = town->field_0x00[bestIndex];
+        StorageComponent* winStorage = winner->FindComponent<StorageComponent>();
 
         // --- 0x1400f1425..0x1400f16a0: build the take list ------------------
-        // 0x18-byte records: +0x00 resource type, +0x08 rank (the ba70 sort key,
-        // SIGNED int32), +0x0c available, +0x10 demand-record index.
-        MW_ArrayDesc takeList = {nullptr, 0, 0};
-        const int winEntries = *reinterpret_cast<int32_t*>(winStorage[0] + 0x30);
+        // 0x18-byte records: resource type, rank (the ba70 sort key, SIGNED
+        // int32), available, demand-record index.
+        TakeList takeList = {nullptr, 0, 0};
+        const int winEntries = winStorage->slotCount;
 
         for (int i = 0; i < winEntries; ++i) {
-            const uintptr_t wentries = *reinterpret_cast<uintptr_t*>(winStorage[0] + 0x28);
-            const uintptr_t wentry   = wentries + static_cast<int64_t>(i) * 0x10;
-            const uintptr_t wresType = *reinterpret_cast<uintptr_t*>(wentry + 0x00);
-            void* wrm = MW_FindChildByTypeId(wresType, tidRawMaterialDescription);
-            const uint32_t wmask =
-                *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(wrm) + 0x5c);
+            const StorageComponent::Item& wentry = winStorage->storageSlots[i];
+            ComponentDescription* wresType = wentry._resource;
+            RawMaterialDescription* wrm = MW_FindRawMaterial(wresType);
+            const uint32_t wmask = wrm->_flags;
 
             // First demand record this resource satisfies AND that the market is
             // not already double-stocked on. ⚠ RETAIL QUIRK, ported as-is: the
@@ -1307,48 +1157,42 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
             int matched = -1;
             for (int r = 0; r < records.count; ++r) {
                 if ((rec[r].resourceMask & wmask) == 0) continue;
-                const float lim =
-                    *reinterpret_cast<float*>(descEntries + static_cast<int64_t>(r) * 8 + 4)
-                    * kSurplusTrigger;
+                const float lim = descEntries[r].ratio * kSurplusTrigger;
                 if (rec[r].stockedFrac < lim) matched = r;
                 break;   // 0x1400f1660: first mask hit ends the scan either way
             }
             if (matched < 0) continue;
 
-            uint8_t* tn = MW_TreeFind(treeRoot, wresType);
-            // 0x1400f159f/0x1400f15a2: node+0x10 (in-transit qty) + node+0x08
-            // (the quadratic market-weighted term from loop A).
+            MW_SupplyNode* tn = MW_TreeFind(treeRoot, wresType);
+            // 0x1400f159f/0x1400f15a2: node accumB (in-transit qty) + accumA
+            // (the quadratic market-weighted term from loop A), added unsigned.
             const int32_t rank = static_cast<int32_t>(
-                *reinterpret_cast<uint32_t*>(tn + kNodeAccumB) +
-                *reinterpret_cast<uint32_t*>(tn + kNodeAccumA));
-            const int32_t avail = *reinterpret_cast<int32_t*>(wentry + 0x08) -
-                                  *reinterpret_cast<int32_t*>(wentry + 0x0c);
+                static_cast<uint32_t>(tn->element.accumB) +
+                static_cast<uint32_t>(tn->element.accumA));
+            const int32_t avail = wentry._count - wentry._reserve;
 
             const int32_t oldCount = takeList.count;
             const int32_t newCount = oldCount + 1;
-            uint8_t* oldData = takeList.data;
+            Take* oldData = takeList.data;
             takeList.count = newCount;
             if (takeList.capacity < newCount) {
                 int32_t cap = newCount;
                 if (oldCount != 0) cap = newCount * 3;
                 takeList.capacity = cap;
-                takeList.data = static_cast<uint8_t*>(
+                takeList.data = static_cast<Take*>(
                     System::MemoryAllocator::MemAlloc(static_cast<int64_t>(cap) * 0x18, 8));
             }
             int32_t start = (oldData == takeList.data) ? oldCount : 0;
             for (int32_t k = start; k < newCount; ++k) {
-                uint8_t* dst = takeList.data + static_cast<int64_t>(k) * 0x18;
+                Take* dst = &takeList.data[k];
                 if (k < oldCount) {
-                    const uint8_t* src = oldData + static_cast<int64_t>(k) * 0x18;
-                    reinterpret_cast<uint64_t*>(dst)[0] = reinterpret_cast<const uint64_t*>(src)[0];
-                    reinterpret_cast<uint64_t*>(dst)[1] = reinterpret_cast<const uint64_t*>(src)[1];
-                    reinterpret_cast<uint64_t*>(dst)[2] = reinterpret_cast<const uint64_t*>(src)[2];
+                    *dst = oldData[k];
                 } else {
-                    *reinterpret_cast<uintptr_t*>(dst + 0x00) = wresType;
-                    *reinterpret_cast<int32_t*>  (dst + 0x08) = rank;
-                    *reinterpret_cast<int32_t*>  (dst + 0x0c) = avail;
-                    *reinterpret_cast<int32_t*>  (dst + 0x10) = matched;
-                    *reinterpret_cast<int32_t*>  (dst + 0x14) = 0;
+                    dst->resource = wresType;
+                    dst->rank     = rank;
+                    dst->avail    = avail;
+                    dst->record   = matched;
+                    dst->_pad14   = 0;
                 }
             }
             if (oldData != takeList.data) System::MemoryAllocator::MemFree(oldData);
@@ -1358,51 +1202,39 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
         if (takeList.count > 1) MarketBst_ba70(takeList.data, takeList.count);
 
         // --- 0x1400f16a5..0x1400f18c0: two interact points -------------------
-        const uintptr_t mktEntity = *reinterpret_cast<uintptr_t*>(a + 0x10);
-        uintptr_t mktInteract[2] = {0, 0};
-        new (mktInteract) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(mktEntity, tidInteractComponent)));   // B.3.3 bridge
-        const uintptr_t mic = mktInteract[0];
-        void* micDescRaw = *reinterpret_cast<void**>(mic + 0x18);
-        void* micDesc = Object::IsDerivedFromNullSafe(micDescRaw, tidInteractDescription) ? micDescRaw : nullptr;
-        uint32_t weight =
-            *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(micDesc) + 0x30);
-        const int micChildren = *reinterpret_cast<int32_t*>(mic + 0x30);
+        InteractComponent* mic = field_10->FindComponent<InteractComponent>();
+        Description* micDescRaw = mic->_description;
+        InteractDescription* micDesc = Object::IsDerivedFromNullSafe(micDescRaw, InteractDescription::TypeId())
+            ? static_cast<InteractDescription*>(micDescRaw) : nullptr;
+        uint32_t weight = static_cast<uint32_t>(micDesc->_useNodes.count);
+        const int micChildren = mic->useLocationCount;
         for (int k = 0; k < micChildren; ++k) {
-            void** slot = reinterpret_cast<void**>(
-                *reinterpret_cast<uintptr_t*>(mic + 0x28) + static_cast<int64_t>(k) * 8);
-            weight += Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(*slot), 0);
+            weight += Pf_RecursiveChildSum_123070(reinterpret_cast<int64_t>(mic->useLocations[k]), 0);
         }
-        void* rng2 = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xd8);
-        const uint32_t roll2 = reinterpret_cast<System::Random*>(rng2)->Rand(static_cast<uint32_t>(weight));   // B.3.4b bridge
+        const uint32_t roll2 = GameUpdateLoop::_singleton->m_random->Rand(weight);
         float marketPos2[3] = {0.0f, 0.0f, 0.0f};
-        Pf_EntityResolvePos_2e20(reinterpret_cast<void*>(mktInteract[0]), marketPos2, 0,
-                              static_cast<int>(roll2), nullptr);
+        Pf_EntityResolvePos_2e20(mic, marketPos2, 0, static_cast<int>(roll2), nullptr);
 
+        // (0x14012d5d0 takes the component as an integer: LEFT.)
         float winnerPos[3] = {0.0f, 0.0f, 0.0f};
-        uintptr_t winnerIBP2 = winner;
-        uintptr_t winLoc[2] = {0, 0};
-        new (winLoc) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(MW_FindComponentByTypeId(winnerIBP2, tidStorageLocationComponent)));   // B.3.3 bridge
-        Pf_FindBestAdjacentCell_d5d0(static_cast<int64_t>(winLoc[0]),
+        StorageLocationComponent* winLoc = winner->FindComponent<StorageLocationComponent>();
+        Pf_FindBestAdjacentCell_d5d0(reinterpret_cast<int64_t>(winLoc),
                                   static_cast<uint32_t>(cellIdx), winnerPos,
                                   static_cast<int64_t>(roll2));
 
         // --- 0x1400f18c0..0x1400f1a80: how much of each to actually carry ----
-        // 0x10-byte records {resource type, count}. This IS the payload a9f0
-        // stores on the claim node, unlike the S3 arm's zeroed descriptor.
-        MW_ArrayDesc carry = {nullptr, 0, 0};
+        // {resource type, count} records. This IS the payload a9f0 stores on the
+        // claim node, unlike the S3 arm's zeroed descriptor.
+        CarryList carry = {nullptr, 0, 0};
         int carryRemaining = freeCarry;
         for (int t = 0; t < takeList.count; ++t) {
-            const uint8_t* te = takeList.data + static_cast<int64_t>(t) * 0x18;
-            const uintptr_t tType = *reinterpret_cast<const uintptr_t*>(te + 0x00);
-            const int32_t   tAvail = *reinterpret_cast<const int32_t*>(te + 0x0c);
-            const int32_t   tRec   = *reinterpret_cast<const int32_t*>(te + 0x10);
+            const Take& te = takeList.data[t];
+            ComponentDescription* tType = te.resource;
+            const int32_t   tAvail = te.avail;
+            const int32_t   tRec   = te.record;
 
-            void* trm = MW_FindChildByTypeId(tType, tidRawMaterialDescription);
-            const int unit = *reinterpret_cast<int32_t*>(
-                reinterpret_cast<uintptr_t>(trm) + 0x48);
+            RawMaterialDescription* trm = MW_FindRawMaterial(tType);
+            const int unit = trm->_weight;
             int take = carryRemaining / unit;
             if (tAvail < take) take = tAvail;
             const int byDemand = rec[tRec].shortfall / unit;
@@ -1411,27 +1243,25 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
 
             const int32_t oldCount = carry.count;
             const int32_t newCount = oldCount + 1;
-            uint8_t* oldData = carry.data;
+            Carry* oldData = carry.data;
             carry.count = newCount;
             if (carry.capacity < newCount) {
                 int32_t cap = newCount;
                 if (oldCount != 0) cap = newCount * 3;
                 carry.capacity = cap;
-                carry.data = static_cast<uint8_t*>(
+                carry.data = static_cast<Carry*>(
                     System::MemoryAllocator::MemAlloc(static_cast<int64_t>(cap) * 0x10, 8));
             }
             int32_t start = (oldData == carry.data) ? oldCount : 0;
             for (int32_t k = start; k < newCount; ++k) {
-                uint8_t* dst = carry.data + static_cast<int64_t>(k) * 0x10;
+                Carry* dst = &carry.data[k];
                 if (dst == nullptr) continue;   // retail's own per-element guard
                 if (k < oldCount) {
-                    const uint8_t* src = oldData + static_cast<int64_t>(k) * 0x10;
-                    reinterpret_cast<uint64_t*>(dst)[0] = reinterpret_cast<const uint64_t*>(src)[0];
-                    reinterpret_cast<uint64_t*>(dst)[1] = reinterpret_cast<const uint64_t*>(src)[1];
+                    *dst = oldData[k];
                 } else {
-                    *reinterpret_cast<uintptr_t*>(dst + 0x00) = tType;
-                    *reinterpret_cast<int32_t*>  (dst + 0x08) = take;
-                    *reinterpret_cast<int32_t*>  (dst + 0x0c) = 0;
+                    dst->resource = tType;
+                    dst->count    = take;
+                    dst->_pad0C   = 0;
                 }
             }
             if (oldData != carry.data) System::MemoryAllocator::MemFree(oldData);
@@ -1444,40 +1274,41 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
 
         // --- 0x1400f1a80..0x1400f1bd9: the claim ------------------------------
         if (carry.count != 0) {
-            uintptr_t pathWinner[2], pathMarket[2], pathCitizen[2];
-            uintptr_t winnerRef = winner;
-            uintptr_t marketRef = *reinterpret_cast<uintptr_t*>(a + 0x10);
-            MW_MakeStrongRef(pathWinner,  &winnerRef);
-            MW_MakeStrongRef(pathMarket,  &marketRef);
-            MW_MakeStrongRef(pathCitizen, reinterpret_cast<uintptr_t*>(citizenHolder));
+            // Retail builds each FindPath argument as InternalBasePtr() + Copy
+            // (0x140152ac0 / 0x140152ab8: an 8-byte copy, not refcounted).
+            ComponentEntity* pathWinner = winner;
+            ComponentEntity* pathMarket = field_10;
+            CitizenComponent* pathCitizen = *citizenSlot;
 
             // Note the direction: SRC is the winner (pick up there), DEST is the
             // market (drop off here) -- the mirror of the S3 shed arm. Args 8/9 are
-            // 0 and -1 here, not a material template and a count.
-            uintptr_t pathOut2[2] = {0, 0};
-            const int pathType2 = *reinterpret_cast<int32_t*>(a + 0x20);
-            WorkAct_GatherRawMatCtor_bf790(pathOut2, pathCitizen, pathType2, pathMarket, marketPos2,
-                          reinterpret_cast<void**>(pathWinner), winnerPos, 0, -1, 0, 1, '\0', 0, 1);
+            // 0 and -1 here, not a material template and a count. (0x1400bf790 takes
+            // the locations as integers: LEFT.)
+            int64_t pathOut2[2] = {0, 0};
+            const int pathType2 = field_20;
+            WorkAct_GatherRawMatCtor_bf790(pathOut2, &pathCitizen, pathType2, reinterpret_cast<uint64_t*>(&pathMarket), marketPos2,
+                          reinterpret_cast<void**>(&pathWinner), winnerPos, 0, -1, 0, 1, '\0', 0, 1);
 
-            const uintptr_t citizen5 = *reinterpret_cast<uintptr_t*>(citizenHolder);
-            int64_t* tgt2 = reinterpret_cast<int64_t*>(GetTarget(pathWinner));
-            const int64_t tgtVal2 = *tgt2;
-            *reinterpret_cast<int32_t*>(citizen5 + 0x30)   = pathType2;
-            *reinterpret_cast<uint32_t*>(citizen5 + 0x54) |= 4;
-            *reinterpret_cast<int32_t*>(citizen5 + 0xb0)   = 0;
-            if (tgtVal2 == *reinterpret_cast<int64_t*>(citizen5 + 0x1f0) && pathType2 >= 0) {
-                *reinterpret_cast<uint32_t*>(citizen5 + 0x88) |= 0x20000;
+            CitizenComponent* citizen5 = *citizenSlot;
+            Profession* tgtVal2 = nullptr;
+            GetTarget(&tgtVal2);
+            citizen5->field_0x30   = pathType2;
+            citizen5->statusFlags |= 4;
+            citizen5->field_0xB0   = 0;
+            if (tgtVal2 == citizen5->profession && pathType2 >= 0) {
+                citizen5->happinessFlags |= 0x20000;
             }
 
+            // (0x1400ca230 takes the action and the material as integers: LEFT.)
             for (int k = 0; k < carry.count; ++k) {
-                const uint8_t* ce = carry.data + static_cast<int64_t>(k) * 0x10;
-                ActChild_TransferToCarrier_ca230(static_cast<int64_t>(pathOut2[0]),
-                                       *reinterpret_cast<const int64_t*>(ce + 0x00),
-                                       *reinterpret_cast<const int32_t*>(ce + 0x08));
+                const Carry& ce = carry.data[k];
+                ActChild_TransferToCarrier_ca230(pathOut2[0],
+                                       reinterpret_cast<int64_t>(ce.resource),
+                                       ce.count);
             }
 
-            MarketBst_a9f0(reinterpret_cast<int64_t*>(a + 0x48), reinterpret_cast<int64_t*>(pathWinner),
-                                      reinterpret_cast<int64_t*>(citizenHolder), reinterpret_cast<int64_t*>(&carry));
+            ClaimNode* claimNode = nullptr;
+            MarketBst_a9f0(&_field48, &claimNode, citizenSlot, &carry);
             result = 2;
 
         }
@@ -1490,7 +1321,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     }
 
 
-    MW_Stage2Teardown(treeDesc, &records);
+    MW_Stage2Teardown(&tree, &records);
     return result;
 }
 
@@ -1499,7 +1330,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
 // MarketWork::DtorBody (called from ScalarDtor)
 // ============================================================
 // Sets vtables down chain, frees tree nodes at +0x48 using
-// FUN_14002af40 (which also frees node data at +0x08), then
+// FUN_14002af40 (which also frees each node's carry list), then
 // calls Work -> Internal dtor chain.
 //
 // CRITICAL: Uses FUN_14002af40 for tree cleanup, NOT the simple
@@ -1508,37 +1339,35 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
 //
 // MarketWork dtor (inlined in retail slot 0 0x14002a910). The stamps and the `~Internal` call are the compiler's chain.
 MarketWork::~MarketWork() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    // Free BST nodes at +0x48 using market-specific cleanup
-    void* bstRoot = *(void**)(selfAddr + 0x48);
+    // Free the claim tree using market-specific cleanup
+    ClaimNode* bstRoot = _field48;
     if (bstRoot != nullptr) {
-        // FUN_14002af40 recursively frees left(+0x20), right(+0x28),
-        // then frees data at +0x08, zeros +0x08 and +0x10, frees node
-        WorkLeaf_MarketTreeCleanup_2af40((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
-        WorkLeaf_MarketTreeCleanup_2af40((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x28));
-        // Free root node's data and the root itself
-        void* rootData = *(void**)((uintptr_t)bstRoot + 0x08);
+        // FUN_14002af40 recursively frees left, right, then the node's carry list,
+        // zeros it, frees the node
+        WorkLeaf_MarketTreeCleanup_2af40(&_field48, bstRoot->left);
+        WorkLeaf_MarketTreeCleanup_2af40(&_field48, bstRoot->right);
+        // Free root node's carry list and the root itself
+        Carry* rootData = bstRoot->element.carries.data;
         if (rootData) {
             System::MemoryAllocator::MemFree(rootData);
         }
         System::MemoryAllocator::MemFree(bstRoot);
     }
 
-    // Zero out BST root and count
-    *(void**)(selfAddr + 0x48) = nullptr;
-    *(uint32_t*)(selfAddr + 0x50) = 0;
+    // Zero out the tree root and count
+    _field48 = nullptr;
+    _field50 = 0;
 
 }
 
 
 
 // ============================================================
-// MarketWork::Slot11 -- returns (this->_field50 > 0)
+// MarketWork::Slot11 -- returns (this->_field50 > 0), retail 0x140029860
 // ============================================================
 // 9 bytes, too small to hook.
 int MarketWork::GetPriority() {
-    return *(int*)((uintptr_t)this + 0x50) > 0 ? 1 : 0;
+    return _field50 > 0 ? 1 : 0;
 }
 
 
