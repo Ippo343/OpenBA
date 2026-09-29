@@ -37,6 +37,8 @@
 #include "graphics/Animation.h"
 #include "Object/exe_type.h"
 
+namespace Audio { class SoundEffect; }
+
 class AnimAudioEvent final : public Graphics::AnimationEvent {
     DECLARE_EXE_TYPE(AnimAudioEvent)
 
@@ -52,7 +54,7 @@ public:
     virtual Object::External* ConstructInPlace();                        // [9] 0x140016f60
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    _sound;       // +0x20 ExternalPtr: the sound resource (ctor 0)
+    Audio::SoundEffect* _sound; // +0x20 ExternalPtr<SoundEffect>: the sound resource (ctor 0)
     float    _chance;      // +0x28 play probability (ctor 1.0f)
     uint8_t  _pad2c[4];    // +0x2c
 };

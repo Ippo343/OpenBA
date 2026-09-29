@@ -55,6 +55,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CharacterComponent.h"
+#include "Component/CharacterGrid.h"
 #include "Component/ModelComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7a50 cell class
 #include "Component/PickingComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7c10 cell class
 #include "Component/CharacterDescription.h"  // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
@@ -64,9 +65,6 @@
 // FUN_1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into
 // the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
-// charmanager.cpp — already a real C++ function (not a resolved pointer).
-extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp);
-
 namespace {
 
 // ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c7a50 (ModelComponent), 0x1401c7c10
@@ -75,19 +73,16 @@ namespace {
 // ABSTRACT base Action's cell: Action::TypeId() since ENDGAME B.3.9 RF gave the
 // abstract bases their records.
 
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
-}
-
-inline bool Loading(void* stream) {
-    return *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(stream) + 8) == 0;
-}
-
-void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
-    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && tid && *tid && !::Object::IsDerivedFromNullSafe(obj, *tid))
-        *reinterpret_cast<uint64_t*>(ibp) = 0;
+// Serialize one pointer field as the InternalBasePtr retail keeps there and null
+// it when the pointee is not derived from `tid`.
+// LEFT: CharacterComponent declares these InternalPtr members as plain T* (its
+// readers in other blocks spell them so); the Serialize view is a cast.
+template <class T>
+void SerializeValidatedIBP(T*& field, IO::Serializer& ser, uint32_t tid) {
+    Object::InternalBasePtr* ibp = reinterpret_cast<Object::InternalBasePtr*>(&field);
+    ibp->Serialize(ser);
+    if (field && tid && !::Object::IsDerivedFromNullSafe(field, tid))
+        field = nullptr;
 }
 
 } // namespace
@@ -97,50 +92,44 @@ void CharacterComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
-    reinterpret_cast<Math::Vector3*>(At(this, 0x2c))->Serialize(ser);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x3c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x60)), nullptr);    // B.3.4 bridge
+    field_0x2C.Serialize(&ser);
+    ser.Serialize(field_0x3C, nullptr);
+    ser.Serialize(field_0x38, nullptr);
+    ser.Serialize(field_0x28, nullptr);
+    ser.Serialize(currentAction, nullptr);
 
-    int count = *reinterpret_cast<int*>(At(this, 0x50));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+    int count = actionCount;
+    ser.Serialize(count, nullptr);
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(stream)) GameColl::AsArray<GameColl::Ptr8>(At(this, 0x48)).SetSize(count);
+    const bool loading = static_cast<int>(ser.GetDirection()) == 0;   // the stream's +8 word
+    if (loading) GameColl::AsArray<GameColl::Ptr8>(&actions).SetSize(count);
 
     const uint32_t tidAction = Action::TypeId();   // cell 0x1401c5da8
-    uint8_t* member = *reinterpret_cast<uint8_t**>(At(this, 0x48));
-    for (int i = 0; i < count && member; ++i, member += 8)
-        SerializeValidatedIBP(member, ser, &tidAction);
+    Action** member = actions;
+    for (int i = 0; i < count && member; ++i)
+        SerializeValidatedIBP(member[i], ser, tidAction);
 
-    SerializeValidatedIBP(At(this, 0x58), ser, &tidAction);
-    const uint32_t tidModelComponent = ModelComponent::TypeId();
-    SerializeValidatedIBP(At(this, 0x68), ser, &tidModelComponent);
-    const uint32_t tidPickingComponent = PickingComponent::TypeId();
-    SerializeValidatedIBP(At(this, 0x70), ser, &tidPickingComponent);
+    SerializeValidatedIBP(field_0x58, ser, tidAction);
+    SerializeValidatedIBP(modelComponent, ser, ModelComponent::TypeId());
+    SerializeValidatedIBP(pickingComponent, ser, PickingComponent::TypeId());
 
-    if (Loading(stream)) {
-        void* owner = *reinterpret_cast<void**>(At(this, 0x18));
+    if (static_cast<int>(ser.GetDirection()) == 0) {
+        Description* owner = _description;
         bool isDesc = owner && ::Object::IsDerivedFromNullSafe(owner, CharacterDescription::TypeId());
-        *reinterpret_cast<void**>(At(this, 0x78)) = isDesc ? owner : nullptr;
+        characterDescription = isDesc ? static_cast<CharacterDescription*>(owner) : nullptr;
 
         {
-            int64_t selfIbp = 0;
-            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-            void* gw = GameUpdateLoop::_singleton;
-            float* charMgr = gw ? reinterpret_cast<float*>(
-                *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x88)) : nullptr;
+            // LEFT: GameUpdateLoop::m_characterGrid is void* (W0 header)
+            CharacterGrid* charMgr = GameUpdateLoop::_singleton
+                                         ? reinterpret_cast<CharacterGrid*>(GameUpdateLoop::_singleton->m_characterGrid)
+                                         : nullptr;
             if (charMgr) {
-                int64_t ibpArg = selfIbp;
-                *reinterpret_cast<int32_t*>(At(this, 0x40)) =
-                    static_cast<int32_t>(CharMgr_sub_83f0(charMgr, &ibpArg));
+                Object::InternalPtr<CharacterComponent> ibpArg(this);
+                characterIndex = static_cast<int32_t>(charMgr->Register(&ibpArg));
             }
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

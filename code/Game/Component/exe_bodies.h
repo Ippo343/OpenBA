@@ -20,7 +20,9 @@
 class CitizenComponent;
 
 // ---- ambient_externalptr_serialize.cpp
-extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* serializer);  // 0x1400019a0
+namespace Audio { class SoundEffect; }
+namespace IO { class Serializer; }
+extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0
 
 // ---- ambientemittercomponent.cpp
 extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount);  // 0x140001770
@@ -33,7 +35,6 @@ void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll);  // 0x1
 void AttendanceComponent_ReleaseLink1650(void* workerP);  // 0x140111650
 void AttendanceComponent_ReleaseLink59b0(void* workerP);  // 0x1401159b0
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0x140002e10 (returns outPtr)
-void AttendanceComponent_ProcessQueue(void* selfP);  // 0x140043f60
 
 // ---- buildcomponent.cpp
 int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);  // 0x140017550
@@ -43,7 +44,8 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf);  // 0x140
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0
 
 // ---- charactercomponent.cpp
-void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t deltaTime);  // 0x1400c4f80
+class Action;
+void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* deltaTime);  // 0x1400c4f80
 
 // ---- charmanager.cpp
 extern "C" void CharMgr_sub_8660(float* mgrF, int idx);  // 0x140018660

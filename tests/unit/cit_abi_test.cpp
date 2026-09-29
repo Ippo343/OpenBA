@@ -76,11 +76,11 @@ UNIT_TEST(cit_component_sizes_match_retail) {
 
 UNIT_TEST(cit_component_member_offsets) {
     // The first own field of every leaf sits right after Component's 0x28.
-    CHECK_EQ(offsetof(AmbientEmitterComponent, field28),       (size_t)0x28);
-    CHECK_EQ(offsetof(AmbientEmitterComponent, field38),       (size_t)0x38);
-    CHECK_EQ(offsetof(AmbientEnvironmentComponent, field40),   (size_t)0x40);
-    CHECK_EQ(offsetof(AnimalComponent, data44),                (size_t)0x44);
-    CHECK_EQ(offsetof(AnimalComponent, data50),                (size_t)0x50);
+    CHECK_EQ(offsetof(AmbientEmitterComponent, position),      (size_t)0x28);
+    CHECK_EQ(offsetof(AmbientEmitterComponent, slots),         (size_t)0x38);
+    CHECK_EQ(offsetof(AmbientEnvironmentComponent, position.z), (size_t)0x40);
+    CHECK_EQ(offsetof(AnimalComponent, age),                   (size_t)0x44);
+    CHECK_EQ(offsetof(AnimalComponent, grazeTimer),            (size_t)0x50);
     CHECK_EQ(offsetof(CharacterComponent, characterIndex),     (size_t)0x40);   // char index
     CHECK_EQ(offsetof(CharacterComponent, currentAction),      (size_t)0x60);   // action index
     CHECK_EQ(offsetof(CharacterComponent, characterDescription), (size_t)0x78);

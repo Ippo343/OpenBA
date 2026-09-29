@@ -52,7 +52,7 @@
 namespace {
 
 // ---- engine helpers (shared by all four bodies) ----------------------------
-// 0x1401189b0 is Component_SerializeReimpl; the import slot 0x140152a98 is
+// 0x1401189b0 is Component::Persist; the import slot 0x140152a98 is
 // Object::Base::IsDerivedFrom. Both are called directly.
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2, ImmigrationComp_DynArrayResize body: stride 8,
@@ -60,21 +60,19 @@ namespace {
 
 // True when the serializer is READING (retail: *(int*)(stream + 8) == 0,
 // reached through the serializer's first field).
-inline bool Loading(void* ser) {
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+inline bool Loading(IO::Serializer& ser) {
+    return static_cast<int>(ser.GetDirection()) == 0;   // IO::Serializer::GetDirection, retail 0x180006210
 }
 
-// Serialize one InternalBasePtr and apply retail's post-load type validation
-// (null the ref when the pointee is not derived from *tid).
-inline void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
-    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && tid && !reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(tid))   // B.3.x bridge
-        *reinterpret_cast<uint64_t*>(ibp) = 0;
-}
-
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
+// Serialize one InternalBasePtr slot and apply retail's post-load type validation
+// (null the ref when the pointee is not derived from tid). The slots are the
+// Herd/Livestock/Population headers' untyped words (COMP-d / COMP-e).
+inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) {
+    Object::InternalBasePtr* p = reinterpret_cast<Object::InternalBasePtr*>(ibp);   // LEFT: untyped slot
+    p->Serialize(ser);
+    RtObject::Internal* obj = p->Get();
+    if (obj && tid && !::Object::IsDerivedFromNullSafe(obj, tid))
+        *p = Object::InternalBasePtr();
 }
 
 } // namespace
@@ -110,112 +108,107 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // 12-byte-cell resize(+0x38) and per-cell field order 0/8/4, herd-entity
 // count(+0x58) with load-side IBP resize(+0x50, validated ComponentEntity),
 // smooth Time(+0x60), ints +0x68/+0x6c.
+// LEFT: the member PopulationComponent::Persist is defined in
+// populationcomponent.cpp (COMP-e) as a call of this body; the fields are that
+// header's untyped words, so the reads keep their casts.
 // ============================================================
-extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
-    if (!self || !stream) return;
-    Component_SerializeReimpl(self, stream);   // 0x1401189b0
+extern "C" void PopulationComponent_Serialize_Real(void* selfP, void* stream) {
+    if (!selfP || !stream) return;
+    PopulationComponent* self = reinterpret_cast<PopulationComponent*>(selfP);   // B4 FORWARD receiver
+    self->Component::Persist(stream);   // 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
     // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c47c8 is PopulationDescription's
     // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
     // (code/Game/Game, out of C1's file set) still wants a pointer.
     const uint32_t tidPopDesc = PopulationDescription::TypeId();
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(self, 0x28)), ser,
+    ExternalPtrSerializeGeneric(&self->field28, &ser,
                                 &tidPopDesc, "PopulationDescription");
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
+    ser.Serialize(*reinterpret_cast<int*>(&self->field30), nullptr);
+    ser.Serialize(*reinterpret_cast<int*>(&self->field48), nullptr);
 
-    int cells = *reinterpret_cast<int*>(At(self, 0x40));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(cells, nullptr);   // B.3.4 bridge
+    int cells = *reinterpret_cast<int*>(&self->field40);
+    ser.Serialize(cells, nullptr);
     if (Loading(ser))
-        PopulationComponent_ResizeCells(
-            reinterpret_cast<int64_t*>(At(self, 0x38)), cells);
-    uint8_t* cell = *reinterpret_cast<uint8_t**>(At(self, 0x38));
+        PopulationComponent_ResizeCells(reinterpret_cast<int64_t*>(&self->field38), cells);
+    uint8_t* cell = reinterpret_cast<uint8_t*>(self->field38);
     for (int i = 0; i < cells && cell; ++i, cell += 0xc) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(cell + 0x0), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(cell + 0x8), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(cell + 0x4), nullptr);   // B.3.4 bridge
+        ser.Serialize(*reinterpret_cast<int*>(cell + 0x0), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(cell + 0x8), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(cell + 0x4), nullptr);
     }
 
-    int herds = *reinterpret_cast<int*>(At(self, 0x58));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(herds, nullptr);   // B.3.4 bridge
+    int herds = *reinterpret_cast<int*>(&self->field58);
+    ser.Serialize(herds, nullptr);
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x50)).SetSize(herds);
-    uint8_t* herd = *reinterpret_cast<uint8_t**>(At(self, 0x50));
+    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&self->field50).SetSize(herds);
+    uint8_t* herd = reinterpret_cast<uint8_t*>(self->field50);
     for (int i = 0; i < herds && herd; ++i, herd += 8)
         SerializeValidatedIBP(herd, ser, ComponentEntity::TypeId());
 
-    reinterpret_cast<System::Time*>(At(self, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x68)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x6c)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(&self->field60)->Serialize(ser);
+    int32_t* ints68 = reinterpret_cast<int32_t*>(&self->field68);
+    ser.Serialize(ints68[0], nullptr);
+    ser.Serialize(ints68[1], nullptr);
 }
 
 void AnimalComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // Persist's stream is void*
 
-    reinterpret_cast<System::Time*>(At(this, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x44)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x40)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(this, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x3a)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x3c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x3e)), nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0) {   // B.3.4 bridge
+    moveTimer.Serialize(ser);
+    ser.Serialize(habitatCell, nullptr);
+    ser.Serialize(age, nullptr);
+    ser.Serialize(deathAge, nullptr);
+    ser.Serialize(canGraze, nullptr);
+    grazeTimer.Serialize(ser);
+    ser.Serialize(wanderX, nullptr);
+    ser.Serialize(wanderY, nullptr);
+    ser.Serialize(wanderWidth, nullptr);
+    ser.Serialize(wanderHeight, nullptr);
+    if (ser.GetVersion() == 0) {
         // v0 compatibility: read-and-discard one IBP (retail probes the type
         // and drops the value; the local never leaves the frame).
-        uint64_t legacy = 0;
-        reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-        if (legacy)
-            reinterpret_cast<const ::Object::Base*>(legacy)->IsDerivedFrom(PopulationComponent::TypeId());   // B.3.x bridge
+        Object::InternalBasePtr legacy;
+        legacy.Serialize(ser);
+        if (legacy.Get())
+            ::Object::IsDerivedFromNullSafe(legacy.Get(), PopulationComponent::TypeId());
     }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 void HerdComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
 
-    int count = *reinterpret_cast<int*>(At(this, 0x40));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+    // LEFT: HerdComponent's fields are untyped words (COMP-d's header)
+    int count = *reinterpret_cast<int*>(&data40);
+    ser.Serialize(count, nullptr);
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(this, 0x38)).SetSize(count);
+    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&data38).SetSize(count);
 
-    uint8_t* member = *reinterpret_cast<uint8_t**>(At(this, 0x38));
+    uint8_t* member = reinterpret_cast<uint8_t*>(data38);
     for (int i = 0; i < count && member; ++i, member += 8)
         SerializeValidatedIBP(member, ser, WildAnimalComponent::TypeId());
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(this, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(At(this, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x4c)), nullptr);   // B.3.4 bridge
-    SerializeValidatedIBP(At(this, 0x28), ser, PopulationComponent::TypeId());
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(*reinterpret_cast<bool*>(&data48), nullptr);
+    reinterpret_cast<System::Time*>(&data50)->Serialize(ser);
+    reinterpret_cast<System::Time*>(&data58)->Serialize(ser);
+    ser.Serialize(data4C, nullptr);
+    SerializeValidatedIBP(&data28, ser, PopulationComponent::TypeId());
+    ser.Serialize(*reinterpret_cast<int*>(&data30), nullptr);
 }
 
 void LivestockComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    SerializeValidatedIBP(At(this, 0x28), ser, PastureComponent::TypeId());
-    reinterpret_cast<System::Time*>(At(this, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // Persist's stream is void*
+    // LEFT: LivestockComponent's fields are untyped words (COMP-d's header)
+    SerializeValidatedIBP(&data28, ser, PastureComponent::TypeId());
+    reinterpret_cast<System::Time*>(&data30)->Serialize(ser);
 }
