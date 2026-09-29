@@ -174,18 +174,6 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
 // operand is the `MOV R8,RCX`: `this` itself IS the second Transform. The note
 // has been corrected in place.
 // ============================================================================
-Transform* RtGraphics_InterpolatedStateTransform_Lerp(const void* self,
-                                                      Transform* ret,
-                                                      const Scalar* t) {
-
-    // `ret` may point into `self`'s own 0x38; Transform::Lerp returns by value
-    // and reads every input before the assignment, so that is safe.
-    const uint8_t* base = static_cast<const uint8_t*>(self);
-    *ret = reinterpret_cast<const Transform*>(base + 0x1c)
-               ->Lerp(*reinterpret_cast<const Transform*>(base), *t);
-
-    return ret;
-}
 
 // ============================================================================
 // void Graphics::MaterialInstance::RenderTextures(Renderer&, const Scene&,
@@ -290,26 +278,6 @@ void RtGraphics_MaterialInstance_RenderTextures(const MaterialInstance* self,
 // that included them would fail on garbage neither side wrote
 // (reference_oracle_must_not_compare_unwritten_bytes.md).
 // ============================================================================
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::Renderer::AddDrawItem` (block F's class, not block F's file). The
-// door keeps its name and both its registrations, and retail's ten-argument
-// arity.
-void RtGraphics_Renderer_AddDrawItem(Renderer* self,
-                                     const void* geometry,
-                                     const MaterialInstance* material,
-                                     uint16_t arg4,
-                                     uint16_t arg5,
-                                     float arg6,
-                                     float arg7,
-                                     int32_t arg8,
-                                     const void* arg9,
-                                     uint32_t arg10) {
-    reinterpret_cast<Graphics::Renderer*>(self)                          // B.3.5 bridge
-        ->Graphics::Renderer::AddDrawItem(
-            reinterpret_cast<const Graphics::Geometry*>(geometry),        // B.3.5 bridge
-            reinterpret_cast<const Graphics::MaterialInstance*>(material),// B.3.5 bridge
-            arg4, arg5, arg6, arg7, arg8, arg9, arg10);
-}
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC — the member bodies whose live doors are the

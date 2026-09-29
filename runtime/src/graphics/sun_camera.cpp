@@ -370,23 +370,3 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
 }
 
 }  // namespace Graphics
-
-// ============================================================================
-// ?GetSunCamera@SunLight@Graphics@@QEBA?AVCamera@2@AEAVRenderer@2@@Z
-// — retail 0x180107010. THE DOOR.
-//
-// Keeps retail's ABI exactly as the banner at the top of this file derives it:
-// RCX = this (SunLight*), RDX = the Camera return slot, R8 = Renderer&, and RAX
-// carries the slot back. The member returns BY VALUE, which is correct for a
-// NON-VIRTUAL member — `Graphics::SunLight`'s slot list does not contain this
-// function — and C++17's guaranteed elision constructs the prvalue straight into
-// the caller's storage, so the placement-new below is not a second copy.
-// ============================================================================
-extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* ret,
-                                                    void* rendererv) {
-    new (reinterpret_cast<::Graphics::Camera*>(ret)) ::Graphics::Camera(  // B.3.5 bridge
-        reinterpret_cast<const ::Graphics::SunLight*>(selfv)
-            ->::Graphics::SunLight::GetSunCamera(
-                *reinterpret_cast<::Graphics::Renderer*>(rendererv)));
-    return ret;
-}

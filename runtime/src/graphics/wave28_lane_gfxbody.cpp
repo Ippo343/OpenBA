@@ -172,33 +172,6 @@ inline void* PassShaderProgram(const void* material, int32_t pass) {
 
 }  // namespace
 
-// ENDGAME B.3.5 block G: BOTH BODIES MOVED to `Graphics::Material`'s members,
-// at the bottom of this file. The doors keep their names, their addresses and
-// their attendance counters, and delegate with a QUALIFIED non-virtual call.
-//
-// The members keep the OUT-PARAMETER spelled rather than returning a
-// `System::String` by value, and that is a deliberate departure from the
-// COORDINATOR AMENDMENT's "non-virtual by-value members are unaffected": retail's
-// body passes the CALLER'S slot straight through to `Video::ShaderProgram`'s own
-// retslot export without ever writing it, and a C++ by-value return would
-// materialise a temporary, let the callee fill THAT, and then copy a refcounted
-// pointer out of it. The copy would be harmless (the refcount is already taken)
-// but the pass-through would stop being one, and the whole content of these two
-// functions IS the pass-through.
-extern "C" String* RtGraphics_Material_GetConstantName(const void* self, String* ret,
-                                                       int32_t pass, int32_t index) {
-    Attend("Material::GetConstantName", g_getConstNameCalls);
-    return reinterpret_cast<const Graphics::Material*>(self)        // B.3.5 bridge
-               ->Graphics::Material::GetConstantName(ret, pass, index);
-}
-
-extern "C" String* RtGraphics_Material_GetTextureName(const void* self, String* ret,
-                                                      int32_t pass, int32_t index) {
-    Attend("Material::GetTextureName", g_getTexNameCalls);
-    return reinterpret_cast<const Graphics::Material*>(self)        // B.3.5 bridge
-               ->Graphics::Material::GetTextureName(ret, pass, index);
-}
-
 // ============================================================================
 // §2.  MaterialInstance::FindConstant / FindTexture
 //      retail 0x180102f40 (ord 2343) and 0x180103020 (ord 2361), 211 bytes each.
@@ -305,28 +278,6 @@ int32_t FindByName(const uint8_t* data, int32_t size, const String* query, int32
 
 }  // namespace
 
-// ENDGAME B.3.5 block G: BOTH BODIES MOVED to `Graphics::MaterialInstance`'s
-// members. The doors keep their names, addresses and BOTH counters — the entry
-// count and the separate "a name actually matched" branch count, which the file's
-// attendance banner says are different findings.
-extern "C" int32_t RtGraphics_MaterialInstance_FindConstant(const void* self,
-                                                            const String* name) {
-    Attend("MaterialInstance::FindConstant", g_findConstCalls);
-    const int32_t r = reinterpret_cast<const Graphics::MaterialInstance*>(self)  // B.3.5 bridge
-                          ->Graphics::MaterialInstance::FindConstant(*name);
-    if (r >= 0) ++g_findConstHits;
-    return r;
-}
-
-extern "C" int32_t RtGraphics_MaterialInstance_FindTexture(const void* self,
-                                                           const String* name) {
-    Attend("MaterialInstance::FindTexture", g_findTexCalls);
-    const int32_t r = reinterpret_cast<const Graphics::MaterialInstance*>(self)  // B.3.5 bridge
-                          ->Graphics::MaterialInstance::FindTexture(*name);
-    if (r >= 0) ++g_findTexHits;
-    return r;
-}
-
 // ============================================================================
 // §3.  Animation::ApplyEvents
 //      retail 0x1800fa9a0, ordinal 1605, 242 bytes across 3 chained fragments.
@@ -419,22 +370,6 @@ struct AnimationEventEntry {
 static_assert(sizeof(AnimationEventEntry) == 0x10, "clip event entry stride is 0x10");
 
 }  // namespace
-
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto `Graphics::Animation::ApplyEvents`
-// (block H1's class; this file is not block H1's, which is why Animation.h said
-// "door: wave28_lane_gfxbody.cpp (not ours)"). The door keeps its name, its
-// registration and its entry counter; the FIRED counter is a branch counter and
-// stays inside the member.
-extern "C" void RtGraphics_Animation_ApplyEvents(const void* self, const void* transform,
-                                                 const int64_t* fromTime,
-                                                 const int64_t* toTime) {
-    Attend("Animation::ApplyEvents", g_applyEventsCalls);
-    reinterpret_cast<const Graphics::Animation*>(self)                   // B.3.5 bridge
-        ->Graphics::Animation::ApplyEvents(
-            *reinterpret_cast<const Math::Transform*>(transform),        // B.3.5 bridge
-            *reinterpret_cast<const System::Time*>(fromTime),
-            *reinterpret_cast<const System::Time*>(toTime));
-}
 
 // ============================================================================
 // §4.  Renderer::BeginDrawGroup
@@ -535,31 +470,6 @@ inline void DrawItemArraysDestroy(uint8_t* base) {
 }
 
 }  // namespace
-
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::Renderer::BeginDrawGroup`, in this file's trailing `namespace
-// Graphics` block (the A.2 sibling reason again). The door keeps its name, its
-// registration and its entry counter; the APPEND counter is a branch counter and
-// stays in the member.
-//
-// THE `??4Camera@Graphics@@` RESOLVER EDGES STAY, and that is block F's ruling
-// carried forward rather than an omission: retail's `operator=` is a PARTIAL copy
-// that leaves +0x61..+0x63 and +0xd5..+0xd7 alone, `Graphics::Camera::operator=`
-// is `= default` precisely so the class stays trivially copyable, and a defaulted
-// assignment cannot express a partial copy. The faithful body lives in that door,
-// which is where every copy the live engine makes goes.
-extern "C" int32_t RtGraphics_Renderer_BeginDrawGroup(void* self, const void* renderBuffer,
-                                                      const void* drawCamera,
-                                                      const void* cullCamera,
-                                                      int32_t shader, uint32_t passMask) {
-    Attend("Renderer::BeginDrawGroup", g_beginGroupCalls);
-    return reinterpret_cast<Graphics::Renderer*>(self)                   // B.3.5 bridge
-        ->Graphics::Renderer::BeginDrawGroup(
-            reinterpret_cast<const Video::RenderBuffer*>(renderBuffer),  // B.3.5 bridge
-            *reinterpret_cast<const Graphics::Camera*>(drawCamera),      // B.3.5 bridge
-            *reinterpret_cast<const Graphics::Camera*>(cullCamera),      // B.3.5 bridge
-            shader, passMask);
-}
 
 // ============================================================================
 // §5.  AnimationState::UpdateRootOnly
@@ -689,15 +599,6 @@ inline const void* LayerClip(const RtGraphics::AnimationLayer* L) {
 // this file and B4b-1 keeps it until the last one converts; it is field-for-field
 // `Graphics::AnimationState::Layer` and the header cross-asserts the two.
 
-// The registered door: name, address and retail argument order unchanged, and it
-// keeps the entry counter — the per-layer counter stays in the loop, inside the
-// member, because it measures the loop and not the call.
-extern "C" void RtGraphics_AnimationState_UpdateRootOnly(void* self, float dt, float* out) {
-    rtgfxbody28::Attend("AnimationState::UpdateRootOnly", rtgfxbody28::g_updateRootCalls);
-    reinterpret_cast<Graphics::AnimationState*>(self)                   // B.3.5 bridge
-        ->Graphics::AnimationState::UpdateRootOnly(
-            dt, *reinterpret_cast<Math::Vector3*>(out));                // B.3.5 bridge
-}
 // ============================================================================
 // §6.  Camera::operator=  — retail 0x180017c40, ordinal 1060, 460 bytes.
 // ============================================================================

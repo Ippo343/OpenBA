@@ -968,18 +968,6 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
 // safety check. The `movq $-2,0x20(%rsp)` at the top is the MSVC unwind
 // funclet's state slot and has no effect on the object.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto
-// `Graphics::ParticleInstance::RemoveState`. `IEAA` means PROTECTED, not
-// unexported — this DLL exports its protected members
-// (reference_aeaa_is_private_not_unexported.md) — so the member is `protected`
-// on the real class too and the door reaches it as a friend would: it does not,
-// it reaches it through the qualified call, which is legal because the door is
-// spelled inside this translation unit and the member is declared public-facing
-// for the registry's sake. See the header's note beside `RemoveState`.
-extern "C" void RtGraphics_ParticleInstance_RemoveState(void* selfv) {
-    reinterpret_cast<::Graphics::ParticleInstance*>(selfv)
-        ->::Graphics::ParticleInstance::RemoveState();
-}
 
 namespace Graphics {
 
@@ -1022,23 +1010,6 @@ void ParticleInstance::RemoveState() {
 // The class overrides both purely to REPLACE the Light/Geometry behaviour with
 // nothing (SunLight's real work is in DrawShadowMap and the four-int Draw).
 // ============================================================================
-// ENDGAME B.3.5 block E: all three bodies below MOVED onto the real
-// `Graphics::SunLight`; each door keeps its name and its registration and
-// delegates with a QUALIFIED non-virtual call.
-extern "C" void RtGraphics_SunLight_Update(void* self, const void* time) {
-    reinterpret_cast<::Graphics::SunLight*>(self)
-        ->::Graphics::SunLight::Update(*reinterpret_cast<const System::Time*>(time));
-}
-
-extern "C" void RtGraphics_SunLight_Draw_MHHH(void* self, void* context,
-                                              const void* camera, void* material,
-                                              float alpha, int a, int b, int c) {
-    RtGraphics::ExternalPtr mat; mat.p = material;
-    reinterpret_cast<const ::Graphics::SunLight*>(self)
-        ->::Graphics::SunLight::Draw(*reinterpret_cast<Video::Context*>(context),
-                                     *reinterpret_cast<const ::Graphics::Camera*>(camera),
-                                     mat, alpha, a, b, c);
-}
 
 namespace Graphics {
 
@@ -1095,12 +1066,6 @@ void SunLight::Draw(Video::Context& context, const Camera& camera,
 // GetSunCamera is a MEMBER function — `this` takes RCX and the visible
 // `Renderer&` is pushed out to R8.
 // ============================================================================
-extern "C" void RtGraphics_SunLight_AddDrawItems(void* selfv, const void* scenev, void* rendererv) {
-    reinterpret_cast<const ::Graphics::SunLight*>(selfv)
-        ->::Graphics::SunLight::AddDrawItems(
-              *reinterpret_cast<const ::Graphics::Scene*>(scenev),
-              *reinterpret_cast<::Graphics::Renderer*>(rendererv));
-}
 
 namespace Graphics {
 

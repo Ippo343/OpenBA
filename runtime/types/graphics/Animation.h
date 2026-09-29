@@ -132,7 +132,7 @@ static_assert(offsetof(AnimationEvent, _f18) == 0x18, "AnimationEvent::_f18 @ +0
 // on the guess that Serialize probably touches it. WAVE 24 lane GFXMAT ported
 // that body and ANSWERED R4: **no**. The only AnimationManager fields it reads
 // are +0x00 (_data) and +0x08 (_size) -- see the transcription above
-// `RtGraphics_AnimationManager_Serialize` in
+// `Graphics::AnimationManager::Serialize` in
 // runtime/src/graphics/wave24_lane_gfxmat.cpp. So the premise that used to
 // stand here -- "Serialize is still unported" -- is no longer true, and the
 // VERDICT is unchanged: +0x10 stays UNVERIFIED, and the body that was named as

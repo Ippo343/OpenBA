@@ -197,187 +197,22 @@ void Copy7Dwords(void* dst, const void* src) {
 // ============================================================================
 // ?PlayAnimation@AnimationState@Graphics@@  (0x1800fdf50)
 // ============================================================================
-//
-// Push a clip onto the front of the layer list, cross-fading out whatever was
-// playing. Four arms, and the interesting part is that they are chosen by the
-// state of layer 0, not by the caller:
-//
-//   animIndex < 0   stop everything: drop every layer's reference on its shared
-//                   instance and free the layer array. This is
-//                   ResetAnimationState's body inlined, except that retail
-//                   calls Array<Layer>::SetSize(0) here instead of inlining
-//                   ~Array as ResetAnimationState does.
-//   same LOOPING clip already on layer 0   nothing to do but reset the speed
-//                   to 1.0f and return.
-//   layer 0 has NOT restarted and there is more than one layer   re-arm the
-//                   fade on layer 1 and overwrite layer 0 in place; no layer is
-//                   inserted.
-//   otherwise       arm the fade on layer 0, grow the array by one and shift
-//                   every layer up so the new clip becomes layer 0.
-//
-// *** THE 6th AND 7th PARAMETERS ARE NEVER READ. *** The fade length comes from
-// the group's own table (or its default at +0x30), never from the `Time&` the
-// caller passes, and the new layer's speed is the literal 1.0f, never the
-// caller's `float`. Both stay in the signature because retail's callers push
-// them and the registered entry point must have retail's arity.
-// ENDGAME B.3.5 block GC: THE BODY MOVED to
-// `Graphics::AnimationState::PlayAnimation`, in this file's `namespace Graphics`
-// block at the bottom. The door keeps its name, its registration and retail's
-// arity, including the two parameters retail never reads.
-extern "C" void RtGraphics_AnimationState_PlayAnimation(
-    void* selfv, void* group, int animIndex, const void* nodesv,
-    const int64_t* startTime, const int64_t* fadeTime,
-    float speed, bool instanced) {
-    reinterpret_cast<Graphics::AnimationState*>(selfv)                  // B.3.5 bridge
-        ->Graphics::AnimationState::PlayAnimation(
-            Object::ExternalPtr<Graphics::AnimationGroup>(
-                reinterpret_cast<Graphics::AnimationGroup*>(group)),    // B.3.5 bridge
-            animIndex,
-            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv),
-            *reinterpret_cast<const System::Time*>(startTime),
-            *reinterpret_cast<const System::Time*>(fadeTime),
-            speed, instanced);
-}
 
 // ============================================================================
 // ?GetInstanceId@AnimationManager@Graphics@@  (0x1800fb9d0)
 // ============================================================================
-//
-// Find — or bake — the shared instance for (group, clip) and return its packed
-// handle. Baking is the expensive half: for every frame of the clip it builds
-// the skeleton's world pose once and stores it, so that a hundred citizens
-// playing the same walk cycle sample a table instead of each running the
-// hierarchy.
-//
-// THE SEARCH PASS DOES TWO THINGS AT ONCE. It looks for a live entry whose
-// group and clip index match, and in the same sweep remembers the FIRST entry
-// whose group is null — the slot ResetAnimationState/PlayAnimation blanked when
-// its last reference went away. A hit returns immediately; a miss reuses that
-// blank slot, and only if there is none does the array grow by one.
-//
-// THE SECOND RETURN COMPONENT IS NOT ALWAYS ZERO. After bumping the reference
-// count the body sweeps the instance's baked states looking for the one whose
-// layer 0 has the SMALLEST playback time (seeded with 10000.0f from
-// 0x180161734), and packs that state's index into the low byte. A state with no
-// layers scores 0.0f, which wins outright.
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::AnimationManager::GetInstanceId`, in this file's `namespace Graphics`
-// block. Block H1 left it a door for the "NOT DIFFABLE" scaffolding reason; the
-// NOT-DIFFABLE narrative is documentation and travelled with the body, and there
-// was no oracle machinery here to move out from under (the replay captures this
-// file carried went in block GC commit 2). The door keeps its name and its
-// registration.
-extern "C" int RtGraphics_AnimationManager_GetInstanceId(
-    void* selfv, void* group, int animIndex, const void* nodesv) {
-    return reinterpret_cast<Graphics::AnimationManager*>(selfv)          // B.3.5 bridge
-        ->Graphics::AnimationManager::GetInstanceId(
-            Object::ExternalPtr<Graphics::AnimationGroup>(
-                reinterpret_cast<Graphics::AnimationGroup*>(group)),      // B.3.5 bridge
-            animIndex,
-            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv));
-}
 
 // ============================================================================
 // ?CopyInstancedToUnique@AnimationState@Graphics@@  (0x1800fd4c0)
 // ============================================================================
-//
-// Re-root a baked, shared pose onto one instance's own node array: walk the
-// skeleton once, composing each node's baked local transform with its parent's
-// freshly computed world transform, and write the result into the caller's
-// InterpolatedState array (shifting each entry's current value into its
-// previous half first, which is what keeps interpolation continuous).
-//
-// *** `this` IS NEVER READ. *** RCX is overwritten with the root transform four
-// instructions in. The method is declared const and private and takes
-// everything it needs as arguments; the parameter stays for the ABI.
-//
-// Node 0 is done with the two real Math CALLs retail makes (Quaternion::Rotate
-// then operator*); nodes 1..n-1 have the rotate INLINED, and that inlined form
-// is the one whose schedule is transcribed below.
-// ENDGAME B.3.5 block GC: THE BODY MOVED to
-// `Graphics::AnimationState::CopyInstancedToUnique`, at the bottom of this file.
-// The door keeps its name, its registration and retail's `this` parameter, which
-// the body still never reads.
-extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
-    const void* selfv, const void* nodesv, const void* rootv,
-    void* interpv, int handle) {
-    reinterpret_cast<const Graphics::AnimationState*>(selfv)            // B.3.5 bridge
-        ->Graphics::AnimationState::CopyInstancedToUnique(
-            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv),
-            *reinterpret_cast<const Math::Transform*>(rootv),
-            interpv, handle);
-}
 
 // ============================================================================
 // ?UpdateNodes@AnimationState@Graphics@@  (0x1800fcc20)
 // ============================================================================
-//
-// Resolve every layer of a playing animation into one pose, then push that pose
-// through the skeleton.
-//
-// Three phases, in order:
-//   1. Sample the LAST layer into `pose`, either from its shared baked instance
-//      (GetPose) or by sampling the clip directly (GetPoseAtTime).
-//   2. Walk the remaining layers BACKWARDS, from count-2 down to 0. Each one is
-//      sampled into a 48-entry scratch and `pose` is lerped FROM that scratch
-//      TOWARDS its current value by `fadeRemaining / fadeLength` of the layer
-//      ABOVE it — so as that layer's fade runs out the blend lands on the lower
-//      layer's pose.
-//   3. Hand pose[0]'s translation back as the root offset, reset pose[0] to the
-//      identity, and compose every node's pose with its parent's, writing the
-//      hierarchy into `interp`.
-//
-// *** THE SCRATCH IS 48 TRANSFORMS AND THE BOUND IS NEVER CHECKED. *** Retail
-// re-initialises exactly 48 identity transforms at the top of every layer
-// iteration and then fills `nodeCount` of them. A mesh with more than 48 nodes
-// overruns it in retail too; the array here is the same 48 so that a build with
-// more nodes fails the same way rather than differently.
-// ENDGAME B.3.5 block GC: THE BODY MOVED to
-// `Graphics::AnimationState::UpdateNodes`, at the bottom of this file. The door
-// keeps its name, its registration and retail's argument order.
-extern "C" void RtGraphics_AnimationState_UpdateNodes(
-    void* selfv, float speed, const void* nodesv, const void* rootv,
-    void* interpv, void* posev, float* rootOffset) {
-    reinterpret_cast<Graphics::AnimationState*>(selfv)                  // B.3.5 bridge
-        ->Graphics::AnimationState::UpdateNodes(
-            speed,
-            *reinterpret_cast<const Collection::Array<uint8_t>*>(nodesv),
-            *reinterpret_cast<const Math::Transform*>(rootv),
-            interpv, posev,
-            *reinterpret_cast<Math::Vector3*>(rootOffset));             // B.3.5 bridge
-}
 
 // ============================================================================
 // ?GetBones@MeshInstance@Graphics@@  (0x180100070)
 // ============================================================================
-//
-// Produce one skinning matrix per bone and return the bone count.
-//
-// Per bone: interpolate between the InterpolatedState's two halves by `t`,
-// compose that with the node's BIND transform, compose THAT with the instance's
-// root transform, and convert to a Matrix.
-//
-// THE TWO BRANCHES ON MeshInstance+0xd8 ARE THE SAME QUESTION ASKED TWICE.
-// Non-zero means the instance is playing a shared, instanced clip: the node
-// states come out of the AnimationManager's pool through the last layer's
-// packed handle, and the root transform used is the IDENTITY. Zero means the
-// instance owns its nodes (+0xf0) and the root transform is the INVERSE of the
-// one the caller passed. Retail tests the byte three separate times rather than
-// keeping the answer; reproduced.
-//
-// The root quaternion's four `q * 0.0f` products are hoisted out of the loop by
-// MSVC and are kept hoisted here, because they are what the second rotate's
-// accumulators are SEEDED with.
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::MeshInstance::GetBones` (block E's class; this file is not block
-// E's). The door keeps its name and its registration.
-extern "C" int RtGraphics_MeshInstance_GetBones(
-    const void* selfv, float t, const void* rootv, void* outv) {
-    return reinterpret_cast<const Graphics::MeshInstance*>(selfv)        // B.3.5 bridge
-        ->Graphics::MeshInstance::GetBones(
-            t, *reinterpret_cast<const Math::Transform*>(rootv),
-            static_cast<Math::Matrix*>(outv));                           // B.3.5 bridge
-}
 
 // ============================================================================
 // ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@
@@ -394,15 +229,6 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
 // the same thing by handing RDX straight to `Math::Transform::Lerp` and returning
 // it in RAX; ours differs only in that the construction is spelled in C++.
 // ============================================================================
-extern "C" void* RtGraphics_InterpolatedState_Transform_Lerp(
-    const void* selfv, void* ret, const void* tv) {
-    const Graphics::InterpolatedState<Math::Transform>* self =            // B.3.5 bridge
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(selfv);
-    ::new (ret) Math::Transform(
-        self->Graphics::InterpolatedState<Math::Transform>::Lerp(
-            *reinterpret_cast<const Math::Scalar*>(tv)));
-    return ret;
-}
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block GC — the `Graphics::AnimationState` member bodies

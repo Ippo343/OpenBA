@@ -488,14 +488,6 @@ Graphics::EdgeMesh::~EdgeMesh() {
 // to null and `MOV RAX,[RCX]` at 0x1801060d2 immediately reads through it.
 // Retail faults there; so does this.
 // ############################################################################
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::SpotLight::CreateTargets` (block E's class; this file is not block
-// E's, which is why Light.h says "its body stays where it is"). The door keeps its
-// name and both its registrations.
-extern "C" void RtGraphics_SpotLight_CreateTargets(void* selfv) {
-    reinterpret_cast<Graphics::SpotLight*>(selfv)                        // B.3.5 bridge
-        ->Graphics::SpotLight::CreateTargets();
-}
 
 // ############################################################################
 // Graphics::GraphicsMesh::PlatformSerialize
@@ -950,13 +942,6 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
 
 }  // namespace Graphics
 
-// The registered door: name, address and retail argument order unchanged.
-extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* serv) {
-    reinterpret_cast<Graphics::GraphicsMesh*>(selfv)                 // B.3.5 bridge
-        ->Graphics::GraphicsMesh::PlatformSerialize(
-            *reinterpret_cast<IO::Serializer*>(serv));               // B.3.5 bridge
-}
-
 // ############################################################################
 // Graphics::Renderer::DrawItemList
 // ?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z
@@ -1011,15 +996,3 @@ extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* ser
 // how many calls reached a Draw at all, which is the number that matters — a
 // green `calls=` column on a body that dropped every item would mean nothing.
 // ############################################################################
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::Renderer::DrawItemList` (block F's class, not block F's file). The
-// door keeps its name and both its registrations.
-extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
-                                                 int32_t groupIndex, int32_t listIndex,
-                                                 int32_t shaderIndex) {
-    reinterpret_cast<const Graphics::Renderer*>(selfv)                   // B.3.5 bridge
-        ->Graphics::Renderer::DrawItemList(
-            *reinterpret_cast<Video::Context*>(ctx),                     // B.3.5 bridge
-            groupIndex, listIndex, shaderIndex);
-}
-
