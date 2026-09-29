@@ -30,7 +30,7 @@ bool g_csInit = false;
 struct ArmReq { int slot; uintptr_t addr; int len; };
 
 DWORD WINAPI ArmThread(LPVOID p) {
-    ArmReq* r = reinterpret_cast<ArmReq*>(p);
+    ArmReq* r = reinterpret_cast<ArmReq*>(p);  // CAST-OK: win32
     if (SuspendThread(g_mainThread) == (DWORD)-1) return 1;
     CONTEXT ctx; memset(&ctx, 0, sizeof(ctx));
     ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
@@ -67,11 +67,11 @@ extern "C" int HwWatch_Arm(void* addr, int len, const char* why) {
     if (!g_mainThread || GetCurrentThreadId() != g_mainTid) return -1;
     EnterCriticalSection(&g_cs);
     const int slot = g_next; g_next = (g_next + 1) & 3;
-    g_slots[slot].addr = reinterpret_cast<uintptr_t>(addr);
+    g_slots[slot].addr = reinterpret_cast<uintptr_t>(addr);  // CAST-OK: crash_walk
     g_slots[slot].len = len; g_slots[slot].hits = 0;
     ++g_armed;
     LeaveCriticalSection(&g_cs);
-    ArmReq req = { slot, reinterpret_cast<uintptr_t>(addr), len };
+    ArmReq req = { slot, reinterpret_cast<uintptr_t>(addr), len };  // CAST-OK: crash_walk
     HANDLE th = CreateThread(nullptr, 0, &ArmThread, &req, 0, nullptr);
     if (!th) return -1;
     WaitForSingleObject(th, 2000);
@@ -86,7 +86,7 @@ extern "C" int HwWatch_Armed() { return g_armed; }
 // Called from the vectored handler for EXCEPTION_SINGLE_STEP. Returns 1 when the
 // exception was one of our watchpoints (caller should continue execution).
 extern "C" int HwWatch_OnSingleStep(void* epV, void (*logStack)(void* ctx)) {
-    EXCEPTION_POINTERS* ep = reinterpret_cast<EXCEPTION_POINTERS*>(epV);
+    EXCEPTION_POINTERS* ep = reinterpret_cast<EXCEPTION_POINTERS*>(epV);  // CAST-OK: crash_walk
     CONTEXT* ctx = ep->ContextRecord;
     const DWORD64 dr6 = ctx->Dr6;
     int slot = -1;
@@ -96,20 +96,20 @@ extern "C" int HwWatch_OnSingleStep(void* epV, void (*logStack)(void* ctx)) {
     Slot& s = g_slots[slot];
     ++s.hits;
     HMODULE mod = nullptr;
-    const void* rip = reinterpret_cast<const void*>(ctx->Rip);
+    const void* rip = reinterpret_cast<const void*>(ctx->Rip);  // CAST-OK: crash_walk
     char where[300];
     if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (LPCSTR)rip, &mod) && mod) {
+                           (LPCSTR)rip, &mod) && mod) {  // CAST-OK: crash_walk
         char path[MAX_PATH] = {0};
         GetModuleFileNameA(mod, path, MAX_PATH);
         const char* nm = strrchr(path, '\\');
         std::snprintf(where, sizeof(where), "%s+0x%llX", nm ? nm + 1 : path,
-                      (unsigned long long)((uintptr_t)rip - (uintptr_t)mod));
+                      (unsigned long long)((uintptr_t)rip - (uintptr_t)mod));  // CAST-OK: crash_walk
     } else std::snprintf(where, sizeof(where), "%p", rip);
     uint64_t now = 0;
-    if (s.len == 4) now = *reinterpret_cast<uint32_t*>(s.addr);
-    else if (s.len == 8) now = *reinterpret_cast<uint64_t*>(s.addr);
-    else now = *reinterpret_cast<uint8_t*>(s.addr);
+    if (s.len == 4) now = *reinterpret_cast<uint32_t*>(s.addr);  // CAST-OK: crash_walk
+    else if (s.len == 8) now = *reinterpret_cast<uint64_t*>(s.addr);  // CAST-OK: crash_walk
+    else now = *reinterpret_cast<uint8_t*>(s.addr);  // CAST-OK: crash_walk
     std::fprintf(stderr, "[HWWATCH] HIT DR%d addr=%p (hit #%d) value now=0x%llx  writer RIP=%s  "
                          "RAX=%llx RCX=%llx RDX=%llx R8=%llx R9=%llx\n",
                  slot, (void*)s.addr, s.hits, (unsigned long long)now, where,

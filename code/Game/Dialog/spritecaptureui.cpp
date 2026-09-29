@@ -14,6 +14,7 @@
 //   FileSystem::GetSourceDirectory + edit text + ".rsc", calls External::SaveText.
 
 #include "ui/Panels.h"
+#include "Dialog/spritecaptureui_funcs.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "system/String.h"

@@ -59,7 +59,7 @@ const size_t kCallerSlots = 4096;
 CallerRec* g_callers = nullptr;
 
 inline size_t HashPtr(void* p) {
-    uint64_t x = reinterpret_cast<uint64_t>(p) >> 4;
+    uint64_t x = reinterpret_cast<uint64_t>(p) >> 4;  // CAST-OK: hash
     x *= 0x9E3779B97F4A7C15ull; x ^= x >> 29;
     return static_cast<size_t>(x);
 }
@@ -183,9 +183,9 @@ bool StatsOn() {
         g_statsOn = Opt().allocStats ? 1 : 0;
         if (g_statsOn) {
             g_bigThreshold = Opt().allocBig;
-            g_blocks = reinterpret_cast<BlockRec*>(VirtualAlloc(
+            g_blocks = reinterpret_cast<BlockRec*>(VirtualAlloc(  // CAST-OK: win32
                 nullptr, kBlkSlots * sizeof(BlockRec), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-            g_callers = reinterpret_cast<CallerRec*>(VirtualAlloc(
+            g_callers = reinterpret_cast<CallerRec*>(VirtualAlloc(  // CAST-OK: win32
                 nullptr, kCallerSlots * sizeof(CallerRec), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
             g_lastReportMs = GetTickCount64();
             fprintf(stderr, "[ALLOCSTATS] armed (blocks=%p callers=%p bigThreshold=%llu)\n",

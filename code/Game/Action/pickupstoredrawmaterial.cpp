@@ -34,6 +34,8 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"   // ActRm_* helpers
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
+#include "Work/exe_bodies.h"     // WorkBase_FindComponent_6270, WorkLeaf_FreeStorageCapacity_116540
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdio>
 #include <cstdint>
@@ -386,5 +388,196 @@ void* PickupStoredRawMaterial::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PickupStoredRawMaterial());
 }
 
+
+// ============================================================
+// FUN_1400ca230 — Resource_TransferToCarrier
+// Add `count` of resource `resType` to the carrier list at self+0x30 (count +0x38,
+// cap +0x3c, stride 0x10: [+0]=resType u64, [+8]=count int, [+0xc]=reserved int),
+// and bump the matching storage-inventory reserved field (+0xc) by `count`.
+//   self = the PickupStored action; resType = resource type id; count = amount.
+// ============================================================
+void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) {
+    int64_t storageIbp = 0;
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(self + 0x28), &storageIbp);
+
+    // bump storage inventory reserved(+0xc) for the matching resType
+    int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
+    if (0 < invCount) {
+        int64_t* p = *reinterpret_cast<int64_t**>(storageIbp + 0x28);
+        int idx = 0;
+        while (true) {
+            if (*p == resType) {
+                if (idx >= 0) {
+                    int64_t base = *reinterpret_cast<int64_t*>(storageIbp + 0x28);
+                    *reinterpret_cast<int*>(base + (int64_t)idx * 0x10 + 0xc) += count;
+                }
+                break;
+            }
+            idx++; p += 2;
+            if (idx >= invCount) break;
+        }
+    }
+
+    // carrier-list find: if resType already present, add to its count(+8) and return
+    int carCount = *reinterpret_cast<int*>(self + 0x38);
+    if (0 < carCount) {
+        int64_t* p = *reinterpret_cast<int64_t**>(self + 0x30);
+        int idx = 0;
+        while (true) {
+            if (*p == resType) {
+                int64_t base = *reinterpret_cast<int64_t*>(self + 0x30);
+                *reinterpret_cast<int*>(base + (int64_t)idx * 0x10 + 8) += count;
+                return;
+            }
+            idx++; p += 2;
+            if (idx >= carCount) break;
+        }
+    }
+
+    // not found: append {resType, count, reserved=0} to the carrier list (grow-if-full)
+    uint32_t oldCount = *reinterpret_cast<uint32_t*>(self + 0x38);
+    uint32_t newCount = oldCount + 1;
+    if (newCount == oldCount) return;
+    int64_t newEntry[2];
+    newEntry[0] = resType;
+    reinterpret_cast<int*>(&newEntry[1])[0] = count;
+    reinterpret_cast<int*>(&newEntry[1])[1] = 0;
+    void* oldArr = *reinterpret_cast<void**>(self + 0x30);
+    *reinterpret_cast<uint32_t*>(self + 0x38) = newCount;
+    if (*reinterpret_cast<int*>(self + 0x3c) < (int)newCount) {
+        *reinterpret_cast<uint32_t*>(self + 0x3c) = newCount;
+        if (oldCount != 0) *reinterpret_cast<uint32_t*>(self + 0x3c) = newCount * 3;
+        void* na = System::MemoryAllocator::_singleton
+            ? System::MemoryAllocator::MemAlloc(
+                          (uint64_t)((int64_t)*reinterpret_cast<int*>(self + 0x3c) << 4), 8)
+            : nullptr;
+        *reinterpret_cast<void**>(self + 0x30) = na;
+    }
+    int copyStart = 0;
+    if (oldArr == *reinterpret_cast<void**>(self + 0x30)) copyStart = (int)oldCount;
+    int64_t i = copyStart;
+    if (i < (int)newCount) {
+        int64_t byteOff = i << 4;
+        do {
+            int64_t* dst = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self + 0x30) + byteOff);
+            if (dst != nullptr) {
+                int64_t* src = (i < (int)oldCount)
+                    ? reinterpret_cast<int64_t*>((int64_t)i * 0x10 + reinterpret_cast<int64_t>(oldArr))
+                    : newEntry;
+                dst[0] = src[0];
+                dst[1] = src[1];
+            }
+            i++;
+            byteOff += 0x10;
+        } while (i < (int)newCount);
+    }
+    if (oldArr != *reinterpret_cast<void**>(self + 0x30) ) System::MemoryAllocator::MemFree(oldArr);
+}
+
+// ============================================================
+// FUN_1400ca520 — PickupStoredRawMaterial_Action_CopyCtor
+//   RCX=self, RDX=param_2, R8=param_3, R9=param_4(resType u64),
+//   [stack]=param_5(int requested), param_6(byte @ +0x40).
+// Field-init then, if param_4!=0: locate the source entity's RawMaterialDescription
+// (component-array scan vs type-id 0x1401c7cb8) to get its per-unit size at +0x48;
+// if requested(param_5)<=0 compute it from FUN_140116540(self+0x20)/perUnitSize;
+// clamp to the storage availability (count-reserved) for resType; then transfer.
+// ============================================================
+void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_t* param_3,
+                                          int64_t param_4, int param_5, uint8_t param_6) {
+    // ENDGAME B.3.8 ACT: the real ctor (PickupStoredRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (self) PickupStoredRawMaterial(param_2, param_3, param_4, param_5, param_6));
+}
+
+// 0x1400ca520 — the ctor body, moved from the door above: the field init is the
+// initialiser list; everything after it is the retail body verbatim.
+PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* param_3,
+                                                 int64_t param_4, int param_5, uint8_t param_6)
+    : _field20(reinterpret_cast<void*>(*param_2)),
+      _field28(reinterpret_cast<void*>(*param_3)),
+      _field30(nullptr),
+      _field38(nullptr),
+      _field40(param_6) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+
+    int64_t storageIbp = 0;
+    WorkBase_FindComponent_6270(*reinterpret_cast<uintptr_t*>(s + 0x28), &storageIbp);
+
+    if (param_4 == 0) return;
+
+    uint32_t wantTid = RawMaterialDescription::TypeId();
+
+    // component-array scan of param_4 for child GetTypeId == wantTid, IsDerivedFrom-confirm
+    void* rawMatDesc = nullptr;
+    int srcCount = *reinterpret_cast<int*>(param_4 + 0x30);
+    if (0 < srcCount) {
+        int idx = 0;
+        int64_t byteOff = 0;
+        while (true) {
+            int64_t arr = *reinterpret_cast<int64_t*>(param_4 + 0x28);
+            void* child = *reinterpret_cast<void**>(arr + byteOff);
+            uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
+            if (tid == wantTid) {
+                int64_t arr2 = *reinterpret_cast<int64_t*>(param_4 + 0x28);
+                void* match = *reinterpret_cast<void**>(arr2 + (int64_t)idx * 8);
+                if (::Object::IsDerivedFromNullSafe(match, RawMaterialDescription::TypeId()))
+                    rawMatDesc = match;
+                break;
+            }
+            idx++; byteOff += 8;
+            if (idx >= srcCount) break;
+        }
+    }
+
+    int requested = param_5;
+    if (requested <= 0) {
+        int total = WorkLeaf_FreeStorageCapacity_116540(*reinterpret_cast<intptr_t*>(s + 0x20));   // 0x140116540
+        // perUnitSize = *(int*)(rawMatDesc+0x48); guard the null-find (original assumes found).
+        int perUnit = rawMatDesc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rawMatDesc) + 0x48) : 0;
+        requested = (perUnit != 0) ? total / perUnit : 0;
+    }
+
+    // storage availability for resType param_4 = count(+8) - reserved(+0xc); clamp requested down to it
+    int avail = 0;
+    {
+        int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
+        if (0 < invCount) {
+            int64_t* inv = *reinterpret_cast<int64_t**>(storageIbp + 0x28);
+            int idx = 0; int64_t* p = inv;
+            while (true) {
+                if (*p == param_4) {
+                    if (idx >= 0)
+                        avail = reinterpret_cast<int*>(inv)[(int64_t)idx * 4 + 2]
+                              - reinterpret_cast<int*>(reinterpret_cast<int64_t>(inv) + (int64_t)idx * 0x10 + 0xc)[0];
+                    break;
+                }
+                idx++; p += 2;
+                if (idx >= invCount) break;
+            }
+        }
+    }
+    if (avail < requested) {
+        // re-scan to set requested = avail (count - reserved)
+        requested = 0;
+        int invCount = *reinterpret_cast<int*>(storageIbp + 0x30);
+        if (0 < invCount) {
+            int64_t* inv = *reinterpret_cast<int64_t**>(storageIbp + 0x28);
+            int idx = 0; int64_t* p = inv;
+            while (true) {
+                if (*p == param_4) {
+                    if (idx >= 0)
+                        requested = reinterpret_cast<int*>(inv)[(int64_t)idx * 4 + 2]
+                                  - reinterpret_cast<int*>(reinterpret_cast<int64_t>(inv) + (int64_t)idx * 0x10 + 0xc)[0];
+                    break;
+                }
+                idx++; p += 2;
+                if (idx >= invCount) break;
+            }
+        }
+    }
+
+    ActChild_TransferToCarrier_ca230(reinterpret_cast<int64_t>(this), param_4, requested);
+}
 
 DEFINE_EXE_TYPE(PickupStoredRawMaterial, "Action")

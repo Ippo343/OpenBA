@@ -35,7 +35,7 @@ template <typename PMF>
 inline void* SlotAddressOf(const void* obj, PMF pmf) {
     const long slot = CompilerSlotOf(pmf);
     if (slot < 0) return nullptr;
-    return (*reinterpret_cast<void** const*>(obj))[slot];
+    return (*reinterpret_cast<void** const*>(obj))[slot];  // CAST-OK: vslot
 }
 
 }  // namespace Object

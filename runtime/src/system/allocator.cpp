@@ -111,9 +111,9 @@ extern "C" void RtSysMemPlatformInstall(const RtSysMemPlatform* p) {
 // ---------------------------------------------------------------------------
 namespace {
 
-inline uint64_t& Tag(uint8_t* t)             { return *reinterpret_cast<uint64_t*>(t); }
-inline uint64_t  TagC(const uint8_t* t)      { return *reinterpret_cast<const uint64_t*>(t); }
-inline uint64_t& Node(uint8_t* freeTag)      { return *reinterpret_cast<uint64_t*>(freeTag); }
+inline uint64_t& Tag(uint8_t* t)             { return *reinterpret_cast<uint64_t*>(t); }  // CAST-OK: alloc_header
+inline uint64_t  TagC(const uint8_t* t)      { return *reinterpret_cast<const uint64_t*>(t); }  // CAST-OK: alloc_header
+inline uint64_t& Node(uint8_t* freeTag)      { return *reinterpret_cast<uint64_t*>(freeTag); }  // CAST-OK: alloc_header
 
 // The file-static at Runtime 0x1801ff300: largest `size` ever requested.
 // Nothing in retail reads it; it is maintained because it is an observable
@@ -144,13 +144,13 @@ void SetPrevTagInfo(uint8_t* next, const uint8_t* prev) {
         uint64_t enc = static_cast<uint64_t>((next - prev) >> 2) << 41;
         Tag(next) = ((enc ^ v) & kTagPrevSizeMask) ^ v;
     } else {
-        *reinterpret_cast<int64_t*>(next - 8) = next - prev;
+        *reinterpret_cast<int64_t*>(next - 8) = next - prev;  // CAST-OK: alloc_header
         Tag(next) = v & ~kTagPrevSizeMask;
     }
 }
 
-inline MemoryTag* AsTag(uint8_t* p)  { return reinterpret_cast<MemoryTag*>(p); }
-inline FreeTag*   AsNode(uint8_t* p) { return reinterpret_cast<FreeTag*>(p); }
+inline MemoryTag* AsTag(uint8_t* p)  { return reinterpret_cast<MemoryTag*>(p); }  // CAST-OK: alloc_header
+inline FreeTag*   AsNode(uint8_t* p) { return reinterpret_cast<FreeTag*>(p); }  // CAST-OK: alloc_header
 
 }  // namespace
 
@@ -183,7 +183,7 @@ int MemoryAllocator::GetBinForSize(uint64_t n) const {
 MemoryRange* MemoryAllocator::GetMemoryRange(void* p) {
     MemoryRange* r = ranges;
     for (int i = 0; i < rangeCount; ++i, ++r) {
-        if (r->base <= static_cast<uint8_t*>(p) && static_cast<uint8_t*>(p) < r->end)
+        if (r->base <= static_cast<uint8_t*>(p) && static_cast<uint8_t*>(p) < r->end)  // CAST-OK: alloc_header
             return r;
     }
     return nullptr;
@@ -191,7 +191,7 @@ MemoryRange* MemoryAllocator::GetMemoryRange(void* p) {
 
 // --- GetAllocationSize (0x1800c71d0) ---------------------------------------
 uint64_t MemoryAllocator::GetAllocationSize(void* p) {
-    return (*reinterpret_cast<uint64_t*>(static_cast<uint8_t*>(p) - 8) & kTagSizeMask) << 2;
+    return (*reinterpret_cast<uint64_t*>(static_cast<uint8_t*>(p) - 8) & kTagSizeMask) << 2;  // CAST-OK: alloc_header
 }
 
 // --- GetAllocatedSize (0x18007c0b0) ----------------------------------------
@@ -205,7 +205,7 @@ FreeTag* MemoryAllocator::GetFreeTagForSize(uint64_t want) {
     if (bin < minBin) bin = minBin;
 
     for (; bin < 0xc0; ++bin) {
-        uint8_t* cur = reinterpret_cast<uint8_t*>(freeLists[bin]);
+        uint8_t* cur = reinterpret_cast<uint8_t*>(freeLists[bin]);  // CAST-OK: alloc_header
         if (cur == nullptr) continue;
         for (;;) {
             if (((TagC(cur - 8) & kTagSizeMask) << 2) >= want) return AsNode(cur);
@@ -221,7 +221,7 @@ FreeTag* MemoryAllocator::GetFreeTagForSize(uint64_t want) {
 // --- LinkFreeTag (0x1800c7310) ---------------------------------------------
 // Push `tag` onto the head of its bin. Blocks under 16 bytes are never linked.
 void MemoryAllocator::LinkFreeTag(MemoryTag* tagp) {
-    uint8_t* tag = reinterpret_cast<uint8_t*>(tagp);
+    uint8_t* tag = reinterpret_cast<uint8_t*>(tagp);  // CAST-OK: alloc_header
     uint64_t bytes = (Tag(tag) & kTagSizeMask) * 4;
     if (bytes < 0x10) return;
 
@@ -234,7 +234,7 @@ void MemoryAllocator::LinkFreeTag(MemoryTag* tagp) {
         Tag(tag) &= 0x00003fffffffffffull;          // clear the prev-link high bits
         if (bin < minBin) minBin = bin;
     } else {
-        uint8_t* oldHead = reinterpret_cast<uint8_t*>(*head);
+        uint8_t* oldHead = reinterpret_cast<uint8_t*>(*head);  // CAST-OK: alloc_header
         Node(node) = static_cast<uint64_t>(oldHead - node) & kTagSizeMask;
         Tag(tag) &= 0x00003fffffffffffull;
 
@@ -244,14 +244,14 @@ void MemoryAllocator::LinkFreeTag(MemoryTag* tagp) {
         Tag(oldHead - 8) &= 0x00003fffffffffffull;
         Tag(oldHead - 8) |= (back & 0xffffffffff800000ull) << 23;
     }
-    *head = reinterpret_cast<uint64_t>(node);
+    *head = reinterpret_cast<uint64_t>(node);  // CAST-OK: alloc_header
     freeTagCount++;
 }
 
 // --- UnlinkFreeTag(FreeTag*, FreeTag*) (0x1800c7410) -----------------------
 // The second parameter is unused by retail; kept for ABI shape.
 void MemoryAllocator::UnlinkFreeTag(FreeTag* nodep, FreeTag* /*unused*/) {
-    uint8_t* node = reinterpret_cast<uint8_t*>(nodep);
+    uint8_t* node = reinterpret_cast<uint8_t*>(nodep);  // CAST-OK: alloc_header
     uint64_t bytes = (TagC(node - 8) & kTagSizeMask) * 4;
     int bin = GetBinForSize(bytes);
 
@@ -269,7 +269,7 @@ void MemoryAllocator::UnlinkFreeTag(FreeTag* nodep, FreeTag* /*unused*/) {
         if (next == nullptr) {
             freeLists[bin] = 0;
         } else {
-            freeLists[bin] = reinterpret_cast<uint64_t>(next);
+            freeLists[bin] = reinterpret_cast<uint64_t>(next);  // CAST-OK: alloc_header
             Node(next) &= kTagSizeMask;
             Tag(next - 8) &= 0x00003fffffffffffull;
         }
@@ -300,7 +300,7 @@ void MemoryAllocator::UnlinkFreeTag(FreeTag* nodep, FreeTag* /*unused*/) {
 
 // --- UnlinkFreeTag(MemoryTag*) (0x1800c7580) -------------------------------
 void MemoryAllocator::UnlinkFreeTag(MemoryTag* tagp) {
-    uint8_t* tag = reinterpret_cast<uint8_t*>(tagp);
+    uint8_t* tag = reinterpret_cast<uint8_t*>(tagp);  // CAST-OK: alloc_header
     if (3 < (Tag(tag) & kTagSizeMask)) UnlinkFreeTag(AsNode(tag + 8), nullptr);
 }
 
@@ -308,8 +308,8 @@ void MemoryAllocator::UnlinkFreeTag(MemoryTag* tagp) {
 void MemoryAllocator::CommitToPage(MemoryRange* range, void* upTo) {
     uint64_t page = pageSize;
     uint64_t have = range->committed;
-    uint64_t need = ((page - reinterpret_cast<uint64_t>(range->base) - 1 +
-                      reinterpret_cast<uint64_t>(upTo)) / page) * page;
+    uint64_t need = ((page - reinterpret_cast<uint64_t>(range->base) - 1 +  // CAST-OK: alloc_header
+                      reinterpret_cast<uint64_t>(upTo)) / page) * page;  // CAST-OK: alloc_header
     if (have <= need && need - have != 0) {
         g_plat.commit(range->base + have, need - have);
         range->committed = need;
@@ -319,8 +319,8 @@ void MemoryAllocator::CommitToPage(MemoryRange* range, void* upTo) {
 // --- ReleaseToPage (0x1800c7c80) -------------------------------------------
 void MemoryAllocator::ReleaseToPage(MemoryRange* range, void* downTo) {
     uint64_t page = pageSize;
-    uint64_t need = ((page - reinterpret_cast<uint64_t>(range->base) - 1 +
-                      reinterpret_cast<uint64_t>(downTo)) / page) * page;
+    uint64_t need = ((page - reinterpret_cast<uint64_t>(range->base) - 1 +  // CAST-OK: alloc_header
+                      reinterpret_cast<uint64_t>(downTo)) / page) * page;  // CAST-OK: alloc_header
     if (need < range->committed) {
         g_plat.decommit(range->base + need, range->committed - need);
         range->committed = need;
@@ -338,11 +338,11 @@ bool MemoryAllocator::ExpandMemoryRangeTable() {
     rangeCapacity = oldCap + 2;
     uint64_t bytes = ((page - 1 + static_cast<uint64_t>(oldCap + 2) * 0x18) / page) * page;
     void* dst = g_plat.reserveCommit(nullptr, bytes);
-    ranges = static_cast<MemoryRange*>(dst);
+    ranges = static_cast<MemoryRange*>(dst);  // CAST-OK: alloc_header
     if (dst == nullptr) return false;
 
     std::memcpy(dst, src, static_cast<size_t>(oldCap) * 0x18);
-    std::memset(static_cast<uint8_t*>(dst) + static_cast<size_t>(oldCap) * 0x18, 0,
+    std::memset(static_cast<uint8_t*>(dst) + static_cast<size_t>(oldCap) * 0x18, 0,  // CAST-OK: alloc_header
                 static_cast<size_t>(rangeCapacity - oldCap) * 0x18);
     if (oldCap != 0) g_plat.release(src);
     return true;
@@ -363,7 +363,7 @@ bool MemoryAllocator::AddNewMemoryRange(uint64_t want) {
     uint64_t page = pageSize;
     rangeCount++;
 
-    uint8_t* base = static_cast<uint8_t*>(g_plat.reserve(nullptr, ((page - 1 + size) / page) * page));
+    uint8_t* base = static_cast<uint8_t*>(g_plat.reserve(nullptr, ((page - 1 + size) / page) * page));  // CAST-OK: alloc_header
     range->base = base;
     if (base != nullptr) {
         range->committed = 0;
@@ -405,7 +405,7 @@ void* MemoryAllocator::Allocate(uint64_t size, int align) {
     }
     UnlinkFreeTag(freeTag, nullptr);
 
-    uint8_t* tag = reinterpret_cast<uint8_t*>(freeTag) - 8;
+    uint8_t* tag = reinterpret_cast<uint8_t*>(freeTag) - 8;  // CAST-OK: alloc_header
 
     // Inlined GetMemoryRange. Retail does not guard the miss and neither do we.
     MemoryRange* range = nullptr;
@@ -420,10 +420,10 @@ void* MemoryAllocator::Allocate(uint64_t size, int align) {
     uint8_t* user = tag + 8;
     uint64_t quot = (static_cast<uint64_t>(static_cast<int64_t>(
                          static_cast<int32_t>(align8 - 1u))) +
-                     reinterpret_cast<uint64_t>(user)) /
+                     reinterpret_cast<uint64_t>(user)) /  // CAST-OK: alloc_header
                     static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(align8)));
     int32_t pad = static_cast<int32_t>(static_cast<uint32_t>(quot) * align8) -
-                  static_cast<int32_t>(static_cast<uint32_t>(reinterpret_cast<uint64_t>(user)));
+                  static_cast<int32_t>(static_cast<uint32_t>(reinterpret_cast<uint64_t>(user)));  // CAST-OK: alloc_header
 
     if (pad == 0) {
         Tag(tag) &= 0xffffc1ffffffffffull;   // clear prevSize, PREV_FREE, THIS_FREE
@@ -476,7 +476,7 @@ void* MemoryAllocator::Allocate(uint64_t size, int align) {
                     uint64_t enc = static_cast<uint64_t>((next - rem) >> 2) << 41;
                     Tag(next) = ((enc ^ s) & kTagPrevSizeMask) ^ s;
                 } else {
-                    *reinterpret_cast<int64_t*>(next - 8) = next - rem;
+                    *reinterpret_cast<int64_t*>(next - 8) = next - rem;  // CAST-OK: alloc_header
                     Tag(next) = nextv & ~kTagPrevSizeMask;
                 }
             }
@@ -489,8 +489,8 @@ void* MemoryAllocator::Allocate(uint64_t size, int align) {
         uint64_t page = pageSize;
         uint64_t have = range->committed;
         uint64_t need = (((Tag(tag) & kTagSizeMask) * 4 -
-                          reinterpret_cast<uint64_t>(range->base) - 1 + page +
-                          reinterpret_cast<uint64_t>(tag)) / page) * page;
+                          reinterpret_cast<uint64_t>(range->base) - 1 + page +  // CAST-OK: alloc_header
+                          reinterpret_cast<uint64_t>(tag)) / page) * page;  // CAST-OK: alloc_header
         if (have <= need && need - have != 0) {
             g_plat.commit(range->base + have, need - have);
             range->committed = need;
@@ -506,7 +506,7 @@ void* MemoryAllocator::Allocate(uint64_t size, int align) {
 void MemoryAllocator::Free(void* p) {
     if (p == nullptr) return;
 
-    uint8_t* tag = static_cast<uint8_t*>(p) - 8;
+    uint8_t* tag = static_cast<uint8_t*>(p) - 8;  // CAST-OK: alloc_header
 
     MemoryRange* range = nullptr;
     {
@@ -526,7 +526,7 @@ void MemoryAllocator::Free(void* p) {
     if ((tv & kTagPrevFree) != 0) {
         uint64_t back;
         if ((tv & kTagPrevSizeMask) == 0)
-            back = *reinterpret_cast<uint64_t*>(static_cast<uint8_t*>(p) - 0x10);  // footer
+            back = *reinterpret_cast<uint64_t*>(static_cast<uint8_t*>(p) - 0x10);  // footer  // CAST-OK: alloc_header
         else
             back = static_cast<uint64_t>(static_cast<uint32_t>(tv >> 0x27) & 0x1c);
 
@@ -549,7 +549,7 @@ void MemoryAllocator::Free(void* p) {
                 uint64_t enc = static_cast<uint64_t>((next - blk) >> 2) << 41;
                 Tag(next) = ((enc ^ s) & kTagPrevSizeMask) ^ s;
             } else {
-                *reinterpret_cast<int64_t*>(next - 8) = next - blk;
+                *reinterpret_cast<int64_t*>(next - 8) = next - blk;  // CAST-OK: alloc_header
                 Tag(next) = (nv & ~kTagPrevSizeMask) | kTagPrevFree;
             }
         } else {
@@ -566,7 +566,7 @@ void MemoryAllocator::Free(void* p) {
                         uint64_t enc = static_cast<uint64_t>((next - blk) >> 2) << 41;
                         Tag(next) = ((enc ^ s) & kTagPrevSizeMask) ^ s;
                     } else {
-                        *reinterpret_cast<int64_t*>(next - 8) = next - blk;
+                        *reinterpret_cast<int64_t*>(next - 8) = next - blk;  // CAST-OK: alloc_header
                         Tag(next) = (n2 & ~kTagPrevSizeMask) | kTagPrevFree;
                     }
                 }
@@ -632,7 +632,7 @@ void MemoryAllocator::MemFree(void* p) {
 
 // --- PointerOffset (0x180034e20) -------------------------------------------
 int64_t MemoryAllocator::PointerOffset(void* a, void* b) {
-    return static_cast<uint8_t*>(a) - static_cast<uint8_t*>(b);
+    return static_cast<uint8_t*>(a) - static_cast<uint8_t*>(b);  // CAST-OK: ptr_int
 }
 
 // --- The Platform* family (0x1800c7b30 / b50 / b60 / bb0 / c40 / c70) ------
@@ -735,7 +735,7 @@ const size_t kShadowSlots = 1u << 21;          // 2M slots, 32 MB
 ShadowEntry* g_shadowMap = nullptr;
 
 inline size_t ShadowHash(void* p) {
-    uint64_t x = reinterpret_cast<uint64_t>(p) >> 4;
+    uint64_t x = reinterpret_cast<uint64_t>(p) >> 4;  // CAST-OK: hash
     x *= 0x9E3779B97F4A7C15ull; x ^= x >> 29;
     return static_cast<size_t>(x);
 }
@@ -879,7 +879,7 @@ void* ShadowMapTake(void* theirs) {
 // (rangeIndex, offsetInRange) for a user pointer, or (-1, 0) if not in a range.
 void RangeCoords(const MemoryAllocator* a, void* p, int* idx, uint64_t* off) {
     *idx = -1; *off = 0;
-    uint8_t* t = static_cast<uint8_t*>(p) - 8;
+    uint8_t* t = static_cast<uint8_t*>(p) - 8;  // CAST-OK: alloc_header
     for (int i = 0; i < a->rangeCount; ++i) {
         if (a->ranges[i].base <= t && t < a->ranges[i].end) {
             *idx = i; *off = static_cast<uint64_t>(t - a->ranges[i].base); return;

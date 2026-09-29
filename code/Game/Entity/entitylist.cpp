@@ -16,7 +16,7 @@
 //   - EntityList::PostUpdateNodeHandler (0x1400c2c70) — deep reimpl
 //   - EntityList::PostUpdateStaging(0x1400c3ab0) — deep reimpl (static helper)
 //   - EntityList::RemoveEntity     (0x1400c38e0) — deep reimpl
-//   - EntityList::FlagAggregation  (0x1400c3470) — delegates to ComponentEntity_RefreshEntityFlags
+//   - EntityList::FlagAggregation  (0x1400c3470) — is ComponentEntity::RefreshEntityFlags
 //   - EntityList::Serialize        (0x1400c44a0) — deep reimpl
 //
 // Decompiled from Application-x64.exe using Ghidra.
@@ -1141,20 +1141,6 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
 
     // Step 5: Delete the entity IBP reference
     reinterpret_cast< ::Object::InternalBasePtr*>(entityIBP)->DeletePtr();   // B.3.3 bridge
-}
-
-// ============================================================
-// EntityList::FlagAggregation (0x1400c3470)
-// ============================================================
-// This function at 0x1400c3470 is the SAME function as
-// ComponentEntity::RefreshEntityFlags, already reimplemented
-// in code/Game/Entity/componententity.cpp.
-// Delegates to that implementation.
-// Caller batch CB6: the member (the old ComponentEntity_RefreshEntityFlags door's
-// body); the dead `s_fn_FlagAggregation` door cache (a ResolveAddr of 0x1400c3470
-// read only by a debug printf) went with it.
-void EntityList_FlagAggregation(void* entity) {
-    reinterpret_cast<ComponentEntity*>(entity)->RefreshEntityFlags();   // B.3.8 bridge
 }
 
 // ============================================================

@@ -13,7 +13,7 @@
 // We call the original exe functions for these.
 //
 
-#include "Component/zonecomponent_funcs.h"
+#include "Component/ZoneComponent.h"
 #include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -102,18 +102,6 @@ void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
         GameColl::AsArray<GameColl::Ptr8>((void*)(found + 1))
             .SetSizeFill(static_cast<int>(found[2]) + 1, entityPtr);
 }
-
-// 0x1401301f0 door: registered by address (standalone/reg_component_nature.cpp).
-void ZoneComponent_Draw(ZoneComponent* self) {
-    self->ZoneComponent::OnAdded();
-}
-
-
-// 0x140130080 door: registered by address (standalone/reg_component_nature.cpp).
-void ZoneComponent_OnCreate(ZoneComponent* self) {
-    self->ZoneComponent::OnRemove();
-}
-
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — ZoneComponent as a REAL class (ZoneComponent.h).

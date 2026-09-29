@@ -55,12 +55,12 @@ uint64_t PageSize() { SYSTEM_INFO si; GetSystemInfo(&si); return si.dwPageSize; 
 
 // The ctor's own sequence: InitializeCriticalSection then a 5000 spin count.
 void LockInit(void* cs) {
-    InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs));
-    SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(cs), 5000);
+    InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs));  // CAST-OK: win32
+    SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(cs), 5000);  // CAST-OK: win32
 }
-void LockEnter(void* cs)  { EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }
-void LockLeave(void* cs)  { LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }
-void LockDelete(void* cs) { DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }
+void LockEnter(void* cs)  { EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }  // CAST-OK: win32
+void LockLeave(void* cs)  { LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }  // CAST-OK: win32
+void LockDelete(void* cs) { DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }  // CAST-OK: win32
 
 const RtSysMemPlatform kWin32 = {
     &Reserve, &ReserveCommit, &Commit, &Decommit, &Release, &PageSize,

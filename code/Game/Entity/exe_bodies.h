@@ -85,10 +85,7 @@ void fn_FindComponent_SM(void* entity, void* retval);
 // fn_FindComponent_Citizen — DAT_1401c7158, original FUN_140009790
 void fn_FindComponent_Citizen(void* entity, void* retval);
 // fn_FindComponent_Storage — DAT_1401c7e78, original FUN_140006270
-// NOTE: same function as fn_FindComponent_Residence (same type ID search)
 void fn_FindComponent_Storage(void* entity, void* retval);
-// fn_FindComponent_Residence — same as fn_FindComponent_Storage (same type ID)
-void fn_FindComponent_Residence(void* entity, void* retval);
 // fn_FindComponent_Cemetery — DAT_1401c4090, original FUN_140010a00
 void fn_FindComponent_Cemetery(void* entity, void* retval);
 // fn_FindComponent_Immigration — DAT_1401c4480, original FUN_140012020

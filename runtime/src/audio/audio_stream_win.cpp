@@ -286,9 +286,9 @@ Audio::Stream::Stream() : System::Thread(kStreamStackSize) {
     _buffers = nullptr;                                  // 0x1800a0e67 (qword)
     _buffersSize = 0; _buffersCapacity = 0;              // 0x1800a0e6b (ONE qword store at +0x38)
     InitializeCriticalSection(                           // 0x1800a0e73
-        reinterpret_cast<CRITICAL_SECTION*>(_lock));
+        reinterpret_cast<CRITICAL_SECTION*>(_lock));  // CAST-OK: win32
     SetCriticalSectionSpinCount(                         // 0x1800a0e82
-        reinterpret_cast<CRITICAL_SECTION*>(_lock), kStreamSpinCount);
+        reinterpret_cast<CRITICAL_SECTION*>(_lock), kStreamSpinCount);  // CAST-OK: win32
 
     _bytePosition = 0; _channel = 0;                     // 0x1800a0e89 (ONE qword store at +0x78)
     _stopping = 0;                                       // 0x1800a0e8d, a BYTE store
@@ -316,7 +316,7 @@ Audio::Stream::~Stream() {
     CloseHandle(hFirst);                                  // 0x1800a0db4, +0x48
     CloseHandle(hSecond);                                 // 0x1800a0dbe, +0x40
     DeleteCriticalSection(                                // 0x1800a0dc9
-        reinterpret_cast<CRITICAL_SECTION*>(_lock));
+        reinterpret_cast<CRITICAL_SECTION*>(_lock));  // CAST-OK: win32
     // 0x1800a0dd4 CALL 0x18000c4a0 — the +0x30 `Array<Block>::~Array`, a J1
     // body (free the buffer, zero the header; no element destroy).
     rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&_buffers));
