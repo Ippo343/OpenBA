@@ -1185,9 +1185,11 @@ namespace {
 
 // `IO::Serializer` — {Stream*, ReaderWriter*}, 0x10 bytes
 // (runtime/types/io/Serializer.h). Built on the stack twice per controller.
+// Retail inlines ??0Serializer here WITH a null test on the encoding, which
+// the class's own constructor does not have, so the pair is spelt out and
+// handed to the encoding's factory as the Serializer it is.
 struct UiSerializer { void* stream; IO::ReaderWriter* rw; };
-
-using UiCreateRwFn   = IO::ReaderWriter* (*)(void* enc, UiSerializer* out, const char* name);
+static_assert(sizeof(UiSerializer) == sizeof(IO::Serializer), "");
 
 } // namespace
 
@@ -1205,7 +1207,7 @@ void UI::UserInterface::SaveAllSettings() {
             // on a failed allocation), the dead free of the previous one.
             alignas(IO::MemoryStream) unsigned char stMem[sizeof(IO::MemoryStream)];
             IO::MemoryStream* const st = ::new (static_cast<void*>(stMem)) IO::MemoryStream();
-            void* enc = st->_encoding;
+            IO::Encoding* const enc = st->_encoding;
 
             // ---- 3. point the stream at the dialog's settings buffer ------
             const int32_t size = dlg->_userFlags;   // +0xb0, read here as the byte count
@@ -1223,11 +1225,10 @@ void UI::UserInterface::SaveAllSettings() {
             UiSerializer ser{ st, nullptr };
             IO::ReaderWriter* rw = nullptr;
             if (enc) {
-                void** encVt = *reinterpret_cast<void***>(enc);
-                UiCreateRwFn make = reinterpret_cast<UiCreateRwFn>(
-                    st->_direction != 0 ? encVt[4]    // +0x20 CreateWriter
-                                        : encVt[3]);  // +0x18 CreateReader
-                rw = make(enc, &ser, nullptr);
+                // Encoding slot 4 (+0x20) CreateWriter when writing, slot 3
+                // (+0x18) CreateReader when reading; version 0.
+                IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(&ser);
+                rw = st->_direction != 0 ? enc->CreateWriter(s, 0) : enc->CreateReader(s, 0);
             }
             ser.rw = rw;
 
@@ -1251,10 +1252,9 @@ void UI::UserInterface::SaveAllSettings() {
                 UiSerializer ser2{ st, nullptr };
                 IO::ReaderWriter* rw2 = nullptr;
                 if (enc) {
-                    void** encVt = *reinterpret_cast<void***>(enc);
-                    UiCreateRwFn make2 = reinterpret_cast<UiCreateRwFn>(
-                        st->_direction != 0 ? encVt[4] : encVt[3]);
-                    rw2 = make2(enc, &ser2, nullptr);
+                    IO::Serializer& s2 = *reinterpret_cast<IO::Serializer*>(&ser2);
+                    rw2 = st->_direction != 0 ? enc->CreateWriter(s2, 0)
+                                              : enc->CreateReader(s2, 0);
                 }
                 ser2.rw = rw2;
 
