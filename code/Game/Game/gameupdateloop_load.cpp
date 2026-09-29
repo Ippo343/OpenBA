@@ -46,6 +46,7 @@
 #include "EventLog.h"                // m_eventNotifier's class (B.4 GAME-a)
 #include "MusicPlayer.h"             // m_musicPlayer's class (B.4 GAME-a)
 #include "Minimap.h"                 // m_imageCapture's class (B.4 GAME-a)
+#include "MapGenerator.h"            // m_mapConfig's class (B.4 GAME-a)
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -1436,7 +1437,7 @@ void GameUpdateLoop::Load() {
             // and the camera target, WITHOUT calling FUN_1400a3300 yet. Remove once
             // start-town is implemented. See project_newgame_path_roadmap / task #6/#7.
             {
-                uint8_t* mapGen = static_cast<uint8_t*>(m_mapConfig);   // startConfig (MapGenerator rsc)
+                MapGenerator* mapGen = m_mapConfig;   // startConfig (MapGenerator rsc)
                 Map* game       = m_game;
                 WorldGeometry* wgeom = m_worldGeometry;
                 PlayerController* pctrl = m_playerController;
@@ -1444,15 +1445,15 @@ void GameUpdateLoop::Load() {
                         mapGen, game, wgeom, pctrl);
                 if (mapGen) {
                     fprintf(stderr, "[startTown::DIAG]   mapGen+0x3c(townSize)=%d\n",
-                            *(int32_t*)(mapGen + 0x3c));
+                            mapGen->subdivisions);
                     fprintf(stderr, "[startTown::DIAG]   pools: a0=%p a8(cnt)=%d | b0=%p b8(cnt)=%d | "
                             "c0=%p c8(cnt)=%d | d0=%p d8(cnt)=%d | e0=%d e4=%d e8=%d\n",
-                            *(void**)(mapGen + 0xa0), *(int32_t*)(mapGen + 0xa8),
-                            *(void**)(mapGen + 0xb0), *(int32_t*)(mapGen + 0xb8),
-                            *(void**)(mapGen + 0xc0), *(int32_t*)(mapGen + 0xc8),
-                            *(void**)(mapGen + 0xd0), *(int32_t*)(mapGen + 0xd8),
-                            *(int32_t*)(mapGen + 0xe0), *(int32_t*)(mapGen + 0xe4),
-                            *(int32_t*)(mapGen + 0xe8));
+                            mapGen->refArray4.data, mapGen->refArray4.count,
+                            mapGen->refArray5.data, mapGen->refArray5.count,
+                            mapGen->refArray6.data, mapGen->refArray6.count,
+                            mapGen->refArray7.data, mapGen->refArray7.count,
+                            mapGen->paramE0, mapGen->paramE4,
+                            mapGen->paramE8);
                 }
                 if (game) {
                     int gdim = game->size;
@@ -1499,7 +1500,7 @@ void GameUpdateLoop::Load() {
     // worldgen/StartTown branch above. We call the ported SaveRestore directly
     // (it IS our vtable +0x38 slot).
     if (m_savedState != nullptr) {
-        void* savedState = m_savedState;
+        Save::SavedState* savedState = m_savedState;
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE branch: SaveRestore(load) state=%p\n",
                 savedState);
         fflush(stderr);
@@ -1509,11 +1510,11 @@ void GameUpdateLoop::Load() {
         // it before the citizen spawn for the same reason).
         CharManager_Seed();
         int loadOut = 0;
-        SaveRestoreOut(false, static_cast<Save::SavedState*>(savedState), &loadOut);
+        SaveRestoreOut(false, savedState, &loadOut);
         // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
         GameUpdateLoop_SaveRoundtripCheck(this, savedState);
-        RtSave_SavedState_Dtor(static_cast<Save::SavedState*>(savedState));
+        RtSave_SavedState_Dtor(savedState);
         System::MemoryAllocator::MemFree(savedState);
         m_savedState = nullptr;
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);

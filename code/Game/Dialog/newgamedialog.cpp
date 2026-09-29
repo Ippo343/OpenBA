@@ -808,7 +808,7 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
                 nullptr, ibp, (int32_t)scenarioResIdx,
                 *reinterpret_cast<const System::String*>(nameStr),   // editName+0xC8
                 (int32_t)seed, (int32_t)terrainSize, /*p8=*/!disastersOff,
-                mapGen, terrainGen, climateGen);
+                static_cast<MapGenerator*>(mapGen), static_cast<TerrainGenerator*>(terrainGen), static_cast<ClimateGenerator*>(climateGen));
         }
 
         // Step 2: GameLoadDialogLoopT (0xB60 bytes) — retail inlines the subclass

@@ -2354,10 +2354,10 @@ GameUpdateLoop* GameUpdateLoop::_singleton = nullptr;
 // stamp (the compiler's), then every field below — the same stores the three
 // door-then-stamp construction sites outside this block write by hand
 // (newgamedialog.cpp, saveloaddialog.cpp, tutorial_next_scenario.cpp).
-GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
+GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
                                const System::String& saveName, int32_t seed,
-                               int32_t mapSize, bool disasters, void* mapConfig,
-                               void* terrainConfig, void* climateConfig)
+                               int32_t mapSize, bool disasters, MapGenerator* mapConfig,
+                               TerrainGenerator* terrainConfig, ClimateGenerator* climateConfig)
     : Engine::UpdateLoop(), m_saveName(saveName) {
     m_seed          = seed;
     m_mapSize       = mapSize;

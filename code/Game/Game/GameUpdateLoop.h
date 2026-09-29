@@ -61,15 +61,19 @@ class WorkScheduler;      // Game/WorkScheduler.h (B4 GAME-a)
 class EventLog;           // Game/EventLog.h (B4 GAME-a)
 class MusicPlayer;        // Game/MusicPlayer.h (B4 GAME-a)
 class Minimap;            // Game/Minimap.h (B4 GAME-a)
+class MapGenerator;       // Game/MapGenerator.h
+class TerrainGenerator;   // Game/TerrainGenerator.h
+class ClimateGenerator;   // Game/ClimateGenerator.h
+namespace Save        { class SavedState; }
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
     // 0x140098060. `scenarioIbp` is the InternalBasePtr's 8 bytes (retail copies
     // `*param_3`); `disasters` is retail's char p8: +0xD0 = p8 ? 0 : 0xF0.
-    GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
+    GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
                    const System::String& saveName, int32_t seed,
-                   int32_t mapSize, bool disasters, void* mapConfig,
-                   void* terrainConfig, void* climateConfig);
+                   int32_t mapSize, bool disasters, MapGenerator* mapConfig,
+                   TerrainGenerator* terrainConfig, ClimateGenerator* climateConfig);
 
     // [0] 0x140019dd0's body: g_pGameWorldSingleton = 0; then ~String(+0x28) and
     // ~UpdateLoop are the compiler's member/base chain, in retail's order.
@@ -108,10 +112,10 @@ public:
     int32_t  m_seed;                // +0x30  map seed (seeds the Random at +0xD8; newgamedialog writes it)
     int32_t  m_mapSize;             // +0x34  map size index (the terrain size-table row)
     int64_t  m_gameTime;            // +0x38  accumulated game time (Time)
-    void*    m_mapConfig;           // +0x40  ExternalPtr<MapGenerator> (ctor p9; serializer 0x140019ec0)
-    void*    m_terrainConfig;       // +0x48  ExternalPtr<TerrainGenerator> (ctor p10; serializer 0x14001a0c0)
-    void*    m_climateConfig;       // +0x50  ExternalPtr<ClimateGenerator> (ctor p11; serializer 0x1400194a0)
-    void*    m_savedState;          // +0x58  Save::SavedState*, non-null = loading from save (ctor p2)
+    MapGenerator*     m_mapConfig;     // +0x40  ExternalPtr<MapGenerator> (ctor p9; serializer 0x140019ec0)
+    TerrainGenerator* m_terrainConfig; // +0x48  ExternalPtr<TerrainGenerator> (ctor p10; serializer 0x14001a0c0)
+    ClimateGenerator* m_climateConfig; // +0x50  ExternalPtr<ClimateGenerator> (ctor p11; serializer 0x1400194a0)
+    Save::SavedState* m_savedState;    // +0x58  non-null = loading from save (ctor p2)
 
     // Rendering subsystems (created in Load, destroyed in Shutdown)
     // B.4 GAME-a (H4): typed. Load / Shutdown still build and destroy the
