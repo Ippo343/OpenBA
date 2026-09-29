@@ -1,22 +1,13 @@
 // code/Game/Action/action_child_ctors.cpp
-// Keystone B (Phase 2) — the 5 missing Action child-constructors that the Work
-// action-ctor cascade (work_base_actionctor.cpp) depends on. Faithful 1:1 ports of
-// the decompiled exe helpers, cross-checked against the disassembly. These are the
-// last unregistered leaves of the action child-ctor closure; the rest
-// (CompleteTask/MoveTo/PerformWork/SendComponentMessage/etc.) already live in
-// action_pf_ctors.cpp and are registered via reg_pf_ctors.cpp.
+// FUN_1400c29a0 (Entity_impl_29a0): the heading from an entity toward a world target,
+// used by the Work action-queue builders. No class yet (B.4 inventory A: unattributed).
 //
-//   0x140042890  ShowTool_Action_Ctor                 (trivial field-copy ctor)
-//   0x1400cadf0  RemoveNaturalResource_Action_CopyCtor (trivial field-copy ctor)
+// B.4 R0-EXE: the four Action ctors that lived here (ShowTool 0x140042890,
+// RemoveNaturalResource 0x1400cadf0, AnimateNaturalResource 0x1400c57d0,
+// CreateNaturalResource 0x1400c6a20) and their by-address doors moved, text unchanged,
+// to their classes' files (showtool.cpp, removenaturalresource.cpp,
+// animatenaturalresource.cpp, createnaturalresource.cpp).
 #include "Action/exe_bodies.h"
-//   0x1400c57d0  AnimateNaturalResource_Action_CopyCtor(trivial field-copy ctor)
-//   0x1400c6a20  CreateNaturalResource_Action_CopyCtor (trivial field-copy ctor)
-//   0x1400c29a0  Entity_impl_29a0  (heading-toward-path-target; returns float XMM0)
-//
-// ENDGAME B.3.8 ACT: the four ctors are the classes' REAL constructors now
-// (ShowTool, RemoveNaturalResource, AnimateNaturalResource,
-// CreateNaturalResource — defined below, next to their by-address doors); the
-// compiler stamps the vtables, so the ResolveAddr'd tables are gone.
 // Closure (bodies NOT duplicated; called by name, B3R):
 //   Entity_ClearPathQueue        0x140003f60 ActCNR_FindComponent_3f60 (action_base_cnr.cpp)
 //   FUN_140004680                0x140004680 FloorComponent_FindResData (floorcomponent.cpp)
@@ -26,10 +17,6 @@
 //
 // Registration: RegisterActionChildCtorsBatch() in standalone/reg_action_child_ctors.cpp.
 
-#include "Action/AnimateNaturalResource.h"
-#include "Action/CreateNaturalResource.h"
-#include "Action/RemoveNaturalResource.h"
-#include "Action/ShowTool.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
@@ -40,69 +27,6 @@
 
 // Math::Vector3::Normalize (slot 0x1401512c0) and Heading (slot 0x1401512d8) are direct
 // members of the real class (B.3.1).
-
-// ============================================================
-// FUN_140042890 — ShowTool_Action_Ctor
-//   RCX=self, RDX=param_2 ({inner ptr}), R8D=toolType (int @ +0x28).
-//   Base Internal ctor; Action vtable -> ShowTool vtable; +0x20 = *param_2; +0x28 = toolType.
-// ============================================================
-void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
-    // ENDGAME B.3.8 ACT: the real ctor (ShowTool.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) ShowTool(param_2, toolType));
-}
-
-// 0x140042890: Action() (Internal, +0x10/+0x18 = 0), then +0x20 = *param_2 (the
-// door's double store `+0x20 = 0; +0x20 = *param_2` keeps only the second), +0x28.
-ShowTool::ShowTool(void* entity, int toolId)
-    : _field20(*static_cast<void**>(entity)), _field28(toolId) {}
-
-// ============================================================
-// FUN_1400cadf0 — RemoveNaturalResource_Action_CopyCtor
-//   RCX=self, RDX=param_2, R8=param_3, R9B=param_4 (byte @ +0x30).
-//   +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
-// ============================================================
-void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* param_3, uint8_t param_4) {
-    // ENDGAME B.3.8 ACT: the real ctor (RemoveNaturalResource.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) RemoveNaturalResource(param_2, param_3, param_4));
-}
-
-// 0x1400cadf0: +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
-RemoveNaturalResource::RemoveNaturalResource(uint64_t* p2, uint64_t* p3, uint8_t flag)
-    : _field20(reinterpret_cast<void*>(*p3)),
-      _field28(reinterpret_cast<void*>(*p2)),
-      _field30(flag) {}
-
-// ============================================================
-// FUN_1400c57d0 — AnimateNaturalResource_Action_CopyCtor
-//   RCX=self, RDX=param_2, R8D=param_3 (int @ +0x28), R9B=param_4 (byte @ +0x2c).
-//   +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
-// ============================================================
-void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t param_3, uint8_t param_4) {
-    // ENDGAME B.3.8 ACT: the real ctor (AnimateNaturalResource.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) AnimateNaturalResource(param_2, param_3, param_4));
-}
-
-// 0x1400c57d0: +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
-AnimateNaturalResource::AnimateNaturalResource(uint64_t* entity, uint32_t animIndexArg, uint8_t wait)
-    : _field20(reinterpret_cast<void*>(*entity)),
-      animIndex(static_cast<int32_t>(animIndexArg)),
-      waitForAnim(wait) {}
-
-// ============================================================
-// FUN_1400c6a20 — CreateNaturalResource_Action_CopyCtor
-//   RCX=self, RDX=param_2 (raw u64 @ +0x20), R8=param_3, R9D=param_4 (int @ +0x30).
-//   +0x20 = param_2 ; +0x28 = *param_3 ; +0x30 = param_4.
-// ============================================================
-void* ActChild_CreateNRCopyCtor_c6a20(void* self, uint64_t param_2, uint64_t* param_3, uint32_t param_4) {
-    // ENDGAME B.3.8 ACT: the real ctor (CreateNaturalResource.h). A by-address door.
-    return static_cast<Object::Base*>(new (self) CreateNaturalResource(param_2, param_3, param_4));
-}
-
-// 0x1400c6a20: +0x20 = param_2 (raw) ; +0x28 = *param_3 ; +0x30 = param_4.
-CreateNaturalResource::CreateNaturalResource(uint64_t desc, uint64_t* parent, uint32_t cell)
-    : descEntity(reinterpret_cast<void*>(desc)),
-      parentEntity(reinterpret_cast<void*>(*parent)),
-      cellIndex(static_cast<int32_t>(cell)) {}
 
 // ============================================================
 // FUN_1400c29a0 — Entity_impl_29a0
