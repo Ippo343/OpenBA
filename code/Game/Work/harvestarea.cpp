@@ -44,16 +44,28 @@
 #include <cstdlib>
 #include <new>
 #include "Component/CropFieldDescription.h"   // ENDGAME B.3.9 D5: CropFieldDescription::TypeId()
+#include "Component/CropFieldComponent.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/StatusIconComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/Description.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
+#include "Game/Map.h"
 
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component/Tutorial/Game headers)
 // ============================================================
 //   AutoPickupWork::CheckAssignments (0x1400e3db0)  WorkGrid_AutoPickup_e3db0
-//   0x140003050 FindComponent MaterialDesc          WorkBase_FindComponent_3050
-//   0x140002f90 FindComponent MeshInstance          WorkBase_FindComponent_2f90
-//   0x140005380 FindComponent CropFieldDescription  WorkAcc_FindComponent_5380
-//   0x1400052c0 FindComponent NaturalResource       WorkBase_FindComponent_52c0
-//   0x14012c3f0 MeshInstance set visible            CitizenComp_FUN_14012c3f0
+//   0x140003050 FindComponent WorkComponent         ComponentEntity::FindComponent<WorkComponent>
+//   0x140002f90 FindComponent StatusIconComponent   ComponentEntity::FindComponent<StatusIconComponent>
+//   0x140005380 FindComponent CropFieldComponent    ComponentEntity::FindComponent<CropFieldComponent>
+//   0x1400052c0 FindComponent NaturalResource       ComponentEntity::FindComponent<NaturalResourceComponent>
+//   0x14012c3f0 status icon flag                    StatusIconComponent::SetFlag
 //   0x14012e5c0 CalcMaxWorkers                      WorkComponent_CalcMaxWorkers
 //   0x14009ccf0 Map_FindNearestPassable             WorkGrid_FindCell_9ccf0
 //   0x1400a00f0 Map_CanPathTo                       WorkBase_ValidateCell_a00f0
@@ -64,7 +76,7 @@
 //                                                   WorkCellBST_Insert_9a40 / _Remove_ca60 / _Serialize_9de0
 //   0x1400f7100 ValidateTask                        WorkBase_ValidateTask_f7100
 //   0x1400c5400 cancel work                         WorkBase_TaskListCleanup_c5400
-//   0x140002e10 FindPositionComponent               AttendanceComponent_GetJobHostComponent
+//   0x140002e10 FindComponent WorkPlaceComponent    ComponentEntity::FindComponent<WorkPlaceComponent>
 //   0x14000e320 BST recursive free                  WorkBase_TreeNodeFree_e320
 //   MemAlloc                                        System::MemoryAllocator::MemAlloc
 //   DAT_140172114 = 0.5f                            kRdata_140172114
@@ -72,17 +84,15 @@
 
 
 // ============================================================
-// Helper: BST search for int key
-// Returns node pointer if found, nullptr otherwise.
-// BST node layout: [0]=int key, [+8]=IBP data, [+0x10]=parent, [+0x18]=left, [+0x20]=right
+// Helper: the claim tree searched by the int slot key
 // ============================================================
-static void* BST_Find(void* root, int key) {
-    int* node = (int*)root;
+static HarvestArea::ClaimNode* BST_Find(HarvestArea::ClaimNode* root, int key) {
+    HarvestArea::ClaimNode* node = root;
     while (node != nullptr) {
-        if (key < *node) {
-            node = *(int**)(node + 6);  // left child at +0x18
-        } else if (key > *node) {
-            node = *(int**)(node + 8);  // right child at +0x20
+        if (key < node->element.slot) {
+            node = node->left;
+        } else if (key > node->element.slot) {
+            node = node->right;
         } else {
             return node;  // found
         }
@@ -97,7 +107,7 @@ static void* BST_Find(void* root, int key) {
 //
 // Algorithm:
 // 1. Check auto-pickup assignments
-// 2. Find MaterialDescription, CropDescription on workplace entity
+// 2. Find the WorkComponent and the CropFieldComponent on the workplace entity
 // 3. Check capacity
 // 4. Iterate field cells (0..cellCount), find unharvested crops
 // 5. For each valid cell: check pathing, check NaturalResource status
@@ -120,103 +130,89 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
     {
         ++g_ha_calls;
     }
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
+    // The citizen slot (InternalPtr<CitizenComponent>*; Work.h keeps the slot's
+    // parameter as void*: LEFT for Work.h's owner).
+    CitizenComponent** citizenIBP = (CitizenComponent**)entityIBP;
 
-    uintptr_t citizenRef = *(uintptr_t*)entityIBP;
-    void* citizenIBP = entityIBP;
+    CitizenComponent* citizenRef = *citizenIBP;
 
-    // Step 1: Check auto-pickup
-    int checkResult = WorkGrid_AutoPickup_e3db0(selfAddr, &citizenRef);
+    // Step 1: Check auto-pickup (0x1400e3db0 takes the work as an integer: LEFT)
+    int checkResult = WorkGrid_AutoPickup_e3db0(reinterpret_cast<uintptr_t>(this), &citizenRef);
     if (checkResult == 2) {
         ++g_ha_auto;
         return 2;
     }
 
-    // Step 2: Find components
-    uintptr_t* workEntityPtr = (uintptr_t*)(selfAddr + 0x10);
-    uintptr_t matDescIBP = 0;
-    WorkBase_FindComponent_3050(*workEntityPtr, &matDescIBP);
+    // Step 2: Find components (0x140003050 WorkComponent, 0x140005380 CropFieldComponent)
+    WorkComponent* matDesc = field_10->FindComponent<WorkComponent>();
 
-    uintptr_t cropDescIBP = 0;
-    WorkAcc_FindComponent_5380(*workEntityPtr, &cropDescIBP);
+    CropFieldComponent* cropField = field_10->FindComponent<CropFieldComponent>();
 
-    // Check CropDescription -> get description object
-    void* descObj = *(void**)(cropDescIBP + 0x18);
+    // The crop field's description
+    Description* descObj = cropField->_description;
     bool isDerived = Object::IsDerivedFromNullSafe(descObj, CropFieldDescription::TypeId());
-    void* cropDesc = isDerived ? descObj : nullptr;
+    CropFieldDescription* cropDesc = isDerived ? static_cast<CropFieldDescription*>(descObj) : nullptr;
 
-    // Material index for resource tracking
-    int materialIdx = *(int*)((uintptr_t)cropDesc + 0x20);
-    uintptr_t gameWorld = (uintptr_t)GameUpdateLoop::_singleton;
-    uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
-    uintptr_t resourceTable = *(uintptr_t*)(resourceTracker + 0x170);
-    uintptr_t resEntry = resourceTable + (uintptr_t)materialIdx * 0x20;
-    bool atCapacity = *(int*)(resEntry + 8) <= *(int*)(resEntry);
+    // Capacity: the town's per-resource counts (CitizenBehavior +0x170) for the crop's
+    // material
+    int materialIdx = (int)cropDesc->_type;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
+    const ProfessionResourceEntry& resEntry = gameWorld->m_citizenList->professionResources[materialIdx];
+    bool atCapacity = resEntry.maxCount <= resEntry.currentCount;
 
-    // THE DEPOSIT METER. resEntry+0 is the town's current stock of this crop's material
-    // and resEntry+8 its limit (that is exactly what the atCapacity test above compares).
-    // Harvest is confirmed running -- 61 crops through the harvestFlag=1 arm -- so the
-    // only question left is whether the raw material reaches STORAGE. Printing the stock
-    // here answers it directly instead of by inference: a rising number IS the deposit.
-    {
-        [[maybe_unused]] const int cur = *(int*)(resEntry);
-    }
-
-    // Set mesh visibility (group 2) based on capacity
-    uintptr_t meshIBP[2] = {0};
-    WorkBase_FindComponent_2f90(*workEntityPtr, meshIBP);
-    CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>((void*)(*(uintptr_t*)meshIBP)), 2, atCapacity ? 1 : 0);
+    // The status icon's flag 2 from the capacity (0x140002f90, 0x14012c3f0)
+    StatusIconComponent* statusIcon = field_10->FindComponent<StatusIconComponent>();
+    statusIcon->SetFlag(2, atCapacity ? 1 : 0);
 
     if (atCapacity) {
         ++g_ha_cap;
         return 1;
     }
 
-    // Check tree count vs max workers
-    int treeCount = (int)selfQ[10]; // _field50
-    if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(matDescIBP);
-        *(int*)(matDescIBP + 0x30) = maxWorkers;
+    // Check tree count vs max workers (the tree's port of 0x14012e5c0 called here takes
+    // the component as an integer: LEFT)
+    int treeCount = _field50;
+    if (matDesc->workState == 0) {
+        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));
+        matDesc->workState = maxWorkers;
     }
-    if (treeCount > *(int*)(matDescIBP + 0x30)) {
+    if (treeCount > matDesc->workState) {
         ++g_ha_wcap;
         return 1;
     }
 
     // Step 3: Setup iteration
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
+    Map* map = gameWorld->m_game;
+    // The map helpers (0x14009ccf0, 0x1400a00f0) take the map as int*: LEFT.
+    int* mapGrid = reinterpret_cast<int*>(map);
 
     // Get citizen position
-    uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
-    uintptr_t aiComp = *(uintptr_t*)(citizenEntity + 0x278);
-    uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
+    const Math::Vector3& citizenPos = (*citizenIBP)->character->modelComponent->transform.translation;
 
-    int mapSz = *mapGrid;
-    int citizenCellX = (int)(*(float*)(posComp + 0x158) + (float)(mapSz >> 1));
-    int citizenCellY = (int)(*(float*)(posComp + 0x15c) + (float)(mapSz >> 1));
+    int mapSz = map->size;
+    int citizenCellX = (int)(citizenPos.x + (float)(mapSz >> 1));
+    int citizenCellY = (int)(citizenPos.y + (float)(mapSz >> 1));
     if (citizenCellX < 0) citizenCellX = 0;
     if (citizenCellX >= mapSz) citizenCellX = mapSz - 1;
     if (citizenCellY < 0) citizenCellY = 0;
     if (citizenCellY >= mapSz) citizenCellY = mapSz - 1;
     uint32_t citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
-    int fieldCellCount = (int)selfQ[0xc]; // self->_field60 as int
+    int fieldCellCount = _field60;
 
     if (fieldCellCount > 0) {
         int cellIdx2 = 1; // paired cell index starts at 1
         for (int i = 0; i < fieldCellCount; i++) {
             // Check if this cell's validity flag is set
-            char* validityArray = (char*)selfQ[0xb]; // self->_field58
+            bool* validityArray = _field58;
             if (validityArray[i] == 0) {
                 ++g_ha_nomark;
                 goto next_cell;
             }
 
-            // Check if cell index is already in the BST (already assigned)
+            // Check if cell index is already in the claim tree (already assigned)
             {
-                int* bstRoot = (int*)selfQ[9]; // self->_field48
-                void* found = BST_Find(bstRoot, i);
+                ClaimNode* found = BST_Find(_field48, i);
                 if (found != nullptr) {
                     ++g_ha_inbst;
                     goto next_cell;
@@ -227,72 +223,65 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
             {
                 bool pairedAvailable = false;
                 if (cellIdx2 < fieldCellCount && validityArray[cellIdx2] != 0) {
-                    int* bstRoot = (int*)selfQ[9];
-                    void* found2 = BST_Find(bstRoot, cellIdx2);
+                    ClaimNode* found2 = BST_Find(_field48, cellIdx2);
                     if (found2 == nullptr) {
                         pairedAvailable = true;
                     }
                 }
 
-                // Look up entity at this cell in the map grid
-                uintptr_t entityAtCell1 = 0;
-                uintptr_t entityAtCell2 = 0;
+                // Look up the occupant of this slot's cell
+                ComponentEntity* entityAtCell1 = nullptr;
+                ComponentEntity* entityAtCell2 = nullptr;
 
-                uintptr_t cropDescVal = cropDescIBP;
-                uintptr_t gridData = *(uintptr_t*)(mapGrid + 0x20); // +0x80 byte offset
-                int cellGridIdx = *(int*)((uintptr_t)i * 0x20 + *(uintptr_t*)(cropDescVal + 0x58));
-                entityAtCell1 = *(uintptr_t*)(gridData + (uintptr_t)cellGridIdx * 0x30 + 8);
+                MapCell* gridData = map->cells;
+                int cellGridIdx = cropField->slots.data[i].cell;
+                entityAtCell1 = gridData[cellGridIdx].occupant;
 
-                if (entityAtCell1 == 0) {
+                if (entityAtCell1 == nullptr) {
                     // No entity at cell -- mark as unavailable
                     ++g_ha_noent;
                     validityArray[i] = 0;
                 } else {
                     if (pairedAvailable) {
-                        uintptr_t cropDescVal2 = cropDescIBP;
-                        int cellGridIdx2 = *(int*)((uintptr_t)cellIdx2 * 0x20 + *(uintptr_t*)(cropDescVal2 + 0x58));
-                        entityAtCell2 = *(uintptr_t*)(gridData + (uintptr_t)cellGridIdx2 * 0x30 + 8);
-                        if (entityAtCell2 == 0) {
+                        int cellGridIdx2 = cropField->slots.data[cellIdx2].cell;
+                        entityAtCell2 = gridData[cellGridIdx2].occupant;
+                        if (entityAtCell2 == nullptr) {
                             pairedAvailable = false;
                         }
                     }
 
                     // Check pathfinding from cell to citizen
-                    int srcCellIdx = *(int*)(*(uintptr_t*)(cropDescIBP + 0x58) + (uintptr_t)i * 0x20);
+                    int srcCellIdx = cropField->slots.data[i].cell;
                     int nearestCell = WorkGrid_FindCell_9ccf0(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {
                         uint64_t canPath = (uint64_t)static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
                         if ((char)canPath != 0) {
                             // Check NaturalResourceComponent on entity
-                            // natResIBPArray must be contiguous: ShowTool_Action_Ctor4
+                            // natRes must be contiguous: the action ctor 0x1400c1530
                             // iterates param_4 as an array of harvestMode entries
-                            uintptr_t natResIBPArray[2] = {0, 0};
-                            uintptr_t& natResIBP1 = natResIBPArray[0];
-                            uintptr_t& natResIBP2 = natResIBPArray[1];
+                            NaturalResourceComponent* natRes[2] = {nullptr, nullptr};
+                            NaturalResourceComponent*& natRes1 = natRes[0];
+                            NaturalResourceComponent*& natRes2 = natRes[1];
 
-                            uintptr_t natResCompIBP[2] = {0};
-                            WorkBase_FindComponent_52c0(entityAtCell1, natResCompIBP);
-                            natResIBP1 = *(uintptr_t*)natResCompIBP;
+                            natRes1 = entityAtCell1->FindComponent<NaturalResourceComponent>();
 
                             if (pairedAvailable) {
-                                uintptr_t natResCompIBP2[2] = {0};
-                                WorkBase_FindComponent_52c0(entityAtCell2, natResCompIBP2);
-                                natResIBP2 = *(uintptr_t*)natResCompIBP2;
+                                natRes2 = entityAtCell2->FindComponent<NaturalResourceComponent>();
                             }
 
                             // Check flag bit 20 on NatRes (flagged for removal)
-                            if (natResIBP1 == 0) {
+                            if (natRes1 == nullptr) {
                                 // NatRes component gone — skip this cell
                                 validityArray[i] = 0;
                                 goto next_cell;
                             }
-                            if ((*(uint32_t*)(natResIBP1 + 0x20) >> 20) & 1) {
+                            if ((natRes1->_flags >> 20) & 1) {
                                 goto handle_removal;
                             }
 
-                            if (natResIBP2 != 0) {
-                                if (natResIBP2 != 0 && (*(uint32_t*)(natResIBP2 + 0x20) >> 20) & 1) {
+                            if (natRes2 != nullptr) {
+                                if (natRes2 != nullptr && (natRes2->_flags >> 20) & 1) {
                                     pairedAvailable = false;
                                 }
                             }
@@ -303,70 +292,68 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
                             }
 
                         handle_removal:
-                            if (!((*(uint32_t*)(natResIBP1 + 0x20) >> 20) & 1)) {
+                            if (!((natRes1->_flags >> 20) & 1)) {
                                 // Valid cell -- create harvest action
-                                float halfOffset = (float)(*mapGrid >> 1) - kRdata_140172114;
+                                float halfOffset = (float)(map->size >> 1) - kRdata_140172114;
                                 Math::Vector3 targetPos(
-                                    (float)(nearestCell % *mapGrid) - halfOffset,
-                                    (float)(nearestCell / *mapGrid) - halfOffset,
+                                    (float)(nearestCell % map->size) - halfOffset,
+                                    (float)(nearestCell / map->size) - halfOffset,
                                     0.0f);
 
                                 float pathPos[4]; // extra padding for GetTerrainPos
-                                Reimpl_MapGetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
+                                Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
 
                                 // Create the harvest action
-                                void* pCitizenIBP = citizenIBP;
-                                uintptr_t citizenVal = *(uintptr_t*)pCitizenIBP;
-                                uintptr_t actionBuf[2] = { citizenVal, 0 };
+                                CitizenComponent* actionBuf[2] = { *citizenIBP, nullptr };
 
                                 int harvestMode = pairedAvailable ? 2 : 1;
                                 uint32_t packedCellInfo = ((uint32_t)cellIdx2 << 16) | (uint32_t)i;
 
-
+                                // (0x1400c1530 takes the NaturalResource array as void**: LEFT)
                                 WorkAct_HarvestAreaCtor_c1530(
                                     actionBuf,                    // citizenIBP
-                                    (int)selfQ[4],                // priority
+                                    field_20,                     // priority
                                     harvestMode,                  // 1=single, 2=paired
-                                    reinterpret_cast<void**>(natResIBPArray),               // target NatRes IBP array (harvestMode entries)
+                                    reinterpret_cast<void**>(natRes),   // target NatRes array (harvestMode entries)
                                     pathPos,                      // position
                                     packedCellInfo,               // packed cell indices
                                     0);                           // param7
 
                                 // Assign work and register with AI
-                                int priority = (int)selfQ[4];
-                                uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
+                                int priority = field_20;
+                                CitizenComponent* citizenEnt = *citizenIBP;
 
-                                uintptr_t workEntIBP[2] = {0};
-                                uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
-                                uintptr_t workEnt = *wResult;
+                                Profession* workEnt = nullptr;
+                                GetTarget(&workEnt);
 
-                                *(uint32_t*)(citizenEnt + 0x54) |= 4;
-                                *(int32_t*)(citizenEnt + 0x30) = priority;
-                                *(uint32_t*)(citizenEnt + 0xb0) = 0;
+                                citizenEnt->statusFlags |= 4;
+                                citizenEnt->field_0x30 = priority;
+                                citizenEnt->field_0xB0 = 0;
 
-                                if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && priority >= 0) {
-                                    *(uint32_t*)(citizenEnt + 0x88) |= 0x20000;
+                                if (workEnt == citizenEnt->profession && priority >= 0) {
+                                    citizenEnt->happinessFlags |= 0x20000;
                                 }
 
-                                // Insert cell index into BST
-                                uintptr_t insertResult[2] = {0};
-                                uint32_t keyBuf[4] = { (uint32_t)i, 0, 0, 0 };
-                                uintptr_t citizenIBPBuf = *(uintptr_t*)citizenIBP;
-                                keyBuf[2] = (uint32_t)citizenIBPBuf;
-                                keyBuf[3] = (uint32_t)(citizenIBPBuf >> 32);
-                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult, keyBuf);
+                                // Insert {cell, citizen} into the claim tree (the helper
+                                // takes the container as uintptr_t*: LEFT)
+                                ClaimNode* insertResult[2] = {nullptr, nullptr};
+                                Claim keyBuf;
+                                keyBuf.slot = i;
+                                keyBuf._pad04 = 0;
+                                keyBuf.citizen = *citizenIBP;
+                                WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult, &keyBuf);
 
                                 // Mark cell as used
                                 validityArray[i] = 0;
 
                                 // If paired, also insert and mark
                                 if (pairedAvailable) {
-                                    uintptr_t insertResult2[2] = {0};
-                                    uint32_t keyBuf2[4] = { (uint32_t)cellIdx2, 0, 0, 0 };
-                                    uintptr_t citizenIBPBuf2 = *(uintptr_t*)citizenIBP;
-                                    keyBuf2[2] = (uint32_t)citizenIBPBuf2;
-                                    keyBuf2[3] = (uint32_t)(citizenIBPBuf2 >> 32);
-                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), insertResult2, keyBuf2);
+                                    ClaimNode* insertResult2[2] = {nullptr, nullptr};
+                                    Claim keyBuf2;
+                                    keyBuf2.slot = cellIdx2;
+                                    keyBuf2._pad04 = 0;
+                                    keyBuf2.citizen = *citizenIBP;
+                                    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&_field48), insertResult2, &keyBuf2);
                                     validityArray[cellIdx2] = 0;
                                 }
 
@@ -390,16 +377,17 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
 }
 
 
-// Shared by slots 6 and 7: find `key` in the cell BST at +0x48 and remove it if present.
-static void HarvestArea_RemoveCellNode(uintptr_t selfAddr, int key) {
-    int* node = *(int**)(selfAddr + 0x48);
+// Shared by slots 6 and 7: find `key` in the claim tree at +0x48 and remove it if
+// present (the helper takes the container as uintptr_t*: LEFT).
+static void HarvestArea_RemoveCellNode(HarvestArea* self, int key) {
+    HarvestArea::ClaimNode* node = self->_field48;
     while (node != nullptr) {
-        if (key < *node) {
-            node = *(int**)(node + 6);          // left  +0x18
-        } else if (key > *node) {
-            node = *(int**)(node + 8);          // right +0x20
+        if (key < node->element.slot) {
+            node = node->left;
+        } else if (key > node->element.slot) {
+            node = node->right;
         } else {
-            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), node);
+            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&self->_field48), node);
             return;
         }
     }
@@ -420,13 +408,12 @@ static void HarvestArea_RemoveCellNode(uintptr_t selfAddr, int key) {
 // Same Slot6/Slot7 mix-up HarvestOrchard and PlantArea each paid for once already.
 int HarvestArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
-    uintptr_t selfAddr = (uintptr_t)this;
     int primaryIdx = (int)(param4 & 0xFFFF);
     int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
 
-    HarvestArea_RemoveCellNode(selfAddr, primaryIdx);
-    if (pairedIdx < *(int*)(selfAddr + 0x60)) {
-        HarvestArea_RemoveCellNode(selfAddr, pairedIdx);
+    HarvestArea_RemoveCellNode(this, primaryIdx);
+    if (pairedIdx < _field60) {
+        HarvestArea_RemoveCellNode(this, pairedIdx);
     }
     return 0;
 }
@@ -455,20 +442,18 @@ int HarvestArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
 // Both symptoms are this one missing removal (2026-09-05).
 int HarvestArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
     int primaryIdx = (int)(param4 & 0xFFFF);
     int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
 
-    HarvestArea_RemoveCellNode(selfAddr, primaryIdx);
+    HarvestArea_RemoveCellNode(this, primaryIdx);
 
     // Cancelled: the cell goes back in the pool.
-    char* validityArray = (char*)selfQ[0xb];
+    bool* validityArray = _field58;
     validityArray[primaryIdx] = 1;
 
-    if (pairedIdx < *(int*)(selfAddr + 0x60)) {
+    if (pairedIdx < _field60) {
         validityArray[pairedIdx] = 1;
-        HarvestArea_RemoveCellNode(selfAddr, pairedIdx);
+        HarvestArea_RemoveCellNode(this, pairedIdx);
     }
     return 0;
 }
@@ -477,27 +462,26 @@ int HarvestArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
 // ============================================================
 // HarvestArea::Slot8 -- CancelAll
 // ============================================================
-// Loops through BST (rightmost traversal), cancels each work item
-// via citizen AI task cleanup.
+// Loops through the claim tree, cancels each work item via citizen AI task cleanup.
+// The walk follows the LEFT child (+0x18 in the 0x30 node); the tree called the node
+// "rightmost".
 int HarvestArea::Cleanup() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    int count = *(int*)(selfAddr + 0x50);
+    int count = _field50;
 
     while (count > 0) {
-        // Find rightmost node in BST
-        uintptr_t node = *(uintptr_t*)(selfAddr + 0x48);
-        uintptr_t rightmost = node;
-        while (node != 0) {
-            rightmost = node;
-            node = *(uintptr_t*)(node + 0x18); // left child (finds leftmost actually)
+        ClaimNode* node = _field48;
+        ClaimNode* leftmost = node;
+        while (node != nullptr) {
+            leftmost = node;
+            node = node->left;
         }
 
         // Cancel work via citizen AI
-        uintptr_t citizenEntity = *(uintptr_t*)(rightmost + 8);
-        WorkBase_TaskListCleanup_c5400((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+        CitizenComponent* citizenEntity = leftmost->element.citizen;
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
 
         const int before = count;
-        count = *(int*)(selfAddr + 0x50);
+        count = _field50;
 
         // Cancelling made no progress: retail would spin here forever. The guard is a
         // deliberate deviation (it can only fire in a state that would otherwise hang).
@@ -515,20 +499,17 @@ int HarvestArea::Cleanup() {
 // Hook DISABLED (bug class 2: MOV RAX,RSP in prologue).
 // Implemented for standalone exe.
 //
-// Iterates BST in-order, validates each entry via FUN_1400f7100,
-// collects invalid ones, then removes them from BST.
+// Iterates the claim tree in-order, validates each entry via FUN_1400f7100,
+// collects invalid ones, then removes them from the tree.
 int HarvestArea::Validate() {
-    uintptr_t selfAddr = (uintptr_t)this;
-    uintptr_t* selfQ = (uintptr_t*)this;
-
     int* collectArray = nullptr;
     int* currentArray = nullptr;
     uint32_t collectCount = 0;
     uint32_t collectCapacity = 0;
 
-    // In-order traversal of BST
-    int* root = (int*)(selfAddr + 0x48);
-    int* node = *(int**)root;
+    // In-order traversal of the claim tree
+    ClaimNode** root = &_field48;
+    ClaimNode* node = *root;
 
     if (node == nullptr) {
         goto cleanup;
@@ -536,18 +517,18 @@ int HarvestArea::Validate() {
 
     // Find leftmost node
     {
-        int* cur = node;
+        ClaimNode* cur = node;
         while (cur != nullptr) {
             node = cur;
-            cur = *(int**)(cur + 6); // left child
+            cur = cur->left;
         }
     }
 
     // Traverse in-order
     while (node != nullptr) {
-        uintptr_t ibpData = *(uintptr_t*)(node + 2); // IBP at +0x8
+        CitizenComponent* ibpData = node->element.citizen;
 
-        uint8_t valid = WorkBase_ValidateTask_f7100(reinterpret_cast<void*>(selfAddr), uintptr_t{0}, (void*)&ibpData, nullptr);
+        uint8_t valid = WorkBase_ValidateTask_f7100(this, nullptr, &ibpData, nullptr);
 
         if (valid == 0) {
             // Invalid -- add to collect list
@@ -559,7 +540,7 @@ int HarvestArea::Validate() {
                         newCap = newCount * 3;
                     }
                     collectCapacity = newCap;
-                    int* newArray = (int*)System::MemoryAllocator::MemAlloc((int64_t)newCap << 2, 4);
+                    int* newArray = static_cast<int*>(System::MemoryAllocator::MemAlloc((int64_t)newCap << 2, 4));
                     currentArray = newArray;
 
                     uint32_t copyStart = 0;
@@ -570,7 +551,7 @@ int HarvestArea::Validate() {
                         if (j < collectCount) {
                             newArray[j] = collectArray[j];
                         } else {
-                            newArray[j] = *node;
+                            newArray[j] = node->element.slot;
                         }
                     }
                     if (collectArray != newArray) {
@@ -579,34 +560,34 @@ int HarvestArea::Validate() {
                     collectArray = newArray;
                 } else {
                     currentArray = collectArray;
-                    collectArray[collectCount] = *node;
+                    collectArray[collectCount] = node->element.slot;
                 }
                 collectCount = newCount;
             }
 
             // Mark validity flag
-            char* validityArray = (char*)selfQ[0xb];
-            validityArray[*node] = 1;
+            bool* validityArray = _field58;
+            validityArray[node->element.slot] = 1;
         }
 
         // Move to next in-order node
-        int* right = *(int**)(node + 8); // right child
+        ClaimNode* right = node->right;
         if (right != nullptr) {
             // Go to leftmost of right subtree
-            int* cur = right;
+            ClaimNode* cur = right;
             while (cur != nullptr) {
                 node = cur;
-                cur = *(int**)(cur + 6);
+                cur = cur->left;
             }
         } else {
             // Go up until we find a node we're the left child of
-            int* parent = *(int**)(node + 4); // parent
+            ClaimNode* parent = node->parent;
             if (parent != nullptr) {
-                if (*(int**)(parent + 6) != node) {
+                if (parent->left != node) {
                     // Not left child -- go up
-                    while (parent != nullptr && *(int**)(parent + 8) == node) {
+                    while (parent != nullptr && parent->right == node) {
                         node = parent;
-                        parent = *(int**)(parent + 4);
+                        parent = parent->parent;
                     }
                 }
                 node = parent;
@@ -617,15 +598,16 @@ int HarvestArea::Validate() {
     }
 
 cleanup:
-    // Remove collected invalid nodes from BST
+    // Remove collected invalid nodes from the tree (the helper takes the container as
+    // uintptr_t*: LEFT)
     if ((int)collectCount > 0) {
         for (uint32_t k = 0; k < collectCount; k++) {
-            int* bstNode = *(int**)root;
+            ClaimNode* bstNode = *root;
             while (bstNode != nullptr) {
-                if (collectArray[k] < *bstNode) {
-                    bstNode = *(int**)(bstNode + 6);
-                } else if (collectArray[k] > *bstNode) {
-                    bstNode = *(int**)(bstNode + 8);
+                if (collectArray[k] < bstNode->element.slot) {
+                    bstNode = bstNode->left;
+                } else if (collectArray[k] > bstNode->element.slot) {
+                    bstNode = bstNode->right;
                 } else {
                     WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(root), bstNode);
                     break;
@@ -640,23 +622,12 @@ cleanup:
 
 
 // ============================================================
-// HarvestArea::Slot10 -- GetWorkEntity
+// HarvestArea::Slot10 -- GetWorkEntity: the entity's WorkPlaceComponent (0x140002e10),
+// its profession (+0x48) into the return slot (void* in Work.h's slot: LEFT).
 // ============================================================
-// Returns entity pointer from workplace entity ref.
-// Uses hidden return ptr ABI (RCX=self, RDX=outPtr).
 void* HarvestArea::GetTarget(void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
-    // CheckPtr on self->_field10 (work entity IBP)
-    uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
-
-    // Find position component on entity
-    uintptr_t posCompIBP[2] = {0};
-    AttendanceComponent_GetJobHostComponent(reinterpret_cast<void*>(entity), posCompIBP);
-
-    // CheckPtr and read +0x48 (workplace sub-entity)
-    *(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)posCompIBP + 0x48);
-
+    WorkPlaceComponent* workPlace = field_10->FindComponent<WorkPlaceComponent>();
+    *(Profession**)outPtr = workPlace->profession;
     return outPtr;
 }
 
@@ -666,34 +637,30 @@ void* HarvestArea::GetTarget(void* outPtr) {
 // ============================================================
 // Work::Serialize + version block + BST serialize + array + int
 void HarvestArea::Persist(void* stream) {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
     Work::Persist(stream);
 
-    // Create Serializer with version=0
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // Version block with no extra data (Persist's stream is void* in Work.h: LEFT)
+    {
+        IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);
+    }
 
-    // Immediately destroy (version block with no extra data)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    // Serializer (version=0) for our data
+    IO::Serializer serializer2(*reinterpret_cast<IO::Stream*>(stream), 0);
 
-    // Create new Serializer (version=0) for our data
-    alignas(8) uint8_t serializerBuf2[16];
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize BST at +0x48
-    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>((void*)(selfAddr + 0x48)), serializerBuf2);
+    // Serialize the claim tree at +0x48 (the helper takes the container as uintptr_t*:
+    // LEFT)
+    WorkCellBST_Serialize_9de0(reinterpret_cast<uintptr_t*>(&_field48), &serializer2);
 
     // Serialize field cell count at +0x60
-    int cellCount = *(int*)(selfAddr + 0x60);
+    int cellCount = _field60;
     int cellCountBuf[2] = { cellCount, 0 };
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(*reinterpret_cast<int*>(cellCountBuf), nullptr);   // B.3.4 bridge
+    serializer2.Serialize(cellCountBuf[0], nullptr);
 
     // If reading (serializer mode == 0), resize validity array.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
+    if (static_cast<int>(serializer2.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        GameColl::AsArray<GameColl::U8>(&_field58).SetSize(cellCountBuf[0]);
     }
 
     // Serialize validity array through the BOOL-ARRAY door.
@@ -712,33 +679,28 @@ void HarvestArea::Persist(void* stream) {
     // B.3.4a closing sweep) pointed at — that is the THREE-parameter
     // `Serialize(int&)` scalar door, so the old call put the COUNT in the register
     // the scalar body dereferences as `int*`.
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(
-        cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
+    serializer2.Serialize(cellCountBuf[0], _field58, nullptr);   // slot 0x140151458 = bool-array door
 }
 
 
 // The HarvestArea / AutoPickupWork / Work stamps and the `~Internal` call are the
 // compiler's chain.
 HarvestArea::~HarvestArea() {
-    uintptr_t selfAddr = (uintptr_t)this;
-
     // Free validity array at +0x58
-    System::MemoryAllocator::MemFree(*(void**)(selfAddr + 0x58));
-    *(uintptr_t*)(selfAddr + 0x58) = 0;
-    *(uintptr_t*)(selfAddr + 0x60) = 0;
+    System::MemoryAllocator::MemFree(_field58);
+    _field58 = nullptr;
+    _field60 = 0;   // with +0x64: one qword store in retail
+    _field64 = 0;
 
-    // Free BST at +0x48
-    void* bstRoot = *(void**)(selfAddr + 0x48);
+    // Free the claim tree at +0x48
+    ClaimNode* bstRoot = _field48;
     if (bstRoot != nullptr) {
-        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
-        WorkBase_TreeNodeFree_e320((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x20));
+        WorkBase_TreeNodeFree_e320(&_field48, bstRoot->left);
+        WorkBase_TreeNodeFree_e320(&_field48, bstRoot->right);
         System::MemoryAllocator::MemFree(bstRoot);
     }
-    *(uintptr_t*)(selfAddr + 0x48) = 0;
-    *(uint32_t*)(selfAddr + 0x50) = 0;
+    _field48 = nullptr;
+    _field50 = 0;
 }
 
 
@@ -746,12 +708,13 @@ HarvestArea::~HarvestArea() {
 // [11] 0x140029860 (shared by 13 tables): `+0x50 > 0` — "is anyone assigned". The
 // old table pointed at Work_Slot11_HasActiveTasks, the same body.
 int HarvestArea::GetPriority() {
-    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
+    return _field50 > 0 ? 1 : 0;
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
-HarvestArea::HarvestArea() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(nullptr) {
+HarvestArea::HarvestArea()
+    : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(0), _field64(0) {
 }
 
 // ============================================================
@@ -760,7 +723,6 @@ HarvestArea::HarvestArea() : AutoPickupWork(), _field48(nullptr), _field50(0), _
 // Before: a hand-built 13-slot `g_HarvestArea_Vtable` (slot 1 null, slot 2 a lazily
 // cached id) and REGISTER_TYPE over HarvestArea_Factory / _CreateInPlace (both
 // Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
-
 // create 0x14002a460: MemAlloc(sizeof, 8), then the ctor.
 void* HarvestArea::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HarvestArea), 8);

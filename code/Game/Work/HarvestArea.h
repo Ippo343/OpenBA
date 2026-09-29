@@ -25,7 +25,9 @@
 #include <cstddef>
 #include "Work/AutoPickupWork.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Set<T>::Node
 
+class CitizenComponent;
 
 class HarvestArea final : public AutoPickupWork {
     DECLARE_EXE_TYPE(HarvestArea)
@@ -45,12 +47,36 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- HarvestArea fields (+0x48) ---
-    void*    _field48;           // +0x48: zeroed
-    uint32_t _field50;           // +0x50: zeroed
+    // The element of the claim tree (0x10): the crop-field slot index (the int key) and
+    // the claiming citizen (the cell-BST helpers 0x140029a40 / 0x14001ca60 / 0x140029de0;
+    // Execute 0x1400eccd0 stores the key at +0 and the citizen at +8).
+    struct Claim {
+        int32_t           slot;      // +0x00
+        int32_t           _pad04;    // +0x04 written 0 with the key
+        CitizenComponent* citizen;   // +0x08 InternalPtr<CitizenComponent> (Cleanup reads its +0x278)
+    };
+    // Its 0x30-byte node: parent +0x10, left +0x18, right +0x20.
+    using ClaimNode = Collection::Set<Claim>::Node;
+
+    // +0x48 / +0x50: Collection::Set<Claim> {root, count}; the container stays raw (H5).
+    ClaimNode* _field48;         // +0x48: zeroed
+    int32_t  _field50;           // +0x50: claim count (0x140029860 `CMP [RCX+0x50],EAX; SETG`)
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    _field58;           // +0x58: zeroed
-    void*    _field60;           // +0x60: zeroed
+    // +0x58 / +0x60 / +0x64: Collection::Array<bool> {data, count, capacity}, one flag per
+    // crop-field slot (Persist 0x1400ed350 serializes it through the bool-array door
+    // 0x140151458 with the int count at +0x60; Execute and OnComplete 0x1400ecc20 read
+    // +0x60 as a dword; the ctor 0x1400ed4c0 and the dtor clear +0x60/+0x64 with one
+    // qword store). The container stays raw (H5).
+    bool*    _field58;           // +0x58: zeroed
+    int32_t  _field60;           // +0x60: count
+    int32_t  _field64;           // +0x64: capacity
 };
+
+static_assert(sizeof(HarvestArea::Claim) == 0x10, "HarvestArea claim element 0x10");
+static_assert(sizeof(HarvestArea::ClaimNode) == 0x30, "HarvestArea claim node 0x30");
+static_assert(offsetof(HarvestArea::ClaimNode, parent) == 0x10, "claim node parent @ +0x10");
+static_assert(offsetof(HarvestArea::ClaimNode, left) == 0x18, "claim node left @ +0x18");
+static_assert(offsetof(HarvestArea::ClaimNode, right) == 0x20, "claim node right @ +0x20");
 
 static_assert(sizeof(HarvestArea) == 0x68, "HarvestArea is 0x68 (retail create MemAlloc)");
 static_assert(alignof(HarvestArea) == 8, "HarvestArea is 8-aligned");
@@ -58,3 +84,4 @@ static_assert(offsetof(HarvestArea, _field48) == 0x48, "HarvestArea +0x48");
 static_assert(offsetof(HarvestArea, _field50) == 0x50, "HarvestArea +0x50");
 static_assert(offsetof(HarvestArea, _field58) == 0x58, "HarvestArea +0x58");
 static_assert(offsetof(HarvestArea, _field60) == 0x60, "HarvestArea +0x60");
+static_assert(offsetof(HarvestArea, _field64) == 0x64, "HarvestArea +0x64");
