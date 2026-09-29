@@ -264,8 +264,8 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl, 
 void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2);  // 0x140091ba0
 
 // ---- workcomponent.cpp
-bool WorkComponent_CheckWorkSlot(void* selfP);  // 0x14012ead0
-void WorkComponent_RegisterWorkSlot(void* selfP);  // 0x14012eb50
+bool WorkComponent_CheckWorkSlot(void* selfP);  // 0x14012ead0 B4 FORWARD -> WorkComponent::IsWorkPosted (outside callers)
+void WorkComponent_RegisterWorkSlot(void* selfP);  // 0x14012eb50 B4 FORWARD -> WorkComponent::CancelWork (outside callers)
 
 // ---- workplacecomponent.cpp
 void WorkplaceComponent_Detach(int64_t comp, void* workerIbp);  // 0x14012f7e0
@@ -302,7 +302,7 @@ int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10
 // If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
 // Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
 // Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
-int fn_StorageCountQuery(void* component);  // 0x14012e5c0 (NOT the registered body: that is
+int fn_StorageCountQuery(void* component);  // 0x14012e5c0 B4 FORWARD -> WorkComponent::CalcMaxWorkers (NOT the registered body: that is
                                             // WorkComponent_CalcMaxWorkers, tutorial_base.cpp; R5, two bodies)
 
 // ---- componentdescription.cpp
