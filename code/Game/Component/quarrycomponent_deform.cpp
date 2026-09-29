@@ -254,8 +254,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
     // ---- footprint -> terrain type 5 --------------------------------------------
     if (GameUpdateLoop::_singleton == nullptr) return;
     WorldGeometry* terrainGrid = GameUpdateLoop::_singleton->m_worldGeometry;
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
-    Map* tileGrid = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
+    Map* tileGrid = GameUpdateLoop::_singleton->m_game;
     if (!terrainGrid || !tileGrid) { QuarryBail("Slot15", "gameWorld terrain/tile grid null"); return; }
 
     MapComponent* map = entity ? entity->FindComponent<MapComponent>() : nullptr;   // 0x140004680
@@ -265,8 +264,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
     const int rectW = map->tileX1;
     const int rectH = map->tileY1;
 
-    // LEFT: Map's cells are raw storage (GAME-a / GAME-b, H5).
-    uint8_t* tileData = reinterpret_cast<uint8_t*>(tileGrid->cells);
+    MapCell* tileData = tileGrid->cells;
     if (!tileData) { QuarryBail("Slot15", "tileGrid+0x80 cell array null"); return; }
     const float   halfTerrain = static_cast<float>(terrainGrid->_gridSize >> 1);
 
@@ -316,15 +314,15 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
 
                 if (!(probe[2] < s_slopeCut)) continue;
 
-                uint8_t* cell = tileData + static_cast<int64_t>(cellIdx) * 0x30;
-                const uint8_t  oldType = cell[0x29];
+                MapCell* cell = &tileData[static_cast<int64_t>(cellIdx)];
+                const uint8_t  oldType = cell->terrainType;
                 const uint32_t oldMask = 1u << (oldType & 0x1f);
                 // newType 5 always lands in 0x1e0, so f2f0's two-sided boundary rule
                 // reduces to "was the old type in 0xe1f" — which is what retail inlines.
                 const uint8_t dirty = ((oldMask & 0xe1f) != 0) ? 1u : 0u;
                 tileGrid->field_0xA2 |= dirty;
-                cell[0x29] = 5;
-                PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
+                cell->terrainType = 5;
+                PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror (takes the cell's bytes)
 
                 if (dirty) {
                     const int64_t regionObj = reinterpret_cast<int64_t>(tileGrid->field_0x70);
@@ -335,9 +333,8 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                     Pf_EnqueueCmd2_a6fe0(pfThread, static_cast<uint32_t>(cellIdx),
                                          reinterpret_cast<void*>(static_cast<uintptr_t>(5)), nullptr);
 
-                // cell+0x08 is the ENTITY raster (cell+0x00 is the ZONE raster) — the
-                // quarry claims the dug cell.
-                *reinterpret_cast<ComponentEntity**>(cell + 8) = entity;
+                // MapCell::occupant (+0x08) is the ENTITY raster — the quarry claims the dug cell.
+                cell->occupant = entity;
                 ++converted;
             }
         }

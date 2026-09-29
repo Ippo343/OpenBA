@@ -75,8 +75,7 @@ void ResidenceComponent::EvictAndUnregister() {
     // The owner entity, as the InternalBasePtr value retail builds on the stack
     ComponentEntity* entityPtr = _entity;
 
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-    CitizenBehavior* worldMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Unregister the entity from the town's residence entity list (+0x20)
     CemeteryListErase_Reimpl(&worldMgr->field_0x20, &entityPtr);   // 0x140002cc0

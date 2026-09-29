@@ -40,6 +40,7 @@
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"   // CitizenBehavior::professionResources
+#include "Game/WeatherSimulation.h"   // WeatherSimulation::temperature
 #include "Component/ResidenceDescription.h"
 #include "Component/RawMaterialDescription.h"
 #include "system/Value.h"
@@ -90,10 +91,9 @@ char ResidenceComponent::HeatTick(System::Time* dt) {
 
     // 5. Burn branch.
     if (GameUpdateLoop::_singleton == nullptr) return 1;
-    // LEFT: GameUpdateLoop::m_weather is void* (GAME-a): the temperature stays by offset.
-    uintptr_t wsim = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_weather);   // weather sim ptr
+    WeatherSimulation* wsim = GameUpdateLoop::_singleton->m_weather;
     if (!wsim) return 1;
-    float worldTemp = *reinterpret_cast<float*>(wsim + 0x18);
+    float worldTemp = wsim->temperature;
 
     Description* descObj = _description;
     if (!descObj || !Object::IsDerivedFromNullSafe(descObj, ResidenceDescription::TypeId())) return 1;
@@ -146,8 +146,7 @@ char ResidenceComponent::HeatTick(System::Time* dt) {
             // LEFT: ActRm_StorageSubtract_d150 takes the storage and the item as integers (ACT-b's declaration).
             ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(store), reinterpret_cast<int64_t>(stack), 1);
 
-            // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-            CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+            CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
             if (townMgr) {
                 int cat = ActRm_GetResourceCategory_88f90(store, reinterpret_cast<uintptr_t>(stack));   // LEFT: ACT-b's declaration takes the item as uintptr_t
                 if (cat >= 0) {

@@ -31,6 +31,7 @@
 
 class PopulationDescription;
 class ComponentEntity;
+class Map;   // Game/Map.h
 
 class PopulationComponent final : public Component {
     DECLARE_EXE_TYPE(PopulationComponent)
@@ -57,7 +58,7 @@ public:
     };
 
     void SmoothDensity();                                         // 0x1400538c0 5x5 kernel over the cells
-    void ScanHabitability(int* map, int cellIndex);               // 0x140053b50 one cell's block of map tiles
+    void ScanHabitability(Map* map, int cellIndex);               // 0x140053b50 one cell's block of map tiles
     void SetCellCount(int newCount);                              // 0x14000b0d0 Array<Cell>::SetSize on +0x38
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x1400544a0:

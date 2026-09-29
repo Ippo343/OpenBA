@@ -16,6 +16,7 @@
 #include "Component/HerdComponent.h"
 #include "Component/HerdDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Game/Map.h"   // Map, MapCell
 #include "Entity/CitizenBehavior.h"       // CitizenBehavior::populations (GameUpdateLoop::m_citizenList)
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
@@ -163,7 +164,7 @@ void PopulationComponent::SmoothDensity() {
 // Scans one cell's block of map tiles, OR-ing the blocking flags + counting the
 // habitable tiles; writes the result density into the cell.
 // ============================================================
-void PopulationComponent::ScanHabitability(int* terrainGrid, int cellIndex) {
+void PopulationComponent::ScanHabitability(Map* map, int cellIndex) {
     const PopulationDescription* scan = description;
     int walkable = 0;
     int blockDim = scan->_habitatBlock;
@@ -177,24 +178,18 @@ void PopulationComponent::ScanHabitability(int* terrainGrid, int cellIndex) {
         int r = rowStart;
         do {
             if (colStart < blockDim + colStart) {
-                // LEFT: the map (size +0x00, cells +0x80, 0x30-byte cells: +0x00 the
-                // entity, +0x29 the terrain type) is read raw: GameUpdateLoop::m_game
-                // and the Map cell are GAME-a's.
-                int64_t* tile = reinterpret_cast<int64_t*>(
-                    (int64_t)(terrainGrid[0] * r + colStart) * 0x30 +
-                    *reinterpret_cast<int64_t*>(terrainGrid + 0x20));
+                const MapCell* tile = &map->cells[(int64_t)(map->size * r + colStart)];
                 uint64_t remaining = (uint64_t)(unsigned int)((blockDim + colStart) - colStart);
                 do {
-                    unsigned int bit = 1u << (*reinterpret_cast<uint8_t*>(
-                                                 reinterpret_cast<uint8_t*>(tile) + 0x29) & 0x1f);
+                    unsigned int bit = 1u << (tile->terrainType & 0x1f);
                     if ((bit & scan->_habitatTerrain) != 0) {
                         walkable++;
                     }
                     orFlags |= scan->_blockingTerrain & bit;
-                    if (scan->_blockedByEntity && *tile != 0) {
+                    if (scan->_blockedByEntity && tile->blocker != nullptr) {
                         orFlags |= 1;
                     }
-                    tile += 6;  // 0x30 bytes
+                    tile += 1;  // 0x30 bytes
                     remaining--;
                 } while (remaining != 0);
             }
@@ -309,22 +304,21 @@ void PopulationComponent::Startup() {
         return;
     }
 
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map size is read raw.
-    int* mapDims = reinterpret_cast<int*>(gw->m_game);
-    if (!mapDims) return;
+    Map* map = gw->m_game;
+    if (!map) return;
     int habBlock  = popDesc->_habitatBlock;
     int herdBlock = popDesc->_herdBlock;
     if (habBlock <= 0 || herdBlock <= 0) return;
 
-    int habDim = *mapDims / habBlock;
+    int habDim = map->size / habBlock;
     habitatDim = habDim;
-    herdDim = *mapDims / herdBlock;
+    herdDim = map->size / herdBlock;
 
     SetCellCount(habDim * habDim);
 
     int count = cellCount;
     for (int i = 0; i < count; i++) {
-        ScanHabitability(mapDims, i);
+        ScanHabitability(map, i);
         Cell& cell = cells[i];
         cell.smoothed = cell.density;
         cell.minimum = cell.density;
@@ -338,7 +332,7 @@ void PopulationComponent::Startup() {
     int herdCells = herdDim * herdDim;
     fprintf(stderr, "[Herd] PopulationComponent::Startup: self=%p mapDim=%d "
             "habDim=%d cells=%d herdDim=%d herds=%d template=%p\n",
-            static_cast<void*>(this), *mapDims, habDim, count, herdDim,
+            static_cast<void*>(this), map->size, habDim, count, herdDim,
             herdTemplate ? herdCells : 0, static_cast<void*>(herdTemplate));
     fflush(stderr);
     if (herdTemplate == nullptr) return;
@@ -400,8 +394,7 @@ void PopulationComponent::Startup() {
 // combo had zero rows.
 void PopulationComponent::OnAdded() {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
 
     Object::InternalPtr<PopulationComponent> selfRef(this);
@@ -419,8 +412,7 @@ void PopulationComponent::OnAdded() {
 // to dereference.
 void PopulationComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
 
     Object::InternalPtr<PopulationComponent> selfRef(this);
@@ -466,8 +458,7 @@ void PopulationComponent::Update(void* timeV) {
 
     // Get terrain grid from game world global
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
-    int* terrainGrid = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    Map* terrainGrid = GameUpdateLoop::_singleton->m_game;
 
     Cell* gridData = cells;
 

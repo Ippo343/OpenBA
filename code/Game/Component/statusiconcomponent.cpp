@@ -34,6 +34,7 @@
 #include "graphics/Camera.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"              // Map::size
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -63,9 +64,8 @@ static inline bool SI_Initialised(const StatusIconComponent* c) {
 }
 
 // The graphics scene the icons register with: GameUpdateLoop +0x60.
-// LEFT: GameUpdateLoop::m_graphicsScene is void* (GAME-a).
 static Graphics::Scene* StatusIcon_Scene() {
-    return reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
+    return GameUpdateLoop::_singleton->m_graphicsScene;
 }
 
 // ============================================================
@@ -726,9 +726,8 @@ void StatusIconComponent::Tick(void* /*time*/) {
         // MAP-CELL fallback.
         MapComponent* mc = entity->FindComponent<MapComponent>();   // 0x140004680
         if (mc) {
-            // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map width stays a raw read.
-            int* widthPtr = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
-            int w = *widthPtr;
+            Map* widthPtr = GameUpdateLoop::_singleton->m_game;
+            int w = widthPtr->size;
             // The footprint is read as int16 (the tree's width; MapComponent.h declares
             // uint16 -- COMP-d's header, LISTED).
             int idx = ((int)static_cast<int16_t>(mc->tileY0) + ((int)static_cast<int16_t>(mc->tileY1) >> 1)) * w

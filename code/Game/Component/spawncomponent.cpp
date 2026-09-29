@@ -18,6 +18,8 @@
 #include "Component/MapComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"   // EntityList::shuttingDown
+#include "Game/Map.h"   // Map::size
 #include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -214,9 +216,9 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     if (GameUpdateLoop::_singleton == nullptr) { ++g_doSpawn.noWorld; return; }
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map goes to the
-    // can-place test as the int* it has always been.
-    int* grid = reinterpret_cast<int*>(gw->m_game);
+    Map* map = gw->m_game;
+    // LEFT: the can-place test 0x14009f5d0 takes the map as int* (Player block's declaration).
+    int* grid = reinterpret_cast<int*>(map);
     System::Random* random = gw->m_random;
     if ((gw->m_gameFlags >> 10) & 1) { ++g_doSpawn.worldBitSet; return; }
 
@@ -245,15 +247,15 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     if (roll > density) { ++g_doSpawn.densityRoll; return; }
 
     // Owner tile (FindComponent<MapComponent> 0x140004680)
-    MapComponent* map = _entity->FindComponent<MapComponent>();
-    int16_t baseX = map->tileX0;
-    int16_t baseY = map->tileY0;
+    MapComponent* footprint = _entity->FindComponent<MapComponent>();
+    int16_t baseX = footprint->tileX0;
+    int16_t baseY = footprint->tileY0;
 
     int tol = templ->_i4c;
     int x = baseX + random->RandTol(static_cast<int32_t>(tol));
     int y = baseY + random->RandTol(static_cast<int32_t>(tol));
     if (x < 0 || y < 0) { ++g_doSpawn.offMap; return; }
-    int mapSize = *grid;
+    int mapSize = map->size;
     if (x >= mapSize || y >= mapSize) { ++g_doSpawn.offMap; return; }
 
     float ca = SC_RdataF32(kRdata_140172140);
@@ -264,7 +266,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     if (!(static_cast<char>(WorkLeaf_FootprintOwnerCheck_120c30(
               reinterpret_cast<intptr_t>(templ), x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
 
-    int placeMapSize = *grid;
+    int placeMapSize = map->size;
     ComponentEntity* mem = static_cast<ComponentEntity*>(
         System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* newEntity = nullptr;
@@ -294,9 +296,8 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
         // also counts the non-event, so read the flag first and tally separately —
         // a deleted entity that already joined Graphics::Scene during its ctor is
         // precisely the dangling scene node Scene::Clean faults on.
-        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): its +0xE0 byte by offset.
-        void* list = gw->m_entityList;
-        const bool closed = list && reinterpret_cast<const char*>(list)[0xE0] != '\0';
+        EntityList* list = gw->m_entityList;
+        const bool closed = list && list->shuttingDown;
         EntityList_RegisterEntity_Impl(list, &regIbp, _entity->_description->_category);
         // Measurement only — the tail below stays byte-faithful to retail, which
         // also carries on through the deleted IBP (its finders return null there).

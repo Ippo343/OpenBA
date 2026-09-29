@@ -101,8 +101,7 @@ void PickingComponent::RefreshMesh() {
     Picking::PickingMesh* mesh = row[(int)meshIndex];
     if (!mesh) return;
 
-    // LEFT: GameUpdateLoop::m_pickingScene is void* (GAME-a).
-    Picking::Scene* scene = reinterpret_cast<Picking::Scene*>(GameUpdateLoop::_singleton->m_pickingScene);
+    Picking::Scene* scene = GameUpdateLoop::_singleton->m_pickingScene;
     if (!scene) return;
 
     // Picking::Scene::AddMesh (Runtime 0x1801252e0): the ExternalPtr is a bare
@@ -230,8 +229,7 @@ void PickingComponent::OnAdded() { RefreshMesh(); }
 void PickingComponent::OnRemove() {
     if ((int)pickingId >= 0) {
         if (GameUpdateLoop::_singleton != nullptr) {
-            // LEFT: GameUpdateLoop::m_pickingScene is void* (GAME-a).
-            Picking::Scene* pickingScene = reinterpret_cast<Picking::Scene*>(GameUpdateLoop::_singleton->m_pickingScene);
+            Picking::Scene* pickingScene = GameUpdateLoop::_singleton->m_pickingScene;
             // Picking::Scene::RemoveMesh (import slot 0x140152438, Runtime 0x180125290).
             pickingScene->RemoveMesh((uint32_t)pickingId);
         }

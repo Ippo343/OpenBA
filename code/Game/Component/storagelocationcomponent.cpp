@@ -85,8 +85,7 @@ static char StorageLoc_State2Enter(void* data, void* /*sm*/) {
 static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
     if (!data) return 0;
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    // LEFT: GameUpdateLoop::m_citizenList is void* (GAME-a).
-    CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+    CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
     StorageLocationComponent* self = reinterpret_cast<StorageLocationComponent*>(data);   // the dispatcher's void* component
     ComponentEntity* entityRef = self->_entity;

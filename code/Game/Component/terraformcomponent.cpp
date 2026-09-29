@@ -144,10 +144,9 @@ static void TerraformArrayPush(T*& data, int32_t& count, int32_t& cap, const T& 
     if (oldData != data) System::MemoryAllocator::MemFree(oldData);
 }
 
-// The terrain-type byte of map cell `idx` (the 0x30-byte cell's +0x29).
-// LEFT: Map's cells are raw storage (GAME-a / GAME-b, H5).
+// The terrain-type byte of map cell `idx` (MapCell::terrainType, +0x29).
 static uint8_t* TerraformCellTypeAt(Map* map, int64_t idx) {
-    return reinterpret_cast<uint8_t*>(map->cells) + 0x29 + idx * 0x30;
+    return &map->cells[idx].terrainType;
 }
 
 // Terrain type byte of the map cell containing world point (wx, wy). Retail truncates
@@ -208,8 +207,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     WorldGeometry* terrain = gameWorld->m_worldGeometry;
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
-    Map* map = reinterpret_cast<Map*>(gameWorld->m_game);
+    Map* map = gameWorld->m_game;
     if (!terrain || !map) { bail("gameWorld terrain/tile grid null"); return; }
 
     const Picking::PickingMesh* mesh = ceiling ? desc->_ceilingMesh : desc->_floorMesh;
@@ -285,8 +283,7 @@ void TerraformComponent::ApplyFootprint() {
     MapComponent* mapComp = _entity ? _entity->FindComponent<MapComponent>() : nullptr;   // 0x140004680
     if (!mapComp) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
-    Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
+    Map* map = GameUpdateLoop::_singleton->m_game;
     if (!map) return;
 
     const int x0 = mapComp->tileX0;
@@ -411,8 +408,7 @@ void TerraformComponent::OnRemove() {
     }
 
     // Phase 2: Update tile types from the recorded cell indices
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
-    Map* map = reinterpret_cast<Map*>(gameWorld->m_game);
+    Map* map = gameWorld->m_game;
     int count = tileCount;
 
     if (count > 0 && map) {

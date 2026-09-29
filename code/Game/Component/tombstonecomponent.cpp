@@ -12,6 +12,7 @@
 
 #include "Component/TombstoneComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"   // EntityList::removalList
 #include "Component/TombstoneDescription.h"
 #include "Component/coll_bridge.h"
 #include "object/Internal.h"
@@ -133,8 +134,7 @@ void TombstoneComponent::Update(void* timeV) {
     if (lifetime._ticks < 1) {
         ComponentEntity* entityPtr = _entity;
         if (GameUpdateLoop::_singleton == nullptr) return;
-        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): its +0xD0 removal array by offset.
-        uint8_t* entityList = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton->m_entityList);
+        EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
 
         if (entityPtr != nullptr) {
 
@@ -146,8 +146,8 @@ void TombstoneComponent::Update(void* timeV) {
                 // Add to removal queue
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 if (entityList) {
-                    int count = *reinterpret_cast<int*>(entityList + 0xD8);
-                    GameColl::AsArray<GameColl::Ptr8>(entityList + 0xD0)
+                    int count = entityList->removalList.count;
+                    GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
                         .SetSizeFill(count + 1, &_entity);
                 }
             }

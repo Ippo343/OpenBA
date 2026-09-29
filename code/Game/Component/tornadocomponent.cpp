@@ -46,6 +46,8 @@
 #include "graphics/Mesh.h"
 #include "Component/tornadocomponent_funcs.h"
 #include "Component/coll_bridge.h"
+#include "Entity/EntityList.h"   // EntityList::removalList
+#include "Game/Map.h"   // Map, MapCell
 #include "options.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
@@ -411,7 +413,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity*
         // and filing livestock losses under "debris" hides a herd wipe.
         GameUpdateLoop* gw = GameWorld();
         // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): the removal list stays by offset.
-        void* entityMgr = gw ? gw->m_entityList : nullptr;
+        EntityList* entityMgr = gw ? gw->m_entityList : nullptr;
         ComponentEntity* ibp = entity;
         // Inlined 0x1400c49d0 (EntityList::QueueDestroy): skip entities already
         // flagged (bit 10 of entity+0x40), else MarkForRemoval + push onto the
@@ -420,10 +422,9 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity*
             const uint32_t f = ibp->_entityFlags;
             if (((f >> 10) & 1) == 0) {
                 ActHunt_MarkEntityRemoval_c2ea0(ibp);
-                uintptr_t mgr = reinterpret_cast<uintptr_t>(entityMgr);
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(mgr + 0xd0))
-                    .SetSizeFill(*reinterpret_cast<int*>(mgr + 0xd8) + 1, &ibp);
+                GameColl::AsArray<GameColl::Ptr8>(&entityMgr->removalList)
+                    .SetSizeFill(entityMgr->removalList.count + 1, &ibp);
                 if (hitAnimal) ++*hitAnimal;
             }
         }
@@ -457,8 +458,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
     System::Random* rng = gw->m_random;
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map size and cells stay raw.
-    int* map = reinterpret_cast<int*>(gw->m_game);
+    Map* map = gw->m_game;
 
     // Random point within the scatter radius: angle in [-pi, pi], radius scaled by
     // RandFloat. Z is a genuine hard zero here (`XORPS XMM4,XMM4` at 0x140058110).
@@ -478,8 +478,8 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
     int hitTree = 0, hitTreeNoKnock = 0, hitBuilding = 0, hitBuildingNoFire = 0;
     int hitAnimal = 0, hitCitizen = 0;
 
-    const int N = *map;
-    uintptr_t cells = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    const int N = map->size;
+    MapCell* cells = map->cells;
 
     auto clampCell = [N](float v) {
         int i = static_cast<int>(v + static_cast<float>(N >> 1));
@@ -492,8 +492,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
     {
         const int ix = clampCell(px);
         const int iy = clampCell(py);
-        ComponentEntity* cellEntity =
-            *reinterpret_cast<ComponentEntity**>(cells + 8 + static_cast<uintptr_t>(iy * N + ix) * 0x30);
+        ComponentEntity* cellEntity = cells[iy * N + ix].occupant;
         if (cellEntity != nullptr) {
             NaturalResourceComponent* probe = cellEntity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
             if (probe != nullptr) {
@@ -555,8 +554,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
                 const int cy = row + dy;
                 if (cx < 0 || cy < 0 || cx >= N || cy >= N) continue;
                 const int64_t off = static_cast<int64_t>(N) * cy + cx;
-                ComponentEntity* cellEntity =
-                    *reinterpret_cast<ComponentEntity**>(cells + 8 + static_cast<uintptr_t>(off) * 0x30);
+                ComponentEntity* cellEntity = cells[off].occupant;
                 if (cellEntity == nullptr) continue;
                 // Retail passes `off * 6` here — junk into a dead parameter. Kept.
                 Tornado_StrikeEntityCounted(off * 6, &cellEntity, &hitTree, &hitTreeNoKnock,
@@ -627,7 +625,7 @@ void AmbientEmitterComponent::MoveTo(const Math::Vector3& newPos) {
         const uint32_t id = slots[i].handle;
         if (id != 0 && gw)
             // LEFT: GameUpdateLoop::m_audioScene is void* (GAME-a).
-            reinterpret_cast<Audio::Scene*>(gw->m_audioScene)->MoveEmitter(id, position, newPos);
+            gw->m_audioScene->MoveEmitter(id, position, newPos);
     }
     position = newPos;
 }
@@ -701,18 +699,17 @@ void TornadoComponent::Startup() {
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
     System::Random* rng = gw->m_random;
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a): the map size stays a raw read.
-    uint32_t* map = reinterpret_cast<uint32_t*>(gw->m_game);
+    Map* map = gw->m_game;
 
     // --- pick two cells at least desc->_minSeparation apart (at most 100 tries) ---
     const int minSep = desc->_minSeparation;
     uint32_t ax = 0, ay = 0, bx = 0, by = 0;
     int tries = 0;
     do {
-        ax = rng->Rand(static_cast<uint32_t>(*map));
-        ay = rng->Rand(static_cast<uint32_t>(*map));
-        bx = rng->Rand(static_cast<uint32_t>(*map));
-        by = rng->Rand(static_cast<uint32_t>(*map));
+        ax = rng->Rand(static_cast<uint32_t>(map->size));
+        ay = rng->Rand(static_cast<uint32_t>(map->size));
+        bx = rng->Rand(static_cast<uint32_t>(map->size));
+        by = rng->Rand(static_cast<uint32_t>(map->size));
         if (tries > 99) break;
         ++tries;
     } while (static_cast<int>((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) < minSep * minSep);
@@ -721,10 +718,10 @@ void TornadoComponent::Startup() {
     float pathBuf[kPathNodes * 3];
     std::memset(pathBuf, 0, sizeof(pathBuf));
 
-    const float half = static_cast<float>(static_cast<int>(*map) >> 1) - kHalf;
+    const float half = static_cast<float>(map->size >> 1) - kHalf;
 
     auto seedEndpoint = [&](uint32_t cx, uint32_t cy, float* out) {
-        const int n = static_cast<int>(*map);
+        const int n = map->size;
         const int lin = static_cast<int>(n * cy + cx);
         float in[3] = { static_cast<float>(lin % n) - half,
                         static_cast<float>(lin / n) - half,
@@ -822,8 +819,7 @@ void TornadoComponent::Tick(void* time) {
     if (!gw) return;
 
     ParticleComponent* pc = _entity->FindComponent<ParticleComponent>();   // 0x140005200
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
-    int* map = reinterpret_cast<int*>(gw->m_game);
+    Map* map = gw->m_game;
 
     // FAITHFUL: retail dereferences the ParticleComponent unguarded — Tornado.rsc
     // always has one, so a null here is an upstream problem, not something to paper
@@ -835,15 +831,14 @@ void TornadoComponent::Tick(void* time) {
     if (!particleAlive) {
         // --- the funnel is gone: queue the tornado entity for destruction ---
         ComponentEntity* entity = _entity;
-        // LEFT: GameUpdateLoop::m_entityList is void* (GAME-a): the removal list stays by offset.
-        uintptr_t entityMgr = reinterpret_cast<uintptr_t>(gw->m_entityList);
+        EntityList* entityMgr = gw->m_entityList;
         if (entity != nullptr) {
             const uint32_t f = entity->_entityFlags;
             if (((f >> 10) & 1) == 0) {
                 ActHunt_MarkEntityRemoval_c2ea0(entity);
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityMgr + 0xd0))
-                    .SetSizeFill(*reinterpret_cast<int*>(entityMgr + 0xd8) + 1, &entity);
+                GameColl::AsArray<GameColl::Ptr8>(&entityMgr->removalList)
+                    .SetSizeFill(entityMgr->removalList.count + 1, &entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "
                               "(pathIndex=%d of %d)\n",
                               path.index, path.count);
@@ -932,7 +927,7 @@ void TornadoComponent::Tick(void* time) {
                 } else if (emitter->volume != volume) {
                     emitter->volume = volume;
                     // LEFT: GameUpdateLoop::m_audioScene is void* (GAME-a).
-                    reinterpret_cast<Audio::Scene*>(gw->m_audioScene)->SetEmitterVolume(
+                    gw->m_audioScene->SetEmitterVolume(
                         emitter->handle, audio2->position, volume);
                 }
             }

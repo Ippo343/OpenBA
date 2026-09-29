@@ -26,6 +26,7 @@
 #include "Component/MapComponent.h"
 #include "Component/ComponentDescription.h"
 #include "Entity/ComponentEntity.h"
+#include "Game/Map.h"   // Map::size
 #include "object/External.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
@@ -265,8 +266,7 @@ void StorageDisplayComponent::SetPileMesh(int index, float fraction, ComponentDe
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
     if (index >= pileCount) return;
-    // LEFT: GameUpdateLoop::m_graphicsScene is void* (GAME-a).
-    Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(gw->m_graphicsScene);
+    Graphics::Scene* scene = gw->m_graphicsScene;
 
     if (material == nullptr) {
         int32_t objId = piles[index].sceneId;
@@ -392,8 +392,7 @@ void StorageDisplayComponent::OnAdded() {
 
     // Get the map from game state
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // LEFT: GameUpdateLoop::m_game is void* (GAME-a).
-    int* mapInfo = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    Map* mapInfo = GameUpdateLoop::_singleton->m_game;
     if (!mapInfo) return;
 
     //   DAT_140172204 = 0x42b40000 = 90.0f (per-cell checkerboard yaw, degrees)
@@ -404,7 +403,7 @@ void StorageDisplayComponent::OnAdded() {
     int displayCount = pileCount;
     if (displayCount <= 0) return;
 
-    int mapSize = *mapInfo;
+    int mapSize = mapInfo->size;
     float halfMap = (float)(mapSize >> 1) - halfTile;
 
     for (int i = 0; i < displayCount; i++) {
@@ -456,8 +455,7 @@ void StorageDisplayComponent::OnRemove() {
 
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    // LEFT: GameUpdateLoop::m_graphicsScene is void* (GAME-a).
-    Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
+    Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
 
     for (int i = 0; i < count; i++) {
         Pile& pile = array[i];
