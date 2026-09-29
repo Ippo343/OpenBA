@@ -89,12 +89,12 @@ struct EntityList {
     IBPArray        masterArray;        // +0x08: master array of all entity IBPs {data, count, cap}
     UpdateBucket    buckets[5];         // +0x18: 5 round-robin update buckets (each 0x10)
     EntityTreeNode* updateTreeRoot;     // +0x68: root of binary tree for per-tick entity processing
-    int64_t         updateTreeCount;    // +0x70: number of nodes in update tree. RETAIL: an int32
-                                        //        (ctor 0x1400c3fe8 `MOV dword ptr [RAX+0x8],EDI`);
-                                        //        the int64 is the tree's width (H8, listed)
+    int32_t         updateTreeCount;    // +0x70: number of nodes in update tree (ctor 0x1400c3fe8
+                                        //        `MOV dword ptr [RAX+0x8],EDI`; the Set count dword)
+    uint8_t         _pad74[4];          // +0x74
     EntityTreeNode* postUpdateTreeRoot; // +0x78: root of binary tree for post-update processing
-    int64_t         postUpdateTreeCount;// +0x80: number of nodes in post-update tree. RETAIL: an
-                                        //        int32 (ctor 0x1400c3ff7), as +0x70 (H8, listed)
+    int32_t         postUpdateTreeCount;// +0x80: number of nodes in post-update tree (ctor 0x1400c3ff7)
+    uint8_t         _pad84[4];          // +0x84
     IBPArray        stagingUpdate;      // +0x88: staging array for update tree (added by FlagAggregation)
     IBPArray        stagingPostUpdate;  // +0x98: staging array for post-update tree
     int32_t         processCount[5];    // +0xA8: per-bucket entities to process per tick (int: Serialize
@@ -124,8 +124,10 @@ static_assert(offsetof(EntityList, masterArray) == 0x08, "EntityList::masterArra
 static_assert(offsetof(EntityList, buckets) == 0x18, "EntityList::buckets at +0x18");
 static_assert(offsetof(EntityList, updateTreeRoot) == 0x68, "EntityList::updateTreeRoot at +0x68");
 static_assert(offsetof(EntityList, updateTreeCount) == 0x70, "EntityList::updateTreeCount at +0x70");
+static_assert(offsetof(EntityList, _pad74) == 0x74, "EntityList +0x74");
 static_assert(offsetof(EntityList, postUpdateTreeRoot) == 0x78, "EntityList::postUpdateTreeRoot at +0x78");
 static_assert(offsetof(EntityList, postUpdateTreeCount) == 0x80, "EntityList::postUpdateTreeCount at +0x80");
+static_assert(offsetof(EntityList, _pad84) == 0x84, "EntityList +0x84");
 static_assert(offsetof(EntityList, stagingUpdate) == 0x88, "EntityList::stagingUpdate at +0x88");
 static_assert(offsetof(EntityList, stagingPostUpdate) == 0x98, "EntityList::stagingPostUpdate at +0x98");
 static_assert(offsetof(EntityList, processCount) == 0xA8, "EntityList::processCount at +0xA8");
