@@ -72,6 +72,8 @@
 #include <cstdlib>
 
 #include "Component/controller_state_table.h"
+#include "Component/ClearResourceComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Action/exe_bodies.h"
 
 // ============================================================
@@ -96,31 +98,32 @@
 // param_1 is the COMPONENT (the enter dispatcher tail-calls with RCX = node+0x18 =
 // the owning component); comp+0x10 is the owner-entity IBP.
 // ============================================================
-extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
-    uintptr_t c = reinterpret_cast<uintptr_t>(data);
-
-    int64_t entity = *reinterpret_cast<int64_t*>(c + 0x10);
-    if (entity == 0) return 1;
+char ClearResourceComponent::State2Enter() {
+    ComponentEntity* entity = _entity;
+    if (entity == nullptr) return 1;
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 
-    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
+    // GameUpdateLoop::m_entityList (+0xe8) is still void* (GAME-a): the removal array at
+    // +0xd0 / +0xd8 is LEFT.
+    uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
     if (entityList == 0) return 1;
 
-
-    // Idempotence guard (bit 0x400 at entity+0x40) — see the header note: this is
+    // Idempotence guard (bit 0x400 of the entity flags) — see the header note: this is
     // what keeps the sibling `destroy` controller from double-pushing the entity.
-    if (((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0) {
+    if (((entity->_entityFlags >> 10) & 1) != 0) {
         return 1;
     }
 
-    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entity));
+    ActHunt_MarkEntityRemoval_c2ea0(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
+    GameColl::AsArray<GameColl::Ptr8>(entityList + 0xd0)
         .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
 
     return 1;
 }
+
+// The state table's handler adapter: the controller hands it its owner (node+0x18).
+static char ClearResource_State2Enter(ClearResourceComponent* c, void* /*sm*/) { return c->State2Enter(); }   // 0x140118560
 
 // ============================================================
 // Dispatcher + state table for the ClearResourceComponent controller.

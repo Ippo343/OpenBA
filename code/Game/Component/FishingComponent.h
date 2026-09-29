@@ -36,7 +36,7 @@ public:
     char        OnExitProducing() override;                             // [20] 0x14011ee50
     char        ProduceTick(void* time) override;                       // [21] 0x14011ec10
 
-    uint8_t  fishingFlag;       // +0x50: the dock's coverage-registered latch (bool)
+    bool     fishingFlag;       // +0x50: the dock's coverage-registered latch (Persist 0x14011f050: Serialize(bool&))
     uint8_t  _pad51[3];         // +0x51
     float    fishingRate;       // +0x54: the per-tick production rate (serialized)
 };

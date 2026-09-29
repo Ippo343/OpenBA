@@ -93,10 +93,10 @@ UNIT_TEST(cit_component_member_offsets) {
     CHECK_EQ(offsetof(FireComponent, igniteAccum),             (size_t)0x40);
     CHECK_EQ(offsetof(FruitComponent, fruitFlag),              (size_t)0x34);
     CHECK_EQ(offsetof(GrowthComponent, growthScale),           (size_t)0x4c);
-    CHECK_EQ(offsetof(HerdComponent, data4C),                  (size_t)0x4c);
-    CHECK_EQ(offsetof(LivestockComponent, data30),             (size_t)0x30);
-    CHECK_EQ(offsetof(NaturalResourceComponent, resourceFlags),(size_t)0x2c);
-    CHECK_EQ(offsetof(ParticleComponent, field40),             (size_t)0x40);
+    CHECK_EQ(offsetof(HerdComponent, tile),                  (size_t)0x4c);
+    CHECK_EQ(offsetof(LivestockComponent, productionTimer),    (size_t)0x30);
+    CHECK_EQ(offsetof(NaturalResourceComponent, mature),       (size_t)0x2c);
+    CHECK_EQ(offsetof(ParticleComponent, emitterCount),             (size_t)0x40);
     CHECK_EQ(offsetof(PopulationComponent, field68),           (size_t)0x68);
     CHECK_EQ(offsetof(SpawnComponent, field30),                (size_t)0x30);
     CHECK_EQ(offsetof(TombstoneComponent, field28),            (size_t)0x28);

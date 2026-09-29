@@ -67,7 +67,7 @@ static inline bool SaneHeapPtr(const void* p) {
 static Object::Base* FindCompInDesc(const ComponentDescription* desc, uint32_t typeId) {
     if (!SaneHeapPtr(desc)) return nullptr;
     int count = desc->_subDescCount;
-    void** array = desc->_subDescs;
+    Description** array = desc->_subDescs;   // COMP-c typed _subDescs (merge fix)
     // Guard against a count/array mismatch (our standalone desc divergence can hand
     // a description whose array is null while the count is non-zero — the retail
     // BuildComponent never is). Bound the count so a garbage value can't run wild.
@@ -117,7 +117,7 @@ static UI::Element* FindDialogElemChecked(UI::DialogInstance* dialogInst, const 
 static bool PresentsComponentArray(Object::Base* obj, bool strict) {
     const ComponentDescription* cd = static_cast<const ComponentDescription*>(obj);
     int32_t compCount = cd->_subDescCount;
-    void**  compArr   = cd->_subDescs;
+    Description**  compArr   = cd->_subDescs;   // COMP-c typed _subDescs (merge fix)
     return compCount > 0 && compCount < 256 && (strict ? SaneHeapPtr(compArr) : compArr != nullptr);
 }
 

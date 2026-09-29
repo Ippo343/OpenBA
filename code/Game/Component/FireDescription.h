@@ -36,31 +36,29 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140005680
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    float _f20;                                 // +0x20
-    float _f24;                                 // +0x24
-    int32_t _i28;                               // +0x28
-    int32_t _i2c;                               // +0x2c
-    float _f30;                                 // +0x30
-    float _f34;                                 // +0x34
-    int32_t _i38;                               // +0x38
-    int32_t _i3c;                               // +0x3c
-    int32_t _i40;                               // +0x40
-    float _f44;                                 // +0x44
-    float _f48;                                 // +0x48
+    float burnBase;                                 // +0x20
+    float burnScale;                                 // +0x24
+    int32_t particleEmitter;                               // +0x28
+    int32_t audioEmitter;                               // +0x2c
+    float spreadInterval;                                 // +0x30
+    float spreadChance;                                 // +0x34
+    int32_t dangerRadius;                               // +0x38
+    int32_t bucketsToOut;                               // +0x3c
+    int32_t maxFirefighters;                               // +0x40
+    float igniteChance[2];                      // +0x44 the {rate, weight} pair FUN_1400a9290 rolls
     int32_t _i4c;                               // +0x4c zeroed, never serialized
 };
 
 static_assert(sizeof(FireDescription) == 0x50, "FireDescription is 0x50 (create 0x140005640 MemAlloc(0x50))");
 static_assert(alignof(FireDescription) == 8, "FireDescription alignment");
-static_assert(offsetof(FireDescription, _f20) == 0x20, "FireDescription::_f20 @ +0x20");
-static_assert(offsetof(FireDescription, _f24) == 0x24, "FireDescription::_f24 @ +0x24");
-static_assert(offsetof(FireDescription, _i28) == 0x28, "FireDescription::_i28 @ +0x28");
-static_assert(offsetof(FireDescription, _i2c) == 0x2c, "FireDescription::_i2c @ +0x2c");
-static_assert(offsetof(FireDescription, _f30) == 0x30, "FireDescription::_f30 @ +0x30");
-static_assert(offsetof(FireDescription, _f34) == 0x34, "FireDescription::_f34 @ +0x34");
-static_assert(offsetof(FireDescription, _i38) == 0x38, "FireDescription::_i38 @ +0x38");
-static_assert(offsetof(FireDescription, _i3c) == 0x3c, "FireDescription::_i3c @ +0x3c");
-static_assert(offsetof(FireDescription, _i40) == 0x40, "FireDescription::_i40 @ +0x40");
-static_assert(offsetof(FireDescription, _f44) == 0x44, "FireDescription::_f44 @ +0x44");
-static_assert(offsetof(FireDescription, _f48) == 0x48, "FireDescription::_f48 @ +0x48");
+static_assert(offsetof(FireDescription, burnBase) == 0x20, "FireDescription::burnBase @ +0x20");
+static_assert(offsetof(FireDescription, burnScale) == 0x24, "FireDescription::burnScale @ +0x24");
+static_assert(offsetof(FireDescription, particleEmitter) == 0x28, "FireDescription::particleEmitter @ +0x28");
+static_assert(offsetof(FireDescription, audioEmitter) == 0x2c, "FireDescription::audioEmitter @ +0x2c");
+static_assert(offsetof(FireDescription, spreadInterval) == 0x30, "FireDescription::spreadInterval @ +0x30");
+static_assert(offsetof(FireDescription, spreadChance) == 0x34, "FireDescription::spreadChance @ +0x34");
+static_assert(offsetof(FireDescription, dangerRadius) == 0x38, "FireDescription::dangerRadius @ +0x38");
+static_assert(offsetof(FireDescription, bucketsToOut) == 0x3c, "FireDescription::bucketsToOut @ +0x3c");
+static_assert(offsetof(FireDescription, maxFirefighters) == 0x40, "FireDescription::maxFirefighters @ +0x40");
+static_assert(offsetof(FireDescription, igniteChance) == 0x44, "FireDescription::igniteChance @ +0x44");
 static_assert(offsetof(FireDescription, _i4c) == 0x4c, "FireDescription::_i4c @ +0x4c");

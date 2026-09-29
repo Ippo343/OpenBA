@@ -36,14 +36,19 @@ public:
     ~NaturalResourceComponent() override = default;               // [0] 0x1400366b0
     void Persist(void* stream) override;                          // [3] 0x140125cf0
     void Tick(void* time) override;                               // [8] 0x140125c40 PORT GAP
+    // Set the dead bit 0x200000, refresh the entity, animation index 2 (defined in
+    // growthcomponent.cpp, B4 COMP-c).
+    void ResetGrowthState();                                      // 0x140126780
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     float    resourceScale; // +0x28 (ctor 1.0f)
-    uint16_t resourceFlags; // +0x2C (ctor 0x100: +0x2c mature 0, +0x2d harvestable 1)
+    bool     mature;        // +0x2C Serialize(bool&) (ctor 0: the word store 0x100)
+    bool     harvestable;   // +0x2D Serialize(bool&) (ctor 1)
     uint8_t  _pad2E[2];     // +0x2E
 };
 
 static_assert(sizeof(NaturalResourceComponent) == 0x30, "NaturalResourceComponent is 0x30 (create 0x140036550)");
 static_assert(alignof(NaturalResourceComponent) == 8, "NaturalResourceComponent alignment");
 static_assert(offsetof(NaturalResourceComponent, resourceScale) == 0x28, "");
-static_assert(offsetof(NaturalResourceComponent, resourceFlags) == 0x2C, "");
+static_assert(offsetof(NaturalResourceComponent, mature) == 0x2C, "");
+static_assert(offsetof(NaturalResourceComponent, harvestable) == 0x2D, "");

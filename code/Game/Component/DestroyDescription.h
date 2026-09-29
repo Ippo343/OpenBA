@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 class DestroyDescription final : public Description {
     DECLARE_EXE_TYPE(DestroyDescription)
 
@@ -36,7 +38,7 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140033ca0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _replaceEntity;                       // +0x20 ExternalPtr<ComponentDescription>
+    ComponentDescription* _replaceEntity;       // +0x20 ExternalPtr<ComponentDescription> (Serialize 0x140002340)
     int32_t _damagedSkin;                       // +0x28 rubble MATERIAL-SET index
     int32_t _damagedDecal;                      // +0x2c rubble DECAL state
     int32_t _minDamageLevel;                    // +0x30 retail leaves it unset; the tree zeroes it (kept)

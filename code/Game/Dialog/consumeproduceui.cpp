@@ -152,7 +152,7 @@ void ConsumeProduceUI::OnCreated() {
 
             // Search its sub-descriptions for the RawMaterialDescription
             int subCount = entryPtr->_subDescCount;
-            void** subArray = entryPtr->_subDescs;
+            Description** subArray = entryPtr->_subDescs;   // COMP-c typed _subDescs (merge fix)
             RawMaterialDescription* resourceDesc = nullptr;
 
             for (int j = 0; j < subCount; j++) {
@@ -174,8 +174,8 @@ void ConsumeProduceUI::OnCreated() {
             // RCX = RSI + RSI*4 = i * 5, so address = base + i*0x28 + 0x20.
             const System::String* name =
                 (const System::String*)(entriesBase + (uintptr_t)i * 0x28 + 0x20);
-            // LEFT: ConsumeProduceDescription::_ref20 is void* (COMP-c's header).
-            UI::String uiStr(Object::ExternalPtr<UI::StringTable>((UI::StringTable*)cpComp->_ref20), *name);
+            // COMP-c typed ConsumeProduceDescription +0x20 as UI::StringTable* (merge fix).
+            UI::String uiStr(Object::ExternalPtr<UI::StringTable>(cpComp->_stringTable), *name);
 
             // Convert UI::String to System::String
             System::String sysStr = uiStr;

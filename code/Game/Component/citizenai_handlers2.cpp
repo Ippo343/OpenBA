@@ -336,15 +336,15 @@ uint64_t CitizenAIComponent::State_FindWork() {
                             reinterpret_cast<uintptr_t>(transform) + 0x28, pos, outVec, &bestCost);
 
     // walk each use location (field28 array, count in field30's low half: untyped, raw)
-    int childCount = *reinterpret_cast<int*>(&posComp->field30);
+    int childCount = posComp->useLocationCount;
     if (0 < childCount) {
         int i = 0; int64_t off = 0;
         do {
-            int64_t* slot = reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(posComp->field28) + off);
+            int64_t* slot = reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(posComp->useLocations) + off);
             uint8_t r = WorkImpl_WalkablePosRecursive_122b00(static_cast<uintptr_t>(*slot), 0, pos, outVec, &bestCost);
             found |= r;
             i++; off += 8;
-        } while (i < *reinterpret_cast<int*>(&posComp->field30));
+        } while (i < posComp->useLocationCount);
     }
 
     if (found != 0) {

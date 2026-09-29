@@ -47,18 +47,13 @@
 //       element = 0
 //   ~Serializer()
 
-// Engine-wide "am I loading?" test: 0 = loading, non-zero = saving. Reached by
-// dereferencing the Serializer to its stream first. Same idiom as
-// marketwork_bst_b290.cpp's SerIsLoading and pasturecomponent.cpp et al.
-static inline bool SerializerIsLoading(void* serializer) {
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-}
-
 // ============================================================
 // Reimpl of FUN_140004740 (find the WorkplaceComponent (type DWORD_1401c7ac0)
 //   on an entity and return it wrapped in an InternalBasePtr via retBuf)
 // ============================================================
-// Shared callee: also used from buildcomponent.cpp (BuildComponent::Draw).
+// B4 FORWARD: FindComponent<MultiObjectComponent> for outside callers
+// (destroycomponent_states.cpp, fencedtool_calcpath.cpp, pathtool_setselected.cpp,
+// tool_base_render.cpp).
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
     new (retBuf) ::Object::InternalPtr<MultiObjectComponent>(
         reinterpret_cast<ComponentEntity*>(entity)->FindComponent<MultiObjectComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
@@ -93,7 +88,8 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
 
 // 0x140123480: Component() is the CALL 0x1401188b0; the 0x1401638b0 stamp is
 // the compiler's; +0x28 = +0x30 = 0; flags |= 1 (0x81).
-InteractComponent::InteractComponent() : field28(nullptr), field30(nullptr) {
+InteractComponent::InteractComponent()
+    : useLocations(nullptr), useLocationCount(0), useLocationCapacity(0) {
     OrFlagsInCtor(0x1);
 }
 
@@ -102,118 +98,87 @@ void InteractComponent::Persist(void* stream) {
     // Call base Component_Serialize
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    // Create local IO::Serializer (24 bytes on stack)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);
 
     // Serialize count
-    int32_t count = *reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(this) + 0x30);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+    int32_t count = useLocationCount;
+    ser.Serialize(count, nullptr);
 
-    // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
-    // Serializer to reach its STREAM, then read the stream's +8. This read was
-    // missing that dereference and tested the Serializer's own +8, which is
-    // m_encoding, not a loading flag (see
-    // reference_serializer_plus8_is_encoding_not_loading_flag -- the same trap,
-    // found here a second time). With the wrong field the resize below never ran
-    // on a real load, so the array at +0x28 stayed NULL while `count` came back
-    // non-zero from the stream, and the element loop dereferenced null.
-    if (SerializerIsLoading(serializer)) {
+    // "Am I loading?" is the STREAM's direction (IO::Serializer::GetDirection, retail
+    // 0x180006210), not the Serializer's own +8 (m_encoding): see
+    // reference_serializer_plus8_is_encoding_not_loading_flag -- the same trap, found
+    // here a second time. With the wrong field the resize below never ran on a real
+    // load, so the array at +0x28 stayed NULL while `count` came back non-zero from
+    // the stream, and the element loop dereferenced null.
+    if (static_cast<int>(ser.GetDirection()) == 0) {
         // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>(
-            reinterpret_cast<uint8_t*>(this) + 0x28).SetSize(count);
+        GameColl::AsArray<GameColl::Ptr8>(&useLocations).SetSize(count);
     }
 
     // Serialize each InternalBasePtr element and validate
-    uint8_t* arrayBase = *reinterpret_cast<uint8_t**>(
-        reinterpret_cast<uint8_t*>(this) + 0x28);
+    InteractComponent** arrayBase = useLocations;
     for (int i = 0; i < count; i++) {
-        uint8_t* element = arrayBase + i * 8;
-
-        // Serialize InternalBasePtr
-        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+        // LEFT: the array holds InternalPtr<InteractComponent>; InternalBasePtr has no
+        // typed view of a bare pointer slot.
+        reinterpret_cast<Object::InternalBasePtr*>(&arrayBase[i])->Serialize(ser);
 
         // Validate with IsDerivedFrom
-        void* ptr = *reinterpret_cast<void**>(element);
+        InteractComponent* ptr = arrayBase[i];
         if (ptr != nullptr) {
-            bool valid = reinterpret_cast<const Object::Base*>(ptr)->IsDerivedFrom(
-                InteractComponent::TypeId());   // B.3.x bridge (slot 0x140152a98)
+            bool valid = ptr->IsDerivedFrom(InteractComponent::TypeId());   // slot 0x140152a98
             if (!valid) {
-                *reinterpret_cast<uint64_t*>(element) = 0;
+                arrayBase[i] = nullptr;
             }
         }
     }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // [6] 0x140123110
 void InteractComponent::OnAdded() {
-    uintptr_t selfA = (uintptr_t)this;
-
-    int64_t multiBuf = 0;
-    InteractComponent_FindWorkplaceComponent(*(uintptr_t*)(selfA + 0x10), &multiBuf);   // 0x140004740
-    if (multiBuf == 0) return;
+    MultiObjectComponent* multi = _entity->FindComponent<MultiObjectComponent>();   // 0x140004740
+    if (multi == nullptr) return;
 
     // Clear the existing use-location array
-    System::MemoryAllocator::MemFree(*(void**)(selfA + 0x28));
-    *(int64_t*)(selfA + 0x28) = 0;
-    *(int64_t*)(selfA + 0x30) = 0;
+    System::MemoryAllocator::MemFree(useLocations);
+    useLocations = nullptr;
+    useLocationCount = 0;
+    useLocationCapacity = 0;
 
-    int childCount = *(int*)(multiBuf + 0x50);
+    int childCount = multi->childCount;
     for (int ci = 0; ci < childCount; ci++) {
-        int64_t host = *(int64_t*)((int64_t)ci * 8 + *(int64_t*)(multiBuf + 0x48));
+        ComponentEntity* host = multi->children[ci].Get();
 
         // Find the InteractComponent (DAT_1401c7900) on this host
-        void* interact = nullptr;
-        int hc = *(int*)(host + 0x38);
-        int64_t harr = *(int64_t*)(host + 0x30);
-        for (int k = 0; k < hc; k++) {
-            int64_t* slot = (int64_t*)(harr + (int64_t)k * 8);
-            void* comp = (void*)*slot;
-            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == InteractComponent::TypeId()) {
-                void* c = (void*)*slot;
-                if (reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(
-                        InteractComponent::TypeId()))   // B.3.x bridge (slot 0x140152a98)
-                    interact = c;
-                break;
-            }
-        }
+        InteractComponent* interact = host->FindComponent<InteractComponent>();
 
-        int64_t interactIbp = 0;
-        new (&interactIbp) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(interact));   // B.3.3 bridge
-        if (interactIbp != 0) {
-            // Append interactIbp to the use-location array at +0x28 (count +0x30, cap +0x34)
-            uint32_t oldCount = *(uint32_t*)(selfA + 0x30);
+        if (interact != nullptr) {
+            // Append interact to the use-location array at +0x28 (count +0x30, cap +0x34)
+            uint32_t oldCount = (uint32_t)useLocationCount;
             uint32_t newCount = oldCount + 1;
             if (newCount != oldCount) {
-                void* oldBuf = *(void**)(selfA + 0x28);
-                *(uint32_t*)(selfA + 0x30) = newCount;
-                if (*(int*)(selfA + 0x34) < (int)newCount) {
-                    *(uint32_t*)(selfA + 0x34) = newCount;
-                    if (oldCount != 0) *(uint32_t*)(selfA + 0x34) = newCount * 3;
-                    void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)(selfA + 0x34) << 3), 8);
-                    *(void**)(selfA + 0x28) = nb;
+                InteractComponent** oldBuf = useLocations;
+                useLocationCount = (int32_t)newCount;
+                if (useLocationCapacity < (int)newCount) {
+                    useLocationCapacity = (int32_t)newCount;
+                    if (oldCount != 0) useLocationCapacity = (int32_t)(newCount * 3);
+                    useLocations = static_cast<InteractComponent**>(
+                        System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)useLocationCapacity << 3), 8));
                 }
-                int start = (oldBuf == *(void**)(selfA + 0x28)) ? (int)oldCount : 0;
-                int64_t* nbArr = *(int64_t**)(selfA + 0x28);
-                int64_t* oldArr = (int64_t*)oldBuf;
+                int start = (oldBuf == useLocations) ? (int)oldCount : 0;
+                InteractComponent** nbArr = useLocations;
+                InteractComponent** oldArr = oldBuf;
                 for (int i = start; i < (int)newCount; i++) {
-                    int64_t* dst = nbArr + i;
+                    InteractComponent** dst = nbArr + i;
                     if (dst) {
-                        *dst = 0;
-                        *dst = (i < (int)oldCount) ? oldArr[i] : interactIbp;
+                        *dst = nullptr;
+                        *dst = (i < (int)oldCount) ? oldArr[i] : interact;
                     }
                 }
-                if (oldBuf != *(void**)(selfA + 0x28)) System::MemoryAllocator::MemFree(oldBuf);
+                if (oldBuf != useLocations) System::MemoryAllocator::MemFree(oldBuf);
             }
         }
     }
 }
-
 // create 0x1400351a0: MemAlloc(0x38, 8), then the ctor.
 void* InteractComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(InteractComponent), 8);

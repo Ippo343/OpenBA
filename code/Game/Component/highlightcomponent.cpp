@@ -55,19 +55,20 @@
 // Display 0xCB / StatusIcon 0xC2 all have it). No-ops when no outline is
 // registered (+0x120 < 0), so it is safe on every non-selected teardown.
 void HighlightComponent::OnRemove() {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     // A null +0x28 vtable is the "fresh/inert" tell (same test Impl_c4a0 uses):
     // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
     // in the Scene and +0x120 is not a real object id. Must precede the sceneId
     // read — an inert component's +0x120 is 0, not -1.
-    if (*reinterpret_cast<void**>(s + 0x28) == nullptr) return;
-    int32_t sceneId = *reinterpret_cast<int32_t*>(s + 0x120);
+    // LEFT: the embedded EdgeMeshInstance is raw storage (H5); its first word is the vptr.
+    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;
+    int32_t sceneId = highlightId;
     if (sceneId < 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0x60);
+    void* scene = GameUpdateLoop::_singleton->m_graphicsScene;
     if (!scene) return;
-    reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(static_cast<uint32_t>(sceneId));   // B.3.5 bridge
-    *reinterpret_cast<int32_t*>(s + 0x120) = -1;
+    // LEFT: GameUpdateLoop::m_graphicsScene is void* (W0 header).
+    reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(static_cast<uint32_t>(sceneId));
+    highlightId = -1;
 }
 
 // ============================================================================

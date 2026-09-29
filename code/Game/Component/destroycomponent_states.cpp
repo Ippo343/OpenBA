@@ -94,21 +94,33 @@
 #include "Dialog/dialog_exe_helpers.h"
 #include "Game/exe_bodies.h"
 
+#include "Component/DestroyComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/BuildDescription.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/MultiObjectComponent.h"
+#include "Component/MapComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/StatusIconComponent.h"
+#include "Component/RawMaterialComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
+
 // ============================================================
 // Helpers, called directly
 // ============================================================
-//   finders (member-return shape: entity, &outIBP):
-//     0x140003050 production yard                 WorkBase_FindComponent_3050
-//     0x14000d6c0 build-material yard (+0x48 delivered, +0x4c mult)  Dialog_FindComponent_d6c0
-//     0x140002e10 workplace-ext                   AttendanceComponent_GetJobHostComponent
-//     0x140004740 yard0 (+0x58 multiplier)        InteractComponent_FindWorkplaceComponent
-//     0x140004680 FootprintComponent (type 1401c79e0)  FloorComponent_FindResData
-//     0x140003f60 model/transform comp            ActCNR_FindComponent_3f60
-//     0x140002f90 MeshInstance comp               WorkBase_FindComponent_2f90
+//   finders: ComponentEntity::FindComponent<T> (the classes read from the type-id cell
+//   each retail instance loads):
+//     0x140003050 WorkComponent (0x1401c8070)        0x14000d6c0 BuildComponent (0x1401c7008)
+//     0x140002e10 WorkPlaceComponent (0x1401c80e0)   0x140004740 MultiObjectComponent (0x1401c7ac0)
+//     0x140004680 MapComponent (0x1401c79e0)         0x140003f60 ModelComponent (0x1401c7a50)
+//     0x140002f90 StatusIconComponent (0x1401c7e08)  0x140006270 StorageComponent (0x1401c7e78)
 //   0x14012c3f0 mesh state flag  CitizenComp_FUN_14012c3f0
 //   0x14012ead0 / 0x14012eb50    WorkComponent_CheckWorkSlot / _RegisterWorkSlot
 //   0x14012ec60 CitizenAI_WorkScheduler_Post
-//   0x14012f670 WorkPlaceComponent_LeaveBuilderProfession, 0x14012f520 _EnterBuilderProfession
+//   0x14012f670 WorkPlaceComponent_LeaveBuilderProfession, 0x14012f520 WorkPlaceComponent::EnterBuilderProfession
 //   0x140103480 trade notify     NomadComp_FUN_140103480
 //   0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
 //   0x1400c3720 ComponentEntity_CtorFromDescription, 0x1400c48a0 EntityList_RegisterEntity_Impl
@@ -135,8 +147,8 @@ extern "C" void* g_pConstructionDemoEntity;
 // would otherwise dangle at a freed BuildComponent, and a reused heap block landing on
 // the same address would compare equal to it in BuildComponent_DemoGateSkip. The spawn
 // path retargets them to the replacement immediately afterwards.
-static void Destroy_ReleaseDemoSite(int64_t buildComp) {
-    if (buildComp && g_pConstructionDemoSite == reinterpret_cast<void*>(buildComp)) {
+static void Destroy_ReleaseDemoSite(BuildComponent* buildComp) {
+    if (buildComp && g_pConstructionDemoSite == buildComp) {
         g_pConstructionDemoSite   = nullptr;
         g_pConstructionDemoEntity = nullptr;
     }
@@ -146,61 +158,49 @@ static void Destroy_ReleaseDemoSite(int64_t buildComp) {
 // work-manager AVL lookup (walks the tree at param_1+0x30 for payload key == param_3).
 // buildstructure.cpp — BuildStructure_CreateInPlaceFull, the full retail BuildStructure
 // ctor (0x1400e59c0 port).
-// action_base_rawmat.cpp — ActRm_FindComponent_223c0, the RawMaterialComponent finder
-// over an entity's IBP array (self+0x30 ptrs / +0x38 count); ctors retIBP from the
-// found component. Reused verbatim by the scatter path.
 
 // ============================================================
 // Worker release / builder re-seat
 // ============================================================
 // The WorkPlaceComponent half of a demolition: state-4 enter re-seats the workplace onto
 // the BUILDER profession (FUN_14012f520) and the state-5 tick takes it back off before the
-// old entity dies (FUN_14012f670). Both are ported+registered (see
-// destroycomponent_workerrelease.cpp and reg_destroy_workers.cpp).
+// old entity dies (FUN_14012f670). Both are ported (see
+// destroycomponent_workerrelease.cpp and workplacecomponent.cpp).
 
-
-// Owner-entity value from the component's IBP at +0x10.
-static int64_t OwnerEntity(uintptr_t comp) {
-    return *reinterpret_cast<int64_t*>(comp + 0x10);
-}
-
-// Every finder has the member-return shape (entity, &outIBP); the entity argument is
-// passed as the finder's own first-parameter type.
-template <typename R, typename E>
-static int64_t FindOn(int64_t entity, R (*finder)(E, void*)) {
-    if (!entity) return 0;
-    int64_t out = 0;
-    finder((E)entity, &out);
-    return out;
+// Every finder is ComponentEntity::FindComponent<T>. The tree answered null for a null
+// entity (its old FindOn helper tested it); retail has no such test. Kept (B9).
+template <class T>
+static T* FindOn(ComponentEntity* entity) {
+    if (!entity) return nullptr;
+    return entity->FindComponent<T>();
 }
 
 // ============================================================
 // DestroyDescription_helper_sub_da80 (0x14011da80) — storage-empty test.
 // !storage || StorageComponent_QueryCount(storage) == 0.
 // ============================================================
-extern "C" char Destroy_StorageEmpty_da80(int64_t comp) {
-    int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
-    if (!entity) return 1;
-    void* storage = nullptr;
+bool DestroyComponent::StorageEmpty() {
+    if (!_entity) return true;
     // Ghidra-verified: retail da80 calls FUN_140006270 (StorageComponent
     // finder, DAT_1401c7e78) — NOT the ConsumeProduce finder.
-    fn_FindComponent_Storage(reinterpret_cast<void*>(entity), &storage);
-    if (!storage) return 1;
-    return fn_StorageComponent_QueryCount(storage) == 0 ? 1 : 0;
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();
+    if (!storage) return true;
+    return fn_StorageComponent_QueryCount(storage) == 0;
 }
 
 // ============================================================
 // DestroyDescription_helper_ea20 (0x14012ea20) — reclaim-job-pending test.
 // Looks up the yard's resource key (+0x28) in the work-manager tree
 // ((gWorld+0x118)+0x30) and calls the found node's vtable+0x58.
+// (RCX is the WorkComponent: a WorkComponent member retail compiled, left free here
+// because the scheduler behind GameUpdateLoop +0x118 is still void*: LEFT.)
 // ============================================================
-static char Destroy_ReclaimPending_ea20(int64_t yard) {
+static char Destroy_ReclaimPending_ea20(WorkComponent* yard) {
     if (!yard) return 0;
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int64_t mgr = *reinterpret_cast<int64_t*>(gw + 0x118);
+    int64_t mgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_tutorial);   // +0x118
     if (!mgr) return 0;
-    int key = *reinterpret_cast<int*>(yard + 0x28);
+    int key = yard->workId;
     void* node = nullptr;
     RemovalCalc_helper_8d50(mgr, &node, key);
     if (!node) return 0;
@@ -216,21 +216,19 @@ static char Destroy_ReclaimPending_ea20(int64_t yard) {
 // current description AND the DestroyDescription's default target.
 // DestroyDescription_helper_e5b0 (0x14011e5b0) — target == entity's current.
 // ============================================================
-extern "C" char Destroy_TargetDiffers_e600(int64_t comp) {
-    void* desc = *reinterpret_cast<void**>(comp + 0x18);
-    void* typed = (desc && ::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId())) ? desc : nullptr;
-    int64_t target = *reinterpret_cast<int64_t*>(comp + 0x60);
-    int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
-    if (entity && target == *reinterpret_cast<int64_t*>(entity + 0x28)) return 0;
-    if (typed && target == *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uintptr_t>(typed) + 0x20)) return 0;
-    return 1;
+bool DestroyComponent::TargetDiffers() {
+    Description* desc = _description;
+    DestroyDescription* typed = (desc && ::Object::IsDerivedFromNullSafe(desc, DestroyDescription::TypeId()))
+                                    ? static_cast<DestroyDescription*>(desc) : nullptr;
+    ComponentDescription* target = upgradeTarget;
+    if (_entity && target == _entity->_description) return false;
+    if (typed && target == typed->_replaceEntity) return false;
+    return true;
 }
-extern "C" char Destroy_TargetIsCurrent_e5b0(int64_t comp) {
-    int64_t target = *reinterpret_cast<int64_t*>(comp + 0x60);
-    int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
-    if (!entity) return 0;
-    return target == *reinterpret_cast<int64_t*>(entity + 0x28) ? 1 : 0;
+bool DestroyComponent::TargetIsCurrent() {
+    ComponentDescription* target = upgradeTarget;
+    if (!_entity) return false;
+    return target == _entity->_description;
 }
 
 // ============================================================
@@ -247,29 +245,19 @@ extern "C" char Destroy_TargetIsCurrent_e5b0(int64_t comp) {
 // 0x14009f3e0 is Reimpl_MapGetTerrainPos and 0x140129760 ActRm_PositionEntity_9760,
 // both called directly.
 
-// ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c7cb8 is RawMaterialDescription's
-// registered type-id cell (INVENTORY_C Table 1); it always holds
-// RawMaterialDescription's id once Fill* runs, so the raw-read-with-fallback
-// this used to be is now mechanically equivalent to the direct static call.
-// 0x1401c7040 (BuildDescription) had no reader at all (kept only for parity via
-// a `(void)` cast) -- removed outright rather than converted.
-static uint32_t RawMatDescTid() {
-    return RawMaterialDescription::TypeId();
-}
-
 // Find the RawMaterialDescription in a resource TEMPLATE's component-description
-// array (template+0x28 ptrs, count template+0x30) via GetTypeId (vtable+0x10). Its
-// +0x48 (stack size) caps each dropped pile at 100/stackSize (retail c530). Raw
-// pointers, not IBPs — no CheckPtr (matches FUN_140088f90).
-static void* FindRawMatDescInTemplate(int64_t tmpl) {
-    uint32_t tid = RawMatDescTid();
-    int n = *reinterpret_cast<int*>(tmpl + 0x30);
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(tmpl + 0x28);
+// array via GetTypeId (vtable+0x10). Its +0x48 caps each dropped pile at
+// 100/_weight (retail c530). Raw pointers, not IBPs — no CheckPtr (matches
+// FUN_140088f90).
+static RawMaterialDescription* FindRawMatDescInTemplate(ComponentDescription* tmpl) {
+    uint32_t tid = RawMaterialDescription::TypeId();
+    int n = tmpl->_subDescCount;
+    Description** base = tmpl->_subDescs;
     for (int i = 0; i < n; i++) {
-        void* c = *reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
-        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
+        Description* c = base[i];
+        uint32_t t = c->Type();   // slot 2
         if (t == tid)
-            return (::Object::IsDerivedFromNullSafe(c, tid)) ? c : nullptr;
+            return (::Object::IsDerivedFromNullSafe(c, tid)) ? static_cast<RawMaterialDescription*>(c) : nullptr;
     }
     return nullptr;
 }
@@ -290,70 +278,67 @@ static void* FindRawMatDescInTemplate(int64_t tmpl) {
 // The register category is read from recipe[pairIndex]->+0x20 (retail indexes the
 // build recipe by the scatter-pair index; benign for the ordered partial-build case).
 // ============================================================
-static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
-                                          int width, int depth) {
+void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int depth) {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    ComponentEntity* entity = _entity;
     if (!entity) return;
 
     // BuildComponent + its BuildDescription (+0x18). Scatter is only reached with
     // comp+0x51 set, i.e. the build comp existed — guard defensively regardless.
-    int64_t buildComp = FindOn(entity, &Dialog_FindComponent_d6c0);
+    BuildComponent* buildComp = FindOn<BuildComponent>(entity);
     if (!buildComp) return;
-    void* rawDesc = *reinterpret_cast<void**>(buildComp + 0x18);
+    Description* rawDesc = buildComp->_description;
     if (!rawDesc) return;
     // Retail narrows the desc to BuildDescription (0x1401c7040) but then derefs
     // it unconditionally (required@+0x30, recipe@+0x20/+0x28) — the invariant is that
     // a BuildComponent always carries a BuildDescription. We trust the pointer (the
     // derive check would only null it, which retail never survives).
-    uintptr_t desc = reinterpret_cast<uintptr_t>(rawDesc);
+    BuildDescription* desc = static_cast<BuildDescription*>(rawDesc);
 
-    int delivered = *reinterpret_cast<int*>(buildComp + 0x48);
-    int required  = *reinterpret_cast<int*>(desc + 0x30) *
-                    *reinterpret_cast<int*>(buildComp + 0x4c);
-    uintptr_t recipeBase = *reinterpret_cast<uintptr_t*>(desc + 0x20);
+    int delivered = buildComp->laborProgress;
+    int required  = desc->_i30 * buildComp->costMultiplier;
+    BuildCost* recipeBase = desc->_costs;
 
     // ---- Phase 1: scatter list ----
-    struct Pair { int64_t tmpl; int count; };
+    struct Pair { ComponentDescription* tmpl; int count; };
     std::vector<Pair> list;
 
     if (delivered < required) {
-        // Partially built: spill the real Storage contents.
-        void* storage = nullptr;
-        fn_FindComponent_Storage(reinterpret_cast<void*>(entity), &storage);
+        // Partially built: spill the real Storage contents. StorageComponent's item
+        // array (+0x28, 0x10-byte items) is `void*` in COMP-e's header: LEFT.
+        StorageComponent* storage = entity->FindComponent<StorageComponent>();
         if (storage) {
-            uintptr_t st = reinterpret_cast<uintptr_t>(storage);
-            int nStacks = *reinterpret_cast<int*>(st + 0x30);
-            uintptr_t stacks = *reinterpret_cast<uintptr_t*>(st + 0x28);
+            int nStacks = storage->slotCount;
+            uintptr_t stacks = reinterpret_cast<uintptr_t>(storage->storageSlots);
             int divisor = (delivered > 0) ? 2 : 1;
             for (int i = 0; i < nStacks; i++) {
                 uintptr_t s = stacks + static_cast<uintptr_t>(i) * 0x10;
                 int f8 = *reinterpret_cast<int*>(s + 8);
                 int fc = *reinterpret_cast<int*>(s + 0xc);
-                list.push_back({*reinterpret_cast<int64_t*>(s), (f8 - fc) / divisor});
+                list.push_back({*reinterpret_cast<ComponentDescription**>(s), (f8 - fc) / divisor});
             }
         }
     } else {
         // Fully built: refund half (or a quarter, when comp+0x50) of the recipe.
-        int divisor = (*reinterpret_cast<int8_t*>(comp + 0x50) != 0) ? 4 : 2;
-        int nRecipe = *reinterpret_cast<int*>(desc + 0x28);
+        int divisor = burning ? 4 : 2;
+        int nRecipe = desc->_costCount;
         for (int i = 0; i < nRecipe; i++) {
-            uintptr_t e = recipeBase + static_cast<uintptr_t>(i) * 0x10;
-            list.push_back({*reinterpret_cast<int64_t*>(e),
-                            *reinterpret_cast<int*>(e + 8) / divisor});
+            list.push_back({recipeBase[i].material, recipeBase[i].quantity / divisor});
         }
     }
     if (list.empty()) return;
 
     // ---- Phase 2: place piles on empty walkable footprint tiles ----
-    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
+    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a) and Map's cells are
+    // untyped: the width and cell reads are LEFT.
+    int* grid = reinterpret_cast<int*>(gw->m_game);
     if (!grid) return;
     int gw_width = *grid;
     if (gw_width <= 0) return;
     int64_t cellArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(grid) + 0x80);
-    void* random = *reinterpret_cast<void**>(gw + 0xd8);
-    void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
+    System::Random* random = gw->m_random;
+    void* entityList = gw->m_entityList;
 
     const float kHalfCell  = 0.5f;   // DAT_140172114
     const float kMaxHeight = 0.2f;   // DAT_1401720fc
@@ -364,7 +349,7 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
     int row = 0;   // local_128
 
     for (size_t pi = 0; pi < list.size(); pi++) {
-        int64_t tmpl = list[pi].tmpl;
+        ComponentDescription* tmpl = list[pi].tmpl;
         int remaining = list[pi].count;
         if (remaining <= 0) continue;
 
@@ -383,42 +368,36 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
                          (*reinterpret_cast<int8_t*>(cp + 0x29) == 2) &&
                          (0.0f <= w1[2]) && (w1[2] < kMaxHeight);
             if (valid) {
-                void* rmDesc = FindRawMatDescInTemplate(tmpl);
-                int stackSize = rmDesc ? *reinterpret_cast<int*>(
-                                    reinterpret_cast<uintptr_t>(rmDesc) + 0x48) : 0;
+                RawMaterialDescription* rmDesc = FindRawMatDescInTemplate(tmpl);
+                int stackSize = rmDesc ? rmDesc->_weight : 0;
                 if (stackSize > 0) {
                     int per = 100 / stackSize;
                     if (per > remaining) per = remaining;
 
-                    void* mem = (::System::MemoryAllocator::_singleton)
-                                    ? ::System::MemoryAllocator::MemAlloc(0x48, 8) : nullptr;
-                    void* newEntity = mem
-                        ? ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem),
-                                                              reinterpret_cast<void*>(tmpl))
+                    ComponentEntity* mem = (::System::MemoryAllocator::_singleton)
+                        ? static_cast<ComponentEntity*>(::System::MemoryAllocator::MemAlloc(0x48, 8)) : nullptr;
+                    ComponentEntity* newEntity = mem
+                        ? ComponentEntity_CtorFromDescription(mem, tmpl)
                         : nullptr;
                     if (newEntity) {
-                        int64_t entIBP = 0;
-                        new (&entIBP) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
+                        ::Object::InternalPtr<ComponentEntity> entIBP(newEntity);
 
                         // RawMaterialComponent on the new entity → position + amount.
-                        int64_t rmIBP = 0;
-                        ActRm_FindComponent_223c0(static_cast<uintptr_t>(entIBP), &rmIBP);
-                        if (rmIBP) {
-                            int yaw = random ? reinterpret_cast<System::Random*>(random)->RandTol(2) : 0;   // B.3.4b bridge
-                            ActRm_PositionEntity_9760(rmIBP, cell, static_cast<float>(yaw) * kYawScale);
-                            *reinterpret_cast<int*>(rmIBP + 0x28) = per;
-                            *reinterpret_cast<int64_t*>(rmIBP + 0x30) = 0;
+                        RawMaterialComponent* rm = newEntity->FindComponent<RawMaterialComponent>();   // 0x1400223c0
+                        if (rm) {
+                            int yaw = random ? random->RandTol(2) : 0;
+                            ActRm_PositionEntity_9760(reinterpret_cast<int64_t>(rm), cell, static_cast<float>(yaw) * kYawScale);
+                            rm->quantity = per;
+                            rm->profession = nullptr;
                         }
 
                         // Register into the world with the recipe category.
                         int category = 0;
                         if (recipeBase) {
-                            int64_t catTmpl = *reinterpret_cast<int64_t*>(
-                                recipeBase + pi * 0x10);
-                            if (catTmpl) category = *reinterpret_cast<int*>(catTmpl + 0x20);
+                            ComponentDescription* catTmpl = recipeBase[pi].material;
+                            if (catTmpl) category = catTmpl->_category;
                         }
-                        int64_t regIBP = entIBP;
+                        ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
                         if (entityList) EntityList_RegisterEntity_Impl(entityList, &regIBP, category);
 
                         remaining -= per;
@@ -440,52 +419,49 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
 // Mark the owner entity for removal + push onto the EntityList removal drain —
 // the exact guard+push idiom of clearresourcecomponent_states.cpp (the 0x400
 // bit keeps sibling controllers from double-pushing the same entity).
-static void Destroy_MarkAndPushRemoval(int64_t entity) {
+static void Destroy_MarkAndPushRemoval(ComponentEntity* entity) {
     if (!entity) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    int64_t entityList = *reinterpret_cast<int64_t*>(gw + 0xe8);
+    // GameUpdateLoop::m_entityList (+0xe8) is still void* (GAME-a): the removal
+    // array at +0xd0 / +0xd8 is LEFT.
+    uintptr_t entityList = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_entityList);
     if (!entityList) return;
-    if (((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0) return;
-    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(entity));
+    if (((entity->_entityFlags >> 10) & 1) != 0) return;
+    ActHunt_MarkEntityRemoval_c2ea0(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
+    GameColl::AsArray<GameColl::Ptr8>(entityList + 0xd0)
         .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
 }
 
-// d6c0 yard material math: delivered (+0x48), required = desc(+0x18)->+0x30 *
-// requiredMult (+0x4c).
-static int Yard_Delivered(int64_t prod) {
-    return prod ? *reinterpret_cast<int*>(prod + 0x48) : 0;
+// BuildComponent material math: delivered (+0x48), required = the BuildDescription's
+// +0x30 * costMultiplier (+0x4c).
+static int Yard_Delivered(BuildComponent* prod) {
+    return prod ? prod->laborProgress : 0;
 }
-static int Yard_Required(int64_t prod) {
+static int Yard_Required(BuildComponent* prod) {
     if (!prod) return 0;
-    void* desc = *reinterpret_cast<void**>(prod + 0x18);
+    Description* desc = prod->_description;
     if (!desc) return 0;
-    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x30) *
-           *reinterpret_cast<int*>(prod + 0x4c);
+    return static_cast<BuildDescription*>(desc)->_i30 * prod->costMultiplier;
 }
 
 // ============================================================
 // State 3 enter — 0x14011d7b0 (begin demolition).
 // ============================================================
-extern "C" char Destroy_State3Enter_d7b0(void* data, void* sm) {
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-    *reinterpret_cast<int*>(comp + 0x54) = 0;   // reset progress
-
-    int64_t entity = OwnerEntity(comp);
+char DestroyComponent::State3Enter(void* sm) {
+    progress = 0;   // reset progress
 
     // Stop pending production work on the yard (FUN_14012ead0/FUN_14012eb50).
-    int64_t yard = FindOn(entity, &WorkBase_FindComponent_3050);
-    if (yard && WorkComponent_CheckWorkSlot(reinterpret_cast<void*>(yard)))
-        WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(yard));
+    WorkComponent* yard = FindOn<WorkComponent>(_entity);
+    if (yard && WorkComponent_CheckWorkSlot(yard))
+        WorkComponent_RegisterWorkSlot(yard);
 
     // STANDALONE: status-icon strip (StatusIconComponent_helper_c2a0) and the
     // render-scene mesh removal / rubble swap are skipped — visual-only, and the
     // standalone mesh pipeline is partial (same policy as ResidenceInit's
     // SetMeshFlag skip in residencecomponent.cpp).
 
-    int nextState = (*reinterpret_cast<int8_t*>(comp + 0x50) == 0) ? 4 : 6;
+    int nextState = !burning ? 4 : 6;
     ::ControllerLive::RequestStateTransition(sm, nextState);
 
     // RETURN 0, NOT 1 — this is the state-machine ENTER WALK's stop bit, not a
@@ -512,21 +488,20 @@ extern "C" char Destroy_State3Enter_d7b0(void* data, void* sm) {
 // ============================================================
 // State 4 enter — 0x14011cfd0 (queue the haul-away).
 // ============================================================
-extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-    int64_t entity = OwnerEntity(comp);
+char DestroyComponent::State4Enter(void* sm) {
+    ComponentEntity* entity = _entity;
 
     // Re-seat the workplace onto the BUILDER profession (retail FUN_14012f520 on the 2e10
     // comp) — ported in destroycomponent_workerrelease.cpp.
-    int64_t wp = FindOn(entity, &AttendanceComponent_GetJobHostComponent);
-    if (wp) WorkPlaceComponent_EnterBuilderProfession(wp);
+    WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
+    if (wp) wp->EnterBuilderProfession();
 
-    int64_t prod = FindOn(entity, &Dialog_FindComponent_d6c0);
-    if (prod) *reinterpret_cast<int8_t*>(comp + 0x51) = 1;
+    BuildComponent* prod = FindOn<BuildComponent>(entity);
+    if (prod) hasBuildComponent = true;
 
     // Storage already empty, or build materials never fully delivered
     // (partially-built building has nothing to haul) -> straight to state 5.
-    if (Destroy_StorageEmpty_da80(static_cast<int64_t>(comp)) ||
+    if (StorageEmpty() ||
         (prod && Yard_Delivered(prod) < Yard_Required(prod))) {
         ::ControllerLive::RequestStateTransition(sm, 5);
         // Retail 0x14011cfd0 reaches its single `return uVar3 & 0xffffffffffffff00`
@@ -539,18 +514,16 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
     // Queue a ClearStorage work (type 1) on the production yard. Faithful ctor
     // path: Work_Ctor25 base bind (field_10 = entity) + ClearStorage vtable +
     // zeroed tail fields (ClearStorage_Ctor 0x1400e74b0 shape).
-    int64_t yard = FindOn(entity, &WorkBase_FindComponent_3050);
+    WorkComponent* yard = FindOn<WorkComponent>(entity);
     if (yard && ::System::MemoryAllocator::_singleton) {
         void* mem = ::System::MemoryAllocator::MemAlloc(0x68, 8);
         if (mem) {
             // ENDGAME B.3.9 OBJ: the real class (Work_Ctor25 + the table +
             // four zero qwords), not the `??0Internal` door + hand stamp.
-            int64_t entityTmp = entity;
-            ::new (mem) ClearStorage(&entityTmp);
-            int64_t workIBP = 0;
-            new (&workIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-            CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(yard), 1, 0, &workIBP);
+            ComponentEntity* entityTmp = entity;
+            ClearStorage* work = ::new (mem) ClearStorage(&entityTmp);
+            ::Object::InternalPtr<ClearStorage> workIBP(work);
+            CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 1, 0, &workIBP);
         }
     }
     // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
@@ -561,14 +534,12 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
 // ============================================================
 // State 4 tick — 0x14011cec0 (per-frame: storage drained -> state 5).
 // ============================================================
-extern "C" char Destroy_State4Tick_cec0(void* data, void* sm, void* /*time*/) {
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-    if (!Destroy_StorageEmpty_da80(static_cast<int64_t>(comp))) return 1;
-    int64_t entity = OwnerEntity(comp);
-    int64_t yard = FindOn(entity, &WorkBase_FindComponent_3050);
+char DestroyComponent::State4Tick(void* sm) {
+    if (!StorageEmpty()) return 1;
+    WorkComponent* yard = FindOn<WorkComponent>(_entity);
     if (!Destroy_ReclaimPending_ea20(yard)) {
         ::ControllerLive::RequestStateTransition(sm, 5);
-        if (yard) WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(yard));
+        if (yard) WorkComponent_RegisterWorkSlot(yard);
     }
     return 1;
 }
@@ -576,11 +547,9 @@ extern "C" char Destroy_State4Tick_cec0(void* data, void* sm, void* /*time*/) {
 // ============================================================
 // State 5 enter — 0x14011cc70 (refund + queue BuildStructure, or finish up).
 // ============================================================
-extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
-    (void)sm;
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-    int64_t entity = OwnerEntity(comp);
-    int64_t prod = FindOn(entity, &Dialog_FindComponent_d6c0);
+char DestroyComponent::State5Enter() {
+    ComponentEntity* entity = _entity;
+    BuildComponent* prod = FindOn<BuildComponent>(entity);
 
     // Diagnostic: the refund+BuildStructure branch (which sets the +0x58 progress
     // target that gates the replacement spawn) fires ONLY when the building has a
@@ -591,44 +560,41 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
 
     if (prod && Yard_Delivered(prod) != 0) {
         // Half-materials refund into +0x58.
-        int64_t yard0 = FindOn(entity, &InteractComponent_FindWorkplaceComponent);
-        int mult = yard0 ? *reinterpret_cast<int*>(yard0 + 0x58) : 1;
-        void* desc = *reinterpret_cast<void**>(prod + 0x18);
-        int base = desc ? *reinterpret_cast<int*>(
-                       reinterpret_cast<uintptr_t>(desc) + 0x30) : 0;
+        MultiObjectComponent* yard0 = FindOn<MultiObjectComponent>(entity);
+        int mult = yard0 ? static_cast<int>(yard0->multiCount) : 1;
+        Description* desc = prod->_description;
+        int base = desc ? static_cast<BuildDescription*>(desc)->_i30 : 0;
         int recovered = (base * mult) / 2;
         if (recovered == 0) recovered = 1;
-        *reinterpret_cast<int*>(comp + 0x58) = recovered;
+        progressTarget = recovered;
 
         // Queue the BuildStructure work (type 0x2001) via the full retail ctor.
-        int64_t yard = FindOn(entity, &WorkBase_FindComponent_3050);
+        WorkComponent* yard = FindOn<WorkComponent>(entity);
         if (yard && ::System::MemoryAllocator::_singleton) {
             void* mem = ::System::MemoryAllocator::MemAlloc(0x70, 8);
             if (mem) {
-                int64_t entityIBP = entity;
+                ComponentEntity* entityIBP = entity;
                 BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1);
                 int64_t workIBP = 0;
                 new (&workIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge
-                CitizenAI_WorkScheduler_Post(static_cast<uintptr_t>(yard), 0x2001, 0, &workIBP);
+                CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(yard), 0x2001, 0, &workIBP);
             }
         }
     } else {
         // Nothing recoverable: scatter old contents (over the footprint) + notify
         // trade + mark the old entity for removal.
-        if (*reinterpret_cast<int8_t*>(comp + 0x51)) {
-            int64_t fp = FindOn(entity, &FloorComponent_FindResData);
+        if (hasBuildComponent) {
+            MapComponent* fp = FindOn<MapComponent>(entity);
+            // Retail loads the footprint with MOVSX: signed shorts.
             if (fp)
-                Destroy_ScatterContents_c530(static_cast<int64_t>(comp),
-                    *reinterpret_cast<int16_t*>(fp + 0x28),
-                    *reinterpret_cast<int16_t*>(fp + 0x2a),
-                    *reinterpret_cast<int16_t*>(fp + 0x2c),
-                    *reinterpret_cast<int16_t*>(fp + 0x2e));
+                ScatterContents(static_cast<int16_t>(fp->tileX0), static_cast<int16_t>(fp->tileY0),
+                                static_cast<int16_t>(fp->tileX1), static_cast<int16_t>(fp->tileY1));
         }
         if (GameUpdateLoop::_singleton != nullptr) {
-            uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-            int64_t tradeMgr = *reinterpret_cast<int64_t*>(gw + 0x120);
-            int64_t entityIBP = entity;
+            // +0x120 (the tree's "trade manager"; GameUpdateLoop names it m_toolManager).
+            int64_t tradeMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_toolManager);
+            ComponentEntity* entityIBP = entity;
             if (tradeMgr) NomadComp_FUN_140103480(tradeMgr, &entityIBP);
         }
         Destroy_ReleaseDemoSite(prod);   // nothing replaces it on this branch
@@ -640,10 +606,7 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
 // ============================================================
 // State 5 tick — 0x14011c120 ★ the replacement spawn ★.
 // ============================================================
-extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
-    (void)sm;
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-
+char DestroyComponent::State5Tick() {
     // 0) RETAIL GATE (0x14011c120 first branch): wait for the demolition work.
     // +0x54 = progress (credited one unit per completed builder PerformWork via
     // vtable slot 15 / DestroyComponent_MsgReceive), +0x58 = the target the
@@ -653,19 +616,18 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     // (observed live 2026-07-20: instant mark-for-removal froze the open panel
     // via the 0x400 bit and the upgrade spawn logic misfired).
     //
-    if (*reinterpret_cast<int*>(comp + 0x54) <
-        static_cast<int>(*reinterpret_cast<uint32_t*>(comp + 0x58))) {
+    if (progress < progressTarget) {   // 0x14011c14f CMP / JL: both int32
         return 1;
     }
 
-    int64_t entity = OwnerEntity(comp);
+    ComponentEntity* entity = _entity;
     if (!entity) return 1;
 
     // 0b) Retail: stop the yard's pending work now that demolition is complete
     // (FUN_140003050 -> FUN_14012eb50) before capturing the footprint.
     {
-        int64_t yard = FindOn(entity, &WorkBase_FindComponent_3050);
-        if (yard) WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(yard));
+        WorkComponent* yard = FindOn<WorkComponent>(entity);
+        if (yard) WorkComponent_RegisterWorkSlot(yard);
     }
 
     // 1) Capture the OLD footprint (grid cell + rotation) and world transform.
@@ -683,96 +645,91 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     // its foundation at the wrong orientation — the "rebuilt house's decal footprint
     // doesn't match" report (2026-08-23). Same class as the narrowed-store trap in
     // [reference_narrowed_8byte_store_desyncs_count_and_cap].
-    int64_t fp = FindOn(entity, &FloorComponent_FindResData);
+    // Retail loads the four shorts with MOVSX (0x14011c1a8..bb).
+    MapComponent* fp = FindOn<MapComponent>(entity);
     int16_t sx = 0, sy = 0, sc = 0, sd = 0;
     int32_t rot = 0;
     if (fp) {
-        sx = *reinterpret_cast<int16_t*>(fp + 0x28);
-        sy = *reinterpret_cast<int16_t*>(fp + 0x2a);
-        sc = *reinterpret_cast<int16_t*>(fp + 0x2c);
-        sd = *reinterpret_cast<int16_t*>(fp + 0x2e);
-        rot = *reinterpret_cast<int32_t*>(fp + 0x30);
+        sx = static_cast<int16_t>(fp->tileX0);
+        sy = static_cast<int16_t>(fp->tileY0);
+        sc = static_cast<int16_t>(fp->tileX1);
+        sd = static_cast<int16_t>(fp->tileY1);
+        rot = fp->extraField;
     }
-    int64_t pq = FindOn(entity, &ActCNR_FindComponent_3f60);
+    ModelComponent* pq = FindOn<ModelComponent>(entity);
     float tf[3] = {0, 0, 0};
     float yaw = 0.0f;
     uint16_t orient = 0;
     if (pq) {
-        tf[0] = *reinterpret_cast<float*>(pq + 0x158);
-        tf[1] = *reinterpret_cast<float*>(pq + 0x15c);
-        tf[2] = *reinterpret_cast<float*>(pq + 0x160);
-        orient = *reinterpret_cast<uint16_t*>(pq + 0x164);
-        yaw = *reinterpret_cast<float*>(pq + 0x168);
+        // ModelComponent's transform (+0x148): its translation (+0x10 / +0x14 / +0x18).
+        tf[0] = pq->transform.translation.x;
+        tf[1] = pq->transform.translation.y;
+        tf[2] = pq->transform.translation.z;
+        orient = static_cast<uint16_t>(pq->meshGroup);
+        yaw = pq->yaw;
     }
 
     // 2) Release workers from the old workplace, i.e. leave the BUILDER profession
     //    (FUN_14012f670 = workplacecomponent.cpp WorkPlaceComponent_LeaveBuilderProfession,
     //    called directly). Skipping it is what would leave the roster half-torn-down
     //    on the entity we are about to remove.
-    int64_t wp = FindOn(entity, &AttendanceComponent_GetJobHostComponent);
+    WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
     if (wp) {
-        WorkPlaceComponent_LeaveBuilderProfession(reinterpret_cast<void*>(wp));
+        WorkPlaceComponent_LeaveBuilderProfession(wp);
     }
 
     // 3) Trade notify + mark the old entity for removal.
     if (GameUpdateLoop::_singleton != nullptr) {
-        uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-        int64_t tradeMgr = *reinterpret_cast<int64_t*>(gw + 0x120);
-        int64_t entityIBP = entity;
+        int64_t tradeMgr = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_toolManager);
+        ComponentEntity* entityIBP = entity;
         if (tradeMgr) NomadComp_FUN_140103480(tradeMgr, &entityIBP);
     }
     Destroy_MarkAndPushRemoval(entity);
 
-    int64_t prod = FindOn(entity, &Dialog_FindComponent_d6c0);
-    int64_t target = *reinterpret_cast<int64_t*>(comp + 0x60);
+    BuildComponent* prod = FindOn<BuildComponent>(entity);
+    ComponentDescription* target = upgradeTarget;
     const bool wasDemoSite =
-        prod != 0 && g_pConstructionDemoSite == reinterpret_cast<void*>(prod);
+        prod != nullptr && g_pConstructionDemoSite == prod;
     Destroy_ReleaseDemoSite(prod);
 
-    if (target != 0) {
-        bool ready = (prod && Yard_Delivered(prod) >= Yard_Required(prod)) ||
-                     (*reinterpret_cast<int8_t*>(comp + 0x50) != 0);
+    if (target != nullptr) {
+        bool ready = (prod && Yard_Delivered(prod) >= Yard_Required(prod)) || burning;
         if (ready) {
             // Retail 0x14011c3xx: scatter when e600 != 0 OR e5b0 != 0 (the
             // previous port had the e600 sense inverted).
-            if (*reinterpret_cast<int8_t*>(comp + 0x51)) {
-                if (Destroy_TargetDiffers_e600(static_cast<int64_t>(comp)) ||
-                    Destroy_TargetIsCurrent_e5b0(static_cast<int64_t>(comp)))
-                    Destroy_ScatterContents_c530(static_cast<int64_t>(comp), sx, sy, sc, sd);
+            if (hasBuildComponent) {
+                if (TargetDiffers() || TargetIsCurrent())
+                    ScatterContents(sx, sy, sc, sd);
             }
 
             // >>> CREATE THE NEW BUILDING at the old footprint <<<
             if (::System::MemoryAllocator::_singleton &&
                 GameUpdateLoop::_singleton != nullptr) {
-                void* mem = ::System::MemoryAllocator::MemAlloc(0x48, 8);
-                void* newEntity = mem ? ComponentEntity_CtorFromDescription(
-                    static_cast<ComponentEntity*>(mem), *reinterpret_cast<void**>(comp + 0x60)) : nullptr;
+                ComponentEntity* mem = static_cast<ComponentEntity*>(::System::MemoryAllocator::MemAlloc(0x48, 8));
+                ComponentEntity* newEntity = mem ? ComponentEntity_CtorFromDescription(
+                    mem, upgradeTarget) : nullptr;
                 if (newEntity) {
-                    int64_t hold = 0;
-                    new (&hold) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
+                    ::Object::InternalPtr<ComponentEntity> hold(newEntity);
 
-                    int64_t nfp = FindOn(reinterpret_cast<int64_t>(newEntity), &FloorComponent_FindResData);
+                    MapComponent* nfp = FindOn<MapComponent>(newEntity);
                     if (nfp) {
-                        *reinterpret_cast<int16_t*>(nfp + 0x28) = sx;
-                        *reinterpret_cast<int16_t*>(nfp + 0x2a) = sy;
-                        *reinterpret_cast<int16_t*>(nfp + 0x2c) = sc;
-                        *reinterpret_cast<int16_t*>(nfp + 0x2e) = sd;
+                        nfp->tileX0 = static_cast<uint16_t>(sx);
+                        nfp->tileY0 = static_cast<uint16_t>(sy);
+                        nfp->tileX1 = static_cast<uint16_t>(sc);
+                        nfp->tileY1 = static_cast<uint16_t>(sd);
                         // 32-bit, like retail — see the capture-side note above.
                         int32_t r = rot;
                         while (r < 0) r += 360;   // retail: += 0x168 until >= 0
-                        *reinterpret_cast<int32_t*>(nfp + 0x30) = r;
+                        nfp->extraField = r;
                     }
-                    int64_t npq = FindOn(reinterpret_cast<int64_t>(newEntity), &ActCNR_FindComponent_3f60);
+                    ModelComponent* npq = FindOn<ModelComponent>(newEntity);
                     if (npq) {
-                        ToolTile_SetTransformFromYaw_3870(static_cast<uintptr_t>(npq), tf, yaw);
+                        ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(npq), tf, yaw);
                         ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(npq), orient, 0);
                     }
 
-                    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-                    void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
-                    int category = *reinterpret_cast<int*>(
-                        *reinterpret_cast<uintptr_t*>(comp + 0x60) + 0x20);
+                    void* entityList = GameUpdateLoop::_singleton->m_entityList;
+                    int category = upgradeTarget->_category;
                     if (entityList) EntityList_RegisterEntity_Impl(entityList, &hold, category);
 
                     // Standalone-only: give the replacement the two world registrations
@@ -788,15 +745,15 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                     // the pointers a moment ago), so BUILD_TRACE's demo logging follows
                     // the building that is now actually constructing.
                     if (wasDemoSite) {
-                        int64_t newProd = FindOn(reinterpret_cast<int64_t>(newEntity), &Dialog_FindComponent_d6c0);
-                        g_pConstructionDemoSite   = reinterpret_cast<void*>(newProd);
+                        BuildComponent* newProd = FindOn<BuildComponent>(newEntity);
+                        g_pConstructionDemoSite   = newProd;
                         g_pConstructionDemoEntity = newEntity;
                     }
 
                     std::fprintf(stderr, "[DestroySM] UPGRADE SPAWN: new entity=%p from "
-                                         "template=%llx at cell(%d,%d) %dx%d rot=%d "
+                                         "template=%p at cell(%d,%d) %dx%d rot=%d "
                                          "orient=%u yaw=%.1f cat=%d\n",
-                                 newEntity, static_cast<unsigned long long>(target),
+                                 (void*)newEntity, (void*)target,
                                  sx, sy, sc, sd, rot,
                                  static_cast<unsigned>(orient), static_cast<double>(yaw), category);
                     std::fflush(stderr);
@@ -806,8 +763,8 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
         }
     }
 
-    if (*reinterpret_cast<int8_t*>(comp + 0x51))
-        Destroy_ScatterContents_c530(static_cast<int64_t>(comp), sx, sy, sc, sd);
+    if (hasBuildComponent)
+        ScatterContents(sx, sy, sc, sd);
     return 1;
 }
 
@@ -817,9 +774,6 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
 // enter 0x14011d4d0 / update 0x14011d400 / trans38-tick 0x14011d490, plus the
 // rubble step 0x14011d5d0 and the material re-point 0x140125020. Gated at runtime
 // by BANISHED_LIVE_DESTROY_COLLAPSE; see that file's header for the mechanism.
-extern "C" char Destroy_State6Enter_d4d0(void* data, void* sm);
-extern "C" char Destroy_State6Update_d400(void* data, void* sm);
-extern "C" char Destroy_State6Tick_d490(void* data, void* sm, void* time);
 
 // ============================================================
 // State-7 EVENT handlers — the destroyed-building panel's buttons.
@@ -849,24 +803,23 @@ extern "C" char Destroy_State6Tick_d490(void* data, void* sm, void* time);
 // clear the queued upgrade target at +0x60.
 
 // Shared prologue: retail's FUN_14012f520 on the 2e10 (WorkPlaceComponent) match.
-static void Destroy_ReseatWorkplaceOnBuilder(int64_t entity) {
-    int64_t wp = FindOn(entity, &AttendanceComponent_GetJobHostComponent);
+static void Destroy_ReseatWorkplaceOnBuilder(ComponentEntity* entity) {
+    WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
     if (!wp) return;
-    WorkPlaceComponent_EnterBuilderProfession(wp);
+    wp->EnterBuilderProfession();
 }
 
 // State 7 event 0 — 0x14011d2a0. "Rebuild" (buttonRebuild) and "Reclaim"
 // (buttonReclaim; 0x14011e400 posts the same event 0, then additionally calls the
 // component's own vtable slot 4).
-extern "C" char Destroy_State7Event0_Rebuild_d2a0(void* data, void* sm) {
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-    int64_t entity = OwnerEntity(comp);
+char DestroyComponent::State7Rebuild(void* sm) {
+    ComponentEntity* entity = _entity;
 
     Destroy_ReseatWorkplaceOnBuilder(entity);
 
     // Retail sets the flag unconditionally here (unlike state-4 enter / the destroy
     // event, which both gate it on a BuildComponent being present).
-    *reinterpret_cast<int8_t*>(comp + 0x51) = 1;
+    hasBuildComponent = true;
 
     // +0x60 = the queued upgrade/replacement description. Re-pointing it at the
     // entity's OWN description (entity+0x28) is what makes this "rebuild what was
@@ -874,8 +827,7 @@ extern "C" char Destroy_State7Event0_Rebuild_d2a0(void* data, void* sm) {
     // CanRebuild (0x14011e600) tests exactly this equality to decide whether the
     // panel shows the upgrade text.
     if (entity) {
-        *reinterpret_cast<int64_t*>(comp + 0x60) =
-            *reinterpret_cast<int64_t*>(static_cast<uintptr_t>(entity) + 0x28);
+        upgradeTarget = entity->_description;
     }
 
     // Retail runs a nested Tick(Time(0)) first when smc[0x51] < 0; ControllerLive's
@@ -886,17 +838,16 @@ extern "C" char Destroy_State7Event0_Rebuild_d2a0(void* data, void* sm) {
 }
 
 // State 7 event 1 — 0x14011d1a0. "Remove" (buttonDestroy).
-extern "C" char Destroy_State7Event1_Remove_d1a0(void* data, void* sm) {
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-    int64_t entity = OwnerEntity(comp);
+char DestroyComponent::State7Remove(void* sm) {
+    ComponentEntity* entity = _entity;
 
     Destroy_ReseatWorkplaceOnBuilder(entity);
 
     // Same BuildComponent (d6c0) gate as state-4 enter: only a building with a build
     // yard gets the flag. Retail does NOT touch +0x60 here — the queued upgrade, if
     // any, survives the removal.
-    int64_t prod = FindOn(entity, &Dialog_FindComponent_d6c0);
-    if (prod) *reinterpret_cast<int8_t*>(comp + 0x51) = 1;
+    BuildComponent* prod = FindOn<BuildComponent>(entity);
+    if (prod) hasBuildComponent = true;
 
     ::ControllerLive::RequestStateTransition(sm, 5);
     return 1;
@@ -910,7 +861,8 @@ extern "C" char Destroy_State7Event1_Remove_d1a0(void* data, void* sm) {
 // the burning/collapsing stage and 7 is the destroyed-building rest state, so this
 // is "the fire is out — show the rubble panel". Nothing in the shipped UI posts
 // event 2 today (the Remove/Rebuild buttons are state 7 / events 0-1), but the
-// registration exists in dd00, so the handler does too.
+// registration exists in dd00, so the handler does too. It reads no field of the
+// component (RCX unused): it stays a free function (B1).
 extern "C" char Destroy_State6Event2_ToRubble_d390(void* /*data*/, void* sm) {
     ::ControllerLive::RequestStateTransition(sm, 7);
     return 1;
@@ -927,26 +879,24 @@ extern "C" char Destroy_State6Event2_ToRubble_d390(void* /*data*/, void* sm) {
 // Retail derefs the three finder results unguarded — a building sitting in state 4/5
 // always carries a MeshInstance, a production yard and (for the variant math) a model
 // component. Those derefs stay faithful.
-extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
-    uintptr_t comp = reinterpret_cast<uintptr_t>(data);
-    int64_t entity = OwnerEntity(comp);
+char DestroyComponent::CancelDemolition(void* sm) {
+    ComponentEntity* entity = _entity;
 
     // Read first (retail order): does the building have a build yard at all?
-    int64_t build = FindOn(entity, &Dialog_FindComponent_d6c0);
+    BuildComponent* build = FindOn<BuildComponent>(entity);
 
-    // MeshInstance state flag 5 off (the "under construction/demolition" overlay) and
-    // stop the production yard's worker.
-    int64_t mesh = FindOn(entity, &WorkBase_FindComponent_2f90);
+    // StatusIconComponent state flag 5 off (the "under construction/demolition"
+    // overlay) and stop the production yard's worker.
+    StatusIconComponent* mesh = FindOn<StatusIconComponent>(entity);
     CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(mesh), 5, 0);
-    int64_t yard = FindOn(entity, &WorkBase_FindComponent_3050);
-    WorkComponent_RegisterWorkSlot(reinterpret_cast<void*>(yard));
+    WorkComponent* yard = FindOn<WorkComponent>(entity);
+    WorkComponent_RegisterWorkSlot(yard);
 
-    // comp+0x50 — the "this was a REPLACEMENT/upgrade, not a plain demolish" flag that
-    // state-4 enter and the panel buttons set. Cancelling one of those leaves nothing
+    // comp+0x50 — the burning flag BeginBurning sets. Cancelling leaves nothing
     // standing, so the machine goes to the destroyed-building rest state instead.
-    if (*reinterpret_cast<int8_t*>(comp + 0x50) != 0) {
-        int64_t wp = FindOn(entity, &AttendanceComponent_GetJobHostComponent);
-        if (wp) WorkPlaceComponent_LeaveBuilderProfession(reinterpret_cast<void*>(wp));
+    if (burning) {
+        WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
+        if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
         ::ControllerLive::RequestStateTransition(sm, 7);
         return 1;
     }
@@ -957,26 +907,26 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
         next = 2;
     } else {
         // Pick the resume state from how far the model got. The variant source is the
-        // yard-0 component's (+0x48) referenced entity when there is one — the
+        // MultiObjectComponent's (+0x48) first child entity when there is one — the
         // construction SITE — otherwise this entity itself.
-        int64_t yard0  = FindOn(entity, &InteractComponent_FindWorkplaceComponent);
-        int64_t target = entity;
-        if (yard0) target = *reinterpret_cast<int64_t*>(
-                                *reinterpret_cast<int64_t*>(yard0 + 0x48));
+        MultiObjectComponent* yard0 = FindOn<MultiObjectComponent>(entity);
+        ComponentEntity* target = entity;
+        if (yard0) target = yard0->children[0].Get();
 
-        int64_t model = FindOn(target, &ActCNR_FindComponent_3f60);
-        int16_t modelVariant = *reinterpret_cast<int16_t*>(model + 0x166);
-        int16_t variantIdx   = *reinterpret_cast<int16_t*>(model + 0x164);
-        void*   obj = *reinterpret_cast<void**>(model + 0x18);
-        void*   modelDesc = (::Object::IsDerivedFromNullSafe(obj, ModelDescription::TypeId())) ? obj : nullptr;
+        ModelComponent* model = FindOn<ModelComponent>(target);
+        int16_t modelVariant = model->meshIndex;
+        int16_t variantIdx   = model->meshGroup;
+        Description* obj = model->_description;
+        ModelDescription* modelDesc = (::Object::IsDerivedFromNullSafe(obj, ModelDescription::TypeId()))
+                                          ? static_cast<ModelDescription*>(obj) : nullptr;
 
         if (modelVariant < 0) {
             next = 0;                       // no mesh chosen yet — back to the start
         } else {
             // group[variantIdx] is 0x18 bytes; +0x10 is the mesh COUNT (+0x08 is the
-            // mesh array — the same layout destroycomponent_state6.cpp walks).
-            int64_t groups = *reinterpret_cast<int64_t*>(
-                reinterpret_cast<uintptr_t>(modelDesc) + 0x20);
+            // mesh array — the same layout destroycomponent_state6.cpp walks). The
+            // group array is `void*` in COMP-d's ModelDescription.h: LEFT.
+            int64_t groups = reinterpret_cast<int64_t>(modelDesc->_meshGroups);
             int meshCount = *reinterpret_cast<int*>(
                 groups + 0x10 + static_cast<int64_t>(variantIdx) * 0x18);
             next = (modelVariant == meshCount - 1) ? 2 : 8;
@@ -986,8 +936,8 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
     ::ControllerLive::RequestStateTransition(sm, next);
 
     // Release the workplace roster AFTER the request on this arm (retail order).
-    int64_t wp = FindOn(entity, &AttendanceComponent_GetJobHostComponent);
-    if (wp) WorkPlaceComponent_LeaveBuilderProfession(reinterpret_cast<void*>(wp));
+    WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
+    if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
 
     return 1;
 }
@@ -999,23 +949,37 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
 // ============================================================
 // ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
 // ControllerLive::TableController<DestroyCtrlTag>, DestroyComponent.h).
-#include "Component/DestroyComponent.h"
 using DestroyDispatch = ::ControllerLive::Dispatcher<DestroyCtrlTag>;
+
+// The table holds one-line adapters: the dispatcher hands the handler
+// `[node+0x18]` (the DestroyComponent), the state machine and, for the per-frame
+// column, the elapsed Time.
+static char DestroyState3Enter(DestroyComponent* c, void* sm)  { return c->State3Enter(sm); }   // 0x14011d7b0
+static char DestroyState4Enter(DestroyComponent* c, void* sm)  { return c->State4Enter(sm); }   // 0x14011cfd0
+static char DestroyState4Tick(DestroyComponent* c, void* sm)   { return c->State4Tick(sm); }    // 0x14011cec0
+static char DestroyState5Enter(DestroyComponent* c)            { return c->State5Enter(); }     // 0x14011cc70
+static char DestroyState5Tick(DestroyComponent* c)             { return c->State5Tick(); }      // 0x14011c120
+static char DestroyState6Enter(DestroyComponent* c)            { return c->State6Enter(); }     // 0x14011d4d0
+static char DestroyState6Update(DestroyComponent* c)           { return c->State6Update(); }    // 0x14011d400
+static char DestroyState6Tick(DestroyComponent* c, void*, System::Time* t) { return c->State6Tick(t); }   // 0x14011d490
+static char DestroyState7Rebuild(DestroyComponent* c, void* sm) { return c->State7Rebuild(sm); }  // 0x14011d2a0
+static char DestroyState7Remove(DestroyComponent* c, void* sm)  { return c->State7Remove(sm); }   // 0x14011d1a0
+static char DestroyCancel(DestroyComponent* c, void* sm)        { return c->CancelDemolition(sm); }  // 0x14011bcc0
 
 extern "C" void DestroyCtrl_PopulateTable() {
     using namespace ::ControllerLive;
     StateTable& t = DestroyDispatch::table;
     if (t.count != 0) return;   // idempotent
 
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&Destroy_State3Enter_d7b0),
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&DestroyState3Enter),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 6, nullptr);
 
     // sub_3e50(6, A=d4d0, B=d400, D=d490): A -> enter, B -> update, D -> trans38.
-    TableRegisterState(t, 6, reinterpret_cast<void*>(&Destroy_State6Enter_d4d0),
-                       nullptr, reinterpret_cast<void*>(&Destroy_State6Tick_d490),
-                       reinterpret_cast<void*>(&Destroy_State6Update_d400));
+    TableRegisterState(t, 6, reinterpret_cast<void*>(&DestroyState6Enter),
+                       nullptr, reinterpret_cast<void*>(&DestroyState6Tick),
+                       reinterpret_cast<void*>(&DestroyState6Update));
     TableAddTransition(t, 7, nullptr);
     // sub_4020(2, d390) — state 6's only event.
     TableAddEvent(t, 2, reinterpret_cast<void*>(&Destroy_State6Event2_ToRubble_d390));
@@ -1026,23 +990,23 @@ extern "C" void DestroyCtrl_PopulateTable() {
     TableAddTransition(t, 5, nullptr);
     // sub_4020(0, d2a0) / sub_4020(1, d1a0) — the destroyed-building panel's
     // Rebuild/Reclaim and Remove buttons. Registration order matches dd00.
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&Destroy_State7Event0_Rebuild_d2a0));
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&Destroy_State7Event1_Remove_d1a0));
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&DestroyState7Rebuild));
+    TableAddEvent(t, 1, reinterpret_cast<void*>(&DestroyState7Remove));
 
-    TableRegisterState(t, 4, reinterpret_cast<void*>(&Destroy_State4Enter_cfd0),
-                       nullptr, reinterpret_cast<void*>(&Destroy_State4Tick_cec0),
+    TableRegisterState(t, 4, reinterpret_cast<void*>(&DestroyState4Enter),
+                       nullptr, reinterpret_cast<void*>(&DestroyState4Tick),
                        nullptr);
     TableAddTransition(t, 5, nullptr);
     TableAddTransition(t, 2, nullptr);
     // sub_4020(0, bcc0) — cancel, registered on state 4 AND state 5.
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&Destroy_State45Event0_Cancel_bcc0));
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&DestroyCancel));
 
-    TableRegisterState(t, 5, reinterpret_cast<void*>(&Destroy_State5Enter_cc70),
-                       nullptr, reinterpret_cast<void*>(&Destroy_State5Tick_c120),
+    TableRegisterState(t, 5, reinterpret_cast<void*>(&DestroyState5Enter),
+                       nullptr, reinterpret_cast<void*>(&DestroyState5Tick),
                        nullptr);
     TableAddTransition(t, 0, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 8, nullptr);
     TableAddTransition(t, 7, nullptr);
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&Destroy_State45Event0_Cancel_bcc0));
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&DestroyCancel));
 }

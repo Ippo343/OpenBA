@@ -133,8 +133,7 @@ void ImmigrationUI::OnUpdateLayout() {
     }
 
     // The immigration count: the low dword of +0x60 (the array's count).
-    // LEFT: ImmigrationComponent::field60 is void* (COMP's header).
-    uint32_t immigCount = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(immigComp->field60));
+    uint32_t immigCount = static_cast<uint32_t>(immigComp->groupCount);
 
     // The StateMachineComponent on the component's entity
     StateMachineComponent* buildState = immigrationui_sa::FindStateMachine(immigComp->_entity);

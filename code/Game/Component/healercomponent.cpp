@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/CitizenBehavior.h"
 
 // FUN_140002cc0 -- ERASE-by-value from an InternalBasePtr array {ptr@+0, count@+8}.
 // (The legacy name said "push"; the body at 0x140002cc0 scans for a matching
@@ -60,27 +61,31 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0
 // This is the whole reason a built hospital was invisible to the town: with the
 // component inert nothing ever entered state 2, so the healer array at townMgr+0x70
 // stayed empty for the life of the save and the sick had nowhere to be sent.
-extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
+// GameUpdateLoop::m_citizenList (+0xF0) is still void* (GAME-a); the town manager it
+// points at is the CitizenBehavior (WORK-a), whose healer list is read by name. The one
+// bridge from the untyped member is LEFT.
+static CitizenBehavior* TownManager() {
+    return reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
+}
+
+char HealerComponent::StateBuiltEnter() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
 
-    uint8_t ibp[24] = {};
-    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
+    ::Object::InternalPtr<HealerComponent> self(this);
 
-    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
-    if (!townMgr) return 0;
+    CitizenBehavior* town = TownManager();
+    if (!town) return 0;
 
-    const int count = *reinterpret_cast<int*>(townMgr + 0x78);
+    const int count = town->healerCount;
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x70))
-        .SetSizeFill(count + 1, ibp);
+    GameColl::AsArray<GameColl::Ptr8>(&town->healers).SetSizeFill(count + 1, &self);
 
     {
         static int n = 0;
         if (n < 8) { ++n;
             fprintf(stderr, "[Healer] hospital REGISTERED: comp=%p townMgr=%p "
-                            "healerCount=%d\n", comp, reinterpret_cast<void*>(townMgr),
-                    *reinterpret_cast<int*>(townMgr + 0x78));
+                            "healerCount=%d\n", static_cast<void*>(this), static_cast<void*>(town),
+                    town->healerCount);
             fflush(stderr);
         }
     }
@@ -89,10 +94,15 @@ extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
 
 // HealerComponent state-3 "demolish" enter -- 0x14004adf0. Byte-identical to the
 // slot-7 removal hook (0x14004ae70): wrap the component, call the erase.
-extern "C" char HealerComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    reinterpret_cast<HealerComponent*>(comp)->HealerComponent::OnRemove();   // B.3.8 bridge (state enters take void*)
+char HealerComponent::StateDemolishEnter() {
+    HealerComponent::OnRemove();
     return 0;
 }
+
+// The state table's handler adapters: the controller hands each one its owner
+// (node+0x18), the HealerComponent.
+static char Healer_StateBuiltEnter(HealerComponent* c, void* /*sm*/)    { return c->StateBuiltEnter(); }      // 0x14004ae30
+static char Healer_StateDemolishEnter(HealerComponent* c, void* /*sm*/) { return c->StateDemolishEnter(); }   // 0x14004adf0
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — HealerComponent as a REAL class (HealerComponent.h).
@@ -117,11 +127,11 @@ static void HealerComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = HealerCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&HealerComponent_EnterBuilt),
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&Healer_StateBuiltEnter),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableAddTransition(t, 13, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&HealerComponent_EnterDemolish),
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&Healer_StateDemolishEnter),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);
@@ -163,13 +173,11 @@ void HealerComponent::Persist(void* stream) {
 // [7] 0x14004ae70 — leave the town healer registry: wrap THIS component in an
 // InternalBasePtr and erase it from *(GameWorld+0xF0)+0x70.
 void HealerComponent::OnRemove() {
-    uint8_t basePtr[24] = {};
-    new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    ::Object::InternalPtr<HealerComponent> self(this);
     if (GameUpdateLoop::_singleton != nullptr) {
-        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
-        if (townMgr)
-            CemeteryListErase_Reimpl(reinterpret_cast<void*>(townMgr + 0x70), basePtr);
+        CitizenBehavior* town = TownManager();
+        if (town)
+            CemeteryListErase_Reimpl(&town->healers, &self);   // 0x140002cc0
     }
 }
 

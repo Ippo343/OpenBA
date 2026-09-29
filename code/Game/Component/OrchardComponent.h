@@ -31,7 +31,30 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
+class ComponentEntity;
+class NaturalResourceComponent;
+class FruitComponent;
+class ComponentDescription;
+
 struct OrchardCtrlTag {};
+
+// One tree position of the orchard, stride 0x28 (Array element of +0x50; resized by
+// 0x140009f80, serialized by 0x14000a230 as int, int, three InternalPtrs, bool).
+struct OrchardSlot {
+    int32_t                   tile;       // +0x00 cell index into the Map's cell array
+    int32_t                   state;      // +0x04 0 empty, 1 planted (bound), 2 hole
+    ComponentEntity*          tree;       // +0x08 InternalPtr<ComponentEntity>: the tree on the cell
+    NaturalResourceComponent* resource;   // +0x10 InternalPtr<NaturalResourceComponent>
+    FruitComponent*           fruit;      // +0x18 InternalPtr<FruitComponent>
+    bool                      picked;     // +0x20 harvested this season
+    uint8_t                   _pad21[7];  // +0x21
+};
+static_assert(sizeof(OrchardSlot) == 0x28, "OrchardSlot stride 0x28 (0x140009f80)");
+static_assert(offsetof(OrchardSlot, state) == 0x04, "OrchardSlot +0x04");
+static_assert(offsetof(OrchardSlot, tree) == 0x08, "OrchardSlot +0x08");
+static_assert(offsetof(OrchardSlot, resource) == 0x10, "OrchardSlot +0x10");
+static_assert(offsetof(OrchardSlot, fruit) == 0x18, "OrchardSlot +0x18");
+static_assert(offsetof(OrchardSlot, picked) == 0x20, "OrchardSlot +0x20");
 
 class OrchardComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(OrchardComponent)
@@ -52,14 +75,40 @@ public:
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080
 
-    // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
-    StateController _controller;   // +0x28 the embedded controller (D6)
-    uint8_t  orchardFlag;          // +0x48 work enabled (byte)
-    uint8_t  _pad49[3];            // +0x49
-    int32_t  orchardId;            // +0x4c the last-harvest year (-1 = never; retail ctor)
-    void*    field50;              // +0x50 the tree-slot array
-    void*    field58;              // +0x58 its count / capacity
-    void*    field60;              // +0x60 (Startup clears it)
+    // ---- non-virtual members (retail addresses; orchardcomponent*.cpp) ----
+    void  SetSlotCount(int count);                      // 0x140009f80 Array<OrchardSlot>::SetSize on +0x50
+    void  ValidateRefs();                               // 0x140051830
+    float GetGrowth() const;                            // 0x140051640
+    // The state table's handlers (the controller hands them this component).
+    char EnterIdle();                                   // 0x140051530 state 2
+    char TickIdle(void* sm);                            // 0x1400514c0
+    char OnPlantEvent(void* sm);                        // 0x140051450 event 3
+    char EnterPlanting();                               // 0x140051070 state 9
+    char TickPlanting(void* sm);                        // 0x140050f90
+    char OnHarvestEvent(void* sm);                      // 0x140050900 event 4
+    char OnClearEvent(void* sm);                        // 0x1400513e0 event 5
+    char TryHarvest(void* sm);                          // 0x140051580
+    char EnterTending(void* sm);                        // 0x140050e30 state 10
+    char UpdateTending();                               // 0x140050ba0 (state 12's 0x1400509b0 is the same body)
+    char TickTending(void* sm);                         // 0x140050c00
+    char EnterReplanting();                             // 0x140050ae0 state 12
+    char TickReplanting(void* sm);                      // 0x140050a10
+    char EnterHarvesting();                             // 0x140050800 state 11
+    char TickHarvesting(void* sm);                      // 0x140050650
+    char EnterClearing();                               // 0x1400504e0 state 20
+    char UpdateClearing();                              // 0x1400503e0
+    char TickClearing(void* sm);                        // 0x140050430
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
+    // 0x140051de0 (bool +0x48, int +0x4c, the slot array, ExternalPtr +0x60).
+    StateController   _controller;      // +0x28 the embedded controller (D6)
+    bool              enabled;          // +0x48 work switch (panel command 2)
+    uint8_t           _pad49[3];        // +0x49
+    int32_t           lastHarvestYear;  // +0x4c -1 = never (retail ctor)
+    OrchardSlot*      slots;            // +0x50 Array<OrchardSlot> data (freed by the dtor)
+    int32_t           slotCount;        // +0x58
+    int32_t           slotCapacity;     // +0x5c
+    ComponentDescription* treeType;     // +0x60 ExternalPtr: the tree template chosen in OrchardUI (Startup clears it)
 };
 
 static_assert(sizeof(OrchardComponent) == 0x68, "OrchardComponent is 0x68 (create 0x140009870)");
@@ -68,8 +117,9 @@ static_assert(offsetof(OrchardComponent, _controller) == 0x28,
               "OrchardComponent's controller member at +0x28 (slot 17 0x140004080)");
 static_assert(offsetof(OrchardComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x140051f9c)");
-static_assert(offsetof(OrchardComponent, orchardFlag) == 0x48, "OrchardComponent +0x48");
-static_assert(offsetof(OrchardComponent, orchardId) == 0x4c, "OrchardComponent +0x4c (ctor 0x140051fa3)");
-static_assert(offsetof(OrchardComponent, field50) == 0x50, "OrchardComponent +0x50");
-static_assert(offsetof(OrchardComponent, field58) == 0x58, "OrchardComponent +0x58");
-static_assert(offsetof(OrchardComponent, field60) == 0x60, "OrchardComponent +0x60");
+static_assert(offsetof(OrchardComponent, enabled) == 0x48, "OrchardComponent +0x48");
+static_assert(offsetof(OrchardComponent, lastHarvestYear) == 0x4c, "OrchardComponent +0x4c (ctor 0x140051fa3)");
+static_assert(offsetof(OrchardComponent, slots) == 0x50, "OrchardComponent +0x50");
+static_assert(offsetof(OrchardComponent, slotCount) == 0x58, "OrchardComponent +0x58");
+static_assert(offsetof(OrchardComponent, slotCapacity) == 0x5c, "OrchardComponent +0x5c");
+static_assert(offsetof(OrchardComponent, treeType) == 0x60, "OrchardComponent +0x60");

@@ -108,7 +108,7 @@ static UIDescription* GetDescPage_Impl(const ComponentDescription* entityDesc)
     if (!entityDesc) return result;
 
     int count = entityDesc->_subDescCount;
-    void** compArray = entityDesc->_subDescs;
+    Description** compArray = entityDesc->_subDescs;   // COMP-c typed _subDescs (merge fix)
 
     for (int i = 0; i < count; i++) {
         // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
@@ -628,10 +628,9 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
             MultiObjectComponent* multi =
                 entityPtr ? entityPtr->FindComponent<MultiObjectComponent>() : nullptr;          // 0x140004740
             if (multi == nullptr) {
-                // LEFT: ModelComponent::transform is raw Math::Transform storage (H5);
-                // the translation is its +0x10 / +0x14.
-                focus[0] = *(float*)&model->transform[0x10];
-                focus[1] = *(float*)&model->transform[0x14];
+                // The model transform's translation (+0x158 / +0x15c).
+                focus[0] = model->transform.translation.x;
+                focus[1] = model->transform.translation.y;
                 gotPos = true;
             }
         }

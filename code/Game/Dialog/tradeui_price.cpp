@@ -70,7 +70,7 @@ constexpr float kTradeDiscount = 0.75f;      // DAT_140172124
 ::Object::Base* PriceFindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId) {
     if (!entity) return nullptr;
     const int32_t count = entity->_subDescCount;
-    void* const* arr = entity->_subDescs;
+    Description* const* arr = entity->_subDescs;   // COMP-c typed _subDescs (merge fix)
     if (!arr || count <= 0) return nullptr;
     for (int32_t i = 0; i < count; ++i) {
         ::Object::Base* comp = reinterpret_cast<::Object::Base*>(arr[i]);   // LEFT: ComponentDescription::_subDescs is void** (COMP-c)

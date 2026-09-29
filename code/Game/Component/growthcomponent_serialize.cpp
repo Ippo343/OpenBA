@@ -48,24 +48,11 @@
 #include "Component/GrowthComponent.h"
 #include "Component/NaturalResourceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7b30 cell class
 #include "Component/ModelComponent.h"             // ENDGAME B.3.9 C1: 0x1401c7a50 cell class
-
-namespace {
+#include "Component/GrowthDescription.h"
 
 // (The base serialize 0x1401189b0 is Component::Persist, called qualified.)
-
-inline void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
-    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    void* obj = *reinterpret_cast<void**>(ibp);
-    // slot 0x140152a98 = ?IsDerivedFrom@Base@Object@@QEBA_NI@Z
-    if (obj && tid && !reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(tid))   // B.3.x bridge
-        *reinterpret_cast<uint64_t*>(ibp) = 0;
-}
-
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
-}
-
-} // namespace
+// Each IBP is InternalPtr<T>::Serialize(ser, typeId): InternalBasePtr::Serialize,
+// then IsDerivedFrom (slot 0x140152a98) and the ref nulled on a mismatch.
 
 // ============================================================
 // GrowthComponent::Serialize (vtable slot [3], 0x1401207c0)
@@ -75,21 +62,20 @@ void GrowthComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    bool loading;
+    {
+        IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (Persist takes void*)
 
-    SerializeValidatedIBP(At(this, 0x28), ser, NaturalResourceComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x30), ser, ModelComponent::TypeId());
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x4c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(this, 0x40))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        resource.Serialize(ser, NaturalResourceComponent::TypeId());
+        model.Serialize(ser, ModelComponent::TypeId());
+        ser.Serialize(displayScale, nullptr);
+        ser.Serialize(growthScale, nullptr);
+        spawnTimer.Serialize(ser);
 
-    // Everything above is retail 0x1401207c0 field-for-field. What follows is a
-    // deliberate, load-only repair -- see below for why it cannot be avoided.
-    const bool loading =
-        (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+        // Everything above is retail 0x1401207c0 field-for-field. What follows is a
+        // deliberate, load-only repair -- see below for why it cannot be avoided.
+        loading = (static_cast<int>(ser.GetDirection()) == 0);   // (IO::Serializer::GetDirection, retail 0x180006210)
+    }
 
     // config@+0x38 is NOT in the stream: retail's serialize (above) persists only
     // +0x28, +0x30, +0x48, +0x4c and +0x40. Its one writer is GrowthComponent's
@@ -109,7 +95,7 @@ void GrowthComponent::Persist(void* stream) {
     // crop field can message a restored plant BEFORE that plant's first Update tick.
     // That was a null deref a few hundred frames into a loaded tutorial 4. Doing it
     // here means no reader can ever observe +0x38 null on a loaded plant.
-    if (loading && *reinterpret_cast<uintptr_t*>(At(this, 0x38)) == 0)
-        *reinterpret_cast<uintptr_t*>(At(this, 0x38)) =
-            *reinterpret_cast<uintptr_t*>(At(this, 0x18));
+    Description* desc0 = _description;
+    if (loading && config == nullptr)
+        config = static_cast<GrowthDescription*>(desc0);
 }

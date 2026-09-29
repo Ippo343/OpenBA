@@ -134,12 +134,14 @@ void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* );  // 0x1400302
 void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
 
 // ---- cropfieldcomponent.cpp
-void CropFieldComponent_ValidateEntityRefs(uintptr_t self);  // 0x14011aa20
-void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize);  // 0x1400335b0
-void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr_t arrayPtr);  // 0x1400336c0
+struct CropSlot;
+struct CropSlotArray;
+namespace IO { class Serializer; }
+void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize
+void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0
 
 // ---- cropfieldcomponent_states.cpp
-extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410
+extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410  B4 FORWARD: CropFieldComponent::Maturity (cropui_promote.cpp)
 
 // ---- decalcomponent.cpp
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId);  // 0x1400b0d00
@@ -157,35 +159,23 @@ extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIB
 
 // ---- floorcomponent.cpp
 void* FloorComponent_FindResData(void* owner, void* outIBP);  // 0x140004680
-void FloorComponent_RemoveFloorMesh(void* scene, uint32_t floorId, int x, int y, int w, int h);  // 0x14009cba0
-void FloorComponent_SubF390(void* selfV);  // 0x14011f390
+void FloorComponent_SubF390(void* selfV);  // 0x14011f390  B4 FORWARD: FloorComponent::PlaceFloor (multiobjectcomponent.cpp)
 
 // ---- frustumoutlineelement.cpp
 extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 
 // ---- growthcomponent.cpp
-void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);  // 0x140118950
-int GrowthComponent_GetResourceIndex(void* comp);  // 0x140120410
-void GrowthComponent_SetResourceAmount(void* comp, float amount);  // 0x140120470
-void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780
-void GrowthComponent_SpawnSubResource(void* growthComp, void* config);  // 0x14011fba0
+void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);  // 0x140118950  B4 FORWARD: Component::ModifyFlags (animalcomponent.cpp)
+void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780  B4 FORWARD: NaturalResourceComponent::ResetGrowthState (tornadocomponent.cpp)
 
 // ---- happinesscomponent.cpp
-void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, short delta);  // 0x14009f990
-void FishingComponent_NotifyTile(void* selfP, int16_t param2);  // 0x14004a300
 
 // ---- herdcomponent.cpp
-char HerdComponent_Helper6b10(int64_t param_1);  // 0x140106b10
-float HerdComponent_CheckFood(int64_t entityComp, int gridCell);  // 0x140053f20
-char HerdComponent_CheckMigrationDone(int64_t herdComp);  // 0x140121980
-void HerdComponent_AdjustSize(void* herdComp, int targetSize);  // 0x140121450
-void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp);  // 0x14012e510
 
 // ---- interactcomponent.cpp
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);  // 0x140004740
 
 // ---- keystone_a_map.cpp
-void MapComponent_sub_41b0(int64_t param_1);  // 0x1401241b0
 
 // ---- keystone_a_restree.cpp
 extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, uint64_t* param_3, int64_t* param_4);  // 0x140017230
@@ -204,18 +194,13 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  
 void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 
 // ---- orchardcomponent.cpp
-void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount);  // 0x140009f80
-void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arrayBase);  // 0x14000a230
-void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830
+void OrchardComponent_ValidateRefs(void* selfV);  // 0x140051830 B4 FORWARD to OrchardComponent::ValidateRefs
 
 // ---- pasturecomponent.cpp
-void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20
-uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570
-void PastureComponent_Helper5ed0(void* entityRef);  // 0x140105ed0
-void PastureComponent_ReassignEntityRef(uintptr_t entityPtr);  // 0x1401240a0
+void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY, short* outW, short* outH, int size);  // 0x140105e20 B4 FORWARD to AnimalComponent::GetWanderBox
+uint64_t PastureComponent_ComputeCapacity(uintptr_t self);  // 0x140128570 B4 FORWARD to PastureComponent::ComputeCapacity
 
 // ---- pasturecomponent_spawn.cpp
-extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);  // 0x14002f1d0
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 

@@ -28,6 +28,8 @@
 #include "Component/FrustumOutlineElement.h"
 #include <cstdint>
 #include "Component/exe_bodies.h"
+#include "Game/PlayerController.h"
+#include "Game/Map.h"
 
 // UI::Element::GetAlignedPosition (member overload, Runtime 0x180115ff0). Computes the
 // element's aligned screen rect from its size (+0x60/+0x64), margins (+0x18..+0x24) and
@@ -46,27 +48,25 @@
 // Vector3::Dot — slots 0x1401512c0, 0x140151298 — are direct Math:: class calls.)
 extern "C" void FrustumOutline_ProjectCorners(float* out) {
     if (!out) return;
-    void* gw = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    uint8_t* cam = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(gw) + 0xe0);
-    if (!cam) return;
+    PlayerController* pc = gw->m_playerController;
+    if (!pc) return;
+    // PlayerController::camera is raw storage (GAME-b, H5): the one bridge is LEFT.
+    const Graphics::Camera* camera = reinterpret_cast<const Graphics::Camera*>(pc->camera);
 
-    // Camera Transform3 (rotation + translation, 0x30 bytes) at cam+0x98;
-    // translation Vector3 at cam+0xbc. Copy the transform so Rotate reads a
-    // stable object.
-    const Math::Transform3 xform = *reinterpret_cast<const Math::Transform3*>(cam + 0x98);   // B.3.1 bridge
-    const Math::Vector3 trans(*reinterpret_cast<float*>(cam + 0xbc),
-                              *reinterpret_cast<float*>(cam + 0xc0),
-                              *reinterpret_cast<float*>(cam + 0xc4));
+    // Camera Transform3 (rotation + translation, 0x30 bytes) at camera +0x64 (the
+    // controller's +0x98); its translation at +0x24 (the controller's +0xbc). Copy the
+    // transform so Rotate reads a stable object.
+    const Math::Transform3 xform = camera->_cameraToWorld;
+    const Math::Vector3 trans = xform.translation;
 
-    // 8 view-frustum corners (camera object at cam+0x34), in camera space.
-    // Camera::GetFrustum is a hidden-retslot door in retail; the door body moves
-    // to the call site as exactly ONE construction into the same caller storage.
-    alignas(::Frustum) uint8_t frustum[0x80];
-    ::Frustum* fr = ::new (static_cast<void*>(frustum)) ::Frustum(
-        reinterpret_cast<const Graphics::Camera*>(cam + 0x34)->GetFrustum());   // B.3.5 bridge
+    // 8 view-frustum corners, in camera space. Camera::GetFrustum is a hidden-retslot
+    // door in retail; the door body moves to the call site as exactly ONE construction
+    // into the same caller storage.
+    ::Frustum frustum(camera->GetFrustum());
     Math::Vector3 corners[8];
-    RtVolume_Frustum_GetCorners(fr, corners);
+    RtVolume_Frustum_GetCorners(&frustum, corners);
 
     // Far corners 4..7 -> normalized -> rotated into world-space ray directions.
     Math::Vector3 dir[4];
@@ -110,36 +110,33 @@ FrustumOutlineElement::FrustumOutlineElement()
 // patching 4/5/6; the class's compiler table carries them now.
 // ---------------------------------------------------------------------------
 // Slot 4 (+0x20) — ComputeSize (exe 0x14006c290). If the "size-pending" flag
-// (bit 27 of +0x34) is set, copy the element's intrinsic width/height (+0xd0/+0xd4)
-// into its size fields (+0x60/+0x64) and clear the flag. Pure field arithmetic —
+// (bit 27 of _flags) is set, copy the element's intrinsic width/height (_width /
+// _height) into its layout size and clear the flag. Pure field arithmetic —
 // no engine deps. (RibbonElement::ComputeSize clears the same bit 27 after it.)
 void FrustumOutlineElement::ComputeSize() {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
-    uint32_t flags = *reinterpret_cast<uint32_t*>(s + 0x34);
+    uint32_t flags = _flags;
     if ((flags >> 27) & 1u) {
-        *reinterpret_cast<uint32_t*>(s + 0x60) = *reinterpret_cast<uint32_t*>(s + 0xd0);
-        *reinterpret_cast<uint32_t*>(s + 0x34) = flags & ~(1u << 27);
-        *reinterpret_cast<uint32_t*>(s + 0x64) = *reinterpret_cast<uint32_t*>(s + 0xd4);
+        _layoutWidth = _width;
+        _flags = flags & ~(1u << 27);
+        _layoutHeight = _height;
     }
 }
 // [5] 0x14006c1c0
 // Slot 5 (+0x28) — ComputeLayout (exe 0x14006c1c0). Faithful port: run the base
 // UI::Element::ComputeLayout, then compute the aligned screen rect via GetAlignedPosition
-// and store it at +0x68 (left) / +0x6c (top) / +0x70 (right) / +0x74 (bottom). The outline
-// Draw reads +0x68/+0x6c as the absolute pixel offset for its lines and scissor — without
-// this write they stay 0 and the frustum draws relative to screen origin instead of the
+// and store it in the layout rect (left / top / right / bottom). The outline Draw reads
+// the left/top as the absolute pixel offset for its lines and scissor — without this
+// write they stay 0 and the frustum draws relative to screen origin instead of the
 // inset minimap rect (renders too high/left).
 void FrustumOutlineElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
     // base — QUALIFIED: this body IS slot 5 of FrustumOutlineElement.
-    reinterpret_cast<UI::Element*>(this)->UI::Element::ComputeLayout(x, y, w, h);  // B.3.6 bridge
+    UI::Element::ComputeLayout(x, y, w, h);
     int outX = 0, outY = 0, outW = 0, outH = 0;
-    reinterpret_cast<UI::Element*>(this)->GetAlignedPosition(  // B.3.6 bridge
-        x, y, w, h, 0, 0, outX, outY, outW, outH, false, false);
-    uint8_t* e = reinterpret_cast<uint8_t*>(this);
-    *reinterpret_cast<int*>(e + 0x68) = outX;
-    *reinterpret_cast<int*>(e + 0x70) = outX + outW;
-    *reinterpret_cast<int*>(e + 0x6c) = outY;
-    *reinterpret_cast<int*>(e + 0x74) = outY + outH;
+    GetAlignedPosition(x, y, w, h, 0, 0, outX, outY, outW, outH, false, false);
+    _layoutLeft   = outX;
+    _layoutRight  = outX + outW;
+    _layoutTop    = outY;
+    _layoutBottom = outY + outH;
 }
 // [6] 0x14006be90
 // Slot 6 (+0x30) — Draw. Port of FrustumOutlineElement_Draw (exe 0x14006be90):
@@ -147,18 +144,17 @@ void FrustumOutlineElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32
 // minimap rect. (AddLine no-ops on a spriteless sprite — CreateElement wires the
 // element's line sprite from the description; see frustumoutlinedescription.cpp.)
 void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) const {
-    uint8_t* e = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(this));   // the body reads raw offsets
     // base element draw — QUALIFIED: this body IS slot 6 of FrustumOutlineElement.
-    reinterpret_cast<const UI::Element*>(this)->UI::Element::Draw(context, alpha);  // B.3.6 bridge
+    UI::Element::Draw(context, alpha);
 
-    // Line color = element+0x38 modulated by alpha (halved if flag bit 18 set).
+    // Line color = _color modulated by alpha (halved if flag bit 18 set).
     uint32_t a32 = alpha;
-    if (*reinterpret_cast<uint32_t*>(e + 0x34) & 0x40000) a32 = (uint32_t)(alpha >> 1);
-    uint32_t v = *reinterpret_cast<uint32_t*>(e + 0x38);
+    if (_flags & 0x40000) a32 = (uint32_t)(alpha >> 1);
+    uint32_t v = _color;
     uint32_t color = ((((v >> 8) & 0xffff0000u) * a32 ^ v) & 0xffffffu)
                      ^ (((v >> 8) & 0xff0000u) * a32);
 
-    void* gw = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
 
     float pts[4 * 3] = {0};
@@ -166,11 +162,12 @@ void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) cons
 
     // Map the world-space ground corners to minimap pixel coordinates.
     float uvScale = kRdata_14017214c;
-    int   width   = *reinterpret_cast<int*>(e + 0xd0);
-    int   height  = *reinterpret_cast<int*>(e + 0xd4);
-    int*  gridPtr = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
-    if (!gridPtr || *gridPtr == 0) return;
-    float scale = (float)width / (float)(*gridPtr);
+    int   width   = _width;
+    int   height  = _height;
+    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): LEFT.
+    const Map* map = reinterpret_cast<const Map*>(gw->m_game);
+    if (!map || map->size == 0) return;
+    float scale = (float)width / (float)(map->size);
     float halfW = (float)width * 0.5f;
     float halfH = (float)height * 0.5f;
     for (int i = 0; i < 4; ++i) {
@@ -181,25 +178,21 @@ void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) cons
         pts[i * 3 + 2] = 0.0f;
     }
 
-    int ex = *reinterpret_cast<int*>(e + 0x68);   // element origin X
-    int ey = *reinterpret_cast<int*>(e + 0x6c);   // element origin Y
-    void* sprite = e + 0xc0;
+    int ex = _layoutLeft;   // element origin X
+    int ey = _layoutTop;    // element origin Y
     auto ix = [&](int i){ return (int)pts[i * 3 + 0] + ex; };
     auto iy = [&](int i){ return (int)pts[i * 3 + 1] + ey; };
 
     UI::SpriteContext* sc = &context;
-    const UI::Sprite& lineSprite = *reinterpret_cast<const UI::Sprite*>(sprite);  // B.3.6 bridge
-    uint8_t savedVP[24] = {0}, scratchVP[24] = {0};
-    ::new (savedVP) Video::Viewport(sc->SetScissor(ex, ey, width, height));
+    const Video::Viewport savedVP = sc->SetScissor(ex, ey, width, height);
 
     // Wire quad, corner order pt0-pt1-pt3-pt2-pt0 (matches the exe's 4 AddLines).
-    sc->AddLine(lineSprite, ix(0), iy(0), ix(1), iy(1), color);
-    sc->AddLine(lineSprite, ix(1), iy(1), ix(3), iy(3), color);
-    sc->AddLine(lineSprite, ix(2), iy(2), ix(3), iy(3), color);
-    sc->AddLine(lineSprite, ix(2), iy(2), ix(0), iy(0), color);
+    sc->AddLine(_lineSprite, ix(0), iy(0), ix(1), iy(1), color);
+    sc->AddLine(_lineSprite, ix(1), iy(1), ix(3), iy(3), color);
+    sc->AddLine(_lineSprite, ix(2), iy(2), ix(3), iy(3), color);
+    sc->AddLine(_lineSprite, ix(2), iy(2), ix(0), iy(0), color);
 
-    ::new (scratchVP) Video::Viewport(
-        sc->SetScissor(*reinterpret_cast<const Video::Viewport*>(savedVP)));
+    sc->SetScissor(savedVP);
 }
 
 // create 0x140012400: MemAlloc(0xd8, 8), then the (inlined) ctor.

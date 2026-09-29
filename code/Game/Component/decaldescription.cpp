@@ -61,63 +61,58 @@ void* AllocArray(void* header, int count, int stride) {
 // the defaults.
 DecalDescription::DecalDescription()
     : Description(),
-      _sizeA(1.0f),
-      _flagA(false),
+      _initialAlpha(1.0f),
+      _tiled(false),
       _flagB(false),
-      _refs(nullptr),
-      _refCount(0),
-      _refCap(0),
-      _quads(nullptr),
-      _quadCount(0),
-      _quadCap(0),
+      _materials(nullptr),
+      _materialCount(0),
+      _materialCap(0),
+      _uvRects(nullptr),
+      _uvRectCount(0),
+      _uvRectCap(0),
       _sizeB(1.0f) {}
 
 // dtor (slot 0 0x1400338a0 minus the stamps): frees the quad and ref arrays.
 // The compiler then chains ~Description -> ~External.
 DecalDescription::~DecalDescription() {
-    if (_quads) ::System::MemoryAllocator::MemFree(_quads);   // quadArray
-    if (_refs)  ::System::MemoryAllocator::MemFree(_refs);    // refArray
-    _refs = nullptr;  _refCount = 0;  _refCap = 0;
-    _quads = nullptr; _quadCount = 0; _quadCap = 0;
+    if (_uvRects)   ::System::MemoryAllocator::MemFree(_uvRects);     // quadArray
+    if (_materials) ::System::MemoryAllocator::MemFree(_materials);   // refArray
+    _materials = nullptr; _materialCount = 0; _materialCap = 0;
+    _uvRects = nullptr;   _uvRectCount = 0;   _uvRectCap = 0;
 }
 
 // [5] 0x14011b980: stream order as retail.
 bool DecalDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    ser.Serialize(_sizeA, nullptr);   // sizeA
-    
+    ser.Serialize(_initialAlpha, nullptr);   // sizeA
+
     // --- refArray (External* pool) at +0x28 ---
-    ser.Serialize(_refCount, nullptr);   // refCount
-    int refCount = _refCount;
+    ser.Serialize(_materialCount, nullptr);   // refCount
+    int refCount = _materialCount;
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     if (loading) {
-        uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(&_refs, refCount, 8));
-        for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
+        AllocArray(&_materials, refCount, 8);
+        for (int j = 0; j < refCount; ++j) _materials[j] = nullptr;
     }
-    Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, _refs);
-    
+    Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, _materials);
+
     ser.Serialize(_sizeB, nullptr);   // sizeB
-    
+
     // --- quadArray (4-float entries) at +0x38 ---
-    ser.Serialize(_quadCount, nullptr);   // quadCount
-    int quadCount = _quadCount;
-    uint8_t* q;
+    ser.Serialize(_uvRectCount, nullptr);   // quadCount
+    int quadCount = _uvRectCount;
     if (loading) {
-        q = reinterpret_cast<uint8_t*>(AllocArray(&_quads, quadCount, 0x10));
-        for (int i = 0; i < quadCount; ++i) {
-            float* f = (float*)(q + i * 0x10);
-            f[0] = 0.0f; f[1] = 0.0f; f[2] = 1.0f; f[3] = 1.0f;   // default quad
-        }
-    } else {
-        q = static_cast<uint8_t*>(_quads);
+        AllocArray(&_uvRects, quadCount, 0x10);
+        for (int i = 0; i < quadCount; ++i)
+            _uvRects[i] = DecalUVRect{0.0f, 0.0f, 1.0f, 1.0f};   // default quad
     }
-    for (int i = 0; i < quadCount; ++i, q += 0x10) {
-        ser.Serialize(*reinterpret_cast<float*>(q + 0x0), nullptr);
-        ser.Serialize(*reinterpret_cast<float*>(q + 0x4), nullptr);
-        ser.Serialize(*reinterpret_cast<float*>(q + 0x8), nullptr);
-        ser.Serialize(*reinterpret_cast<float*>(q + 0xc), nullptr);
+    for (int i = 0; i < quadCount; ++i) {
+        ser.Serialize(_uvRects[i].u0, nullptr);
+        ser.Serialize(_uvRects[i].v0, nullptr);
+        ser.Serialize(_uvRects[i].u1, nullptr);
+        ser.Serialize(_uvRects[i].v1, nullptr);
     }
-    ser.Serialize(_flagA, nullptr);
+    ser.Serialize(_tiled, nullptr);
     ser.Serialize(_flagB, nullptr);
     return true;
 }

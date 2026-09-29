@@ -26,6 +26,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "system/Value.h"   // System::Time
+
+class ComponentDescription;   // Component/ComponentDescription.h
 
 class DiseaseComponent final : public Component {
     DECLARE_EXE_TYPE(DiseaseComponent)
@@ -41,15 +44,26 @@ public:
     void OnRemove() override;                                     // [7] 0x140048bb0
     void Update(void* time) override;                             // [9] 0x140048b90
 
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    bool CheckCure();                                             // 0x1400481b0
+    void Cure();                                                  // 0x140048320
+    void Infect();                                                // 0x1400483a0
+    void InfectionTick(System::Time* elapsed);                    // 0x140048610
+    void ActiveDisease(System::Time* elapsed);                    // 0x140048840
+    void KillOnePlant();                                          // 0x140047b40
+    void KillOneAnimal();                                         // 0x140047d70
+
     // PUBLIC while the ported bodies read them (B38 decision 1). All four
-    // timers are System::Time (int64 ticks) — never narrow them to int32.
-    int64_t  rollAccum;     // +0x28 time accumulated toward the next infection roll
-    int64_t  duration;      // +0x30 infestation time REMAINING (>0 == infested)
-    int64_t  killAccum;     // +0x38 time accumulated toward the next kill tick
-    int64_t  spreadAccum;   // +0x40 time accumulated toward the next spread attempt
-    int32_t  isPasture;     // +0x48 1 when the entity has a PastureComponent
+    // timers are System::Time (Persist 0x140048ca0 serializes each through
+    // `?Serialize@Time@System@@`, IAT 0x140152aa8) — never narrow them.
+    System::Time rollAccum;     // +0x28 time accumulated toward the next infection roll
+    System::Time duration;      // +0x30 infestation time REMAINING (>0 == infested)
+    System::Time killAccum;     // +0x38 time accumulated toward the next kill tick
+    System::Time spreadAccum;   // +0x40 time accumulated toward the next spread attempt
+    int32_t  isPasture;     // +0x48 1 when the entity has a PastureComponent (Serialize int&)
     uint8_t  _pad4C[4];     // +0x4C
-    uint64_t curedIdentity; // +0x50 ExternalPtr: what was growing at the last Cure
+    ComponentDescription* curedIdentity; // +0x50 ExternalPtr<ComponentDescription> (0x140002340
+                                         //       IsDerivedFrom 0x1401c7318): what grew at the last Cure
 };
 
 static_assert(sizeof(DiseaseComponent) == 0x58, "DiseaseComponent is 0x58 (create 0x140004db0)");

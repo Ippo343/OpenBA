@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+
 class HerdDescription final : public Description {
     DECLARE_EXE_TYPE(HerdDescription)
 
@@ -35,22 +37,23 @@ public:
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140034e30
     virtual Object::External* Construct();                                 // [9] 0x140034d90
 
-    // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
-    int32_t _i28;                               // +0x28
-    int32_t _i2c;                               // +0x2c
-    float _f30;                                 // +0x30
-    float _f34;                                 // +0x34
-    int32_t _i38;                               // +0x38
-    float _f3c;                                 // +0x3c
+    // ---- fields (B.4 COMP-d: names from what HerdComponent does with them,
+    // Update 0x140121bf0, AdjustSize 0x140121450, Populate 0x140120f50) ----
+    ComponentDescription* _animal;              // +0x20 ExternalPtr: the entity description each animal is built from
+    int32_t _maxSize;                           // +0x28 herd size cap (scaled by the food score)
+    int32_t _minSize;                           // +0x2c herd size floor (PopulationComponent Startup: Rand(max - min) + min)
+    float _grazeMinutes;                        // +0x30 graze time, fixed part (x 300 s)
+    float _grazeRandomMinutes;                  // +0x34 graze time, random part
+    int32_t _spread;                            // +0x38 side of the wander box / spawn radius, tiles
+    float _growMinutes;                         // +0x3c growth interval (x 300 s)
 };
 
 static_assert(sizeof(HerdDescription) == 0x40, "HerdDescription is 0x40 (create 0x140034d30 MemAlloc(0x40))");
 static_assert(alignof(HerdDescription) == 8, "HerdDescription alignment");
-static_assert(offsetof(HerdDescription, _ref20) == 0x20, "HerdDescription::_ref20 @ +0x20");
-static_assert(offsetof(HerdDescription, _i28) == 0x28, "HerdDescription::_i28 @ +0x28");
-static_assert(offsetof(HerdDescription, _i2c) == 0x2c, "HerdDescription::_i2c @ +0x2c");
-static_assert(offsetof(HerdDescription, _f30) == 0x30, "HerdDescription::_f30 @ +0x30");
-static_assert(offsetof(HerdDescription, _f34) == 0x34, "HerdDescription::_f34 @ +0x34");
-static_assert(offsetof(HerdDescription, _i38) == 0x38, "HerdDescription::_i38 @ +0x38");
-static_assert(offsetof(HerdDescription, _f3c) == 0x3c, "HerdDescription::_f3c @ +0x3c");
+static_assert(offsetof(HerdDescription, _animal) == 0x20, "HerdDescription::_animal @ +0x20");
+static_assert(offsetof(HerdDescription, _maxSize) == 0x28, "HerdDescription::_maxSize @ +0x28");
+static_assert(offsetof(HerdDescription, _minSize) == 0x2c, "HerdDescription::_minSize @ +0x2c");
+static_assert(offsetof(HerdDescription, _grazeMinutes) == 0x30, "HerdDescription::_grazeMinutes @ +0x30");
+static_assert(offsetof(HerdDescription, _grazeRandomMinutes) == 0x34, "HerdDescription::_grazeRandomMinutes @ +0x34");
+static_assert(offsetof(HerdDescription, _spread) == 0x38, "HerdDescription::_spread @ +0x38");
+static_assert(offsetof(HerdDescription, _growMinutes) == 0x3c, "HerdDescription::_growMinutes @ +0x3c");

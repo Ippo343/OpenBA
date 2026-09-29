@@ -97,7 +97,7 @@ static bool DestroyComponent_CanRebuild_Impl(DestroyComponent* destroyComp)
     // Also check separately (decompile does it twice)
     ::Object::IsDerivedFromNullSafe(destroyComp->_description, DestroyDescription::TypeId());
 
-    void* upgradeRef = destroyComp->field60;
+    void* upgradeRef = destroyComp->upgradeTarget;   // COMP-c named +0x60 (merge fix)
 
     // Get entity
     ComponentEntity* entity = destroyComp->_entity;
@@ -249,7 +249,7 @@ void DestroyUI::OnCreated() {
 
     bool canReclaim = DestroyComponent_CanReclaim_Impl(destroyComp);
     // SA-guard: entity may have no DestroyComponent in standalone
-    bool compFlag = destroyComp && (uint8_t)destroyComp->destroyFlags != 0;
+    bool compFlag = destroyComp && destroyComp->burning;   // COMP-c named +0x50 (merge fix)
 
     if (canReclaim || compFlag) {
         // Hide the reclaim button (SetFlagsOnOff: set flag 1 = hidden)
@@ -325,10 +325,10 @@ void DestroyUI::OnUpdateLayout() {
         }
 
         // --- Update destruction progress bar ---
-        int destroyDone = (int)destroyComp->field54;
+        int destroyDone = destroyComp->progress;   // COMP-c named +0x54 (merge fix)
         // LEFT: DestroyComponent +0x58 is declared void* in COMP-c's header; the
         // demolition target is its low dword.
-        int destroyTotal = *(const int*)&destroyComp->field58;
+        int destroyTotal = destroyComp->progressTarget;   // COMP-c named +0x58 (merge fix)
 
         float destroyRatio;
         if (destroyTotal == 0) {
@@ -357,7 +357,7 @@ void DestroyUI::OnUpdateLayout() {
 
         // --- Text visibility based on component state ---
         // The component's target description against the entity's own
-        if (destroyComp->field60 == destroyComp->_entity->_description) {
+        if (destroyComp->upgradeTarget == destroyComp->_entity->_description) {
             // Building state matches target → show "fixing" text
             if (textFixing) textFixing->SetFlagsOnOff(0, 1);
             if (textRemove) textRemove->SetFlagsOnOff(1, 0);

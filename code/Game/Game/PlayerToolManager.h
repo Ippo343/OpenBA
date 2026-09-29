@@ -27,6 +27,9 @@
 #include <cstdint>
 #include <cstddef>
 
+class Tool;
+class ComponentEntity;
+
 class PlayerToolManager {
 public:
     void*    field_0x00;         // +0x00 InternalBasePtr (ctor null)
@@ -65,6 +68,8 @@ public:
     uint8_t  _padA5[3];          // +0xA5
     int32_t  field_0xA8;         // +0xA8 not written by the ctor
     int32_t  field_0xAC;         // +0xAC not written by the ctor
+
+    void OnEntityRemoved(ComponentEntity* const* entity);   // 0x140103480 (body: nomadcomponent.cpp)
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");

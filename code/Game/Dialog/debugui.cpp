@@ -313,7 +313,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
 
         // Search entity's sub-descriptions for RawMaterialDescription
         int compCount = buildEntity->_subDescCount;
-        void** compArray = buildEntity->_subDescs;
+        Description** compArray = buildEntity->_subDescs;   // COMP-c typed _subDescs (merge fix)
 
         for (int i = 0; i < compCount; i++) {
             void* comp = compArray[i];
@@ -362,12 +362,10 @@ static void Game_SpawnItemsInStorage_Impl() {
         PastureComponent* storage = town->pastures[i];
 
         // Check if storage has items to spawn (component+0x28 != 0)
-        if (storage->field28 == nullptr) continue;
+        if (storage->livestockType == nullptr) continue;
 
         for (int j = 0; j < 5; j++) {
-            // LEFT: PastureComponent +0x38 is declared void* (COMP-d's header); its
-            // low dword is the animal count.
-            int currentCount = *reinterpret_cast<const int32_t*>(&storage->field38);
+            int currentCount = storage->animalCount;
             // 0x140128570 PastureComponent_ComputeCapacity (door misnamed
             // fn_StorageComponent_GetCapacity; the int the door read is the low dword).
             int capacity = static_cast<int>(PastureComponent_ComputeCapacity(reinterpret_cast<uintptr_t>(storage)));

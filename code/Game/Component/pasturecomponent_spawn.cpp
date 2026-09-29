@@ -44,6 +44,14 @@
 #include "Component/PastureComponent.h"
 #include "Component/LivestockComponent.h"
 #include "Component/AnimalComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/CitizenBehavior.h"   // CitizenBehavior::pastures (GameUpdateLoop::m_citizenList)
+#include "Entity/ComponentEntity.h"
+#include "Game/Map.h"                 // Map::size (GameUpdateLoop::m_game)
+#include "math/Math.h"
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
@@ -56,156 +64,82 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
-#include "Component/animalcomponent_funcs.h"   // AnimalComponent_UpdateBehavior (0x140107320)
-#include "Component/herdcomponent_funcs.h"     // HerdComponent_Helper7400 (0x140107400)
-#include "Action/exe_bodies.h"                 // ActHunt_FindComponent_5500, ActMv_FindComponentFamily_12d0
 #include "Entity/componententity_funcs.h"      // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Game/exe_constants.h"
 
-extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP);
-
-// starttown.cpp — resolve a "Template\\Name.rsc" path to its loaded template object.
-extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
-
 // The exe helpers this file calls, by retail address:
-//   0x14002f1d0 Pasture_FindLivestockComp (below)   0x140005500 ActHunt_FindComponent_5500
-//   0x1400012d0 ActMv_FindComponentFamily_12d0      0x140004680 FloorComponent_FindResData
+//   0x14002f1d0 FindComponent<LivestockComponent>   0x140005500 FindComponent<AnimalComponent>
+//   0x1400012d0 FindComponent<CharacterComponent>   0x140004680 FindComponent<MapComponent>
 //   0x1400c3720 ComponentEntity_CtorFromDescription 0x1400c48a0 EntityList_RegisterEntity_Impl
-//   0x140107400 HerdComponent_Helper7400 (the registered row is reg_herd_live.cpp's
-//               one-line thunk Herd_Helper7400_Thunk, which forwards to it)
-//   0x140107320 AnimalComponent_UpdateBehavior      0x140128570 PastureComponent_ComputeCapacity
+//   0x140107400 AnimalComponent::Place              0x140107320 AnimalComponent::UpdateBehavior
+//   0x140128570 PastureComponent::ComputeCapacity
 //   .rdata 0x140172220 yaw spread (180.0f), 0x140172114 half cell (0.5f)
-namespace {
-
-inline uint64_t MakeIBP(void* obj) {
-    uint64_t r = 0;
-    new (&r) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(obj));   // B.3.3 bridge
-    return r;
-}
-inline uintptr_t World() {
-    return (GameUpdateLoop::_singleton != nullptr)
-             ? reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) : 0;
-}
-inline uintptr_t GameState() {
-    uintptr_t w = World();
-    return w ? *reinterpret_cast<uintptr_t*>(w + 0xf0) : 0;
-}
-} // namespace (reopened below)
+// LEFT (B.4 COMP-d): GameUpdateLoop m_game / m_citizenList / m_entityList are void* (W0
+// header).
 
 // ============================================================
-// Reimpl of FUN_14002f1d0 — the standard entity find-loop for LivestockComponent
-// (type id 0x1401c7970; same template as ActHunt_FindComponent_5500).
-//
-// This finder was NEVER registered, so the spawn path's finder resolved null and the
-// spawn path silently skipped Pasture_BindAnimal for EVERY spawned or born
-// livestock: fill-time sheep only reached the pasture because the state-2
-// ADOPT pass rescued them from the free-roam pool, and NEWBORNS (pasture at
-// capacity, adopt won't take them) stayed unbound free-roamers forever. It is
-// also why every "[Pasture] SPAWN" trace printed count 0/5 — the bind that
-// should have run just before never did.
+// Game_helper_8670 (0x140128670) — spawn ONE livestock into this pasture.
+//   `parent` is non-null for a birth (the new animal appears next to its parent), null
+//   for a fresh stocking (random footprint cell). The male/female roll uses the
+//   pasture's current mix: retail counts the animals whose AnimalComponent canGraze
+//   byte is 0 and rolls RandFloat against thatCount/total, so a pasture short of one
+//   sex tends to produce it.
 // ============================================================
-extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP) {
-    const uint32_t tid = LivestockComponent::TypeId();   // cell 0x1401c7970 (D5)
-    void* found = nullptr;
-    if (entity) {
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        for (int i = 0; i < n && list; ++i) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            if (!comp) continue;
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-            if (t == tid) {
-                found = (Object::IsDerivedFromNullSafe(comp, tid)) ? comp : nullptr;
-                break;
-            }
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
-}
-
-namespace {
-
-inline void*& PastureType(void* p)  { return *reinterpret_cast<void**>((uintptr_t)p + 0x28); }
-inline uintptr_t PastureAnimals(void* p) { return *reinterpret_cast<uintptr_t*>((uintptr_t)p + 0x30); }
-inline int&   PastureCount(void* p) { return *reinterpret_cast<int*>((uintptr_t)p + 0x38); }
-inline int&   PastureCap(void* p)   { return *reinterpret_cast<int*>((uintptr_t)p + 0x40); }
-
-}  // namespace
-
-// ============================================================
-// Game_helper_8670 (0x140128670) — spawn ONE livestock into `pasture`.
-//   param_2 (parentAnimalIBP) is an InternalBasePtr: non-null for a birth (the new
-//   animal appears next to its parent), null for a fresh stocking (random footprint
-//   cell). The male/female roll uses the pasture's current mix: retail counts the
-//   animals whose AnimalComponent+0x40 byte is 0 and rolls RandFloat against
-//   thatCount/total, so a pasture short of one sex tends to produce it.
-// ============================================================
-extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
-    if (!pasture) return;
-    uintptr_t w = World();
+void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
+    GameUpdateLoop* w = GameUpdateLoop::_singleton;
     if (!w) return;
-    void* rng = *reinterpret_cast<void**>(w + 0xd8);
-    int64_t tmpl = *reinterpret_cast<int64_t*>((uintptr_t)pasture + 0x28);
-    if (tmpl == 0) return;
+    System::Random* rng = w->m_random;
+    ComponentDescription* tmpl = livestockType;
+    if (tmpl == nullptr) return;
 
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-    void* ent = mem ? ComponentEntity_CtorFromDescription(
-                          reinterpret_cast<ComponentEntity*>(mem), reinterpret_cast<void*>(tmpl))
-                    : nullptr;
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+    ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
     if (!ent) return;
-    uint64_t entIBP = MakeIBP(ent);
 
-    uint64_t livestockIBP = 0;
-    Pasture_FindLivestockComp(static_cast<int64_t>(entIBP), &livestockIBP);
-    uint64_t animalIBP = 0;
-    ActHunt_FindComponent_5500(static_cast<uintptr_t>(entIBP), &animalIBP);
+    LivestockComponent* livestock = ent->FindComponent<LivestockComponent>();   // 0x14002f1d0
+    AnimalComponent* animal = ent->FindComponent<AnimalComponent>();            // 0x140005500
 
     // ── Position ──────────────────────────────────────────────────────────────
     float posX = 0.0f, posY = 0.0f;
-    uint64_t parentFamily = 0;
-    if (parentAnimalIBP && *reinterpret_cast<int64_t*>(parentAnimalIBP) != 0) {
-        int64_t parentOwner = *reinterpret_cast<int64_t*>(
-            *reinterpret_cast<int64_t*>(parentAnimalIBP) + 0x10);
-        ActMv_FindComponentFamily_12d0(static_cast<uintptr_t>(parentOwner), &parentFamily);
+    CharacterComponent* parentCharacter = nullptr;
+    if (parent && *parent != nullptr) {
+        ComponentEntity* parentOwner = (*parent)->_entity;
+        parentCharacter = parentOwner->FindComponent<CharacterComponent>();   // 0x1400012d0
     }
 
-    if (parentFamily != 0) {
+    if (parentCharacter != nullptr) {
         // Birth: jitter around the parent's model position.
         float jitterY = fn_Random_RandFloatTol(rng);
         float jitterX = fn_Random_RandFloatTol(rng);
-        uintptr_t fam = static_cast<uintptr_t>(parentFamily);
-        uintptr_t model = *reinterpret_cast<uintptr_t*>(fam + 0x68);
+        ModelComponent* model = parentCharacter->modelComponent;
         if (model) {
-            posX = *reinterpret_cast<float*>(model + 0x158) + jitterX;
-            posY = *reinterpret_cast<float*>(model + 0x15c) + jitterY;
+            const Math::Vector3& p =
+                model->transform.translation;
+            posX = p.x + jitterX;
+            posY = p.y + jitterY;
         }
     } else {
         // Fresh stocking: a random cell inside the pasture's map footprint.
-        uint64_t mapIBP = 0;
-        FloorComponent_FindResData(*reinterpret_cast<void**>((uintptr_t)pasture + 0x10), &mapIBP);
-        if (mapIBP) {
-            uintptr_t mc = static_cast<uintptr_t>(mapIBP);
-            int16_t x0 = *reinterpret_cast<int16_t*>(mc + 0x28);
-            int16_t y0 = *reinterpret_cast<int16_t*>(mc + 0x2a);
-            int16_t fw = *reinterpret_cast<int16_t*>(mc + 0x2c);
-            int16_t fh = *reinterpret_cast<int16_t*>(mc + 0x2e);
-            uint32_t dx = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)fw);   // B.3.4b bridge
-            uint32_t dy = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)fh);   // B.3.4b bridge
-            int* grid = *reinterpret_cast<int**>(w + 0xf8);
+        MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
+        if (mc) {
+            int16_t x0 = static_cast<int16_t>(mc->tileX0);
+            int16_t y0 = static_cast<int16_t>(mc->tileY0);
+            int16_t fw = static_cast<int16_t>(mc->tileX1);
+            int16_t fh = static_cast<int16_t>(mc->tileY1);
+            uint32_t dx = rng->Rand((uint32_t)fw);
+            uint32_t dy = rng->Rand((uint32_t)fh);
+            // LEFT: GameUpdateLoop::m_game is void* (W0 header).
+            const Map* grid = reinterpret_cast<const Map*>(w->m_game);
             float jitterY = fn_Random_RandFloatTol(rng);
             float jitterX = fn_Random_RandFloatTol(rng);
             if (grid) {
-                const int dim = *grid;
+                const int dim = grid->size;
                 const int cell = dim * (y0 + (int)dy) + x0 + (int)dx;
                 const float half = static_cast<float>(dim >> 1) - kRdata_140172114;
                 float world2[3] = { static_cast<float>(cell % dim) - half,
                                     static_cast<float>(cell / dim) - half, 0.0f };
                 float out3[3] = {0, 0, 0};
-                Reimpl_MapGetTerrainPos(grid, out3, world2, 0, nullptr);
+                Reimpl_MapGetTerrainPos(w->m_game, out3, world2, 0, nullptr);
                 posX = out3[0] + jitterX;
                 posY = out3[1] + jitterY;
             }
@@ -214,78 +148,86 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
 
     // ── Sex roll from the pasture's current mix ───────────────────────────────
     int flagged = 0;
-    const int total = PastureCount(pasture);
+    const int total = animalCount;
     for (int i = 0; i < total; ++i) {
-        uintptr_t arr = PastureAnimals(pasture);
+        LivestockComponent** arr = animals;
         if (!arr) break;
-        uint64_t* slot = reinterpret_cast<uint64_t*>(arr + (uintptr_t)i * 8);
-        if (!*slot) continue;
-        uint64_t ownerIBP = *reinterpret_cast<uint64_t*>(*slot + 0x10);
-        uint64_t peerAnimal = 0;
-        ActHunt_FindComponent_5500(static_cast<uintptr_t>(ownerIBP), &peerAnimal);
-        if (peerAnimal && *reinterpret_cast<char*>(static_cast<uintptr_t>(peerAnimal) + 0x40) == 0)
+        LivestockComponent* peerLivestock = arr[i];
+        if (!peerLivestock) continue;
+        AnimalComponent* peerAnimal = peerLivestock->_entity->FindComponent<AnimalComponent>();   // 0x140005500
+        if (peerAnimal && !peerAnimal->canGraze)
             ++flagged;
     }
     bool female = true;
     if (total != 0) {
-        float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+        float roll = rng->RandFloat();
         female = roll < (static_cast<float>(flagged) / static_cast<float>(total));
     }
 
     // ── Place, bind, activate, register ───────────────────────────────────────
-    if (animalIBP) {
+    if (animal) {
         float yaw = fn_Random_RandFloatTol(rng) * kRdata_140172220;
-        float pos2[2] = { posX, posY };
-        HerdComponent_Helper7400(static_cast<int64_t>(animalIBP), pos2, yaw, (char)female);
+        // Retail builds the full Vector3 {x, y, 0} (local_d8 / local_d0 zeroed at
+        // 0x140128670); the callee reads all three floats.
+        const Math::Vector3 pos(posX, posY, 0.0f);
+        animal->Place(&pos, yaw, female);   // 0x140107400
     }
 
-    uint64_t pastureIBP = MakeIBP(pasture);
-    if (livestockIBP)
-        Pasture_BindAnimal(reinterpret_cast<void*>(livestockIBP), &pastureIBP);
+    PastureComponent* pastureRef = this;
+    if (livestock)
+        livestock->SetPasture(&pastureRef);   // 0x140123cc0
 
     // A fresh stocking randomises the production phase so a pasture full of animals
     // does not yield everything on the same tick; a birth starts at 0.
-    if (animalIBP) {
+    if (animal) {
         float phase = 0.0f;
-        if (parentAnimalIBP && *reinterpret_cast<int64_t*>(parentAnimalIBP) == 0)
-            phase = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-        *reinterpret_cast<float*>(static_cast<uintptr_t>(animalIBP) + 0x44) = phase;
-        AnimalComponent_UpdateBehavior(reinterpret_cast<AnimalComponent*>(animalIBP));
+        if (parent && *parent == nullptr)
+            phase = rng->RandFloat();
+        animal->age = phase;
+        animal->UpdateBehavior();   // 0x140107320
     }
 
-    uint64_t regIBP = entIBP;
-    EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(w + 0xe8), &regIBP,
-                                   *reinterpret_cast<int*>(tmpl + 0x20));
+    ComponentEntity* regRef = ent;
+    // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
+    EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, tmpl->_category);
 
     std::fprintf(stderr, "[Pasture] SPAWN livestock ent=%p into pasture=%p at (%.1f,%.1f) "
                  "female=%d birth=%d (count now %d/%d)\n",
-                 ent, pasture, posX, posY, (int)female,
-                 (int)(parentFamily != 0), PastureCount(pasture), PastureCap(pasture));
+                 static_cast<void*>(ent), static_cast<void*>(this), posX, posY, (int)female,
+                 (int)(parentCharacter != nullptr), animalCount, capacity);
     std::fflush(stderr);
+}
+
+// B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
+extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
+    if (!pasture) return;
+    reinterpret_cast<PastureComponent*>(pasture)->SpawnLivestock(
+        reinterpret_cast<AnimalComponent* const*>(parentAnimalIBP));
 }
 
 // ============================================================
 // Game_SpawnItemsInStorage (0x140060290) — MISNAMED in Ghidra; this is the debug
-// menu's "fill pastures" body. For every pasture in the world registry that has an
-// assigned type, spawn animals until it is at capacity, at most 5 per pasture per call.
+// menu's "fill pastures" body. For every pasture in the town registry that has a
+// livestock type, spawn animals until it is at capacity, at most 5 per pasture per call.
 // ============================================================
 extern "C" int Pasture_FillAllPastures() {
-    uintptr_t gs = GameState();
-    if (!gs) return 0;
-    const int nPastures = *reinterpret_cast<int*>(gs + 0x98);
-    uintptr_t list = *reinterpret_cast<uintptr_t*>(gs + 0x90);
+    GameUpdateLoop* w = GameUpdateLoop::_singleton;
+    // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
+    CitizenBehavior* town = w ? reinterpret_cast<CitizenBehavior*>(w->m_citizenList) : nullptr;
+    if (!town) return 0;
+    const int nPastures = town->pastureCount;
+    PastureComponent** list = town->pastures;
     if (nPastures <= 0 || !list) return 0;
 
     int spawned = 0;
     for (int i = 0; i < nPastures; ++i) {
-        uint64_t pastureIBP = *reinterpret_cast<uint64_t*>(list + (uintptr_t)i * 8);
-        void* pasture = reinterpret_cast<void*>(pastureIBP);
-        if (!pasture || PastureType(pasture) == nullptr) continue;
+        PastureComponent* pasture = list[i];
+        if (!pasture || pasture->livestockType == nullptr) continue;
         for (int k = 0; k < 5; ++k) {
-            const int cap = static_cast<int>(PastureComponent_ComputeCapacity((uintptr_t)pasture));
-            if (PastureCount(pasture) >= cap) break;
-            uint64_t nullParent = MakeIBP(nullptr);
-            Pasture_SpawnLivestock(pasture, &nullParent);
+            const int cap = pasture->ComputeCapacity();   // 0x140128570
+            if (pasture->animalCount >= cap) break;
+            AnimalComponent* nullParent = nullptr;
+            pasture->SpawnLivestock(&nullParent);   // 0x140128670
             ++spawned;
         }
     }
@@ -302,22 +244,23 @@ extern "C" int Pasture_FillAllPastures() {
 //                                             vtable[14](pasture, 2); }
 //   pasture->type = newType;
 //   pasture->capacity = FUN_140128570(pasture);
-// The command-2 slot is PastureComponent::Slot14 (0x140127a60), which posts the
+// The command-2 slot is PastureComponent::Command (0x140127a60), which posts the
 // PastureWork job and flips the workplace on — hence the deliberate double write:
 // the slot is invoked with the type already visible, then the field is re-stamped.
 // ============================================================
-extern "C" void Pasture_SetLivestockType(void* pasture, void* newTypeTemplate) {
+extern "C" void Pasture_SetLivestockType(PastureComponent* pasture, ComponentDescription* newTypeTemplate) {
     if (!pasture) return;
-    void* prev = PastureType(pasture);
+    ComponentDescription* prev = pasture->livestockType;
     if (prev == nullptr && newTypeTemplate != nullptr) {
-        PastureType(pasture) = newTypeTemplate;
-        reinterpret_cast<PastureComponent*>(pasture)->Command(2);   // B.3.8 bridge (slot 14, +0x70)
+        pasture->livestockType = newTypeTemplate;
+        pasture->Command(2);   // slot 14, +0x70
     }
-    PastureType(pasture) = newTypeTemplate;
-    PastureCap(pasture) = static_cast<int>(PastureComponent_ComputeCapacity((uintptr_t)pasture));
+    pasture->livestockType = newTypeTemplate;
+    pasture->capacity = pasture->ComputeCapacity();
 
     std::fprintf(stderr, "[Pasture] set livestock type: pasture=%p %p -> %p (capacity=%d)\n",
-                 pasture, prev, newTypeTemplate, PastureCap(pasture));
+                 static_cast<void*>(pasture), static_cast<void*>(prev),
+                 static_cast<void*>(newTypeTemplate), pasture->capacity);
     std::fflush(stderr);
 }
 
@@ -349,87 +292,69 @@ extern "C" void Pasture_SetLivestockType(void* pasture, void* newTypeTemplate) {
 // (sub_7140, pasturecomponent_states.cpp:287) pulls matching ones in once the player
 // builds a pasture and picks that type. Both of those are already ported and live.
 extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centre, void* tmpl) {
+    // LEFT: the start condition has no class here (starttown.cpp hands it as void*).
     uint8_t* sc = reinterpret_cast<uint8_t*>(startConfig);
     if (!sc || !tmpl || !centre) return 0;
 
     const int groupCount = *reinterpret_cast<int32_t*>(sc + 0xf8);
     if (groupCount <= 0) return 0;
 
-    uintptr_t w = World();
+    GameUpdateLoop* w = GameUpdateLoop::_singleton;
     if (!w) return 0;
-    void* rng = *reinterpret_cast<void**>(w + 0xd8);
+    System::Random* rng = w->m_random;
 
-    // AnimalComponent type id. Retail scans the entity's component array inline and
-    // compares GetTypeId (vtable +0x10) against DAT_1401c6f98 — it does NOT call the
-    // 0x140005500 finder. Reproduced inline for the same reason: this project has a
-    // documented trap where a finder's Ghidra name does not match the type id it keys on.
-    const uint32_t animalTid = AnimalComponent::TypeId();   // cell 0x1401c6f98 (D5)
+    // Retail scans the entity's component array inline and compares GetTypeId (vtable
+    // +0x10) against DAT_1401c6f98 = AnimalComponent — the same loop FindComponent<T>
+    // instantiates; it does NOT call the 0x140005500 finder.
 
     // Retail seeds the alternating sex from ONE Rand(2) before the loop and flips it every
     // iteration, so a group of 8 comes out 4/4 rather than 8 independent coin flips.
-    bool female = reinterpret_cast<System::Random*>(rng)->Rand(2u) == 0u;   // B.3.4b bridge
+    bool female = rng->Rand(2u) == 0u;
 
     const float offX      = *reinterpret_cast<float*>(sc + 0xec);
     const float offY      = *reinterpret_cast<float*>(sc + 0xf0);
     const float radius    = *reinterpret_cast<float*>(sc + 0xf4);
     const float yawSpread = kRdata_140172220;  // 0x140172220 = 180.0f
 
+    // LEFT: starttown.cpp hands the template as void*.
+    const ComponentDescription* templ = reinterpret_cast<const ComponentDescription*>(tmpl);
+
     int spawned = 0;
     for (int i = 0; i < groupCount; ++i) {
-        void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-        void* ent = mem ? ComponentEntity_CtorFromDescription(
-                              reinterpret_cast<ComponentEntity*>(mem), tmpl)
-                        : nullptr;
+        ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
+        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
         if (!ent) continue;
-        uint64_t entIBP = MakeIBP(ent);
-        if (!entIBP) continue;
 
         // Inline AnimalComponent scan (retail LAB_1400a0c40 path).
-        void* animal = nullptr;
-        {
-            int   n    = *reinterpret_cast<int*>(static_cast<uintptr_t>(entIBP) + 0x38);
-            uintptr_t list = *reinterpret_cast<uintptr_t*>(static_cast<uintptr_t>(entIBP) + 0x30);
-            for (int c = 0; c < n && list; ++c) {
-                void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(c) * 8);
-                void* comp = *slot;
-                if (!comp) continue;
-                uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (tid != animalTid) continue;
-                if (Object::IsDerivedFromNullSafe(comp, animalTid)) animal = comp;
-                break;
-            }
-        }
-        uint64_t animalIBP = MakeIBP(animal);
+        AnimalComponent* animal = ent->FindComponent<AnimalComponent>();
 
         // Retail evaluates RandFloatTol TWICE and applies the results CROSSED: the FIRST
         // scales Y, the SECOND scales X (decompile: X += fVar13*r, Y += fVar12*r where
-        // fVar12 is the earlier call). The world RNG at gw+0xd8 is shared, so evaluating
-        // these in the wrong order desynchronises every later roll in the game.
+        // fVar12 is the earlier call). The world RNG is shared, so evaluating these in
+        // the wrong order desynchronises every later roll in the game.
         const float tolY = fn_Random_RandFloatTol(rng);
         const float tolX = fn_Random_RandFloatTol(rng);
         const float px = centre[0] + offX + tolX * radius;
         const float py = centre[1] + offY + tolY * radius;
 
-        if (animalIBP) {
+        if (animal) {
             const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
             // THREE floats, not two: retail builds a full Vector3 (Z = centre Z) and the
-            // callee reads all three. A 2-float array here would feed it whatever local
-            // happens to sit next on the stack as Z.
-            float pos3[3] = { px, py, centre[2] };
-            HerdComponent_Helper7400(static_cast<int64_t>(animalIBP), pos3, yaw, (char)female);
+            // callee reads all three.
+            const Math::Vector3 pos3(px, py, centre[2]);
+            animal->Place(&pos3, yaw, female);   // 0x140107400
         }
         female = !female;   // alternate AFTER placing, as retail does
 
-        if (animalIBP) {
-            // +0x44 = animation/behaviour phase, randomised so the herd doesn't move in lockstep.
-            *reinterpret_cast<float*>(static_cast<uintptr_t>(animalIBP) + 0x44) =
-                reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
-            AnimalComponent_UpdateBehavior(reinterpret_cast<AnimalComponent*>(animalIBP));
+        if (animal) {
+            // age, randomised so the herd doesn't move in lockstep.
+            animal->age = rng->RandFloat();
+            animal->UpdateBehavior();   // 0x140107320
         }
 
-        uint64_t regIBP = entIBP;
-        EntityList_RegisterEntity_Impl(*reinterpret_cast<void**>(w + 0xe8), &regIBP,
-                                       *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(tmpl) + 0x20));
+        ComponentEntity* regRef = ent;
+        // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
+        EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, templ->_category);
         ++spawned;
     }
 

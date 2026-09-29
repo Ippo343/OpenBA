@@ -31,8 +31,40 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+
+class ComponentDescription;       // Component/ComponentDescription.h
+class ComponentEntity;            // Entity/ComponentEntity.h
+class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
+namespace IO { class Serializer; }
 
 struct CropFieldCtrlTag {};
+
+// One cell of the field's slot grid (0x20 bytes). Persist 0x14011ae70's element
+// helper 0x1400336c0 serializes int, int, InternalBasePtr (IsDerivedFrom
+// ComponentEntity 0x1401c5d70), InternalBasePtr (IsDerivedFrom
+// NaturalResourceComponent 0x1401c7b30), bool.
+struct CropSlot {
+    int32_t cell;                                            // +0x00 map cell index
+    int32_t state;                                           // +0x04 0 empty, 1 growing, 2 done
+    Object::InternalPtr<ComponentEntity>          entity;    // +0x08 the planted entity
+    Object::InternalPtr<NaturalResourceComponent> resource;  // +0x10 its natural resource
+    bool    plantHere;                                       // +0x18 this cell gets a crop
+    uint8_t _pad19[7];                                       // +0x19
+};
+static_assert(sizeof(CropSlot) == 0x20, "CropSlot stride 0x20 (0x1400335b0 MemAlloc(cap*0x20))");
+static_assert(offsetof(CropSlot, state)     == 0x04, "CropSlot +0x04");
+static_assert(offsetof(CropSlot, entity)    == 0x08, "CropSlot +0x08");
+static_assert(offsetof(CropSlot, resource)  == 0x10, "CropSlot +0x10");
+static_assert(offsetof(CropSlot, plantHere) == 0x18, "CropSlot +0x18");
+
+// The slot grid's Collection::Array<CropSlot> header (data / count / capacity).
+struct CropSlotArray {
+    CropSlot* data;       // +0x00
+    int32_t   count;      // +0x08
+    int32_t   capacity;   // +0x0C
+};
+static_assert(sizeof(CropSlotArray) == 0x10, "Array header");
 
 class CropFieldComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(CropFieldComponent)
@@ -53,13 +85,32 @@ public:
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080
 
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    void  ValidateEntityRefs();                                         // 0x14011aa20
+    float Maturity();                                                   // 0x14011b410
+    void  PushAccepting();   // the WorkPlaceComponent accepting push 0x14011a920 / 0x14011a7b0 share
+    // The state handlers of the controller's table (RCX = [node+0x18] = this).
+    char  State2Enter();                                                // 0x14011a920
+    char  Event3Plant(void* sm);                                        // 0x14011a7b0
+    char  State2PerFrame(void* sm);                                     // 0x14011a860
+    char  State9Enter();                                                // 0x14011a310
+    char  State9PerFrame(void* sm);                                     // 0x14011a1e0
+    char  State10Enter();                                               // 0x14011a100
+    char  State10Update();                                              // 0x140119f70
+    char  State10PerFrame(void* sm);                                    // 0x140119fd0
+    char  State11Enter();                                               // 0x140119e60
+    char  State11PerFrame(void* sm);                                    // 0x140119d80
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
+    // Types from Persist 0x14011ae70: +0x48 / +0x49 Serialize(bool&), +0x50
+    // ExternalPtr<ComponentDescription> (0x140002340), the grid count Serialize(int&).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    uint16_t cropFlags;            // +0x48 byte 0 = work enabled, byte 1 (+0x49) = 1
+    bool     workEnabled;          // +0x48 the panel's master switch (Command 2 flips it)
+    bool     hasCrop;              // +0x49 a crop type is set (state 9 enter; ctor 1)
     uint8_t  _pad4A[6];            // +0x4a
-    void*    field50;              // +0x50 the crop description list (Startup clears it)
-    void*    field58;              // +0x58 the slot grid (stride 0x20)
-    void*    field60;              // +0x60 its count (dword) / capacity
+    ComponentDescription* cropDescription; // +0x50 ExternalPtr<ComponentDescription> (Persist 0x140002340):
+                                   //       the crop the field is set to grow (Startup clears it)
+    CropSlotArray slots;           // +0x58 the slot grid (Array<CropSlot>)
 };
 
 static_assert(sizeof(CropFieldComponent) == 0x68, "CropFieldComponent is 0x68 (create 0x140032ed0)");
@@ -68,7 +119,9 @@ static_assert(offsetof(CropFieldComponent, _controller) == 0x28,
               "CropFieldComponent's controller member at +0x28 (slot 17 0x140004080)");
 static_assert(offsetof(CropFieldComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x14011b02c)");
-static_assert(offsetof(CropFieldComponent, cropFlags) == 0x48, "CropFieldComponent +0x48 (ctor 0x14011b030)");
-static_assert(offsetof(CropFieldComponent, field50) == 0x50, "CropFieldComponent +0x50");
-static_assert(offsetof(CropFieldComponent, field58) == 0x58, "CropFieldComponent +0x58");
-static_assert(offsetof(CropFieldComponent, field60) == 0x60, "CropFieldComponent +0x60");
+static_assert(offsetof(CropFieldComponent, workEnabled) == 0x48, "CropFieldComponent +0x48 (ctor 0x14011b030)");
+static_assert(offsetof(CropFieldComponent, hasCrop) == 0x49, "CropFieldComponent +0x49");
+static_assert(offsetof(CropFieldComponent, cropDescription) == 0x50, "CropFieldComponent +0x50");
+static_assert(offsetof(CropFieldComponent, slots) == 0x58, "CropFieldComponent +0x58");
+static_assert(offsetof(CropFieldComponent, slots) + offsetof(CropSlotArray, count) == 0x60,
+              "CropFieldComponent +0x60 the grid count");

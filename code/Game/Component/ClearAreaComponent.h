@@ -46,9 +46,21 @@ public:
     int         GetDefaultState() const override { return 0; }  // [16] 0x140003730
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
 
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    int   FootprintSweep();                                       // 0x140117d60
+    bool  IsDone();                                               // 0x140118440
+    int   CountRemaining();                                       // 0x140118330
+    void  FinishClear();                                          // 0x140118270
+    // state handlers (the controller hands them its owner, node+0x18)
+    char  State0Enter(void* sm);                                  // 0x140117960
+    char  State0PerFrame(void* sm);                               // 0x1401178f0
+    char  State0Update();                                         // 0x140117890
+    char  State1Enter(void* sm);                                  // 0x140117820
+    char  State2Enter();                                          // 0x1401177f0
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    uint32_t        clearState;    // +0x48
+    int32_t         clearState;    // +0x48 Persist 0x140117ec0: Serialize(int&); footprint occupants left
     uint8_t         _pad4C[4];     // +0x4c
 };
 

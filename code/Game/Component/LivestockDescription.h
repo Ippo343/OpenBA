@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+
 class LivestockDescription final : public Description {
     DECLARE_EXE_TYPE(LivestockDescription)
 
@@ -36,13 +38,13 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140035550
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _byproduct;                           // +0x20 ExternalPtr (byproduct)
-    uint32_t _type;                             // +0x28 enum (serialized through the uint door)
-    float _f2c;                                 // +0x2c
+    ComponentDescription* _byproduct;           // +0x20 ExternalPtr: the template of the pile a pasture drops
+    uint32_t _type;                             // +0x28 enum (serialized through the uint door): the town stock row
+    float _productionInterval;                  // +0x2c x 300 s per production credit (LivestockComponent::Update)
 };
 
 static_assert(sizeof(LivestockDescription) == 0x30, "LivestockDescription is 0x30 (create 0x1400354e0 MemAlloc(0x30))");
 static_assert(alignof(LivestockDescription) == 8, "LivestockDescription alignment");
 static_assert(offsetof(LivestockDescription, _byproduct) == 0x20, "LivestockDescription::_byproduct @ +0x20");
 static_assert(offsetof(LivestockDescription, _type) == 0x28, "LivestockDescription::_type @ +0x28");
-static_assert(offsetof(LivestockDescription, _f2c) == 0x2c, "LivestockDescription::_f2c @ +0x2c");
+static_assert(offsetof(LivestockDescription, _productionInterval) == 0x2c, "LivestockDescription::_productionInterval @ +0x2c");

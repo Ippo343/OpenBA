@@ -24,13 +24,14 @@
 // "Idle" is CharacterComponent+0x60 == -1: the action-stack top index that
 // Pf_ActStackPush_54e0 / WorkBase_TaskListCleanup_c5400 maintain — the walk gate.
 //
-// Component layout (retail ctor 0x14004fdb0):
-//   +0x10 owner entity IBP   +0x18 NomadDescription   +0x28 town-hall entity IBP
-//   +0x30 Vector3 spawn point   +0x3c Vector3 meeting point   +0x48 Time wander timer
-//   +0x50 int gender/variant    +0x58 embedded state node (node+0x18 = this)
+// Component layout (retail ctor 0x14004fdb0): NomadComponent.h.
 //
 // Opt-in with the town hall side: BANISHED_LIVE_IMMIGRATION. Faithful port of
 // 0x14004f420 .. 0x14004fb60 and 0x1400c49d0.
+//
+// LEFT (B.4 COMP-d): GameUpdateLoop m_game / m_entityList are void* (W0 header); the
+// Map's cell record has no type (GAME-b); StateMachineComponent::controllerSelf is
+// void* (COMP-e); the action-stack bodies (WORK / ACT) take raw receivers.
 
 #include <new>
 #include "object/TypeInfo.h"
@@ -38,10 +39,12 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/CharacterComponent.h"
 #include "Component/ControllerComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/EntityList.h"
 #include "Action/exe_bodies.h"   // Pf_ActStackPush_54e0, Pf_MoveToCtor_9170, ActHunt_MarkEntityRemoval_c2ea0
-#include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos, fn_Random_RandFloatTol
+#include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"  // kRdata_1401721cc
-#include "Player/exe_bodies.h"   // PlayerPath_FindComponent_3ea0
 #include "Work/exe_bodies.h"     // WorkBase_TaskListCleanup_c5400
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
@@ -52,6 +55,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/NomadComponent.h"
 
 namespace {
 
@@ -61,7 +65,7 @@ constexpr float kHalfCell        = 0.5f;    // DAT_140172114
 constexpr float kMoveSpeed       = -1.0f;   // DAT_140172280 (MoveTo speed arg: default)
 
 // Helpers, called by name (B3R):
-//   0x140003ea0 PlayerPath_FindComponent_3ea0 (the StateMachineComponent)
+//   0x140003ea0 FindComponent<StateMachineComponent>
 //   0x1400c5400 WorkBase_TaskListCleanup_c5400   0x1400c54e0 Pf_ActStackPush_54e0
 //   0x1400c9170 Pf_MoveToCtor_9170               0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
 //               (ComponentEntity::MarkForRemoval)
@@ -70,144 +74,111 @@ constexpr float kMoveSpeed       = -1.0f;   // DAT_140172280 (MoveTo speed arg: 
 // The .rdata float constants (Game/exe_constants.h) that are stored as bit patterns.
 inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
-uint32_t TidCharacter() { return CharacterComponent::TypeId(); }
+inline GameUpdateLoop* GW() { return GameUpdateLoop::_singleton; }
+// LEFT: GameUpdateLoop::m_entityList is void* (W0 header).
+inline EntityList* Entities(GameUpdateLoop* gw) { return reinterpret_cast<EntityList*>(gw->m_entityList); }
 
-
-inline uint8_t* GW() { return (GameUpdateLoop::_singleton != nullptr) ? reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) : nullptr; }
-inline void MakeIBP(void* dst, void* obj) { new (dst) ::Object::InternalBasePtr(
-    reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
-
-// Entity_FindComponent_Family (0x1400012d0) — the CharacterComponent (DAT_1401c7078).
-uintptr_t FindCharacter(void* entity) {
-    if (!entity) return 0;
-    uintptr_t e = reinterpret_cast<uintptr_t>(entity);
-    uint32_t tid = TidCharacter();
-    int n = *reinterpret_cast<int*>(e + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
-    for (int i = 0; i < n; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* c = *slot;
-        if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() != tid) continue;   // B.3.8 bridge (slot 2)
-        c = *slot;
-        return ::Object::IsDerivedFromNullSafe(c, tid) ? reinterpret_cast<uintptr_t>(c) : 0;
-    }
-    return 0;
-}
-
-// `*(int*)(chr+0x60) + 1 < 1` — the action stack is empty.
-bool Idle(uintptr_t nomad, uintptr_t* chrOut) {
-    uintptr_t chr = FindCharacter(*reinterpret_cast<void**>(nomad + 0x10));
-    uint64_t ibp = 0; MakeIBP(&ibp, reinterpret_cast<void*>(chr));
-    chr = static_cast<uintptr_t>(ibp);
-    if (chrOut) *chrOut = chr;
+// `character->currentAction + 1 < 1` — the action stack is empty. The character is the
+// entity's CharacterComponent (Entity_FindComponent_Family 0x1400012d0, DAT_1401c7078).
+bool Idle(NomadComponent* nomad) {
+    ComponentEntity* entity = nomad->_entity;
+    CharacterComponent* chr = entity ? entity->FindComponent<CharacterComponent>() : nullptr;
     if (!chr) return false;
-    return *reinterpret_cast<int*>(chr + 0x60) + 1 < 1;
+    return chr->currentAction + 1 < 1;
 }
 
 }  // namespace
 
 // ============================================================
-// Nomad_Remove — port of 0x1400c49d0: MarkForRemoval + queue on the entity list's
-// removal array (entityList+0xd0/+0xd8), unless already marked (flag 0x400).
+// EntityList::QueueDestroy — port of 0x1400c49d0: MarkForRemoval + queue on the entity
+// list's removal array (+0xd0/+0xd8), unless already marked (flag 0x400).
 // ============================================================
-extern "C" void Nomad_Remove(void* entityList, void* entityIBP) {
-    uint64_t* ibp = reinterpret_cast<uint64_t*>(entityIBP);
-    if (*ibp == 0) return;
-    uintptr_t e = static_cast<uintptr_t>(*ibp);
-    if ((*reinterpret_cast<uint32_t*>(e + 0x40) >> 10) & 1) return;
-    ActHunt_MarkEntityRemoval_c2ea0(reinterpret_cast<void*>(*ibp));   // 0x1400c2ea0
-    uint8_t* el = reinterpret_cast<uint8_t*>(entityList);
+void EntityList::QueueDestroy(ComponentEntity* const* entity) {
+    if (*entity == nullptr) return;
+    if (((*entity)->_entityFlags >> 10) & 1) return;
+    ActHunt_MarkEntityRemoval_c2ea0(*entity);   // 0x1400c2ea0
     // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(el + 0xd0)
-        .SetSizeFill(*reinterpret_cast<int*>(el + 0xd8) + 1, ibp);
+    GameColl::AsArray<GameColl::Ptr8>(&removalList).SetSizeFill(removalList.count + 1, entity);
 }
 
 // ============================================================
-// Nomad_MoveTo — port of 0x14004fb60: clear the character's action stack and push a
-// MoveTo(dest) (Slow, mask 0xe1f, default speed).
+// NomadComponent::MoveTo — port of 0x14004fb60: clear the character's action stack
+// and push a MoveTo(dest) (Slow, mask 0xe1f, default speed).
 // ============================================================
-extern "C" void Nomad_MoveTo(void* nomadV, float* dest) {
-    uintptr_t nomad = reinterpret_cast<uintptr_t>(nomadV);
-    uintptr_t chr = FindCharacter(*reinterpret_cast<void**>(nomad + 0x10));
-    uint64_t chrIBP = 0; MakeIBP(&chrIBP, reinterpret_cast<void*>(chr));
-    chr = static_cast<uintptr_t>(chrIBP);
+void NomadComponent::MoveTo(Math::Vector3* dest) {
+    ComponentEntity* entity = _entity;
+    CharacterComponent* chr = entity ? entity->FindComponent<CharacterComponent>() : nullptr;
     if (!chr) return;
-    WorkBase_TaskListCleanup_c5400(reinterpret_cast<void*>(chr + 0x48));   // 0x1400c5400
+    WorkBase_TaskListCleanup_c5400(&chr->actions);   // 0x1400c5400
     void* mem = System::MemoryAllocator::MemAlloc(0x480, 8);
     void* act = nullptr;
     if (mem) {
-        uint64_t ownerIBP = chrIBP;
-        act = Pf_MoveToCtor_9170(mem, &ownerIBP, 1 /*Slow*/, 0, dest, 0xe1f, 0, kMoveSpeed);
+        CharacterComponent* ownerIBP = chr;
+        // LEFT: 0x1400c9170 takes the destination as float* (ACT's signature).
+        act = Pf_MoveToCtor_9170(mem, &ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);
     }
-    uint64_t actIBP = 0; MakeIBP(&actIBP, act);
-    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(chr + 0x48), &actIBP);   // 0x1400c54e0
+    void* actIBP = act;
+    // LEFT: 0x1400c54e0 takes the action stack as int64_t* (ACT's signature).
+    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0
 }
 
 // ============================================================
-// State handlers (data = the NomadComponent, sm = its StateMachine)
+// State handlers (the controller hands them this component and its StateMachine)
 // ============================================================
 
 // state 0 enter 0x14004faf0: walk to the meeting point
-extern "C" char Nomad_State0_Enter(void* data, void* /*sm*/) {
-    Nomad_MoveTo(data, reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(data) + 0x3c));
+char NomadComponent::EnterWalkIn() {
+    MoveTo(&meetPoint);   // 0x14004fb60
     return 1;
 }
 // state 0 tick 0x14004f9c0: arrived -> tell the hall (event 6) -> state 1
-extern "C" char Nomad_State0_Tick(void* data, void* sm, void* /*time*/) {
-    uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
-    if (!Idle(nomad, nullptr)) return 1;
-    uint8_t* gw = GW();
-    if (*reinterpret_cast<uint64_t*>(nomad + 0x28) == 0) {
-        uint64_t ibp = *reinterpret_cast<uint64_t*>(nomad + 0x10);
-        if (gw) Nomad_Remove(*reinterpret_cast<void**>(gw + 0xe8), &ibp);
+char NomadComponent::TickWalkIn(void* sm) {
+    if (!Idle(this)) return 1;
+    GameUpdateLoop* gw = GW();
+    if (hall == nullptr) {
+        ComponentEntity* ibp = _entity;
+        if (gw) Entities(gw)->QueueDestroy(&ibp);   // 0x1400c49d0
         return 1;
     }
-    uint64_t smcIBP = 0;
-    PlayerPath_FindComponent_3ea0(static_cast<uintptr_t>(*reinterpret_cast<uint64_t*>(nomad + 0x28)), &smcIBP);   // 0x140003ea0
-    uintptr_t smc = static_cast<uintptr_t>(smcIBP);
+    StateMachineComponent* smc = hall->FindComponent<StateMachineComponent>();   // 0x140003ea0
     if (smc) {
-        void* node = *reinterpret_cast<void**>(smc + 0x48);
+        ControllerComponent::Controller* node = smc->stateMachine.current;
         if (node) {
             // node = the controller member the StateMachineComponent linked (D6); slot 2.
-            reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(   // B.3.8 bridge
-                reinterpret_cast<void*>(smc + 0x48),
-                static_cast<int>(*reinterpret_cast<int8_t*>(smc + 0x51)), 6);
+            node->PostEvent(
+                &smc->stateMachine, smc->stateMachine.activeState, 6);
         }
     }
     ::ControllerLive::RequestStateTransition(sm, 1);
     return 1;
 }
 // event 1 0x14004f4a0: LEAVE -> state 2, forget the hall
-extern "C" char Nomad_Event1_Leave(void* data, void* sm) {
+char NomadComponent::OnLeave(void* sm) {
     ::ControllerLive::RequestStateTransition(sm, 2);
-    uint64_t nullIBP = 0; MakeIBP(&nullIBP, nullptr);
-    *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(data) + 0x28) = nullIBP;
+    hall = nullptr;   // a null InternalBasePtr
     return 1;
 }
-// state 1 enter LAB_14004f9b0: `mov al,1; ret`
-extern "C" char Nomad_State1_Enter(void* /*data*/, void* /*sm*/) { return 1; }
 // state 1 tick 0x14004f600: loiter around the meeting point
-extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
-    uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
-    if (!Idle(nomad, nullptr)) return 1;
-    int64_t* timer = reinterpret_cast<int64_t*>(nomad + 0x48);
-    *timer -= time ? *reinterpret_cast<int64_t*>(time) : 0;
-    if (*timer >= 0) return 1;
-    uint8_t* gw = GW();
+char NomadComponent::TickLoiter(void* time) {
+    if (!Idle(this)) return 1;
+    // LEFT: the controller hands the tick its elapsed System::Time as void*.
+    wanderTimer._ticks -= time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;
+    if (wanderTimer._ticks >= 0) return 1;
+    GameUpdateLoop* gw = GW();
     if (!gw) return 1;
-    void* rng = *reinterpret_cast<void**>(gw + 0xd8);
-    float secs = fn_Random_RandFloatTol(rng) * kWanderRandRange +
+    System::Random* rng = gw->m_random;
+    float secs = rng->RandFloatTol() * kWanderRandRange +
                  RdataF(kRdata_1401721cc);   // DAT_1401721cc = 30.0f, wander base
-    int64_t t = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), secs);
-    *timer = t;
+    System::Time t;
+    t._ticks = 0;
+    RtSystem_Time_Ctor(&t, secs);
+    wanderTimer = t;
 
-    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
+    // LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
+    int* grid = reinterpret_cast<int*>(gw->m_game);
     const int W = *grid;
-    const float* meet = reinterpret_cast<const float*>(nomad + 0x3c);
-    int cx = static_cast<int>(meet[0] + static_cast<float>(W >> 1));
-    int cy = static_cast<int>(meet[1] + static_cast<float>(W >> 1));
+    int cx = static_cast<int>(meetPoint.x + static_cast<float>(W >> 1));
+    int cy = static_cast<int>(meetPoint.y + static_cast<float>(W >> 1));
     if (cx < 0) cx = 0;
     if (cx >= W) cx = W - 1;
     if (cy < 0) cy = 0;
@@ -215,7 +186,8 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
     int centre = W * cy + cx;
     int x0 = centre % W - 8;
     int y0 = centre / W - 8;
-    uintptr_t tiles = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
+    // LEFT: the Map's 0x30-byte cell record (array at +0x80) has no type yet (GAME-b).
+    const uint8_t* tiles = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(grid) + 0x80);
     // Retail grows a DynArray<int> of candidates; a fixed 16x16 buffer holds them all.
     int cand[256];
     int nc = 0;
@@ -225,43 +197,41 @@ extern "C" char Nomad_State1_Tick(void* data, void* /*sm*/, void* time) {
             int xx = x0 + rx;
             if (xx < 0 || xx >= W || yy < 0 || yy >= W) continue;
             int c = yy * W + xx;
-            if (*reinterpret_cast<uint8_t*>(tiles + static_cast<uintptr_t>(c) * 0x30 + 0x29) < 3) cand[nc++] = c;
+            if (tiles[static_cast<uintptr_t>(c) * 0x30 + 0x29] < 3) cand[nc++] = c;
         }
     }
     if (nc != 0) {
-        uint32_t pick = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(nc));   // B.3.4b bridge
-        float jx = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar18
-        float jy = fn_Random_RandFloatTol(rng) * kWanderJitter;   // fVar19
+        uint32_t pick = rng->Rand(static_cast<uint32_t>(nc));
+        float jx = rng->RandFloatTol() * kWanderJitter;   // fVar18
+        float jy = rng->RandFloatTol() * kWanderJitter;   // fVar19
         int c = cand[pick];
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         float pos[3] = {0, 0, 0};
         Reimpl_MapGetTerrainPos(grid, pos, cellPos, '\0', nullptr);
-        float dest[3] = { jy + pos[0], jx + pos[1], pos[2] + 0.0f };
-        Nomad_MoveTo(data, dest);
+        Math::Vector3 dest(jy + pos[0], jx + pos[1], pos[2] + 0.0f);
+        MoveTo(&dest);   // 0x14004fb60
     }
     return 1;
 }
 // event 0 0x14004f420: DESTROY (the nomad became a citizen)
-extern "C" char Nomad_Event0_Destroy(void* data, void* /*sm*/) {
-    uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
-    uint8_t* gw = GW();
-    uint64_t ibp = *reinterpret_cast<uint64_t*>(nomad + 0x10);
-    if (gw && ibp) Nomad_Remove(*reinterpret_cast<void**>(gw + 0xe8), &ibp);
+char NomadComponent::OnDestroy() {
+    GameUpdateLoop* gw = GW();
+    ComponentEntity* ibp = _entity;
+    if (gw && ibp) Entities(gw)->QueueDestroy(&ibp);   // 0x1400c49d0
     return 1;
 }
 // state 2 enter 0x14004f5e0: walk back to the spawn point
-extern "C" char Nomad_State2_Enter(void* data, void* /*sm*/) {
-    Nomad_MoveTo(data, reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(data) + 0x30));
+char NomadComponent::EnterWalkOut() {
+    MoveTo(&spawnPoint);   // 0x14004fb60
     return 1;
 }
 // state 2 tick 0x14004f530: back at the edge -> destroy
-extern "C" char Nomad_State2_Tick(void* data, void* /*sm*/, void* /*time*/) {
-    uintptr_t nomad = reinterpret_cast<uintptr_t>(data);
-    if (!Idle(nomad, nullptr)) return 1;
-    uint8_t* gw = GW();
-    uint64_t ibp = *reinterpret_cast<uint64_t*>(nomad + 0x10);
-    if (gw && ibp) Nomad_Remove(*reinterpret_cast<void**>(gw + 0xe8), &ibp);
+char NomadComponent::TickWalkOut() {
+    if (!Idle(this)) return 1;
+    GameUpdateLoop* gw = GW();
+    ComponentEntity* ibp = _entity;
+    if (gw && ibp) Entities(gw)->QueueDestroy(&ibp);   // 0x1400c49d0
     return 1;
 }
 
@@ -270,24 +240,37 @@ extern "C" char Nomad_State2_Tick(void* data, void* /*sm*/, void* /*time*/) {
 // ============================================================
 // ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
 // ControllerLive::TableController<NomadCtrlTag>, NomadComponent.h).
-#include "Component/NomadComponent.h"
 using NomadDispatch = ::ControllerLive::Dispatcher<NomadCtrlTag>;
+
+// The table (controller_state_table.h) holds plain handler addresses called as
+// handler([node+0x18], sm[, time]): [node+0x18] is the controller's back-pointer, this
+// component, so each entry is a one-line adapter that calls the member.
+namespace {
+char NomadEnterWalkIn(NomadComponent* c, void*)                { return c->EnterWalkIn(); }     // 0x14004faf0
+char NomadTickWalkIn(NomadComponent* c, void* sm, void*)       { return c->TickWalkIn(sm); }    // 0x14004f9c0
+char NomadOnLeave(NomadComponent* c, void* sm)                 { return c->OnLeave(sm); }       // 0x14004f4a0
+char NomadEnterLoiter(NomadComponent*, void*)                  { return 1; }                    // LAB_14004f9b0 `mov al,1; ret`
+char NomadTickLoiter(NomadComponent* c, void*, void* time)     { return c->TickLoiter(time); }  // 0x14004f600
+char NomadOnDestroy(NomadComponent* c, void*)                  { return c->OnDestroy(); }       // 0x14004f420
+char NomadEnterWalkOut(NomadComponent* c, void*)               { return c->EnterWalkOut(); }    // 0x14004f5e0
+char NomadTickWalkOut(NomadComponent* c, void*, void*)         { return c->TickWalkOut(); }     // 0x14004f530
+}  // namespace
 
 extern "C" void NomadCtrl_PopulateTable() {
     using namespace ::ControllerLive;
     StateTable& t = NomadDispatch::table;
     if (t.count != 0) return;
-    TableRegisterState(t, 0, reinterpret_cast<void*>(&Nomad_State0_Enter), nullptr,
-                       reinterpret_cast<void*>(&Nomad_State0_Tick), nullptr);
+    TableRegisterState(t, 0, reinterpret_cast<void*>(&NomadEnterWalkIn), nullptr,
+                       reinterpret_cast<void*>(&NomadTickWalkIn), nullptr);
     TableAddTransition(t, 1, nullptr);
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&Nomad_Event1_Leave));
+    TableAddEvent(t, 1, reinterpret_cast<void*>(&NomadOnLeave));
 
-    TableRegisterState(t, 1, reinterpret_cast<void*>(&Nomad_State1_Enter), nullptr,
-                       reinterpret_cast<void*>(&Nomad_State1_Tick), nullptr);
+    TableRegisterState(t, 1, reinterpret_cast<void*>(&NomadEnterLoiter), nullptr,
+                       reinterpret_cast<void*>(&NomadTickLoiter), nullptr);
     TableAddTransition(t, 2, nullptr);
-    TableAddEvent(t, 0, reinterpret_cast<void*>(&Nomad_Event0_Destroy));
-    TableAddEvent(t, 1, reinterpret_cast<void*>(&Nomad_Event1_Leave));
+    TableAddEvent(t, 0, reinterpret_cast<void*>(&NomadOnDestroy));
+    TableAddEvent(t, 1, reinterpret_cast<void*>(&NomadOnLeave));
 
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&Nomad_State2_Enter), nullptr,
-                       reinterpret_cast<void*>(&Nomad_State2_Tick), nullptr);
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&NomadEnterWalkOut), nullptr,
+                       reinterpret_cast<void*>(&NomadTickWalkOut), nullptr);
 }

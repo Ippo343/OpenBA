@@ -87,32 +87,31 @@ bool EnvironmentDescription::Serialize(void* stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_environmentRef, &ser);   // ExternalPtr +0x20
 
     // count through a local (the resize below owns +0x30)
-    uint32_t count = _weatherCount;
-    ser.Serialize(*reinterpret_cast<int*>(&count), nullptr);
+    int count = _weatherCount;
+    ser.Serialize(count, nullptr);
 
     // On load: resize the dynamic weather-entry array.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        Reimpl_WeatherArray_Resize(&_weatherArray, (int)count);
+        Reimpl_WeatherArray_Resize(&_weatherArray, count);
     }
 
-    uintptr_t* arrPtr = static_cast<uintptr_t*>(_weatherArray);
-    for (uint32_t i = 0; i < count; ++i) {
-        Reimpl_ExternalPtr_Serialize_Weather(arrPtr, &ser);
-        Reimpl_ExternalPtr_Serialize_StringTable(arrPtr + 1, &ser);
-        arrPtr += 2;   // 16-byte entries
+    for (uint32_t i = 0; i < static_cast<uint32_t>(count); ++i) {
+        Reimpl_ExternalPtr_Serialize_Weather(&_weatherArray[i].weather, &ser);
+        Reimpl_ExternalPtr_Serialize_StringTable(&_weatherArray[i].description, &ser);
     }
 
-    // 12 inline weather entries @ +0x38, each 0x20 bytes: 3 Colors + 5 floats,
-    // all through the 4-byte int door.
+    // 12 inline weather entries @ +0x38, each 0x20 bytes. Retail 0x1400940f0..0x140094170:
+    // the three packed colours through System::Color::Serialize (import 0x140151ee0,
+    // the uint door), the five floats through Serialize(float&) (import 0x140152a60).
     for (WeatherEntry& w : _months) {
-        ser.Serialize(*reinterpret_cast<int*>(&w.skyColor), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(&w.groundColor), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(&w.fogColor), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(&w.fogStart), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(&w.fogEnd), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(&w.sunIntensity), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(&w.sunAngle), nullptr);
-        ser.Serialize(*reinterpret_cast<int*>(&w.sunSpread), nullptr);
+        ser.Serialize(w.skyColor, nullptr);
+        ser.Serialize(w.groundColor, nullptr);
+        ser.Serialize(w.fogColor, nullptr);
+        ser.Serialize(w.fogStart, nullptr);
+        ser.Serialize(w.fogEnd, nullptr);
+        ser.Serialize(w.sunIntensity, nullptr);
+        ser.Serialize(w.sunAngle, nullptr);
+        ser.Serialize(w.sunSpread, nullptr);
     }
     return true;
 }

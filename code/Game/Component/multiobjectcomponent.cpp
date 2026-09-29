@@ -5,8 +5,8 @@
 // Manages multi-part objects (multi-tile buildings spanning several entities).
 //
 // Vtable at 0x140163cf0. Two non-trivial overrides:
-//   Shutdown  (0x140125880) — Serialize entity ref array + multiCount
-//   OnCreate  (0x1401257C0) — Mark child entities for removal
+//   Persist   (0x140125880) — Serialize entity ref array + multiCount
+//   OnRemove  (0x1401257c0) — Mark child entities for removal
 //
 
 #include "Component/multiobjectcomponent_funcs.h"
@@ -22,58 +22,41 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Entity/ComponentEntity.h"   // ENDGAME B.3.9 CB: ComponentEntity::TypeId()
+#include "Entity/EntityList.h"
 
 // ============================================================
-// MultiObjectComponent::OnCreate (0x1401257C0)
+// MultiObjectComponent::OnRemove — slot 7 (0x1401257c0)
 // ============================================================
-// Iterates child entity array. For each valid child, checks bit 10 of
-// entity flags. If not already marked, calls MarkForRemoval and adds
-// to removal queue.
-//
-// Nothing calls this body (the class's slot 7 is a PORT GAP, MultiObjectComponent.h).
-// B3R: its two doors are gone — the game-state cell 0x1401c3dd8 is read through the
-// engine_funcs storage global bound to the same cell (converted by the STORAGE block),
-// and 0x1400c2ea0 is ActHunt_MarkEntityRemoval_c2ea0 by name.
-
-void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
-    int count = *(int*)((uintptr_t)self + 0x50);
-    void** array = *(void***)((uintptr_t)self + 0x48);
-
+// Iterates the child entity array (count and data re-read per pass, as retail). For
+// each child not yet marked (entity flag bit 10), MarkForRemoval (0x1400c2ea0) and
+// append it to the entity list's removal queue (0x140003110).
+// The singleton / entity-list null tests are the tree's (retail has neither).
+void MultiObjectComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    for (int i = 0; i < count; i++) {
-        void* entityPtr = array[i];
-        void* gameWorld = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0xE8);
+    for (int i = 0; i < childCount; i++) {
+        ComponentEntity* entityPtr = children[i].Get();
+        // LEFT: GameUpdateLoop::m_entityList is void* (W0 header).
+        EntityList* entityList = reinterpret_cast<EntityList*>(GameUpdateLoop::_singleton->m_entityList);
 
-        if (entityPtr != nullptr) {
+        if (entityPtr != nullptr && ((entityPtr->_entityFlags >> 10) & 1) == 0) {
+            ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
 
-            uint32_t entityFlags = *(uint32_t*)((uintptr_t)entityPtr + 0x40);
-            if (((entityFlags >> 10) & 1) == 0) {
-                ActHunt_MarkEntityRemoval_c2ea0(entityPtr);
-
-                if (gameWorld) {
-                    int removalCount = *(int*)((uintptr_t)gameWorld + 0xD8);
-                    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                    GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)gameWorld + 0xD0))
-                        .SetSizeFill(removalCount + 1, &array[i]);
-                }
+            if (entityList) {
+                int removalCount = entityList->removalList.count;
+                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                GameColl::AsArray<GameColl::Ptr8>(&entityList->removalList)
+                    .SetSizeFill(removalCount + 1, &entityPtr);
             }
         }
     }
 }
 
 // ===== ENDGAME B.3.8 MI-B — MultiObjectComponent's own slot bodies =====
-// The class (MultiObjectComponent.h) reaches the slot-12 body below through its
-// OnEvent member, at the bottom of this file.
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
 #include "Component/MapComponent.h"
 #include "Component/FloorComponent.h"
-
-// 0x140125490 door: registered by address (standalone/reg_terraform_live.cpp).
-extern "C" void MultiObjectComponent_Slot12(void* selfV, int msgId) {
-    reinterpret_cast<MultiObjectComponent*>(selfV)->MultiObjectComponent::OnEvent(msgId);   // B.3.8 bridge
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-B — MultiObjectComponent as a REAL class with its retail
@@ -85,48 +68,34 @@ extern "C" void MultiObjectComponent_Slot12(void* selfV, int msgId) {
 // 18-slot vtable, a real ctor/dtor chain, and retail's member at +0x28 over retail's
 // state table.
 // ============================================================================
-extern void MapComponent_sub_41b0(int64_t mapComponent);   // keystone_a_map.cpp, 0x1401241b0
-extern void FloorComponent_SubF390(void* floorComponent);  // floorcomponent.cpp, 0x14011f390
 
 using MultiObjectCtrlDispatch = ::ControllerLive::Dispatcher<MultiObjectCtrlTag>;
-
-// The first component of `entity` whose slot-2 type id is `tid`, kept only if it
-// IsDerivedFrom `tid` — retail's inlined FindComponent<T> shape (the scan breaks at
-// the FIRST id match, then re-validates). Component array at entity+0x30, count +0x38.
-static void* MultiObject_FindComponent(uintptr_t entity, uint32_t tid) {
-    const int n = *reinterpret_cast<int*>(entity + 0x38);
-    const uintptr_t comps = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int i = 0; i < n; ++i) {
-        void* c = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(i) * 8);
-        const uint32_t id = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
-        if (id == tid)
-            return ::Object::IsDerivedFromNullSafe(c, tid) ? c : nullptr;
-    }
-    return nullptr;
-}
 
 // state-2 ENTER — retail 0x140125560. For every child entity in the list at +0x48
 // (count +0x50, re-read each pass):
 //   map   = FindComponent<MapComponent>(child)      (type 0x1401c79e0)
-//   MapComponent_sub_41b0(map)                      (0x1401241b0 — stamp the child's
+//   map->AddToMap()                                 (0x1401241b0 — stamp the child's
 //                                                    footprint; guarded by its own
 //                                                    +0x20 bit 20, so idempotent)
 //   floor = FindComponent<FloorComponent>(child)    (type 0x1401c76d0)
 //   if (floor) FloorComponent_sub_f390(floor)       (0x14011f390)
 // then `XOR AL,AL`. Retail derefs the MapComponent unguarded: every child of a
 // multi-object structure carries one (a faithful crash if not, not a guard here).
-static char MultiObject_State2Enter(void* data, void* /*sm*/) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(data);
-    for (int i = 0; i < *reinterpret_cast<int*>(self + 0x50); ++i) {
-        const uintptr_t child = *reinterpret_cast<uintptr_t*>(
-            *reinterpret_cast<uintptr_t*>(self + 0x48) + static_cast<uintptr_t>(i) * 8);
-        void* map = MultiObject_FindComponent(child, MapComponent::TypeId());
-        MapComponent_sub_41b0(reinterpret_cast<int64_t>(map));
-        void* floor = MultiObject_FindComponent(child, FloorComponent::TypeId());
-        if (floor) FloorComponent_SubF390(floor);
+char MultiObjectComponent::EnterState2() {
+    for (int i = 0; i < childCount; ++i) {
+        ComponentEntity* child = children[i].Get();
+        MapComponent* map = child->FindComponent<MapComponent>();
+        map->AddToMap();   // 0x1401241b0
+        FloorComponent* floor = child->FindComponent<FloorComponent>();
+        if (floor) FloorComponent_SubF390(floor);   // 0x14011f390
     }
     return 0;
 }
+
+// The table (controller_state_table.h) holds plain handler addresses called as
+// handler([node+0x18], sm): [node+0x18] is the controller's back-pointer, this
+// component, so the entry is a one-line adapter that calls the member.
+static char MultiObjectEnterState2(MultiObjectComponent* c) { return c->EnterState2(); }   // 0x140125560
 
 // Retail's table, transcribed from MultiObjectDescription_Setup (0x14014f530): its
 // RegisterState (0x1400360f0) registers state 2 with enter 0x140125560 and every other
@@ -136,7 +105,7 @@ static void MultiObjectComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = MultiObjectCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&MultiObject_State2Enter),
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&MultiObjectEnterState2),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }
@@ -147,16 +116,17 @@ static const bool s_multiObjectStateTableBuilt = (MultiObjectComponent_PopulateS
 // +0x58 = 1; then `_flags |= 2` (0x82).
 // (+0x58 is the cell count the bridge/fence tools stamp; the tree's factory zeroed it.)
 MultiObjectComponent::MultiObjectComponent()
-    : _controller(this), field48(nullptr), field50(nullptr), multiCount(1), _pad5C{} {
+    : _controller(this), children(nullptr), childCount(0), childCapacity(0), multiCount(1), _pad5C{} {
     OrFlagsInCtor(0x2);
 }
 
 // 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0, then the restamps and ~Internal
 // (the compiler chain).
 MultiObjectComponent::~MultiObjectComponent() {
-    Object::detail::InternalMemFree(field48);
-    field48 = nullptr;
-    field50 = nullptr;
+    Object::detail::InternalMemFree(children);
+    children = nullptr;
+    childCount = 0;
+    childCapacity = 0;
 }
 
 // create 0x140035ef0: MemAlloc(0x60, 8), then the ctor.
@@ -173,7 +143,7 @@ void* MultiObjectComponent::CreateInPlaceObject(void* storage) {
 }
 
 // ============================================================
-// MultiObjectComponent::Shutdown (0x140125880)
+// MultiObjectComponent::Persist (0x140125880)
 // ============================================================
 // Component_Serialize + empty serializer block + second serializer:
 //   serialize count from +0x50, resize array if loading, serialize each IBP
@@ -183,76 +153,69 @@ void* MultiObjectComponent::CreateInPlaceObject(void* storage) {
 void MultiObjectComponent::Persist(void* stream) {
     Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
+    // LEFT: Component::Persist takes void* (COMP-c's header).
+    IO::Stream* st = reinterpret_cast<IO::Stream*>(stream);
+
     // First empty serializer block (controller section)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
+    { IO::Serializer scope(*st, 0); }
 
     // Second serializer block with entity array + multiCount
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*st, 0);
 
-    int localCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x50);
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
+    int localCount = childCount;
+    ser.Serialize(localCount, nullptr);
 
     // If loading (stream+8 == 0), resize array
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        GameColl::AsArray<GameColl::Ptr8>((void*)(reinterpret_cast<uintptr_t>(this) + 0x48))
-            .SetSize(localCount);
+    if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+        GameColl::AsArray<GameColl::Ptr8>(&children).SetSize(localCount);
     }
 
     // Serialize each InternalBasePtr in the array
-    void* arrayBase = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x48);
+    Object::InternalPtr<ComponentEntity>* arrayBase = children;
     if (localCount > 0) {
         for (int i = 0; i < localCount; i++) {
-            void* ibp = (void*)((uintptr_t)arrayBase + (uintptr_t)i * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
+            Object::InternalPtr<ComponentEntity>& ibp = arrayBase[i];
+            ibp.InternalBasePtr::Serialize(ser);
 
             // Validate: if not ComponentEntity, null it out
             // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =
             // ComponentEntity::TypeId() (Persist 0x140125880, at 0x140125936). The tree read 0x1401c72e8 instead -- the NAME
             // field (+8) of Description's record, whose only retail reader is Description's
             // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
-            void* ptr = *(void**)ibp;
+            ComponentEntity* ptr = ibp.Get();
             if (ptr != nullptr) {
                 // slot 0x140152a98 = ?IsDerivedFrom@Base@Object@@QEBA_NI@Z
-                if (!reinterpret_cast<const Object::Base*>(ptr)->IsDerivedFrom(
-                        ComponentEntity::TypeId())) {   // B.3.x bridge
-                    *(uintptr_t*)ibp = 0;
+                if (!ptr->IsDerivedFrom(ComponentEntity::TypeId())) {
+                    ibp = nullptr;
                 }
             }
         }
     }
 
-    // Serialize multiCount at +0x58
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + 0x58), nullptr);   // B.3.4 bridge
+    // Serialize multiCount at +0x58 (retail Serialize(int&)).
+    ser.Serialize(multiCount, nullptr);
 
     // On load: compact array — remove null entries
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        int count = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x50);
+    if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
+        int count = childCount;
         for (int i = 0; i < count; /* no increment */) {
-            void* arr = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x48);
-            uintptr_t entryAddr = (uintptr_t)arr + (uintptr_t)i * 8;
-            if (*(uintptr_t*)entryAddr == 0) {
+            Object::InternalPtr<ComponentEntity>* arr = children;
+            if (arr[i].Get() == nullptr) {
                 // Shift remaining entries down
                 for (int j = i; j < count - 1; j++) {
-                    uintptr_t curAddr = (uintptr_t)arr + (uintptr_t)j * 8;
-                    uintptr_t nextAddr = curAddr + 8;
                     // Clear then copy
-                    *(uintptr_t*)curAddr = 0;
-                    *(uintptr_t*)curAddr = *(uintptr_t*)nextAddr;
+                    arr[j] = nullptr;
+                    arr[j] = arr[j + 1];
                 }
                 count--;
-                *(int*)(reinterpret_cast<uintptr_t>(this) + 0x50) = count;
+                childCount = count;
                 // Don't increment i, re-check this slot
             } else {
                 i++;
             }
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 // -- slot 12 (+0x60) -- retail 0x140125490 -- the child-entity MESSAGE FORWARDER -----
 // Pure relay, no message filter: for every child entity in the array at +0x48 (count at
@@ -270,23 +233,20 @@ void MultiObjectComponent::Persist(void* stream) {
 // one "msg 4 -> deform" (the master), both mesh passes correctly skipped on a null mesh,
 // and FootprintPass converting 18 cells -- master-level work only, no carve.
 void MultiObjectComponent::OnEvent(int eventId) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    const int count = childCount;
+    Object::InternalPtr<ComponentEntity>* list = children;
+    if (count <= 0 || !list) return;
 
-    const int childCount = *reinterpret_cast<int*>(self + 0x50);
-    const uintptr_t children = *reinterpret_cast<uintptr_t*>(self + 0x48);
-    if (childCount <= 0 || !children) return;
-
-    for (int i = 0; i < childCount; ++i) {
-        void** childSlot = reinterpret_cast<void**>(children + static_cast<uintptr_t>(i) * 8);
-        uintptr_t child = reinterpret_cast<uintptr_t>(*childSlot);
+    for (int i = 0; i < count; ++i) {
+        ComponentEntity* child = list[i].Get();
         if (!child) continue;
 
-        const int compCount = *reinterpret_cast<int*>(child + 0x38);
-        const uintptr_t comps = *reinterpret_cast<uintptr_t*>(child + 0x30);
+        const int compCount = child->_componentCount;
+        Object::InternalPtr<Component>* comps = child->_components;
         for (int k = 0; k < compCount && comps; ++k) {
-            void* comp = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(k) * 8);
+            Component* comp = comps[k].Get();
             if (!comp) continue;
-            reinterpret_cast<Component*>(comp)->OnEvent(eventId);   // B.3.8 bridge (slot 12, +0x60)
+            comp->OnEvent(eventId);   // slot 12 (+0x60)
         }
     }
 }

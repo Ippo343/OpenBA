@@ -55,12 +55,14 @@
 #include "system/MemoryAllocator.h"
 #include "object/Type.h"
 
+#include <cstring>
+
 namespace {
-// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
-// (0 == ok on the read leg). The tree's check before it allocates an array.
-inline int SerStreamErr(IO::Serializer& ser) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
+// retail's `*(int*)(*(serializer) + 8) == 0` is the stream's direction word —
+// IO::Serializer::GetDirection (0x180006210) — 0 = reading. The tree's check before
+// it allocates an array.
+inline bool Reading(IO::Serializer& ser) {
+    return static_cast<int>(ser.GetDirection()) == 0;
 }
 }  // namespace
 
@@ -69,7 +71,7 @@ inline int SerStreamErr(IO::Serializer& ser) {
 // the defaults.
 ConsumeProduceDescription::ConsumeProduceDescription()
     : Description(),
-      _ref20(nullptr),
+      _stringTable(nullptr),
       _recipes(nullptr),
       _recipeCount(0),
       _recipeCap(0),
@@ -78,7 +80,7 @@ ConsumeProduceDescription::ConsumeProduceDescription()
       _i40(1),
       _f44(4.0f),
       _i48(-1),
-      _i4c(0),
+      _defaultRecipe(0),
       _u50(0xb) {}
 
 // dtor (slot 0 0x1400323e0 minus the stamps): frees each recipe's inner array and String, then the recipe array.
@@ -86,12 +88,11 @@ ConsumeProduceDescription::ConsumeProduceDescription()
 ConsumeProduceDescription::~ConsumeProduceDescription() {
     // free inner arrays then the outer recipe array (the tree walks the CAPACITY)
     int outerN = _recipeCap;
-    uint8_t* e = static_cast<uint8_t*>(_recipes);
-    if (e) {
-        for (int i = 0; i < outerN; ++i, e += 0x28) {
-            void* inner = *(void**)(e + 0x00);
-            if (inner) ::System::MemoryAllocator::MemFree(inner);
-            reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
+    if (_recipes) {
+        for (int i = 0; i < outerN; ++i) {
+            ConsumeProduceRecipe& e = _recipes[i];
+            if (e.inputs) ::System::MemoryAllocator::MemFree(e.inputs);
+            e.name.~String();
         }
         ::System::MemoryAllocator::MemFree(_recipes);
     }
@@ -102,35 +103,34 @@ ConsumeProduceDescription::~ConsumeProduceDescription() {
 bool ConsumeProduceDescription::Serialize(void* stream) {
     if (!::System::MemoryAllocator::_singleton) return true;   // standalone: unwired doors
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);
     // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
     ser.Serialize(_recipeCount, nullptr);
     int outerN = _recipeCount;
-    if (SerStreamErr(ser) == 0 && outerN > 0) {
-        void* buf = ::System::MemoryAllocator::MemAlloc((uint64_t)outerN * 0x28, 8);
-        _recipes = buf;
+    if (Reading(ser) && outerN > 0) {
+        _recipes = static_cast<ConsumeProduceRecipe*>(::System::MemoryAllocator::MemAlloc((uint64_t)outerN * sizeof(ConsumeProduceRecipe), 8));
         _recipeCap = outerN;
-        if (buf) for (uint64_t b = 0; b < (uint64_t)outerN * 0x28; ++b) ((uint8_t*)buf)[b] = 0;
+        if (_recipes) std::memset(static_cast<void*>(_recipes), 0, (size_t)outerN * sizeof(ConsumeProduceRecipe));
     }
-    if (outerN > 0) {
-        uint8_t* e = static_cast<uint8_t*>(_recipes);
-        for (int i = 0; i < outerN && e; ++i, e += 0x28) {
-            // inner array @ e+0x00 (count @ e+0x08, element stride 0x10)
-            ser.Serialize(*reinterpret_cast<int*>(e + 0x08), nullptr);
-            int innerN = *(int32_t*)(e + 0x08);
-            if (SerStreamErr(ser) == 0 && innerN > 0) {
-                void* ibuf = ::System::MemoryAllocator::MemAlloc((uint64_t)innerN * 0x10, 8);
-                *(void**)(e + 0x00) = ibuf;
-                if (ibuf) for (uint64_t b = 0; b < (uint64_t)innerN * 0x10; ++b) ((uint8_t*)ibuf)[b] = 0;
+    if (outerN > 0 && _recipes) {
+        for (int i = 0; i < outerN; ++i) {
+            ConsumeProduceRecipe& e = _recipes[i];
+            // inner array (count, element stride 0x10)
+            ser.Serialize(e.inputCount, nullptr);
+            int innerN = e.inputCount;
+            if (Reading(ser) && innerN > 0) {
+                e.inputs = static_cast<ConsumeProduceInput*>(::System::MemoryAllocator::MemAlloc((uint64_t)innerN * sizeof(ConsumeProduceInput), 8));
+                if (e.inputs) std::memset(static_cast<void*>(e.inputs), 0, (size_t)innerN * sizeof(ConsumeProduceInput));
             }
-            uint8_t* ie = *(uint8_t**)(e + 0x00);
-            for (int j = 0; j < innerN && ie; ++j, ie += 0x10) {
-                Reimpl_ExternalPtr_Serialize_StringTable(ie + 0x00, &ser); // ExternalPtr
-                ser.Serialize(*reinterpret_cast<int*>(ie + 0x08), nullptr);
+            if (e.inputs) {
+                for (int j = 0; j < innerN; ++j) {
+                    Reimpl_ExternalPtr_Serialize_StringTable(&e.inputs[j].material, &ser); // ExternalPtr
+                    ser.Serialize(e.inputs[j].count, nullptr);
+                }
             }
-            Reimpl_ExternalPtr_Serialize_StringTable(e + 0x10, &ser);      // ExternalPtr +0x10
-            ser.Serialize(*reinterpret_cast<unsigned int*>(e + 0x18), nullptr);   // enum +0x18
-            reinterpret_cast<System::String*>(e + 0x20)->Serialize(&ser);        // B.3.1 bridge: String +0x20
+            Reimpl_ExternalPtr_Serialize_StringTable(&e.product, &ser);      // ExternalPtr +0x10
+            ser.Serialize(e.materialType, nullptr);                          // enum +0x18
+            e.name.Serialize(&ser);                                          // String +0x20
         }
     }
     ser.Serialize(_i40, nullptr);
@@ -141,7 +141,7 @@ bool ConsumeProduceDescription::Serialize(void* stream) {
     ser.Serialize(_i3c, nullptr);
     ser.Serialize(_f44, nullptr);
     ser.Serialize(_i48, nullptr);
-    ser.Serialize(_i4c, nullptr);
+    ser.Serialize(_defaultRecipe, nullptr);
     return true;
 }
 
