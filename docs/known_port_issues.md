@@ -210,3 +210,25 @@ stress town crashed (`READ of 0000000000000001`, `town_workplace_registry.cpp:28
 **Fix.** The body returns `outPtr`; the reader calls it by name. Entry 9 lists the same class of
 defect. **The lesson for B.4:** a cast of a function to another signature is never "keeping today's
 bits" — what RAX holds after a `void` function is not defined, and changes with the call form.
+
+## 13. `TradeWork::Validate` walks a stale entry of the post's citizen tree — OPEN (found 2026-09-29)
+
+**Symptom.** The stress town with the virtual merchant customer
+(`BANISHED_AUTOSTART=1 BANISHED_STRESS=1 BANISHED_TRADE_SELL=600 BANISHED_TRADE_SELL_SEED=50`, debug
+exe) dies with exit 3 after 17-19 trades (frame ~10,800-12,000): `Object::Base::IsA`
+(`TypeInfo.h:338`) <- `WorkBase_ValidateTask_f7100` (`work_base_reimpl.cpp`) <-
+`TradeWork::Validate()` (`tradework.cpp:545`) <- the citizen AI's idle helpers
+(`citizenai_housing_idle.cpp`) <- `CitizenAIComponent::State_Idle`. The object whose `Type()` is
+read is garbage (`READ of 0x18900000073` at B.4's tip; `EXEC of 0x6000000060` at the base: the
+vtable slot itself was garbage there).
+
+**Not a B.4 regression.** Reproduced on `b2a5434c` (the step's base) with the same route: same three
+frames. No block of B.4 changed `tradework.cpp` or the validate body.
+
+**What is known.** `TradeWork::Validate` walks the in-order BST of entities assigned to the trading
+post and validates each; the last log line before the fault in the B.4 run is a citizen dying
+(`[Burial] NO GRAVE … cause=0(starvation)`). A citizen that leaves the world is still an entry of
+the post's tree. Retail has no check at the fault site (`IsA` on the entry): do NOT add one. The
+question for the fix is which retail path removes a dying / leaving citizen from the work's tree
+(the citizen's `OnRemove` 0x140113ca0 and the workplace release 0x140116540 / 0x140115a50 are the
+candidates) and whether the tree's port of it reaches TradeWork. The route is not part of any gate.
