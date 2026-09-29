@@ -532,9 +532,11 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
 // member from this herd's own +0x38 list is what drains the +0x40 count and
 // terminates the loop), then removes the herd from the world herd list.
 // ============================================================
-void HerdComponent_OnRemove(HerdComponent* self) {
-    while (self->memberCount > 0) {
-        WildAnimalComponent* member = self->members[self->memberCount - 1];
+void HerdComponent::OnRemove() {
+    // The two `break`s below are the tree's guards (retail has neither: a member with
+    // no herd would spin, a null member would fault).
+    while (memberCount > 0) {
+        WildAnimalComponent* member = members[memberCount - 1];
         if (!member) break;
 
         // LEFT: WildAnimalComponent::data28 is a uint64_t (COMP-f's header).
@@ -550,7 +552,7 @@ void HerdComponent_OnRemove(HerdComponent* self) {
     // LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
     CitizenBehavior* townMgr = reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
     if (!townMgr) return;
-    HerdComponent* selfRef = self;
+    HerdComponent* selfRef = this;
     CemeteryListErase_Reimpl(&townMgr->herds, &selfRef);   // 0x140002cc0
 }
 
@@ -634,10 +636,7 @@ void HerdComponent::OnAdded() {
     GameColl::AsArray<GameColl::Ptr8>(&townMgr->herds).SetSizeFill(townMgr->herdCount + 1, &selfRef);
 }
 
-// [7] 0x140121e20. PORT GAP (retail 0x140121e20) — B38 D9: the body is ported
-// (HerdComponent_OnRemove above) but the tree's old table never installed it; the
-// empty body is kept here. Installing it is its own titled commit.
-void HerdComponent::OnRemove() {}
+// [7] 0x140121e20: HerdComponent::OnRemove above.
 
 // [9] 0x140121bf0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).

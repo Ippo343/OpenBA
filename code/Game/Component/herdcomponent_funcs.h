@@ -20,5 +20,3 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
 // (populationcomponent.cpp).
 void HerdComponent_Populate(int64_t herdComp, int count);
 
-// 0x140121e20, HerdComponent's slot 7 (not installed: HerdComponent::OnRemove is empty).
-void HerdComponent_OnRemove(HerdComponent* self);
