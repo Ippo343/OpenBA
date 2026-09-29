@@ -240,6 +240,7 @@ namespace UI {
 
 class Dialog;    // block B
 class Element;   // Element.h (this block)
+class StringTable;
 
 class ElementDescription : public Object::External {
 public:
@@ -319,10 +320,13 @@ public:
     int32_t  _id;                      // +0x3c  ctor: -1
     uint32_t _elementType;             // +0x40  ctor: 3 — the Alignment, see above
     uint32_t _flags;                   // +0x44
-    void*    _childDesc;               // +0x48  ExternalPtr<UI::ElementDescription>
-    uint64_t _userData;                // +0x50  ExternalPtr<UI::Dialog>  (misnamed)
-    void*    _stringTable;             // +0x58  ExternalPtr<UI::StringTable>
-    char*    _textName;                // +0x60  System::String (refcounted char*)
+    ElementDescription* _childDesc;    // +0x48  ExternalPtr<UI::ElementDescription> (B4 H4)
+    // +0x50: ExternalPtr<UI::Dialog> (Serialize 0x180076610). B4 H3: renamed from
+    // `_userData` by what retail does with it — CreateInstance (0x180115ad0)
+    // copies it to Element::_toolTipDialog (+0x40).
+    Dialog*  _toolTipDialog;           // +0x50
+    StringTable* _stringTable;         // +0x58  ExternalPtr<UI::StringTable> (B4 H4)
+    char*    _textName;                // +0x60  System::String (refcounted char*; H5 raw)
 };
 
 static_assert(sizeof(ElementDescription) == 0x68,
@@ -343,7 +347,7 @@ static_assert(offsetof(ElementDescription, _id)          == 0x3c, "");
 static_assert(offsetof(ElementDescription, _elementType) == 0x40, "");
 static_assert(offsetof(ElementDescription, _flags)       == 0x44, "");
 static_assert(offsetof(ElementDescription, _childDesc)   == 0x48, "");
-static_assert(offsetof(ElementDescription, _userData)    == 0x50, "");
+static_assert(offsetof(ElementDescription, _toolTipDialog) == 0x50, "");
 static_assert(offsetof(ElementDescription, _stringTable) == 0x58, "");
 static_assert(offsetof(ElementDescription, _textName)    == 0x60, "");
 // The class and the POD describe the same bytes.

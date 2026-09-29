@@ -192,8 +192,6 @@
 namespace UI {
 
 Dialog::~Dialog() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-
     // 180112e56: the re-stamp of the Dialog vtable is the compiler's.
 
     // THE FOUR ARRAYS, DESCENDING: +0x78, +0x68, +0x58, +0x48.
@@ -203,16 +201,17 @@ Dialog::~Dialog() {
     // `_templates` are `void**` + count + capacity, laid out contiguously
     // exactly like `Collection::Array<void*>` (data/size/capacity), so the
     // conversion bridges at the use site with a `reinterpret_cast`.
-    reinterpret_cast<Collection::Array<void*>*>(p + 0x78)->~Array();  // retail 0x180009460
-    reinterpret_cast<Collection::Array<void*>*>(p + 0x68)->~Array();  // retail 0x180039440
+    // LEFT: 0x180009460 has no named body; the triple is viewed as the Array.
+    reinterpret_cast<Collection::Array<void*>*>(&_references)->~Array();  // +0x78 retail 0x180009460
+    rtcoll::RtColl_ArrayDtor_180039440(&_templates);                      // +0x68 retail 0x180039440
 
     // The last two (+0x58 `_namedTemplates`, +0x48 `_controllerConfigs`) are
     // `array_destroy.cpp`'s J2 entries (`RtColl_ArrayDtorElem_180039360` /
     // `_180039280`): they destroy each element's embedded `System::String`
     // via a `DestroySpec` — a different mechanism from `rtcoll::ArraySpec` —
     // so they stay free-function calls, by name.
-    rtcoll::RtColl_ArrayDtorElem_180039360(p + 0x58);                  // 180112e78
-    rtcoll::RtColl_ArrayDtorElem_180039280(p + 0x48);                  // 180112e82
+    rtcoll::RtColl_ArrayDtorElem_180039360(&_namedTemplates);          // 180112e78  +0x58
+    rtcoll::RtColl_ArrayDtorElem_180039280(&_controllerConfigs);       // 180112e82  +0x48
 
     // ---- the System::String release at +0x28, ASYMMETRY AND ALL ------------
     // String's own Release (0x1800c9870): the freeing branch leaves the field

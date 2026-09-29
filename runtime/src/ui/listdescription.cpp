@@ -46,6 +46,8 @@
 #include "../../types/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
 #include "../../types/ui/RibbonElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
+#include "description_common.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/SpriteSheet.h"
 #include "../../types/system/String.h"
@@ -63,26 +65,13 @@ namespace {
 // first dword of RibbonElement's (0x1801fa2e0) and ClipRegionElement's
 // (0x1801f9d68) `_typeInfo` -- `X::TypeId()` (ENDGAME B.3.9 TI-UI).
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
+// (B4: the file-local IO::Stream / IO::Serializer shadows are gone -- H10;
+// the Serialize body builds a real IO::Serializer.)
 
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -90,16 +79,14 @@ void ReleaseStringField(char** field) {
     }
 }
 
-void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
+void AddChild(const UI::Dialog* dialog, Object::InternalPtr<UI::Element>* slot, UI::Element* elem,
+              UI::ElementDescription* childDesc) {
     // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
     // placed in the caller's slot.
-    void** made = slot;
-    new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-        static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-            Object::ExternalPtr<UI::ElementDescription>(
-                static_cast<UI::ElementDescription*>(childDesc))));
+    Object::InternalPtr<UI::Element>* made = slot;
+    *made = dialog->CreateElement(Object::ExternalPtr<UI::ElementDescription>(childDesc));
 
-    UI::Element* child = static_cast<UI::Element*>(*made);
+    UI::Element* child = made->Get();
     if (child != nullptr) child->_parent = elem;
 
     rtcoll::RtColl_ArraySetSizeFill_180076900(&elem->_children, elem->_children.GetSize() + 1, made);
@@ -131,30 +118,23 @@ void ListDescription::Destruct() { this->~ListDescription(); }
 
 // ?Serialize@ListDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d4810
 bool ListDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::ElementDescription::Serialize(stream);                 // 1800d482a (qualified)
 
-    Serializer ser = { stream, nullptr };
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800d485a
+    IO::ReaderWriter* rw = ser._readerWriter;                                     // 1800d485a
 
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_partDescs[0]), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800d4868
-    RtObject_ExternalPtrSerialize_ElementDescription(reinterpret_cast<RtObject::External**>(&_partDescs[1]), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800d4876
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));   // 1800d4884
-    reinterpret_cast<System::String*>(&_spriteName)->Serialize(&ser);   // 1800d4895
+    RtObject_ExternalPtrSerialize_ElementDescription(rtdesc::ExtField(&_partDescs[0]), rtdesc::IoSer(&ser));  // 1800d4868
+    RtObject_ExternalPtrSerialize_ElementDescription(rtdesc::ExtField(&_partDescs[1]), rtdesc::IoSer(&ser));  // 1800d4876
+    RtObject_ExternalPtrSerialize_SpriteSheet(rtdesc::ExtField(&_spriteSheet), rtdesc::IoSer(&ser));   // 1800d4884
+    rtdesc::StringSerialize(&_spriteName, &ser);   // 1800d4895
 
     rw->SerializeUInt(_hoverColor, nullptr);
     rw->SerializeUInt(_selectColor, nullptr);
 
-    if (rw != nullptr) {                                       // 1800d48d3
-        delete rw;
-    }
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                                       // 1800d48d3
     return true;
 }
 
@@ -192,29 +172,18 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
     if (raw != nullptr)                                        // 1800d4662
         elem = ::new (raw) ListElement();                      // 1800d4667 ??0 (out of line)
 
-    void* slot = elem;                                         // 1800d4674
+    Object::InternalPtr<Element> slot(elem);                                         // 1800d4674
     UI::ElementDescription::CreateInstance(                   // 1800d4681
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     AddChild(dialog, &slot, elem, _partDescs[0]);              // 1800d4692
     AddChild(dialog, &slot, elem, _partDescs[1]);              // 1800d46e3
 
     // The one {sheet, index} pair, with the batch's usual 4-byte write / 8-byte
     // read of the index slot.
-    {
-        void* sheet = _spriteSheet;
-        uint64_t idxSlot;                                      // [RSP+0x30]
-        if (sheet != nullptr) {                                // 1800d472d
-            const int32_t idx = static_cast<const SpriteSheet*>(sheet)       // B.3.x bridge
-                ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteName));
-            __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // 1800d473e  DWORD store
-        } else {
-            const int32_t minusOne = -1;
-            __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);
-        }
-        elem->_highlight.spriteSheet = sheet;                  // 1800d474c
-        __builtin_memcpy(&elem->_highlight.spriteIndex, &idxSlot, 8);   // 1800d4758  QWORD store
-    }
+    // 1800d472d..1800d473e the index (or -1) into [RSP+0x30]; 1800d474c /
+    // 1800d4758 the sheet and a QWORD store of that slot (rtdesc::SpriteFromName).
+    elem->_highlight = rtdesc::SpriteFromName(_spriteSheet, &_spriteName);
 
     elem->_hoverColor  = _hoverColor;                          // 1800d4765
     elem->_selectColor = _selectColor;                         // 1800d4771
@@ -223,20 +192,18 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
         Element* const k1   = elem->_children[1];              // 1800d4777 / 1800d477a
         Element* const kk0  = k1->_children[0];                // 1800d477e / 1800d4785
         Element* const cand = kk0->_children[0];               // 1800d4788 / 1800d478f
-        const bool ok = reinterpret_cast<const Object::Base*>(cand)          // B.3.x bridge
-            ->IsDerivedFrom(UI::RibbonElement::TypeId());                        // 1800d479b
+        const bool ok = cand->IsDerivedFrom(UI::RibbonElement::TypeId());   // 1800d479b
         elem->_ribbon = ok ? cand : nullptr;                   // 1800d47a9
     }
 
     {   // TWO levels down: children[1]->children[0]
         Element* const k1   = elem->_children[1];              // 1800d47b0 / 1800d47b3
         Element* const cand = k1->_children[0];                // 1800d47b7 / 1800d47be
-        const bool ok = reinterpret_cast<const Object::Base*>(cand)          // B.3.x bridge
-            ->IsDerivedFrom(UI::ClipRegionElement::TypeId());                    // 1800d47ca
+        const bool ok = cand->IsDerivedFrom(UI::ClipRegionElement::TypeId());   // 1800d47ca
         elem->_clip = ok ? cand : nullptr;                     // 1800d47d5
     }
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 1800d47dc
+    *ret = Object::InternalPtr<Element>(elem);                     // 1800d47dc
     return ret;
 }
 

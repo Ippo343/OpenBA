@@ -58,7 +58,6 @@ static_assert(kEdgeRight    == offsetof(UI::TabElement, _edgeRight), "");
 static_assert(kTabBarHeight == offsetof(UI::TabElement, _tabBarHeight), "");
 static_assert(kTabBarWidth  == offsetof(UI::TabElement, _tabBarWidth), "");
 
-int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
 
 }  // namespace
 
@@ -203,7 +202,6 @@ void TabElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bott
 // ComputeColor, no dim test. Retail passes `[RDI+0x38]` straight through.
 // ---------------------------------------------------------------------------
 void TabElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    void* const ctx = &context;
     if (_border != nullptr)
         reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
@@ -226,13 +224,13 @@ void TabElement::Draw(SpriteContext& context, uint8_t alpha) const {
     const uint32_t c = _color;
 
     // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeLeft, bl, y0, SpriteW(_edgeLeft) + bl, y1, c);
+    context.AddSprite(_edgeLeft, bl, y0, _edgeLeft.Width() + bl, y1, c);
 
-    const int32_t rw = SpriteW(_edgeRight);
-    const int32_t lw = SpriteW(_edgeLeft);
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeMiddle, bl + lw, y0, br - rw, y1, c);
+    const int32_t rw = _edgeRight.Width();
+    const int32_t lw = _edgeLeft.Width();
+    context.AddSprite(_edgeMiddle, bl + lw, y0, br - rw, y1, c);
 
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_edgeRight, br - SpriteW(_edgeRight), y0, br, y1, c);
+    context.AddSprite(_edgeRight, br - _edgeRight.Width(), y0, br, y1, c);
 
     _children.GetData()[GetContainerIndex(_activeTab)]->Draw(context, alpha);
 }

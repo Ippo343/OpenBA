@@ -48,6 +48,7 @@
 
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Modification.h"
+#include "../../types/io/PackageFile.h"   // the packfile array's element
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
@@ -116,20 +117,10 @@ static int StriCmpAscii(const char* a, const char* b) {
 // (same shared string), which is exactly what this proves: our AddRef landed
 // on the DLL's own live dataDirectory buffer, not a stale or wrong one.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
-// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
-// both registrations and delegates. No qualified `IO::` call is needed:
-// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-//
-// The return is BY VALUE, so `ret` IS retail's hidden return slot (RDX); the
-// member's by-value return fills it through the same ABI, so the door
-// constructs the member's result into it -- one AddRef, exactly as before.
-Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
-    new (ret) System::Filename(
-        reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetDataDirectory());
-    return ret;
-}
+// The body is the member `IO::FileSystem::GetDataDirectory`, at the bottom of
+// this file. B.4 R-IO: the `RtIo_FileSystem_GetDataDirectory` door is gone;
+// its two callers (object/external_compiled.cpp, object/external_path_win.cpp)
+// call the member.
 
 // ============================================================================
 // ?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ retail 0x180007b90
@@ -297,7 +288,7 @@ uint32_t FileSystem::GetPackfileId(const RtSystem::Filename& pathRef) const {
         }
 
         if (found)
-            ours = _packfiles[found->packIndex]->packfileId;
+            ours = _packfiles[found->packIndex]->_crc;          // +0xA8, the packfile id
 
         // (relPath's release is ~Filename now — retail's own 0x1800ab0f2.)
     }

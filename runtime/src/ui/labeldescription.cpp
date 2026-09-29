@@ -67,12 +67,12 @@ void LabelDescription::Destruct() { this->~LabelDescription(); }
 // COMES FIRST, BEFORE THE SIX DWORDS — offset order would put +0x90..+0xa4
 // first, and the byte stream a .rsc parses is this order, not that one.
 bool LabelDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::TextDescription::Serialize(stream);                  // 1800d283a
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 1800d287b ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);  // 1800d288c System::String
@@ -84,7 +84,7 @@ bool LabelDescription::Serialize(void* streamv) {
     rw->SerializeInt(_worda0, nullptr);                      // 1800d2903
     rw->SerializeInt(_worda4, nullptr);                      // 1800d291b
 
-    if (rw != nullptr) delete rw;                  // 1800d2934
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                  // 1800d2934
     return true;
 }
 
@@ -109,13 +109,12 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     void* raw = MemAlloc(0x130, 8);                          // 1800d26f2
 
-    LabelElement* elem = static_cast<LabelElement*>(raw);
+    LabelElement* elem = nullptr;                            // the null allocation stays null
     if (raw != nullptr)                                      // 1800d271d
         elem = ::new (raw) LabelElement();                   // 1800d2722 ??0LabelElement
 
-    void* slot = elem;                                       // 1800d272a
-    TextDescription::CreateInstance(                         // 1800d273a  0x18011ef70
-        reinterpret_cast<Object::InternalPtr<TextElement>*>(&slot), dialog);   // B.3.x bridge
+    Object::InternalPtr<TextElement> slot(elem);             // 1800d272a
+    TextDescription::CreateInstance(&slot, dialog);          // 1800d273a  0x18011ef70
 
     {
         SpriteSheet* sheet = _spriteSheet;                   // 1800d273f
@@ -146,7 +145,7 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
 
     elem->_iconColor = static_cast<uint32_t>(_id);           // 1800d27f1
 
-    *reinterpret_cast<void**>(ret) = elem;                   // 1800d27fa
+    *ret = Object::InternalPtr<Element>(elem);                   // 1800d27fa
     return ret;
 }
 
@@ -162,8 +161,7 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
 // +0xa8 ExternalPtr is not released.
 namespace UI {
 LabelDescription::~LabelDescription() {
-    System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_spriteName));   // 1800d2980
+    ReleaseStringField(_spriteName);                         // 1800d2980  +0xb0
 }
 }  // namespace UI
 

@@ -54,15 +54,11 @@
 #include "widget_common.h"
 #include "../../types/ui/ListElement.h"
 #include "../../types/ui/DialogInstance.h"   // B3X W0: OnElementEvent by name
+#include "../../types/ui/RibbonElement.h"    // B4: _ribbon's three fields by name
 
 using namespace rtui;
 
 namespace {
-
-// The RibbonElement-shaped fields Update reads through _ribbon (block C5's).
-constexpr int kGridVertical = 0xC0;   // byte
-constexpr int kGridSpacing  = 0xC4;   // int32
-constexpr int kGridExtents  = 0xC8;   // Array<int32>::_data
 
 // `?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z` 0x1800d3f70 —
 // declared on the class, body still element_bodies_b5.cpp's door.
@@ -156,10 +152,8 @@ void ListElement::Draw(SpriteContext& context, uint8_t alpha) const {
 void ListElement::Update(const System::Time& time, UserInterface* ui,
                          Object::InternalPtr<DialogInstance>* dialog,
                          const UpdateState& state) {
-    void* slot = *reinterpret_cast<void* const*>(dialog);      // 1800d3c2a / 3c40
-    UI::Element::Update(time, ui,
-                        reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&slot),
-                        state);                                // 1800d3c4a (qualified)
+    Object::InternalPtr<DialogInstance> slot(dialog->Get());   // 1800d3c2a / 3c40
+    UI::Element::Update(time, ui, &slot, state);               // 1800d3c4a (qualified)
 
     _hoverIndex = -1;                                          // 1800d3c56
     if ((_flags & kFlagInteractive) == 0) return;              // TEST ...,0x20000
@@ -170,27 +164,29 @@ void ListElement::Update(const System::Time& time, UserInterface* ui,
     for (int32_t i = 0; i < _ribbon->_children.GetSize(); ++i) {
         if (i < 0) continue;                                   // TEST EBX,EBX / JS
 
-        Element* grid = _ribbon;
+        // The RibbonElement ListDescription::CreateInstance found by its type
+        // test (ListElement.h): _vertical +0xC0, _spacing +0xC4, _extentsData +0xC8.
+        const RibbonElement* grid = static_cast<const RibbonElement*>(_ribbon);
 
         // The running offset of row i: the sum of the previous rows' extents
         // plus one spacing each. Retail unrolls this by four; the rolled form
         // computes the same sum in the same order.
         int32_t off = 0;
         for (int32_t k = 0; k < i; ++k)
-            off += reinterpret_cast<int32_t*>(PTR(grid, kGridExtents))[k]
-                   + I32(grid, kGridSpacing);
+            off += grid->_extentsData[k]
+                   + grid->_spacing;
 
         int32_t x0 = grid->_layoutLeft;
         int32_t y0 = grid->_layoutTop;
         int32_t x1, y1;
-        if (U8(grid, kGridVertical) == 0) {
+        if (grid->_vertical == 0) {
             y1 = grid->_layoutBottom;
             x0 = x0 + off;
-            x1 = reinterpret_cast<int32_t*>(PTR(grid, kGridExtents))[i] + x0;
+            x1 = grid->_extentsData[i] + x0;
         } else {
             x1 = grid->_layoutRight;
             y0 = y0 + off;
-            y1 = reinterpret_cast<int32_t*>(PTR(grid, kGridExtents))[i] + y0;
+            y1 = grid->_extentsData[i] + y0;
         }
 
         Element* clip = _clip;
@@ -204,7 +200,7 @@ void ListElement::Update(const System::Time& time, UserInterface* ui,
             if (y0 < ct) y0 = ct;
             if (cr < x1) x1 = cr + 1;
             if (x0 < cl) x0 = cl;
-            if (U8(grid, kGridVertical) != 0) {
+            if (grid->_vertical != 0) {
                 // A vertical list hit-tests the full clip width and the
                 // clamped row band; a horizontal one the clamped row band and
                 // the full clip height. Retail expresses that by overwriting
@@ -218,12 +214,12 @@ void ListElement::Update(const System::Time& time, UserInterface* ui,
                 _hoverIndex = i;
                 if (state.buttonPressed != 0) {
                     _selectedIndex = i;
-                    slot = this;                                   // 1800d3e37
-                    void* dlg = *reinterpret_cast<void* const*>(dialog);   // 1800d3e2a
+                    // Retail reuses the [RSP+0x70] slot for `this`; nothing
+                    // reads the earlier value again, so it is its own local.
+                    Object::InternalPtr<Element> elemSlot(this);   // 1800d3e37
+                    DialogInstance* dlg = dialog->Get();           // 1800d3e2a
                     // UI::DialogInstance slot 8 (block B), by name.
-                    static_cast<DialogInstance*>(dlg)->OnElementEvent(
-                        reinterpret_cast<Object::InternalPtr<Element>*>(&slot),   // B.3.x bridge
-                        0x14, _elementId, i, 0, 0, nullptr);
+                    dlg->OnElementEvent(&elemSlot, 0x14, _elementId, i, 0, 0, nullptr);
                 }
             }
         }

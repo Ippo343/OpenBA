@@ -110,7 +110,7 @@ bool FileStream::Write(int len, const void* buf) {
     ++RtIO::g_fsWrite;
 
     DWORD written = 0;                                          // 1800aabb8
-    ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),      // 1800aaba5: [RCX+0x38]
+    ::WriteFile(_file.winHandle,      // 1800aaba5: [RCX+0x38]
                 buf, static_cast<DWORD>(len), &written, nullptr);   // 1800aabc1
 
     _file.cursor += static_cast<int32_t>(written);              // 1800aabcc: ADD [RBX+0x2c]
@@ -151,7 +151,7 @@ bool FileStream::SetCurrentPos(int pos) {
 
     ++RtIO::g_fsSeekPlatform;
     const DWORD got = ::SetFilePointer(
-        reinterpret_cast<HANDLE>(_file.winHandle),        // 1800aac29
+        _file.winHandle,        // 1800aac29
         pos, nullptr, FILE_BEGIN);                        // 1800aac33
     return static_cast<int32_t>(got) == pos;              // 1800aac39
 }

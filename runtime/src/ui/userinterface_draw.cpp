@@ -131,13 +131,16 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/ui/SpriteCapture.h"
 #include "../../types/ui/Element.h"
+#include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/Dialog.h"
+#include "../../types/ui/Cursor.h"
+#include "../../types/ui/SpriteSheet.h"
 // ENDGAME B.3.6 block E: element_common.h carries the same file-scope
 // `Module` / `ResolveAddr` declaration every other runtime/src file uses (the
 // address door lives in standalone/), and the RULE B6-5 atomic door caches.
@@ -155,23 +158,6 @@ using UI::UserInterface;
 using UI::SpriteContext;
 using UI::SpriteDraw;
 
-// ---- data slots -------------------------------------------------------------
-// Through RT_DATA_SLOT, which never caches a null: a slot resolved before the
-// mint must be able to retry rather than freeze the DLL's answer for the
-// process (reference_resolveexport_phantom_names.md).
-//
-// ENDGAME B.3.9 SS1 (B39_RULES D7): all three are class statics now, no lazy
-// AtomicExport cache (B9-10).
-inline void** VideoDeviceSingleton() {          // 0x1801fe7a8
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
-}
-inline void** InputDeviceSingleton() {          // 0x1801fe770
-    return reinterpret_cast<void**>(&::Input::Device::_singleton);
-}
-inline void** InputConfigSingleton() {          // 0x1801fe768
-    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
-}
-
 // ---- the callees ------------------------------------------------------------
 // SEVEN OF THE EIGHT ARE EXPORTED, verified against the shipped export
 // directory with pefile rather than assumed — `AEAA` means PRIVATE, not
@@ -184,9 +170,9 @@ inline void** InputConfigSingleton() {          // 0x1801fe768
 // 0x1800783d0, `Collection::Array<UI::SpriteDraw>::SetSize(0)`, the deferred
 // batch's clear (not exported: rtcoll::RtColl_ArraySetSize_1800783d0).
 
-// A dialog-list node: value, prev, next. Same shape lane UI1 pinned from the
-// drain's own stores; `Draw` only ever walks it forwards through `next`.
-struct Node { void* value; Node* prev; Node* next; };
+// A dialog-list node: element, prev, next. `Draw` only ever walks it forwards
+// through `next`.
+using Node = Collection::LinkedList<UI::DialogInstancePtr>::Node;
 static_assert(sizeof(Node) == 0x18, "LinkedList node is value/prev/next");
 
 // Bit-exact float negation. Retail negates through `XORPS` against four copies
@@ -203,37 +189,17 @@ inline float NegBits(float v) {
     return r;
 }
 
-// The sprite-table entry stride and the two size fields, read off
-// 0x180121df8 (`IMUL RCX,RCX,0x38`) and 0x180121e00 / 0x180121e1c.
-constexpr int32_t kSpriteEntryStride = 0x38;
-constexpr int32_t kSpriteEntryWidth  = 0x1c;
-constexpr int32_t kSpriteEntryHeight = 0x20;
-
-// ============================================================================
-// The body, written against the live sink (rt_sink.h).
-// ============================================================================
-// `out` is a live sink: every write is a store, every `Call` returns true.
-//
-// EVERY WRITE INTO `this` OR INTO THE CONTEXT GOES THROUGH `out`. Writes into
-// the SpriteContext, the Camera, the Frustum and the SpriteDraw records do NOT:
-// those are this frame's own stack, they are ours in both modes, and recording
-// them would be recording a prediction about memory retail never shares.
 } // namespace
 
 // ENDGAME B.3.6 block E: the body is the member.
 void UI::UserInterface::Draw(Video::Context& context) {
-    RtSink out;                                                 // the live sink
-    void* const ctx = &context;
-    uint8_t* const S = reinterpret_cast<uint8_t*>(this);
-    uint8_t* const C = reinterpret_cast<uint8_t*>(ctx);
-
     // ---- 0x180121907: UI-space screen size -------------------------------
-    uint8_t* const vdev  = static_cast<uint8_t*>(*VideoDeviceSingleton());
-    const float    scale = *reinterpret_cast<float*>(S + 0xdc);
+    const ::Video::Device* const vdev = ::Video::Device::_singleton;
+    const float    scale = _uiScale;
     const int32_t  width = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<int32_t*>(vdev + 4)) * scale);
+        static_cast<float>(vdev->backBufferWidth) * scale);    // +0x04
     const int32_t  height = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<int32_t*>(vdev + 8)) * scale);
+        static_cast<float>(vdev->backBufferHeight) * scale);   // +0x08
 
     // ---- 0x180121942: force the context colour to opaque white ------------
     // Four UCOMISS/JP/JNZ pairs: ANY inequality, and an unordered compare
@@ -241,22 +207,22 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // d==1)` reproduces that including the NaN case, because `NaN == 1.0f` is
     // false and so the negation is true.
     {
-        const float* const col = reinterpret_cast<const float*>(C + 0x408);
-        if (!(col[0] == 1.0f && col[1] == 1.0f && col[2] == 1.0f && col[3] == 1.0f)) {
-            out.U32(C + 0x408, 0x3f800000u, "Context::_color.x = 1.0f");
-            out.U32(C + 0x40c, 0x3f800000u, "Context::_color.y = 1.0f");
-            out.U32(C + 0x410, 0x3f800000u, "Context::_color.z = 1.0f");
-            out.U32(C + 0x414, 0x3f800000u, "Context::_color.w = 1.0f");
-            out.U32(C + 0x10, out.ReadU32(C + 0x10) | RtVideo::kDirtyMaterialConstants,
-                    "Context::_dirty |= kDirtyMaterialConstants");
+        const Math::Vector4& col = context._color;             // +0x408
+        if (!(col.x == 1.0f && col.y == 1.0f && col.z == 1.0f && col.w == 1.0f)) {
+            context._color.x = 1.0f;
+            context._color.y = 1.0f;
+            context._color.z = 1.0f;
+            context._color.w = 1.0f;
+            context._dirty |= RtVideo::kDirtyMaterialConstants;    // +0x10
         }
     }
 
     // ---- 0x1801219c0: the clip region ------------------------------------
     // One QWORD clears x and y together (0x1801219c0), then two DWORDs.
-    out.U64(S + 0x0fc, 0, "_clipRegion.x/y = 0 (one qword)");
-    out.U32(S + 0x104, static_cast<uint32_t>(width - 1),  "_clipRegion.w = width-1");
-    out.U32(S + 0x108, static_cast<uint32_t>(height - 1), "_clipRegion.h = height-1");
+    _clipRegion.left   = 0;
+    _clipRegion.top    = 0;
+    _clipRegion.right  = width - 1;
+    _clipRegion.bottom = height - 1;
 
     // ---- 0x180121a3f: the orthographic UI frustum -------------------------
     // Six planes {normal.xyz, d}. Together they are the box
@@ -294,33 +260,29 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // The 1.0f in m[15] is the SAME XMM14 as the frustum's, not a fresh
     // constant load — noted because it is why the constant appears once.
     {
-        const float* const ctw = reinterpret_cast<const float*>(&cam.cameraToWorld);
+        const Transform3& ctw = cam.cameraToWorld;
         Matrix view;
-        view.m[0]  = ctw[0];  view.m[1]  = ctw[1];  view.m[2]  = ctw[2];  view.m[3]  = 0.0f;
-        view.m[4]  = ctw[3];  view.m[5]  = ctw[4];  view.m[6]  = ctw[5];  view.m[7]  = 0.0f;
-        view.m[8]  = ctw[6];  view.m[9]  = ctw[7];  view.m[10] = ctw[8];  view.m[11] = 0.0f;
-        view.m[12] = ctw[9];  view.m[13] = ctw[10]; view.m[14] = ctw[11]; view.m[15] = 1.0f;
+        view.m[0]  = ctw.axisX.x;        view.m[1]  = ctw.axisX.y;        view.m[2]  = ctw.axisX.z;        view.m[3]  = 0.0f;
+        view.m[4]  = ctw.axisY.x;        view.m[5]  = ctw.axisY.y;        view.m[6]  = ctw.axisY.z;        view.m[7]  = 0.0f;
+        view.m[8]  = ctw.axisZ.x;        view.m[9]  = ctw.axisZ.y;        view.m[10] = ctw.axisZ.z;        view.m[11] = 0.0f;
+        view.m[12] = ctw.translation.x;  view.m[13] = ctw.translation.y;  view.m[14] = ctw.translation.z;  view.m[15] = 1.0f;
 
         // Retail copies the projection into its own scratch and passes THAT,
         // so the argument is a copy, not a pointer into the camera.
         Matrix proj = cam.projection;
 
-        // ENDGAME B.3.5: `?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z`
-        // (0x18001a150) is a member of the real `Video::Context`. The
-        // `out.Call(label, target)` wrapper went with the door pointer it
-        // labelled: `RtSink::Call` ignores every argument and returns true
-        // unconditionally (rt_sink.h), so it guarded nothing and dropping it
-        // changes no behaviour.
-        reinterpret_cast<Video::Context*>(ctx)->SetCamera(view, proj);  // B.3.5 bridge
+        // `?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z` (0x18001a150).
+        context.SetCamera(view, proj);
     }
 
     // ---- 0x180121cad: the SpriteContext, built on the stack ---------------
     // 0xa0 rather than sizeof(SpriteContext) (0x88): the header states 0x88 as
     // a LOWER BOUND proven by Begin's store at +0x80, not as a measured sizeof.
-    // Retail's frame has unused slack above the object; giving ours the same
-    // slack costs nothing and is the safe side of an unproven size.
     // DELIBERATELY UNINITIALISED as a whole — retail writes each field, and
     // +0x50 it never writes at all.
+    // B.4 LEFT: a `UI::SpriteContext` object would run its members' ctors and
+    // its dtor, which retail's inlined builder does not (B4_RULES H5); the
+    // storage stays raw until that is a `behaviour:` commit of its own.
     alignas(16) uint8_t scStorage[0xa0];
     SpriteContext* const sc = reinterpret_cast<SpriteContext*>(scStorage);
 
@@ -331,23 +293,28 @@ void UI::UserInterface::Draw(Video::Context& context) {
     sc->_draws._capacity = 0;                       //              _capacity
     sc->_scissorX = 0; sc->_scissorY = 0;           // 0x180121cc3, one MOVDQA
     sc->_scissorW = 0; sc->_scissorH = 0;
-    sc->_context     = ctx;                         // 0x180121cc8
+    sc->_context     = &context;                    // 0x180121cc8
     sc->_deferring   = 0;                           // 0x180121ccc
     sc->_deferred._data     = nullptr;              // 0x180121cd0
     sc->_deferred._size     = 0;                    // 0x180121cd4
     sc->_deferred._capacity = 0;
     // +0x50 (RBP-0x30): retail takes its ADDRESS at 0x180121cd8 and never
-    // writes the qword. Left uninitialised on purpose.
-    std::memset(scStorage + 0x58, 0, 0x20);         // +0x58..+0x77, four qwords
-                                                    // (0x180121ce3..0x180121cef)
+    // writes the qword. Left uninitialised on purpose. +0x58..+0x77 are four
+    // qwords (0x180121ce3..0x180121cef): the Layout's two arrays.
+    sc->_layout._entries._data        = nullptr;    // +0x58
+    sc->_layout._entries._size        = 0;          // +0x60 } one QWORD
+    sc->_layout._entries._capacity    = 0;          // +0x64 }
+    sc->_layout._lineWidths._data     = nullptr;    // +0x68
+    sc->_layout._lineWidths._size     = 0;          // +0x70 } one QWORD
+    sc->_layout._lineWidths._capacity = 0;          // +0x74 }
 
     // ---- 0x180121d0e: Begin ------------------------------------------------
     // ENDGAME B.3.6: `SpriteContext::Begin` / `Flush` / `AddSpriteDraw` are
-    // members of the real class (block D); the three RT_EXPORT_ONCE doors that
-    // used to sit here are direct calls now.
-    sc->Begin(*reinterpret_cast<float*>(S + 0xdc),
-              *reinterpret_cast<UI::SpriteCapture**>(S + 0x110),
-              reinterpret_cast<Video::Viewport*>(S + 0x118));
+    // members of the real class (block D).
+    // B.4 LEFT: `_captureViewport` stays bytes (a `Video::Viewport` member
+    // would pull video/Context.h into every exe includer of this header).
+    sc->Begin(_uiScale, _spriteCapture,
+              reinterpret_cast<Video::Viewport*>(_captureViewport));   // +0x118
 
     // A local lambda for retail's repeated "switch the batch key" preamble,
     // which appears FIVE times verbatim (0x180121e96, 0x180121f79, 0x180122084,
@@ -365,24 +332,25 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // ---- 0x180121d1b: the layer pre-pass -----------------------------------
     // Two things at once: find the LAST dialog whose flags bit 4 is set (the
     // "topmost" barrier below which only backdrop-flagged dialogs draw), and
-    // find the highest layer index.
+    // find the highest layer index (`Dialog::_drawLevel`, +0x34).
     int32_t maxLayer = 0;
-    Node*   topmost  = *reinterpret_cast<Node**>(S + 0x00);
+    Node*   topmost  = _dialogs._head;
     for (Node* n = topmost; n != nullptr; n = n->next) {
-        uint8_t* const d = static_cast<uint8_t*>(n->value);
+        const DialogInstance* const d = static_cast<const DialogInstance*>(n->element);
 
-        const uint32_t shifted = *reinterpret_cast<uint32_t*>(d + 0x20) >> 4;
+        const uint32_t shifted = d->_flags >> 4;
         if (shifted & 1u) topmost = n;
 
-        // THE DROPPED DEREFERENCE. On a null +0x18 the compared value is
-        // `shifted`, not zero — the load is skipped and ECX is not reset.
-        uint8_t* const desc  = *reinterpret_cast<uint8_t**>(d + 0x18);
-        const int32_t  probe = desc ? *reinterpret_cast<int32_t*>(desc + 0x34)
-                                    : static_cast<int32_t>(shifted);
+        // THE DROPPED DEREFERENCE. On a null `_dialog` (+0x18) the compared
+        // value is `shifted`, not zero — the load is skipped and ECX is not
+        // reset.
+        const Dialog* const desc  = d->_dialog;
+        const int32_t       probe = desc ? desc->_drawLevel
+                                         : static_cast<int32_t>(shifted);
         if (probe > maxLayer) {
             // ...and here the SAME null yields 0 instead, from `XOR R8D,R8D`.
-            uint8_t* const desc2 = *reinterpret_cast<uint8_t**>(d + 0x18);
-            maxLayer = desc2 ? *reinterpret_cast<int32_t*>(desc2 + 0x34) : 0;
+            const Dialog* const desc2 = d->_dialog;
+            maxLayer = desc2 ? desc2->_drawLevel : 0;
         }
     }
 
@@ -397,8 +365,8 @@ void UI::UserInterface::Draw(Video::Context& context) {
         for (int64_t pass = 0;; ++pass, ++curLayer) {
             bool pastTopmost = false;
 
-            for (Node* n = *reinterpret_cast<Node**>(S + 0x00); n != nullptr; n = n->next) {
-                uint8_t* const d = static_cast<uint8_t*>(n->value);
+            for (Node* n = _dialogs._head; n != nullptr; n = n->next) {
+                DialogInstance* const d = static_cast<DialogInstance*>(n->element);
 
                 // ---- 0x180121dbe: the backdrop, FIRST PASS ONLY -----------
                 // `TEST R12,R12; JNZ` — the whole block is gated on the OUTER
@@ -408,8 +376,8 @@ void UI::UserInterface::Draw(Video::Context& context) {
                     int32_t x1 = 0, y1 = 0, x2 = width, y2 = height;
                     uint32_t tint = 0;
 
-                    const int32_t spriteIndex = *reinterpret_cast<int32_t*>(d + 0x60);
-                    void* const   sheet0      = *reinterpret_cast<void**>(d + 0x58);
+                    const int32_t spriteIndex = d->_spriteIndex;       // +0x60
+                    void* const   sheet0      = d->_spriteSheet;       // +0x58
                     if (spriteIndex >= 0 && sheet0 != nullptr) {
                         // Letterbox the backdrop to the sprite's aspect ratio.
                         const float screenAspect =
@@ -417,25 +385,25 @@ void UI::UserInterface::Draw(Video::Context& context) {
 
                         // Both size reads re-do the `idx < 0 -> 0` test, and
                         // both re-load the sheet. Kept as two reads because
-                        // that is two loads of `[d+0x58]` in retail, and the
-                        // dialog is live memory a suppressed callee could move.
+                        // that is two loads of `[d+0x58]` in retail. The sheet's
+                        // sprite table is `SpriteSheet::m_sprites` (+0x20).
+                        // B.4 LEFT: `DialogInstance::_spriteSheet` is `void*`
+                        // (R-UI-a).
                         int32_t sw = 0, sh = 0;
                         {
-                            const int64_t idx = *reinterpret_cast<int32_t*>(d + 0x60);
+                            const int64_t idx = d->_spriteIndex;
                             if (idx >= 0) {
-                                uint8_t* const tbl = *reinterpret_cast<uint8_t**>(
-                                    static_cast<uint8_t*>(*reinterpret_cast<void**>(d + 0x58)) + 0x20);
-                                sw = *reinterpret_cast<int32_t*>(
-                                    tbl + idx * kSpriteEntryStride + kSpriteEntryWidth);
+                                const SpriteInfo* const tbl =
+                                    static_cast<const SpriteSheet*>(d->_spriteSheet)->m_sprites;
+                                sw = tbl[idx].width;                   // +0x1c
                             }
                         }
                         {
-                            const int64_t idx = *reinterpret_cast<int32_t*>(d + 0x60);
+                            const int64_t idx = d->_spriteIndex;
                             if (idx >= 0) {
-                                uint8_t* const tbl = *reinterpret_cast<uint8_t**>(
-                                    static_cast<uint8_t*>(*reinterpret_cast<void**>(d + 0x58)) + 0x20);
-                                sh = *reinterpret_cast<int32_t*>(
-                                    tbl + idx * kSpriteEntryStride + kSpriteEntryHeight);
+                                const SpriteInfo* const tbl =
+                                    static_cast<const SpriteSheet*>(d->_spriteSheet)->m_sprites;
+                                sh = tbl[idx].height;                  // +0x20
                             }
                         }
 
@@ -459,25 +427,20 @@ void UI::UserInterface::Draw(Video::Context& context) {
                         }
 
                         // 0x180121e7c — unguarded on +0x18, but INSIDE the
-                        // sprite test: Ghidra shows `local_248 = *(*(d+0x18)
-                        // +0x30)` after the letterbox arms and before the
-                        // sheet re-read, all under `spriteIndex >= 0 && sheet`.
-                        // A dialog with no backdrop sprite never reads it.
-                        // ComboDialog's ctor leaves +0x18 NULL by design and
-                        // has spriteIndex -1, so hoisting this out of the
-                        // block (as this port once did) faulted on the first
-                        // dropdown drawn DLL-absent (Options > Video, 2026-09-12).
-                        tint = *reinterpret_cast<uint32_t*>(
-                            *reinterpret_cast<uint8_t**>(d + 0x18) + 0x30);
+                        // sprite test: ComboDialog's ctor leaves `_dialog` NULL
+                        // by design and has spriteIndex -1, so hoisting this out
+                        // of the block (as this port once did) faulted on the
+                        // first dropdown drawn DLL-absent (2026-09-12).
+                        tint = d->_dialog->_backgroundColor;           // +0x30
                     }
 
-                    void* const sheet = *reinterpret_cast<void**>(d + 0x58);
-                    if (sheet != nullptr && *reinterpret_cast<int32_t*>(d + 0x60) >= 0) {
+                    void* const sheet = d->_spriteSheet;
+                    if (sheet != nullptr && d->_spriteIndex >= 0) {
                         selectSheet(sheet);
 
                         SpriteDraw sd;
-                        sd.sheet       = *reinterpret_cast<void**>(d + 0x58);
-                        sd.spriteIndex = *reinterpret_cast<int32_t*>(d + 0x60);
+                        sd.sheet       = d->_spriteSheet;
+                        sd.spriteIndex = d->_spriteIndex;
                         sd.x1 = x1; sd.y1 = y1; sd.x2 = x2; sd.y2 = y2;
                         sd.rotation    = 0.0f;
                         sd.color       = tint;
@@ -492,23 +455,23 @@ void UI::UserInterface::Draw(Video::Context& context) {
                 if (n == topmost) {
                     pastTopmost = true;
                 } else if (!pastTopmost) {
-                    uint8_t* const desc = *reinterpret_cast<uint8_t**>(d + 0x18);
-                    if ((desc[0x40] & 0x40) == 0) continue;   // UNGUARDED deref
+                    const Dialog* const desc = d->_dialog;
+                    if ((desc->_defaultFlags & 0x40) == 0) continue;   // UNGUARDED deref, +0x40
                 }
 
                 // ---- 0x180121f32: layer test then paint ------------------
                 {
-                    uint8_t* const desc  = *reinterpret_cast<uint8_t**>(d + 0x18);
-                    const int32_t  layer = desc ? *reinterpret_cast<int32_t*>(desc + 0x34) : 0;
+                    const Dialog* const desc  = d->_dialog;
+                    const int32_t       layer = desc ? desc->_drawLevel : 0;
                     if (layer != curLayer) continue;
                 }
 
                 sc->_deferring = 1;
                 {
                     // Element vtable slot 6 (+0x30) `Draw(SpriteContext&, alpha)`
-                    // — VIRTUAL, dispatched through the root's own table.
-                    void* const root = *reinterpret_cast<void**>(d + 0x50);
-                    reinterpret_cast<UI::Element*>(root)->Draw(*sc, 0xff);   // B.3.6 bridge
+                    // — VIRTUAL, dispatched through the root's own table. `_root`
+                    // (+0x50) through the dialog's one-load accessor (0x180045580).
+                    d->GetRoot()->Draw(*sc, 0xff);
                 }
 
                 // The element pushed its geometry into `_deferred` while
@@ -539,25 +502,25 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // reproduces that; `x != 0.0f` would too, but the negation is written out
     // because the JP/JZ pair is the only reason to think about it.
     {
-        const float amount = *reinterpret_cast<float*>(S + 0xf4);
+        const float amount = _fadeAmount;
         if (!(amount == 0.0f) &&
-            *reinterpret_cast<int32_t*>(S + 0xe8) >= 0 &&
-            *reinterpret_cast<void**>(S + 0xe0) != nullptr) {
+            _fadeSpriteIndex >= 0 &&
+            _fadeSpriteSheet != nullptr) {
 
             // alpha = (uint8)(int64)(amount * 255.0f), placed in the top byte
             // over the fade colour's low 24 bits.
             const int64_t a64 = static_cast<int64_t>(amount * 255.0f);
             const uint32_t color =
                 (static_cast<uint32_t>(static_cast<uint8_t>(a64)) << 24) |
-                (*reinterpret_cast<uint32_t*>(S + 0xf8) & 0x00ffffffu);
+                (_fadeColor & 0x00ffffffu);
 
-            void* const sheet = *reinterpret_cast<void**>(S + 0xe0);
-            if (sheet != nullptr && *reinterpret_cast<int32_t*>(S + 0xe8) >= 0) {
+            void* const sheet = _fadeSpriteSheet;
+            if (sheet != nullptr && _fadeSpriteIndex >= 0) {
                 selectSheet(sheet);
 
                 SpriteDraw sd;
-                sd.sheet       = *reinterpret_cast<void**>(S + 0xe0);
-                sd.spriteIndex = *reinterpret_cast<int32_t*>(S + 0xe8);
+                sd.sheet       = _fadeSpriteSheet;
+                sd.spriteIndex = _fadeSpriteIndex;
                 sd.x1 = 0; sd.y1 = 0;            // one qword at 0x1801220b9
                 sd.x2 = width; sd.y2 = height;
                 sd.rotation    = 0.0f;
@@ -570,32 +533,31 @@ void UI::UserInterface::Draw(Video::Context& context) {
 
     // ---- 0x1801220ec: the mouse cursor -------------------------------------
     {
-        uint8_t* const cursor = *reinterpret_cast<uint8_t**>(S + 0xd0);
-        uint8_t* const cfg    = static_cast<uint8_t*>(*InputConfigSingleton());
-        if (cursor != nullptr && *(S + 0xd8) != 0 && cfg[0x0a] != 0) {
-            uint8_t* const in = static_cast<uint8_t*>(*InputDeviceSingleton());
+        const Cursor* const cursor = _cursor;
+        const ::Input::Configuration* const cfg = ::Input::Configuration::_singleton;
+        if (cursor != nullptr && _cursorEnabled != 0 && cfg->_mouseDisplay) {   // +0x0a
+            const ::Input::Device* const in = ::Input::Device::_singleton;
 
             // MOVSX — SIGNED 16-bit mouse coordinates, which Ghidra prints as a
             // zero extension. A negative X off the left edge is real.
-            const int32_t rawY = *reinterpret_cast<int16_t*>(in + 0x10b4);
-            const float   uiScale = *reinterpret_cast<float*>(S + 0xdc);
-            const int32_t rawX = *reinterpret_cast<int16_t*>(in + 0x109c);
+            const int32_t rawY = in->_mouse[1].value;                     // +0x10b4
+            const float   uiScale = _uiScale;
+            const int32_t rawX = in->_mouse[0].value;                     // +0x109c
 
             const int32_t x1 = static_cast<int32_t>(static_cast<float>(rawX) * uiScale)
-                             - *reinterpret_cast<int32_t*>(cursor + 0x20);
+                             - cursor->_hotSpotX;                         // +0x20
             const int32_t y1 = static_cast<int32_t>(static_cast<float>(rawY) * uiScale)
-                             - *reinterpret_cast<int32_t*>(cursor + 0x24);
+                             - cursor->_hotSpotY;                         // +0x24
 
-            void* const sheet = *reinterpret_cast<void**>(cursor + 0x28);
+            SpriteSheet* const sheet = cursor->_spriteSheet.Get();        // +0x28
             if (sheet != nullptr) {
                 selectSheet(sheet);
 
                 // UNGUARDED, and sprite index 0 is implicit: the size comes
                 // from the FIRST table entry, with no index arithmetic.
-                uint8_t* const tbl = *reinterpret_cast<uint8_t**>(
-                    static_cast<uint8_t*>(sheet) + 0x20);
-                const int32_t sh = *reinterpret_cast<int32_t*>(tbl + kSpriteEntryHeight);
-                const int32_t sw = *reinterpret_cast<int32_t*>(tbl + kSpriteEntryWidth);
+                const SpriteInfo* const tbl = sheet->m_sprites;           // +0x20
+                const int32_t sh = tbl->height;                           // +0x20
+                const int32_t sw = tbl->width;                            // +0x1c
 
                 SpriteDraw sd;
                 sd.sheet       = sheet;
@@ -618,19 +580,20 @@ void UI::UserInterface::Draw(Video::Context& context) {
     }
 
     // ---- 0x1801221e6: restore the context scissor to the whole target ------
+    // Retail reads the context back through the SpriteContext (+0x30).
     {
-        uint8_t* const dev = static_cast<uint8_t*>(*VideoDeviceSingleton());
-        const int32_t devW = *reinterpret_cast<int32_t*>(dev + 4);
-        const int32_t devH = *reinterpret_cast<int32_t*>(dev + 8);
+        const ::Video::Device* const dev = ::Video::Device::_singleton;
+        const int32_t devW = dev->backBufferWidth;
+        const int32_t devH = dev->backBufferHeight;
 
-        uint8_t* const cc = static_cast<uint8_t*>(sc->_context);
-        int32_t* const vp = reinterpret_cast<int32_t*>(cc + 0x1e0);
-        if (vp[0] != 0 || vp[1] != 0 || vp[2] != devW || vp[3] != devH) {
-            out.U32(cc + 0x10, out.ReadU32(cc + 0x10) | RtVideo::kDirtyScissor,
-                    "Context::_dirty |= kDirtyScissor");
-            out.U64(cc + 0x1e0, 0, "Context::_scissor.x/y = 0 (one qword)");
-            out.U32(cc + 0x1e8, static_cast<uint32_t>(devW), "Context::_scissor.w");
-            out.U32(cc + 0x1ec, static_cast<uint32_t>(devH), "Context::_scissor.h");
+        ::Video::Context* const cc = sc->_context;
+        ::Video::Viewport& vp = cc->_scissor;                              // +0x1e0
+        if (vp.x != 0 || vp.y != 0 || vp.width != devW || vp.height != devH) {
+            cc->_dirty |= RtVideo::kDirtyScissor;                          // +0x10
+            vp.x      = 0;                                                 // } one QWORD
+            vp.y      = 0;                                                 // }
+            vp.width  = devW;
+            vp.height = devH;
         }
     }
 
@@ -642,15 +605,29 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // (WAVE10_LANE_UI1.md §1b). Retail's own `if (p)` is OUTSIDE the call here,
     // so the guard is reproduced outside too.
     //
-    // The order is retail's: +0x68, +0x58, +0x40, +0x10. Each clears the
-    // pointer and the size/capacity qword that follows it.
-    constexpr size_t kFreeSlots[4] = { 0x68, 0x58, 0x40, 0x10 };
-    for (size_t k = 0; k < 4; ++k) {
-        uint8_t* const slot = scStorage + kFreeSlots[k];
-        if (void* const p = *reinterpret_cast<void**>(slot)) {
-            System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
-        }
-        *reinterpret_cast<void**>(slot)     = nullptr;
-        *reinterpret_cast<uint64_t*>(slot + 8) = 0;
+    // The order is retail's: +0x68, +0x58, +0x40, +0x10.
+    if (void* const p = sc->_layout._lineWidths._data) {                // +0x68
+        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
     }
+    sc->_layout._lineWidths._data     = nullptr;
+    sc->_layout._lineWidths._size     = 0;                                  // } one QWORD
+    sc->_layout._lineWidths._capacity = 0;                                  // }
+    if (void* const p = sc->_layout._entries._data) {                // +0x58
+        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
+    }
+    sc->_layout._entries._data     = nullptr;
+    sc->_layout._entries._size     = 0;                                  // } one QWORD
+    sc->_layout._entries._capacity = 0;                                  // }
+    if (void* const p = sc->_deferred._data) {                // +0x40
+        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
+    }
+    sc->_deferred._data     = nullptr;
+    sc->_deferred._size     = 0;                                  // } one QWORD
+    sc->_deferred._capacity = 0;                                  // }
+    if (void* const p = sc->_draws._data) {                // +0x10
+        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
+    }
+    sc->_draws._data     = nullptr;
+    sc->_draws._size     = 0;                                  // } one QWORD
+    sc->_draws._capacity = 0;                                  // }
 }

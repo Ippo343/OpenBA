@@ -197,7 +197,7 @@ bool ElementDescription::Serialize(void* streamArg) {
     RecInt(rw, &_tabOrder);     // +0x38
 
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), &ser);   // +0x48 0x180038f90
-    RtObject_ExternalPtrSerialize_Dialog(ExtField(&_userData), &ser);                // +0x50 0x180076610
+    RtObject_ExternalPtrSerialize_Dialog(ExtField(&_toolTipDialog), &ser);           // +0x50 0x180076610
     RtObject_ExternalPtrSerialize_StringTable(ExtField(&_stringTable), &ser);        // +0x58 0x1800042a0
     reinterpret_cast<System::String*>(&_textName)->Serialize(&ser);                  // +0x60 0x1800c9930
 

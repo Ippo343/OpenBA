@@ -108,7 +108,7 @@ void LabelElement::ComputeSize() {
     int textH = 0;
     if (_font != nullptr) {
         char* str = _cachedText;
-        if (str != nullptr && *reinterpret_cast<const int32_t*>(str - 8) > 0) {
+        if (str != nullptr && RtSystem::StringLength(str) > 0) {
             int w = 0, h = 0;
             _font->ComputeStringLayout(AsString(_cachedText), _wrap != 0,
                                        _lineSpacing, _maxWidth, 0,
@@ -179,7 +179,7 @@ void LabelElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
     int textW = 0, textH = 0;
     bool hasText = false;
     if (font != nullptr && str != nullptr &&
-        *reinterpret_cast<const int32_t*>(str - 8) >= 1) {
+        RtSystem::StringLength(str) >= 1) {
         textW = _textWidth;
         textH = font->_lineHeight;
         hasText = true;

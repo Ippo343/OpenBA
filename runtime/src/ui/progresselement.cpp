@@ -52,11 +52,6 @@ static_assert(kBackColor   == offsetof(UI::ProgressElement, _backgroundColor), "
 static_assert(kMaxValue    == offsetof(UI::ProgressElement, _maxValue), "");
 static_assert(kCurValue    == offsetof(UI::ProgressElement, _currentValue), "");
 
-// A sprite's frame width / height (widget_common.h's reader, handed the sprite
-// itself at offset 0).
-int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
-int32_t SpriteH(const ::Sprite& s) { return SpriteHeight(&s, 0); }
-
 }  // namespace
 
 namespace UI {
@@ -67,8 +62,8 @@ namespace UI {
 void ProgressElement::ComputeSize() {
     if ((_flags & kFlagNeedsSizeCalc) == 0) return;
 
-    const int32_t fillW  = SpriteW(_fillLeft) + SpriteW(_fillMiddle) + SpriteW(_fillRight);
-    int32_t trackW = SpriteW(_trackLeft) + SpriteW(_trackMiddle) + SpriteW(_trackRight);
+    const int32_t fillW  = _fillLeft.Width() + _fillMiddle.Width() + _fillRight.Width();
+    int32_t trackW = _trackLeft.Width() + _trackMiddle.Width() + _trackRight.Width();
 
     int32_t height = 0;
     if (_children.GetSize() > 0) {
@@ -82,8 +77,8 @@ void ProgressElement::ComputeSize() {
     if (trackW < fillW) trackW = fillW;
     _layoutWidth = trackW;
 
-    int32_t spriteH = SpriteH(_trackLeft);
-    const int32_t fillH = SpriteH(_fillLeft);
+    int32_t spriteH = _trackLeft.Height();
+    const int32_t fillH = _fillLeft.Height();
     if (spriteH < fillH) spriteH = fillH;
     if (height  < spriteH) height = spriteH;
 
@@ -144,19 +139,19 @@ void ProgressElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t
 
     uint32_t color;
     if (_currentValue == 0.0f) {
-        if (I32(this, kFillLeft + kSpriteIndex) < 0) {
+        if (_fillLeft.spriteIndex < 0) {
             color = 0xffffffffu;
         } else {
-            left += SpriteW(_fillLeft);
+            left += _fillLeft.Width();
             color = 0xffffffffu;
         }
     } else {
-        const int32_t capW = SpriteW(_fillRight);
+        const int32_t capW = _fillRight.Width();
         if (barW + cw < (_layoutRight - left) - capW) {
             color = 0xffffffffu;
         } else {
             color = 0xff000000u;
-            left  = (left - SpriteW(_fillRight)) - cw;
+            left  = (left - _fillRight.Width()) - cw;
         }
         left += barW;
     }
@@ -175,7 +170,6 @@ void ProgressElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t
 // quarter alpha, not a half. Transcribed, not corrected.
 // ---------------------------------------------------------------------------
 void ProgressElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    void* const ctx = &context;
     if (_border != nullptr)
         reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
@@ -192,28 +186,28 @@ void ProgressElement::Draw(SpriteContext& context, uint8_t alpha) const {
     const int32_t rightX = _layoutRight;
 
     // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackLeft, left, top, trackColor);
+    context.AddSprite(_trackLeft, left, top, trackColor);
 
-    const int32_t midH   = SpriteH(_trackMiddle);
-    const int32_t rightW = SpriteW(_trackRight);
-    const int32_t leftW  = SpriteW(_trackLeft);
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left + leftW, top, rightX - rightW, top + midH, trackColor);
+    const int32_t midH   = _trackMiddle.Height();
+    const int32_t rightW = _trackRight.Width();
+    const int32_t leftW  = _trackLeft.Width();
+    context.AddSprite(_trackMiddle, left + leftW, top, rightX - rightW, top + midH, trackColor);
 
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackRight, rightX - SpriteW(_trackRight), top, trackColor);
+    context.AddSprite(_trackRight, rightX - _trackRight.Width(), top, trackColor);
 
     if (_currentValue > 0.0f) {
         int32_t barW = static_cast<int32_t>(
             (_currentValue / _maxValue) * static_cast<float>(rightX - left));
         if (barW < _layoutWidth) barW = _layoutWidth;
 
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_fillLeft, left, top, fillColor);
+        context.AddSprite(_fillLeft, left, top, fillColor);
 
-        const int32_t fMidH = SpriteH(_fillMiddle);
-        const int32_t fCapW = SpriteW(_fillRight);
-        const int32_t fLefW = SpriteW(_fillLeft);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_fillMiddle, left + fLefW, top, (left - fCapW) + barW, top + fMidH, fillColor);
+        const int32_t fMidH = _fillMiddle.Height();
+        const int32_t fCapW = _fillRight.Width();
+        const int32_t fLefW = _fillLeft.Width();
+        context.AddSprite(_fillMiddle, left + fLefW, top, (left - fCapW) + barW, top + fMidH, fillColor);
 
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_fillRight, (left - SpriteW(_fillRight)) + barW, top, fillColor);
+        context.AddSprite(_fillRight, (left - _fillRight.Width()) + barW, top, fillColor);
     }
 
     if (_children.GetSize() > 0) {

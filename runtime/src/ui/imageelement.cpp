@@ -70,7 +70,7 @@ void ImageElement::ComputeSize() {
     if (((flags >> 27) & 1u) == 0) return;
 
     int w = _width;
-    if (w < 1) w = SpriteW(&_sprite);
+    if (w < 1) w = SpriteW(_sprite);
     _layoutWidth = w;
 
     int h = _height;
@@ -80,7 +80,7 @@ void ImageElement::ComputeSize() {
             _layoutHeight = 0;
             return;
         }
-        h = SpriteH(&_sprite);
+        h = SpriteH(_sprite);
     }
     _layoutHeight = h;
     _flags = flags & ~static_cast<uint32_t>(kElementFlagNeedsSizeCalc);

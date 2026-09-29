@@ -55,8 +55,9 @@ namespace UI {
 void GroupElement::ComputeSize() {
     if (((_flags >> 27) & 1u) == 0) return;
 
-    // +0x60 and +0x64 zeroed as ONE qword store.
-    *reinterpret_cast<uint64_t*>(&_layoutWidth) = 0;
+    // +0x60 and +0x64 zeroed as ONE qword store (H7: two named stores).
+    _layoutWidth  = 0;
+    _layoutHeight = 0;
 
     const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {

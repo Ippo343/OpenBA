@@ -171,27 +171,13 @@ namespace RtIo {
 using Window = CompressedStreamWindow;
 using Header = CompressedStreamHeader;
 
-// Bodies this file calls that live in the sibling files. Retail reaches every
-// one of these with a direct rel32 CALL, so a direct C++ call is the faithful
-// spelling AND adds no door the census has to see.
-extern "C" bool  RtIo_CompressedStream_SetWindow(CompressedStream*, int32_t);
-extern "C" void  RtIo_CompressedStream_Release(CompressedStream*);
-extern "C" void  RtIo_CompressedStream_SetWindowCount(CompressedStream*, int32_t);
+// Bodies this file calls that live in the sibling files are `IO::CompressedStream`
+// members (B.4 R-IO); retail reaches every one with a direct rel32 CALL, so a
+// direct C++ call is the faithful spelling.
 
 namespace {
 
 constexpr int32_t kWin = kCompressedStreamWindowSize;   // 0x8000
-
-inline Window* Windows(CompressedStream* s) { return static_cast<Window*>(s->windowData); }
-inline Header* Headers(CompressedStream* s) { return static_cast<Header*>(s->headerData); }
-inline void**  Blocks (CompressedStream* s) { return static_cast<void**>(s->blockData);  }
-
-// B.3.4 block 4: the same two accessors over the REAL class. Overloads rather
-// than a signature change, because the NON-virtual bodies in this file
-// (CompressWindow, Commit, Create) still take the POD and are not part of this
-// block's conversion.
-inline Window* Windows(IO::CompressedStream* s) { return static_cast<Window*>(s->_windowData); }
-inline Header* Headers(IO::CompressedStream* s) { return static_cast<Header*>(s->_headerData); }
 
 // A header's stored length: compressedSize, or uncompressedSize when
 // compressedSize is 0. Zero is NOT "empty" — it is the STORED (uncompressed)
@@ -206,9 +192,6 @@ inline uint32_t StoredLength(const Header& h) {
 // slot 4) on the source and [RAX+0x40] (PreCommit, slot 8) on `this`. B3X W0:
 // by name on `IO::Stream` / `IO::CompressedStream`, through each object's own
 // vtable as retail does.
-inline ::IO::Stream* AsStream(void* s) {
-    return static_cast<::IO::Stream*>(s);   // B.3.x bridge
-}
 
 // The two System::MemoryAllocator doors. Retail INLINES lock/Allocate/unlock in
 // ?Create below (`MOV RBX,[0x1801fc718] / ADD RBX,0x640 / EnterCriticalSection
@@ -404,9 +387,14 @@ inline ::IO::Stream* AsStream(void* s) {
 // input. Compress may legitimately need more; it signals that by returning a
 // value larger than the input, which is exactly the case the JBE turns into
 // "store it raw". So the buffer is not undersized — the protocol handles it.
-extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int32_t i) {
+}  // namespace RtIo
 
-    Window* const w = &Windows(self)[i];                 // 1800a9829..31
+void IO::CompressedStream::CompressWindow(int i) {
+    using RtIo::Window;
+    using RtIo::Header;
+    using RtIo::kWin;
+
+    Window* const w = &_windowData[i];                   // 1800a9829..31
     if (w->start < 0) {                                  // 1800a9835/39/3b  TEST/JS
         return;
     }
@@ -414,8 +402,8 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
     uint8_t scratch[kWin];                               // 1800a9816..20  (RSP+0x30)
 
     const int32_t blk = w->start >> 15;                  // 1800a9841  SAR EAX,0xf
-    Header* const h   = &Headers(self)[blk];             // 1800a9854/62/72
-    void** const  blocks = Blocks(self);                 // 1800a986a
+    Header* const h   = &_headerData[blk];               // 1800a9854/62/72
+    void** const  blocks = _blockData;                   // 1800a986a
 
     if (blocks[blk] != nullptr)                          // 1800a986e/75/78
         ::System::MemoryAllocator::MemFree(
@@ -423,7 +411,7 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
 
     h->uncompressedSize = static_cast<uint16_t>(w->end - w->start);   // 1800a987f..98
 
-    const int rc = static_cast<::System::Compression*>(self->compression)   // B.3.x bridge
+    const int rc = _compression
         ->Compress(w->buffer, h->uncompressedSize,
             scratch, static_cast<uint32_t>(kWin));       // 1800a989d..a5
     h->compressedSize = static_cast<uint16_t>(rc);       // 1800a98aa
@@ -431,15 +419,16 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
     if (h->compressedSize > h->uncompressedSize)         // 1800a98ae/b2  CMP/JBE (unsigned)
         h->compressedSize = 0;                           // 1800a98b4/b6
 
-    const uint32_t len = StoredLength(*h);               // 1800a98ba..c7
+    const uint32_t len = RtIo::StoredLength(*h);         // 1800a98ba..c7
     void* const dst = ::System::MemoryAllocator::MemAlloc(len, 4);   // 1800a98ce/d3
     blocks[blk] = dst;                                   // 1800a98d8
 
     std::memcpy(dst,
-                h->compressedSize != 0 ? static_cast<const void*>(scratch)
-                                       : static_cast<const void*>(w->buffer),
+                h->compressedSize != 0 ? scratch : w->buffer,
                 len);                                    // 1800a98dc..909
 }
+
+namespace RtIo {
 
 // ============================================================================
 // ?PreCommit@CompressedStream@IO@@UEAAXXZ                    retail 0x1800aa8c0
@@ -500,25 +489,30 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
 // written as one `headerSize*8` byte blob straight out of headerData, which is
 // what makes CompressedStreamHeader's 8-byte stride an ON-DISK fact and not
 // just an in-memory one.
-extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
+}  // namespace RtIo
+
+void IO::CompressedStream::Commit() {
+    using RtIo::Window;
+    using RtIo::Header;
+    using RtIo::StoredLength;
 
     // ---- 1. flush resident windows ---------------------------------------
-    if (self->windowSize > 0) {                          // 1800a9ef6/f9
-        Window* const w = Windows(self);
-        for (int32_t i = 0; i < self->windowSize; ++i) { // 1800a9f1c  reloaded each pass
+    if (_windowSize > 0) {                               // 1800a9ef6/f9
+        Window* const w = _windowData;
+        for (int32_t i = 0; i < _windowSize; ++i) {      // 1800a9f1c  reloaded each pass
             if (w[i].start >= 0)                         // 1800a9f06/0a  JL skips
-                RtIo_CompressedStream_CompressWindow(self, i);   // 1800a9f11
+                CompressWindow(i);                       // 1800a9f11
         }
     }
 
     // ---- 2. virtual PreCommit --------------------------------------------
-    reinterpret_cast<::IO::CompressedStream*>(self)->PreCommit();   // 1800a9f26..2c  +0x40  (B.3.x bridge)
+    PreCommit();                                         // 1800a9f26..2c  +0x40
 
     // ---- 3. lay the blocks out in the file --------------------------------
-    const int32_t n = self->headerSize;                  // 1800a9f2f
+    const int32_t n = _headerSize;                       // 1800a9f2f
     uint32_t off = 4 + static_cast<uint32_t>(n) * 8;     // 1800a9f35  LEA EDX,[4+RAX*8]
     if (n > 0) {                                         // 1800a9f3c/3e
-        Header* const h = Headers(self);
+        Header* const h = _headerData;
         for (int32_t i = 0; i < n; ++i) {                // 1800a9f75
             h[i].sourceOffset = off;                     // 1800a9f50
             off += StoredLength(h[i]);                   // 1800a9f54..73
@@ -526,25 +520,26 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
     }
 
     // ---- 4. write [count][directory][blocks] ------------------------------
-    void* const src = self->source;                      // 1800a9f7b
-    AsStream(src)->SetCurrentPos(0);                     // 1800a9f84  +0x20
+    Stream* const src = _source;                         // 1800a9f7b
+    src->SetCurrentPos(0);                               // 1800a9f84  +0x20
 
-    int32_t count = self->headerSize;                    // 1800a9f87/8e  ([RSP+0x30])
-    AsStream(src)->Write(4, &count);                     // 1800a9f9f  +0x10
-    AsStream(src)->Write(
-        self->headerSize * 8, self->headerData);         // 1800a9fa2..b3
+    int32_t count = _headerSize;                         // 1800a9f87/8e  ([RSP+0x30])
+    src->Write(4, &count);                               // 1800a9f9f  +0x10
+    src->Write(_headerSize * 8, _headerData);            // 1800a9fa2..b3
 
-    if (self->headerSize > 0) {                          // 1800a9fb6/b9
-        const Header* const h = Headers(self);
-        void* const* const blocks = Blocks(self);
-        for (int32_t i = 0; i < self->headerSize; ++i)   // 1800a9fee
-            AsStream(src)->Write(
+    if (_headerSize > 0) {                               // 1800a9fb6/b9
+        const Header* const h = _headerData;
+        void* const* const blocks = _blockData;
+        for (int32_t i = 0; i < _headerSize; ++i)        // 1800a9fee
+            src->Write(
                 static_cast<int32_t>(StoredLength(h[i])), blocks[i]);   // 1800a9fc0..e5
     }
 
     // ---- 5. release the working set ---------------------------------------
-    RtIo_CompressedStream_Release(self);                 // 1800a9ff6
+    Release();                                           // 1800a9ff6
 }
+
+namespace RtIo {
 
 // ============================================================================
 // ?Close@CompressedStream@IO@@UEAAXXZ                        retail 0x1800aa8d0
@@ -584,22 +579,21 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
 // language's rules and retail never tests it. Phase 0a's subject is the base
 // whose vtable is abstract, and nothing here dispatches on `src` — Commit does,
 // later, once the object is real.
-extern "C" bool RtIo_CompressedStream_Create(CompressedStream* self, Stream* src,
-                                             int32_t windows) {
+}  // namespace RtIo
 
-    self->base.direction = 1;                            // 1800aa4d4
-    self->source         = src;                          // 1800aa4db
+bool IO::CompressedStream::Create(Stream& src, int windows) {
+
+    _direction = 1;                                      // 1800aa4d4
+    _source    = &src;                                   // 1800aa4db
 
     void* const p = ::System::MemoryAllocator::MemAlloc(8, 4);   // 1800aa4df..517
-    self->compression = (p != nullptr)                   // 1800aa522/25
-        ? static_cast<void*>(::new (p) ::System::Compression())            // 1800aa52a
+    _compression = (p != nullptr)                        // 1800aa522/25
+        ? ::new (p) ::System::Compression()              // 1800aa52a
         : nullptr;                                       // 1800aa531  XOR EAX,EAX
 
-    RtIo_CompressedStream_SetWindowCount(self, windows); // 1800aa53c
+    SetWindowCount(windows);                             // 1800aa53c
     return true;                                         // 1800aa541  MOV AL,0x1
 }
-
-}  // namespace RtIo
 
 // ============================================================================
 // The `IO::Compressed*` member bodies this file owns — B.3.4 block 4 (STREAMS)
@@ -634,8 +628,7 @@ uint32_t CompressedStream::GetCurrentPos() const {
 // value is DISCARDED: this returns true unconditionally even when SetWindow
 // failed. That is retail's behaviour and it is reproduced, not corrected.
 bool CompressedStream::SetCurrentPos(int pos) {
-    RtIo::RtIo_CompressedStream_SetWindow(
-        reinterpret_cast<RtIo::CompressedStream*>(this), pos);   // 1800aa834
+    SetWindow(pos);                                      // 1800aa834
     return true;                                         // 1800aa839  MOV AL,0x1
 }
 
@@ -654,7 +647,7 @@ bool CompressedStream::SetCurrentPos(int pos) {
 //     shift is on the SIGNED count, which is why headerSize is read MOVSXD.
 uint32_t CompressedStream::GetSize() const {
 
-    CompressedStream* const s = const_cast<CompressedStream*>(this);
+    const CompressedStream* const s = this;
     const int32_t nWin = s->_windowSize;                 // 1800aa863
     int32_t best = 0;                                    // 1800aa867  XOR EAX,EAX
 
@@ -662,14 +655,14 @@ uint32_t CompressedStream::GetSize() const {
         return 0;
     }
     if (nWin > 0) {                                      // 1800aa870  JLE skips the loop
-        const RtIo::CompressedStreamWindow* const w = RtIo::Windows(s);
+        const RtIo::CompressedStreamWindow* const w = s->_windowData;
         for (int32_t i = 0; i < nWin; ++i)               // 1800aa880
             if (best <= w[i].end) best = w[i].end;       // CMP/CMOVLE — <=, not <
     }
 
     const int32_t nHdr = s->_headerSize;                 // 1800aa88e
     if (nHdr != 0) {                                     // 1800aa892/95  TEST/JZ
-        const RtIo::CompressedStreamHeader* const h = RtIo::Headers(s);
+        const RtIo::CompressedStreamHeader* const h = s->_headerData;
         const int32_t last = h[nHdr - 1].uncompressedSize;   // 1800aa89b  [RCX+R10*8-2]
         int32_t total = (nHdr << 15) - RtIo::kCompressedStreamWindowSize + last;  // 1800aa8a1/a5/ac
         if (total < best) total = best;                      // 1800aa8af/b1  CMOVG
@@ -701,20 +694,19 @@ uint32_t CompressedStream::GetSize() const {
 // 3 of this file's banner.
 bool CompressedStream::Write(int n, const void* src) {
 
-    RtIo::CompressedStream* const self = reinterpret_cast<RtIo::CompressedStream*>(this);
-    const uint8_t* in = static_cast<const uint8_t*>(src);
+    const uint8_t* in = static_cast<const uint8_t*>(src);   // CAST-OK: byte_io
 
     while (n > 0) {                                      // 1800aa6d1 / 1800aa758
-        RtIo::RtIo_CompressedStream_SetWindow(self, _position);     // 1800aa6f6
+        SetWindow(_position);                            // 1800aa6f6
         RtIo::CompressedStreamWindow* const w =
-            &RtIo::Windows(this)[_activeWindow];                    // 1800aa6fb..711
+            &_windowData[_activeWindow];                 // 1800aa6fb..711
         const int32_t pos = _position;                   // 1800aa6ff
         int32_t chunk = n;                               // 1800aa70a  MOV EBX,EBP
         const int32_t cap = w->start +
                             RtIo::kCompressedStreamWindowSize;      // 1800aa718  LEA ECX,[R8+0x8000]
         if (pos + n > cap) chunk = cap - pos;            // 1800aa715/1f/23/25
 
-        std::memcpy(static_cast<uint8_t*>(w->buffer) + (pos - w->start),
+        std::memcpy(w->buffer + (pos - w->start),
                     in, static_cast<size_t>(chunk));     // 1800aa727..3c
 
         _position += chunk;                              // 1800aa741
@@ -756,7 +748,7 @@ void CompressedMemoryStream::PreCommit() {
     const int32_t n = _headerSize;                       // 1800a9660  MOVSXD
     uint32_t total = 4 + static_cast<uint32_t>(n) * 8;   // 1800a9667  LEA R8D,[4+RAX*8]
     if (n > 0) {                                         // 1800a966f/71  TEST/JLE
-        const RtIo::CompressedStreamHeader* const h = RtIo::Headers(this);
+        const RtIo::CompressedStreamHeader* const h = _headerData;
         for (int32_t k = 0; k < n; ++k)                  // 1800a9680
             total += RtIo::StoredLength(h[k]);           // 1800a9683..93
     }
@@ -775,8 +767,7 @@ void CompressedMemoryStream::PreCommit() {
 // "has anything been written yet".
 void CompressedStream::Close() {
     if (_headerSize > 0 && _direction == 1) {            // 1800aa8d0/d6
-        RtIo::RtIo_CompressedStream_Commit(
-            reinterpret_cast<RtIo::CompressedStream*>(this));   // 1800aa8da  JZ 0x1800a9ee0
+        Commit();                                        // 1800aa8da  JZ 0x1800a9ee0
         return;
     }
 }
@@ -796,13 +787,12 @@ void CompressedStream::Close() {
 void CompressedFileStream::Close() {
 
     if (_headerSize > 0 && _direction == 1)              // 1800a9496/9f
-        RtIo::RtIo_CompressedStream_Commit(
-            reinterpret_cast<RtIo::CompressedStream*>(this));   // 1800a94a5
+        Commit();                                        // 1800a94a5
 
     RtIO::FileInfo* const fileInfo = &_file._file;       // 1800a94aa  (== this+0x88)
     if (fileInfo->handle != -1) {                        // 1800a94b1/b4
-        void* const fs = ::IO::FileSystem::_singleton;             // 1800a94b6  // ENDGAME B.3.9 IO (D7): the class static.
-        static_cast<::IO::FileSystem*>(fs)->CloseFile(*fileInfo);           // 1800a94c2
+        ::IO::FileSystem* const fs = ::IO::FileSystem::_singleton;   // 1800a94b6  (the class static)
+        fs->CloseFile(*fileInfo);                        // 1800a94c2
         return;
     }
 }

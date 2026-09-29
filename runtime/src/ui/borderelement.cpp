@@ -56,15 +56,15 @@ namespace UI {
 void BorderElement::ComputeSize() {
     if (((_flags >> 27) & 1u) == 0) return;
 
-    const int tlW = SpriteW(&_topLeft);
-    const int trW = SpriteW(&_topRight);
-    const int blW = SpriteW(&_bottomLeft);
-    const int brW = SpriteW(&_bottomRight);
+    const int tlW = SpriteW(_topLeft);
+    const int trW = SpriteW(_topRight);
+    const int blW = SpriteW(_bottomLeft);
+    const int brW = SpriteW(_bottomRight);
 
-    const int tlH = SpriteH(&_topLeft);
-    const int blH = SpriteH(&_bottomLeft);
-    const int trH = SpriteH(&_topRight);
-    const int brH = SpriteH(&_bottomRight);
+    const int tlH = SpriteH(_topLeft);
+    const int blH = SpriteH(_bottomLeft);
+    const int trH = SpriteH(_topRight);
+    const int brH = SpriteH(_bottomRight);
 
     int w = blW + brW;
     if (w < trW + tlW) w = trW + tlW;
@@ -122,31 +122,31 @@ void BorderElement::Draw(SpriteContext& context, uint8_t alpha) const {
     context.AddSprite(_topLeft, L(), T(), c);                                         // 180110469
 
     context.AddSprite(_top,                                                         // 18011050d
-         L() + SpriteW(&_topLeft), T(),
-         R() - SpriteW(&_topRight), T() + SpriteH(&_top), c);
+         L() + SpriteW(_topLeft), T(),
+         R() - SpriteW(_topRight), T() + SpriteH(_top), c);
 
-    context.AddSprite(_topRight, R() - SpriteW(&_topRight), T(), c);                  // 180110545
+    context.AddSprite(_topRight, R() - SpriteW(_topRight), T(), c);                  // 180110545
 
     context.AddSprite(_left,                                                        // 1801106b8
-         L(), T() + SpriteH(&_topLeft),
-         L() + SpriteW(&_left), B() - SpriteH(&_bottomLeft), c);
+         L(), T() + SpriteH(_topLeft),
+         L() + SpriteW(_left), B() - SpriteH(_bottomLeft), c);
 
     context.AddSprite(_centre,                                                      // 1801106b8 (2nd)
-         L() + SpriteW(&_left), T() + SpriteH(&_top),
-         R() - SpriteW(&_right), B() - SpriteH(&_bottom), c);
+         L() + SpriteW(_left), T() + SpriteH(_top),
+         R() - SpriteW(_right), B() - SpriteH(_bottom), c);
 
     context.AddSprite(_right,                                                       // 18011074e
-         R() - SpriteW(&_right), T() + SpriteH(&_topRight),
-         R(), B() - SpriteH(&_bottomLeft), c);
+         R() - SpriteW(_right), T() + SpriteH(_topRight),
+         R(), B() - SpriteH(_bottomLeft), c);
 
-    context.AddSprite(_bottomLeft, L(), B() - SpriteH(&_bottomLeft), c);              // 180110786
+    context.AddSprite(_bottomLeft, L(), B() - SpriteH(_bottomLeft), c);              // 180110786
 
     context.AddSprite(_bottom,                                                      // 180110826
-         L() + SpriteW(&_bottomLeft), B() - SpriteH(&_bottom),
-         R() - SpriteW(&_bottomRight), B(), c);
+         L() + SpriteW(_bottomLeft), B() - SpriteH(_bottom),
+         R() - SpriteW(_bottomRight), B(), c);
 
     context.AddSprite(_bottomRight,                                                   // 180110877
-       R() - SpriteW(&_bottomRight), B() - SpriteH(&_bottomRight), c);
+       R() - SpriteW(_bottomRight), B() - SpriteH(_bottomRight), c);
 }
 
 }  // namespace UI

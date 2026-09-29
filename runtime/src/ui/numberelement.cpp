@@ -49,7 +49,7 @@ void AssignString(char*& field, char* nv) {
     char* old = field;
     if (old == nv) return;
     if (old != nullptr) {
-        int32_t* rc = reinterpret_cast<int32_t*>(old - 4);
+        int32_t* rc = &RtSystem::StringRefCount(old);
         if (--*rc == 0) {
             field = field - 8;
             MemFree(field);
@@ -58,18 +58,18 @@ void AssignString(char*& field, char* nv) {
         }
     }
     field = nv;
-    if (nv != nullptr) ++*reinterpret_cast<int32_t*>(nv - 4);
+    if (nv != nullptr) ++RtSystem::StringRefCount(nv);
 }
-void ReleaseStringLocal(void** slot) {
-    uint8_t* p = static_cast<uint8_t*>(*slot);
+void ReleaseStringLocal(char*& slot) {
+    char* p = slot;
     if (p == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(p - 4);
-    if (--*rc == 0) { *slot = p - 8; MemFree(*slot); }
+    int32_t* rc = &RtSystem::StringRefCount(p);
+    if (--*rc == 0) { slot = p - 8; MemFree(slot); }
 }
 void ReleaseStringField(char*& field) {
     char* p = field;
     if (p == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(p - 4);
+    int32_t* rc = &RtSystem::StringRefCount(p);
     if (--*rc == 0) {
         field = field - 8;
         MemFree(field);
@@ -97,19 +97,19 @@ NumberElement::~NumberElement() {
 // one kind of constant that CAN be retyped, because its bytes are its value.
 // ---------------------------------------------------------------------------
 void NumberElement::CacheText() {
-    void* tmp = nullptr;
+    char* tmp = nullptr;
     if (_mode == 0) {
         const char* fmt = (_showSign != 0) ? "%+i" : "%i";
         // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730): retslot = `tmp`.
         new (static_cast<void*>(&tmp)) System::String(System::String::Format(fmt, _intValue));
-        AssignString(_cachedText, static_cast<char*>(tmp));
+        AssignString(_cachedText, tmp);
     } else {
         const char* fmt = (_showSign != 0) ? "%+.2f" : "%.2f";
         new (static_cast<void*>(&tmp)) System::String(
             System::String::Format(fmt, static_cast<double>(_floatValue)));
-        AssignString(_cachedText, static_cast<char*>(tmp));
+        AssignString(_cachedText, tmp);
     }
-    ReleaseStringLocal(&tmp);
+    ReleaseStringLocal(tmp);
 }
 
 // slot 4 — 0x180119000
@@ -123,7 +123,7 @@ void NumberElement::ComputeSize() {
     const char* text = _cachedText;
     int32_t len = 0;
     if (text != nullptr)
-        len = *reinterpret_cast<const int32_t*>(text - 8);     // System::String length
+        len = RtSystem::StringLength(text);                    // System::String length
 
     _layoutWidth  = font->ComputeLineLayout(text, len, 0, 0, -1, 0, nullptr);
     _layoutHeight = font->_lineHeight;

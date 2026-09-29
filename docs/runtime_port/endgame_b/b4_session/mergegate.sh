@@ -27,6 +27,10 @@ fi
 [ ! -f tools/rt_mint_gen.py ] || [ ! -f standalone/rt_data_mint_tables.inc ] || $PY tools/rt_mint_gen.py > "$HERE/mintgen_$LABEL.log" 2>&1 || { echo "MINT GENERATOR REFUSED:"; tail -20 "$HERE/mintgen_$LABEL.log"; echo "merge left in progress (pre-merge HEAD $PRE)"; exit 4; }
 git ls-files --error-unmatch standalone/rt_export_addrs.inc >/dev/null 2>&1 && git checkout -- standalone/rt_export_addrs.inc 2>/dev/null
 [ -f standalone/rt_data_mint_tables.inc ] && git add -A standalone/rt_data_mint_tables.inc
+# B4: a merge of two branches that each build can fail to build (R-UI-a + R-UI-b, 18662af7).
+# Build BEFORE the merge commit exists; on failure the merge is left in progress, to be fixed and
+# finished with finishmerge.sh, so no commit on main fails to build.
+/c/msys64/ucrt64/bin/mingw32-make.exe -j4 standalone-debug > "$HERE/premerge_$LABEL.log" 2>&1 || { echo "MERGED TREE DOES NOT BUILD (merge left in progress, pre-merge HEAD $PRE):"; grep -E "error" "$HERE/premerge_$LABEL.log" | head -10; exit 6; }
 git commit -q -F "$HERE/mergemsg.txt" || { echo "commit failed"; exit 5; }
 echo "merged $BR: $PRE -> $(git rev-parse --short HEAD)"
 bash "$HERE/gate.sh" "$LABEL" 5 > "$HERE/gate_$LABEL.out" 2>&1

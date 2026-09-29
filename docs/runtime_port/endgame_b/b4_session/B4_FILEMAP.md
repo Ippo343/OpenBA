@@ -6,24 +6,24 @@ READ by every block and edited by none without the coordinator.
 
 | block | files | metric | first / last family | largest families |
 |---|---:|---:|---|---|
-| `ACT-a` | 21 | 2455 | action … action | action 2455 |
+| `ACT-a` | 21 | 2439 | action … action | action 2439 |
 | `ACT-b` | 38 | 1202 | animatenaturalresource … showtool | moveto 161 · region 142 · pickupstoredrawmaterial 131 · createrawmaterial 99 · consumerawmaterial 89 · huntanimal 69 |
-| `COMP-a` | 59 | 1077 | absorbresourcecomponent … charmanager | boatcomponent 205 · ambientenvironmentcomponent 116 · animalwave 111 · animalcomponent 108 · charmanager 105 · attendancecomponent 95 |
-| `COMP-b` | 35 | 3413 | citizen … citizen | citizen 3413 |
-| `COMP-c` | 121 | 1753 | clearareacomponent … herbalistdescription | destroycomponent 288 · cropfieldcomponent 205 · growthcomponent 195 · diseasecomponent 179 · firecomponent 165 · clearareacomponent 143 |
-| `COMP-d` | 85 | 1941 | herdcomponent … pasturecomponent | pasturecomponent 329 · orchardcomponent 319 · herdcomponent 231 · particlecomponent 196 · immigrationcomponent 195 · keystone 103 |
+| `COMP-a` | 64 | 1362 | absorbresourcecomponent … charmanager | buildcomponent 286 · boatcomponent 205 · ambientenvironmentcomponent 116 · animalwave 111 · animalcomponent 108 · charmanager 105 |
+| `COMP-b` | 35 | 3406 | citizen … citizen | citizen 3406 |
+| `COMP-c` | 121 | 1745 | clearareacomponent … herbalistdescription | destroycomponent 288 · cropfieldcomponent 205 · growthcomponent 195 · diseasecomponent 176 · firecomponent 165 · clearareacomponent 143 |
+| `COMP-d` | 85 | 1934 | herdcomponent … pasturecomponent | pasturecomponent 329 · orchardcomponent 319 · herdcomponent 231 · particlecomponent 196 · immigrationcomponent 195 · keystone 103 |
 | `COMP-e` | 86 | 1553 | pasturedescription … trackerdescription | tornadocomponent 207 · statemachinecomponent 170 · populationcomponent 122 · statusiconcomponent 117 · spawncomponent 104 · storagedisplaycomponent 100 |
 | `COMP-f` | 39 | 992 | trade … zonedescription | trade 619 · workplacecomponent 180 · wellcomponent 64 · workcomponent 50 · zonecomponent 48 · uidescription 12 |
-| `DLG-a` | 38 | 1868 | achievementdialog … eventnotifydialog | debugui 409 · eventnotifydialog 237 · entityui 220 · citizenui 213 · destroyui 139 · eventlogui 108 |
-| `DLG-b` | 41 | 1932 | eventpopupdialog … optionsdialog | optionsdialog 544 · moddialog 200 · helpui 188 · newgamedialog 169 · mainmenudialog 144 · moddetailsdialog 108 |
-| `DLG-c` | 39 | 1788 | orchardui … storageui | saveloaddialog 396 · professionui 328 · statusbarui 166 · scenariodialog 139 · residenceui 120 · storageui 103 |
-| `DLG-d` | 10 | 1743 | titledesctooltipui … townhallui | townhallui 829 · toolbardialog 508 · toolui 204 · townhall 168 · toolbar 22 · titledesctooltipui 12 |
-| `DLG-e` | 18 | 1439 | trade … workplaceui | trade 1113 · workplaceui 273 · upgradeui 49 · unreg 3 · upgradeuiconfig 1 |
+| `DLG-a` | 36 | 1762 | achievementdialog … entityui | debugui 409 · entityui 220 · citizenui 213 · buildui 148 · destroyui 139 · achievementdialog 107 |
+| `DLG-b` | 43 | 1733 | eventlogui … optioninputbinddialog | eventnotifydialog 237 · moddialog 200 · helpui 188 · newgamedialog 169 · mainmenudialog 144 · eventlogui 108 |
+| `DLG-c` | 24 | 1747 | optionsdialog … saveloaddialog | optionsdialog 544 · saveloaddialog 396 · professionui 328 · residenceui 120 · pastureui 87 · productionui 84 |
+| `DLG-d` | 25 | 1499 | scenariodialog … townhall | toolbardialog 508 · toolui 204 · townhall 168 · statusbarui 166 · scenariodialog 139 · storageui 103 |
+| `DLG-e` | 20 | 2268 | townhallui … workplaceui | trade 1113 · townhallui 829 · workplaceui 273 · upgradeui 49 · unreg 3 · upgradeuiconfig 1 |
 | `DX11` | 15 | 240 | buffers … videodx11data | imagebufferdata 76 · devicedata 50 · buffers 43 · contextdata 27 · renderstatedata 17 · dx11 12 |
-| `GAME-a` | 32 | 1645 | camera … gameupdateloop | gameupdateloop 869 · citizenlist 186 · game 175 · camera 86 · eventlog 80 · gamegrid 72 |
+| `GAME-a` | 33 | 1645 | builder … gameupdateloop | gameupdateloop 869 · citizenlist 186 · game 175 · camera 86 · eventlog 80 · gamegrid 72 |
 | `GAME-b` | 44 | 1528 | geometry … serialize | serialize 334 · goals 266 · geometry 217 · menudialogloopt 173 · keystone 110 · minimap 80 |
 | `GAME-c` | 29 | 1497 | starttown … worldsetup | starttown 546 · worldgen 358 · weather 239 · town 111 · water 62 · unreg 41 |
-| `PLAYER` | 49 | 2228 | bridgetool … toolsetting | tool 986 · keystone 278 · pathtool 184 · fencedtool 177 · placementtool 140 · roadtool 114 |
+| `PLAYER` | 49 | 2225 | bridgetool … toolsetting | tool 983 · keystone 278 · pathtool 184 · fencedtool 177 · placementtool 140 · roadtool 114 |
 | `R-CORE` | 108 | 941 | allocator … widestring | array 493 · scene 121 · avl 63 · introsort 38 · set 38 · collection 29 |
 | `R-ENG` | 66 | 590 | achievement … wave29 | audio 133 · engine 133 · mainloop 62 · loops 47 · input 39 · singleton 34 |
 | `R-GFX` | 50 | 1409 | animation … wave9 | animationstate 330 · wave27 182 · mesh 153 · batchc 113 · wave28 101 · lights 99 |
@@ -31,10 +31,10 @@ READ by every block and edited by none without the coordinator.
 | `R-UI-a` | 97 | 863 | animatedimagedescription … numbereditdescription | dialog 216 · element 127 · font 80 · documenttext 51 · combodialog 43 · documenttextelement 33 |
 | `R-UI-b` | 78 | 862 | numbereditelement … widgets | userinterface 430 · spritecapture 43 · scrollelement 41 · tabdescription 33 · progressdescription 30 · sliderdescription 28 |
 | `R-VIDEO` | 44 | 587 | batchc … videoprogram | device 153 · context 94 · buffers 49 · companiondata 48 · video 31 · dynamic 30 |
-| `STANDALONE` | 77 | 1737 | ach … video | tool 455 · food 233 · orchard 144 · scene 90 · death 86 · stress 85 |
-| `TUT` | 67 | 1272 | buildinggoal … tutorialui | statvaluedispatch 352 · tutorial 237 · tutorialgoalcount 94 · tutorialhighlightdialog 78 · tutorialsetuprestrictplayer 76 · statgoal 46 |
-| `WORK-a` | 34 | 1626 | autopickupwork … foresterwork | consumeproduce 246 · cleararea 222 · entitylist 193 · citizen 191 · foresterwork 185 · fishingwork 168 |
-| `WORK-b` | 40 | 1599 | gatherrawmaterials … pickup | marketwork 478 · gatherrawmaterials 192 · pasturework 167 · herbalistwork 159 · pickup 154 · harvestorchard 140 |
-| `WORK-c` | 33 | 1748 | plantarea … work | work 1139 · trade 252 · plantarea 129 · plantorchard 123 · tendarea 105 |
+| `STANDALONE` | 78 | 1751 | ach … video | tool 455 · food 233 · orchard 144 · scene 90 · death 86 · stress 85 |
+| `TUT` | 68 | 1320 | buildinggoal … tutorialui | statvaluedispatch 352 · tutorial 237 · tutorialgoalcount 94 · tutorialhighlightdialog 78 · tutorialsetuprestrictplayer 76 · buildinggoal 48 |
+| `WORK-a` | 36 | 1697 | autopickupwork … fishingwork | consumeproduce 246 · cleararea 222 · entitylist 193 · citizen 191 · fishingwork 168 · buildstructure 147 |
+| `WORK-b` | 43 | 1784 | foresterwork … pickup | marketwork 478 · gatherrawmaterials 192 · foresterwork 185 · pasturework 167 · herbalistwork 159 · pickup 154 |
+| `WORK-c` | 33 | 1724 | plantarea … work | work 1115 · trade 252 · plantarea 129 · plantorchard 123 · tendarea 105 |
 
-Total metric in the map: 44485 in 1593 files, 30 blocks.
+Total metric in the map: 45262 in 1608 files, 30 blocks.

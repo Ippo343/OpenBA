@@ -25,3 +25,16 @@ Coordinator errors, each fixed in its own commit:
 **W0 closed at `b6f73067`.** Metric 46,733 (all casts, block 0) = 46,226 to remove + 507 floor at the
 base; at W0's close **45,357 to remove** (tier I 327, CAST-OK 180), bridge markers 6,849 -> 6,535.
 `acceptance.sh`: 9 of 12 lines off target.
+
+| 6 | W1-T | `be8b5258` | `ComponentEntity::FindComponent<T>()`, `FindComponentByTypeId`; `Component::_entity` / `_components` typed; 26 faithful find copies are `B4 FORWARD` forwarders | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | tools ok | 0 |
+| 7 | W1-T-beh | `c7aedffa` | `behaviour:` 0x14000b6f0 finds ConsumeProduceComponent (cell 0x1401c7350) | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | tools ok | 0 |
+
+Metric at `c7aedffa`: **45,262** to remove. The file map's build-directory exclusion swallowed the
+twelve `build*.cpp` files (866 casts) until `76f22aff`.
+
+| 8 | W1-R-UI-a | `6d2462aa` | runtime UI a (dialog, element, font, document text): 863 -> 135 in 97 files | exit 0 · 918 / 0 · 0 | 5683/0 · 5773/12 · loadgame ok · perf 0 | 5/5 | ui ok · tools ok | 0 |
+
+Coordinator error 2: the merge `18662af7` (R-UI-b) does not build — the two UI blocks ran in
+parallel and each typed a field the other reads (`UserInterface::_toolTipDialog`). Fixed in the next
+commit. **A bisect must skip `18662af7`.** `mergegate.sh` now builds the merged tree BEFORE the
+merge commit is made.

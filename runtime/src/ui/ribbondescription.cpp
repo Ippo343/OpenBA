@@ -54,29 +54,12 @@
 #include "../../types/collection/Collection.h"
 
 #include <new>
+
+#include "../../types/io/Stream.h"
 #include <new>
 
 namespace {
 
-// The same two-field views groupdescription.cpp carries, for the same reason:
-// these bodies read exactly `Stream::mode` (+0x08) and `Stream::encodingFactory`
-// (+0x10), and the {stream, readerWriter} PAIR must live on this frame because
-// `LEA RDX,[RSP+0x28]` is what every callee receives.
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;              // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;   // +0x10
-};
-struct Serializer {
-    Stream* stream;            // +0x00
-    void*   readerWriter;      // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 }  // namespace
 
@@ -122,36 +105,30 @@ void RibbonDescription::Destruct() { this->~RibbonDescription(); }
 // the two bools and the int in the wrong sequence into every saved layout,
 // which the reader would then mis-parse. Each body's order is its own.
 bool RibbonDescription::Serialize(void* streamArg) {
-    Stream* stream = static_cast<Stream*>(streamArg);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
     ElementDescription::Serialize(stream);                              // 1800d5f1a
 
-    Serializer ser = { stream, nullptr };                               // [RSP+0x28], [RSP+0x30]
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);                               // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;                // Create{Reader,Writer}
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int zero);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                              // 1800d5f4a
-
-    rw->SerializeBool(reinterpret_cast<bool&>(_vertical), nullptr);
-    rw->SerializeBool(reinterpret_cast<bool&>(_uniform), nullptr);
+    rw->SerializeBool(_vertical, nullptr);
+    rw->SerializeBool(_uniform, nullptr);
     rw->SerializeInt(_spacing, nullptr);
 
     int32_t n = _itemsCount;                                            // 1800d5f88
     rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->mode == 0) {                                        // 1800d5fa5 (re-read)
+    if (ser._stream->_direction == 0) {                                        // 1800d5fa5 (re-read)
         rtcoll::RtColl_ArraySetSize_1800492d0(&_itemsData, n);              // 1800d5fb8
     }
 
     RtObject_ExternalPtrArraySerialize_ElementDescription(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_itemsData));
 
-    if (rw != nullptr) {                                                // 1800d5fd5
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (1800d5fd5).
     return true;
 }
 
@@ -179,12 +156,12 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
     if (raw != nullptr)                                                 // 1800d6070
         elem = ::new (raw) RibbonElement();                             // 1800d6078 ??0Element + stores
 
-    void* slot = elem;                                                  // 1800d60ad [RSP+0x50]
+    Object::InternalPtr<Element> slot(elem);                                                  // 1800d60ad [RSP+0x50]
 
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
     UI::ElementDescription::CreateInstance(                   // 1800d60ba
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     elem->_vertical = _vertical;                                        // 1800d60bf
     elem->_spacing  = _spacing;                                         // 1800d60c9
@@ -192,17 +169,15 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
 
     const int32_t count = _itemsCount;
     for (int32_t i = 0; i < count; ++i) {                               // 1800d60dc / 1800d6149
-        void* desc = _itemsData[i];                                     // 1800d60f7
+        ElementDescription* desc = _itemsData[i];                                   // 1800d60f7
 
         // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
         // placed in the caller's slot.
-        void** made = &slot;
-        new (static_cast<void*>(made)) Object::InternalPtr<UI::Element>(
-            static_cast<const UI::Dialog*>(dialog)->CreateElement(               // B.3.x bridge
-                Object::ExternalPtr<UI::ElementDescription>(
-                    static_cast<UI::ElementDescription*>(desc))));
+        Object::InternalPtr<Element>* made = &slot;
+        *made = dialog->CreateElement(
+            Object::ExternalPtr<UI::ElementDescription>(desc));
 
-        Element* child = *reinterpret_cast<Element**>(made);            // 1800d6108
+        Element* child = made->Get();            // 1800d6108
         if (child != nullptr)
             child->_parent = elem;                                      // 1800d6110
 
@@ -225,7 +200,7 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
 // 0x180039440. The restamps, the base's asymmetric _textName (+0x60) release
 // and the tail JMP into ~External are the compiler's chain.
 RibbonDescription::~RibbonDescription() {
-    rtcoll::RtColl_ArrayDtor_180039440(reinterpret_cast<uint8_t*>(this) + 0x70);   // 1800d5cb4
+    rtcoll::RtColl_ArrayDtor_180039440(&_itemsData);   // 1800d5cb4, +0x70
 }
 
 // ?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ 0x180044220 --

@@ -128,24 +128,15 @@ Serializer::Serializer(Stream& stream, int version) {
     _stream       = &stream;
     _readerWriter = nullptr;
 
-    // The FACTORY SLOT IS STILL A RAW SLOT CALL, and stays one for the same
-    // reason the 22 Serialize members keep theirs (B34_RULES section 3.1): the
-    // Encoding a live stream carries wears one of the three MINTED tables
-    // (0x1801554a8 / 0x1801559d0 / 0x1801559f8), whose slots resolve back to
-    // registered doors. `CreateReader`/`CreateWriter` are slots 3 and 4 of a
-    // five-slot table whose slot 0 is NOT a destructor, which is why the
-    // constant is spelled from `encoding_vtbl` rather than counted.
+    // B.4 R-IO: the factory is called BY NAME. `IO::Encoding` declares the
+    // five slots in retail's order (Serializer.h: slot 3 +0x18 CreateReader,
+    // slot 4 +0x20 CreateWriter, no destructor slot), and B.3.9 IO retired the
+    // minted tables, so the virtual call reads the same slot the old
+    // `encoding_vtbl` constant named. Direction 0 is reading.
     Encoding* factory = stream._encoding;
-    // `MOV RAX,[RCX]` — the vptr AT the object, which on a live Encoding is
-    // the minted table, not GCC's.
-    void** const fvt = *reinterpret_cast<void** const*>(factory);
-    const int slot = (stream._direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRw = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    _readerWriter = reinterpret_cast<MakeRw>(
-        *reinterpret_cast<void* const*>(
-            reinterpret_cast<const uint8_t*>(fvt) + slot))(factory, this, version);
+    _readerWriter = (stream._direction == rt::io::kDirectionReading)
+                        ? factory->CreateReader(*this, version)
+                        : factory->CreateWriter(*this, version);
 }
 
 // THE DESTRUCTOR, 0x1800b99b0:

@@ -127,6 +127,7 @@
 #include <type_traits>
 
 #include "FileSystem.h"                // RtIO::PackageFileView, RtIO::FileInfo
+#include "Modification.h"              // RtIO::ModArray: GetIconData / GetPreviewData's slot
 #include "../object/External.h"          // Object::External — the base
 #include "../object/Internal.h"          // Object::detail::InternalMemFree
 #include "../system/String.h"
@@ -171,7 +172,7 @@ public:
         _file.baseOffset = 0;                                   // 1800b4507
         _file._name0.data = nullptr;                            // 1800b4514
         _file._name1.data = nullptr;                            // 1800b4520
-        _file.winHandle = -1;                                   // 1800b4523
+        _file.winHandle = reinterpret_cast<void*>(intptr_t{-1});   // 1800b4523 INVALID_HANDLE_VALUE (no <windows.h> in a type header)  // CAST-OK: win32
     }
 
     // ---- the nine slots of ??_7PackageFile@IO@@6B@ (0x180155700) ----------
@@ -257,11 +258,11 @@ public:
     // Declared with `void*` for the return slot because the two `Array<T>`
     // instantiations they assign through are still reached by address; the
     // bodies stay in modification_refresh.cpp where their registrations are.
-    void* GetIconData(void* ret) const;       // 0x180025530
-    void* GetPreviewData(void* ret) const;    // 0x180025580
+    void* GetIconData(RtIO::ModArray* ret) const;       // 0x180025530
+    void* GetPreviewData(RtIO::ModArray* ret) const;    // 0x180025580
 
     // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z 0x1800b46b0
-    bool ReadPackfile(const RtSystem::Filename& path);
+    bool ReadPackfile(const System::Filename& path);
 
     // ---- ENDGAME B.3.4a closing: the last two PackageFile bodies ----------
     // Both lived in FileSystem's files (filesystem_openfile_win.cpp,
@@ -301,10 +302,10 @@ public:
     // +0x58/+0x60. What IS known: the serializer writes each as
     // count-then-elements through `StringArraySerialize`, and sizes the array
     // from the count on the reading side only.
-    void*    _stringArray20;      // +0x20  data
+    RtSystem::String* _stringArray20;  // +0x20  data
     int32_t  _stringArray20Count; // +0x28  size
     int32_t  _stringArray20Cap;   // +0x2c  capacity
-    void*    _stringArray30;      // +0x30  data
+    RtSystem::String* _stringArray30;  // +0x30  data
     int32_t  _stringArray30Count; // +0x38  size
     int32_t  _stringArray30Cap;   // +0x3c  capacity
 
@@ -330,7 +331,7 @@ public:
     int32_t  _iconWidth;    // +0x78
     int32_t  _iconHeight;   // +0x7c
 
-    void*    _iconData;      // +0x80  Collection::Array<uint32> — ?GetIconData@
+    uint32_t* _iconData;     // +0x80  Collection::Array<uint32> — ?GetIconData@
     int32_t  _iconCount;     // +0x88
     int32_t  _iconCapacity;  // +0x8c
 
@@ -351,7 +352,7 @@ public:
     int32_t  _previewByteCount;  // +0x90
     int32_t  _pad94;             // +0x94 — NOT PINNED
 
-    void*    _previewData;     // +0x98  Collection::Array<uint8> — ?GetPreviewData@
+    uint8_t* _previewData;     // +0x98  Collection::Array<uint8> — ?GetPreviewData@
     int32_t  _previewCount;    // +0xa0
     int32_t  _previewCapacity; // +0xa4
 
@@ -366,7 +367,7 @@ public:
     uint8_t  _overridable;   // +0xac
     uint8_t  _padAd[3];      // +0xad
 
-    void*    _entries;       // +0xb0  Collection::Array<PackageFileEntry>, stride 16
+    RtIO::PackageFileEntry* _entries;   // +0xb0  Collection::Array<PackageFileEntry>, stride 16
     int32_t  _entryCount;    // +0xb8
     int32_t  _entryCapacity; // +0xbc
 

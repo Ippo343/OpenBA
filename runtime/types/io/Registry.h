@@ -31,9 +31,10 @@
 //          built by the ctor with `String::Format`. Refcounted: the copy ctor
 //          AddRefs it, and `IO::Persistence::ReadSettings` releases it inline
 //          at 0x1800b8892 with the standard String release idiom.
-//   +0x08  HKEY _key — the open handle. `void*` here rather than `HKEY` so this
-//          header stays free of <windows.h> (PLAN.md §4.1 decision 1); the only
-//          file that casts it is `persistence_registry_win.cpp`. ZERO means
+//   +0x08  HKEY _key — the open handle, spelled `HKEY__*` (what <windows.h>'s
+//          STRICT `DECLARE_HANDLE(HKEY)` makes HKEY) against a forward
+//          declaration, so this header stays free of <windows.h> (PLAN.md §4.1
+//          decision 1) and nothing casts it. ZERO means
 //          "neither open nor create succeeded", which the ctor writes
 //          explicitly at 0x1800b971c.
 //   +0x10  uint32 _enumIndex — the running `dwIndex` for RegEnumValueW /
@@ -56,20 +57,14 @@
 #include <type_traits>   // B.3.4 PACKAGE+FS: the "IO::Registry has no vptr" pins
 #include "../system/String.h"
 
+// <windows.h>'s STRICT handle type: `DECLARE_HANDLE(HKEY)` is
+// `struct HKEY__ { int unused; }; typedef struct HKEY__* HKEY;`.
+struct HKEY__;
+
 namespace RtIo {
 
-struct Registry {
-    RtSystem::String path;            // +0x00
-    void*            key;             // +0x08 — HKEY, or null
-    uint32_t         enumIndex;       // +0x10
-    uint32_t         enumGroupIndex;  // +0x14 — see the banner: name inferred
-};
-static_assert(offsetof(Registry, key)            == 0x08, "IO::Registry::_key @ +0x08");
-static_assert(offsetof(Registry, enumIndex)      == 0x10, "IO::Registry::_enumIndex @ +0x10");
-static_assert(offsetof(Registry, enumGroupIndex) == 0x14, "IO::Registry::_enumGroupIndex @ +0x14");
-static_assert(sizeof(Registry) == 0x18,
-              "IO::Registry is exactly 0x18 bytes -- pinned by the member-wise copy "
-              "ctor ??0Registry@IO@@QEAA@AEBV01@@Z (retail 0x18002b140)");
+// (B.4 R-IO: the `RtIo::Registry` POD is gone -- its last user,
+// WriteSettings, holds the class.)
 
 // The registry path the no-subkey constructor builds, split into the three
 // literals retail's `String::Format` consumes. Read out of the shipped DLL's
@@ -107,22 +102,15 @@ constexpr const char* kRegistryPathSeparator = "\\";
 // dangerous only when the member form would change which vtable a live object
 // wears, and this object wears none.
 //
-// *** WHY IT HAS NO DESTRUCTOR, AND WHY `_path` STAYS A POD. ***
-// --------------------------------------------------------------
+// *** ITS DESTRUCTOR IS RETAIL'S INLINED TEARDOWN. ***
 // Retail exports no `??1Registry@IO@@`: every `~Registry` in the DLL is
 // INLINED at its use site as `if (_key) RegCloseKey(_key); _key = 0;` followed
 // by the String release idiom on `_path` (0x1800b8892 in `ReadSettings`,
-// 0x1800b8af2 and 0x1800b8fc3 in `WriteSettings`). Our port reproduces all
-// three of those inlined teardowns by hand, and one of them lives inside
-// `WriteSettingsBody`, which ENDGAME B.3.1 deliberately LEFT AS C.
-//
-// Retyping `_path` to a real `System::String` would give this class a
-// non-trivial destructor, which would then run *in addition to* those three
-// hand-written releases — the `RtSystem::String` double-free in a new costume
-// (B31_RULES). So `_path` keeps the `RtSystem::String` POD spelling and the
-// class keeps NO destructor: a `IO::Registry` local is destroyed by hand, at
-// retail's own position, exactly as it is today. It converts when the last
-// hand-written teardown does, which is not this step.
+// 0x1800b8af2 and 0x1800b8fc3 in `WriteSettings`). B.4 R-IO: that is this
+// class's destructor -- the body closes the key, then `_path`'s own
+// destructor releases the String -- and each of the three use sites is a
+// local whose scope ends exactly where retail's inlined copy sits. All three
+// are in persistence_registry_win.cpp; nothing else names this class.
 // ============================================================================
 
 namespace IO {
@@ -140,6 +128,10 @@ public:
     // (0x1800b971c).
     Registry(const char* subKey);
 
+    // Retail's inlined teardown (see the banner). Defined in
+    // persistence_registry_win.cpp, which has <windows.h>.
+    ~Registry();
+
     // Retail HAS a copy constructor (`??0Registry@IO@@QEAA@AEBV01@@Z`, ord 344,
     // 0x18002b140) and it AddRefs `_path` — see this header's top banner, where
     // its member-wise body is what pins the 0x18 size. It is NOT ported (no
@@ -150,10 +142,9 @@ public:
     Registry& operator=(const Registry&) = delete;
 
     // ---- the 0x18 bytes, at retail's offsets -------------------------------
-    // PUBLIC for the same reason `IO::Serializer`'s two are: unconverted bodies
-    // reach them through a cast, and `offsetof` on them has to be well formed.
-    RtSystem::String _path;            // +0x00 — see the POD banner above
-    void*            _key;             // +0x08 — HKEY, or null
+    // PUBLIC: `offsetof` on them has to be well formed for the pins below.
+    System::String   _path;            // +0x00
+    HKEY__*          _key;             // +0x08 — HKEY, or null
     uint32_t         _enumIndex;       // +0x10
     uint32_t         _enumGroupIndex;  // +0x14 — name inferred, offset is not
 };
@@ -161,23 +152,15 @@ public:
 static_assert(sizeof(Registry) == 0x18,
               "IO::Registry is exactly 0x18 bytes -- pinned by the member-wise "
               "copy ctor ??0Registry@IO@@QEAA@AEBV01@@Z (retail 0x18002b140)");
-static_assert(sizeof(Registry) == sizeof(RtIo::Registry),
-              "IO::Registry and the RtIo::Registry POD stay interchangeable");
 static_assert(offsetof(Registry, _key)            == 0x08, "IO::Registry::_key @ +0x08");
 static_assert(offsetof(Registry, _enumIndex)      == 0x10, "IO::Registry::_enumIndex @ +0x10");
 static_assert(offsetof(Registry, _enumGroupIndex) == 0x14, "IO::Registry::_enumGroupIndex @ +0x14");
-static_assert(offsetof(Registry, _path) == offsetof(RtIo::Registry, path), "alias path");
-static_assert(offsetof(Registry, _key)  == offsetof(RtIo::Registry, key),  "alias key");
-static_assert(offsetof(Registry, _enumIndex) == offsetof(RtIo::Registry, enumIndex),
-              "alias enumIndex");
-static_assert(offsetof(Registry, _enumGroupIndex) == offsetof(RtIo::Registry, enumGroupIndex),
-              "alias enumGroupIndex");
 // The guard, stated as an assertion so a future `virtual` fails the build
 // rather than the boot: a vptr would make this 0x20 bytes and push every field
 // eight bytes down, under a door that is registered BY ADDRESS.
 static_assert(!std::is_polymorphic<Registry>::value,
               "IO::Registry must never acquire a vtable: retail has none for it");
 static_assert(std::is_standard_layout<Registry>::value,
-              "the door reaches these four fields through a reinterpret_cast");
+              "the four fields sit at the offsets pinned above");
 
 }  // namespace IO

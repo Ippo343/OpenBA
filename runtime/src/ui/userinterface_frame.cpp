@@ -38,8 +38,8 @@
 //     verdict on REPLACING the allocator arena (`standalone/rt_alloc_swap.cpp`),
 //     not on a ported body calling it; ~30 ported files already call `MemAlloc`.
 //
-//  3. "No oracle."  The body is written against the live sink
-//     (`runtime/funcs/rt_sink.h`); every store below goes through it.
+//  3. "No oracle."  The body writes the named fields directly (B.4 retired
+//     the `rt_sink.h` pass-through it was written against).
 //
 // ---------------------------------------------------------------------------
 // FACTS THE DECOMPILED C DROPPED (read off the disassembly, per
@@ -140,10 +140,11 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/Element.h"
+#include "../../types/ui/ToolTipDialog.h"
+#include "../../types/system/Value.h"
 // ENDGAME B.3.6 block E: element_common.h carries the same file-scope
 // `Module` / `ResolveAddr` declaration userinterface.cpp and dialog.cpp use
 // (the address door lives in standalone/), and the RULE B6-5 atomic door
@@ -161,22 +162,11 @@ namespace {
 
 using UI::UserInterface;
 
-inline uint8_t* B(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
-
 // ---- data slots -------------------------------------------------------------
-// ENDGAME B.3.9 SS1 (B39_RULES D7): all four are class statics now, no lazy
-// AtomicExport cache (B9-10).
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class statics, no lazy AtomicExport
+// cache (B9-10).
 inline const double* TimerSecondsPerTick() {
     return &::System::Timer::_secondsPerTick;
-}
-inline void** VideoDeviceSingleton() {
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
-}
-inline void** InputDeviceSingleton() {
-    return reinterpret_cast<void**>(&::Input::Device::_singleton);
-}
-inline void** InputConfigSingleton() {
-    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
 }
 
 // ---- the callees ------------------------------------------------------------
@@ -194,72 +184,48 @@ inline void** InputConfigSingleton() {
 // (RBP-0x29, 8 bytes). Only the fields Update touches are named; the rest is
 // left as explicit padding rather than invented, per PLAN §4.3 risk 1.
 //
+// B.4 LEFT: `UI::Element::UpdateState` (Element.h, R-UI-a) is the real type,
+// but its constructor (0x180115600) makes stores this frame does not, and
+// `DialogInstance::Update` still takes the state as `uint8_t*`; this frame
+// record stays until R-UI-a's typed overload lands.
+//
 // `DialogInstance::Update` takes this by reference and WRITES BACK into it —
 // at least `+0x07` (the mouse-down byte reloaded at 0x180121781) and `+0x20`
-// (stored into `_mouseCaptured` at 0x18012184e). That write-back is exactly why
-// predict mode cannot know the drag-drop branch.
+// (stored into `_mouseCaptured` at 0x18012184e).
 struct UpdateState {
     uint8_t  dragActive;      // +0x00  = (_dragDropDialog != 0)
-    uint8_t  buttonPressed;   // +0x01  Input +0x10fe
-    uint8_t  b02;             // +0x02  Input +0x112e
-    uint8_t  b03;             // +0x03  Input +0x1116
-    uint8_t  b04;             // +0x04  Input +0x10ff
-    uint8_t  b05;             // +0x05  Input +0x112f
-    uint8_t  b06;             // +0x06  Input +0x1117
-    uint8_t  leftDown;        // +0x07  (Input word +0x10fc > 0); WRITTEN BACK
-    uint8_t  b08;             // +0x08  (Input word +0x1114 > 0)
-    uint8_t  b09;             // +0x09  (Input word +0x112c > 0)
+    uint8_t  buttonPressed;   // +0x01  Input _mouse[4].pressed
+    uint8_t  b02;             // +0x02  Input _mouse[6].pressed
+    uint8_t  b03;             // +0x03  Input _mouse[5].pressed
+    uint8_t  b04;             // +0x04  Input _mouse[4].released
+    uint8_t  b05;             // +0x05  Input _mouse[6].released
+    uint8_t  b06;             // +0x06  Input _mouse[5].released
+    uint8_t  leftDown;        // +0x07  (Input _mouse[4].value > 0); WRITTEN BACK
+    uint8_t  b08;             // +0x08  (Input _mouse[5].value > 0)
+    uint8_t  b09;             // +0x09  (Input _mouse[6].value > 0)
     uint8_t  pad0a[2];        // +0x0a  never written
     int32_t  dragDx;          // +0x0c
     int32_t  dragDy;          // +0x10
-    int32_t  wheel;           // +0x14  Input word +0x11bc
+    int32_t  wheel;           // +0x14  Input _mouse[12].value
     int32_t  mouseX;          // +0x18  init -1
     int32_t  mouseY;          // +0x1c  init -1
     uint8_t  mouseCaptured;   // +0x20  WRITTEN BACK; -> _mouseCaptured
     uint8_t  pad21[7];        // +0x21
-    void*    config;          // +0x28  = *(void**)Input::Configuration::_singleton
+    void*    config;          // +0x28  = Input::Configuration::_singleton->_keyMap
 };
 static_assert(sizeof(UpdateState) == 0x30, "UpdateState frame span is 0x30");
 
-// One queued UI event, built on the stack by both drag-drop pushes.
-struct EventRecord {
-    void*    dialog;   // +0x00
-    void*    z08;      // +0x08 = 0
-    int32_t  id;       // +0x10 = 0xd then 0xe
-    int32_t  m1;       // +0x14 = -1
-    void*    z18;      // +0x18 = 0
-    uint32_t dragId;   // +0x20 = _dragDropId
-    uint32_t pad24;    // +0x24 NEVER written by retail, and never copied by the
-                       //       grow helper either (it copies +0x00,+0x08,+0x10,
-                       //       +0x14,+0x18,+0x1c,+0x20,+0x28 field by field)
-    void*    dragData; // +0x28 = _dragDropData
-};
-static_assert(sizeof(EventRecord) == 0x30, "UI::Event stride");
-
-// A list node: value, prev, next. Proven by the drain's own stores
-// (tail->[+0x10] = node, node->[+0x08] = tail) and by every walk in the class.
-struct Node { void* value; Node* prev; Node* next; };
+// A list node of `_dialogs`: element, prev, next. Proven by the drain's own
+// stores (tail->[+0x10] = node, node->[+0x08] = tail).
+using Node = Collection::LinkedList<UI::DialogInstancePtr>::Node;
 static_assert(sizeof(Node) == 0x18, "MemAlloc(0x18, 8) in the drain");
 
-// ============================================================================
-// The body, written against the live sink (rt_sink.h).
-// ============================================================================
-// `out` is a live sink: every write is a store, every `Call` returns true.
-//
-// Reads of locations THIS BODY WRITES go through `out.ReadU*` so the predictor
-// is self-consistent; reads of locations it never writes stay plain loads. The
-// distinction matters here in exactly one place — `_fadeAmount`, which is read
-// back inside the fade arm after being written.
 } // namespace
 
 // ENDGAME B.3.6 block E: the body is the member (the main-loop hot path).
 int32_t UI::UserInterface::Update(const System::Time& timeRef) {
-    RtSink out;                                                 // the live sink
-    const void* const time = &timeRef;                          // one int64 tick count
-    uint8_t* const S = reinterpret_cast<uint8_t*>(this);
-
     // 0x1801213ef — _mouseCaptured = 0, BEFORE anything else.
-    out.U8(S + 0xd9, 0, "_mouseCaptured = 0 (entry)");
+    _mouseCaptured = 0;
 
     // 0x1801213f6
     CleanRemovedDialogs();                                      // #1
@@ -268,58 +234,49 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     // Retail walks i = _size-1 down to 0 (0x1801213fb: MOVSXD R14, size-1, and
     // JS past the whole loop when negative — a genuine sign-extension, which
     // Ghidra prints as a zero extension).
-    const int32_t addCount = *reinterpret_cast<int32_t*>(S + 0x30);
+    const int32_t addCount = _addDialogs._size;
     for (int64_t i = static_cast<int64_t>(addCount) - 1; i >= 0; --i) {
-        void** const addData = *reinterpret_cast<void***>(S + 0x28);
+        DialogInstancePtr* const addData = _addDialogs._data;
 
-        Node* node = nullptr;
-        if (out.Call("MemAlloc(0x18, 8) — list node",
-                     reinterpret_cast<const void*>(&System::MemoryAllocator::MemAlloc), 0x18, 8)) {
-            node = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x18, 8));
-            if (node) {
-                node->value = nullptr;          // retail zeroes then stores
-                node->value = addData[i];
-                node->prev  = nullptr;
-                node->next  = nullptr;
-            }
-            // else: RDI := R13 (0) at 0x180121456 — and the tail fixup below
-            // still runs. That unguarded `node->prev = tail` is retail's.
-        } else {
-            // Predict mode: no allocation, and therefore no honest prediction
-            // for the list. The caller has excluded +0x000..+0x018 on exactly
-            // this path; there is nothing to record here.
-            continue;
+        Node* node = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x18, 8));
+        if (node) {
+            node->element = nullptr;        // retail zeroes then stores
+            node->element = addData[i];
+            node->prev    = nullptr;
+            node->next    = nullptr;
         }
+        // else: RDI := R13 (0) at 0x180121456 — and the tail fixup below
+        // still runs. That unguarded `node->prev = tail` is retail's.
 
-        Node* const tail = *reinterpret_cast<Node**>(S + 0x08);
+        Node* const tail = _dialogs._tail;
         if (tail) {
-            out.Ptr(&tail->next, node, "_dialogs._tail->next = node");
-            out.Ptr(&node->prev, *reinterpret_cast<Node**>(S + 0x08),
-                    "node->prev = _dialogs._tail");
+            tail->next = node;                                  // _dialogs._tail->next = node
+            node->prev = _dialogs._tail;                        // node->prev = _dialogs._tail
         } else {
-            out.Ptr(S + 0x00, node, "_dialogs._head = node");
+            _dialogs._head = node;
         }
-        out.Ptr(S + 0x08, node, "_dialogs._tail = node");
-        out.U32(S + 0x10, out.ReadU32(S + 0x10) + 1, "_dialogs._count++");
+        _dialogs._tail = node;
+        ++_dialogs._count;
 
         // ---- the tooltip teardown arm ------------------------------------
-        void* const toolTip = *reinterpret_cast<void**>(S + 0x40);
+        ToolTipDialog* const toolTip = _toolTipDialog;
         if (toolTip) {
-            void** const reload = *reinterpret_cast<void***>(S + 0x28);
-            uint8_t* const dlg  = static_cast<uint8_t*>(reload[i]);
-            if ((*reinterpret_cast<uint32_t*>(dlg + 0x20) >> 4) & 1u) {
+            DialogInstancePtr* const reload = _addDialogs._data;
+            const DialogInstance* const dlg = static_cast<const DialogInstance*>(reload[i]);
+            if ((dlg->_flags >> 4) & 1u) {
                 // 0x1801214a9: MOV RAX,[RDX+0x30]; CMP RAX,RAX; JNZ ...
                 // The compare can never be unequal, so the branch is dead — but
-                // the LOAD is real and faults on a bad pointer exactly as retail
-                // does. Kept, and kept `volatile` so no compiler deletes it.
-                (void)*static_cast<void* volatile*>(
-                    static_cast<void*>(static_cast<uint8_t*>(toolTip) + 0x30));
+                // the LOAD (+0x30, `_dataSource`) is real and faults on a bad
+                // pointer exactly as retail does. Kept `volatile` so no compiler
+                // deletes it.
+                Object::Base* volatile deadLoad = toolTip->_dataSource;
+                (void)deadLoad;
 
                 // the by-value InternalPtr copy, passed by address (B6-11)
-                Object::InternalPtr<DialogInstance> tmp(static_cast<DialogInstance*>(toolTip));
+                Object::InternalPtr<DialogInstance> tmp(toolTip);
                 CloseDialog(&tmp);
-                out.Ptr(S + 0x40, nullptr, "_toolTipDialog = 0");
-                out.Ptr(S + 0x38, nullptr, "_toolTipOwner = 0");
+                _toolTipDialog = nullptr;
+                _toolTipOwner  = nullptr;
             }
         }
     }
@@ -331,44 +288,42 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
 
     // 0x1801214e3 — free the array and clear BOTH size and capacity with one
     // QWORD store (0x180121525: MOV qword[RSI+0x30], 0).
-    void* const addData = *reinterpret_cast<void**>(S + 0x28);
-    if (addData) {
-        if (out.Call("MemFree(_addDialogs._data)",
-                     reinterpret_cast<const void*>(&System::MemoryAllocator::MemFree)))
-            System::MemoryAllocator::MemFree(addData);
+    if (void* const addData = _addDialogs._data) {
+        System::MemoryAllocator::MemFree(addData);
     }
-    out.Ptr(S + 0x28, nullptr, "_addDialogs._data = 0");
-    out.U64(S + 0x30, 0, "_addDialogs._size/_capacity = 0 (one qword)");
+    _addDialogs._data     = nullptr;
+    _addDialogs._size     = 0;                                  // } one QWORD
+    _addDialogs._capacity = 0;                                  // }
 
     // ---- clip region ------------------------------------------------------
-    const float scale = *reinterpret_cast<float*>(S + 0xdc);
-    uint8_t* const vdev = static_cast<uint8_t*>(*VideoDeviceSingleton());
+    const float scale = _uiScale;
+    const ::Video::Device* const vdev = ::Video::Device::_singleton;
     const int32_t w = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<int32_t*>(vdev + 4)) * scale);
+        static_cast<float>(vdev->backBufferWidth) * scale);    // +0x04
     const int32_t h = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<int32_t*>(vdev + 8)) * scale);
-    out.U64(S + 0x0fc, 0, "_clipRegion.left/top = 0 (one qword)");
-    out.U32(S + 0x104, static_cast<uint32_t>(w - 1), "_clipRegion.right");
-    out.U32(S + 0x108, static_cast<uint32_t>(h - 1), "_clipRegion.bottom");
+        static_cast<float>(vdev->backBufferHeight) * scale);   // +0x08
+    _clipRegion.left   = 0;                                     // } one QWORD
+    _clipRegion.top    = 0;                                     // }
+    _clipRegion.right  = w - 1;
+    _clipRegion.bottom = h - 1;
 
     // ---- fullscreen fade --------------------------------------------------
-    const float vel = *reinterpret_cast<float*>(S + 0xf0);
+    const float vel = _fadeVelocity;
     if (vel != 0.0f) {
-        const double secs = static_cast<double>(*reinterpret_cast<const int64_t*>(time))
+        const double secs = static_cast<double>(timeRef._ticks)
                           * *TimerSecondsPerTick();
         const float amount =
             static_cast<float>(secs) * vel * 4.0f
-            + *reinterpret_cast<float*>(S + 0xf4);
-        uint32_t bits;
-        __builtin_memcpy(&bits, &amount, 4);
-        out.U32(S + 0xf4, bits, "_fadeAmount +=");
+            + _fadeAmount;
+        _fadeAmount = amount;
 
         if (!(amount < 1.0f)) {
-            out.U32(S + 0xf4, 0x3f800000u, "_fadeAmount = 1.0f");
-            out.U32(S + 0xf0, 0, "_fadeVelocity = 0");
+            _fadeAmount   = 1.0f;
+            _fadeVelocity = 0.0f;
         } else if (!(0.0f < amount)) {
             // ONE qword — clears velocity AND amount together (0x1801215d7).
-            out.U64(S + 0xf0, 0, "_fadeVelocity/_fadeAmount = 0 (one qword)");
+            _fadeVelocity = 0.0f;
+            _fadeAmount   = 0.0f;
         }
     }
 
@@ -379,13 +334,13 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     // ---- layout every dialog, head -> tail --------------------------------
     // `DialogInstance::ComputeLayout` (0x180113d90) — non-virtual member of the
     // real class (block B).
-    for (Node* n = *reinterpret_cast<Node**>(S + 0x00); n; n = n->next) {
-        reinterpret_cast<DialogInstance*>(n->value)->ComputeLayout(0, 0, w, h);  // B.3.6 bridge
+    for (Node* n = _dialogs._head; n; n = n->next) {
+        reinterpret_cast<DialogInstance*>(n->element)->ComputeLayout(0, 0, w, h);
     }
 
     // 0x18012161e — a fade in progress swallows the whole input half AND the
     // return value.
-    if (*reinterpret_cast<float*>(S + 0xf0) != 0.0f)
+    if (_fadeVelocity != 0.0f)
         return 0;
 
     // ---- gather input into UpdateState ------------------------------------
@@ -393,102 +348,100 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     st.mouseX = -1;
     st.mouseY = -1;
 
-    uint8_t* const in = static_cast<uint8_t*>(*InputDeviceSingleton());
-    st.dragActive = (*reinterpret_cast<void**>(S + 0x60) != nullptr) ? 1 : 0;
+    const ::Input::Device* const in = ::Input::Device::_singleton;
+    st.dragActive = (_dragDropDialog != nullptr) ? 1 : 0;
 
     const int32_t mx = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<int16_t*>(in + 0x109c)) * scale);
+        static_cast<float>(in->_mouse[0].value) * scale);      // +0x109c
     const int32_t my = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<int16_t*>(in + 0x10b4)) * scale);
+        static_cast<float>(in->_mouse[1].value) * scale);      // +0x10b4
     st.mouseX = mx;
     st.mouseY = my;
 
-    st.buttonPressed = in[0x10fe];
-    st.b03           = in[0x1116];
-    st.b02           = in[0x112e];
-    st.b04           = in[0x10ff];
-    st.b06           = in[0x1117];
-    st.b05           = in[0x112f];
-    st.leftDown      = (*reinterpret_cast<int16_t*>(in + 0x10fc) > 0) ? 1 : 0;
-    st.b08           = (*reinterpret_cast<int16_t*>(in + 0x1114) > 0) ? 1 : 0;
-    st.b09           = (*reinterpret_cast<int16_t*>(in + 0x112c) > 0) ? 1 : 0;
-    st.wheel         = *reinterpret_cast<int16_t*>(in + 0x11bc);
-    st.config        = *reinterpret_cast<void**>(*InputConfigSingleton());
+    st.buttonPressed = in->_mouse[4].pressed;                   // +0x10fe
+    st.b03           = in->_mouse[5].pressed;                   // +0x1116
+    st.b02           = in->_mouse[6].pressed;                   // +0x112e
+    st.b04           = in->_mouse[4].released;                  // +0x10ff
+    st.b06           = in->_mouse[5].released;                  // +0x1117
+    st.b05           = in->_mouse[6].released;                  // +0x112f
+    st.leftDown      = (in->_mouse[4].value > 0) ? 1 : 0;       // +0x10fc
+    st.b08           = (in->_mouse[5].value > 0) ? 1 : 0;       // +0x1114
+    st.b09           = (in->_mouse[6].value > 0) ? 1 : 0;       // +0x112c
+    st.wheel         = in->_mouse[12].value;                    // +0x11bc
+    st.config        = ::Input::Configuration::_singleton->_keyMap;   // +0x00
     st.mouseCaptured = 0;
 
     uint8_t leftDown = st.leftDown;
 
     if (st.buttonPressed) {
-        out.U32(S + 0x58, static_cast<uint32_t>(mx), "_mouseDownX");
-        out.U32(S + 0x5c, static_cast<uint32_t>(my), "_mouseDownY");
+        _mouseDownX = mx;
+        _mouseDownY = my;
         st.dragDx = 0;                     // the JMP to 0x180121746 zeroes both
         st.dragDy = 0;
     } else if (leftDown) {
-        st.dragDx = *reinterpret_cast<int32_t*>(S + 0x58) - mx;
-        st.dragDy = *reinterpret_cast<int32_t*>(S + 0x5c) - my;
+        st.dragDx = _mouseDownX - mx;
+        st.dragDy = _mouseDownY - my;
     } else {
         st.dragDx = 0;
         st.dragDy = 0;
     }
 
     // ---- pump every dialog, tail (frontmost) -> head -----------------------
-    Node* n = *reinterpret_cast<Node**>(S + 0x08);
+    Node* n = _dialogs._tail;
     if (n) {
         for (;;) {
-            uint8_t* const dlg = static_cast<uint8_t*>(n->value);
-            if (*reinterpret_cast<void**>(dlg + 0x28) == nullptr) {
+            DialogInstance* const dlg = static_cast<DialogInstance*>(n->element);
+            if (dlg->_parent.Get() == nullptr) {                    // +0x28
                 // `DialogInstance::Update(const Time&, UserInterface*,
                 // Element::UpdateState&)` (0x180113980) — non-virtual member of
                 // the real class (block B), which spells the state as its
                 // address; it WRITES BACK into `st`.
-                reinterpret_cast<DialogInstance*>(dlg)->Update(            // B.3.6 bridge
-                    timeRef, this, reinterpret_cast<uint8_t*>(&st));
+                // B.4 LEFT: the `uint8_t*` parameter is R-UI-a's signature.
+                dlg->Update(timeRef, this, reinterpret_cast<uint8_t*>(&st));
             }
-            if ((*reinterpret_cast<uint32_t*>(dlg + 0x20) >> 1) & 1u) break;
+            if ((dlg->_flags >> 1) & 1u) break;
             n = n->prev;
             if (!n) break;
         }
         // 0x180121781 — RELOADED from the UpdateState, which the callee may
-        // have rewritten. This is the byte predict mode cannot know.
+        // have rewritten.
         leftDown = st.leftDown;
     }
 
     // ---- end drag-drop ----------------------------------------------------
-    if (!leftDown && *reinterpret_cast<void**>(S + 0x60) != nullptr) {
+    if (!leftDown && _dragDropDialog != nullptr) {
         for (int32_t id = 0xd; id <= 0xe; ++id) {
-            EventRecord rec;
-            rec.dialog   = *reinterpret_cast<void**>(S + 0x60);
-            rec.z08      = nullptr;
-            rec.id       = id;
-            rec.m1       = -1;
-            rec.z18      = nullptr;
-            rec.dragId   = *reinterpret_cast<uint32_t*>(S + 0x70);
-            rec.dragData = *reinterpret_cast<void**>(S + 0x78);
-            // rec.pad24 deliberately left uninitialised: retail never writes it
-            // and the grow helper never copies it.
-            const int32_t newSize = *reinterpret_cast<int32_t*>(S + 0x50) + 1;
-            if (out.Call("Array<Event>::SetSize (drag-drop end/cancel)",
-                         reinterpret_cast<const void*>(&rtcoll::RtColl_ArraySetSizeFill_180033690),
-                         newSize, id))
-                rtcoll::RtColl_ArraySetSizeFill_180033690(S + 0x48, newSize, &rec);
+            Event rec;
+            rec.dialog   = _dragDropDialog;
+            rec.element  = nullptr;
+            rec.eventId  = id;
+            rec.arg14    = -1;
+            rec.arg18    = 0;                                   // } one QWORD
+            rec.arg1C    = 0;                                   // }
+            rec.arg20    = static_cast<int32_t>(_dragDropId);
+            rec.userData = _dragDropData;
+            // rec._pad24 deliberately left uninitialised: retail never writes
+            // it and the grow helper never copies it.
+            const int32_t newSize = _events._size + 1;
+            rtcoll::RtColl_ArraySetSizeFill_180033690(&_events, newSize, &rec);
         }
 
-        out.Ptr(S + 0x60, nullptr, "_dragDropDialog = 0");
-        void* const dragEl = *reinterpret_cast<void**>(S + 0x68);
-        if (dragEl) {
+        _dragDropDialog = nullptr;
+        if (Element* const dragEl = _dragDropElement) {
             // Element vtable slot 0 `delete` (slot 0, flags 1) — VIRTUAL.
-            delete reinterpret_cast<UI::Element*>(dragEl);   // B.3.6 bridge
-            out.Ptr(S + 0x68, nullptr, "_dragDropElement = 0 (inside the guard)");
+            delete dragEl;
+            _dragDropElement = nullptr;                          // inside the guard
         }
-        out.Ptr(S + 0x68, nullptr, "_dragDropElement = 0 (again, unguarded)");
-        out.U32(S + 0x70, 0, "_dragDropId = 0");
-        out.Ptr(S + 0x78, nullptr, "_dragDropData = 0");
-        out.Ptr(S + 0x80, nullptr, "_dragDropUserData = 0");
+        _dragDropElement = nullptr;                              // again, unguarded
+        _dragDropId      = 0;
+        _dragDropData    = nullptr;
+        _dragDropGrabX   = 0;                                    // } one QWORD
+        _dragDropGrabY   = 0;                                    // }
     }
 
     CleanRemovedDialogs();                                      // #3
 
-    out.U8(S + 0xd9, st.mouseCaptured, "_mouseCaptured = UpdateState+0x20");
+    _mouseCaptured = st.mouseCaptured;                          // UpdateState+0x20
 
     return GetMouseCursorIndex(mx, my);
 }

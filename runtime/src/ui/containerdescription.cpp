@@ -86,12 +86,12 @@ void ContainerDescription::Destruct() { this->~ContainerDescription(); }
 // the ints in memory. Sorting them into offset order would change the byte
 // stream a .rsc parses.
 bool ContainerDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::ElementDescription::Serialize(stream);              // 1800cceea (qualified)
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     rw->SerializeInt(_requestedWidth, nullptr);             // 1800ccf2e
     rw->SerializeInt(_requestedHeight, nullptr);            // 1800ccf43
@@ -101,10 +101,10 @@ bool ContainerDescription::Serialize(void* streamv) {
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[1]), IoSer(&ser));   // 1800ccf6c
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_partDescs[2]), IoSer(&ser));   // 1800ccf7d
 
-    rw->SerializeBool(reinterpret_cast<bool&>(_clampWidth), nullptr); // 1800ccf9d
-    rw->SerializeBool(reinterpret_cast<bool&>(_clampHeight), nullptr); // 1800ccfaf
+    rw->SerializeBool(_clampWidth, nullptr);                 // 1800ccf9d
+    rw->SerializeBool(_clampHeight, nullptr);                // 1800ccfaf
 
-    if (rw != nullptr) delete rw;                 // 1800ccfc5
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 1800ccfc5
     return true;
 }
 
@@ -154,19 +154,21 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
     // ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@… (0x180115ad0)
     // is name-hidden by slot 8 and its body is still a dialog.cpp door, so it
     // is reached by address, as before.
-    void* slot = container;                                 // 1800ccc31
+    Object::InternalPtr<Element> slot(container);                                 // 1800ccc31
     UI::ElementDescription::CreateInstance(                   // 1800ccc3e
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     // ---- 3. the clip region -------------------------------------------------
     void* rawR = MemAlloc(0xd8, 8);                         // 1800ccc60
-    uint8_t* clip = nullptr;
+    UI::ClipRegionElement* clip = nullptr;
     if (rawR != nullptr)                                    // 1800ccc8b
-        clip = reinterpret_cast<uint8_t*>(::new (rawR) UI::ClipRegionElement());   // 1800ccc90..1800cccc0 inlined ctor (B.3.9 UI-A)
-    Element* const clipElem = reinterpret_cast<Element*>(clip);         // B.3.6 bridge
+        clip = ::new (rawR) UI::ClipRegionElement();        // 1800ccc90..1800cccc0 inlined ctor (B.3.9 UI-A)
+    Element* const clipElem = clip;
 
     // ---- 4. the clip region's child -----------------------------------------
-    void** made = DialogCreateElement(dialog, &slot, _partDescs[2]);    // 1800cccda
+    // ?CreateElement@Dialog@UI@@ (0x180112ed0), its RETSLOT the same local.
+    Object::InternalPtr<Element>* made = &slot;
+    *made = dialog->CreateElement(Object::ExternalPtr<ElementDescription>(_partDescs[2]));   // 1800cccda
     AttachAndPushChild(clip, made);                         // 1800ccce7 .. 1800ccd24
 
     // ---- 5. two identical virtual calls (slot 4) ----------------------------
@@ -175,15 +177,15 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
 
     // ---- 6. the size negotiation --------------------------------------------
     {
-        int32_t w = *reinterpret_cast<int32_t*>(clip + 0xc8);           // 1800ccd38
+        int32_t w = clip->_innerWidth;                                  // 1800ccd38
         int32_t h = _requestedHeight;                                   // 1800ccd3e
-        if (h <= 0) h = *reinterpret_cast<int32_t*>(clip + 0xcc);       // 1800ccd46
+        if (h <= 0) h = clip->_innerHeight;                             // 1800ccd46
         const int32_t t = _requestedWidth;
         if (t > 0) w = t;                                              // 1800ccd52 CMOVG
-        if (*reinterpret_cast<int32_t*>(clip + 0xc0) != w ||            // 1800ccd55
-            *reinterpret_cast<int32_t*>(clip + 0xc4) != h) {            // 1800ccd5d
-            *reinterpret_cast<int32_t*>(clip + 0xc0) = w;               // 1800ccd65
-            *reinterpret_cast<int32_t*>(clip + 0xc4) = h;               // 1800ccd6b
+        if (clip->_reqWidth != w ||                                    // 1800ccd55
+            clip->_reqHeight != h) {                                   // 1800ccd5d
+            clip->_reqWidth  = w;                                      // 1800ccd65
+            clip->_reqHeight = h;                                      // 1800ccd6b
             clipElem->SetNeedsSizeCalc();                               // 1800ccd80
         }
     }
@@ -205,14 +207,13 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
     }
 
     // ---- 9. the container's two remaining children, DESCENDING --------------
-    uint8_t* const containerBytes = reinterpret_cast<uint8_t*>(container);
-    made = DialogCreateElement(dialog, &slot, _partDescs[1]);           // 1800cce17
-    AttachAndPushChild(containerBytes, made);               // 1800cce24 .. 1800cce54
+    *made = dialog->CreateElement(Object::ExternalPtr<ElementDescription>(_partDescs[1]));   // 1800cce17
+    AttachAndPushChild(container, made);                    // 1800cce24 .. 1800cce54
 
-    made = DialogCreateElement(dialog, &slot, _partDescs[0]);           // 1800cce62
-    AttachAndPushChild(containerBytes, made);               // 1800cce6f .. 1800ccea4
+    *made = dialog->CreateElement(Object::ExternalPtr<ElementDescription>(_partDescs[0]));   // 1800cce62
+    AttachAndPushChild(container, made);                    // 1800cce6f .. 1800ccea4
 
-    *reinterpret_cast<void**>(ret) = container;             // 1800ccea6
+    *ret = Object::InternalPtr<Element>(container);             // 1800ccea6
     return ret;
 }
 

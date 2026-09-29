@@ -192,7 +192,7 @@ void RibbonElement::Draw(SpriteContext& context, uint8_t alpha) const {
 // retired door (ENDGAME B.3.9 UI-B): the extent Array through 0x18001c750. The
 // restamp and the tail into ~Element are the compiler's.
 RibbonElement::~RibbonElement() {
-    rtcoll::RtColl_ArrayDtor_18001c750(B(this, kExtents));
+    rtcoll::RtColl_ArrayDtor_18001c750(&_extentsData);
 }
 
 // ?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ 0x1800447d0 --

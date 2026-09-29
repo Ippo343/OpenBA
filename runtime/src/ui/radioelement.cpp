@@ -35,32 +35,13 @@
 
 #include "widget_common.h"
 #include "../../types/ui/RadioElement.h"
+#include "../../types/ui/CheckElement.h"
+#include "../../types/ui/UserInterface.h"
 
 using namespace rtui;
 
 namespace {
 
-constexpr int kCheckBoxChecked = 0xD8;   // CheckElement's own "is checked" byte
-
-// UI::UserInterface's pending-event Array<Event>, stride 0x30
-// (runtime/src/collection/array.cpp's kSpec_Event30 names the same stride for
-// the same append at 0x180033690). UserInterface is block E's class.
-constexpr int kUiEvents     = 0x48;
-constexpr int kUiEventCount = 0x50;
-
-// The 0x30-byte UI event record the widgets append.
-struct WidgetEvent {
-    void*    dialog;     // +0x00  InternalPtr<DialogInstance>, copied from the arg
-    void*    element;    // +0x08  InternalPtr<Element>, `this`
-    int32_t  kind;       // +0x10
-    int32_t  elementId;  // +0x14
-    int32_t  mouseX;     // +0x18
-    int32_t  mouseY;     // +0x1c
-    int32_t  value;      // +0x20
-    int32_t  pad24;      // +0x24  never written
-    int64_t  tail;       // +0x28  zeroed
-};
-static_assert(sizeof(WidgetEvent) == 0x30, "UI event record is 0x30 bytes");
 
 }  // namespace
 
@@ -92,7 +73,9 @@ void RadioElement::Update(const System::Time& time, UserInterface* ui,
             Element* box = _checkBoxes._data[i];
             if ((box->_flags & kElementFlagWasActivated) != 0) {
                 active = -1;
-                if (reinterpret_cast<const uint8_t*>(box)[kCheckBoxChecked] != 0) active = i;
+                // The radio's boxes are the CheckElements its description
+                // built (RadioDescription::CreateInstance): +0xd8 `_checked`.
+                if (static_cast<const CheckElement*>(box)->_checked != 0) active = i;
             }
         }
     }
@@ -105,23 +88,22 @@ void RadioElement::Update(const System::Time& time, UserInterface* ui,
     // count from +0xC8 each iteration, as shipped.
     for (int32_t i = 0; i < _checkBoxes._size; ++i) {
         if (i != _activeIndex)
-            reinterpret_cast<uint8_t*>(_checkBoxes._data[i])[kCheckBoxChecked] = 0;
+            static_cast<CheckElement*>(_checkBoxes._data[i])->_checked = 0;
     }
 
     if (_activeIndex >= 0)
         value = _checkBoxes._data[_activeIndex]->_elementId;
 
-    WidgetEvent ev;
-    std::memcpy(&ev.dialog, dialog, sizeof ev.dialog);   // the handle's raw 8 bytes
-    ev.element   = this;
-    ev.kind      = 0x16;
-    ev.elementId = _elementId;
-    ev.mouseX    = state.mouseX;
-    ev.mouseY    = state.mouseY;
-    ev.value     = value;
-    ev.tail      = 0;
-    rtcoll::RtColl_ArraySetSizeFill_180033690(
-        B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
+    UserInterface::Event ev;
+    ev.dialog   = dialog->Get();     // the handle's 8 bytes
+    ev.element  = this;
+    ev.eventId  = 0x16;
+    ev.arg14    = _elementId;
+    ev.arg18    = state.mouseX;
+    ev.arg1C    = state.mouseY;
+    ev.arg20    = value;
+    ev.userData = nullptr;
+    rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events, ui->_events._size + 1, &ev);
 }
 
 // ============================================================================

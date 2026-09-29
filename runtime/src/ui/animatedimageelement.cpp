@@ -101,7 +101,7 @@ void AnimatedImageElement::Update(const System::Time& time, UserInterface* ui,
 
     const double spt = SecondsPerTick();
 
-    _accumTicks += *reinterpret_cast<const int64_t*>(&time);   // 1800cb2c2  System::Time's ticks
+    _accumTicks += time._ticks;                             // 1800cb2c2  System::Time's ticks
 
     float elapsed = static_cast<float>(static_cast<double>(_accumTicks) * spt);
     const float period = static_cast<float>(_frames._size) /   // 1800cb2da

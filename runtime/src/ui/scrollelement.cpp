@@ -66,18 +66,6 @@ namespace {
 // 0x18016169c — `00 00 80 3f`, read from the shipped .rdata.
 constexpr float kOne = 1.0f;
 
-// A 0x10-byte UI::Sprite copied to the stack, exactly as Draw does: two qword
-// loads from the chosen field.
-struct SpriteCopy { void* sheet; int64_t index; };
-static_assert(sizeof(SpriteCopy) == 0x10, "");
-
-SpriteCopy LoadSprite(const ::Sprite& src) {
-    SpriteCopy s;
-    s.sheet = src.spriteSheet;
-    __builtin_memcpy(&s.index, &src.spriteIndex, sizeof s.index);
-    return s;
-}
-
 // `?GetBarLayout@ScrollElement@UI@@AEBAXAEAH000@Z` (0x18011a2d0) — declared on
 // the class, body still element_bodies_b5.cpp's door (fragment pass).
 
@@ -96,19 +84,19 @@ void ScrollElement::ComputeSize() {
     if ((flags & kFlagNeedsSizeCalc) == 0) return;
 
     if (_vertical != 0) {
-        _layoutWidth = SpriteWidth(&_trackStart, 0);
-        const int32_t h = SpriteHeight(&_trackStart, 0)
-                        + SpriteHeight(&_trackMiddle, 0)
-                        + SpriteHeight(&_trackEnd, 0);
+        _layoutWidth = _trackStart.Width();
+        const int32_t h = _trackStart.Height()
+                        + _trackMiddle.Height()
+                        + _trackEnd.Height();
         _flags = flags & ~kFlagNeedsSizeCalc;
         _layoutHeight = h;
         return;
     }
 
-    _layoutWidth = SpriteWidth(&_trackStart, 0)
-                 + SpriteWidth(&_trackMiddle, 0)
-                 + SpriteWidth(&_trackEnd, 0);
-    _layoutHeight = SpriteHeight(&_trackStart, 0);
+    _layoutWidth = _trackStart.Width()
+                 + _trackMiddle.Width()
+                 + _trackEnd.Width();
+    _layoutHeight = _trackStart.Height();
     _flags = flags & ~kFlagNeedsSizeCalc;
 }
 
@@ -166,7 +154,6 @@ void ScrollElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t b
 // colour and again before the bar colour, on the same register. Retail's.
 // ---------------------------------------------------------------------------
 void ScrollElement::Draw(SpriteContext& context, uint8_t alpha) const {
-    void* const ctx = &context;
     if (Element* border = static_cast<Element*>(_border))
         border->Draw(context, alpha);
 
@@ -181,27 +168,27 @@ void ScrollElement::Draw(SpriteContext& context, uint8_t alpha) const {
 
     int32_t ex0, ey0, ex1, ey1;    // the END slice's rectangle, common tail
     if (_vertical == 0) {
-        const int32_t w0 = SpriteWidth(&_trackStart, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackStart, left, top, left + w0, botY, trackColor);
-        const int32_t w2 = SpriteWidth(&_trackEnd, 0);
-        const int32_t w0b = SpriteWidth(&_trackStart, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left + w0b, top, rightX - w2, botY, trackColor);
-        ex0 = rightX - SpriteWidth(&_trackEnd, 0);
+        const int32_t w0 = _trackStart.Width();
+        context.AddSprite(_trackStart, left, top, left + w0, botY, trackColor);
+        const int32_t w2 = _trackEnd.Width();
+        const int32_t w0b = _trackStart.Width();
+        context.AddSprite(_trackMiddle, left + w0b, top, rightX - w2, botY, trackColor);
+        ex0 = rightX - _trackEnd.Width();
         ey0 = top;
         ex1 = rightX;
         ey1 = botY;
     } else {
-        const int32_t h0 = SpriteHeight(&_trackStart, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackStart, left, top, rightX, top + h0, trackColor);
-        const int32_t h2 = SpriteHeight(&_trackEnd, 0);
-        const int32_t h0b = SpriteHeight(&_trackStart, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackMiddle, left, top + h0b, rightX, botY - h2, trackColor);
+        const int32_t h0 = _trackStart.Height();
+        context.AddSprite(_trackStart, left, top, rightX, top + h0, trackColor);
+        const int32_t h2 = _trackEnd.Height();
+        const int32_t h0b = _trackStart.Height();
+        context.AddSprite(_trackMiddle, left, top + h0b, rightX, botY - h2, trackColor);
         ex0 = left;
-        ey0 = botY - SpriteHeight(&_trackEnd, 0);
+        ey0 = botY - _trackEnd.Height();
         ex1 = rightX;
         ey1 = botY;
     }
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(_trackEnd, ex0, ey0, ex1, ey1, trackColor);
+    context.AddSprite(_trackEnd, ex0, ey0, ex1, ey1, trackColor);
 
     raw = _barColor;
     if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
@@ -213,26 +200,28 @@ void ScrollElement::Draw(SpriteContext& context, uint8_t alpha) const {
     // The thumb uses the HOT set while the element is interactive and the
     // scroll actually has range.
     const bool hot = (_flags & kFlagInteractive) != 0 && _maxValue > 0.0f;
-    const SpriteCopy s0 = LoadSprite(hot ? _hotStart  : _thumbStart);
-    const SpriteCopy s1 = LoadSprite(hot ? _hotMiddle : _thumbMiddle);
-    const SpriteCopy s2 = LoadSprite(hot ? _hotEnd    : _thumbEnd);
+    // Each thumb slice is a 0x10-byte UI::Sprite copied to the stack (two
+    // qword loads), exactly as Draw does.
+    const UI::Sprite s0 = hot ? _hotStart  : _thumbStart;
+    const UI::Sprite s1 = hot ? _hotMiddle : _thumbMiddle;
+    const UI::Sprite s2 = hot ? _hotEnd    : _thumbEnd;
 
     if (_vertical == 0) {
-        const int32_t w0 = SpriteWidth(&s0, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s0), bx0, by0, bx0 + w0, by1, barColor);
-        const int32_t w2  = SpriteWidth(&s2, 0);
-        const int32_t w0b = SpriteWidth(&s0, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s1), bx0 + w0b, by0, bx1 - w2, by1, barColor);
-        bx0 = bx1 - SpriteWidth(&s2, 0);
+        const int32_t w0 = s0.Width();
+        context.AddSprite(s0, bx0, by0, bx0 + w0, by1, barColor);
+        const int32_t w2  = s2.Width();
+        const int32_t w0b = s0.Width();
+        context.AddSprite(s1, bx0 + w0b, by0, bx1 - w2, by1, barColor);
+        bx0 = bx1 - s2.Width();
     } else {
-        const int32_t h0 = SpriteHeight(&s0, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s0), bx0, by0, bx1, by0 + h0, barColor);
-        const int32_t h2  = SpriteHeight(&s2, 0);
-        const int32_t h0b = SpriteHeight(&s0, 0);
-        static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s1), bx0, by0 + h0b, bx1, by1 - h2, barColor);
-        by0 = by1 - SpriteHeight(&s2, 0);
+        const int32_t h0 = s0.Height();
+        context.AddSprite(s0, bx0, by0, bx1, by0 + h0, barColor);
+        const int32_t h2  = s2.Height();
+        const int32_t h0b = s0.Height();
+        context.AddSprite(s1, bx0, by0 + h0b, bx1, by1 - h2, barColor);
+        by0 = by1 - s2.Height();
     }
-    static_cast<UI::SpriteContext*>(ctx)->AddSprite(*reinterpret_cast<const UI::Sprite*>(&s2), bx0, by0, bx1, by1, barColor);
+    context.AddSprite(s2, bx0, by0, bx1, by1, barColor);
 }
 
 // ---------------------------------------------------------------------------

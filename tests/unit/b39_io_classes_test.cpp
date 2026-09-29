@@ -29,6 +29,7 @@
 #include <cstring>
 #include <new>
 #include <type_traits>
+#include <windows.h>   // INVALID_HANDLE_VALUE (B.4 R-IO: FileInfo::winHandle is a HANDLE)
 
 namespace {
 
@@ -413,7 +414,7 @@ UNIT_TEST(b39_io_filestream_and_binaryfilestream_ctor_stores) {
     CHECK_EQ(fs->_file.size, 0);
     CHECK_EQ(fs->_file.cursor, 0);
     CHECK_EQ(fs->_file.baseOffset, 0);
-    CHECK_EQ(fs->_file.winHandle, (int64_t)-1);
+    CHECK_EQ(fs->_file.winHandle, INVALID_HANDLE_VALUE);
     CHECK(fs->_file._name0.data == nullptr);
     CHECK(fs->_file._name1.data == nullptr);
     for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
@@ -580,7 +581,7 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     CHECK_EQ(pf->_file.handle, -1);
     CHECK_EQ(pf->_file.size, 0);
     CHECK_EQ(pf->_file.baseOffset, 0);
-    CHECK_EQ(pf->_file.winHandle, (int64_t)-1);
+    CHECK_EQ(pf->_file.winHandle, INVALID_HANDLE_VALUE);
     CHECK(pf->_file._name1.data == nullptr);
     for (int i = 0x78; i < 0x80; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0x90; i < 0x98; ++i) CHECK_EQ((int)mem[i], 0xCD);
