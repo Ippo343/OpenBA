@@ -66,7 +66,9 @@
 #include <new>
 
 #include "../../types/graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
-#include "../../types/io/Serializer.h"    // IO::ReaderWriter (B3X W0)
+#include "../../types/io/Serializer.h"    // IO::Serializer, IO::ReaderWriter (B3X W0)
+#include "../../types/io/Stream.h"        // B.4: IO::Stream (the slot's parameter)
+#include "../../types/video/CompanionData.h"  // B.4: Video::{Index,Vertex}BufferData::Serialize
 #include "../../types/object/External.h"  // RtObject_ExternalPtrSerialize_*
 #include "../collection/array_internal.h"
 
@@ -87,56 +89,41 @@ namespace {
 // RT_DATA_SLOT node readers that stood here are gone.
 // ---------------------------------------------------------------------------
 
-typedef uint32_t    (*U32ThisFn)(const void*);
-typedef const char* (*CStrThisFn)(const void*);
-typedef int32_t     (*I32ThisFn)(const void*);
-typedef int32_t     (*CompileFn)(void*, const void*);
-
 // (ENDGAME B.3.9 GFX: `EdgeMeshCtor`, the ??0EdgeMesh name door Construct /
 // Reconstruct called, is gone with the door; both placement-new the class.)
 
 // ---------------------------------------------------------------------------
-// THE SERIALIZE CONTEXT, read out of the shipped frame rather than assumed.
+// THE SERIALIZE CONTEXT IS AN `IO::Serializer`, read out of the shipped frame.
 //
 // ?Serialize@EdgeMesh@ builds a TWO-QWORD local at [RBP-0x18] and passes its
 // ADDRESS (`LEA RDX,[RBP-0x18]`) to every helper:
-//     [RBP-0x18] = RDX          the incoming IO::Stream& / Serializer&
-//     [RBP-0x10] = 0, then the Encoding* the factory hands back
-// and every helper dereferences it the same way — 0x180014520 does
-// `MOV RDI,RDX ; MOV RAX,[RDX]` (the stream) and later `MOV RCX,[RDI+8]`
-// (the encoding) before every virtual call. So the pair is a context struct,
-// not two separate arguments, and it is reproduced with the same layout so the
-// helpers this file calls by address see exactly the bytes retail gives them.
-// ---------------------------------------------------------------------------
-struct SerializeCtx {
-    void* stream;    // +0x00  the IO::Stream& this slot was handed
-    void* encoding;  // +0x08  the ReaderWriter the stream's Encoding factory produced
-};
-static_assert(sizeof(SerializeCtx) == 0x10, "the shipped context is two qwords");
-static_assert(offsetof(SerializeCtx, encoding) == 8, "encoding is the second qword");
-
-// The stream's mode discriminator, `[stream+0x8]`, tested three times in this
-// body (`CMP dword ptr [RDX+0x8],R8D` / `CMP dword ptr [RAX+0x8],0x0`).
-// ZERO selects the READ arm — it is the arm that RESIZES the two arrays before
-// streaming them, which only a reader does. Non-zero is the write arm.
-constexpr size_t kStreamModeOffset    = 0x08;
-constexpr size_t kStreamFactoryOffset = 0x10;
-
+//     [RBP-0x18] = RDX          the incoming IO::Stream&
+//     [RBP-0x10] = 0, then the ReaderWriter the stream's Encoding factory
+//                  hands back (`CMP [stream+8],0` -> +0x18 reader, else +0x20
+//                  writer; version 0 in R8D)
+// and the frame ends with `if (rw) rw->vt[0](rw, 1)`. B.4: that is
+// `IO::Serializer`'s ctor (0x1800b9960) and dtor (0x1800b99b0) inlined, and
+// the local is spelled as the class: `IO::Serializer ser(stream, 0)`. The
+// stream's mode is `ser._stream->_direction` (IO::kReading == 0 selects the
+// READ arm, the one that RESIZES the two arrays before streaming them).
+//
 // The two ReaderWriter slots this body calls, READ FROM RETAIL: `CALL
-// [RAX+0xa0]` is `SerializeInt` (one 4-byte value) and `CALL [RAX+0x28]` is
-// `SerializeFloatArray` (count, float*, 0). The profile build's table uses
-// DIFFERENT offsets for the same operations
-// (reference_encoding_vtable_offsets_differ_between_builds.md). B3X W0: both
-// are by-name calls on `IO::ReaderWriter` now (Serializer.h:486-505).
+// [RAX+0xa0]` is `SerializeInt` and `CALL [RAX+0x28]` is
+// `SerializeFloatArray` (count, float*, 0) -- by name on `IO::ReaderWriter`.
+// ---------------------------------------------------------------------------
 
-// The stream factory's vtable byte offsets — the two that produce an Encoding.
-//     CMP [ser+8],0 ; JNZ  -> CALL [RAX+0x20]     (index 4)
-//                      else -> CALL [RAX+0x18]     (index 3)
-constexpr size_t kFactoryMakeReadEncoding  = 0x18;
-constexpr size_t kFactoryMakeWriteEncoding = 0x20;
-
-// Video buffer slot: `MOV RCX,[this+X] ; MOV RAX,[RCX] ; CALL [RAX+0x30]`.
-constexpr size_t kVideoBufferSerialize = 0x30;
+// The eight Video-buffer calls: `MOV RCX,[this+X] ; MOV RAX,[RCX] ;
+// CALL [RAX+0x30]` -- the companion's slot 6, `Serialize`, on the buffer's
+// `platformData` (header+0x08, what PlatformConstruct wrote). That is
+// `?Serialize@IndexBuffer/VertexBuffer@Video@@` (0x1800f5a20) inlined.
+// LEFT: `platformData` is a `void*` in Buffers.h (video's header, not this
+// block's), so the one view of it as its companion is here.
+inline void SerializeBuffer(Video::IndexBuffer& buf, IO::Serializer& ser) {
+    static_cast<Video::IndexBufferData*>(buf.platformData)->Serialize(&ser);   // faithful: unguarded
+}
+inline void SerializeBuffer(Video::VertexBuffer& buf, IO::Serializer& ser) {
+    static_cast<Video::VertexBufferData*>(buf.platformData)->Serialize(&ser);  // faithful: unguarded
+}
 
 // ---------------------------------------------------------------------------
 // THE FOUR UNEXPORTED HELPERS THIS BODY CALLS, AND WHY BY ADDRESS.
@@ -179,24 +166,20 @@ constexpr size_t kVideoBufferSerialize = 0x30;
 // object/external_ptr_serialize.cpp (declared in types/object/External.h), and
 // RtGraphics_EdgeMesh_SerializeTriangleListArray (0x180014850,
 // graphics/closure_batch2b.cpp, declared in types/graphics/Mesh.h).
-// B.3.x bridge: `SerializeCtx` is this file's view of an rt::io::Serializer.
-inline void ExtBase(void* slot, SerializeCtx* ctx) {
+// LEFT: both take object's POD spellings (`RtObject::External**`,
+// `rt::io::Serializer*`, External.h -- not this block's header).
+inline void ExtBase(void* slot, IO::Serializer& ser) {
     RtObject_ExternalPtrSerialize_GraphicsMesh(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(ctx));
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));
 }
-inline void ExtMat(void* slot, SerializeCtx* ctx) {
+inline void ExtMat(void* slot, IO::Serializer& ser) {
     RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(ctx));
+        reinterpret_cast<RtObject::External**>(slot), reinterpret_cast<rt::io::Serializer*>(&ser));
 }
-// ENDGAME B.3.2 step 2 (callers) — the 0x1800136f0 ArrayResizeFn forwarder
-// that used to sit here is GONE: `self` here is a raw `void*` with no
-// EdgeMesh type header in runtime/types/ (the whole of this Serialize slot
-// walks it by byte offset), so there is no C++ element type to spell
-// `Collection::Array<T>` with. array.cpp's `kSpec_Tri18A4` row IS
-// trait-equivalent (a pure 0x18-byte copy, no init, no destroy) but names no
-// real type either — it is still the correct hand-derived row to bridge
-// through at the two call sites (`rtcoll::AsArray<&kSpec_Tri18A4>(...)`),
-// per B32_RULES: bridge at the use site when there is no struct to re-type.
+// 0x1800136f0, the TriangleList `Array<>::SetSize`, is called by its body
+// name `rtcoll::RtColl_ArraySetSize_1800136f0` (Collection.h), on the typed
+// `Array<GraphicsMesh::TriangleList>` members (B.4), as mesh.cpp's `Set` and
+// graphicsmesh_vtable.cpp do.
 
 }  // namespace
 
@@ -329,94 +312,58 @@ EdgeMesh::CompileResult EdgeMesh::Compile(const System::Filename& /*path*/) {
 // Reading `_size` again after the resize would be the same number by accident
 // on the write arm and a silent truncation on the read arm.
 bool EdgeMesh::Serialize(void* stream) {
-    uint8_t* const st = reinterpret_cast<uint8_t*>(stream);
-
-    SerializeCtx ctx;
-    ctx.stream   = stream;
-    ctx.encoding = nullptr;
-
-    const int32_t mode = *reinterpret_cast<const int32_t*>(st + kStreamModeOffset);
-    void* const factory = *reinterpret_cast<void**>(st + kStreamFactoryOffset);
-    {
-        void** const fvt = *reinterpret_cast<void***>(factory);
-        using MakeEncFn = void* (*)(void*, SerializeCtx*, int);
-        const size_t off = (mode == 0) ? kFactoryMakeReadEncoding
-                                       : kFactoryMakeWriteEncoding;
-        MakeEncFn make = *reinterpret_cast<MakeEncFn*>(
-            reinterpret_cast<uint8_t*>(fvt) + off);
-        ctx.encoding = make(factory, &ctx, 0);
-    }
+    // LEFT: the slot's parameter is `void*` in Mesh.h because the base
+    // `Object::External::Serialize` declares it so (object's header).
+    IO::Serializer ser(*static_cast<IO::Stream*>(stream), 0);
 
     // The +0x20 qword no getter names, then the four materials IN FIELD ORDER
     // (mask, skinMask, edge, skinEdge — see Mesh.h's note; the FIELD order and
     // the SetMaterials ARGUMENT order are two groupings of the same four).
-    ExtBase(&_reserved20,      &ctx);
-    ExtMat (&_maskMaterial,     &ctx);
-    ExtMat (&_skinMaskMaterial, &ctx);
-    ExtMat (&_edgeMaterial,     &ctx);
-    ExtMat (&_skinEdgeMaterial, &ctx);
+    ExtBase(&_reserved20,      ser);
+    ExtMat (&_maskMaterial,     ser);
+    ExtMat (&_skinMaskMaterial, ser);
+    ExtMat (&_edgeMaterial,     ser);
+    ExtMat (&_skinEdgeMaterial, ser);
 
-    // `ctx.encoding` is the ReaderWriter the factory made (see SerializeCtx).
-    IO::ReaderWriter* const rw =
-        static_cast<IO::ReaderWriter*>(ctx.encoding);   // B.3.x bridge
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     {   // step 5 — the triangle lists, +0x148 data / +0x150 size
         int32_t n = _triangleLists._size;
         rw->SerializeInt(n, nullptr);
-        if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
+        if (ser._stream->_direction == IO::kReading)
             // retail 0x1800136f0 — Array<GraphicsMesh::TriangleList>::SetSize(n).
-            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_triangleLists)->SetSize(n);
-        RtGraphics_EdgeMesh_SerializeTriangleListArray(&ctx, n, _triangleLists._data);
+            rtcoll::RtColl_ArraySetSize_1800136f0(&_triangleLists, n);
+        RtGraphics_EdgeMesh_SerializeTriangleListArray(ser, n, _triangleLists._data);
     }
     {   // step 6 — the edge lists, +0x158 data / +0x160 size
         int32_t n = _edgeLists._size;
         rw->SerializeInt(n, nullptr);
-        if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
-            // Same door, same spec: the edge-list array shares 0x1800136f0.
-            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_edgeLists)->SetSize(n);
-        RtGraphics_EdgeMesh_SerializeTriangleListArray(&ctx, n, _edgeLists._data);
+        if (ser._stream->_direction == IO::kReading)
+            // Same SetSize: the edge-list array shares 0x1800136f0.
+            rtcoll::RtColl_ArraySetSize_1800136f0(&_edgeLists, n);
+        RtGraphics_EdgeMesh_SerializeTriangleListArray(ser, n, _edgeLists._data);
     }
 
-    {   // step 7 — eight Video buffers, INDEX BEFORE VERTEX in each pair,
-        // retail's order. The eight offsets 0x70, 0x50, 0xb0, 0x90, 0xf0, 0xd0,
-        // 0x130, 0x110 are each header+0x08 — the `_deviceData` qword
-        // `PlatformConstruct` wrote — which is why they read 8 past the four
-        // pairs' bases. All four pairs are now NAMED by retail's own getters
-        // (Mesh.h's EdgeMesh banner), so the eight are spelled out.
-        void* const kBuffers[8] = {
-            _indexBuffer._deviceData,          // +0x68 + 8 = +0x70
-            _vertexBuffer._deviceData,         // +0x48 + 8 = +0x50
-            _skinIndexBuffer._deviceData,      // +0xa8 + 8 = +0xb0
-            _skinVertexBuffer._deviceData,     // +0x88 + 8 = +0x90
-            _edgeIndexBuffer._deviceData,      // +0xe8 + 8 = +0xf0
-            _edgeVertexBuffer._deviceData,     // +0xc8 + 8 = +0xd0
-            _edgeSkinIndexBuffer._deviceData,  // +0x128 + 8 = +0x130
-            _edgeSkinVertexBuffer._deviceData, // +0x108 + 8 = +0x110
-        };
-        using BufSerializeFn = void (*)(void*, SerializeCtx*);
-        for (size_t i = 0; i < 8; ++i) {
-            void* const buf = kBuffers[i];                 // faithful: unguarded
-            void** const bvt = *reinterpret_cast<void***>(buf);
-            BufSerializeFn f = *reinterpret_cast<BufSerializeFn*>(
-                reinterpret_cast<uint8_t*>(bvt) + kVideoBufferSerialize);
-            f(buf, &ctx);
-        }
-    }
+    // step 7 — eight Video buffers, INDEX BEFORE VERTEX in each pair, retail's
+    // order (+0x70, +0x50, +0xb0, +0x90, +0xf0, +0xd0, +0x130, +0x110: each
+    // pair's `platformData`).
+    SerializeBuffer(_indexBuffer,          ser);
+    SerializeBuffer(_vertexBuffer,         ser);
+    SerializeBuffer(_skinIndexBuffer,      ser);
+    SerializeBuffer(_skinVertexBuffer,     ser);
+    SerializeBuffer(_edgeIndexBuffer,      ser);
+    SerializeBuffer(_edgeVertexBuffer,     ser);
+    SerializeBuffer(_edgeSkinIndexBuffer,  ser);
+    SerializeBuffer(_edgeSkinVertexBuffer, ser);
 
     // step 8 — the bounds box, as two runs of THREE floats. Retail passes the
     // literal 3 in EDX (`LEA EDX,[R9+0x3]` with R9 already zeroed), and the two
     // runs are +0x168 and +0x174, not one run of six: the Box is {min, max} and
     // the encoding is told so.
-    rw->SerializeFloatArray(3, reinterpret_cast<float*>(&_aabb.min), nullptr);
-    rw->SerializeFloatArray(3, reinterpret_cast<float*>(&_aabb.max), nullptr);
+    rw->SerializeFloatArray(3, &_aabb.min.x, nullptr);
+    rw->SerializeFloatArray(3, &_aabb.max.x, nullptr);
 
-    // step 9 — `if (rw) rw->vt[0](rw, 1)`. Flag 1 is destroy AND free; the
-    // ReaderWriter the factory made in step 2 is owned by this frame. By name
-    // since B3X W0 (the ReaderWriter's own root, `IO::ReaderWriter`).
-    if (ctx.encoding) {
-        delete static_cast<IO::ReaderWriter*>(ctx.encoding);   // B.3.x bridge
-    }
-
+    // step 9 — `if (rw) rw->vt[0](rw, 1)` is `~Serializer` at scope exit.
     return true;   // MOV AL,1 — no failure path exists in the shipped body.
 }
 

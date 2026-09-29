@@ -62,6 +62,8 @@
 #include "Camera.h"                         // Graphics::Camera (by value)
 #include "../object/Internal.h"             // B.3.9: InternalMemFree (the concrete slot 0s)
 
+namespace Video { class ImageBuffer; class RenderBuffer; }   // B.4: the owned targets
+
 namespace Graphics {
 
 // ============================================================================
@@ -266,11 +268,9 @@ static_assert(offsetof(AmbientLight, _padD4)     == 0xd4, "AmbientLight tail pad
 //   +0x160 void* _boundImage             bound into Context+0x50 by slot-10
 //                                        Draw; ctor zeroes it
 //
-// The three owned pointers are spelled `void*` on purpose: `Video::ImageBuffer`
-// and `Video::RenderBuffer` are block C's and block D's classes and this block
-// forward-declares nothing it cannot take by reference. `lights_vtable.cpp`
-// reaches them through their own vtable slot 0 / their exported members and
-// keeps doing so.
+// B.4: the three owned pointers carry their classes, forward-declared
+// (`Video::ImageBuffer*` / `Video::RenderBuffer*`); `lights_vtable.cpp` reaches
+// them through their own vtable slot 0 / their exported members.
 // ============================================================================
 // ENDGAME B.3 step 9 (block GFX, B39_RULES D1): CONCRETE, like AmbientLight
 // above -- real ctor (retail's ??0 body), own vector slot 0, protected
@@ -345,10 +345,11 @@ public:
     float           _spotScalarA;    // +0x130  NOT written by the default ctor
     float           _spotScalarB;    // +0x134  NOT written by the default ctor
     Math::Vector4   _colour;         // +0x138  ctor 0,0,0,0
-    void*           _shadowMap;      // +0x148  Video::ImageBuffer*, owned
-    void*           _shadowDepth;    // +0x150  Video::ImageBuffer*, owned
-    void*           _shadowTarget;   // +0x158  Video::RenderBuffer*, owned;
-                                     //         NOT zeroed by the ctor
+    // B.4: the three owned pointers carry their classes (pointers: no ctor /
+    // dtor step of their own, the bytes and the ctor's stores are unchanged).
+    Video::ImageBuffer*  _shadowMap;     // +0x148  owned
+    Video::ImageBuffer*  _shadowDepth;   // +0x150  owned
+    Video::RenderBuffer* _shadowTarget;  // +0x158  owned; NOT zeroed by the ctor
     void*           _boundImage;     // +0x160
 };
 

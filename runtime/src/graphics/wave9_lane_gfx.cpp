@@ -42,21 +42,13 @@
 #include "../../types/graphics/Scene.h"
 #include "../../types/object/TypeInfo.h"          // Object::Base::IsDerivedFrom
 #include "../../types/system/MemoryAllocator.h"
+#include "../../types/video/ImageBuffer.h"     // B.4: Video::ImageBuffer::_kind
+#include "../../types/video/VideoProgram.h"    // B.4: the selected pass's three programs
+#include "../../types/video/ShaderProgram.h"   // B.4: ShaderProgram::_byteCode
 
-using RtGraphics::MaterialInstance;
-using RtGraphics::Renderer;
-using RtGraphics::RendererDrawGroup;
-using RtGraphics::RendererDrawItem;
+using Graphics::RendererDrawItem;
 
 namespace {
-
-// ---------------------------------------------------------------------------
-// Object::Base::IsDerivedFrom — ?IsDerivedFrom@Base@Object@@QEBA_NI@Z, retail
-// 0x1800c0390, the member (B3R). Unguarded on `obj`, as the door's body was.
-// ---------------------------------------------------------------------------
-bool CallIsDerivedFrom(const void* obj, uint32_t typeId) {
-    return reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(typeId);   // B.3.x bridge
-}
 
 // ---------------------------------------------------------------------------
 // The type id RenderTextures tests against.
@@ -210,18 +202,9 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
 // grep for `didWork` found this one declaration and no consumer. It was a
 // warning, not a measurement, so it is deleted rather than carried into the
 // member (the block brief's "dead scaffolding nobody reads" arm).
-void RtGraphics_MaterialInstance_RenderTextures(const MaterialInstance* self,
-                                                void* renderer,
-                                                const void* scene,
-                                                const void* camera,
-                                                int arg) {
-    reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
-        ->Graphics::MaterialInstance::RenderTextures(
-            *reinterpret_cast<Graphics::Renderer*>(renderer),      // B.3.5 bridge
-            *reinterpret_cast<const Graphics::Scene*>(scene),      // B.3.5 bridge
-            *reinterpret_cast<const Graphics::Camera*>(camera),    // B.3.5 bridge
-            arg);
-}
+//
+// B.4: the forwarding door is gone; its one caller, AddDrawItem below, calls the
+// member.
 
 // ============================================================================
 // void Graphics::Renderer::AddDrawItem(const Geometry*, const MaterialInstance*,
@@ -319,17 +302,20 @@ void MaterialInstance::RenderTextures(Renderer& renderer, const Scene& scene,
     const uint32_t typeId = GeneratedImageBufferTypeId();
 
     for (int32_t i = 0; i < _textures._size; ++i) {
-        void* obj = _textures._data[i].image;
+        const Video::ImageBuffer* const obj = _textures._data[i].image;
 
-        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 5)
+        if (obj->_kind != 5)     // +0x2c
             continue;
-        if (!CallIsDerivedFrom(obj, typeId))
+        // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z (0x1800c0390), the member.
+        // Unguarded on `obj`, as retail is.
+        if (!obj->IsDerivedFrom(typeId))
             continue;
         if (obj == nullptr)      // retail's order: after the deref above
             continue;
 
-        // Slot 11 (0x58/8) — a virtual call on the real class.
-        reinterpret_cast<const GeneratedImageBuffer*>(obj)          // B.3.5 bridge
+        // Slot 11 (0x58/8) — a virtual call on the real class; the derivation
+        // test above licenses the downcast.
+        static_cast<const GeneratedImageBuffer*>(obj)
             ->Render(&renderer, &scene, &camera, arg);
     }
 }
@@ -338,65 +324,55 @@ void MaterialInstance::RenderTextures(Renderer& renderer, const Scene& scene,
 // ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z
 // retail 0x1801057b0 -- ENDGAME B.3.5 block GC. The argument-slot count, the three
 // silent drops and RULE B5-13's two unwritten pads are in the door's banner, and
-// the record is STILL not value-initialised for exactly that reason.//
-// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
-// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
-// indexes are still spelled `RtGraphics::*` through one bridge local, because
-// those PODs have live users in files outside this block and B4b-1 keeps a POD
-// until its LAST user converts. Camera.h cross-asserts every one of their offsets
-// against the real classes', so the two descriptions cannot drift, and renaming
-// ~200 field accesses in a body this size is a second change, not this one.
+// the record is STILL not value-initialised for exactly that reason.
+//
+// B.4: on the real classes' named fields -- the Renderer's `_drawGroups` /
+// `_currentDrawGroup` / `_sceneGroups`, the group's `_materialTypeFlags` /
+// `_shader`, the instance's `_shaderClass` / `_material`, the Material's
+// `_passes` and the selected `Video::VideoProgram`'s three programs.
 // ---------------------------------------------------------------------------
-void Renderer::AddDrawItem(const Geometry* geometryIn, const MaterialInstance* materialIn,
+void Renderer::AddDrawItem(const Geometry* geometry, const MaterialInstance* material,
                            uint16_t arg4, uint16_t arg5, float arg6, float arg7, int arg8,
                            const void* arg9, uint32_t arg10) {
-    RtGraphics::Renderer* const self =
-        reinterpret_cast<RtGraphics::Renderer*>(this);              // B.3.5 bridge
-    const void* const geometry = geometryIn;
-    const RtGraphics::MaterialInstance* const material =
-        reinterpret_cast<const RtGraphics::MaterialInstance*>(materialIn);  // B.3.5 bridge
     // MOVSXD, both of them — Ghidra's C prints these as zero extensions and
     // that misreading produced three Wave 6 defects including a crash
     // (reference_ghidra_c_output_vs_disassembly.md).
-    const int64_t groupIdx = static_cast<int32_t>(self->currentDrawGroup);   // +0x34
-    const int64_t pass     = static_cast<int32_t>(material->shaderClass);    // +0x20
+    const int64_t groupIdx = static_cast<int32_t>(_currentDrawGroup);          // +0x34
+    const int64_t pass     = static_cast<int32_t>(material->_shaderClass);     // +0x20
 
-    RtGraphics::RendererDrawGroup* group = reinterpret_cast<RtGraphics::RendererDrawGroup*>(
-        reinterpret_cast<uint8_t*>(self->drawGroups._data) + groupIdx * 0x1f0);
+    RendererDrawGroup* const group = _drawGroups._data + groupIdx;
 
     // (a) BT EAX,R11D — 32-bit BT masks the bit index to 5 bits.
-    if (((group->passMask >> (static_cast<uint32_t>(pass) & 31u)) & 1u) == 0u) {
+    if (((group->_materialTypeFlags >> (static_cast<uint32_t>(pass) & 31u)) & 1u) == 0u) {
         return;
     }
 
-    const int64_t  shader = static_cast<int32_t>(group->shader);              // +0x1b8
-    const uint8_t* mtl    = static_cast<const uint8_t*>(material->material);  // +0x28
+    const int64_t   shader = static_cast<int32_t>(group->_shader);            // +0x1b8
+    const Material* mtl    = material->_material.Get();                       // +0x28
 
     // (b)
     if (static_cast<int32_t>(shader) < 0) {  return; }
-    if (static_cast<int32_t>(shader) >= *reinterpret_cast<const int32_t*>(mtl + 0x30)) {
+    if (static_cast<int32_t>(shader) >= mtl->_passes._size) {                 // +0x30
         return;
     }
 
-    // (c) Material+0x28 is the VideoProgram* array MaterialInstance::Setup also
-    // hands to Video::VideoProgram::SetupShaders, so these are VideoProgram*.
-    const uint8_t* const* programs =
-        *reinterpret_cast<const uint8_t* const* const*>(mtl + 0x28);
-    const uint8_t* prog = programs[shader];
+    // (c) Material+0x28 is the VideoProgram array MaterialInstance::Setup also
+    // hands to Video::VideoProgram::SetupShaders.
+    const Video::VideoProgram* const prog = mtl->_passes._data[shader].Get();
 
-    if (*reinterpret_cast<const void* const*>(prog + 0x20) == nullptr) {  return; }
-    const uint8_t* sub28 = *reinterpret_cast<const uint8_t* const*>(prog + 0x28);
+    if (prog->_vertexLayout.Get() == nullptr) {  return; }                    // +0x20
+    const Video::VertexProgram* const sub28 = prog->_vertexProgram.Get();    // +0x28
     if (sub28 == nullptr) {  return; }
-    if (*reinterpret_cast<const int32_t*>(sub28 + 0x48) <= 0) {  return; }
-    const uint8_t* sub30 = *reinterpret_cast<const uint8_t* const*>(prog + 0x30);
+    if (sub28->_byteCode._size <= 0) {  return; }                             // +0x48
+    const Video::PixelProgram* const sub30 = prog->_pixelProgram.Get();      // +0x30
     if (sub30 == nullptr) {  return; }
-    if (*reinterpret_cast<const int32_t*>(sub30 + 0x48) <= 0) {  return; }
+    if (sub30->_byteCode._size <= 0) {  return; }
 
     // NOT value-initialised, deliberately: retail's record is a raw stack frame
     // and +0x24 / +0x34 are never stored to before the helper copies all seven
     // qwords out of it. Zeroing them here would be a "tidier" port that no
     // longer reproduces what lands in the array.
-    RtGraphics::RendererDrawItem rec;
+    RendererDrawItem rec;
 
     // 0x18010584d: 0x8000 unless the 7th argument is exactly 1.0f. The compare
     // is UCOMISS + JP/JNZ, so a NaN takes the not-equal path — which `!=` in
@@ -404,38 +380,35 @@ void Renderer::AddDrawItem(const Geometry* geometryIn, const MaterialInstance* m
     uint16_t flags = (arg7 == 1.0f) ? 0u : 0x8000u;
     flags = static_cast<uint16_t>(flags | arg4);   // OR AX,R9W — a 16-bit OR
 
-    rec.geometry = geometry;                          // [RSP+0x30]
-    rec.material = mtl;                               // [RSP+0x38]
-    rec.instance = material;                          // [RSP+0x40]
-    rec.flags    = flags;                             // [RSP+0x48]
-    rec.arg5     = arg5;                              // [RSP+0x4a]
-    rec.sortKey  = arg6;                              // [RSP+0x4c]
-    rec.arg8     = arg8;                              // [RSP+0x50]
-    rec.userData = arg9;                              // [RSP+0x58]
-    rec.arg10    = arg10;                             // [RSP+0x60]
+    rec._geometry = geometry;                         // [RSP+0x30]
+    rec._material = mtl;                              // [RSP+0x38]
+    rec._instance = material;                         // [RSP+0x40]
+    rec._flags    = flags;                            // [RSP+0x48]
+    rec._arg5     = arg5;                             // [RSP+0x4a]
+    rec._sortKey  = arg6;                             // [RSP+0x4c]
+    rec._arg8     = arg8;                             // [RSP+0x50]
+    rec._userData = arg9;                             // [RSP+0x58]
+    rec._arg10    = arg10;                            // [RSP+0x60]
 
     // `group + 0x1c0 + pass*0x10` (LEA RCX,[R11+0x1c]; SHL RCX,4; ADD RCX,R10),
-    // written as raw byte arithmetic ON PURPOSE. `&group->items[pass]` would be
-    // the same address, but `items` is declared [3] and retail applies NO bound
+    // written as raw byte arithmetic ON PURPOSE. `&group->_items[pass]` would be
+    // the same address, but `_items` is declared [3] and retail applies NO bound
     // check — spelling it as an array index would let the compiler assume
-    // pass < 3 and is undefined behaviour on the path retail simply takes.
-    Collection::Array<RtGraphics::RendererDrawItem>* list =
-        reinterpret_cast<Collection::Array<RtGraphics::RendererDrawItem>*>(
+    // pass < 3 and is undefined behaviour on the path retail simply takes. LEFT.
+    Collection::Array<RendererDrawItem>* list =
+        reinterpret_cast<Collection::Array<RendererDrawItem>*>(
             reinterpret_cast<uint8_t*>(group) + 0x1c0 + pass * 0x10);
     const int32_t oldSize = list->_size;
     DrawItemArrayResize(list, oldSize + 1, &rec);
 
-    // The render-to-texture pre-pass. `hasRenderedTexture` is +0x25, the byte
-    // BuildParameters sets when any bound texture's +0x2c == 5.
-    if (material->hasRenderedTexture != 0) {
-        const uint8_t* entries = reinterpret_cast<const uint8_t*>(self->scenes._data);
-        const int64_t  off     = static_cast<int32_t>(self->currentScene) * 0x110;  // MOVSXD
-        RtGraphics_MaterialInstance_RenderTextures(
-            material,
-            self,
-            *reinterpret_cast<const void* const*>(entries + off),   // entry.scene
-            entries + off + 0x10,                                   // &entry.camera
-            self->contextSerial);                                   // +0x44
+    // The render-to-texture pre-pass. `_hasRenderedTexture` is +0x25, the byte
+    // BuildParameters sets when any bound texture's +0x2c == 5. The entry's
+    // scene and its Camera (+0x10); the Renderer's `_frameIndex` (+0x44).
+    if (material->_hasRenderedTexture != 0) {
+        const RendererSceneEntry& e =
+            _sceneGroups._data[static_cast<int64_t>(_currentSceneGroup)];   // MOVSXD
+        material->Graphics::MaterialInstance::RenderTextures(
+            *this, *e._scene, e._camera, _frameIndex);
     }
 }
 

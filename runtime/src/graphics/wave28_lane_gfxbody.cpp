@@ -49,14 +49,17 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 
 #include "../../types/graphics/Animation.h"        // Graphics::Animation -- block GC
 #include "../../types/system/Value.h"             // System::Time, ditto
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
+#include "../../types/graphics/AnimationGroup.h"     // B.4: AnimationGroup::GetAnimation
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/ShaderProgram.h"   // ENDGAME B.3.5 caller batch: Video::ShaderProgram
+#include "../../types/video/VideoProgram.h"    // B.4: Video::VideoProgram::_pixelProgram
 #include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../collection/array_internal.h"
 #include "../system/string.h"
@@ -70,14 +73,8 @@
 
 namespace rtgfxbody28 {
 
-using RtGraphics::AnimationClipPrefix;
-using RtGraphics::Camera;
 using RtGraphics::MaterialConstant;
-using RtGraphics::MaterialInstance;
 using RtGraphics::MaterialTexture;
-using RtGraphics::Renderer;
-using RtGraphics::RendererDrawGroup;
-using RtGraphics::RendererDrawItem;
 using RtSystem::String;
 
 // ---------------------------------------------------------------------------
@@ -159,15 +156,13 @@ namespace {
 // unsigned widening and that has cost this project real defects
 // (reference_ghidra_c_output_vs_disassembly.md). A negative pass index indexes
 // BACKWARD in retail and does so here too.
-inline void* MaterialPass(const void* material, int32_t pass) {
-    uint8_t* const passes =
-        *reinterpret_cast<uint8_t* const*>(static_cast<const uint8_t*>(material) + 0x28);
-    return *reinterpret_cast<void**>(passes + static_cast<int64_t>(pass) * 8);
-}
-
-// `MOV RCX,[RCX+0x30]` — the pass object's Video::ShaderProgram.
-inline void* PassShaderProgram(const void* material, int32_t pass) {
-    return *reinterpret_cast<void**>(static_cast<uint8_t*>(MaterialPass(material, pass)) + 0x30);
+//
+// B.4: `Material::_passes` (+0x28) is `Array<ExternalPtr<Video::VideoProgram>>`
+// and `MOV RCX,[RCX+0x30]` is the pass's `_pixelProgram` -- the pass object's
+// pixel `Video::ShaderProgram`.
+inline const Video::PixelProgram* PassShaderProgram(const Graphics::Material* material,
+                                                    int32_t pass) {
+    return material->_passes._data[pass].Get()->_pixelProgram.Get();
 }
 
 }  // namespace
@@ -261,17 +256,30 @@ bool StringEqualsInline(const char* a, const char* b) {
     return d == 0;
 }
 
-// The shared loop. `stride` is the literal in the `ADD R11,<n>` at the bottom.
-int32_t FindByName(const uint8_t* data, int32_t size, const String* query, int32_t stride) {
+// Each element's leading `System::String` data pointer (+0x00).
+inline const char* ElementName(const MaterialTexture& t) { return t.name; }
+inline const char* ElementName(const MaterialConstant& c) {
+    // MaterialConstant keeps +0x00 as eight raw bytes (Material.h): a `char*`
+    // member would raise the element's alignment to 8 and with it the align
+    // argument its array hands the allocator. The bytes ARE the pointer.
+    const char* name;
+    std::memcpy(&name, c._head, sizeof name);
+    return name;
+}
+
+// The shared loop. The stride is the element's size (`ADD R11,<n>` at the
+// bottom: 0x18 for a constant, 0x10 for a texture).
+template <class Element>
+int32_t FindByName(const Element* data, int32_t size, const String* query) {
     const int64_t n = size;                       // MOVSXD RSI,<size>
     if (n <= 0) return -1;                        // TEST RSI,RSI / JLE  -> OR EAX,-1
 
     const char* const b = query->data;            // MOV R9,[RDX]
-    const uint8_t* p = data;                      // MOV R11,[RCX+0x40 / 0x50]
+    const Element* p = data;                      // MOV R11,[RCX+0x40 / 0x50]
     for (int64_t i = 0; i < n; ++i) {
-        if (StringEqualsInline(*reinterpret_cast<const char* const*>(p), b))
+        if (StringEqualsInline(ElementName(*p), b))
             return static_cast<int32_t>(i);       // MOV EAX,EDI
-        p += stride;
+        ++p;
     }
     return -1;                                    // OR EAX,0xffffffff
 }
@@ -358,16 +366,9 @@ int32_t FindByName(const uint8_t* data, int32_t size, const String* query, int32
 // ----------------------------------------------------------------------------
 namespace {
 
-// One entry of the clip's event array, stride 0x10.
-//   +0x00  int32  the FRAME the event fires on (`MOV EAX,[R14+RDX]`)
-//   +0x08  Graphics::AnimationEvent*         (`MOV RCX,[R14+RDX+0x8]`)
-// +0x04 has no reader in this body and is left an explicit hole.
-struct AnimationEventEntry {
-    int32_t  frame;
-    int32_t  _unpinned_04;
-    void*    event;
-};
-static_assert(sizeof(AnimationEventEntry) == 0x10, "clip event entry stride is 0x10");
+// One entry of the clip's event array, stride 0x10, is `Animation::Event`
+// (Animation.h): `_frame` (+0x00, `MOV EAX,[R14+RDX]`) and `_event`
+// (+0x08, `MOV RCX,[R14+RDX+0x8]`).
 
 }  // namespace
 
@@ -436,38 +437,15 @@ static_assert(sizeof(AnimationEventEntry) == 0x10, "clip event entry stride is 0
 // ----------------------------------------------------------------------------
 namespace {
 
-// The eh-vector ctor at 0x1800801e8 runs 0x180062950 over three 0x10-byte
-// elements, and 0x180062950 is five instructions:
+// The eh-vector ctor at 0x1800801e8 runs 0x180062950 over the three 0x10-byte
+// item arrays, and 0x180062950 is five instructions:
 //     XOR EAX,EAX / MOV [RCX],RAX / MOV [RCX+8],RAX / MOV RAX,RCX / RET
-// i.e. sixteen zero bytes. Reproduced rather than called, because it is smaller
-// than the door would be. THE DESTROY SIDE IS NOT: 0x18001b960 is a five-byte
-// JMP thunk to 0x18001c650, which runtime/src/collection/array_destroy.cpp
-// already identifies as a twelfth copy of lane Q's J1 body — so `ArrayDtorImpl`
-// IS that destructor and is called rather than re-written
-// (reference_grep_for_the_port_before_writing_it.md).
-inline void DrawItemArraysInit(uint8_t* base) {
-    for (int i = 0; i < 3; ++i) {
-        reinterpret_cast<uint64_t*>(base + i * 0x10)[0] = 0;
-        reinterpret_cast<uint64_t*>(base + i * 0x10)[1] = 0;
-    }
-}
-inline void DrawItemArraysDestroy(uint8_t* base) {
-    // The CRT iterator destroys BACKWARD (element count-1 first). Preserved:
-    // the frees reach the allocator in that order and the allocator is shared
-    // state.
-    //
-    // ENDGAME B.3.2 step 2 (callers) — `base` is `temp + 0x1c0`, exactly where
-    // `RendererDrawGroup::items[3]` (Camera.h) sits, and `RendererDrawItem` is
-    // trivially destructible (Camera.h — a plain POD), so
-    // `Collection::Array<RendererDrawItem>::~Array` is the trait-derived body
-    // and is bit-for-bit `rtcoll::ArrayDtorImpl` on each element (spec->destroy
-    // is null either way). Calling the member destructor on the reinterpreted
-    // slots names the container rather than the free function underneath it.
-    using ItemArray = Collection::Array<RendererDrawItem>;
-    ItemArray* const items = reinterpret_cast<ItemArray*>(base);
-    for (int i = 2; i >= 0; --i)
-        items[i].~Array();
-}
+// i.e. `Collection::Array`'s default constructor. The destroy side, the
+// eh-vector iterator at 0x18007ec98, runs 0x18001b960 -- a five-byte JMP thunk
+// to 0x18001c650, a twelfth copy of lane Q's J1 body, i.e. `~Array` -- over
+// the three BACKWARD. B.4: both are the stack `RendererDrawGroup`'s own
+// implicit constructor and destructor in `BeginDrawGroup` (C++ destroys an
+// array member's elements last-first, as the iterator does).
 
 }  // namespace
 
@@ -540,44 +518,23 @@ inline void DrawItemArraysDestroy(uint8_t* base) {
 // ----------------------------------------------------------------------------
 namespace {
 
-// Math::Transform — quaternion then Vector3, 0x1c bytes. Already asserted in
-// wave23_lane_gfxbody.cpp; restated locally rather than reached across.
-struct Transform7 { float q[4]; float v[3]; };
-static_assert(sizeof(Transform7) == 0x1c, "Math::Transform is 0x1c bytes");
-
-// RCX = clip, RDX = hidden return slot, R8 = const Time&, R9 = const Time&.
-using GetRootPoseFn = Transform7* (*)(const void* clip, Transform7* ret,
-                                      const int64_t* at, const int64_t* delta);
-// RCX = this quat, RDX = hidden return slot, R8 = const Quaternion&,
-// R9 = const Scalar& (a single float BY REFERENCE, not by value).
-using QuatLerpFn = float* (*)(const float* self, float* ret,
-                              const float* other, const float* t);
-
-// `MOV R15,[0x1801fe7b0]` — ?_singleton@AnimationManager@Graphics@@ (ord 4799),
-// a DATA export. Read through the mint's own slot rather than by address.
-// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
-inline uint8_t* AnimationGroups() {
-    uint8_t* const mgr = reinterpret_cast<uint8_t*>(Graphics::AnimationManager::_singleton);
-    return *reinterpret_cast<uint8_t**>(mgr);        // AnimationManager::_groupData
-}
-
-// The static-pose lookup both AnimationState bodies share.
-// group stride 0x30, entry stride 0x48; the Vector3 lives at entry + 0x18.
-inline const float* StaticRootVector(int32_t handle) {
-    uint8_t* const groups = AnimationGroups();
+// The static-pose lookup both AnimationState bodies share. `MOV R15,
+// [0x1801fe7b0]` is ?_singleton@AnimationManager@Graphics@@ (the class static);
+// its `_instances` (stride 0x30) indexed by `(handle >> 8) & 0xff` -- an
+// ARITHMETIC shift of the sign-extended dword -- then that instance's `_states`
+// (stride 0x48) by `handle & 0xff`, and the state's `_rootOffset` (+0x18).
+inline const Math::Vector3& StaticRootVector(int32_t handle) {
+    const Graphics::AnimationManager* const mgr = Graphics::AnimationManager::_singleton;
     const int32_t gi = static_cast<int32_t>((static_cast<int64_t>(handle) >> 8) & 0xff);
     const int32_t si = static_cast<int32_t>(static_cast<uint8_t>(handle));
-    uint8_t* const entries =
-        *reinterpret_cast<uint8_t**>(groups + static_cast<int64_t>(gi) * 0x30 + 0x20);
-    return reinterpret_cast<const float*>(entries + static_cast<int64_t>(si) * 0x48 + 0x18);
+    return mgr->_instances._data[gi]._states._data[si]._rootOffset;
 }
 
 // `MOV RAX,[layer+0x00] / MOVSXD RCX,[layer+0x08] / IMUL RCX,RCX,0x70 /
-//  ADD RCX,[RAX+0x20]` — the clip record the layer plays.
-inline const void* LayerClip(const RtGraphics::AnimationLayer* L) {
-    uint8_t* const clips = *reinterpret_cast<uint8_t**>(
-        static_cast<uint8_t*>(L->group) + 0x20);
-    return clips + static_cast<int64_t>(L->clipIndex) * 0x70;
+//  ADD RCX,[RAX+0x20]` — the clip record the layer plays:
+// `AnimationGroup::GetAnimation`, inline in AnimationGroup.h.
+inline const Graphics::Animation& LayerClip(const Graphics::AnimationState::Layer* L) {
+    return L->_group->GetAnimation(L->_clipIndex);
 }
 
 }  // namespace
@@ -638,18 +595,20 @@ inline const void* LayerClip(const RtGraphics::AnimationLayer* L) {
 // `+0x61..+0x63` and `+0xd5..+0xd7` (sizeof is 0xd8; the last store is the byte
 // at +0xd4). Returns `this` (`MOV RAX,RCX` at 0x180017e08).
 // ----------------------------------------------------------------------------
-extern "C" void* RtGraphics_Camera_Assign(void* self, const void* src) {
+//
+// B.4: on the named fields -- the frustum's 24 floats (+0x00..+0x5f) and its
+// `isOrthographic` byte (+0x60), the Transform3 and projection (+0x64..+0xd3)
+// and the `_zUp` byte (+0xd4); the same bytes, the same holes.
+extern "C" Graphics::Camera* RtGraphics_Camera_Assign(Graphics::Camera* self,
+                                                     const Graphics::Camera* src) {
     Attend("Camera::operator=", g_cameraAssignCalls);
 
-    uint32_t* const       d = static_cast<uint32_t*>(self);
-    const uint32_t* const s = static_cast<const uint32_t*>(src);
-
-    for (int i = 0; i < 0x60 / 4; ++i) d[i] = s[i];          // +0x00..+0x5f
-    static_cast<uint8_t*>(self)[0x60] =
-        static_cast<const uint8_t*>(src)[0x60];              // +0x60, a BYTE
-    for (int i = 0x64 / 4; i <= 0xd0 / 4; ++i) d[i] = s[i];  // +0x64..+0xd3
-    static_cast<uint8_t*>(self)[0xd4] =
-        static_cast<const uint8_t*>(src)[0xd4];              // +0xd4, a BYTE
+    for (int k = 0; k < 6; ++k)                                      // +0x00..+0x5f
+        self->_frustum.planes[k] = src->_frustum.planes[k];
+    self->_frustum.isOrthographic = src->_frustum.isOrthographic;   // +0x60, a BYTE
+    self->_cameraToWorld = src->_cameraToWorld;                      // +0x64..+0x93
+    self->_projection    = src->_projection;                         // +0x94..+0xd3
+    self->_zUp = src->_zUp;                                          // +0xd4, a BYTE
     return self;
 }
 
@@ -718,20 +677,20 @@ namespace Graphics {
 // `ret` that the door pointer used to be handed, from the member's prvalue. That
 // is line for line what `RtVideo_ShaderProgram_GetConstantName` does, minus the
 // indirection, so the refcount arithmetic is unchanged. `ShaderGetNameFn` is gone.
+// LEFT: `ret` is the `RtSystem::String` slot the member's declaration names
+// (Material.h), constructed in place as the `System::String` it holds.
 RtSystem::String* Material::GetConstantName(RtSystem::String* ret,
                                             int32_t pass, int32_t index) const {
-    new (ret) System::String(                                       // B.3.5 bridge
-        reinterpret_cast<const ::Video::ShaderProgram*>(
-            rtgfxbody28::PassShaderProgram(this, pass))
+    new (ret) System::String(
+        rtgfxbody28::PassShaderProgram(this, pass)
             ->::Video::ShaderProgram::GetConstantName(index));
     return ret;                                   // MOV RAX,RBX
 }
 
 RtSystem::String* Material::GetTextureName(RtSystem::String* ret,
                                            int32_t pass, int32_t index) const {
-    new (ret) System::String(                                       // B.3.5 bridge
-        reinterpret_cast<const ::Video::ShaderProgram*>(
-            rtgfxbody28::PassShaderProgram(this, pass))
+    new (ret) System::String(
+        rtgfxbody28::PassShaderProgram(this, pass)
             ->::Video::ShaderProgram::GetTextureName(index));
     return ret;
 }
@@ -743,8 +702,8 @@ RtSystem::String* Material::GetTextureName(RtSystem::String* ret,
 // A linear search of the instance's own constant / texture array for an element
 // whose leading `System::String` equals the argument, returning the index or -1.
 // The two differ in THREE fields and nothing else — the array, its count and the
-// element stride — and `Material.h`'s real class names all of them, so the
-// stride literals below are the array's element size rather than a number.
+// element stride — and `Material.h`'s real class names all of them; the stride is
+// the element type's.
 //
 // `AEBA` is PRIVATE, and this DLL exports its private members
 // (reference_aeaa_is_private_not_unexported.md) — which is also why the two are
@@ -753,15 +712,11 @@ RtSystem::String* Material::GetTextureName(RtSystem::String* ret,
 // does not need.
 // ---------------------------------------------------------------------------
 int32_t MaterialInstance::FindConstant(const RtSystem::String& name) const {
-    return rtgfxbody28::FindByName(reinterpret_cast<const uint8_t*>(_constants._data),
-                      _constants._size, &name,
-                      static_cast<int32_t>(sizeof(RtGraphics::MaterialConstant)));
+    return rtgfxbody28::FindByName(_constants._data, _constants._size, &name);
 }
 
 int32_t MaterialInstance::FindTexture(const RtSystem::String& name) const {
-    return rtgfxbody28::FindByName(reinterpret_cast<const uint8_t*>(_textures._data),
-                      _textures._size, &name,
-                      static_cast<int32_t>(sizeof(RtGraphics::MaterialTexture)));
+    return rtgfxbody28::FindByName(_textures._data, _textures._size, &name);
 }
 
 // ---------------------------------------------------------------------------
@@ -769,54 +724,40 @@ int32_t MaterialInstance::FindTexture(const RtSystem::String& name) const {
 // ENDGAME B.3.5 block GC. The evidence — the backward loop, the next-layer blend
 // weight, the single-precision delta, and above all "count the stores: Lerp
 // supplies only FOUR of the seven floats" — is in the banner beside the door.
+//
+// B.4: on `Layer`'s named fields, the clip through `AnimationGroup::
+// GetAnimation`, the static pose through `AnimationManager::_instances`, and the
+// accumulator as the `Math::Transform` it is.
 // ---------------------------------------------------------------------------
 // `_layers._data` is RE-READ at every use, never hoisted into a local: retail
 // reloads it (`MOV RAX,[RDI+8]`) at the top of the loop and again for the
 // next-layer weight, and `GetRootPoseAtTime` is a call between those reloads.
-#define RTGC_LAYERS() (reinterpret_cast<RtGraphics::AnimationLayer*>(_layers._data))
-
 void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
-    float* const out = reinterpret_cast<float*>(&rootOffsetOut);
-
-    rtgfxbody28::Transform7 accum;                                 // the [RSP+0x30] local
+    Math::Transform accum;                            // the [RSP+0x30] local
     float ax, ay, az;                                 // XMM7 / XMM8 / XMM9
 
     {   // ---- seed from the LAST layer --------------------------------------
-        RtGraphics::AnimationLayer* const L = &RTGC_LAYERS()[_layers._size - 1];
-        const void* const clip = rtgfxbody28::LayerClip(L);
-        _needsUniqueCopy = 0;                         // MOV BYTE PTR [RDI],0x0
+        const Layer* const L = &_layers._data[_layers._size - 1];
+        const Animation& clip = rtgfxbody28::LayerClip(L);
+        _needsUniqueCopy = false;                     // MOV BYTE PTR [RDI],0x0
 
-        if (L->handle >= 0) {                         // TEST EAX,EAX / JS
-            accum.q[0] = 0.0f; accum.q[1] = 0.0f;     // XORPS XMM6,XMM6
-            accum.q[2] = 0.0f; accum.q[3] = 1.0f;     // [0x18016169c] == 00 00 80 3f
-            const float* const v = rtgfxbody28::StaticRootVector(L->handle);
-            ax = v[0]; ay = v[1]; az = v[2];
+        if (L->_handle >= 0) {                        // TEST EAX,EAX / JS
+            accum.rotation.x = 0.0f; accum.rotation.y = 0.0f;   // XORPS XMM6,XMM6
+            accum.rotation.z = 0.0f; accum.rotation.w = 1.0f;   // [0x18016169c] == 00 00 80 3f
+            const Math::Vector3& v = rtgfxbody28::StaticRootVector(L->_handle);
+            ax = v.x; ay = v.y; az = v.z;
         } else {
-            const float secs = dt * L->speed;         // MULSS XMM0,[R8+0x10]
-            const int64_t delta = static_cast<int64_t>(
-                static_cast<double>(secs) / ::System::Timer::_secondsPerTick);
-            // B.3.5 bridge — ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@
-            // Math@@AEBVTime@System@@0@Z (0x1800faaa0). A HIDDEN-RETSLOT door, so the
-            // conversion uses the "door body moved to the call site" shape: EXACTLY
-            // ONE construction, into the SAME caller storage the retslot was handed,
-            // and `p` still points at it. `Transform7` is this lane's name for the
-            // 0x1c bytes of `Math::Transform` (its own static_assert says so), so the
-            // cast is a spelling, not a reinterpretation. The receiver is a
-            // `Graphics::Animation` — see wave27_lane_gfxbig.cpp's proof from
-            // ?GetAnimation@AnimationGroup@Graphics@@'s mangled return type and
-            // `imul $0x70`.
-            const Math::Transform tmp =
-                reinterpret_cast<const Graphics::Animation*>(clip)   // B.3.5 bridge
-                    ->Graphics::Animation::GetRootPoseAtTime(
-                        *reinterpret_cast<const System::Time*>(&L->time),
-                        *reinterpret_cast<const System::Time*>(&delta));
-            const rtgfxbody28::Transform7* const p =
-                reinterpret_cast<const rtgfxbody28::Transform7*>(&tmp);   // B.3.5 bridge
-            accum.q[0] = p->q[0]; accum.q[1] = p->q[1];
-            accum.q[2] = p->q[2]; accum.q[3] = p->q[3];
-            ax = p->v[0]; ay = p->v[1]; az = p->v[2];
+            const float secs = dt * L->_speed;        // MULSS XMM0,[R8+0x10]
+            const System::Time delta = { static_cast<int64_t>(
+                static_cast<double>(secs) / ::System::Timer::_secondsPerTick) };
+            // ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@AEBVTime@
+            // System@@0@Z (0x1800faaa0), the member: EXACTLY ONE construction, into
+            // the caller's storage.
+            const Math::Transform p = clip.Graphics::Animation::GetRootPoseAtTime(L->_time, delta);
+            accum.rotation = p.rotation;
+            ax = p.translation.x; ay = p.translation.y; az = p.translation.z;
         }
-        accum.v[0] = ax; accum.v[1] = ay; accum.v[2] = az;
+        accum.translation.x = ax; accum.translation.y = ay; accum.translation.z = az;
     }
 
     // ---- blend the rest, BACKWARD from layerCount-2 -------------------------
@@ -825,46 +766,29 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
     // is volatile. A single local is the same thing.
     const double spt = ::System::Timer::_secondsPerTick;
     for (int32_t i = _layers._size - 2; i >= 0; --i) {
-        RtGraphics::AnimationLayer* const L = &RTGC_LAYERS()[i];   // re-read each pass
-        const void* const clip = rtgfxbody28::LayerClip(L);
+        const Layer* const L = &_layers._data[i];     // re-read each pass
+        const Animation& clip = rtgfxbody28::LayerClip(L);
 
-        rtgfxbody28::Transform7 cur;
+        Math::Transform cur;
         float cx, cy, cz;                              // XMM3 / XMM4 / XMM5
-        if (L->handle >= 0) {
-            cur.q[0] = 0.0f; cur.q[1] = 0.0f;
-            cur.q[2] = 0.0f; cur.q[3] = 1.0f;
-            const float* const v = rtgfxbody28::StaticRootVector(L->handle);
-            cx = v[0]; cy = v[1]; cz = v[2];
+        if (L->_handle >= 0) {
+            cur.rotation.x = 0.0f; cur.rotation.y = 0.0f;
+            cur.rotation.z = 0.0f; cur.rotation.w = 1.0f;
+            const Math::Vector3& v = rtgfxbody28::StaticRootVector(L->_handle);
+            cx = v.x; cy = v.y; cz = v.z;
         } else {
-            const float secs = dt * L->speed;
-            const int64_t delta = static_cast<int64_t>(static_cast<double>(secs) / spt);
-            // B.3.5 bridge — ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@
-            // Math@@AEBVTime@System@@0@Z (0x1800faaa0). A HIDDEN-RETSLOT door, so the
-            // conversion uses the "door body moved to the call site" shape: EXACTLY
-            // ONE construction, into the SAME caller storage the retslot was handed,
-            // and `p` still points at it. `Transform7` is this lane's name for the
-            // 0x1c bytes of `Math::Transform` (its own static_assert says so), so the
-            // cast is a spelling, not a reinterpretation. The receiver is a
-            // `Graphics::Animation` — see wave27_lane_gfxbig.cpp's proof from
-            // ?GetAnimation@AnimationGroup@Graphics@@'s mangled return type and
-            // `imul $0x70`.
-            const Math::Transform tmp =
-                reinterpret_cast<const Graphics::Animation*>(clip)   // B.3.5 bridge
-                    ->Graphics::Animation::GetRootPoseAtTime(
-                        *reinterpret_cast<const System::Time*>(&L->time),
-                        *reinterpret_cast<const System::Time*>(&delta));
-            const rtgfxbody28::Transform7* const p =
-                reinterpret_cast<const rtgfxbody28::Transform7*>(&tmp);   // B.3.5 bridge
-            cur.q[0] = p->q[0]; cur.q[1] = p->q[1];
-            cur.q[2] = p->q[2]; cur.q[3] = p->q[3];
-            cx = p->v[0]; cy = p->v[1]; cz = p->v[2];
+            const float secs = dt * L->_speed;
+            const System::Time delta = { static_cast<int64_t>(static_cast<double>(secs) / spt) };
+            const Math::Transform p = clip.Graphics::Animation::GetRootPoseAtTime(L->_time, delta);
+            cur.rotation = p.rotation;
+            cx = p.translation.x; cy = p.translation.y; cz = p.translation.z;
         }
-        cur.v[0] = cx; cur.v[1] = cy; cur.v[2] = cz;
+        cur.translation.x = cx; cur.translation.y = cy; cur.translation.z = cz;
 
         // The weight is the NEXT layer's fade. See the banner.
-        const RtGraphics::AnimationLayer* const N = &RTGC_LAYERS()[i + 1];
-        const float t = static_cast<float>(static_cast<double>(N->fadeRemaining) * spt) /
-                        static_cast<float>(static_cast<double>(N->fadeLength)    * spt);
+        const Layer* const N = &_layers._data[i + 1];
+        const float t = static_cast<float>(static_cast<double>(N->_fadeRemaining._ticks) * spt) /
+                        static_cast<float>(static_cast<double>(N->_fadeLength._ticks)    * spt);
 
         // SUBSS then MULSS then ADDSS, in that order, on the ACCUMULATOR minus
         // the current layer — `cur + (accum - cur) * t`.
@@ -873,97 +797,72 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
         const float dz = (az - cz) * t;
         ax = cx + dx; ay = cy + dy; az = cz + dz;
 
-        // FOUR floats out of Lerp, and only four. B.3.1 bridge: `cur.q` and
-        // `accum.q` are float[4] slots in this file's own scratch layout.
-        const Math::Quaternion q =
-            reinterpret_cast<const Math::Quaternion*>(cur.q)->Lerp(
-                *reinterpret_cast<const Math::Quaternion*>(accum.q),
-                reinterpret_cast<const Math::Scalar&>(t));
-        accum.q[0] = q.x; accum.q[1] = q.y;
-        accum.q[2] = q.z; accum.q[3] = q.w;
-        accum.v[0] = ax; accum.v[1] = ay; accum.v[2] = az;
+        // FOUR floats out of Lerp, and only four.
+        accum.rotation = cur.rotation.Lerp(accum.rotation, Math::Scalar(t));
+        accum.translation.x = ax; accum.translation.y = ay; accum.translation.z = az;
         ++rtgfxbody28::g_updateRootLayers;
     }
 
-    out[0] = ax; out[1] = ay; out[2] = az;             // MOVSS [R14], ...
+    rootOffsetOut.x = ax; rootOffsetOut.y = ay; rootOffsetOut.z = az;   // MOVSS [R14], ...
 }
-
-#undef RTGC_LAYERS
 
 // ---------------------------------------------------------------------------
 // ?BeginDrawGroup@Renderer@Graphics@@  0x180104fd0 -- ENDGAME B.3.5 block GC.
 // The reuse-versus-append split, the `_drawGroupsUsed` cursor (B35_RULES 13
 // item 10, SETTLED by this body) and the hand-derived `kSpec_DrawGroup1f0` bridge
-// are in the banner beside the door.//
-// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
-// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
-// indexes are still spelled `RtGraphics::*` through one bridge local, because
-// those PODs have live users in files outside this block and B4b-1 keeps a POD
-// until its LAST user converts. Camera.h cross-asserts every one of their offsets
-// against the real classes', so the two descriptions cannot drift, and renaming
-// ~200 field accesses in a body this size is a second change, not this one.
+// are in the banner beside the door.
+//
+// B.4: on the real Renderer's and RendererDrawGroup's named fields. The append
+// path's stack group is a `RendererDrawGroup`: its implicit constructor is the
+// eh-vector zeroing of the three item arrays (0x1800801e8) and its implicit
+// destructor their backward destruction (0x18007ec98) -- see the banner.
 // ---------------------------------------------------------------------------
-int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
-                             const Camera& drawCameraRef, const Camera& cullCameraRef,
+int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBuffer,
+                             const Camera& drawCamera, const Camera& cullCamera,
                              int shader, uint32_t passMask) {
-    RtGraphics::Renderer* const r =
-        reinterpret_cast<RtGraphics::Renderer*>(this);          // B.3.5 bridge
-    const void* const renderBuffer = renderBufferIn;
-    const void* const drawCamera   = &drawCameraRef;
-    const void* const cullCamera   = &cullCameraRef;
-    const int32_t prev = r->currentDrawGroup;          // MOV EBP,[RCX+0x34]
-    const int32_t idx  = r->field_38;                  // MOVSXD RCX,[RCX+0x38]
-    r->currentDrawGroup = idx;                         // MOV [RDI+0x34],ECX
+    const int32_t prev = _currentDrawGroup;            // MOV EBP,[RCX+0x34]
+    const int32_t idx  = _drawGroupsUsed;              // MOVSXD RCX,[RCX+0x38]
+    _currentDrawGroup = idx;                           // MOV [RDI+0x34],ECX
 
-    if (r->drawGroups.GetSize() != idx) {
+    if (_drawGroups.GetSize() != idx) {
         // ---- REUSE -------------------------------------------------------
-        r->field_38 = idx + 1;                         // LEA EAX,[RCX+1]
-        uint8_t* const g = reinterpret_cast<uint8_t*>(r->drawGroups.GetData()) +
-                           static_cast<int64_t>(idx) * 0x1f0;
-        *reinterpret_cast<const void**>(g) = renderBuffer;
+        _drawGroupsUsed = idx + 1;                     // LEA EAX,[RCX+1]
+        RendererDrawGroup& g = _drawGroups._data[idx];
+        g._renderBuffer = renderBuffer;
         // ??4Camera@Graphics@@ (0x180017c40): the door body above, by name (it
         // counts its calls for the [GFXBODY28] line).
-        rtgfxbody28::RtGraphics_Camera_Assign(
-            reinterpret_cast<RtGraphics::Camera*>(g + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
-        rtgfxbody28::RtGraphics_Camera_Assign(
-            reinterpret_cast<RtGraphics::Camera*>(g + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
-        *reinterpret_cast<int32_t*>(g + 0x1b8)  = shader;
-        *reinterpret_cast<uint32_t*>(g + 0x1bc) = passMask;
+        rtgfxbody28::RtGraphics_Camera_Assign(&g._camera, &drawCamera);
+        rtgfxbody28::RtGraphics_Camera_Assign(&g._cullCamera, &cullCamera);
+        g._shader            = shader;
+        g._materialTypeFlags = passMask;
         return prev;
     }
 
     // ---- APPEND ----------------------------------------------------------
     ++rtgfxbody28::g_beginGroupAppends;
-    alignas(8) uint8_t temp[0x1f0];
-    *reinterpret_cast<const void**>(temp) = renderBuffer;
+    RendererDrawGroup temp;
+    temp._renderBuffer = renderBuffer;
     // ??0Camera@Graphics@@QEAA@AEBV01@@Z (0x180017a70), the copy door, by name.
-    rtgfxd::RtGraphics_Camera_CopyCtor(
-        reinterpret_cast<RtGraphics::Camera*>(temp + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
-    rtgfxd::RtGraphics_Camera_CopyCtor(
-        reinterpret_cast<RtGraphics::Camera*>(temp + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
-    *reinterpret_cast<int32_t*>(temp + 0x1b8)  = shader;
-    *reinterpret_cast<uint32_t*>(temp + 0x1bc) = passMask;
-    rtgfxbody28::DrawItemArraysInit(temp + 0x1c0);
+    rtgfxd::RtGraphics_Camera_CopyCtor(&temp._camera, &drawCamera);
+    rtgfxd::RtGraphics_Camera_CopyCtor(&temp._cullCamera, &cullCamera);
+    temp._shader            = shader;
+    temp._materialTypeFlags = passMask;
 
-    //   SYMBOL:      0x1800638e0 — Collection::Array<RtGraphics::RendererDrawGroup>::SetSize.
+    //   SYMBOL:      0x1800638e0 — Collection::Array<RendererDrawGroup>::SetSize.
     //                CONFIRMED ABSENT from the export directory with pefile, not
     //                inferred from a comment (AEAA means private, not unexported).
     //
-    // ENDGAME B.3.2 step 2 (callers) — the ResolveAddr-by-address call above is
-    // GONE. `r->drawGroups` is a real `Collection::Array<RtGraphics::RendererDrawGroup>`
-    // member (runtime/types/graphics/RtGraphics::Camera.h), but its DECLARED spec is the
+    // ENDGAME B.3.2 step 2 (callers) — `_drawGroups`'s DECLARED spec is the
     // trait-derived default, which is NOT what retail's 0x1800638e0 does (see
     // array_internal.h's `kSpec_DrawGroup1f0` banner: the element assign is a
     // deep nested-array copy the trait derivation cannot reproduce). Bridged
     // through the hand-derived row at the call site instead of trusting the
-    // field's own (wrong) spec — array.cpp's `RtColl_ArraySetSizeFill_...` row
-    // for this address stays registered, unchanged, for `code/`.
-    rtcoll::AsArray<&rtcoll::kSpec_DrawGroup1f0>(&r->drawGroups)
-        ->SetSizeFill(r->drawGroups.GetSize() + 1, temp);
+    // field's own (wrong) spec.
+    rtcoll::AsArray<&rtcoll::kSpec_DrawGroup1f0>(&_drawGroups)
+        ->SetSizeFill(_drawGroups.GetSize() + 1, &temp);
 
-    rtgfxbody28::DrawItemArraysDestroy(temp + 0x1c0);
-    ++r->field_38;                                     // INC [RDI+0x38] — NOT the size
-    return prev;
+    ++_drawGroupsUsed;                                 // INC [RDI+0x38] — NOT the size
+    return prev;                                       // ~RendererDrawGroup: the three arrays
 }
 
 // ---------------------------------------------------------------------------
@@ -972,11 +871,9 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
 // windows, the re-read event count and the +0x50 frame-count correction are in the
 // banner beside the door.
 //
-// THE RECEIVER IS THE 0x70-BYTE CLIP RECORD and is still spelled
-// `RtGraphics::AnimationClipPrefix` through one bridge local: `Graphics::Animation`
-// IS that record, but only the eight fields the prefix names are proved, and the
-// POD has live users in `wave27_lane_gfxbig.cpp` and `animationstate_transforms.cpp`,
-// so B4b-1 keeps it.
+// B.4: on `Graphics::Animation`'s own fields -- `_events` (+0x00/+0x08),
+// `_startFrame` / `_endFrame` (+0x30/+0x34, the prefix's frameFirst / frameLast),
+// `_loopScale` (+0x48), `_frameCount` (+0x50) and `_duration` (+0x58).
 //
 // SLOT 8 OF THE EVENT OBJECT is a by-name call of the pure
 // `AnimationEvent::Construct(const Math::Transform&)` (B3R owed 2: the header
@@ -984,28 +881,24 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
 // ---------------------------------------------------------------------------
 void Animation::ApplyEvents(const Math::Transform& base, const System::Time& from,
                             const System::Time& to) const {
-    const RtGraphics::AnimationClipPrefix* const clip =
-        reinterpret_cast<const RtGraphics::AnimationClipPrefix*>(this);   // B.3.5 bridge
     const int64_t* const fromTime = &from._ticks;
     const int64_t* const toTime   = &to._ticks;
 
-    const int64_t duration = clip->duration;            // MOV RBX,[RCX+0x58]
+    const int64_t duration = _duration;                 // MOV RBX,[RCX+0x58]
     const int64_t fromWrapped = *fromTime - duration;   // SUB RDI,RBX
     const int64_t toWrapped   = *toTime   - duration;   // SUB RSI,RBX
 
     // CMP [RCX+0x8],EBP / JLE — count read from `this` on every iteration
     // (0x1800faa6c re-reads it), so it is not hoisted.
-    for (int32_t i = 0; i < clip->eventCount; ++i) {
-        const rtgfxbody28::AnimationEventEntry* const ev =
-            reinterpret_cast<const rtgfxbody28::AnimationEventEntry*>(
-                *reinterpret_cast<void* const*>(clip)) + i;   // MOV RDX,[R15]
+    for (int32_t i = 0; i < _events._size; ++i) {
+        const Event* const ev = _events._data + i;      // MOV RDX,[R15]
 
         // +0x50 is the FRAME COUNT, not the frame rate -- corrected
         // 2026-09-12 in AnimationState.h; the arithmetic is unchanged.
-        const float rate  = static_cast<float>(clip->frameCount);   // CVTDQ2PS
-        const float num   = static_cast<float>(ev->frame - clip->frameFirst);
-        const float den   = static_cast<float>(clip->frameLast - clip->frameFirst);
-        const float secs  = ((num / den) * rate) * clip->loopScale;
+        const float rate  = static_cast<float>(_frameCount);   // CVTDQ2PS
+        const float num   = static_cast<float>(ev->_frame - _startFrame);
+        const float den   = static_cast<float>(_endFrame - _startFrame);
+        const float secs  = ((num / den) * rate) * _loopScale;
         const int64_t t   = static_cast<int64_t>(
             static_cast<double>(secs) / ::System::Timer::_secondsPerTick);
 
@@ -1020,8 +913,7 @@ void Animation::ApplyEvents(const Math::Transform& base, const System::Time& fro
 
         // Slot 8 (`CALL [RAX+0x40]`, 0x1800faa5e) with RDX = the transform
         // (R13, ApplyEvents' own second argument); RAX is not read after.
-        reinterpret_cast<Graphics::AnimationEvent*>(ev->event)   // B.3.x bridge
-            ->Construct(base);
+        ev->_event->Construct(base);
         ++rtgfxbody28::g_applyEventsFired;
     }
 }

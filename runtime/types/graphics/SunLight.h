@@ -200,9 +200,10 @@ public:
     float    _ambientB;         // +0xE4  ctor 0.0f
     float    _ambientA;         // +0xE8  ctor 1.0f
     uint32_t _holdEC;           // +0xEC  NEVER WRITTEN by ctor, Set or dtor
-    void*    _colourTarget;     // +0xF0  Video::ImageBuffer*  (capability-gated)
-    void*    _depthTarget;      // +0xF8  Video::ImageBuffer*  (always built)
-    void*    _renderBuffer;     // +0x100 Video::RenderBuffer*
+    // B.4: the three pointers carry their classes (the bytes are unchanged).
+    Video::ImageBuffer*  _colourTarget;  // +0xF0  (capability-gated)
+    Video::ImageBuffer*  _depthTarget;   // +0xF8  (always built)
+    Video::RenderBuffer* _renderBuffer;  // +0x100
 };
 
 static_assert(sizeof(SunLight) == 0x108,
