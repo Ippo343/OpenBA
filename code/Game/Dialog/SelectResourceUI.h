@@ -31,6 +31,9 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
+class ComponentDescription;   // Component/ComponentDescription.h
+namespace UI { class ComboElement; }
+
 class SelectResourceUI : public UI::DialogController {
     DECLARE_EXE_TYPE(SelectResourceUI)
 
@@ -47,17 +50,25 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;  // [9] 0x140078d80
 
-    // [11] set the selected resource type on the leaf's component.
-    virtual void  SetResource(int64_t type) = 0;                  // [11] _purecall
-    // [12] the current resource type, written through `out` (retslot shape:
-    // RCX this, RDX out; returns out).
-    virtual void* GetResource(void* out) = 0;                     // [12] _purecall
+    // [11] set the selected resource type (a template, the town's +0x120 list
+    // entry) on the leaf's component. Retail passes the ExternalPtr by value in
+    // RDX (0x1400b2920 stores RDX straight into CropFieldComponent +0x50).
+    virtual void  SetResource(ComponentDescription* type) = 0;    // [11] _purecall
+    // [12] the current resource type, an ExternalPtr<ComponentDescription>
+    // returned by value (retslot shape: RCX this, RDX out; returns out).
+    virtual ComponentDescription** GetResource(ComponentDescription** out) = 0;  // [12] _purecall
     // [13] the SelectDescription category the combo lists.
     virtual int   GetCategory() = 0;                              // [13] _purecall
 
-    // +0x30 the "selectResource" ComboElement (Object::InternalBasePtr). The
-    // name is the Panels.h CropUI POD's, kept for cropui.cpp's bodies.
-    UI::Element* internalBasePtr = nullptr;                       // +0x30 (B4 H4: typed; DLG-a)
+    // 0x140078830: clear the combo and list the town's templates of
+    // GetCategory()'s category, selecting GetResource()'s.
+    void PopulateCombo();
+    // 0x140078a40: how many of the town's templates GetCategory() lists.
+    int  GetResourceCount();
+
+    // +0x30 the "selectResource" ComboElement (InternalPtr; OnCreated
+    // 0x140078be0 stores the FindElement result, id 500).
+    UI::ComboElement* selectResource = nullptr;
 
 protected:
     // Inlined into every leaf ctor by retail; the InternalBasePtr(null) is
@@ -67,4 +78,4 @@ protected:
 
 static_assert(sizeof(SelectResourceUI) == 0x38, "SelectResourceUI adds one qword to DialogController");
 static_assert(alignof(SelectResourceUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(SelectResourceUI, internalBasePtr) == 0x30, "combo @ +0x30 (0x140078be0)");
+static_assert(offsetof(SelectResourceUI, selectResource) == 0x30, "combo @ +0x30 (0x140078be0)");

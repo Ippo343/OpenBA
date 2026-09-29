@@ -36,8 +36,8 @@ public:
     void  OnUpdate(const System::Time& time) override;
     void  OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                          int32_t c, int32_t d, int32_t e, void* userData) override;  // [9] 0x1400b4e20
-    void  SetResource(int64_t type) override;                     // [11] 0x1400b4c40
-    void* GetResource(void* out) override;                        // [12] 0x1400b4d00
+    void  SetResource(ComponentDescription* type) override;       // [11] 0x1400b4c40
+    ComponentDescription** GetResource(ComponentDescription** out) override;  // [12] 0x1400b4d00
     int   GetCategory() override;                                 // [13] 0x1400b4cf0  MOV EAX,2
 
 private:

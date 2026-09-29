@@ -37,8 +37,8 @@ public:
     // the tree's wrapper traces the event, then runs the same base body.
     void  OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                          int32_t c, int32_t d, int32_t e, void* userData) override;
-    void  SetResource(int64_t type) override;                     // [11] 0x140075380
-    void* GetResource(void* out) override;                        // [12] 0x140075430
+    void  SetResource(ComponentDescription* type) override;       // [11] 0x140075380
+    ComponentDescription** GetResource(ComponentDescription** out) override;  // [12] 0x140075430
     int   GetCategory() override;                                 // [13] 0x140075420  MOV EAX,1
 
     // ---- fields -----------------------------------------------------------------
