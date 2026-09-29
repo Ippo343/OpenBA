@@ -198,10 +198,11 @@ void ModDetailsDialog::OnOpened() {
     // --- Build conflict list markup ---
     int conflictCount = mod.files.size;
     System::String conflictResult("^jl^f0^c0^lb");
+    // The conflicting mods' filenames.
+    // LEFT: RtIO::ModArray::data is void* (R-IO's POD).
+    const RtSystem::Filename* conflictArray = static_cast<const RtSystem::Filename*>(mod.files.data);
 
     for (int i = 0; i < conflictCount; i++) {
-        // LEFT: RtIO::ModArray::data is void* (R-IO's POD).
-        const RtSystem::Filename* conflictArray = static_cast<const RtSystem::Filename*>(mod.files.data);
         // Find(const Filename&) takes the ADDRESS of the array element (retail
         // 0x14006ddee: `LEA RDX,[RAX + RCX*8]` on the array base, not a MOV of
         // the slot's value) — &conflictArray[i], not conflictArray[i].
@@ -254,10 +255,9 @@ void ModDetailsDialog::OnOpened() {
             bool higherPriority = false;
 
             for (int i = 0; i < conflictCount; i++) {
-                const RtSystem::Filename* cArray = static_cast<const RtSystem::Filename*>(mod.files.data);
                 // Same address-vs-value fix as above (retail 0x14006dfd7:
-                // `LEA RDX,[RAX + RCX*8]`) — &cArray[i], not cArray[i].
-                int cIdx = modification->Find(cArray[i]);
+                // `LEA RDX,[RAX + RCX*8]`) — &conflictArray[i], not conflictArray[i].
+                int cIdx = modification->Find(conflictArray[i]);
                 const RtIO::Mod& cMod = modification->GetModification(cIdx);
 
                 if (cMod.enabled != 0) {

@@ -255,7 +255,7 @@ void MapUI::OnCreated() {
         s_logged = true;
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         // LEFT: GameUpdateLoop::m_imageCapture is void* (no ImageCapture class yet).
-        Video::ImageBuffer* const* mapObj =
+        [[maybe_unused]] Video::ImageBuffer* const* mapObj =
             gw ? reinterpret_cast<Video::ImageBuffer* const*>(gw->m_imageCapture) : nullptr;
         printf("[MapUI::Slot4] dispatched self=%p mat_tid=%u img_tid=%u "
                "terrBuf=%p ovrBuf=%p\n", this,
