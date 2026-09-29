@@ -47,32 +47,6 @@
 #include "Game/PlayerToolManager.h"
 
 // ============================================================
-// The tool manager's selected-entity sets (PlayerToolManager +0x50 / +0x60)
-// ============================================================
-// An AVL tree of 0x38-byte nodes keyed by the entity (0x140102e30 builds them).
-// PlayerToolManager declares the roots as void* (GAME-a's header): the node
-// type is declared here, where its only builder and walkers live.
-struct TrackedEntityNode {
-    ComponentEntity*   key;       // +0x00 the entity (InternalPtr value)
-    uint32_t           x;         // +0x08
-    uint32_t           y;         // +0x0C
-    uint8_t            active;    // +0x10 (the insert stores the dword 1)
-    uint8_t            _pad11[7]; // +0x11
-    TrackedEntityNode* parent;    // +0x18
-    TrackedEntityNode* left;      // +0x20
-    TrackedEntityNode* right;     // +0x28
-    int16_t            balance;   // +0x30
-    int16_t            height;    // +0x32
-    uint8_t            _pad34[4]; // +0x34
-};
-static_assert(sizeof(TrackedEntityNode) == 0x38, "0x140102e30 MemAlloc(0x38)");
-static_assert(offsetof(TrackedEntityNode, active) == 0x10, "+0x10");
-static_assert(offsetof(TrackedEntityNode, parent) == 0x18, "+0x18");
-static_assert(offsetof(TrackedEntityNode, left) == 0x20, "+0x20");
-static_assert(offsetof(TrackedEntityNode, right) == 0x28, "+0x28");
-static_assert(offsetof(TrackedEntityNode, balance) == 0x30, "+0x30");
-
-// ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
 // ============================================================
 // BST remove: walks the tree to the node whose key == *key, then deletes it

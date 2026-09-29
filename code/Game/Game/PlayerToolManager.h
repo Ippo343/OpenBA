@@ -27,6 +27,36 @@
 #include <cstdint>
 #include <cstddef>
 
+class ComponentEntity;
+
+// B.4 GAME-a: one node of the two entity sets at +0x50 / +0x60 (moved here
+// from entityui.cpp, whose walkers read it): an AVL tree of 0x38-byte nodes
+// keyed by the entity, built by 0x140102e30 (MemAlloc(0x38)), walked and
+// removed by 0x14002c690 / 0x140025740.
+struct TrackedEntityNode {
+    ComponentEntity*   key;       // +0x00 the entity (InternalPtr value)
+    uint32_t           x;         // +0x08
+    uint32_t           y;         // +0x0C
+    uint8_t            active;    // +0x10 (the insert stores the dword 1)
+    uint8_t            _pad11[7]; // +0x11
+    TrackedEntityNode* parent;    // +0x18
+    TrackedEntityNode* left;      // +0x20
+    TrackedEntityNode* right;     // +0x28
+    int16_t            balance;   // +0x30
+    int16_t            height;    // +0x32
+    uint8_t            _pad34[4]; // +0x34
+};
+static_assert(sizeof(TrackedEntityNode) == 0x38, "0x140102e30 MemAlloc(0x38)");
+static_assert(offsetof(TrackedEntityNode, key) == 0x00, "TrackedEntityNode::key @ +0x00");
+static_assert(offsetof(TrackedEntityNode, x) == 0x08, "TrackedEntityNode::x @ +0x08");
+static_assert(offsetof(TrackedEntityNode, y) == 0x0C, "TrackedEntityNode::y @ +0x0C");
+static_assert(offsetof(TrackedEntityNode, active) == 0x10, "+0x10");
+static_assert(offsetof(TrackedEntityNode, parent) == 0x18, "+0x18");
+static_assert(offsetof(TrackedEntityNode, left) == 0x20, "+0x20");
+static_assert(offsetof(TrackedEntityNode, right) == 0x28, "+0x28");
+static_assert(offsetof(TrackedEntityNode, balance) == 0x30, "+0x30");
+static_assert(offsetof(TrackedEntityNode, height) == 0x32, "TrackedEntityNode::height @ +0x32");
+
 class PlayerToolManager {
 public:
     void*    field_0x00;         // +0x00 InternalBasePtr (ctor null)
@@ -45,11 +75,11 @@ public:
     int32_t  field_0x40;         // +0x40 ctor 0
     float    field_0x44;         // +0x44 ctor 0.75
     void*    field_0x48;         // +0x48 ctor 0
-    void*    field_0x50;         // +0x50 ctor 0
-    int32_t  field_0x58;         // +0x58 ctor 0
+    TrackedEntityNode* field_0x50; // +0x50 ctor 0; the pinned entity set's root (EntityUI unpin removes, 0x14002c690)
+    int32_t  field_0x58;         // +0x58 ctor 0; its count
     uint8_t  _pad5C[4];          // +0x5C
-    void*    field_0x60;         // +0x60 ctor 0
-    int32_t  field_0x68;         // +0x68 ctor 0
+    TrackedEntityNode* field_0x60; // +0x60 ctor 0; the open-entity set's root (EntityUI::OnClosed removes)
+    int32_t  field_0x68;         // +0x68 ctor 0; its count
     uint8_t  _pad6C[4];          // +0x6C
     void*    field_0x70;         // +0x70 Array data (sized to 5 by the ctor)
     int32_t  field_0x78;         // +0x78 Array count
