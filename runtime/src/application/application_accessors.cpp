@@ -70,10 +70,6 @@ void* Application::Application::GetInstance() const {
     return ours;
 }
 
-void* RtApp_GetInstance(const App* self) {
-    return self->Application::GetInstance();
-}
-
 // ============================================================================
 // Application::Application::GetWindow() const             retail 0x18009fba0
 // ?GetWindow@Application@1@QEBAPEAUHWND__@@XZ
@@ -85,10 +81,6 @@ void* RtApp_GetInstance(const App* self) {
 void* Application::Application::GetWindow() const {
     void* ours = _windowHandle;
     return ours;
-}
-
-void* RtApp_GetWindow(const App* self) {
-    return self->Application::GetWindow();
 }
 
 // ============================================================================
@@ -123,10 +115,6 @@ uint8_t Application::Application::IsCursorEnabled() {
     return ours;
 }
 
-uint8_t RtApp_IsCursorEnabled(App* self) {
-    return self->Application::IsCursorEnabled();
-}
-
 // ============================================================================
 // Application::Application::PlatformIsPaused() const      retail 0x18009fe80  (private)
 // ?PlatformIsPaused@Application@1@AEAA_NXZ
@@ -147,10 +135,6 @@ bool Application::Application::PlatformIsPaused() {
     return ours;
 }
 
-bool RtApp_PlatformIsPaused(const App* self) {
-    return const_cast<App*>(self)->Application::PlatformIsPaused();
-}
-
 // ============================================================================
 // Application::Application::PlatformDestruct()            retail 0x18009fc00  (private)
 // ?PlatformDestruct@Application@1@AEAAXXZ
@@ -165,8 +149,4 @@ bool RtApp_PlatformIsPaused(const App* self) {
 // and is registered exactly like the rest.
 // ============================================================================
 void Application::Application::PlatformDestruct() {
-}
-
-void RtApp_PlatformDestruct(App* self) {
-    self->Application::PlatformDestruct();
 }

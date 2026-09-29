@@ -393,12 +393,3 @@ Application::Application& Application::Application::operator=(const Application&
 
     return *this;                                    // 0x18000a1dd
 }
-
-extern "C" App* RtApp_Assign(App* self, const App* other) {
-    return &self->Application::operator=(*other);
-}
-
-// ---------------------------------------------------------------------------
-// Read by the probe, so it can report how many nodes OUR bodies released.
-// ---------------------------------------------------------------------------
-extern "C" uint64_t RtApp_LifecycleFreeCount() { return g_freeCount; }

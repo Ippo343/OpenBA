@@ -321,10 +321,6 @@ bool Application::Application::PlatformStartup() {
     return ok;
 }
 
-extern "C" bool RtApp_PlatformStartup(App* self) {
-    return self->Application::PlatformStartup();
-}
-
 // ============================================================================
 // Application::Application::PlatformShutdown()
 // ?PlatformShutdown@Application@1@AEAAXXZ      retail 0x18009fd70   ord 3393
@@ -401,10 +397,6 @@ void Application::Application::PlatformShutdown() {
 
 }
 
-extern "C" void RtApp_PlatformShutdown(App* self) {
-    self->Application::PlatformShutdown();
-}
-
 // ============================================================================
 // The three that are two instructions, and the one that is seven
 // ============================================================================
@@ -421,10 +413,6 @@ extern "C" void RtApp_PlatformShutdown(App* self) {
 // qualifier is only the house shape here).
 bool Achievement::AchievementManager::PlatformStartup() {
     return true;
-}
-
-extern "C" bool RtAchievement_AchievementManager_PlatformStartup(void* self) {
-    return reinterpret_cast<Achievement::AchievementManager*>(self)->Achievement::AchievementManager::PlatformStartup();  // B.3.7 bridge
 }
 
 // ?PlatformStartup@ExternalFactory@Object@@AEAA_NXZ           0x1800bf6c0 ord 3407
@@ -458,8 +446,4 @@ extern "C" bool RtObject_ExternalFactory_PlatformStartup(void* /*self*/) {
 bool Engine::Engine::PlatformStartup() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     return true;
-}
-
-extern "C" bool RtEngine_Engine_PlatformStartup(void* self) {
-    return reinterpret_cast<Engine::Engine*>(self)->Engine::Engine::PlatformStartup();  // B.3.7 bridge
 }

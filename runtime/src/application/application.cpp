@@ -39,10 +39,6 @@ bool Application::Application::IsPaused() {
     return ours;
 }
 
-bool RtApp_IsPaused(const App* self) {
-    return const_cast<App*>(self)->Application::IsPaused();
-}
-
 // ============================================================================
 // Application::Application::Quit()              retail 0x18009f4d0   ord 3437
 // ?Quit@Application@1@QEAAXXZ
@@ -64,8 +60,4 @@ bool RtApp_IsPaused(const App* self) {
 // ============================================================================
 void Application::Application::Quit() {
     _quitRequested = 1;
-}
-
-void RtApp_Quit(App* self) {
-    self->Application::Quit();
 }

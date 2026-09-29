@@ -237,11 +237,6 @@ void Application::Application::RegisterMessageCallback(uint32_t id, MessageCallb
     set->count += 1;                   // 0x18009fb63
 }
 
-extern "C" void RtApp_RegisterMessageCallback(App* app, unsigned id,
-                                              void* callback) {
-    app->Application::RegisterMessageCallback(id, reinterpret_cast<App::MessageCallback>(callback));
-}
-
 // ============================================================================
 // ?UnregisterMessageCallback@Application@1@QEAAXI@Z    retail 0x18009fa20
 // ============================================================================
@@ -259,8 +254,4 @@ void Application::Application::UnregisterMessageCallback(uint32_t id) {
         else if (key >= id) { rtsetavl::Erase(set, n); return; }  // 0x18009fa47
         else                n = n->right;   // 0x18009fa3b
     }
-}
-
-extern "C" void RtApp_UnregisterMessageCallback(App* app, unsigned id) {
-    app->Application::UnregisterMessageCallback(id);
 }
