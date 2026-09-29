@@ -43,6 +43,7 @@
 #include "Calendar.h"                // m_dayCounter's class (B.4 GAME-a)
 #include "WeatherSimulation.h"       // m_weather's class (B.4 GAME-a)
 #include "WorkScheduler.h"           // m_tutorial's class (B.4 GAME-a)
+#include "EventLog.h"                // m_eventNotifier's class (B.4 GAME-a)
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -563,6 +564,8 @@ static_assert(std::is_trivially_default_constructible<CitizenBehavior>::value,
               "placement new of CitizenBehavior runs no code");
 static_assert(std::is_trivially_default_constructible<Calendar>::value,
               "placement new of Calendar runs no code");
+static_assert(std::is_trivially_default_constructible<EventLog>::value,
+              "placement new of EventLog runs no code");
 static void EntityList_Construct(EntityList* list) {
     memset(list, 0, sizeof(EntityList));      // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
     list->processCount[0] = 0x32;             // +0xA8 50
@@ -1069,14 +1072,19 @@ void GameUpdateLoop::Load() {
     // Step 17 — StringTable-pair struct (+0x138, 0x28) zero + flag bytes.
     {
         void* mem = AllocSub(0x28, 4);
-        if (mem) {
-            uint8_t* d = (uint8_t*)mem;
-            memset(d, 0, 0x28);
-            *(uint32_t*)(d + 0x10) = 0x01010101;
-            *(uint16_t*)(d + 0x14) = 0x0101;
-            *(uint8_t*)(d + 0x10) = 0;   // clear low byte (matches exe)
+        EventLog* eventLog = mem ? new (mem) EventLog : nullptr;
+        if (eventLog) {
+            memset(eventLog, 0, sizeof(EventLog));
+            // Retail: dword 0x01010101 at +0x10, word 0x0101 at +0x14, then byte
+            // +0x10 = 0 (H7: the six named bytes, in address order, final values).
+            eventLog->field_0x10[0] = false;
+            eventLog->field_0x10[1] = true;
+            eventLog->field_0x10[2] = true;
+            eventLog->field_0x10[3] = true;
+            eventLog->field_0x10[4] = true;
+            eventLog->field_0x10[5] = true;
         }
-        m_eventNotifier = mem;
+        m_eventNotifier = eventLog;
     }
 
     // Step 18 — Graphics::Scene (+0x60, 0x78).
@@ -1199,7 +1207,7 @@ void GameUpdateLoop::Load() {
     // mirroring the Environment/SkyMesh finds above. The ":events"/":seasons"
     // suffix selects the named sub-resource within Dialog/StringTable.rsc.
     {
-        void* evStruct = m_eventNotifier;
+        EventLog* evStruct = m_eventNotifier;
         if (evStruct && ::Object::ExternalFactory::_singleton) {
             void* factory = ::Object::ExternalFactory::_singleton;
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
@@ -1213,21 +1221,21 @@ void GameUpdateLoop::Load() {
 
             // Load a StringTable sub-resource. AdjustDelimiters normalizes the
             // "rsc:subname" delimiter so FindOrLoad resolves the named sub-table.
-            auto loadStringTable = [&](const char* name) -> void* {
+            auto loadStringTable = [&](const char* name) -> UI::StringTable* {
                 // Retail: String(name) then Filename::AdjustDelimiters on it —
                 // Filename(const char*) is exactly Set + AdjustDelimiters.
                 System::Filename fname(name);
-                void* ext = const_cast<::Object::External*>(
+                ::Object::External* ext = const_cast<::Object::External*>(
                     efactory->FindOrLoad(fname));                            // B.3.3 bridge
                 if (!ext) return nullptr;
                 if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;
-                return ext;
+                return static_cast<UI::StringTable*>(ext);   // checked above (B10)
             };
 
-            void* evTable = loadStringTable("Dialog/StringTable.rsc:events");
-            void* seTable = loadStringTable("Dialog/StringTable.rsc:seasons");
-            *(void**)((uint8_t*)evStruct + 0x00) = evTable;
-            *(void**)((uint8_t*)evStruct + 0x08) = seTable;
+            UI::StringTable* evTable = loadStringTable("Dialog/StringTable.rsc:events");
+            UI::StringTable* seTable = loadStringTable("Dialog/StringTable.rsc:seasons");
+            evStruct->events = evTable;
+            evStruct->seasons = seTable;
 
             fprintf(stderr, "[GUL::Load] step29 event StringTables: events=%p seasons=%p (tid=%u)\n",
                     evTable, seTable, stTid);

@@ -55,6 +55,7 @@ class CharacterGrid;      // Component/CharacterGrid.h (block COMP-a)
 class Calendar;           // Game/Calendar.h (B4 GAME-a)
 class WeatherSimulation;  // Game/WeatherSimulation.h (B4 GAME-a)
 class WorkScheduler;      // Game/WorkScheduler.h (B4 GAME-a)
+class EventLog;           // Game/EventLog.h (B4 GAME-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -167,7 +168,7 @@ public:
     PlayerToolManager* m_toolManager; // +0x120 player tool manager (0xB0 bytes)
     Calendar* m_dayCounter;         // +0x128 the year clock (0x18 bytes: {year, yearTime, yearLength})
     WeatherSimulation* m_weather;   // +0x130 the weather simulation (0x78 bytes; not the Weather resource)
-    void*    m_eventNotifier;       // +0x138 EventNotifier* (0x28 bytes)
+    EventLog* m_eventNotifier;      // +0x138 the event log (0x28 bytes)
     Save::SaveLoad* m_saveLoad;     // +0x140 MemAlloc(0x90) in Load
     void*    m_imageCapture;        // +0x148 ImageCapture* (0x38 bytes)
 

@@ -43,6 +43,7 @@
 #include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/EventLog.h"   // m_eventNotifier's class (B.4 GAME-a)
 #include "Game/WorkScheduler.h"   // m_tutorial's class (B.4 GAME-a)
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -2133,7 +2134,7 @@ void GameUpdateLoop::Shutdown() {
     // EventNotifier
     if (m_eventNotifier != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EventNotifier...\n");
-        Game_EventNotifierCleanup((void*)((uintptr_t)m_eventNotifier + 0x18));   // 0x14000a8a0
+        Game_EventNotifierCleanup(&m_eventNotifier->entries);   // 0x14000a8a0
         System::MemoryAllocator::MemFree(m_eventNotifier);
     }
 
