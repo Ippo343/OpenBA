@@ -46,9 +46,6 @@ extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  //
 // ---- pasturework.cpp
 extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
 
-// ---- pickup_gate.cpp
-uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amount);  // 0x14008d3c0
-
 // ---- plantorchard_ctor.cpp
 extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
 

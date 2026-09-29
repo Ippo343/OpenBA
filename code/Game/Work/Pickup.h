@@ -29,6 +29,9 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class CitizenComponent;
+class Profession;
+
 
 class Pickup final : public Work {
     DECLARE_EXE_TYPE(Pickup)
@@ -49,10 +52,13 @@ public:
     int   GetPriority() override;                                   // [11] 0x14002c000
 
     // --- Pickup fields (+0x48) ---
-    uint32_t status;             // +0x48: 0=unassigned, 1=assigned, 2=completing
+    int32_t  status;             // +0x48: 0=unassigned, 1=assigned, 2=completing (Persist
+                                 //        0x1400f3aa0 Serialize(int&))
     uint8_t  _pad4C[4];          // +0x4C: padding
-    void*    citizenIBP;         // +0x50: InternalBasePtr to citizen entity
-    void*    candidateList;      // +0x58: array/list for pickup candidates
+    CitizenComponent* citizenIBP; // +0x50: InternalPtr<CitizenComponent> (Persist validates the
+                                 //        cell 0x1401c7158; Cleanup reads its +0x278)
+    Profession* candidateList;   // +0x58: ExternalPtr<Profession> (Persist v1+ 0x140018020); the
+                                 //        name is the tree's, not what the field holds
 };
 
 static_assert(sizeof(Pickup) == 0x60, "Pickup is 0x60 (retail create MemAlloc)");
