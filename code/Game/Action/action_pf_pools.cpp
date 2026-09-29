@@ -15,7 +15,7 @@
 // The three pool allocators (0x14001a9b0, 0x14001d730, 0x14001df40) carve nodes out of
 // a raw chunk: the first qword of a chunk links the chunk list, the nodes follow, and
 // a free node's first qword is the free-list link (PathPoolLink). Those casts are the
-// pool's own raw memory becoming a node (`CAST-OK: elem_stride`).
+// pool's own raw memory becoming a node (each carries an elem_stride marker).
 //
 // Pf_VectorResize60_fa80 (0x14001fa80) calls TradeWork_impl_sub_f5e0 (0x14001f5e0, element
 // copy-ctor) and TradeWork_impl_sub_f250_sub_fb80 (0x14001fb80, 0x60-stride element free),
