@@ -42,6 +42,8 @@
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
+class ComponentEntity;   // B4 WORK-a: field_10 typed (H4)
+
 
 class Work : public Object::Internal {
     DECLARE_EXE_TYPE(Work)
@@ -79,7 +81,7 @@ public:
 
     // ---- the 0x38 bytes Work adds, retail order ------------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
-    void*    field_10;   // +0x10 InternalPtr — the owning entity (a ComponentEntity)
+    ComponentEntity* field_10;   // +0x10 InternalPtr — the owning entity (a ComponentEntity)
     void*    field_18;   // +0x18 InternalPtr — the entity's WorkComponent
     int32_t  field_20;   // +0x20 work id (-1)
     int32_t  field_24;   // +0x24 (Persist copies +0x20 into it before v1)
