@@ -268,7 +268,7 @@ LAB_14012d8ce:;
         iVar15 = 0;
         if (0 < iVar4) {
             do {
-                Pf_EntityResolvePos_2e20(interact, posVec, 0, iVar15, nullptr);   // 0x140122e20
+                InteractNodePosition(interact, posVec, 0, iVar15, nullptr);   // 0x140122e20
                 int iVar13 = map->size;
                 int iVar4b = (int)(posVec[0] + (float)(iVar13 >> 1));
                 int iVar5 = (int)(posVec[1] + (float)(iVar13 >> 1));
@@ -401,7 +401,7 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
             }
             if (accepted) {
                 ComponentEntity* anchor = entity;
-                uint32_t uVar10 = (uint32_t)Pf_EntityAnchorCell_7fb0(&anchor, nullptr);   // 0x140087fb0
+                uint32_t uVar10 = (uint32_t)EntityAnchorCell(&anchor, nullptr);   // 0x140087fb0
                 int iVar17d = map->PathDistance(uVar10, param_3, '\x01');   // 0x14009f810
                 if (iVar17d < 0) {
                     iVar17d = map->size;
@@ -416,9 +416,7 @@ ComponentEntity** PickBestDropTarget(const RawArray<ComponentEntity*>* lists, Co
                     float dropVec[3] = {0, 0, 0};
                     int iVar11;
                     if (location == nullptr) {
-                        // LEFT: 0x14004edb0's C declaration (action_pf_road.cpp) takes the
-                        // component as an integer.
-                        iVar11 = Pf_PickReachableCell_edb0(reinterpret_cast<int64_t>(market), param_3, dropVec);   // 0x14004edb0
+                        iVar11 = PickReachableCell(market, param_3, dropVec);   // 0x14004edb0
                     } else {
                         iVar11 = FindBestAdjacentCell(location, param_3, dropVec);   // 0x14012d5d0
                     }

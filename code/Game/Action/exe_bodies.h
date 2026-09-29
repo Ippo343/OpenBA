@@ -155,14 +155,17 @@ int Pf_RegionPathLength_8ba0(int* param_1, int param_2, uint32_t param_3, uint64
 void Pf_RegionPairCacheInsert_5b30(uint64_t* param_1, int param_2, int param_3, uint32_t param_4);  // 0x1400a5b30
 
 // ---- action_pf_road.cpp
-void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend);  // 0x1400acc10
-int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6, float* p7, float* p8, uint32_t* p9);  // 0x1400aaa20
-float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3);  // 0x1400b0f90
+void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend);  // 0x1400acc10 B4 FORWARD -> BuildRoadQuad
+int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6, float* p7, float* p8, uint32_t* p9);  // 0x1400aaa20 B4 FORWARD -> RayTestCell
+float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3);  // 0x1400b0f90 B4 FORWARD -> TerrainHeightUnder
 void Pf_RegionDirty4_b150(int64_t self, int x, int y);  // 0x1400ab150
 void Pf_FineCellDirty_a8c90(int64_t self, int x, int y);  // 0x1400a8c90
-void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20
-int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3);  // 0x14004edb0
-int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2);  // 0x140087fb0
+float* InteractNodePosition(const InteractComponent* self, float* out, int kind, int index, float* heading);  // 0x140122e20
+int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
+int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
+void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20 B4 FORWARD -> InteractNodePosition
+int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3);  // 0x14004edb0 B4 FORWARD -> PickReachableCell
+int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);  // 0x1400af370
 
 // ---- action_pf_roots_drop.cpp
