@@ -79,13 +79,7 @@ class SaveLoadDialog;
 void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
 // ---- storageui.cpp
-// StorageUI sort function (FUN_1400213f0) — sorts 0x18-byte entries by resource name.
-// Quicksort/introsort with inline comparator using UI::String → System::String.
-// StorageUI_SortItems — reimplemented as clean C++ introsort in storageui.cpp
-// Sorts array of 0x18-byte resource display structs alphabetically by resource name.
-// Each struct: [0]=entityPtr, [8]=resourceTypePtr, [0x10]=count
-// Original: FUN_1400213f0 (introsort) + FUN_1400b8370 (comparator) + FUN_140015ad0 (insertion sort)
-void StorageUI_SortItems(void* items, int count, void* scratch, void* scratch2);
+// B.4 DLG-d: the item sort (0x1400213f0) is file-local to storageui.cpp, typed.
 
 // ---- toolbar_utility_helpers.cpp
 extern "C" void ToolbarUtility_FindDialogByControllerType_0270(void* , void* retBuf, uint64_t param);  // 0x140100270
