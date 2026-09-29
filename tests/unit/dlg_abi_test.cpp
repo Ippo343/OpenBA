@@ -128,7 +128,7 @@ UNIT_TEST(dlg_loader_autosave_dialogs) {
     CHECK_EQ(sizeof(AutoSaveDialog), (size_t)0xd0);
     CHECK_EQ(offsetof(LoaderDialog, loadingImage), (size_t)0xb8);
     CHECK_EQ(offsetof(LoaderDialog, rotation),     (size_t)0xc0);
-    CHECK_EQ(offsetof(AutoSaveDialog, dataC0),     (size_t)0xc0);
+    CHECK_EQ(offsetof(AutoSaveDialog, animatedImage), (size_t)0xc0);
     CHECK_EQ(offsetof(AutoSaveDialog, angle),      (size_t)0xc8);
     CheckShape<LoaderDialog>();
     CheckShape<AutoSaveDialog>();
@@ -151,9 +151,9 @@ UNIT_TEST(dlg_mainmenu_mapparams_dialogs) {
 
 UNIT_TEST(dlg_achievement_goal_dialogs) {
     CHECK_EQ(sizeof(AchievementDialog), (size_t)0xd0);
-    CHECK_EQ(offsetof(AchievementDialog, dataB8), (size_t)0xb8);
-    CHECK_EQ(offsetof(AchievementDialog, dataC0), (size_t)0xc0);
-    CHECK_EQ(offsetof(AchievementDialog, dataC8), (size_t)0xc8);
+    CHECK_EQ(offsetof(AchievementDialog, textComplete), (size_t)0xb8);
+    CHECK_EQ(offsetof(AchievementDialog, entryData), (size_t)0xc0);
+    CHECK_EQ(offsetof(AchievementDialog, entryCount), (size_t)0xc8);
     CheckShape<AchievementDialog>();
     CheckDialogInstanceSlots<AchievementDialog>();
     CHECK_EQ(sizeof(GoalDialog), (size_t)0xc8);

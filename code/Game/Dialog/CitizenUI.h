@@ -20,6 +20,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class Element; class TextElement; class NumberElement; class DialogInstance; }
+
 class CitizenUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(CitizenUI)
 
@@ -39,33 +41,46 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400650f0
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38
-    uint64_t data40 = 0;           // +0x40
-    uint64_t data48 = 0;           // +0x48
-    uint64_t data50 = 0;           // +0x50
-    uint64_t data58 = 0;           // +0x58
-    uint64_t data60 = 0;           // +0x60
-    uint64_t data68 = 0;           // +0x68
-    uint64_t data70 = 0;           // +0x70
-    uint64_t data78 = 0;           // +0x78
-    uint64_t data80 = 0;           // +0x80
-    uint64_t data88 = 0;           // +0x88
-    uint64_t data90 = 0;           // +0x90
-    uint64_t data98 = 0;           // +0x98
-    uint64_t dataA0 = 0;           // +0xA0
-    uint64_t dataA8 = 0;           // +0xA8
-    uint64_t dataB0 = 0;           // +0xB0
-    uint64_t dataB8 = 0;           // +0xB8
-    uint64_t dataC0 = 0;           // +0xC0
-    uint64_t dataC8 = 0;           // +0xC8
-    uint64_t dataD0 = 0;           // +0xD0
-    uint64_t dataD8 = 0;           // +0xD8
-    uint64_t internalBasePtr = 0;  // +0xE0: Object::InternalBasePtr (init to null)
+    // ---- fields (B4 DLG-a: the element names are the strings OnCreated
+    // 0x1400651a0 finds them by; typed with the class each is read as) --------
+    UI::Element*       imageMale = nullptr;          // +0x30 "imageMale"
+    UI::Element*       imageFemale = nullptr;        // +0x38 "imageFemale"
+    UI::TextElement*   textName = nullptr;           // +0x40 "textName" (SetParameter)
+    UI::NumberElement* numberAge = nullptr;          // +0x48 "numberAge"
+    UI::TextElement*   textProfession = nullptr;     // +0x50 "textProfession" (SetText)
+    UI::Element*       textEducatedYes = nullptr;    // +0x58 "textEducatedYes"
+    UI::Element*       textEducatedNo = nullptr;     // +0x60 "textEducatedNo"
+    UI::TextElement*   textClothing = nullptr;       // +0x68 "textClothing" (SetText)
+    UI::TextElement*   textTool = nullptr;           // +0x70 "textTool" (SetText)
+    UI::Element*       buttonProfession = nullptr;   // +0x78 "buttonProfession" (id 0x227)
+    UI::Element*       buttonHome = nullptr;         // +0x80 "buttonHome" (id 0x226)
+    UI::Element*       buttonFollow = nullptr;       // +0x88 "buttonFollow" (id 0x228)
+    UI::Element*       textNameIs = nullptr;         // +0x90 "textNameIs"
+    UI::TextElement*   textAction = nullptr;         // +0x98 "textAction" (SetText)
+    // +0xA0 / +0xC0: the "groupHearts" / "groupStars" icon groups, each two
+    // Collection::Array<InternalPtr<UI::Element>> (whole icons, half icons).
+    // H5 raw storage: retail's dtor (0x140065990) frees them, the tree's does not.
+    uint64_t heartIcons[4] = {};                     // +0xA0
+    uint64_t starIcons[4] = {};                      // +0xC0
+    Object::InternalPtr<UI::DialogInstance> followDialog;   // +0xE0 the open FollowDialog (null)
 };
 
 static_assert(sizeof(CitizenUI) == 0xe8, "CitizenUI is 0xe8 (create 0x140010f80 MemAlloc(0xe8))");
 static_assert(alignof(CitizenUI) == 8, "qword-aligned (the vptr)");
-static_assert(offsetof(CitizenUI, data30) == 0x30, "data30 @ 0x30");
-static_assert(offsetof(CitizenUI, internalBasePtr) == 0xE0, "internalBasePtr @ 0xE0");
+static_assert(offsetof(CitizenUI, imageMale) == 0x30, "CitizenUI::imageMale @ +0x30");
+static_assert(offsetof(CitizenUI, imageFemale) == 0x38, "CitizenUI::imageFemale @ +0x38");
+static_assert(offsetof(CitizenUI, textName) == 0x40, "CitizenUI::textName @ +0x40");
+static_assert(offsetof(CitizenUI, numberAge) == 0x48, "CitizenUI::numberAge @ +0x48");
+static_assert(offsetof(CitizenUI, textProfession) == 0x50, "CitizenUI::textProfession @ +0x50");
+static_assert(offsetof(CitizenUI, textEducatedYes) == 0x58, "CitizenUI::textEducatedYes @ +0x58");
+static_assert(offsetof(CitizenUI, textEducatedNo) == 0x60, "CitizenUI::textEducatedNo @ +0x60");
+static_assert(offsetof(CitizenUI, textClothing) == 0x68, "CitizenUI::textClothing @ +0x68");
+static_assert(offsetof(CitizenUI, textTool) == 0x70, "CitizenUI::textTool @ +0x70");
+static_assert(offsetof(CitizenUI, buttonProfession) == 0x78, "CitizenUI::buttonProfession @ +0x78");
+static_assert(offsetof(CitizenUI, buttonHome) == 0x80, "CitizenUI::buttonHome @ +0x80");
+static_assert(offsetof(CitizenUI, buttonFollow) == 0x88, "CitizenUI::buttonFollow @ +0x88");
+static_assert(offsetof(CitizenUI, textNameIs) == 0x90, "CitizenUI::textNameIs @ +0x90");
+static_assert(offsetof(CitizenUI, textAction) == 0x98, "CitizenUI::textAction @ +0x98");
+static_assert(offsetof(CitizenUI, heartIcons) == 0xA0, "CitizenUI::heartIcons @ +0xA0");
+static_assert(offsetof(CitizenUI, starIcons) == 0xC0, "CitizenUI::starIcons @ +0xC0");
+static_assert(offsetof(CitizenUI, followDialog) == 0xE0, "CitizenUI::followDialog @ +0xE0");

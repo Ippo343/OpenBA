@@ -30,6 +30,9 @@
 #include "Component/ConsumeProduceDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/ConsumeProduceComponent.h"   // B4 DLG-a: by-name reads
+#include "Component/ComponentDescription.h"
+#include "Dialog/ConsumeProduceUI.h"
 
 // ConsumeProduceUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-24. The Tavern panel
 // rendered its authored layout -- worker spinner, Inventory, "Alcohol Limit 500",
@@ -49,8 +52,24 @@
 // component+0x18 is that description, matching Table 1's authority) / RawMaterialDescription
 // all have a ported TypeId() now, so the EnsureTypeIds()/Ready() lazy-cache is dead.
 
+// The data source's ConsumeProduceComponent (retail's checked cast of +0x28,
+// then FindComponent<ConsumeProduceComponent> 0x14000b6f0). The generic finder
+// the tree called returned null for a null entity (kept).
+static ConsumeProduceComponent* CPUI_FindComponent(Object::Base* entity) {
+    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
+    ComponentEntity* entityPtr = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
+    return entityPtr ? entityPtr->FindComponent<ConsumeProduceComponent>() : nullptr;
+}
+
+// The component's ConsumeProduceDescription (Component::_description, checked).
+static ConsumeProduceDescription* CPUI_Description(ConsumeProduceComponent* component) {
+    Description* desc = component->_description;
+    bool isCPComp = ::Object::IsDerivedFromNullSafe(desc, ConsumeProduceDescription::TypeId());
+    return isCPComp ? static_cast<ConsumeProduceDescription*>(desc) : nullptr;
+}
+
 // ============================================================
-// ConsumeProduceUI::Slot4 (vtable +0x20) — Setup/refresh
+// ConsumeProduceUI::OnCreated (vtable +0x20) — Setup/refresh
 // ============================================================
 // Gets entity's ConsumeProduceComponent, finds "comboProduct" and
 // "progressRemaining" UI elements, populates the combo with product
@@ -61,40 +80,23 @@
 
 // [4] 0x14005f3d0
 void ConsumeProduceUI::OnCreated() {
-    uintptr_t s = (uintptr_t)this;
-
     // Bail on a dead / marked-for-removal datasource before probing it (see Slot7).
     if (!SA_DialogEntityAlive(this)) return;
 
-    // Get entity from controller data (+0x28)
-    void* entity = *(void**)(s + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
+    // Find the ConsumeProduceComponent of the data source (+0x28)
+    ConsumeProduceComponent* component = CPUI_FindComponent(_dataSource);
 
-    // Wrap entity in InternalBasePtr
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-    void* entityInternal = *(void**)entityBuf;
-
-    // Find ConsumeProduceComponent
-    uint64_t component = 0;
-    fn_FindComponent_ConsumeProduce(entityInternal, &component);
-
-    // Get Description at component+0x18, check ConsumeProduceComponent
-    void* desc = *(void**)((uintptr_t)component + 0x18);
-    bool isCPComp = ::Object::IsDerivedFromNullSafe(desc, ConsumeProduceDescription::TypeId());
-    void* cpComp = isCPComp ? desc : nullptr;
+    // Its description, checked as a ConsumeProduceDescription
+    ConsumeProduceDescription* cpComp = CPUI_Description(component);
 
     // Find "comboProduct" element via DialogInstance
-    void* dialogInst = *(void**)(s + 0x18);
+    UI::DialogInstance* dialogInst = _dialog;
 
     // Check if element exists (first FindElement call to test)
     bool hasCombo;
     {
         System::String nameStr("comboProduct");
-        uint64_t testBuf = 0;
-        ::new (&testBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        hasCombo = (testBuf != 0);
+        hasCombo = (dialogInst->FindElement(nameStr).Get() != nullptr);
     }
     {
         static int nh = 0;
@@ -106,32 +108,23 @@ void ConsumeProduceUI::OnCreated() {
     }
 
     if (hasCombo) {
-        // Find "comboProduct" again, wrap as InternalBasePtr, check ComboElement type
+        // Find "comboProduct" again, check ComboElement type
         System::String nameStr("comboProduct");
-        uint8_t elemBuf[16];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        void* foundElem = *(void**)elemBuf;
+        UI::Element* foundElem = dialogInst->FindElement(nameStr).Get();
 
         // IsDerivedFrom ComboElement type check
         bool isCombo = ::Object::IsDerivedFromNullSafe(foundElem, UI::ComboElement::TypeId());
-        void* comboRaw = isCombo ? foundElem : nullptr;
-        uint64_t comboBP = 0;
-        new (&comboBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comboRaw));   // B.3.3 bridge
-        *(uint64_t*)(s + 0x30) = comboBP;
+        comboProduct = isCombo ? static_cast<UI::ComboElement*>(foundElem) : nullptr;
 
         // Set element ID 22000
-        reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(22000);  // B.3.6 bridge
+        comboProduct->SetElementId(22000);
 
-        // Iterate description entries and populate combo
-        // cpComp+0x28 = entries array ptr, cpComp+0x30 = entry count, stride 0x28
-        uintptr_t cp = (uintptr_t)cpComp;
+        // Iterate the description's recipes and populate combo
+        // (_recipes: 0x28 stride, _recipeCount)
         // [CPUI] the Tavern's Product combo renders EMPTY. Three different things
         // produce that same blank dropdown and they need different fixes:
-        //   * hasCombo false      -> the "comboProduct" element was never found, so this
-        //                           whole block is skipped (no crash, blank combo)
-        //   * cpComp null         -> the IsDerivedFrom below tests the DESCRIPTION at
-        //                           component+0x18 against the COMPONENT type id, which
-        //                           is the wrong class entirely
+        //   * hasCombo false      -> the "comboProduct" element was never found
+        //   * cpComp null         -> the description is not a ConsumeProduceDescription
         //   * entryCount == 0     -> the recipe array on the description never
         //                           deserialized (see the unregistered-resize trap)
         // Print all three rather than guessing between them.
@@ -141,105 +134,93 @@ void ConsumeProduceUI::OnCreated() {
                 ++n;
                 fprintf(stderr, "[CPUI] Slot4 comp=%p desc(comp+0x18)=%p cpComp(afterCast)=%p "
                         "entryCount(desc+0x30)=%d entriesBase(desc+0x28)=%p\n",
-                        (void*)component, *(void**)((uintptr_t)component + 0x18), cpComp,
-                        cpComp ? *(int*)(cp + 0x30) : -1,
-                        cpComp ? *(void**)(cp + 0x28) : nullptr);
+                        (void*)component, component->_description, (void*)cpComp,
+                        cpComp ? cpComp->_recipeCount : -1,
+                        cpComp ? cpComp->_recipes : nullptr);
                 fflush(stderr);
             }
         }
-        int entryCount = *(int*)(cp + 0x30);
-        uintptr_t entriesBase = *(uintptr_t*)(cp + 0x28);
+        int entryCount = cpComp->_recipeCount;
+        // LEFT: the recipe entries (0x28 stride: +0x10 the raw material's
+        // ComponentDescription, +0x20 its name String) have no type in COMP-c's header.
+        const uint8_t* entriesBase = (const uint8_t*)cpComp->_recipes;
 
         for (int i = 0; i < entryCount; i++) {
-            // Each entry at entriesBase + i*0x28 has sub-descriptions
-            // at entry+0x10 = pointer to sub-entry
-            uintptr_t entryPtr = *(uintptr_t*)(entriesBase + (uintptr_t)i * 0x28 + 0x10);
+            // The recipe's raw-material description (entry +0x10)
+            ComponentDescription* entryPtr =
+                *(ComponentDescription* const*)(entriesBase + (uintptr_t)i * 0x28 + 0x10);
 
-            // Search sub-entries for ResourceDescription type (TypeId_RawMaterialDescription)
-            int subCount = *(int*)(entryPtr + 0x30);
-            uintptr_t subArray = *(uintptr_t*)(entryPtr + 0x28);
-            void* resourceDesc = nullptr;
+            // Search its sub-descriptions for the RawMaterialDescription
+            int subCount = entryPtr->_subDescCount;
+            void** subArray = entryPtr->_subDescs;
+            RawMaterialDescription* resourceDesc = nullptr;
 
             for (int j = 0; j < subCount; j++) {
-                void* subEntry = *(void**)(subArray + (uintptr_t)j * 8);
+                // LEFT: ComponentDescription::_subDescs is void** (COMP-c's header).
+                Object::Base* subEntry = reinterpret_cast<Object::Base*>(subArray[j]);
                 // Call GetTypeId virtual (vtable+0x10) and compare
-                int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
+                int typeId = subEntry->Type();
                 if (typeId == (int)RawMaterialDescription::TypeId()) {
                     // Verify with IsDerivedFrom
-                    if (::Object::IsDerivedFromNullSafe((void*)subEntry, RawMaterialDescription::TypeId())) {
-                        resourceDesc = subEntry;
+                    if (::Object::IsDerivedFromNullSafe(subEntry, RawMaterialDescription::TypeId())) {
+                        resourceDesc = static_cast<RawMaterialDescription*>(subEntry);
                     }
                     break;
                 }
             }
 
-            // Create UI::String from description string table + entry name
-            // String table at cpComp+0x20, name at entriesBase + i*0x28 + 0x20
-            // Note: stride 0x28, offset for name within entry is calculated as:
-            // base + i * (i+1) * 4 * 8 -> no, from disasm: LEA RCX,[RSI+RCX*8] where
-            // RCX = RSI + RSI*4 = i * 5, so address = base + i*5*8 = base + i*0x28 + 0x20
-            uintptr_t nameAddr = entriesBase + (uintptr_t)i * 0x28 + 0x20;
-            uint64_t stringTable = *(uint64_t*)(cp + 0x20);
-            uint8_t uiStrBuf[16];
-            ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), *reinterpret_cast<const System::String*>(nameAddr));  // B.3.6 bridge
+            // UI::String from the description's string table (+0x20) and the
+            // recipe's name (entry +0x20). From disasm: LEA RCX,[RSI+RCX*8] where
+            // RCX = RSI + RSI*4 = i * 5, so address = base + i*0x28 + 0x20.
+            const System::String* name =
+                (const System::String*)(entriesBase + (uintptr_t)i * 0x28 + 0x20);
+            // LEFT: ConsumeProduceDescription::_ref20 is void* (COMP-c's header).
+            UI::String uiStr(Object::ExternalPtr<UI::StringTable>((UI::StringTable*)cpComp->_ref20), *name);
 
             // Convert UI::String to System::String
-            System::String sysStr;
-            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
+            System::String sysStr = uiStr;
 
-            // Create UI::Sprite from ResourceDescription
-            // resourceDesc+0x20 = sprite sheet, resourceDesc+0x38 = sprite name
-            void* comboElem = (void*)*(uint64_t*)(s + 0x30);
-            uint8_t spriteBuf[32];
-            uintptr_t rd = (uintptr_t)resourceDesc;
-            ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(rd + 0x20))), *reinterpret_cast<const System::String*>(rd + 0x38));  // B.3.6 bridge
+            // UI::Sprite from the RawMaterialDescription: sheet (+0x20), _nameSmall (+0x38)
+            UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resourceDesc->_spriteSheet),
+                              resourceDesc->_nameSmall);
 
             // Add item to combo: sprite, string, null userData
-            reinterpret_cast<UI::ComboElement*>(comboElem)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), sysStr, nullptr);  // B.3.6 bridge
+            comboProduct->AddItem(sprite, sysStr, nullptr);
         }
 
         // Get current product index and set combo selection
-        uint32_t productIdx = fn_GetCurrentProductIndex((void*)component);
+        uint32_t productIdx = fn_GetCurrentProductIndex(component);
         int selIdx = (int)productIdx;
         if ((int)productIdx < 0) {
             // Invalid — reset to 0
-            *(uint32_t*)(component + 0x50) = 0;
+            component->consumeResourceId = 0;
             selIdx = 0;
         }
-        void* comboFinal = (void*)*(uint64_t*)(s + 0x30);
-        reinterpret_cast<UI::ComboElement*>(comboFinal)->SetCurrentItem(selIdx);  // B.3.6 bridge
+        comboProduct->SetCurrentItem(selIdx);
     }
 
     // Find "progressRemaining" element
     bool hasProgress;
     {
         System::String nameStr("progressRemaining");
-        uint64_t testBuf2 = 0;
-        ::new (&testBuf2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        hasProgress = (testBuf2 != 0);
+        hasProgress = (dialogInst->FindElement(nameStr).Get() != nullptr);
     }
 
     if (hasProgress) {
         System::String nameStr("progressRemaining");
-        uint8_t elemBuf2[16];
-        ::new (elemBuf2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
-        void* progElem = *(void**)elemBuf2;
+        UI::Element* progElem = dialogInst->FindElement(nameStr).Get();
 
         // Check ProgressElement type
         bool isProgress = ::Object::IsDerivedFromNullSafe(progElem, UI::ProgressElement::TypeId());
-        void* progRaw = isProgress ? progElem : nullptr;
-        uint64_t progBP = 0;
-        new (&progBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progRaw));   // B.3.3 bridge
-        *(uint64_t*)(s + 0x38) = progBP;
+        progressRemaining = isProgress ? static_cast<UI::ProgressElement*>(progElem) : nullptr;
 
-        // Set initial progress to 1.0f at element+0x124
-        void* progFinal = (void*)*(uint64_t*)(s + 0x38);
-        *(float*)((uintptr_t)progFinal + 0x124) = 1.0f;
+        // Set the progress maximum to 1.0f
+        progressRemaining->_maxValue = 1.0f;
     }
 }
 
 // ============================================================
-// ConsumeProduceUI::Slot7 (vtable +0x38) — Update progress bar
+// ConsumeProduceUI::OnUpdateLayout (vtable +0x38) — Update progress bar
 // ============================================================
 // Updates the production progress bar. Reads current/total ticks
 // from the entity's components, calculates ratio, and formats
@@ -250,53 +231,37 @@ void ConsumeProduceUI::OnCreated() {
 // [7] 0x14005f1f0
 void ConsumeProduceUI::OnUpdateLayout() {
     // Bail if the datasource entity is gone or marked-for-removal — otherwise the
-    // IsDerivedFrom below runs on a dying entity (crash class 2026-07-21). Reliable
-    // now that removals are one-frame-deferred (entitylist.cpp Step 0): the entity
-    // is valid marked-but-alive memory whenever this per-frame slot fires.
+    // IsDerivedFrom below runs on a dying entity (crash class 2026-07-21).
     if (!SA_DialogEntityAlive(this)) return;
 
-    // data38 = progress element InternalPtr
-    void* progressElem = (void*)this->data38;
+    // The progress element
+    UI::ProgressElement* progressElem = progressRemaining;
     if (!progressElem) return;
 
-    // Get entity from controller data (+0x28)
-    void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
+    // Find the component (FUN_14000b6f0)
+    ConsumeProduceComponent* component = CPUI_FindComponent(_dataSource);
 
-    // Wrap entity in InternalBasePtr
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-    void* entityInternal = *(void**)entityBuf;
-
-    // Find component via FUN_14000b6f0 (same FindComponent used in StorageCapacityUI)
-    void* component = nullptr;
-    fn_FindComponent_ConsumeProduce(entityInternal, &component);
-
-    // Get sub-component at +0x18 of found component, check if ConsumeProduceComponent
-    void* subComp = *(void**)((uintptr_t)component + 0x18);
-    bool isCPComp = ::Object::IsDerivedFromNullSafe(subComp, ConsumeProduceDescription::TypeId());
-    void* cpComp = isCPComp ? subComp : nullptr;
+    // Its description, checked as a ConsumeProduceDescription
+    ConsumeProduceDescription* cpComp = CPUI_Description(component);
 
     // Calculate production ratio: 1.0 - currentTicks / totalTicks
-    int currentTicks = *(int*)((uintptr_t)component + 0x68);
-    int totalTicks = *(int*)((uintptr_t)cpComp + 0x48);
+    int currentTicks = component->consumeState;
+    int totalTicks = cpComp->_i48;
     float ratio = 1.0f - (float)currentTicks / (float)totalTicks;
 
-    // Store ratio at progress element +0x128
-    void* progPtr = (void*)this->data38;
-    *(float*)((uintptr_t)progPtr + 0x128) = ratio;
+    // Store ratio as the progress value
+    progressRemaining->_currentValue = ratio;
 
     // Format as integer percentage: (int)(ratio * 100.0 + 0.5)
     int percent = (int)(ratio * 100.0f + 0.5f);
     System::String str = System::String::Format("%i", (uint64_t)(uint32_t)percent);
 
     // Set on progress element
-    reinterpret_cast<UI::ProgressElement*>(progPtr)->SetProgressTextParameter(0, str);  // B.3.6 bridge
+    progressRemaining->SetProgressTextParameter(0, str);
 }
 
 // ============================================================
-// ConsumeProduceUI::Slot9 (vtable +0x48) — Combo selection handler
+// ConsumeProduceUI::OnElementEvent (vtable +0x48) — Combo selection handler
 // ============================================================
 // When the combo selection changes (param3==0x14, param4==22000),
 // reads the selected product index from the UI combo element and
@@ -309,24 +274,12 @@ void ConsumeProduceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
                                       int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 != 0x14 || param4 != 22000) return;
 
-    // Get entity from controller data (+0x28)
-    void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
-    void* entityPtr = isEntity ? entity : nullptr;
-
-    // Wrap entity in InternalBasePtr
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-    void* entityInternal = *(void**)entityBuf;
-
     // Find component
-    void* component = nullptr;
-    fn_FindComponent_ConsumeProduce(entityInternal, &component);
+    ConsumeProduceComponent* component = CPUI_FindComponent(_dataSource);
 
-    // Read selection from combo element (data30 InternalPtr) at +0x118
-    void* comboElem = (void*)this->data30;
-    uint32_t selection = *(uint32_t*)((uintptr_t)comboElem + 0x118);
+    // Read the combo's selection
+    uint32_t selection = comboProduct->_currentItem;
 
-    // Write to found component at +0x50
-    *(uint32_t*)((uintptr_t)component + 0x50) = selection;
+    // Write it as the component's selected recipe (+0x50)
+    component->consumeResourceId = selection;
 }

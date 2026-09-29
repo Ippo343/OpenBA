@@ -18,6 +18,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class LabelElement; class TextElement; class ProgressElement; }
+
 class BuildUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(BuildUI)
 
@@ -34,12 +36,29 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400b1ea0
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
-    uint64_t data40 = 0;           // +0x40: zeroed
-    uint64_t data48 = 0;           // +0x48: zeroed
+    // One storage-table row: its "labelStorage" and "textTotal" elements (the
+    // element of the +0x30 Array, stride 0x10; OnCreated 0x1400b1f40 pushes them).
+    struct StorageRow {
+        UI::LabelElement* label;   // +0x00 InternalPtr<LabelElement>
+        UI::TextElement*  total;   // +0x08 InternalPtr<TextElement>
+    };
+
+    // ---- fields (B4 DLG-a: named from the element strings OnCreated finds) ----
+    // +0x30 Collection::Array<StorageRow>, declared as its three raw members
+    // (H5: retail's dtor frees the data, the tree's does not).
+    StorageRow* rowData = nullptr;             // +0x30 Array data
+    int32_t     rowCount = 0;                  // +0x38 Array count
+    int32_t     rowCapacity = 0;               // +0x3C Array capacity
+    UI::ProgressElement* progress = nullptr;   // +0x40 "progress"
+    UI::TextElement*     textTotal = nullptr;  // +0x48 the header row's "textTotal"
 };
 
 static_assert(sizeof(BuildUI) == 0x50, "BuildUI is 0x50 (create 0x1400209e0 MemAlloc(0x50))");
 static_assert(alignof(BuildUI) == 8, "qword-aligned (the vptr)");
+static_assert(sizeof(BuildUI::StorageRow) == 0x10, "BuildUI::StorageRow stride 0x10");
+static_assert(offsetof(BuildUI::StorageRow, total) == 0x08, "BuildUI::StorageRow::total @ +0x08");
+static_assert(offsetof(BuildUI, rowData) == 0x30, "BuildUI::rowData @ +0x30");
+static_assert(offsetof(BuildUI, rowCount) == 0x38, "BuildUI::rowCount @ +0x38");
+static_assert(offsetof(BuildUI, rowCapacity) == 0x3C, "BuildUI::rowCapacity @ +0x3C");
+static_assert(offsetof(BuildUI, progress) == 0x40, "BuildUI::progress @ +0x40");
+static_assert(offsetof(BuildUI, textTotal) == 0x48, "BuildUI::textTotal @ +0x48");

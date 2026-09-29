@@ -18,6 +18,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class ComboElement; class ProgressElement; }
+
 class ConsumeProduceUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ConsumeProduceUI)
 
@@ -32,10 +34,12 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x14005f330
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
+    // ---- fields (B4 DLG-a: the element strings OnCreated 0x14005f3d0 finds) ----
+    UI::ComboElement*    comboProduct = nullptr;       // +0x30 "comboProduct" (id 22000)
+    UI::ProgressElement* progressRemaining = nullptr;  // +0x38 "progressRemaining"
 };
 
 static_assert(sizeof(ConsumeProduceUI) == 0x40, "ConsumeProduceUI is 0x40 (create 0x140010ae0 MemAlloc(0x40))");
 static_assert(alignof(ConsumeProduceUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(ConsumeProduceUI, comboProduct) == 0x30, "ConsumeProduceUI::comboProduct @ +0x30");
+static_assert(offsetof(ConsumeProduceUI, progressRemaining) == 0x38, "ConsumeProduceUI::progressRemaining @ +0x38");

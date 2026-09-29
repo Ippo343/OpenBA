@@ -57,7 +57,7 @@ public:
 
     // +0x30 the "selectResource" ComboElement (Object::InternalBasePtr). The
     // name is the Panels.h CropUI POD's, kept for cropui.cpp's bodies.
-    uint64_t internalBasePtr = 0;                                 // +0x30
+    UI::Element* internalBasePtr = nullptr;                       // +0x30 (B4 H4: typed; DLG-a)
 
 protected:
     // Inlined into every leaf ctor by retail; the InternalBasePtr(null) is
