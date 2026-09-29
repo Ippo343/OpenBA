@@ -166,11 +166,8 @@ void FloorComponent_SubF390(void* selfV);  // 0x14011f390
 extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 
 // ---- growthcomponent.cpp
-void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);  // 0x140118950
-int GrowthComponent_GetResourceIndex(void* comp);  // 0x140120410
-void GrowthComponent_SetResourceAmount(void* comp, float amount);  // 0x140120470
-void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780
-void GrowthComponent_SpawnSubResource(void* growthComp, void* config);  // 0x14011fba0
+void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);  // 0x140118950  B4 FORWARD: Component::ModifyFlags (animalcomponent.cpp)
+void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780  B4 FORWARD: NaturalResourceComponent::ResetGrowthState (tornadocomponent.cpp)
 
 // ---- happinesscomponent.cpp
 void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, short delta);  // 0x14009f990

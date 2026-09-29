@@ -25,6 +25,12 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "object/Internal.h"   // Object::InternalPtr<T>
+#include "system/Value.h"      // System::Time
+
+class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
+class ModelComponent;             // Component/ModelComponent.h
+class GrowthDescription;          // Component/GrowthDescription.h
 
 class GrowthComponent final : public Component {
     DECLARE_EXE_TYPE(GrowthComponent)
@@ -42,20 +48,28 @@ public:
     void PostUpdate() override;                                   // [10] 0x14011fea0
     void Slot11() override;                                       // [11] 0x1401206a0 PORT GAP
 
-    // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    field28;      // +0x28 resource sub-component
-    void*    field30;      // +0x30 model sibling
-    void*    field38;      // +0x38 config
-    void*    field40;      // +0x40
-    float    growthRate;   // +0x48 (retail ctor 1.0f)
-    float    growthScale;  // +0x4C (retail ctor 1.0f)
+    // ---- non-virtual members (retail addresses; RCX = this) ----
+    int  GetResourceIndex();                                      // 0x140120410
+    void SetResourceAmount(float amount);                         // 0x140120470
+    void SpawnSubResource(GrowthDescription* config);             // 0x14011fba0
+
+    // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
+    // 0x1401207c0: +0x28 / +0x30 InternalBasePtr::Serialize then IsDerivedFrom
+    // NaturalResourceComponent (0x1401c7b30) / ModelComponent (0x1401c7a50); +0x48 /
+    // +0x4c Serialize(float&); +0x40 Time::Serialize.
+    Object::InternalPtr<NaturalResourceComponent> resource;   // +0x28 (Startup: FindComponent 0x1400052c0)
+    Object::InternalPtr<ModelComponent>           model;      // +0x30 (Startup: FindComponent 0x140003f60)
+    GrowthDescription* config;     // +0x38 Startup's copy of the description (not serialized)
+    System::Time spawnTimer;       // +0x40 sub-resource spawn timer (Update)
+    float    displayScale; // +0x48 the smoothed displayed scale (PostUpdate; retail ctor 1.0f)
+    float    growthScale;  // +0x4C the harvest threshold (Startup; retail ctor 1.0f)
 };
 
 static_assert(sizeof(GrowthComponent) == 0x50, "GrowthComponent is 0x50 (create 0x140034b10)");
 static_assert(alignof(GrowthComponent) == 8, "GrowthComponent alignment");
-static_assert(offsetof(GrowthComponent, field28)     == 0x28, "");
-static_assert(offsetof(GrowthComponent, field30)     == 0x30, "");
-static_assert(offsetof(GrowthComponent, field38)     == 0x38, "");
-static_assert(offsetof(GrowthComponent, field40)     == 0x40, "");
-static_assert(offsetof(GrowthComponent, growthRate)  == 0x48, "");
+static_assert(offsetof(GrowthComponent, resource)    == 0x28, "");
+static_assert(offsetof(GrowthComponent, model)       == 0x30, "");
+static_assert(offsetof(GrowthComponent, config)      == 0x38, "");
+static_assert(offsetof(GrowthComponent, spawnTimer)  == 0x40, "");
+static_assert(offsetof(GrowthComponent, displayScale) == 0x48, "");
 static_assert(offsetof(GrowthComponent, growthScale) == 0x4C, "");
