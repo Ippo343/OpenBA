@@ -259,6 +259,8 @@ in the code carries a comment.
 | 12 | `TerraformComponent_RegionRecalc` | a second copy of `Pf_RegionDirty4_b150` with the tree's zero-chunk guard | one body | CONFIRMED (COMP-e) |
 | 33 | `Audio::Stream::Run` (`vtbatch7b_stream_run_win.cpp`), `IXAudio2SourceVoice::GetState` | mingw's `<xaudio2.h>` is the 2.8 interface, so the call passes a second argument (`Flags = 0` in R8) | XAudio2 2.7's `GetState(pVoiceState)` takes one; slot +0xc8 is the same and 2.7 ignores R8 | SUSPECTED harmless (R-ENG) |
 | 34 | `Engine::PlatformConfigure`'s launcher (`engine_platform_win.cpp`) | reads the two launcher check-box bytes and calls the dialog proc 0x1800a1ae0 at module-relative addresses of a LOADED `Runtime-x64.dll` (`GetModuleHandleW`); the standalone never loads it, so the launcher dialog is never shown and both bytes read 0 | retail runs its own dialog proc 0x1800a1ae0 over resource 0x66 | CONFIRMED from the code, not from retail (R-ENG); a door into the retail binary, LEFT |
+| 35 | the Work bodies' worker cap (Forester, GatherRawMaterials, HarvestArea, HarvestOrchard, Herbalist, Hunt, MarketWork, Pasture Execute) | call `WorkComponent_CalcMaxWorkers` (`tutorial_base.cpp`), a second port of 0x14012e5c0 that differs from the member `WorkComponent::CalcMaxWorkers` (which footprint component it reads, FloorComponent vs MapComponent, and its guards) | one body, 0x14012e5c0 | SUSPECTED (WORK-b; the two ports compared, retail not re-read) |
+| 36 | `PastureWork::OnCancel` (`pasturework.cpp`) | tests the entity's description IsDerivedFrom AnimalDescription and returns when it is not; calls `ActHunt_NotifyEntityChanged` when bit 20 changed. Net: the tree never clears bit 20 of the AnimalComponent's flags | 0x1400f22c0 checks against ComponentEntity (cell 0x1401c5d70) and passes null on failure, finds the AnimalComponent with no null test, always clears bit 20 (`BTR`), and tests `(old ^ new) & 0xFFFF`, always 0 for bit 20, so it never notifies | CONFIRMED (WORK-b, disassembly read) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -320,6 +322,15 @@ stated condition.
   every `T` is registered. PastureUI's second copy of ComputeCapacity went with its two guards
   (`behaviour:` 0x140128570).
 - DROPPED WITHOUT READING RETAIL: the MemAlloc-failure path of `TickIdle` (COMP-f). SUSPECTED.
+- KEPT (WORK-b): `HarvestArea::Execute` skips a cell whose occupant has no NaturalResourceComponent,
+  where retail 0x1400eccd0 reads its +0x20 unguarded (0x1400ed082), CONFIRMED; `HarvestArea::Cleanup`
+  breaks when a cancel does not drop the count, where retail 0x1400ed270 loops on `+0x50 > 0`
+  (0x1400ed2cb), CONFIRMED; the null-slot and null-entry skips of `PG_FindComp` /
+  `PG_FindRawMaterialDesc` and `CitizenBehavior::HasStorageFor` (`pickup_gate.cpp`, 0x14008d3c0 /
+  0x14012d990); PastureWork's guarded finder 0x1400012d0; `Pickup` slot 5's freed-self vptr test;
+  the GatherRawMaterials site-ctor guards; the HarvestOrchard ctor's orchard / array / slots guards;
+  `CitizenComp_StorageComponent_QueryCount`'s null test. SUSPECTED for the last five (retail not
+  re-read in B.4).
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -359,6 +370,12 @@ stated condition.
   and video-restart callbacks there (the profile build's `Video::Device::SetVideoErrorFuncs`,
   0x1800fd860, inlined); `engine.cpp` still writes them as raw bytes because the header (R-VIDEO)
   has no named fields.
+- Work (WORK-b): `Pickup::candidateList` is an `ExternalPtr<Profession>`, not a list; the
+  `citizenEntity` locals of `Pickup` slot 5 and the pickup gate hold a Profession; the finder
+  forwarders `WorkBase_FindComponent_2f90` ("MeshInstance") and `WorkBase_FindComponent_2ed0`
+  ("Position") find the StatusIconComponent and the InteractComponent; `WorkAct_HarvestAreaCtor_c1530`
+  is named for its caller. HarvestArea / HarvestOrchard / Herbalist `Cleanup` walks the LEFT child
+  (the tree's comments said "rightmost"; corrected in the converted files).
 
 ### 14g. Commit messages that state something nobody verified
 
