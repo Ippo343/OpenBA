@@ -380,8 +380,9 @@ static const bool s_buildStateTableBuilt = (BuildComponent_PopulateStateTable(),
 // multiplier, 0x140109023), +0x50 = 0 (byte), +0x58..+0x70 = 0; then
 // `_flags |= 0x83`.
 BuildComponent::BuildComponent()
-    : _controller(this), buildState(0), buildProgress(1), buildFlag(0), _pad51{},
-      field58(nullptr), field60(nullptr), field68(nullptr), field70(nullptr) {
+    : _controller(this), laborProgress(0), costMultiplier(1), buildFlag(0), _pad51{},
+      modelComponents(nullptr), modelComponentCount(0), modelComponentCapacity(0),
+      pickingComponents(nullptr), pickingComponentCount(0), pickingComponentCapacity(0) {
     OrFlagsInCtor(0x83);
 }
 
@@ -389,12 +390,14 @@ BuildComponent::BuildComponent()
 // are freed and zeroed, in retail's order; the member's and the bases' dtors
 // (restamps only) and ~Internal are the compiler's chain.
 BuildComponent::~BuildComponent() {
-    Object::detail::InternalMemFree(field68);
-    field68 = nullptr;
-    field70 = nullptr;
-    Object::detail::InternalMemFree(field58);
-    field58 = nullptr;
-    field60 = nullptr;
+    Object::detail::InternalMemFree(pickingComponents);
+    pickingComponents = nullptr;
+    pickingComponentCount = 0;      // retail: one qword 0 over +0x70..+0x77
+    pickingComponentCapacity = 0;
+    Object::detail::InternalMemFree(modelComponents);
+    modelComponents = nullptr;
+    modelComponentCount = 0;        // retail: one qword 0 over +0x60..+0x67
+    modelComponentCapacity = 0;
 }
 
 // create 0x14002f2b0: MemAlloc(0x78, 8), then the ctor.
@@ -561,7 +564,7 @@ void BuildComponent::OnRemove() {
 // +0x48; State8Update ramps the build meshes as +0x48 climbs toward target
 // (matComp[0x30] * bc[0x4c]) and requests 8->2 completion once it is reached.
 void BuildComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
-    if (message == 0) buildState += 1;
+    if (message == 0) laborProgress += 1;
 }
 
 DEFINE_EXE_TYPE(BuildComponent, "ControllerComponent")

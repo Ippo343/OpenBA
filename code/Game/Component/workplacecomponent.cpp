@@ -823,8 +823,8 @@ static void WorkPlaceComponent_RecordCensus(WorkPlaceComponent* wpc) {
 // (accepting: FindAvailableBuilding's gate reads it); +0x58 = +0x60 = 0; then
 // `_flags |= 2` (0x82).
 WorkPlaceComponent::WorkPlaceComponent()
-    : _controller(this), workerData(nullptr), isAccepting(1), _pad51{},
-      field58(nullptr), field60(nullptr) {
+    : _controller(this), profession(nullptr), isAccepting(1), _pad51{},
+      workers(nullptr), workerCount(0), workerCapacity(0) {
     OrFlagsInCtor(0x2);
     WorkPlaceComponent_RecordCensus(this);
 }
@@ -832,9 +832,10 @@ WorkPlaceComponent::WorkPlaceComponent()
 // 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
 // (the compiler chain).
 WorkPlaceComponent::~WorkPlaceComponent() {
-    Object::detail::InternalMemFree(field58);
-    field58 = nullptr;
-    field60 = nullptr;
+    Object::detail::InternalMemFree(workers);
+    workers = nullptr;
+    workerCount = 0;       // retail: one qword 0 over +0x60..+0x67
+    workerCapacity = 0;
 }
 
 // create 0x14003a030: MemAlloc(0x68, 8), then the ctor.
@@ -931,7 +932,7 @@ void WorkPlaceComponent::Persist(void* stream) {
             WorkPlaceDescription::TypeId());   // import slot 0x140152a98
         void* descComp = derived ? obj : nullptr;
         if (descComp) {
-            *(uint64_t*)&workerData = *(uint64_t*)((uintptr_t)descComp + 0x20);
+            *(uint64_t*)&profession = *(uint64_t*)((uintptr_t)descComp + 0x20);
         }
     } else {
         // Version >= 1: serialize via FUN_140018020

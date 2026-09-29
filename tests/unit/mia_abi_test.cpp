@@ -96,11 +96,11 @@ UNIT_TEST(mia_component_member_offsets) {
     CHECK_EQ(offsetof(BoatComponent, data28),              (size_t)0x28);
     CHECK_EQ(offsetof(BoatComponent, data60),              (size_t)0x60);   // route array
     CHECK_EQ(offsetof(BoatComponent, data70),              (size_t)0x70);
-    CHECK_EQ(offsetof(BuildComponent, buildState),         (size_t)0x48);
-    CHECK_EQ(offsetof(BuildComponent, buildProgress),      (size_t)0x4c);
+    CHECK_EQ(offsetof(BuildComponent, laborProgress),      (size_t)0x48);
+    CHECK_EQ(offsetof(BuildComponent, costMultiplier),     (size_t)0x4c);
     CHECK_EQ(offsetof(BuildComponent, buildFlag),          (size_t)0x50);
-    CHECK_EQ(offsetof(BuildComponent, field58),            (size_t)0x58);
-    CHECK_EQ(offsetof(BuildComponent, field70),            (size_t)0x70);
+    CHECK_EQ(offsetof(BuildComponent, modelComponents),    (size_t)0x58);
+    CHECK_EQ(offsetof(BuildComponent, pickingComponentCount),(size_t)0x70);
     CHECK_EQ(offsetof(CemeteryComponent, plots),           (size_t)0x48);
     CHECK_EQ(offsetof(CemeteryComponent, plotCapacity),    (size_t)0x54);
     CHECK_EQ(offsetof(ClearAreaComponent, clearState),     (size_t)0x48);

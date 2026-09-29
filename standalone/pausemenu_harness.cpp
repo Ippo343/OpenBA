@@ -201,7 +201,7 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
     if (!s_opened) {
         if (frameNum - s_worldSeenAt < s_openFrame) return;
         // Retail passes gameWorld+0x120 (the EntityUI). GameUpdateLoop hands us the
-        // same pointer as m_entityUI; fall back to the world field if it is null.
+        // same pointer as m_toolManager; fall back to the world field if it is null.
         void* eui = entityUI ? entityUI
                              : *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x120);
         std::fprintf(stderr, "[PauseMenu] frame %d - opening (entityUI=%p ui=%p pausesGame=%d)\n",

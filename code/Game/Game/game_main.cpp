@@ -61,7 +61,7 @@
 
 // The exe cell 0x1401c3de0 (B3R STORAGE): GameMain's settings block
 // (Game/exe_bodies.h).
-int32_t* g_gameSettings = nullptr;
+GameSettings* g_gameSettings = nullptr;
 
 // Defined in standalone/menudialogloopt_stubs.cpp. Loads
 // Dialog/SpriteSheet.rsc + constructs the "White" / "SaveLoadEmpty" Sprites
@@ -113,8 +113,8 @@ extern "C" void BootState_MarkQuitting();
 // caches, EnsureResolved, the "[GameMain] Engine ctor/dtor = %p" and "MainLoop
 // ctor/dtor = %p" lines and the "not resolved" FATAL arm went with them.
 // GameSettings <-> IO::Persistence bridge (code/Game/Game/game_settings_persist.cpp).
-extern "C" void GameSettings_Load(int32_t* settings);   // 0x140098b60
-extern "C" void GameSettings_Save(int32_t* settings);   // 0x140098970
+extern "C" void GameSettings_Load(GameSettings* settings);   // 0x140098b60
+extern "C" void GameSettings_Save(GameSettings* settings);   // 0x140098970
 
 // ============================================================
 // Partial reimpl of Engine::Engine::Shutdown (Runtime 0x1800db4f0).
@@ -450,7 +450,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // aligned) and run its ctor. Original GameMain follows this with
                 // Game_Register on a settings struct; we skip Game_Register for now
                 // and just zero-init settings to the same hardcoded defaults.
-                void* gameObj = System::MemoryAllocator::MemAlloc(0xe0, 4);
+                GameContainer* gameObj = static_cast<GameContainer*>(
+                    System::MemoryAllocator::MemAlloc(0xe0, 4));
                 printf("[GameMain] Game alloc      = %p\n", gameObj);
                 if (gameObj) {
                     Game_Ctor(gameObj);
@@ -496,21 +497,37 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 StallDebug::Mark("SpriteSheet.rsc load");
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.
-                int32_t* settings = reinterpret_cast<int32_t*>(
+                GameSettings* settings = static_cast<GameSettings*>(
                     System::MemoryAllocator::MemAlloc(0x34, 4));
                 printf("[GameMain] Settings alloc  = %p\n", (void*)settings);
                 if (settings) {
-                    settings[0] = 100;          // UIScale
-                    settings[1] = 1;            // AutosaveInterval
-                    settings[2] = 100;          // StatusIconOpacity
-                    settings[3] = 1;            // StatusIconEnable + bools at +0x15..0x17
-                    settings[4] = 100;          // StatusIconScale
-                    settings[5] = 0x1010001;    // packed bools (EdgeScroll, ShowCelcius, ShowWeather, AutoSlow)
-                    settings[6] = 1;            // AutoPause
-                    *reinterpret_cast<int64_t*>(&settings[7])  = 0;  // LastOption + LastTerrain
-                    settings[9] = 0;            // LastMapSize
-                    settings[10] = 1;           // LastClimate
-                    *reinterpret_cast<int64_t*>(&settings[11]) = 1;  // LastStart + LastDisaster
+                    settings->uiScale           = 100;
+                    settings->autosaveInterval  = 1;
+                    settings->statusIconOpacity = 100;
+                    // The tree writes a dword 1 at +0x0C and at +0x18 where retail
+                    // writes one byte (0x140042001, 0x140042013): the pad bytes after
+                    // the two flags are zeroed here, MemAlloc garbage in retail (H8
+                    // candidate, kept in W0).
+                    settings->statusIconEnable  = 1;
+                    settings->_pad0D[0] = 0;
+                    settings->_pad0D[1] = 0;
+                    settings->_pad0D[2] = 0;
+                    settings->statusIconScale   = 100;
+                    // retail: one dword 0x01010001 at +0x14 (0x14004200c)
+                    settings->edgeScroll        = 1;
+                    settings->showCelsius       = 0;
+                    settings->showWeather       = 1;
+                    settings->autoSlow          = 1;
+                    settings->autoPause         = 1;
+                    settings->_pad19[0] = 0;
+                    settings->_pad19[1] = 0;
+                    settings->_pad19[2] = 0;
+                    settings->lastOption        = 0;   // retail: one qword 0 at +0x1C
+                    settings->lastTerrain       = 0;
+                    settings->lastMapSize       = 0;
+                    settings->lastClimate       = 1;
+                    settings->lastStart         = 1;   // retail: one qword 1 at +0x2C
+                    settings->lastDisaster      = 0;
                     g_gameSettings = settings;
                     // Retail GameMain calls this immediately after the defaults
                     // (0x14004203d -> 0x140098b60): every field above is only a

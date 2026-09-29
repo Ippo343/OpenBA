@@ -21,6 +21,9 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+class ComponentEntity;           // Entity/ComponentEntity.h
+namespace UI { class Element; }  // runtime/types/ui/Element.h
+
 class EntityUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(EntityUI)
 
@@ -38,11 +41,16 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140067050
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
-    uint64_t data40 = 0;           // +0x40: zeroed
+    // ---- fields (B.4 W0-H2; retail create 0x140011270 zeroes all three,
+    // OnCreated 0x1400670d0 fills them). Retail's types are InternalPtr<T>;
+    // declared as plain T* (layout-identical, trivial; B.4 H5).
+    ComponentEntity* entity   = nullptr;   // +0x30 the controller's +0x28 object if IsDerivedFrom ComponentEntity
+    UI::Element*     checkPin = nullptr;   // +0x38 FindElement("checkPin"), SetElementId(100)
+    UI::Element*     pages    = nullptr;   // +0x40 FindElement("pages")
 };
 
 static_assert(sizeof(EntityUI) == 0x48, "EntityUI is 0x48 (create 0x140011270 MemAlloc(0x48))");
 static_assert(alignof(EntityUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(EntityUI, entity) == 0x30, "EntityUI::entity @ +0x30 (0x1400670d0)");
+static_assert(offsetof(EntityUI, checkPin) == 0x38, "EntityUI::checkPin @ +0x38 (0x1400670d0)");
+static_assert(offsetof(EntityUI, pages) == 0x40, "EntityUI::pages @ +0x40 (0x1400670d0)");

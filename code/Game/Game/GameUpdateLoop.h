@@ -33,6 +33,22 @@
 #include "engine/UpdateLoop.h"   // -Iruntime/types: Engine::UpdateLoop
 #include "system/String.h"       // -Iruntime/types: System::String (by value at +0x28)
 
+// B.4 W0-H2 (H4): the pointer members are typed; forward declarations only
+// (layout-neutral, proven by the offset asserts below). The members still
+// `void*` name their class in the comment; W0-H2's hand-in lists why each
+// stays (a void* ctor parameter, a Runtime POD-mirror construction / read, an
+// allocation through a void* helper, or no class in the tree yet).
+namespace Graphics    { class Material; class SunLight; class MeshInstance; }
+namespace UI          { class UserInterface; }
+namespace System      { class Random; }
+namespace Save        { class SaveLoad; }
+namespace Object      { class ExternalList; }
+namespace Achievement { class AchievementInstance; }
+class ProfessionList;     // Game/ProfessionList.h (block W0-H1)
+class WorldGeometry;      // Game/WorldGeometry.h
+class PlayerController;   // Game/PlayerController.h
+class PlayerToolManager;  // Game/PlayerToolManager.h
+
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
     // 0x140098060. `scenarioIbp` is the InternalBasePtr's 8 bytes (retail copies
@@ -79,16 +95,16 @@ public:
     int32_t  m_seed;                // +0x30  map seed (seeds the Random at +0xD8; newgamedialog writes it)
     int32_t  m_mapSize;             // +0x34  map size index (the terrain size-table row)
     int64_t  m_gameTime;            // +0x38  accumulated game time (Time)
-    void*    m_mapConfig;           // +0x40  map generation config resource
-    void*    m_terrainConfig;       // +0x48  terrain generation config resource
-    void*    m_climateConfig;       // +0x50  climate generation config resource
-    void*    m_savedState;          // +0x58  SavedState* (non-null = loading from save)
+    void*    m_mapConfig;           // +0x40  ExternalPtr<MapGenerator> (ctor p9; serializer 0x140019ec0)
+    void*    m_terrainConfig;       // +0x48  ExternalPtr<TerrainGenerator> (ctor p10; serializer 0x14001a0c0)
+    void*    m_climateConfig;       // +0x50  ExternalPtr<ClimateGenerator> (ctor p11; serializer 0x1400194a0)
+    void*    m_savedState;          // +0x58  Save::SavedState*, non-null = loading from save (ctor p2)
 
     // Rendering subsystems (created in Load, destroyed in Shutdown)
-    void*    m_graphicsScene;       // +0x60  Graphics::Scene*
-    void*    m_animationManager;    // +0x68  Graphics::AnimationManager*
-    void*    m_pickingScene;        // +0x70  Picking::Scene*
-    void*    m_audioScene;          // +0x78  Audio::Scene*
+    void*    m_graphicsScene;       // +0x60  Graphics::Scene*, MemAlloc(0x78) in Load
+    void*    m_animationManager;    // +0x68  Graphics::AnimationManager*, MemAlloc(0x9d8) in Load
+    void*    m_pickingScene;        // +0x70  Picking::Scene*, MemAlloc(0x60) in Load
+    void*    m_audioScene;          // +0x78  Audio::Scene*, MemAlloc(0x38) in Load
     // +0x80: MusicPlayer* — MemAlloc(0x18,4) {+0x00 int32 currentTrackId = -1,
     //   +0x08 MusicTrackList* = Find("Game/MusicTracks.rsc"), +0x10 int64 0};
     //   ticked by 0x1400a40e0 (MusicPlayer::Update).
@@ -97,48 +113,57 @@ public:
     //   ctor 0x1400182b0 (8 levels, 0x5555 cells). NOT a MusicPlayer and NOT a
     //   Transform (the +0x80/+0x88 names were swapped until 2026-08-30).
     void*    m_characterGrid;       // +0x88
-    void*    m_renderer;            // +0x90  Graphics::Renderer*
-    void*    m_userInterface;       // +0x98  UI::UserInterface*
+    void*    m_renderer;            // +0x90  Graphics::Renderer*, MemAlloc(0x50) in Load
+    UI::UserInterface* m_userInterface; // +0x98  MemAlloc(0x128) in Load
 
-    // Resource references (looked up in Load from the ExternalList)
-    void*    m_helpTopics;          // +0xA0  "Game/Help/HelpTopics.rsc"
-    void*    m_diseaseList;         // +0xA8  "Game/Disease/Diseases.rsc"
-    void*    m_professionList;      // +0xB0  "Game/Profession/Profession.rsc"
-    void*    m_uiMaterial;          // +0xB8  "Material/UI/UIMaterialNoBlend.rsc"
+    // Resource references (looked up in Load from the ExternalList). Retail's
+    // type is ExternalPtr<T> (one pointer); declared as T* (B.4 H5: the tree's
+    // ctor zeroes them by hand, as retail's does). T is the type id Load's
+    // ExternalList::Find is gated on (0x140096b00).
+    Object::ExternalList* m_helpTopics;     // +0xA0  "Game/Help/HelpTopics.rsc" (ExternalList type id)
+    Object::ExternalList* m_diseaseList;    // +0xA8  "Game/Disease/Diseases.rsc" (ExternalList type id)
+    ProfessionList*       m_professionList; // +0xB0  "Game/Profession/Profession.rsc" (TypeInfo_ProfessionList)
+    Graphics::Material*   m_uiMaterial;     // +0xB8  "Material/UI/UIMaterialNoBlend.rsc" (Material type id)
 
     // Input state
     uint8_t  m_quickSavePressed;    // +0xC0  KeyMap::Pressed(0x21)
     uint8_t  m_quickLoadPressed;    // +0xC1  KeyMap::Pressed(0x22)
     uint8_t  _padC2[6];             // +0xC2
 
-    void*    m_nextLoop;            // +0xC8  UpdateLoop* — pending loop transition
+    Engine::UpdateLoop* m_nextLoop; // +0xC8  pending loop transition (ctor 0)
 
     uint32_t m_gameFlags;           // +0xD0  0xF0 or 0x00 (ctor's p8)
     uint32_t _padD4;                // +0xD4
 
     // Game systems (created in Load, destroyed in Shutdown)
-    void*    m_random;              // +0xD8  System::Random* (0x9C4 bytes)
-    void*    m_playerController;    // +0xE0  PlayerController* (0x10C bytes, camera+frustum)
-    void*    m_entityList;          // +0xE8  EntityList* (0xE8 bytes)
-    void*    m_citizenList;         // +0xF0  CitizenBehavior* (0x1C0 bytes)
-    void*    m_game;                // +0xF8  Game* (0xF8 bytes, timed events at +0x78)
+    System::Random* m_random;       // +0xD8  MemAlloc(0x9c4) + Random(seed +0x30) in Load
+    PlayerController* m_playerController; // +0xE0  camera controller, MemAlloc(0x10c) + ctor 0x1400985b0
+    void*    m_entityList;          // +0xE8  EntityList*, MemAlloc(0xe8) + ctor 0x1400c3f90 in Load
+    void*    m_citizenList;         // +0xF0  CitizenBehavior* (town manager), MemAlloc(0x1c0) + ctor 0x140090a30 in Load
+    void*    m_game;                // +0xF8  Map* (Game/Map.h): the world map (tile grid), MemAlloc(0xf8) + ctor 0x14009ee70
 
     // Scene geometry objects (added to Graphics::Scene as globals)
-    void*    m_sunLight;            // +0x100 Graphics::SunLight* (0x108 bytes)
-    void*    m_skyMesh;             // +0x108 Graphics::MeshInstance* (sky, 0x120 bytes)
-    void*    m_worldGeometry;       // +0x110 Graphics::Geometry* (terrain, 0x230 bytes)
+    Graphics::SunLight*     m_sunLight;      // +0x100 MemAlloc(0x108) in Load (exe table 0x14015e290)
+    Graphics::MeshInstance* m_skyMesh;       // +0x108 sky, MemAlloc(0x120) in Load (exe table 0x14015e240)
+    WorldGeometry*          m_worldGeometry; // +0x110 terrain, MemAlloc(0x230) + ctor 0x1400b00e0
 
     // Game managers
     void*    m_tutorial;            // +0x118 Tutorial* (0x138 bytes)
-    void*    m_entityUI;            // +0x120 EntityUI/PlayerToolManager* (0xB0 bytes)
+    // +0x120: NOT an EntityUI (that is a 0x48-byte UI::DialogController). Load
+    //   builds it with MemAlloc(0xb0, 4) + ctor 0x1401025c0 (no vtable: an
+    //   InternalBasePtr at +0x00, the CURRENT TOOL InternalBasePtr at +0x28 that
+    //   Update's per-frame call 0x1401026a0 checks against EditTool and drives
+    //   through the tool's slots, +0x30 the paused byte, +0x34 the game speed
+    //   (ctor 1), a 5-entry Array at +0x70). Renamed from m_entityUI (B.4 W0-H2).
+    PlayerToolManager* m_toolManager; // +0x120 player tool manager (0xB0 bytes)
     void*    m_dayCounter;          // +0x128 DayCounter* (0x18 bytes: {day, accumulated, dayLength})
     void*    m_weather;             // +0x130 Weather* (0x78 bytes)
     void*    m_eventNotifier;       // +0x138 EventNotifier* (0x28 bytes)
-    void*    m_saveLoad;            // +0x140 Save::SaveLoad* (0x90 bytes)
+    Save::SaveLoad* m_saveLoad;     // +0x140 MemAlloc(0x90) in Load
     void*    m_imageCapture;        // +0x148 ImageCapture* (0x38 bytes)
 
     // Scenario/achievement
-    void*    m_scenarioInstance;    // +0x150 InternalBasePtr to AchievementInstance
+    Achievement::AchievementInstance* m_scenarioInstance; // +0x150 InternalBasePtr<AchievementInstance> (ctor: *p3)
     uint8_t  m_scenarioCompleted;   // +0x158 set to 1 when scenario met/failed
     uint8_t  _pad159[3];            // +0x159
     int32_t  m_scenarioIndex;       // +0x15C index into scenario list (-1 = none)
@@ -151,6 +176,7 @@ static_assert(offsetof(GameUpdateLoop, m_seed) == 0x30, "m_seed at +0x30");
 static_assert(offsetof(GameUpdateLoop, m_mapSize) == 0x34, "m_mapSize at +0x34");
 static_assert(offsetof(GameUpdateLoop, m_gameTime) == 0x38, "m_gameTime at +0x38");
 static_assert(offsetof(GameUpdateLoop, m_mapConfig) == 0x40, "m_mapConfig at +0x40");
+static_assert(offsetof(GameUpdateLoop, m_terrainConfig) == 0x48, "m_terrainConfig at +0x48");
 static_assert(offsetof(GameUpdateLoop, m_climateConfig) == 0x50, "m_climateConfig at +0x50");
 static_assert(offsetof(GameUpdateLoop, m_savedState) == 0x58, "m_savedState at +0x58");
 static_assert(offsetof(GameUpdateLoop, m_graphicsScene) == 0x60, "m_graphicsScene at +0x60");
@@ -162,11 +188,15 @@ static_assert(offsetof(GameUpdateLoop, m_characterGrid) == 0x88, "m_characterGri
 static_assert(offsetof(GameUpdateLoop, m_renderer) == 0x90, "m_renderer at +0x90");
 static_assert(offsetof(GameUpdateLoop, m_userInterface) == 0x98, "m_userInterface at +0x98");
 static_assert(offsetof(GameUpdateLoop, m_helpTopics) == 0xA0, "m_helpTopics at +0xA0");
+static_assert(offsetof(GameUpdateLoop, m_diseaseList) == 0xA8, "m_diseaseList at +0xA8");
+static_assert(offsetof(GameUpdateLoop, m_professionList) == 0xB0, "m_professionList at +0xB0");
 static_assert(offsetof(GameUpdateLoop, m_uiMaterial) == 0xB8, "m_uiMaterial at +0xB8");
 static_assert(offsetof(GameUpdateLoop, m_quickSavePressed) == 0xC0, "m_quickSavePressed at +0xC0");
 static_assert(offsetof(GameUpdateLoop, m_quickLoadPressed) == 0xC1, "m_quickLoadPressed at +0xC1");
+static_assert(offsetof(GameUpdateLoop, _padC2) == 0xC2, "_padC2 at +0xC2");
 static_assert(offsetof(GameUpdateLoop, m_nextLoop) == 0xC8, "m_nextLoop at +0xC8");
 static_assert(offsetof(GameUpdateLoop, m_gameFlags) == 0xD0, "m_gameFlags at +0xD0");
+static_assert(offsetof(GameUpdateLoop, _padD4) == 0xD4, "_padD4 at +0xD4");
 static_assert(offsetof(GameUpdateLoop, m_random) == 0xD8, "m_random at +0xD8");
 static_assert(offsetof(GameUpdateLoop, m_playerController) == 0xE0, "m_playerController at +0xE0");
 static_assert(offsetof(GameUpdateLoop, m_entityList) == 0xE8, "m_entityList at +0xE8");
@@ -176,7 +206,7 @@ static_assert(offsetof(GameUpdateLoop, m_sunLight) == 0x100, "m_sunLight at +0x1
 static_assert(offsetof(GameUpdateLoop, m_skyMesh) == 0x108, "m_skyMesh at +0x108");
 static_assert(offsetof(GameUpdateLoop, m_worldGeometry) == 0x110, "m_worldGeometry at +0x110");
 static_assert(offsetof(GameUpdateLoop, m_tutorial) == 0x118, "m_tutorial at +0x118");
-static_assert(offsetof(GameUpdateLoop, m_entityUI) == 0x120, "m_entityUI at +0x120");
+static_assert(offsetof(GameUpdateLoop, m_toolManager) == 0x120, "m_toolManager at +0x120");
 static_assert(offsetof(GameUpdateLoop, m_dayCounter) == 0x128, "m_dayCounter at +0x128");
 static_assert(offsetof(GameUpdateLoop, m_weather) == 0x130, "m_weather at +0x130");
 static_assert(offsetof(GameUpdateLoop, m_eventNotifier) == 0x138, "m_eventNotifier at +0x138");
@@ -184,4 +214,5 @@ static_assert(offsetof(GameUpdateLoop, m_saveLoad) == 0x140, "m_saveLoad at +0x1
 static_assert(offsetof(GameUpdateLoop, m_imageCapture) == 0x148, "m_imageCapture at +0x148");
 static_assert(offsetof(GameUpdateLoop, m_scenarioInstance) == 0x150, "m_scenarioInstance at +0x150");
 static_assert(offsetof(GameUpdateLoop, m_scenarioCompleted) == 0x158, "m_scenarioCompleted at +0x158");
+static_assert(offsetof(GameUpdateLoop, _pad159) == 0x159, "_pad159 at +0x159");
 static_assert(offsetof(GameUpdateLoop, m_scenarioIndex) == 0x15C, "m_scenarioIndex at +0x15C");

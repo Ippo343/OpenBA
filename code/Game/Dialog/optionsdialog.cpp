@@ -187,7 +187,7 @@ extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface) {
         reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFadeSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
     }
     if (g_gameSettings != nullptr)
-        *(float*)(ui + 0xDC) = (float)g_gameSettings[0] / 100.0f;
+        *(float*)(ui + 0xDC) = (float)g_gameSettings->uiScale / 100.0f;
 }
 
 // Helper: get actual KeyMap object via triple deref from exref at 0x140151738
@@ -718,7 +718,7 @@ void OptionsDialog::OnOpened() {
                 reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)i);  // B.3.6 bridge
             }
         }
-        int autoSaveIdx = (g_gameSettings != nullptr) ? g_gameSettings[1] : 0;
+        int autoSaveIdx = (g_gameSettings != nullptr) ? g_gameSettings->autosaveInterval : 0;
         if (autoSaveIdx < 0) autoSaveIdx = 0;
         if (autoSaveIdx > 8) autoSaveIdx = 8;
         if (this->comboAutosave) reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->SetCurrentItem(autoSaveIdx);  // B.3.6 bridge
@@ -729,7 +729,7 @@ void OptionsDialog::OnOpened() {
         FIND_ELEMENT(this->sliderUIScale,"sliderUIScale");
         SetSliderRange(this->sliderUIScale, 75.0f, 150.0f);
         if (g_gameSettings != nullptr)
-            SetSliderValue(this->sliderUIScale, (float)g_gameSettings[0]);
+            SetSliderValue(this->sliderUIScale, (float)g_gameSettings->uiScale);
     }
 
     // --- Gameplay settings checkboxes and sliders ---
@@ -744,19 +744,19 @@ void OptionsDialog::OnOpened() {
         FIND_ELEMENT(this->checkAutopause,       "checkAutopause");
 
         if (g_gameSettings != nullptr) {
-            int32_t* gs = g_gameSettings;
+            GameSettings* gs = g_gameSettings;
             SetCheckState(this->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
-            SetCheckState(this->checkAutopause,  (uint8_t)gs[6]);
-            SetCheckState(this->checkStatusIcon, (uint8_t)gs[3]);
-            SetCheckState(this->checkEdgeScroll, (uint8_t)gs[5]);
+            SetCheckState(this->checkAutopause,  (uint8_t)gs->autoPause);
+            SetCheckState(this->checkStatusIcon, (uint8_t)gs->statusIconEnable);
+            SetCheckState(this->checkEdgeScroll, (uint8_t)gs->edgeScroll);
             SetCheckState(this->checkShowCelsius,*(uint8_t*)((uintptr_t)gs + 0x15));
             SetCheckState(this->checkShowWeather,*(uint8_t*)((uintptr_t)gs + 0x16));
 
             SetSliderRange(this->sliderStatusIcon, 0.0f, 100.0f);
-            SetSliderValue(this->sliderStatusIcon, (float)gs[2]);
+            SetSliderValue(this->sliderStatusIcon, (float)gs->statusIconOpacity);
 
             SetSliderRange(this->sliderStatusIconScale, 25.0f, 200.0f);
-            SetSliderValue(this->sliderStatusIconScale, (float)gs[4]);
+            SetSliderValue(this->sliderStatusIconScale, (float)gs->statusIconScale);
         }
     }
 
@@ -771,7 +771,7 @@ void OptionsDialog::OnOpened() {
     if (s_enableTabRestore) {
         FIND_ELEMENT(this->tabOptions,"tabOptions");
         if (this->tabOptions) {
-            int lastTab = (g_gameSettings != nullptr) ? g_gameSettings[7] : 0;
+            int lastTab = (g_gameSettings != nullptr) ? g_gameSettings->lastOption : 0;
             // Clamp to valid range — options dialog has 4 tabs (0-3)
             if (lastTab < 0 || lastTab > 3) lastTab = 0;
             reinterpret_cast<UI::TabElement*>(this->tabOptions)->SetActiveTab(lastTab);  // B.3.6 bridge
@@ -828,29 +828,29 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
 // applies key map to UI, and updates UI scale.
 static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     if (g_gameSettings == nullptr) return;
-    int32_t* gs = g_gameSettings;
+    GameSettings* gs = g_gameSettings;
 
     // UI scale slider -> gs[0]
-    gs[0] = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderUIScale + 0x128);
+    gs->uiScale = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderUIScale + 0x128);
 
     // Autosave combo -> gs[1]
-    gs[1] = *(int32_t*)((uintptr_t)*(void**)&self->comboAutosave + 0x118);
+    gs->autosaveInterval = *(int32_t*)((uintptr_t)*(void**)&self->comboAutosave + 0x118);
 
     // Status icon checkbox -> gs[3] (byte at offset +0x0C)
-    *(uint8_t*)(&gs[3]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkStatusIcon + 0xD8);
+    gs->statusIconEnable = *(uint8_t*)((uintptr_t)*(void**)&self->checkStatusIcon + 0xD8);
 
     // Status icon distance slider -> gs[2]
-    gs[2] = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderStatusIcon + 0x128);
+    gs->statusIconOpacity = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderStatusIcon + 0x128);
 
     // Status icon scale slider -> gs[4]
     // Original divides by 100.0f then multiplies by 100.0f (cancels out to identity)
     {
         float sliderVal = *(float*)((uintptr_t)*(void**)&self->sliderStatusIconScale + 0x128);
-        gs[4] = (int32_t)sliderVal;
+        gs->statusIconScale = (int32_t)sliderVal;
     }
 
     // Edge scroll checkbox -> gs[5] (byte)
-    *(uint8_t*)(&gs[5]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkEdgeScroll + 0xD8);
+    gs->edgeScroll = *(uint8_t*)((uintptr_t)*(void**)&self->checkEdgeScroll + 0xD8);
 
     // Show celsius -> byte at gs+0x15
     *(uint8_t*)((uintptr_t)gs + 0x15) =
@@ -865,10 +865,10 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
         *(uint8_t*)((uintptr_t)*(void**)&self->checkAutoslow + 0xD8);
 
     // Auto pause -> gs[6] (byte)
-    *(uint8_t*)(&gs[6]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkAutopause + 0xD8);
+    gs->autoPause = *(uint8_t*)((uintptr_t)*(void**)&self->checkAutopause + 0xD8);
 
     // Last active tab -> gs[7]
-    gs[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+    gs->lastOption = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
 
     // Iterate all open dialogs and update autosave timer on each
     UI::UserInterface* userInterface = *(UI::UserInterface**)((uintptr_t)self + 0x10);
@@ -876,7 +876,7 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     // called by name, so the log line's two door-pointer fields (isA / isDerived) are
     // gone and restartFn is the body's address.
     fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d restartFn=%p tid=%u\n",
-            gs[1], (void*)&AutoSaveDialog_Slot4, AutoSaveDialog::TypeId());
+            gs->autosaveInterval, (void*)&AutoSaveDialog_Slot4, AutoSaveDialog::TypeId());
     fflush(stderr);
     {
         uint32_t typeId = AutoSaveDialog::TypeId();
@@ -907,7 +907,7 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     if (keyMap) ApplyKeyMapToUI_Impl(keyMap, userInterface);
 
     // Set UI scale: gs[0] is percentage (0-200), divide by 100.0f to get ratio
-    *(float*)((uintptr_t)userInterface + 0xDC) = (float)gs[0] / 100.0f;
+    *(float*)((uintptr_t)userInterface + 0xDC) = (float)gs->uiScale / 100.0f;
 
     // Notify game world of settings change (virtual call at vtable+0x18)
     void* gameWorld = GameUpdateLoop::_singleton;
@@ -1111,7 +1111,7 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
 
     // Restore last tab
     if (g_gameSettings != nullptr)
-        g_gameSettings[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+        g_gameSettings->lastOption = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
 
     // Re-apply keymap config to UI
     void* keyMap = GetKeyMapContainer();

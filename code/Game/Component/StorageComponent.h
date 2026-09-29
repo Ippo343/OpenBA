@@ -16,6 +16,22 @@
 //     [3] 0x14012c730 Persist                [4] 0x14012c720 own `RET`
 //     [6] 0x14012c640 OnAdded (Ghidra "Draw": capacity + template slots)
 //     every other slot = Component's
+//
+// B.4 W0-H2 fields (retail ctor 0x14012c8d0, dtor 0x14012c870, Persist
+// 0x14012c730, OnAdded 0x14012c640; the profile assertions name the item
+// fields `_items[index]._count` / `._reserve`):
+//   +0x28 Collection::Array<Item> _items: data +0x28, count +0x30, capacity
+//         +0x34 (SetSize 0x14000f090; 0x10-byte items {ExternalPtr resource,
+//         int32 _count, int32 _reserve}; the retail dtor MemFrees the data).
+//         Declared as its three raw members (B.4 H5: an Array member would
+//         give the tree's defaulted dtor the MemFree retail has and the tree
+//         lacks -- the B38 D2 PORT GAP below; a `behaviour:` commit, LISTED).
+//   +0x38 int32  capacity: Serialize(int&); OnAdded = StorageDescription
+//         _pickupValue (+0x24) times the footprint area. Not written by the
+//         retail ctor (the tree's ctor zeroes it).
+//   +0x3C uint32 rawMaterialFlags: serialized through the uint encoding slot
+//         (+0x98); OnAdded and the version-0 load copy StorageDescription
+//         _rawMaterialFlags (+0x28). Not written by the retail ctor.
 // ============================================================================
 
 #include <cstdint>
@@ -37,14 +53,17 @@ public:
     void OnAdded() override;                                      // [6] 0x14012c640
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    void*    storageSlots; // +0x28 slot array data (freed by the retail dtor)
-    int32_t  slotCount;    // +0x30 number of storage slots
-    uint8_t  _pad34[4];    // +0x34 (capacity of the slot array)
-    void*    field38;      // +0x38 capacity (+0x38) / default type (+0x3c)
+    void*    storageSlots;      // +0x28 _items data (0x10-byte items; freed by the retail dtor)
+    int32_t  slotCount;         // +0x30 _items count
+    int32_t  slotCapacity;      // +0x34 _items capacity
+    int32_t  capacity;          // +0x38 total capacity (Serialize int&)
+    uint32_t rawMaterialFlags;  // +0x3C StorageDescription::_rawMaterialFlags copy
 };
 
 static_assert(sizeof(StorageComponent) == 0x40, "StorageComponent is 0x40 (create 0x140038b50)");
 static_assert(alignof(StorageComponent) == 8, "StorageComponent alignment");
 static_assert(offsetof(StorageComponent, storageSlots) == 0x28, "");
 static_assert(offsetof(StorageComponent, slotCount) == 0x30, "");
-static_assert(offsetof(StorageComponent, field38) == 0x38, "");
+static_assert(offsetof(StorageComponent, slotCapacity) == 0x34, "StorageComponent _items capacity @ +0x34 (0x14000f090)");
+static_assert(offsetof(StorageComponent, capacity) == 0x38, "StorageComponent::capacity @ +0x38 (Serialize int&)");
+static_assert(offsetof(StorageComponent, rawMaterialFlags) == 0x3C, "StorageComponent::rawMaterialFlags @ +0x3C");

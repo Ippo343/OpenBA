@@ -52,7 +52,7 @@ void AutoSaveDialog::OnOpened() {
     // Autosave-interval setting: gs[1] = the Options 'Autosave' combo index (0..7).
     if (g_gameSettings == nullptr)
         return;
-    int speedSetting = *(g_gameSettings + 1);
+    int speedSetting = g_gameSettings->autosaveInterval;
 
     // Autosave interval table, in MINUTES, read off retail's .rdata (2026-08-30).
     // The switch at 0x14005e130 picks one of these eight floats and multiplies by
