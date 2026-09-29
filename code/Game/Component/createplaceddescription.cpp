@@ -122,33 +122,31 @@ bool CreatePlacedDescription::Serialize(void* stream) {
     // the element loop was skipped, the stream desynced, and the process crashed.
     // Resizing only when the array cannot already hold `count` keeps an already-parsed
     // array — values intact — which is the whole point of the fix above.
-    uint8_t* arr = static_cast<uint8_t*>(_placeArray);
+    uint32_t* arr = _placeArray;
     if (count > 0 && !arr) {
         // No buffer yet: allocate directly instead of going through the shared resize.
         // Reimpl_Array_Resize_Stride04 (our 0x1400021D0) reads the RECORDED count as
         // `oldCount` and copies that many elements from the old pointer, so handing it a
         // null data pointer with a non-zero count makes it read from address 0. Retail
         // never sees that state; ours could, so keep the shared helper off this path.
-        arr = reinterpret_cast<uint8_t*>(
-            ::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
+        arr = static_cast<uint32_t*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
         _placeArray = arr;
         _placeCount = count;
         _placeCap   = count;
         // Zeroing a FRESH buffer is right — its elements are about to be read from the
         // stream. Zeroing an ALREADY-PARSED one is the bug this fix removes.
-        if (arr) for (int i = 0; i < count; ++i) *reinterpret_cast<int32_t*>(arr + i * 4) = 0;
+        if (arr) for (int i = 0; i < count; ++i) arr[i] = 0;
     } else if (count > 0 && _placeCap < count) {
         // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
         // here at 14011993d. I32NoInit — the grown tail is left as the allocation found
         // it, like retail. Safe: this branch is only taken when the buffer cannot
         // already hold `count`, i.e. the array has not been parsed yet, and the element
         // loop right below reads all `count` slots from the stream into it.
-        GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(&_placeArray)).SetSize(count);
-        arr = static_cast<uint8_t*>(_placeArray);
+        GameColl::AsArray<GameColl::I32NoInit>(&_placeArray).SetSize(count);
+        arr = _placeArray;
     }
-    uint8_t* e = arr;
-    for (int i = 0; i < count && arr; ++i, e += 4) {
-        ser.Serialize(*reinterpret_cast<unsigned int*>(e), nullptr);   // enum element
+    for (int i = 0; i < count && arr; ++i) {
+        ser.Serialize(arr[i], nullptr);   // enum element
     }
     _name.Serialize(&ser);
     ser.Serialize(_i44, nullptr);

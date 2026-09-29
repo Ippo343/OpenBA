@@ -28,11 +28,11 @@
 #include <new>
 
 namespace {
-// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
-// (0 == ok on the read leg). The tree's check before it allocates an array.
-inline int SerStreamErr(IO::Serializer& ser) {
-    return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
+// retail's `*(int*)(*(serializer) + 8) == 0` is the stream's direction word —
+// IO::Serializer::GetDirection (0x180006210) — 0 = reading. The tree's check before
+// it allocates an array.
+inline bool Reading(IO::Serializer& ser) {
+    return static_cast<int>(ser.GetDirection()) == 0;
 }
 }  // namespace
 
@@ -61,11 +61,10 @@ bool HerbalistDescription::Serialize(void* stream) {
     // External*-array @ +0x20 (count @ +0x28, stride 8)
     ser.Serialize(_herbCount, nullptr);
     int n = _herbCount;
-    if (SerStreamErr(ser) == 0 && n > 0 && System::MemoryAllocator::_singleton) {
-        void* buf = System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8);
-        _herbs = buf;
+    if (Reading(ser) && n > 0 && System::MemoryAllocator::_singleton) {
+        _herbs = static_cast<Object::External**>(System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
         _herbCap = n;
-        if (buf) for (int i = 0; i < n; ++i) static_cast<void**>(buf)[i] = nullptr;
+        if (_herbs) for (int i = 0; i < n; ++i) _herbs[i] = nullptr;
     }
     Desc_LoadExternalArray(&ser, n, _herbs);
     ser.Serialize(_u30, nullptr);
