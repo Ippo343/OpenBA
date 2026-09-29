@@ -34,18 +34,18 @@
 HappinessDescription::HappinessDescription()
     : Description(),
       _happinessType(5),
-      _b24(false),
-      _b25(false),
-      _u28(0),
+      _needsWorkers(false),
+      _needsGoods(false),
+      _goodsFlags(0),
       _i2c(0) {}
 
 // [5] 0x14004acb0: stream order as retail.
 bool HappinessDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     ser.Serialize(_happinessType, nullptr);
-    ser.Serialize(_b24, nullptr);
-    ser.Serialize(_b25, nullptr);
-    ser.Serialize(_u28, nullptr);
+    ser.Serialize(_needsWorkers, nullptr);
+    ser.Serialize(_needsGoods, nullptr);
+    ser.Serialize(_goodsFlags, nullptr);
     ser.Serialize(_i2c, nullptr);
     return true;
 }

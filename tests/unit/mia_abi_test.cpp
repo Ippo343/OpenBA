@@ -107,7 +107,7 @@ UNIT_TEST(mia_component_member_offsets) {
     CHECK_EQ(offsetof(DestroyComponent, burning),          (size_t)0x50);
     CHECK_EQ(offsetof(DestroyComponent, progress),         (size_t)0x54);
     CHECK_EQ(offsetof(DestroyComponent, upgradeTarget),    (size_t)0x60);
-    CHECK_EQ(offsetof(HappinessComponent, happinessFlag),  (size_t)0x28);
+    CHECK_EQ(offsetof(HappinessComponent, registered),     (size_t)0x28);
     CHECK_EQ(offsetof(ImmigrationComponent, field58),      (size_t)0x58);
     CHECK_EQ(offsetof(NomadComponent, field50),            (size_t)0x50);
     CHECK_EQ(offsetof(ResidenceComponent, heatRemaining),  (size_t)0x48);

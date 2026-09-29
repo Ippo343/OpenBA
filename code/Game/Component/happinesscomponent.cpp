@@ -6,7 +6,7 @@
 // Tracks citizen happiness state.
 //
 // Vtable at 0x1401595d0:
-//   [3] Shutdown  = 0x14004aa80 -- serialize base + happinessFlag
+//   [3] Shutdown  = 0x14004aa80 -- serialize base + registered
 //   [7] OnRemove  = 0x14004aa20 -- ERASE from the happiness list (Ghidra names this
 //                                  slot OnCreate on several components; it is the remove side)
 //
@@ -28,6 +28,12 @@
 #include "Component/RadiusDescription.h"        // ENDGAME B.3.9 C1: 0x1401c4870 cell class
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/exe_bodies.h"
+#include "Component/ComponentDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Entity/CitizenBehavior.h"
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -37,7 +43,7 @@
 // append counterpart is DynArray8_ResizeFill (0x140003110), which is what Register uses.
 // Ghidra's own plate comment on the callee records that leaving it unnamed already caused
 // two component OnCreate/OnRemove vtable entries to be mislabelled as the create side.
-// 0x14004a300 FishingComponent_NotifyTile (below) -- sets index on entity to given value.
+// 0x14004a300 HappinessComponent::UpdateInfluence (below) -- stamps / lifts the influence disk.
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into the exe
 // (ENDGAME B.3.2 step 2) — converted at its call site below.
 // 0x140002e10 AttendanceComponent_GetJobHostComponent(entity, outIBP) -- the owner's
@@ -58,7 +64,7 @@
 //   Component_Serialize(param_1, param_2)
 //   Serializer(local_20, param_2, 0); ~Serializer(local_20)  // empty controller block
 //   Serializer(local_30, param_2, 0)
-//   Serialize(local_30, param_1+0x28, nullptr)  // happinessFlag as bool
+//   Serialize(local_30, param_1+0x28, nullptr)  // registered as bool
 //   ~Serializer(local_30)
 
 // ============================================================
@@ -125,41 +131,47 @@ void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, shor
     *acc = (short)(*acc + delta);
 }
 
-void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
-    uintptr_t self = (uintptr_t)selfP;
+// Retail's `IsDerivedFrom(p, tid) ? p : nullptr` idiom on a component's description.
+template <class T>
+static T* AsType(Description* obj) {
+    if (!obj || !T::TypeId()) return nullptr;
+    return ::Object::IsDerivedFromNullSafe(obj, T::TypeId()) ? static_cast<T*>(obj) : nullptr;
+}
+
+// The first sub-description of `desc` whose Type() is T's, if it IsDerivedFrom T —
+// retail's inlined description walk (Type match, then IsDerivedFrom, then stop).
+template <class T>
+static T* FindSubDescription(const ComponentDescription* desc) {
+    const uint32_t tid = T::TypeId();
+    for (int i = 0; i < desc->_subDescCount; ++i) {
+        Description* sub = desc->_subDescs[i];
+        if (sub->Type() == tid)
+            return ::Object::IsDerivedFromNullSafe(sub, tid) ? static_cast<T*>(sub) : nullptr;
+    }
+    return nullptr;
+}
+
+// ============================================================
+// HappinessComponent::UpdateInfluence — 0x14004a300 (Ghidra FishingComponent_impl_a300;
+// every retail caller is a HappinessComponent body: 0x14004a4a0, 0x14004a4f0,
+// 0x14004a940, 0x14004aa20). Stamps (delta +1) or lifts (delta -1) this building's
+// influence disk on the map: the kind from HappinessDescription::_happinessType, the
+// radius from the entity's RadiusDescription, the centre from its MapComponent.
+// ============================================================
+void HappinessComponent::UpdateInfluence(int16_t delta) {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    void* descObj = *(void**)(self + 0x18);
-    void* desc = ::Object::IsDerivedFromNullSafe(descObj, HappinessDescription::TypeId())
-                     ? descObj : nullptr;
+    HappinessDescription* desc = AsType<HappinessDescription>(_description);
 
-    int64_t host = *(int64_t*)(*(int64_t*)(self + 0x10) + 0x28);
+    // The RadiusDescription (0x1401c4870) among the entity description's sub-descriptions.
+    RadiusDescription* radius = FindSubDescription<RadiusDescription>(_entity->_description);
 
-    // Find the RadiusDescription (0x1401c4870) on the host
-    void* targetComp = nullptr;
-    {
-        const uint32_t tidTarget = RadiusDescription::TypeId();
-        int count = *(int*)(host + 0x30);
-        int64_t arr = *(int64_t*)(host + 0x28);
-        for (int i = 0; i < count; i++) {
-            void* comp = *(void**)(arr + (int64_t)i * 8);
-            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == tidTarget) {
-                if (::Object::IsDerivedFromNullSafe(comp, tidTarget))
-                    targetComp = comp;
-                break;
-            }
-        }
-    }
+    // The MapComponent for tile coords (0x140004680).
+    MapComponent* mc = _entity->FindComponent<MapComponent>();
 
-    // Find the MapComponent for tile coords
-    uint8_t mapBuf[8] = {0};
-    FloorComponent_FindResData(*(void**)(self + 0x10), mapBuf);   // 0x140004680
-    int64_t mapComp = *(int64_t*)mapBuf;
-
-    // Map description mode (desc+0x20) to a state id (default 5)
+    // Map the description's kind (0..4) to a state id (default 5).
     int state = 5;
-    switch (desc ? *(int*)((uintptr_t)desc + 0x20) : -1) {
+    switch (desc ? static_cast<int>(desc->_happinessType) : -1) {
         case 0: state = 0; break;
         case 1: state = 1; break;
         case 2: state = 2; break;
@@ -168,12 +180,13 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
         default: break;
     }
 
-    int x = ((int)*(int16_t*)(mapComp + 0x2c) >> 1) + (int)*(int16_t*)(mapComp + 0x28);
-    int y = ((int)*(int16_t*)(mapComp + 0x2e) >> 1) + (int)*(int16_t*)(mapComp + 0x2a);
-    int resourceId = targetComp ? *(int*)((uintptr_t)targetComp + 0x28) : 0;
+    int x = (static_cast<int16_t>(mc->tileX1) >> 1) + static_cast<int16_t>(mc->tileX0);
+    int y = (static_cast<int16_t>(mc->tileY1) >> 1) + static_cast<int16_t>(mc->tileY0);
+    int r = radius ? radius->_radius : 0;
 
-    FishingComponent_BrushTile(*(int**)((uintptr_t)GameUpdateLoop::_singleton + 0xf8), state, x, y,
-                               resourceId, param2);   // 0x14009f990
+    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT.
+    FishingComponent_BrushTile(reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game), state, x, y,
+                               r, delta);   // 0x14009f990
 }
 
 // ============================================================
@@ -182,158 +195,139 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
 // Decides whether this happiness source is currently DOING anything. Read off the
 // disassembly at 0x14004a550; the three arms, in retail's order:
 //
-//   1. desc[+0x20] == 5  -> unconditionally active. This is the plain radius source
+//   1. _happinessType == 5  -> unconditionally active. This is the plain radius source
 //      (the chapel / well / town square kind): being built is enough.
-//   2. desc[+0x24] != 0  -> needs staff. Find the owner's workplace via
-//      AttendanceComponent_GetJobHostComponent (0x140002e10); with no workplace the
-//      staffing test is skipped entirely, otherwise a workplace with no worker
-//      (+0x60 == 0), or one that is closed (+0x50 == 0), makes it inactive.
-//   3. desc[+0x25] != 0  -> needs goods. Walk the owner's StorageComponent slots
+//   2. _needsWorkers        -> needs staff. Find the owner's WorkPlaceComponent
+//      (0x140002e10); with no workplace the staffing test is skipped entirely,
+//      otherwise a workplace with no worker (workerCount == 0), or one that is closed
+//      (isAccepting == 0), makes it inactive.
+//   3. _needsGoods          -> needs goods. Walk the owner's StorageComponent slots
 //      (0x140006270; slot records are 0x10 bytes, first qword = the stored good's
-//      entity) and AND that good's RawMaterialDescription flags (+0x5c) against the
-//      happiness description's accepted-goods mask (+0x28). Active if any slot matches.
-//      This is the tavern: it cheers nobody up until there is ale in it.
+//      ComponentDescription) and AND that good's RawMaterialDescription flags (+0x5c)
+//      against the happiness description's accepted-goods mask (_goodsFlags). Active
+//      if any slot matches. This is the tavern: it cheers nobody up until there is ale.
 //
 // NOTE the inner RawMaterialDescription lookup is deliberately left unguarded. Retail
 // falls out of that loop with RCX == 0 and reads [RCX+0x5c] regardless -- it relies on
 // every stored good carrying a RawMaterialDescription. Guarding it here would silently
 // skip the mask test rather than restore the behaviour, so the deref stays faithful; if
 // it ever faults, the good in storage is what is wrong.
-extern "C" bool HappinessComponent_IsActive(void* selfV) {
-    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
+// The tree's null tests on the storage, on a slot's good and on a null sub-description
+// are its own (retail has none); kept (B9).
+bool HappinessComponent::IsActive() {
+    Description* d = _description;
+    const HappinessDescription* desc =
+        (d && d->IsDerivedFrom(HappinessDescription::TypeId()))
+            ? static_cast<HappinessDescription*>(d) : nullptr;
 
-    const uintptr_t su = reinterpret_cast<uintptr_t>(self);
-    void* descRaw = *reinterpret_cast<void**>(su + 0x18);
-    const uintptr_t desc =
-        (descRaw && reinterpret_cast<const Object::Base*>(descRaw)->IsDerivedFrom(
-                        HappinessDescription::TypeId()))   // B.3.x bridge (slot 0x140152a98)
-            ? reinterpret_cast<uintptr_t>(descRaw) : 0;
+    if (static_cast<int>(desc->_happinessType) == 5) return true;
 
-    if (*reinterpret_cast<int*>(desc + 0x20) == 5) return true;
-
-    if (*reinterpret_cast<uint8_t*>(desc + 0x24) != 0) {
-        void* ownerSlot = *reinterpret_cast<void**>(su + 0x10);
-        ownerSlot = *reinterpret_cast<void**>(su + 0x10);
-
-        void* wpIbp = nullptr;
-        AttendanceComponent_GetJobHostComponent(ownerSlot, &wpIbp);   // 0x140002e10
-        if (wpIbp) {
-            const uintptr_t wp = reinterpret_cast<uintptr_t>(wpIbp);
-            if (*reinterpret_cast<int*>(wp + 0x60) == 0) return false;
-            if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(wpIbp) + 0x50) == 0)
-                return false;
+    if (desc->_needsWorkers) {
+        WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
+        if (wp) {
+            if (wp->workerCount == 0) return false;
+            if (!wp->isAccepting) return false;
         }
     }
 
-    if (*reinterpret_cast<uint8_t*>(desc + 0x25) == 0) return true;
+    if (!desc->_needsGoods) return true;
 
-    void* owner = *reinterpret_cast<void**>(su + 0x10);
+    StorageComponent* store = _entity->FindComponent<StorageComponent>();   // 0x140006270
 
-    void* storeIbp = nullptr;
-    WorkBase_FindComponent_6270(reinterpret_cast<uintptr_t>(owner), &storeIbp);   // 0x140006270
-
-    const uint32_t wantMask = *reinterpret_cast<uint32_t*>(desc + 0x28);
+    const uint32_t wantMask = desc->_goodsFlags;
     bool matched = false;
 
-    uintptr_t store = reinterpret_cast<uintptr_t>(storeIbp);
     if (!store) return false;
 
-    for (int i = 0; i < *reinterpret_cast<int*>(store + 0x30); ++i) {
-        store = reinterpret_cast<uintptr_t>(storeIbp);
-        const uintptr_t slots = *reinterpret_cast<uintptr_t*>(store + 0x28);
-        const uintptr_t good  = *reinterpret_cast<uintptr_t*>(slots + static_cast<uintptr_t>(i) * 0x10);
+    // StorageComponent::storageSlots is still void* (COMP-e): the 0x10-byte item's
+    // first qword, the good's ComponentDescription, is LEFT.
+    ComponentDescription* const* items =
+        reinterpret_cast<ComponentDescription* const*>(store->storageSlots);
+    for (int i = 0; i < store->slotCount; ++i) {
+        const ComponentDescription* good = items[i * 2];
 
-        uintptr_t rawMatDesc = 0;
+        const RawMaterialDescription* rawMat = nullptr;
         if (good) {
-            const uint32_t  tidRawMat = RawMaterialDescription::TypeId();
-            const int       n   = *reinterpret_cast<int*>(good + 0x30);
-            const uintptr_t arr = *reinterpret_cast<uintptr_t*>(good + 0x28);
-            for (int j = 0; j < n; ++j) {
-                void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
+            const uint32_t tidRawMat = RawMaterialDescription::TypeId();
+            for (int j = 0; j < good->_subDescCount; ++j) {
+                Description* c = good->_subDescs[j];
                 if (!c) continue;
-                const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-                if (tid == tidRawMat) {
-                    if (reinterpret_cast<const Object::Base*>(c)->IsDerivedFrom(tidRawMat))   // B.3.x bridge
-                        rawMatDesc = reinterpret_cast<uintptr_t>(c);
+                if (c->Type() == tidRawMat) {
+                    if (c->IsDerivedFrom(tidRawMat))
+                        rawMat = static_cast<RawMaterialDescription*>(c);
                     break;
                 }
             }
         }
         // Faithful unguarded read -- see the note above.
-        const uint32_t flags = *reinterpret_cast<uint32_t*>(rawMatDesc + 0x5c);
-        matched |= (wantMask & flags) != 0;
+        matched |= (wantMask & rawMat->_flags) != 0;
     }
     return matched;
+}
+
+// GameUpdateLoop::m_citizenList (+0xF0) is still void* (GAME-a); the town manager it
+// points at is the CitizenBehavior (WORK-a), whose happiness list is read by name. The
+// one bridge from the untyped member is LEFT.
+static CitizenBehavior* TownManager() {
+    return reinterpret_cast<CitizenBehavior*>(GameUpdateLoop::_singleton->m_citizenList);
 }
 
 // ============================================================
 // HappinessComponent::Register -- 0x14004a4f0
 // ============================================================
-// Stamp the happiness radius onto the map (a300 with state 1), append the component's
-// IBP to the TownManager happiness list at *(GameWorld+0xF0)+0x50 (count at +0x58),
-// and latch self[+0x28] so it is not registered twice.
-extern "C" void HappinessComponent_Register(void* selfV) {
-    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
+// Stamp the happiness radius onto the map (UpdateInfluence +1), append the component
+// to the town manager's happiness list (CitizenBehavior::happinessComponents), and
+// latch `registered` so it is not registered twice.
+void HappinessComponent::Register() {
+    UpdateInfluence(1);   // 0x14004a300
 
-    FishingComponent_NotifyTile(self, 1);   // 0x14004a300
-
-    uint8_t basePtr[24] = {};
-    new (basePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+    ::Object::InternalPtr<HappinessComponent> self(this);
 
     if (GameUpdateLoop::_singleton != nullptr) {
-        const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
-        if (townMgr) {
-            const int count = *reinterpret_cast<int*>(townMgr + 0x58);
+        CitizenBehavior* town = TownManager();
+        if (town) {
+            const int count = town->happinessComponentCount;
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x50))
-                .SetSizeFill(count + 1, basePtr);
+            GameColl::AsArray<GameColl::Ptr8>(&town->happinessComponents)
+                .SetSizeFill(count + 1, &self);
 
             static int n = 0;
             if (n < 8) { ++n;
                 fprintf(stderr, "[Happiness] source REGISTERED: comp=%p townMgr=%p "
-                                "happinessCount=%d\n", selfV,
-                        reinterpret_cast<void*>(townMgr),
-                        *reinterpret_cast<int*>(townMgr + 0x58));
+                                "happinessCount=%d\n", static_cast<void*>(this),
+                        static_cast<void*>(town), town->happinessComponentCount);
                 fflush(stderr);
             }
         }
     }
-    self->happinessFlag = 1;
+    registered = true;
 }
 
 // ============================================================
 // HappinessComponent::Unregister -- 0x14004a4a0
 // ============================================================
 // The mirror of Register, and byte-identical to the body of slot 7 / the state-3 enter
-// minus their `if (self[+0x28])` guard.
-extern "C" void HappinessComponent_Unregister(void* selfV) {
-    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(selfV);
-
-    uint8_t basePtr[24] = {};
-    new (basePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+// minus their `if (registered)` guard.
+void HappinessComponent::Unregister() {
+    ::Object::InternalPtr<HappinessComponent> self(this);
 
     if (GameUpdateLoop::_singleton != nullptr) {
-        const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0);
-        if (townMgr)
-            CemeteryListErase_Reimpl(reinterpret_cast<void*>(townMgr + 0x50), basePtr);
+        CitizenBehavior* town = TownManager();
+        if (town)
+            CemeteryListErase_Reimpl(&town->happinessComponents, &self);   // 0x140002cc0
     }
-    FishingComponent_NotifyTile(self, -1);   // 0x14004a300
-    self->happinessFlag = 0;
+    UpdateInfluence(-1);   // 0x14004a300
+    registered = false;
 }
 
 // ============================================================
 // HappinessComponent state 2 / 13 "built" enter -- 0x14004a9f0
 // ============================================================
 // Register on entry, but only if not already registered and currently active.
-extern "C" char HappinessComponent_EnterBuilt(void* comp, void* /*sm*/) {
-    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(comp);
-    const bool active = HappinessComponent_IsActive(comp);
-    if (self->happinessFlag == 0 && active)
-        HappinessComponent_Register(comp);
+char HappinessComponent::StateBuiltEnter() {
+    const bool active = IsActive();
+    if (!registered && active)
+        Register();
     return 0;
 }
 
@@ -346,26 +340,31 @@ extern "C" char HappinessComponent_EnterBuilt(void* comp, void* /*sm*/) {
 // This is the only state-table column HappinessComponent populates, which is why its
 // RegisterState instantiation (0x140005e30) is the 3-argument one: the extra stack
 // argument lands in the trans38 slot at table entry +0x18.
-extern "C" char HappinessComponent_Tick38(void* comp, void* /*sm*/, void* /*time*/,
-                                          int /*idx*/) {
-    HappinessComponent* self = reinterpret_cast<HappinessComponent*>(comp);
-    const bool active     = HappinessComponent_IsActive(comp);
-    const bool registered = (self->happinessFlag != 0);
+char HappinessComponent::StateBuiltPerFrame() {
+    const bool active = IsActive();
 
     if (!registered && active) {
-        HappinessComponent_Register(comp);
+        Register();
     } else if (registered && !active) {
-        HappinessComponent_Unregister(comp);
+        Unregister();
     }
     return 0;
 }
 
 // HappinessComponent state-3 "demolish" enter -- 0x14004a940. Byte-identical to the
 // slot-7 removal hook (0x14004aa20), guard included.
-extern "C" char HappinessComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    reinterpret_cast<HappinessComponent*>(comp)->HappinessComponent::OnRemove();   // B.3.8 bridge (state enters take void*)
+char HappinessComponent::StateDemolishEnter() {
+    HappinessComponent::OnRemove();
     return 0;
 }
+
+// The state table's handler adapters: the controller hands each one its owner
+// (node+0x18), the HappinessComponent.
+static char Happiness_StateBuiltEnter(HappinessComponent* c, void* /*sm*/) { return c->StateBuiltEnter(); }      // 0x14004a9f0
+static char Happiness_StateBuiltPerFrame(HappinessComponent* c, void* /*sm*/, void* /*time*/, int /*idx*/) {
+    return c->StateBuiltPerFrame();                                                                             // 0x14004a9a0
+}
+static char Happiness_StateDemolishEnter(HappinessComponent* c, void* /*sm*/) { return c->StateDemolishEnter(); } // 0x14004a940
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — HappinessComponent as a REAL class (HappinessComponent.h).
@@ -391,13 +390,13 @@ static void HappinessComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = HappinessCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 2, reinterpret_cast<void*>(&HappinessComponent_EnterBuilt),
-                       nullptr, reinterpret_cast<void*>(&HappinessComponent_Tick38), nullptr);
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&Happiness_StateBuiltEnter),
+                       nullptr, reinterpret_cast<void*>(&Happiness_StateBuiltPerFrame), nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 13, reinterpret_cast<void*>(&HappinessComponent_EnterBuilt),
-                       nullptr, reinterpret_cast<void*>(&HappinessComponent_Tick38), nullptr);
+    TableRegisterState(t, 13, reinterpret_cast<void*>(&Happiness_StateBuiltEnter),
+                       nullptr, reinterpret_cast<void*>(&Happiness_StateBuiltPerFrame), nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 3, reinterpret_cast<void*>(&HappinessComponent_EnterDemolish),
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&Happiness_StateDemolishEnter),
                        nullptr, nullptr, nullptr);
     TableAddTransition(t, 6, nullptr);
     TableAddTransition(t, 4, nullptr);
@@ -408,7 +407,7 @@ static const bool s_happinessStateTableBuilt = (HappinessComponent_PopulateState
 // 0x14004ab60. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // +0x28 = 0 (byte); `_controller(this)` is the member's back-pointer at +0x48; then
 // `_flags |= 2` (0x82).
-HappinessComponent::HappinessComponent() : happinessFlag(0), _pad29{}, _controller(this) {
+HappinessComponent::HappinessComponent() : registered(false), _pad29{}, _controller(this) {
     OrFlagsInCtor(0x2);
 }
 
@@ -428,14 +427,14 @@ void* HappinessComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HappinessComponent());
 }
 
-// [3] 0x14004aa80 — happinessFlag round-trips (save/load wave 2026-08-28):
+// [3] 0x14004aa80 — registered round-trips (save/load wave 2026-08-28):
 // Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
-// then a scope carrying happinessFlag (+0x28) as a bool.
+// then a scope carrying registered (+0x28) as a bool.
 void HappinessComponent::Persist(void* stream) {
     Component::Persist(stream);
     { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
-    ser.Serialize(*reinterpret_cast<bool*>(&happinessFlag), nullptr);
+    ser.Serialize(registered, nullptr);
 }
 
 // [7] 0x14004aa20 — if registered: ERASE this component from the happiness list
@@ -446,17 +445,12 @@ void HappinessComponent::Persist(void* stream) {
 // so a slot that erases, sets the entity index to -1 and clears the registered
 // flag is the REMOVE side.
 void HappinessComponent::OnRemove() {
-    if (happinessFlag == 0) return;
-    uint8_t basePtr[24];
-    new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-    if (GameUpdateLoop::_singleton != nullptr) {
-        void* happinessArray = reinterpret_cast<void*>(
-            *reinterpret_cast<uintptr_t*>(
-                reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xF0) + 0x50);
-        CemeteryListErase_Reimpl(happinessArray, basePtr);   // 0x140002cc0
-    }
-    FishingComponent_NotifyTile(this, -1);                    // 0x14004a300 (entity index)
-    happinessFlag = 0;
+    if (!registered) return;
+    ::Object::InternalPtr<HappinessComponent> self(this);
+    if (GameUpdateLoop::_singleton != nullptr)
+        CemeteryListErase_Reimpl(&TownManager()->happinessComponents, &self);   // 0x140002cc0
+    UpdateInfluence(-1);                                      // 0x14004a300
+    registered = false;
 }
 
 

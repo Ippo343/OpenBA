@@ -173,7 +173,6 @@ void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780  B4 FORW
 
 // ---- happinesscomponent.cpp
 void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, short delta);  // 0x14009f990
-void FishingComponent_NotifyTile(void* selfP, int16_t param2);  // 0x14004a300
 
 // ---- herdcomponent.cpp
 char HerdComponent_Helper6b10(int64_t param_1);  // 0x140106b10
