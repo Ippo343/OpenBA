@@ -18,6 +18,7 @@
 #include "runtime/types/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/CheckElement.h"  // X::TypeId() (B.3.9 CG2)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "Dialog/PageToggleUI.h"
 
 // ---- UI::CheckElement type id -----------------------------------------------
 // Retail reads this through exe .rdata exref 0x1401516a8 (import string
@@ -107,43 +108,36 @@ namespace pagetoggleui_sa {
 // [4] 0x140075850
 void PageToggleUI::OnCreated() {
     if (!pagetoggleui_sa::Ready()) return;
-    uintptr_t s = (uintptr_t)this;
 
-    // Find checkbox element by type ID in the dialog element tree
+    // Find checkbox element by type ID in the container's element tree
     uint32_t checkboxTypeId = PageToggleUI_CheckElementTypeId();
-    uint64_t foundElem = 0;
-    ::new (&foundElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x20))->FindElementType(checkboxTypeId));  // B.3.6 bridge
+    UI::Element* elemPtr = _container->FindElementType(checkboxTypeId).Get();
 
     // IsDerivedFrom check + store at +0x30
-    void* elemPtr = (void*)foundElem;
-    void* checked = nullptr;
+    UI::CheckElement* checked = nullptr;
     if (elemPtr) {
         bool derived = ::Object::IsDerivedFromNullSafe(elemPtr, checkboxTypeId);
-        if (derived) checked = elemPtr;
+        if (derived) checked = static_cast<UI::CheckElement*>(elemPtr);
     }
-    uint64_t basePtr = 0;
-    new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x30) = basePtr;
+    checkBox = checked;
 
     // SetElementId on checkbox = 700
-    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(700);  // B.3.6 bridge
+    checkBox->SetElementId(700);
 
-    // Find "pages" element in dialog instance
+    // Find "pages" element in the owning dialog instance
     System::String nameStr("pages");
-    uint64_t pagesElem = 0;
-    ::new (&pagesElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(*(uint64_t*)(s + 0x18))->FindElement(nameStr));  // B.3.6 bridge
-    *(uint64_t*)(s + 0x38) = pagesElem;
+    pages = static_cast<UI::PageElement*>(_dialog->FindElement(nameStr).Get());
 
     // If active page is 0 or 4, restore saved page; otherwise reset saved page to 0
-    int activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
+    int activePage = pages->GetActivePage();
     if (activePage != 0) {
-        activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
+        activePage = pages->GetActivePage();
         if (activePage != 4) {
-            *(uint32_t*)(s + 0x40) = 0;
+            savedPage = 0;
             return;
         }
     }
-    reinterpret_cast<UI::PageElement*>(*(uint64_t*)(s + 0x38))->SetActivePage(*(int*)(s + 0x40));  // B.3.6 bridge
+    pages->SetActivePage(savedPage);
 }
 
 // Slot7: Enable/disable checkbox based on whether active page is 0 or 4.
@@ -153,23 +147,19 @@ void PageToggleUI::OnUpdateLayout() {
     // Standalone-only precondition: Slot7/Slot9 run before Slot4 has populated
     // +0x30/+0x38 (retail's Slot4 always succeeds first); with both caches
     // populated this is retail verbatim.
-    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x30) ||
-        !*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x38)) return;
-    uintptr_t s = (uintptr_t)this;
+    if (!checkBox || !pages) return;
 
-    void* checkbox = (void*)*(uint64_t*)(s + 0x30);
-
-    int activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
+    UI::CheckElement* checkbox = checkBox;
+    int activePage = pages->GetActivePage();
     bool enabled;
     if (activePage != 0) {
-        activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
+        activePage = pages->GetActivePage();
         enabled = (activePage == 4);
     } else {
         enabled = true;
     }
-
     // vtable[8] = SetEnabled(this, bool)
-    reinterpret_cast<UI::Element*>(checkbox)->Enable(enabled);  // B.3.6 bridge: Element slot 8 Enable
+    checkbox->Enable(enabled);   // Element slot 8 Enable
 }
 
 // Slot9: On checkbox toggle event, switch between page 0 and page 4.
@@ -180,22 +170,17 @@ void PageToggleUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
     // Standalone-only precondition: Slot7/Slot9 run before Slot4 has populated
     // +0x30/+0x38 (retail's Slot4 always succeeds first); with both caches
     // populated this is retail verbatim.
-    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x30) ||
-        !*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x38)) return;
-    uintptr_t s = (uintptr_t)this;
+    if (!checkBox || !pages) return;
 
     if (param3 == 0x12 && param4 == 700) {
-        // Read checkbox state at +0xd8 (bool: checked or not)
-        void* checkbox = (void*)*(uint64_t*)(s + 0x30);
-        char checkState = *(char*)((uintptr_t)checkbox + 0xd8);
-
+        // The checkbox state (CheckElement::_checked, +0xd8)
+        char checkState = static_cast<char>(checkBox->_checked);
         if (checkState == 0) {
-            *(uint32_t*)(s + 0x40) = 0;
+            savedPage = 0;
         } else {
-            *(uint32_t*)(s + 0x40) = 4;
+            savedPage = 4;
         }
-
-        reinterpret_cast<UI::PageElement*>(*(uint64_t*)(s + 0x38))->SetActivePage(*(int*)(s + 0x40));  // B.3.6 bridge
+        pages->SetActivePage(savedPage);
     }
 }
 

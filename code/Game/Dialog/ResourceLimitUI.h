@@ -18,6 +18,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class SpinnerElement; }
+
 class ResourceLimitUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ResourceLimitUI)
 
@@ -32,10 +34,12 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x1400777e0
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
+    // ---- fields -------------------------------------------------------
+    UI::SpinnerElement* editLimit = nullptr;   // +0x30: the "editLimit" spinner (InternalBasePtr, OnCreated 0x140077970)
     uint64_t data38 = 0;           // +0x38: zeroed
 };
 
 static_assert(sizeof(ResourceLimitUI) == 0x40, "ResourceLimitUI is 0x40 (create 0x1400136b0 MemAlloc(0x40))");
 static_assert(alignof(ResourceLimitUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(ResourceLimitUI, editLimit) == 0x30, "ResourceLimitUI +0x30");
+static_assert(offsetof(ResourceLimitUI, data38) == 0x38, "ResourceLimitUI +0x38");

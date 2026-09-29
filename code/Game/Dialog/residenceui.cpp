@@ -41,6 +41,10 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/exe_constants.h"   // B3R: kRdata_*
+#include "Dialog/ResidenceUI.h"
+#include "Game/Profession.h"
+#include "Game/ProfessionList.h"
+#include "runtime/types/ui/TableElement.h"
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -58,23 +62,12 @@ static inline bool RUI_OkPtr(uintptr_t p) {
     return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
 }
 
-// Helper: find element by name in parent element, returns raw pointer
-// Original pattern: FindElement → CheckPtr → deref
-static void* FindChildElem(void* parentElem, const char* name) {
+// Helper: find an element by name under a parent element, as the UI class it
+// is read as (Original pattern: FindElement → CheckPtr → deref)
+template <class T>
+static T* FindChildElem(UI::Element* parentElem, const char* name) {
     System::String nameStr(name);
-    uint8_t retBuf[16];
-    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
-    void* result = *(void**)retBuf;
-    return result;
-}
-
-// Helper: find element by name, wrap as InternalBasePtr
-// Original pattern: FindElement → CheckPtr → deref → IsDerivedFrom → IBP_Ctor
-static uint64_t FindElemAsBasePtr(void* parentElem, const char* name) {
-    void* elem = FindChildElem(parentElem, name);
-    uint8_t bpBuf[8];
-    new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
-    return *(uint64_t*)bpBuf;
+    return static_cast<T*>(parentElem->FindElement(nameStr).Get());
 }
 
 namespace residenceui_sa {
@@ -93,13 +86,13 @@ bool Ready() {
 // destruction (verified live 2026-07-20: house demolished via the upgrade path
 // with its panel open → IsDerivedFrom(null) crashed in Runtime). Bail when the
 // entity is gone — the panel just stops refreshing.
-static bool DataSourceAlive(void* self) {
-    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
+static bool DataSourceAlive(ResidenceUI* self) {
+    Object::Base* e = self->_dataSource;
     if (!e) return false;
     // Marked-for-removal (entity+0x40 bit 0x400): the entity survives until the
     // EntityList drain, but its components/roster may already be torn down —
     // reading them crashed live 2026-07-20 (garbage into IsDerivedFrom).
-    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
+    if ((static_cast<ComponentEntity*>(e)->_entityFlags >> 10) & 1)
         return false;
     return true;
 }
@@ -121,29 +114,19 @@ static bool DataSourceAlive(void* self) {
 // [4] 0x1400b5850
 void ResidenceUI::OnCreated() {
     if (!residenceui_sa::Ready()) return;
-    uintptr_t s = (uintptr_t)this;
-    void* dialogElem = *(void**)(s + 0x20);
+    UI::Element* dialogElem = _container;
 
     // Try "residenceTable" first, fall back to "residenceLongTable"
-    void* tableRaw = FindChildElem(dialogElem, "residenceTable");
-    void* tableElem;
+    UI::TableElement* tableElem = FindChildElem<UI::TableElement>(dialogElem, "residenceTable");
 
-    if (!tableRaw) {
+    if (!tableElem) {
         // Fallback: find "residenceLongTable"
-        void* longTable = FindChildElem(dialogElem, "residenceLongTable");
-        uint8_t basePtrBuf[8];
-        new (basePtrBuf) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(longTable));   // B.3.3 bridge
-        tableElem = *(void**)basePtrBuf;
-    } else {
-        uint8_t basePtrBuf[8];
-        new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(tableRaw));   // B.3.3 bridge
-        tableElem = *(void**)basePtrBuf;
+        tableElem = FindChildElem<UI::TableElement>(dialogElem, "residenceLongTable");
     }
 
     // Get row count and column count from table element
-    int rowCount = *(int*)((uintptr_t)tableElem + 0xC0);
-    int colCount = *(int*)((uintptr_t)tableElem + 0xC4);
+    int rowCount = tableElem->_rowCount;
+    int colCount = tableElem->_columnCount;
 
 #ifdef _DEBUG
     printf("[ResidenceUI::Slot4] tableElem=%p rowCount=%d colCount=%d\n",
@@ -153,56 +136,43 @@ void ResidenceUI::OnCreated() {
 
     for (int i = 0; i < rowCount; i++) {
         // 0x30-byte entry: imageMale, imageFemale, textName, textAge, textProfession, buttonGoto
-        uint64_t entry[6] = {0, 0, 0, 0, 0, 0};
-        uint8_t childBuf[8];
+        ResidenceUIRow entry = {};
 
         // Original uses flat table indices: row * colCount + column
         // Column layout: 0=buttonGoto, 1=textName, 2=imageMale/Female, 3=textAge, 4=textProfession
         int base = i * colCount;
 
         // Col 0: buttonGoto
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 0));  // B.3.6 bridge
-        entry[5] = FindElemAsBasePtr(*(void**)childBuf, "buttonGoto");
-        if (entry[5]) reinterpret_cast<UI::Element*>(entry[5])->SetElementId(300 + i);  // B.3.6 bridge
+        entry.buttonGoto = FindChildElem<UI::Element>(tableElem->Child(base + 0).Get(), "buttonGoto");
+        if (entry.buttonGoto) entry.buttonGoto->SetElementId(300 + i);
 
         // Col 1: textName
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 1));  // B.3.6 bridge
-        entry[2] = FindElemAsBasePtr(*(void**)childBuf, "textName");
+        entry.textName = FindChildElem<UI::TextElement>(tableElem->Child(base + 1).Get(), "textName");
 
         // Col 2: imageMale + imageFemale (container cell)
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 2));  // B.3.6 bridge
-        void* iconCell = *(void**)childBuf;
-        entry[0] = FindElemAsBasePtr(iconCell, "imageMale");
+        UI::Element* iconCell = tableElem->Child(base + 2).Get();
+        entry.imageMale = FindChildElem<UI::Element>(iconCell, "imageMale");
 
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 2));  // B.3.6 bridge
-        entry[1] = FindElemAsBasePtr(*(void**)childBuf, "imageFemale");
+        entry.imageFemale = FindChildElem<UI::Element>(tableElem->Child(base + 2).Get(), "imageFemale");
 
         // Col 3: textAge
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 3));  // B.3.6 bridge
-        entry[3] = FindElemAsBasePtr(*(void**)childBuf, "textAge");
+        entry.textAge = FindChildElem<UI::TextElement>(tableElem->Child(base + 3).Get(), "textAge");
 
         // Col 4: textProfession
-        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 4));  // B.3.6 bridge
-        entry[4] = FindElemAsBasePtr(*(void**)childBuf, "textProfession");
+        entry.textProfession = FindChildElem<UI::TextElement>(tableElem->Child(base + 4).Get(), "textProfession");
 
 #ifdef _DEBUG
         if (i < 3) {
-            printf("[ResidenceUI::Slot4]   row[%d] base=%d: imgM=%llx imgF=%llx txtN=%llx txtA=%llx txtP=%llx btn=%llx\n",
-                   i, base, entry[0], entry[1], entry[2], entry[3], entry[4], entry[5]);
+            printf("[ResidenceUI::Slot4]   row[%d] base=%d: imgM=%p imgF=%p txtN=%p txtA=%p txtP=%p btn=%p\n",
+                   i, base, entry.imageMale, entry.imageFemale, entry.textName,
+                   entry.textAge, entry.textProfession, entry.buttonGoto);
             fflush(stdout);
         }
 #endif
 
-        // Push entry into dynamic array at +0x30.
-        // B.3.2 bridge: ResidenceUI+0x30 is Collection::Array<{imageMale,
-        // imageFemale, textName, textAge, textProfession, buttonGoto}>
-        // (stride 0x30, count +0x38, capacity +0x3C) inside a struct §B.2 has
-        // not converted, so it is reached at its offset. Was FUN_140021020's
-        // own inlined SetSize (ResidenceUI_ArrayPush_Impl).
-        auto& rows = GameColl::ArrayAt<GameColl::Bytes<0x30, 8>>(s, 0x30);
-        rows.SetSize(rows.GetSize() + 1,
-                     GameColl::Bytes<0x30, 8>(entry[0], entry[1], entry[2],
-                                    entry[3], entry[4], entry[5]));
+        // Push entry into the row array at +0x30 (was FUN_140021020's own
+        // inlined SetSize, ResidenceUI_ArrayPush_Impl).
+        rows.SetSize(rows.GetSize() + 1, entry);
     }
 }
 
@@ -229,23 +199,22 @@ void ResidenceUI::OnCreated() {
 // Original: 0x1400B51F0.
 
 // [7] 0x1400b51f0
+// LEFT (B4 DLG-c): ResidenceComponent::residentSlots is declared void* (COMP-e's
+// header; each 0x10 slot is a Collection::Array<CitizenComponent*>), so the slot
+// walk and the residents reached through it stay raw.
 void ResidenceUI::OnUpdateLayout() {
     if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
-    uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source +0x28
-    void* dataSource = *(void**)(s + 0x28);
+    Object::Base* dataSource = _dataSource;
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
-    void* entity = isEntity ? dataSource : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    uintptr_t entityPtr = *(uintptr_t*)entityBuf;
+    ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
     // Find ResidenceComponent — original uses type ID at 0x1401c7cf0 (ResidenceComponent),
     // NOT StorageComponent (0x1401c7e78). Different component with room data at +0x50/+0x58.
-    uintptr_t storageComp = 0;
+    ResidenceComponent* residenceComp = nullptr;
     uint32_t residenceComponentTypeId = ResidenceComponent::TypeId();
-    Entity_FindComponentByExeTypeId((void*)entityPtr, &storageComp, &residenceComponentTypeId);
+    Entity_FindComponentByExeTypeId(entity, &residenceComp, &residenceComponentTypeId);
 
 #ifdef _DEBUG
 #endif
@@ -254,10 +223,10 @@ void ResidenceUI::OnUpdateLayout() {
     int totalResidents = 0;
     int rowIdx = 0;
 
-    if (!storageComp) return;
+    if (!residenceComp) return;
 
-    // Outer loop: iterate room groups (storageComp+0x58 = group count)
-    int groupCount = *(int*)(storageComp + 0x58);
+    // Outer loop: iterate room groups (residentSlotCount, +0x58)
+    int groupCount = residenceComp->residentSlotCount;
 #ifdef _DEBUG
 #endif
 
@@ -265,7 +234,7 @@ void ResidenceUI::OnUpdateLayout() {
         uintptr_t groupOffset = 0;
 
         for (int g = 0; g < groupCount; g++) {
-            uintptr_t groupArrayBase = *(uintptr_t*)(storageComp + 0x50);
+            uintptr_t groupArrayBase = (uintptr_t)residenceComp->residentSlots;   // LEFT: void* (COMP-e)
             int residentCount = *(int*)(groupArrayBase + 8 + groupOffset);
 
             if (residentCount > 0) {
@@ -301,59 +270,59 @@ void ResidenceUI::OnUpdateLayout() {
                     // yet evidence either way about the ResidenceUI_Slot7+0x295 crash of
                     // 2026-07-25; the mass-death teardown remains an equally good explanation.
                     // Stop at the last real row instead of walking off the end, and say so.
-                    const int rowCapacity = *(int*)(s + 0x38);
+                    const int rowCapacity = rows._size;
                     if (rowIdx >= rowCapacity) {
                         static int s_warned = 0;
                         if (s_warned < 4) { ++s_warned;
                             fprintf(stderr, "[ResidenceUI] GUARD: residence %p has %d resident(s) "
                                     "in group %d but the dialog table only has %d row(s) — "
                                     "truncating (SA over-filled house)\n",
-                                    (void*)storageComp, residentCount, g, rowCapacity);
+                                    residenceComp, residentCount, g, rowCapacity);
                             fflush(stderr);
                         }
                         break;
                     }
                     // Original CheckPtr's the component IBP every iteration
 
-                    // Get citizen ptr from resident list + CheckPtr
-                    uintptr_t residentListPtr = *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + groupOffset);
+                    // Get citizen ptr from resident list + CheckPtr (LEFT: residentSlots)
+                    uintptr_t residentListPtr = *(uintptr_t*)((uintptr_t)residenceComp->residentSlots + groupOffset);
                     uintptr_t citizen = *(uintptr_t*)(residentListPtr + r * 8);
 
 #ifdef _DEBUG
 #endif
 
-                    // Get row entry: 0x30-byte entries at self+0x30
-                    uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + rowIdx * 0x30;
+                    // The row's elements (0x30-byte rows at +0x30)
+                    ResidenceUIRow& row = rows[rowIdx];
 
                     // Check gender: citizen+0x38 != 0 means male
                     bool isMale = (*(int*)(citizen + 0x38) != 0);
 
                     // Show/hide gender icons — CheckPtr each element IBP in row array
-                    void* imageFemale = *(void**)(rowBase + 0x08);
+                    UI::Element* imageFemale = row.imageFemale;
                     if (imageFemale) {
                         if (isMale) {
-                            reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+                            imageFemale->SetFlagsOnOff(1, 0);
                         } else {
-                            reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+                            imageFemale->SetFlagsOnOff(0, 1);
                         }
                     }
-                    void* imageMale = *(void**)rowBase;
-                    if (imageMale) reinterpret_cast<UI::Element*>(imageMale)->SetFlagsOnOff((uint32_t)!isMale, (uint32_t)isMale);  // B.3.6 bridge
+                    UI::Element* imageMale = row.imageMale;
+                    if (imageMale) imageMale->SetFlagsOnOff((uint32_t)!isMale, (uint32_t)isMale);
 
                     // Set name text: citizen+0x28 is the name String
-                    void* textName = *(void**)(rowBase + 0x10);
+                    UI::TextElement* textName = row.textName;
                     // SA safety: the name String buffer (citizen+0x28) may be unset on a
                     // standalone citizen; SetParameter refcounts the source buffer and
                     // would fault on garbage. 0 (empty String) is fine.
                     uintptr_t nameBuf = *(uintptr_t*)(citizen + 0x28);
                     if (textName && (nameBuf == 0 || RUI_OkPtr(nameBuf)))
-                        reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, *reinterpret_cast<const System::String*>(citizen + 0x28));  // B.3.6 bridge
+                        textName->SetParameter(0, *reinterpret_cast<const System::String*>(citizen + 0x28));
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
                     int ageYears = (int)(*(float*)(citizen + 0x3c) * ageMul);
                     System::String ageStr = System::String::Format("%i", (uint64_t)(uint32_t)ageYears);
-                    void* textAge = *(void**)(rowBase + 0x18);
-                    if (textAge) reinterpret_cast<UI::TextElement*>(textAge)->SetParameter(0, ageStr);  // B.3.6 bridge
+                    UI::TextElement* textAge = row.textAge;
+                    if (textAge) textAge->SetParameter(0, ageStr);
 
                     // Determine profession text. Faithful to retail 0x1400B51F0:
                     //   if (age < desc.childThreshold(+0x44) || job(+0x208) != 0):
@@ -363,7 +332,7 @@ void ResidenceUI::OnUpdateLayout() {
                     // (The prior port had these branches scrambled and read +0x208 as a
                     //  "dead" flag; corrected here.) Every deref is range-guarded so a
                     // standalone citizen with a garbage description cache can't fault.
-                    void* textProfession = *(void**)(rowBase + 0x20);
+                    UI::TextElement* textProfession = row.textProfession;
 
                     float age = *(float*)(citizen + 0x3c);
                     uintptr_t jobEntity = *(uintptr_t*)(citizen + 0x208);
@@ -379,16 +348,19 @@ void ResidenceUI::OnUpdateLayout() {
                     // UI::String ctor needs 3 args: (retbuf, externalPtr at +0x20,
                     // stringName at +0x30). fn_UIString_Ctor passes all three; the
                     // Ghidra decompile drops R8 (the +0x30 name) on the call.
-                    uint64_t uiStr[2];
+                    UI::String uiStr;
                     bool builtProf = false;
                     if (age < oldAgeThreshold || jobEntity != 0) {
-                        // Child (no job) -> ProfList+0x40; employed -> ProfList+0x48.
-                        void* world = GameUpdateLoop::_singleton;
-                        uintptr_t profList = world ? *(uintptr_t*)((uintptr_t)world + 0xB0) : 0;
-                        if (RUI_OkPtr(profList)) {
-                            uintptr_t entry = *(uintptr_t*)(profList + (jobEntity == 0 ? 0x40 : 0x48));
-                            if (RUI_OkPtr(entry)) {
-                                ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(entry + 0x20))), *reinterpret_cast<const System::String*>(entry + 0x30));  // B.3.6 bridge
+                        // Child (no job) -> ProfessionList::childProfession (+0x40);
+                        // employed -> ProfessionList::studentProfession (+0x48).
+                        GameUpdateLoop* world = GameUpdateLoop::_singleton;
+                        ProfessionList* profList = world ? world->m_professionList : nullptr;
+                        if (RUI_OkPtr((uintptr_t)profList)) {  // CAST-OK: ptr_int
+                            Profession* entry = (jobEntity == 0) ? profList->childProfession
+                                                                 : profList->studentProfession;
+                            if (RUI_OkPtr((uintptr_t)entry)) {  // CAST-OK: ptr_int
+                                // LEFT: Profession's Strings are raw storage (GAME-b, H5)
+                                uiStr = UI::String(entry->stringTable, *reinterpret_cast<const System::String*>(&entry->stringName));
                                 builtProf = true;
                             }
                         }
@@ -396,17 +368,17 @@ void ResidenceUI::OnUpdateLayout() {
                         // Adult laborer: the citizen's own profession object (+0x1f0).
                         uintptr_t profDesc = *(uintptr_t*)(citizen + 0x1f0);
                         if (RUI_OkPtr(profDesc)) {
-                            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profDesc + 0x20))), *reinterpret_cast<const System::String*>(profDesc + 0x30));  // B.3.6 bridge
+                            uiStr = UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profDesc + 0x20))), *reinterpret_cast<const System::String*>(profDesc + 0x30));  // B.3.6 bridge
                             builtProf = true;
                         }
                     }
-                    if (textProfession && builtProf) reinterpret_cast<UI::TextElement*>(textProfession)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+                    if (textProfession && builtProf) textProfession->SetText(&uiStr);
 
                     // Enable buttonGoto: retail 0x1400b54f6 `MOV DL,0x1` before
                     // `CALL [RAX+0x40]` (the call used to leave RDX unset).
-                    void* buttonGoto = *(void**)(rowBase + 0x28);
+                    UI::Element* buttonGoto = row.buttonGoto;
                     if (buttonGoto) {
-                        reinterpret_cast<UI::Element*>(buttonGoto)->Enable(true);   // B.3.x bridge (slot 8)
+                        buttonGoto->Enable(true);   // slot 8
                     }
 
                     rowIdx++;
@@ -417,80 +389,75 @@ void ResidenceUI::OnUpdateLayout() {
     }
 
     // Hide unused rows beyond active resident count
-    if (totalResidents < *(int*)(s + 0x38)) {
+    if (totalResidents < rows._size) {
         int i = totalResidents;
         do {
-            uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + (uintptr_t)i * 0x30;
+            ResidenceUIRow& row = rows[i];
 
             // Hide both gender icons
-            void* imageMale = *(void**)(rowBase + 0x00);
-            if (imageMale) reinterpret_cast<UI::Element*>(imageMale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-            void* imageFemale = *(void**)(rowBase + 0x08);
-            if (imageFemale) reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+            UI::Element* imageMale = row.imageMale;
+            if (imageMale) imageMale->SetFlagsOnOff(1, 0);
+            UI::Element* imageFemale = row.imageFemale;
+            if (imageFemale) imageFemale->SetFlagsOnOff(1, 0);
 
             // Clear name text
             {
                 System::String emptyStr1("");
-                void* textName = *(void**)(rowBase + 0x10);
-                if (textName) reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, emptyStr1);  // B.3.6 bridge
+                UI::TextElement* textName = row.textName;
+                if (textName) textName->SetParameter(0, emptyStr1);
             }
 
             // Clear age text
             {
                 System::String emptyStr2("");
-                void* textAge = *(void**)(rowBase + 0x18);
-                if (textAge) reinterpret_cast<UI::TextElement*>(textAge)->SetParameter(0, emptyStr2);  // B.3.6 bridge
+                UI::TextElement* textAge = row.textAge;
+                if (textAge) textAge->SetParameter(0, emptyStr2);
             }
 
-            // Reset profession text: fn_UIString_Ctor(retbuf, externalPtr from +0xD8, empty string)
-            void* textProfession = *(void**)(rowBase + 0x20);
+            // Reset profession text: UI::String(the element's own table, empty string)
+            UI::TextElement* textProfession = row.textProfession;
             if (textProfession) {
                 System::String emptyStr3("");
-                uint64_t origUIStr[2];
-                ::new (origUIStr) UI::String(
-                    Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)textProfession + 0xD8))), emptyStr3);  // B.3.6 bridge
-                reinterpret_cast<UI::TextElement*>(textProfession)->SetText(reinterpret_cast<const UI::String*>(origUIStr));  // B.3.6 bridge
+                UI::String origUIStr(textProfession->_text.GetStringTable(), emptyStr3);
+                textProfession->SetText(&origUIStr);
             }
 
             // Disable buttonGoto (retail 0x1400b5664 `XOR EDX,EDX`).
-            void* buttonGoto = *(void**)(rowBase + 0x28);
+            UI::Element* buttonGoto = row.buttonGoto;
             if (buttonGoto) {
-                reinterpret_cast<UI::Element*>(buttonGoto)->Enable(false);   // B.3.x bridge (slot 8)
+                buttonGoto->Enable(false);   // slot 8
             }
 
             i++;
-        } while (i < *(int*)(s + 0x38));
+        } while (i < rows._size);
     }
 }
 
 // ============================================================
-// ResidenceUI_GoToCitizen — navigate camera to resident citizen
+// ResidenceUI::GoToCitizen — navigate camera to resident citizen
 // ============================================================
-// Iterates storage component rooms to find the citizen at the given
+// Iterates the component's rooms to find the citizen at the given
 // flat index, then centers the camera on that citizen entity.
 //
-// Storage layout: +0x50 = room array ptr (0x10-byte entries: ptr, count),
-//                 +0x58 = room count.
+// Room layout: +0x50 = room array ptr (0x10-byte entries: ptr, count),
+//              +0x58 = room count.
 // Each room entry: [citizenListPtr 8][count 4][pad 4].
 // citizenListPtr -> array of citizen entity pointers (8 bytes each).
 // Citizen entity +0x10 = InternalBasePtr self-reference.
 //
-// Original: 0x1400B56A0.
+// Original: 0x1400B56A0. Retail finds the component through 0x140006270, the
+// StorageComponent cell (0x1401c7e78), and reads +0x50 / +0x58 of it: the class
+// of those two fields is not settled, so the walk stays raw (LEFT).
 
-static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
-    uintptr_t s = (uintptr_t)self;
-
+void ResidenceUI::GoToCitizen(int citizenIndex) {
     // Get entity from data source +0x28
-    void* dataSource = *(void**)(s + 0x28);
+    Object::Base* dataSource = _dataSource;
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
-    void* entity = isEntity ? dataSource : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    uintptr_t entityPtr = *(uintptr_t*)entityBuf;
+    ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
     // Find StorageComponent on the residence entity
     uintptr_t storageComp = 0;
-    fn_FindComponent_Storage((void*)entityPtr, &storageComp);
+    fn_FindComponent_Storage(entity, &storageComp);
 
     // Iterate storage room groups to find citizen at flat index
     int flatIdx = 0;
@@ -509,12 +476,11 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
 
                 // Get citizen's InternalBasePtr self-reference at +0x10
                 uint64_t citizenBP = *(uint64_t*)(citizenPtr + 0x10);
-                // Get parent dialog ptr from self+0x18
-                uint64_t parentDialog = *(uint64_t*)(s + 0x18);
+                // The owning dialog (DialogController::_dialog, +0x18)
+                UI::DialogInstance* parentDialog = _dialog;
 
-                // Center camera on this citizen via toolController (gameWorld+0x120)
-                void* toolController = *(void**)((uintptr_t)GameUpdateLoop::_singleton + 0x120);
-                Toolbar_CenterOnEntity_Impl(toolController, &parentDialog, &citizenBP);
+                // Center camera on this citizen via the tool manager (gameWorld+0x120)
+                Toolbar_CenterOnEntity_Impl(GameUpdateLoop::_singleton->m_toolManager, &parentDialog, &citizenBP);
                 return;
             }
             flatIdx++;
@@ -525,16 +491,14 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
 // [9] 0x1400b5820
 void ResidenceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
                                  int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    void* param2 = element;
+    (void)element;
     if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
-    (void)param2;
-    uintptr_t s = (uintptr_t)this;
 
     if (msg != 0x12) return;
 
-    int count = *(int*)(s + 0x38);
+    int count = rows._size;
     if (id >= 300 && id < 300 + count) {
-        ResidenceUI_GoToCitizen(this, id - 300);
+        GoToCitizen(id - 300);
     }
 }
 
@@ -560,26 +524,16 @@ void ResidenceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int3
 //   +0x48 (idx9) Slot9  (0x1400b5820) — resident-row click dispatch (id 300+index)
 
 
-// ~ResidenceUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
-// WITHOUT ~DialogController); moved here unchanged. The compiler now chains
-// ~DialogController -> ~Internal after it.
-ResidenceUI::~ResidenceUI() {
-    void* self = this;
-    // Free the cached per-row element array at +0x30 (mirrors the exe ScalarDtor).
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* rows = *reinterpret_cast<void**>(s + 0x30);
-    if (rows) System::MemoryAllocator::MemFree(rows);
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-}
+// ~ResidenceUI (0x140020fc0): the row array at +0x30 is freed by `rows`' own
+// dtor (MemFree + zero data / count / capacity, as the tree's teardown did);
+// the compiler then chains ~DialogController -> ~Internal.
 
 
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void ResidenceUI::OnUpdate(const System::Time& /*time*/) {
     if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
-    if (*reinterpret_cast<int*>(s + 0x38) == 0) {
+    if (rows._size == 0) {
         ResidenceUI::OnCreated();
     }
     ResidenceUI::OnUpdateLayout();

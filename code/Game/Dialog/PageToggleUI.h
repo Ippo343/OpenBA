@@ -19,6 +19,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class CheckElement; class PageElement; }
+
 class PageToggleUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(PageToggleUI)
 
@@ -34,12 +36,15 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x140075710
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
-    uint32_t data40 = 0;           // +0x40: zeroed (u32 write)
-    uint8_t _pad44[4] = {};        // +0x44: gap
+    // ---- fields (OnCreated 0x140075850 fills them) --------------------
+    UI::CheckElement* checkBox = nullptr;  // +0x30: the dialog's CheckElement (FindElementType), id 700
+    UI::PageElement*  pages = nullptr;     // +0x38: the "pages" PageElement
+    int32_t savedPage = 0;                 // +0x40: 0 or 4, the page the check box selects (u32 write)
+    uint8_t _pad44[4] = {};                // +0x44: gap
 };
 
 static_assert(sizeof(PageToggleUI) == 0x48, "PageToggleUI is 0x48 (create 0x140013160 MemAlloc(0x48))");
 static_assert(alignof(PageToggleUI) == 8, "qword-aligned (the vptr)");
+static_assert(offsetof(PageToggleUI, checkBox) == 0x30, "PageToggleUI +0x30");
+static_assert(offsetof(PageToggleUI, pages) == 0x38, "PageToggleUI +0x38");
+static_assert(offsetof(PageToggleUI, savedPage) == 0x40, "PageToggleUI +0x40");

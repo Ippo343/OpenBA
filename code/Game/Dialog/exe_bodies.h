@@ -64,19 +64,20 @@ extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed, vo
 void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140071d30
 
 // ---- optionsdialog.cpp
-extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface);  // 0x140099260
-void* OptionsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140075150
+// Free: reads the GameContainer (Game/game.h) through its first argument.
+struct GameContainer;
+class OptionsDialog;
+namespace UI { class UserInterface; class Dialog; class DialogInstance; }
+namespace Object { template <class T> class InternalPtr; }
+extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface);  // 0x140099260
+// B4 FORWARD: 1 outside caller (Dialog/mainmenudialog.cpp) -> OptionsDialog's ctor
+OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140075150
 
 // ---- saveloaddialog.cpp
-extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes, void* parentIBP, uint8_t mode, void* enginePtr, void* gameWorldPtr);  // 0x1400b8270
-
-// SaveLoadDialog helper: FUN_1400b6ce0 — populates the file list table
-// NOW REIMPLEMENTED in code/Game/Dialog/saveloaddialog.cpp as SaveLoadDialog_PopulateFileList()
-// Old typedef kept for reference:
-// typedef void (*fn_SaveLoadDialog_PopulateFileList_t)(void* self);
-// extern fn_SaveLoadDialog_PopulateFileList_t fn_SaveLoadDialog_PopulateFileList;
+// B4 FORWARD: 1 outside caller file (Dialog/mainmenudialog.cpp) -> SaveLoadDialog's ctor
 class SaveLoadDialog;
-void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
+class MenuDialogLoopT;
+extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP, uint8_t mode, MenuDialogLoopT* menuLoop, GameUpdateLoop* game);  // 0x1400b8270
 
 // ---- storageui.cpp
 // B.4 DLG-d: the item sort (0x1400213f0) is file-local to storageui.cpp, typed.

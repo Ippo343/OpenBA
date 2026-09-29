@@ -26,7 +26,12 @@
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Component/Component.h"   // B.3.x W0: Component::Command by name
-#include "Component/orchardcomponent_funcs.h"   // B3R: OrchardComponent_GetGrowth
+#include "Component/OrchardComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Dialog/OrchardUI.h"
+
+// LEFT (B4 DLG-c): the tree type crosses SelectResourceUI's int64_t SetResource /
+// void* GetResource (DLG-a).
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *TypeId_ProgressElement) before storing it at +0x38.
@@ -46,13 +51,23 @@ static uint32_t OrchardUI_ProgressElementTypeId() {
 
 namespace orchardui_sa {
 
-static void Trace(const char* what, void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    fprintf(stderr, "[OrchardUI] %s self=%p combo(+0x30)=%llx yield(+0x38)=%llx\n",
+static void Trace(const char* what, OrchardUI* self) {
+    fprintf(stderr, "[OrchardUI] %s self=%p combo(+0x30)=%p yield(+0x38)=%p\n",
             what, self,
-            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x30) : 0ull,
-            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x38) : 0ull);
+            self ? self->internalBasePtr : nullptr,
+            self ? self->yield : nullptr);
     fflush(stderr);
+}
+
+// The data source (DialogController +0x28) as the ComponentEntity it is checked to be.
+static ComponentEntity* CheckedEntity(OrchardUI* self) {
+    Object::Base* entity = self->_dataSource;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
+    ComponentEntity* checkedEntity = nullptr;
+    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
+        checkedEntity = static_cast<ComponentEntity*>(entity);
+    }
+    return checkedEntity;
 }
 
 }  // namespace orchardui_sa
@@ -68,36 +83,29 @@ static void Trace(const char* what, void* self) {
 
 // [4] 0x1400755b0
 void OrchardUI::OnCreated() {
-    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x18)) {
+    if (!_dialog) {
         orchardui_sa::Trace("Slot4 SKIP (no DialogInstance)", this);
         return;
     }
-    uintptr_t s = (uintptr_t)this;
 
-    // Find "yield" progress element in parent element at +0x20
+    // Find "yield" progress element in the container (+0x20)
     System::String nameStr("yield");
 
-    void* parentElem = *(void**)(s + 0x20);
-    uint64_t findResult = 0;
-    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
+    UI::Element* rawElem = _container->FindElement(nameStr).Get();
 
     // Store yield element at +0x38, faithful to retail: the find result is kept only
     // if it really is a ProgressElement (see the type-id note at the top of the file —
     // this check used to be skipped, which is safe but unfaithful).
-    void* rawElem = (void*)findResult;
-    void* checked = ::Object::IsDerivedFromNullSafe(rawElem, OrchardUI_ProgressElementTypeId())
-                        ? rawElem : nullptr;
-    uint64_t basePtrVal = 0;
-    new (&basePtrVal) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x38) = basePtrVal;
+    yield = ::Object::IsDerivedFromNullSafe(rawElem, OrchardUI_ProgressElementTypeId())
+                ? static_cast<UI::ProgressElement*>(rawElem) : nullptr;
 
     // Set initial progress value to 1.0f (100%).
     // Retail writes this unguarded — Orchard.rsc always carries a "yield" progress
     // element, so the deref is load-bearing there. SA guard: the panel template is
     // reached through the shared StandardDialog mount, so a dialog whose layout has
     // no "yield" would fault here where retail never can. Skip the write, don't fake it.
-    if (*(uint64_t*)(s + 0x38))
-        *(float*)(*(uint64_t*)(s + 0x38) + 0x124) = 1.0f;
+    if (yield)
+        yield->_maxValue = 1.0f;
 
     // Initialize combo via base class
     SelectResourceUI::OnCreated();
@@ -115,52 +123,43 @@ void OrchardUI::OnCreated() {
 
 // [7] 0x1400754b0
 void OrchardUI::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
 
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe. Same guard PastureUI_Slot7 carries, same reason.
     if (!SA_DialogEntityAlive(this)) return;
 
     // Get entity at +0x28, check ComponentEntity
-    void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = ComponentEntity::TypeId();
-    void* checkedEntity = nullptr;
-    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
-        checkedEntity = entity;
-    }
-    uint64_t entityBasePtr = 0;
-    new (&entityBasePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
+    ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    uint64_t orchardComp = 0;
-    fn_FindComponent_Orchard((void*)entityBasePtr, &orchardComp);
+    OrchardComponent* orchard = nullptr;
+    fn_FindComponent_Orchard(checkedEntity, &orchard);
 
     // SA guard (retail unguarded): an entity without an OrchardComponent, or the
     // combo/yield elements not seated yet because Slot4 has not run for this
     // instance. Retail cannot reach either state — the panel is only mounted on
     // Orchard.rsc and Slot4 always precedes the first tick.
-    if (!orchardComp) return;
-    if (!*(uint64_t*)(s + 0x30) || !*(uint64_t*)(s + 0x38)) return;
+    if (!orchard) return;
+    if (!internalBasePtr || !yield) return;
 
     // Get average growth ratio (0.0 - 1.0)
-    float growth = OrchardComponent_GetGrowth((void*)orchardComp);   // 0x140051640
+    float growth = orchard->GetGrowth();   // 0x140051640
 
-    // Set progress bar value directly at element+0x128
-    void* yieldElem = (void*)*(uint64_t*)(s + 0x38);
-    *(float*)((uintptr_t)yieldElem + 0x128) = growth;
+    // Set progress bar value directly (ProgressElement::_currentValue)
+    UI::ProgressElement* yieldElem = yield;
+    yieldElem->_currentValue = growth;
 
     // Format percentage text: (int)(growth * 100.0f + 0.5f)
     int percent = (int)(growth * 100.0f + 0.5f);
     System::String textStr = System::String::Format("%i", (uint64_t)(uint32_t)percent);
 
     // Set progress text parameter
-    reinterpret_cast<UI::ProgressElement*>(yieldElem)->SetProgressTextParameter(0, textStr);  // B.3.6 bridge
+    yieldElem->SetProgressTextParameter(0, textStr);
 
     // Enable/disable combo based on item count (SelectResourceUI base logic)
-    void* combo = (void*)*(uint64_t*)(s + 0x30);
-    int itemCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(combo)->Enable(itemCount > 0);  // B.3.6 bridge: Element slot 8 Enable
+    UI::ComboElement* combo = static_cast<UI::ComboElement*>(internalBasePtr);
+    int itemCount = combo->GetItemCount();
+    combo->Enable(itemCount > 0);   // Element slot 8 Enable
 }
 
 // ============================================================
@@ -174,36 +173,27 @@ void OrchardUI::OnUpdateLayout() {
 
 // [11] 0x140075380
 void OrchardUI::SetResource(int64_t param2) {
-    uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check ComponentEntity
-    void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = ComponentEntity::TypeId();
-    void* checkedEntity = nullptr;
-    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
-        checkedEntity = entity;
-    }
-    uint64_t entityBasePtr = 0;
-    new (&entityBasePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
+    ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    uint64_t orchardComp = 0;
-    fn_FindComponent_Orchard((void*)entityBasePtr, &orchardComp);
+    OrchardComponent* orchard = nullptr;
+    fn_FindComponent_Orchard(checkedEntity, &orchard);
 
     // SA guard (retail unguarded): fires from a combo event, which can only be
     // routed to an entity that has an OrchardComponent in retail.
-    if (!orchardComp) return;
+    if (!orchard) return;
 
-    // If currently no resource set (comp+0x60 == 0) and new resource is valid,
-    // call initialization via vtable[14](comp, 2)
-    int64_t currentResource = *(int64_t*)(orchardComp + 0x60);
-    if (currentResource == 0 && param2 != 0) {
-        reinterpret_cast<Component*>(orchardComp)->Command(2);   // B.3.x bridge (slot 14)
+    // If no tree type is set yet and the new one is valid, start production
+    // (Command(2), slot 14). (LEFT: the type arrives as SelectResourceUI's int64_t)
+    ComponentDescription* newType = reinterpret_cast<ComponentDescription*>(param2);
+    if (orchard->treeType == nullptr && param2 != 0) {
+        orchard->Command(2);   // slot 14
     }
 
-    // Set the resource type
-    *(int64_t*)(orchardComp + 0x60) = param2;
+    // Set the tree type (+0x60)
+    orchard->treeType = newType;
 }
 
 // ============================================================
@@ -216,25 +206,17 @@ void OrchardUI::SetResource(int64_t param2) {
 
 // [12] 0x140075430
 void* OrchardUI::GetResource(void* param2) {
-    uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check ComponentEntity
-    void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = ComponentEntity::TypeId();
-    void* checkedEntity = nullptr;
-    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
-        checkedEntity = entity;
-    }
-    uint64_t entityBasePtr = 0;
-    new (&entityBasePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
+    ComponentEntity* checkedEntity = orchardui_sa::CheckedEntity(this);
 
     // Find OrchardComponent on entity
-    uint64_t orchardComp = 0;
-    fn_FindComponent_Orchard((void*)entityBasePtr, &orchardComp);
+    OrchardComponent* orchard = nullptr;
+    fn_FindComponent_Orchard(checkedEntity, &orchard);
 
-    // Return resource type at comp+0x60 (SA guard: see Slot11)
-    *(uint64_t*)param2 = orchardComp ? *(uint64_t*)(orchardComp + 0x60) : 0;
+    // Return the tree type (+0x60) (SA guard: see Slot11).
+    // (LEFT: `out` is SelectResourceUI's void* retslot)
+    *(ComponentDescription**)param2 = orchard ? orchard->treeType : nullptr;
     return param2;
 }
 
@@ -286,13 +268,12 @@ int OrchardUI::GetCategory() {
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void OrchardUI::OnUpdate(const System::Time& time) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     if (!SA_DialogEntityAlive(this)) return;
-    if (!*reinterpret_cast<void**>(s + 0x38)) {
+    if (!yield) {
         OrchardUI::OnCreated();
-        if (!*reinterpret_cast<void**>(s + 0x38)) return;   // dialog genuinely lacks it
+        if (!yield) return;   // dialog genuinely lacks it
     }
-    if (*reinterpret_cast<void**>(s + 0x30))
+    if (internalBasePtr)
         SelectResourceUI::OnUpdate(time);
 }
 

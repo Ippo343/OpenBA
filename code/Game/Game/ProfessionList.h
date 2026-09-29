@@ -45,7 +45,7 @@ public:
     // hand). +0x40 / +0x48 are named from PostLifeEvent, which titles a child
     // with +0x40's name and a student with +0x48's; +0x30 / +0x38 keep typed
     // guess names.
-    void*    arrayData;          // +0x20: Collection::Array<Profession*> data (H5 raw)
+    Profession** arrayData;      // +0x20: Collection::Array<Profession*> data (H5 raw; B4 H4: typed, DLG-c)
     int32_t  arrayCount;         // +0x28: Array count
     int32_t  arrayCapacity;      // +0x2C: Array capacity
     Profession* field_0x30;      // +0x30: ExternalPtr<Profession>
