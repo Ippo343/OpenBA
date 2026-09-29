@@ -82,3 +82,27 @@ Metric at `c6681a14`: **36,053** to remove.
 | 18 | W1-DLG-a | `ae7b443e` | Dialog a: DebugUI, EntityUI, CitizenUI, BuildUI, DestroyUI, AchievementDialog and the smaller panels: 1762 -> 133 in 36 files; `behaviour:` CropUI::OnCreated calls SelectResourceUI's 0x140078be0 (0x1400b2b50); the two literal vtable-index calls of `destroyui` are gone (NEXT_SESSION §0.6) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `ae7b443e`: **34,424** to remove.
+
+| 19 | W1-DLG-b | `ec3770d5` | Dialog b: EventNotifyDialog, ModDialog, ModDetailsDialog, HelpUI, MainMenuDialog, NewGameDialog, EventLogUI, GoalDialog …: 1733 -> 164 in 43 files; `behaviour:` FollowDialog title 0x140068f70, EventLogUI one flag byte per check box 0x140067640 (neither dialog is opened by a gate route) | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 20 | W1-COMP-c | `d30aa937` | Component c: Disease, Destroy, Growth, CropField, Fire, ClearArea, Happiness, Decal, Floor, Fishing, Healer, Forester …: 1745 -> 405 in 121 files; `behaviour:` EnvironmentDescription::Serialize overloads 0x1400940f9 / 0x140094128 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, crash log empty, update 1.88 ms/frame (p95 2.71; recorded) | 0 |
+
+Metric at `d30aa937`: **31,512** to remove.
+
+Owed, found by the blocks (each a `behaviour:` commit of its own, not yet made):
+- `CheckEducation` 0x14010f7a0 calls the StorageComponent finder 0x140006270 in retail; the tree
+  calls the Residence finder and adds a null-guard bail (COMP-b).
+- `AnimAudioEvent::Serialize` calls the StringTable serializer; retail calls 0x1400019a0 at
+  0x140087efa (COMP-a).
+- `PackageFile::GetFileInfo` returns a bitwise copy; retail uses the FileInfo copy ctor 0x18000c110
+  (R-IO). `Graphics::AnimationState` is 0x18 in retail (ctor 0x1800fdaf0), 0x48 in the tree (R-GFX).
+- HelpUI's history array (retail frees it at 0x140011cf0) and EventLogUI's three arrays
+  (0x1400114b0) leak; `MainMenuDialog` OnOpened / OnClosed vs the Slot5 / Slot4 ports 0x1400b3c60 /
+  0x1400b3cd0; `EventNotifyDialog::OnUpdate` vs 0x140067c30 (DLG-b).
+- `UpgradeUIConfig::Serialize` validates against `ComponentEntity::TypeId()`; retail 0x140086fb0
+  uses ComponentDescription (DLG-e). Retail's settings Save passes the raw flag byte 0x1400989d7
+  (W0-H2).
+- `NaturalResourceComponent` slot 8 0x140125c40 is NOT installed: it finds a ParticleComponent and
+  reads its +0x28 as a MeshInstance (COMP-d asks for a ruling).
+- `FindComponent<T>()` does not skip null component slots (retail does not either); the tree's old
+  finders did. Safe while `ComponentEntity`'s ctor never stores a null slot (it skips a component
+  that has no factory).
