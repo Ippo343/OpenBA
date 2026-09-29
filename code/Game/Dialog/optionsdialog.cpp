@@ -12,6 +12,11 @@
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/TabElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/CheckElement.h"
+#include "ui/SliderElement.h"
+#include "Dialog/OptionsDialog.h"
+#include "Dialog/MessageDialog.h"
+#include "Dialog/OptionInputBindDialog.h"
 #include "ui/ButtonElement.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "ui/Dialog.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/AutoSaveDialog.h"   // X::TypeId() (ENDGAME B.3.9)
@@ -126,26 +131,17 @@ enum OptionsElementId {
 //   +0x98: anisotropic filter level count (int)
 //   +0xF8: current renderer index (int)
 
-// Helper macro: find a named element in the dialog and store in outField.
-#define FIND_ELEMENT(outField, name)                       \
-    do {                                                    \
-        System::String _nameStr(name);                     \
-        uint64_t _retval = 0;                              \
-        ::new (&_retval) Object::InternalPtr<UI::Element>(  /* B.3.6 bridge */ \
-            FindElement(_nameStr));  /* a member: used in OnOpened */ \
-        (outField) = (void*)_retval;                       \
-    } while (0)
-
-// Helper: set checkbox state (byte at +0xD8)
-static inline void SetCheckState(void* elem, uint8_t val) {
-    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = val;
+// Helper: find a named element of the dialog as the UI class retail reads it as
+// (OnOpened 0x1400742d0 stores each FindElement result in place).
+template <class T>
+static T* FindElementAs(OptionsDialog* dialog, const char* name) {
+    System::String nameStr(name);
+    return static_cast<T*>(dialog->FindElement(nameStr).Get());
 }
 
-// Helper: get KeyMap container via single deref from 0x1401c3de8
-// Used for name table (+0xC8), string table (+0xD0), and fn_ApplyKeyMapToUI
-static inline void* GetKeyMapContainer() {
-    if (g_gameContainer == nullptr) return nullptr;
-    return g_gameContainer;
+// Helper: set checkbox state (CheckElement::_checked, +0xD8)
+static inline void SetCheckState(UI::CheckElement* elem, uint8_t val) {
+    if (elem) elem->_checked = val;
 }
 
 // ============================================================
@@ -153,10 +149,10 @@ static inline void* GetKeyMapContainer() {
 // ============================================================
 // Ghidra calls it OptionsDialog_helper_9260, but it is not options-specific and it
 // is not "cursor speed / zoom" as an older comment here guessed. Retail body, in
-// order: copy five UI sound-effect pointers out of the KeyMap container into the
-// UserInterface's sound table, build a 16-byte sprite from km+0xA8/+0xB0 and hand
-// it to UI::UserInterface::SetFullscreenFadeSprite, then write the UI scale ratio
-// (settings[0] / 100.0f) to ui+0xDC — which edittool.cpp:674 reads back.
+// order: copy five UI sound-effect pointers out of the game container into the
+// UserInterface's sound table, hand the container's white sprite (+0xA8) to
+// UI::UserInterface::SetFullscreenFadeSprite, then write the UI scale ratio
+// (settings[0] / 100.0f) to UserInterface::_uiScale — which edittool.cpp:674 reads back.
 //
 // Four retail callers; three matter to us:
 //   0x140098fa0  OptionsDialog OK/Apply       -> calls this directly (below)
@@ -171,42 +167,30 @@ static inline void* GetKeyMapContainer() {
 //
 // Retail null-checks neither param; both call sites already guard, and the
 // guards below only cover our own optional resolves.
-extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface) {
+// B4: stays free — it reads the GameContainer (game.h, block GAME-a) through its
+// first argument; not a member of a class this block owns.
+extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface) {
     if (!keyMap || !userInterface) return;
-    uintptr_t ui = (uintptr_t)userInterface;
-    uintptr_t km = (uintptr_t)keyMap;
-    *(uint64_t*)(ui + 0xA8) = *(uint64_t*)(km + 0x70);   // BeginDrag
-    *(uint64_t*)(ui + 0xB0) = *(uint64_t*)(km + 0x78);   // EndDrag
-    *(uint64_t*)(ui + 0xB8) = *(uint64_t*)(km + 0x60);   // ButtonDown
-    *(uint64_t*)(ui + 0xC0) = *(uint64_t*)(km + 0x68);   // ButtonUp
-    *(uint64_t*)(ui + 0xC8) = *(uint64_t*)(km + 0x58);   // Alert
+    userInterface->_sounds[2] = keyMap->beginDragEffect.Get();   // +0xA8 BeginDrag
+    userInterface->_sounds[3] = keyMap->endDragEffect.Get();     // +0xB0 EndDrag
+    userInterface->_sounds[4] = keyMap->buttonDownEffect.Get();  // +0xB8 ButtonDown
+    userInterface->_sounds[5] = keyMap->buttonUpEffect.Get();    // +0xC0 ButtonUp
+    userInterface->_sounds[6] = keyMap->alertEffect.Get();       // +0xC8 Alert
     {
-        uint8_t sprite[16];
-        *(uint64_t*)&sprite[0] = *(uint64_t*)(km + 0xA8);
-        *(uint64_t*)&sprite[8] = *(uint64_t*)(km + 0xB0);
-        reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFadeSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
+        UI::Sprite sprite = keyMap->spriteWhite;
+        userInterface->SetFullscreenFadeSprite(&sprite);
     }
     if (g_gameSettings != nullptr)
-        *(float*)(ui + 0xDC) = (float)g_gameSettings->uiScale / 100.0f;
-}
-
-// Helper: get actual KeyMap object via triple deref from exref at 0x140151738
-// [exref] -> [runtime global] -> [KeyMap ptr] = actual Input::KeyMap
-// Used for method calls (GetDeviceForId, GetInputForId, etc.)
-static inline void* GetActualKeyMap() {
-    if (Input::Configuration::_singleton == nullptr) return nullptr;
-    void* step2 = Input::Configuration::_singleton;
-    if (!step2) return nullptr;
-    return *(void**)step2;
+        userInterface->_uiScale = (float)g_gameSettings->uiScale / 100.0f;
 }
 
 // Helper: get input key name as UI::String (replaces FUN_140099c20)
 // Converts device type (-1=unbound, 0=gamepad, 1=keyboard, 2=mouse) and key index
-// to a UI-display string like "Keyboard5" or "Unbound".
-// Returns a UI::String (16 bytes) in retval, using the KeyMap's string table at +0xD0.
-static void GetInputKeyName(void* retval, int deviceType, int keyIndex) {
-    void* keyMapContainer = GetKeyMapContainer();
-    if (!keyMapContainer) return;
+// to a UI-display string like "Keyboard5" or "Unbound", through the game
+// container's keyNames string table (+0xD0).
+static UI::String GetInputKeyName(int deviceType, int keyIndex) {
+    GameContainer* keyMapContainer = g_gameContainer;
+    if (!keyMapContainer) return UI::String();
 
     System::String tempStr;
     if (deviceType < 0) {
@@ -217,41 +201,36 @@ static void GetInputKeyName(void* retval, int deviceType, int keyIndex) {
         tempStr = System::String::Format("%s%i", devName, keyIndex);
     }
 
-    // Construct UI::String from the KeyMap container's string table at +0xD0
-    uint64_t stringTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xD0);
-    ::new (retval) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), tempStr);  // B.3.6 bridge
+    return UI::String(keyMapContainer->keyNames, tempStr);
 }
 
 // Helper: set the key name text on a button element (replaces FUN_140073490)
 // Finds "textInputKey" child in the element, formats device+key into display text.
-static void SetInputBindButtonText(void* elementPtr, int deviceType, uint32_t keyIndex) {
+static void SetInputBindButtonText(UI::Element* element, int deviceType, uint32_t keyIndex) {
     // Find "textInputKey" in the element
     System::String nameStr("textInputKey");
-    uint64_t found = 0;
-    ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)elementPtr)->FindElement(nameStr));  // B.3.6 bridge
+    UI::Element* found = element->FindElement(nameStr).Get();
 
     if (!found) return;
 
     // Check it's a TextElement
-    void* foundObj = (void*)found;
-    if (!::Object::IsDerivedFromNullSafe(foundObj, UI::TextElement::TypeId()))
+    if (!::Object::IsDerivedFromNullSafe(found, UI::TextElement::TypeId()))
         return;
 
     // Get the key name as UI::String, then set as text
-    uint8_t uiStr[16];
-    GetInputKeyName(uiStr, deviceType, keyIndex);
+    UI::String uiStr = GetInputKeyName(deviceType, keyIndex);
 
-    reinterpret_cast<UI::TextElement*>(foundObj)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+    static_cast<UI::TextElement*>(found)->SetText(&uiStr);
 }
 
-// Helper: set slider min/max/value (float fields at +0x118/+0x11c/+0x128)
-static inline void SetSliderRange(void* elem, float minVal, float maxVal) {
+// Helper: set slider min/max/value (SliderElement _minimum / _maximum / _value)
+static inline void SetSliderRange(UI::SliderElement* elem, float minVal, float maxVal) {
     if (!elem) return;
-    *(float*)((uintptr_t)elem + 0x118) = minVal;
-    *(float*)((uintptr_t)elem + 0x11c) = maxVal;
+    elem->_minimum = minVal;
+    elem->_maximum = maxVal;
 }
-static inline void SetSliderValue(void* elem, float val) {
-    if (elem) *(float*)((uintptr_t)elem + 0x128) = val;
+static inline void SetSliderValue(UI::SliderElement* elem, float val) {
+    if (elem) elem->_value = val;
 }
 
 // ENDGAME B.3.9: UI::TextElement / UI::StringTable both have a ported TypeId() now
@@ -259,25 +238,16 @@ static inline void SetSliderValue(void* elem, float val) {
 // and LoadStringTable's inline lazy-resolve are dead.
 
 // Helper: load a StringTable resource by path.
-static void* LoadStringTable(const char* path) {
+static const UI::StringTable* LoadStringTable(const char* path) {
     System::Filename filenameObj(path);   // ctor already normalises delimiters
-    void* ext = const_cast<::Object::External*>(
-        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-            ->FindOrLoad(filenameObj));
+    const ::Object::External* ext =
+        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameObj);
     if (!ext) return nullptr;
 
     if (::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-        return ext;
+        return static_cast<const UI::StringTable*>(ext);
     return nullptr;
 }
-
-// ============================================================
-// Forward declarations for internal helper functions
-// ============================================================
-static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self);
-static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self);
-static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self);
-static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self);
 
 // ============================================================
 // ValidateVideoConfig (replaces FUN_140072eb0)
@@ -298,129 +268,117 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self);
 // the saved-* fields stayed zero-initialized). In standalone we now fall back
 // to the Runtime DLL's _singleton slot in EngineFuncsInit, but keep this
 // guard as belt-and-braces so a future regression here can't crash the game.
-static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
-    if (self->savedRefreshDen == 0) {
+void OptionsDialog::ValidateVideoConfig() {
+    if (savedRefreshDen == 0) {
         // Defaults from Video::Configuration ctor (Runtime @ 0x1800f6f10): 60/1.
         // Better to pretend "60Hz" than to crash; the next Apply will write
         // ValidateConfiguration's clamped values back to the singleton.
-        self->savedRefreshNum = 60;
-        self->savedRefreshDen = 1;
+        savedRefreshNum = 60;
+        savedRefreshDen = 1;
     }
-    // B.3.5 bridge — THE DOOR DECIDES THE OVERLOAD. `Video::Device` has TWO
-    // `ValidateConfiguration`s at adjacent ordinals; the global this call used is bound to
+    // THE DOOR DECIDES THE OVERLOAD. `Video::Device` has TWO
+    // `ValidateConfiguration`s at adjacent ordinals; this call is
     // `?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z` (0x1800f7370, the EIGHT
     // `int&` out-parameter one), NOT `…QEAA_NXZ` (0x1800f8830, no arguments). Eight
     // arguments are spelled here so overload resolution cannot pick the sibling.
     ::Video::Device::_singleton->ValidateConfiguration(
-        *(int*)&self->savedRenderer, *(int*)&self->savedAdapter,
-        *(int*)&self->savedWidth,    *(int*)&self->savedHeight,
-        *(int*)&self->savedRefreshNum, *(int*)&self->savedRefreshDen,
-        *(int*)&self->savedAntialias, *(int*)&self->savedAdapter);   // B.3.5 bridge
+        savedRenderer, savedAdapter,
+        savedWidth,    savedHeight,
+        savedRefreshNum, savedRefreshDen,
+        savedAntialias, savedAdapter);
 }
 
 // ============================================================
 // PopulateFilterCombo (replaces FUN_140073800)
 // ============================================================
 // Fills texture filter combo: "None", "Bilinear", then "Anisotropic Nx" for each level.
-static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
-    void* vidDev = ::Video::Device::_singleton;
+void OptionsDialog::PopulateFilterCombo() {
+    Video::Device* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
-    reinterpret_cast<UI::ComboElement*>(self->comboFilter)->RemoveAllItems();  // B.3.6 bridge
+    comboFilter->RemoveAllItems();
 
-    void* stringTable = LoadStringTable("Dialog/StringTable.rsc:textureFilter");
+    const UI::StringTable* stringTable = LoadStringTable("Dialog/StringTable.rsc:textureFilter");
     if (!stringTable) return;
 
     // Item 0: "None" (filter -1)
     {
-        System::String textStr;
-        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)-1);  // B.3.6 bridge
+        System::String textStr(stringTable->GetText(0));
+        UI::Sprite sprite;
+        comboFilter->AddItem(sprite, textStr, (void*)(intptr_t)-1);  // CAST-OK: ptr_int
     }
 
     // Item 1: "Bilinear" (filter 0)
     {
-        System::String textStr;
-        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(1));  // B.3.6 bridge
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)0);  // B.3.6 bridge
+        System::String textStr(stringTable->GetText(1));
+        UI::Sprite sprite;
+        comboFilter->AddItem(sprite, textStr, nullptr);
     }
 
     // Anisotropic filter levels: "Anisotropic 1x", "Anisotropic 2x", etc.
-    int anisoLevels = *(int*)((uintptr_t)vidDev + 0x98);
+    int anisoLevels = vidDev->maxAnisotropy;
     if (anisoLevels > 0) {
         // First level: "Anisotropic 1x"
-        System::String textStr;
-        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(2));  // B.3.6 bridge
+        System::String textStr(stringTable->GetText(2));
         System::String fmtStr = System::String::Format("%s 1x", textStr._data);
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)1);  // B.3.6 bridge
+        UI::Sprite sprite;
+        comboFilter->AddItem(sprite, fmtStr, (void*)(intptr_t)1);  // CAST-OK: ptr_int
     }
     // Higher levels: "Anisotropic 2x", "Anisotropic 4x", etc.
     for (int level = 2; level <= anisoLevels; level += 2) {
-        System::String textStr;
-        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(2));  // B.3.6 bridge
+        System::String textStr(stringTable->GetText(2));
         System::String fmtStr = System::String::Format("%s %ix", textStr._data, level);
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)level);  // B.3.6 bridge
+        UI::Sprite sprite;
+        comboFilter->AddItem(sprite, fmtStr, (void*)(intptr_t)level);  // CAST-OK: ptr_int
     }
 
     // Set current selection based on savedFilter
-    int filterVal = (int)self->savedFilter;
+    int filterVal = savedFilter;
     int selIdx;
     if (filterVal == -1) selIdx = 0;
     else if (filterVal == 0) selIdx = 1;
     else if (filterVal == 1) selIdx = 2;
     else selIdx = (filterVal >> 1) + 2;
 
-    reinterpret_cast<UI::ComboElement*>(self->comboFilter)->SetCurrentItem(selIdx);  // B.3.6 bridge
+    comboFilter->SetCurrentItem(selIdx);
 }
 
 // ============================================================
 // PopulateAntialiasCombo (replaces FUN_140073b10)
 // ============================================================
 // Fills antialias combo: "None", then "Nx multisample" for each supported mode.
-static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
-    void* vidDev = ::Video::Device::_singleton;
+void OptionsDialog::PopulateAntialiasCombo() {
+    Video::Device* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
-    reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->RemoveAllItems();  // B.3.6 bridge
+    comboAntialias->RemoveAllItems();
 
-    void* stringTable = LoadStringTable("Dialog/StringTable.rsc:multiSample");
+    const UI::StringTable* stringTable = LoadStringTable("Dialog/StringTable.rsc:multiSample");
 
-    int modeCount = reinterpret_cast<const Video::Device*>(vidDev)
-                        ->GetMultisampleModeCount();   // B.3.5 bridge
+    int modeCount = vidDev->GetMultisampleModeCount();
 
     for (int i = 0; i < modeCount; i++) {
-        bool supported = reinterpret_cast<const Video::Device*>(vidDev)
-                             ->IsMultisampleModeSupported(i);   // B.3.5 bridge
+        bool supported = vidDev->IsMultisampleModeSupported(i);
         if (!supported) continue;
 
         int addedIdx;
         if (i == 0) {
             // "None"
             System::String textStr;
-            if (stringTable) ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
-            uint8_t spriteBuf[16] = {};
-            ::new (spriteBuf) UI::Sprite();
-            addedIdx = reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)0);  // B.3.6 bridge
+            if (stringTable) ::new (&textStr) System::String(stringTable->GetText(0));
+            UI::Sprite sprite;
+            addedIdx = comboAntialias->AddItem(sprite, textStr, nullptr);
         } else {
             // "Nx multisample" — e.g. "2x Multisample"
             System::String textStr;
-            if (stringTable) ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(1));  // B.3.6 bridge
+            if (stringTable) ::new (&textStr) System::String(stringTable->GetText(1));
             System::String fmtStr = System::String::Format("%ix %s", i + 1, textStr._data);
-            uint8_t spriteBuf[16] = {};
-            ::new (spriteBuf) UI::Sprite();
-            addedIdx = reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)i);  // B.3.6 bridge
+            UI::Sprite sprite;
+            addedIdx = comboAntialias->AddItem(sprite, fmtStr, (void*)(intptr_t)i);  // CAST-OK: ptr_int
         }
 
-        if ((int)self->savedAntialias == i) {
-            reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->SetCurrentItem(addedIdx);  // B.3.6 bridge
+        if (savedAntialias == i) {
+            comboAntialias->SetCurrentItem(addedIdx);
         }
     }
 }
@@ -429,155 +387,143 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
 // PopulateRefreshCombo (replaces FUN_140073d20)
 // ============================================================
 // Fills refresh rate combo for the currently selected resolution.
-static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
-    void* vidDev = ::Video::Device::_singleton;
+void OptionsDialog::PopulateRefreshCombo() {
+    Video::Device* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
-    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
-                         ->GetInterface((int)self->savedRenderer);   // B.3.5 bridge
-    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
-    intptr_t adapter = adapterArray + (intptr_t)(int)self->savedAdapter * 0x38;
+    const Video::Device::GraphicsInterface& gfxIface = vidDev->GetInterface(savedRenderer);
+    const Video::Device::Adapter& adapter = gfxIface.adapterData[savedAdapter];
 
     // Find display mode matching saved width/height
-    int modeCount = *(int*)(adapter + 0x10);
-    intptr_t modes = *(intptr_t*)(adapter + 8);
+    int modeCount = adapter.modeCount;
+    const Video::Device::DisplayMode* modes = adapter.modeData;
     int modeIdx = -1;
     for (int i = 0; i < modeCount; i++) {
-        uint32_t w = *(uint32_t*)(modes + i * 0x18);
-        uint32_t h = *(uint32_t*)(modes + i * 0x18 + 4);
-        if (w == self->savedWidth && h == self->savedHeight) {
+        if (modes[i].width == savedWidth && modes[i].height == savedHeight) {
             modeIdx = i;
             break;
         }
     }
     if (modeIdx < 0) modeIdx = 0;
 
-    intptr_t modeEntry = modes + (intptr_t)modeIdx * 0x18;
-    intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
-    int refreshCount = *(int*)(modeEntry + 0x10);
+    const Video::Device::DisplayMode& modeEntry = modes[modeIdx];
+    const Video::Device::RefreshRate* refreshArray = modeEntry.refreshData;
+    int refreshCount = modeEntry.refreshCount;
 
-    reinterpret_cast<UI::ComboElement*>(self->comboRefresh)->RemoveAllItems();  // B.3.6 bridge
+    comboRefresh->RemoveAllItems();
 
     int currentIdx = -1;
     for (int i = 0; i < refreshCount; i++) {
-        int* refreshEntry = (int*)(refreshArray + (intptr_t)i * 8);
-        int num = refreshEntry[0];
-        int den = refreshEntry[1];
+        int num = refreshArray[i].numerator;
+        int den = refreshArray[i].denominator;
         int rate = (den != 0) ? (num / den) : 0;
 
         System::String fmtStr = System::String::Format("%i", rate);
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboRefresh)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)i);  // B.3.6 bridge
+        UI::Sprite sprite;
+        comboRefresh->AddItem(sprite, fmtStr, (void*)(intptr_t)i);  // CAST-OK: ptr_int
 
-        if ((uint32_t)num == self->savedRefreshNum && (uint32_t)den == self->savedRefreshDen)
+        if (num == savedRefreshNum && den == savedRefreshDen)
             currentIdx = i;
     }
 
-    reinterpret_cast<UI::ComboElement*>(self->comboRefresh)->SetCurrentItem(currentIdx);  // B.3.6 bridge
+    comboRefresh->SetCurrentItem(currentIdx);
 }
 
 // ============================================================
 // PopulateResolutionCombo (replaces FUN_140073ec0)
 // ============================================================
 // Fills resolution combo with "WxH" entries for the current adapter.
-static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
-    void* vidDev = ::Video::Device::_singleton;
+void OptionsDialog::PopulateResolutionCombo() {
+    Video::Device* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
-    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
-                         ->GetInterface((int)self->savedRenderer);   // B.3.5 bridge
-    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
-    intptr_t adapter = adapterArray + (intptr_t)(int)self->savedAdapter * 0x38;
-    int modeCount = *(int*)(adapter + 0x10);
-    intptr_t modes = *(intptr_t*)(adapter + 8);
+    const Video::Device::GraphicsInterface& gfxIface = vidDev->GetInterface(savedRenderer);
+    const Video::Device::Adapter& adapter = gfxIface.adapterData[savedAdapter];
+    int modeCount = adapter.modeCount;
+    const Video::Device::DisplayMode* modes = adapter.modeData;
 
     printf("[OptionsDialog::PopulateResolutionCombo] savedW=%u savedH=%u modeCount=%d "
            "renderer=%u adapter=%u\n",
-           self->savedWidth, self->savedHeight, modeCount,
-           self->savedRenderer, self->savedAdapter);
+           savedWidth, savedHeight, modeCount,
+           savedRenderer, savedAdapter);
 
-    reinterpret_cast<UI::ComboElement*>(self->comboResolution)->RemoveAllItems();  // B.3.6 bridge
+    comboResolution->RemoveAllItems();
 
     int currentIdx = -1;
     for (int i = 0; i < modeCount; i++) {
-        uint32_t w = *(uint32_t*)(modes + i * 0x18);
-        uint32_t h = *(uint32_t*)(modes + i * 0x18 + 4);
+        int32_t w = modes[i].width;
+        int32_t h = modes[i].height;
 
-        if (i < 5 || (w == self->savedWidth && h == self->savedHeight))
+        if (i < 5 || (w == savedWidth && h == savedHeight))
             printf("[OptionsDialog::PopRes]   mode[%d] = %ux%u%s\n", i, w, h,
-                   (w == self->savedWidth && h == self->savedHeight) ? " <-- MATCH" : "");
+                   (w == savedWidth && h == savedHeight) ? " <-- MATCH" : "");
 
         System::String fmtStr = System::String::Format("%ix%i", w, h);
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboResolution)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)i);  // B.3.6 bridge
+        UI::Sprite sprite;
+        comboResolution->AddItem(sprite, fmtStr, (void*)(intptr_t)i);  // CAST-OK: ptr_int
 
-        if (w == self->savedWidth && h == self->savedHeight)
+        if (w == savedWidth && h == savedHeight)
             currentIdx = i;
     }
 
-    reinterpret_cast<UI::ComboElement*>(self->comboResolution)->SetCurrentItem(currentIdx);  // B.3.6 bridge
+    comboResolution->SetCurrentItem(currentIdx);
 
-    OptionsDialog_PopulateRefreshCombo(self);
+    PopulateRefreshCombo();
 }
 
 // ============================================================
 // PopulateAdapterCombo (replaces FUN_140074040)
 // ============================================================
 // Fills adapter combo for the current renderer, then repopulates dependent combos.
-static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
-    void* vidDev = ::Video::Device::_singleton;
+void OptionsDialog::PopulateAdapterCombo() {
+    Video::Device* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
-    reinterpret_cast<UI::ComboElement*>(self->comboAdapter)->RemoveAllItems();  // B.3.6 bridge
+    comboAdapter->RemoveAllItems();
 
-    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
-                         ->GetInterface((int)self->savedRenderer);   // B.3.5 bridge
-    int adapterCount = *(int*)((uintptr_t)gfxIface + 0x10);
-    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
+    const Video::Device::GraphicsInterface& gfxIface = vidDev->GetInterface(savedRenderer);
+    int adapterCount = gfxIface.adapterCount;
 
     for (int i = 0; i < adapterCount; i++) {
-        // Adapter name is a System::String at the start of each 0x38-byte entry
-        void* adapterName = (void*)(adapterArray + (intptr_t)i * 0x38);
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboAdapter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>(adapterName), (void*)(intptr_t)i);  // B.3.6 bridge
+        // Adapter name is the System::String at the start of each 0x38-byte entry
+        // (LEFT: Adapter::name is declared as the String's data pointer, H5).
+        UI::Sprite sprite;
+        void* itemData = (void*)(intptr_t)i;  // CAST-OK: ptr_int
+        comboAdapter->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.adapterData[i].name), itemData);
     }
 
-    reinterpret_cast<UI::ComboElement*>(self->comboAdapter)->SetCurrentItem((int)self->savedAdapter);  // B.3.6 bridge
+    comboAdapter->SetCurrentItem(savedAdapter);
 
-    OptionsDialog_PopulateResolutionCombo(self);
-    OptionsDialog_PopulateAntialiasCombo(self);
-    OptionsDialog_PopulateFilterCombo(self);
+    PopulateResolutionCombo();
+    PopulateAntialiasCombo();
+    PopulateFilterCombo();
 }
 
 // ============================================================
 // PopulateVideoComboBoxes (replaces FUN_140074140)
 // ============================================================
 // Fills all video combo boxes: renderer, adapter, resolution, refresh, antialias, filter.
-static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
-    void* vidDev = ::Video::Device::_singleton;
+void OptionsDialog::PopulateVideoComboBoxes() {
+    Video::Device* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
     // --- Renderer combo ---
-    reinterpret_cast<UI::ComboElement*>(self->comboRenderer)->RemoveAllItems();  // B.3.6 bridge
+    comboRenderer->RemoveAllItems();
 
-    int ifaceCount = reinterpret_cast<const Video::Device*>(vidDev)
-                         ->GetInterfaceCount();   // B.3.5 bridge
+    int ifaceCount = vidDev->GetInterfaceCount();
     for (int i = 0; i < ifaceCount; i++) {
         // GraphicsInterface starts with a System::String (the interface name)
-        void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
-                             ->GetInterface(i);   // B.3.5 bridge
-        uint8_t spriteBuf[16] = {};
-        ::new (spriteBuf) UI::Sprite();
-        reinterpret_cast<UI::ComboElement*>(self->comboRenderer)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>(gfxIface), (void*)(intptr_t)i);  // B.3.6 bridge
+        // (LEFT: GraphicsInterface::name is declared as the String's data pointer, H5).
+        const Video::Device::GraphicsInterface& gfxIface = vidDev->GetInterface(i);
+        UI::Sprite sprite;
+        void* itemData = (void*)(intptr_t)i;  // CAST-OK: ptr_int
+        comboRenderer->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.name), itemData);
     }
 
-    reinterpret_cast<UI::ComboElement*>(self->comboRenderer)->SetCurrentItem((int)self->savedRenderer);  // B.3.6 bridge
+    comboRenderer->SetCurrentItem(savedRenderer);
 
     // --- Adapter combo (also populates resolution/antialias/filter) ---
-    OptionsDialog_PopulateAdapterCombo(self);
+    PopulateAdapterCombo();
 }
 
 // ============================================================
@@ -613,120 +559,121 @@ void OptionsDialog::OnOpened() {
            (int)s_enableUIScaleSlider, (int)s_enableGameplayChecks,
            (int)s_enableMouseClipCheck, (int)s_enableTabRestore);
 
-    int32_t* audioVol = reinterpret_cast<int32_t*>(::Audio::Configuration::_singleton);
-    void* vidCfg = ::Video::Configuration::_singleton;
-    void* inputCfg = ::Input::Configuration::_singleton;
+    ::Audio::Configuration* audioCfg = ::Audio::Configuration::_singleton;
+    ::Video::Configuration* vidCfg = ::Video::Configuration::_singleton;
+    ::Input::Configuration* inputCfg = ::Input::Configuration::_singleton;
 
-    // --- Buttons: find, assign IDs, set buttonCancel's hidden flag ---
+    // --- Buttons: find, assign IDs, set buttonCancel's shortcut key ---
     if (s_enableButtons) {
-        void *buttonOk = nullptr, *buttonCancel = nullptr, *buttonApply = nullptr;
-        FIND_ELEMENT(buttonOk,     "buttonOk");
-        FIND_ELEMENT(buttonCancel, "buttonCancel");
-        FIND_ELEMENT(buttonApply,  "buttonApply");
-        reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(kButton_Ok);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(buttonCancel)->SetElementId(kButton_Cancel);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(buttonApply)->SetElementId(kButton_Apply);  // B.3.6 bridge
-        if (buttonCancel) *(uint32_t*)((uintptr_t)buttonCancel + 0xC0) = 8;
+        UI::ButtonElement* buttonOk     = FindElementAs<UI::ButtonElement>(this, "buttonOk");
+        UI::ButtonElement* buttonCancel = FindElementAs<UI::ButtonElement>(this, "buttonCancel");
+        UI::ButtonElement* buttonApply  = FindElementAs<UI::ButtonElement>(this, "buttonApply");
+        buttonOk->SetElementId(kButton_Ok);
+        buttonCancel->SetElementId(kButton_Cancel);
+        buttonApply->SetElementId(kButton_Apply);
+        if (buttonCancel) buttonCancel->_keyIndex = 8;
     }
 
     // --- Audio sliders ---
     if (s_enableAudioSliders) {
-        FIND_ELEMENT(this->sliderUI,     "sliderUI");
-        FIND_ELEMENT(this->sliderMusic,  "sliderMusic");
-        FIND_ELEMENT(this->sliderAmbient,"sliderAmbient");
-        FIND_ELEMENT(this->sliderEffect, "sliderEffect");
-        reinterpret_cast<UI::Element*>(this->sliderUI)->SetElementId(kSlider_UI);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->sliderMusic)->SetElementId(kSlider_Music);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->sliderAmbient)->SetElementId(kSlider_Ambient);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->sliderEffect)->SetElementId(kSlider_Effect);  // B.3.6 bridge
-        void* audioSliders[4] = { this->sliderUI, this->sliderMusic,
-                                   this->sliderAmbient, this->sliderEffect };
+        this->sliderUI      = FindElementAs<UI::SliderElement>(this, "sliderUI");
+        this->sliderMusic   = FindElementAs<UI::SliderElement>(this, "sliderMusic");
+        this->sliderAmbient = FindElementAs<UI::SliderElement>(this, "sliderAmbient");
+        this->sliderEffect  = FindElementAs<UI::SliderElement>(this, "sliderEffect");
+        this->sliderUI->SetElementId(kSlider_UI);
+        this->sliderMusic->SetElementId(kSlider_Music);
+        this->sliderAmbient->SetElementId(kSlider_Ambient);
+        this->sliderEffect->SetElementId(kSlider_Effect);
+        UI::SliderElement* audioSliders[4] = { this->sliderUI, this->sliderMusic,
+                                               this->sliderAmbient, this->sliderEffect };
         for (int i = 0; i < 4; i++) {
             SetSliderRange(audioSliders[i], 0.0f, 100.0f);
-            if (audioVol) SetSliderValue(audioSliders[i], (float)audioVol[i]);
+        }
+        if (audioCfg) {
+            SetSliderValue(audioSliders[0], (float)audioCfg->uiVolume);
+            SetSliderValue(audioSliders[1], (float)audioCfg->musicVolume);
+            SetSliderValue(audioSliders[2], (float)audioCfg->ambientVolume);
+            SetSliderValue(audioSliders[3], (float)audioCfg->effectVolume);
         }
     }
 
     // --- Video combos: find + IDs + save config + populate ---
     if (s_enableVideoCombos) {
-        FIND_ELEMENT(this->comboRenderer,  "comboRenderer");
-        FIND_ELEMENT(this->comboAdapter,   "comboAdapter");
-        FIND_ELEMENT(this->comboResolution,"comboResolution");
-        FIND_ELEMENT(this->comboAntialias, "comboAntialias");
-        FIND_ELEMENT(this->comboFilter,    "comboFilter");
-        FIND_ELEMENT(this->comboRefresh,   "comboRefresh");
-        reinterpret_cast<UI::Element*>(this->comboRenderer)->SetElementId(kCombo_Renderer);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->comboAdapter)->SetElementId(kCombo_Adapter);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->comboResolution)->SetElementId(kCombo_Resolution);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->comboRefresh)->SetElementId(kCombo_Refresh);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->comboAntialias)->SetElementId(kCombo_Antialias);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(this->comboFilter)->SetElementId(kCombo_Filter);  // B.3.6 bridge
+        this->comboRenderer   = FindElementAs<UI::ComboElement>(this, "comboRenderer");
+        this->comboAdapter    = FindElementAs<UI::ComboElement>(this, "comboAdapter");
+        this->comboResolution = FindElementAs<UI::ComboElement>(this, "comboResolution");
+        this->comboAntialias  = FindElementAs<UI::ComboElement>(this, "comboAntialias");
+        this->comboFilter     = FindElementAs<UI::ComboElement>(this, "comboFilter");
+        this->comboRefresh    = FindElementAs<UI::ComboElement>(this, "comboRefresh");
+        this->comboRenderer->SetElementId(kCombo_Renderer);
+        this->comboAdapter->SetElementId(kCombo_Adapter);
+        this->comboResolution->SetElementId(kCombo_Resolution);
+        this->comboRefresh->SetElementId(kCombo_Refresh);
+        this->comboAntialias->SetElementId(kCombo_Antialias);
+        this->comboFilter->SetElementId(kCombo_Filter);
         if (vidCfg) {
-            this->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
-            this->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
-            this->savedWidth      = *(uint32_t*)((uintptr_t)vidCfg + 0x0C);
-            this->savedHeight     = *(uint32_t*)((uintptr_t)vidCfg + 0x10);
-            this->savedRefreshNum = *(uint32_t*)((uintptr_t)vidCfg + 0x38);
-            this->savedRefreshDen = *(uint32_t*)((uintptr_t)vidCfg + 0x3C);
-            this->savedAntialias  = *(uint32_t*)((uintptr_t)vidCfg + 0x24);
-            this->savedFilter     = *(uint32_t*)((uintptr_t)vidCfg + 0x28);
+            this->savedRenderer   = vidCfg->interfaceIndex;
+            this->savedAdapter    = vidCfg->adapterIndex;
+            this->savedWidth      = vidCfg->width;
+            this->savedHeight     = vidCfg->height;
+            this->savedRefreshNum = vidCfg->refreshNumerator;
+            this->savedRefreshDen = vidCfg->refreshDenominator;
+            this->savedAntialias  = vidCfg->multisample;
+            this->savedFilter     = vidCfg->textureFilter;
         }
-        OptionsDialog_PopulateVideoComboBoxes(this);
+        PopulateVideoComboBoxes();
     }
 
     // --- Shadow/reflection combos ---
     if (s_enableShadowReflCombos) {
-        FIND_ELEMENT(this->comboShadowRes,        "comboShadowResolution");
-        FIND_ELEMENT(this->comboShadowQuality,    "comboShadowQuality");
-        FIND_ELEMENT(this->comboReflectionQuality,"comboReflectionQuality");
+        this->comboShadowRes         = FindElementAs<UI::ComboElement>(this, "comboShadowResolution");
+        this->comboShadowQuality     = FindElementAs<UI::ComboElement>(this, "comboShadowQuality");
+        this->comboReflectionQuality = FindElementAs<UI::ComboElement>(this, "comboReflectionQuality");
         if (vidCfg) {
-            reinterpret_cast<UI::ComboElement*>(this->comboShadowRes)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x2C));  // B.3.6 bridge
-            reinterpret_cast<UI::ComboElement*>(this->comboShadowQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x30));  // B.3.6 bridge
-            reinterpret_cast<UI::ComboElement*>(this->comboReflectionQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x34));  // B.3.6 bridge
+            this->comboShadowRes->SetCurrentItem(vidCfg->shadowScalar);
+            this->comboShadowQuality->SetCurrentItem(vidCfg->shaderDetail);
+            this->comboReflectionQuality->SetCurrentItem(vidCfg->reflectionDetail);
         }
     }
 
     // --- Video / input checkboxes (fullscreen, vsync, software mouse) ---
     if (s_enableVidCheckboxes) {
-        FIND_ELEMENT(this->checkFullscreen,"checkFullscreen");
-        FIND_ELEMENT(this->checkVSync,     "checkVSync");
+        this->checkFullscreen = FindElementAs<UI::CheckElement>(this, "checkFullscreen");
+        this->checkVSync      = FindElementAs<UI::CheckElement>(this, "checkVSync");
         if (vidCfg) {
-            SetCheckState(this->checkFullscreen, *(uint8_t*)((uintptr_t)vidCfg + 0x40));
-            SetCheckState(this->checkVSync,      *(uint8_t*)((uintptr_t)vidCfg + 0x41));
+            SetCheckState(this->checkFullscreen, vidCfg->fullscreen);
+            SetCheckState(this->checkVSync,      vidCfg->vsync);
         }
-        FIND_ELEMENT(this->checkSoftwareMouse,"checkSoftwareMouse");
-        if (inputCfg) SetCheckState(this->checkSoftwareMouse,
-                                    *(uint8_t*)((uintptr_t)inputCfg + 0x0A));
+        this->checkSoftwareMouse = FindElementAs<UI::CheckElement>(this, "checkSoftwareMouse");
+        if (inputCfg) SetCheckState(this->checkSoftwareMouse, inputCfg->_mouseDisplay);
     }
 
     // --- Input bind list (prime suspect for the per-frame KeyMap::Pressed crash) ---
     if (s_enableInputList) {
-        FIND_ELEMENT(this->inputList,"inputList");
-        OptionsDialog_PopulateInputBindList(this);
+        this->inputList = FindElementAs<UI::Element>(this, "inputList");
+        PopulateInputBindList();
     }
 
     // --- Autosave combo ---
     if (s_enableAutosaveCombo) {
-        FIND_ELEMENT(this->comboAutosave,"comboAutosave");
-        void* stringTable = LoadStringTable("Dialog/StringTable.rsc:autoSave");
+        this->comboAutosave = FindElementAs<UI::ComboElement>(this, "comboAutosave");
+        const UI::StringTable* stringTable = LoadStringTable("Dialog/StringTable.rsc:autoSave");
         if (stringTable && this->comboAutosave) {
             for (int i = 0; i < 9; i++) {
-                System::String textStr;
-                ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(i));  // B.3.6 bridge
-                uint8_t spriteBuf[16] = {};
-                ::new (spriteBuf) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)i);  // B.3.6 bridge
+                System::String textStr(stringTable->GetText(i));
+                UI::Sprite sprite;
+                this->comboAutosave->AddItem(sprite, textStr, (void*)(intptr_t)i);  // CAST-OK: ptr_int
             }
         }
         int autoSaveIdx = (g_gameSettings != nullptr) ? g_gameSettings->autosaveInterval : 0;
         if (autoSaveIdx < 0) autoSaveIdx = 0;
         if (autoSaveIdx > 8) autoSaveIdx = 8;
-        if (this->comboAutosave) reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->SetCurrentItem(autoSaveIdx);  // B.3.6 bridge
+        if (this->comboAutosave) this->comboAutosave->SetCurrentItem(autoSaveIdx);
     }
 
     // --- UI scale slider ---
     if (s_enableUIScaleSlider) {
-        FIND_ELEMENT(this->sliderUIScale,"sliderUIScale");
+        this->sliderUIScale = FindElementAs<UI::SliderElement>(this, "sliderUIScale");
         SetSliderRange(this->sliderUIScale, 75.0f, 150.0f);
         if (g_gameSettings != nullptr)
             SetSliderValue(this->sliderUIScale, (float)g_gameSettings->uiScale);
@@ -734,23 +681,23 @@ void OptionsDialog::OnOpened() {
 
     // --- Gameplay settings checkboxes and sliders ---
     if (s_enableGameplayChecks) {
-        FIND_ELEMENT(this->checkStatusIcon,      "checkStatusIcon");
-        FIND_ELEMENT(this->sliderStatusIcon,     "sliderStatusIcon");
-        FIND_ELEMENT(this->sliderStatusIconScale,"sliderStatusIconScale");
-        FIND_ELEMENT(this->checkShowCelsius,     "checkShowCelsius");
-        FIND_ELEMENT(this->checkEdgeScroll,      "checkEdgeScroll");
-        FIND_ELEMENT(this->checkShowWeather,     "checkShowWeather");
-        FIND_ELEMENT(this->checkAutoslow,        "checkAutoslow");
-        FIND_ELEMENT(this->checkAutopause,       "checkAutopause");
+        this->checkStatusIcon       = FindElementAs<UI::CheckElement>(this, "checkStatusIcon");
+        this->sliderStatusIcon      = FindElementAs<UI::SliderElement>(this, "sliderStatusIcon");
+        this->sliderStatusIconScale = FindElementAs<UI::SliderElement>(this, "sliderStatusIconScale");
+        this->checkShowCelsius      = FindElementAs<UI::CheckElement>(this, "checkShowCelsius");
+        this->checkEdgeScroll       = FindElementAs<UI::CheckElement>(this, "checkEdgeScroll");
+        this->checkShowWeather      = FindElementAs<UI::CheckElement>(this, "checkShowWeather");
+        this->checkAutoslow         = FindElementAs<UI::CheckElement>(this, "checkAutoslow");
+        this->checkAutopause        = FindElementAs<UI::CheckElement>(this, "checkAutopause");
 
         if (g_gameSettings != nullptr) {
             GameSettings* gs = g_gameSettings;
-            SetCheckState(this->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
-            SetCheckState(this->checkAutopause,  (uint8_t)gs->autoPause);
-            SetCheckState(this->checkStatusIcon, (uint8_t)gs->statusIconEnable);
-            SetCheckState(this->checkEdgeScroll, (uint8_t)gs->edgeScroll);
-            SetCheckState(this->checkShowCelsius,*(uint8_t*)((uintptr_t)gs + 0x15));
-            SetCheckState(this->checkShowWeather,*(uint8_t*)((uintptr_t)gs + 0x16));
+            SetCheckState(this->checkAutoslow,   gs->autoSlow);
+            SetCheckState(this->checkAutopause,  gs->autoPause);
+            SetCheckState(this->checkStatusIcon, gs->statusIconEnable);
+            SetCheckState(this->checkEdgeScroll, gs->edgeScroll);
+            SetCheckState(this->checkShowCelsius, gs->showCelsius);
+            SetCheckState(this->checkShowWeather, gs->showWeather);
 
             SetSliderRange(this->sliderStatusIcon, 0.0f, 100.0f);
             SetSliderValue(this->sliderStatusIcon, (float)gs->statusIconOpacity);
@@ -762,24 +709,21 @@ void OptionsDialog::OnOpened() {
 
     // --- MouseClip checkbox (depends on inputCfg) ---
     if (s_enableMouseClipCheck) {
-        FIND_ELEMENT(this->checkMouseClip,       "checkMouseClip");
-        if (inputCfg) SetCheckState(this->checkMouseClip,
-                                    *(uint8_t*)((uintptr_t)inputCfg + 0x08));
+        this->checkMouseClip = FindElementAs<UI::CheckElement>(this, "checkMouseClip");
+        if (inputCfg) SetCheckState(this->checkMouseClip, inputCfg->_mouseClipping);
     }
 
     // --- Tab options: restore last active tab ---
     if (s_enableTabRestore) {
-        FIND_ELEMENT(this->tabOptions,"tabOptions");
+        this->tabOptions = FindElementAs<UI::TabElement>(this, "tabOptions");
         if (this->tabOptions) {
             int lastTab = (g_gameSettings != nullptr) ? g_gameSettings->lastOption : 0;
             // Clamp to valid range — options dialog has 4 tabs (0-3)
             if (lastTab < 0 || lastTab > 3) lastTab = 0;
-            reinterpret_cast<UI::TabElement*>(this->tabOptions)->SetActiveTab(lastTab);  // B.3.6 bridge
+            this->tabOptions->SetActiveTab(lastTab);
         }
     }
 }
-
-#undef FIND_ELEMENT
 
 // ============================================================
 // Shutdown (vtable +0x28, exe 0x140073480): RET 0 (3 bytes)
@@ -793,85 +737,71 @@ void OptionsDialog::OnClosed() {}
 // Reads checkMouseClip and checkSoftwareMouse from UI, writes to
 // Input::Configuration singleton, enables/disables mouse clipping,
 // enables cursor, and saves input config.
-static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
-    void* inputCfg = ::Input::Configuration::_singleton;
+void OptionsDialog::ApplyInputSettings() {
+    ::Input::Configuration* inputCfg = ::Input::Configuration::_singleton;
     if (!inputCfg) return;
 
-    // Read mouse clip checkbox -> Input::Configuration +0x08
-    *(uint8_t*)((uintptr_t)inputCfg + 0x08) =
-        *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
+    // Read mouse clip checkbox -> Input::Configuration::_mouseClipping (+0x08)
+    inputCfg->_mouseClipping = checkMouseClip->_checked != 0;
 
-    // Read software mouse checkbox -> Input::Configuration +0x0A
-    *(uint8_t*)((uintptr_t)inputCfg + 0x0A) =
-        *(uint8_t*)((uintptr_t)*(void**)&self->checkSoftwareMouse + 0xD8);
+    // Read software mouse checkbox -> Input::Configuration::_mouseDisplay (+0x0A)
+    inputCfg->_mouseDisplay = checkSoftwareMouse->_checked != 0;
 
     // Enable cursor in UI
-    void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    reinterpret_cast<UI::UserInterface*>(userInterface)->EnableCursor(true);  // B.3.6 bridge
+    _ui->EnableCursor(true);
 
     // Enable/disable mouse clipping based on checkbox
-    bool mouseClip = *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
-    void* inputDevice = ::Input::Device::_singleton;
+    bool mouseClip = checkMouseClip->_checked;
+    ::Input::Device* inputDevice = ::Input::Device::_singleton;
     if (inputDevice)
-        reinterpret_cast<Input::Device*>(inputDevice)->EnableMouseClipping(static_cast<uint8_t>(mouseClip));  // B.3.7 bridge
+        inputDevice->EnableMouseClipping(static_cast<uint8_t>(mouseClip));
 
     // Save input configuration
     if (inputCfg)
-        reinterpret_cast<Input::Configuration*>(inputCfg)->Save();  // B.3.7 bridge
+        inputCfg->Save();
 }
 
 // ============================================================
 // ApplyGameSettings (0x140072420)
 // ============================================================
-// Reads all game settings from UI controls, writes to g_pGameSettingsPtr,
+// Reads all game settings from UI controls, writes to g_gameSettings,
 // updates autosave timers on all open dialogs, persists settings,
 // applies key map to UI, and updates UI scale.
-static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
+void OptionsDialog::ApplyGameSettings() {
     if (g_gameSettings == nullptr) return;
     GameSettings* gs = g_gameSettings;
 
-    // UI scale slider -> gs[0]
-    gs->uiScale = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderUIScale + 0x128);
+    // UI scale slider -> uiScale
+    gs->uiScale = (int32_t)sliderUIScale->_value;
 
-    // Autosave combo -> gs[1]
-    gs->autosaveInterval = *(int32_t*)((uintptr_t)*(void**)&self->comboAutosave + 0x118);
+    // Autosave combo -> autosaveInterval
+    gs->autosaveInterval = comboAutosave->_currentItem;
 
-    // Status icon checkbox -> gs[3] (byte at offset +0x0C)
-    gs->statusIconEnable = *(uint8_t*)((uintptr_t)*(void**)&self->checkStatusIcon + 0xD8);
+    // Status icon checkbox -> statusIconEnable (the checkbox byte, raw)
+    gs->statusIconEnable = checkStatusIcon->_checked;
 
-    // Status icon distance slider -> gs[2]
-    gs->statusIconOpacity = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderStatusIcon + 0x128);
+    // Status icon distance slider -> statusIconOpacity
+    gs->statusIconOpacity = (int32_t)sliderStatusIcon->_value;
 
-    // Status icon scale slider -> gs[4]
+    // Status icon scale slider -> statusIconScale
     // Original divides by 100.0f then multiplies by 100.0f (cancels out to identity)
     {
-        float sliderVal = *(float*)((uintptr_t)*(void**)&self->sliderStatusIconScale + 0x128);
+        float sliderVal = sliderStatusIconScale->_value;
         gs->statusIconScale = (int32_t)sliderVal;
     }
 
-    // Edge scroll checkbox -> gs[5] (byte)
-    gs->edgeScroll = *(uint8_t*)((uintptr_t)*(void**)&self->checkEdgeScroll + 0xD8);
+    // The five flags take the checkbox byte raw (0x14007248f).
+    gs->edgeScroll  = checkEdgeScroll->_checked;
+    gs->showCelsius = checkShowCelsius->_checked;
+    gs->showWeather = checkShowWeather->_checked;
+    gs->autoSlow    = checkAutoslow->_checked;
+    gs->autoPause   = checkAutopause->_checked;
 
-    // Show celsius -> byte at gs+0x15
-    *(uint8_t*)((uintptr_t)gs + 0x15) =
-        *(uint8_t*)((uintptr_t)*(void**)&self->checkShowCelsius + 0xD8);
-
-    // Show weather -> byte at gs+0x16
-    *(uint8_t*)((uintptr_t)gs + 0x16) =
-        *(uint8_t*)((uintptr_t)*(void**)&self->checkShowWeather + 0xD8);
-
-    // Auto slow -> byte at gs+0x17
-    *(uint8_t*)((uintptr_t)gs + 0x17) =
-        *(uint8_t*)((uintptr_t)*(void**)&self->checkAutoslow + 0xD8);
-
-    // Auto pause -> gs[6] (byte)
-    gs->autoPause = *(uint8_t*)((uintptr_t)*(void**)&self->checkAutopause + 0xD8);
-
-    // Last active tab -> gs[7]
-    gs->lastOption = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+    // Last active tab -> lastOption
+    gs->lastOption = tabOptions->_activeTab;
 
     // Iterate all open dialogs and update autosave timer on each
-    UI::UserInterface* userInterface = *(UI::UserInterface**)((uintptr_t)self + 0x10);
+    UI::UserInterface* userInterface = _ui;
     // B3R: IsA / IsDerivedFrom / the restart (0x14005e120 AutoSaveDialog_Slot4) are
     // called by name, so the log line's two door-pointer fields (isA / isDerived) are
     // gone and restartFn is the body's address.
@@ -883,6 +813,8 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
         // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150, whose
         // whole body is `*retval = this->_dialogs._head`); the iterator is the
         // bare node pointer, so `it.node` is what retail hands to CheckPtr.
+        // LEFT: the list's element is `DialogInstancePtr`, a `void*` typedef of
+        // runtime/types/ui/UserInterface.h.
         for (auto it = userInterface->_dialogs.GetFirst(); it; ++it) {
             void* dialog = it.node->element;
             if (reinterpret_cast<const ::Object::Base*>(dialog)->IsA(typeId)) {   // B.3.x bridge (?IsA@Base@Object@@)
@@ -903,22 +835,21 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     // Apply key map config to UI. Was an inline copy of ApplyKeyMapToUI_Impl's body
     // as a fallback; now just calls it, so the OK path and the two pointer-driven
     // call sites (OnCancel below, GameUpdateLoop::Startup) can never diverge.
-    void* keyMap = GetKeyMapContainer();
+    GameContainer* keyMap = g_gameContainer;
     if (keyMap) ApplyKeyMapToUI_Impl(keyMap, userInterface);
 
-    // Set UI scale: gs[0] is percentage (0-200), divide by 100.0f to get ratio
-    *(float*)((uintptr_t)userInterface + 0xDC) = (float)gs->uiScale / 100.0f;
+    // Set UI scale: uiScale is a percentage, divide by 100.0f to get the ratio
+    userInterface->_uiScale = (float)gs->uiScale / 100.0f;
 
     // Notify game world of settings change (virtual call at vtable+0x18)
-    void* gameWorld = GameUpdateLoop::_singleton;
+    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     if (gameWorld) {
         // System::Time::Time(0.0f)
-        uint8_t timeVal[8] = {};
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeVal), 0.0f);
+        System::Time timeVal{};
+        RtSystem_Time_Ctor(&timeVal, 0.0f);
         // UpdateLoop slot 3, dispatched through the loop's own table (the world
         // is a GameUpdateLoop).
-        reinterpret_cast<Engine::UpdateLoop*>(gameWorld)->Update(
-            *reinterpret_cast<const System::Time*>(timeVal));   // B.3.x bridge (slot 3)
+        static_cast<Engine::UpdateLoop*>(gameWorld)->Update(timeVal);
     }
 }
 
@@ -928,77 +859,73 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
 // Reads all video combos/checkboxes, compares with current video config,
 // applies changes via Video::Device (shutdown/startup or apply changed),
 // and saves video config on success. Restores on failure.
-static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
+void OptionsDialog::ApplyVideoSettings() {
     // Diagnostic trace for the video-apply path (default quiet). The dialog
     // logic itself is verified correct — see notes: ApplyChangedSettings runs
     // and returns success; the standalone gap is the render backend not
     // recreating the M5 scene targets with the new sample count.
-    void* vidDev = ::Video::Device::_singleton;
-    void* vidCfg = ::Video::Configuration::_singleton;
+    ::Video::Device* vidDev = ::Video::Device::_singleton;
+    ::Video::Configuration* vidCfg = ::Video::Configuration::_singleton;
     if (!vidDev || !vidCfg) return;
 
     // Save current config for potential rollback
-    int oldRenderer  = *(int*)((uintptr_t)vidDev + 0xF8);  // current renderer
-    int oldAdapter   = *(int*)((uintptr_t)vidCfg + 0x08);
-    int oldRefreshN  = *(int*)((uintptr_t)vidCfg + 0x38);
-    int oldRefreshD  = *(int*)((uintptr_t)vidCfg + 0x3C);
-    int oldWidth     = *(int*)((uintptr_t)vidCfg + 0x0C);
-    int oldHeight    = *(int*)((uintptr_t)vidCfg + 0x10);
-    int oldAntialias = *(int*)((uintptr_t)vidCfg + 0x24);
-    int oldFilter    = *(int*)((uintptr_t)vidCfg + 0x28);
-    int oldShadowRes = *(int*)((uintptr_t)vidCfg + 0x2C);
-    int oldShadowQ   = *(int*)((uintptr_t)vidCfg + 0x30);
-    int oldReflQ     = *(int*)((uintptr_t)vidCfg + 0x34);
-    uint8_t oldFullscreen = *(uint8_t*)((uintptr_t)vidCfg + 0x40);
-    uint8_t oldVsync      = *(uint8_t*)((uintptr_t)vidCfg + 0x41);
+    int oldRenderer  = vidDev->activeInterface;  // current renderer
+    int oldAdapter   = vidCfg->adapterIndex;
+    int oldRefreshN  = vidCfg->refreshNumerator;
+    int oldRefreshD  = vidCfg->refreshDenominator;
+    int oldWidth     = vidCfg->width;
+    int oldHeight    = vidCfg->height;
+    int oldAntialias = vidCfg->multisample;
+    int oldFilter    = vidCfg->textureFilter;
+    int oldShadowRes = vidCfg->shadowScalar;
+    int oldShadowQ   = vidCfg->shaderDetail;
+    int oldReflQ     = vidCfg->reflectionDetail;
+    uint8_t oldFullscreen = vidCfg->fullscreen;
+    uint8_t oldVsync      = vidCfg->vsync;
 
-    // Read new values from UI combos
+    // Read new values from UI combos (the item data are indices: ptr_int)
     // Renderer
-    int rendItem = *(int*)((uintptr_t)*(void**)&self->comboRenderer + 0x118);
-    int newRenderer = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboRenderer)->GetItemData(rendItem);  // B.3.6 bridge
+    int rendItem = comboRenderer->_currentItem;
+    int newRenderer = (int)(intptr_t)comboRenderer->GetItemData(rendItem);  // CAST-OK: ptr_int
 
     // Adapter
-    int adpItem = *(int*)((uintptr_t)*(void**)&self->comboAdapter + 0x118);
-    int newAdapter = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboAdapter)->GetItemData(adpItem);  // B.3.6 bridge
+    int adpItem = comboAdapter->_currentItem;
+    int newAdapter = (int)(intptr_t)comboAdapter->GetItemData(adpItem);  // CAST-OK: ptr_int
 
     // Resolution
-    int resItem = *(int*)((uintptr_t)*(void**)&self->comboResolution + 0x118);
-    void* resData = reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboResolution)->GetItemData(resItem);  // B.3.6 bridge
+    int resItem = comboResolution->_currentItem;
+    int resIndex = (int)(intptr_t)comboResolution->GetItemData(resItem);  // CAST-OK: ptr_int
 
     // Refresh
-    int refItem = *(int*)((uintptr_t)*(void**)&self->comboRefresh + 0x118);
+    int refItem = comboRefresh->_currentItem;
 
     // Look up actual width/height/refresh from the video interface data
-    void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
-                         ->GetInterface(newRenderer);   // B.3.5 bridge
-    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
-    intptr_t adapter = adapterArray + (intptr_t)newAdapter * 0x38;
-    intptr_t modes = *(intptr_t*)(adapter + 8);
-    intptr_t modeEntry = modes + (intptr_t)(int)(intptr_t)resData * 0x18;
-    intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
-    intptr_t refreshEntry = refreshArray + (intptr_t)refItem * 8;
+    const Video::Device::GraphicsInterface& gfxIface = vidDev->GetInterface(newRenderer);
+    const Video::Device::Adapter& adapter = gfxIface.adapterData[newAdapter];
+    const Video::Device::DisplayMode& modeEntry = adapter.modeData[resIndex];
+    const Video::Device::RefreshRate& refreshEntry = modeEntry.refreshData[refItem];
 
-    int newRefreshN = *(int*)refreshEntry;
-    int newRefreshD = *(int*)(refreshEntry + 4);
-    int newWidth    = *(int*)modeEntry;
-    int newHeight   = *(int*)(modeEntry + 4);
+    int newRefreshN = refreshEntry.numerator;
+    int newRefreshD = refreshEntry.denominator;
+    int newWidth    = modeEntry.width;
+    int newHeight   = modeEntry.height;
 
     // Antialias
-    int aaItem = *(int*)((uintptr_t)*(void**)&self->comboAntialias + 0x118);
-    int newAntialias = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboAntialias)->GetItemData(aaItem);  // B.3.6 bridge
+    int aaItem = comboAntialias->_currentItem;
+    int newAntialias = (int)(intptr_t)comboAntialias->GetItemData(aaItem);  // CAST-OK: ptr_int
 
     // Filter
-    int fltItem = *(int*)((uintptr_t)*(void**)&self->comboFilter + 0x118);
-    int newFilter = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboFilter)->GetItemData(fltItem);  // B.3.6 bridge
+    int fltItem = comboFilter->_currentItem;
+    int newFilter = (int)(intptr_t)comboFilter->GetItemData(fltItem);  // CAST-OK: ptr_int
 
     // Shadow res, shadow quality, reflection quality
-    int newShadowRes = *(int*)((uintptr_t)*(void**)&self->comboShadowRes + 0x118);
-    int newShadowQ = *(int*)((uintptr_t)*(void**)&self->comboShadowQuality + 0x118);
-    int newReflQ = *(int*)((uintptr_t)*(void**)&self->comboReflectionQuality + 0x118);
+    int newShadowRes = comboShadowRes->_currentItem;
+    int newShadowQ = comboShadowQuality->_currentItem;
+    int newReflQ = comboReflectionQuality->_currentItem;
 
     // Fullscreen / VSync checkboxes
-    uint8_t newFullscreen = *(uint8_t*)((uintptr_t)*(void**)&self->checkFullscreen + 0xD8);
-    uint8_t newVsync = *(uint8_t*)((uintptr_t)*(void**)&self->checkVSync + 0xD8);
+    uint8_t newFullscreen = checkFullscreen->_checked;
+    uint8_t newVsync = checkVSync->_checked;
 
     // Check if anything changed. If nothing changed, return early.
     bool rendererChanged = (oldRenderer != newRenderer);
@@ -1031,66 +958,65 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 
     // If renderer or adapter changed, need full shutdown/startup
     if (needsFullRestart) {
-        void* mainLoop = ::Engine::MainLoop::_singleton;
+        ::Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton;
         if (mainLoop)
-            reinterpret_cast<Engine::MainLoop*>(mainLoop)->OnVideoError();  // B.3.7 bridge
-        reinterpret_cast<Video::Device*>(vidDev)->ReleaseDynamic();   // B.3.5 bridge
-        reinterpret_cast<Video::Device*>(vidDev)->Shutdown();         // B.3.5 bridge
+            mainLoop->OnVideoError();
+        vidDev->ReleaseDynamic();
+        vidDev->Shutdown();
     }
 
     // Write new settings to video config
-    *(int*)((uintptr_t)vidCfg + 0x04) = newRenderer;
-    *(int*)((uintptr_t)vidCfg + 0x08) = newAdapter;
-    *(int*)((uintptr_t)vidCfg + 0x38) = newRefreshN;
-    *(int*)((uintptr_t)vidCfg + 0x0C) = newWidth;
-    *(int*)((uintptr_t)vidCfg + 0x10) = newHeight;
-    *(int*)((uintptr_t)vidCfg + 0x3C) = newRefreshD;
+    vidCfg->interfaceIndex = newRenderer;
+    vidCfg->adapterIndex = newAdapter;
+    vidCfg->refreshNumerator = newRefreshN;
+    vidCfg->width = newWidth;
+    vidCfg->height = newHeight;
+    vidCfg->refreshDenominator = newRefreshD;
     // Update windowed size if resolution changed
     if (newWidth != oldWidth || newHeight != oldHeight) {
-        *(int*)((uintptr_t)vidCfg + 0x1C) = newWidth;
-        *(int*)((uintptr_t)vidCfg + 0x20) = newHeight;
+        vidCfg->windowWidth = newWidth;
+        vidCfg->windowHeight = newHeight;
     }
-    *(uint8_t*)((uintptr_t)vidCfg + 0x41) = newVsync;
-    *(int*)((uintptr_t)vidCfg + 0x24) = newAntialias;
-    *(uint8_t*)((uintptr_t)vidCfg + 0x40) = newFullscreen;
-    *(int*)((uintptr_t)vidCfg + 0x28) = newFilter;
-    *(int*)((uintptr_t)vidCfg + 0x2C) = newShadowRes;
-    *(int*)((uintptr_t)vidCfg + 0x30) = newShadowQ;
-    *(int*)((uintptr_t)vidCfg + 0x34) = newReflQ;
+    vidCfg->vsync = newVsync;
+    vidCfg->multisample = newAntialias;
+    vidCfg->fullscreen = newFullscreen;
+    vidCfg->textureFilter = newFilter;
+    vidCfg->shadowScalar = newShadowRes;
+    vidCfg->shaderDetail = newShadowQ;
+    vidCfg->reflectionDetail = newReflQ;
 
     bool success;
     if (!needsFullRestart) {
         // Same renderer+adapter: just apply changed settings
-        success = reinterpret_cast<Video::Device*>(vidDev)
-                      ->ApplyChangedSettings();   // B.3.5 bridge
+        success = vidDev->ApplyChangedSettings();
     } else {
         // Full restart
-        success = reinterpret_cast<Video::Device*>(vidDev)->Startup();   // B.3.5 bridge
-        reinterpret_cast<Video::Device*>(vidDev)->RecreateDynamic();     // B.3.5 bridge
-        void* mainLoop = ::Engine::MainLoop::_singleton;
+        success = vidDev->Startup();
+        vidDev->RecreateDynamic();
+        ::Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton;
         if (mainLoop)
-            reinterpret_cast<Engine::MainLoop*>(mainLoop)->OnVideoRestart();  // B.3.7 bridge
+            mainLoop->OnVideoRestart();
     }
 
 
     if (success) {
         // Save the new config
-        reinterpret_cast<Video::Configuration*>(vidCfg)->Save();   // B.3.5 bridge
+        vidCfg->Save();
     } else {
         // Rollback to old config
-        *(int*)((uintptr_t)vidCfg + 0x08) = oldAdapter;
-        *(int*)((uintptr_t)vidCfg + 0x0C) = oldWidth;
-        *(int*)((uintptr_t)vidCfg + 0x04) = oldRenderer;
-        *(int*)((uintptr_t)vidCfg + 0x10) = oldHeight;
-        *(int*)((uintptr_t)vidCfg + 0x38) = oldRefreshN;
-        *(int*)((uintptr_t)vidCfg + 0x3C) = oldRefreshD;
-        *(int*)((uintptr_t)vidCfg + 0x24) = oldAntialias;
-        *(uint8_t*)((uintptr_t)vidCfg + 0x40) = oldFullscreen;
-        *(uint8_t*)((uintptr_t)vidCfg + 0x41) = oldVsync;
-        *(int*)((uintptr_t)vidCfg + 0x28) = oldFilter;
-        *(int*)((uintptr_t)vidCfg + 0x2C) = oldShadowRes;
-        *(int*)((uintptr_t)vidCfg + 0x30) = oldShadowQ;
-        *(int*)((uintptr_t)vidCfg + 0x34) = oldReflQ;
+        vidCfg->adapterIndex = oldAdapter;
+        vidCfg->width = oldWidth;
+        vidCfg->interfaceIndex = oldRenderer;
+        vidCfg->height = oldHeight;
+        vidCfg->refreshNumerator = oldRefreshN;
+        vidCfg->refreshDenominator = oldRefreshD;
+        vidCfg->multisample = oldAntialias;
+        vidCfg->fullscreen = oldFullscreen;
+        vidCfg->vsync = oldVsync;
+        vidCfg->textureFilter = oldFilter;
+        vidCfg->shadowScalar = oldShadowRes;
+        vidCfg->shaderDetail = oldShadowQ;
+        vidCfg->reflectionDetail = oldReflQ;
     }
 }
 
@@ -1099,11 +1025,11 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 // ============================================================
 // Restores video/game settings on cancel: re-reads from persistence,
 // restores last tab, and re-applies keymap config to UI.
-static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
+void OptionsDialog::RestoreVideoSettings() {
     // Re-read all settings from persistence
-    void* persistence = ::IO::Persistence::_singleton;
+    ::IO::Persistence* persistence = ::IO::Persistence::_singleton;
     if (persistence)
-        reinterpret_cast<IO::Persistence*>(persistence)->ReadSettings();   // B.3.4 bridge
+        persistence->ReadSettings();
 
     // Re-read game settings from persistence
     if (g_gameSettings != nullptr)
@@ -1111,13 +1037,12 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
 
     // Restore last tab
     if (g_gameSettings != nullptr)
-        g_gameSettings->lastOption = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+        g_gameSettings->lastOption = tabOptions->_activeTab;
 
     // Re-apply keymap config to UI
-    void* keyMap = GetKeyMapContainer();
-    void* userInterface = *(void**)((uintptr_t)self + 0x10);
+    GameContainer* keyMap = g_gameContainer;
     if (keyMap)
-        ApplyKeyMapToUI_Impl(keyMap, userInterface);   // 0x140099260
+        ApplyKeyMapToUI_Impl(keyMap, _ui);   // 0x140099260
 }
 
 // ============================================================
@@ -1126,19 +1051,19 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
 // Calls ApplyVideoSettings, ApplyInputSettings, saves audio config,
 // applies game settings, and writes persistence settings.
 
-void OptionsDialog_OnApply(OptionsDialog* self) {
-    OptionsDialog_ApplyVideoSettings(self);
-    OptionsDialog_ApplyInputSettings(self);
+void OptionsDialog::OnApply() {
+    ApplyVideoSettings();
+    ApplyInputSettings();
 
     // Save audio configuration
     if (::Audio::Configuration::_singleton)
-        ::Audio::Configuration::_singleton->Save();   // B.3.7 bridge
+        ::Audio::Configuration::_singleton->Save();
 
-    OptionsDialog_ApplyGameSettings(self);
+    ApplyGameSettings();
 
     // Write all settings to disk
     if (::IO::Persistence::_singleton)
-        ::IO::Persistence::_singleton->WriteSettings();   // B.3.4 bridge
+        ::IO::Persistence::_singleton->WriteSettings();
 }
 
 // ============================================================
@@ -1146,14 +1071,12 @@ void OptionsDialog_OnApply(OptionsDialog* self) {
 // ============================================================
 // Same as OnApply plus closes the dialog window.
 
-void OptionsDialog_OnOk(OptionsDialog* self) {
-    OptionsDialog_OnApply(self);
+void OptionsDialog::OnOk() {
+    OnApply();
 
     // Close dialog
-    uint8_t ibpBuf[8];
-    new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibpBuf));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> self(this);
+    _ui->CloseDialog(&self);
 }
 
 // ============================================================
@@ -1162,41 +1085,39 @@ void OptionsDialog_OnOk(OptionsDialog* self) {
 // Reloads settings from disk, re-registers default input bindings,
 // restores video settings, and closes the dialog.
 
-void OptionsDialog_OnCancel(OptionsDialog* self) {
+void OptionsDialog::OnCancel() {
     // Reload persistence settings from disk
     if (::IO::Persistence::_singleton)
-        ::IO::Persistence::_singleton->ReadSettings();   // B.3.4 bridge
+        ::IO::Persistence::_singleton->ReadSettings();
 
     // Re-register default input bindings and load saved config
     Game::RegisterDefaultInputBindings();   // 0x1400992f0
 
     // Reload input configuration
     if (::Input::Configuration::_singleton)
-        ::Input::Configuration::_singleton->Load();  // B.3.7 bridge
+        ::Input::Configuration::_singleton->Load();
 
-    // Restore mouse clipping from input config byte at +0x08
+    // Restore mouse clipping from Input::Configuration::_mouseClipping (+0x08)
     if (::Input::Device::_singleton &&
         ::Input::Configuration::_singleton) {
-        bool clipEnabled = *(bool*)((uintptr_t)::Input::Configuration::_singleton + 0x08);
-        ::Input::Device::_singleton->EnableMouseClipping(static_cast<uint8_t>(clipEnabled));  // B.3.7 bridge
+        bool clipEnabled = ::Input::Configuration::_singleton->_mouseClipping;
+        ::Input::Device::_singleton->EnableMouseClipping(static_cast<uint8_t>(clipEnabled));
     }
 
     // Reload persistence settings again (for audio config)
     if (::IO::Persistence::_singleton)
-        ::IO::Persistence::_singleton->ReadSettings();   // B.3.4 bridge
+        ::IO::Persistence::_singleton->ReadSettings();
 
     // Reinitialize audio from saved config
     if (::Audio::Configuration::_singleton)
-        ::Audio::Configuration::_singleton->Startup();   // B.3.7 bridge
+        ::Audio::Configuration::_singleton->Startup();
 
     // Restore video settings to pre-dialog state
-    OptionsDialog_RestoreVideoSettings(self);
+    RestoreVideoSettings();
 
     // Close dialog
-    uint8_t ibpBuf[8];
-    new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibpBuf));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> self(this);
+    _ui->CloseDialog(&self);
 }
 
 // ============================================================
@@ -1208,26 +1129,23 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
     if (eventType == 0x12) {
         // --- Button click ---
         if (eventData == kButton_Ok) {
-            OptionsDialog_OnOk(this);
+            OnOk();
             return;
         }
         if (eventData == kButton_Cancel) {
-            OptionsDialog_OnCancel(this);
+            OnCancel();
             return;
         }
         if (eventData == kButton_Apply) {
-            OptionsDialog_OnApply(this);
+            OnApply();
             return;
         }
         // Input bind button clicks: IDs >= 13
         if (eventData >= kInputBind_Base) {
-            // FUN_140010460: IsDerivedFrom(elem, UIElementBase type) — returns elem if valid, else null
-            void* clickedElem = *(void**)element;
+            // FUN_140010460: IsDerivedFrom(elem, ButtonElement type) — returns elem if valid, else null
+            UI::Element* clickedElem = element->Get();
             bool isUIElement = ::Object::IsDerivedFromNullSafe(clickedElem, UI::ButtonElement::TypeId());
-            void* parent = isUIElement ? clickedElem : nullptr;
-            uint8_t parentPtr[16];
-            new (parentPtr) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(parent));   // B.3.3 bridge
+            Object::InternalPtr<UI::Element> parentPtr(isUIElement ? clickedElem : nullptr);
 
             unsigned int offset = (unsigned int)(eventData - kInputBind_Base);
             unsigned int slot = offset & 0x80000001;
@@ -1236,99 +1154,83 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             }
             int bindIndex = (int)offset / 2;
 
-            OptionsDialog_OnInputBindClick(this, parentPtr, bindIndex, slot);
+            OnInputBindClick(&parentPtr, bindIndex, slot);
         }
         return;
     }
 
     if (eventType == 0x14) {
-        // --- Combo selection change ---
+        // --- Combo selection change (the item data are indices: ptr_int) ---
         if (eventData == kCombo_Renderer) {
-            int curItem = *(int*)((uintptr_t)this->comboRenderer + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboRenderer)->GetItemData(curItem);  // B.3.6 bridge
-            this->savedRenderer = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(this);
-            OptionsDialog_PopulateAdapterCombo(this);
+            int curItem = this->comboRenderer->_currentItem;
+            void* data = this->comboRenderer->GetItemData(curItem);
+            this->savedRenderer = (int32_t)(intptr_t)data;  // CAST-OK: ptr_int
+            ValidateVideoConfig();
+            PopulateAdapterCombo();
             return;
         }
         if (eventData == kCombo_Adapter) {
-            int curItem = *(int*)((uintptr_t)this->comboAdapter + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboAdapter)->GetItemData(curItem);  // B.3.6 bridge
-            this->savedAdapter = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(this);
-            OptionsDialog_PopulateAntialiasCombo(this);
-            OptionsDialog_PopulateFilterCombo(this);
-            OptionsDialog_PopulateResolutionCombo(this);
+            int curItem = this->comboAdapter->_currentItem;
+            void* data = this->comboAdapter->GetItemData(curItem);
+            this->savedAdapter = (int32_t)(intptr_t)data;  // CAST-OK: ptr_int
+            ValidateVideoConfig();
+            PopulateAntialiasCombo();
+            PopulateFilterCombo();
+            PopulateResolutionCombo();
             return;
         }
         if (eventData == kCombo_Resolution) {
-            int curItem = *(int*)((uintptr_t)this->comboResolution + 0x118);
-            void* resData = reinterpret_cast<const UI::ComboElement*>(this->comboResolution)->GetItemData(curItem);  // B.3.6 bridge
+            int curItem = this->comboResolution->_currentItem;
+            int resIndex = (int)(intptr_t)this->comboResolution->GetItemData(curItem);  // CAST-OK: ptr_int
 
             int adapterIdx = this->savedAdapter;
-            void* gfxIface = (void*)&::Video::Device::_singleton
-                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
+            const Video::Device::GraphicsInterface* gfxIface =
+                &::Video::Device::_singleton->GetInterface(this->savedRenderer);
             int adapterIdx2 = this->savedAdapter;
 
-            intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
-            intptr_t displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx * 0x38 + 8);
-            intptr_t modeEntry = displayModes + (intptr_t)(int)(intptr_t)resData * 0x18;
+            this->savedWidth = gfxIface->adapterData[adapterIdx].modeData[resIndex].width;
 
-            this->savedWidth = *(uint32_t*)modeEntry;
+            gfxIface = &::Video::Device::_singleton->GetInterface(this->savedRenderer);
+            this->savedHeight = gfxIface->adapterData[adapterIdx2].modeData[resIndex].height;
 
-            gfxIface = (void*)&::Video::Device::_singleton
-                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
-            adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
-            displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx2 * 0x38 + 8);
-            this->savedHeight = *(uint32_t*)(displayModes + (intptr_t)(int)(intptr_t)resData * 0x18 + 4);
-
-            OptionsDialog_ValidateVideoConfig(this);
-            OptionsDialog_PopulateRefreshCombo(this);
+            ValidateVideoConfig();
+            PopulateRefreshCombo();
             return;
         }
         if (eventData == kCombo_Refresh) {
-            int resItem = *(int*)((uintptr_t)this->comboResolution + 0x118);
-            void* resData = reinterpret_cast<const UI::ComboElement*>(this->comboResolution)->GetItemData(resItem);  // B.3.6 bridge
+            int resItem = this->comboResolution->_currentItem;
+            int resIndex = (int)(intptr_t)this->comboResolution->GetItemData(resItem);  // CAST-OK: ptr_int
 
-            int refItem = *(int*)((uintptr_t)this->comboRefresh + 0x118);
-            void* refData = reinterpret_cast<const UI::ComboElement*>(this->comboRefresh)->GetItemData(refItem);  // B.3.6 bridge
+            int refItem = this->comboRefresh->_currentItem;
+            int refIndex = (int)(intptr_t)this->comboRefresh->GetItemData(refItem);  // CAST-OK: ptr_int
 
             int adapterIdx = this->savedAdapter;
-            void* gfxIface = (void*)&::Video::Device::_singleton
-                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
+            const Video::Device::GraphicsInterface* gfxIface =
+                &::Video::Device::_singleton->GetInterface(this->savedRenderer);
             int adapterIdx2 = this->savedAdapter;
 
-            intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
-            intptr_t displayMode = adapterArray + (intptr_t)adapterIdx * 0x38;
-            intptr_t modeEntry = *(intptr_t*)(displayMode + 8) + (intptr_t)(int)(intptr_t)resData * 0x18;
-            intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
-            intptr_t refreshEntry = refreshArray + (intptr_t)(int)(intptr_t)refData * 8;
+            this->savedRefreshNum =
+                gfxIface->adapterData[adapterIdx].modeData[resIndex].refreshData[refIndex].numerator;
 
-            this->savedRefreshNum = *(uint32_t*)refreshEntry;
+            gfxIface = &::Video::Device::_singleton->GetInterface(this->savedRenderer);
+            this->savedRefreshDen =
+                gfxIface->adapterData[adapterIdx2].modeData[resIndex].refreshData[refIndex].denominator;
 
-            gfxIface = (void*)&::Video::Device::_singleton
-                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
-            adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
-            displayMode = adapterArray + (intptr_t)adapterIdx2 * 0x38;
-            modeEntry = *(intptr_t*)(displayMode + 8) + (intptr_t)(int)(intptr_t)resData * 0x18;
-            refreshArray = *(intptr_t*)(modeEntry + 8);
-            this->savedRefreshDen = *(uint32_t*)(refreshArray + (intptr_t)(int)(intptr_t)refData * 8 + 4);
-
-            OptionsDialog_ValidateVideoConfig(this);
+            ValidateVideoConfig();
             return;
         }
         if (eventData == kCombo_Antialias) {
-            int curItem = *(int*)((uintptr_t)this->comboAntialias + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboAntialias)->GetItemData(curItem);  // B.3.6 bridge
-            this->savedAntialias = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(this);
+            int curItem = this->comboAntialias->_currentItem;
+            void* data = this->comboAntialias->GetItemData(curItem);
+            this->savedAntialias = (int32_t)(intptr_t)data;  // CAST-OK: ptr_int
+            ValidateVideoConfig();
             return;
         }
         if (eventData == kCombo_Filter) {
-            int curItem = *(int*)((uintptr_t)this->comboFilter + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboFilter)->GetItemData(curItem);  // B.3.6 bridge
-            this->savedFilter = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(this);
+            int curItem = this->comboFilter->_currentItem;
+            void* data = this->comboFilter->GetItemData(curItem);
+            this->savedFilter = (int32_t)(intptr_t)data;  // CAST-OK: ptr_int
+            ValidateVideoConfig();
             return;
         }
         return;
@@ -1336,21 +1238,24 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 
     if (eventType == 0x17) {
         // --- Slider value change ---
-        int32_t* audioVol = reinterpret_cast<int32_t*>(::Audio::Configuration::_singleton);
-        if (!audioVol) return;
+        ::Audio::Configuration* audioCfg = ::Audio::Configuration::_singleton;
+        if (!audioCfg) return;
 
-        void** sliderField = nullptr;
         switch (eventData) {
-            case kSlider_UI:      sliderField = &this->sliderUI; break;
-            case kSlider_Music:   sliderField = &this->sliderMusic; break;
-            case kSlider_Ambient: sliderField = &this->sliderAmbient; break;
-            case kSlider_Effect:  sliderField = &this->sliderEffect; break;
+            case kSlider_UI:      audioCfg->uiVolume      = (int32_t)this->sliderUI->_value; break;
+            case kSlider_Music:   audioCfg->musicVolume   = (int32_t)this->sliderMusic->_value; break;
+            case kSlider_Ambient: audioCfg->ambientVolume = (int32_t)this->sliderAmbient->_value; break;
+            case kSlider_Effect:  audioCfg->effectVolume  = (int32_t)this->sliderEffect->_value; break;
             default: return;
         }
-
-        audioVol[eventData] = (int32_t)*(float*)((uintptr_t)*sliderField + 0x128);
         return;
     }
+}
+
+// Helper: the Input::KeyMap the configuration owns (Configuration::_keyMap, +0x00).
+static ::Input::KeyMap* GetActualKeyMap() {
+    if (::Input::Configuration::_singleton == nullptr) return nullptr;
+    return ::Input::Configuration::_singleton->_keyMap;
 }
 
 // ============================================================
@@ -1360,16 +1265,15 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 //   child[i*3+0] = row container (contains "textInputName" label)
 //   child[i*3+1] = bind button for slot 0
 //   child[i*3+2] = bind button for slot 1
-// Sets label text from KeyMap string table, sets button key name text,
-// assigns element IDs starting at kInputBind_Base (13).
-void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
-    void* keyMapContainer = GetKeyMapContainer();
+// Sets label text from the game container's gameKeys string table, sets button
+// key name text, assigns element IDs starting at kInputBind_Base (13).
+void OptionsDialog::PopulateInputBindList() {
+    GameContainer* keyMapContainer = g_gameContainer;
     if (!keyMapContainer) return;
-    void* keyMap = GetActualKeyMap();  // for method calls (GetDeviceForId, etc.)
+    ::Input::KeyMap* keyMap = GetActualKeyMap();  // for method calls (GetDeviceForId, etc.)
     if (!keyMap) return;
 
-    void* inputList = self->inputList;
-    int childCount = reinterpret_cast<const UI::Element*>(inputList)->ChildCount();  // B.3.6 bridge
+    int childCount = inputList->ChildCount();
 
     int numRows = childCount / 3;
     if (numRows <= 0) return;
@@ -1379,41 +1283,35 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 
     for (int row = 0; row < numRows; row++, inputId++) {
         // Get the 3 children for this row
-        uint64_t rowChild = 0;
-        ::new (&rowChild) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(self->inputList)->Child(row * 3));  // B.3.6 bridge
+        UI::Element* rowChild = inputList->Child(row * 3).Get();
 
         // Find "textInputName" in the row container and set label
         {
             System::String nameStr("textInputName");
-            uint64_t textElem = 0;
-            ::new (&textElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>((void*)rowChild)->FindElement(nameStr));  // B.3.6 bridge
+            UI::Element* textElem = rowChild->FindElement(nameStr).Get();
 
             if (textElem) {
-                void* textObj = (void*)textElem;
-                if (::Object::IsDerivedFromNullSafe(textObj, UI::TextElement::TypeId())) {
-                    // Get input name from KeyMap container's name table at +0xC8
-                    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
-                    uint8_t uiStr[16];
-                    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(nameTable)), inputId);  // B.3.6 bridge
-                    reinterpret_cast<UI::TextElement*>(textObj)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
+                if (::Object::IsDerivedFromNullSafe(textElem, UI::TextElement::TypeId())) {
+                    // Input name from the game container's gameKeys table (+0xC8)
+                    UI::String uiStr(keyMapContainer->gameKeys, inputId);
+                    static_cast<UI::TextElement*>(textElem)->SetText(&uiStr);
                 }
             }
         }
 
         // Set bind button texts and element IDs for slots 0 and 1
         for (int slot = 0; slot < 2; slot++) {
-            uint64_t btnChild = 0;
-            ::new (&btnChild) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(self->inputList)->Child(row * 3 + 1 + slot));  // B.3.6 bridge
+            UI::Element* btnChild = inputList->Child(row * 3 + 1 + slot).Get();
 
             // Get current device and key for this input binding
-            int device = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetDeviceForId(inputId, slot);  // B.3.7 bridge
-            int key = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetInputForId(inputId, slot);  // B.3.7 bridge
+            int device = keyMap->GetDeviceForId(inputId, slot);
+            int key = keyMap->GetInputForId(inputId, slot);
 
             // Set the button's key name text
-            SetInputBindButtonText((void*)&btnChild, device, key);
+            SetInputBindButtonText(btnChild, device, key);
 
             // Assign element ID
-            reinterpret_cast<UI::Element*>((void*)btnChild)->SetElementId(elemId + slot);  // B.3.6 bridge
+            btnChild->SetElementId(elemId + slot);
         }
 
         elemId += 2;
@@ -1431,81 +1329,70 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 // 5. If result=2 (clear), clears the binding
 // 6. If result=1 (bound), checks for conflicts and handles them
 // 7. Refreshes the input bind list
-void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot) {
-    void* keyMapContainer = GetKeyMapContainer();
+void OptionsDialog::OnInputBindClick(Object::InternalPtr<UI::Element>* element, int bindIndex, int slot) {
+    GameContainer* keyMapContainer = g_gameContainer;
     if (!keyMapContainer) return;
-    void* keyMap = GetActualKeyMap();  // for method calls
+    ::Input::KeyMap* keyMap = GetActualKeyMap();  // for method calls
     if (!keyMap) return;
 
     int inputId = bindIndex + 5;  // Convert bind index to KeyMap input ID
 
     // Load the input bind dialog resource
     System::Filename filenameObj("Dialog/Options.rsc:inputBind");   // ctor already normalises
-    void* extResult = const_cast<::Object::External*>(
-        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-            ->FindOrLoad(filenameObj));
+    const ::Object::External* extResult =
+        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameObj);
     // Type check the external resource
-    void* external = nullptr;
+    const UI::Dialog* external = nullptr;
     if (extResult) {
         bool isDerived = ::Object::IsDerivedFromNullSafe(extResult, UI::Dialog::TypeId());
-        if (isDerived) external = extResult;
+        if (isDerived) external = static_cast<const UI::Dialog*>(extResult);
     }
 
-    // Allocate and construct OptionInputBindDialog
+    // Allocate and construct OptionInputBindDialog (0x140071d30)
     void* mem = System::MemoryAllocator::MemAlloc(200, 8);  // 0xC8 = 200 bytes
-    void* dialog = nullptr;
+    OptionInputBindDialog* dialog = nullptr;
     if (mem) {
-        uint8_t nullPtr[8] = {};
-        new (nullPtr) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        void* userInterface = *(void**)((uintptr_t)self + 0x10);
-        dialog = OptionInputBindDialog_Ctor_Standalone(mem, userInterface, external, nullPtr);   // 0x140071d30
+        dialog = ::new (mem) OptionInputBindDialog(_ui, external,
+                                                   Object::InternalPtr<UI::DialogInstance>());
     }
 
     // Wrap in InternalPtr
-    uint64_t dialogPtr = 0;
-    new ((void*)&dialogPtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(dialog));   // B.3.3 bridge
+    Object::InternalPtr<UI::DialogInstance> dialogPtr(dialog);
 
     // Set the input name text on the dialog
-    // Get input name from KeyMap container's name table at +0xC8
-    uint8_t inputNameUI[16];
-    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
-    ::new (inputNameUI) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(nameTable)), inputId);  // B.3.6 bridge
+    // Input name from the game container's gameKeys table (+0xC8)
+    UI::String inputNameUI(keyMapContainer->gameKeys, inputId);
 
     // Convert to System::String
-    System::String inputNameStr;
-    ::new (&inputNameStr) System::String(reinterpret_cast<const UI::String*>(inputNameUI)->operator System::String());  // B.3.6 bridge
+    System::String inputNameStr(inputNameUI.operator System::String());
 
     // Find TextElement in dialog and set parameter 0
     {
-        uint64_t textElem = 0;
-        ::new (&textElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialogPtr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
+        UI::Element* textElem = dialogPtr->FindElementType(UI::TextElement::TypeId()).Get();
         if (textElem) {
-            reinterpret_cast<UI::TextElement*>((void*)textElem)->SetParameter(0, inputNameStr);  // B.3.6 bridge
+            static_cast<UI::TextElement*>(textElem)->SetParameter(0, inputNameStr);
         }
     }
 
     // Show dialog modally — get result
-    void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    uint64_t showPtr = dialogPtr;
-    int result = reinterpret_cast<UI::UserInterface*>(userInterface)->ShowDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&showPtr));  // B.3.6 bridge
+    Object::InternalPtr<UI::DialogInstance> showPtr = dialogPtr;
+    int result = _ui->ShowDialog(&showPtr);
 
     // Read captured key data from dialog before deleting
-    int capturedDevice = *(int*)((uintptr_t)(void*)dialogPtr + 0xC4);
-    int capturedKey = *(int*)((uintptr_t)(void*)dialogPtr + 0xC0);
+    int capturedDevice = dialog->inputType;
+    int capturedKey = dialog->keyIndex;
 
     // Check if the new binding conflicts with an existing one
-    int conflictId = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetIdForDeviceInput(capturedDevice, capturedKey);  // B.3.7 bridge
+    int conflictId = keyMap->GetIdForDeviceInput(capturedDevice, capturedKey);
 
     // Delete the input bind dialog
-    reinterpret_cast< ::Object::InternalBasePtr*>((void*)&dialogPtr)->DeletePtr();   // B.3.3 bridge
+    dialogPtr.DeletePtr();
 
     if (result == 2) {
         // User chose "clear" — unbind this slot
-        reinterpret_cast<Input::KeyMap*>(keyMap)->ClearInput(static_cast<int32_t>(inputId), static_cast<int32_t>(slot));  // B.3.7 bridge
+        keyMap->ClearInput(static_cast<int32_t>(inputId), static_cast<int32_t>(slot));
         // Update button text to "Unbound"
-        uint64_t elemVal = *(uint64_t*)element;
-        SetInputBindButtonText((void*)&elemVal, -1, 0);
+        SetInputBindButtonText(element->Get(), -1, 0);
         goto cleanup;
     }
 
@@ -1520,39 +1407,31 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     {
         // Load the inputBound dialog resource
         System::Filename fnameObj2("Dialog/Options.rsc:inputBound");   // ctor already normalises
-        void* extResult2 = const_cast<::Object::External*>(
-            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
-                ->FindOrLoad(fnameObj2));
-        void* external2 = nullptr;
+        const ::Object::External* extResult2 =
+            ::Object::ExternalFactory::_singleton->FindOrLoad(fnameObj2);
+        const UI::Dialog* external2 = nullptr;
         if (extResult2) {
-            if (::Object::IsDerivedFromNullSafe(extResult2, UI::Dialog::TypeId())) external2 = extResult2;
+            if (::Object::IsDerivedFromNullSafe(extResult2, UI::Dialog::TypeId()))
+                external2 = static_cast<const UI::Dialog*>(extResult2);
         }
 
-        // Allocate and construct MessageDialog (0xC0 bytes)
+        // Allocate and construct MessageDialog (0xC0 bytes, 0x14006d300)
         void* mem2 = System::MemoryAllocator::MemAlloc(0xC0, 8);
-        void* dialog2 = nullptr;
+        MessageDialog* dialog2 = nullptr;
         if (mem2) {
-            uint8_t nullPtr2[8] = {};
-            new (nullPtr2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            void* ui = *(void**)((uintptr_t)self + 0x10);
-            dialog2 = MessageDialog_Ctor_Standalone(mem2, ui, external2, nullPtr2);   // 0x14006d300
+            dialog2 = ::new (mem2) MessageDialog(_ui, external2,
+                                                 Object::InternalPtr<UI::DialogInstance>());
         }
 
-        uint64_t dialog2Ptr = 0;
-        new ((void*)&dialog2Ptr) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(dialog2));   // B.3.3 bridge
+        Object::InternalPtr<UI::DialogInstance> dialog2Ptr(dialog2);
 
         // Get the name of the key that was pressed (new binding)
-        uint8_t newKeyUI[16];
-        GetInputKeyName(newKeyUI, capturedDevice, capturedKey);
-        System::String newKeyStr;
-        ::new (&newKeyStr) System::String(reinterpret_cast<const UI::String*>(newKeyUI)->operator System::String());  // B.3.6 bridge
+        UI::String newKeyUI = GetInputKeyName(capturedDevice, capturedKey);
+        System::String newKeyStr(newKeyUI.operator System::String());
 
         // Get the name of the existing binding that conflicts
-        uint8_t conflictNameUI[16];
-        ::new (conflictNameUI) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(nameTable)), conflictId);  // B.3.6 bridge
-        System::String conflictNameStr;
-        ::new (&conflictNameStr) System::String(reinterpret_cast<const UI::String*>(conflictNameUI)->operator System::String());  // B.3.6 bridge
+        UI::String conflictNameUI(keyMapContainer->gameKeys, conflictId);
+        System::String conflictNameStr(conflictNameUI.operator System::String());
 
         // Check if the conflicting binding is the same as the current one
         // (in which case no confirmation is needed)
@@ -1572,49 +1451,46 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             // Set parameters on the confirmation dialog:
             // param 0 = new key name, param 1 = conflicting binding name, param 2 = current input name
             {
-                uint64_t textElem2 = 0;
-                ::new (&textElem2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
+                UI::Element* textElem2 = dialog2Ptr->FindElementType(UI::TextElement::TypeId()).Get();
                 if (textElem2) {
-                    reinterpret_cast<UI::TextElement*>((void*)textElem2)->SetParameter(0, newKeyStr);  // B.3.6 bridge
+                    static_cast<UI::TextElement*>(textElem2)->SetParameter(0, newKeyStr);
                 }
 
-                uint64_t textElem3 = 0;
-                ::new (&textElem3) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
+                UI::Element* textElem3 = dialog2Ptr->FindElementType(UI::TextElement::TypeId()).Get();
                 if (textElem3) {
-                    reinterpret_cast<UI::TextElement*>((void*)textElem3)->SetParameter(1, conflictNameStr);  // B.3.6 bridge
+                    static_cast<UI::TextElement*>(textElem3)->SetParameter(1, conflictNameStr);
                 }
 
-                uint64_t textElem4 = 0;
-                ::new (&textElem4) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
+                UI::Element* textElem4 = dialog2Ptr->FindElementType(UI::TextElement::TypeId()).Get();
                 if (textElem4) {
-                    reinterpret_cast<UI::TextElement*>((void*)textElem4)->SetParameter(2, inputNameStr);  // B.3.6 bridge
+                    static_cast<UI::TextElement*>(textElem4)->SetParameter(2, inputNameStr);
                 }
             }
 
             // Show confirmation dialog
-            uint64_t show2Ptr = dialog2Ptr;
-            confirmResult = reinterpret_cast<UI::UserInterface*>(userInterface)->ShowDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&show2Ptr));  // B.3.6 bridge
-            reinterpret_cast< ::Object::InternalBasePtr*>((void*)&dialog2Ptr)->DeletePtr();   // B.3.3 bridge
+            Object::InternalPtr<UI::DialogInstance> show2Ptr = dialog2Ptr;
+            confirmResult = _ui->ShowDialog(&show2Ptr);
+            dialog2Ptr.DeletePtr();
         }
 
         if (confirmResult >= 1 && confirmResult <= 2) {
             // User confirmed (OK or Yes) — clear the old conflicting binding
-            reinterpret_cast<Input::KeyMap*>(keyMap)->ClearInput(static_cast<int32_t>(conflictId), static_cast<int32_t>(capturedDevice), static_cast<int32_t>(capturedKey));  // B.3.7 bridge
+            keyMap->ClearInput(static_cast<int32_t>(conflictId), static_cast<int32_t>(capturedDevice), static_cast<int32_t>(capturedKey));
             goto set_binding;
         }
         // User cancelled — don't change anything
     }
 
     // Refresh the input bind list display
-    OptionsDialog_PopulateInputBindList(self);
+    PopulateInputBindList();
     goto cleanup;
 
 set_binding:
-    reinterpret_cast<Input::KeyMap*>(keyMap)->SetInput(inputId, slot, capturedDevice, capturedKey);  // B.3.7 bridge
-    ::Input::Device::_singleton->ResetState();  // B.3.7 bridge
+    keyMap->SetInput(inputId, slot, capturedDevice, capturedKey);
+    ::Input::Device::_singleton->ResetState();
 
     // Refresh the entire input bind list
-    OptionsDialog_PopulateInputBindList(self);
+    PopulateInputBindList();
 
 cleanup:
     ;
@@ -1624,19 +1500,16 @@ cleanup:
 // ============================================================
 // OptionsDialog standalone scaffolding
 // ============================================================
-// Provides a 10-slot vtable + ctor + factory + REGISTER_TYPE so that
-// MainMenuDialog::OpenOptions can produce a real OptionsDialog instance.
-//
 // Vtable layout (exe @ 0x14015ceb0, 10 slots):
 //   +0x00 Slot0 Dtor                — sets vtable, ~DialogInstance, conditional free
 //   +0x08 Slot1 TypeName            — exe const-load
 //   +0x10 Slot2 TypeId              — exe const-load
 //   +0x18 Slot3 Persist             — runtime thunk
-//   +0x20 Slot4 Setup               — REIMPL'd above (OptionsDialog_Startup)
-//   +0x28 Slot5 Shutdown            — REIMPL'd above (OptionsDialog_Shutdown)
+//   +0x20 Slot4 OnOpened            — above
+//   +0x28 Slot5 OnClosed            — above
 //   +0x30 Slot6 OnUpdateLayout      — runtime thunk
 //   +0x38 Slot7 OnUpdate            — runtime thunk
-//   +0x40 Slot8 OnEvent             — REIMPL'd above (OptionsDialog_OnEvent)
+//   +0x40 Slot8 OnElementEvent      — above
 //   +0x48 Slot9 OnSerializeSettings — runtime thunk
 //
 // 10 slots vs MainMenuDialog's 20: OptionsDialog has only the DialogInstance
@@ -1661,11 +1534,45 @@ OptionsDialog::OptionsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 // a zero-filled object; this keeps the zero fields over the default base ctor.
 OptionsDialog::OptionsDialog() { ZeroFields(); }
 
+// +0xB8..+0x1B8 = 0, in address order (the saved-* dwords pairwise, H7).
 void OptionsDialog::ZeroFields() {
-    char* base = reinterpret_cast<char*>(this);
-    for (size_t off = 0xB8; off < sizeof(OptionsDialog); off += 8) {
-        *reinterpret_cast<uint64_t*>(base + off) = 0;
-    }
+    comboRenderer = nullptr;
+    comboAdapter = nullptr;
+    comboResolution = nullptr;
+    comboRefresh = nullptr;
+    comboAntialias = nullptr;
+    checkFullscreen = nullptr;
+    checkVSync = nullptr;
+    comboFilter = nullptr;
+    comboShadowRes = nullptr;
+    comboShadowQuality = nullptr;
+    comboReflectionQuality = nullptr;
+    inputList = nullptr;
+    checkSoftwareMouse = nullptr;
+    sliderUI = nullptr;
+    sliderMusic = nullptr;
+    sliderAmbient = nullptr;
+    sliderEffect = nullptr;
+    sliderUIScale = nullptr;
+    comboAutosave = nullptr;
+    checkStatusIcon = nullptr;
+    sliderStatusIcon = nullptr;
+    sliderStatusIconScale = nullptr;
+    checkEdgeScroll = nullptr;
+    checkShowCelsius = nullptr;
+    checkShowWeather = nullptr;
+    checkAutoslow = nullptr;
+    checkAutopause = nullptr;
+    savedRenderer = 0;
+    savedAdapter = 0;
+    savedWidth = 0;
+    savedHeight = 0;
+    savedRefreshNum = 0;
+    savedRefreshDen = 0;
+    savedAntialias = 0;
+    savedFilter = 0;
+    checkMouseClip = nullptr;
+    tabOptions = nullptr;
 }
 
 // create 0x140012df0: MemAlloc(0x1c0, 8), then the ctor.
@@ -1681,18 +1588,18 @@ void* OptionsDialog::CreateInPlaceObject(void* storage) {
 }
 
 
-// The ctor DOOR, reached by address: fn_OptionsDialog_Ctor (engine_funcs.cpp)
-// resolves 0x140075150. Signature matches fn_OptionsDialog_Ctor_t.
-void* OptionsDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
-                                    void* parentIBP) {
+// The retail-ABI ctor entry (0x140075150). B4 FORWARD: 1 outside caller
+// (Dialog/mainmenudialog.cpp, MainMenuDialog::OpenOptions).
+OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui,
+                                             const UI::Dialog* extRes,
+                                             const Object::InternalPtr<UI::DialogInstance>* parentIBP) {
     if (!self) return nullptr;
     printf("[OptionsDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
-           self, ui, extRes, parentIBP);
+           self, (void*)ui, (const void*)extRes, (const void*)parentIBP);
     Object::InternalPtr<UI::DialogInstance> parent;
     if (parentIBP)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
-    return ::new (self) OptionsDialog(static_cast<UI::UserInterface*>(ui),
-                                      static_cast<const UI::Dialog*>(extRes), parent);
+        parent = *parentIBP;
+    return ::new (self) OptionsDialog(ui, extRes, parent);
 }
 
 // Parent literal EXACTLY retail's (RegisterType_OptionsDialog 0x14014c440 passes

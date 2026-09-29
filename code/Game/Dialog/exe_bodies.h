@@ -64,8 +64,14 @@ extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed, vo
 void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140071d30
 
 // ---- optionsdialog.cpp
-extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface);  // 0x140099260
-void* OptionsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x140075150
+// Free: reads the GameContainer (Game/game.h) through its first argument.
+struct GameContainer;
+class OptionsDialog;
+namespace UI { class UserInterface; class Dialog; class DialogInstance; }
+namespace Object { template <class T> class InternalPtr; }
+extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface);  // 0x140099260
+// B4 FORWARD: 1 outside caller (Dialog/mainmenudialog.cpp) -> OptionsDialog's ctor
+OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140075150
 
 // ---- saveloaddialog.cpp
 extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes, void* parentIBP, uint8_t mode, void* enginePtr, void* gameWorldPtr);  // 0x1400b8270
