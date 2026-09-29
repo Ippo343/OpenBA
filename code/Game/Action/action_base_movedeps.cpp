@@ -36,6 +36,8 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include "Component/ModelDescription.h"   // ENDGAME B.3.8 CB3: ModelDescription::TypeId()
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // FUN_1400a9290 — task-due / break probability check.
@@ -54,19 +56,24 @@ namespace {
 inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 } // namespace
 
-bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
+bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng) {
     float weight = pair[1];
     if (!(0.0f < weight)) {                       // weight <= 0 (COMISS 0 < weight)
-        *reinterpret_cast<uint64_t*>(timeV) = 0;
+        time->_ticks = 0;
         return false;
     }
     float k1 = RdataF(kRdata_1401721b8);   // 0x1401721b8
     float k2 = kRdata_140172234;           // 0x140172234
     float denom = pair[0] * k1 * k2;
-    float secs = reinterpret_cast<const System::Time*>(timeV)->AsSeconds();   // B.3.4b bridge
-    *reinterpret_cast<uint64_t*>(timeV) = 0;
-    float roll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
+    float secs = time->AsSeconds();
+    time->_ticks = 0;
+    float roll = rng->RandFloat();
     return roll < secs / (denom * weight);
+}
+
+// B4 FORWARD: the time arrives as an int64_t* / void* from the callers.
+bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
+    return BreakTimeCheck(reinterpret_cast<System::Time*>(timeV), pair, reinterpret_cast<System::Random*>(rng));
 }
 
 // ============================================================
@@ -87,53 +94,48 @@ bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
 // B3R: ??0Time@System@@QEAA@M@Z is RtSystem_Time_Ctor, 0x1400c3470 is
 // ActHunt_NotifyEntityChanged_c3470, both called by name.
 
-void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5) {
-    // Standalone-inert guard: `self` is the animation target (a ModelComponent / resource
-    // component). In retail it is never null — the caller resolved it from a live entity.
-    // In standalone some finds resolve null when a shared type-id global is the unfilled
-    // sentinel (e.g. AnimateNaturalResource → WorkBase_FindComponent_52c0 on a tree, whose
-    // c7b30 global stays 0xFFFFFFFF). The animation then targets the inert resource-entity
-    // MeshInstance layer, which isn't brought up. Skip as a safe no-op rather than deref
-    // null at self+0x18 — matches this function's existing inert-world no-op philosophy
-    // below and the move-tick tail's inert-ModelComponent guards. The live-world path
-    // (self non-null) is unchanged. This keeps the organic forester cut sequence crash-safe once
-    // the citizen actually arrives at a tree (the MoveTo/arrival keystone now works).
-    if (self == 0) return;
+void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5) {
+    // Standalone-inert guard: `model` is the animation target. In retail it is never null —
+    // the caller resolved it from a live entity. In standalone some finds resolve null when
+    // a shared type-id global is the unfilled sentinel (e.g. AnimateNaturalResource on a
+    // tree). Skip as a safe no-op rather than deref null at +0x18. The live-world path is
+    // unchanged.
+    if (model == nullptr) return;
 
-    void* obj = *reinterpret_cast<void**>(self + 0x18);
-    // The type-gate validates the ModelComponent's description (self+0x18) is a
-    // ModelDescription (DAT_1401c7a88 — mislabeled "FenceDescription" in the global;
-    // its DATA writer is ModelDescription_Register @ 0x14014f435). That shared type-id
-    // global is the unfilled 0xFFFFFFFF sentinel in standalone, so resolve it
-    // self-contained via Object::GetTypeIdByName (the same real-CRC source the live
-    // factories use). Without this the gate fails → animHolder null → PlayAnimation
-    // skipped → the citizen never registers an animation group → AnimationManager::Update
-    // no-ops → the skinned bone palette stays frozen (RenderDoc-verified).
+    Description* obj = model->_description;
+    // The type-gate validates the ModelComponent's description is a ModelDescription
+    // (DAT_1401c7a88; its DATA writer is ModelDescription_Register @ 0x14014f435). Without
+    // it the gate fails → PlayAnimation skipped → the skinned bone palette stays frozen
+    // (RenderDoc-verified).
     const uint32_t s_tidModelDesc = ModelDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
     bool derived = s_tidModelDesc ? ::Object::IsDerivedFromNullSafe(obj, s_tidModelDesc) : false;
-    void* animHolder = derived ? obj : nullptr;
+    const ModelDescription* animHolder = derived ? static_cast<const ModelDescription*>(obj) : nullptr;
 
-    uint8_t timeA[8] = {0};  // p4
-    uint8_t timeB[8] = {0};  // p3
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeA), p4); RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeB), p3);
+    System::Time timeA = {};  // p4
+    System::Time timeB = {};  // p3
+    RtSystem_Time_Ctor(&timeA, p4); RtSystem_Time_Ctor(&timeB, p3);
 
-    // Defensive: the original reads *(animHolder+0x20) unconditionally (it relies on the
+    // Defensive: the original reads the mesh groups unconditionally (it relies on the
     // type always being derived here). Guard so a type miss in the inert standalone world
     // is a safe no-op rather than a null deref.
     if (animHolder) {
-        short animIndex = *reinterpret_cast<short*>(self + 0x164);
-        uintptr_t animArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(animHolder) + 0x20);
-        void* animData = *reinterpret_cast<void**>(animArray + static_cast<uintptr_t>(animIndex) * 0x18);
-        // PlayAnimation(meshInst=self+0x28, animData, animId, &tB=p3, &tA=p4, p5)
-        reinterpret_cast<Graphics::MeshInstance*>(self + 0x28)
-            ->PlayAnimation(Graphics::ExternalPtrHandle{animData}, static_cast<int>(animId),
-                            timeB, timeA, p5);   // B.3.5 bridge
+        short animIndex = model->meshGroup;
+        void* animData = animHolder->_meshGroups[static_cast<uintptr_t>(animIndex)].field_0x00;
+        // PlayAnimation(meshInstance, animData, animId, &tB=p3, &tA=p4, p5)
+        model->meshInstance.PlayAnimation(Graphics::ExternalPtrHandle{animData}, static_cast<int>(animId),
+                                          &timeB, &timeA, p5);
     }
 
-    uint32_t old = *reinterpret_cast<uint32_t*>(self + 0x20);
+    uint32_t old = model->_flags;
     uint32_t nw = old | 4u;
-    *reinterpret_cast<uint32_t*>(self + 0x20) = nw;
-    if (((nw ^ old) & 0xffff) != 0 && *reinterpret_cast<uintptr_t*>(self + 0x10) != 0) {
-        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(self + 0x10));   // 0x1400c3470
+    model->_flags = nw;
+    if (((nw ^ old) & 0xffff) != 0 && model->_entity != nullptr) {
+        NotifyEntityChanged(model->_entity);   // 0x1400c3470
     }
+}
+
+// B4 FORWARD: outside callers (Component/animalcomponent.cpp, Component/firecomponent.cpp,
+// Action/action_base_cnr.cpp)
+void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5) {
+    PlayModelAnimation(reinterpret_cast<ModelComponent*>(self), animId, p3, p4, p5);
 }

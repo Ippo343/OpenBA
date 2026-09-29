@@ -109,7 +109,7 @@ void Pf_SetFlagRefreshUpdate_107260(Component* self) {
     uint32_t uVar2 = uVar1 | 0x100000;
     self->_flags = uVar2;
     if ((((uVar2 ^ uVar1) & 0xffff) != 0) && (self->_entity != nullptr)) {
-        ActHunt_NotifyEntityChanged_c3470(self->_entity);   // 0x1400c3470
+        NotifyEntityChanged(self->_entity);   // 0x1400c3470
     }
     CharacterComponent* character = self->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (0 < character->currentAction + 1) {

@@ -34,6 +34,26 @@
 #include "Work/Work.h"         // B.3.x W0: Work::GetTarget by name
 #include "Component/CharacterComponent.h"   // ENDGAME B.3.8 CB3: CharacterComponent::TypeId()
 #include "Component/CharacterDescription.h"
+#include "Component/CitizenComponent.h"
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/Profession.h"
+#include "Game/WorkScheduler.h"
+
+namespace {
+// A node of the WorkScheduler id trees (key = the work id).
+struct WorkIdNode {
+    int32_t     key;        // +0x00
+    uint8_t     _pad04[4];  // +0x04
+    Work*       work;       // +0x08 InternalPtr<Work>
+    WorkIdNode* parent;     // +0x10
+    WorkIdNode* left;       // +0x18
+    WorkIdNode* right;      // +0x20
+};
+static_assert(offsetof(WorkIdNode, work) == 0x08, "WorkIdNode::work @ +0x08");
+static_assert(offsetof(WorkIdNode, left) == 0x18, "WorkIdNode::left @ +0x18");
+static_assert(offsetof(WorkIdNode, right) == 0x20, "WorkIdNode::right @ +0x20");
+}  // namespace
 
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
@@ -63,26 +83,30 @@ static inline uintptr_t GameWorld() {
 // match (DAT_1401c7078) runs IsDerivedFrom before storing through the out IBP.
 //
 // 1:1 port — type-ID cell at DAT_1401c7078 is CharacterComponent's (Table 1).
-void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
-    void* found = nullptr;
+CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
+    CharacterComponent* found = nullptr;
     uint32_t wantId = CharacterComponent::TypeId();
-    int n = *reinterpret_cast<int*>(entity + 0x38);
+    int n = entity->_componentCount;
+    // The tree's guard: the type-id checks (retail compares with the cell unconditionally).
     if (n > 0 && wantId != 0 && wantId != 0xFFFFFFFFu) {
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+        ::Object::InternalPtr<Component>* list = entity->_components;
         for (int i = 0; i < n; i++) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+            Component* comp = list[i].Get();
+            uint32_t t = comp->Type();   // slot 2
             if (t == wantId) {
-                void* c = *slot;
-                found = ::Object::IsDerivedFromNullSafe(c, wantId) ? c : nullptr;
+                Component* c = list[i].Get();
+                found = ::Object::IsDerivedFromNullSafe(c, wantId) ? static_cast<CharacterComponent*>(c) : nullptr;
                 break;
             }
         }
     }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+    return found;
+}
+
+// B4 FORWARD: outside callers in ~20 files (Action, Component, Work)
+void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
+    return new (retIBP) ::Object::InternalPtr<CharacterComponent>(
+        FindCharacterComponent(reinterpret_cast<const ComponentEntity*>(entity)));
 }
 
 // ============================================================
@@ -211,17 +235,19 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
 // Sets a component's facing from a Vector3 direction. Clears a byte at +0x28,
 // normalizes (x,y,0) into +0x2c..+0x34, stores Heading(dir) at +0x3c.
 // Caller signature: void fn(void* comp, void* vector3)
-void ActMv_SetFacingDirection_a060(void* comp, void* vector3) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(comp);
-    const Math::Vector3& dir = *reinterpret_cast<const Math::Vector3*>(vector3);  // B.3.1 bridge
-
-    *reinterpret_cast<uint8_t*>(self + 0x28) = 0;
+void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir) {
+    character->field_0x28 = false;
     Math::Vector3 tmp(dir.x, dir.y, 0.0f);
     Math::Vector3 n = tmp.Normalize();
-    *reinterpret_cast<float*>(self + 0x2c) = n.x;
-    *reinterpret_cast<float*>(self + 0x30) = n.y;
-    *reinterpret_cast<float*>(self + 0x34) = n.z;
-    *reinterpret_cast<float*>(self + 0x3c) = dir.Heading();
+    character->field_0x2C.x = n.x;
+    character->field_0x2C.y = n.y;
+    character->field_0x2C.z = n.z;
+    character->field_0x3C = dir.Heading();
+}
+
+// B4 FORWARD: outside callers (Action/performwork.cpp, playanimation.cpp; Component, Work files)
+void ActMv_SetFacingDirection_a060(void* comp, void* vector3) {
+    SetFacingDirection(reinterpret_cast<CharacterComponent*>(comp), *reinterpret_cast<const Math::Vector3*>(vector3));
 }
 
 // ============================================================
@@ -293,14 +319,19 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
 //     XMM3=*(lVar1+0x2c), stack5=p3 float).  Verified in disassembly: XMM6=p3, XMM7=p4.
 //   self+0x38 = *(animObj+0x13c) * p4  (speed multiplier).
 // Caller signature: void fn(void* self, uint32_t animId, float p3, float p4)
-void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
-    uintptr_t sub = *reinterpret_cast<uintptr_t*>(self + 0x78);
-    uintptr_t animObj = *reinterpret_cast<uintptr_t*>(self + 0x68);
+void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4) {
+    const CharacterDescription* desc = character->characterDescription;
     // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
-    ActMvDep_AnimHelper_50f0(animObj, animId, 0.0f, *reinterpret_cast<float*>(sub + 0x2c), p3);   // 0x1401250f0
-    uintptr_t animObj2 = *reinterpret_cast<uintptr_t*>(self + 0x68);
-    *reinterpret_cast<float*>(self + 0x38) = *reinterpret_cast<float*>(animObj2 + 0x13c) * p4;
+    PlayModelAnimation(character->modelComponent, animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
+    // LEFT: ModelComponent +0x13c lies inside the embedded Graphics::MeshInstance (+0x28),
+    // at MeshInstance +0x114, which Runtime's header does not name.
+    const uint8_t* model = reinterpret_cast<const uint8_t*>(character->modelComponent);
+    character->field_0x38 = *reinterpret_cast<const float*>(model + 0x13c) * p4;
+}
+
+// B4 FORWARD: outside callers (Action/moveto.cpp, performwork.cpp, playanimation.cpp; Component files)
+void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
+    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);
 }
 
 // ============================================================
@@ -315,68 +346,69 @@ void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
 //     to fetch a record; read float at out+0x54; FUN_1400a9290(self+0x200, &thatFloat,
 //     gw+0xd8 Random) decides. On success stash out at self+0x1f8 and return it (nonzero).
 // Caller signature: uint8_t fn(void* entity)
-uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(entityp);
-    uintptr_t gw = GameWorld();
+uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
 
-    uint32_t flags = *reinterpret_cast<uint32_t*>(gw + 0xd0);
+    uint32_t flags = gw->m_gameFlags;
     if (((flags >> 8) & 1) != 0)
         return 0;
 
-    if (*reinterpret_cast<uintptr_t*>(self + 0x1f8) != 0)
+    if (citizen->pendingProfession != nullptr)
         return 1;
 
-    int taskId = *reinterpret_cast<int*>(self + 0x30);
+    int taskId = citizen->field_0x30;
     if (taskId < 0)
         return 0;
 
-    // AVL tree search at gw+0x118 -> +0x30 (root node).
-    int* node = *reinterpret_cast<int**>(*reinterpret_cast<uintptr_t*>(gw + 0x118) + 0x30);
-    void* valueIBP = nullptr;       // local_res10 (longlong*)
-    uintptr_t valueObj = 0;
+    // The scheduler's first id tree (WorkScheduler::trees[0], +0x30): int key at +0x00,
+    // the Work at +0x08, children at +0x18 / +0x20.
+    // LEFT: WorkSchedulerTree::root (Game/WorkScheduler.h) is declared void*.
+    const WorkIdNode* node = reinterpret_cast<const WorkIdNode*>(gw->m_tutorial->trees[0].root);
+    Work* value = nullptr;       // local_res10
     bool haveValue = false;
     while (node != nullptr) {
-        if (taskId < *node) {
-            node = *reinterpret_cast<int**>(node + 6);      // +0x18
-        } else if (taskId > *node) {
-            node = *reinterpret_cast<int**>(node + 8);      // +0x20
+        if (taskId < node->key) {
+            node = node->left;
+        } else if (taskId > node->key) {
+            node = node->right;
         } else {
-            valueObj = *reinterpret_cast<uintptr_t*>(node + 2);  // +0x08
-            valueIBP = reinterpret_cast<void*>(valueObj);
+            value = node->work;
             haveValue = true;
             break;
         }
     }
     if (!haveValue) {
         // InternalBasePtr ctor (&local_res10, 0): value stays null.
-        new (&valueIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        valueObj = reinterpret_cast<uintptr_t>(valueIBP);
+        value = nullptr;
     }
 
-    if (valueObj == 0)
+    if (value == nullptr)
         return 0;
 
-    uintptr_t v = reinterpret_cast<uintptr_t>(valueIBP);
-
-    // value->vtable[+0x50](value, &out) -> record ptr in 'out'.
-    uintptr_t outRec = 0;
-    // The value is the scheduler's work IBP (gw+0x118 id map, filled by
-    // CitizenAI_impl_88a0 0x1400f88a0 with the posted Work leaves).
-    reinterpret_cast<Work*>(v)->GetTarget(&outRec);   // B.3.x bridge (slot 10, retslot)
+    // value->vtable[+0x50](value, &out) -> the Profession in 'out'. The value is the
+    // scheduler's work (filled by CitizenAI_impl_88a0 0x1400f88a0 with the posted Work
+    // leaves).
+    Profession* outRec = nullptr;
+    value->GetTarget(&outRec);   // slot 10, retslot
 
     // Original copies 8 bytes (*(undefined8*)(rec+0x54)) — a9290 reads BOTH floats
-    // (pair[0] = value, pair[1] = weight). Passing a single float would feed it stack
-    // garbage for pair[1]. Copy the full pair.
+    // (pair[0] = value, pair[1] = weight).
     float duePair[2];
-    duePair[0] = *reinterpret_cast<float*>(outRec + 0x54);
-    duePair[1] = *reinterpret_cast<float*>(outRec + 0x58);
-    void* rng = *reinterpret_cast<void**>(gw + 0xd8);
-    bool ok = ActMvDep_TimeCheck_a9290(reinterpret_cast<void*>(self + 0x200), duePair, rng);   // 0x1400a9290
+    duePair[0] = outRec->skillMult1;
+    duePair[1] = outRec->skillMult2;
+    // LEFT: CitizenComponent::field_0x200 (block COMP-b's header) is declared int64_t, not
+    // System::Time.
+    bool ok = BreakTimeCheck(reinterpret_cast<System::Time*>(&citizen->field_0x200), duePair, gw->m_random);   // 0x1400a9290
     if (ok) {
-        *reinterpret_cast<uintptr_t*>(self + 0x1f8) = outRec;
+        citizen->pendingProfession = outRec;
         return 1;
     }
     return 0;
+}
+
+// B4 FORWARD: outside callers (Action/performwork.cpp; Work files)
+uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
+    return CitizenBreakCheck(reinterpret_cast<CitizenComponent*>(entityp));
 }
 
 // ============================================================

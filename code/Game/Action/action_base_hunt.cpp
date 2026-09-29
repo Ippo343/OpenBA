@@ -25,6 +25,9 @@
 #include "Component/WildAnimalComponent.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Component/HuntDescription.h"
+#include "Component/HuntComponent.h"
+#include "Entity/EntityList.h"
+#include "Action/PathSearch.h"   // RawArray
 
 // ============================================================
 // FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
@@ -43,157 +46,149 @@ void* ActHunt_FindComponent_27e0(uintptr_t entity, void* retIBP) {
 }
 
 // ============================================================
-// HuntAnimal_helper_2a80 (0x140122a80) — animal-hold-time check.
+// HuntAnimal_helper_2a80 (0x140122a80) — is the hunt done: the HuntComponent's
+// description, when a HuntDescription, gives the hunt time (_f20 * DAT_140172234 seconds);
+// returns whether that Time (in raw ticks) is <= the component's huntProgress.
 // ============================================================
-// obj = self+0x18; if IsDerivedFrom(obj, DAT_1401c78c8) keep it, else null. Build a
-// Time from (desc->holdSeconds @+0x20) * DAT_140172234, and return whether that Time
-// (in raw ticks) is <= self->heldTime (raw longlong at self+0x50).
-//
-// Caller signature: bool fn(void* self)
-bool ActHunt_IsAnimalReady_2a80(void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* obj = *reinterpret_cast<void**>(s + 0x18);
-    void* desc = nullptr;
-    if (::Object::IsDerivedFromNullSafe(obj, HuntDescription::TypeId())) desc = obj;
+bool HuntIsReady(const HuntComponent* hunt) {
+    Description* obj = hunt->_description;
+    const HuntDescription* desc = nullptr;
+    if (::Object::IsDerivedFromNullSafe(obj, HuntDescription::TypeId())) desc = static_cast<const HuntDescription*>(obj);
 
     float scale = kRdata_140172234;   // 0x140172234 = 300.0f
-    float holdSeconds = desc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20) : 0.0f;
+    // The tree's guard: retail reads the description unconditionally.
+    float holdSeconds = desc ? desc->_f20 : 0.0f;
 
-    int64_t timeTicks = 0;
-    {
-        int64_t tmp = 0;
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&tmp), holdSeconds * scale);   // ??0Time@System@@QEAA@M@Z
-        timeTicks = tmp;
-    }
-    return timeTicks <= *reinterpret_cast<int64_t*>(s + 0x50);
+    System::Time time = {};
+    RtSystem_Time_Ctor(&time, holdSeconds * scale);   // ??0Time@System@@QEAA@M@Z
+    return time._ticks <= hunt->huntProgress._ticks;
 }
 
 // ============================================================
-// FUN_140003110 (0x140003110) — dynamic 8-byte-element array set-count + value insert.
+// FUN_140003110 (0x140003110) — Array<qword>::SetSize(n, fill).
 // ============================================================
-// arr layout: [0]=base ptr, +8=count(int), +0xc=capacity(int). Grows the array to
-// param_2 elements (capacity grows: if first growth beyond a non-zero count by exactly
-// 1, cap *= 3), then fills [oldCount..param_2) with param_3's value (the rows below the
-// old count are copied from the OLD buffer; new rows take *param_3). Frees the old
-// buffer if reallocated.
-//
-// Caller signature: void fn(void* arr, int newCount, void* valuePtr)
-void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
-    int64_t* arr = reinterpret_cast<int64_t*>(arrV);
-    int oldCount = static_cast<int>(arr[1]);          // (int)param_1[1]
+// Grows the array to newCount elements (capacity grows: if first growth beyond a non-zero
+// count by exactly 1, cap *= 3), then fills [start..newCount) — the rows below the old count
+// are copied from the OLD buffer; new rows take *fill. Frees the old buffer if reallocated.
+void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill) {
+    int oldCount = arr->size;
     if (newCount == oldCount) return;
 
-    void* oldBase = reinterpret_cast<void*>(arr[0]);
-    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(arr) + 8) = newCount;   // count = newCount
-    int* pCap = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(arr) + 0xc);
-    if (*pCap < newCount) {
-        *pCap = newCount;
+    void** oldBase = arr->data;
+    arr->size = newCount;
+    if (arr->capacity < newCount) {
+        arr->capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0)
-            *pCap = newCount * 3;
-        void* nb = System::MemoryAllocator::MemAlloc(
-                       static_cast<uint64_t>(static_cast<int64_t>(*pCap)) << 3, 8);
-        arr[0] = reinterpret_cast<int64_t>(nb);
+            arr->capacity = newCount * 3;
+        arr->data = static_cast<void**>(System::MemoryAllocator::MemAlloc(
+                       static_cast<uint64_t>(static_cast<int64_t>(arr->capacity)) << 3, 8));
     }
 
-    int startIdx = (oldBase == reinterpret_cast<void*>(arr[0])) ? oldCount : 0;
+    int startIdx = (oldBase == arr->data) ? oldCount : 0;
     for (int64_t i = startIdx; i < newCount; i++) {
-        void** dst = reinterpret_cast<void**>(arr[0] + i * 8);
+        void** dst = arr->data + i;
         if (dst) {
             *dst = nullptr;
             void* srcVal;
             if (i < oldCount)
-                srcVal = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oldBase) + i * 8);
+                srcVal = oldBase[i];
             else
-                srcVal = *reinterpret_cast<void**>(valuePtr);
+                srcVal = *fill;
             *dst = srcVal;
         }
     }
 
-    if (oldBase != reinterpret_cast<void*>(arr[0]))
+    if (oldBase != arr->data)
         System::MemoryAllocator::MemFree(oldBase);
 }
 
 // ============================================================
-// FUN_1400c2ea0 (0x1400c2ea0) — mark entity (and removable components) for removal.
+// FUN_1400c2ea0 (0x1400c2ea0) — mark an entity (and its removable components) for removal.
 // ============================================================
-// If self->flags(+0x40) bit 1 (mask 2) is set: walk component list (base +0x30,
-// count +0x38); for each component whose flags(+0x20)>>1 bit is set, invoke its
-// vtable +0x38 (OnRemove). Always finally OR flag bit 0x400 into self+0x40.
-//
-// Caller signature: void fn(void* self)
-void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    uint32_t* pFlags = reinterpret_cast<uint32_t*>(s + 0x40);
-    // Diagnostic: the +0x38 removed-from-world broadcast is the engine's dangling-
-    // drawable protection (each drawable component RemoveObject's its scene geometry
-    // here). Trace which components it visits/skips so a live run pins any leak.
-    if ((*reinterpret_cast<uint8_t*>(s + 0x40) & 2) != 0) {
-        int count = *reinterpret_cast<int*>(s + 0x38);
+// If the entity's flags have bit 1 (mask 2): walk its components; each whose _flags bit 1
+// is set gets OnRemove (slot 7). Always finally OR 0x400 into the entity's flags.
+void MarkEntityForRemoval(ComponentEntity* entity) {
+    if ((static_cast<uint8_t>(entity->_entityFlags) & 2) != 0) {
+        int count = entity->_componentCount;
         if (count >= 1) {
-            uintptr_t base = *reinterpret_cast<uintptr_t*>(s + 0x30);
+            ::Object::InternalPtr<Component>* base = entity->_components;
             for (int64_t i = 0; i < count; i++) {
-                void* node = *reinterpret_cast<void**>(base + i * 8);
-                // component flags at node+0x20 (uint), bit 1 (>>1 & 1)
-                uint32_t cflags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(node) + 0x20);
-                bool visits = ((cflags >> 1) & 1) != 0;
+                Component* node = base[i].Get();
+                bool visits = ((node->_flags >> 1) & 1) != 0;
                 if (visits) {
-                    reinterpret_cast<Component*>(node)->OnRemove();   // B.3.x bridge (slot 7)
+                    node->OnRemove();   // slot 7
                 }
             }
         }
     }
-    *pFlags |= 0x400u;
+    entity->_entityFlags |= 0x400u;
 }
 
 // ============================================================
-// FUN_1400c3470 (0x1400c3470) — recompute entity component-flags + (de)register in
-// the two world flag-buckets. HIGH-REUSE (called from many Component/Work files).
+// FUN_1400c3470 (0x1400c3470) — ComponentEntity::RefreshEntityFlags: recompute the entity's
+// flags (the OR of every component's low 16 flag bits) and, if the entity is in an
+// EntityList, stage it for the update tree when bit 4 changed and for the post-update tree
+// when bit 0x10 changed (0x140003110 appends).
+// HIGH-REUSE (called from many Component/Work files).
+// The tree has a second body of this address, the member ComponentEntity::RefreshEntityFlags
+// (Entity/componententity.cpp, block WORK-a), which skips null component slots and appends
+// through Collection::Array::SetSize; the C spelling's callers keep this one (no null skip,
+// the 0x140003110 port) until the two are reconciled.
 // ============================================================
-// oldFlags = self+0x40; reset self+0x40=0; OR in each component's flag-word (uint16 at
-// component+0x20) by walking the component list (base +0x30, count +0x38). If self has
-// an owning entity (self+0x10 != 0): when bit 4 (mask 4) of the flag word changed, push
-// self into the world list at owner+0x88 (count owner+0x90); when bit 0x10 changed,
-// push into owner+0x98 (count owner+0xa0). Pushes use FUN_140003110.
-//
-// Caller signature: void fn(void* self)
-void ActHunt_NotifyEntityChanged_c3470(void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    uint32_t oldFlags = *reinterpret_cast<uint32_t*>(s + 0x40);
-    int count = *reinterpret_cast<int*>(s + 0x38);
-    *reinterpret_cast<uint32_t*>(s + 0x40) = 0;
+void NotifyEntityChanged(ComponentEntity* entity) {
+    uint32_t oldFlags = entity->_entityFlags;
+    int count = entity->_componentCount;
+    entity->_entityFlags = 0;
 
     if (count > 0) {
-        uintptr_t base = *reinterpret_cast<uintptr_t*>(s + 0x30);
+        ::Object::InternalPtr<Component>* base = entity->_components;
         for (int64_t i = 0; i < count; i++) {
-            void** slot = reinterpret_cast<void**>(base + i * 8);
-            void* comp = *slot;
-            uint16_t cflags = *reinterpret_cast<uint16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x20);
-            *reinterpret_cast<uint32_t*>(s + 0x40) |= static_cast<uint32_t>(cflags);
+            Component* comp = base[i].Get();
+            entity->_entityFlags |= static_cast<uint32_t>(static_cast<uint16_t>(comp->_flags));
         }
     }
 
-    uintptr_t owner = *reinterpret_cast<uintptr_t*>(s + 0x10);
-    if (owner != 0) {
-        uint32_t newFlags = *reinterpret_cast<uint32_t*>(s + 0x40);
+    // LEFT: ComponentEntity::_entityList (block WORK-a's header) is declared void*.
+    EntityList* owner = reinterpret_cast<EntityList*>(entity->_entityList);
+    if (owner != nullptr) {
+        uint32_t newFlags = entity->_entityFlags;
         if (((oldFlags ^ newFlags) & 4) != 0) {
-            void* ibp = nullptr;
-            new (&ibp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(owner + 0x88),
-                                          *reinterpret_cast<int*>(owner + 0x90) + 1, &ibp);
+            ComponentEntity* ibp = entity;
+            ActHunt_DynArraySetCount_3110(&owner->stagingUpdate, owner->stagingUpdate.count + 1, &ibp);
         }
         if (((oldFlags ^ newFlags) & 0x10) != 0) {
-            void* ibp = nullptr;
-            new (&ibp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(owner + 0x98),
-                                          *reinterpret_cast<int*>(owner + 0xa0) + 1, &ibp);
+            ComponentEntity* ibp = entity;
+            ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate, owner->stagingPostUpdate.count + 1, &ibp);
         }
     }
 }
 
 // ============================================================
-// CompleteRoad_helper_c640 (0x14009c640) — RETIRED duplicate. The registered port is
-// Pf_FinalizeRoadTile_9c640 in action_pf_roots_road.cpp (wired by reg_pf_roots_road.cpp),
-// which calls its sub-helpers 9f2f0/9e0e0/1a6e0 directly as registered ports.
+// CompleteRoad_helper_c640 (0x14009c640) — RETIRED duplicate. The port is
+// Map::FinishRoadCell in action_pf_roots_road.cpp.
 // ============================================================
+
+// ===========================================================================
+// B4 FORWARD: the C spellings other blocks' files still call, one line each.
+// ===========================================================================
+
+// B4 FORWARD: 1 outside caller (Action/huntanimal.cpp, block ACT-b)
+bool ActHunt_IsAnimalReady_2a80(void* self) {
+    return HuntIsReady(reinterpret_cast<const HuntComponent*>(self));
+}
+
+// B4 FORWARD: outside callers in many files (the arrays arrive as void*)
+void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
+    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arrV), newCount,
+                      reinterpret_cast<void* const*>(valuePtr));
+}
+
+// B4 FORWARD: outside callers in many files
+void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
+    MarkEntityForRemoval(reinterpret_cast<ComponentEntity*>(self));
+}
+
+// B4 FORWARD: outside callers in many files
+void ActHunt_NotifyEntityChanged_c3470(void* self) {
+    NotifyEntityChanged(reinterpret_cast<ComponentEntity*>(self));
+}

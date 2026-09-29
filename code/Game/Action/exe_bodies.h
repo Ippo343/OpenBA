@@ -38,12 +38,27 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId);  // 0x1401173b0
 // ---- action_base_hunt.cpp
 void* ActHunt_FindComponent_5500(uintptr_t entity, void* retIBP);  // 0x140005500
 void* ActHunt_FindComponent_27e0(uintptr_t entity, void* retIBP);  // 0x1400227e0
-bool ActHunt_IsAnimalReady_2a80(void* self);  // 0x140122a80
-void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr);  // 0x140003110
-void ActHunt_MarkEntityRemoval_c2ea0(void* self);  // 0x1400c2ea0
-void ActHunt_NotifyEntityChanged_c3470(void* self);  // 0x1400c3470
+class HuntComponent;          // Component/HuntComponent.h
+class ComponentEntity;        // Entity/ComponentEntity.h
+template <class T> struct RawArray;   // Action/PathSearch.h
+bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
+void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
+void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
+void NotifyEntityChanged(ComponentEntity* entity);  // 0x1400c3470 (a second body of ComponentEntity::RefreshEntityFlags)
+bool ActHunt_IsAnimalReady_2a80(void* self);  // 0x140122a80 B4 FORWARD -> HuntIsReady
+void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr);  // 0x140003110 B4 FORWARD -> QwordArraySetSize
+void ActHunt_MarkEntityRemoval_c2ea0(void* self);  // 0x1400c2ea0 B4 FORWARD -> MarkEntityForRemoval
+void ActHunt_NotifyEntityChanged_c3470(void* self);  // 0x1400c3470 B4 FORWARD -> NotifyEntityChanged
 
 // ---- action_base_move.cpp
+class CharacterComponent;     // Component/CharacterComponent.h
+class CitizenComponent;       // Component/CitizenComponent.h
+class ComponentEntity;        // Entity/ComponentEntity.h
+namespace Math { class Vector3; }
+CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
+void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir);  // 0x14010a060
+void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4);  // 0x14010a1f0
+uint8_t CitizenBreakCheck(CitizenComponent* citizen);  // 0x140116650
 void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP);  // 0x1400012d0
 void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer);  // 0x140022970
 void ActMv_SetFacingDirection_a060(void* comp, void* vector3);  // 0x14010a060
@@ -56,6 +71,10 @@ void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
 void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void*, void* param4);  // 0x1400c8c10
 
 // ---- action_base_movedeps.cpp
+class ModelComponent;         // Component/ModelComponent.h
+namespace System { class Time; class Random; }
+bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290
+void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng);  // 0x1400a9290
 void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 

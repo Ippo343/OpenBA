@@ -399,7 +399,7 @@ void HerdStartMigration(HerdComponent* herd) {
                 EntityList* list = GameUpdateLoop::_singleton->m_entityList;
                 if (local_res8 != nullptr) {
                     if ((local_res8->_entityFlags >> 10 & 1) == 0) {
-                        ActHunt_MarkEntityRemoval_c2ea0(local_res8);   // 0x1400c2ea0
+                        MarkEntityForRemoval(local_res8);   // 0x1400c2ea0
                         ActHunt_DynArraySetCount_3110(&list->removalList,   // 0x140003110
                                  list->removalList.count + 1, &local_res8);
                     }
