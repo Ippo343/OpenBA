@@ -41,7 +41,7 @@ void* PersistenceSingleton() {
 // The 16 keys in retail's order. Order matters only for log readability, but
 // keeping it identical makes a diff against the decompile trivial.
 struct IntKey  { const char* key; int32_t GameSettings::* field; };
-struct BoolKey { const char* key; bool GameSettings::* field; };
+struct BoolKey { const char* key; uint8_t GameSettings::* field; };   // one byte, Get(bool&)
 
 const IntKey  kIntKeys[] = {
     { "UIScale", &GameSettings::uiScale },
@@ -91,7 +91,7 @@ extern "C" void GameSettings_Load(GameSettings* settings) {
         reinterpret_cast<const IO::Persistence*>(p)->Get("Game", k.key, settings->*k.field);   // B.3.4 bridge
     for (const auto& k : kBoolKeys)
         reinterpret_cast<const IO::Persistence*>(p)->Get(
-            "Game", k.key, settings->*k.field);   // B.3.4 bridge
+            "Game", k.key, *reinterpret_cast<bool*>(&(settings->*k.field)));   // B.3.4 bridge
 
     fprintf(stderr, "[GameSettings] Load: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
@@ -119,7 +119,7 @@ extern "C" void GameSettings_Save(GameSettings* settings) {
         reinterpret_cast<IO::Persistence*>(p)->Set("Game", k.key, settings->*k.field);   // B.3.4 bridge
     for (const auto& k : kBoolKeys)
         reinterpret_cast<IO::Persistence*>(p)->Set(
-            "Game", k.key, settings->*k.field);   // B.3.4 bridge
+            "Game", k.key, (settings->*k.field) != 0);   // B.3.4 bridge
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d\n",

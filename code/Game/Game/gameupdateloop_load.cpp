@@ -784,16 +784,13 @@ static inline void* AllocSub(uint64_t size, int align) {
 // (the same export, `??0Time@System@@QEAA@M@Z`).
 static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     void* mem = AllocSub(0x120, 8);
+    self->m_skyMesh = static_cast<Graphics::MeshInstance*>(mem);
     if (!mem) {
-        self->m_skyMesh = nullptr;
         fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p\n", mem);
         fflush(stderr);
         return;
     }
-    // B.4 W0-H2: m_skyMesh is typed, so it is stored from the placement new's
-    // result (after the ctor; it was stored before it). Load runs alone here.
     Graphics::MeshInstance* sky = ::new (mem) Graphics::MeshInstance();
-    self->m_skyMesh = sky;
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;

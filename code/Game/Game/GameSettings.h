@@ -17,7 +17,13 @@
 //            0x140098b60 (Get) / 0x140098970 (Set). The key spelled
 //            "ShowCelcius" by retail is the field `showCelsius`.
 //   types  = the Persistence overload retail passes: int& for the int32
-//            fields, bool& (one byte) for the six flags.
+//            fields, bool& (one byte) for the six flags. The six flags are
+//            DECLARED uint8_t (H8 candidate, B.4 W0-H2): the tree copies the
+//            Options checkbox byte in raw (as retail does, 0x14007249d MOV
+//            byte) and GameSettings_Save normalises it (`!= 0`) where retail
+//            hands the raw byte to Set(bool) (0x1400989d7 MOVZX R9D). A bool
+//            field would let the compiler drop that normalisation. Retail's
+//            type is bool; switching is a later `behaviour:` commit.
 //   defaults (GameMain 0x140041f00): UIScale 100, AutosaveInterval 1,
 //            StatusIconOpacity 100, StatusIconEnable 1, StatusIconScale 100,
 //            EdgeScroll 1, ShowCelcius 0, ShowWeather 1, AutoSlow 1,
@@ -35,14 +41,14 @@ struct GameSettings {
     int32_t uiScale;             // +0x00 "UIScale"            (OptionsDialog sliderUIScale)
     int32_t autosaveInterval;    // +0x04 "AutosaveInterval"   (comboAutosave index)
     int32_t statusIconOpacity;   // +0x08 "StatusIconOpacity"  (sliderStatusIcon)
-    bool    statusIconEnable;    // +0x0C "StatusIconEnable"   (checkStatusIcon)
+    uint8_t statusIconEnable;    // +0x0C "StatusIconEnable"   (checkStatusIcon)
     uint8_t _pad0D[3];           // +0x0D not written by retail
     int32_t statusIconScale;     // +0x10 "StatusIconScale"    (sliderStatusIconScale)
-    bool    edgeScroll;          // +0x14 "EdgeScroll"
-    bool    showCelsius;         // +0x15 "ShowCelcius" (retail's spelling of the key)
-    bool    showWeather;         // +0x16 "ShowWeather"
-    bool    autoSlow;            // +0x17 "AutoSlow"
-    bool    autoPause;           // +0x18 "AutoPause"
+    uint8_t edgeScroll;          // +0x14 "EdgeScroll"
+    uint8_t showCelsius;         // +0x15 "ShowCelcius" (retail's spelling of the key)
+    uint8_t showWeather;         // +0x16 "ShowWeather"
+    uint8_t autoSlow;            // +0x17 "AutoSlow"
+    uint8_t autoPause;           // +0x18 "AutoPause"
     uint8_t _pad19[3];           // +0x19 not written by retail
     int32_t lastOption;          // +0x1C "LastOption"   (OptionsDialog's last tab)
     int32_t lastTerrain;         // +0x20 "LastTerrain"  (NewGameDialog)
