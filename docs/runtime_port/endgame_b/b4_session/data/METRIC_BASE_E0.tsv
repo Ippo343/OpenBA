@@ -1,8 +1,8 @@
 dir	files	reinterpret	cstyle_ptr	functional	static_void	static_uintptr	static_cross	const_cast	pun	accessor	total	tier_i	cast_ok	bridge
-code/Game/Action	59	2412	1023	0	23	7	0	3	0	198	3666	7	0	338
-code/Game/Component	433	8544	2116	0	91	31	0	19	3	244	11048	67	0	1394
-code/Game/Dialog	141	2882	5968	0	68	9	0	53	2	37	9019	32	0	2065
-code/Game/Entity	9	314	345	0	4	2	0	0	0	19	684	4	0	69
+code/Game/Action	59	2403	1023	0	23	7	0	3	0	198	3657	7	0	336
+code/Game/Component	430	8540	2101	0	91	31	0	19	3	244	11029	67	0	1390
+code/Game/Dialog	148	2881	5967	0	68	9	0	53	2	37	9017	32	0	2064
+code/Game/Entity	9	290	207	0	4	2	0	0	0	19	522	4	0	59
 code/Game/Game	102	3060	1361	0	96	1	0	47	10	161	4736	32	0	1010
 code/Game/Goal	15	413	75	0	0	0	0	3	0	0	491	0	0	67
 code/Game/Object	5	10	0	0	0	0	0	0	0	0	10	0	0	0
@@ -56,7 +56,7 @@ runtime/types/utility	1	0	0	0	0	0	0	0	0	0	0	0	0	0
 runtime/types/video	10	48	0	0	0	0	0	0	0	0	48	0	0	2
 runtime/types/volume	1	0	0	0	0	0	0	0	0	0	0	0	0	0
 standalone	78	1541	68	0	139	0	0	5	0	0	1753	73	119	119
-TOTAL	1600	28697	14196	5	1859	58	2	191	256	958	46222	329	182	6849
+TOTAL	1604	28659	14042	5	1859	58	2	191	256	958	46030	329	182	6832
 
 file	reinterpret	cstyle_ptr	functional	static_void	static_uintptr	static_cross	const_cast	pun	accessor	total	tier_i	cast_ok	bridge
 code/Game/Action/action.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
@@ -66,11 +66,11 @@ code/Game/Action/action_base_hunt.cpp	50	0	0	0	0	0	0	0	0	50	0	0	5
 code/Game/Action/action_base_move.cpp	118	0	0	0	2	0	3	0	0	123	0	0	18
 code/Game/Action/action_base_movedeps.cpp	16	0	0	0	0	0	0	0	0	16	0	0	3
 code/Game/Action/action_base_rawmat.cpp	136	0	0	0	2	0	0	0	0	138	2	0	8
-code/Game/Action/action_child_ctors.cpp	21	0	0	1	0	0	0	0	0	22	0	0	0
-code/Game/Action/action_child_ctors2.cpp	95	0	0	0	0	0	0	0	0	95	0	0	4
+code/Game/Action/action_child_ctors.cpp	16	0	0	0	0	0	0	0	0	16	0	0	0
+code/Game/Action/action_child_ctors2.cpp	7	0	0	0	0	0	0	0	0	7	0	0	1
 code/Game/Action/action_pf_astar.cpp	288	0	0	0	0	0	0	0	0	288	0	0	8
 code/Game/Action/action_pf_avl.cpp	64	0	0	0	0	0	0	0	198	262	0	0	0
-code/Game/Action/action_pf_ctors.cpp	104	0	0	0	0	0	0	0	0	104	0	0	5
+code/Game/Action/action_pf_ctors.cpp	44	0	0	0	0	0	0	0	0	44	0	0	4
 code/Game/Action/action_pf_geom.cpp	144	6	0	0	0	0	0	0	0	150	0	0	2
 code/Game/Action/action_pf_pools.cpp	260	0	0	0	0	0	0	0	0	260	0	0	0
 code/Game/Action/action_pf_region.cpp	1	295	0	0	0	0	0	0	0	296	0	0	7
@@ -79,26 +79,26 @@ code/Game/Action/action_pf_roots_drop.cpp	92	0	0	1	0	0	0	0	0	93	0	0	12
 code/Game/Action/action_pf_roots_misc.cpp	100	2	0	2	0	0	0	0	0	104	0	0	7
 code/Game/Action/action_pf_roots_road.cpp	46	0	0	0	0	0	0	0	0	46	0	0	1
 code/Game/Action/action_pf_roots_route.cpp	5	94	0	0	0	0	0	0	0	99	1	0	5
-code/Game/Action/animatenaturalresource.cpp	16	2	0	0	0	0	0	0	0	18	0	0	9
+code/Game/Action/animatenaturalresource.cpp	17	2	0	0	0	0	0	0	0	19	0	0	9
 code/Game/Action/completeroad.cpp	13	3	0	1	0	0	0	0	0	17	0	0	8
-code/Game/Action/completetask.cpp	15	13	0	3	0	0	0	0	0	31	0	0	10
-code/Game/Action/consumerawmaterial.cpp	24	40	0	0	0	0	0	0	0	64	0	0	13
-code/Game/Action/createnaturalresource.cpp	16	26	0	1	0	0	0	0	0	43	0	0	12
-code/Game/Action/createrawmaterial.cpp	37	57	0	1	0	0	0	0	0	95	0	0	24
-code/Game/Action/dropoffrawmaterial.cpp	20	13	0	2	0	0	0	0	0	35	1	0	9
-code/Game/Action/huntanimal.cpp	19	47	0	1	0	0	0	0	0	67	0	0	10
+code/Game/Action/completetask.cpp	17	13	0	3	0	0	0	0	0	33	0	0	10
+code/Game/Action/consumerawmaterial.cpp	49	40	0	0	0	0	0	0	0	89	0	0	13
+code/Game/Action/createnaturalresource.cpp	18	26	0	1	0	0	0	0	0	45	0	0	12
+code/Game/Action/createrawmaterial.cpp	41	57	0	1	0	0	0	0	0	99	0	0	24
+code/Game/Action/dropoffrawmaterial.cpp	23	13	0	2	0	0	0	0	0	38	1	0	9
+code/Game/Action/huntanimal.cpp	21	47	0	1	0	0	0	0	0	69	0	0	10
 code/Game/Action/keystone_a_zone.cpp	63	0	0	0	0	0	0	0	0	63	0	0	8
-code/Game/Action/moveto.cpp	39	92	0	3	0	0	0	0	0	134	0	0	21
-code/Game/Action/performwork.cpp	20	18	0	0	0	0	0	0	0	38	0	0	12
+code/Game/Action/moveto.cpp	66	92	0	3	0	0	0	0	0	161	0	0	22
+code/Game/Action/performwork.cpp	40	18	0	0	0	0	0	0	0	58	0	0	12
 code/Game/Action/pickuprawmaterial.cpp	12	20	0	0	0	0	0	0	0	32	0	0	8
-code/Game/Action/pickupstoredrawmaterial.cpp	24	58	0	0	0	0	0	0	0	82	0	0	14
+code/Game/Action/pickupstoredrawmaterial.cpp	73	58	0	0	0	0	0	0	0	131	0	0	15
 code/Game/Action/playanimation.cpp	22	6	0	0	0	0	0	0	0	28	0	0	9
 code/Game/Action/region_graph_build.cpp	0	94	0	0	0	0	0	0	0	94	0	0	0
 code/Game/Action/region_paircache.cpp	1	47	0	0	0	0	0	0	0	48	0	0	0
 code/Game/Action/removeanimal.cpp	11	15	0	0	0	0	0	0	0	26	0	0	7
-code/Game/Action/removenaturalresource.cpp	16	30	0	0	0	0	0	0	0	46	0	0	8
-code/Game/Action/sendcomponentmessage.cpp	26	10	0	0	0	0	0	0	0	36	3	0	13
-code/Game/Action/showtool.cpp	25	35	0	0	0	0	0	0	0	60	0	0	14
+code/Game/Action/removenaturalresource.cpp	18	30	0	0	0	0	0	0	0	48	0	0	8
+code/Game/Action/sendcomponentmessage.cpp	33	10	0	0	0	0	0	0	0	43	3	0	13
+code/Game/Action/showtool.cpp	25	35	0	1	0	0	0	0	0	61	0	0	14
 code/Game/Component/absorbresourcecomponent.cpp	31	0	0	0	0	0	0	0	0	31	0	0	4
 code/Game/Component/absorbresourcedescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Component/ambient_externalptr_serialize.cpp	13	0	0	0	0	0	2	0	0	15	0	0	8
@@ -265,7 +265,7 @@ code/Game/Component/pasturecomponent_states.cpp	129	19	0	0	1	0	0	0	0	149	1	0	8
 code/Game/Component/pasturedescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Component/pickingcomponent.cpp	15	40	0	0	0	0	0	0	0	55	0	0	10
 code/Game/Component/pickingdescription.cpp	5	9	0	2	0	0	0	0	0	16	0	0	1
-code/Game/Component/populationcomponent.cpp	118	5	0	1	0	0	0	0	0	124	1	0	10
+code/Game/Component/populationcomponent.cpp	116	5	0	1	0	0	0	0	0	122	1	0	8
 code/Game/Component/populationdescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Component/quarrycomponent.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Component/quarrycomponent_deform.cpp	67	0	0	0	1	0	2	0	0	70	0	0	9
@@ -286,13 +286,13 @@ code/Game/Component/statemachinedescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Component/statusicon_geometry.cpp	37	0	0	0	0	0	3	0	0	40	0	0	11
 code/Game/Component/statusiconcomponent.cpp	32	85	0	0	0	0	0	0	0	117	2	0	15
 code/Game/Component/statusicondescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
-code/Game/Component/storagecomponent.cpp	18	74	0	0	0	0	0	0	0	92	0	0	13
+code/Game/Component/storagecomponent.cpp	17	59	0	0	0	0	0	0	0	76	0	0	12
 code/Game/Component/storagedescription.cpp	4	5	0	1	0	0	0	0	0	10	0	0	1
 code/Game/Component/storagedisplaycomponent.cpp	24	76	0	0	0	0	0	0	0	100	1	0	11
 code/Game/Component/storagedisplaydescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Component/storagelocationcomponent.cpp	10	0	0	0	0	0	0	0	0	10	0	0	4
 code/Game/Component/storagelocationdescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
-code/Game/Component/terraformcomponent.cpp	59	33	0	0	2	0	3	0	0	97	1	0	12
+code/Game/Component/terraformcomponent.cpp	58	33	0	0	2	0	3	0	0	96	1	0	11
 code/Game/Component/terraformdescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Component/tombstonecomponent.cpp	11	27	0	1	0	0	0	0	0	39	0	0	8
 code/Game/Component/tombstonedescription.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
@@ -331,7 +331,7 @@ code/Game/Dialog/citizenui.cpp	53	159	0	0	0	0	1	0	0	213	0	0	38
 code/Game/Dialog/consumeproduceui.cpp	20	54	0	0	0	0	0	0	0	74	1	0	17
 code/Game/Dialog/controlui.cpp	32	50	0	0	0	0	0	0	0	82	0	0	7
 code/Game/Dialog/controluiconfig.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
-code/Game/Dialog/cropui.cpp	18	32	0	0	0	0	0	0	0	50	0	0	15
+code/Game/Dialog/cropui.cpp	17	31	0	0	0	0	0	0	0	48	0	0	14
 code/Game/Dialog/cropui_promote.cpp	35	0	0	0	0	0	0	0	0	35	0	0	5
 code/Game/Dialog/debugui.cpp	76	328	0	1	0	0	4	0	0	409	0	0	60
 code/Game/Dialog/destroyui.cpp	45	94	0	0	0	0	0	0	0	139	0	0	36
@@ -393,10 +393,10 @@ code/Game/Dialog/unreg_lane2_mapparamsdialog_ctor.cpp	0	0	0	3	0	0	0	0	0	3	0	0	0
 code/Game/Dialog/upgradeui.cpp	18	31	0	0	0	0	0	0	0	49	0	0	8
 code/Game/Dialog/upgradeuiconfig.cpp	1	0	0	0	0	0	0	0	0	1	0	0	1
 code/Game/Dialog/workplaceui.cpp	127	140	0	0	6	0	0	0	0	273	0	0	42
-code/Game/Entity/citizenbehavior.cpp	210	138	0	0	2	0	0	0	11	361	1	0	18
+code/Game/Entity/citizenbehavior.cpp	178	0	0	0	2	0	0	0	11	191	1	0	7
 code/Game/Entity/componententity.cpp	36	71	0	2	0	0	0	0	8	117	1	0	25
-code/Game/Entity/entity_findcomponent.cpp	1	5	0	1	0	0	0	0	0	7	0	0	2
-code/Game/Entity/entitylist.cpp	67	127	0	0	0	0	0	0	0	194	2	0	23
+code/Game/Entity/entity_findcomponent.cpp	10	5	0	1	0	0	0	0	0	16	0	0	4
+code/Game/Entity/entitylist.cpp	66	127	0	0	0	0	0	0	0	193	2	0	22
 code/Game/Entity/exe_bodies.h	0	4	0	1	0	0	0	0	0	5	0	0	1
 code/Game/Game/MenuDialogLoopT.h	1	0	0	0	0	0	0	0	0	1	0	0	0
 code/Game/Game/camera_input.cpp	18	66	0	2	0	0	0	0	0	86	0	0	18
@@ -981,4 +981,4 @@ standalone/stress_harness.cpp	72	13	0	0	0	0	0	0	0	85	2	0	1
 standalone/tool_harness.cpp	402	2	0	51	0	0	0	0	0	455	16	0	34
 standalone/trade_buy_harness.cpp	36	0	0	3	0	0	0	0	0	39	1	0	2
 standalone/video_interface.cpp	8	0	0	0	0	0	0	0	0	8	2	0	2
-# castmetric total: 46222
+# castmetric total: 46030
