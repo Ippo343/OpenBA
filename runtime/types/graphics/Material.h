@@ -24,6 +24,8 @@
                                           // classes at the bottom of this file
                                           // derive from / hold these)
 
+namespace Video { class ImageBuffer; }   // B.4: MaterialTexture::image
+
 namespace RtGraphics {
 
 // ============================================================
@@ -41,7 +43,9 @@ namespace RtGraphics {
 // object whose +0x2c is compared against 4 and 5.
 struct MaterialTexture {
     char* name;    // +0x00  System::String::_data (may be null)
-    void* image;   // +0x08  Object::ExternalPtr<Video::ImageBuffer>, by value
+    // B.4: typed (one pointer either way; the element stays 0x10 and
+    // trivially copyable). Object::ExternalPtr<Video::ImageBuffer>, by value.
+    Video::ImageBuffer* image;   // +0x08
 };
 static_assert(sizeof(MaterialTexture) == 0x10, "MaterialInstance texture entry is 0x10");
 

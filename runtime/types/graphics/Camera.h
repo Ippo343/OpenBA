@@ -377,7 +377,7 @@ static_assert(offsetof(Renderer, contextSerial)    == 0x44, "Renderer::contextSe
 // The classes other blocks own. Taken by pointer / reference only; the bridge,
 // where one is needed, happens at the use site and never in this header.
 namespace Video    { class Context; class RenderBuffer; }
-namespace Graphics { class Geometry; class Light; class MaterialInstance; class Scene; }
+namespace Graphics { class Geometry; class Light; class Material; class MaterialInstance; class Scene; }
 
 namespace Graphics {
 
@@ -513,9 +513,11 @@ static_assert(offsetof(RendererDrawable, _pad0c) == 0x0c, "Drawable::_pad0c @ +0
 // ============================================================
 class RendererDrawItem {
 public:
-    const void* _geometry;   // +0x00
-    const void* _material;   // +0x08  MaterialInstance::material (+0x28), by value
-    const void* _instance;   // +0x10  the MaterialInstance*
+    // B.4: the three object pointers carry their classes (pointers: the bytes
+    // and trivial copyability are unchanged).
+    const Geometry*         _geometry;   // +0x00
+    const Material*         _material;   // +0x08  MaterialInstance::_material (+0x28), by value
+    const MaterialInstance* _instance;   // +0x10
     uint16_t    _flags;      // +0x18
     uint16_t    _arg5;       // +0x1a
     float       _sortKey;    // +0x1c
