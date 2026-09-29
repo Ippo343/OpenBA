@@ -1,29 +1,8 @@
 #pragma once
 // Function declarations for the reimplemented TornadoComponent lane.
-//
-// Slot indices below come from the vtable BYTES at 0x14015aa80. Ghidra's names for
-// all three are off by one ("_Shutdown" / "_Serialize" / "_OnRemove"); the C++
-// function names here keep Ghidra's spelling so grepping the address registry and
-// the decompiler agree, but the COMMENTS say what each one really is.
 
 #include "engine/types/TornadoComponent.h"   // the forwarder: also carries TornadoDescriptionFields
 #include <cstdint>
-
-// vtable slot [3] (+0x18), 0x140058b80 — the real Serialize (save/load).
-// Streams waypoint(+0x30), pathIndex(+0x50), pathCount(+0x48), the waypoints,
-// Time(+0x28), position(+0x58).
-void TornadoComponent_Shutdown(TornadoComponent* self, void* stream);
-
-// vtable slot [4] (+0x20), 0x1400585a0 — the real Startup. Picks two map cells at
-// least desc+0x24 apart, terrain-clamps them, fractal-fills 129 waypoints between
-// them, posts event-log type 0x1e severity 3, and honours the pause-on-event setting.
-void TornadoComponent_Serialize(TornadoComponent* self);
-
-// vtable slot [8] (+0x40), 0x140057cd0 — the real per-frame Update. Slot 8, not 9:
-// the ctor's 0x84 flags set bit 2, which is the full-rate EntityList update-tree walk.
-// Particle-liveness gate -> path advance -> damage -> position integration ->
-// geometry transform + audio emitters.
-void TornadoComponent_OnRemove(TornadoComponent* self, void* time);
 
 // ---- ported leaves, exposed for the address-registry wave -------------------
 extern "C" {

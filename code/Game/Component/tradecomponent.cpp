@@ -34,18 +34,6 @@
 // FUN_140003110 — add entity to world pending list (GameColl SetSizeFill).
 // FUN_14005c220 TradeComponent_Setup (below) — called after adding to pending list.
 
-// 0x14005c1d0 door: registered by address (standalone/reg_component_economy.cpp).
-void TradeComponent_Draw(TradeComponent* self) {
-    self->TradeComponent::OnAdded();
-}
-
-
-// 0x14005c190 door: registered by address (standalone/reg_component_economy.cpp).
-void TradeComponent_OnCreate(TradeComponent* self) {
-    self->TradeComponent::OnRemove();
-}
-
-
 // ============================================================
 // TradeComponent slots 13 and 14 — the work-enable pair
 // ============================================================

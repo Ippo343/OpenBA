@@ -8,6 +8,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/cropui_funcs.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Dialog/exe_bodies.h"
@@ -175,18 +176,6 @@ void CropUI_PopulateCombo(CropUI* self) {
 }
 
 // ============================================================
-// GetExpectedCount (0x140078a40): Count matching crop types
-// ============================================================
-// Same iteration as PopulateCombo but just counts matching types.
-// Used by Slot8 to detect when the combo needs refreshing.
-//
-// Original: FUN_140078a40
-
-int CropUI_GetExpectedCount(CropUI* self) {
-    return CropUI_IterateResources(self, nullptr, nullptr);
-}
-
-// ============================================================
 // CropUI::Slot4 (vtable +0x20) — Setup/refresh
 // ============================================================
 // Finds the "selectResource" combo element in the dialog,
@@ -249,23 +238,4 @@ void SelectResourceUI::OnUpdateLayout() {
 
     // Virtual call: vtable[8] = SetEnabled(hasItems)
     reinterpret_cast<UI::Element*>(combo)->Enable(itemCount > 0);  // B.3.6 bridge: Element slot 8 Enable
-}
-
-// ============================================================
-// CropUI::Slot8 (vtable +0x40) — Refresh check
-// ============================================================
-// Compares current combo item count with expected count.
-// If they differ, repopulates the combo with available crop types.
-//
-// Original: 0x140078D30.
-
-void CropUI_Slot8(CropUI* self) {
-    void* combo = (void*)self->internalBasePtr;
-
-    int currentCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
-    int expectedCount = CropUI_GetExpectedCount(self);
-
-    if (currentCount != expectedCount) {
-        CropUI_PopulateCombo(self);
-    }
 }

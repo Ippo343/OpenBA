@@ -98,4 +98,13 @@ void* CompleteRoad::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400c59d0 — CompleteRoad_Action_CopyCtor
+//   RCX=self, EDX=p2(u32 @ +0x24), R8D=p3(u32 @ +0x20), R9B=p4(byte @ +0x28).
+// ============================================================
+void* ActChild_CompleteRoadCopyCtor_c59d0(void* self, uint32_t p2, uint32_t p3, uint8_t p4) {
+    // ENDGAME B.3.8 ACT: the real ctor (CompleteRoad.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) CompleteRoad(p2, p3, p4));
+}
+
 DEFINE_EXE_TYPE(CompleteRoad, "Action")

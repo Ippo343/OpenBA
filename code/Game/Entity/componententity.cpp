@@ -389,11 +389,6 @@ void ComponentEntity::RefreshEntityFlags() {
     }
 }
 
-// Door for entitylist.cpp (EntityList::FlagAggregation).
-void ComponentEntity_RefreshEntityFlags(ComponentEntity* self) {
-    self->RefreshEntityFlags();
-}
-
 // ============================================================
 // [3] Persist (0x1400c3140)
 // ============================================================

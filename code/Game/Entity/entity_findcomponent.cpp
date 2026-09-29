@@ -163,11 +163,6 @@ void fn_FindComponent_Storage(void* entity, void* retval) {
     FindByTypeId(entity, retval, StorageComponent::TypeId());
 }
 
-// fn_FindComponent_Residence -- StorageComponent (cell 0x1401c7e78), retail FUN_140006270. same function as fn_FindComponent_Storage.
-void fn_FindComponent_Residence(void* entity, void* retval) {
-    FindByTypeId(entity, retval, StorageComponent::TypeId());
-}
-
 // fn_FindComponent_Cemetery -- CemeteryComponent (cell 0x1401c4090), retail FUN_140010a00.
 void fn_FindComponent_Cemetery(void* entity, void* retval) {
     FindByTypeId(entity, retval, CemeteryComponent::TypeId());
@@ -206,4 +201,37 @@ void fn_FindComponent_Fire(void* entity, void* retval) {
 // fn_FindComponent_Unknown7ee8 -- StorageLocationComponent (cell 0x1401c7ee8). MISNOMER: the cell is StorageLocationComponent.
 void fn_FindComponent_Unknown7ee8(void* entity, void* retval) {
     FindByTypeId(entity, retval, StorageLocationComponent::TypeId());
+}
+
+// ============================================================
+// FUN_14000b6f0 — find the StateMachineComponent on an entity's component list.
+// Walks param_1's list (ptr +0x30, count +0x38, stride 8): child whose GetTypeId
+// (vtable+0x10) == *0x1401c7350, IsDerivedFrom-confirmed → found; writes the IBP into
+// param_2 via InternalBasePtr_Ctor and returns param_2.
+// ============================================================
+void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
+    void* found = nullptr;
+    uint32_t wantTid = StateMachineComponent::TypeId();
+    int count = *reinterpret_cast<int*>(param_1 + 0x38);
+    if (0 < count) {
+        int idx = 0;
+        int64_t byteOff = 0;
+        while (true) {
+            int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + byteOff);
+            void* child = reinterpret_cast<void*>(*slot);
+            uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
+            if (tid == wantTid) {
+                int64_t* mslot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + (int64_t)idx * 8);
+                void* match = reinterpret_cast<void*>(*mslot);
+                if (::Object::IsDerivedFromNullSafe(match, StateMachineComponent::TypeId()))
+                    found = match;
+                break;
+            }
+            idx++; byteOff += 8;
+            if (idx >= count) break;
+        }
+    }
+    new (param_2) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+    return param_2;
 }

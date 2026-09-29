@@ -453,9 +453,3 @@ void TradeComponent::Persist(void* stream) {
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
-
-// 0x14005bd50 door: registered by address (standalone/reg_trade_serialize.cpp).
-extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
-    if (!self) return;
-    self->TradeComponent::Persist(stream);
-}

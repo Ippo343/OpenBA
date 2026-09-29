@@ -296,4 +296,24 @@ void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
 }
 
 
+// ============================================================
+// FUN_1400c7cd0 — DropOffRawMaterial_Action_CopyCtor
+//   RCX=self, RDX=p2, R8=p3, R9=p4(u64), [stack]=p5(u32), p6(byte).
+//   +0x20=p6(byte) ; +0x24=p5(u32) ; +0x28=p4(u64) ; +0x30=*p2 ; +0x38=*p3.
+// ============================================================
+void* ActChild_DropOffRawCopyCtor_c7cd0(void* self, uint64_t* p2, uint64_t* p3,
+                                        uint64_t p4, uint32_t p5, uint8_t p6) {
+    // ENDGAME B.3.8 ACT: the real ctor (DropOffRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) DropOffRawMaterial(p2, p3, p4, p5, p6));
+}
+
+// 0x1400c7cd0: +0x20 = p6 (byte) ; +0x24 = p5 ; +0x28 = p4 ; +0x30 = *p2 ; +0x38 = *p3.
+DropOffRawMaterial::DropOffRawMaterial(uint64_t* storage, uint64_t* source, uint64_t resType,
+                                       uint32_t count, uint8_t flag)
+    : _field20(flag),
+      _field24(static_cast<int32_t>(count)),
+      _field28(reinterpret_cast<void*>(resType)),
+      _field30(reinterpret_cast<void*>(*storage)),
+      _field38(reinterpret_cast<void*>(*source)) {}
+
 DEFINE_EXE_TYPE(DropOffRawMaterial, "Action")

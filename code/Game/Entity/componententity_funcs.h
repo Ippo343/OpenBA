@@ -7,11 +7,6 @@
 #include "Entity/ComponentEntity.h"
 #include <cstdint>
 
-// RefreshEntityFlags (0x1400c3470): Recomputes entityFlags from all components.
-// Door for entitylist.cpp (EntityList::FlagAggregation); the body is
-// ComponentEntity::RefreshEntityFlags.
-void ComponentEntity_RefreshEntityFlags(ComponentEntity* self);
-
 // Ctor from a description (0x1400c3720, the retail "CopyCtor"): registered at
 // that address (fn_EntityFactory_CreateEntity), so the door stays. It
 // placement-constructs the class on caller-allocated memory.

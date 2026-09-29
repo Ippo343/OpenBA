@@ -16,7 +16,6 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/buildcomponent_funcs.h"
 #include "Component/MultiObjectComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
