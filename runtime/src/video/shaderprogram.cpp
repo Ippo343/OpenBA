@@ -136,114 +136,74 @@
 
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"      // IO::Stream, IO::kReading
 #include "../../types/video/ShaderProgram.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 
 namespace {
 
-using rt::io::Serializer;
-using rt::io::Stream;
-using rt::io::ReaderWriter;
 using Collection::Array;
 using ShaderParameter = Video::ShaderProgram::Parameter;
 
-// `?_singleton@Device@Video@@` is the ADDRESS of the Device* static;
-// Device+0xF8 is `activeInterface` (runtime/types/video/Device.h).
+// `Video::Device::_singleton->activeInterface` (+0xF8).
 int32_t ActiveInterface() {
-    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    void* device = slot ? *slot : nullptr;
+    Video::Device* device = Video::Device::_singleton;
     // Retail derefs the singleton unguarded here (MOV RAX,[0x1801fe7a8] then
-    // CMP dword [RAX+0xF8]); the null test exists only because RT_DATA_SLOT can
-    // hand back a slot that the mint has not filled yet, which retail's own
+    // CMP dword [RAX+0xF8]); the null test exists only because RT_DATA_SLOT could
+    // hand back a slot that the mint had not filled yet, which retail's own
     // static could not be.
     if (!device) return -1;
-    return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0xF8);
-}
-
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-inline void RwInt(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeInt(*reinterpret_cast<int32_t*>(p), nullptr);
-}
-inline void RwBool(ReaderWriter* rw, void* p) {
-    AsRw(rw)->SerializeBool(*reinterpret_cast<bool*>(p), nullptr);
-}
-inline int RwVersion(ReaderWriter* rw) {
-    return AsRw(rw)->GetVersion();
-}
-inline void DeleteRw(ReaderWriter* rw) {
-    if (rw == nullptr) return;
-    delete AsRw(rw);
-}
-
-// The `Serializer ser{stream,null}; rw = encoding->CreateReader/Writer(&ser,v)`
-// prologue every Serialize in this family opens with.
-ReaderWriter* MakeReaderWriter(Serializer* ser, int version) {
-    Stream* stream = ser->stream;
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, ser, version);
-    ser->readerWriter = rw;
-    return rw;
+    return device->activeInterface;
 }
 
 // One `Array<Parameter>` of the two, in the order retail does them. Both are
 // resized by 0x180055db0, `Array<Parameter>::SetSize`.
-void SerializeParameters(Serializer* ser, Array<ShaderParameter>* arr) {
-    ReaderWriter* rw = ser->readerWriter;
+void SerializeParameters(IO::Serializer& ser, Array<ShaderParameter>* arr) {
+    IO::ReaderWriter* rw = ser._readerWriter;
     int32_t n = arr->_size;
-    RwInt(rw, &n);
-    if (ser->stream->direction == rt::io::kDirectionReading)
+    rw->SerializeInt(n, nullptr);
+    if (ser._stream->GetDirection() == IO::kReading)
         rtcoll::RtColl_ArraySetSize_180055db0(arr, n);
 
     ShaderParameter* e = arr->_data;
     for (int32_t i = 0; i < n; ++i, ++e) {
-        // B.3.1 bridge: ShaderProgram::Parameter::name is `void*` because a real
-        // `System::String` member would give Parameter a non-trivial destructor
-        // and make the compiler release every name a SECOND time (the reason is
-        // spelled out on the Parameter declaration); the eight bytes are a
-        // System::String.
-        reinterpret_cast<System::String&>(e->name).Serialize(ser);
-        RwInt(rw, &e->dest);
-        if (RwVersion(rw) >= 1) RwBool(rw, &e->internal);
+        // LEFT (B.3.1 bridge): ShaderProgram::Parameter::name is `void*` because a
+        // real `System::String` member would give Parameter a non-trivial
+        // destructor and make the compiler release every name a SECOND time (the
+        // reason is spelled out on the Parameter declaration); the eight bytes are
+        // a System::String.
+        reinterpret_cast<System::String&>(e->name).Serialize(&ser);
+        rw->SerializeInt(e->dest, nullptr);
+        if (rw->GetVersion() >= 1) rw->SerializeBool(e->internal, nullptr);
     }
 }
 
 // One arm of PlatformSerialize. `wanted` is the interface index this arm is
 // written for; when it is not the active one the arm SKIPS instead of reading.
-void PlatformSerializeArm(Video::ShaderProgram* self, Serializer* outer, int32_t wanted) {
-    Serializer sub = { outer->stream, nullptr };
-    ReaderWriter* rw = MakeReaderWriter(&sub, 0);
+// Each arm is its own `IO::Serializer` over the outer one's stream, version 0.
+void PlatformSerializeArm(Video::ShaderProgram* self, IO::Serializer& outer, int32_t wanted) {
+    IO::Serializer sub(*outer._stream, 0);
+    IO::ReaderWriter* rw = sub._readerWriter;
 
     if (ActiveInterface() == wanted) {
         int32_t n = self->_byteCode._size;
-        RwInt(rw, &n);
-        if (sub.stream->direction == rt::io::kDirectionReading)
+        rw->SerializeInt(n, nullptr);
+        if (sub._stream->GetDirection() == IO::kReading)
             rtcoll::RtColl_ArraySetSize_180053f00(&self->_byteCode, n);   // Array<Array<uint8>>::SetSize
 
         Array<uint8_t>* blob = self->_byteCode._data;
         for (int32_t i = 0; i < n; ++i, ++blob) {
             int32_t m = blob->_size;
-            RwInt(rw, &m);
-            if (sub.stream->direction == rt::io::kDirectionReading)
+            rw->SerializeInt(m, nullptr);
+            if (sub._stream->GetDirection() == IO::kReading)
                 rtcoll::RtColl_ArraySetSize_180029630(blob, m);           // Array<uint8>::SetSize
-            AsRw(rw)->SerializeUCharArray(
-                m, reinterpret_cast<unsigned char*>(blob->_data), nullptr);
+            rw->SerializeUCharArray(m, blob->_data, nullptr);
         }
     } else {
-        AsRw(rw)->Skip();
+        rw->Skip();
     }
-    DeleteRw(rw);
-}
+}   // ~Serializer: the sub reader/writer's slot 0, flags 1
 
 }  // namespace
 
@@ -312,33 +272,31 @@ bool ShaderProgram::IsTextureInternal(int32_t index) const {                   /
 }
 
 // ?PlatformSerialize@ShaderProgram@Video@@QEAAXAEAVSerializer@IO@@@Z 0x1800f52b0
-void ShaderProgram::PlatformSerialize(void* serv) {
-    Serializer* ser = static_cast<Serializer*>(serv);
-
-    void** encVt = *reinterpret_cast<void***>(ser->stream->encoding);
-    using CarriesPlatformDataFn = bool (*)(void*);
-    if (!reinterpret_cast<CarriesPlatformDataFn>(encVt[0])(ser->stream->encoding)) return;
+// The opening test is the stream's encoding policy slot 0, `IsBinary`: a text
+// stream carries no byte code.
+void ShaderProgram::PlatformSerialize(IO::Serializer& ser) {
+    if (!ser._stream->_encoding->IsBinary()) return;
 
     PlatformSerializeArm(this, ser, 0);
     PlatformSerializeArm(this, ser, 1);
     // The third backend arrived in file version 1; older files have only two
     // sub-streams and must not be advanced past a third.
-    if (RwVersion(ser->readerWriter) < 1) return;
+    if (ser._readerWriter->GetVersion() < 1) return;
     PlatformSerializeArm(this, ser, 2);
 }
 
 // slot 5 — ?Serialize@ShaderProgram@Video@@UEAA_NAEAVStream@IO@@@Z 0x1800f5110
 bool ShaderProgram::Serialize(void* streamv) {
-    Serializer ser = { static_cast<Stream*>(streamv), nullptr };
-    ReaderWriter* rw = MakeReaderWriter(&ser, 1);
+    // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
+    // keeps `External`'s `void*` parameter (R-OBJ's declaration).
+    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 1);
 
-    SerializeParameters(&ser, &_constants);   // +0x30 FIRST
-    SerializeParameters(&ser, &_textures);    // +0x20 second
+    SerializeParameters(ser, &_constants);   // +0x30 FIRST
+    SerializeParameters(ser, &_textures);    // +0x20 second
     // Retail CALLs 0x1800f52b0 here; the qualified spelling is that call.
-    this->ShaderProgram::PlatformSerialize(&ser);
+    this->ShaderProgram::PlatformSerialize(ser);
 
-    DeleteRw(rw);
-    return true;
+    return true;   // ~Serializer: the ReaderWriter's slot 0, flags 1
 }
 
 }  // namespace Video

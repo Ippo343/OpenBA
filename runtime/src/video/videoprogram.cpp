@@ -64,34 +64,16 @@
 #include <new>
 
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "../../types/video/CompanionData.h"   // the typed *Data companions
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"      // IO::Stream, IO::kReading
 #include "../../types/object/External.h"
 #include "../../types/video/VideoProgram.h"
 
 namespace {
 
-using rt::io::Serializer;
-using rt::io::Stream;
-using rt::io::ReaderWriter;
 using Video::VideoProgram;
-
-// `?_singleton@Device@Video@@` is the ADDRESS of the Device* static; +0x100 of
-// the Device is its DeviceData* (runtime/types/video/Device.h, dx11/src).
-void* ActiveDeviceDataPtr() {
-    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
-    void* device = slot ? *slot : nullptr;
-    if (!device) return nullptr;
-    return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
-}
-constexpr size_t kDeviceDataCreateVideoProgramData = 0x90;   // DeviceData vtable slot 18
-
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-inline IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
 
 }  // namespace
 
@@ -159,64 +141,53 @@ const void* VideoProgram::GetData() const { return _data; }
 // ?PlatformConstruct@VideoProgram@Video@@AEAAXXZ (0x1800f47a0), also the tail of
 // the ctor and of Construct. DeviceData slot 18 (+0x90).
 void VideoProgram::PlatformConstruct() {
-    void* dd = ActiveDeviceDataPtr();
+    Device* device = Device::_singleton;
+    DeviceData* dd = device ? device->deviceData : nullptr;
     if (dd == nullptr) { _data = nullptr; return; }
-    using CreateFn = void* (*)(void* deviceData, void* program);
-    void** vt = *reinterpret_cast<void***>(dd);
-    _data = reinterpret_cast<CreateFn>(vt[kDeviceDataCreateVideoProgramData / 8])(dd, this);
+    _data = dd->CreateVideoProgramData(this);
 }
-// ?PlatformCreate@VideoProgram@Video@@AEAAXXZ (0x1800f4810): _data->vtable[1](_data)
+// ?PlatformCreate@VideoProgram@Video@@AEAAXXZ (0x1800f4810): the companion's slot 1.
+// Its bool result is dropped, as retail's tail call drops it.
 void VideoProgram::PlatformCreate() {
-    using Fn = void (*)(void*);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[1])(_data);
+    _data->Slot1();
 }
-// ?PlatformDestruct@VideoProgram@Video@@AEAAXXZ (0x1800f47f0): _data->vtable[0](_data, 1)
+// ?PlatformDestruct@VideoProgram@Video@@AEAAXXZ (0x1800f47f0): slot 0, flags 1.
 void VideoProgram::PlatformDestruct() {
     if (_data == nullptr) return;
-    using Fn = void (*)(void*, int);
-    void** vt = *reinterpret_cast<void***>(_data);
-    reinterpret_cast<Fn>(vt[0])(_data, 1);
+    _data->DeletingDtor(1);
 }
 
 // slot 5 — ?Serialize@VideoProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f46b0).
 //
-// The four per-T `ExternalPtr<T>::Serialize` instantiations are reached by ADDRESS
-// because each is its own 748-byte body in retail and ours are ported in
-// object/external_ptr_serialize.cpp under those addresses. The ORDER is the field
-// order and the four addresses are NOT interchangeable: each one loads its own
-// `_typeInfo`, so swapping two would look up a VertexProgram resource under
-// VertexLayout's type id.
+// The four per-T `ExternalPtr<T>::Serialize` instantiations are reached by NAME;
+// each is its own 748-byte body in retail and ours are ported in
+// object/external_ptr_serialize.cpp. The ORDER is the field order and the four
+// are NOT interchangeable: each one loads its own `_typeInfo`, so swapping two
+// would look up a VertexProgram resource under VertexLayout's type id.
 bool VideoProgram::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    // LEFT (B.4 R-VIDEO): the slot is `Serialize(IO::Stream&)`; the override
+    // keeps `External`'s `void*` parameter (R-OBJ's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
+    IO::Serializer ser(stream, 0);
 
-    Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
-    const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                              : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
-    ser.readerWriter = rw;
-
-    // The four ExternalPtr serializers (0x180055090 / 0x1800542a0 / 0x180055380 /
-    // 0x180055670). B.3.x bridge: each ExternalPtr<T> field is one External*.
+    // LEFT (B.4 R-VIDEO): the four thunks (R-OBJ, External.h) still take the
+    // `rt::io::Serializer` POD (asserted interchangeable with IO::Serializer) and
+    // an `External**` over each ExternalPtr<T> field (one External* each).
+    rt::io::Serializer* const pod = reinterpret_cast<rt::io::Serializer*>(&ser);
     RtObject_ExternalPtrSerialize_VertexLayout(
-        reinterpret_cast<RtObject::External**>(&_vertexLayout), &ser);
+        reinterpret_cast<RtObject::External**>(&_vertexLayout), pod);    // 0x180055090
     RtObject_ExternalPtrSerialize_VertexProgram(
-        reinterpret_cast<RtObject::External**>(&_vertexProgram), &ser);
+        reinterpret_cast<RtObject::External**>(&_vertexProgram), pod);   // 0x1800542a0
     RtObject_ExternalPtrSerialize_PixelProgram(
-        reinterpret_cast<RtObject::External**>(&_pixelProgram), &ser);
+        reinterpret_cast<RtObject::External**>(&_pixelProgram), pod);    // 0x180055380
     RtObject_ExternalPtrSerialize_RenderState(
-        reinterpret_cast<RtObject::External**>(&_renderState), &ser);
+        reinterpret_cast<RtObject::External**>(&_renderState), pod);     // 0x180055670
 
     if ((_vertexLayout.Get() || _vertexProgram.Get() || _pixelProgram.Get() || _renderState.Get())
-        && stream->direction == 0) {
+        && stream.GetDirection() == IO::kReading) {
         this->Video::VideoProgram::PlatformCreate();   // retail derefs _data unguarded
     }
-    if (rw != nullptr) {
-        delete AsRw(rw);
-    }
-    return true;
+    return true;   // ~Serializer: the ReaderWriter's slot 0, flags 1
 }
 
 }  // namespace Video

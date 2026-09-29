@@ -67,12 +67,11 @@
 
 // ENDGAME B.3.5 block D1: the body MOVED onto `Video::Context::SetLight`; the
 // registered door at the bottom kept its name, its mangled-name row and its
-// address row and is a one-line QUALIFIED non-virtual delegation. The offsets
-// stay RAW: every one of them is inside `_lightStaging` (+0x1dd8, 0x1a0 bytes)
-// or `_pixelConstantStaging` (+0x200, 0x98 bytes), two members Context.h keeps
-// undivided because retail's own `Reset` and `BindResources` treat them as
-// single blocks. The four static_asserts below are what pin the raw offsets to
-// those two members.
+// address row and is a one-line QUALIFIED non-virtual delegation. B.4 (R-VIDEO):
+// the light window is `Context::LightStaging`'s named head now (still one 0x1a0
+// block for `Reset` and `BindResources`); the two publish windows stay offsets
+// into `_pixelConstantStaging` (+0x200, 0x98 bytes), which other blocks index
+// by byte. The static_asserts below pin both.
 namespace {
 
 using Video::Context;
@@ -82,20 +81,25 @@ constexpr uint32_t kLightStage    = 0x1dd8;   // .. 0x1e38, 0x60 bytes
 constexpr uint32_t kLightStageLen = 0x60;
 constexpr uint32_t kPixelColour   = 0x268;    // .. 0x288, 8 dwords copied from +0x1dd8
 constexpr uint32_t kPixelColourLen = 0x20;
+constexpr uint32_t kPixelPosition = kPixelColour + 0x10;   // the second four of those dwords
 constexpr uint32_t kPixelShadow   = 0x248;    // .. 0x258, 4 dwords copied from +0x1e28
 constexpr uint32_t kPixelShadowLen = 0x10;
 constexpr uint32_t kDirtyBits     = 0x12000;  // OR dword [this+0x10],0x12000
 
 static_assert(offsetof(Context, _lightStaging) == kLightStage,
               "SetLight writes Context::_lightStaging");
-static_assert(kLightStage + kLightStageLen <=
-                  offsetof(Context, _lightStaging) + sizeof(Context::_lightStaging),
-              "the light window must stay inside _lightStaging");
+static_assert(kLightStageLen == offsetof(Context::LightStaging, _unwritten60),
+              "the light window is LightStaging's named head");
 static_assert(kPixelShadow >= offsetof(Context, _pixelConstantStaging) &&
                   kPixelColour + kPixelColourLen <=
                       offsetof(Context, _pixelConstantStaging) +
                           sizeof(Context::_pixelConstantStaging),
               "both published windows must stay inside _pixelConstantStaging");
+static_assert(kPixelShadowLen == sizeof(Context::LightStaging::shadow),
+              "the shadow window is LightStaging::shadow");
+static_assert(kPixelColourLen == sizeof(Context::LightStaging::colour) +
+                                     sizeof(Context::LightStaging::position),
+              "the colour window is LightStaging::colour + position");
 static_assert(offsetof(Context, _dirty) == 0x10, "SetLight ORs Context::_dirty");
 
 // The immediates, as BIT PATTERNS read out of the image (lights_vtable.cpp's
@@ -112,16 +116,12 @@ float NegateBySignMask(float v) {
     float r; std::memcpy(&r, &b, 4); return r;
 }
 
-inline uint8_t* At(void* self, uint32_t off) {
-    return static_cast<uint8_t*>(self) + off;
+// `_pixelConstantStaging` stays one undivided byte block (engine/loops.cpp and
+// graphics/wave21_lane_gfxbody.cpp index it by byte). `off` is the Context
+// offset retail's listing spells; the block starts at +0x200.
+inline uint8_t* PixelStagingAt(Context* self, uint32_t off) {
+    return self->_pixelConstantStaging + (off - offsetof(Context, _pixelConstantStaging));
 }
-inline void StoreF(void* self, uint32_t off, float v) { std::memcpy(At(self, off), &v, 4); }
-inline void CopyD(void* self, uint32_t dst, uint32_t src) {
-    std::memcpy(At(self, dst), At(self, src), 4);
-}
-
-using SetLightFn = void (*)(void*, const float*, const float*,
-                            const uint32_t*, const uint32_t*, float, float, int32_t);
 
 }  // namespace
 
@@ -145,45 +145,52 @@ void Video::Context::SetLight(const void* directionRaw, const void* attenuationR
     const float*    attenuation = static_cast<const float*>(attenuationRaw);
     const uint32_t* colour      = static_cast<const uint32_t*>(colourRaw);
     const uint32_t* position    = static_cast<const uint32_t*>(positionRaw);
+    LightStaging& L = _lightStaging;
 
     // +0x1dd8 .. +0x1de4 — the colour, four dwords copied as dwords.
-    std::memcpy(At(self, 0x1dd8), colour, 16);
+    std::memcpy(L.colour, colour, 16);
 
     // +0x1de8 .. +0x1df4 — the position, four dwords.
-    std::memcpy(At(self, 0x1de8), position, 16);
+    std::memcpy(L.position, position, 16);
 
     // +0x1e18 / +0x1e1c / +0x1e20 / +0x1e24 — see banner points 1 and 2.
     const float invRange = AsFloat(kBits_one) / (farPlane - nearPlane);
-    StoreF(self, 0x1e18, farPlane);
-    StoreF(self, 0x1e1c, NegateBySignMask(nearPlane));
-    StoreF(self, 0x1e20, invRange);
-    StoreF(self, 0x1e24, 0.0f);
+    L.farPlane     = farPlane;
+    L.negNearPlane = NegateBySignMask(nearPlane);
+    L.invRange     = invRange;
+    L.zero4c       = 0.0f;
 
     // +0x1df8 .. +0x1e04 — the direction, with w = 1.0f.
-    StoreF(self, 0x1df8, direction[0]);
-    StoreF(self, 0x1dfc, direction[1]);
-    StoreF(self, 0x1e00, direction[2]);
-    StoreF(self, 0x1e04, AsFloat(kBits_one));
+    L.direction[0] = direction[0];
+    L.direction[1] = direction[1];
+    L.direction[2] = direction[2];
+    L.direction[3] = AsFloat(kBits_one);
 
     // +0x1e08 .. +0x1e10 — the attenuation, then its dot with the direction at
     // +0x1e14. Association order per banner point 3.
-    StoreF(self, 0x1e08, attenuation[0]);
-    StoreF(self, 0x1e0c, attenuation[1]);
-    StoreF(self, 0x1e10, attenuation[2]);
+    L.attenuation[0] = attenuation[0];
+    L.attenuation[1] = attenuation[1];
+    L.attenuation[2] = attenuation[2];
     const float dot = (attenuation[1] * direction[1] + attenuation[0] * direction[0]) +
                       attenuation[2] * direction[2];
-    StoreF(self, 0x1e14, dot);
+    L.attenuationDot = dot;
 
     // +0x1e28 — 1.0f / (float)shadowResolution. CVTDQ2PS: a SIGNED int-to-float
     // conversion, then a single DIVSS.
-    StoreF(self, 0x1e28, AsFloat(kBits_one) / static_cast<float>(shadowResolution));
-    StoreF(self, 0x1e2c, 0.0f);
-    StoreF(self, 0x1e30, 0.0f);
-    StoreF(self, 0x1e34, 0.0f);
+    L.shadow[0] = AsFloat(kBits_one) / static_cast<float>(shadowResolution);
+    L.shadow[1] = 0.0f;
+    L.shadow[2] = 0.0f;
+    L.shadow[3] = 0.0f;
 
-    // The two publish blocks, dword by dword, exactly as retail (banner 4).
-    for (uint32_t k = 0; k < 8; ++k) CopyD(self, kPixelColour + k * 4, 0x1dd8 + k * 4);
-    for (uint32_t k = 0; k < 4; ++k) CopyD(self, kPixelShadow + k * 4, 0x1e28 + k * 4);
+    // The two publish blocks, dword by dword, exactly as retail (banner 4):
+    // colour + position (+0x1dd8, 8 dwords) to +0x268, shadow (+0x1e28, 4
+    // dwords) to +0x248.
+    for (uint32_t k = 0; k < 4; ++k)
+        std::memcpy(PixelStagingAt(self, kPixelColour + k * 4), &L.colour[k], 4);
+    for (uint32_t k = 0; k < 4; ++k)
+        std::memcpy(PixelStagingAt(self, kPixelPosition + k * 4), &L.position[k], 4);
+    for (uint32_t k = 0; k < 4; ++k)
+        std::memcpy(PixelStagingAt(self, kPixelShadow + k * 4), &L.shadow[k], 4);
 
-    *reinterpret_cast<uint32_t*>(At(self, 0x10)) |= kDirtyBits;
+    _dirty |= kDirtyBits;
 }

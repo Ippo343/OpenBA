@@ -261,7 +261,7 @@ public:
     // Video resources captured on device loss and restored on device restart.
     Collection::Array<RtEngine::VideoResourceEntry> _videoResources;  // +0x00
 
-    void*    _context;            // +0x10  Video::Context*, owned; 0x2168 bytes
+    Video::Context* _context;     // +0x10  owned; 0x2168 bytes (B.4 R-VIDEO: H4 typing)
     uint8_t  _contextDirty;       // +0x18  loop switch asks for a fresh context
     uint8_t  _quit;               // +0x19  Run's exit flag
     uint8_t  _pad1a[6];           // +0x1a  ctor zeroes +0x18/+0x19 as one word;

@@ -73,57 +73,25 @@
 #include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::RenderBufferData
 #include "../../types/io/Persistence.h"        // ENDGAME B.3.9 SS1: Persistence::_singleton
 
-using RtVideo::Adapter;
-using RtVideo::Configuration;
-using RtVideo::Device;
-using RtVideo::DisplayMode;
-using RtVideo::GraphicsInterface;
-using RtVideo::RefreshRate;
-using RtVideo::RenderBuffer;
+using Video::Configuration;
+using Video::Device;
+using Video::RenderBuffer;
+using Adapter           = Video::Device::Adapter;
+using DisplayMode       = Video::Device::DisplayMode;
+using GraphicsInterface = Video::Device::GraphicsInterface;
+using RefreshRate       = Video::Device::RefreshRate;
 
 // ----------------------------------------------------------------------------
-// The two IO::Persistence readers, declared here rather than included.
+// B.4 (R-VIDEO): the three singleton-slot accessors are gone — the bodies read
+// the class statics `Device::_singleton`, `Configuration::_singleton` and
+// `IO::Persistence::_singleton` by name. `Configuration::Startup` calls the two
+// `IO::Persistence::Get` members (retail 0x1800b81e0 int, 0x1800b8290 bool)
+// directly instead of their `RtIo_Persistence_Get*` forwarders.
 //
-// Wave 4 lane C's ports of ?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z (retail
-// 0x1800b81e0) and ?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z (0x1800b8290).
-// Video_Configuration_Startup calls them as C++ symbols; the same extern-here
-// shape runtime/src/input/input.cpp:38 already uses for the bool one, and for
-// the same reason — runtime/src/io/persistence.cpp exposes no header.
-//
-// CONTRACT THIS FILE DEPENDS ON: both write through `out` only on a hit and
-// leave the caller's value untouched on a miss. That is retail's behaviour and
-// it is what makes an absent registry key leave the ctor default in place.
+// CONTRACT THIS FILE DEPENDS ON: both Gets write through `out` only on a hit
+// and leave the caller's value untouched on a miss. That is retail's behaviour
+// and it is what makes an absent registry key leave the ctor default in place.
 // ----------------------------------------------------------------------------
-extern bool RtIo_Persistence_GetInt (void* self, const char* section, const char* key, int*  out);
-extern bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out);
-
-namespace {
-
-// ---- The three singletons these bodies read --------------------------------
-// Exported DATA symbols: the export address IS the pointer slot.
-//
-// The comment here used to say these went through the raw DLL door "because the
-// registry holds function redirections only, and nothing has registered — or
-// can register — a data slot before cutover." Both halves were wrong by Wave 9.
-// The code called ResolveExport, not Raw; and RegisterRuntimeExport is a plain
-// name->pointer map that does not care whether the pointer is code or data, so
-// a data slot CAN be registered and cutover is exactly when it must be. Going
-// through ResolveExport is therefore right, and RT_DATA_SLOT makes the late
-// registration reachable by refusing to cache a null.
-Device** DeviceSingletonSlot() {
-    Device** p = reinterpret_cast<Device**>(&::Video::Device::_singleton);
-    return p;
-}
-Configuration** ConfigSingletonSlot() {
-    Configuration** p = reinterpret_cast<Configuration**>(&::Video::Configuration::_singleton);
-    return p;
-}
-void** PersistenceSingletonSlot() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
-    return reinterpret_cast<void**>(&::IO::Persistence::_singleton);
-}
-
-}  // namespace
 
 // ?_singleton@Device@Video@@0PEAV12@EA (0x1801fe7a8) — the class static
 // (ENDGAME B.3.9 VID, B39_RULES D7; the minted row is redirected onto it).
@@ -314,7 +282,7 @@ void Video::Device::ValidateConfiguration(int& renderer, int& adapterIdx,
 // nothing matches: displayModeIndex keeps whatever it had. Both are retail.
 // ============================================================================
 bool Video::Device::ApplyChangedSettings() {
-    const Configuration* cfg = *ConfigSingletonSlot();
+    const Configuration* cfg = Configuration::_singleton;
 
     const int width  = cfg->fullscreen ? cfg->width  : cfg->windowWidth;
     backBufferWidth = width;
@@ -368,34 +336,23 @@ int RenderBufferExtent(uint32_t flags,
 
 }  // namespace
 
-// ENDGAME B.3.5 block D2. Two things moved with the body:
-//
-//  * The hand-inlined `(*(void***)platformData)[1]` tail call became a VIRTUAL
-//    CALL on `Video::RenderBufferData`, which block A made a real abstract class
-//    with `Slot1()` at slot 1 (runtime/types/video/CompanionData.h). The
-//    `reinterpret_cast` is the `// B.3.5 bridge` shape the brief asks for,
-//    because `platformData` is still a `void*` field (its layout is pinned and
-//    dx11 reads it at +0x28).
-//  * The `ImageBuffer` parameters keep the SIGNATURE retail's mangling gives
-//    them (`PEBVImageBuffer@2@` — `Video::ImageBuffer`), but the field reads go
-//    through the global POD, because `runtime/types/video/ImageBuffer.h` is
-//    b35-C's file and `Video::ImageBuffer` is not a complete type here yet. One
-//    bridge cast, marked, to be deleted by the ImageBuffer caller batch.
+// ENDGAME B.3.5 block D2: the hand-inlined `(*(void***)platformData)[1]` tail
+// call is a virtual call on `Video::RenderBufferData`'s slot 1. B.4 (R-VIDEO):
+// the two attachments and `platformData` are typed fields and the ImageBuffer
+// descriptor is read through the real class (`_flags`, `_width`, `_height`).
 bool Video::RenderBuffer::Create(const ImageBuffer* color, const ImageBuffer* depth) {
-    colorBuffer = static_cast<void*>(const_cast<ImageBuffer*>(color));
-    depthBuffer = static_cast<void*>(const_cast<ImageBuffer*>(depth));
+    colorBuffer = color;
+    depthBuffer = depth;
 
-    const Device*        dev = *DeviceSingletonSlot();
-    const Configuration* cfg = *ConfigSingletonSlot();
-    // B.3.5 bridge — b35-C owns Video::ImageBuffer's definition.
-    const ::ImageBuffer* src = reinterpret_cast<const ::ImageBuffer*>(color ? color : depth);
-    const uint32_t       flags = src->flags;
+    const Device*        dev = Device::_singleton;
+    const Configuration* cfg = Configuration::_singleton;
+    const ImageBuffer*   src = color ? color : depth;
+    const uint32_t       flags = src->_flags;
 
-    width  = RenderBufferExtent(flags, src->width,  dev->backBufferWidth,  cfg);
-    height = RenderBufferExtent(flags, src->height, dev->backBufferHeight, cfg);
+    width  = RenderBufferExtent(flags, src->_width,  dev->backBufferWidth,  cfg);
+    height = RenderBufferExtent(flags, src->_height, dev->backBufferHeight, cfg);
 
-    // B.3.5 bridge — platformData stays void* (pinned at +0x28, read by dx11).
-    return reinterpret_cast<Video::RenderBufferData*>(platformData)->Slot1();
+    return platformData->Slot1();
 }
 
 // (The `??1RenderStateData@Video@@UEAA@XZ` door, retail 0x1800f8d70, is GONE:
@@ -426,54 +383,49 @@ namespace {
 
 constexpr const char* kSectionVideo = "Video";
 
-// Retail's 18 stores, in retail's order. `isBool` picks the Set overload.
+// Retail's 18 stores, in retail's order. The field is named by a pointer to
+// member (B.4 R-VIDEO: it was a byte offset); an int field has `intField`, a
+// bool one `boolField`, and which is set picks the Set overload. The offsets in
+// the comments are the ones retail's LEA operands carry.
 struct SaveField {
     const char* key;
-    bool        isBool;
-    uint16_t    offset;   // byte offset into Video::Configuration
+    int32_t Configuration::* intField;
+    uint8_t Configuration::* boolField;
 };
 
 constexpr SaveField kSaveFields[] = {
-    { "Interface",        false, 0x04 },
-    { "Adapter",          false, 0x08 },
-    { "Width",            false, 0x0C },
-    { "Height",           false, 0x10 },
-    { "WindowWidth",      false, 0x1C },
-    { "WindowHeight",     false, 0x20 },
-    { "WindowX",          false, 0x14 },
-    { "WindowY",          false, 0x18 },
-    { "RefreshN",         false, 0x38 },
-    { "RefreshD",         false, 0x3C },
-    { "Multisample",      false, 0x24 },
-    { "Fullscreen",       true,  0x40 },
-    { "VSync",            true,  0x41 },
-    { "TextureFilter",    false, 0x28 },
-    { "ShadowScalar",     false, 0x2C },
-    { "ShaderDetail",     false, 0x30 },
-    { "ReflectionDetail", false, 0x34 },
-    { "Settings",         true,  0x00 },
+    { "Interface",        &Configuration::interfaceIndex,     nullptr },   // +0x04
+    { "Adapter",          &Configuration::adapterIndex,       nullptr },   // +0x08
+    { "Width",            &Configuration::width,              nullptr },   // +0x0C
+    { "Height",           &Configuration::height,             nullptr },   // +0x10
+    { "WindowWidth",      &Configuration::windowWidth,        nullptr },   // +0x1C
+    { "WindowHeight",     &Configuration::windowHeight,       nullptr },   // +0x20
+    { "WindowX",          &Configuration::windowX,            nullptr },   // +0x14
+    { "WindowY",          &Configuration::windowY,            nullptr },   // +0x18
+    { "RefreshN",         &Configuration::refreshNumerator,   nullptr },   // +0x38
+    { "RefreshD",         &Configuration::refreshDenominator, nullptr },   // +0x3C
+    { "Multisample",      &Configuration::multisample,        nullptr },   // +0x24
+    { "Fullscreen",       nullptr, &Configuration::fullscreen },           // +0x40
+    { "VSync",            nullptr, &Configuration::vsync },                // +0x41
+    { "TextureFilter",    &Configuration::textureFilter,      nullptr },   // +0x28
+    { "ShadowScalar",     &Configuration::shadowScalar,       nullptr },   // +0x2C
+    { "ShaderDetail",     &Configuration::shaderDetail,       nullptr },   // +0x30
+    { "ReflectionDetail", &Configuration::reflectionDetail,   nullptr },   // +0x34
+    { "Settings",         nullptr, &Configuration::settingsValid },        // +0x00
 };
 constexpr int kSaveFieldCount = (int)(sizeof(kSaveFields) / sizeof(kSaveFields[0]));
-
-int  FieldInt (const Configuration* c, uint16_t off) {
-    return *reinterpret_cast<const int32_t*>(reinterpret_cast<const uint8_t*>(c) + off);
-}
-bool FieldBool(const Configuration* c, uint16_t off) {
-    return *(reinterpret_cast<const uint8_t*>(c) + off) != 0;
-}
 
 }  // namespace
 
 void Video::Configuration::Save() {
-    void* persistence = *PersistenceSingletonSlot();
+    IO::Persistence* store = IO::Persistence::_singleton;
 
     for (int i = 0; i < kSaveFieldCount; ++i) {
         const SaveField& f = kSaveFields[i];
-        IO::Persistence* store = reinterpret_cast<IO::Persistence*>(persistence);  // B.3.x bridge
-        if (f.isBool)
-            store->Set(kSectionVideo, f.key, FieldBool(this, f.offset));
+        if (f.boolField)
+            store->Set(kSectionVideo, f.key, (this->*f.boolField) != 0);
         else
-            store->Set(kSectionVideo, f.key, FieldInt(this, f.offset));
+            store->Set(kSectionVideo, f.key, static_cast<int>(this->*f.intField));
     }
 }
 
@@ -524,20 +476,21 @@ void Video::Configuration::Save() {
 //    Nothing here can fail, including a completely empty registry.
 // ============================================================================
 bool Video::Configuration::Startup() {
-    void* persistence = *PersistenceSingletonSlot();
+    const IO::Persistence* persistence = IO::Persistence::_singleton;
 
     int found = 0;
     for (int i = 0; i < kSaveFieldCount; ++i) {
         const SaveField& f = kSaveFields[i];
-        auto* field = reinterpret_cast<uint8_t*>(this) + f.offset;
-        if (f.isBool) {
-            bool v = (*field != 0);
-            if (RtIo_Persistence_GetBool(persistence, kSectionVideo, f.key, &v)) ++found;
-            *field = static_cast<uint8_t>(v ? 1 : 0);
+        if (f.boolField) {
+            uint8_t& field = this->*f.boolField;
+            bool v = (field != 0);
+            if (persistence->Get(kSectionVideo, f.key, v)) ++found;
+            field = static_cast<uint8_t>(v ? 1 : 0);
         } else {
-            int v = *reinterpret_cast<int32_t*>(field);
-            if (RtIo_Persistence_GetInt(persistence, kSectionVideo, f.key, &v)) ++found;
-            *reinterpret_cast<int32_t*>(field) = v;
+            int32_t& field = this->*f.intField;
+            int v = field;
+            if (persistence->Get(kSectionVideo, f.key, v)) ++found;
+            field = v;
         }
     }
 

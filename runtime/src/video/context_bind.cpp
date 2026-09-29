@@ -169,76 +169,46 @@
 
 #include "../../types/video/Context.h"
 // ENDGAME B.3.5 block J: the eight real Video::*Data abstract bases (block A),
-// whose slots the seventeen backend dispatches below now go through.
+// whose slots the seventeen backend dispatches below go through.
 #include "../../types/video/CompanionData.h"
+// B.4 (R-VIDEO): the owners whose companions the arms read, by name.
+#include "../../types/video/Buffers.h"
+#include "../../types/video/ImageBuffer.h"
+#include "../../types/video/RenderState.h"
+#include "../../types/video/ShaderProgram.h"
+#include "../../types/video/VertexLayout.h"
+#include "../../types/video/VideoProgram.h"
 
 // ENDGAME B.3.5 block D1. Both bodies MOVED onto `Video::Context`; the two
-// registered doors at the bottom kept their names, their mangled-name rows and
-// their address rows and became one-line QUALIFIED non-virtual delegations.
+// registered doors kept their names and became one-line QUALIFIED non-virtual
+// delegations.
 //
-// THE RAW-OFFSET READS ARE NOW REAL FIELD ACCESSES, except in the three places
-// the disassembly reads bytes the struct cannot name:
-//   * +0x200, which is `_videoProgram` living inside `_pixelConstantStaging`
-//     (see that member's banner in Context.h — the array is left undivided so no
-//     other file's offsets move);
-//   * the QWORD clear over +0x20..+0x27, which covers `_transformCount` AND
-//     `_unknown0024` in ONE store (0x1800ef317) and is one of this file's
-//     negative controls;
+// B.4 (R-VIDEO): every read is a named field of a typed receiver — the owners'
+// companions (`ImageBuffer::_data` +0x60, `VertexProgram` / `PixelProgram::_data`
+// +0x50, `VideoProgram::_data` +0x40, `VertexLayout::_data` +0x30,
+// `Index/VertexBuffer::platformData` +0x08, `RenderState::_data` +0x78,
+// `ConstantBuffer::_platformData` +0x40) and the Context's own fields. What is
+// LEFT, each with its reason at the line:
+//   * `_imageBuffers[i]` is still `void*` in Context.h (outside writers store
+//     untyped pointers into it), so the image arm views it as the ImageBuffer it
+//     is;
+//   * +0x200 is `_videoProgram` living inside `_pixelConstantStaging`, which
+//     Context.h keeps undivided because code outside this block indexes the
+//     array by its own offsets;
+// and two things are spelled from the member they start in:
+//   * the QWORD clear over +0x20..+0x27 (0x1800ef317), `_transformCount` AND
+//     `_unknown0024`, written as the two named fields in address order (H7);
 //   * the five constant-buffer STAGING sources at +0x208 / +0x248 / +0x328 /
 //     +0x3f8 / +0x1dd8, two of which start mid-array.
-// Everything else — including the five constant buffers' backend companions,
-// which used to be `Field<void*>(self, bufOffset + 0x40)` — now goes through the
-// real `Video::ConstantBuffer::_platformData` (runtime/types/video/ConstantBuffer.h).
+//
+// The negative controls and the in-process replay probe that used to follow
+// the two bodies are GONE (B.4 R-VIDEO): nothing called the probe
+// (`RunCase` / `InstallFakes` were unreferenced — the compiler's
+// -Wunused-function said so), and the defect switch it set was therefore
+// always 0.
 using Video::Context;
-using RtVideo::kContextSize;
 
 namespace {
-
-template <typename T> inline T& Field(void* p, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
-inline void* At(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
-
-// ---- Context offsets this file uses, by number ------------------------------
-// Deliberately raw offsets rather than the struct members: two of them
-// (+0x200 and +0x24) name fields the struct does not model the way the
-// disassembly reads them, and mixing the two spellings in one body is how an
-// offset silently drifts.
-enum : size_t {
-    kDirty            = 0x0010,
-    kImageDirty       = 0x0018,
-    kVertexDirty      = 0x001c,
-    kTransformCount   = 0x0020,   // the QWORD at +0x20 covers +0x24 too
-    kImageBuffers     = 0x0030,   // [16]
-    kVertexLayout     = 0x00b0,
-    kVertexBuffers    = 0x00b8,   // [16]
-    kVertexOffsets    = 0x0138,   // int32[16]
-    kVertexStrides    = 0x0178,   // int32[16]
-    kIndexBuffer      = 0x01b8,
-    kRenderState      = 0x01c8,
-    kVertexProgram    = 0x01f0,
-    kPixelProgram     = 0x01f8,
-    kVideoProgram     = 0x0200,
-    kShaderDetail     = 0x000c,
-    kContextData      = 0x2160,
-
-    kMaterialBuffer   = 0x0298,
-    kPixelBuffer      = 0x02e0,
-    kGlobalBuffer     = 0x1f78,
-    kInstanceBuffer   = 0x1fc0,
-    kLightBuffer      = 0x2098,
-
-    kMaterialStaging  = 0x0208,
-    kPixelStaging     = 0x0248,
-    kGlobalStaging    = 0x0328,
-    kInstanceStaging  = 0x03f8,
-    kLightStaging     = 0x1dd8,
-
-    // A Video::ConstantBuffer's backend companion. Same +0x40 lane VID2's ctor
-    // mints through `factory->vtbl[11]`; retail reaches it as an absolute
-    // offset from the Context (`[RBX+0x1fb8]` == 0x1f78 + 0x40).
-    kBufCompanion     = 0x40,
-};
 
 // ---- Upload sizes, as retail's immediates ----------------------------------
 enum : int32_t {
@@ -249,115 +219,16 @@ enum : int32_t {
     kPixelBytes    = 0x50,
 };
 
-// ---- Backend companion vtable slots (Context+0x2160) ------------------------
-// Every one of these is confirmed twice: once as the offset BindResources
-// dispatches through, and once as the offset the corresponding one-line
-// exported thunk jumps through. The thunks are three instructions each
-// (`MOV RCX,[RCX+0x2160] / MOV RAX,[RCX] / JMP [RAX+off]`), so the pairing is
-// not an inference.
-enum : size_t {
-    kSlotBindRenderBuffer = 0x28,  // ?BindRenderBuffer@ 0x1800f2280
-    kSlotBindViewport     = 0x30,  // ?BindViewport@     0x1800f2300
-    kSlotBindScissor      = 0x38,  // ?BindScissor@      0x1800f2320
-    kSlotBindTransforms   = 0x40,  // ?BindTransforms@   0x1800f22a0
-    kSlotBindTextureNone  = 0x48,  // ?BindTextureNone@  0x1800f2260
-    kSlotBindIndexNone    = 0x50,  // ?BindIndexNone@    0x1800f22e0
-    kSlotBindVertexNone   = 0x58,  // ?BindVertexNone@   0x1800f22c0
-};
-
-// ---- Sub-object companion offsets and slots --------------------------------
-enum : size_t {
-    kImageCompanion   = 0x60, kImageBindSlot   = 0x20,  // (that, ctx, i)
-    kProgCompanion50  = 0x50, kProgBindSlot    = 0x10,  // (that, ctx, detail)
-    kVideoCompanion40 = 0x40,                            // same slot, other offset
-    kVBufCompanion    = 0x08, kVBufBindSlot    = 0x28,  // (that,ctx,i,off,stride)
-    kLayoutCompanion  = 0x30, kLayoutBindSlot  = 0x08,  // (that, ctx)
-    kIBufCompanion    = 0x08, kIBufBindSlot    = 0x28,  // (that, ctx)
-    kStateCompanion   = 0x78, kStateBindSlot   = 0x10,  // (that, ctx)
-    kCBufBindSlot     = 0x10,                            // (that,ctx,src,0,len)
-};
-
-// ENDGAME B.3.5 block J, COORDINATOR RULING — `VSlot()` AND THE SIX FUNCTION
-// TYPEDEFS ARE GONE, and the seventeen dispatches they served are VIRTUAL CALLS.
-//
-// `VSlot(obj, byteOff)` read the vptr at `obj+0x00` and indexed it at `byteOff`;
-// every one of the eight companion classes is a real abstract class with its slots
-// in retail order (block A, runtime/types/video/CompanionData.h), so a virtual call
-// through the matching base reads THE SAME live vptr at THE SAME byte offset. It is
-// the same dispatch, with the slot index and the argument list checked by the
-// compiler instead of by a `using ...Fn = ...` typedef and a comment. The seam is
-// still what fills the slots; nothing here changes what is installed in one.
-//
-// The object behind each pointer is the CONCRETE VideoDX11 class, which does not
-// derive from the abstract base in C++ (RULE B5-8's declared leave), so each
-// receiver takes one `// B.3.5 bridge` cast. The eight one-line helpers below are
-// those casts, named once per companion kind instead of seventeen times inline.
-//
-// THE SLOT DECIDES. Every index below was checked against the class's declaration
-// order in CompanionData.h AND against the `DX11_REGISTER_SLOT` row that fills it;
-// the `static_assert`s pin the seven ContextData byte offsets this file had spelled
-// as an enum. THREE SLOT SIGNATURES WERE UNDER-DECLARED in that header and are
-// corrected there this pass, each with the retail disassembly — `ImageBufferData`
-// slot 4's first argument is the Context (not "unknownArg"), `IndexBufferData` slot
-// 5 takes the Context at all, `ConstantBufferData` slot 2's fourth argument is an
-// int and not a pointer, and `VideoProgramData` slot 2 is `Bind(Context*, int)`
-// rather than a nameless no-argument `Slot2`. In all four cases the CALL SITES here
-// were already passing the right thing; it was the declaration that was short.
-//
-// The OWNER-side companion offsets (`kImageCompanion` &c) stay raw field reads:
-// they are not doors, and two of them (+0x40 vs +0x50 for a VideoProgram) are the
-// trap this file's banner exists to record.
-inline Video::ContextData* AsContextData(void* p) {
-    return reinterpret_cast<Video::ContextData*>(p);              // B.3.5 bridge
-}
-inline Video::ImageBufferData* AsImageData(void* p) {
-    return reinterpret_cast<Video::ImageBufferData*>(p);          // B.3.5 bridge
-}
-// VertexProgramData and PixelProgramData declare an identical slot 2, which is why
-// retail shares one dispatch shape between them; VideoProgramData's slot 2 is the
-// same shape at the same index behind a different companion offset. Typed on
-// VertexProgramData, exactly as `buffers.cpp` types one view on IndexBuffer for
-// both GPU buffers.
-inline Video::VertexProgramData* AsProgramData(void* p) {
-    return reinterpret_cast<Video::VertexProgramData*>(p);        // B.3.5 bridge
-}
-inline Video::VertexBufferData* AsVertexBufferData(void* p) {
-    return reinterpret_cast<Video::VertexBufferData*>(p);         // B.3.5 bridge
-}
-inline Video::VertexLayoutData* AsLayoutData(void* p) {
-    return reinterpret_cast<Video::VertexLayoutData*>(p);         // B.3.5 bridge
-}
-inline Video::IndexBufferData* AsIndexBufferData(void* p) {
-    return reinterpret_cast<Video::IndexBufferData*>(p);          // B.3.5 bridge
-}
-inline Video::RenderStateData* AsRenderStateData(void* p) {
-    return reinterpret_cast<Video::RenderStateData*>(p);          // B.3.5 bridge
-}
-inline Video::ConstantBufferData* AsConstantBufferData(void* p) {
-    return reinterpret_cast<Video::ConstantBufferData*>(p);       // B.3.5 bridge
-}
-
-static_assert(kSlotBindRenderBuffer / 8 ==  5, "ContextData::BindRenderBuffer is slot 5");
-static_assert(kSlotBindViewport     / 8 ==  6, "ContextData::BindViewport is slot 6");
-static_assert(kSlotBindScissor      / 8 ==  7, "ContextData::BindScissor is slot 7");
-static_assert(kSlotBindTransforms   / 8 ==  8, "ContextData::BindTransforms is slot 8");
-static_assert(kSlotBindTextureNone  / 8 ==  9, "ContextData::BindTextureNone is slot 9");
-static_assert(kSlotBindIndexNone    / 8 == 10, "ContextData::BindIndexNone is slot 10");
-static_assert(kSlotBindVertexNone   / 8 == 11, "ContextData::BindVertexNone is slot 11");
-static_assert(kImageBindSlot  / 8 == 4, "ImageBufferData::Bind is slot 4");
-static_assert(kProgBindSlot   / 8 == 2, "Vertex/Pixel/VideoProgramData::Bind is slot 2");
-static_assert(kVBufBindSlot   / 8 == 5, "VertexBufferData::Bind is slot 5");
-static_assert(kLayoutBindSlot / 8 == 1, "VertexLayoutData::Bind is slot 1");
-static_assert(kIBufBindSlot   / 8 == 5, "IndexBufferData::Bind is slot 5");
-static_assert(kStateBindSlot  / 8 == 2, "RenderStateData::Bind is slot 2");
-static_assert(kCBufBindSlot   / 8 == 2, "ConstantBufferData::Bind is slot 2");
-
-// ---- Negative-control injection --------------------------------------------
-// Set only by the probe, and only for one case at a time. A control that lives
-// outside the function it is testing measures the harness rather than the port
-// (reference_probe_needs_an_effectiveness_control.md), so these sit on the real
-// branches inside the real bodies.
-int g_ctxBindDefect = 0;   // 0 = none; see the probe's table
+// THE SLOT DECIDES. Every virtual call below is on the companion class whose
+// slot retail's call site dispatches through; the indexes were checked against
+// the class's declaration order in CompanionData.h AND against the
+// `DX11_REGISTER_SLOT` row that fills it (ENDGAME B.3.5 block J):
+//   ContextData  BindRenderBuffer 5, BindViewport 6, BindScissor 7,
+//                BindTransforms 8, BindTextureNone 9, BindIndexNone 10,
+//                BindVertexNone 11
+//   ImageBufferData::Bind 4 · Vertex/Pixel/VideoProgramData::Bind 2 ·
+//   VertexBufferData::Bind 5 · VertexLayoutData::Bind 1 · IndexBufferData::Bind 5
+//   · RenderStateData::Bind 2 · ConstantBufferData::Bind 2
 
 }  // namespace
 
@@ -380,11 +251,11 @@ void Video::Context::BindTextures() {
         void* img = _imageBuffers[i];
         if (img) {
             // 0x1800ef358: RCX = img->+0x60, RDX = ctx, R8D = i, vt[+0x20].
-            void* companion = Field<void*>(img, kImageCompanion);
-            AsImageData(companion)->Bind(this, static_cast<unsigned>(i));
+            // LEFT: `_imageBuffers` is `void*` in Context.h (see the banner).
+            static_cast<const ImageBuffer*>(img)->_data->Bind(this, static_cast<unsigned>(i));
         } else {
             // 0x1800ef372: companion->BindTextureNone(i).
-            AsContextData(_contextData)->BindTextureNone(i);
+            _contextData->BindTextureNone(i);
         }
     }
     // 0x1800ef398 — AFTER the loop, unconditionally, even when no bit was set.
@@ -398,17 +269,17 @@ void Video::Context::BindTextures() {
 // streams (0x8) are bound BEFORE the vertex layout (0x4), and the transform
 // check sits between the shader programs and the streams. Reordering them is
 // invisible in the final Context bytes and visible to any backend that cares
-// what was set when — which is why the probe compares the call SEQUENCE.
+// what was set when.
 void Video::Context::BindResources() {
 
     // 0x1800ef066: the whole body is inside `if (dirty != 0)`.
     if (_dirty == 0) return;
 
-    void* cd = _contextData;
+    ContextData* cd = _contextData;
 
     // --- 0x00001 render buffer ---------------------------------------------
     // TWO DELIBERATE DEPARTURES FROM THE LITERAL BYTES, both stated rather than
-    // hidden, and both covered by the 33-case oracle:
+    // hidden:
     //
     //   (a) 0x1800ef079 tests `AL` of the value loaded ONCE at entry
     //       (0x1800ef066); every later arm re-reads `[RBX+0x10]`. This port
@@ -418,63 +289,40 @@ void Video::Context::BindResources() {
     //   (b) retail reloads `[RBX+0x2160]` at each companion arm; `cd` is loaded
     //       once here. No arm writes +0x2160 — the field is set by the ctor and
     //       by ?PlatformConstruct@, neither of which this function reaches.
-    //
-    // Both are equivalences, not normalisations of observable behaviour: if
-    // either were wrong the call log would differ, because a stale `cd` would
-    // dispatch through the wrong table.
     if (_dirty & 0x1u)
-        AsContextData(cd)->BindRenderBuffer();
+        cd->BindRenderBuffer();
 
     // --- 0x00002 textures ---------------------------------------------------
-    // A direct member call now, not the resolved door: retail's `CALL
-    // 0x1800ef330` at 0x1800ef08a is a near call to its own sibling body, and
-    // this is that same edge (B.3.5, runtime-internal caller inside the block).
+    // A direct member call: retail's `CALL 0x1800ef330` at 0x1800ef08a is a near
+    // call to its own sibling body.
     if (_dirty & 0x2u)
         this->Video::Context::BindTextures();
 
     const int32_t detail = _shaderDetail;
 
     // --- 0x00040 vertex program --------------------------------------------
-    if (_dirty & 0x40u) {
-        void* p = _vertexProgram;
-        void* c = Field<void*>(p, kProgCompanion50);
-        AsProgramData(c)->Bind(this, detail);
-    }
+    if (_dirty & 0x40u)
+        _vertexProgram->_data->Bind(this, detail);
 
     // --- 0x00080 pixel program ---------------------------------------------
-    if (_dirty & 0x80u) {
-        void* p = _pixelProgram;
-        void* c = Field<void*>(p, kProgCompanion50);
-        AsProgramData(c)->Bind(this, detail);
-    }
+    if (_dirty & 0x80u)
+        _pixelProgram->_data->Bind(this, detail);
 
     // --- 0x00100 video program ---------------------------------------------
     // NOTE THE COMPANION OFFSET: +0x40, not +0x50. A VideoProgram's backend
-    // companion sits one qword earlier than a Vertex/PixelProgram's. Copying
-    // the line above would be a silent wrong-pointer read.
+    // companion sits one qword earlier than a Vertex/PixelProgram's; the typed
+    // `VideoProgram::_data` says so.
     if (_dirty & 0x100u) {
-        // +0x200 by raw offset: `_videoProgram` is the first qword of
-        // `_pixelConstantStaging`, which Context.h keeps undivided on purpose.
-        void* p = Field<void*>(this, kVideoProgram);
-        void* c = Field<void*>(p, kVideoCompanion40);
-        // Slot 2 of `Video::VideoProgramData` is the SAME shape at the SAME index
-        // as the two above, which is why one helper serves all three; the header
-        // names it `Bind` as of this pass (it was a nameless `Slot2()`).
-        AsProgramData(c)->Bind(this, detail);
+        // LEFT: +0x200 is `_videoProgram`, the first qword of
+        // `_pixelConstantStaging`, which Context.h keeps undivided (see the banner).
+        const VideoProgram* p =
+            *reinterpret_cast<const VideoProgram* const*>(_pixelConstantStaging);
+        p->_data->Bind(this, detail);
     }
 
     // --- 0x04000 transforms, OR a live transform count ----------------------
     if ((_dirty & 0x4000u) || _transformCount > 0 || _unknown0024 > 0)
-        AsContextData(cd)->BindTransforms();
-
-    // Negative control 1 hoists the vertex-layout arm to HERE, ahead of the
-    // streams. Nothing in the Context bytes can tell the two orders apart, so
-    // this control fails unless the oracle really is comparing the call
-    // SEQUENCE and not just the end state.
-    if (g_ctxBindDefect == 1 && (_dirty & 0x4u)) {
-        void* c = Field<void*>(_vertexLayout, kLayoutCompanion);
-        AsLayoutData(c)->Bind(this);
-    }
+        cd->BindTransforms();
 
     // --- 0x00008 the sixteen vertex streams ---------------------------------
     if (_dirty & 0x8u) {
@@ -482,18 +330,17 @@ void Video::Context::BindResources() {
         for (int32_t i = 0; i < 16; ++i, mask = (mask << 1) | (mask >> 31)) {
             if ((_vertexBufferDirty & mask) == 0) continue;
 
-            void* vb = _vertexBuffers[i];
+            const VertexBuffer* vb = _vertexBuffers[i];
             if (vb) {
                 // 0x1800ef15d: RCX = vb->+0x8, RDX = ctx, R8D = i,
                 // R9D = offsets[i] (+0x138), [RSP+0x20] = strides[i] (+0x178,
                 // reached as R15+0x40 off the offsets cursor).
-                void* c = Field<void*>(vb, kVBufCompanion);
-                AsVertexBufferData(c)->Bind(this,
-                                            static_cast<uint32_t>(i),
-                                            static_cast<uint32_t>(_vertexOffsets[i]),
-                                            static_cast<uint32_t>(_vertexStrides[i]));
+                vb->platformData->Bind(this,
+                                       static_cast<uint32_t>(i),
+                                       static_cast<uint32_t>(_vertexOffsets[i]),
+                                       static_cast<uint32_t>(_vertexStrides[i]));
             } else {
-                AsContextData(cd)->BindVertexNone(i);
+                cd->BindVertexNone(i);
             }
         }
         // 0x1800ef1af — inside the 0x8 arm only. A stream marked dirty while
@@ -502,442 +349,77 @@ void Video::Context::BindResources() {
     }
 
     // --- 0x00004 vertex layout ----------------------------------------------
-    // Retail binds the layout AFTER the streams. Negative control 1 swaps
-    // these two arms; nothing in the Context bytes can tell the difference.
-    if (g_ctxBindDefect != 1) {
-        if (_dirty & 0x4u) {
-            void* c = Field<void*>(_vertexLayout, kLayoutCompanion);
-            AsLayoutData(c)->Bind(this);
-        }
-    }
+    // Retail binds the layout AFTER the streams.
+    if (_dirty & 0x4u)
+        _vertexLayout->_data->Bind(this);
 
     // --- 0x00010 index buffer -----------------------------------------------
     if (_dirty & 0x10u) {
-        void* ib = _indexBuffer;
+        const IndexBuffer* ib = static_cast<const IndexBuffer*>(_indexBuffer);   // LEFT: Context.h _indexBuffer
         if (ib) {
-            void* c = Field<void*>(ib, kIBufCompanion);
             // The Context argument retail loads into RDX at 0x1800ef1e2 and
-            // VideoDX11's body never reads. The SLOT takes it; CompanionData.h is
-            // corrected this pass from a no-argument `Bind()`.
-            AsIndexBufferData(c)->Bind(this);
+            // VideoDX11's body never reads. The SLOT takes it.
+            ib->platformData->Bind(this);
         } else {
-            AsContextData(cd)->BindIndexNone();
+            cd->BindIndexNone();
         }
     }
 
     // --- 0x00020 render state -----------------------------------------------
-    if (_dirty & 0x20u) {
-        void* c = Field<void*>(_renderState, kStateCompanion);
-        AsRenderStateData(c)->Bind(this);
-    }
+    if (_dirty & 0x20u)
+        _renderState->_data->Bind(this);
 
     // --- 0x00200 viewport / 0x00400 scissor ---------------------------------
     if (_dirty & 0x200u)
-        AsContextData(cd)->BindViewport();
+        cd->BindViewport();
     if (_dirty & 0x400u)
-        AsContextData(cd)->BindScissor();
+        cd->BindScissor();
 
     // --- the five constant-buffer uploads -----------------------------------
     // Each is `buf->_platformData->vt[+0x10](platformData, ctx, staging, 0,
     // len)`. The fourth argument is an `XOR R9D,R9D` in all five; the fifth is
-    // the size immediate and is what negative control 3 corrupts.
-    //
-    // B.3.5: the companion used to be `Field<void*>(self, bufOffset + 0x40)`.
-    // `Video::ConstantBuffer` is a real class now, so the buffer is named and
-    // the +0x40 is `_platformData`. The STAGING source stays a raw offset —
-    // +0x208 and +0x248 start inside `_pixelConstantStaging`.
-    struct Upload { uint32_t bit; Video::ConstantBuffer* buf; size_t src; int32_t len; };
+    // the size immediate. The STAGING sources are spelled from the member they
+    // start in — +0x208 and +0x248 start inside `_pixelConstantStaging` (+0x200),
+    // +0x328 is `_viewProjection`, +0x3f8 `_inverseScale`, +0x1dd8 `_lightStaging`.
+    struct Upload { uint32_t bit; Video::ConstantBuffer* buf; const void* src; int32_t len; };
     const Upload kUploads[5] = {
-        { 0x00800u, &_globalConstants,   kGlobalStaging,   kGlobalBytes   },
-        { 0x01000u, &_instanceConstants, kInstanceStaging, kInstanceBytes },
-        { 0x02000u, &_lightConstants,    kLightStaging,    kLightBytes    },
-        { 0x08000u, &_materialConstants, kMaterialStaging, kMaterialBytes },
-        { 0x10000u, &_pixelConstants,    kPixelStaging,    kPixelBytes    },
+        { 0x00800u, &_globalConstants,   &_viewProjection,                      kGlobalBytes   },
+        { 0x01000u, &_instanceConstants, &_inverseScale,                        kInstanceBytes },
+        { 0x02000u, &_lightConstants,    &_lightStaging,                        kLightBytes    },
+        { 0x08000u, &_materialConstants, _pixelConstantStaging + (0x208 - 0x200), kMaterialBytes },
+        { 0x10000u, &_pixelConstants,    _pixelConstantStaging + (0x248 - 0x200), kPixelBytes    },
     };
     for (const Upload& u : kUploads) {
         if ((_dirty & u.bit) == 0) continue;
-        void* c = u.buf->_platformData;
-        int32_t len = u.len;
-        if (g_ctxBindDefect == 3 && u.bit == 0x800u) len = kInstanceBytes;
-        // The fourth argument is retail's `XOR R9D,R9D` — a DWORD zero, which is
-        // why CompanionData.h's `void* unused2` is corrected to `int32_t first`
-        // this pass. It was never a pointer.
-        AsConstantBufferData(c)->Bind(this, At(this, u.src), 0, len);
+        // The fourth argument is retail's `XOR R9D,R9D` — a DWORD zero.
+        u.buf->_platformData->Bind(this, u.src, 0, u.len);
     }
 
     // 0x1800ef317 / 0x1800ef31b — a QWORD zero over +0x20..+0x27, then the
-    // dirty mask. That single store covers `_transformCount` AND `_unknown0024`,
-    // which is why it stays a raw write: clearing only the dword would leave a
-    // live transform binding that never re-binds again. Negative control 2 does
-    // exactly that.
-    if (g_ctxBindDefect == 2)
-        _transformCount = 0;
-    else
-        Field<uint64_t>(this, kTransformCount) = 0;
+    // dirty mask. That single store covers `_transformCount` AND `_unknown0024`;
+    // both are cleared (clearing only the dword would leave a live transform
+    // binding that never re-binds again).
+    _transformCount = 0;
+    _unknown0024    = 0;
     _dirty = 0;
 }
 
-// ============================================================================
-// THE PROBE
-// ============================================================================
-namespace {
+// ---- ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z  0x180019f20
+// B.4 (R-VIDEO): MOVED here from context.cpp (unchanged), beside BindResources,
+// the one reader of the slots it fills.
+void Context::SetVertexBuffer(const void* vb, int32_t slot,
+                              int32_t offset, int32_t stride) {
 
-// ---- the recorder ----------------------------------------------------------
-// One entry per backend call. `slot` is the vtable BYTE offset, which is what
-// the disassembly shows and therefore what a mismatch should name; `tag`
-// separates the eight different call shapes, so a slot collision between two
-// object kinds cannot read as agreement.
-//
-// ARITY IS PART OF THE RECORD, AND IT IS AN EXCLUSION DERIVED FROM THE
-// DISASSEMBLY, NOT A TOLERANCE. Retail's call sites load only as many argument
-// registers as the callee takes: `?BindViewport@`'s dispatch loads RCX alone,
-// the image bind loads RCX/RDX/R8, the vertex-stream bind loads RCX/RDX/R8/R9
-// and one stack slot. A trampoline with one wide signature therefore READS
-// REGISTERS THE CALLER NEVER SET for the narrow shapes, and their contents are
-// whatever the two implementations happened to leave there — different on the
-// two sides for a reason with nothing to do with the port. Comparing them would
-// be comparing bytes neither side wrote
-// (reference_oracle_must_not_compare_unwritten_bytes.md). So each shape's arity
-// is fixed here from the call site, and arguments past it are zeroed before the
-// record is stored. What this cannot see, stated plainly: a port that passed a
-// SIXTH argument where retail passes five would go unnoticed. No shape in
-// either body has more than five.
-struct CallRec {
-    int32_t  tag;
-    int32_t  slot;      // vtable byte offset
-    int32_t  nargs;
-    int32_t  pad;
-    int64_t  a[5];      // this, then up to four more; normalised
-};
-
-enum : int32_t {
-    kTagCompanion = 1, kTagImage = 2, kTagProgram = 3,
-    kTagVBuf = 4, kTagLayout = 5, kTagIBuf = 6, kTagState = 7, kTagCBuf = 8,
-};
-
-// Derived from the call sites listed in this file's banner.
-int ArityOf(int32_t tag, size_t slotByte) {
-    switch (tag) {
-        case kTagCompanion:
-            // slots 5,6,7,8,10 take (this); slots 9 and 11 take (this, int).
-            return (slotByte == kSlotBindTextureNone ||
-                    slotByte == kSlotBindVertexNone) ? 2 : 1;
-        case kTagImage:   return 3;   // (this, ctx, i)
-        case kTagProgram: return 3;   // (this, ctx, shaderDetail)
-        case kTagVBuf:    return 5;   // (this, ctx, i, offset, stride)
-        case kTagLayout:  return 2;   // (this, ctx)
-        case kTagIBuf:    return 2;
-        case kTagState:   return 2;
-        case kTagCBuf:    return 5;   // (this, ctx, src, 0, len)
-        default:          return 1;
+    if (vb != _vertexBuffers[slot] || offset != _vertexOffsets[slot] ||
+        stride != _vertexStrides[slot]) {
+        _dirty |= RtVideo::kDirtyVertexBuffers;
+        _vertexBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
+        // LEFT (B.4 R-VIDEO): the parameter stays `const void*` because
+        // dx11/src/contextdata.cpp and code/Game/Game/geometry_draw.cpp hand it
+        // one; the field is typed.
+        _vertexBuffers[slot] = static_cast<const Video::VertexBuffer*>(vb);
+        _vertexOffsets[slot] = offset;
+        _vertexStrides[slot] = stride;
     }
+
 }
-
-constexpr int kMaxRecs = 512;
-CallRec  g_rec[kMaxRecs];
-int      g_recN       = 0;
-void*    g_recSubject = nullptr;    // the Context THIS side is running on
-uint64_t g_slotsSeen  = 0;          // bitmask of vtable slot INDEXES observed
-
-// A pointer argument that points inside the subject is recorded as its offset;
-// anything else is recorded raw. Without this the five constant uploads would
-// differ on 100% of calls for a reason with nothing to do with the port — each
-// side passes a pointer into its OWN Context. Every OTHER pointer the two
-// bodies pass is one of the SHARED fakes, so it compares directly.
-int64_t Norm(const void* p) {
-    const uint8_t* b = static_cast<const uint8_t*>(p);
-    const uint8_t* s = static_cast<const uint8_t*>(g_recSubject);
-    if (s && b >= s && b < s + kContextSize)
-        return static_cast<int64_t>(b - s) | static_cast<int64_t>(0x1000000000000000ll);
-    return static_cast<int64_t>(reinterpret_cast<uintptr_t>(p));
-}
-
-void Rec(int32_t tag, size_t slotByte,
-         int64_t a0, int64_t a1, int64_t a2, int64_t a3, int64_t a4) {
-    g_slotsSeen |= (1ull << (slotByte / 8));
-    if (g_recN >= kMaxRecs) return;
-    CallRec& r = g_rec[g_recN++];
-    std::memset(&r, 0, sizeof(r));
-    r.tag = tag;
-    r.slot = static_cast<int32_t>(slotByte);
-    r.nargs = ArityOf(tag, slotByte);
-    const int64_t all[5] = { a0, a1, a2, a3, a4 };
-    for (int i = 0; i < r.nargs; ++i) r.a[i] = all[i];
-}
-
-// ---- the fake vtables ------------------------------------------------------
-// SIXTY-FOUR SLOTS, EVERY ONE IMPLEMENTED, on all eight tables. Lane VID2
-// shipped a probe three times that implemented only the slots it predicted; the
-// first died EXEC-of-0 and the second read PAST the end of the array. The
-// derivation in this file's banner predicts slots 1,2,4,5,6,7,8,9,10,11 — the
-// probe reports which were ACTUALLY reached, on both sides, so the prediction
-// and the measurement can disagree out loud.
-constexpr int kFakeSlots = 64;
-
-// The widest shape any of these is called with. A Microsoft-x64 callee may
-// always ignore arguments it was not passed; the arity mask above is what keeps
-// the unset ones out of the comparison.
-template <int32_t TAG, int N>
-void FakeSlot(void* self, void* a1, void* a2, int64_t a3, int64_t a4) {
-    Rec(TAG, static_cast<size_t>(N) * 8,
-        Norm(self), Norm(a1), Norm(a2),
-        static_cast<int64_t>(static_cast<int32_t>(a3)),
-        static_cast<int64_t>(static_cast<int32_t>(a4)));
-}
-
-template <int32_t TAG> struct Vt { static void* table[kFakeSlots]; };
-template <int32_t TAG> void* Vt<TAG>::table[kFakeSlots] = {};
-
-template <int32_t TAG, int N> struct Fill {
-    static void Do() {
-        Vt<TAG>::table[N] = reinterpret_cast<void*>(&FakeSlot<TAG, N>);
-        Fill<TAG, N - 1>::Do();
-    }
-};
-template <int32_t TAG> struct Fill<TAG, -1> { static void Do() {} };
-
-// A fake object needs room for a companion pointer at up to +0x78 (the render
-// state's), so it is 0x80 bytes, not two qwords. All of them are SHARED between
-// the two sides, which is what lets every recorded pointer argument except the
-// subject compare directly rather than merely by presence.
-struct FakeObj { uint8_t bytes[0x80]; };
-
-FakeObj g_companion;
-FakeObj g_imgCompanion,   g_images[16];
-FakeObj g_progCompanion,  g_vProg, g_pProg, g_videoProg;
-FakeObj g_vbufCompanion,  g_vbufs[16];
-FakeObj g_layoutCompanion, g_layout;
-FakeObj g_ibufCompanion,   g_ibuf;
-FakeObj g_stateCompanion,  g_state;
-FakeObj g_cbufCompanion[5];
-
-void InstallFakes() {
-    Fill<kTagCompanion, kFakeSlots - 1>::Do();
-    Fill<kTagImage,     kFakeSlots - 1>::Do();
-    Fill<kTagProgram,   kFakeSlots - 1>::Do();
-    Fill<kTagVBuf,      kFakeSlots - 1>::Do();
-    Fill<kTagLayout,    kFakeSlots - 1>::Do();
-    Fill<kTagIBuf,      kFakeSlots - 1>::Do();
-    Fill<kTagState,     kFakeSlots - 1>::Do();
-    Fill<kTagCBuf,      kFakeSlots - 1>::Do();
-
-    std::memset(&g_companion, 0, sizeof(g_companion));
-    Field<void*>(&g_companion, 0) = Vt<kTagCompanion>::table;
-
-    // Each companion carries its own table at +0. The OWNING objects carry a
-    // pointer to their companion at the offset the retail body loads it from —
-    // and those offsets differ per kind, which is the whole point of recording
-    // them separately.
-    struct Wire { FakeObj* companion; void** table; };
-    const Wire kW[] = {
-        { &g_imgCompanion,    Vt<kTagImage>::table   },
-        { &g_progCompanion,   Vt<kTagProgram>::table },
-        { &g_vbufCompanion,   Vt<kTagVBuf>::table    },
-        { &g_layoutCompanion, Vt<kTagLayout>::table  },
-        { &g_ibufCompanion,   Vt<kTagIBuf>::table    },
-        { &g_stateCompanion,  Vt<kTagState>::table   },
-    };
-    for (const Wire& w : kW) {
-        std::memset(w.companion, 0, sizeof(FakeObj));
-        Field<void*>(w.companion, 0) = w.table;
-    }
-    for (int i = 0; i < 5; ++i) {
-        std::memset(&g_cbufCompanion[i], 0, sizeof(FakeObj));
-        Field<void*>(&g_cbufCompanion[i], 0) = Vt<kTagCBuf>::table;
-    }
-
-    for (int i = 0; i < 16; ++i) {
-        std::memset(&g_images[i], 0, sizeof(FakeObj));
-        std::memset(&g_vbufs[i],  0, sizeof(FakeObj));
-        Field<void*>(&g_images[i], kImageCompanion) = &g_imgCompanion;
-        Field<void*>(&g_vbufs[i],  kVBufCompanion)  = &g_vbufCompanion;
-    }
-    std::memset(&g_vProg, 0, sizeof(FakeObj));
-    std::memset(&g_pProg, 0, sizeof(FakeObj));
-    std::memset(&g_videoProg, 0, sizeof(FakeObj));
-    std::memset(&g_layout, 0, sizeof(FakeObj));
-    std::memset(&g_ibuf,  0, sizeof(FakeObj));
-    std::memset(&g_state, 0, sizeof(FakeObj));
-    Field<void*>(&g_vProg,     kProgCompanion50)  = &g_progCompanion;
-    Field<void*>(&g_pProg,     kProgCompanion50)  = &g_progCompanion;
-    // +0x40, NOT +0x50 — a VideoProgram's companion sits one qword earlier.
-    Field<void*>(&g_videoProg, kVideoCompanion40) = &g_progCompanion;
-    Field<void*>(&g_layout,    kLayoutCompanion)  = &g_layoutCompanion;
-    Field<void*>(&g_ibuf,      kIBufCompanion)    = &g_ibufCompanion;
-    Field<void*>(&g_state,     kStateCompanion)   = &g_stateCompanion;
-}
-
-// ---- the subject ------------------------------------------------------------
-alignas(16) uint8_t g_master[kContextSize];
-alignas(16) uint8_t g_ours  [kContextSize];
-alignas(16) uint8_t g_theirs[kContextSize];
-
-struct Case {
-    const char* name;
-    uint32_t dirty;
-    uint32_t imageDirty;
-    uint32_t vertexDirty;
-    int32_t  transformCount;
-    int32_t  field24;
-    bool     imagesNull;
-    bool     vbufsNull;
-    bool     ibufNull;
-};
-
-// Build the master image. Every byte is written here, so nothing either body
-// reads is uninitialised and the full 0x2168-byte comparison needs NO
-// exclusions at all.
-void BuildMaster(const Case& c) {
-    // A deterministic non-zero fill, so a wrong offset lands on a value that
-    // differs from its neighbours instead of on a sea of zeroes
-    // (reference_uniform_population_is_not_a_verification.md).
-    for (size_t i = 0; i < kContextSize; ++i)
-        g_master[i] = static_cast<uint8_t>((i * 31u + 7u) & 0xffu);
-
-    void* m = g_master;
-    Field<uint32_t>(m, kDirty)              = c.dirty;
-    Field<uint32_t>(m, 0x14)                = 0;
-    Field<uint32_t>(m, kImageDirty)         = c.imageDirty;
-    Field<uint32_t>(m, kVertexDirty)        = c.vertexDirty;
-    Field<int32_t> (m, kTransformCount)     = c.transformCount;
-    Field<int32_t> (m, kTransformCount + 4) = c.field24;
-    Field<int32_t> (m, kShaderDetail)       = 0x5a;
-
-    Field<void*>(m, kContextData) = &g_companion;
-
-    for (int i = 0; i < 16; ++i) {
-        Field<void*>(m, kImageBuffers + static_cast<size_t>(i) * 8) =
-            c.imagesNull ? nullptr : &g_images[i];
-        Field<void*>(m, kVertexBuffers + static_cast<size_t>(i) * 8) =
-            c.vbufsNull ? nullptr : &g_vbufs[i];
-        Field<int32_t>(m, kVertexOffsets + static_cast<size_t>(i) * 4) = 0x1000 + i;
-        Field<int32_t>(m, kVertexStrides + static_cast<size_t>(i) * 4) = 0x20 + i;
-    }
-    Field<void*>(m, kVertexLayout)  = &g_layout;
-    Field<void*>(m, kIndexBuffer)   = c.ibufNull ? nullptr : &g_ibuf;
-    Field<void*>(m, kRenderState)   = &g_state;
-    Field<void*>(m, kVertexProgram) = &g_vProg;
-    Field<void*>(m, kPixelProgram)  = &g_pProg;
-    Field<void*>(m, kVideoProgram)  = &g_videoProg;
-
-    static const size_t kBufs[5] = { kGlobalBuffer, kInstanceBuffer, kLightBuffer,
-                                     kMaterialBuffer, kPixelBuffer };
-    for (int i = 0; i < 5; ++i)
-        Field<void*>(m, kBufs[i] + kBufCompanion) = &g_cbufCompanion[i];
-}
-
-using BindFn = void (*)(void*);
-
-// Run one case through ours and theirs and compare. `quiet` suppresses the
-// per-difference lines for the negative controls, which are SUPPOSED to differ.
-int RunCase(const Case& c, BindFn ours, BindFn theirs, int defect, bool quiet,
-            int* shippedCalls, uint64_t* slotsOurs, uint64_t* slotsTheirs) {
-    BuildMaster(c);
-    std::memcpy(g_ours,   g_master, kContextSize);
-    std::memcpy(g_theirs, g_master, kContextSize);
-
-    static CallRec ourRec[kMaxRecs];
-
-    g_recN = 0; g_slotsSeen = 0; g_recSubject = g_ours;
-    g_ctxBindDefect = defect;
-    ours(g_ours);
-    g_ctxBindDefect = 0;
-    const int      ourN     = g_recN;
-    const uint64_t ourSlots = g_slotsSeen;
-    std::memcpy(ourRec, g_rec, sizeof(CallRec) * static_cast<size_t>(ourN));
-
-    g_recN = 0; g_slotsSeen = 0; g_recSubject = g_theirs;
-    theirs(g_theirs);
-    const int      theirN     = g_recN;
-    const uint64_t theirSlots = g_slotsSeen;
-
-    if (shippedCalls) *shippedCalls = theirN;
-    if (slotsOurs)    *slotsOurs    = ourSlots;
-    if (slotsTheirs)  *slotsTheirs  = theirSlots;
-
-    int bad = 0;
-
-    // (a) the whole object, every byte, no exclusions.
-    if (std::memcmp(g_ours, g_theirs, kContextSize) != 0) {
-        ++bad;
-        if (!quiet) {
-            size_t off = 0;
-            while (off < kContextSize && g_ours[off] == g_theirs[off]) ++off;
-            printf("[CtxBind] *** %s: state differs first at +0x%04zx "
-                        "ours=0x%02x theirs=0x%02x ***\n",
-                        c.name, off, g_ours[off], g_theirs[off]);
-        }
-    }
-
-    // (b) the call SEQUENCE, element by element.
-    if (ourN != theirN) {
-        ++bad;
-        if (!quiet)
-            printf("[CtxBind] *** %s: call COUNT ours=%d theirs=%d ***\n",
-                        c.name, ourN, theirN);
-    } else {
-        for (int i = 0; i < ourN; ++i) {
-            if (std::memcmp(&ourRec[i], &g_rec[i], sizeof(CallRec)) == 0) continue;
-            ++bad;
-            if (!quiet) {
-                const CallRec& a = ourRec[i];
-                const CallRec& b = g_rec[i];
-                printf("[CtxBind] *** %s: call %d differs -- "
-                            "ours tag=%d slot=+0x%02x n=%d a=%llx,%llx,%llx,%llx,%llx | "
-                            "theirs tag=%d slot=+0x%02x n=%d a=%llx,%llx,%llx,%llx,%llx ***\n",
-                            c.name, i,
-                            a.tag, a.slot, a.nargs,
-                            (unsigned long long)a.a[0], (unsigned long long)a.a[1],
-                            (unsigned long long)a.a[2], (unsigned long long)a.a[3],
-                            (unsigned long long)a.a[4],
-                            b.tag, b.slot, b.nargs,
-                            (unsigned long long)b.a[0], (unsigned long long)b.a[1],
-                            (unsigned long long)b.a[2], (unsigned long long)b.a[3],
-                            (unsigned long long)b.a[4]);
-            }
-            break;
-        }
-    }
-    return bad;
-}
-
-// One row per arm, plus the shapes that make an arm take its OTHER branch.
-const Case kCases[] = {
-    // name                        dirty     imgD     vtxD     tc  f24  iN     vN     ibN
-    { "dirty=0",                   0x00000u, 0xffffu, 0xffffu,  5,  5, false, false, false },
-    { "dirty=0 tc>0",              0x00000u, 0u,      0u,       9,  0, false, false, false },
-    { "renderBuffer",              0x00001u, 0u,      0u,       0,  0, false, false, false },
-    { "textures all",              0x00002u, 0xffffu, 0u,       0,  0, false, false, false },
-    { "textures alternating",      0x00002u, 0xa5a5u, 0u,       0,  0, false, false, false },
-    { "textures null objects",     0x00002u, 0xffffu, 0u,       0,  0, true,  false, false },
-    { "textures mask 0",           0x00002u, 0u,      0u,       0,  0, false, false, false },
-    { "vertexLayout",              0x00004u, 0u,      0u,       0,  0, false, false, false },
-    { "vertexBuffers all",         0x00008u, 0u,      0xffffu,  0,  0, false, false, false },
-    { "vertexBuffers alternating", 0x00008u, 0u,      0x5a5au,  0,  0, false, false, false },
-    { "vertexBuffers null",        0x00008u, 0u,      0xffffu,  0,  0, false, true,  false },
-    { "vertexBuffers mask 0",      0x00008u, 0u,      0u,       0,  0, false, false, false },
-    { "indexBuffer",               0x00010u, 0u,      0u,       0,  0, false, false, false },
-    { "indexBuffer null",          0x00010u, 0u,      0u,       0,  0, false, false, true  },
-    { "renderState",               0x00020u, 0u,      0u,       0,  0, false, false, false },
-    { "vertexProgram",             0x00040u, 0u,      0u,       0,  0, false, false, false },
-    { "pixelProgram",              0x00080u, 0u,      0u,       0,  0, false, false, false },
-    { "videoProgram",              0x00100u, 0u,      0u,       0,  0, false, false, false },
-    { "viewport",                  0x00200u, 0u,      0u,       0,  0, false, false, false },
-    { "scissor",                   0x00400u, 0u,      0u,       0,  0, false, false, false },
-    { "globalConstants",           0x00800u, 0u,      0u,       0,  0, false, false, false },
-    { "instanceConstants",         0x01000u, 0u,      0u,       0,  0, false, false, false },
-    { "lightConstants",            0x02000u, 0u,      0u,       0,  0, false, false, false },
-    { "transforms bit",            0x04000u, 0u,      0u,       0,  0, false, false, false },
-    { "transforms via count",      0x00001u, 0u,      0u,       3,  0, false, false, false },
-    { "transforms via +0x24",      0x00001u, 0u,      0u,       0,  7, false, false, false },
-    { "transforms negative both",  0x00001u, 0u,      0u,      -4, -4, false, false, false },
-    { "materialConstants",         0x08000u, 0u,      0u,       0,  0, false, false, false },
-    { "pixelConstants",            0x10000u, 0u,      0u,       0,  0, false, false, false },
-    { "vertexDirty w/o bit 0x8",   0x00001u, 0u,      0xffffu,  0,  0, false, false, false },
-    { "imageDirty w/o bit 0x2",    0x00001u, 0xffffu, 0u,       0,  0, false, false, false },
-    { "ALL bits, objects present", 0x1ffffu, 0xffffu, 0xffffu,  2,  2, false, false, false },
-    { "ALL bits, objects null",    0x1ffffu, 0xffffu, 0xffffu,  2,  2, true,  true,  true  },
-};
-constexpr int kNCases = static_cast<int>(sizeof(kCases) / sizeof(kCases[0]));
-
-}  // namespace
