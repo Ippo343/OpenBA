@@ -348,27 +348,9 @@ constexpr size_t kPackageFileSize = 0xF0;
 // ============================================================================
 // The scalar field reads. Each is one MOV; the offset IS the function.
 // ============================================================================
-// Each door delegates to the like-named member. The second macro argument is
-// the MEMBER NAME, because the offset is spelled once, in the member body, and
-// nowhere else. (B3R RT-IO: the three discarded arguments -- label, oracle
-// typedef, mangled name -- are gone.)
-#define RT_PKG2_SCALAR_GETTER(FN, MEMBER, TYPE)                                 \
-    extern "C" TYPE FN(const PackageFileView* self) {                          \
-        return static_cast<TYPE>(                                              \
-            reinterpret_cast<const IO::PackageFile*>(self)                     \
-                ->IO::PackageFile::MEMBER());                                  \
-    }
-
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetVersion, GetVersion, int32_t)            // +0x68
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetUserVersion, GetUserVersion, int32_t)        // +0x6C
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPlatform, GetPlatform, int32_t)           // +0x74
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetPriority, GetPriority, int32_t)           // +0x70
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetFileCount, GetFileCount, int32_t)          // +0xB8
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetCRC, GetCRC, uint32_t)                // +0xA8
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconWidth, GetIconWidth, int32_t)          // +0x78
-RT_PKG2_SCALAR_GETTER(RtIo_PackageFile_GetIconHeight, GetIconHeight, int32_t)         // +0x7C
-
-#undef RT_PKG2_SCALAR_GETTER
+// B.4 R-IO: the eight `RtIo_PackageFile_Get*` doors that stood here (each a
+// reinterpret of a PackageFileView* onto the member) had no caller left and are
+// deleted; the members below are the bodies.
 
 // 0x1800254f0 is `MOVZX EAX,byte ptr [RCX+0xac]` — a ZERO extension of the
 // byte, not a sign extension and not a dword read. The field is the same one
@@ -556,15 +538,11 @@ bool PackageFile::CanOverride() const {
 // bounds check in either body and none is added -- the caller bounds it with
 // GetFileCount, and a guard here would skip work rather than restore it.
 uint32_t PackageFile::GetFileSize(int index) const {
-    const RtIO::PackageFileEntry* const e =
-        static_cast<const RtIO::PackageFileEntry*>(_entries) + static_cast<int64_t>(index);
-    return e->size;                                             // +0x0C
+    return _entries[static_cast<int64_t>(index)].size;          // +0x0C
 }
 
 uint32_t PackageFile::GetFileOffset(int index) const {
-    const RtIO::PackageFileEntry* const e =
-        static_cast<const RtIO::PackageFileEntry*>(_entries) + static_cast<int64_t>(index);
-    return e->offset;                                           // +0x08
+    return _entries[static_cast<int64_t>(index)].offset;        // +0x08
 }
 
 }  // namespace IO

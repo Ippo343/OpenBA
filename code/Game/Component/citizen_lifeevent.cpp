@@ -30,37 +30,39 @@
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include "Component/exe_bodies.h"
+#include "Component/CitizenComponent.h"     // B.4 W1 COMP-b: PostLifeEvent is a member
+#include "Component/CitizenDescription.h"
+#include "Game/Profession.h"
+#include "Game/ProfessionList.h"
 
 // code/Game/Game/eventlog.cpp
 extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
                                          void* entityIBP, void* nameStr, void* titleStr,
                                          void* extraStr);
 
-extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int severity,
-                                               const char* strParam) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    void* gw = GameUpdateLoop::_singleton;
+void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* strParam) {
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
     // [STANDALONE GUARD] partial worlds can lack the event log; retail derefs unguarded.
-    void* eventLog = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x138);
+    void* eventLog = gw->m_eventNotifier;
     if (!eventLog) return;
 
-    // --- Pick the title source object ---
-    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
-    float age = *reinterpret_cast<float*>(p + 0x3C);
-    float adultAge = desc ? *reinterpret_cast<float*>(desc + 0x44) : 0.0f;
-    bool inSchool = *reinterpret_cast<int64_t*>(p + 0x208) != 0;
-    uintptr_t profList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xB0);
+    // --- Pick the title source profession ---
+    CitizenDescription* desc = description;
+    float age = this->age;
+    float adultAge = desc ? desc->adultAge : 0.0f;
+    bool inSchool = school != nullptr;
+    ProfessionList* profList = gw->m_professionList;
 
-    uintptr_t titleSrc = 0;
+    Profession* titleSrc = nullptr;
     if (age < adultAge && !inSchool) {
-        titleSrc = profList ? *reinterpret_cast<uintptr_t*>(profList + 0x40) : 0;  // child
+        titleSrc = profList ? profList->childProfession : nullptr;     // child
     } else if (!inSchool) {
         // [STANDALONE GUARD] +0x1F0 profession can be unstamped (same gap the
         // unemployed-flag path in Update guards); retail always has it set.
-        titleSrc = *reinterpret_cast<uintptr_t*>(p + 0x1F0);                       // profession
+        titleSrc = profession;                                          // profession
     } else {
-        titleSrc = profList ? *reinterpret_cast<uintptr_t*>(profList + 0x48) : 0;  // student
+        titleSrc = profList ? profList->studentProfession : nullptr;   // student
     }
 
     // --- Build the title System::String from the source's UI::String name pair ---
@@ -68,9 +70,8 @@ extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int se
     if (titleSrc) {
         uint8_t uiStr[16];
         ::new (uiStr) UI::String(
-            Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
-                reinterpret_cast<UI::StringTable*>(*reinterpret_cast<uint64_t*>(titleSrc + 0x20))),
-            *reinterpret_cast<const System::String*>(titleSrc + 0x30));
+            Object::ExternalPtr<UI::StringTable>(titleSrc->stringTable),
+            *reinterpret_cast<const System::String*>(&titleSrc->stringName));   // H5 raw String
         ::new (&titleStr) System::String(
             reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
     } else {
@@ -81,8 +82,7 @@ extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int se
     System::String paramStr(strParam ? strParam : "");
 
     // --- Post (null entity IBP: citizen life events carry no map location) ---
-    int64_t nullIBP = 0;
-    new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    ComponentEntity* nullIBP = nullptr;
     EventLog_AddCitizenEvent(eventLog, eventType, severity, &nullIBP,
-                             p + 0x28 /* citizen name String */, &titleStr, &paramStr);
+                             &name /* citizen name String (H5 raw) */, &titleStr, &paramStr);
 }

@@ -233,23 +233,13 @@ namespace {
 // LeaveCriticalSection(...); }`, which is the inlined sequence character for
 // character. So this reaches the SAME allocator lock the DLL uses, through the
 // port-aware door, and stays correct when Wave 10's allocator port is armed.
-struct ArrayHeader {
-    void*    data;      // +0x00
-    int32_t  size;      // +0x08
-    int32_t  capacity;  // +0x0c
-};
-static_assert(sizeof(ArrayHeader) == 0x10, "Collection::Array<T> is 0x10 bytes");
-
-
-// One element of `Graphics::MaterialInstance`'s parameter array at +0x50: a
-// refcounted `System::String` name and the borrowed object it binds to.
-// Stride 0x10 is pinned by 0x180061480's `SHL/lea *0x10` addressing and by its
-// per-element copy of BOTH qwords with a refcount bump on only the first.
-struct MaterialBinding {
-    const char* name;   // +0x00  System::String
-    void*       value;  // +0x08  borrowed; no refcount
-};
-static_assert(sizeof(MaterialBinding) == 0x10, "MaterialInstance binding stride is 0x10");
+// One element of `Graphics::MaterialInstance`'s texture array at +0x50
+// (`_textures`): a refcounted `System::String` name and the borrowed object it
+// binds to — `RtGraphics::MaterialTexture` (graphics/Material.h). Stride 0x10
+// is pinned by 0x180061480's `SHL/lea *0x10` addressing and by its per-element
+// copy of BOTH qwords with a refcount bump on only the first.
+using MaterialBinding = RtGraphics::MaterialTexture;
+using BindingArray    = Collection::Array<RtGraphics::MaterialTexture>;
 
 // `FUN_180005930` (0x180005930) — release the String half of `count` bindings
 // starting at `p`. The idiom is `ReleaseStringSlot` applied over a strided
@@ -276,28 +266,27 @@ void ReleaseBindingNames(MaterialBinding* p, int32_t count) {
 //     block is freed. Collapsing either into a bare `MemFree` would leak one
 //     String refcount per element — the shape
 //     reference_a_written_recipe_can_be_wrong.md is about.
-void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding* fill) {
-    const uint32_t oldSize = static_cast<uint32_t>(a->size);
+void ArrayBindingSetSize(BindingArray* a, uint32_t newSize, const MaterialBinding* fill) {
+    const uint32_t oldSize = static_cast<uint32_t>(a->_size);
     if (newSize == oldSize) return;
 
-    MaterialBinding* const oldData = static_cast<MaterialBinding*>(a->data);
-    a->size = static_cast<int32_t>(newSize);
+    MaterialBinding* const oldData = a->_data;
+    a->_size = static_cast<int32_t>(newSize);
 
-    if (a->capacity < static_cast<int32_t>(newSize)) {
-        a->capacity = static_cast<int32_t>(newSize);
-        if (newSize == oldSize + 1 && oldSize != 0) a->capacity = static_cast<int32_t>(newSize * 3);
-        a->data = MemAlloc(static_cast<uint64_t>(a->capacity) << 4, 8);
+    if (a->_capacity < static_cast<int32_t>(newSize)) {
+        a->_capacity = static_cast<int32_t>(newSize);
+        if (newSize == oldSize + 1 && oldSize != 0) a->_capacity = static_cast<int32_t>(newSize * 3);
+        a->_data = static_cast<MaterialBinding*>(MemAlloc(static_cast<uint64_t>(a->_capacity) << 4, 8));
     }
 
     // `plVar6 = 0; if (buffer did not move) plVar6 = oldSize;` — the index the
     // fill loop starts at is the old size when the buffer was reused and 0
     // when it was replaced, because a replaced buffer must be re-populated
     // from the start.
-    const int32_t start = (oldData == static_cast<MaterialBinding*>(a->data))
-                            ? static_cast<int32_t>(oldSize) : 0;
+    const int32_t start = (oldData == a->_data) ? static_cast<int32_t>(oldSize) : 0;
 
     if (start < static_cast<int32_t>(newSize)) {
-        MaterialBinding*       dst = static_cast<MaterialBinding*>(a->data) + start;
+        MaterialBinding*       dst = a->_data + start;
         const MaterialBinding* src = oldData + start;
         for (int32_t i = start; i < static_cast<int32_t>(newSize); ++i, ++dst, ++src) {
             if (dst == nullptr) continue;                 // retail's own null test
@@ -305,13 +294,13 @@ void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding
             dst->name = nullptr;
             if (from->name != nullptr) {
                 dst->name = from->name;
-                *reinterpret_cast<int*>(const_cast<char*>(from->name) - 4) += 1;
+                RtSystem::StringRefCount(from->name) += 1;   // the String header's refcount
             }
-            dst->value = from->value;
+            dst->image = from->image;
         }
     }
 
-    if (oldData == static_cast<MaterialBinding*>(a->data)) {
+    if (oldData == a->_data) {
         if (static_cast<int32_t>(newSize) < static_cast<int32_t>(oldSize))
             ReleaseBindingNames(oldData + newSize, static_cast<int32_t>(oldSize - newSize));
     } else {
@@ -343,11 +332,8 @@ void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding
 // so a future promotion of Device@Video or Configuration@Video cannot strand
 // this file's readers on the DLL's `.data` (and so [RtSlotAudit] can see them).
 // ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, read fresh.
-RtVideo::Device* DeviceSingleton() {
-    return reinterpret_cast<RtVideo::Device*>(::Video::Device::_singleton);
-}
-RtVideo::Configuration* ConfigurationSingleton() {
-    return reinterpret_cast<RtVideo::Configuration*>(::Video::Configuration::_singleton);
+::Video::Device* DeviceSingleton() {
+    return ::Video::Device::_singleton;
 }
 
 // (The vtable-stamp helpers VtBase / VtExternal / VtSpriteSheet /
@@ -356,33 +342,15 @@ RtVideo::Configuration* ConfigurationSingleton() {
 // GFX's MaterialInstance; the merge of the two left Base / External unread.)
 
 // ============================================================================
-// 3. `Video::ImageBuffer::Width()` / `Height()`, inlined by retail at four
-//    sites in this body (0x1800c32b8, 0x1800c330e, 0x1800c33ae, 0x1800c3404 —
-//    the SAME pair of computations performed twice, once for SpriteSheet::Set
-//    and once for the sprite entry's pixel size).
-//
-//    The flag bits match runtime/types/video/ImageBuffer.h's own note exactly:
-//    bit 8 = "the device's size", bit 9 = "half the device's size", bit 6 =
-//    "shift the stored size right by Configuration::shadowScalar". Retail's
-//    halving is `CDQ; SUB EAX,EDX; SAR EAX,1`, which is signed division by 2
-//    (round toward zero), not an arithmetic shift.
+// 3. `Video::ImageBuffer::Width()` / `Height()` (0x1800f2530 / 0x1800f24e0),
+//    inlined by retail at four sites in this body (0x1800c32b8, 0x1800c330e,
+//    0x1800c33ae, 0x1800c3404 — the SAME pair of computations performed twice,
+//    once for SpriteSheet::Set and once for the sprite entry's pixel size).
+//    Bit 8 = "the device's size", bit 9 = "half the device's size" (signed
+//    division by 2), bit 6 = "shift the stored size right by
+//    Configuration::shadowScalar". B.4 R-IO: called as the members they are
+//    (buffers.cpp), which compute exactly that.
 // ============================================================================
-int32_t ImageBufferWidth(const ImageBuffer* ib) {
-    const uint32_t f = ib->flags;
-    if (f & 0x100u) return DeviceSingleton()->backBufferWidth;
-    if (f & 0x200u) return DeviceSingleton()->backBufferWidth / 2;
-    int32_t w = ib->width;
-    if (f & 0x40u) w >>= (ConfigurationSingleton()->shadowScalar & 0x1f);
-    return w;
-}
-int32_t ImageBufferHeight(const ImageBuffer* ib) {
-    const uint32_t f = ib->flags;
-    if (f & 0x100u) return DeviceSingleton()->backBufferHeight;
-    if (f & 0x200u) return DeviceSingleton()->backBufferHeight / 2;
-    int32_t h = ib->height;
-    if (f & 0x40u) h >>= (ConfigurationSingleton()->shadowScalar & 0x1f);
-    return h;
-}
 
 // ============================================================================
 // 4. THE BODY.
@@ -398,9 +366,9 @@ void Save::SaveLoad::Draw(Video::Context& context,
     Context* const ctx = &context;
     // `CMP byte ptr [RCX+0x7c],0x0` — a BYTE test, matching the byte stores
     // the ctor and UpdateSave make into the same field.
-    if (*reinterpret_cast<const uint8_t*>(&_captureFlags) == 0) return;
+    if (_captureFlags == 0) return;
 
-    RtVideo::Device* const device = DeviceSingleton();
+    ::Video::Device* const device = DeviceSingleton();
 
     // ---- the frame-copy texture -------------------------------------------
     // `??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z` (787) then
@@ -426,13 +394,13 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // `p` and the returned `this` are the same pointer BY CONSTRUCTION, so using
     // `p` is byte-faithful to what retail computes and is independent of how any
     // port spells its signature — on the DLL-present path AND at cutover.
-    ImageBuffer* frameCopy = nullptr;
+    Graphics::FrameCopyImageBuffer* frameCopy = nullptr;
     {
         void* p = RtGraphics_FrameCopyImageBuffer_OperatorNew(0x88);   // ??2FrameCopyImageBuffer@Graphics@@
         if (p != nullptr) {
             // ENDGAME B.3.9 GFX (B9-13): the real class's ctor, not the ??0 door.
-            ::new (p) Graphics::FrameCopyImageBuffer();
-            frameCopy = static_cast<ImageBuffer*>(p);
+            // The placement-new's value IS `p`.
+            frameCopy = ::new (p) Graphics::FrameCopyImageBuffer();
         }
     }
 
@@ -452,10 +420,10 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // `Graphics::FrameCopyImageBuffer`, which OVERRIDES slot 9 (its own
     // 0x1800a3b70, not `Video::ImageBuffer`'s 0x1800f2680). The eleven parameter
     // types come from the export-table entry, unchanged.
-    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)->Create(
+    frameCopy->Create(
         0, 4, 5, 0x100u,
         device->backBufferWidth, device->backBufferHeight,
-        1, 1, 1, 1, nullptr);                                // B.3.5 bridge
+        1, 1, 1, 1, nullptr);
 
     // vtable[0x50] is `?Generate@FrameCopyImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z`
     // — `void Generate(Video::Context&, int) const`. TWO parameters plus `this`.
@@ -465,44 +433,47 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // +0x50 is slot 10, introduced by `Graphics::GeneratedImageBuffer` and
     // overridden here: `void Generate(Video::Context&, int) const`. Three
     // arguments including `this`, which is banner note 1.
-    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)
-        ->Generate(ctx, 1);                                  // B.3.5 bridge
+    frameCopy->Generate(ctx, 1);
 
     // ---- the offscreen colour target --------------------------------------
-    ImageBuffer* target = nullptr;
+    Video::ImageBuffer* target = nullptr;
     {
         void* p = Video::ImageBuffer::operator new(0x68);   // ??2ImageBuffer@Video@@ 0x18001e910
         if (p != nullptr) {
-            // Same rule as above: `p`, never the constructor's return.
-            ::new (p) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
-            target = static_cast<ImageBuffer*>(p);
+            // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door
+            // and the minted row are retired. The placement-new's value IS `p`.
+            target = ::new (p) Video::ImageBuffer();
         }
     }
     // Same slot 9, but the proved static type here is plain `Video::ImageBuffer`
     // (the op-new and ctor above are `??2ImageBuffer@Video@@` /
     // `??0ImageBuffer@Video@@`), so this reaches ImageBuffer's own 0x1800f2680.
-    reinterpret_cast<Video::ImageBuffer*>(target)->Create(
+    target->Create(
         0, 0, 5, 0u,
         _captureWidth, _captureHeight,
-        1, 1, 1, 1, nullptr);                                // B.3.5 bridge
+        1, 1, 1, 1, nullptr);
 
     // ---- the render buffer ------------------------------------------------
     // Three qword zero stores, then `PlatformConstruct`. The zeroing is INSIDE
     // the allocation-succeeded arm and `renderBuffer` stays null otherwise.
-    void* renderBuffer = nullptr;
+    Video::RenderBuffer* renderBuffer = nullptr;
     {
         void* p = Video::RenderBuffer::operator new(0x30);  // ??2RenderBuffer@Video@@ 0x18001f2e0
         if (p != nullptr) {
-            reinterpret_cast<uint64_t*>(p)[0] = 0;
-            reinterpret_cast<uint64_t*>(p)[1] = 0;
-            reinterpret_cast<uint64_t*>(p)[2] = 0;
-            reinterpret_cast<Video::RenderBuffer*>(p)
-                ->PlatformConstruct();                       // B.3.5 bridge
-            renderBuffer = p;
+            // The class has no C++ constructor (its ??0 is a door): the
+            // default-initialising placement-new stores nothing and names the
+            // storage. Then retail's three qword zero stores, as the four named
+            // fields they cover (H7), and PlatformConstruct.
+            Video::RenderBuffer* rb = ::new (p) Video::RenderBuffer;
+            rb->colorBuffer = nullptr;   // +0x00
+            rb->depthBuffer = nullptr;   // +0x08
+            rb->width       = 0;         // +0x10 } one qword store
+            rb->height      = 0;         // +0x14 }
+            rb->PlatformConstruct();
+            renderBuffer = rb;
         }
     }
-    reinterpret_cast<Video::RenderBuffer*>(renderBuffer)->Create(
-        reinterpret_cast<const Video::ImageBuffer*>(target), nullptr);  // B.3.5 bridge
+    renderBuffer->Create(target, nullptr);
 
     // ---- save the viewport, and letterbox ---------------------------------
     const Viewport savedViewport = ctx->_viewport;
@@ -536,20 +507,20 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // stores are dead and are reproduced: they are what the bytes do, and a
     // reader who meets only the final store elsewhere should recognise this
     // shape.
-    void* mat = nullptr;
+    Graphics::MaterialInstance* mat = nullptr;
     {
         void* p = RtGraphics_MaterialInstance_OperatorNew(0x60);       // ??2MaterialInstance@Graphics@@
         if (p != nullptr) {
             // ENDGAME B.3.9 GFX (B9-13): those stores ARE the real ctor inlined
             // (External()'s stamps and zeroes, the MaterialInstance stamp, the
             // field stores), so the builder is the class's ctor.
-            ::new (p) Graphics::MaterialInstance();
-            mat = p;
+            mat = ::new (p) Graphics::MaterialInstance();
         }
     }
-    // The by-value ExternalPtr<Material>, stored whole and borrowed. See the
-    // banner: no retain, no release. Unguarded, as retail is.
-    *reinterpret_cast<void**>(static_cast<uint8_t*>(mat) + 0x28) = material.Get();
+    // The by-value ExternalPtr<Material>, stored whole and borrowed (a trivial
+    // copy of the one qword). See the banner: no retain, no release. Unguarded,
+    // as retail is.
+    mat->_material = material;
 
     {
         // ENDGAME B.3.1 step 2: a real `System::String` local. The zero-init is
@@ -561,22 +532,22 @@ void Save::SaveLoad::Draw(Video::Context& context,
 
         MaterialBinding binding;
         binding.name  = nullptr;
-        binding.value = nullptr;
+        binding.image = nullptr;
         if (diffuse._data != nullptr) {
             binding.name = diffuse._data;
-            *reinterpret_cast<int*>(diffuse._data - 4) += 1;
+            RtSystem::StringRefCount(diffuse._data) += 1;   // the String header's refcount
         }
-        binding.value = frameCopy;
+        binding.image = frameCopy;
 
-        ArrayHeader* params = reinterpret_cast<ArrayHeader*>(static_cast<uint8_t*>(mat) + 0x50);
-        ArrayBindingSetSize(params, static_cast<uint32_t>(params->size) + 1, &binding);
+        BindingArray* params = &mat->_textures;
+        ArrayBindingSetSize(params, static_cast<uint32_t>(params->_size) + 1, &binding);
 
         ReleaseStringSlot(&binding.name);
     }
     // ENDGAME B.3.5: `?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ`
     // 0x1801033e0 is a DEFINED member now (wave27_lane_gfxbig.cpp), so the
     // by-name door call becomes a member call. The door stays registered.
-    reinterpret_cast<Graphics::MaterialInstance*>(mat)->BuildParameters();  // B.3.5 bridge
+    mat->BuildParameters();
 
     // ---- the one-sprite sheet ---------------------------------------------
     SpriteSheet* sheet = nullptr;
@@ -592,19 +563,16 @@ void Save::SaveLoad::Draw(Video::Context& context,
         // Two EMPTY Strings, passed by reference. `Set`'s third parameter is
         // the one at RBP+0xe0 (R9) and its fourth the one at RSP+0x70; both are
         // null here, so the sheet gets no texture name and no group name.
-        const char* emptyA = nullptr;   // RSP+0x70
-        const char* emptyB = nullptr;   // RBP+0xe0
-        sheet->Set(ImageBufferWidth(frameCopy), ImageBufferHeight(frameCopy),
-                   *reinterpret_cast<const System::String*>(&emptyB),   // B.3.6 bridge
-                   *reinterpret_cast<const System::String*>(&emptyA), false);
+        const System::String emptyA;   // RSP+0x70
+        const System::String emptyB;   // RBP+0xe0
+        sheet->Set(frameCopy->Width(), frameCopy->Height(), emptyB, emptyA, false);
 
         // AddSpriteInfo's two Strings are a DIFFERENT pair of empty slots (the
         // two above are consumed by Set), zeroed immediately before the call.
-        const char* nameA = nullptr;
-        const char* nameB = nullptr;
-        sheet->AddSpriteInfo(*reinterpret_cast<const System::String*>(&nameA),   // B.3.6 bridge
-                             *reinterpret_cast<const System::String*>(&nameB),
-                             offX, offY, offX + fitW, offY + fitH);
+        // (All four stay null; their destructors release nothing.)
+        const System::String nameA;
+        const System::String nameB;
+        sheet->AddSpriteInfo(nameA, nameB, offX, offY, offX + fitW, offY + fitH);
     }
 
     // Sprite entry 0's device-space size and normalised UV rect, written
@@ -613,8 +581,8 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // ImageBuffer::Width()/Height() pair as above, evaluated a second time.
     {
         SpriteInfo* entry = static_cast<SpriteInfo*>(sheet->m_sprites);
-        entry->width  = ImageBufferWidth(frameCopy);
-        entry->height = ImageBufferHeight(frameCopy);
+        entry->width  = frameCopy->Width();
+        entry->height = frameCopy->Height();
         entry->u0 = static_cast<float>(offX) / fDevW;
         entry->v0 = static_cast<float>(offY) / fDevH;
         entry->u1 = static_cast<float>(offX + fitW) / fDevW;
@@ -692,7 +660,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     Matrix projection;
     std::memcpy(&projection, &camera.projection, sizeof(Matrix));
 
-    reinterpret_cast<Video::Context*>(ctx)->SetCamera(view, projection);  // B.3.5 bridge
+    ctx->SetCamera(view, projection);
 
     // ---- the sprite context, constructed inline ---------------------------
     // A stack object whose constructor retail inlined. See the banner for the
@@ -732,7 +700,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
         // alone is the memset, and -Wclass-memaccess is not tripped.
         Matrix identity;
         identity.m[0] = 1.0f; identity.m[5] = 1.0f; identity.m[10] = 1.0f; identity.m[15] = 1.0f;
-        reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, identity);  // B.3.5 bridge
+        ctx->SetTransform(0, identity);
     }
     sc._scale = 1.0f;   // written a second time, after SetTransform
 
@@ -799,11 +767,9 @@ void Save::SaveLoad::Draw(Video::Context& context,
         // `kImg_Read` — "staging copy + Map/READ readback" (0x180002ef0). So
         // this is the GPU->CPU readback, identified by our own DX11 lane's slot
         // table rather than guessed from the argument shape.
-        void* platform = target->platformData;
-        using ReadBackFn = void (*)(void*, void*, int32_t, int32_t);
-        (*reinterpret_cast<ReadBackFn*>(
-            reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(platform)) + 0x30))(
-                platform, buffer, _captureWidth, _captureHeight);
+        // Slot 6 of the abstract `Video::ImageBufferData`, `bool Read(void*,
+        // int, int)` (CompanionData.h), by name; retail ignores the result.
+        target->_data->Read(buffer, _captureWidth, _captureHeight);
     }
 
     // ---- tear down --------------------------------------------------------
@@ -811,18 +777,17 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // retail is; see the banner. B3X W0: by name, each on the class its own
     // operator new / constructor above proves.
     delete sheet;                                                    // UI::SpriteSheet
-    delete reinterpret_cast<Graphics::MaterialInstance*>(mat);       // B.3.x bridge
-    delete reinterpret_cast<Video::ImageBuffer*>(target);            // B.3.x bridge
-    delete reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy);   // B.3.x bridge
+    delete mat;                                                      // Graphics::MaterialInstance
+    delete target;                                                   // Video::ImageBuffer
+    delete frameCopy;                                                // Graphics::FrameCopyImageBuffer
 
     if (renderBuffer != nullptr) {
-        reinterpret_cast<Video::RenderBuffer*>(renderBuffer)
-            ->PlatformDestruct();                            // B.3.5 bridge
+        renderBuffer->PlatformDestruct();
         Video::RenderBuffer::operator delete(renderBuffer); // ??3RenderBuffer@Video@@ 0x18001f360
     }
 
     // The handshake with UpdateSave state 1: a BYTE store, clearing the request.
-    *reinterpret_cast<uint8_t*>(&_captureFlags) = 0;
+    _captureFlags = 0;
 
     // The SpriteContext destructor, also inlined by retail: four Array<T>
     // frees in the order +0x68, +0x58, +0x40, +0x10 (0x1800c3acd..0x1800c3af8).

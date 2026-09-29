@@ -63,10 +63,11 @@
 #include <type_traits>
 
 #include "../collection/Collection.h"
+#include "../system/String.h"   // System::String, held by value below (B.4 R-IO)
 #include "../ui/Sprite.h"   // UI::Sprite, held by value below
 
-namespace System   { class String; class Time; }
-namespace Video    { class Context; }
+namespace System   { class Time; }
+namespace Video    { class Context; class ImageBuffer; }
 namespace IO       { class MemoryStream; }
 namespace Graphics { class Material; }
 namespace RtIo     { struct SaveBlock; }
@@ -206,32 +207,38 @@ public:
     //
     // THE WIRE FORMAT IS UNSIGNED: ?LoadMetaData (0x1800c1b30) serializes +0x10,
     // +0x14 and +0x18 through ReaderWriter +0x98 (kScalarUInt) — 0x1800c1d2a,
-    // 0x1800c1d3f, 0x1800c1d54. Two are typed int32_t because CheckMod compares
-    // them SIGNED; a sign test and a wire type are different facts about the
-    // same four bytes. +0x1c is written by NO retail body: a byte comparison
-    // over a ModInfo must stop at +0x1c.
+    // 0x1800c1d3f, 0x1800c1d54 — so all three are uint32_t (B.4 R-IO, H2).
+    // CheckMod compares +0x10 and +0x18 for EQUALITY only (0x1800c1206
+    // `CMP [RCX+0x2c],EAX ; JZ`, 0x1800c1215 `CMP [RCX+0x1c],EAX ; JZ`), where
+    // signedness is unobservable; +0x14 is compared UNSIGNED (`< 0x1000400`).
+    // +0x1c is written by NO retail body: a byte comparison over a ModInfo
+    // must stop at +0x1c.
     // ========================================================================
     struct ModInfo {
         // The init arm of 0x180034010 (0x1800340ff / 0x180034102): the two
         // String qwords zeroed and NOTHING else — +0x10..+0x1f keep what the
         // storage held. This is what `Collection::Array<ModInfo>` grows with.
-        ModInfo() : name(nullptr), path(nullptr) {}
+        ModInfo() : name(), path() {}
         // The assign arm of 0x180034010 / 0x180033080 (0x1800340b8..0x1800340ec):
         // name zeroed-then-adopted with an AddRef, path the same, the three
-        // dwords copied, +0x1c NOT copied. saveload.cpp.
+        // dwords copied, +0x1c NOT copied. The String copy ctor (0x180006cb0)
+        // IS that zero-adopt-AddRef, and the member initialisers run in
+        // retail's order (name, then path). saveload.cpp.
         ModInfo(const ModInfo& other);
         // One element of 0x1800341e0: release +0x08 (path) FIRST, then +0x00
-        // (name), with the String refcount idiom. saveload.cpp.
+        // (name), with the String refcount idiom. ~String (0x180006c80) IS that
+        // idiom, and C++ destroys the members in reverse declaration order —
+        // path, then name: retail's order. saveload.cpp.
         ~ModInfo();
         // Retail never assigns an element: its Array assign (0x180033f30) is
         // clear-then-copy-construct.
         ModInfo& operator=(const ModInfo&) = delete;
 
-        const char* name;           // +0x00  System::String — display name
-        const char* path;           // +0x08  System::String — path, relative to the data dir
-        int32_t     versionMajor;   // +0x10  vs IO::Modification entry +0x2c -> status 4
+        System::String name;        // +0x00  display name
+        System::String path;        // +0x08  path, relative to the data dir
+        uint32_t    versionMajor;   // +0x10  vs IO::Modification entry +0x2c -> status 4
         uint32_t    gameVersion;    // +0x14  < 0x1000400 -> status 2 (modsOutOfDate)
-        int32_t     versionMinor;   // +0x18  vs IO::Modification entry +0x1c -> status 3
+        uint32_t    versionMinor;   // +0x18  vs IO::Modification entry +0x1c -> status 3
         uint32_t    pad1c;          // +0x1c  never written by any retail body
     };
 
@@ -285,11 +292,11 @@ public:
         // deliberately uninitialised storage.
         explicit SaveInfo(int32_t index)
             : thumbnail(),                 // +0x00 qword 0, +0x08 dword -1
-              description(nullptr),        // +0x10
+              description(),               // +0x10  String(): the qword 0
               imageBuffer(nullptr),        // +0x18
               thumbPixels(nullptr),        // +0x28
               sortKey(0),                  // +0x30
-              name(nullptr),               // +0x38
+              name(),                      // +0x38  String(): the qword 0
               saveIndex(index),            // +0x40
               field44(-1),                 // +0x44
               mods() {}                    // +0x48 qword 0, +0x50 qword 0
@@ -298,7 +305,9 @@ public:
         // nested Array ZEROED then assigned through 0x180033f30.
         // closure_batch2b.cpp.
         SaveInfo(const SaveInfo& other);
-        // 0x1800c3f40 (unexported). saveload.cpp.
+        // 0x1800c3f40 (unexported). saveload.cpp. The body tears down +0x18,
+        // +0x28 and the mods Array; C++ then destroys `name` (+0x38) and
+        // `description` (+0x10) in that order — retail's last two releases.
         ~SaveInfo();
         SaveInfo& operator=(const SaveInfo&) = delete;   // retail never assigns a row
 
@@ -311,13 +320,13 @@ public:
         static int Compare(const void* a, const void* b);
 
         UI::Sprite  thumbnail;       // +0x00
-        const char* description;     // +0x10  System::String  (UpdateList state 4)
-        void*       imageBuffer;     // +0x18  Video::ImageBuffer*  (OnVideoRestart)
+        System::String description;  // +0x10  (UpdateList state 4)
+        Video::ImageBuffer* imageBuffer;  // +0x18  (OnVideoRestart, SetThumbnail)
         int32_t     thumbWidth;      // +0x20  upload arg 3
         int32_t     thumbHeight;     // +0x24  upload arg 4
-        void*       thumbPixels;     // +0x28  upload arg 2
+        void*       thumbPixels;     // +0x28  upload arg 2: the raw pixel block
         uint64_t    sortKey;         // +0x30  SaveGameInfo+0x00; qsort key, DESCENDING
-        const char* name;            // +0x38  System::String
+        System::String name;         // +0x38
         int32_t     saveIndex;       // +0x40  Persistence save index; -1 == the blank row
         int32_t     field44;         // +0x44  LoadMetaData out-param 6 (format version)
         Collection::Array<ModInfo> mods;   // +0x48  {_data, _size, _capacity}
@@ -385,11 +394,7 @@ public:
     SavedState* GetSaveState() { return _saveState; }
     // ?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z   0x1800c3b60 — a
     //   REFERENCE return (`AEBU`), no retslot. NO bounds check: MOVSXD + IMUL.
-    const SaveInfo& GetSaveInfo(int index) const {
-        return *reinterpret_cast<const SaveInfo*>(
-            reinterpret_cast<const uint8_t*>(_saves._data) +
-            static_cast<int64_t>(index) * static_cast<int64_t>(sizeof(SaveInfo)));
-    }
+    const SaveInfo& GetSaveInfo(int index) const { return _saves._data[index]; }
     // ?GetSaveCount@SaveLoad@Save@@QEBAHXZ  0x1800c3b80 — `MOV EAX,[RCX+0x58]`.
     int GetSaveCount() const { return _saves._size; }
     // ?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z  0x1800c3b90 — the
@@ -420,7 +425,11 @@ public:
     int64_t     _minOperationTime; // +0x10  Time; SetMinOperationTime copies 8 bytes here
     uint32_t    _progress;         // +0x18  zeroed by SetOperation; NOT zeroed by the ctor
     uint32_t    pad1c;             // +0x1c
-    const char* _string20;         // +0x20  System::String; ~SaveLoad releases it with the refcount idiom
+    // The two Strings are real `System::String`s (B.4 R-IO). SaveLoad has NO
+    // C++ constructor or destructor that could run them: construction and
+    // destruction are the ??0 / ??1 doors (saveload.cpp), which write
+    // `_data` and call `~String()` at retail's points explicitly.
+    System::String _string20;      // +0x20  the operation's save name; ~SaveLoad releases it LAST
     // An entire Save::SavedState embedded BY VALUE (Wave 13's correction of the
     // old `field28`/`_buffer30`): ?UpdateList state 3 (0x1800c2455) calls
     // ?SetupLoad@SavedState with `this + 0x28`; ?UpdateSave (0x1800c2c60) builds
@@ -435,9 +444,13 @@ public:
     uint32_t    pad4c;             // +0x4c
     SaveInfoArray _saves;          // +0x50  {_data, _size, _capacity}; GetSaveCount is _size
     UI::Sprite  _saveSprite;       // +0x60  SetSaveSprite; ctor {0, -1}
-    const char* _saveName;         // +0x70  System::String; SetSaveName refcount-assigns it
+    System::String _saveName;      // +0x70  SetSaveName refcount-assigns it
     int32_t     _saveNameMode;     // +0x78  SetSaveName's second argument
-    uint32_t    _captureFlags;     // +0x7c  ONLY the low byte is written (ctor 0; Draw tests it, then clears it)
+    // A BYTE: the ctor (`MOV byte ptr [RCX+0x7c],DL`), UpdateSave state 0
+    // (`MOV byte ptr [RBX+0x7c],1`) and Draw's test and clear are all byte
+    // accesses; +0x7d..+0x7f are written by no retail body.
+    uint8_t     _captureFlags;     // +0x7c
+    uint8_t     pad7d[3];          // +0x7d
     int32_t     _captureWidth;     // +0x80  Draw reads it as the capture width
     int32_t     _captureHeight;    // +0x84  Draw reads it as the capture height
     void*       _capturePixels;    // +0x88  Draw MemAllocs w*h*4 and stores it here
@@ -493,6 +506,7 @@ static_assert(offsetof(SaveLoad, _saveSprite)       == 0x60, "SaveLoad._saveSpri
 static_assert(offsetof(SaveLoad, _saveName)         == 0x70, "SaveLoad._saveName @ 0x70");
 static_assert(offsetof(SaveLoad, _saveNameMode)     == 0x78, "SaveLoad._saveNameMode @ 0x78");
 static_assert(offsetof(SaveLoad, _captureFlags)     == 0x7c, "SaveLoad._captureFlags @ 0x7c");
+static_assert(offsetof(SaveLoad, pad7d)             == 0x7d, "SaveLoad.pad7d @ 0x7d");
 static_assert(offsetof(SaveLoad, _captureWidth)     == 0x80, "SaveLoad._captureWidth @ 0x80");
 static_assert(offsetof(SaveLoad, _captureHeight)    == 0x84, "SaveLoad._captureHeight @ 0x84");
 static_assert(offsetof(SaveLoad, _capturePixels)    == 0x88, "SaveLoad._capturePixels @ 0x88");

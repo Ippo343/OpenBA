@@ -158,7 +158,6 @@ using RtSaveDetail::ModificationSingleton;
 using RtSaveDetail::PersistenceSingleton;
 using RtSaveDetail::SecondsPerTick;
 using RtSaveDetail::ZeroTime;
-using RtSaveDetail::ReleaseStringSlot;
 
 
 }  // namespace
@@ -183,7 +182,7 @@ static void SaveLoad_CtorLogic(SaveLoad* self) {
     self->_operation        = RtSave::kOpNone;
     self->_elapsed          = 0;
     self->_minOperationTime = ZeroTime();
-    self->_string20         = nullptr;
+    self->_string20._data   = nullptr;
     // One qword store of 0 at +0x28 in retail, which is _id AND _size together,
     // then the pointer at +0x30 — see the embedded-SavedState note in the header.
     self->_embeddedState._id   = 0;
@@ -196,9 +195,9 @@ static void SaveLoad_CtorLogic(SaveLoad* self) {
     self->_saves._capacity  = 0;
     self->_saveSprite.spriteSheet = nullptr;
     self->_saveSprite.spriteIndex = -1;
-    self->_saveName         = nullptr;
+    self->_saveName._data   = nullptr;
     // Retail writes a BYTE here (MOV byte ptr [RCX+0x7c],DL), not a dword.
-    *reinterpret_cast<uint8_t*>(&self->_captureFlags) = 0;
+    self->_captureFlags     = 0;
     self->_captureWidth     = 0;
     self->_captureHeight    = 0;
     self->_capturePixels    = nullptr;
@@ -299,32 +298,23 @@ SaveLoad* RtSave_SaveLoad_Ctor(SaveLoad* self) {
 //   [dst] = 0 ; if (src.name) { [dst] = src.name ; INC [src.name-4] }
 //   [dst+8] = 0 ; if (src.path) { [dst+8] = src.path ; INC [src.path-4] }
 //   +0x10, +0x14, +0x18 as three dwords; +0x1c NOT copied.
-// Written as body stores, not an init list, so the store order is retail's.
+// The zero-adopt-AddRef of each String IS ??0String@System@@QEAA@AEBV01@@Z
+// (0x180006cb0); the member initialisers run in declaration order, which is
+// retail's store order (name, path, then the three dwords).
 //
 // DESTROY — one element of FUN_1800341e0: release +0x08 (path) FIRST, then
-// +0x00 (name), with the String refcount idiom (both of its dead stores kept,
-// saveload_internal.h). An independent confirmation of the 0x20 layout.
+// +0x00 (name), with the String refcount idiom (both of its dead stores kept).
+// That idiom IS ~String (0x180006c80), and the members are destroyed in reverse
+// declaration order — path, then name — so the body is empty.
 // ============================================================================
-Save::SaveLoad::ModInfo::ModInfo(const ModInfo& other) {
-    name = nullptr;
-    if (other.name != nullptr) {
-        name = other.name;
-        *reinterpret_cast<int*>(const_cast<char*>(other.name) - 4) += 1;
-    }
-    path = nullptr;
-    if (other.path != nullptr) {
-        path = other.path;
-        *reinterpret_cast<int*>(const_cast<char*>(other.path) - 4) += 1;
-    }
-    versionMajor = other.versionMajor;
-    gameVersion  = other.gameVersion;
-    versionMinor = other.versionMinor;
-}
+Save::SaveLoad::ModInfo::ModInfo(const ModInfo& other)
+    : name(other.name),
+      path(other.path),
+      versionMajor(other.versionMajor),
+      gameVersion(other.gameVersion),
+      versionMinor(other.versionMinor) {}
 
-Save::SaveLoad::ModInfo::~ModInfo() {
-    ReleaseStringSlot(&path);
-    ReleaseStringSlot(&name);
-}
+Save::SaveLoad::ModInfo::~ModInfo() {}
 
 // FUN_1800341e0 — destroy `count` ModInfo elements in place, stride 0x20,
 // ascending. Retail's loop bails immediately when count <= 0 (the TEST/JLE is
@@ -364,20 +354,21 @@ void RtSaveDetail::ArrayModInfoDtor(Collection::Array<Save::SaveLoad::ModInfo>* 
 // AGAIN (0x1800c3f65 TEST RCX,RCX). The second test is redundant in the bytes
 // too; it is transcribed as written rather than folded.
 //
-// ORDER: +0x18, +0x28, the mods Array (0x1800331f0), +0x38, +0x10. The member
-// destructors C++ runs AFTER this body (`mods`, then the trivial `thumbnail`)
-// see an Array the transcription has already emptied and zeroed, so
-// `~Array` is a no-op free of a null buffer: nothing is released twice and
-// nothing moves out of retail's order.
+// ORDER: +0x18, +0x28, the mods Array (0x1800331f0), +0x38, +0x10. The body
+// does the first three; the member destructors C++ runs AFTER it are, in
+// reverse declaration order, `mods` (an Array the transcription has already
+// emptied and zeroed: a no-op free of a null buffer), `name` (+0x38) and
+// `description` (+0x10) — ~String IS the release idiom — then the trivial
+// `thumbnail`. Nothing is released twice and nothing moves out of retail's
+// order.
 // ============================================================================
 Save::SaveLoad::SaveInfo::~SaveInfo() {
-    void* owned = imageBuffer;
+    ::Video::ImageBuffer* owned = imageBuffer;
     const int32_t ownFlag = saveIndex;
     if (owned != nullptr && ownFlag >= 0 && owned != nullptr) {
         // MOV RAX,[RCX] ; MOV EDX,1 ; CALL [RAX]  -- scalar deleting dtor of the
         // row's Video::ImageBuffer (built by SetThumbnail), through its slot 0.
-        // B3X W0: by name.
-        delete reinterpret_cast<::Video::ImageBuffer*>(owned);   // B.3.x bridge
+        delete owned;
     }
 
     void* block = thumbPixels;
@@ -385,10 +376,9 @@ Save::SaveLoad::SaveInfo::~SaveInfo() {
 
     RtSaveDetail::ArrayModInfoDtor(&mods);
 
-    // +0x38, reached in retail as [RBX+0x30]+0x8 -- the LEA RAX,[RBX+0x30] is
-    // the address of an inlined Pair/String pair, not a separate object.
-    ReleaseStringSlot(&name);
-    ReleaseStringSlot(&description);
+    // +0x38 then +0x10: the member destructors (see above). +0x38 is reached
+    // in retail as [RBX+0x30]+0x8 -- the LEA RAX,[RBX+0x30] is the address of
+    // an inlined Pair/String pair, not a separate object.
 }
 // (B3R W2-RT: the file-static SaveInfo_Dtor, the address door 0x1800c3f40's
 // body, went with its row: nothing called it. ~SaveInfo above is the body.)
@@ -417,7 +407,9 @@ void RtSave_SaveLoad_Dtor(SaveLoad* self) {
     // is not the singleton; that is what the bytes do.
     if (SaveLoad** slot = SaveLoadSingletonSlot()) *slot = nullptr;
 
-    ReleaseStringSlot(&self->_saveName);
+    // SaveLoad has no C++ destructor (the header's banner): the two Strings'
+    // releases are their destructors, run explicitly at retail's points.
+    self->_saveName.System::String::~String();
     RtSaveDetail::ArraySaveInfoDtor(&self->_saves);
 
     // FUN_180006a10, the un-exported second copy of MemFree
@@ -427,8 +419,7 @@ void RtSave_SaveLoad_Dtor(SaveLoad* self) {
     void* buffer30 = self->_embeddedState._data;
     if (buffer30) MemFree(buffer30);
 
-    ReleaseStringSlot(&self->_string20);
-
+    self->_string20.System::String::~String();
 }
 
 // ============================================================================
@@ -545,37 +536,24 @@ System::String Save::SaveLoad::GetAutoSaveName() const {
 // equal candidates never share an address the way GetSaveInfo's pointer-
 // identity oracle can rely on.
 // ============================================================================
-namespace {
-// The inlined "String::Format into a scratch, then refcount-adopt into *ret"
-// idiom (0x1800c1290..0x1800c1310). NOT `String::operator=`: retail's very
-// first instruction blindly zeroes `*ret` without releasing whatever was
-// there (see the banner above), so the release/adopt pair below only ever
-// runs against a slot this function itself already populated.
-void GenerateSaveName_FormatCandidateInto(const char** ret, int index) {
-    // ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730), by name: the
-    // by-value String lands in `tmp` born at refcount 1, as the door did.
-    const char* tmp = nullptr;
-    RtSaveDetail::AdoptReturned(&tmp, System::String::Format("Save%i", index));
-
-    if (*ret != tmp) {
-        ReleaseStringSlot(ret);
-        RtSaveDetail::RetainInto(ret, tmp);
-    }
-    ReleaseStringSlot(&tmp);   // release the temp's OWN reference
-}
-}  // namespace
-
 System::String Save::SaveLoad::GenerateSaveName() const {
     System::String result;     // retail's unconditional `*ret = 0`, NOT a release
-    const char** ret = const_cast<const char**>(&result._data);
     int index = 0;
     for (;;) {
-        GenerateSaveName_FormatCandidateInto(ret, index);
+        // The inlined "String::Format into a scratch, then refcount-assign
+        // into *ret" idiom (0x1800c1290..0x1800c1310): ?Format@ (0x1800c9730)
+        // builds `tmp` in place at refcount 1; the pointer-compare, release,
+        // adopt, AddRef that follows IS String::operator= (0x1800c9810); the
+        // scratch's own reference is released as `tmp` leaves the scope.
+        {
+            System::String tmp = System::String::Format("Save%i", index);
+            result = tmp;
+        }
         if (_saves._size < 1) break;
         bool collision = false;
         for (int i = 0; i < _saves._size; ++i) {
             // ENDGAME B.3.1 step 2: the static, spelled as itself (0x1800c98a0).
-            if (System::String::StrCompare(_saves._data[i].name, *ret) == 0) {
+            if (System::String::StrCompare(_saves._data[i].name._data, result._data) == 0) {
                 collision = true;
                 break;
             }
@@ -672,13 +650,9 @@ void Save::SaveLoad::SetMinOperationTime(const System::Time& time) {
 // freed early and nothing leaks.
 // ============================================================================
 void Save::SaveLoad::SetSaveName(const System::String& name, int mode) {
-    const char* cur = _saveName;
-    if (cur != name._data) {
-        ReleaseStringSlot(&_saveName);
-        _saveName = name._data;
-        if (name._data != nullptr)
-            *reinterpret_cast<int*>(name._data - 4) += 1;
-    }
+    // Pointer compare, release, adopt, AddRef: String::operator= (0x1800c9810),
+    // inlined by retail.
+    _saveName = name;
     _saveNameMode = mode;
 }
 
@@ -718,7 +692,7 @@ void Save::SaveLoad::SetSaveName(const System::String& name, int mode) {
 // ============================================================================
 int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
 
-    uint8_t* const mods = ModificationSingleton();
+    const ::IO::Modification* const mods = ModificationSingleton();
     // `MOVSXD R9,EDX ; IMUL R9,R9,0x58` then `SHL RBP,0x5` into +0x48's
     // buffer: GetSaveInfo's unchecked arithmetic, and the mods Array's _data.
     const SaveInfo* info = &GetSaveInfo(saveIndex);
@@ -732,7 +706,7 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     // after the three Strings exist.
     int found = -1;
     int32_t  count = 0;
-    uint8_t* base  = nullptr;
+    const RtIO::Mod* base = nullptr;
 
     // full = GetDataDirectory() + mod->path,  then AdjustDelimiters(full)
     //
@@ -752,14 +726,11 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     {
     System::String   joined;
     System::Filename dataDir(                                   // 0x180007bd0
-        static_cast<const ::IO::FileSystem*>(FileSystemSingleton())->GetDataDirectory());
+        FileSystemSingleton()->GetDataDirectory());
 
     // The `??HSystem@@YA?AVString@0@AEBV10@0@Z` door IS System::operator+
-    // (0x1800c9440). `mod->path` is a raw `const char*` member of the
-    // unconverted `ModInfo` that retail reads AS a String, so it comes through
-    // a transitional cast (B31_RULES, "members of not-yet-converted structs").
-    joined = dataDir.AsString()
-             + reinterpret_cast<const System::String&>(mod->path);
+    // (0x1800c9440).
+    joined = dataDir.AsString() + mod->path;
 
     // Retail adopts the concatenation's buffer into a fresh slot (with an
     // AddRef) and adjusts THAT, leaving `joined` itself untouched, so the two
@@ -768,11 +739,11 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     // (0x18000c780), so this one line spends both.
     System::Filename work(joined);
 
-    count = *reinterpret_cast<const int32_t*>(mods + 0x10);
-    base  = *reinterpret_cast<uint8_t* const*>(mods + 8);
+    count = mods->_count;
+    base  = mods->_mods;
     for (int i = 0; i < count; ++i) {
-        const char* entry = *reinterpret_cast<const char* const*>(base + static_cast<int64_t>(i) * 0x80 + 0x58);
-        const int lenEntry = entry ? *reinterpret_cast<const int*>(entry - 8) : 0;
+        const char* entry = base[i].file.data;
+        const int lenEntry = entry ? RtSystem::StringLength(entry) : 0;
         // GetLength (0x1800063c0) IS the null-guarded header read this line
         // used to spell by hand.
         const int lenWork  = work.GetLength();
@@ -784,9 +755,10 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     if (found < 0) {
         ours = 1;
     } else {
-        const uint8_t* entry = base + static_cast<int64_t>(found) * 0x80;
-        if (*reinterpret_cast<const int32_t*>(entry + 0x2c) != mod->versionMajor)      ours = 4;
-        else if (*reinterpret_cast<const int32_t*>(entry + 0x1c) != mod->versionMinor) ours = 3;
+        const RtIO::Mod& entry = base[found];
+        // Equality only (`CMP ; JZ`): signedness is unobservable.
+        if (static_cast<uint32_t>(entry.i2c) != mod->versionMajor)      ours = 4;
+        else if (static_cast<uint32_t>(entry.i1c) != mod->versionMinor) ours = 3;
         else ours = (mod->gameVersion < 0x1000400u) ? 2 : 0;
     }
 
@@ -828,9 +800,9 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
 void Save::SaveLoad::Update(const System::Time& delta) {
     _elapsed = _elapsed + delta._ticks;
 
-    const uint8_t* p = PersistenceSingleton();
-    if ((*(p + 0x18) & 1) != 0) return;
-    if (*reinterpret_cast<const int32_t*>(p + 0x48) == 0) return;
+    const ::IO::Persistence* p = PersistenceSingleton();
+    if ((p->_flags & 1) != 0) return;
+    if (p->_status == 0) return;
 
     // ENDGAME B.3.7 B2: the five targets are members of this class now, called
     // directly (they were five RT_EXPORT_ONCE doors onto our own ports).

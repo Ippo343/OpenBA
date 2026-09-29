@@ -79,6 +79,10 @@
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -89,7 +93,7 @@
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Game/exe_bodies.h"
-#include "Game/exe_constants.h"
+#include "Game/exe_constants.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
@@ -266,38 +270,35 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
 }
 
 // ============================================================
-// 0x140115e60 — CitizenAI_State_LongTermPlan  (state id 13)
-//   param_1 = CitizenComponent (the citizen). Builds two parallel dynamic arrays of
-//   (storage-entity, world-pos) candidates by scanning the storage occupants of the
-//   citizen's home region for matching RawMaterialDescription items, then pushes a
+// 0x140115e60 — CitizenComponent::LongTermPlan  (AI state id 13; tree: "CitizenAI_State_LongTermPlan")
+//   `this` = the CitizenComponent. Builds two parallel dynamic arrays of
+//   (storage-entity, world-pos) candidates by scanning the rows of the citizen's own
+//   (carry) StorageComponent for matching RawMaterialDescription items, then pushes a
 //   PerformWork(Ctor4) chain per candidate and runs the executor.
 // ============================================================
-extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
+void CitizenComponent::LongTermPlan() {
     EnsureInit();
     int64_t* listPair = ListPair();
     int* mapGrid = MapGrid();
 
     // citizen storage component (local_res20)
-    int64_t storBuf[2] = {0, 0};
-    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
-    int64_t citStorNode = storBuf[0];
+    StorageComponent* citStor = _entity->FindComponent<StorageComponent>();
 
     // dynamic array A: entity IBP pairs (stride 0x10 bytes = 2*8). base/cap at local_70/local_68.
     float*   arrA = nullptr;  int arrACount = 0; int arrACap = 0;          // local_70 / (int)local_68 / local_68._4_4_
     // dynamic array B: float[3] world positions (stride 0xc). base/cap at local_60/local_58.
     float*   arrB = nullptr;  int arrBCount = 0; int arrBCap = 0;          // local_60 / (int)local_58 / local_58._4_4_
 
-    // citizen home cell (model pos) — uVar15 / local_res18
-    int64_t cch = *reinterpret_cast<int64_t*>(param_1 + 0x278);
-    int64_t model = *reinterpret_cast<int64_t*>(cch + 0x68);
+    // citizen home cell (model pos) — uVar15 / local_res18 (ModelComponent's transform: raw)
+    int64_t model = reinterpret_cast<int64_t>(character->modelComponent);
     uint32_t homeCell = ModelCell(model, mapGrid);
 
-    // iterate the citizen-storage occupant rows (citStorNode+0x30 count, +0x28 row array,
-    // each row is 0x10 bytes: [+0] entity-ptr, [+8] occupancy count).
-    int rowCount = (citStorNode != 0) ? *reinterpret_cast<int*>(citStorNode + 0x30) : 0;
+    // iterate the citizen-storage rows (slotCount, storageSlots; each row is 0x10 bytes:
+    // [+0] entity-ptr, [+8] occupancy count).
+    int rowCount = (citStor != nullptr) ? citStor->slotCount : 0;
     bool committed = false;        // matched cd80 → break to commit
     for (int row = 0; row < rowCount; ++row) {
-        int64_t rowArr = *reinterpret_cast<int64_t*>(citStorNode + 0x28);
+        int64_t rowArr = reinterpret_cast<int64_t>(citStor->storageSlots);
         int64_t rowBase = rowArr + static_cast<int64_t>(row) * 0x10;
         int occ = *reinterpret_cast<int*>(rowBase + 8);
         if (occ == 0) {
@@ -391,9 +392,7 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     if (arrACount != 0) {
         int64_t firstIBP = 0;       // local_90
         new (&firstIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        int64_t selfIBP = 0;        // local_98
-        new (&selfIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
+        CitizenComponent* selfIBP = this;   // local_98 (the InternalBasePtr ctor: one store)
 
         // Vector3((Scalar&)0) — the first push uses a zero-vector built from local_res10 (=0).
         float zeroScalar = 0.0f;
@@ -407,23 +406,21 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
         // remaining candidates (the original loops uVar16 times over arrA/arrB).
         for (int i = 0; i < arrACount; ++i) {
             int64_t entIBP = reinterpret_cast<int64_t*>(arrA)[i];  // local_res8 = *pfVar11
-            int64_t citizenIBP = 0;     // local_res10
-            new (&citizenIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(param_1));   // B.3.3 bridge
+            CitizenComponent* citizenIBP = this;   // local_res10
             float* destB = &arrB[i * 3];
             CitizenAI_PerformWorkCtor4_c1070(&citizenIBP, &entIBP, destB, homeCell, 0, 0);
         }
 
         // commit the action-state flags on the citizen and run the executor.
-        *reinterpret_cast<int32_t*>(param_1 + 0x30) = static_cast<int32_t>(0xffffffff);
-        *reinterpret_cast<uint32_t*>(param_1 + 0x54) |= 4;
-        *reinterpret_cast<int32_t*>(param_1 + 0xb0) = 0;
+        field_0x30 = -1;
+        statusFlags |= 4;
+        field_0xB0 = 0;
 
         int64_t timeStamp = 0;
         RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStamp), 0.0f);
-        int64_t ch = *reinterpret_cast<int64_t*>(param_1 + 0x278);
-        if (-1 < *reinterpret_cast<int*>(ch + 0x48 + 0x18)) {
-            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(ch + 0x48), &timeStamp);
+        CharacterComponent* ch = character;
+        if (-1 < ch->currentAction) {
+            CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(&ch->actions), &timeStamp);
         }
         (void)committed;
     }
@@ -435,10 +432,17 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     arrA = nullptr; arrACount = 0;
 }
 
+// B4 FORWARD: 13 outside caller(s) (Work/buildroad.cpp, clearstorage.cpp, consumeproduce.cpp,
+// fishingwork.cpp, foresterwork.cpp, gatherrawmaterials.cpp, herbalistwork.cpp, huntwork.cpp,
+// locationwork.cpp, marketwork.cpp, pickup.cpp, tradework.cpp)
+extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
+    reinterpret_cast<CitizenComponent*>(param_1)->LongTermPlan();
+}
+
 // ============================================================
-// 0x14010c890 — CitizenAI_State_GrowUp  (state id 4)
+// 0x14010c890 — CitizenAIComponent::State_GrowUp  (state id 4)
 // ============================================================
-extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
+uint64_t CitizenAIComponent::State_GrowUp() {
     EnsureInit();
     int64_t* listPair = ListPair();
     int* mapGrid = MapGrid();
@@ -446,40 +450,36 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     float destA[4] = {0, 0, 0, 0};   // local_a0
     float destB[4] = {0, 0, 0, 0};   // local_90
 
-    int64_t citizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
-    // citizen+0x278 = CharacterComponent; +0x68 = ModelComponent; +0x160 = walk-time src (local_70)
-    int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
-    // model+0x160 (local_70) is read by the original but only the *(desc+0x78)*scale path is
-    // used for the cooldown below; the raw value is not consumed. home cell from model pos:
+    // the citizen's ModelComponent (+0x160 = walk-time src, local_70; transform raw)
+    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
+    // model+0x160 (local_70) is read by the original but only the desc->foodInterval*scale
+    // path is used for the cooldown below; the raw value is not consumed. home cell from model pos:
     uint32_t homeCell = ModelCell(model, mapGrid);
 
-    // citizen home StorageComponent → QueryCount (food on hand?)
-    int64_t citizen2 = *reinterpret_cast<int64_t*>(param_1 + 0x38);
-    int64_t storBuf[2] = {0, 0};
-    WorkBase_FindComponent_6270(*reinterpret_cast<int64_t*>(citizen2 + 0x10), storBuf);
-    int count = (storBuf[0]) ? CitizenComp_StorageComponent_QueryCount(storBuf[0]) : 0;
+    // the citizen's own StorageComponent → QueryCount (carrying anything?)
+    StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
+    int count = (own) ? CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(own)) : 0;
 
     if (count >= 1) {
         // Citizen's own storage is non-empty (QueryCount >= 1) → defer to LongTermPlan
-        // (housing/marriage/work life-planning) and queue next state 4. (decompile `else`).
-        CitizenAI_State_LongTermPlan(*reinterpret_cast<int64_t*>(param_1 + 0x38));
-        *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 4;
-        return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;
+        // (the haul-to-storage leg) and queue next state 4. (decompile `else`).
+        citizen->LongTermPlan();
+        queuedState = 4;
+        return 1;  // low byte 1
     }
 
-    // FOOD-SHORTAGE branch (count < 1): stamp the food-cooldown into citizen+0x60,
+    // FOOD-SHORTAGE branch (count < 1): stamp the cooldown into timers[4],
     // find the best food source via dd30, then scan its storage for an eatable item.
     int64_t cd = 0;
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&cd), s_walkScale);
-    *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd;
+    timers[4] = cd;
 
-    int64_t resEntity = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x238); // citizen+0x238
+    ComponentEntity* resEntity = citizen->home;
     uint32_t bGoal;
-    if (resEntity == 0) {
+    if (resEntity == nullptr) {
         bGoal = 0xffffffff;
     } else {
-        int64_t resIBP = resEntity;
+        ComponentEntity* resIBP = resEntity;
         bGoal = Pf_EntityAnchorCell_7fb0(&resIBP, nullptr);
     }
 
@@ -487,7 +487,7 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     int64_t outComp = 0;      // local_res18
     CitizenAI_FindBestTarget_dd30(reinterpret_cast<int64_t*>(listPair), &found, homeCell, bGoal, &outComp, destA, 3);
     if (found == 0) {
-        return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;   // no source → return 0
+        return 0;   // no source → low byte 0
     }
 
     // found a source entity. find its StorageComponent (local_b8).
@@ -496,7 +496,7 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     WorkBase_FindComponent_6270(target, tStorBuf);
     int64_t tStorNode = tStorBuf[0];
     if (tStorNode == 0) {
-        return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
+        return 0;
     }
 
     // scan the source storage's occupant rows for an eatable RawMaterialDescription item
@@ -523,14 +523,13 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
         ++eligible;
     }
     if (eligible == 0) {
-        return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
+        return 0;
     }
 
     int chosen = preferred;
     if (chosen < 0) {
-        // System::Random::Rand(GW+0xd8, eligible)
-        void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
-        chosen = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(eligible));   // B.3.4b bridge
+        // System::Random::Rand(m_random, eligible)
+        chosen = GameUpdateLoop::_singleton->m_random->Rand(static_cast<uint32_t>(eligible));
     }
 
     // second pass: locate the chosen eatable row, build the eat (Ctor11) action.
@@ -553,31 +552,32 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
                 int64_t bestWp[2] = {0, 0};   // local_60
                 CitizenAI_Entity_impl_f230(reinterpret_cast<int64_t>(listPair), bestWp, homeCell, destB);
                 if (bestWp[0] != 0) {
-                    // Ctor11 holder = *(param_1+0x38) = the CitizenComponent (citizen) wrapped
+                    // Ctor11 holder = the CitizenComponent wrapped
                     // (disasm: local_res8 := param_1; then local_res8 := *(local_res8+0x38)).
-                    int64_t holderCitizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
+                    CitizenComponent* holderCitizen = citizen;
                     int64_t srcIBP = found;        // local_res18 = lVar4 = local_b0 (food source entity)
                     int64_t dstIBP = bestWp[0];    // local_res10 (workplace entity from f230)
                     CitizenAI_PerformWorkCtor11_bc790(&holderCitizen, resCountObj, &srcIBP, destA, &dstIBP, destB);
 
-                    // success epilogue: flag triplet on cz = *(param_1+0x38) = citizen.
-                    int64_t cz = *reinterpret_cast<int64_t*>(param_1 + 0x38);
-                    *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
-                    *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
-                    *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
+                    // success epilogue: flag triplet on the citizen.
+                    CitizenComponent* cz = citizen;
+                    cz->statusFlags |= 4;
+                    cz->field_0x30 = -1;
+                    cz->field_0xB0 = 0;
 
-                    // walk-time-scaled cooldown: desc = *(cz+0x18), require CitizenDescription
-                    // (DWORD_1401c7190); wt = desc+0x78 * DAT_1401721fc. Stamp → param_1+0x60.
-                    int64_t cdesc = *reinterpret_cast<int64_t*>(cz + 0x18);
+                    // walk-time-scaled cooldown: desc = cz->_description, require
+                    // CitizenDescription (DWORD_1401c7190); wt = foodInterval * DAT_1401721fc.
+                    // Stamp → timers[4].
+                    void* cdesc = cz->_description;
                     float wt = 0.0f;
-                    if (cdesc && Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(cdesc), s_tid_CitizenDescription)) {
-                        wt = *reinterpret_cast<float*>(static_cast<uintptr_t>(cdesc) + 0x78);
+                    if (cdesc && Object::IsDerivedFromNullSafe(cdesc, s_tid_CitizenDescription)) {
+                        wt = reinterpret_cast<CitizenDescription*>(cdesc)->foodInterval;
                     }
                     int64_t cd2 = 0;
                     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&cd2), wt * s_walkScale);
-                    *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd2;
+                    timers[4] = cd2;
 
-                    return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;
+                    return 1;  // low byte 1
                 }
             }
             break;
@@ -585,6 +585,6 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
         ++ordinal;
     }
 
-    return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
+    return 0;
 }
 

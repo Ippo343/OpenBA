@@ -71,6 +71,7 @@
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
+#include "../../types/video/CompanionData.h"   // B.4: Video::DeviceData::Slot7
 #include "../collection/array_internal.h"
 #include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 #include "../../types/volume/Volume.h"           // RtVolume_Frustum_Projection
@@ -180,9 +181,10 @@ void RtMemFree(void* p) {
 // `ExplicitSpec<&kSpec_StringExt>` is the correct long-term fix but touches a
 // shared runtime/types header this batch does not own; bridging at the call
 // site instead, exactly as B32_RULES prescribes for a hand-derived row.
-void RtArraySetSizeTexturePairs(MaterialInstance* self, uint32_t newSize,
+// B.4: takes the texture array itself (the one caller hands `&_textures`).
+void RtArraySetSizeTexturePairs(Collection::Array<MaterialTexture>* textures, uint32_t newSize,
                                 const MaterialTexture* fill) {
-    rtcoll::AsArray<&rtcoll::kSpec_StringExt>(&self->textures)
+    rtcoll::AsArray<&rtcoll::kSpec_StringExt>(textures)
         ->SetSizeFill(static_cast<int>(newSize), fill);
 }
 
@@ -203,11 +205,9 @@ void RtArraySetSizeTexturePairs(MaterialInstance* self, uint32_t newSize,
 // decision 1 wants portable to a second backend.
 bool RtVideoDeviceUsesZeroToOneDepth() {
     // ENDGAME B.3.9 close (D7): the class static, read fresh (no cached door).
-    void* device = ::Video::Device::_singleton;
-    void* iface = *reinterpret_cast<void**>(static_cast<char*>(device) + 0x100);
-    void** vtable = *reinterpret_cast<void***>(iface);
-    using Fn = bool (*)(void*);
-    return reinterpret_cast<Fn>(vtable[7])(iface);
+    // B.4: `Device::deviceData` (+0x100) and `DeviceData::Slot7`, by name. LEFT:
+    // the field is `void*` in Device.h, viewed once as the companion it is.
+    return static_cast<::Video::DeviceData*>(::Video::Device::_singleton->deviceData)->Slot7();
 }
 
 // ============================================================================
@@ -418,10 +418,9 @@ extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
 // ============================================================================
 namespace Graphics {
 MaterialInstance::~MaterialInstance() {
-    uint8_t* const d = reinterpret_cast<uint8_t*>(this);
-    rtcoll::RtColl_ArrayDtorElem_180004d60(d + 0x50);
-    rtcoll::RtColl_ArrayDtorElem_180004c80(d + 0x40);
-    rtcoll::RtColl_ArrayDtorElem_180004b70(d + 0x30);
+    rtcoll::RtColl_ArrayDtorElem_180004d60(&_textures);     // +0x50
+    rtcoll::RtColl_ArrayDtorElem_180004c80(&_constants);    // +0x40
+    rtcoll::RtColl_ArrayDtorElem_180004b70(&_parameters);   // +0x30
 }
 }  // namespace Graphics
 
@@ -680,9 +679,9 @@ void MaterialInstance::AddTexture(const RtSystem::String& name,
     }
     local.image = image.Get();
 
-    RtArraySetSizeTexturePairs(reinterpret_cast<RtGraphics::MaterialInstance*>(this),
+    RtArraySetSizeTexturePairs(&_textures,
                                static_cast<uint32_t>(_textures.GetSize() + 1),
-                               &local);              // B.3.5 bridge
+                               &local);
 
     if (local.name) {
         int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);

@@ -14,12 +14,11 @@
 // 1 ("pushed") commits the state; the "no destination" tail returns 0 (low byte clear).
 // Transcribed from the Ghidra decompile, offset-by-offset.
 //
-// SELF CHAIN: param_1 = CitizenAIComponent. self = param_1+0x38 (sibling CitizenComponent
-//   IBP). citizen = *self. citizen+0x18 = CitizenDescription (IsDerivedFrom 0x1c7190).
-//   citizen+0x238 = home/workplace entity. citizen+0x278 = CharacterComponent (+0x68 =
-//   ModelComponent, whose transform +0x158/+0x15c/+0x160 = world pos). Success epilogue
-//   writes the action-state flags to *self (+0x30 = -1, +0x54 |= 4, +0xb0 = 0) and
-//   *(param_1+0xc0) = 0, then returns 1.
+// B.4 W1 COMP-b: Leisure is a CitizenAIComponent member; `citizen` is the sibling
+//   CitizenComponent (its _description = CitizenDescription, IsDerivedFrom 0x1c7190; home;
+//   character->modelComponent whose transform +0x158/+0x15c/+0x160 = world pos, raw).
+//   Success epilogue writes field_0x30 = -1, statusFlags |= 4, field_0xB0 = 0 and
+//   leisureTimer = 0, then returns 1.
 //
 // GameWorld layout: GW+0xf8 = MapGrid (int*, [0]=width, +0x20=cell array base, cell
 //   stride 0x30). GW+0xd8 = System::Random. GW+0xf0 = entity list pair (EntityList**).
@@ -71,6 +70,10 @@
 #include "Component/HappinessDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/HappinessComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -80,7 +83,7 @@
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
-#include "Game/exe_bodies.h"
+#include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 namespace {
@@ -119,7 +122,7 @@ static void EnsureInit() {
 
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
-static inline void* Rng() { return *reinterpret_cast<void**>(GW() + 0xd8); }
+static inline System::Random* Rng() { return GameUpdateLoop::_singleton->m_random; }
 // Cell-array base lives at MapGrid+0x80 (Ghidra prints `piVar5 + 0x20` for int* piVar5;
 // disasm confirms MOV RCX,[R15+0x80]). Width is at MapGrid[0] (+0x00); stride 0x30.
 static inline int64_t CellArrayBase(int* mapGrid) {
@@ -319,7 +322,7 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
         } while (idx < listCount);
 
         if (matchCount != 0) {
-            uint32_t pick = reinterpret_cast<System::Random*>(Rng())->Rand(static_cast<uint32_t>(matchCount));   // B.3.4b bridge
+            uint32_t pick = Rng()->Rand(static_cast<uint32_t>(matchCount));
             int64_t* chosen = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(curArr) + static_cast<uint64_t>(pick) * 8);
             int64_t node = *chosen;
             *param_2 = 0;
@@ -342,22 +345,18 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
 //   iVar27=blockRadius, local_a0/9c/98=animDest, local_d8/d0=homeBst/count,
 //   local_c8/c0=cellBst/count, happinessMode=local_res10 low byte.
 // ============================================================
-extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
+uint64_t CitizenAIComponent::State_Leisure() {
     EnsureInit();
 
     int* piVar5 = MapGrid();
-    void* pRVar6 = Rng();
+    System::Random* pRVar6 = GameUpdateLoop::_singleton->m_random;
 
-    int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);   // local_90
-
-    // pvVar26 = CitizenDescription on the citizen (citizen+0x18, IsDerivedFrom 0x1c7190).
-    void* descRaw = *reinterpret_cast<void**>(*self + 0x18);
+    // pvVar26 = CitizenDescription on the citizen (its _description, IsDerivedFrom 0x1c7190).
+    void* descRaw = citizen->_description;
     void* pvVar26 = Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription) ? descRaw : nullptr;
 
-    // citizen ModelComponent transform -> grid cell (uVar37=srcCell).
-    uintptr_t citizen = static_cast<uintptr_t>(*self);
-    int64_t character = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    int64_t model = *reinterpret_cast<int64_t*>(character + 0x68);
+    // citizen ModelComponent transform (raw) -> grid cell (uVar37=srcCell).
+    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
     int w0 = *piVar5;
     int colC = static_cast<int>(static_cast<float>(w0 >> 1) + *reinterpret_cast<float*>(model + 0x158));
     int rowC = static_cast<int>(static_cast<float>(w0 >> 1) + *reinterpret_cast<float*>(model + 0x15c));
@@ -365,12 +364,12 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
     if (rowC < 0) rowC = 0; if (w0 <= rowC) rowC = w0 - 1;
     uint32_t uVar37 = static_cast<uint32_t>(w0 * rowC + colC);    // srcCell / local_res10
 
-    // homeCell (uVar14) from workplace anchor (+0x238) or -1.
+    // homeCell (uVar14) from the home anchor or -1.
     uint32_t uVar14;
-    if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
+    if (citizen->home == nullptr) {
         uVar14 = 0xffffffff;
     } else {
-        int64_t homeIBP = *reinterpret_cast<int64_t*>(*self + 0x238);
+        ComponentEntity* homeIBP = citizen->home;
         uVar14 = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
     }
 
@@ -378,7 +377,7 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
     int64_t* local_res20 = *reinterpret_cast<int64_t**>(local_a8 + CellArrayBase(piVar5));  // target node
 
     {
-        float fVar39 = reinterpret_cast<System::Random*>(pRVar6)->RandFloat();   // B.3.4b bridge
+        float fVar39 = pRVar6->RandFloat();
         if (fVar39 < kRandThresh) {
             int64_t nullIBP = 0;
             new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -470,8 +469,8 @@ LAB_14010a846:
                         int64_t mapBuf = 0;     // local_b0
                         FloorComponent_FindResData(reinterpret_cast<void*>(cand), &mapBuf);
                         if (mapBuf != 0) {
-                            int64_t workArg = cand;   // local_b8 = cand
-                            char ok = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(*self), &workArg);
+                            // local_b8 = cand
+                            char ok = citizen->CanReach(reinterpret_cast<ComponentEntity*>(cand));
                             if (ok != '\0') {
                                 int64_t outNode = 0;   // &local_a0 (out-node, result unused)
                                 { WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&local_d8), &outNode, &cand);
@@ -483,14 +482,13 @@ LAB_14010a846:
             }
             ++boxRow;
         }
-        // also consider the citizen's own workplace (+0x238) if valid (manual key-ordered insert).
+        // also consider the citizen's own home if reachable (manual key-ordered insert).
         uVar37 = static_cast<uint32_t>(w0 * rowC + colC);   // uVar37 = (uint)local_res10 = srcCell
         iVar27 = 6;
-        if (*reinterpret_cast<int64_t*>(*self + 0x238) != 0) {
-            int64_t key = *reinterpret_cast<int64_t*>(*self + 0x238);   // local_res10
-            char ok = CitizenComp_CheckWorkplaceValid(reinterpret_cast<CitizenComponent*>(*self), &key);
+        if (citizen->home != nullptr) {
+            char ok = citizen->CanReach(citizen->home);   // local_res10 = home
             if (ok != '\0') {
-                key = *reinterpret_cast<int64_t*>(*self + 0x238);
+                int64_t key = reinterpret_cast<int64_t>(citizen->home);
                 if (local_d8 == nullptr) {
                     int64_t* nd = reinterpret_cast<int64_t*>(NodeAlloc(0x28));
                     if (nd) { nd[0] = key; nd[1] = 0; nd[2] = 0; nd[3] = 0; *reinterpret_cast<int*>(nd + 4) = 0; }
@@ -527,7 +525,7 @@ LAB_14010a846:
         }
         // pick (rand%count)-th in-order node; its key (+0x00) is local_res20.
         if (static_cast<int>(local_d0) > 0) {
-            uint32_t pick = reinterpret_cast<System::Random*>(pRVar6)->Rand(static_cast<uint32_t>(local_d0));   // B.3.4b bridge
+            uint32_t pick = pRVar6->Rand(static_cast<uint32_t>(local_d0));
             int64_t* node = local_d8; int64_t* chosen = local_d8;
             while (node != nullptr) { chosen = node; node = reinterpret_cast<int64_t*>(node[2]); }
             for (uint32_t s = pick; s > 0; --s) {
@@ -684,7 +682,7 @@ LAB_14010ae8a:
 
         uint64_t uVar41 = 0;
         if (local_c0 != 0) {
-            uint32_t pick = reinterpret_cast<System::Random*>(pRVar6)->Rand(static_cast<uint32_t>(local_c0));   // B.3.4b bridge
+            uint32_t pick = pRVar6->Rand(static_cast<uint32_t>(local_c0));
             int64_t* node = local_c8; int64_t* puVar21 = local_c8;
             while (node != nullptr) { puVar21 = node; node = reinterpret_cast<int64_t*>(node[2]); }
             for (uint32_t s = pick; s > 0; --s) {
@@ -717,8 +715,8 @@ LAB_14010ae8a:
                 local_a0 = out3[0]; local_9c = out3[1]; local_98 = out3[2];
             }
             // random offset within a disk.
-            float fVar39 = reinterpret_cast<System::Random*>(pRVar6)->RandFloatTol() * kDiskScale;   // B.3.4b bridge
-            float fVar40 = reinterpret_cast<System::Random*>(pRVar6)->RandFloatTol();   // B.3.4b bridge
+            float fVar39 = pRVar6->RandFloatTol() * kDiskScale;
+            float fVar40 = pRVar6->RandFloatTol();
             float off[4] = { fVar40 * kDiskScale, fVar39, 0.0f, 0.0f };
             float dest[4] = { local_a0 + off[0], local_9c + off[1], local_98 + off[2], 0.0f };
 
@@ -730,17 +728,16 @@ LAB_14010ae8a:
             else entIBP = reinterpret_cast<int64_t>(local_res20);
             int64_t local_res18 = entIBP;
 
-            int64_t local_a8h = *self;   // holder citizen (PlayAnimation self IBP)
-            float fVar39t = reinterpret_cast<System::Random*>(pRVar6)->RandFloatTol();   // B.3.4b bridge
+            CitizenComponent* local_a8h = citizen;   // holder citizen (PlayAnimation self IBP)
+            float fVar39t = pRVar6->RandFloatTol();
             CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, &local_res18, reinterpret_cast<uint32_t*>(dest),
                                        fVar39t * kAgeMult + kAnimTimeBase,
                                        static_cast<uint32_t>(static_cast<unsigned char>(cVar12)));
 
-            uintptr_t cz = static_cast<uintptr_t>(*self);
-            *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
-            *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
-            *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
-            *reinterpret_cast<int64_t*>(param_1 + 0xc0) = 0;
+            citizen->field_0x30 = -1;
+            citizen->statusFlags |= 4;
+            citizen->field_0xB0 = 0;
+            leisureTimer = 0;
             uVar41 = 1;
         }
 

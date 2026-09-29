@@ -68,6 +68,8 @@
 #include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -164,23 +166,18 @@ bool ResidenceCheck_2ac30(int64_t param_1) {
 }
 
 // ============================================================
-// CitizenAI_helper_db20 (0x14010db20) — State_Work workplace-still-valid check.
-//   param_1 = CitizenAIComponent. self = param_1+0x38 (sibling CitizenComponent IBP).
-//   *self = CitizenComponent, +0x238 = workplace entity. If no workplace -> return *self with the
-//   low byte cleared (i.e. "false"). Else CitizenComponent::CheckWorkplaceValid(citizen, &workplace).
-//   Faithful: returns ulonglong (caller reads it as bool / low byte).
+// CitizenAIComponent::CanReachHome (0x14010db20; tree: "CitizenAI_helper_db20") — the
+//   State_Work check. No home -> false (retail's RAX keeps the citizen pointer above the
+//   cleared low byte; the caller reads the low byte). Else citizen->CanReach(home)
+//   (0x1401158d0).
 // ============================================================
-uint64_t CitizenAI_helper_db20(int64_t param_1) {
+uint64_t CitizenAIComponent::CanReachHome() {
     EnsureInit();
-    uint64_t* self = reinterpret_cast<uint64_t*>(param_1 + 0x38);
-    if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
-        return *self & 0xffffffffffffff00ULL;
+    if (citizen->home == nullptr) {
+        return 0;
     }
-    uint64_t local_res8[4] = {0, 0, 0, 0};
-    local_res8[0] = *reinterpret_cast<uint64_t*>(*self + 0x238);
     // The caller reads the low byte (the body's char).
-    return static_cast<uint8_t>(CitizenComp_CheckWorkplaceValid(
-        reinterpret_cast<CitizenComponent*>(*self), local_res8));   // 0x1401158d0
+    return static_cast<uint8_t>(citizen->CanReach(citizen->home));   // 0x1401158d0
 }
 
 // ============================================================

@@ -68,12 +68,6 @@
 #include "../system/setupdir_helpers.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
-namespace RtIO {
-// runtime/src/io/filesystem.cpp:185. Takes the FileSystem as void* there.
-RtSystem::Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid,
-                                                     RtSystem::Filename* ret);
-}  // namespace RtIO
-
 namespace RtObject {
 
 using RtSystem::Filename;
@@ -90,7 +84,7 @@ const char* const kCrs        = ".crs";
 // `?_singleton@FileSystem@IO@@0PEAV12@EA`, retail 0x1801fc6a8 — the qword the
 // `MOV RCX,qword ptr [0x1801fc6a8]` at 0x1800bec75 loads. The class static now
 // (ENDGAME B.3.9 SS1, B39_RULES D7); read fresh, no lazy cache.
-inline const void* FileSystemSingleton() {
+inline const ::IO::FileSystem* FileSystemSingleton() {
     return ::IO::FileSystem::_singleton;
 }
 
@@ -124,11 +118,9 @@ void BuildCompiledPath(const Filename* path, Filename* out) {
     System::Filename fname = in.GetPathFilename(true);           // [RBP+0x38]
     System::Filename dir   = in.GetPathDirectory();              // [RBP+0x30]
 
-    // GetDataDirectory is still a C entry point with a hidden return slot; it
-    // placement-constructs into the null local, so this must not construct twice.
-    System::Filename dataDir;                                    // [RBP-0x28]
-    RtIO::RtIo_FileSystem_GetDataDirectory(FileSystemSingleton(),
-                                           reinterpret_cast<Filename*>(&dataDir));
+    // B.4 R-IO: the member, returning into the local (one AddRef, as retail).
+    System::Filename dataDir =
+        FileSystemSingleton()->GetDataDirectory();               // [RBP-0x28]
 
     System::String t1 = dataDir.AsString() + dir.AsString();
     System::String t2 = t1 + fname.AsString();

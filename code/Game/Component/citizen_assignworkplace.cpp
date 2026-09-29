@@ -42,6 +42,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 #include "Component/exe_bodies.h"
+#include "Component/CitizenComponent.h"     // B.4 W1 COMP-b: SetHome is a member
+#include "Component/ResidenceComponent.h"
+#include "Entity/ComponentEntity.h"          // FindComponent<T>
 #include "Component/firecomponent_funcs.h"
 #include "Action/exe_bodies.h"
 #include "Work/exe_bodies.h"
@@ -87,19 +90,20 @@ inline RosterRec* Roster(int64_t storageComp, int slotIndex) {
 // stack copy before the field reads (exactly as the original does).
 // ------------------------------------------------------------
 int RosterCompare_9e20(const void* pa, const void* pb) {
-    int64_t ea = *reinterpret_cast<const int64_t*>(pa);
-    int64_t eb = *reinterpret_cast<const int64_t*>(pb);
+    // qsort's element pointers: each element is a CitizenComponent pointer.
+    const CitizenComponent* ea = *reinterpret_cast<CitizenComponent* const*>(pa);
+    const CitizenComponent* eb = *reinterpret_cast<CitizenComponent* const*>(pb);
 
-    int64_t a258 = *reinterpret_cast<int64_t*>(ea + 600);   // +0x258 guardian
-    int a38 = *reinterpret_cast<int*>(ea + 0x38);           // +0x38 state
+    const CitizenComponent* a258 = ea->_parent;   // +0x258 parent
+    int a38 = ea->gender;                         // +0x38 gender
 
-    int64_t b258 = *reinterpret_cast<int64_t*>(eb + 600);
-    int b38 = *reinterpret_cast<int*>(eb + 0x38);
+    const CitizenComponent* b258 = eb->_parent;
+    int b38 = eb->gender;
 
     uint32_t ub = (b38 == 1) ? 0x100u : 0u;
     uint32_t ua = (a38 == 1) ? 0x100u : 0u;
-    uint32_t lhs = ub | ((b258 == 0) ? 0x1000u : 0u);
-    uint32_t rhs = ((a258 == 0) ? 0x1000u : 0u) | ua;
+    uint32_t lhs = ub | ((b258 == nullptr) ? 0x1000u : 0u);
+    uint32_t rhs = ((a258 == nullptr) ? 0x1000u : 0u) | ua;
     return static_cast<int>(lhs - rhs);
 }
 
@@ -290,36 +294,35 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
 }
 
 // ============================================================
-// CitizenComponent::AssignWorkplace (0x1401163d0)
-//   self         = CitizenComponent*
-//   workplaceIBP = InternalBasePtr wrapping the new workplace entity (raw ptr @ [0])
-//   slotIndex    = profession slot index within that workplace
+// CitizenComponent::SetHome (0x1401163d0; tree and Ghidra: "AssignWorkplace")
+//   home = the new home entity (the residence), slot = the household slot in it.
 // If the assignment actually changes (+0x238 or +0x240 differ): remove from the old
-// workplace roster, store the new workplace+slot, add to the new roster, then apply the
-// same assignment to every family member on the +0x260/+0x268 circular list.
+// residence's household roster, store the new home + slot, add to the new roster, then
+// apply the same assignment to every child on the +0x260/+0x268 circular ring.
+// The rosters are ResidenceComponent's (a550 / a710 stay free bodies, LEFT: their
+// receiver class's header is COMP-e's; int64_t receiver).
 // ============================================================
-extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP, int slotIndex) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-
-    int64_t* pWorkplace = reinterpret_cast<int64_t*>(self + 0x238);  // current workplace IBP
-    int32_t* pSlot = reinterpret_cast<int32_t*>(self + 0x240);
-    int64_t newWp = *reinterpret_cast<int64_t*>(workplaceIBP);
+void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
+    void* selfV = this;
+    ComponentEntity** pWorkplace = &home;  // current home
+    int32_t* pSlot = &homeSlot;
+    ComponentEntity* newWp = newHome;
 
     if (*pWorkplace == newWp && *pSlot == slotIndex)
         return;   // no change
 
-    // [diag] A citizen losing its workplace is how "everyone froze after a load"
+    // [diag] A citizen losing its home is how "everyone froze after a load"
     // starts: +0x238 goes null, the AI has nothing to plan, and the town starves.
     // Only the UN-assignment is interesting, and only its CALLER identifies which
-    // rule decided the job was invalid -- so report the return address and let nm
+    // rule decided the home was invalid -- so report the return address and let nm
     // name it (image base 0x140000000).
-    if (*pWorkplace != 0 && newWp == 0) {
+    if (*pWorkplace != nullptr && newWp == nullptr) {
         static int n = 0;
         if (n < 25) {
             ++n;
-            std::fprintf(stderr, "[Unassign] #%d citizen=%p oldWp=%llx slot %d->%d "
+            std::fprintf(stderr, "[Unassign] #%d citizen=%p oldWp=%p slot %d->%d "
                          "caller=%p (static 0x%llx)\n", n, selfV,
-                         (unsigned long long)*pWorkplace, *pSlot, slotIndex,
+                         (void*)*pWorkplace, *pSlot, slotIndex,
                          __builtin_return_address(0),
                          (unsigned long long)((uintptr_t)__builtin_return_address(0)
                              - (uintptr_t)GetModuleHandleW(nullptr) + 0x140000000ULL));
@@ -327,43 +330,43 @@ extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP
         }
     }
 
-    // --- Remove from the old workplace roster. ---
-    if (*pWorkplace != 0) {
-        int64_t storageIBP[2] = {0, 0};
-        CitizenComp_Entity_FindComponent_Storage(*pWorkplace, storageIBP);
-        int64_t selfIBP[2] = {0, 0};
-        new (selfIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        // Guard: a force-assigned / partially-built workplace may lack a Storage
-        // component (null-wrapped IBP); the original relies on the invariant that an
-        // assigned workplace always carries one. Skip the roster op crash-safe if absent.
-        if (storageIBP[0] != 0)
-            CitizenComponent_helper_a550(storageIBP[0], *pSlot, selfIBP);
+    // --- Remove from the old residence roster. ---
+    if (*pWorkplace != nullptr) {
+        ResidenceComponent* storage = (*pWorkplace)->FindComponent<ResidenceComponent>();
+        CitizenComponent* selfIBP[2] = {this, nullptr};
+        // Guard: a force-assigned / partially-built home may lack a ResidenceComponent
+        // (null); the original relies on the invariant that an assigned home always
+        // carries one. Skip the roster op crash-safe if absent.
+        if (storage != nullptr)
+            CitizenComponent_helper_a550(reinterpret_cast<int64_t>(storage), *pSlot, selfIBP);
     }
 
-    // --- Store the new workplace + slot. ---
+    // --- Store the new home + slot. ---
     *pWorkplace = newWp;
     *pSlot = slotIndex;
 
-    // --- Add to the new workplace roster. ---
-    if (*pWorkplace != 0) {
-        int64_t storageIBP[2] = {0, 0};
-        CitizenComp_Entity_FindComponent_Storage(*pWorkplace, storageIBP);
-        int64_t selfIBP[2] = {0, 0};
-        new (selfIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        if (storageIBP[0] != 0)
-            CitizenComponent_helper_a710(storageIBP[0], *pSlot, selfIBP);
+    // --- Add to the new residence roster. ---
+    if (*pWorkplace != nullptr) {
+        ResidenceComponent* storage = (*pWorkplace)->FindComponent<ResidenceComponent>();
+        CitizenComponent* selfIBP[2] = {this, nullptr};
+        if (storage != nullptr)
+            CitizenComponent_helper_a710(reinterpret_cast<int64_t>(storage), *pSlot, selfIBP);
     }
 
-    // --- Propagate to the family/children on the +0x260 circular list. ---
-    // head = *(self+0x260); each node's next = *(node+0x268); loop until next wraps to head.
-    int64_t node = *reinterpret_cast<int64_t*>(self + 0x260);
-    if (node != 0) {
+    // --- Propagate to the children on the +0x260 circular ring. ---
+    // head = _firstChild; each node's next = _nextSibling; loop until next wraps to head.
+    CitizenComponent* node = _firstChild;
+    if (node != nullptr) {
         do {
-            int64_t wpLocal = *reinterpret_cast<int64_t*>(workplaceIBP);  // fresh IBP holding the raw wp ptr
-            CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(node), &wpLocal, *pSlot);
-            node = *reinterpret_cast<int64_t*>(node + 0x268);
-        } while (node != *reinterpret_cast<int64_t*>(self + 0x260));
+            node->SetHome(newHome, *pSlot);
+            node = node->_nextSibling;
+        } while (node != _firstChild);
     }
+}
+
+// B4 FORWARD: 3 outside caller(s) (Component/residencecomponent.cpp, Game/starttown.cpp,
+// standalone/death_harness.cpp)
+extern "C" void CitizenComponent_AssignWorkplace(void* selfV, void* workplaceIBP, int slotIndex) {
+    reinterpret_cast<CitizenComponent*>(selfV)->SetHome(
+        *reinterpret_cast<ComponentEntity**>(workplaceIBP), slotIndex);
 }

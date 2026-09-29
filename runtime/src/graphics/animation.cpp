@@ -505,14 +505,12 @@ Object::Base* AnimationEvent::CreateInPlaceObject(void* place) { (void)place; re
 // test either. Neither guard is added; the full evidence and the oracle's
 // limits are in the banner above the door.
 //
-// `RtGraphics::` IS LOAD-BEARING ON THE TWO POD SPELLINGS BELOW (B4b-5): inside
-// this `namespace Graphics` block a bare `ParticleResource` or
-// `ParticleBoundsRecord` would look up in `Graphics` first, and as of block H2 a
-// bare `Particle` binds the REAL CLASS rather than nothing.
+// B.4: `_resource` is the real `Graphics::Particle` and `_boundsPtr` the named
+// `RtGraphics::ParticleBoundsRecord` (ParticleInstance.h).
 bool ParticleInstance::Update() {
-    RtGraphics::ParticleResource* resource = _resource;     // +0xc0, unguarded
+    const Particle* const resource = _resource;             // +0xc0, unguarded
     if (resource->_active != 0) {                            // +0x20, unguarded
-        _boundsPtr = resource->_boxes[_index];               // +0x38 array, +0xd0 index
+        _boundsPtr = resource->_records._data[_index];       // +0x38 array, +0xd0 index
     }
 
     bool needsUpdate;
@@ -522,7 +520,7 @@ bool ParticleInstance::Update() {
         // batch. `this` IS the Geometry base (offset zero), so the cast the POD
         // form needed is gone.
         this->::Graphics::Geometry::SetBounds(
-            *reinterpret_cast<const ::Box*>(_boundsPtr));
+            _boundsPtr->_bounds);
         needsUpdate = false;
     } else {
         _boundsPtr->frameTag = _frameIndex;                  // unguarded, faithful
@@ -562,21 +560,21 @@ void ParticleInstance::IncrementInstanceIndex() {
 // (0x1800c6c00) / unlock, i.e. System::MemoryAllocator::MemFree. The record
 // elements are NOT nulled in the array (retail does not).
 // ============================================================================
+// B.4: on `_records` and each pool record's own `_records` header by name.
 void Graphics::Particle::ReleaseFields() {
-
-    uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x40); ++i) {
-        uint8_t* const rec =
-            (*reinterpret_cast<uint8_t* const* const*>(self + 0x38))[i];
+    for (int32_t i = 0; i < _records._size; ++i) {
+        RtGraphics::ParticleBoundsRecord* const rec = _records._data[i];
         if (rec == nullptr) continue;
-        if (void* const buf = *reinterpret_cast<void* const*>(rec + 0x18)) System::MemoryAllocator::MemFree(buf);
-        *reinterpret_cast<void**>(rec + 0x18) = nullptr;
-        *reinterpret_cast<uint64_t*>(rec + 0x20) = 0;
+        if (void* const buf = rec->_records._data) System::MemoryAllocator::MemFree(buf);
+        rec->_records._data     = nullptr;
+        rec->_records._size     = 0;               // one qword: size AND capacity
+        rec->_records._capacity = 0;
         System::MemoryAllocator::MemFree(rec);
     }
-    if (void* const data = *reinterpret_cast<void* const*>(self + 0x38)) System::MemoryAllocator::MemFree(data);
-    *reinterpret_cast<void**>(self + 0x38) = nullptr;
-    *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
+    if (void* const data = _records._data) System::MemoryAllocator::MemFree(data);
+    _records._data     = nullptr;
+    _records._size     = 0;                        // one qword: size AND capacity
+    _records._capacity = 0;
 }
 
 // ?_singleton@AnimationManager@Graphics@@0PEAV12@EA  retail 0x1801fe7b0 --

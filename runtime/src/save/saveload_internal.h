@@ -99,20 +99,19 @@ inline void MemFree(void* p) {
 // RtResolveCached to refuse to freeze a pre-init answer
 // (rt_resolve_cache.cpp §6). Converting the shape is what puts these four
 // under that rule, and under the [RtSlotAudit] instrument that can see them.
-using SaveLoadSlot = SaveLoad**;
 inline SaveLoad** SaveLoadSingletonSlot() {
-    return reinterpret_cast<SaveLoadSlot>(&::Save::SaveLoad::_singleton);
+    return &::Save::SaveLoad::_singleton;
 }
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the three below are class statics now
 // (redirect in their namespace's *PortInit) -- read fresh, no lazy cache.
-inline void* FileSystemSingleton() {
+inline ::IO::FileSystem* FileSystemSingleton() {
     return ::IO::FileSystem::_singleton;
 }
-inline uint8_t* ModificationSingleton() {
-    return reinterpret_cast<uint8_t*>(::IO::Modification::_singleton);
+inline ::IO::Modification* ModificationSingleton() {
+    return ::IO::Modification::_singleton;
 }
-inline uint8_t* PersistenceSingleton() {
-    return reinterpret_cast<uint8_t*>(::IO::Persistence::_singleton);
+inline ::IO::Persistence* PersistenceSingleton() {
+    return ::IO::Persistence::_singleton;
 }
 
 inline double SecondsPerTick() { return RtSystem::TimerSecondsPerTick(); }
@@ -135,37 +134,23 @@ inline int64_t ZeroTime() {
 // afterwards — but they are what the bytes do, and this project has already
 // lost a day to a String destructor applied to something that was not a String
 // (reference_load_wild_write_high_dword_7fc.md, Wave 4 lane H).
-inline void ReleaseStringSlot(const char** slot) {
-    const char* p = *slot;
+//
+// B.4 R-IO: every Save-class String is a real `System::String` now, whose
+// destructor IS this idiom; the one remaining caller releases the raw `char*`
+// name of a `RtGraphics::MaterialTexture` element (saveload_draw.cpp), whose
+// type is not this block's. The refcount word is read through String.h's
+// header accessor. (`RetainInto` and `AdoptReturned` went with their last
+// callers.)
+inline void ReleaseStringSlot(char** slot) {
+    char* p = *slot;
     if (p == nullptr) return;
-    *reinterpret_cast<int*>(const_cast<char*>(p) - 4) -= 1;
-    if (*reinterpret_cast<int*>(const_cast<char*>(p) - 4) == 0) {
+    RtSystem::StringRefCount(p) -= 1;
+    if (RtSystem::StringRefCount(p) == 0) {
         *slot = p - 8;
-        MemFree(const_cast<char*>(*slot));
+        MemFree(*slot);
     } else {
         *slot = nullptr;
     }
-}
-
-// The ACQUIRE half, which Wave 5 never needed because none of its bodies
-// re-pointed a String member. Four of Wave 13's do. Transcribed from
-// UpdateDelete 0x1800c2dce..0x1800c2ddc: store first, then increment, and the
-// whole sequence is skipped when the incoming pointer already equals the slot.
-inline void RetainInto(const char** slot, const char* src) {
-    *slot = src;
-    if (src != nullptr) *reinterpret_cast<int*>(const_cast<char*>(src) - 4) += 1;
-}
-
-// ENDGAME B.3.7 block B2. A by-value `System::String` a MEMBER returns
-// (GetAutoSaveName / GenerateSaveName), landed in a `const char*` slot the
-// unconverted body then manages by hand. Retail constructs the String straight
-// into the caller's slot (the member's hidden retslot IS `&slot`), so the
-// refcount is born at 1 and nothing is added or dropped on the way: this steals
-// the prvalue's pointer and leaves the temporary null, whose destructor is then
-// a no-op. The same refcount trace as retail's, with no AddRef/Release pair.
-inline void AdoptReturned(const char** slot, System::String&& s) {
-    *slot = s._data;
-    s._data = nullptr;
 }
 
 // ---- the two unexported Array destructors saveload.cpp transcribes ----------

@@ -34,9 +34,9 @@ you. If it does not: `git fetch . 2>/dev/null; git reset --hard main`. Then
 - Type headers: a new or retyped field is `static_assert(offsetof)`ed; `sizeof` stays asserted.
 - Build in YOUR worktree, in the FOREGROUND (Bash timeout 600000 ms; re-invoke if it times out;
   never a background waiter):
-  `/c/msys64/ucrt64/bin/mingw32-make.exe -j3 standalone-debug > build_debug.log 2>&1; echo $?`
-  then `-j3 standalone-perf`, then `-j3 unit`. All exit 0, unit 0 failures, no new warning in a file
-  you touched. Check the build's exit code, not a pipe's. Never higher than `-j3`. If the shell is
+  `/c/msys64/ucrt64/bin/mingw32-make.exe -j2 standalone-debug > build_debug.log 2>&1; echo $?`
+  then `-j2 standalone-perf`, then `-j2 unit`. All exit 0, unit 0 failures, no new warning in a file
+  you touched. Check the build's exit code, not a pipe's. Never higher than `-j2` (the machine locked up on 2026-09-29 with five agents at -j3). If the shell is
   killed for low memory, say so in the hand-in; do not restart in a loop.
 - NEVER run the game, `sa-run`, `sa-deploy`, or touch `C:/GOG Games/Banished`. The coordinator gates.
 - Never `find /` or any unscoped search; never `git stash`, amend, rebase, push; never `pacman`;

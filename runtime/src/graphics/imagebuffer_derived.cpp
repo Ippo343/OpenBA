@@ -111,19 +111,18 @@ void* RenderBufferOperatorNew(uint64_t n) {
 // ENDGAME B.3.5 caller batch: `PlatformConstruct`, `PlatformDestruct` and
 // `Create` are DEFINED members of the real `Video::RenderBuffer`, so all three
 // by-name doors become member calls, and so does the `??3` operator delete (B3R).
-void RenderBufferPlatformConstruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformConstruct();   // B.3.5 bridge
+void RenderBufferPlatformConstruct(Video::RenderBuffer* p) {
+    p->PlatformConstruct();
 }
-void RenderBufferPlatformDestruct(void* p) {
-    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();    // B.3.5 bridge
+void RenderBufferPlatformDestruct(Video::RenderBuffer* p) {
+    p->PlatformDestruct();
 }
 void RenderBufferOperatorDelete(void* p) {
     Video::RenderBuffer::operator delete(p);       // 0x18001f360
 }
-bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
-    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
-        reinterpret_cast<const Video::ImageBuffer*>(colour),
-        reinterpret_cast<const Video::ImageBuffer*>(depth));          // B.3.5 bridge
+bool RenderBufferCreate(Video::RenderBuffer* rb, const Video::ImageBuffer* colour,
+                        const Video::ImageBuffer* depth) {
+    return rb->Create(colour, depth);
 }
 
 // ENDGAME B.3.9 block GFX: `FrameCopyCtor` (the ??0 name door), `VtGenerated`
@@ -456,13 +455,13 @@ bool ReflectionImageBuffer::Serialize(void* stream) {
             // --- the depth target ---------------------------------------------
             if (_depth != nullptr) delete _depth;
 
-            void* const img = ImageBufferOperatorNew(0x68);
+            // `??2ImageBuffer` hands back raw storage, typed once as the object
+            // `ImageBufferCtor` builds in it. Never the ctor's return value — see
+            // the `ImageBufferCtor` banner.
+            Video::ImageBuffer* const img =
+                static_cast<Video::ImageBuffer*>(ImageBufferOperatorNew(0x68));
             if (img != nullptr) ImageBufferCtor(img);
-            // B.3.5 bridge: `??2ImageBuffer` hands back raw storage and
-            // `??0ImageBuffer` is still a door in block D2's `buffers.cpp`, so the
-            // object is typed only here. Never the ctor's return value — see the
-            // `ImageBufferCtor` banner.
-            _depth = reinterpret_cast<Video::ImageBuffer*>(img);
+            _depth = img;
 
             // `CALL qword ptr [R10+0x48]` = slot 9, Video::ImageBuffer::Create.
             // With the real class that is `_depth->Create(...)`, a virtual call at
@@ -487,11 +486,13 @@ bool ReflectionImageBuffer::Serialize(void* stream) {
                 RenderBufferPlatformDestruct(_target);
                 RenderBufferOperatorDelete(_target);
             }
-            void* const rb = RenderBufferOperatorNew(0x30);
+            Video::RenderBuffer* const rb =
+                static_cast<Video::RenderBuffer*>(RenderBufferOperatorNew(0x30));
             if (rb != nullptr) {
-                reinterpret_cast<uint64_t*>(rb)[0] = 0;
-                reinterpret_cast<uint64_t*>(rb)[1] = 0;
-                reinterpret_cast<uint64_t*>(rb)[2] = 0;
+                rb->colorBuffer = nullptr;             // three zeroed qwords:
+                rb->depthBuffer = nullptr;             //   +0x00, +0x08,
+                rb->width  = 0;                        //   +0x10 (width, height)
+                rb->height = 0;
                 RenderBufferPlatformConstruct(rb);
             }
             _target = rb;
@@ -583,11 +584,7 @@ bool ReflectionImageBuffer::Serialize(void* stream) {
 namespace {
 
 // `??0Camera@Graphics@@QEAA@AEBV01@@Z` 0x180017a70 — its ported body,
-// rtgfxd::RtGraphics_Camera_CopyCtor (wave9_lane_gfxd.cpp), by name.
-void CameraCopyCtor(void* dst, const void* src) {
-    rtgfxd::RtGraphics_Camera_CopyCtor(static_cast<RtGraphics::Camera*>(dst),
-                                       static_cast<const RtGraphics::Camera*>(src));
-}
+// rtgfxd::RtGraphics_Camera_CopyCtor (wave9_lane_gfxd.cpp), called by name below.
 
 // `Collection::Array<T>::SetSize(n, const T&)` 0x1800637b0 and
 // `Collection::Array<T>::~Array` 0x18001c750 — both UNEXPORTED template
@@ -605,16 +602,8 @@ void GroupArraySetSize(void* arrayHdr, int n, const void* fill) {
 
 // `?_singleton@Configuration@Video@@0PEAV12@EA` — 0x1801fe7a0. A pointer TO the
 // Configuration, so the read is a double indirection, which is what
-// `MOV RAX,[0x1801fe7a0]; MOV EBX,[RAX+0x34]` does. By NAME: the row is an
-// exported private static and a name door is the one that follows a promotion
-// (reference_aeaa_is_private_not_unexported.md).
-const uint8_t* VideoConfiguration() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    return reinterpret_cast<const uint8_t*>(::Video::Configuration::_singleton);
-}
-
-constexpr uint32_t kCameraSize = 0xd8;   // group +0x010 .. +0x0e7
-constexpr uint32_t kGroupSize  = 0x110;  // the Array stride, two ways (see above)
+// `MOV RAX,[0x1801fe7a0]; MOV EBX,[RAX+0x34]` does: B.4, its
+// `reflectionDetail` (+0x34), read fresh from the class static.
 
 }  // namespace
 
@@ -629,6 +618,12 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
     // is spelled with the cast at the one site rather than by making the field
     // `mutable`, which would hide the disagreement in the declaration.
     ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);
+
+    // LEFT: the slot's three references arrive as `void*` (the declaration
+    // GeneratedImageBuffer.h and tests/unit/rb_graphics_abi_test.cpp share);
+    // each is viewed once as retail's `Renderer&` / `const Scene&` / `const Camera&`.
+    Graphics::Renderer& rend = *static_cast<Graphics::Renderer*>(renderer);
+    const Graphics::Camera& cam = *static_cast<const Graphics::Camera*>(camera);
 
     if (p->_generation == generation) return;      // CMP [RCX+0x68],ESI / JZ
 
@@ -650,39 +645,31 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
     // stack copy — retail does NOT pass &camera->transform directly, and the
     // copy is reproduced because `operator*` takes `this` by pointer and would
     // otherwise alias the live camera).
-    Math::Transform3 cameraToWorld;
-    std::memcpy(&cameraToWorld,
-                static_cast<const uint8_t*>(camera) + 0x64, sizeof cameraToWorld);
+    const Math::Transform3 cameraToWorld = cam._cameraToWorld;
 
     const Math::Transform3 mirrored = cameraToWorld * reflect;
 
-    alignas(8) uint8_t mirrorCam[kCameraSize];
-    CameraCopyCtor(mirrorCam, camera);
-    std::memcpy(mirrorCam + 0x64, &mirrored, sizeof mirrored);
-
-    // ---- the draw group -----------------------------------------------------
-    alignas(8) uint8_t group[kGroupSize];
-    *reinterpret_cast<const void**>(group + 0x000) = scene;
-    *reinterpret_cast<void**>(group + 0x008)       = p->_target;
-    CameraCopyCtor(group + 0x010, mirrorCam);
-    *reinterpret_cast<int32_t*>(group + 0x0e8)  = 0;
-    *reinterpret_cast<int32_t*>(group + 0x0ec)  = 2;
-    *reinterpret_cast<int32_t*>(group + 0x0f0)  = 0x8001;
-    *reinterpret_cast<int32_t*>(group + 0x0f4)  = -1;
-    *reinterpret_cast<int32_t*>(group + 0x0f8)  =
-        *reinterpret_cast<const int32_t*>(VideoConfiguration() + 0x34);
+    // The mirrored camera: retail copies the camera (the copy door) into a stack
+    // Camera, overwrites its transform with the mirrored one and copies THAT into
+    // the group's Camera slot. The slot ends holding the same bytes when the door
+    // copies the camera straight into it and the transform is overwritten there;
+    // `Graphics::Camera` cannot be a C++ local (its default ctor is protected, B5-4).
+    Graphics::RendererSceneEntry group;            // ctor: `_drawableIds` zeroed (+0x100)
+    group._scene        = static_cast<const Graphics::Scene*>(scene);
+    group._renderBuffer = p->_target;
+    rtgfxd::RtGraphics_Camera_CopyCtor(&group._camera, &cam);
+    group._camera._cameraToWorld = mirrored;
+    group._shaderDetail      = 0;
+    group._shader            = 2;
+    group._materialTypeFlags = 0x8001;
+    group._drawGroupIndex    = -1;
+    group._detailId          = ::Video::Configuration::_singleton->reflectionDetail;
     // +0x0fc: never written by retail. Left as it is.
-    *reinterpret_cast<uint64_t*>(group + 0x100) = 0;
-    *reinterpret_cast<uint64_t*>(group + 0x108) = 0;
 
-    const int32_t count = *reinterpret_cast<const int32_t*>(
-                              static_cast<const uint8_t*>(renderer) + 8);
-    GroupArraySetSize(renderer, count + 1, group);
+    GroupArraySetSize(&rend._sceneGroups, rend._sceneGroups._size + 1, &group);
 
-    // retail 0x18001c750 — the temporary's own Array<uint8_t> header, freed.
-    reinterpret_cast<rtcoll::ArrayHdr*>(group + 0x100)->~Array();
     p->_generation = generation;                    // MOV [RDI+0x68],ESI
-}
+}   // ~RendererSceneEntry: retail 0x18001c750, the temporary's own Array header
 
 }  // namespace Graphics
 

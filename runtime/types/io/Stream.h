@@ -42,6 +42,8 @@
 #include "Serializer.h"
 #include "../system/String.h"
 
+namespace System { class Compression; }   // system/Compression.h: CompressedStream owns one
+
 namespace RtIo {
 
 // ============================================================
@@ -226,8 +228,8 @@ struct CompressedStreamWindow {
     uint32_t _pad0c;      // +0x0C — never written by anything this lane read
     // +0x10 — the 0x8000-byte decompressed page. Allocated one per window by
     // SetWindowCount (`MOV EDX,0x8000 ; MOV R8D,4` at 0x1800aa07d) and memset to
-    // zero immediately after.
-    void*    buffer;
+    // zero immediately after. B.4 R-IO: typed as the bytes it holds.
+    uint8_t* buffer;
 };
 static_assert(sizeof(CompressedStreamWindow) == 0x18,
               "SetWindow 0x1800a9acb: `LEA RCX,[R10+R10*2]` then scale 8 = stride 24");
@@ -631,19 +633,15 @@ static_assert(std::is_trivially_destructible<RtIo::MemoryStream>::value,
 // meanings, and FileStream.h says the same thing from its side.
 //
 // ---------------------------------------------------------------------------
-// WHAT THIS BLOCK DOES NOT CONVERT, AND WHY IT IS NOT AN OVERSIGHT
+// THE NON-VIRTUAL MEMBERS (B.4 R-IO)
 // ---------------------------------------------------------------------------
-// The family's NON-virtual members — `Open`, `Create`, `Release`, `Commit`,
-// `CompressWindow`, `SetWindow`, `SetWindowCount`, `GetAvailableWindow`,
-// `DecompressFromSource`, `GetMemoryStream` and the two `CompressedMemoryStream`
-// helpers — are NOT declared here and keep their registered free-function
-// doors. Only the NINE VTABLE SLOTS move, because the vtable is what a real
-// class is for and what nothing else in the build can check. Declaring a member
-// whose body had not moved would be a link hazard for no gain, and moving those
-// eleven bodies as well would have meant editing
-// `compressed_stream_open.cpp` and `compressed_stream_read.cpp` far beyond the
-// two slots they own — on the exact path section D says to leave alone. They
-// convert when the defect is understood.
+// `Open`, `Create`, `Release`, `Commit`, `CompressWindow`, `SetWindow`,
+// `SetWindowCount`, `GetAvailableWindow` and `DecompressFromSource` were free
+// `RtIo_CompressedStream_*` doors on the RtIo POD view; they are members now,
+// each body moved statement for statement (section D: no lock, retry, loop
+// bound, null check or reorder added, and nothing removed), with `self->x`
+// become the member's own field and the three arrays and the Compression
+// pointer typed.
 // ===========================================================================
 
 namespace IO {
@@ -671,6 +669,26 @@ public:
     virtual void Close();                                // slot 7 +0x38  0x1800aa8d0
     virtual void PreCommit();                            // slot 8 +0x40  0x1800aa8c0
 
+    // ---- the non-virtual members (see the banner) -------------------------
+    // ?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z          0x1800aa560
+    bool Open(Stream& src, int windowCount);
+    // ?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z        0x1800aa4b0
+    bool Create(Stream& src, int windows);
+    // ?Commit@CompressedStream@IO@@QEAAXXZ                       0x1800a9ee0
+    void Commit();
+    // ?Release@CompressedStream@IO@@AEAAXXZ                      0x1800aa100
+    void Release();
+    // ?CompressWindow@CompressedStream@IO@@AEAAXH@Z              0x1800a9810
+    void CompressWindow(int i);
+    // ?SetWindowCount@CompressedStream@IO@@AEAAXH@Z              0x1800aa020
+    void SetWindowCount(int n);
+    // ?SetWindow@CompressedStream@IO@@AEAA_NH@Z                  0x1800a9aa0
+    bool SetWindow(int pos);
+    // ?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ           0x1800a9980
+    int  GetAvailableWindow();
+    // ?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z       0x1800a96b0
+    bool DecompressFromSource(int blk);
+
     // ---- the 0x68 bytes, at retail's offsets -------------------------------
     // `_unknown18` and `_unknown24` are the two gaps `??0CompressedStream`
     // (0x1800aa3d0) leaves unwritten. They are recorded as unknown rather than
@@ -680,16 +698,16 @@ public:
     int32_t  _activeWindow;   // +0x20  ctor writes -1
     uint32_t _unknown24;      // +0x24  never initialised by the ctor
     Stream*  _source;         // +0x28  the stream the compressed bytes live on
-    void*    _windowData;     // +0x30  Array<Window>::_data
+    RtIo::CompressedStreamWindow* _windowData;   // +0x30  Array<Window>::_data
     int32_t  _windowSize;     // +0x38  Array<Window>::_size
     int32_t  _windowCap;      // +0x3c
-    void*    _headerData;     // +0x40  Array<Header>::_data
+    RtIo::CompressedStreamHeader* _headerData;   // +0x40  Array<Header>::_data
     int32_t  _headerSize;     // +0x48  Array<Header>::_size   <-- the dtor's guard
     int32_t  _headerCap;      // +0x4c
-    void*    _blockData;      // +0x50
+    void**   _blockData;      // +0x50  Array<void*>::_data, one buffer per block
     int32_t  _blockSize;      // +0x58
     int32_t  _blockCap;       // +0x5c
-    void*    _compression;    // +0x60  System::Compression*, owned
+    System::Compression* _compression;   // +0x60  owned
 
 protected:
     // ENDGAME B.3.9 IO -- ??0CompressedStream@IO@@QEAA@XZ 0x1800aa3d0, the
@@ -805,14 +823,8 @@ static_assert(std::is_trivially_destructible<RtIo::CompressedMemoryStream>::valu
 // declared here, copied from its definition (linkage, namespace, types), so the
 // reader can call it by name. Nothing calls it through this declaration yet.
 
-namespace RtIo {
-// ---- io/compressed_stream_open.cpp
-extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int32_t n);  // 0x1800aa020
-extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src, int32_t flag);  // 0x1800aa560 (B3R RT-Core)
-// ---- io/compressed_stream_write.cpp
-extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self);  // 0x1800a9ee0
-extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int32_t i);  // 0x1800a9810
-}  // namespace RtIo
+// (B.4 R-IO: the four RtIo_CompressedStream_* bodies that stood here are
+// IO::CompressedStream members.)
 
 // ---- io/text_codec.cpp
 extern "C" int32_t RtIo_TextCodec_DetectFormat(const void* srcv, int32_t len);  // 0x1800c9d60

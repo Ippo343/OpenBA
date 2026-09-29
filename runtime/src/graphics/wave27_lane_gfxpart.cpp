@@ -83,6 +83,7 @@
 #include "../../types/graphics/Particle.h"
 #include "../../types/graphics/ParticleInstance.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"                   // B.4: IO::Stream::_direction
 #include "../../types/math/Math.h"
 #include "../../types/graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Graphics::Renderer
 #include "../../types/graphics/Material.h"  // ENDGAME B.3.5 caller batch: Graphics::MaterialInstance
@@ -92,15 +93,6 @@
 #include "../../types/object/TypeInfo.h"         // Object::Base::IsDerivedFrom
 #include "../../types/system/Value.h"            // System::Random::NextGroup
 #include "../../types/system/MemoryAllocator.h"
-
-using RtGraphics::Geometry;
-using RtGraphics::Particle;
-using RtGraphics::ParticleInstance;
-using RtGraphics::ParticleSystemInstance;
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
 
 namespace rtcoll {
 // Lane Q's `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) door:
@@ -149,88 +141,33 @@ inline float DegToRad() {
     return f;
 }
 
-inline uint8_t*       B(void* p)        { return static_cast<uint8_t*>(p); }
-inline const uint8_t* B(const void* p)  { return static_cast<const uint8_t*>(p); }
-inline float  F(const void* p, size_t off) {
-    float v; std::memcpy(&v, B(p) + off, sizeof v); return v;
-}
-inline void   SetF(void* p, size_t off, float v) { std::memcpy(B(p) + off, &v, sizeof v); }
-inline int32_t I32(const void* p, size_t off) {
-    int32_t v; std::memcpy(&v, B(p) + off, sizeof v); return v;
-}
-
-void** VTableOf(const void* obj) { return *reinterpret_cast<void* const*>(obj)
-                                         ? *reinterpret_cast<void** const*>(obj) : nullptr; }
-void*  VSlot(const void* obj, size_t byteOffset) {
-    return VTableOf(obj)[byteOffset / sizeof(void*)];
-}
+// ---------------------------------------------------------------------------
+// `Graphics::Particle`, the fields THIS lane pinned (B.4: all named on the
+// class, Particle.h):
+//   `_active` +0x20, `_recordCount` +0x24, `_subCount` +0x28,
+//   `_material` +0x30 — ExternalPtr<MaterialInstance>, corroborated from BOTH
+//          ends: Particle::Serialize hands &+0x30 to the ExternalBasePtr::
+//          Serialize instantiation at 0x180014520, and ParticleInstance::
+//          AddDrawItems passes `*(void**)(particle+0x30)` as Renderer::
+//          AddDrawItem's `const MaterialInstance*` argument;
+//   `_records` +0x38 — the pool-record array {data, size@+0x40, cap@+0x44},
+//          pinned by the profile build's ~Particle, which loops
+//          `i < *(int*)(this+0x40)` over `*(void**)(this+0x38) + i*8`.
+//
+// The per-instance particle pool (`ParticleInstance::_boundsPtr`, +0xc8) is
+// `RtGraphics::ParticleBoundsRecord` and each live particle, stride 0x58, is
+// `RtGraphics::ParticleRecord` (ParticleInstance.h; this lane MEASURED the
+// whole 0x40 and the Draw reads, wave 28 the rest). The Draw reads each
+// {current, previous} pair: `_pos` / `_color` (Wave 27: "posA" / "posB"),
+// `_alpha` (Wave 27: "scroll"), `_rot` (DEGREES) and `_size`.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// `Graphics::Particle`, the fields THIS lane pins. runtime/types/graphics/
-// Particle.h owns the struct; these are the three offsets whose MEANING this
-// lane measured for the first time (see that header's updated comments):
-//   +0x30  ExternalPtr<MaterialInstance>  — corroborated from BOTH ends:
-//          Particle::Serialize hands &+0x30 to the ExternalBasePtr::Serialize
-//          instantiation at 0x180014520, and ParticleInstance::AddDrawItems
-//          passes `*(void**)(particle+0x30)` as Renderer::AddDrawItem's
-//          `const MaterialInstance*` argument.
-//   +0x38  the record array's data pointer
-//   +0x40  the record array's size (int32), +0x44 its capacity
-//          — pinned by the profile build's ~Particle, which loops
-//          `i < *(int*)(this+0x40)` over `*(void**)(this+0x38) + i*8` and
-//          MemFrees each element's own +0x18 buffer, then the block.
-// ---------------------------------------------------------------------------
-constexpr size_t kParticle_Active      = 0x20;  // bool
-constexpr size_t kParticle_Count       = 0x24;  // int, the record count
-constexpr size_t kParticle_SubCount    = 0x28;  // int, ctor 0xf; each record's sub-array size
-constexpr size_t kParticle_Material    = 0x30;  // ExternalPtr<MaterialInstance>
-constexpr size_t kParticle_RecordArray = 0x38;  // Array<void*> {data, size@+0x40, cap@+0x44}
-
-static_assert(offsetof(Particle, _active) == kParticle_Active, "Particle::_active");
-static_assert(offsetof(Particle, _f24)    == kParticle_Count,  "Particle record count @ +0x24");
-static_assert(offsetof(Particle, _f28)    == kParticle_SubCount, "Particle sub-count @ +0x28");
-static_assert(offsetof(Particle, _f30)    == kParticle_Material, "Particle material @ +0x30");
-static_assert(offsetof(Particle, _f38)    == kParticle_RecordArray, "Particle records @ +0x38");
-
-// ---------------------------------------------------------------------------
-// The per-instance particle pool (`ParticleInstance::_boundsPtr`, +0xc8) — the
-// 0x40-byte object whose ctor is 0x180103bf0. Fields this lane reads:
-//   +0x00..+0x18  a Volume::Box (min seeded 1e8, max seeded -1e8)
-//   +0x18         the live particle Array's data pointer
-//   +0x20         that array's size, +0x28 the live count
-//   +0x2c         the per-frame tag compared against ParticleInstance::_frameIndex
-// runtime/types/graphics/Particle.h's `ParticleBoundsRecord` describes the same
-// object with an `opaque[0x2c]` prefix; this lane MEASURED the whole 0x40 and
-// the fields below are that measurement, recorded here rather than by widening
-// a struct another lane's oracles compare byte-for-byte.
-// ---------------------------------------------------------------------------
-constexpr size_t kPool_ParticleArrayData = 0x18;
-constexpr size_t kPool_ParticleArraySize = 0x20;
-constexpr size_t kPool_LiveCount         = 0x28;
-constexpr size_t kPool_FrameTag          = 0x2c;
-
-// Per-particle record inside that array, stride 0x58. Only the fields the two
-// Draw bodies read are named; all are float pairs {current, previous}.
-constexpr size_t kRec_Stride    = 0x58;
-constexpr size_t kRec_PosA      = 0x10;  // 3 floats current
-constexpr size_t kRec_PosAPrev  = 0x1c;
-constexpr size_t kRec_PosB      = 0x28;  // 3 floats current
-constexpr size_t kRec_PosBPrev  = 0x34;
-constexpr size_t kRec_ScrollCur = 0x40;
-constexpr size_t kRec_ScrollPrv = 0x44;
-constexpr size_t kRec_RotCur    = 0x48;  // DEGREES (see DegToRad above)
-constexpr size_t kRec_RotPrv    = 0x4c;
-constexpr size_t kRec_SizeCur   = 0x50;
-constexpr size_t kRec_SizePrv   = 0x54;
-
-// ---------------------------------------------------------------------------
-// `System::Random` — MT19937. Layout read out of SetParticle's own bytes:
-//   +0x00        int  index (`mti`); zero means "regenerate before use"
-//   +0x04..      uint32 state[624]
-// `?NextGroup@Random@System@@AEAAXXZ` (0x1800c7dd0) is the twist. AEAA means
-// PRIVATE, not unexported — this DLL exports its private members
-// (reference_aeaa_is_private_not_unexported.md); our header declares it public,
-// so it is a member call (B3R).
+// `System::Random` — MT19937 (`_index` +0x00, zero means "regenerate before
+// use"; `_mt[624]` +0x04). `?NextGroup@Random@System@@AEAAXXZ` (0x1800c7dd0) is
+// the twist. AEAA means PRIVATE, not unexported — this DLL exports its private
+// members (reference_aeaa_is_private_not_unexported.md); our header declares
+// it public, so it is a member call (B3R).
 // ---------------------------------------------------------------------------
 
 // (`ParticleRng()`, the lazy name door onto ?_rng@Particle@Graphics@@, is gone:
@@ -239,17 +176,13 @@ constexpr size_t kRec_SizePrv   = 0x54;
 // One MT19937 draw, exactly as retail inlines it (five call sites in
 // SetParticle/Update share the identical instruction sequence). Returns the
 // tempered word; the index advance and 0x270 wrap are part of the draw.
-uint32_t RngNext(void* rngv) {
-    uint8_t* rng = B(rngv);
-    int32_t index = I32(rng, 0);
+uint32_t RngNext(System::Random& rng) {
+    int32_t index = rng._index;
     if (index == 0) {
-        // ?NextGroup@Random@System@@AEAAXXZ (0x1800c7dd0): System::Random::NextGroup,
-        // the member (B3R). B.3.x bridge: `rng` is the Random's storage.
-        reinterpret_cast<System::Random*>(rng)->NextGroup();
-        index = I32(rng, 0);
+        rng.NextGroup();                     // 0x1800c7dd0
+        index = rng._index;
     }
-    uint32_t y;
-    std::memcpy(&y, rng + 4 + static_cast<size_t>(static_cast<uint32_t>(index)) * 4, sizeof y);
+    uint32_t y = rng._mt[static_cast<uint32_t>(index)];
     // The shipped tempering, masks lifted from the bytes (see the banner).
     y ^= y >> 11;
     y ^= (y & 0xff3a58adu) << 7;
@@ -257,37 +190,14 @@ uint32_t RngNext(void* rngv) {
     y ^= y >> 18;
     int32_t next = index + 1;
     if (next == 0x270) next = 0;     // retail: CMP EDX,0x270 / CMOVZ EDX,<zero reg>
-    std::memcpy(rng, &next, sizeof next);
+    rng._index = next;
     return y;
 }
 
-// The shared Serialize prologue/epilogue, the same two helpers
-// runtime/src/achievement/goal_serialize.cpp already carries — repeated here
-// rather than exported from there because that file keeps them in an anonymous
-// namespace and this lane must not change another wave's translation unit.
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-    Encoding* enc = stream->encoding;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw =
-        reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    delete AsRw(rw);
-}
+// The shared Serialize prologue/epilogue (`{ &stream, nullptr }`, the
+// encoding's CreateReader / CreateWriter with version 0, and `if (rw) delete
+// rw` at the end) is `IO::Serializer`'s ctor and dtor, inlined by retail; B.4
+// spells it as the class.
 
 }  // namespace
 
@@ -329,8 +239,6 @@ void DestroyCodec(ReaderWriter* rw) {
 //    `CALL 0x180103bf0; MOV RCX,RAX`. It returns its own first argument, so the
 //    two agree today; the port stores what retail stores.
 // 4. `MOV AL,0x1` — always true. There is no error path to reproduce.
-//
-// THREE ADDRESS DOORS, all commented at their call sites below.
 // ============================================================================
 // ENDGAME B.3.9 block GFX: the slot-5 door `RtGraphics_Particle_Serialize` is
 // gone with the minted `??_7Particle@Graphics@@6B@` (its only reader besides
@@ -342,82 +250,53 @@ namespace Graphics {
 bool Particle::Serialize(void* streamv) {
     ++g_particleSerialize;
 
-    Stream*  stream = static_cast<Stream*>(streamv);
+    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
 
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
+    IO::Serializer ser(stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
-    AsRw(rw)->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);          // +0x78
-    AsRw(rw)->SerializeInt(_recordCount, nullptr);   // +0xa0
-    AsRw(rw)->SerializeInt(_subCount, nullptr);      // +0xa0
+    rw->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);   // +0x78; LEFT: `_active` is the byte retail stores (Particle.h)
+    rw->SerializeInt(_recordCount, nullptr);   // +0xa0
+    rw->SerializeInt(_subCount, nullptr);      // +0xa0
 
-    // ADDRESS DOOR — SYMBOL: the `Object::ExternalBasePtr::Serialize` template
-    // instantiation at retail 0x180014520 (UNNAMED in the export directory,
-    // checked by VA with pefile — not assumed from the absence of a mangled
-    // name). It is the same body shape as 0x1800042a0 / 0x180005dc0, which
-    // runtime/src/achievement/goal_serialize.cpp already reaches the same way,
-    // and it compares against `_typeInfo` at 0x1801fa778.
-    // B3R: RtObject_ExternalPtrSerialize_MaterialInstance, by name.
+    // 0x180014520, the `Object::ExternalBasePtr::Serialize` instantiation
+    // (UNNAMED in the export directory) — RtObject_ExternalPtrSerialize_
+    // MaterialInstance, by name. LEFT: it takes object's POD spellings
+    // (External.h).
     RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(&_material), &ser);   // B.3.x bridge
+        reinterpret_cast<RtObject::External**>(&_material),
+        reinterpret_cast<rt::io::Serializer*>(&ser));
 
-    if (stream->direction == rt::io::kDirectionReading && _active != 0) {
-        // ADDRESS DOOR — SYMBOL: `Collection::Array<void*>::SetSize(this, int)`
-        // at retail 0x180062110, UNNAMED (checked by VA). Its body reads
-        // `SHL RCX,3 / MOV EDX,8` with a plain qword copy loop whose else-arm is
-        // empty, i.e. stride 8, align 8, new tail UNINITIALISED — which is
-        // kSpec_Fill8 in runtime/src/collection/array.cpp's J3 family exactly.
-        // B3R: ported as rtcoll::RtColl_ArraySetSize_180062110 and called by name.
+    if (stream._direction == IO::kReading && _active != 0) {
+        // 0x180062110, `Collection::Array<void*>::SetSize` (UNNAMED): stride 8,
+        // align 8, new tail UNINITIALISED — kSpec_Fill8 exactly; by name.
         //
         // The pool-record constructor at retail 0x180103bf0, UNNAMED (checked by
-        // VA): RtGraphics_ParticlePoolRecord_Ctor (below), by name. It seeds a
-        // Volume::Box to (+1e8,+1e8,+1e8)/(-1e8,-1e8,-1e8), zeroes +0x18..+0x28,
-        // writes -1 at +0x2c and sizes its own sub-array at +0x18 to
-        // `particle->_subCount` through a second unnamed SetSize at 0x180061bb0.
+        // VA): RtGraphics_ParticlePoolRecord_Ctor (below), by name. It seeds
+        // the Box, zeroes the counters, writes -1 at `frameTag` and sizes its
+        // own `_records` to `particle->_subCount` through 0x180061bb0.
         //
         // The loop bound is RE-READ from `_recordCount` at the bottom and the
         // array base RE-READ from `_records._data` at the top of each
-        // iteration, exactly as retail does (point 2 of the banner). Spelling
-        // them as members changes neither read.
+        // iteration, exactly as retail does (point 2 of the banner).
         rtcoll::RtColl_ArraySetSize_180062110(&_records, _recordCount);
         for (int32_t i = 0; i < _recordCount; ++i) {
-            void* p = rtcoll::MemAlloc(0x40, 8);
-            void* v = p ? RtGraphics_ParticlePoolRecord_Ctor(p, this) : nullptr;
-            void** base = reinterpret_cast<void**>(_records._data);
-            base[i] = v;
+            void* const p = rtcoll::MemAlloc(0x40, 8);
+            RtGraphics::ParticleBoundsRecord* const v =
+                p ? RtGraphics_ParticlePoolRecord_Ctor(p, this) : nullptr;
+            _records._data[i] = v;
             ++g_particleSerRecords;
         }
     }
 
-    DestroyCodec(rw);
-    return true;
+    return true;   // ~Serializer: `if (rw) delete rw`
 }
 
 // ---------------------------------------------------------------------------
-// `Graphics::Particle`'s three type-info slots and its destructor.
-//
-// SLOTS 1, 2 and 3 ARE MEMBERS THAT FORWARD, not doors that delegate. Their
-// bodies are `RtGraphics_Particle_TypeName` / `_Type` / `_GetFileVersion` in
-// `runtime/src/graphics/graphics_typeinfo_accessors.cpp`, which is NOT block
-// H2's file set, so the direction is reversed for these three: the registered
-// door is untouched and the member calls it. Exactly the split
-// `runtime/src/object/external_class_doors.cpp` documents and block H1 used for
-// `Graphics::AnimationEvent`.
-//
-// `~Particle()` IS EMPTY AND THE DOOR SITUATION IS UNCHANGED. Retail's
-// `??1Particle@Graphics@@UEAA@XZ` (0x180103c70) stamps the MINTED table and
-// walks `_records` freeing each element; it is not ported anywhere in the tree,
-// and nothing here starts porting it. The member exists so the class has the
-// destructor its declaration promises; writing the stamp by hand would name the
-// minted table, which is the one thing a converted object must not carry
-// (B34_RULES section 4.3, the `Object::External` precedent).
-// ---------------------------------------------------------------------------
 // `Particle::TypeName` (slot 1), `::Type` (slot 2) and `::GetFileVersion`
-// (slot 3) USED TO BE DEFINED HERE, forwarding INTO the `extern "C"` doors in
-// `graphics_typeinfo_accessors.cpp`. ENDGAME B.3.5 block GC flipped that: the
-// members ARE the bodies now, in that file, beside the byte decode that is their
-// evidence, and each door is a one-line qualified delegation.
-// ENDGAME B.3.8 block RB: `~Particle()` is inline in Particle.h now, its body
+// (slot 3) are DECLARE_TYPE's / graphics_typeinfo_accessors.cpp's.
+// ENDGAME B.3.8 block RB: `~Particle()` is inline in Particle.h, its body
 // (retail 0x180103c70) ported as `Particle::ReleaseFields` in animation.cpp.
 
 // ?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ 0x18001ff40 and
@@ -455,61 +334,37 @@ Object::Base* Particle::CreateInPlaceObject(void* place) { (void)place; return n
 // w-components: three with the shipped 1.0f and the last with the interpolated
 // opacity. A port that copied `m` wholesale and patched only +0x3c would leave
 // AsMatrix's w-row in place and hand the shader a different matrix.
-// ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
-// name, its address and its registration and delegates with a QUALIFIED
-// non-virtual call (the qualification stops it re-entering itself through the
-// minted table, B34_BRIEFS section A.1).
 //
 // RULE B5-12: the hidden return slot is spelled OUT, in RETAIL ORDER, and
 // returned again. THIS is the slot the 2026-09-13 perf-only crash came through
 // (`1a4200c3`), and Geometry.h records why a C++ by-value return would be the
 // WRONG fix on a vtable slot under GCC.
-// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
-// reader was the minted ParticleInstance / ParticleSystemInstance table.
+// ============================================================================
 
 namespace Graphics {
 
 Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int index,
                                                      float alpha) const {
-    (void)index;         // ignored, see the banner above the door
+    (void)index;         // ignored, see the banner above
     ++g_piGetInstanceXform;
 
-    const Geometry* self = this;
-    const uint8_t*  cur  = B(&self->_transform);
-    const uint8_t*  prv  = B(&self->_prevTransform);
-
-    // NAME DOORS — SYMBOLS: ?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z
-    // (0x18001d500) and ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ (0x18001e5f0).
-    // CONDITION: both are ordinary public exports and both are PORTED (Wave 1
-    // Math), so going by NAME reaches our own bodies. Going by ADDRESS would walk
-    // past them into the DLL — the port-bypassing-a-port defect
-    // tools/port_bypass_audit.py exists for.
-    // CONSEQUENCE: a null leaves `out` untouched, so the caller would draw with
-    // stack garbage; both are therefore checked once and named.
-    // ENDGAME B.3.1 step 2: Quaternion::Lerp and Transform::AsMatrix are
-    // members now. There is no resolve left to fail, so the "resolved to null"
-    // arm that used to return the matrix UNWRITTEN is gone with it.
+    const Math::Transform& cur = _transform;
+    const Math::Transform& prv = _prevTransform;
 
     const float t = alpha;
 
     // Retail's order exactly: subtract, scale, add back onto the PREVIOUS value.
-    Transform blended;
-    const float px = F(prv, 0x10), py = F(prv, 0x14), pz = F(prv, 0x18);
-    blended.translation.x = (F(cur, 0x10) - px) * t + px;
-    blended.translation.y = (F(cur, 0x14) - py) * t + py;
-    blended.translation.z = (F(cur, 0x18) - pz) * t + pz;
+    Math::Transform blended;
+    const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;
+    blended.translation.x = (cur.translation.x - px) * t + px;
+    blended.translation.y = (cur.translation.y - py) * t + py;
+    blended.translation.z = (cur.translation.z - pz) * t + pz;
 
-    Quaternion q;
     // `this` is the PREVIOUS rotation and the argument is the CURRENT one, so the
     // lerp runs prev -> cur, matching the translation blend above.
-    q = reinterpret_cast<const Quaternion*>(prv)->Lerp(
-                *reinterpret_cast<const Quaternion*>(cur),
-                reinterpret_cast<const Scalar&>(t));   // B.3.1 bridge
-    blended.rotation = q;
+    blended.rotation = prv.rotation.Lerp(cur.rotation, Math::Scalar(t));
 
-    Matrix m;
-    m = blended.AsMatrix();
+    const Math::Matrix m = blended.AsMatrix();
 
     const float one = One();
     out->m[0]  = m.m[0];  out->m[1]  = m.m[1];  out->m[2]  = m.m[2];  out->m[3]  = one;
@@ -518,7 +373,7 @@ Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int inde
     out->m[12] = m.m[12]; out->m[13] = m.m[13]; out->m[14] = m.m[14];
     // ((1 - t) * prevOpacity) + (t * opacity) — retail computes the two products
     // and adds the t-term LAST. Folding it the other way is a different float.
-    out->m[15] = ((one - t) * self->_opacityPrev) + (t * self->_opacity);
+    out->m[15] = ((one - t) * _opacityPrev) + (t * _opacity);
     // Hidden return slot: the by-value Matrix's buffer comes in RDX and its
     // address goes back in RAX. Declared void until 2026-09-13; RAX was garbage
     // at -O2 and DrawItemList's SetTransform read through it (perf build only).
@@ -537,91 +392,69 @@ Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int inde
 //
 // Retail:
 //   pool = this->_boundsPtr
-//   if (pool->liveCount == 0) return;                 // +0x28
-//   group = renderer.drawGroups.data + renderer.currentDrawGroup * 0x1f0
-//   d  = this->_transform.translation - *(Vector3*)(group + 0x90)
+//   if (pool->_liveCount == 0) return;                // +0x28
+//   group = renderer._drawGroups[renderer._currentDrawGroup]
+//   d  = this->_transform.translation - group._camera._cameraToWorld.translation
 //   Renderer::AddDrawItem(
 //       &renderer,
 //       this,                                          // const Geometry*
-//       *(MaterialInstance**)(this->_resource + 0x30),
+//       this->_resource->_material,                    // const MaterialInstance*
 //       0x8000,                                        // ushort
 //       0,                                             // ushort
 //       (d.x*d.x + d.y*d.y) + d.z*d.z,                 // float, retail's order
-//       ((1.0f - renderer.frameAlpha) * _opacityPrev)
-//           + (renderer.frameAlpha * _opacity),        // float
+//       ((1.0f - renderer._alphaT) * _opacityPrev)
+//           + (renderer._alphaT * _opacity),           // float
 //       this->_resource->_active ? 0x34 : 0,           // int
 //       pool,                                          // const void*
 //       0);                                            // uint
 //
 // TWO THINGS WORTH SPELLING OUT.
 //
-// 1. `group + 0x90` is a THREE-FLOAT EYE POSITION inside RendererDrawGroup's
-//    `_head[0xe0]`, which runtime/types/graphics/Camera.h declares opaque with
-//    the note "not read by lane F". This body is the first to read it. It is
-//    read here by documented offset rather than by widening that struct, because
-//    lane F's renderer oracles memcmp RendererDrawGroup and splitting `_head`
-//    would change nothing about the bytes but everything about which lane owns
-//    the row. WAVE27_LANE_GFXPART.md §5 carries the finding with an ADDRESSEE.
+// 1. `group + 0x90` is the draw group's view position: `_camera` (+0x08) ->
+//    `_cameraToWorld` (+0x64) -> `translation` (+0x24) -- Camera.h names the
+//    whole group now.
 // 2. The int flag is `(active ? -1 : 0) & 0x34` — retail computes it with
 //    `NEG AL; SBB ECX,ECX; AND ECX,0x34`, a branchless mask, not a conditional.
 //    0x34 and not 0x34-something: the immediate is in the instruction.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
-// name, its address and its registration and delegates with a QUALIFIED
-// non-virtual call (the qualification stops it re-entering itself through the
-// minted table, B34_BRIEFS section A.1).
-// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
-// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
 void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
-    (void)scene;         // never read by retail -- see the banner above the door
-    void* const rendererv = reinterpret_cast<void*>(&renderer);   // B.3.5 bridge
+    (void)scene;         // never read by retail -- see the banner above
     ++g_piAddDrawItems;
 
-    const Geometry*         self = this;
-    const ParticleInstance* pi   = this;
-    uint8_t*                rend = B(rendererv);
+    const RtGraphics::ParticleBoundsRecord* const pool = _boundsPtr;
+    if (pool->_liveCount == 0) return;
 
-    const uint8_t* pool = B(pi->_boundsPtr);
-    if (I32(pool, kPool_LiveCount) == 0) return;
+    // renderer._drawGroups (+0x10) indexed by renderer._currentDrawGroup (+0x34).
+    // MOVSXD — a SIGNED widening; a negative index here would address
+    // backwards, which is retail's behaviour and not ours to guard.
+    const int64_t gi = static_cast<int64_t>(renderer._currentDrawGroup);
+    const Math::Vector3& eye =
+        renderer._drawGroups._data[gi]._camera._cameraToWorld.translation;   // group + 0x90
 
-    // renderer.drawGroups.data (+0x10) indexed by renderer.currentDrawGroup (+0x34).
-    // MOVSXD — a SIGNED widening; Ghidra's C prints it as a zero extension
-    // (reference_ghidra_c_output_vs_disassembly.md), and a negative index here
-    // would address backwards, which is retail's behaviour and not ours to guard.
-    uint8_t* const groups = *reinterpret_cast<uint8_t**>(rend + 0x10);
-    const int64_t  gi     = static_cast<int64_t>(I32(rend, 0x34));
-    const uint8_t* group  = groups + gi * 0x1f0;
-
-    const uint8_t* xf = B(&self->_transform);
-    float dx = F(xf, 0x10) - F(group, 0x90);
-    float dy = F(xf, 0x14) - F(group, 0x94);
-    float dz = F(xf, 0x18) - F(group, 0x98);
+    float dx = _transform.translation.x - eye.x;
+    float dy = _transform.translation.y - eye.y;
+    float dz = _transform.translation.z - eye.z;
     dx *= dx; dy *= dy; dz *= dz;
     // Retail: (dy + dx) + dz. ADDSS XMM2,XMM0 then ADDSS XMM2,XMM1, where XMM2
     // held the Y term, XMM0 the X term and XMM1 the Z term.
     const float distSq = (dy + dx) + dz;
 
-    const uint8_t* res = B(pi->_resource);
-    void* material = *reinterpret_cast<void* const*>(res + kParticle_Material);
-    const int32_t flags = (res[kParticle_Active] != 0 ? -1 : 0) & 0x34;
+    const Particle* const res = _resource;
+    const MaterialInstance* const material = res->_material;      // +0x30
+    const int32_t flags = (res->_active != 0 ? -1 : 0) & 0x34;
 
-    const float a   = F(rend, 0x40);            // Renderer::frameAlpha
+    const float a   = renderer._alphaT;          // +0x40
     const float one = One();
-    const float opacity = ((one - a) * self->_opacityPrev) + (a * self->_opacity);
+    const float opacity = ((one - a) * _opacityPrev) + (a * _opacity);
 
-    // ENDGAME B.3.5 caller batch:
     // `?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z`
-    // (retail 0x1801057b0) is a DEFINED member of the real `Graphics::Renderer`
-    // (wave9_lane_gfx.cpp:431), and `renderer` is already that class — so the
-    // `AddDrawItemFn` typedef, the `add`/`tried` cache, the one-shot NULL report
-    // and the `if (!add) return;` readiness guard are gone. Nine arguments after
-    // `this`, and the arity was checked against the member, not the decompiler.
+    // (retail 0x1801057b0), a DEFINED member. Nine arguments after `this`, and
+    // the arity was checked against the member, not the decompiler.
     renderer.Graphics::Renderer::AddDrawItem(
-        self, reinterpret_cast<const MaterialInstance*>(material),
-        0x8000, 0, distSq, opacity, flags, pool, 0);
+        this, material, 0x8000, 0, distSq, opacity, flags, pool, 0);
     ++g_piAddDrawItemsEmit;
 }
 
@@ -640,12 +473,12 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 // Retail:
 //   this->RemoveState();                                 // 0x1801040b0
 //   this->_resource = p;
-//   this->_materialTypeFlags = 1 << *(int*)(*(void**)(p + 0x30) + 0x20);
+//   this->_materialTypeFlags = 1 << p->_material->_shaderClass;   // +0x30, +0x20
 //   if (p->_active) {
-//       n = p->_count;
+//       n = p->_recordCount;
 //       idx = (n == 0) ? 0 : RngNext(_rng) % n;           // UNSIGNED remainder
 //       this->_index = idx;
-//       rec = ((void**)p->_records.data)[idx];
+//       rec = p->_records._data[idx];
 //   } else {
 //       void* m = operator new(0x40);                     // 0x180061a80
 //       rec = m ? 0x180103bf0(m, p) : nullptr;
@@ -664,90 +497,60 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 // falling into the "not equal" arm (retail's `JP` on each UCOMISS jumps to the
 // reset). Written below with that exact shape rather than as `!= 0.0f`, which a
 // compiler is free to reassociate.
+//
+// LEFT: the ExternalPtr arrives as the untyped `ExternalPtrHandle` (Geometry.h's
+// slot signature, which code/Game's callers hold), viewed once as the Particle.
 // ============================================================================
-// Defined with the rest of batch D2 at the bottom of this file; declared here
-// because this is its first use.
-extern "C" void* RtGraphics_ParticlePool_OperatorNew();
-
-// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
-// name, its address and its registration and delegates with a QUALIFIED
-// non-virtual call (the qualification stops it re-entering itself through the
-// minted table, B34_BRIEFS section A.1).
-// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
-// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
 void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
-    void* const particlev = particle.p;
+    Particle* const p = static_cast<Particle*>(particle.p);
     ++g_piSetParticle;
 
-    ParticleInstance* pi   = this;
-    Geometry*         self = this;
-
-    // NAME DOOR — SYMBOL: ?RemoveState@ParticleInstance@Graphics@@IEAAXXZ
-    // (retail 0x1801040b0). IEAA = PROTECTED, and this DLL exports its protected
-    // members (reference_aeaa_is_private_not_unexported.md), so a name door was
-    // the plain door, and null meant the previous pool was never detached and
-    // the old record leaked into the new instance. `RemoveStateFn` went with it.
-    // ENDGAME B.3.5 block E: this was
-    // `ResolveExport("?RemoveState@ParticleInstance@Graphics@@IEAAXXZ")` — a
-    // class reaching its OWN protected member through the port registry, with a
-    // null-resolve arm that silently leaked the previous pool. The body is now
-    // `Graphics::ParticleInstance::RemoveState` (wave28_lane_partsys.cpp), so
-    // this is a direct QUALIFIED member call and both the resolve and the leak
-    // arm are gone.
+    // ?RemoveState@ParticleInstance@Graphics@@IEAAXXZ (retail 0x1801040b0), the
+    // protected member (wave28_lane_partsys.cpp), QUALIFIED.
     this->ParticleInstance::RemoveState();
 
-    uint8_t* p = B(particlev);
-    pi->_resource = static_cast<RtGraphics::ParticleResource*>(particlev);
+    _resource = p;
 
-    // 1 << material->[0x20]. Faithful deref of a pointer retail does not check
-    // (docs: don't "fix" a faithful crash with a null check).
-    const uint8_t* material = *reinterpret_cast<const uint8_t* const*>(p + kParticle_Material);
-    const int32_t  shift    = I32(material, 0x20);
-    self->_materialTypeFlags = 1u << (static_cast<uint32_t>(shift) & 31u);
+    // 1 << material->_shaderClass (+0x20). Faithful deref of a pointer retail
+    // does not check (docs: don't "fix" a faithful crash with a null check).
+    const int32_t shift = p->_material->_shaderClass;
+    _materialTypeFlags = 1u << (static_cast<uint32_t>(shift) & 31u);
 
-    void* rec = nullptr;
-    if (p[kParticle_Active] != 0) {
-        const int32_t n = I32(p, kParticle_Count);
+    RtGraphics::ParticleBoundsRecord* rec = nullptr;
+    if (p->_active != 0) {
+        const int32_t n = p->_recordCount;
         uint32_t idx = 0;
         if (n != 0) {
-            idx = RngNext(&Graphics::Particle::_rng) % static_cast<uint32_t>(n);
+            idx = RngNext(Graphics::Particle::_rng) % static_cast<uint32_t>(n);
             ++g_piSetParticleRand;
         }
-        pi->_index = static_cast<int32_t>(idx);
-        void** base = *reinterpret_cast<void***>(p + kParticle_RecordArray);
-        rec = base[idx];
+        _index = static_cast<int32_t>(idx);
+        rec = p->_records._data[idx];
     } else {
-        // ADDRESS DOOR — SYMBOL: the per-TU `operator new(0x40)` at retail
-        // 0x180061a80, UNNAMED (checked by VA with pefile). Its body is
-        // `Enter(cs); Allocate(_singleton, 0x40, 8); Leave(cs)` — byte for byte
-        // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z (0x1800c7a50) with the
-        // size and alignment already folded in, so this port calls lane Q's
-        // rtcoll::MemAlloc instead of opening a fourteenth allocator door.
-        // CONDITION: rtcoll::MemAlloc resolves 0x1800c7a50 and must be repointed
-        // at lane E's allocator at cutover, exactly as array.cpp's banner says.
-        // CONSEQUENCE: a null allocation is retail's own tolerated case — it
-        // stores nullptr and the caller copes — so it is NOT an error here.
-        void* m = RtGraphics_ParticlePool_OperatorNew();
+        // 0x180061a80, the per-TU `operator new(0x40)` (UNNAMED): `Enter(cs);
+        // Allocate(_singleton, 0x40, 8); Leave(cs)`. A null allocation is
+        // retail's own tolerated case — it stores nullptr and the caller copes.
+        void* const m = RtGraphics_ParticlePool_OperatorNew();
         if (m) {
             // The pool-record ctor at 0x180103bf0, UNNAMED; the same body
             // Particle::Serialize above calls, by name.
             rec = RtGraphics_ParticlePoolRecord_Ctor(m, p);
         }
     }
-    pi->_boundsPtr = static_cast<RtGraphics::ParticleBoundsRecord*>(rec);
+    _boundsPtr = rec;
 
     // The six-float local-bounds reset. `!(a == 0)` rather than `a != 0` so the
     // NaN case takes the reset arm, which is what retail's JP-before-JNZ does.
-    float* lb = reinterpret_cast<float*>(B(self) + offsetof(Geometry, _localBounds));
-    const bool allZero = (lb[0] == 0.0f) && (lb[1] == 0.0f) && (lb[2] == 0.0f) &&
-                         (lb[3] == 0.0f) && (lb[4] == 0.0f) && (lb[5] == 0.0f);
+    ::Box& lb = _localBounds;
+    const bool allZero = (lb.min.x == 0.0f) && (lb.min.y == 0.0f) && (lb.min.z == 0.0f) &&
+                         (lb.max.x == 0.0f) && (lb.max.y == 0.0f) && (lb.max.z == 0.0f);
     if (!allZero) {
-        lb[0] = 0.0f; lb[1] = 0.0f; lb[2] = 0.0f;
-        lb[3] = 0.0f; lb[4] = 0.0f; lb[5] = 0.0f;
-        self->_dirtyFlags |= RtGraphics::kDirtyBounds;
+        lb.min.x = 0.0f; lb.min.y = 0.0f; lb.min.z = 0.0f;
+        lb.max.x = 0.0f; lb.max.y = 0.0f; lb.max.z = 0.0f;
+        _dirtyFlags |= RtGraphics::kDirtyBounds;
     }
 }
 
@@ -761,16 +564,16 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
 // Retail:
 //   ParticleInstance::SetParticle(this, p);           // CALL 0x180104a00
 //   res = this->_resource;
-//   if (res && !res->_active && this->_emitter) 0x180020d60(this->_emitter);
+//   if (res && !res->_active && this->_f_d8) 0x180020d60(this->_f_d8);
 //   sys = IsDerivedFrom(p, ParticleSystem::_typeInfo.typeId) ? p : nullptr;
 //   if (this->_resource->_active)
-//       this->_emitter = ((void**)(sys + 0xf8))[this->_index];
+//       this->_f_d8 = sys->_pool._data[this->_index];
 //   else {
 //       void* m = operator new(...);                   // 0x1800205a0
 //       if (m) { *(u64*)m = 0; *(u64*)(m+8) = 0;
-//                *(u32*)(m+0x10) = *(u32*)(sys+0x48);
-//                0x180020e90(m, *(u32*)(sys+0x28)); }
-//       this->_emitter = m;
+//                *(u32*)(m+0x10) = sys->_f48 (raw bits);
+//                0x180020e90(m, sys->_subCount); }
+//       this->_f_d8 = m;
 //   }
 //
 // TWO FAITHFUL DEREFS OF A POINTER RETAIL DOES NOT CHECK, left unguarded on
@@ -783,75 +586,61 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
 //     ever reaches it the fault is the diagnosis, not a bug to paper over.
 //
 // `?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A` (0x1801f9a58)
-// is read for its FIRST DWORD only — the typeId. That is the whole of what the
-// DLL's 525 consumers of a BaseTypeInfo read
-// (reference_basetypeinfo_name_is_content_only.md), and it is read through
-// ResolveExport so a minted copy is followed at cutover.
+// is read for its FIRST DWORD only — the typeId.
+//
+// The 0x18-byte emitter record (`_f_d8`) has no retail name (the Emitter
+// banner below); B.4 names its fields as `RtGraphics::ParticleEmitter`
+// (Particle.h), built through its own stores into the raw block.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
-// name, its address and its registration and delegates with a QUALIFIED
-// non-virtual call (the qualification stops it re-entering itself through the
-// minted table, B34_BRIEFS section A.1).
-// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
-// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
 void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
-    void* const particlev = particle.p;
     ++g_psiSetParticle;
 
-    // ENDGAME B.3.5 block E: `psi->base` was the POD mirror's embedded
-    // `ParticleInstance base` member. It is a real BASE CLASS now, so the
-    // sub-object IS `this` -- same bytes, same address, one fewer indirection to
-    // get wrong.
-    ParticleSystemInstance* psi = this;
-    ParticleInstance*       pi  = this;
-
-    // Retail CALLs 0x180104a00 directly, so this port calls OUR body directly
-    // too: going through the registry here would let the two halves of one
-    // class come from different builds.
     // Retail CALLs 0x180104a00 directly, so this calls OUR body directly too --
-    // and it is now a QUALIFIED member call on the base, which is exactly what
-    // "the base's own body, not a virtual re-dispatch" means in C++.
+    // a QUALIFIED member call on the base, which is exactly what "the base's own
+    // body, not a virtual re-dispatch" means in C++.
     this->ParticleInstance::SetParticle(particle);
 
-    uint8_t* res = B(pi->_resource);
-    if (res && res[kParticle_Active] == 0 && psi->_f_d8) {
+    const Particle* const res = _resource;
+    if (res && res->_active == 0 && _f_d8) {
         // The emitter release at retail 0x180020d60, UNNAMED (checked by VA):
         // RtGraphics_Emitter_DeleteDtor, by name. Reached only on the
         // inactive-resource path.
-        RtGraphics_Emitter_DeleteDtor(psi->_f_d8);
+        RtGraphics_Emitter_DeleteDtor(_f_d8);
     }
 
     // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z (0x1800c0390), the member, against
     // the ParticleSystem type record's id (ENDGAME B.3.9 TI-REST), read fresh.
-    const uint8_t* sys =
-        reinterpret_cast<const Object::Base*>(particlev)->IsDerivedFrom(   // B.3.x bridge
-            ParticleSystem::GetTypeInfo().typeId) ? B(particlev) : nullptr;
+    // LEFT: the handle is untyped (see ParticleInstance::SetParticle); the
+    // derivation test is what licenses the downcast.
+    const Particle* const asParticle = static_cast<const Particle*>(particle.p);
+    const ParticleSystem* const sys =
+        asParticle->IsDerivedFrom(ParticleSystem::GetTypeInfo().typeId)
+            ? static_cast<const ParticleSystem*>(asParticle) : nullptr;
 
-    if (B(pi->_resource)[kParticle_Active] != 0) {
-        void* const* table = *reinterpret_cast<void* const* const*>(sys + 0xf8);
-        psi->_f_d8 = table[pi->_index];
+    if (_resource->_active != 0) {
+        _f_d8 = sys->_pool._data[_index];
         return;
     }
 
     // The emitter allocator at retail 0x1800205a0, UNNAMED:
     // RtGraphics_Emitter_OperatorNew, by name. The inactive-resource path only;
     // retail tolerates a null result (it stores null).
-    void* m = RtGraphics_Emitter_OperatorNew();
+    // The raw block viewed once as the record the stores below build.
+    RtGraphics::ParticleEmitter* const m =
+        static_cast<RtGraphics::ParticleEmitter*>(RtGraphics_Emitter_OperatorNew());
     if (m) {
-        uint8_t* e = B(m);
-        std::memset(e, 0, 16);                          // two zeroed qwords
-        const uint32_t seed = *reinterpret_cast<const uint32_t*>(sys + 0x48);
-        std::memcpy(e + 0x10, &seed, sizeof seed);
+        m->_extra._data     = nullptr;                  // two zeroed qwords
+        m->_extra._size     = 0;
+        m->_extra._capacity = 0;
+        m->_rate = sys->_f48;                           // a dword move: the raw bits
         // The emitter initialiser at 0x180020e90, UNNAMED: the Array SetSize
-        // rtcoll::RtColl_ArraySetSize_180020e90, by name. The door typed the
-        // count as uint32_t; the body takes int — the same 32 bits in EDX.
-        rtcoll::RtColl_ArraySetSize_180020e90(
-            m, static_cast<int>(*reinterpret_cast<const uint32_t*>(sys + 0x28)));
+        // rtcoll::RtColl_ArraySetSize_180020e90, by name.
+        rtcoll::RtColl_ArraySetSize_180020e90(&m->_extra, sys->_subCount);
     }
-    psi->_f_d8 = m;
+    _f_d8 = m;
 }
 
 }  // namespace Graphics
@@ -881,12 +670,12 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
 //     The gate is `CMP EDI,1 / JG`, i.e. the single-instance case sets the
 //     transform and the multi-instance case leaves it to the caller.
 //
-//  B. n = this->_boundsPtr->liveCount
+//  B. n = this->_boundsPtr->_liveCount
 //     if (!ctxData->BeginInstancedIndexedVertices(4*n, 0x34, 6*n, instances))
 //         return;
 //
 //  C. for (i = 0; i < n; ++i)        // n RE-READ from the pool each iteration
-//         rec = pool.particles + (n - i - 1) * 0x58      // BACKWARD
+//         rec = pool._records._data[n - i - 1]           // BACKWARD
 //         ... four vertices of 0x34 bytes each, memmove'd into the dynamic
 //             vertex cursor and the cursor advanced by the stride ...
 //         ... six 16-bit indices (b-2, b, b-1, b-2, b+1, b) with b starting at
@@ -906,8 +695,8 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
 //
 // The vertex record is 0x34 bytes — the same 0x34 passed to
 // BeginInstancedIndexedVertices as the stride, which is how the two agree:
-//   +0x00 3f  posA lerped        +0x0c 1i  zero
-//   +0x10 3f  posB lerped        +0x1c 1f  scroll  = ((1-a)*prev) + (a*cur)
+//   +0x00 3f  pos lerped         +0x0c 1i  zero
+//   +0x10 3f  colour lerped      +0x1c 1f  alpha   = ((1-a)*prev) + (a*cur)
 //   +0x20 2f  uv corner          +0x28 2f  corner offset * size
 //   +0x30 1f  rotation radians = (((1-a)*prevDeg)*k + (a*curDeg)*k), k = pi/180
 // ============================================================================
@@ -920,14 +709,20 @@ namespace {
 const float kCornerUV[8]     = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f };
 const float kCornerOffset[8] = { -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1.0f };
 
-}  // namespace
+// The 0x34-byte particle vertex (the stride handed to
+// BeginInstancedIndexedVertices), named from the banner's layout.
+struct ParticleVertex {
+    Math::Vector3 pos;       // +0x00
+    int32_t       zero;      // +0x0c
+    Math::Vector3 color;     // +0x10
+    float         alpha;     // +0x1c
+    float         u, v;      // +0x20
+    float         cx, cy;    // +0x28
+    float         rot;       // +0x30  radians
+};
+static_assert(sizeof(ParticleVertex) == 0x34, "the particle vertex stride is 0x34");
 
-// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door keeps its
-// name, its address and its registration and delegates with a QUALIFIED
-// non-virtual call (the qualification stops it re-entering itself through the
-// minted table, B34_BRIEFS section A.1).
-// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
-// reader was the minted ParticleInstance / ParticleSystemInstance table.
+}  // namespace
 
 namespace Graphics {
 
@@ -937,128 +732,98 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
     (void)camera;        // never read by retail
     (void)material;      // never read by retail
     (void)a5; (void)a6;  // never read by retail
-    void* const contextv = reinterpret_cast<void*>(&context);   // B.3.5 bridge
     ++g_piDraw;
 
-    const Geometry*         self = this;
-    const ParticleInstance* pi   = this;
-    uint8_t*                ctx  = B(contextv);
-    const float             one  = One();
+    const float one = One();
 
     // ---- A: the single-instance transform --------------------------------
+    // `?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z`
+    // (0x18001a400), a DEFINED member. The `instances <= 1` test is retail's.
     if (instances <= 1) {
-        // ENDGAME B.3.1 step 2: Quaternion::Lerp and Transform::AsMatrix are
-        // members now. ENDGAME B.3.5 caller batch: so is the last door here —
-        // `?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z`
-        // (0x18001a400) is a DEFINED member of the real `Video::Context`
-        // (video/context.cpp:435), so the `SetTransformScaleFn` typedef, the
-        // function-local cache, the `resolved` flag, the one-shot NULL report and
-        // the `if (setXform)` readiness guard are ALL gone — a member call cannot
-        // be null, so there is nothing left to skip or to report. The `instances
-        // <= 1` test above is retail's own and stays.
-        {
-            const uint8_t* cur = B(&self->_transform);
-            const uint8_t* prv = B(&self->_prevTransform);
+        const Math::Transform& cur = _transform;
+        const Math::Transform& prv = _prevTransform;
 
-            Transform blended;
-            const float px = F(prv, 0x10), py = F(prv, 0x14), pz = F(prv, 0x18);
-            blended.translation.x = (F(cur, 0x10) - px) * alpha + px;
-            blended.translation.y = (F(cur, 0x14) - py) * alpha + py;
-            blended.translation.z = (F(cur, 0x18) - pz) * alpha + pz;
+        Math::Transform blended;
+        const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;
+        blended.translation.x = (cur.translation.x - px) * alpha + px;
+        blended.translation.y = (cur.translation.y - py) * alpha + py;
+        blended.translation.z = (cur.translation.z - pz) * alpha + pz;
 
-            Quaternion q;
-            const float t = alpha;          // retail spills alpha and passes &it
-            q = reinterpret_cast<const Quaternion*>(prv)->Lerp(
-                *reinterpret_cast<const Quaternion*>(cur),
-                reinterpret_cast<const Scalar&>(t));   // B.3.1 bridge
-            blended.rotation = q;
+        // retail spills alpha and passes &it
+        blended.rotation = prv.rotation.Lerp(cur.rotation, Math::Scalar(alpha));
 
-            Matrix m;
-            m = blended.AsMatrix();
+        const Math::Matrix m = blended.AsMatrix();
 
-            // Retail: XMM0 = alpha * _opacity; XMM1 = (1 - alpha) * _opacityPrev;
-            // XMM1 = XMM1 + XMM0. The three 1.0f are separate immediate stores.
-            const float v4[4] = { one, one, one,
-                                  ((one - alpha) * self->_opacityPrev)
-                                      + (alpha * self->_opacity) };
-            context.SetTransformScale(
-                0, m, *reinterpret_cast<const Vector4*>(v4));   // B.3.5 bridge
-        }
+        // Retail: XMM0 = alpha * _opacity; XMM1 = (1 - alpha) * _opacityPrev;
+        // XMM1 = XMM1 + XMM0. The three 1.0f are separate immediate stores.
+        const Math::Vector4 v4(one, one, one,
+                               ((one - alpha) * _opacityPrev) + (alpha * _opacity));
+        context.SetTransformScale(0, m, v4);
     }
 
     // ---- B: open the dynamic instanced stream -----------------------------
-    const uint8_t* pool = B(pi->_boundsPtr);
-    void* ctxData = *reinterpret_cast<void**>(ctx + 0x2160);   // Context::_contextData
-    const int32_t n0 = I32(pool, kPool_LiveCount);
+    // ContextData slot 18 (+0x90) = BeginInstancedIndexedVertices and slot 19
+    // (+0x98) = EndInstancedIndexedVertices -- `Context::
+    // BeginInstancedIndexedVertices` / `EndInstancedIndexedVertices`
+    // (0x1800f2130 / 0x1800f2110) inlined by retail, called by name here.
+    const RtGraphics::ParticleBoundsRecord* const pool = _boundsPtr;
+    const int32_t n0 = pool->_liveCount;
 
-    // ContextData vtable slot 18 (+0x90) = BeginInstancedIndexedVertices and
-    // slot 19 (+0x98) = EndInstancedIndexedVertices, per
-    // dx11/types/VideoDX11Data.h's slot map, which derived every name from the
-    // Runtime thunk that dispatches to it. Called through the OBJECT's vtable,
-    // which is where our own dx11/ backend already lives.
-    using BeginFn = bool (*)(void*, int32_t, int32_t, int32_t, int32_t);
-    using EndFn   = void (*)(void*, int32_t);
-    if (!reinterpret_cast<BeginFn>(VSlot(ctxData, 0x90))(
-            ctxData, 4 * n0, 0x34, 6 * n0, instances))
+    if (!context.BeginInstancedIndexedVertices(4 * n0, 0x34, 6 * n0, instances))
         return;
 
     // ---- C: four vertices + six indices per particle ----------------------
     const float oneMinus = one - alpha;      // retail: SUBSS XMM11,XMM10, once
     const float degToRad = DegToRad();
     uint16_t    base     = 2;                // retail: LEA R14D,[R15+2] with R15 = 0
-    int32_t     count    = I32(pool, kPool_LiveCount);
+    int32_t     count    = pool->_liveCount;
     for (int32_t i = 0; i < count; ++i) {
-        // (count - i - 1) * 0x58, with the subtraction done in 32 bits and THEN
+        // (count - i - 1), with the subtraction done in 32 bits and THEN
         // widened (CDQE). `count` is the value read at the bottom of the previous
         // iteration, exactly as retail keeps it in EAX.
-        const int32_t  slot = count - i - 1;
-        const uint8_t* rec  = *reinterpret_cast<const uint8_t* const*>(pool + kPool_ParticleArrayData)
-                              + static_cast<int64_t>(slot) * kRec_Stride;
+        const int32_t slot = count - i - 1;
+        const RtGraphics::ParticleRecord& rec =
+            pool->_records._data[static_cast<int64_t>(slot)];
 
         // size  = ((1-a) * prevSize) + (a * curSize)
-        const float size = (oneMinus * F(rec, kRec_SizePrv)) + (alpha * F(rec, kRec_SizeCur));
-        // scroll = ((1-a) * prevScroll) + (a * curScroll)
-        const float scroll = (oneMinus * F(rec, kRec_ScrollPrv))
-                             + (alpha * F(rec, kRec_ScrollCur));
+        const float size = (oneMinus * rec._sizePrev) + (alpha * rec._size);
+        // alpha = ((1-a) * prevAlpha) + (a * curAlpha)
+        const float fade = (oneMinus * rec._alphaPrev) + (alpha * rec._alpha);
         // rotation: each term is scaled by pi/180 BEFORE the add, which is how
         // retail emits it (MULSS XMM1,XMM12 on each side, then ADDSS).
-        const float rot = ((oneMinus * F(rec, kRec_RotPrv)) * degToRad)
-                          + ((alpha * F(rec, kRec_RotCur)) * degToRad);
+        const float rot = ((oneMinus * rec._rotPrev) * degToRad)
+                          + ((alpha * rec._rot) * degToRad);
 
-        float posA[3], posB[3];
-        for (int k = 0; k < 3; ++k) {
-            const float pa = F(rec, kRec_PosAPrev + 4 * k);
-            posA[k] = (F(rec, kRec_PosA + 4 * k) - pa) * alpha + pa;
-            const float pb = F(rec, kRec_PosBPrev + 4 * k);
-            posB[k] = (F(rec, kRec_PosB + 4 * k) - pb) * alpha + pb;
-        }
+        ParticleVertex vertex;
+        vertex.pos.x   = (rec._pos.x - rec._posPrev.x) * alpha + rec._posPrev.x;
+        vertex.color.x = (rec._color.x - rec._colorPrev.x) * alpha + rec._colorPrev.x;
+        vertex.pos.y   = (rec._pos.y - rec._posPrev.y) * alpha + rec._posPrev.y;
+        vertex.color.y = (rec._color.y - rec._colorPrev.y) * alpha + rec._colorPrev.y;
+        vertex.pos.z   = (rec._pos.z - rec._posPrev.z) * alpha + rec._posPrev.z;
+        vertex.color.z = (rec._color.z - rec._colorPrev.z) * alpha + rec._colorPrev.z;
+        vertex.zero  = 0;
+        vertex.alpha = fade;
+        vertex.rot   = rot;
 
-        uint8_t vertex[0x34];
-        std::memcpy(vertex + 0x00, posA, 12);
-        const int32_t zero = 0;
-        std::memcpy(vertex + 0x0c, &zero, 4);
-        std::memcpy(vertex + 0x10, posB, 12);
-        SetF(vertex, 0x1c, scroll);
-        SetF(vertex, 0x30, rot);
-
-        const int32_t stride = I32(ctx, 0x20e8);   // Context::_dynamicVertexStride
+        const int32_t stride = context._dynamicVertexStride;   // +0x20e8
         for (int c = 0; c < 4; ++c) {
-            SetF(vertex, 0x20, kCornerUV[c * 2 + 0]);
-            SetF(vertex, 0x24, kCornerUV[c * 2 + 1]);
-            SetF(vertex, 0x28, size * kCornerOffset[c * 2 + 0]);
-            SetF(vertex, 0x2c, size * kCornerOffset[c * 2 + 1]);
+            vertex.u  = kCornerUV[c * 2 + 0];
+            vertex.v  = kCornerUV[c * 2 + 1];
+            vertex.cx = size * kCornerOffset[c * 2 + 0];
+            vertex.cy = size * kCornerOffset[c * 2 + 1];
             // 0x18008a290 is the CRT's `memmove` (disassembled for this lane:
             // the full rep-movsb / 32-byte-unrolled / MOVNTI ladder, ERMS bit
             // tested at 0x1801fc65c). std::memmove is the same contract.
-            uint8_t* cursor = *reinterpret_cast<uint8_t**>(ctx + 0x20e0);
-            std::memmove(cursor, vertex, static_cast<size_t>(stride));
+            uint8_t* const cursor = context._dynamicVertexCursor;   // +0x20e0
+            std::memmove(cursor, &vertex, static_cast<size_t>(stride));
             // Retail re-reads the stride after the call and adds it to the cursor.
-            const int32_t adv = I32(ctx, 0x20e8);
-            *reinterpret_cast<uint8_t**>(ctx + 0x20e0) = cursor + adv;
+            context._dynamicVertexCursor = cursor + context._dynamicVertexStride;
         }
 
-        // Six 16-bit indices, and every arithmetic step is 16-bit.
-        uint16_t* ip = *reinterpret_cast<uint16_t**>(ctx + 0x20f0);
+        // Six 16-bit indices, and every arithmetic step is 16-bit. The index
+        // cursor is Context+0x20f0 (Context.h's `_unknown20f0`, not named yet:
+        // LEFT, the one view of that qword as the uint16 cursor it is).
+        uint16_t* ip = reinterpret_cast<uint16_t*>(context._unknown20f0);
         const uint16_t b = base;
         const uint16_t idx[6] = { static_cast<uint16_t>(b - 2), b,
                                   static_cast<uint16_t>(b - 1),
@@ -1067,15 +832,15 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
         for (int k = 0; k < 6; ++k) {
             *ip = idx[k];
             ++ip;
-            *reinterpret_cast<uint16_t**>(ctx + 0x20f0) = ip;
+            context._unknown20f0 = reinterpret_cast<uint64_t>(ip);
         }
         base = static_cast<uint16_t>(base + 4);   // retail: ADD R14W,4 — wraps
 
         ++g_piDrawQuads;
-        count = I32(pool, kPool_LiveCount);       // retail re-reads it here
+        count = pool->_liveCount;                 // retail re-reads it here
     }
 
-    reinterpret_cast<EndFn>(VSlot(ctxData, 0x98))(ctxData, 0);
+    context.EndInstancedIndexedVertices(0);
 }
 
 }  // namespace Graphics
@@ -1093,34 +858,20 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
 // UNEXPORTED per-TU helpers — a per-class `operator new`, a per-class
 // `operator delete`, a scalar deleting destructor and two allocation
 // wrappers — and `Emitter` / `ParticlePool` are THIS FILE'S OWN NAMES for them,
-// not retail's. They stay file-local free functions with address-only
-// registrations: there is no class here to convert, and inventing
-// `Graphics::Emitter` would put a name in `runtime/types/` that the binary does
-// not contain (reference_resolveexport_phantom_names.md's failure, one level up).
-//
-// SetParticle above already reaches two of these by address (0x1800205a0 to
-// make an emitter, 0x180020d60 to release one). All three were read out of
-// their own disassembly:
+// not retail's. They stay file-local free functions: there is no class here to
+// convert, and inventing `Graphics::Emitter` would put a name in
+// `runtime/types/` that the binary does not contain
+// (reference_resolveexport_phantom_names.md's failure, one level up).
 //
 //   0x1800205a0  `operator new` for the 0x18-byte emitter record. The size AND
 //                the alignment are immediates: `MOV EDX,0x18` then
-//                `LEA R8D,[RDX-0x10]` — i.e. align 8, computed from the size
-//                rather than written out, which is why a reader who skims it
-//                sees "0x18, 0x18" and gets the alignment wrong.
+//                `LEA R8D,[RDX-0x10]` — i.e. align 8, computed from the size.
 //   0x180020600  the matching per-class `operator delete`: the `if (p)` test
-//                plus the Enter / Free(_singleton, p) / Leave triple, i.e. the
-//                body runtime/src/system/closure_batch2b.cpp's banner names as
-//                this family's single constant.
+//                plus the Enter / Free(_singleton, p) / Leave triple.
 //   0x180020d60  `~X` then that `operator delete`, returning `this` — the
 //                shape MSVC emits for a scalar deleting destructor whose flag
 //                argument has been constant-folded away. The `~X` it calls,
-//                0x180021490, is the twenty-somethingth copy of the
-//                parameterless J1 `~Array` body and is registered as such in
-//                runtime/src/collection/array.cpp; it is reached HERE by
-//                address so the two cannot drift.
-//
-// The allocator is reached by address for lane Q's reason (array.cpp's "THE
-// ALLOCATOR BOUNDARY"): a heap cannot be half ours.
+//                0x180021490, is the parameterless J1 `~Array` body.
 extern "C" void* RtGraphics_Emitter_OperatorNew(void) {
     return rtcoll::MemAlloc(0x18, 8);                  // 1800205d1 / 1800205d6
 }
@@ -1135,14 +886,8 @@ extern "C" void* RtGraphics_Emitter_DeleteDtor(void* p) {
 }
 
 // ============================================================================
-// Registration
-// ============================================================================
-// ============================================================================
 // CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
 // ============================================================================
-// The two unnamed Graphics::Particle bodies this file has been reaching by
-// address since Wave 27. Both are now ported and registered, so the address
-// doors above land on our code and at cutover they still exist.
 
 // 0x180061a80 -- the per-TU `operator new(0x40)` for a pool record. The whole
 // body is `EnterCriticalSection(_singleton + 0x640);
@@ -1156,38 +901,33 @@ extern "C" void* RtGraphics_ParticlePool_OperatorNew() {
 }
 
 // 0x180103bf0 -- the pool record's constructor. RCX = the 0x40-byte block,
-// RDX = the owning Graphics::Particle. Store list read from the disassembly and
-// already tabulated above `ParticleBoundsRecord` in
-// runtime/types/graphics/Particle.h:
-//     +0x00..+0x08  three floats  0x4cbebc20 (+1e8f)   Volume::Box::min seed
-//     +0x0c..+0x14  three floats  0xccbebc20 (-1e8f)   Volume::Box::max seed
-//     +0x18         qword 0        the live-particle Array's _data
-//     +0x20         qword 0        that Array's _size (+0x24 its capacity)
-//     +0x28         dword 0        the live particle count
-//     +0x2c         dword -1       the per-frame tag
-//     +0x30         qword 0
-//     +0x38         qword 0
-// then `SetSize(this + 0x18, particle[+0x28])` through 0x180061bb0.
-// The bit patterns are written as raw u32 rather than float literals so the
-// transcription is the shipped immediate and not whatever the compiler rounds
-// to; +1e8f/-1e8f is what they decode to.
-extern "C" void* RtGraphics_ParticlePoolRecord_Ctor(void* recv, void* particlev) {
-    uint32_t* r = static_cast<uint32_t*>(recv);
-    r[0] = 0x4cbebc20u;  r[1] = 0x4cbebc20u;  r[2] = 0x4cbebc20u;
-    r[3] = 0xccbebc20u;  r[4] = 0xccbebc20u;  r[5] = 0xccbebc20u;
-    uint8_t* b = static_cast<uint8_t*>(recv);
-    *reinterpret_cast<uint64_t*>(b + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(b + 0x20) = 0;
-    *reinterpret_cast<int32_t*> (b + 0x28) = 0;
-    *reinterpret_cast<int32_t*> (b + 0x2c) = -1;
-    *reinterpret_cast<uint64_t*>(b + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(b + 0x38) = 0;
+// RDX = the owning Graphics::Particle. Store list read from the disassembly:
+//     `_bounds.min` three floats +1e8f, `_bounds.max` three floats -1e8f
+//     `_records` qwords zero, `_liveCount` 0, `frameTag` -1, the two tick
+//     counters 0
+// then `SetSize(&_records, particle->_subCount)` through 0x180061bb0.
+// +1e8f / -1e8f are exact floats (0x4cbebc20 / 0xccbebc20).
+// B.4: on `RtGraphics::ParticleBoundsRecord`'s named fields; the raw block is
+// viewed once as the record the ctor builds in it (LEFT: no C++ constructor
+// runs -- retail's body is these stores).
+extern "C" RtGraphics::ParticleBoundsRecord* RtGraphics_ParticlePoolRecord_Ctor(
+        void* recv, const Graphics::Particle* particle) {
+    RtGraphics::ParticleBoundsRecord* const r =
+        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);
+    r->_bounds.min.x = 1e8f;   r->_bounds.min.y = 1e8f;   r->_bounds.min.z = 1e8f;
+    r->_bounds.max.x = -1e8f;  r->_bounds.max.y = -1e8f;  r->_bounds.max.z = -1e8f;
+    r->_records._data     = nullptr;   // +0x18
+    r->_records._size     = 0;         // +0x20 \ one qword
+    r->_records._capacity = 0;         // +0x24 /
+    r->_liveCount   = 0;               // +0x28
+    r->frameTag     = -1;              // +0x2c
+    r->_spawnAccum  = 0;               // +0x30
+    r->_totalTicks  = 0;               // +0x38
 
     // 0x180061bb0, `Collection::Array<T>::SetSize` for the record's 0x58-byte
-    // live-particle slot: rtcoll::RtColl_ArraySetSize_180061bb0 (array.cpp), by name.
-    rtcoll::RtColl_ArraySetSize_180061bb0(b + 0x18, *reinterpret_cast<const int32_t*>(
-                                              static_cast<const uint8_t*>(particlev) + 0x28));
-    return recv;
+    // live-particle slot: rtcoll::RtColl_ArraySetSize_180061bb0 (array.cpp).
+    rtcoll::RtColl_ArraySetSize_180061bb0(&r->_records, particle->_subCount);
+    return r;
 }
 
 // The attendance line names THIS lane, so a run log carries a line only this

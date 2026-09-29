@@ -32,6 +32,8 @@
 
 #include "../video/ImageBuffer.h"
 
+namespace Video { class RenderBuffer; }   // B.4: ReflectionImageBuffer::_target (Device.h)
+
 namespace RtGraphics {
 
 // ---------------------------------------------------------------------------
@@ -305,11 +307,11 @@ public:
     // ---- the 0x20 bytes ReflectionImageBuffer adds ------------------------
     // What the five fields are: the POD's banner above, which is the byte read.
     // `_depth` is typed `Video::ImageBuffer*` now, which is what lets its
-    // teardown be `delete _depth` instead of a hand-indexed slot 0;
-    // `_target` stays `void*` because `Video::RenderBuffer` is still a POD in
-    // `Device.h` and is block D2's to convert.
-    Video::ImageBuffer* _depth;    // +0x70  owned, usage = 1 (a DEPTH buffer)
-    void*               _target;   // +0x78  Video::RenderBuffer* (owned, colour = this)
+    // teardown be `delete _depth` instead of a hand-indexed slot 0.
+    // B.4: `_target` is the real `Video::RenderBuffer` (Device.h) -- a pointer,
+    // so the bytes and the ctor's store are unchanged.
+    Video::ImageBuffer*  _depth;    // +0x70  owned, usage = 1 (a DEPTH buffer)
+    Video::RenderBuffer* _target;   // +0x78  owned, colour = this
     float               _planeX;   // +0x80  ctor: 0 (lower half of one qword store)
     float               _planeY;   // +0x84  ctor: 0 (upper half of it)
     float               _planeZ;   // +0x88  ctor: 1.0f

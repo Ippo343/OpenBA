@@ -42,6 +42,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"   // B.4 W1 COMP-b: description fields by name
+#include "Component/ModelComponent.h"
+#include "Entity/ComponentEntity.h"          // FindComponent<T>
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
 #include "Player/exe_bodies.h"
@@ -54,87 +57,75 @@ extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
 // Exe sub-callees are called by name (Component/Work/Player/Action exe_bodies.h).
 
 // ============================================================
-// CitizenComp_LeaveRoster_2040 (0x140112040)
-// Unlink the citizen (param2 = InternalBasePtr* -> node) from the workplace worker
-// roster (ring links node +0x268/+0x270, head cache self +0x260), re-init its own
-// links to empty IBPs, clear its workplace assignment and its +0x258 workplace link.
+// CitizenComponent::RemoveChild (0x140112040)
+// Unlink `child` from this parent's children ring (ring links child +0x268/+0x270,
+// head cache this +0x260), re-init its own links to empty, take it out of its home
+// (SetHome(null, -1)) and clear its +0x258 parent link.
 // ============================================================
-void CitizenComp_LeaveRoster_2040(int64_t selfV, void* param2V) {
-    uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
-    int64_t* ibp  = reinterpret_cast<int64_t*>(param2V);   // *ibp == citizen node ptr
-    uint64_t empty = 0;
+void CitizenComponent::RemoveChild(CitizenComponent* child) {
+    CitizenComponent** ibp = &child;   // *ibp == the child
 
-    if (*reinterpret_cast<int64_t*>(base + 0x260) == *ibp) {
-        *reinterpret_cast<int64_t*>(base + 0x260) = *reinterpret_cast<int64_t*>(*ibp + 0x268);
+    if (_firstChild == *ibp) {
+        _firstChild = (*ibp)->_nextSibling;
     }
     // node.prev.next = node.next
-    int64_t nextLink = *reinterpret_cast<int64_t*>(*ibp + 0x268);
-    int64_t node = *ibp;
-    *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x270) + 0x268) = nextLink;
+    CitizenComponent* nextLink = (*ibp)->_nextSibling;
+    CitizenComponent* node = *ibp;
+    node->_prevSibling->_nextSibling = nextLink;
     // node.next.prev = node.prev
-    int64_t prevLink = *reinterpret_cast<int64_t*>(*ibp + 0x270);
+    CitizenComponent* prevLink = (*ibp)->_prevSibling;
     node = *ibp;
-    *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x268) + 0x270) = prevLink;
-    // node's own links -> empty IBPs
-    new (&empty) ::Object::InternalBasePtr(nullptr); 
-    *reinterpret_cast<int64_t*>(*ibp + 0x270) = (int64_t)empty;
-    new (&empty) ::Object::InternalBasePtr(nullptr); 
-    *reinterpret_cast<int64_t*>(*ibp + 0x268) = (int64_t)empty;
+    node->_nextSibling->_prevSibling = prevLink;
+    // node's own links -> empty
+    (*ibp)->_prevSibling = nullptr;
+    (*ibp)->_nextSibling = nullptr;
     // if this node was the head, clear the head cache
-    if (*reinterpret_cast<int64_t*>(base + 0x260) == *ibp) {
-        new (&empty) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<int64_t*>(base + 0x260) = (int64_t)empty;
+    if (_firstChild == *ibp) {
+        _firstChild = nullptr;
     }
-    // clear the workplace slot + the current-workplace link (+0x258)
-    new (&empty) ::Object::InternalBasePtr(nullptr); 
-    CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(*ibp), &empty, -1);
-    new (&empty) ::Object::InternalBasePtr(nullptr); 
-    *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)empty;
+    // clear the child's home + its parent link (+0x258)
+    (*ibp)->SetHome(nullptr, -1);
+    (*ibp)->_parent = nullptr;
 }
 
 // ============================================================
-// CitizenComp_JoinRoster_68a0 (0x1401168a0)
-// Inverse of LeaveRoster: splice the citizen (param2) into the roster before the
-// current head (or seed a singleton ring when empty), store self as the citizen's
-// +0x258 workplace link, then AssignWorkplace using self's +0x238 IBP / +0x240 slot.
+// CitizenComponent::AddChild (0x1401168a0)
+// Inverse of RemoveChild: splice `child` into the ring before the current head (or
+// seed a singleton ring when empty), store this as the child's +0x258 parent, then
+// move the child into the parent's home (+0x238 / slot +0x240).
 // ============================================================
-void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
-    uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
-    int64_t* ibp  = reinterpret_cast<int64_t*>(param2V);
-    int64_t head  = *reinterpret_cast<int64_t*>(base + 0x260);
-    int64_t v, node;
+void CitizenComponent::AddChild(CitizenComponent* child) {
+    CitizenComponent** ibp = &child;
+    CitizenComponent* head = _firstChild;
+    CitizenComponent* v;
+    CitizenComponent* node;
 
-    if (head == 0) {
-        // empty roster -> singleton ring (prev = next = node)
-        *reinterpret_cast<int64_t*>(base + 0x260) = *ibp;
+    if (head == nullptr) {
+        // empty ring -> singleton ring (prev = next = node)
+        _firstChild = *ibp;
         v = *ibp;
-        *reinterpret_cast<int64_t*>(*ibp + 0x268) = v;
+        (*ibp)->_nextSibling = v;
         v = *ibp;
         node = *ibp;
     } else {
-        v = *reinterpret_cast<int64_t*>(head + 0x270);      // head.prev
-        *reinterpret_cast<int64_t*>(*ibp + 0x270) = v;      // node.prev = head.prev
-        v = *reinterpret_cast<int64_t*>(base + 0x260);      // head
-        *reinterpret_cast<int64_t*>(*ibp + 0x268) = v;      // node.next = head
+        v = head->_prevSibling;           // head.prev
+        (*ibp)->_prevSibling = v;         // node.prev = head.prev
+        v = _firstChild;                  // head
+        (*ibp)->_nextSibling = v;         // node.next = head
         v = *ibp;
         node = *ibp;
-        *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(node + 0x270) + 0x268) = v; // node.prev.next = node
+        node->_prevSibling->_nextSibling = v;   // node.prev.next = node
         v = *ibp;
         node = *ibp;
-        node = *reinterpret_cast<int64_t*>(node + 0x268);   // node.next
+        node = node->_nextSibling;        // node.next
     }
-    *reinterpret_cast<int64_t*>(node + 0x270) = v;
+    node->_prevSibling = v;
 
-    // store self as an IBP at node +0x258, then AssignWorkplace via self's descriptor
-    uint64_t selfIBP = 0;
-    new (&selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(base));   // B.3.3 bridge
-    *reinterpret_cast<int64_t*>(*ibp + 0x258) = (int64_t)selfIBP;
-    int64_t slotHost = *ibp;
-    slotHost = *reinterpret_cast<int64_t*>(slotHost + 0x258);   // self (deref stored IBP)
-    int64_t wpHost = *ibp;
-    uint64_t wpIBP = (uint64_t)*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(wpHost + 0x258) + 0x238);
-    CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(*ibp), &wpIBP,
-                                     *reinterpret_cast<int32_t*>(slotHost + 0x240));
+    // store this as the child's parent (+0x258), then move it into the parent's home
+    (*ibp)->_parent = this;
+    CitizenComponent* slotHost = (*ibp)->_parent;
+    ComponentEntity* wpIBP = (*ibp)->_parent->home;
+    (*ibp)->SetHome(wpIBP, slotHost->homeSlot);
 }
 
 // ============================================================
@@ -184,51 +175,49 @@ void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* /*tmpV*/) {
 }
 
 // ============================================================
-// CitizenComp_DeferredInit_117080 (0x140117080)
-// Per-citizen deferred init. Signature matches the citizencomponent.cpp typedef
-// fn_FUN_140117080_t: (self, spawnPos, gender, isElder, arg5, forceEmploy,
-// parentIBP, spawnKey). Callers: reproduction/birth path (citizencomponent.cpp),
-// Game_SpawnCitizens. Turning it on gives colonists real names/ages/lifespans.
+// CitizenComponent::Initialize (0x140117080)
+// Per-citizen deferred init: (spawnPos, gender, isElder, age, forceEmploy, parent,
+// profession). Callers: the birth path (GiveBirth), Game_SpawnCitizens (founding),
+// the immigration states and the debug UI. Gives colonists real names/ages/lifespans.
 // ============================================================
-void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
-                                     char isElder, float age, char forceEmploy,
-                                     int64_t* parentIBP, int64_t spawnKey) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-    void* world = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
-    void* rng = world ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(world) + 0xd8) : nullptr;
+void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElder, float age,
+                                  char forceEmploy, CitizenComponent* parent,
+                                  Profession* spawnKey) {
+    GameUpdateLoop* world = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    System::Random* rng = world ? world->m_random : nullptr;
 
     // 1-3. reset path/target, set gender mesh variant, place at spawn transform
-    void* modelIBP = nullptr;
-    ActCNR_FindComponent_3f60(*reinterpret_cast<uintptr_t*>(p + 0x10), &modelIBP);
+    ModelComponent* modelIBP = _entity->FindComponent<ModelComponent>();
     if (modelIBP) {
         ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(modelIBP), static_cast<uint16_t>(gender == 0), 0);
         ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(modelIBP), pos, 0.0f);
     }
 
     // 4. gender
-    *reinterpret_cast<int32_t*>(p + 0x38) = static_cast<int32_t>(gender);
+    this->gender = static_cast<int32_t>(gender);
 
-    // 5. random name -> self+0x28 (faithful: temp String, operator=, ~String)
+    // 5. random name -> +0x28 (faithful: temp String, operator=, ~String); `name` is
+    // H5 raw storage for a System::String (CitizenComponent.h).
     char nameBuf[0x100] = {0};
     if (rng) GenerateCitizenName(rng, gender == 0, nameBuf, static_cast<int>(sizeof(nameBuf)));
     {
         System::String tmpStr(nameBuf);
-        *reinterpret_cast<System::String*>(p + 0x28) = tmpStr;   // B.3.1 bridge
+        *reinterpret_cast<System::String*>(&name) = tmpStr;   // B.3.1 bridge
     }
 
     // 6. appearance variant 0..7 — faithful (Rand()+Rand())&7 (two draws; (a%8+b%8)&7==(a+b)&7)
     if (rng)
-        *reinterpret_cast<uint32_t*>(p + 0x34) = (reinterpret_cast<System::Random*>(rng)->Rand(8u) + reinterpret_cast<System::Random*>(rng)->Rand(8u)) & 7;   // B.3.4b bridge
+        field_0x34 = static_cast<int32_t>((rng->Rand(8u) + rng->Rand(8u)) & 7);
 
     // 7. employment: unemployed unless forced or the world "start-employed" flag (bit 9) is set
-    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
-    uint32_t worldFlags = world ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(world) + 0xd0) : 0;
+    CitizenDescription* desc = description;
+    uint32_t worldFlags = world ? world->m_gameFlags : 0;
     if (forceEmploy == 0 && ((worldFlags >> 9) & 1) == 0) {
-        *(p + 0x220) = 0;
-        *reinterpret_cast<int32_t*>(p + 0x210) = 0;
+        field_0x220 = false;
+        education = 0;
     } else {
-        *(p + 0x220) = 1;
-        *reinterpret_cast<int32_t*>(p + 0x210) = desc ? *reinterpret_cast<int32_t*>(desc + 0x118) : 0;
+        field_0x220 = true;
+        education = desc ? desc->maxEducation : 0;
     }
 
     // 8. age — a FLOAT in retail (the field the census and the adult-age gate compare
@@ -236,41 +225,46 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
     // because every caller passed literal 0 (same bit pattern as 0.0f); the founding
     // spawn port (open H) passes real ages, so the typedef trap is now fixed at every
     // declaration (see NEXT_SESSION_BRIEF.md section 4).
-    *reinterpret_cast<float*>(p + 0x3c) = age;
+    this->age = age;
 
-    // 9. link into family (parent IBP dereffed once, as retail does)
-    {
-        int64_t parentVal = parentIBP ? *parentIBP : 0;
-        CitizenComp_sub_1fa0(selfV, &parentVal);
-    }
+    // 9. link into family (the parent IBP is dereffed once by the caller, as retail does)
+    SetParent(parent);
 
     // 10. age-mesh setup
-    if (isElder == 0) { CitizenComponent_SetupYoung_Reimpl(reinterpret_cast<void*>(selfV)); }
-    else              { CitizenComponent_SetupElder_Reimpl(reinterpret_cast<void*>(selfV)); }
+    if (isElder == 0) { SetupYoung(); }
+    else              { SetupElder(); }
 
-    // 11. housing: (re)assign unless spawn-key and housing IBP already match
-    uint64_t housingIBP = 0;
-    new (&housingIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    bool needAssign = (*reinterpret_cast<int64_t*>(p + 0x1f0) != spawnKey);
+    // 11. workplace: (re)assign unless the profession and the workplace already match
+    ComponentEntity* housingIBP = nullptr;
+    bool needAssign = (profession != spawnKey);
     if (!needAssign) {
-        needAssign = (*reinterpret_cast<int64_t*>(p + 0x248) != static_cast<int64_t>(housingIBP));
+        needAssign = (workplace != housingIBP);
     }
     if (needAssign) {
-        uint64_t arg = housingIBP;
-        CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(selfV),
-                                  reinterpret_cast<int64_t*>(&arg));
-        *reinterpret_cast<int64_t*>(p + 0x1f0) = spawnKey;
+        SetWorkplace(housingIBP);
+        profession = spawnKey;
     }
 
     // 12. lifespan = RandFloatTol(rng) * desc+0x3c (age span) + desc+0x38 (base age)
     float rf    = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
-    float baseA = desc ? *reinterpret_cast<float*>(desc + 0x38) : 0.0f;
-    float spanA = desc ? *reinterpret_cast<float*>(desc + 0x3c) : 0.0f;
-    *reinterpret_cast<float*>(p + 0x40) = rf * spanA + baseA;
+    float baseA = desc ? desc->_f38 : 0.0f;
+    float spanA = desc ? desc->_f3c : 0.0f;
+    maxAge = rf * spanA + baseA;
 
-    // 13. sprite/anim init on the AnimalComponent (+0x278)
-    ActMv_SetAnimation_a1f0(*reinterpret_cast<void**>(p + 0x278), 0,
+    // 13. sprite/anim init on the CharacterComponent (+0x278)
+    ActMv_SetAnimation_a1f0(character, 0,
                             kRdata_14017214c, 0.0f);
+}
+
+// B4 FORWARD: 3 outside caller(s) (Component/immigrationcomponent_states.cpp,
+// Dialog/debugui.cpp, Game/founding_spawn.cpp).
+void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
+                                     char isElder, float age, char forceEmploy,
+                                     int64_t* parentIBP, int64_t spawnKey) {
+    reinterpret_cast<CitizenComponent*>(selfV)->Initialize(
+        reinterpret_cast<const float*>(pos), gender, isElder, age, forceEmploy,
+        parentIBP ? reinterpret_cast<CitizenComponent*>(*parentIBP) : nullptr,
+        reinterpret_cast<Profession*>(spawnKey));
 }
 
 // [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,
@@ -301,19 +295,16 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
 //
 // Byte-faithful to retail, including the unguarded +0x288 description deref.
 void CitizenComponent::Slot11() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    if (!p) return;
-
-    const int64_t desc   = *reinterpret_cast<int64_t*>(p + 0x288);
-    const float   thresh = desc ? *reinterpret_cast<float*>(desc + 0x44) : 0.0f;
-    const float   age    = *reinterpret_cast<float*>(p + 0x3c);
-    const bool    adult  = (*reinterpret_cast<int64_t*>(p + 0x208) != 0);
+    CitizenDescription* desc = description;
+    const float   thresh = desc ? desc->adultAge : 0.0f;
+    const float   age    = this->age;
+    const bool    adult  = (school != nullptr);
 
     if (!adult) {
-        if (age < thresh) { CitizenComponent_SetupElder_Reimpl(p); }
-        else              { CitizenComponent_SetupYoung_Reimpl(p); }
+        if (age < thresh) { SetupElder(); }
+        else              { SetupYoung(); }
     } else {
-        CitizenComponent_SetupAdult_Reimpl(p);
+        SetupAdult();
     }
 
     // ⚠ KNOWN DEVIATION. Retail's 0x1401140f0 unconditionally re-shows the carried tool
@@ -324,4 +315,9 @@ void CitizenComponent::Slot11() {
     // already notes this is "the crash-prone path the ShowTool call site deliberately
     // guards off", so the gap is in 73b0, not here. Restore the re-show once 73b0's
     // description lookup is fixed.
+}
+
+// B4 FORWARD: 1 outside caller(s) (Game/starttown.cpp)
+void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V) {
+    reinterpret_cast<CitizenComponent*>(selfV)->AddChild(*reinterpret_cast<CitizenComponent**>(param2V));
 }

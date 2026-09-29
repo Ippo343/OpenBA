@@ -23,9 +23,9 @@
 //   0x14010cd80  State_AdultTransition-> citizenai_handlers3.cpp (e370 @ 0x14008e370 + 2ac30)
 //   0x14010d2c0  State_ElderTransition-> citizenai_handlers3.cpp (ec70 @ 0x14008ec70 + 2ac30)
 //
-// self chain (all handlers): param = CitizenAIComponent ; self = param+0x38 (sibling
-//   CitizenComponent IBP) ; *self = CitizenComponent. char = *(citizen+0x278). The action
-//   builders take (CitizenComponent-IBP, ...) and push internally.
+// B.4 W1 COMP-b: the handlers are CitizenAIComponent members; `citizen` is the sibling
+//   CitizenComponent (+0x38), its fields read by name. The action builders take
+//   (CitizenComponent-IBP, ...) and push internally.
 //
 // Registered exe sub-callees (resolved via ResolveAddr — bodies NOT duplicated here):
 //   0x14008dd30 CitizenAI_FindBestTarget_dd30   (citizenai_findtarget.cpp)
@@ -63,6 +63,13 @@
 #include "graphics/Scene.h"
 #include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/AttendanceComponent.h"
+#include "Component/InteractComponent.h"
+#include "Component/StatusIconComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "graphics/Mesh.h"
 #include "Component/Component.h"   // B.3.x W0: Component slots by name
 #include "system/Value.h"
@@ -115,34 +122,31 @@ static void EnsureInit() {
 } // namespace
 
 // ============================================================
-// 0x14010c360 — CitizenAI_State_Education  (state id 3)
+// 0x14010c360 — CitizenAIComponent::State_Education  (state id 3)
 // ------------------------------------------------------------
-// Stamp cooldown (Time(75.0) -> param_1+0x58). self=param_1+0x38. Early-return if the
-// citizen already has an education record (*self+0x1e4 != 0). Otherwise find the best
-// education target via dd30 (goal cell = citizen ModelComponent position, B-goal = the
-// workplace anchor cell or -1). If none found: clear edu state, set flag bit, return 0.
-// If found: build the Ctor10 work sequence toward it and set state flags; return 1.
+// Stamp cooldown (Time(75.0) -> timers[3]). Early-return if the citizen's
+// clothingLevel != 0. Otherwise find the best target via dd30 (goal cell = citizen
+// ModelComponent position, B-goal = the home anchor cell or -1). If none found:
+// clear field_0x1E0, set happinessFlags bit 2, return 0. If found: build the Ctor10
+// work sequence toward it and set state flags; return 1.
 // ============================================================
-extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
+uint64_t CitizenAIComponent::State_Education() {
     EnsureInit();
 
-    // cooldown stamp: Time(DAT_1721fc) -> param_1+0x58 (the first 8 bytes of the Time)
+    // cooldown stamp: Time(DAT_1721fc) -> timers[3]
     int64_t timeStamp = 0;
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStamp), kRdata_1401721fc);
-    *reinterpret_cast<int64_t*>(param_1 + 0x58) = timeStamp;
+    timers[3] = timeStamp;
 
-    int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    if (*reinterpret_cast<int*>(*self + 0x1e4) != 0) {
-        return static_cast<uint64_t>(*self) & 0xffffffffffffff00ULL;  // low byte = 0
+    if (citizen->clothingLevel != 0) {
+        return 0;  // low byte 0 (retail's RAX carries the citizen pointer above it)
     }
 
     int64_t local_res8 = 0;            // dd30 out: found component (also Ctor10 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
-    // citizen ModelComponent world pos -> grid cell
-    int64_t cz = *self;
-    int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
+    // citizen ModelComponent world pos -> grid cell (ModelComponent's transform: raw)
+    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
     int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     int half = mapSize >> 1;
     int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(half));
@@ -152,12 +156,12 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
     if (cy < 0) cy = 0;
     if (mapSize <= cy) cy = mapSize - 1;
 
-    // workplace anchor cell (B-goal) or -1
+    // home anchor cell (B-goal) or -1
     uint32_t bGoal;
-    if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
+    if (citizen->home == nullptr) {
         bGoal = 0xffffffff;
     } else {
-        int64_t wpIBP = *reinterpret_cast<int64_t*>(*self + 0x238);
+        ComponentEntity* wpIBP = citizen->home;
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
@@ -168,52 +172,47 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
                   &local_res8, dest, 4);
 
     if (outBest == 0) {
-        *reinterpret_cast<int*>(*self + 0x1e0) = 0;
-        int64_t cz2 = *self;
-        *reinterpret_cast<uint32_t*>(cz2 + 0x88) |= 4;
-        return static_cast<uint64_t>(cz2) & 0xffffffffffffff00ULL;  // low byte 0
+        citizen->field_0x1E0 = 0;
+        citizen->happinessFlags |= 4;
+        return 0;  // low byte 0
     }
 
-    // found: Ctor10(self, &foundEntity, dest, foundComponent)
+    // found: Ctor10(citizen, &foundEntity, dest, foundComponent)
     uint64_t foundEntity = static_cast<uint64_t>(outBest);
-    int64_t ibpHolder = *self;   // CitizenComponent ptr in a stack IBP holder
+    CitizenComponent* ibpHolder = citizen;   // the CitizenComponent in a stack IBP holder
     CitizenAI_PerformWorkCtor10_bccb0(&ibpHolder, &foundEntity, dest, static_cast<uint64_t>(local_res8));
 
-    int64_t cz3 = *self;
-    *reinterpret_cast<uint32_t*>(cz3 + 0x54) |= 4;
-    *reinterpret_cast<int32_t*>(cz3 + 0xb0) = 0;
-    *reinterpret_cast<int32_t*>(cz3 + 0x30) = static_cast<int32_t>(0xffffffff);
+    citizen->statusFlags |= 4;
+    citizen->field_0xB0 = 0;
+    citizen->field_0x30 = -1;
 
     return 1;  // CONCAT71(.., 1) -> low byte 1
 }
 
 // ============================================================
-// 0x14010c580 — CitizenAI_State_SeekHappiness  (state id 8)
+// 0x14010c580 — CitizenAIComponent::State_SeekHappiness  (state id 8)
 // ------------------------------------------------------------
-// Stamp cooldown (Time(75.0) -> param_1+0x80). Early-return if happiness already satisfied
-// (*self+0xac > 0). Find best happiness target via dd30 (category 2). If found: build the
-// Ctor5 work sequence and set state flags (return 1). If NOT found: clear happiness state,
-// set flag bit, and run the MeshInstance "go invisible" render branch (faithful inline copy
-// of FUN_14012c3f0's value=1/flagIndex=4 path), then return 0.
+// Stamp cooldown (Time(75.0) -> timers[8]). Early-return if field_0xAC > 0. Find the
+// best target via dd30 (category 2). If found: build the Ctor5 work sequence and set
+// state flags (return 1). If NOT found: clear field_0xA8, set happinessFlags bit 2,
+// and run the StatusIconComponent "show icon" branch (faithful inline copy of
+// FUN_14012c3f0's value=1/flagIndex=4 path), then return 0.
 // ============================================================
-extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
+uint64_t CitizenAIComponent::State_SeekHappiness() {
     EnsureInit();
 
     int64_t timeStamp = 0;
     RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeStamp), kRdata_1401721fc);
-    *reinterpret_cast<int64_t*>(param_1 + 0x80) = timeStamp;
+    timers[8] = timeStamp;
 
-    int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    if (0 < *reinterpret_cast<int*>(*self + 0xac)) {
-        return static_cast<uint64_t>(*self) & 0xffffffffffffff00ULL;
+    if (0 < citizen->field_0xAC) {
+        return 0;  // low byte 0
     }
 
     int64_t local_res8 = 0;            // dd30 out: found component (Ctor5 param_4)
     float dest[3] = { 0.0f, 0.0f, 0.0f };
 
-    int64_t cz = *self;
-    int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
+    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
     int mapSize = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton) + 0xf8);
     int half = mapSize >> 1;
     int cx = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(half));
@@ -224,10 +223,10 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
     if (mapSize <= cy) cy = mapSize - 1;
 
     uint32_t bGoal;
-    if (*reinterpret_cast<int64_t*>(*self + 0x238) == 0) {
+    if (citizen->home == nullptr) {
         bGoal = 0xffffffff;
     } else {
-        int64_t wpIBP = *reinterpret_cast<int64_t*>(*self + 0x238);
+        ComponentEntity* wpIBP = citizen->home;
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
@@ -238,107 +237,89 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                   &local_res8, dest, 2);
 
     if (outBest == 0) {
-        // --- no happiness target: clear state + run the MeshInstance "hide" render branch ---
-        *reinterpret_cast<int*>(*self + 0xa8) = 0;
-        *reinterpret_cast<uint32_t*>(*self + 0x88) |= 4;
+        // --- no target: clear state + run the StatusIconComponent "show" branch ---
+        citizen->field_0xA8 = 0;
+        citizen->happinessFlags |= 4;
 
-        int64_t entityIBP = *reinterpret_cast<int64_t*>(*self + 0x10);
-        int64_t meshOutIBP = 0;
-        void* meshRet = WorkBase_FindComponent_2f90(static_cast<uintptr_t>(entityIBP), &meshOutIBP);
-        uint64_t retLow = 0;
-        if (meshRet) {
-            int64_t mi = *reinterpret_cast<int64_t*>(meshRet);   // MeshInstance object (plVar3)
-            if (mi) {
-                int64_t inner = *reinterpret_cast<int64_t*>(mi + 0x10);
-                retLow = static_cast<uint64_t>(mi);
-                // gated by ((inner+0x40 >> 10) & 1) == 0  (disasm: SHR 0xa; TEST CL,1).
-                // inner is just-CheckPtr'd by the original (never 0 with valid data); guard
-                // it to stay crash-safe (skip rather than fault, matching nothing-to-do).
-                if (inner != 0 && (*reinterpret_cast<uint32_t*>(inner + 0x40) >> 10 & 1) == 0) {
-                    // OR [mi+0x28 + 0xc8], 0x10   == set status-mask bit 4 at mi+0xf0
-                    *reinterpret_cast<uint32_t*>(mi + 0xf0) |= 0x10;
-                    uint32_t changed;
-                    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-                    if (*reinterpret_cast<int*>(mi + 0xf0) == 0) {
-                        // mask empty -> remove from scene
-                        if (-1 < *reinterpret_cast<int32_t*>(mi + 0x100)) {
-                            reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
-                                ->RemoveObject(*reinterpret_cast<uint32_t*>(mi + 0x100));   // B.3.5 bridge
-                            *reinterpret_cast<int32_t*>(mi + 0x100) = static_cast<int32_t>(0xffffffff);
-                        }
-                        uint32_t before = *reinterpret_cast<uint32_t*>(mi + 0x20);
-                        uint32_t after = before & 0xfffffffb;
-                        *reinterpret_cast<uint32_t*>(mi + 0x20) = after;
-                        changed = after ^ before;
-                    } else {
-                        // mask non-empty -> ensure in scene + run vtable+0x40 update
-                        GameSettings* settings = g_gameSettings;
-                        if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
-                            *reinterpret_cast<int32_t*>(mi + 0x100) < 0) {
-                            uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
-                                ->AddObject(reinterpret_cast<Graphics::Geometry*>(mi + 0x28));   // B.3.5 bridge
-                            *reinterpret_cast<uint32_t*>(mi + 0x100) = id;
-                            SceneWatch_Note(id, reinterpret_cast<void*>(mi + 0x28), "CitizenAI::handlers2 carry-mesh");
-                        }
-                        int64_t t0 = 0;
-                        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t0), 0.0f);
-                        // `mi` is a Component (the +0x10 entity / +0x20 flag-notify idiom below).
-                        reinterpret_cast<Component*>(mi)->Tick(&t0);   // B.3.x bridge (slot 8)
-                        uint32_t before = *reinterpret_cast<uint32_t*>(mi + 0x20);
-                        uint32_t after = before | 4;
-                        *reinterpret_cast<uint32_t*>(mi + 0x20) = after;
-                        changed = after ^ before;
+        StatusIconComponent* mi = citizen->_entity->FindComponent<StatusIconComponent>();
+        if (mi) {
+            ComponentEntity* inner = mi->_entity;
+            // gated by ((inner->_entityFlags >> 10) & 1) == 0  (disasm: SHR 0xa; TEST CL,1).
+            // inner is just-CheckPtr'd by the original (never 0 with valid data); guard
+            // it to stay crash-safe (skip rather than fault, matching nothing-to-do).
+            if (inner != nullptr && (inner->_entityFlags >> 10 & 1) == 0) {
+                // OR [mi+0x28 + 0xc8], 0x10   == set status-mask bit 4
+                mi->_geometry.activeMask |= 0x10;
+                uint32_t changed;
+                if (mi->_geometry.activeMask == 0) {
+                    // mask empty -> remove from scene
+                    if (-1 < mi->iconId) {
+                        reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
+                            ->RemoveObject(static_cast<uint32_t>(mi->iconId));   // B.3.5 bridge
+                        mi->iconId = -1;
                     }
-                    retLow = static_cast<uint64_t>(changed & 0xffff);
-                    if ((changed & 0xffff) != 0 && *reinterpret_cast<int64_t*>(mi + 0x10) != 0) {
-                        int64_t notifyTarget = *reinterpret_cast<int64_t*>(mi + 0x10);
-                        ActHunt_NotifyEntityChanged_c3470(reinterpret_cast<void*>(notifyTarget));
-                        retLow = 0;  // c3470 returns void; original tail value is its (void) ret
+                    uint32_t before = mi->_flags;
+                    uint32_t after = before & 0xfffffffb;
+                    mi->_flags = after;
+                    changed = after ^ before;
+                } else {
+                    // mask non-empty -> ensure in scene + run the slot-8 Tick
+                    GameSettings* settings = g_gameSettings;
+                    if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
+                        mi->iconId < 0) {
+                        uint32_t id = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene)
+                            ->AddObject(&mi->_geometry);   // B.3.5 bridge
+                        mi->iconId = static_cast<int32_t>(id);
+                        SceneWatch_Note(id, &mi->_geometry, "CitizenAI::handlers2 carry-mesh");
                     }
+                    int64_t t0 = 0;
+                    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t0), 0.0f);
+                    mi->Tick(&t0);
+                    uint32_t before = mi->_flags;
+                    uint32_t after = before | 4;
+                    mi->_flags = after;
+                    changed = after ^ before;
+                }
+                if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
+                    ActHunt_NotifyEntityChanged_c3470(mi->_entity);
                 }
             }
         }
-        return retLow & 0xffffffffffffff00ULL;  // low byte 0
+        return 0;  // low byte 0
     }
 
-    // found: Ctor5(self, &foundEntity, dest, foundComponent)
+    // found: Ctor5(citizen, &foundEntity, dest, foundComponent)
     uint64_t foundEntity = static_cast<uint64_t>(outBest);
-    int64_t ibpHolder = *self;
+    CitizenComponent* ibpHolder = citizen;
     CitizenAI_PerformWorkCtor5_bd070(&ibpHolder, &foundEntity, dest, local_res8);
 
-    int64_t cz3 = *self;
-    *reinterpret_cast<uint32_t*>(cz3 + 0x54) |= 4;
-    *reinterpret_cast<int32_t*>(cz3 + 0xb0) = 0;
-    *reinterpret_cast<int32_t*>(cz3 + 0x30) = static_cast<int32_t>(0xffffffff);
+    citizen->statusFlags |= 4;
+    citizen->field_0xB0 = 0;
+    citizen->field_0x30 = -1;
 
     return 1;
 }
 
 // ============================================================
-// 0x14010d560 — CitizenAI_State_FindWork  (state id 10)
+// 0x14010d560 — CitizenAIComponent::State_FindWork  (state id 10)
 // ------------------------------------------------------------
-// (elder citizen path) Resolve the citizen's anchor entity (*self+0x208 -> +0x10), find its
-// Position component, read the citizen ModelComponent world pos, run the walkable-position
-// search (122be0 over the InteractDescription transform sub + 122b00 over each child). If a
-// walkable target is found (bVar3 != 0): push the WalkTowards action toward it (time read
-// from the citizen's CitizenDescription +0x120) and set state flags (return 1). Else:
-// FUN_140115a50(self, 1) (release/reroll the partner slot) and return 0.
+// (at-school path) Resolve the school's entity, find its InteractComponent, read the
+// citizen ModelComponent world pos, run the walkable-position search (122be0 over the
+// InteractDescription transform sub + 122b00 over each use location). If a walkable
+// target is found: push the WalkTowards action toward it (time read from the
+// citizen's CitizenDescription _f120) and set state flags (return 1). Else:
+// FUN_140115a50(citizen, 1) (release/reroll the partner slot) and return 0.
 // ============================================================
-extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
+uint64_t CitizenAIComponent::State_FindWork() {
     EnsureInit();
 
-    int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
-    int64_t anchor = *reinterpret_cast<int64_t*>(*self + 0x208);
-    int64_t anchorEntity = *reinterpret_cast<int64_t*>(anchor + 0x10);
-    int64_t posIBP[2] = { 0, 0 };
-    WorkBase_FindComponent_2ed0(static_cast<uintptr_t>(anchorEntity), posIBP);
+    AttendanceComponent* anchor = citizen->school;
+    InteractComponent* posComp = anchor->_entity->FindComponent<InteractComponent>();
 
     float outVec[3] = { 0.0f, 0.0f, 0.0f };   // local_58 (target out)
 
     // citizen ModelComponent world pos -> local_48 vec3 (x,y,z packed)
-    int64_t cz = *self;
-    int64_t ch = *reinterpret_cast<int64_t*>(cz + 0x278);
-    int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
+    int64_t model = reinterpret_cast<int64_t>(citizen->character->modelComponent);
     float pos[3];
     pos[0] = *reinterpret_cast<float*>(model + 0x158);
     pos[1] = *reinterpret_cast<float*>(model + 0x15c);
@@ -346,50 +327,47 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
 
     int bestCost = 0x7fffffff;            // local_res8 low 32
 
-    // transform sub-object on the Position component (posIBP[0]+0x18), InteractDescription.
-    int64_t posComp = posIBP[0];
-    void* sub = *reinterpret_cast<void**>(posComp + 0x18);
+    // transform sub-object on the InteractComponent's description (InteractDescription).
+    void* sub = posComp->_description;
     void* transform = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription))
                       ? sub : nullptr;
     uint8_t found = 0;
-    found = WorkImpl_WalkablePos_122be0(static_cast<uintptr_t>(posComp),
+    found = WorkImpl_WalkablePos_122be0(reinterpret_cast<uintptr_t>(posComp),
                             reinterpret_cast<uintptr_t>(transform) + 0x28, pos, outVec, &bestCost);
 
-    // walk each child component (+0x28 array, count +0x30)
-    int childCount = *reinterpret_cast<int*>(posComp + 0x30);
+    // walk each use location (field28 array, count in field30's low half: untyped, raw)
+    int childCount = *reinterpret_cast<int*>(&posComp->field30);
     if (0 < childCount) {
         int i = 0; int64_t off = 0;
         do {
-            int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(posComp + 0x28) + off);
+            int64_t* slot = reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(posComp->field28) + off);
             uint8_t r = WorkImpl_WalkablePosRecursive_122b00(static_cast<uintptr_t>(*slot), 0, pos, outVec, &bestCost);
             found |= r;
             i++; off += 8;
-        } while (i < *reinterpret_cast<int*>(posComp + 0x30));
+        } while (i < *reinterpret_cast<int*>(&posComp->field30));
     }
 
     if (found != 0) {
-        // WalkTowards toward outVec; time = citizen CitizenDescription +0x120
-        void* descRaw = *reinterpret_cast<void**>(*self + 0x18);
+        // WalkTowards toward outVec; time = citizen CitizenDescription _f120
+        void* descRaw = citizen->_description;
         void* desc = (descRaw && Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription))
                      ? descRaw : nullptr;
-        int64_t ibpHolder = *self;
+        CitizenComponent* ibpHolder = citizen;
         // [STANDALONE GUARD] the desc null-check is ours; the original derefs +0x120
         // unconditionally (would fault if the description type-check failed).
-        float walkTime = desc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x120) : 0.0f;
+        float walkTime = desc ? reinterpret_cast<CitizenDescription*>(desc)->_f120 : 0.0f;
         CitizenAI_Pathfinding_WalkTowards_bb490(&ibpHolder, 0xffffffff, reinterpret_cast<uint32_t*>(outVec), 4, walkTime, 1);
 
-        int64_t cz2 = *self;
-        *reinterpret_cast<uint32_t*>(cz2 + 0x54) |= 4;
-        *reinterpret_cast<int32_t*>(cz2 + 0x30) = static_cast<int32_t>(0xffffffff);
-        *reinterpret_cast<int32_t*>(cz2 + 0xb0) = 0;
+        citizen->statusFlags |= 4;
+        citizen->field_0x30 = -1;
+        citizen->field_0xB0 = 0;
 
         return 1;
     }
 
-    // 0x140115a50 returns nothing; the only caller (CitizenAI_ValidateAndEnterState)
+    // 0x140115a50 returns nothing; the only caller (ValidateAndEnterState)
     // reads the low byte, which is 0.
-    AttendanceComponent_ReleasePartnerSlot(reinterpret_cast<void*>(*self), '\x01');
-    uint64_t r = 0;
-    return r & 0xffffffffffffff00ULL;  // low byte 0
+    AttendanceComponent_ReleasePartnerSlot(citizen, '\x01');
+    return 0;  // low byte 0
 }
 

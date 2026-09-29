@@ -209,11 +209,9 @@ Scene* GridInit(Scene* self, float cellSize) {
     self->_cellHeads.SetSize(0x5555);              // 18005e580  retail 0x18002fea0
     self->_cellCounts.SetSize(0x5555);             // 18005e58e  retail 0x18002fea0
 
-    for (long off = 0; off < 0x15554; off += 4) {  // 18005e5a0..5be
-        *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uint8_t*>(self->_cellHeads.GetData()) + off) = -1;
-        *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uint8_t*>(self->_cellCounts.GetData()) + off) = 0;
+    for (int32_t i = 0; i < 0x5555; ++i) {         // 18005e5a0..5be, byte offset < 0x15554
+        self->_cellHeads._data[i]  = -1;           // both array pointers re-read
+        self->_cellCounts._data[i] = 0;            // every iteration
     }
 
                             // no early-out arm exists
@@ -455,14 +453,13 @@ void GridThread(Scene* self, int32_t id) {
 void GridReindex(Scene* self, int32_t id) {
 
     SceneNode* const nodes = self->_nodes._data;                 // 18005ee4b  R15
-    const uint8_t* const geo =
-        reinterpret_cast<const uint8_t*>(nodes[id]._object);     // 18005ee5e
+    const Geometry* const geo = nodes[id]._object;               // 18005ee5e
 
-    float minX, minY, maxX, maxY;
-    std::memcpy(&minX, geo + 0x4c, 4);                           // 18005ee8f
-    std::memcpy(&minY, geo + 0x50, 4);                           // 18005ee80
-    std::memcpy(&maxX, geo + 0x58, 4);                           // 18005ee62
-    std::memcpy(&maxY, geo + 0x5c, 4);                           // 18005ee67
+    // The geometry's world box (+0x4c): min.x/min.y and max.x/max.y.
+    const float minX = geo->_worldBounds.min.x;                  // 18005ee8f
+    const float minY = geo->_worldBounds.min.y;                  // 18005ee80
+    const float maxX = geo->_worldBounds.max.x;                  // 18005ee62
+    const float maxY = geo->_worldBounds.max.y;                  // 18005ee67
 
     float cx = (minX + maxX) * kHalf;                            // 18005eec8/eed4
     float cy = (minY + maxY) * kHalf;                            // 18005eecc/eed8
@@ -521,43 +518,6 @@ void GridReindex(Scene* self, int32_t id) {
 
     // `calls` on this site counts ENTRIES, and Scene::Clean enters it for every
     // object every frame. `worked` is the number that actually rethreaded.
-}
-
-// ============================================================================
-// 0x18005f1f0 — free the global-object list
-//
-//   for (node = list->head; node; node = next) { next = node->next; Free(node); }
-//   list->tail = 0; list->head = 0; list->count = 0;
-//
-// `next` is read at +0x10 BEFORE the free (18005f220), which is what makes the
-// walk safe over freed blocks. `prev` at +0x08 is never touched: the list is
-// doubly linked but this teardown only needs one direction.
-//
-// The three clearing stores are in retail's order — tail (+0x08), then head
-// (+0x00), then count (+0x10) — and they are what Scene::~Scene's post-state
-// oracle in scene.cpp already checks.
-//
-// ORACLE: post-state, plus a reclamation counter. See the probe's
-// §FreeGlobals: comparing `{head,tail,count} == {0,0,0}` alone CANNOT
-// distinguish "freed every node" from "freed the first node and then cleared
-// the header", so the probe adds a check that the freed blocks come back from
-// the allocator — and the negative control says whether that check can fail.
-//
-// ENDGAME B.3.2 step 2 (callers) — this body IS `Collection::LinkedList<T>::
-// Clear()` (runtime/types/collection/Collection.h): walk head->next reading
-// `next` BEFORE the free, then tail/head/count, in this exact store order.
-// `Scene::~Scene` (scene.cpp) now calls `_globals.Clear()` directly rather
-// than reaching this address; this body stays registered for `code/`, but is
-// reduced to a one-line bridge onto the real class rather than a hand
-// transcription, since the free door matches: `MemFreeLocked` above and
-// `Collection::detail::ListNodeFree` (linkedlist.cpp) both resolve the same
-// 0x1800c7ad0. `GlobalList`/`GlobalNode` (scene_grid.h) are byte-identical to
-// `LinkedList<void*>`/its `Node` (both statically asserted to 0x18 bytes), and
-// Clear() never reads the node's `element` field, so the element type of the
-// bridge does not matter.
-// ============================================================================
-void FreeGlobals(GlobalList* list) {
-    reinterpret_cast<Collection::LinkedList<void*>*>(list)->Clear();
 }
 
 }  // namespace rtgfxgrid

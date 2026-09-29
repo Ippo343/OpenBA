@@ -28,6 +28,8 @@
 #include <new>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"                // B.4: IO::Stream::_encoding / _direction
+#include "../../types/video/CompanionData.h"      // B.4: Video::{Index,Vertex}BufferData::Serialize
 #include "../../types/graphics/GraphicsMesh.h"   // the real Graphics::GraphicsMesh
 #include "../../types/video/Device.h"            // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../../types/graphics/AnimationState.h" // rtcoll::Rt_SetSize_18005aa30 / RtGraphics_SerializeMeshNodes
@@ -36,11 +38,6 @@
 #include "../../types/object/External.h"         // the ExternalPtr serializers
 #include "../../types/system/String.h"
 #include "../../types/system/MemoryAllocator.h"
-
-using rt::io::Encoding;
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
 
 namespace {
 
@@ -86,13 +83,20 @@ using Graphics::GraphicsMesh;
 // ---------------------------------------------------------------------------
 // Named dependencies — RT_EXPORT_ONCE, so a ported one is reached as ours.
 // ---------------------------------------------------------------------------
-using VoidThisFn  = void  (*)(void*);
-using PtrThisFn   = void* (*)(void*);
-
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
-// the member System::String::Serialize. B.3.x bridge: the field is a String.
-void StringSerialize(void* str, Serializer* ser) {
-    static_cast<System::String*>(str)->Serialize(ser);
+// the member System::String::Serialize. LEFT: `GraphicsMesh::_name` is the POD
+// `RtSystem::Filename` and `DetailLevel::_name` the POD `RtSystem::String`
+// (GraphicsMesh.h keeps both trivially destructible; see its `_name` note), so
+// the one view of either as the real `System::String` is here.
+void StringSerialize(void* str, IO::Serializer& ser) {
+    static_cast<System::String*>(str)->Serialize(&ser);
+}
+
+// LEFT: the ExternalPtr serializers take object's POD `rt::io::Serializer*`
+// (External.h, not this block's header); the two describe the same 0x10 bytes
+// (Serializer.h asserts it).
+rt::io::Serializer* PodSerializer(IO::Serializer& ser) {
+    return reinterpret_cast<rt::io::Serializer*>(&ser);
 }
 
 // `?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z` —
@@ -111,11 +115,9 @@ void StringSerialize(void* str, Serializer* ser) {
 // ENDGAME B.3.5 caller batch: `Graphics::GraphicsMesh::PlatformSerialize` is a
 // DEFINED member (batchc_gfx_leaves.cpp:789), so the by-name door is a member
 // call. The name stays `PlatformSerializeDoor` for the lookup reason above.
-void PlatformSerializeDoor(void* self, Serializer* ser) {
-    reinterpret_cast<::Graphics::GraphicsMesh*>(self)
-        ->::Graphics::GraphicsMesh::PlatformSerialize(
-            *reinterpret_cast<IO::Serializer*>(ser));          // B.3.5 bridge
-}
+// B.4: the door is gone; `Serialize` calls `PlatformSerialize(ser)` directly
+// (a member calling a member of its own class binds the member, which is what
+// is wanted).
 
 // ---------------------------------------------------------------------------
 // The unexported Collection helpers this class's Serialize drives. All are
@@ -160,11 +162,8 @@ int32_t* SerializeCounter()     { return &g_serializeCounter; }
 void**   SerializeCurrentMesh() { return &g_serializeCurrentMesh; }
 
 // `?_singleton@Device@Video@@0PEAV12@EA` — 0x1801fe7a8, a POINTER to the
-// Device, so reading +0xf8 is a double indirection.
-const uint8_t* VideoDevice() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
-}
+// Device; `activeInterface` is its +0xf8, read fresh at each use (B.4: by
+// name, Device.h).
 
 // ---------------------------------------------------------------------------
 // Serializer prologue/epilogue. IDENTICAL to imagebuffer_derived.cpp's, EXCEPT
@@ -180,53 +179,13 @@ const uint8_t* VideoDevice() {
 // `ReaderWriter::GetVersion()` — one runs the OLD inline triangle data when the
 // version is 0, the other runs `PlatformSerialize` when it is >= 1. Passing 0
 // here would make every file this build writes claim to be the old format.
+//
+// B.4: that prologue / epilogue IS `IO::Serializer`'s ctor (0x1800b9960:
+// `{ stream, 0 }`, then the encoding's CreateReader / CreateWriter with the
+// version) and dtor (0x1800b99b0: `if (rw) delete rw`), inlined; the codec is
+// spelled `IO::Serializer ser(stream, 1)` and the ReaderWriter members are
+// called by name on `ser._readerWriter` (`name` nullptr, as retail passes).
 // ---------------------------------------------------------------------------
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser, int version) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-    Encoding* enc = stream->encoding;
-    void** encVt = enc->vtable;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<FactoryFn>(encVt[slot / 8])(enc, ser, version);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-// B3X W0: the ReaderWriter members, by name on the real class (the
-// `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
-// interchangeable in Serializer.h). `name` is nullptr, as retail passes.
-IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    delete AsRw(rw);
-}
-
-void EmitInt(ReaderWriter* rw, int32_t* p) {
-    AsRw(rw)->SerializeInt(*p, nullptr);
-}
-void EmitFloat(ReaderWriter* rw, float* p) {
-    AsRw(rw)->SerializeFloat(*p, nullptr);
-}
-void EmitFloatArray(ReaderWriter* rw, int n, float* p) {
-    AsRw(rw)->SerializeFloatArray(n, p, nullptr);
-}
-int32_t CodecVersion(ReaderWriter* rw) {
-    return AsRw(rw)->GetVersion();
-}
-void CodecSkip(ReaderWriter* rw) {
-    AsRw(rw)->Skip();
-}
-
-// An Array<T> header, as the elements of the +0x70 array-of-arrays are shaped:
-// data, size, capacity. Only `data` and `size` are read here.
-struct ArrayHdrView { uint8_t* data; int32_t size; int32_t capacity; };
-static_assert(sizeof(ArrayHdrView) == 0x10, "Array<T> header is 0x10 bytes");
 
 // ============================================================================
 // ??0GraphicsMesh@Graphics@@QEAA@XZ                  retail 0x1800ff170
@@ -419,61 +378,58 @@ namespace {
 // idiom on EdgeMesh's eight buffers). So retail's "not ascending" order is INDEX
 // BEFORE VERTEX in each pair, the same order `EdgeMesh::Serialize` uses for its
 // eight, and it is transcribed rather than sorted.
-void TriangleListPass(GraphicsMesh::DetailLevel* level, Serializer* ser, ReaderWriter* rw) {
+//
+// B.4: each `_deviceData` is the buffer's companion and +0x30 is its slot 6,
+// `Serialize`, called by name. LEFT: `DetailLevel::Buffer::_deviceData` is a
+// `void*` (the unit test pins the `Buffer` struct), so the view of it as its
+// companion is the one cast per kind below.
+void TriangleListPass(GraphicsMesh::DetailLevel* level, IO::Serializer& ser) {
+    IO::ReaderWriter* const rw = ser._readerWriter;
     int32_t n = level->_triangleLists._size;                   // +0xa0
-    EmitInt(rw, &n);
-    if (ser->stream->direction == rt::io::kDirectionReading)
+    rw->SerializeInt(n, nullptr);
+    if (ser._stream->_direction == IO::kReading)
         rtcoll::RtColl_ArraySetSize_1800136f0(&level->_triangleLists, n);    // +0x98
     RtGraphics_EdgeMesh_SerializeTriangleListArray(ser, n, level->_triangleLists._data);   // 0x180014850
 
-    void* const kSubObjects[4] = {
-        level->_indexBuffer._deviceData,        // +0x38 + 8 = +0x40
-        level->_vertexBuffer._deviceData,       // +0x18 + 8 = +0x20
-        level->_skinIndexBuffer._deviceData,    // +0x78 + 8 = +0x80
-        level->_skinVertexBuffer._deviceData,   // +0x58 + 8 = +0x60
-    };
-    for (void* const sub : kSubObjects) {
-        void** const vt = *reinterpret_cast<void***>(sub);      // faithful: unguarded
-        reinterpret_cast<void (*)(void*, Serializer*)>(vt[0x30 / 8])(sub, ser);
-    }
+    // faithful: all four unguarded
+    static_cast<Video::IndexBufferData*>(level->_indexBuffer._deviceData)->Serialize(&ser);           // +0x40
+    static_cast<Video::VertexBufferData*>(level->_vertexBuffer._deviceData)->Serialize(&ser);         // +0x20
+    static_cast<Video::IndexBufferData*>(level->_skinIndexBuffer._deviceData)->Serialize(&ser);       // +0x80
+    static_cast<Video::VertexBufferData*>(level->_skinVertexBuffer._deviceData)->Serialize(&ser);     // +0x60
 
-    EmitInt(rw, &level->_maxInstances);                         // +0xa8
+    rw->SerializeInt(level->_maxInstances, nullptr);           // +0xa8
 }
 
 }  // namespace
 
-extern "C" void RtGraphics_GraphicsMeshTriangleList_Serialize(void* selfv, Serializer* outer) {
-    GraphicsMesh::DetailLevel* const self =
-        reinterpret_cast<GraphicsMesh::DetailLevel*>(selfv);     // B.3.5 bridge
-    Stream* const stream = outer->stream;
-    Encoding* const enc = stream->encoding;
+// B.4: typed on the detail level and the outer `IO::Serializer`; the
+// encoding's slot 0 is `IO::Encoding::IsBinary`, called by name (twice, as
+// retail does). Internal linkage: this file is its only caller.
+static void RtGraphics_GraphicsMeshTriangleList_Serialize(GraphicsMesh::DetailLevel* self,
+                                                   IO::Serializer& outer) {
+    IO::Stream& stream = *outer._stream;
 
-    using EncQueryFn = bool (*)(Encoding*);
-    if (!reinterpret_cast<EncQueryFn>(enc->vtable[0])(enc)) return;   // 0x1800a46a0
+    if (!stream._encoding->IsBinary()) return;                       // 0x1800a46a0
     ++*SerializeCounter();                                            // 0x1800a46aa
-    if (!reinterpret_cast<EncQueryFn>(enc->vtable[0])(enc)) return;   // 0x1800a46ba
+    if (!stream._encoding->IsBinary()) return;                       // 0x1800a46ba
 
     // ---- pass 1: device mode 0 --------------------------------------------
     {
-        Serializer ser;
-        ReaderWriter* rw = MakeCodec(stream, &ser, 0);
-        if (*reinterpret_cast<const int32_t*>(VideoDevice() + 0xf8) == 0)
-            TriangleListPass(self, &ser, rw);
+        IO::Serializer ser(stream, 0);
+        if (::Video::Device::_singleton->activeInterface == 0)
+            TriangleListPass(self, ser);
         else
-            CodecSkip(rw);                                   // CALL [RAX+0x10]
-        DestroyCodec(rw);
+            ser._readerWriter->Skip();                       // CALL [RAX+0x10]
     }
 
     // ---- pass 2: device mode 1 or 2 ---------------------------------------
     {
-        Serializer ser;
-        ReaderWriter* rw = MakeCodec(stream, &ser, 0);
-        const int32_t mode = *reinterpret_cast<const int32_t*>(VideoDevice() + 0xf8);
+        IO::Serializer ser(stream, 0);
+        const int32_t mode = ::Video::Device::_singleton->activeInterface;
         if (mode == 1 || mode == 2)
-            TriangleListPass(self, &ser, rw);
+            TriangleListPass(self, ser);
         else
-            CodecSkip(rw);
-        DestroyCodec(rw);
+            ser._readerWriter->Skip();
     }
 }
 
@@ -533,70 +489,76 @@ extern "C" void RtGraphics_GraphicsMeshTriangleList_Serialize(void* selfv, Seria
 namespace Graphics {
 
 bool GraphicsMesh::Serialize(void* streamv) {
-    Stream* const stream = static_cast<Stream*>(streamv);
+    // LEFT: the slot's parameter is `void*` (Object::External's declaration).
+    IO::Stream& stream = *static_cast<IO::Stream*>(streamv);
 
-    Serializer ser;
-    ReaderWriter* const rw = MakeCodec(stream, &ser, 1);
-    const bool reading = (stream->direction == rt::io::kDirectionReading);
+    IO::Serializer ser(stream, 1);                 // VERSION 1 — see the note above
+    IO::ReaderWriter* const rw = ser._readerWriter;
+    const bool reading = (stream._direction == IO::kReading);
 
     *SerializeCounter()     = 0;
     *SerializeCurrentMesh() = this;
 
-    StringSerialize(&_name, &ser);
-    EmitFloatArray(rw, 3, &_vector28.x);
-    EmitFloatArray(rw, 3, &_vector34.x);
-    EmitInt  (rw, &_field40);
-    EmitFloat(rw, &_scale);
-    EmitFloat(rw, &_maxDepthDistance);
+    StringSerialize(&_name, ser);
+    rw->SerializeFloatArray(3, &_vector28.x, nullptr);
+    rw->SerializeFloatArray(3, &_vector34.x, nullptr);
+    rw->SerializeInt  (_field40, nullptr);
+    rw->SerializeFloat(_scale, nullptr);
+    rw->SerializeFloat(_maxDepthDistance, nullptr);
 
     // ---- the detail levels ---------------------------------------------------
     {
         int32_t n = _detailLevels._size;
-        EmitInt(rw, &n);
+        rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005d840(&_detailLevels, n);
 
-        DetailLevel* e = reinterpret_cast<DetailLevel*>(_detailLevels._data);
+        DetailLevel* e = reinterpret_cast<DetailLevel*>(_detailLevels._data);  // LEFT: `_detailLevels` stays a raw header (GraphicsMesh.h)
         for (int32_t i = 0; i < n; ++i, ++e) {     // ++e strides retail's 0xb0
-            EmitFloat(rw, &e->_distance);
-            StringSerialize(&e->_name, &ser);
+            rw->SerializeFloat(e->_distance, nullptr);
+            StringSerialize(&e->_name, ser);
+            // LEFT: object's POD `RtObject::External**` (External.h).
             RtObject_ExternalPtrSerialize_ImageBuffer(                    // 0x18005d0f0
-                reinterpret_cast<RtObject::External**>(&e->_image), &ser);
-            if (CodecVersion(rw) == 0)
-                RtGraphics_GraphicsMeshTriangleList_Serialize(e, &ser);
+                reinterpret_cast<RtObject::External**>(&e->_image), PodSerializer(ser));
+            if (rw->GetVersion() == 0)
+                RtGraphics_GraphicsMeshTriangleList_Serialize(e, ser);
         }
     }
 
     // ---- the per-skin material lists ----------------------------------------
     {
         int32_t n = _skinMaterials._size;
-        EmitInt(rw, &n);
+        rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005cda0(&_skinMaterials, n);
 
-        ArrayHdrView* e = reinterpret_cast<ArrayHdrView*>(_skinMaterials._data);
+        // LEFT: `_skinMaterials` stays a raw header (GraphicsMesh.h).
+        Collection::Array<Object::ExternalPtr<MaterialInstance> >* e =
+            reinterpret_cast<Collection::Array<Object::ExternalPtr<MaterialInstance> >*>(
+                _skinMaterials._data);
         for (int64_t i = 0; i < static_cast<int64_t>(n); ++i, ++e) {
-            int32_t m = e->size;
-            EmitInt(rw, &m);
+            int32_t m = e->_size;
+            rw->SerializeInt(m, nullptr);
             if (reading) rtcoll::RtColl_ArraySetSize_18005cc60(e, m);
+            // LEFT: object's POD `RtObject::External**` (External.h).
             RtObject_ExternalPtrArraySerialize_MaterialInstance(          // 0x18005d4a0
-                &ser, m, reinterpret_cast<RtObject::External**>(e->data));
+                PodSerializer(ser), m, reinterpret_cast<RtObject::External**>(e->_data));
         }
     }
 
     // ---- the nodes ----------------------------------------------------------
     {
         int32_t n = _nodes._size;
-        EmitInt(rw, &n);
+        rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005aa30(&_nodes, n);
-        RtGraphics_SerializeMeshNodes(&ser, n, _nodes._data);            // 0x18005c120
+        // LEFT: `_nodes` stays a raw header (GraphicsMesh.h's `Node` note).
+        RtGraphics_SerializeMeshNodes(ser, n, reinterpret_cast<Node*>(_nodes._data));  // 0x18005c120
     }
 
-    EmitFloatArray(rw, 3, &_aabb.min.x);
-    EmitFloatArray(rw, 3, &_aabb.max.x);
+    rw->SerializeFloatArray(3, &_aabb.min.x, nullptr);
+    rw->SerializeFloatArray(3, &_aabb.max.x, nullptr);
 
-    if (CodecVersion(rw) >= 1) PlatformSerializeDoor(this, &ser);
+    if (rw->GetVersion() >= 1) PlatformSerialize(ser);
 
-    DestroyCodec(rw);
-    return true;                                              // MOV AL,1
+    return true;                                              // MOV AL,1 (~Serializer: `if (rw) delete rw`)
 }
 
 }  // namespace Graphics

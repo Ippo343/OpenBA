@@ -112,67 +112,20 @@
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/PersistenceWorker.h"
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2
-#include "../system/pod_bridge.h"
 #include "../../types/system/Crc.h"
-
-using RtIo::BinaryFileStream;
-using RtIo::Persistence;
-using RtSystem::Filename;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
-
-// ---- cross-TU doors onto already-ported bodies, BY NAME NOT ADDRESS --------
-// Declared locally rather than by pulling in each owner's header, the same
-// technique persistence_worker_win.cpp uses for the identical set. This one's
-// signature is the retail POD shape and is not this file's to change.
-extern "C" bool RtIo_FileSystem_ReadFile(RtIO::FileSystem* self, RtIO::FileInfo* fi,
-                                         int32_t count, void* dst);
-namespace RtIO {
-    void RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
-}
 
 namespace {
 
-// One row of the block directory at Persistence+0x60 — stride 0xc, and the
-// element `kSpec_Blk12` (array.cpp:1191) sizes. The SAVE job reads +0x8 as the
-// payload length; this body reads +0x4 as the payload's file offset, which is
-// what makes the seek above possible.
-struct BlockDesc {
-    uint32_t id;       // +0x00
-    uint32_t offset;   // +0x04 — byte offset of the payload within the file
-    uint32_t size;     // +0x08 — payload length
-};
-static_assert(sizeof(BlockDesc) == 0xC, "0x18002a810: LEA RCX,[RAX+RAX*2] / SHL RCX,2");
-static_assert(offsetof(BlockDesc, offset) == 0x4, "0x1800b6833 MOV EDX,[R12+RAX+4]");
-static_assert(offsetof(BlockDesc, size)   == 0x8, "0x1800b6857 MOV R14D,[R12+RAX+8]");
-
-// `Collection::Array<BlockDesc>`, the three fields every Array in this engine
-// has. Persistence.h models the same storage as two loose fields
-// (blockDescData / blockDescCount); this view is what 0x18002a810 is handed.
-struct BlockDescArray {
-    BlockDesc* data;      // +0x00
-    int32_t    size;      // +0x08
-    int32_t    capacity;  // +0x0c
-};
-static_assert(offsetof(BlockDescArray, size) == 0x08, "Array::_size @ +0x08");
-
-// ENDGAME B.3.2 step 2 — 0x18002a810 (kSpec_Blk12, array.cpp) is
-// TRAIT-EQUIVALENT for `BlockDesc`: stride 0xc == sizeof(BlockDesc), align 4
-// == alignof(BlockDesc), assign is a pure 3-dword byte copy, init is null
-// (retail's tail is left uninitialised, matching a trivially
-// default-constructible T), destroy is null (BlockDesc is trivially
-// destructible). So the trait-derived `Collection::Array<BlockDesc>` IS
-// 0x18002a810 with no hand-derived spec needed; `BlockDescArray` above (kept
-// for its offset asserts) is the same three fields Persistence.h already
-// models loosely as `blockDescData`/`blockDescCount`, so this is a
-// reinterpret_cast bridge at the use site rather than a re-typed member of
-// `Persistence` (shared with persistence_startup.cpp / closure_batch2b_win.cpp
-// / engine/singleton_ctors.cpp, outside this batch).
-
-RtIO::FileSystem* Fs() {
-    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-}
+// B.4 R-IO: the block directory is `IO::PersistenceWorker::_blockDescs`, a
+// `Collection::Array<RtIo::BlockDesc>` (Persistence.h): stride 0xc, +0x04 the
+// payload's file offset (0x1800b6833 MOV EDX,[R12+RAX+4]), +0x08 its length
+// (0x1800b6857 MOV R14D,[R12+RAX+8]). 0x18002a810 (kSpec_Blk12, array.cpp) is
+// TRAIT-EQUIVALENT for it: stride 0xc == sizeof(BlockDesc), align 4, assign a
+// pure 3-dword copy, init and destroy null -- so the trait-derived
+// `Collection::Array<RtIo::BlockDesc>::SetSize` IS 0x18002a810.
 
 // ---- CRC-32, reflected table (polynomial 0xEDB88320) ------------------------
 // System::CRC::_crcTable, retail 0x1801f9080, which 0x1800b689f loads by RIP.
@@ -198,179 +151,163 @@ const uint32_t* CrcTable() {
 // ============================================================================
 // The worker's command-3 body.                              retail 0x1800b65b0
 //
-// `worker` is `Persistence + 0x10`; every offset in the shipped listing is
-// `Persistence offset - 0x10` and this body uses the NAMED fields so a layout
-// change breaks a static_assert rather than shifting a raw offset silently.
+// `this` is the worker, `Persistence + 0x10`; every offset in the shipped
+// listing is worker-relative, and PersistenceWorker.h pins each field.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
-    Persistence* const p =
-        reinterpret_cast<Persistence*>(reinterpret_cast<char*>(worker) - 0x10);
-
-    RtIO::FileSystem* const fs = Fs();
+void IO::PersistenceWorker::GetSaveInfoJob() {
+    ::IO::FileSystem* const fs = ::IO::FileSystem::_singleton;   // the class static
 
     // ---- 0. scoped override of the Exists gate ----------------------------
-    const uint8_t savedGate = fs->platformExistsGate;        // 0x1800b65e5
-    fs->platformExistsGate = 1;                              // 0x1800b65f5
+    const uint8_t savedGate = fs->_platformExistsGate;       // 0x1800b65e5
+    fs->_platformExistsGate = 1;                             // 0x1800b65f5
 
-    // ENDGAME B.3.9 IO (W2): the REAL class on raw storage; the body keeps
-    // reading it through the RtIo POD view.
-    alignas(8) unsigned char bfsStorage[sizeof(IO::BinaryFileStream)];
-    IO::BinaryFileStream* const bfsObj =
-        ::new (static_cast<void*>(bfsStorage)) IO::BinaryFileStream();   // inlined 0x1800b6600
-    BinaryFileStream& bfs = *reinterpret_cast<BinaryFileStream*>(bfsObj);
-
-    // ---- 1. open pendingFilename ------------------------------------------
-    // A raw refcount SHARE of the worker's String (0x1800b666f: `MOV
-    // RAX,[RCX+0x30] / TEST / INC dword [RAX-4]`) followed by AdjustDelimiters
-    // (0x1800b6689) IS `Filename(const String&)` (retail 0x18000c780): adopt
-    // the buffer (AddRef, no copy), then normalise -- see B31_RULES
-    // DELIMITERS. `pendingFilename` is a `RtSystem::String` member of the
-    // not-yet-converted `Persistence`, reached through the transitional
-    // bridge. Scoped to a block so its release lands at the same point
-    // retail's manual one did (0x1800b66a6), not at function exit.
-    bool opened;
     {
-        System::Filename f(Sys(p->pendingFilename));
+        // ENDGAME B.3.9 IO (W2) / B.4 R-IO: the REAL class on the stack (inlined
+        // 0x1800b6600); its destructor at the close of this block is retail's
+        // teardown.
+        IO::BinaryFileStream bfs;
 
-        // RtIo_FileStream_Open is a registered entry point owned by another
-        // file and keeps its retail (self, const Filename* POD) signature;
-        // the two types are the same eight bytes (Filename.h), so the cast is
-        // the boundary the pod_bridge itself would spell in the other
-        // direction if it needed to.
-        opened = bfsObj->IO::FileStream::Open(f);   // ENDGAME B.3.9 IO: the member
+        // ---- 1. open pendingFilename ------------------------------------------
+        // A raw refcount SHARE of the worker's String (0x1800b666f: `MOV
+        // RAX,[RCX+0x30] / TEST / INC dword [RAX-4]`) followed by AdjustDelimiters
+        // (0x1800b6689) IS `Filename(const String&)` (retail 0x18000c780): adopt
+        // the buffer (AddRef, no copy), then normalise -- see B31_RULES
+        // DELIMITERS. Scoped to a block so its release lands at the same point
+        // retail's manual one did (0x1800b66a6), not at function exit.
+        bool opened;
+        {
+            System::Filename f(_pendingFilename);
 
-        // ~f is retail's release at 0x1800b66a6.
-    }
+            opened = bfs.IO::FileStream::Open(f);   // ENDGAME B.3.9 IO: the member
 
-    if (!opened) {
-        p->status = 2;                                       // 0x1800b66e0
-    } else {
-        // `headerBytes` is retail's ESI: 4 after the first read, 12 after the
-        // optional second one, and it is the term the size check starts from.
-        uint32_t headerBytes = 4;                            // 0x1800b66ed
-        bool ioFail  = false;
-        bool badFile = false;
+            // ~f is retail's release at 0x1800b66a6.
+        }
 
-        // ---- 2. the 4-byte file header ------------------------------------
-        if (!RtIo_FileSystem_ReadFile(fs, &bfs.base.file, 4, &p->fileHeader)) {
-            p->status = 2;
-            ioFail = true;
-        } else if (static_cast<uint32_t>(static_cast<uint16_t>(p->fileHeader >> 16)) !=
-                   static_cast<uint32_t>(p->blockCount)) {    // 0x1800b6720
-            badFile = true;
+        if (!opened) {
+            _status = 2;                                         // 0x1800b66e0
         } else {
-            // ---- 3. version 2 carries {magic, crc} ------------------------
-            if (static_cast<uint16_t>(p->fileHeader) == 2) {  // 0x1800b672a
-                if (!RtIo_FileSystem_ReadFile(fs, &bfs.base.file, 8, &p->magic)) {
-                    p->status = 2;
-                    ioFail = true;
-                } else {
-                    headerBytes = 0xC;                        // 0x1800b675e
-                    if (p->magic != 0x80808080u) badFile = true;
+            // `headerBytes` is retail's ESI: 4 after the first read, 12 after the
+            // optional second one, and it is the term the size check starts from.
+            uint32_t headerBytes = 4;                            // 0x1800b66ed
+            bool ioFail  = false;
+            bool badFile = false;
+
+            // ---- 2. the 4-byte file header ------------------------------------
+            if (!fs->ReadFile(bfs._file, 4, &_fileHeader)) {
+                _status = 2;
+                ioFail = true;
+            } else if (static_cast<uint32_t>(static_cast<uint16_t>(_fileHeader >> 16)) !=
+                       static_cast<uint32_t>(_blockCount)) {      // 0x1800b6720
+                badFile = true;
+            } else {
+                // ---- 3. version 2 carries {magic, crc} ------------------------
+                // The 8 bytes land on `_magic` and the adjacent `_crc` (+0x48,
+                // +0x4c): retail reads them in one call from &magic.
+                if (static_cast<uint16_t>(_fileHeader) == 2) {    // 0x1800b672a
+                    if (!fs->ReadFile(bfs._file, 8, &_magic)) {
+                        _status = 2;
+                        ioFail = true;
+                    } else {
+                        headerBytes = 0xC;                        // 0x1800b675e
+                        if (_magic != 0x80808080u) badFile = true;
+                    }
                 }
-            }
 
-            // ---- 4. version must be 1 or 2 --------------------------------
-            // `MOVZX EAX,WORD [R15+0x44] / DEC AX / CMP AX,1 / JA` — the
-            // unsigned wrap is what rejects version 0.
-            if (!ioFail && !badFile) {
-                const uint16_t ver = static_cast<uint16_t>(p->fileHeader);
-                if (static_cast<uint16_t>(ver - 1) > 1) badFile = true;  // 0x1800b6771
-            }
+                // ---- 4. version must be 1 or 2 --------------------------------
+                // `MOVZX EAX,WORD [R15+0x44] / DEC AX / CMP AX,1 / JA` — the
+                // unsigned wrap is what rejects version 0.
+                if (!ioFail && !badFile) {
+                    const uint16_t ver = static_cast<uint16_t>(_fileHeader);
+                    if (static_cast<uint16_t>(ver - 1) > 1) badFile = true;  // 0x1800b6771
+                }
 
-            // ---- 5. the block directory -----------------------------------
-            if (!ioFail && !badFile) {
-                BlockDescArray* const descs =
-                    reinterpret_cast<BlockDescArray*>(&p->blockDescData);
-                {
+                // ---- 5. the block directory -----------------------------------
+                if (!ioFail && !badFile) {
+                    Collection::Array<RtIo::BlockDesc>* const descs = &_blockDescs;
                     // retail 0x18002a810 — trait-derived Array<BlockDesc>::SetSize
-                    // (see the kSpec_Blk12 note above the struct).
-                    reinterpret_cast<Collection::Array<BlockDesc>*>(&p->blockDescData)
-                        ->SetSize(static_cast<uint16_t>(p->fileHeader >> 16));  // 0x1800b678c
-                }
+                    // (see the note above CrcTable).
+                    descs->SetSize(static_cast<uint16_t>(_fileHeader >> 16));  // 0x1800b678c
 
-                const int32_t n = descs->size;                // 0x1800b6791
-                if (!RtIo_FileSystem_ReadFile(fs, &bfs.base.file,
-                                              n * 0xC, descs->data)) {
-                    p->status = 2;
-                    ioFail = true;
-                } else {
-                    // ---- 6. the file size must add up ----------------------
-                    // headerBytes + hdrBlockCount*0xc + sum(desc[i].size),
-                    // where the middle term uses the count out of the HEADER
-                    // and the sum uses the ARRAY's size. Retail reads the two
-                    // from different places (0x1800b67c3 vs 0x1800b67d1) and
-                    // SetSize has just made them equal.
-                    uint32_t total = headerBytes +
-                        static_cast<uint32_t>(
-                            static_cast<uint16_t>(p->fileHeader >> 16)) * 0xCu;
-                    for (int32_t i = 0; i < n; ++i)           // 0x1800b67e1
-                        total += descs->data[i].size;
+                    const int32_t n = descs->_size;               // 0x1800b6791
+                    if (!fs->ReadFile(bfs._file, n * 0xC, descs->_data)) {
+                        _status = 2;
+                        ioFail = true;
+                    } else {
+                        // ---- 6. the file size must add up ----------------------
+                        // headerBytes + hdrBlockCount*0xc + sum(desc[i].size),
+                        // where the middle term uses the count out of the HEADER
+                        // and the sum uses the ARRAY's size. Retail reads the two
+                        // from different places (0x1800b67c3 vs 0x1800b67d1) and
+                        // SetSize has just made them equal.
+                        uint32_t total = headerBytes +
+                            static_cast<uint32_t>(
+                                static_cast<uint16_t>(_fileHeader >> 16)) * 0xCu;
+                        for (int32_t i = 0; i < n; ++i)           // 0x1800b67e1
+                            total += descs->_data[i].size;
 
-                    if (total != static_cast<uint32_t>(bfs.base.file.size)) {
-                        badFile = true;                       // 0x1800b67f1
-                    } else if (static_cast<uint16_t>(p->fileHeader) == 2) {
-                        // ---- 7. recompute the checksum --------------------
-                        // ?Compute@CRC@System@@SAIPEBXHI@Z (ordinal 1752,
-                        // retail 0x1800c5490): System::CRC::Compute, by name.
-                        uint32_t crc = ::System::CRC::Compute(
-                                    descs->data, n * 0xC, 0xFFFFFFFFu);   // 0x1800b6811
+                        if (total != static_cast<uint32_t>(bfs._file.size)) {
+                            badFile = true;                       // 0x1800b67f1
+                        } else if (static_cast<uint16_t>(_fileHeader) == 2) {
+                            // ---- 7. recompute the checksum --------------------
+                            // ?Compute@CRC@System@@SAIPEBXHI@Z (ordinal 1752,
+                            // retail 0x1800c5490): System::CRC::Compute, by name.
+                            uint32_t crc = ::System::CRC::Compute(
+                                        descs->_data, n * 0xC, 0xFFFFFFFFu);  // 0x1800b6811
 
-                        // The 0x8000-byte stack buffer at [RBP-0x80]; the
-                        // frame is `_chkstk(0x8088)`, so this size is retail's.
-                        static const uint32_t kChunk = 0x8000;
-                        uint8_t buffer[0x8000];
-                        const uint32_t* const table = CrcTable();
+                            // The 0x8000-byte stack buffer at [RBP-0x80]; the
+                            // frame is `_chkstk(0x8088)`, so this size is retail's.
+                            static const uint32_t kChunk = 0x8000;
+                            uint8_t buffer[0x8000];
+                            const uint32_t* const table = CrcTable();
 
-                        for (int32_t i = 0; i < descs->size; ++i) {  // 0x1800b6830
-                            BlockDesc* const d = &descs->data[i];
+                            for (int32_t i = 0; i < descs->_size; ++i) { // 0x1800b6830
+                                const RtIo::BlockDesc* const d = &descs->_data[i];
 
-                            bfs.base.file.cursor =
-                                static_cast<int32_t>(d->offset);        // 0x1800b6838
-                            // Loose (-1/-2) only; a packed entry needs no seek.
-                            if (static_cast<uint32_t>(bfs.base.file.handle) > 0xFFFFFFFDu)
-                                ::SetFilePointer(
-                                    reinterpret_cast<HANDLE>(bfs.base.file.winHandle),
-                                    static_cast<LONG>(d->offset), nullptr, FILE_BEGIN);
+                                bfs._file.cursor =
+                                    static_cast<int32_t>(d->offset);        // 0x1800b6838
+                                // Loose (-1/-2) only; a packed entry needs no seek.
+                                if (static_cast<uint32_t>(bfs._file.handle) > 0xFFFFFFFDu)
+                                    ::SetFilePointer(
+                                        bfs._file.winHandle,
+                                        static_cast<LONG>(d->offset), nullptr, FILE_BEGIN);
 
-                            int32_t remaining = static_cast<int32_t>(d->size);
-                            while (remaining > 0) {                     // 0x1800b6870
-                                int32_t take = static_cast<int32_t>(kChunk);
-                                if (remaining < take) take = remaining; // CMOVL
-                                // The return value is IGNORED here; see banner.
-                                RtIo_FileSystem_ReadFile(fs, &bfs.base.file,
-                                                         take, buffer);
-                                for (int32_t k = 0; k < take; ++k)      // 0x1800b68b0
-                                    crc = table[(crc & 0xFFu) ^ buffer[k]] ^ (crc >> 8);
-                                crc = ~crc;                             // 0x1800b68ce
-                                remaining -= take;
+                                int32_t remaining = static_cast<int32_t>(d->size);
+                                while (remaining > 0) {                     // 0x1800b6870
+                                    int32_t take = static_cast<int32_t>(kChunk);
+                                    if (remaining < take) take = remaining; // CMOVL
+                                    // The return value is IGNORED here; see banner.
+                                    fs->ReadFile(bfs._file, take, buffer);
+                                    for (int32_t k = 0; k < take; ++k)      // 0x1800b68b0
+                                        crc = table[(crc & 0xFFu) ^ buffer[k]] ^ (crc >> 8);
+                                    crc = ~crc;                             // 0x1800b68ce
+                                    remaining -= take;
+                                }
                             }
-                        }
 
-                        if (crc != p->crc) badFile = true;              // 0x1800b68f3
+                            if (crc != _crc) badFile = true;                // 0x1800b68f3
+                        }
                     }
                 }
             }
-        }
 
-        if (!ioFail) {
-            if (badFile) {
-                p->status = 3;                                          // 0x1800b691b
-            } else {
-                // 0x1800b68f9 — retail's own close, BEFORE the teardown's.
-                if (bfs.base.file.handle != -1)
-                    RtIO::RtIo_FileSystem_CloseFile(fs, &bfs.base.file);
-                p->status = 1;                                          // 0x1800b6911
+            if (!ioFail) {
+                if (badFile) {
+                    _status = 3;                                            // 0x1800b691b
+                } else {
+                    // 0x1800b68f9 — retail's own close, BEFORE the teardown's.
+                    if (bfs._file.handle != -1)
+                        fs->CloseFile(bfs._file);
+                    _status = 1;                                            // 0x1800b6911
+                }
             }
         }
-    }
 
-    // ---- 9. teardown, taken by EVERY path above ----------------------------
-    // The failure-to-open arm jumps past the `LEA RSI,[0x1801549a0]` at
-    // 0x1800b6923 only because RSI still holds that value from 0x1800b65f9;
-    // the teardown itself is the same on both paths.
-    if (bfs.base.file.handle != -1)
-        RtIO::RtIo_FileSystem_CloseFile(fs, &bfs.base.file);            // 0x1800b6942
-    bfsObj->IO::BinaryFileStream::~BinaryFileStream();                      // 0x1800b694f..
-    fs->platformExistsGate = savedGate;                                 // 0x1800b69a3
+        // ---- 9. teardown, taken by EVERY path above ----------------------------
+        // The failure-to-open arm jumps past the `LEA RSI,[0x1801549a0]` at
+        // 0x1800b6923 only because RSI still holds that value from 0x1800b65f9;
+        // the teardown itself is the same on both paths.
+        if (bfs._file.handle != -1)
+            fs->CloseFile(bfs._file);                                       // 0x1800b6942
+    }   // ~bfs: ??1BinaryFileStream                                    // 0x1800b694f..
+    fs->_platformExistsGate = savedGate;                                // 0x1800b69a3
 }
