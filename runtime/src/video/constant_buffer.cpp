@@ -309,16 +309,6 @@ void Video::ConstantBuffer::BeginConstants(const void* typeName, const void* pre
     RtVideo_ConstEntryArrayDtor(Entries(this));         // tail JMP 0x18001cab0
 }
 
-extern "C" void RtVideo_ConstantBuffer_BeginConstants(void* self,
-                                                      const System::String* name,
-                                                      const System::String* prefix,
-                                                      int32_t i10, int32_t i14,
-                                                      bool b18, bool b19,
-                                                      int32_t i20) {
-    static_cast<Video::ConstantBuffer*>(self)
-        ->Video::ConstantBuffer::BeginConstants(name, prefix, i10, i14, b18, b19, i20);
-}
-
 // ============================================================================
 // ?AddConstant@ConstantBuffer@Video@@QEAAXAEBVString@System@@0H@Z
 //                                                   retail 0x1800eec40, ord 1540
@@ -354,14 +344,6 @@ void Video::ConstantBuffer::AddConstant(const void* name, const void* typeName,
     StringRelease(&elem.name);                // 0x1800eeccc (+0x28)
 
     _registerCount += size;                   // 0x1800eecf0
-}
-
-extern "C" void RtVideo_ConstantBuffer_AddConstant(void* self,
-                                                   const System::String* name,
-                                                   const System::String* typeName,
-                                                   int32_t size) {
-    static_cast<Video::ConstantBuffer*>(self)
-        ->Video::ConstantBuffer::AddConstant(name, typeName, size);
 }
 
 // ============================================================================
@@ -494,21 +476,6 @@ int32_t Video::ConstantBuffer::GetNextUploadIndex() const {
 void Video::ConstantBuffer::Bind(Context& context, void* data,
                                 int32_t first, int32_t count) {
     Companion(_platformData)->Bind(&context, data, first, count);
-}
-
-extern "C" bool RtVideo_ConstantBuffer_PlatformCreate(void* self) {
-    return static_cast<Video::ConstantBuffer*>(self)
-        ->Video::ConstantBuffer::PlatformCreate();
-}
-
-extern "C" void RtVideo_ConstantBuffer_EndConstants(void* self, int32_t unread) {
-    static_cast<Video::ConstantBuffer*>(self)
-        ->Video::ConstantBuffer::EndConstants(unread);
-}
-
-extern "C" int32_t RtVideo_ConstantBuffer_GetNextUploadIndex(const void* self) {
-    return static_cast<const Video::ConstantBuffer*>(self)
-        ->Video::ConstantBuffer::GetNextUploadIndex();
 }
 
 // ============================================================================
@@ -818,8 +785,4 @@ void Video::Context::AssignConstants() {
             AddDecl(buf, d.typeLit, d.nameLit, d.size);
         buf->Video::ConstantBuffer::EndConstants(0xcc0);   // retail's tail JMP
     }
-}
-
-extern "C" void RtVideo_Context_AssignConstants(void* self) {
-    static_cast<Video::Context*>(self)->Video::Context::AssignConstants();
 }

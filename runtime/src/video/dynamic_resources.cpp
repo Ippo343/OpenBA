@@ -286,14 +286,6 @@ void Video::Device::Unlock() {
     RtVideoDeviceUnlockThis(this);
 }
 
-extern "C" void Video_Device_Lock(void* self) {
-    reinterpret_cast<Video::Device*>(self)->Video::Device::Lock();   // B.3.5 bridge
-}
-
-extern "C" void Video_Device_Unlock(void* self) {
-    reinterpret_cast<Video::Device*>(self)->Video::Device::Unlock(); // B.3.5 bridge
-}
-
 // ============================================================================
 // Video::ImageBuffer::RecreateDynamic  —  retail 0x1800f2d90, ordinal 3523
 //
@@ -349,10 +341,6 @@ void Video::ImageBuffer::RecreateDynamic() {
     RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
 }
 
-extern "C" void Video_ImageBuffer_RecreateDynamic() {
-    Video::ImageBuffer::RecreateDynamic();
-}
-
 // ============================================================================
 // Video::ImageBuffer::ReleaseDynamic  —  retail 0x1800f2e80, ordinal 3537
 //
@@ -383,10 +371,6 @@ void Video::ImageBuffer::ReleaseDynamic() {
     }
 
     RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
-}
-
-extern "C" void Video_ImageBuffer_ReleaseDynamic() {
-    Video::ImageBuffer::ReleaseDynamic();
 }
 
 // ============================================================================
@@ -466,19 +450,6 @@ void Video::VertexBuffer::ReleaseDynamic() {
     BufferReleaseDynamic(FirstVertexBufferSlot());
 }
 
-extern "C" void Video_IndexBuffer_RecreateDynamic() {
-    Video::IndexBuffer::RecreateDynamic();
-}
-extern "C" void Video_IndexBuffer_ReleaseDynamic() {
-    Video::IndexBuffer::ReleaseDynamic();
-}
-extern "C" void Video_VertexBuffer_RecreateDynamic() {
-    Video::VertexBuffer::RecreateDynamic();
-}
-extern "C" void Video_VertexBuffer_ReleaseDynamic() {
-    Video::VertexBuffer::ReleaseDynamic();
-}
-
 // ============================================================================
 // Video::RenderBuffer::Recreate  —  retail 0x1800f4170, ordinal 3521
 //
@@ -521,10 +492,6 @@ void Video::RenderBuffer::Recreate() {
     height = source->Video::ImageBuffer::Height();
 }
 
-extern "C" void Video_RenderBuffer_Recreate(RenderBuffer* self) {
-    self->Video::RenderBuffer::Recreate();
-}
-
 // ============================================================================
 // Video::RenderBuffer::RecreateDynamic  —  retail 0x1800f4030, ordinal 3525
 // Video::RenderBuffer::ReleaseDynamic   —  retail 0x1800f40c0, ordinal 3539
@@ -564,14 +531,6 @@ void Video::RenderBuffer::ReleaseDynamic() {
     RtVideoDeviceUnlock(reinterpret_cast<void**>(DeviceSlot()));
 }
 
-extern "C" void Video_RenderBuffer_RecreateDynamic() {
-    Video::RenderBuffer::RecreateDynamic();
-}
-
-extern "C" void Video_RenderBuffer_ReleaseDynamic() {
-    Video::RenderBuffer::ReleaseDynamic();
-}
-
 // ============================================================================
 // Video::Device::RecreateDynamic  —  retail 0x1800f80b0, ordinal 3522
 // Video::Device::ReleaseDynamic   —  retail 0x1800f80e0, ordinal 3536
@@ -603,20 +562,4 @@ void Video::Device::ReleaseDynamic() {
     Video::ImageBuffer::ReleaseDynamic();
     Video::VertexBuffer::ReleaseDynamic();
     Video::IndexBuffer::ReleaseDynamic();
-}
-
-// Both are `QEAAXXZ` — non-static members with a `this` in RCX that NEITHER body
-// reads (0x1800f80b0 goes straight to `SUB RSP,0x28` and never touches RCX). The
-// doors previously took no parameter at all; they now take the `void* self` that
-// dx11's import table has always typed them with (`void (*)(void*)`, see this
-// file's banner), so the delegation has a receiver to qualify against. Both
-// spellings interoperate on the Microsoft x64 ABI, nothing in this tree calls
-// either door as a C++ symbol, and `self` is never dereferenced — exactly as
-// retail never dereferences RCX.
-extern "C" void Video_Device_RecreateDynamic(void* self) {
-    reinterpret_cast<Video::Device*>(self)->Video::Device::RecreateDynamic();  // B.3.5 bridge
-}
-
-extern "C" void Video_Device_ReleaseDynamic(void* self) {
-    reinterpret_cast<Video::Device*>(self)->Video::Device::ReleaseDynamic();   // B.3.5 bridge
 }

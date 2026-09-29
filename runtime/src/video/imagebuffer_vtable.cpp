@@ -383,38 +383,3 @@ bool ImageBuffer::Serialize(void* stream) {
 }
 
 }  // namespace Video
-
-// ############################################################################
-// The registered doors — every one a QUALIFIED non-virtual delegation.
-// Names and addresses are UNCHANGED; nothing is retired (B35_RULES 11).
-// ############################################################################
-
-extern "C" uint32_t Video_ImageBuffer_Type(const Video::ImageBuffer* self) {
-    return self->Video::ImageBuffer::Type();
-}
-
-extern "C" const char* Video_ImageBuffer_TypeName(const Video::ImageBuffer* self) {
-    return self->Video::ImageBuffer::TypeName();
-}
-
-extern "C" int Video_ImageBuffer_GetFileVersion(const Video::ImageBuffer* self) {
-    return self->Video::ImageBuffer::GetFileVersion();
-}
-
-extern "C" void Video_ImageBuffer_Destruct(Video::ImageBuffer* self) {
-    self->Video::ImageBuffer::Destruct();
-}
-
-// The retail null-`this` test lives HERE. See the member's banner.
-extern "C" void* Video_ImageBuffer_Construct(Video::ImageBuffer* self) {
-    if (self == nullptr) return nullptr;
-    return self->Video::ImageBuffer::Construct();
-}
-
-extern "C" void* Video_ImageBuffer_Reconstruct(Video::ImageBuffer* self) {
-    return self->Video::ImageBuffer::Reconstruct();
-}
-
-extern "C" bool Video_ImageBuffer_Serialize(Video::ImageBuffer* self, void* stream) {
-    return self->Video::ImageBuffer::Serialize(stream);
-}

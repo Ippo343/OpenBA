@@ -91,7 +91,6 @@ using RtVideo::DisplayMode;
 using RtVideo::GraphicsInterface;
 using RtVideo::InterfaceSlot;
 
-extern "C" void RtVideo_Device_InitializeInterfaces(Device* self);
 extern "C" void RtVideo_SortDisplayModes(DisplayMode* first, int32_t count);
 extern "C" void RtVideo_SortRefreshRates(RtVideo::RefreshRate* first, int32_t count);
 
@@ -182,8 +181,4 @@ bool Video::Device::EnumerateVideoModes() {
     }
 
     return true;                                        // 0x1800f8790 MOV AL,1
-}
-
-extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
-    return self->Video::Device::EnumerateVideoModes();
 }

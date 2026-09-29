@@ -166,11 +166,6 @@ System::String Video::Device::GetDLLForInterface(int index) const {
     return ret;                                   // 0x1800f7cd8 MOV RAX,RDI
 }
 
-extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* self,
-                                                     String* ret, int32_t index) {
-    return new (ret) String(self->Video::Device::GetDLLForInterface(index));
-}
-
 // ============================================================================
 // ?InitializeInterfaces@Device@Video@@QEAAXXZ                   0x1800f79f0
 //                                                               ord 3073
@@ -284,8 +279,3 @@ void Video::Device::InitializeInterfaces() {
         ::VideoInterfaceFillDx9Placeholder(this);
     }
 }
-
-extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
-    self->Video::Device::InitializeInterfaces();
-}
-

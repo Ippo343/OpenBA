@@ -385,14 +385,3 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
 }
 
 }  // namespace Video
-
-// ============================================================================
-// The registered door — a QUALIFIED call on the static member. Name and address
-// are UNCHANGED.
-// ============================================================================
-extern "C" bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
-                                                  int width, int height,
-                                                  uint32_t* pixels) {
-    return Video::ImageBuffer::SaveImageToFile(*path, width, height, pixels);
-}
-

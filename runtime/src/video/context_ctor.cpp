@@ -283,13 +283,6 @@ void* Video::RenderBuffer::operator new(size_t size) {
     return System::MemoryAllocator::MemAlloc(size, 8);                           // MOV R8D,0x8
 }
 
-extern "C" void* RtVideo_ImageBuffer_OperatorNew(uint64_t bytes) {
-    return Video::ImageBuffer::operator new(static_cast<size_t>(bytes));
-}
-extern "C" void* RtVideo_RenderBuffer_OperatorNew(uint64_t bytes) {
-    return Video::RenderBuffer::operator new(static_cast<size_t>(bytes));
-}
-
 // ============================================================================
 // The four sub-object zero-fills. All four return their argument in RAX.
 // ============================================================================
@@ -470,11 +463,6 @@ void Engine::MainLoop::CreateVideoContext() {
     _context = RtVideo_Context_Ctor(static_cast<Video::Context*>(block),
                                     device, 0x800000, 0x400000,
                                     0x100000, nullptr);
-}
-
-extern "C" void RtEngine_MainLoop_CreateVideoContext(void* self) {
-    reinterpret_cast<Engine::MainLoop*>(self)                         // B.3.7 bridge
-        ->Engine::MainLoop::CreateVideoContext();
 }
 
 // ============================================================================

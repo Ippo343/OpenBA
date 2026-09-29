@@ -295,10 +295,6 @@ void Video::RenderBuffer::operator delete(void* p) {
     System::MemoryAllocator::MemFree(p);
 }
 
-extern "C" void Video_RenderBuffer_OperatorDelete(void* p) {
-    Video::RenderBuffer::operator delete(p);
-}
-
 // `??3Context@Video@@SAXPEAX@Z` (0x180018500) stays a FREE FUNCTION and not
 // `Video::Context::operator delete`: `Context.h` declares none of the eight
 // lifecycle spellings, on purpose, and that header — not this file — is where
@@ -414,11 +410,6 @@ void Video::Context::ClearResources() {
         vertexBit = (vertexBit << 1) | (vertexBit >> 31);   // ROL EDX,1
     }
 
-}
-
-// The door, unchanged name and unchanged registrations.
-extern "C" void RtVideo_Context_ClearResources(Context* self) {
-    self->Video::Context::ClearResources();
 }
 
 // ============================================================================

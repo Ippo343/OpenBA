@@ -170,45 +170,6 @@ void SerializeLegacyV0(Serializer* ser) {
 
 }  // namespace
 
-// ---------------------------------------------------------------------------
-// The registered doors. Each is one line over the member of the same name.
-// ---------------------------------------------------------------------------
-extern "C" uint32_t RtVideo_PixelProgram_TypeId() {
-    return Video::PixelProgram::TypeId();
-}
-// .rdata literals at 0x180157a50 / 0x180157a28 / 0x180157a38. RULE B5-15: each
-// is the EXACT retail literal, copied, never derived from the C++ base name.
-// ENDGAME B.3.9 TI-REST: `_TypeName` / `_ParentTypeName` are DECLARE_TYPE's
-// private statics (retail's `CA`), which an `extern "C"` door cannot reach, so
-// the two doors repeat the literals -- renderstate.cpp's precedent -- rather
-// than widen the access. The record (video_type_records.cpp) is built from the
-// class's own accessors.
-extern "C" const char* RtVideo_PixelProgram_StaticTypeName() { return "PixelProgram"; }
-extern "C" const char* RtVideo_PixelProgram_ParentTypeName() { return "ShaderProgram"; }
-extern "C" const char* RtVideo_PixelProgram_FileExtension()  { return Video::PixelProgram::_FileExtension(); }
-extern "C" const void* RtVideo_PixelProgram_GetData(const void* selfv) {
-    return reinterpret_cast<const PixelProgram*>(selfv)
-               ->Video::PixelProgram::GetData();                      // B.3.5 bridge
-}
-extern "C" void RtVideo_PixelProgram_Bind(const void* selfv, void* context, int index) {
-    reinterpret_cast<const PixelProgram*>(selfv)
-        ->Video::PixelProgram::Bind(context, index);                  // B.3.5 bridge
-}
-
-// See vertexprogram.cpp: `AEAA` is private, not unexported.
-extern "C" void RtVideo_PixelProgram_PlatformConstructExport(void* selfv) {
-    reinterpret_cast<PixelProgram*>(selfv)
-        ->Video::PixelProgram::PlatformConstruct();                   // B.3.5 bridge
-}
-extern "C" bool RtVideo_PixelProgram_PlatformCreateExport(void* selfv) {
-    return reinterpret_cast<PixelProgram*>(selfv)
-               ->Video::PixelProgram::PlatformCreate();               // B.3.5 bridge
-}
-extern "C" void RtVideo_PixelProgram_PlatformDestructExport(void* selfv) {
-    reinterpret_cast<PixelProgram*>(selfv)
-        ->Video::PixelProgram::PlatformDestruct();                    // B.3.5 bridge
-}
-
 // ============================================================================
 // THE MEMBER BODIES — `Video::PixelProgram::*`. At `namespace Video` scope and
 // AFTER the anonymous namespace (B34_BRIEFS A.2).

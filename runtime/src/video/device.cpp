@@ -141,10 +141,6 @@ int Video::Device::GetInterfaceCount() const {
     return interfaceCount;
 }
 
-int Video_Device_GetInterfaceCount(const Device* self) {
-    return self->Video::Device::GetInterfaceCount();
-}
-
 // ============================================================================
 // Video::Device::GetInterface  —  retail 0x18000d3c0, ordinal 2728
 //
@@ -163,19 +159,11 @@ const Video::Device::GraphicsInterface& Video::Device::GetInterface(int index) c
     return interfaceData[index];
 }
 
-const GraphicsInterface* Video_Device_GetInterface(const Device* self, int index) {
-    return &self->Video::Device::GetInterface(index);
-}
-
 // ============================================================================
 // Video::Device::GetMultisampleModeCount  —  retail 0x18000d450, ordinal 2803
 // ============================================================================
 int Video::Device::GetMultisampleModeCount() const {
     return multisampleCount;
-}
-
-int Video_Device_GetMultisampleModeCount(const Device* self) {
-    return self->Video::Device::GetMultisampleModeCount();
 }
 
 // ============================================================================
@@ -189,10 +177,6 @@ int Video_Device_GetMultisampleModeCount(const Device* self) {
 // ============================================================================
 bool Video::Device::IsMultisampleModeSupported(int mode) const {
     return multisampleData[mode] != 0;
-}
-
-bool Video_Device_IsMultisampleModeSupported(const Device* self, int mode) {
-    return self->Video::Device::IsMultisampleModeSupported(mode);
 }
 
 // ============================================================================
@@ -312,17 +296,6 @@ void Video::Device::ValidateConfiguration(int& renderer, int& adapterIdx,
         filter = adapter->maxFilterLevel;
 }
 
-void Video_Device_ValidateConfiguration(Device* self,
-                                        int* renderer, int* adapterIdx,
-                                        int* width, int* height,
-                                        int* refreshNum, int* refreshDen,
-                                        int* antialias, int* filter) {
-    self->Video::Device::ValidateConfiguration(*renderer, *adapterIdx,
-                                               *width, *height,
-                                               *refreshNum, *refreshDen,
-                                               *antialias, *filter);
-}
-
 // ============================================================================
 // Video::Device::ApplyChangedSettings  —  retail 0x1800f8110, ordinal 1604
 //
@@ -357,10 +330,6 @@ bool Video::Device::ApplyChangedSettings() {
     settingsChanged = 1;
 
     return true;
-}
-
-bool Video_Device_ApplyChangedSettings(Device* self) {
-    return self->Video::Device::ApplyChangedSettings();
 }
 
 // ============================================================================
@@ -427,13 +396,6 @@ bool Video::RenderBuffer::Create(const ImageBuffer* color, const ImageBuffer* de
 
     // B.3.5 bridge — platformData stays void* (pinned at +0x28, read by dx11).
     return reinterpret_cast<Video::RenderBufferData*>(platformData)->Slot1();
-}
-
-bool Video_RenderBuffer_Create(RenderBuffer* self,
-                               const ::ImageBuffer* color, const ::ImageBuffer* depth) {
-    return self->Video::RenderBuffer::Create(
-        reinterpret_cast<const Video::ImageBuffer*>(color),
-        reinterpret_cast<const Video::ImageBuffer*>(depth));
 }
 
 // (The `??1RenderStateData@Video@@UEAA@XZ` door, retail 0x1800f8d70, is GONE:
@@ -515,10 +477,6 @@ void Video::Configuration::Save() {
     }
 }
 
-void Video_Configuration_Save(Configuration* self) {
-    self->Video::Configuration::Save();
-}
-
 // ============================================================================
 // bool Video::Configuration::Startup()
 // retail 0x1800f6680, ord 4087 — the exact INVERSE of Save above, and the
@@ -584,8 +542,4 @@ bool Video::Configuration::Startup() {
     }
 
     return true;   // 0x1800f6ce4: MOV AL,0x1 — unconditional
-}
-
-bool Video_Configuration_Startup(Configuration* self) {
-    return self->Video::Configuration::Startup();
 }

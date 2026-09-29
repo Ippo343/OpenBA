@@ -185,40 +185,6 @@ RenderStateData::~RenderStateData()       {}
 // calling Lock twice or Unlock on an already-unlocked buffer is exactly the
 // mutate-twice trap WAVE9.md describes for Audio::Scene::Pause.
 // ============================================================================
-// ENDGAME B.3.5 block VC — A FRAGMENT THE BLOCKS MISSED BETWEEN THEM. These four
-// are `Video::{Index,Vertex}Buffer`'s members, declared in
-// `runtime/types/video/Buffers.h` (block D2's header, where they still read
-// "NOT PORTED"); the BODIES have been in this file, block A's, since Wave 6 lane
-// C. Neither block owned the edge, so all four stayed doors with the logic in
-// them while their class was real. They are members now, at `namespace Video`
-// scope below, and the four doors are one-line QUALIFIED non-virtual delegations.
-//
-// The hand-inlined `+0x18` / `+0x20` dispatches went with the move: they are
-// slots 3 and 4 of block A's own real `Video::{Index,Vertex}BufferData`, which
-// `CompanionData.h` names `Lock` and `Unlock` — the same two byte offsets,
-// spelled as the slots they are, with the index checked by the compiler. Both
-// companion classes declare an identical pair, which is why retail shares one
-// body per slot between the two owners.
-//
-// `outByteOffset` is an `int&` in retail's mangling (`AEAH`), so the member takes
-// a reference and the door keeps the pointer the registered ABI passes — the
-// pointer-to-reference step moved into the door, where the ABI is, exactly as
-// `ImageBuffer::SaveImageToFile`'s `Filename&` did.
-void* Video_IndexBuffer_Lock(IndexBuffer* self, int count, int* outOffset) {
-    return self->Video::IndexBuffer::Lock(count, *outOffset);
-}
-
-void Video_IndexBuffer_Unlock(IndexBuffer* self) {
-    self->Video::IndexBuffer::Unlock();
-}
-
-void* Video_VertexBuffer_Lock(VertexBuffer* self, int count, int* outOffset) {
-    return self->Video::VertexBuffer::Lock(count, *outOffset);
-}
-
-void Video_VertexBuffer_Unlock(VertexBuffer* self) {
-    self->Video::VertexBuffer::Unlock();
-}
 
 namespace Video {
 
@@ -259,16 +225,6 @@ void VertexBuffer::Unlock() {
 // stack; retail's tail JMP preserves the frame and so does an ordinary call
 // here, since the signature matches exactly.
 // ============================================================================
-// ENDGAME B.3.5 block D1: the BODY moved onto `Video::ConstantBuffer::Bind`
-// (runtime/src/video/constant_buffer.cpp), because `Video::ConstantBuffer` is
-// block D1's class and the member belongs with the rest of it. This door keeps
-// its name and BOTH its registrations below — nothing moved out of this file but
-// the four lines of body — and is now a one-line QUALIFIED non-virtual call.
-void Video_ConstantBuffer_Bind(ConstantBuffer* self, void* context, void* data,
-                               int first, int count) {
-    self->Video::ConstantBuffer::Bind(*static_cast<Video::Context*>(context),
-                                      data, first, count);
-}
 
 // ============================================================================
 // Video::Device::DisplayMode::DisplayMode(int, int)  —  0x18000d300
