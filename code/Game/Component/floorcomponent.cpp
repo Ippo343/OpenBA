@@ -108,7 +108,7 @@
 // Reimpl of FUN_140004680 (FindComponentByType on owner+0x30 array; returns IBP wrapping found component)
 void* FloorComponent_FindResData(void* owner, void* outIBP) {
     return new (outIBP) ::Object::InternalPtr<MapComponent>(
-        static_cast<ComponentEntity*>(owner)->FindComponent<MapComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(owner)->FindComponent<MapComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // Reimpl of FUN_14009cba0 (decrement per-tile floor counter over w*h footprint, then Scene::RemoveMesh)

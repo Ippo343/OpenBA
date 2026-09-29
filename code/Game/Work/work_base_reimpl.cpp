@@ -47,34 +47,39 @@
 // ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h). These names stay as
 // B4 FORWARD forwarders, returning the out-IBP they were handed, until their callers
 // hold a typed entity.
+namespace {
+// The one receiver cast of this file's six B4 FORWARD finders; it takes the place of
+// the shared loop body (FindComponentByTypeId) the six names called before.
+template <class T>
+void* ForwardFindComponent(uintptr_t entity, void* retIBP) {
+    return new (retIBP) ::Object::InternalPtr<T>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<T>());   // B4 FORWARD: receiver typed by the callers' blocks
+}
+}  // namespace
+
 // Reimpl of Entity_FindComponent_Position (FUN_140002ed0, type 0x1401c7900 = InteractComponent)
 void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<InteractComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<InteractComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+    return ForwardFindComponent<InteractComponent>(entity, retIBP);
 }
 
 // Reimpl of Entity_FindComponent_MeshInstance (FUN_140002f90, type 0x1401c7e08 = StatusIconComponent)
 void* WorkBase_FindComponent_2f90(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<StatusIconComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StatusIconComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+    return ForwardFindComponent<StatusIconComponent>(entity, retIBP);
 }
 
 // Reimpl of FUN_140003050 (type 0x1401c8070 = WorkComponent)
 void* WorkBase_FindComponent_3050(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<WorkComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+    return ForwardFindComponent<WorkComponent>(entity, retIBP);
 }
 
 // Reimpl of FUN_1400052c0 (type 0x1401c7b30 = NaturalResourceComponent)
 void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<NaturalResourceComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<NaturalResourceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+    return ForwardFindComponent<NaturalResourceComponent>(entity, retIBP);
 }
 
 // Reimpl of Entity_FindComponent_Storage (FUN_140006270, type 0x1401c7e78 = StorageComponent)
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<StorageComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<StorageComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+    return ForwardFindComponent<StorageComponent>(entity, retIBP);
 }
 
 // Reimpl of Entity_FindComponent_Building (FUN_140015140, type 0x1401c4b80 = TradeComponent).
@@ -82,8 +87,7 @@ void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
 // (it matches the TradeComponent type-id, not a generic "building"). Ported to close the
 // TradeWork::Slot4 closure gap.
 void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<TradeComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<TradeComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+    return ForwardFindComponent<TradeComponent>(entity, retIBP);
 }
 
 // ============================================================

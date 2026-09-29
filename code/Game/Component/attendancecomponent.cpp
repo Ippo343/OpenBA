@@ -166,7 +166,7 @@ void AttendanceComponent_ReleaseLink59b0(void* workerP) {
 // ============================================================
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
     return new (outPtr) ::Object::InternalPtr<WorkPlaceComponent>(
-        static_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

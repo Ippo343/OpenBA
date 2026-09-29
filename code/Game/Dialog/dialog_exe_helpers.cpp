@@ -43,7 +43,7 @@
 // Caller signature (workplaceui.cpp): void* fn(void* entity, void* retIBP).
 void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<BuildComponent>(
-        static_cast<ComponentEntity*>(entity)->FindComponent<BuildComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<BuildComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================
