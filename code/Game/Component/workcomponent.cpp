@@ -39,16 +39,6 @@
 //   WorkComponent_RegisterWorkSlot — defined below.
 
 
-// ============================================================
-// WorkComponent::Draw (vtable slot [6], 0x14012e6f0)
-// ============================================================
-// Compute the effective work capacity and store it at +0x30.
-
-void WorkComponent_Draw(WorkComponent* self) {
-    int capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(self));   // 0x14012e5c0
-    self->workState = capacity;
-}
-
 
 // ============================================================
 // Reimpl helpers for the work-slot BST functions
@@ -216,11 +206,13 @@ void WorkComponent::Persist(void* stream) {
     }
 }
 
-// [6] 0x14012e6f0. PORT GAP (retail 0x14012e6f0) — B38 D9: the body is ported
-// above (WorkComponent_Draw, capacity -> +0x30) but the tree's table never
-// installed it; the inert stub is kept here. Installing it is its own titled
-// commit.
-void WorkComponent::OnAdded() {}
+// [6] 0x14012e6f0 (Ghidra "Draw"): `CALL 0x14012e5c0; MOV [RBX+0x30],EAX` — the
+// starting worker count is computed when the entity is added. The tree's table never
+// installed this body (it lived as the uncalled WorkComponent_Draw) and every reader
+// computed +0x30 lazily on a 0.
+void WorkComponent::OnAdded() {
+    workState = CalcMaxWorkers();   // 0x14012e5c0
+}
 
 // ============================================================
 // WorkComponent slot [7] = +0x38, 0x14012e6c0 — CANCEL MY WORK ON REMOVAL
