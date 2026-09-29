@@ -29,6 +29,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Component/CharacterGrid.h"  // m_characterGrid's class (B.4 GAME-a)
+#include "Game/Map.h"                // m_game's class (B.4 GAME-a)
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -41,12 +43,12 @@ constexpr int kMaxLevels = 10;   // cap (4^10 -> ~350K cells per array); maps ar
 extern "C" void CharManager_Seed() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-    if (reinterpret_cast<GameUpdateLoop*>(gw)->m_characterGrid != nullptr) return;   // already seeded   // B.3.8 bridge
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    if (gw->m_characterGrid != nullptr) return;   // already seeded
 
-    void* mapV = reinterpret_cast<GameUpdateLoop*>(gw)->m_game;   // B.3.8 bridge
-    if (!mapV) { fprintf(stderr, "[CharMgr] no map @ GW+0xf8 — skip\n"); fflush(stderr); return; }
-    int dim = *reinterpret_cast<int*>(mapV);
+    Map* map = gw->m_game;
+    if (!map) { fprintf(stderr, "[CharMgr] no map @ GW+0xf8 — skip\n"); fflush(stderr); return; }
+    int dim = map->size;
     if (dim <= 0) { fprintf(stderr, "[CharMgr] bad map dim=%d — skip\n", dim); fflush(stderr); return; }
 
     // levels: smallest L with (1<<(L-1)) >= dim, i.e. finest cell ~= 1 tile; capped.
@@ -54,7 +56,7 @@ extern "C" void CharManager_Seed() {
     while ((1 << (levels - 1)) < dim && levels < kMaxLevels) ++levels;
 
     // implicit-quadtree level base-offset table: offset[L] = (4^L - 1)/3
-    int* offTbl = reinterpret_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(levels) * sizeof(int), 4));
+    int* offTbl = static_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(levels) * sizeof(int), 4));
     if (!offTbl) return;
     int64_t acc = 0;
     for (int L = 0; L < levels; ++L) {
@@ -63,30 +65,30 @@ extern "C" void CharManager_Seed() {
     }
     int totalCells = static_cast<int>(acc);                 // = (4^levels - 1)/3
 
-    int* cellHead = reinterpret_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(totalCells) * sizeof(int), 4));
-    int* cellOcc  = reinterpret_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(totalCells) * sizeof(int), 4));
+    int* cellHead = static_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(totalCells) * sizeof(int), 4));
+    int* cellOcc  = static_cast<int*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(totalCells) * sizeof(int), 4));
     if (!cellHead || !cellOcc) return;
     for (int i = 0; i < totalCells; ++i) { cellHead[i] = -1; cellOcc[i] = 0; }
 
     // allocate + zero the manager struct (0x60 covers all known fields up to +0x58)
-    uint8_t* m = reinterpret_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(0x60, 8));
+    CharacterGrid* m = static_cast<CharacterGrid*>(System::MemoryAllocator::MemAlloc(0x60, 8));
     if (!m) return;
-    std::memset(m, 0, 0x60);
-    *reinterpret_cast<float*>(m + 0x00) = static_cast<float>(dim);            // worldSize
-    *reinterpret_cast<float*>(m + 0x04) = static_cast<float>(dim) * 0.5f;     // center.x
-    *reinterpret_cast<float*>(m + 0x08) = static_cast<float>(dim) * 0.5f;     // center.y
-    *reinterpret_cast<int*>  (m + 0x0c) = levels;
-    *reinterpret_cast<void**>(m + 0x10) = nullptr;   // slot array (grown on first append)
-    *reinterpret_cast<int*>  (m + 0x18) = 0;         // slot count
-    *reinterpret_cast<int*>  (m + 0x1c) = 0;         // slot capacity
-    *reinterpret_cast<void**>(m + 0x20) = nullptr;   // free-list
-    *reinterpret_cast<int*>  (m + 0x28) = 0;         // free count
-    *reinterpret_cast<int*>  (m + 0x2c) = 0;         // free capacity
-    *reinterpret_cast<int**> (m + 0x30) = cellHead;
-    *reinterpret_cast<int**> (m + 0x40) = offTbl;
-    *reinterpret_cast<int**> (m + 0x50) = cellOcc;
+    std::memset(m, 0, sizeof(CharacterGrid));
+    m->worldSize = static_cast<float>(dim);
+    m->centerX = static_cast<float>(dim) * 0.5f;
+    m->centerY = static_cast<float>(dim) * 0.5f;
+    m->levels = levels;
+    m->slots = nullptr;          // slot array (grown on first append)
+    m->slotCount = 0;
+    m->slotCapacity = 0;
+    m->freeList = nullptr;
+    m->freeCount = 0;
+    m->freeCapacity = 0;
+    m->cellHead = cellHead;
+    m->levelOffsets = offTbl;
+    m->cellOccupancy = cellOcc;
 
-    reinterpret_cast<GameUpdateLoop*>(gw)->m_characterGrid = m;   // B.3.8 bridge
+    gw->m_characterGrid = m;
 
     fprintf(stderr, "[CharMgr] seeded @ GW+0x88 = %p (dim=%d, levels=%d, cells=%d)\n",
             static_cast<void*>(m), dim, levels, totalCells);

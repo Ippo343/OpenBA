@@ -51,6 +51,7 @@ class PlayerToolManager;  // Game/PlayerToolManager.h
 class Map;                // Game/Map.h (B4 GAME-a)
 class EntityList;         // Entity/EntityList.h (block WORK-a)
 class CitizenBehavior;    // Entity/CitizenBehavior.h (block WORK-a)
+class CharacterGrid;      // Component/CharacterGrid.h (block COMP-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -115,7 +116,7 @@ public:
     // +0x88: loose Morton (Z-order) quadtree over characters, MemAlloc(0x60,8),
     //   ctor 0x1400182b0 (8 levels, 0x5555 cells). NOT a MusicPlayer and NOT a
     //   Transform (the +0x80/+0x88 names were swapped until 2026-08-30).
-    void*    m_characterGrid;       // +0x88
+    CharacterGrid* m_characterGrid; // +0x88
     void*    m_renderer;            // +0x90  Graphics::Renderer*, MemAlloc(0x50) in Load
     UI::UserInterface* m_userInterface; // +0x98  MemAlloc(0x128) in Load
 

@@ -2371,7 +2371,9 @@ GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t s
     m_savedState    = savedState;
     // +0x60..+0xB8, in field order (retail's qword stores).
     m_graphicsScene = m_animationManager = m_pickingScene = m_audioScene = nullptr;
-    m_musicPlayer = m_characterGrid = m_renderer = nullptr;
+    m_renderer = nullptr;      // the chained store's order: +0x90, +0x88, +0x80
+    m_characterGrid = nullptr;
+    m_musicPlayer = nullptr;
     m_userInterface  = nullptr;
     m_helpTopics     = nullptr;
     m_diseaseList    = nullptr;
