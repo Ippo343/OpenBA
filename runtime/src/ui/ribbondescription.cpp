@@ -115,8 +115,8 @@ bool RibbonDescription::Serialize(void* streamArg) {
     IO::Serializer ser(*stream, 0);                               // [RSP+0x28], [RSP+0x30]
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    rw->SerializeBool(reinterpret_cast<bool&>(_vertical), nullptr);
-    rw->SerializeBool(reinterpret_cast<bool&>(_uniform), nullptr);
+    rw->SerializeBool(_vertical, nullptr);
+    rw->SerializeBool(_uniform, nullptr);
     rw->SerializeInt(_spacing, nullptr);
 
     int32_t n = _itemsCount;                                            // 1800d5f88

@@ -104,7 +104,7 @@ bool ScrollDescription::Serialize(void* streamv) {
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
         reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(&ser);
 
-    rw->SerializeBool(reinterpret_cast<bool&>(_vertical), nullptr);
+    rw->SerializeBool(_vertical, nullptr);
     rw->SerializeInt(_inset, nullptr);
     // BOTH of the last two are kScalarUInt (vt+0x98), not kScalarInt.
     rw->SerializeUInt(_barColor, nullptr);

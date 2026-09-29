@@ -586,9 +586,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
         const int32_t devW = dev->backBufferWidth;
         const int32_t devH = dev->backBufferHeight;
 
-        // B.4 LEFT: `SpriteContext::_context` stays `void*` (saveload_draw.cpp
-        // assigns it a `void*`).
-        ::Video::Context* const cc = static_cast< ::Video::Context*>(sc->_context);
+        ::Video::Context* const cc = sc->_context;
         ::Video::Viewport& vp = cc->_scissor;                              // +0x1e0
         if (vp.x != 0 || vp.y != 0 || vp.width != devW || vp.height != devH) {
             cc->_dirty |= RtVideo::kDirtyScissor;                          // +0x10

@@ -57,8 +57,8 @@ public:
     // ElementDescription's stores, then ONE WORD over both bools (+0x6a/+0x6b
     // never written), +0x6c, and the item Array header.
     RibbonDescription() : ElementDescription() {
-        _vertical      = 0;
-        _uniform       = 0;
+        _vertical      = false;
+        _uniform       = false;
         _spacing       = 0;
         _itemsData     = nullptr;
         _itemsCount    = 0;
@@ -91,8 +91,8 @@ public:
 private:
 
 public:
-    uint8_t  _vertical;        // +0x68  kScalarBool -> RibbonElement::_vertical (+0xc0)
-    uint8_t  _uniform;         // +0x69  kScalarBool -> RibbonElement::_uniform  (+0xc1)
+    bool     _vertical;        // +0x68  kScalarBool -> RibbonElement::_vertical (+0xc0)
+    bool     _uniform;         // +0x69  kScalarBool -> RibbonElement::_uniform  (+0xc1)
     uint8_t  _pad6a[2];        // +0x6a  written by nothing
     int32_t  _spacing;         // +0x6c  kScalarInt  -> RibbonElement::_spacing  (+0xc4)
     // +0x70 Collection::Array<ExternalPtr<UI::ElementDescription>>, one child
