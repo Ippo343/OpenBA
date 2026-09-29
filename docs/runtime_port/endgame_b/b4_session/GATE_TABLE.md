@@ -129,3 +129,19 @@ Owed, added:
 - Commit messages with an UNVERIFIED sentence: COMP-d `9a0c288e` ("the next update re-grounds it
   either way"), COMP-f `a61be2e2` (the load-time recompute), DLG-b's GoalDialog commit ("46 -> 0":
   the base was 70).
+
+| 25 | W1-COMP-f | `c544190a` | Component f: TradeComponent arrays and stock tree, TradeDescription merchants, WildAnimal, Well, Work, WorkPlace, Zone: 992 -> 146 in 39 files; `behaviour:` WorkComponent::OnAdded sets the worker count 0x14012e6f0 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.78 ms/frame, p95 2.53 · trade harness: 18 trades through the converted trade component, then the known crash (`known_port_issues` 13) | 0 |
+| 26 | W1-COMP-e | `c7ec34a1` | Component e, the rest: Population, Spawn, StorageDisplay, Terraform, Quarry, Picking, Tombstone, Tracker, ResourceProduce: 1553 -> 207 in its files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok · `sa-stress` exit 0, update 1.97 ms/frame, p95 3.04 (flagged; five agents were building; recorded) | 0 |
+
+Metric at `c7ec34a1`: **24,792** to remove.
+
+**Scope for this session, set by the user (2026-09-29):** the DANGEROUS casts go completely (any
+spelling of a read by offset or of a `void*` / integer receiver reinterpreted as a class; the
+metric's total); only safe casts stay (the `CAST-OK` floor, the three tier-I shapes, arithmetic and
+same-hierarchy `static_cast`). The differences from retail (`known_port_issues` 14) are a separate
+task for another session: blocks record them and do not schedule `behaviour:` commits for them. A
+cast that can only be removed by changing behaviour is LEFT and listed with the row that blocks it.
+
+`sa-stress` p95, recorded only (the 95th percentile moves with the machine's load; the mean does
+not): base 2.40; COMP-c 2.71; COMP-d 3.33; GAME-a 2.57; COMP-f 2.53; COMP-e 3.04. Mean update:
+1.92 / 1.88 / 2.03 / 1.77 / 1.78 / 1.97 ms.
