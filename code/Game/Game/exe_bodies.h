@@ -94,7 +94,6 @@ extern GameSettings* g_gameSettings;
 extern "C" float CalcWindFactor_Reg(void* time);  // 0x1401027c0
 
 // ---- gameupdateloop_load.cpp
-extern "C" void* Reimpl_FUN_1400983f0(void* self, void* outTransform);  // 0x1400983f0 B4 FORWARD: 1 outside caller (Dialog/toolbardialog.cpp) -> PlayerController::CalcTransform
 
 // ---- gameupdateloop_serialize.cpp
 struct UpdateBucket;   // Entity/EntityList.h

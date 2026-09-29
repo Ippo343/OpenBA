@@ -19,6 +19,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class ProgressElement; }
+
 class StorageCapacityUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(StorageCapacityUI)
 
@@ -34,9 +36,12 @@ public:
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
     void OnUpdate(const System::Time& time) override;
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
+    // ---- fields ----------------------------------------------------------
+    // +0x30 InternalPtr<ProgressElement>: OnCreated 0x14007b600 finds it by type
+    // (FindElementType + IsDerivedFrom ProgressElement).
+    UI::ProgressElement* progress = nullptr;
 };
 
+static_assert(offsetof(StorageCapacityUI, progress) == 0x30, "StorageCapacityUI::progress @ +0x30 (0x14007b600)");
 static_assert(sizeof(StorageCapacityUI) == 0x38, "StorageCapacityUI is 0x38 (create 0x1400143f0 MemAlloc(0x38))");
 static_assert(alignof(StorageCapacityUI) == 8, "qword-aligned (the vptr)");

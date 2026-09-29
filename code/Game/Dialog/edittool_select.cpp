@@ -180,7 +180,7 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
                              ? static_cast<ToolUI*>(controller) : nullptr;
         // Not pinned (+0x40 == 0) -> close it. (A null controller has no pin byte
         // to read, so a resolved controller is required first.)
-        if (toolUI && toolUI->hasBorderTitle == 0) {
+        if (toolUI && toolUI->pinned == 0) {
             Object::InternalPtr<UI::DialogInstance> closeRef(oldDialog);
             ui->CloseDialog(&closeRef);
         }

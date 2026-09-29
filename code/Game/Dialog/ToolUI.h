@@ -19,6 +19,9 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+namespace UI { class TextElement; }
+
 class ToolUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ToolUI)
 
@@ -34,20 +37,40 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x14007bc30
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    void* componentData = nullptr;    // +0x30: BuildComponent or sub-component ptr
-    void* labelTitle = nullptr;       // +0x38: TextElement "labelTitle"
-    uint8_t hasBorderTitle = 0;   // +0x40: borderTitle element exists (enables title drag)
-    uint8_t isDragging = 0;       // +0x41: currently dragging dialog
+    // ---- fields (OnCreated 0x14007bd70, OnUpdate 0x14007b9b0, OnElementEvent
+    //      0x14007bc30; EntityUI 0x1400670d0 / 0x140066ad0 write +0x40 / +0x4C) ---
+    // +0x30 the description the panel shows: the data source itself when it is a
+    // ComponentDescription, else the ComponentEntity's _description. Also the
+    // key OnUpdate / OnElementEvent look up in the tool manager's +0x50 set.
+    ComponentDescription* description = nullptr;
+    UI::TextElement* labelTitle = nullptr;   // +0x38 "labelTitle" (SetText of the ToolbarDescription name)
+    // +0x40 PINNED: a mouse-down on the title drags at once; set by OnCreated
+    // when the dialog has a "borderTitle", by OnUpdate when a pending drag
+    // passes 5 px, and by EntityUI's pin check box (0x1400670d0); cleared by
+    // OnCreated without a "borderTitle" and by EntityUI's unpin.
+    uint8_t pinned = 0;
+    uint8_t dragging = 0;         // +0x41: the dialog follows the mouse (OnUpdate)
     uint8_t _pad42[2] = {};        // +0x42: gap
     int32_t dragOffsetX = 0;      // +0x44: mouse offset from dialog left
     int32_t dragOffsetY = 0;      // +0x48: mouse offset from dialog top
-    uint8_t hasTitleDragZone = 0; // +0x4C: borderTitle has drag zone enabled
+    // +0x4C a mouse-down on an unpinned panel arms a pending drag (+0x4D) that
+    // pins it: cleared by OnCreated, set every frame by EntityUI (0x140066ad0).
+    uint8_t pinOnDrag = 0;
     uint8_t isDragPending = 0;    // +0x4D: waiting for mouse movement threshold
     uint8_t _pad4E[2] = {};        // +0x4E: gap
     int32_t dragStartX = 0;       // +0x50: drag start mouse X
     int32_t dragStartY = 0;       // +0x54: drag start mouse Y
 };
 
+static_assert(offsetof(ToolUI, description) == 0x30, "ToolUI::description @ +0x30 (0x14007bd70)");
+static_assert(offsetof(ToolUI, labelTitle) == 0x38, "ToolUI::labelTitle @ +0x38 (0x14007bd70)");
+static_assert(offsetof(ToolUI, pinned) == 0x40, "ToolUI::pinned @ +0x40 (0x14007bc30)");
+static_assert(offsetof(ToolUI, dragging) == 0x41, "ToolUI::dragging @ +0x41 (0x14007b9b0)");
+static_assert(offsetof(ToolUI, dragOffsetX) == 0x44, "ToolUI::dragOffsetX @ +0x44");
+static_assert(offsetof(ToolUI, dragOffsetY) == 0x48, "ToolUI::dragOffsetY @ +0x48");
+static_assert(offsetof(ToolUI, pinOnDrag) == 0x4C, "ToolUI::pinOnDrag @ +0x4C (0x14007bc30)");
+static_assert(offsetof(ToolUI, isDragPending) == 0x4D, "ToolUI::isDragPending @ +0x4D");
+static_assert(offsetof(ToolUI, dragStartX) == 0x50, "ToolUI::dragStartX @ +0x50");
+static_assert(offsetof(ToolUI, dragStartY) == 0x54, "ToolUI::dragStartY @ +0x54");
 static_assert(sizeof(ToolUI) == 0x58, "ToolUI is 0x58 (create 0x140014580 MemAlloc(0x58))");
 static_assert(alignof(ToolUI) == 8, "qword-aligned (the vptr)");

@@ -26,6 +26,9 @@
 #include "object/External.h"
 #include "Object/exe_type.h"
 
+namespace UI { class StringTable; class SpriteSheet; }
+class ComponentDescription;
+
 class Toolbar final : public Object::External {
     DECLARE_EXE_TYPE(Toolbar)
 
@@ -41,8 +44,8 @@ public:
     virtual Object::External* Construct();                        // [8] 0x140024be0
 
 public:
-    void*    _field20;           // +0x20: ExternalPtr (serialized via fn_ExternalPtr_Serialize2)
-    void*    _field28;           // +0x28: ExternalPtr (serialized via fn_ExternalPtr_Serialize)
+    UI::StringTable* _field20;   // +0x20: ExternalPtr<UI::StringTable> (serialized via fn_ExternalPtr_Serialize2; B4 H4: typed, DLG-d -- the button text table)
+    UI::SpriteSheet* _field28;   // +0x28: ExternalPtr<UI::SpriteSheet> (serialized via fn_ExternalPtr_Serialize; B4 H4: typed, DLG-d -- the button sprite sheet)
     void*    _field30;           // +0x30: System::String (serialized)
     void*    _field38;           // +0x38: System::String (serialized)
     int32_t  _field40;           // +0x40: 8 (serialized as uint)
@@ -53,8 +56,8 @@ public:
     int32_t  selectedIndex;      // +0x4C: -1 sentinel (serialized as int)
     int32_t  _field50;           // +0x50: int (serialized as int; the ctor leaves it)
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    _field58;           // +0x58: ExternalPtr<BuildingDescription>
-    void*    _field60;           // +0x60: ExternalPtr<Toolbar> (FUN_140024c70)
+    ComponentDescription* _field58;  // +0x58: ExternalPtr<ComponentDescription> (B4 H4: typed, DLG-d -- the template the button acts on)
+    Toolbar* _field60;           // +0x60: ExternalPtr<Toolbar> (FUN_140024c70; B4 H4: typed, DLG-d -- the parent item)
 };
 
 static_assert(sizeof(Toolbar) == 0x68, "Toolbar is 0x68");

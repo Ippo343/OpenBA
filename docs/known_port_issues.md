@@ -283,6 +283,12 @@ in the code carries a comment.
 | 33 | `Audio::Stream::Run` (`vtbatch7b_stream_run_win.cpp`), `IXAudio2SourceVoice::GetState` | mingw's `<xaudio2.h>` is the 2.8 interface, so the call passes a second argument (`Flags = 0` in R8) | XAudio2 2.7's `GetState(pVoiceState)` takes one; slot +0xc8 is the same and 2.7 ignores R8 | SUSPECTED harmless (R-ENG) |
 | 34 | `Engine::PlatformConfigure`'s launcher (`engine_platform_win.cpp`) | reads the two launcher check-box bytes and calls the dialog proc 0x1800a1ae0 at module-relative addresses of a LOADED `Runtime-x64.dll` (`GetModuleHandleW`); the standalone never loads it, so the launcher dialog is never shown and both bytes read 0 | retail runs its own dialog proc 0x1800a1ae0 over resource 0x66 | CONFIRMED from the code, not from retail (R-ENG); a door into the retail binary, LEFT |
 | 35 | the worker-count callers in `tradework.cpp`, `plantarea.cpp`, `plantorchard.cpp`, `tendarea.cpp` | call `WorkComponent_CalcMaxWorkers` (`tutorial_base.cpp`) | one body, 0x14012e5c0; the tree has a second port of it, `WorkComponent::CalcMaxWorkers` (COMP-f), and the two were not compared, so which one differs from retail is unknown | SUSPECTED (WORK-c) |
+| 36 | `StatusBarUI` slots 4 and 8; `StorageUI`, `StorageCapacityUI`, `StatusIconUI` slot 8 | overridden: slot 4 runs OnOpened; slot 8 rebuilds the panel and refreshes it (StatusBarUI every 30th frame, counted in the +0x104 gap) | inherits DialogController's (StatusBarUI table 0x14015d810); the refresh is slot 7 (StatusBarUI 0x1400798d0) | CONFIRMED (DLG-d) |
+| 37 | `StatusBarUI::OnOpened` element finds | stores every FindElement result unchecked, the hearts / stars groups and labelTitleParam included | 0x14007a3d0 narrows with IsDerivedFrom; the tree's comment says the group check's id was read as ButtonElement and rejected the element | SUSPECTED (DLG-d; not re-read) |
+| 38 | `CitizenUI_BuildIconArray_Impl` (`citizen_icon_helpers.h`; CitizenUI and StatusBarUI call it) | a second body of 0x14006abf0: pushes the "whole" / "half" find results without narrowing and returns on a null group | 0x14006abf0 narrows each to ImageElement (null when not one) and reads the group unguarded; `TownHall_GroupRatingInit` (`townhall_helpers.cpp`) is the faithful copy | CONFIRMED (DLG-d) |
+| 39 | `TownHall_InventorySortAsc` / `Desc` (`townhall_helpers.cpp`) | a stable insertion sort | 0x140015200 / 0x140015500 are an introsort: rows with equal keys may come out in another order | SUSPECTED (DLG-d; the tree's note, not re-read) |
+| 40 | `TitleDescToolTipUI::OnCreated` (`titledesctooltipui.cpp`) | takes "textTitle" / "textDesc" and the data source as found | 0x14007b730 narrows both texts with IsDerivedFrom (the id Ghidra labels LabelElement's, read through a mislabelled import) and the data source to UI::Element | CONFIRMED (DLG-d) |
+| 41 | `SpriteCaptureUI::OnElementEvent` (`ui_dialog_stub_factories.cpp`) | a no-op (PORT GAP): the capture button starts nothing, so OnUpdate's save arm is never reached | 0x140079620 (not ported) | CONFIRMED (DLG-d; the gap, not the body) |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -313,6 +319,7 @@ in the code carries a comment.
 | 30 | `Graphics::AnimationState` | 0x48 bytes (a unit test pins it) | 0x18, ctor 0x1800fdaf0 | CONFIRMED (R-GFX) |
 | 31 | H5 raw-storage members: CitizenComponent `name` +0x28 (String) and `consumedTypes` +0x98; Profession's three Strings; the Build / WorkPlace arrays; Map's picking scene; PlayerController's transform and camera (`Camera`'s default ctor is protected); the `Collection::Array` headers declared as three fields | raw storage, so no ctor / dtor runs | real members | CONFIRMED per class (W0-H1, W0-H2, GAME-a); B4_RULES correction 7 |
 | 32 | `BeginDrawGroup`, `Render` (runtime graphics) | stack `RendererDrawGroup` / `RendererSceneEntry` objects whose implicit ctors zero memory that is then overwritten | no such stores | CONFIRMED (R-GFX); cost only |
+| 42 | `NoiseUI` dtor (`NoiseUI.h`, DLG-b's) | `= default`: the ImageBuffer, MaterialInstance and SpriteSheet OnCreated (0x1400714c0, wired by DLG-d) makes are never freed | 0x140071bc0 deletes +0x40, +0x38, +0x30 through slot 0 (ModDialog's dtor has the same three `delete`s) | CONFIRMED (DLG-d); a header line of a finished block, left for the coordinator |
 
 ### 14d. Guards the tree has and retail lacks — and guards B.4 dropped
 
@@ -352,6 +359,16 @@ stated condition.
   `param_9` null arm of 0x1400bef70; `CompleteTask::CheckEntity`'s null singleton / scheduler
   return (retail 0x1400c5ac0 has none; see entry 13). All SUSPECTED except the last (CONFIRMED).
   0x1400bef70's two reads through the null receiver ([0+0x50], [0+0x28]) stay unguarded, as retail.
+- KEPT (DLG-d): StatusBarUI's Bound / Ready / TownReady / Built gates on slots 5, 7 and 9, its
+  test of textSeason's string table and of a null `g_gameSettings` (0x1400798d0 has none); the
+  status-icon handler's null game / town / citizen / StatusIconComponent tests and its
+  `count <= 0` return (0x14007a120 has none); ToolUI's dialog-address windows
+  (`ToolUI_DialogHasEntityUI`, OnUpdate); `PlayerToolManager::SelectTool`'s empty-registry return
+  (retail goes straight to Factory::CreateObject) and the game-world / text-element tests in
+  `toolbardialog.cpp`; SpriteCaptureUI's Input::Device, capture-box, FileSystem and edit-element
+  tests; StatusIconUI's EntityUI-pages test. CONFIRMED where the site quotes retail.
+- KEPT (DLG-d): `TitleDescToolTipUI::OnCreated`'s unbound-controller return and its null tests of
+  the two texts (0x14007b730 has none).
 
 ### 14e. Stores that may normalise where retail copies
 
@@ -401,6 +418,10 @@ stated condition.
   is FindComponent<StorageComponent>, and `Entity_FindConsumeProduce_b6f0`'s old label
   "Entity_FindStateMachine" is wrong. `Work::field_20` is the work id the scheduler keys on,
   `field_28` the target cell. (WORK-c)
+- INVENTORY_A's `ToolUI_ChildDialog` is `UI::DialogInstance` (the exe's copy of its table,
+  0x14015f5a0); `fn_FindComponent_MeshInstance` finds the StatusIconComponent (cell 0x1401c7e08);
+  Ghidra's `Entity_impl_a120` is StatusBarUI's status-icon handler 0x14007a120 and
+  `ToolUI_helper_e100` is `UIDescription::AddControllers` 0x14012e100 (DLG-d).
 
 ### 14g. Commit messages that state something nobody verified
 

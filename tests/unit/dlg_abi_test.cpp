@@ -166,10 +166,10 @@ UNIT_TEST(dlg_achievement_goal_dialogs) {
 UNIT_TEST(dlg_scenario_dialog) {
     CHECK_EQ(sizeof(ScenarioDialog), (size_t)0xe8);
     CHECK_EQ(offsetof(ScenarioDialog, difficulty), (size_t)0xb8);
-    CHECK_EQ(offsetof(ScenarioDialog, dataC0), (size_t)0xc0);
-    CHECK_EQ(offsetof(ScenarioDialog, dataC8), (size_t)0xc8);
-    CHECK_EQ(offsetof(ScenarioDialog, dataD8), (size_t)0xd8);
-    CHECK_EQ(offsetof(ScenarioDialog, dataE0), (size_t)0xe0);
+    CHECK_EQ(offsetof(ScenarioDialog, parentMenu), (size_t)0xc0);
+    CHECK_EQ(offsetof(ScenarioDialog, selectedIndex), (size_t)0xc8);
+    CHECK_EQ(offsetof(ScenarioDialog, entries), (size_t)0xd8);
+    CHECK_EQ(offsetof(ScenarioDialog, entries) + offsetof(Collection::Array<ScenarioDialogEntry>, _size), (size_t)0xe0);
     CheckShape<ScenarioDialog>();
     CheckDialogInstanceSlots<ScenarioDialog>();
 }
@@ -241,7 +241,7 @@ UNIT_TEST(dlg_toolbar_dialog) {
     CHECK_EQ(offsetof(ToolbarDialog, subDialog), (size_t)0xe8);
     CHECK_EQ(offsetof(ToolbarDialog, openSubIndex), (size_t)0xf0);
     CHECK_EQ(offsetof(ToolbarDialog, speedValues), (size_t)0xf8);
-    CHECK_EQ(offsetof(ToolbarDialog, speedValueCount), (size_t)0x100);
+    CHECK_EQ(offsetof(ToolbarDialog, speedValues) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x100);
     CheckShape<ToolbarDialog>();
     CheckDialogInstanceSlots<ToolbarDialog>();
 }

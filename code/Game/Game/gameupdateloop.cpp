@@ -512,7 +512,7 @@ inline void ApplyForceSpeed(PlayerToolManager* toolManager) {
         g_forceSpeed = (e && e[0]) ? std::atoi(e) : 0;
     }
     if (g_forceSpeed > 0 && toolManager) {
-        toolManager->field_0x30 = false;               // not paused
+        toolManager->paused = false;               // not paused
         toolManager->field_0x34 = g_forceSpeed;        // speed multiplier
     }
 }
@@ -758,7 +758,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
         // Step 2: Read speed multiplier from the tool manager
         // +0x30 = paused flag, +0x34 = speed multiplier
         PlayerToolManager* toolManager = m_toolManager;
-        bool entityUIPaused = toolManager->field_0x30;
+        bool entityUIPaused = toolManager->paused;
         if (!entityUIPaused) {
             speedMultiplier = toolManager->field_0x34;
         }
@@ -1108,7 +1108,7 @@ post_simulation:
         // Get speed multiplier for audio time scaling
         int speedMul = 0;
         PlayerToolManager* toolManager = m_toolManager;
-        if (!toolManager->field_0x30) {
+        if (!toolManager->paused) {
             speedMul = toolManager->field_0x34;
         }
 
@@ -1270,7 +1270,7 @@ post_simulation:
         if (m_entityList)
             entCount = m_entityList->buckets[1].count;   // +0x30
         int spd = 0;
-        if (m_toolManager && !m_toolManager->field_0x30)
+        if (m_toolManager && !m_toolManager->paused)
             spd = m_toolManager->field_0x34;
         SimProfReport(spd, entCount);
     }
@@ -1332,7 +1332,7 @@ void GameUpdateLoop::Draw(float alpha) {
 
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
     bool paused = m_userInterface->PausesGame();  // B.3.6 bridge
-    bool entityUIPaused = m_toolManager->field_0x30;
+    bool entityUIPaused = m_toolManager->paused;
     if (paused || entityUIPaused) {
         alpha = kRdata_14017214c; // 1.0f
     }

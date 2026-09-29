@@ -80,51 +80,26 @@ class MenuDialogLoopT;
 extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP, uint8_t mode, MenuDialogLoopT* menuLoop, GameUpdateLoop* game);  // 0x1400b8270
 
 // ---- storageui.cpp
-// StorageUI sort function (FUN_1400213f0) — sorts 0x18-byte entries by resource name.
-// Quicksort/introsort with inline comparator using UI::String → System::String.
-// StorageUI_SortItems — reimplemented as clean C++ introsort in storageui.cpp
-// Sorts array of 0x18-byte resource display structs alphabetically by resource name.
-// Each struct: [0]=entityPtr, [8]=resourceTypePtr, [0x10]=count
-// Original: FUN_1400213f0 (introsort) + FUN_1400b8370 (comparator) + FUN_140015ad0 (insertion sort)
-void StorageUI_SortItems(void* items, int count, void* scratch, void* scratch2);
+// B.4 DLG-d: the item sort (0x1400213f0) is file-local to storageui.cpp, typed.
 
 // ---- toolbar_utility_helpers.cpp
-extern "C" void ToolbarUtility_FindDialogByControllerType_0270(void* , void* retBuf, uint64_t param);  // 0x140100270
-extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData);  // 0x140014890
+// B.4 DLG-d: 0x140100270 is PlayerToolManager::FindUtilityDialog (Game/PlayerToolManager.h).
+extern "C" void ToolbarUtility_FindDialogByControllerType_0270(void* , void* retBuf, uint64_t param);  // 0x140100270 B4 FORWARD: Tutorial/tutorial_wave.cpp
+extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData);  // 0x140014890 B4 FORWARD: townhallui.cpp (DLG-e) and ToggleUtilityDialog
 
 // ---- toolbardialog.cpp
-void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60
-extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param);  // 0x140101a80
-
-// ============================================================
-// Toolbar_CenterOnEntity_Impl — centers camera on entity and selects it in EditTool
-// ============================================================
-// Reimplemented from FUN_140103040 (fn_Toolbar_CenterOnEntity / fn_GoToEntity).
-//
-// toolController = PlayerController (gameWorld+0x120)
-// parentDialogPtr = InternalBasePtr* to parent dialog (may be null-ptr)
-// entityPtr = InternalBasePtr* to target entity
-//
-// Logic:
-// 1. If parent dialog has a PageToggleUI controller, enable entity tracking
-// 2. Get entity world position:
-//    - Entities with ModelComponent but no MultiObjectComponent: use model's
-//      Math::Transform position (offset +0x158 = +0x148 transform + 0x10 position)
-//    - Multi-object buildings: calculate center from BuildComponent grid footprint
-// 3. Set camera target and snap camera to new position
-// 4. Get/create EditTool and select entity in it
-//
-// NOTE: fn_FindComponent_Character keeps its historical name but finds ModelComponent
-// (DAT_1401c7a50). Body: code/Game/Dialog/toolbardialog.cpp.
-
-void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);
+// B.4 DLG-d: 0x140102b60 / 0x140101a80 / 0x140101ce0 / 0x140103040 are
+// PlayerToolManager members (SelectTool, ToggleUtilityDialog, OpenPauseMenu,
+// CenterOnEntity; Game/PlayerToolManager.h). These are their forwarders.
+void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60 B4 FORWARD: 6 outside caller files -> PlayerToolManager::SelectTool
+extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param);  // 0x140101a80 B4 FORWARD: 2 outside caller files -> PlayerToolManager::ToggleUtilityDialog
+// toolController = the tool manager; parentDialogPtr = InternalPtr<DialogInstance>*
+// (may hold null); entityPtr = InternalPtr<ComponentEntity>*.
+void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 5 outside caller files -> PlayerToolManager::CenterOnEntity
 
 // ---- toolui.cpp
-// FUN_14012e100: UIDescription_AddControllers — REIMPLEMENTED in code/Game/Dialog/toolui.cpp
-// Iterates UIDescription controller entries, checks for TabElement targets,
-// and calls the appropriate AddController overload for each entry.
-// Old fn_* pointer removed; replaced by UIDesc_AddControllers_Impl().
-void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource);
+// B4 DLG-d: FUN_14012e100 is UIDescription::AddControllers (Component/UIDescription.h),
+// its body in toolui.cpp.
 
 // ---- townhall_helpers.cpp
 extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr);  // 0x14006abf0

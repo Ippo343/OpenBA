@@ -35,8 +35,8 @@ public:
     // [8] STANDALONE DEVIATION: retail inherits SelectResourceUI's 0x140078d30;
     // the tree wraps it with a Slot4 self-heal and a liveness guard.
     void  OnUpdate(const System::Time& time) override;
-    void  SetResource(int64_t type) override;                     // [11] 0x1400b2920
-    void* GetResource(void* out) override;                        // [12] 0x1400b29d0
+    void  SetResource(ComponentDescription* type) override;       // [11] 0x1400b2920
+    ComponentDescription** GetResource(ComponentDescription** out) override;  // [12] 0x1400b29d0
     int   GetCategory() override;                                 // [13] 0x1400b29c0  XOR EAX,EAX
 
     // ---- fields (the Panels.h POD's names) -----------------------------------

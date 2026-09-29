@@ -142,7 +142,7 @@ UNIT_TEST(pnl_selectresourceui_abstract_base) {
     CHECK(std::has_virtual_destructor<S>::value);
     CHECK((std::is_base_of<UI::DialogController, S>::value));
     CHECK_EQ(sizeof(S), (size_t)0x38);
-    CHECK_EQ(offsetof(S, internalBasePtr), (size_t)0x30);
+    CHECK_EQ(offsetof(S, selectResource), (size_t)0x30);
     CHECK_DTOR_SLOT(S);
     CHECK_SLOT(S, OnCreated,      0x20/8);   // 0x140078be0
     CHECK_SLOT(S, OnUpdateLayout, 0x38/8);   // 0x140078cb0

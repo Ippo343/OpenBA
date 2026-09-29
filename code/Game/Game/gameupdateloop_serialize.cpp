@@ -471,7 +471,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
 // bool used } (v>1).
 void PlayerToolManager::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 2);
-    ser.Serialize(field_0x30, nullptr);
+    ser.Serialize(paused, nullptr);
     ser.Serialize(field_0x34, nullptr);
     ser.Serialize(field_0x3C, nullptr);
     ser.Serialize(field_0x40, nullptr);
