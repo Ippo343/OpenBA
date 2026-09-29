@@ -97,21 +97,15 @@
 // that was to print them does not exist in this file — so they measured nothing;
 // a counter nothing reads is not an instrument.
 
-// The two element helpers, ported in phase 1 (context_lifecycle.cpp).
-extern "C" void RtVideo_ConstEntryArrayDestroy(void* unused, void* data, int32_t count);
-extern "C" void RtVideo_ConstEntryArrayDtor(void* arr);
+// The two element helpers, ported in phase 1 (context_lifecycle.cpp), and the
+// resize below are declared in ConstantBuffer.h: B.4 (R-VIDEO) hands each the
+// `Collection::Array<ConstantInfo>` as `ConstantBuffer`'s three named fields
+// `{_constantData, _constantCount, _constantCapacity}` (+0x28 / +0x30 / +0x34),
+// by reference, instead of a view of the triple.
 
 namespace {
 
 using ConstantInfo = Video::ConstantBuffer::ConstantInfo;
-
-// The `Collection::Array<ConstantInfo>` header, as the unexported resize at
-// 0x180053510 sees it. It is the same three fields
-// `Video::ConstantBuffer::{_constantData, _constantCount, _constantCapacity}`
-// name at +0x28 / +0x30 / +0x34; the resize is registered BY ADDRESS and is
-// handed the array, not the buffer, so it keeps its own view of the triple.
-struct ArrayHdr { ConstantInfo* data; int32_t size; int32_t capacity; };
-static_assert(sizeof(ArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 
 // WHICH STRING LANDS WHERE, inside a `ConstantInfo`. The two fields are
 // indistinguishable by shape — both are refcounted System::Strings, both are
@@ -126,12 +120,6 @@ static_assert(sizeof(ArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 // same applies to the BUFFER's own two Strings — and there the accessors settle
 // it outright: see the banner at the top of this file.
 
-// The `Collection::Array<ConstantInfo>` living at +0x28 of a ConstantBuffer.
-// Reached as a triple rather than through the three members because the
-// address-registered resize below is handed the ARRAY, not the buffer.
-inline ArrayHdr* Entries(Video::ConstantBuffer* self) {
-    return reinterpret_cast<ArrayHdr*>(&self->_constantData);
-}
 static_assert(offsetof(Video::ConstantBuffer, _constantData) == 0x28,
               "the Array<ConstantInfo> triple starts at +0x28");
 
@@ -151,21 +139,26 @@ static_assert(offsetof(Video::ConstantBuffer, _constantData) == 0x28,
 // self-assignment must not decrement to zero and free the thing it is about to
 // adopt.
 // ---------------------------------------------------------------------------
-void StringAssign(void** dst, void* src) {
-    void* cur = *dst;
+//
+// The destinations are `void*` String data pointers (ConstantBuffer.h: a real
+// `System::String` member would give the class a destructor, H5), so the
+// refcount at `data - 4` and the block at `data - 8` are reached through the
+// marked `string_header` views.
+void StringAssign(void*& dst, char* src) {
+    void* cur = dst;
     if (cur == src) return;                        // 0x1800eed34
     if (cur) {
-        int32_t* rc = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(cur) - 4);
+        int32_t* rc = static_cast<int32_t*>(cur) - 1;             // CAST-OK: string_header
         *rc -= 1;
         if (*rc == 0) {
-            *dst = static_cast<uint8_t*>(cur) - 8; // 0x1800eed47
-            System::MemoryAllocator::MemFree(*dst);
+            dst = static_cast<uint8_t*>(cur) - 8;                 // CAST-OK: string_header  0x1800eed47
+            System::MemoryAllocator::MemFree(dst);
         } else {
-            *dst = nullptr;                        // 0x1800eed57
+            dst = nullptr;                         // 0x1800eed57
         }
     }
-    *dst = src;
-    if (src) *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(src) - 4) += 1;
+    dst = src;
+    if (src) *reinterpret_cast<int32_t*>(src - 4) += 1;          // CAST-OK: string_header
 }
 
 // The ADOPT-INTO-A-FRESH-SLOT half, used where the destination is known empty
@@ -173,25 +166,25 @@ void StringAssign(void** dst, void* src) {
 // writes the null FIRST and then overwrites it, rather than branching — kept,
 // because the intermediate null is what makes a re-entrant read see an empty
 // slot rather than a stale one.
-void StringAdopt(void** dst, void* src) {
-    *dst = nullptr;
+void StringAdopt(void*& dst, void* src) {
+    dst = nullptr;
     if (src) {
-        *dst = src;
-        *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(src) - 4) += 1;
+        dst = src;
+        *(static_cast<int32_t*>(src) - 1) += 1;                   // CAST-OK: string_header
     }
 }
 
 // The RELEASE half on its own, for the two temporaries AddConstant unwinds.
-void StringRelease(void** field) {
-    void* p = *field;
+void StringRelease(void*& field) {
+    void* p = field;
     if (!p) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) - 4);
+    int32_t* rc = static_cast<int32_t*>(p) - 1;                   // CAST-OK: string_header
     *rc -= 1;
     if (*rc == 0) {
-        *field = static_cast<uint8_t*>(p) - 8;
-        System::MemoryAllocator::MemFree(*field);
+        field = static_cast<uint8_t*>(p) - 8;                     // CAST-OK: string_header
+        System::MemoryAllocator::MemFree(field);
     } else {
-        *field = nullptr;
+        field = nullptr;
     }
 }
 
@@ -227,42 +220,39 @@ void StringRelease(void** field) {
 // The growth rule is the same `n == old + 1 && old != 0 -> capacity = n * 3`
 // this lane already transcribed for the Device arrays.
 // ============================================================================
-extern "C" void RtVideo_ConstEntryArraySetSize(void* arrv, int32_t newSize,
-                                               const void* fillv) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(arrv);
-    const ConstantInfo* fill = static_cast<const ConstantInfo*>(fillv);
-
-    const int32_t oldSize = a->size;
+void RtVideo_ConstEntryArraySetSize(ConstantInfo*& data, int32_t& size, int32_t& capacity,
+                                    int32_t newSize, const ConstantInfo& fill) {
+    const int32_t oldSize = size;
     if (newSize == oldSize) return;                       // 0x18005353f
 
-    ConstantInfo* oldData = a->data;
-    a->size = newSize;
+    ConstantInfo* oldData = data;
+    size = newSize;
 
-    if (newSize > a->capacity) {
-        a->capacity = newSize;
-        if (newSize == oldSize + 1 && oldSize != 0) a->capacity = newSize * 3;
-        a->data = static_cast<ConstantInfo*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
-                      static_cast<int64_t>(a->capacity) * 0x18), 8));
+    if (newSize > capacity) {
+        capacity = newSize;
+        if (newSize == oldSize + 1 && oldSize != 0) capacity = newSize * 3;
+        data = static_cast<ConstantInfo*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
+                   static_cast<int64_t>(capacity) * 0x18), 8));
     }
 
-    ConstantInfo* newData = a->data;
+    ConstantInfo* newData = data;
     const int32_t start = (oldData == newData) ? oldSize : 0;   // 0x180053586
 
     for (int32_t i = start; i < newSize; ++i) {
         ConstantInfo* dst = newData + i;
         if (dst == nullptr) continue;                     // retail's ADD/JZ
-        const ConstantInfo* src = (i < oldSize) ? (oldData + i) : fill;
-        StringAdopt(&dst->name,     src->name);       // +0x00 first, as retail
-        StringAdopt(&dst->typeName, src->typeName);   // +0x08
+        const ConstantInfo* src = (i < oldSize) ? (oldData + i) : &fill;
+        StringAdopt(dst->name,     src->name);        // +0x00 first, as retail
+        StringAdopt(dst->typeName, src->typeName);    // +0x08
         dst->size   = src->size;
         dst->offset = src->offset;
     }
 
     if (oldData != newData) {
-        RtVideo_ConstEntryArrayDestroy(a, oldData, oldSize);   // 0x180053613
+        RtVideo_ConstEntryArrayDestroy(oldData, oldSize);   // 0x180053613
         if (oldData) System::MemoryAllocator::MemFree(oldData);
     } else if (oldSize > newSize) {
-        RtVideo_ConstEntryArrayDestroy(a, oldData + newSize, oldSize - newSize);
+        RtVideo_ConstEntryArrayDestroy(oldData + newSize, oldSize - newSize);
     }
 }
 
@@ -291,14 +281,13 @@ extern "C" void RtVideo_ConstEntryArraySetSize(void* arrv, int32_t newSize,
 // because a `System::String` member would give `Video::ConstantBuffer` a
 // destructor and take `Video::Context`'s trivial copyability with it (RULE
 // B5-4). The caller-side temporaries below are real Strings.
-void Video::ConstantBuffer::BeginConstants(const void* typeName, const void* prefix,
+void Video::ConstantBuffer::BeginConstants(const System::String& typeName,
+                                           const System::String& prefix,
                                            int32_t ordinalIndex, int32_t uploadIndex,
                                            bool bindToVertex, bool banked,
                                            int32_t bankStride) {
-    StringAssign(&_typeName,
-                 static_cast<const System::String*>(typeName)->_data);  // 0x1800eed34 -> +0x08
-    StringAssign(&_prefix,
-                 static_cast<const System::String*>(prefix)->_data);    // 0x1800eed6e -> +0x00
+    StringAssign(_typeName, typeName._data);          // 0x1800eed34 -> +0x08
+    StringAssign(_prefix,   prefix._data);            // 0x1800eed6e -> +0x00
 
     _ordinalIndex  = ordinalIndex;
     _uploadIndex   = uploadIndex;
@@ -306,7 +295,8 @@ void Video::ConstantBuffer::BeginConstants(const void* typeName, const void* pre
     _bankStride    = bankStride;
     _bindToVertex  = static_cast<uint8_t>(bindToVertex);
 
-    RtVideo_ConstEntryArrayDtor(Entries(this));         // tail JMP 0x18001cab0
+    RtVideo_ConstEntryArrayDtor(_constantData, _constantCount,
+                                _constantCapacity);     // tail JMP 0x18001cab0
 }
 
 // ============================================================================
@@ -327,21 +317,20 @@ void Video::ConstantBuffer::BeginConstants(const void* typeName, const void* pre
 //
 // The stack element's `offset` field is explicitly zeroed (0x1800eec90).
 // ============================================================================
-void Video::ConstantBuffer::AddConstant(const void* name, const void* typeName,
+void Video::ConstantBuffer::AddConstant(const System::String& name,
+                                        const System::String& typeName,
                                         int32_t size) {
     ConstantInfo elem;
-    StringAdopt(&elem.name,
-                static_cast<const System::String*>(name)->_data);      // 0x1800eec66 -> elem+0x00
-    StringAdopt(&elem.typeName,
-                static_cast<const System::String*>(typeName)->_data);  // 0x1800eec7b -> elem+0x08
+    StringAdopt(elem.name,     name._data);       // 0x1800eec66 -> elem+0x00
+    StringAdopt(elem.typeName, typeName._data);   // 0x1800eec7b -> elem+0x08
     elem.size   = size;                       // 0x1800eec8b
     elem.offset = 0;                          // 0x1800eec90
 
-    ArrayHdr* a = Entries(this);
-    RtVideo_ConstEntryArraySetSize(a, a->size + 1, &elem);   // 0x1800eeca2
+    RtVideo_ConstEntryArraySetSize(_constantData, _constantCount, _constantCapacity,
+                                   _constantCount + 1, elem);   // 0x1800eeca2
 
-    StringRelease(&elem.typeName);            // 0x1800eeca8 (+0x30) — reverse
-    StringRelease(&elem.name);                // 0x1800eeccc (+0x28)
+    StringRelease(elem.typeName);             // 0x1800eeca8 (+0x30) — reverse
+    StringRelease(elem.name);                 // 0x1800eeccc (+0x28)
 
     _registerCount += size;                   // 0x1800eecf0
 }
@@ -389,35 +378,23 @@ void ComputeOffsets(Video::ConstantBuffer* self) {
 }
 // ENDGAME B.3.5 block J, COORDINATOR RULING: the four hand-inlined companion
 // dispatches in this file are VIRTUAL CALLS on `Video::ConstantBufferData` (block
-// A, runtime/types/video/CompanionData.h). `_platformData` stays a pinned `void*`
-// at +0x40 that dx11 reads, and the object behind it is a
-// `VideoDX11::ConstantBufferData` that does not derive in C++ (RULE B5-8's declared
-// leave), so each receiver takes one `// B.3.5 bridge` cast — but the DISPATCH is
-// unchanged: the same live vptr at +0x00, indexed at the same byte offset, with the
-// index checked by the compiler now. `vt[1]` is slot 1 `Create()`, `vt[3]` is slot 3
-// `SlotIndexPlusOne()`, and `vt[+0x10]` is slot 2 `Bind(...)`.
-//
-// The `CompanionFn1` typedef is gone with its two users.
-}  // namespace
-
-namespace {
-// B.3.5 bridge — `_platformData` is a pinned `void*` field, by ABI.
-inline Video::ConstantBufferData* Companion(void* platformData) {
-    return reinterpret_cast<Video::ConstantBufferData*>(platformData);
-}
+// A, runtime/types/video/CompanionData.h): the same live vptr at +0x00, indexed
+// at the same byte offset. `vt[1]` is slot 1 `Create()`, `vt[3]` is slot 3
+// `SlotIndexPlusOne()`, and `vt[+0x10]` is slot 2 `Bind(...)`. B.4 (R-VIDEO):
+// `_platformData` is typed, so the receivers need no view.
 }  // namespace
 
 bool Video::ConstantBuffer::PlatformCreate() {
-    if (void* companion = _platformData) {
-        return Companion(companion)->Create();                     // tail JMP +0x08
+    if (ConstantBufferData* companion = _platformData) {
+        return companion->Create();                                // tail JMP +0x08
     }
     ComputeOffsets(this);
     return true;                                                   // MOV AL,1
 }
 
 void Video::ConstantBuffer::EndConstants(int32_t /*unread*/) {
-    if (void* companion = _platformData) {
-        (void)Companion(companion)->Create();
+    if (ConstantBufferData* companion = _platformData) {
+        (void)companion->Create();
         return;
     }
     ComputeOffsets(this);
@@ -442,9 +419,9 @@ void Video::ConstantBuffer::EndConstants(int32_t /*unread*/) {
 // every companion is still null, which is why the arithmetic branch is the live
 // one on the boot path.
 int32_t Video::ConstantBuffer::GetNextUploadIndex() const {
-    void* companion = _platformData;
+    ConstantBufferData* companion = _platformData;
     if (!companion) return _uploadIndex + 1;
-    return Companion(companion)->SlotIndexPlusOne();   // +0x18, slot 3
+    return companion->SlotIndexPlusOne();              // +0x18, slot 3
 }
 
 // ============================================================================
@@ -475,7 +452,7 @@ int32_t Video::ConstantBuffer::GetNextUploadIndex() const {
 // through a pointer cast.
 void Video::ConstantBuffer::Bind(Context& context, void* data,
                                 int32_t first, int32_t count) {
-    Companion(_platformData)->Bind(&context, data, first, count);
+    _platformData->Bind(&context, data, first, count);
 }
 
 // ============================================================================
@@ -626,7 +603,7 @@ void BeginBuffer(Video::ConstantBuffer* buf, int prefixLit, int nameLit, int32_t
                  int32_t i14, bool b18, bool b19, int32_t i20) {
     System::String prefix = StrLit(prefixLit);   // retail Sets the PREFIX first
     System::String name   = StrLit(nameLit);
-    buf->Video::ConstantBuffer::BeginConstants(&name, &prefix,
+    buf->Video::ConstantBuffer::BeginConstants(name, prefix,
                                                i10, i14, b18, b19, i20);
     // …and releases the NAME first: reverse declaration order, which is the
     // destruction order the two locals now get for free.
@@ -635,17 +612,21 @@ void BeginBuffer(Video::ConstantBuffer* buf, int prefixLit, int nameLit, int32_t
 void AddDecl(Video::ConstantBuffer* buf, int typeLit, int nameLit, int32_t size) {
     System::String type = StrLit(typeLit);       // retail Sets the TYPE first
     System::String name = StrLit(nameLit);
-    buf->Video::ConstantBuffer::AddConstant(&name, &type, size);
+    buf->Video::ConstantBuffer::AddConstant(name, type, size);
     // …and releases the NAME first: reverse declaration order again.
 }
 
 struct DeclRow  { int16_t typeLit; int16_t nameLit; int32_t size; };
+// B.4 (R-VIDEO): each buffer is named by a pointer to the Context member (it
+// was the member's byte offset; the offsets stay in the comments below as the
+// evidence for which buffer each retail call acts on).
+using BufMember = Video::ConstantBuffer Video::Context::*;
 struct BufRow {
-    uint32_t       bufOff;      // offset of this ConstantBuffer inside Context
+    BufMember      buf;         // this ConstantBuffer inside Context
     int16_t        prefixLit;
     int16_t        nameLit;
     int32_t        i10;
-    int32_t        prevOff;     // -1: start a new chain at `i14`
+    BufMember      prev;        // nullptr: start a new chain at `i14`
     int32_t        i14;
     uint8_t        b18, b19;
     int32_t        i20;
@@ -698,48 +679,44 @@ const DeclRow kBoneDecls[] = {
     { kLit_float4x4, kLit_bones51, 204 },           // 51 float4x4 = 204 slots
 };
 
-constexpr uint32_t kOffMaterial = 0x0298;
-constexpr uint32_t kOffPixel    = 0x02e0;
-constexpr uint32_t kOffGlobal   = 0x1f78;
-constexpr uint32_t kOffInstance = 0x1fc0;
-constexpr uint32_t kOffBone     = 0x2008;
-constexpr uint32_t kOffTransform= 0x2050;
-constexpr uint32_t kOffLight    = 0x2098;
+// retail's `LEA R15,[…]` immediates, and the member each one is:
+//   +0x0298 _materialConstants   +0x02e0 _pixelConstants   +0x1f78 _globalConstants
+//   +0x1fc0 _instanceConstants   +0x2008 _boneConstants    +0x2050 _transformConstants
+//   +0x2098 _lightConstants
+// (bc_'s is the one that is easy to get wrong: MSVC does `ADD R15,0x2008` and
+// then passes R15 itself, which reads like `this`.)
+static_assert(offsetof(Video::Context, _materialConstants)  == 0x0298, "mc_");
+static_assert(offsetof(Video::Context, _pixelConstants)     == 0x02e0, "pc_");
+static_assert(offsetof(Video::Context, _globalConstants)    == 0x1f78, "gc_");
+static_assert(offsetof(Video::Context, _instanceConstants)  == 0x1fc0, "ic_");
+static_assert(offsetof(Video::Context, _boneConstants)      == 0x2008, "bc_");
+static_assert(offsetof(Video::Context, _transformConstants) == 0x2050, "tc_");
+static_assert(offsetof(Video::Context, _lightConstants)     == 0x2098, "lc_");
 
 // The five buffers whose constants are all plain literals, in retail's order.
 // tc_ and bc_ follow separately: tc_'s only constant is String::Format'ed and
 // it ends with EndConstants rather than PlatformCreate, and bc_ is the tail.
 const BufRow kBufRows[] = {
-  { kOffPixel,    kLit_pc_, kLit_PixelConstants,    0, -1,          0, 0, 0, 0,
-    kPixelDecls,    5,  0 },
-  { kOffMaterial, kLit_mc_, kLit_MaterialConstants, 1, kOffPixel,   0, 0, 0, 0,
-    kMaterialDecls, 4,  0 },
-  { kOffGlobal,   kLit_gc_, kLit_GlobalConstants,   2, -1,          0, 1, 0, 0,
-    kGlobalDecls,   7,  1 },
-  { kOffInstance, kLit_ic_, kLit_InstanceConstants, 3, kOffGlobal,  0, 1, 0, 0,
-    kInstanceDecls, 2,  1 },
-  { kOffLight,    kLit_lc_, kLit_LightConstants,    4, kOffInstance,0, 1, 0, 0,
-    kLightDecls,   11,  1 },
+  { &Video::Context::_pixelConstants,    kLit_pc_, kLit_PixelConstants,    0, nullptr,
+    0, 0, 0, 0, kPixelDecls,    5,  0 },
+  { &Video::Context::_materialConstants, kLit_mc_, kLit_MaterialConstants, 1, &Video::Context::_pixelConstants,
+    0, 0, 0, 0, kMaterialDecls, 4,  0 },
+  { &Video::Context::_globalConstants,   kLit_gc_, kLit_GlobalConstants,   2, nullptr,
+    0, 1, 0, 0, kGlobalDecls,   7,  1 },
+  { &Video::Context::_instanceConstants, kLit_ic_, kLit_InstanceConstants, 3, &Video::Context::_globalConstants,
+    0, 1, 0, 0, kInstanceDecls, 2,  1 },
+  { &Video::Context::_lightConstants,    kLit_lc_, kLit_LightConstants,    4, &Video::Context::_instanceConstants,
+    0, 1, 0, 0, kLightDecls,   11,  1 },
 };
 // clang-format on
-
-// The buffer offsets are retail's own `LEA R15,[…]` immediates and stay the
-// evidence for which buffer each call acts on; `BufAt` turns one into the real
-// embedded member. (bc_'s is the one that is easy to get wrong: MSVC does
-// `ADD R15,0x2008` and then passes R15 itself, which reads like `this`.)
-inline Video::ConstantBuffer* BufAt(Video::Context* ctx, uint32_t off) {
-    return reinterpret_cast<Video::ConstantBuffer*>(
-        reinterpret_cast<uint8_t*>(ctx) + off);
-}
 }  // namespace
 
 void Video::Context::AssignConstants() {
     for (const BufRow& b : kBufRows) {
-        Video::ConstantBuffer* buf = BufAt(this, b.bufOff);
-        const int32_t slot = (b.prevOff < 0)
+        Video::ConstantBuffer* buf = &(this->*b.buf);
+        const int32_t slot = (b.prev == nullptr)
             ? b.i14
-            : BufAt(this, static_cast<uint32_t>(b.prevOff))
-                  ->Video::ConstantBuffer::GetNextUploadIndex();
+            : (this->*b.prev).Video::ConstantBuffer::GetNextUploadIndex();
         BeginBuffer(buf, b.prefixLit, b.nameLit, b.i10, slot,
                     b.b18 != 0, b.b19 != 0, b.i20);
         for (int i = 0; i < b.ndecls; ++i)
@@ -755,9 +732,8 @@ void Video::Context::AssignConstants() {
     // The only buffer whose constant NAME is formatted rather than a literal,
     // and the only one with b19 set and a non-zero +0x20 (0x40).
     {
-        Video::ConstantBuffer* buf = BufAt(this, kOffTransform);
-        const int32_t slot = BufAt(this, kOffLight)
-                                 ->Video::ConstantBuffer::GetNextUploadIndex();
+        Video::ConstantBuffer* buf = &_transformConstants;
+        const int32_t slot = _lightConstants.Video::ConstantBuffer::GetNextUploadIndex();
         BeginBuffer(buf, kLit_tc_, kLit_TransformConstants, 5, slot,
                     true, true, 0x40);
 
@@ -766,7 +742,7 @@ void Video::Context::AssignConstants() {
         // it; `Format` returns a fresh String by value, which is the same thing.
         System::String name =
             System::String::Format(RtVideoShaderConstantLiteral(kLit_transformFmt), 52);
-        buf->Video::ConstantBuffer::AddConstant(&name, &type, 208);
+        buf->Video::ConstantBuffer::AddConstant(name, type, 208);
         // name then type, retail's release order — reverse declaration order.
 
         buf->Video::ConstantBuffer::EndConstants(0);  // the arg is UNSET at the
@@ -777,9 +753,8 @@ void Video::Context::AssignConstants() {
 
     // ---- bc_ / BoneConstants, and the tail EndConstants --------------------
     {
-        Video::ConstantBuffer* buf = BufAt(this, kOffBone);
-        const int32_t slot = BufAt(this, kOffTransform)
-                                 ->Video::ConstantBuffer::GetNextUploadIndex();
+        Video::ConstantBuffer* buf = &_boneConstants;
+        const int32_t slot = _transformConstants.Video::ConstantBuffer::GetNextUploadIndex();
         BeginBuffer(buf, kLit_bc_, kLit_BoneConstants, 6, slot, true, false, 0);
         for (const DeclRow& d : kBoneDecls)
             AddDecl(buf, d.typeLit, d.nameLit, d.size);

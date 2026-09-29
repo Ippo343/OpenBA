@@ -243,7 +243,7 @@ UNIT_TEST(video_device_gained_no_vptr_and_stays_a_raw_readable_object) {
     d->type             = 0x11223344;
     d->interfaceCount   = 7;
     d->activeInterface  = 1;
-    d->deviceData       = reinterpret_cast<void*>(static_cast<uintptr_t>(0xDEADBEEFu));
+    d->deviceData       = reinterpret_cast<Video::DeviceData*>(static_cast<uintptr_t>(0xDEADBEEFu));
     CHECK_EQ(At<int32_t>(raw, 0x00), 0x11223344);
     CHECK_EQ(At<int32_t>(raw, 0x48), 7);
     CHECK_EQ(At<int32_t>(raw, 0xF8), 1);

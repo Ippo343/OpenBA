@@ -97,6 +97,8 @@
 
 namespace Video {
 
+class VideoProgramData;   // runtime/types/video/CompanionData.h (B.4 R-VIDEO)
+
 // The four resources a VideoProgram binds. Forward declarations only — an
 // `Object::ExternalPtr<T>` is one `T*` and needs nothing more, and keeping the
 // declaration this thin is what lets `dx11/` and the caller batches include this
@@ -241,7 +243,7 @@ public:
     Object::ExternalPtr<RenderState>   _renderState;     // +0x38
     // The `Video::VideoProgramData*` the Device factory hands back (DeviceData
     // vtable +0x90, slot 18 — `Dx11_CreateVideoProgramData`).
-    void*                              _data;           // +0x40
+    VideoProgramData*                  _data;           // +0x40  (B.4 R-VIDEO, H4)
 };
 
 static_assert(sizeof(VideoProgram) == 0x48,
@@ -266,12 +268,5 @@ static_assert(sizeof(Object::ExternalPtr<VertexLayout>) == 8,
 
 }  // namespace Video
 
-// ==== B3R W0-P0c: Runtime bodies reached by retail address ====
-// ENDGAME B.3R (B3R_RULES R5): each body below is registered at the retail
-// address in its trailing comment and read through the registry today. It is
-// declared here, copied from its definition (linkage, namespace, types), so the
-// reader can call it by name. Nothing calls it through this declaration yet.
-
-// ---- video/vertexprogram.cpp
-extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, void* basev);  // 0x180056db0
-// ==== end B3R W0-P0c ====
+// B.4 (R-VIDEO): RtVideo_VertexProgram_SerializeStreams (0x180056db0) is
+// vertexprogram.cpp's own typed helper now; its one caller is that file.

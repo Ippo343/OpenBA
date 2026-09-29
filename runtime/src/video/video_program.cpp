@@ -148,11 +148,13 @@ namespace {
 // spelled here rather than added to a header three other lanes include.
 constexpr uint32_t kDirtyVideoProgram = 0x00000100u;
 
-// One compare-then-OR-then-store, retail's idiom, for a pointer slot.
-inline void Apply(RtVideo::Context* ctx, void** slot, void* value, uint32_t bit) {
-    if (*slot != value) {
+// One compare-then-OR-then-store, retail's idiom, for a typed pointer slot of
+// the Context (B.4 R-VIDEO: the four slots are typed fields now).
+template <class T>
+inline void Apply(Video::Context* ctx, const T*& slot, const T* value, uint32_t bit) {
+    if (slot != value) {
         ctx->_dirty |= bit;
-        *slot = value;
+        slot = value;
     }
 }
 
@@ -170,7 +172,10 @@ inline void Apply(RtVideo::Context* ctx, void** slot, void* value, uint32_t bit)
 namespace Video {
 
 void VideoProgram::SetupShaders(void* ctxv) const {
-    RtVideo::Context* ctx = static_cast<RtVideo::Context*>(ctxv);
+    // LEFT (B.4 R-VIDEO): the parameter is retail's `Context&`
+    // (`AEAVContext@2@`), but graphics/wave21_lane_gfxbody.cpp (R-GFX) hands it a
+    // `void*`, so it stays untyped until that caller converts.
+    Context* ctx = static_cast<Context*>(ctxv);
 
     // Context+0x200 is `_videoProgram`, a POINTER that lives in the first eight
     // bytes of the `_pixelConstantStaging` array — see the WAVE 9 LANE CTX note
@@ -181,14 +186,14 @@ void VideoProgram::SetupShaders(void* ctxv) const {
     std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));
     if (videoProgramSlot != static_cast<const void*>(this)) {
         ctx->_dirty |= kDirtyVideoProgram;
-        void* me = const_cast<VideoProgram*>(this);
+        const VideoProgram* me = this;
         std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));
     }
 
-    Apply(ctx, &ctx->_vertexLayout,  _vertexLayout.Get(),  RtVideo::kDirtyVertexLayout);
-    Apply(ctx, &ctx->_vertexProgram, _vertexProgram.Get(), RtVideo::kDirtyVertexProgram);
-    Apply(ctx, &ctx->_pixelProgram,  _pixelProgram.Get(),  RtVideo::kDirtyPixelProgram);
-    Apply(ctx, &ctx->_renderState,   _renderState.Get(),   RtVideo::kDirtyRenderState);
+    Apply(ctx, ctx->_vertexLayout,  _vertexLayout.Get(),  RtVideo::kDirtyVertexLayout);
+    Apply(ctx, ctx->_vertexProgram, _vertexProgram.Get(), RtVideo::kDirtyVertexProgram);
+    Apply(ctx, ctx->_pixelProgram,  _pixelProgram.Get(),  RtVideo::kDirtyPixelProgram);
+    Apply(ctx, ctx->_renderState,   _renderState.Get(),   RtVideo::kDirtyRenderState);
 }
 
 }  // namespace Video

@@ -220,11 +220,10 @@ using SetSizeFn = void (*)(rtcoll::ArrayHdr* self, int32_t newSize);
 //
 // Retail passes a NULL `name` at every call site (`XOR R8D,R8D` / `XOR R9D,R9D`),
 // so the blobs are unnamed in the stream; the one body reproduces that.
-extern "C" void RtVideo_SerializeBlobArray(void* ctx, int count, void* data);
-
+// (Declared in ImageBuffer.h.)
 inline void SerializeLevelBlobs(IO::Serializer& ser, int32_t count,
                                 rtcoll::ArrayHdr* elems) {
-    RtVideo_SerializeBlobArray(&ser, count, elems);
+    RtVideo_SerializeBlobArray(ser, count, elems);
 }
 
 // The element-destroy spec for the outer array: free the inner buffer at +0x00

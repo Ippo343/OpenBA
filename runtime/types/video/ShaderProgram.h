@@ -93,7 +93,12 @@
 #include "../object/Internal.h"                // Object::detail::InternalMemFree
 #include "../system/String.h"
 
+namespace IO { class Serializer; }   // io/Serializer.h
+
 namespace Video {
+
+class VertexProgramData;   // runtime/types/video/CompanionData.h
+class PixelProgramData;
 
 // ============================================================
 // Video::ShaderProgram — a compiled shader and its parameter bindings.
@@ -132,9 +137,9 @@ public:
     // are named here rather than in code. Nothing in the tree calls them.
     // ========================================================
     struct Parameter {
-        void*   name;      // +0x00  System::String (refcounted, str[-4] is the count)
+        char*   name;      // +0x00  System::String data (refcounted, str[-4] is the count); B.4 R-VIDEO: char*, H4
         int32_t dest;      // +0x08  the register/sampler index this binds to
-        uint8_t internal;  // +0x0c  bool; only serialized when GetVersion() >= 1
+        bool    internal;  // +0x0c  only serialized when GetVersion() >= 1 (B.4 R-VIDEO: bool, H4)
         uint8_t _pad0d[3]; // +0x0d  never written by any arm
 
         // ?Serialize@Parameter@ShaderProgram@Video@@QEAAXAEAVSerializer@IO@@@Z
@@ -194,7 +199,7 @@ public:
 
     // ?PlatformSerialize@ShaderProgram@Video@@QEAAXAEAVSerializer@IO@@@Z
     // 0x1800f52b0 — PUBLIC (`QEAA`), and called by both subclasses' Serialize.
-    void PlatformSerialize(void* serializer);
+    void PlatformSerialize(IO::Serializer& serializer);
 
     // `?CreateNewObject@` / `?CreateInPlaceObject@` exist for every external
     // (declared by DECLARE_TYPE); ShaderProgram's are the ABSTRACT class's:
@@ -319,7 +324,7 @@ public:
     static const char* _FileExtension();   // 0x18004e510 -> "srsl"
 
 public:
-    void* _data;   // +0x50  Video::VertexProgramData*, from DeviceData slot +0x78
+    VertexProgramData* _data;   // +0x50  from DeviceData slot 15 (+0x78); B.4 R-VIDEO, H4
 };
 
 static_assert(sizeof(VertexProgram) == 0x58,
@@ -385,7 +390,7 @@ public:
     static const char* _FileExtension();   // 0x18004e890 -> "srsl"
 
 public:
-    void* _data;   // +0x50  Video::PixelProgramData*, from DeviceData slot +0x80
+    PixelProgramData* _data;    // +0x50  from DeviceData slot 16 (+0x80); B.4 R-VIDEO, H4
 };
 
 static_assert(sizeof(PixelProgram) == 0x58,

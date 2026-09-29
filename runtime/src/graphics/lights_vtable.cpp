@@ -192,6 +192,8 @@ void BiasMatrixB(Math::Matrix& b) {
 // the 0x1a0-byte staging block undivided, so the Matrix there is viewed once.
 // ---------------------------------------------------------------------------
 constexpr size_t kLightStagingShadowMatrix = 0x1e78 - 0x1dd8;   // Context+0x1e78
+static_assert(offsetof(Video::Context::LightStaging, shadowMatrix) == kLightStagingShadowMatrix,
+              "Context::LightStaging::shadowMatrix is Context+0x1e78");
 
 void WriteShadowMatrix(Video::Context& context, const Math::Matrix& projection,
                        const Math::Transform3& viewXform, const Math::Matrix& bias) {
@@ -200,7 +202,7 @@ void WriteShadowMatrix(Video::Context& context, const Math::Matrix& projection,
     const Math::Matrix     product  = asMatrix * projection;
     const Math::Matrix     result   = product * bias;
 
-    *reinterpret_cast<Math::Matrix*>(context._lightStaging + kLightStagingShadowMatrix) = result;
+    context._lightStaging.shadowMatrix = result;   // B.4 R-VIDEO: the named field at +0xa0
     context._dirty |= 0x2000u;
 }
 

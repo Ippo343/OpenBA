@@ -207,7 +207,7 @@ inline char* NameAt(const Collection::Array<Video::ShaderProgram::Parameter>& ar
                     int32_t index) {
     const Video::ShaderProgram::Parameter* const e =
         arr._data + static_cast<int64_t>(index);
-    return static_cast<char*>(e->name);
+    return e->name;
 }
 
 }  // namespace
