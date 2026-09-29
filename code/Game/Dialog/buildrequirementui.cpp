@@ -336,13 +336,13 @@ void BuildRequirementUI::OnCreated() {
             UI::LabelElement* label = static_cast<UI::LabelElement*>(labelData[i]);
             if (SaneHeapPtr(resType)) {
                 // The small sprite: sheet (+0x20) and _nameSmall (+0x38)
-                // LEFT: RawMaterialDescription::_spriteSheet is void* (COMP-e's header).
+                // LEFT (debug arm): Debug_Sprite_Ctor takes the sheet as uint64_t.
 #ifdef _DEBUG
                 uint8_t sprite[24];
                 Debug_Sprite_Ctor(sprite, (uint64_t)resType->_spriteSheet, &resType->_nameSmall);
                 Debug_LabelElement_SetSprite(label, sprite);
 #else
-                UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>((UI::SpriteSheet*)resType->_spriteSheet),
+                UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resType->_spriteSheet),
                                   resType->_nameSmall);
                 label->SetSprite(&sprite);
 #endif

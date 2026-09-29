@@ -275,19 +275,19 @@ void BuildUI::OnCreated() {
 
             if (resType) {
                 // Set sprite from resource type
-                // LEFT: RawMaterialDescription's _spriteSheet / _stringTable are void*.
+                // LEFT (debug arm): Debug_Sprite_Ctor takes the sheet as uint64_t.
 #ifdef _DEBUG
                 uint8_t spriteBuf[16];
                 Debug_Sprite_Ctor(spriteBuf, (uint64_t)resType->_spriteSheet, &resType->_name);
                 Debug_LabelElement_SetSprite(labelStorage, spriteBuf);
 #else
-                UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>((UI::SpriteSheet*)resType->_spriteSheet),
+                UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resType->_spriteSheet),
                                   resType->_name);
                 labelStorage->SetSprite(&sprite);
 #endif
 
                 // Set text from resource type
-                UI::String text(Object::ExternalPtr<UI::StringTable>((UI::StringTable*)resType->_stringTable),
+                UI::String text(Object::ExternalPtr<UI::StringTable>(resType->_stringTable),
                                 resType->_name);
                 labelStorage->SetText(&text);
 

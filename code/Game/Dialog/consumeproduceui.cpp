@@ -181,8 +181,7 @@ void ConsumeProduceUI::OnCreated() {
             System::String sysStr = uiStr;
 
             // UI::Sprite from the RawMaterialDescription: sheet (+0x20), _nameSmall (+0x38)
-            // LEFT: RawMaterialDescription::_spriteSheet is void* (COMP-e's header).
-            UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>((UI::SpriteSheet*)resourceDesc->_spriteSheet),
+            UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resourceDesc->_spriteSheet),
                               resourceDesc->_nameSmall);
 
             // Add item to combo: sprite, string, null userData
