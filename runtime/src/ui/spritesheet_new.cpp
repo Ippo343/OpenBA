@@ -88,6 +88,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "../../types/system/String.h"   // RtSystem::StringRefCount / StringLength
 #include "../../types/ui/SpriteSheet.h"   // ~SpriteSheet's body lives here
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"
@@ -173,21 +174,20 @@ extern "C" void* RtUi_SpriteSheet_OperatorNew(uint64_t bytes) {
 // `Object::External::~External` after are the compiler's.
 // ============================================================================
 UI::SpriteSheet::~SpriteSheet() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    auto release = [](uint8_t* slot) {
-        uint8_t* str = *reinterpret_cast<uint8_t**>(slot);
+    auto release = [](char*& slot) {
+        char* str = slot;
         if (!str) return;
-        int32_t* rc = reinterpret_cast<int32_t*>(str - 4);
+        int32_t* rc = &RtSystem::StringRefCount(str);
         if (--*rc == 0) {
-            uint8_t* blk = str - 8;
-            *reinterpret_cast<uint8_t**>(slot) = blk;
+            char* blk = str - 8;
+            slot = blk;
             if (blk) MemFree(blk);
         } else {
-            *reinterpret_cast<uint8_t**>(slot) = nullptr;
+            slot = nullptr;
         }
     };
-    release(p + 0x40);   // m_groupName
-    release(p + 0x38);   // m_textureName
+    release(m_groupName);     // +0x40
+    release(m_textureName);   // +0x38
 
     // ENDGAME B.3.2 step 2 — left as a free-function call, deliberately. This
     // is array_destroy.cpp's J2_ENTRY(180004f50, ReleaseStringsCounted,
@@ -200,6 +200,6 @@ UI::SpriteSheet::~SpriteSheet() {
     // "DtorElem" helper may not be convertible at all, `m_sprites`
     // (SpriteSheet.h +0x20, `Collection::Array<SpriteInfo>`) stays reached
     // as a free-function call, by name, rather than forced onto `.~Array()`.
-    rtcoll::RtColl_ArrayDtorElem_180004f50(p + 0x20);   // m_sprites, Array<SpriteInfo>
+    rtcoll::RtColl_ArrayDtorElem_180004f50(&m_sprites);   // +0x20, Array<SpriteInfo>
 }
 

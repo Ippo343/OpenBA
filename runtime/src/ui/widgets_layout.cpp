@@ -363,7 +363,7 @@ void DocumentTextElement::SetText(const System::String& text) {
     char* newStr = text._data;
     if (oldStr != newStr) {
         if (oldStr) {
-            int32_t* rc = reinterpret_cast<int32_t*>(oldStr - 4);
+            int32_t* rc = &RtSystem::StringRefCount(oldStr);
             *rc -= 1;
             if (*rc == 0) {
                 RtMemFree(oldStr - 8);
@@ -371,7 +371,7 @@ void DocumentTextElement::SetText(const System::String& text) {
             _sourceText = nullptr;
         }
         _sourceText = newStr;
-        if (newStr) *reinterpret_cast<int32_t*>(newStr - 4) += 1;
+        if (newStr) RtSystem::StringRefCount(newStr) += 1;
     }
     WalkDirty(this);
 

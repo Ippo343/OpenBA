@@ -42,7 +42,7 @@ void AssignString(char*& field, char* nv) {
     char* old = field;
     if (old == nv) return;
     if (old != nullptr) {
-        int32_t* rc = reinterpret_cast<int32_t*>(old - 4);
+        int32_t* rc = &RtSystem::StringRefCount(old);
         if (--*rc == 0) {
             field = field - 8;
             MemFree(field);
@@ -51,12 +51,12 @@ void AssignString(char*& field, char* nv) {
         }
     }
     field = nv;
-    if (nv != nullptr) ++*reinterpret_cast<int32_t*>(nv - 4);
+    if (nv != nullptr) ++RtSystem::StringRefCount(nv);
 }
 void ReleaseStringLocal(void** slot) {
-    uint8_t* p = static_cast<uint8_t*>(*slot);
+    char* p = static_cast<char*>(*slot);
     if (p == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(p - 4);
+    int32_t* rc = &RtSystem::StringRefCount(p);
     if (--*rc == 0) { *slot = p - 8; MemFree(*slot); }
 }
 

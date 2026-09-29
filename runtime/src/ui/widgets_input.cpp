@@ -704,7 +704,7 @@ void EditElement::SetText(const System::String& text) {
         char* newPtr = text._data;
         if (oldPtr != newPtr) {
             if (oldPtr != nullptr) {
-                int32_t* refcount = reinterpret_cast<int32_t*>(oldPtr - 4);
+                int32_t* refcount = &RtSystem::StringRefCount(oldPtr);
                 *refcount -= 1;
                 if (*refcount == 0) {
                     System::MemoryAllocator::MemFree(oldPtr - 8);
@@ -712,7 +712,7 @@ void EditElement::SetText(const System::String& text) {
             }
             _text = newPtr;
             if (newPtr != nullptr) {
-                *reinterpret_cast<int32_t*>(newPtr - 4) += 1;
+                RtSystem::StringRefCount(newPtr) += 1;
             }
         }
     }

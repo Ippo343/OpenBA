@@ -114,7 +114,7 @@ inline void MemFree(void* p) {
 // pointer aimed at `chars`. Same idiom runtime/types/system/String.h documents
 // and runtime/src/ui/sprite.cpp's ReleaseStringRef uses.
 inline int32_t& StringRc(char* data) {
-    return *reinterpret_cast<int32_t*>(data - 4);
+    return RtSystem::StringRefCount(data);
 }
 // Retail's release, instruction for instruction (0x1800d8fc2, 0x1800d8e7c and
 // the two temporaries in AddSprite): decrement, and free the block eight bytes
@@ -302,8 +302,8 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
         // the "" literal at 0x1801551f0.
         char* block = static_cast<char*>(MemAlloc(9, 4));
         char* data  = block + 8;
-        reinterpret_cast<int32_t*>(data)[-2] = 0;   // length
-        reinterpret_cast<int32_t*>(data)[-1] = 1;   // refcount
+        RtSystem::StringLength(data) = 0;   // length
+        RtSystem::StringRefCount(data) = 1;   // refcount
         data[0] = '\0';
         name = data;
         e.name = name;

@@ -116,10 +116,9 @@ Object::Base* SpriteCapture::CreateInPlaceObject(void* place) {
 // order. ENDGAME B.3.9 UI-D: the retired `RtUi_SpriteCapture_Dtor` door ran
 // this same body by hand.
 SpriteCapture::~SpriteCapture() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    rtcoll::RtColl_ArrayDtor_180037310(p + 0x40);           // 1800d91d4  ~Array<Sprite>
-    rtcoll::RtColl_ArrayDtorElem_18003e4a0(p + 0x30);           // 1800d91de  ~Array<CaptureEntry>
-    rtcoll::RtColl_ArrayDtor_18003da00(p + 0x20);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>
+    rtcoll::RtColl_ArrayDtor_180037310(&_sprites);          // 1800d91d4  ~Array<Sprite>, +0x40
+    rtcoll::RtColl_ArrayDtorElem_18003e4a0(&_entries);      // 1800d91de  ~Array<CaptureEntry>, +0x30
+    rtcoll::RtColl_ArrayDtor_18003da00(&_sheets);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>, +0x20
 }
 
 }  // namespace UI
@@ -198,37 +197,40 @@ bool SpriteCapture::Serialize(void* streamv) {
             &_sprites, _entries.size);         // 1800d9642
 
         for (int32_t i = 0; i < _sprites.size; ++i) {
-            uint8_t* entries = static_cast<uint8_t*>(_entries.data);   // 1800d9660
-            const int32_t sheetIndex =
-                *reinterpret_cast<int32_t*>(entries + static_cast<size_t>(i) * 0x28);
+            // B.4 LEFT: the three arrays are `CaptureArray` headers (`void*`
+            // data): as `Collection::Array<T>` members their destructors would
+            // run beside the retail ~Array calls above (B4_RULES H5).
+            const CaptureEntry* entries = static_cast<const CaptureEntry*>(_entries.data);  // 1800d9660
+            const int32_t sheetIndex = entries[i].sheetIndex;
 
             uint64_t idxSlot;                                // see the banner
-            void*    sheet;
-            uint8_t* sprites;
+            SpriteSheet* sheet;
+            Sprite*      sprites;
             if (sheetIndex < 0) {                            // 1800d9664 CMP/JGE
                 const int32_t minusOne = -1;
                 __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);  // 1800d966b
-                sprites = static_cast<uint8_t*>(_sprites.data);        // 1800d9672
+                sprites = static_cast<Sprite*>(_sprites.data);           // 1800d9672
                 sheet   = nullptr;                                       // 1800d9676 (RDI==0)
             } else {
-                sheet = reinterpret_cast<void* const*>(
-                    static_cast<uint8_t*>(_sheets.data))[sheetIndex]; // 1800d968f
+                sheet = static_cast<SpriteSheet* const*>(_sheets.data)[sheetIndex];  // 1800d968f
                 if (sheet != nullptr) {                                  // 1800d9693
                     // ENDGAME B.3.6 block D: was an RT_EXPORT_ONCE door;
-                    // now the member. The entry's +0x08 IS a System::String.
-                    const int32_t idx = static_cast<const SpriteSheet*>(sheet)
-                        ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(  // B.3.6 bridge
-                            entries + static_cast<size_t>(i) * 0x28 + 8));  // 1800d96a3
+                    // now the member. The entry's `name` IS a System::String
+                    // (B.4 LEFT: spelt `char*`, H5).
+                    const int32_t idx = sheet->GetSpriteIndexFromName(
+                        *reinterpret_cast<const System::String*>(&entries[i].name));   // 1800d96a3
                     __builtin_memcpy(&idxSlot, &idx, sizeof idx);         // 1800d96a8
                 } else {
                     const int32_t minusOne = -1;
                     __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne); // 1800d96ad
                 }
-                sprites = static_cast<uint8_t*>(_sprites.data);         // 1800d96b4
+                sprites = static_cast<Sprite*>(_sprites.data);           // 1800d96b4
             }
-            uint8_t* slot = sprites + static_cast<size_t>(i) * 0x10;
-            *reinterpret_cast<void**>(slot)        = sheet;   // 1800d9676 / 1800d96b8
-            *reinterpret_cast<uint64_t*>(slot + 8) = idxSlot; // 1800d96c0  QWORD store
+            // One QWORD store over `spriteIndex` and `pad0C` (1800d96c0).
+            Sprite& slot = sprites[i];
+            slot.spriteSheet = sheet;                                    // 1800d9676 / 1800d96b8
+            slot.spriteIndex = static_cast<int32_t>(idxSlot);
+            slot.pad0C       = static_cast<int32_t>(idxSlot >> 32);
         }
     }
 
@@ -392,23 +394,23 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
 extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void* basev) {
     if (count <= 0) return;                                   // 18004c0d0 TEST/JLE
     Serializer* ser = static_cast<Serializer*>(serv);
-    uint8_t*    e   = static_cast<uint8_t*>(basev);
+    UI::CaptureEntry* e = static_cast<UI::CaptureEntry*>(basev);
 
     // Re-read before every call (see above), then dispatched by name.
     auto rw = [ser]() { return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter); };  // B.3.x bridge
-    auto i32 = [](uint8_t* p) -> int32_t& { return *reinterpret_cast<int32_t*>(p); };
 
-    for (int i = 0; i < count; ++i, e += 0x28) {
-        rw()->SerializeInt(i32(e + 0x00), nullptr);
+    for (int i = 0; i < count; ++i, ++e) {                    // stride 0x28
+        rw()->SerializeInt(e->sheetIndex, nullptr);           // +0x00
 
-        reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);   // 18004c10b 0x1800c9930
+        // B.4 LEFT: `name` is a System::String spelt `char*` (H5).
+        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);   // 18004c10b 0x1800c9930, +0x08
 
-        rw()->SerializeInt(i32(e + 0x10), nullptr);
-        rw()->SerializeInt(i32(e + 0x14), nullptr);
-        rw()->SerializeInt(i32(e + 0x18), nullptr);
-        rw()->SerializeInt(i32(e + 0x1c), nullptr);
-        rw()->SerializeFloat(*reinterpret_cast<float*>(e + 0x20), nullptr);
-        rw()->SerializeUInt(*reinterpret_cast<uint32_t*>(e + 0x24), nullptr);
+        rw()->SerializeInt(e->x1, nullptr);                   // +0x10
+        rw()->SerializeInt(e->y1, nullptr);                   // +0x14
+        rw()->SerializeInt(e->x2, nullptr);                   // +0x18
+        rw()->SerializeInt(e->y2, nullptr);                   // +0x1c
+        rw()->SerializeFloat(e->rotation, nullptr);           // +0x20
+        rw()->SerializeUInt(e->color, nullptr);               // +0x24
     }
 }
 
