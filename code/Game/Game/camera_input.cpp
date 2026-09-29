@@ -33,6 +33,7 @@
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Game/Map.h"   // m_game's class (B.4 GAME-a)
 #include "options.h"
 #include "Game/exe_bodies.h"   // Reimpl_MapGetTerrainPos
 #include <cstdint>
@@ -218,10 +219,10 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
 
     // ── clamp focus to the (zoom-scaled) map bounds ──
     {
-        int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
+        Map* grid = GameUpdateLoop::_singleton->m_game;
         if (grid) {
             float factor = clampf(1.0f - (*(float*)(pc + 0x30) - kClampBase) / kClampSpan, 0.0f, 1.0f);
-            float halfExtent = (float)grid[0] * kHalf * factor;
+            float halfExtent = (float)grid->size * kHalf * factor;
             *(float*)(pc + 0x1c) = clampf(*(float*)(pc + 0x1c), -halfExtent, halfExtent);
             *(float*)(pc + 0x20) = clampf(*(float*)(pc + 0x20), -halfExtent, halfExtent);
         }
@@ -229,9 +230,9 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
 
     // ── follow/center-on-entity smooth move (only when +0xa4 flag set) ──
     if (*(char*)(ui + 0xa4) != 0) {
-        int* grid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
+        Map* grid = GameUpdateLoop::_singleton->m_game;
         if (grid) {
-            const int gw = grid[0];
+            const int gw = grid->size;
             const float halfCell = (float)(gw >> 1) - kHalf;
             float worldA[3] = {0,0,0}, worldB[3] = {0,0,0};
             int cellA = *(int*)(ui + 0xac);

@@ -36,6 +36,7 @@
 #include "ProfessionList.h"     // m_professionList's class (B.4 W0-H2)
 #include "PlayerController.h"   // m_playerController's class (B.4 W0-H2)
 #include "PlayerToolManager.h"  // m_toolManager's class (B.4 W0-H2)
+#include "Map.h"                // m_game's class (B.4 GAME-a)
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
@@ -588,14 +589,13 @@ static void* Reimpl_TradeComponent_impl_0a30(void* selfMem) {
     return selfMem;
 }
 
-// FUN_14009ee70 — REAL Game ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8.
-static void* Reimpl_FUN_14009ee70(void* selfMem) {
-    uint8_t* p = (uint8_t*)selfMem;
-    RtPicking_Scene_Ctor((void*)(p + 8));
-    memset(p + 0x68, 0, 0xf8 - 0x68);         // zero +0x68..+0xf8 (preserves the embedded Scene at +8)
-    *(uint8_t*)(p + 0xa2) = 1;
-    *(uint64_t*)(p + 0xd0) = 8;
-    return selfMem;
+// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8
+// (raw storage, H5: constructed by hand, as the tree always has).
+Map::Map() {
+    RtPicking_Scene_Ctor(pickingScene);
+    memset(&field_0x68, 0, sizeof(Map) - offsetof(Map, field_0x68));   // zero +0x68..+0xf8 (keeps the Scene at +8)
+    field_0xA2 = true;
+    field_0xD0 = 8;
 }
 
 // MainMenuDialog_helper_9180 @ 0x1400f9180 — Tutorial-ish ctor (+0x118, 0x138).
@@ -980,8 +980,8 @@ void GameUpdateLoop::Load() {
     // Step 11 — Game (+0xF8, 0xf8) — CRITICAL: clears the m_game==null Stage-C guards.
     {
         void* mem = AllocSub(0xf8, 8);
-        if (mem) Reimpl_FUN_14009ee70(mem);
-        m_game = mem;
+        Map* map = mem ? new (mem) Map : nullptr;
+        m_game = map;
     }
 
     // Step 12 — Tutorial-ish (+0x118, 0x138).
@@ -1399,7 +1399,7 @@ void GameUpdateLoop::Load() {
             // start-town is implemented. See project_newgame_path_roadmap / task #6/#7.
             {
                 uint8_t* mapGen = static_cast<uint8_t*>(m_mapConfig);   // startConfig (MapGenerator rsc)
-                uint8_t* game   = static_cast<uint8_t*>(m_game);
+                Map* game       = m_game;
                 WorldGeometry* wgeom = m_worldGeometry;
                 PlayerController* pctrl = m_playerController;
                 fprintf(stderr, "[startTown::DIAG] mapGen(loop+0x40)=%p game=%p worldGeom=%p playerCtrl=%p\n",
@@ -1417,16 +1417,16 @@ void GameUpdateLoop::Load() {
                             *(int32_t*)(mapGen + 0xe8));
                 }
                 if (game) {
-                    int gdim = *(int32_t*)game;
-                    uint8_t* cells = *(uint8_t**)(game + 0x80);
+                    int gdim = game->size;
+                    MapCell* cells = game->cells;
                     fprintf(stderr, "[startTown::DIAG]   *game(dim)=%d  tileGrid(*(game+0x80))=%p  cnt=%d\n",
-                            gdim, cells, *(int32_t*)(game + 0x88));
+                            gdim, cells, game->cellCount);
                     // Tile-type histogram (2=buildable 6/10=mountain 7=shore 8=deep water).
                     if (cells && gdim > 0) {
                         int hist[16] = {0};
                         int total = gdim * gdim;
                         for (int i = 0; i < total; ++i) {
-                            uint8_t t = cells[(size_t)i * 0x30 + 0x29];
+                            uint8_t t = cells[i].terrainType;
                             hist[t < 16 ? t : 0]++;
                         }
                         fprintf(stderr, "[startTown::DIAG]   tiles: buildable(2)=%d shore(7)=%d "
@@ -1489,8 +1489,8 @@ void GameUpdateLoop::Load() {
         // + same order as the worldgen branch above; dim comes from the
         // deserialized map object itself (+0x00, what e8c0's *param_1 reads).
         {
-            void* game = m_game;
-            int dim = game ? *(int32_t*)game : 0;
+            Map* game = m_game;
+            int dim = game ? game->size : 0;
             fprintf(stderr, "[GUL::Load] post-load rebuild: game=%p dim=%d\n", game, dim);
             fflush(stderr);
             if (game && dim > 0) {
@@ -1516,14 +1516,13 @@ void GameUpdateLoop::Load() {
                 // wipe, these read 0 and every citizen silently loses its job a few
                 // hundred frames later. One line per load.
                 {
-                    const uint8_t* tiles =
-                        *reinterpret_cast<const uint8_t* const*>((const uint8_t*)game + 0x80);
+                    const MapCell* tiles = game->cells;
                     fprintf(stderr, "[GridProbe] tiles=%p regionIds:", (const void*)tiles);
                     if (tiles)
                         for (int c = 32000; c <= 35000; c += 500)
                             fprintf(stderr, " [%d]=%u/kind%u", c,
-                                    *reinterpret_cast<const uint16_t*>(tiles + (size_t)c*0x30 + 0x26),
-                                    tiles[(size_t)c*0x30 + 0x29]);
+                                    tiles[c].zone,
+                                    tiles[c].terrainType);
                     fprintf(stderr, "\n"); fflush(stderr);
                 }
             }

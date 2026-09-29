@@ -100,6 +100,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Game/Map.h"   // m_game's class (B.4 GAME-a)
 #include <cstdio>
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
@@ -755,12 +756,12 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
 
     if (*reinterpret_cast<int32_t*>(base + 0x148) >= 1) return;   // already populated
 
-    int* mapGrid = static_cast<int*>(GameUpdateLoop::_singleton->m_game);
-    int side = *mapGrid >> 3;
+    Map* mapGrid = GameUpdateLoop::_singleton->m_game;
+    int side = mapGrid->size >> 3;
     ResizeStride0x10(base + 0x140, side * side);
     std::fprintf(stderr, "[CitPostLoad] mapGrid=%p mapWidth=%d side=%d cells=%d "
             "cellMap=%p residence{ptr=%p count=%d} ent{ptr=%p count=%d}\n",
-            (void*)mapGrid, *mapGrid, side, side * side,
+            (void*)mapGrid, mapGrid->size, side, side * side,
             *reinterpret_cast<void**>(base + 0x140),
             *reinterpret_cast<void**>(base + 0x130),
             *reinterpret_cast<int32_t*>(base + 0x138),
@@ -778,7 +779,7 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
         // the resulting x/y ran off the 32x32 cell map and AddCellEntry wrote
         // through a wild record pointer.
         int32_t* residenceCells = *reinterpret_cast<int32_t**>(base + 0x130);
-        int mapWidth = *mapGrid;
+        int mapWidth = mapGrid->size;
         for (; idx < residenceCount; ++idx) {
             int cell = residenceCells[idx * 2];
             if (cell < 0 || cell >= mapWidth * mapWidth) {

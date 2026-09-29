@@ -27,6 +27,7 @@
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Game/Map.h"   // m_game's class (B.4 GAME-a)
 #include "Component/exe_bodies.h"   // FloorComponent_FindResData
 #include "system/String.h"
 #include "collection/Collection.h"
@@ -180,7 +181,7 @@ static int EventLog_TileIndex(void* entityIBP) {
     if (!entityIBP || *(int64_t*)entityIBP == 0) return -1;
     void* gameWorld = GameUpdateLoop::_singleton;
     if (!gameWorld) return -1;
-    int* game = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_game);   // B.3.8 bridge
+    Map* game = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_game;   // B.3.8 bridge
     if (!game) return -1;
 
     int64_t mapIBP = 0;
@@ -190,7 +191,7 @@ static int EventLog_TileIndex(void* entityIBP) {
     const uint8_t* mc = (const uint8_t*)mapIBP;
     int x = *(const int16_t*)(mc + 0x28), y = *(const int16_t*)(mc + 0x2a);
     int w = *(const int16_t*)(mc + 0x2c), h = *(const int16_t*)(mc + 0x2e);
-    return ((h >> 1) + y) * (*game) + (w >> 1) + x;
+    return ((h >> 1) + y) * game->size + (w >> 1) + x;
 }
 
 // ABI shim for the address registry: the original 0x140095030 is

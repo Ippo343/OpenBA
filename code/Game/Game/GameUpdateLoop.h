@@ -48,6 +48,7 @@ class ProfessionList;     // Game/ProfessionList.h (block W0-H1)
 class WorldGeometry;      // Game/WorldGeometry.h
 class PlayerController;   // Game/PlayerController.h
 class PlayerToolManager;  // Game/PlayerToolManager.h
+class Map;                // Game/Map.h (B4 GAME-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -140,7 +141,7 @@ public:
     PlayerController* m_playerController; // +0xE0  camera controller, MemAlloc(0x10c) + ctor 0x1400985b0
     void*    m_entityList;          // +0xE8  EntityList*, MemAlloc(0xe8) + ctor 0x1400c3f90 in Load
     void*    m_citizenList;         // +0xF0  CitizenBehavior* (town manager), MemAlloc(0x1c0) + ctor 0x140090a30 in Load
-    void*    m_game;                // +0xF8  Map* (Game/Map.h): the world map (tile grid), MemAlloc(0xf8) + ctor 0x14009ee70
+    Map*     m_game;                // +0xF8  the world map (tile grid), MemAlloc(0xf8) + ctor 0x14009ee70
 
     // Scene geometry objects (added to Graphics::Scene as globals)
     Graphics::SunLight*     m_sunLight;      // +0x100 MemAlloc(0x108) in Load (exe table 0x14015e290)

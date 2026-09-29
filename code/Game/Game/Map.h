@@ -93,6 +93,8 @@ static_assert(offsetof(MapCell, _pad2E) == 0x2E, "MapCell +0x2E");
 
 class Map {
 public:
+    Map();                       // 0x14009ee70 (defined in gameupdateloop_load.cpp)
+
     int32_t  size;               // +0x00 map edge in cells (Serialize int&)
     uint8_t  _pad04[4];          // +0x04 not written by the ctor
     uint8_t  pickingScene[0x60]; // +0x08 Picking::Scene (embedded; raw, H5)
