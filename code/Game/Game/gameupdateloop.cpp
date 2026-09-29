@@ -284,13 +284,10 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
 // Native time-of-day sun/lighting driver (code/Game/Game/weather_sun.cpp).
 extern "C" void Weather_SunUpdate(void* self, void* ctx);
 
-// In-game camera controller input (code/Game/Game/camera_input.cpp). Drives the
-// PlayerController camera from the KeyMap (WASD pan, Q/E rotate, wheel zoom, presets).
-// Only called in standalone, where EntityUI::Update (0x1401026a0) isn't registered.
-namespace Game {
-    void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks);
-    void Camera_UpdateHotkeys(void* entityUI, int inputFlag, int64_t timeTicks);
-}
+// In-game camera controller input: PlayerToolManager::UpdateHotkeys / UpdateCamera
+// (code/Game/Game/camera_input.cpp) drive the PlayerController camera from the
+// KeyMap (WASD pan, Q/E rotate, wheel zoom, presets). Called here because the
+// manager's Update (0x1401026a0) is not ported.
 
 // OnScenarioComplete sub-functions
 // FUN_140095580 — EventNotifier::FireNotification(notifier, eventType, priority, entityPtr)
@@ -1062,8 +1059,10 @@ post_simulation:
             // registered, so fn_EntityUI_Update is null and the camera never moved.
             // Drive the camera directly from the KeyMap here — hotkeys (pause/presets)
             // first, then per-frame movement, matching the original helper order.
-            Game::Camera_UpdateHotkeys(m_toolManager, noInputFocus ? 1 : 0, time->_ticks);
-            Game::Camera_UpdateMovement(m_toolManager, noInputFocus ? 1 : 0, time->_ticks);
+            if (m_toolManager) {
+                m_toolManager->UpdateHotkeys(noInputFocus ? 1 : 0, time->_ticks);   // 0x1400ff6e0
+                m_toolManager->UpdateCamera(noInputFocus ? 1 : 0, time->_ticks);    // 0x1400feec0
+            }
             // Phase 3: tick the active player tool (the tool half of EntityUI::Update
             // that camera_input.cpp omitted) — OnKey (dialog + left-click confirm) +
             // Serialize (ghost preview) + cursor. -1 = no active tool -> keep default.

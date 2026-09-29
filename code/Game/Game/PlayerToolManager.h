@@ -100,7 +100,7 @@ public:
     float    field_0x3C;         // +0x3C ctor 0 (one qword store with +0x40); Serialize float (0x140102920)
     float    field_0x40;         // +0x40 ctor 0; Serialize float
     float    field_0x44;         // +0x44 ctor 0.75
-    void*    field_0x48;         // +0x48 ctor 0
+    int64_t  field_0x48;         // +0x48 ctor 0; a Time the camera update (0x1400feec0) counts down to 0
     TrackedEntityNode* field_0x50; // +0x50 ctor 0; the pinned entity set's root (EntityUI unpin removes, 0x14002c690)
     int32_t  field_0x58;         // +0x58 ctor 0; its count
     uint8_t  _pad5C[4];          // +0x5C
@@ -124,6 +124,13 @@ public:
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x140102920
+
+    // ---- members (B4 GAME-a; bodies in camera_input.cpp) ----
+    // The camera halves of the manager's Update (0x1401026a0). inputFlag: 1 when
+    // no dialog has the input; timeTicks: the frame's System::Time ticks.
+    void UpdateCamera(int inputFlag, int64_t timeTicks);    // 0x1400feec0
+    void UpdateHotkeys(int inputFlag, int64_t timeTicks);   // 0x1400ff6e0
+    void ApplyCameraView(int index);                        // 0x1400fe8d0 one saved view
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");

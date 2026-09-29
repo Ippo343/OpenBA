@@ -772,7 +772,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x3C = 0.0f;                        // +0x3c / +0x40: one qword store (H7: two stores)
     field_0x40 = 0.0f;
     field_0x44 = 0.75f;
-    field_0x48 = nullptr;
+    field_0x48 = 0;
     field_0x50 = nullptr;
     field_0x58 = 0;
     field_0x60 = nullptr;
