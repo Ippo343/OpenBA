@@ -1437,16 +1437,15 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             const CitizenBehavior* town = gameWorld->m_citizenList;
 
             // A null dialog: no panel to track
-            Object::InternalPtr<UI::DialogInstance> parentRef(nullptr);
+            UI::DialogInstance* noDialog = nullptr;
 
-            // Find entity by template
+            // Find entity by template (0x140088d40)
             ComponentEntity* entity = Toolbar_FindEntity_Impl(town, item->_field58, 0);
 
-            // Center camera on entity. NOTE: the tree hands the ENTITY where
-            // CenterOnEntity reads an InternalPtr* (the tree's
-            // Toolbar_FindEntity_Impl returned the value it wrote); kept as the
-            // tree had it.
-            Toolbar_CenterOnEntity_Impl(gameSys, &parentRef, entity);
+            // Center camera on entity: retail 0x1400b92a0 hands 0x140103040 the
+            // ADDRESS of 0x140088d40's result slot (the tree handed the entity
+            // itself, which CenterOnEntity then read as the slot).
+            gameSys->CenterOnEntity(&noDialog, &entity);   // 0x140103040
             break;
         }
         case 5: {
