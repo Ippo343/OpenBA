@@ -99,6 +99,8 @@
 #include "element_common.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/collection/Collection.h"
+#include "../../types/io/Serializer.h"   // B4: Persist's scope is IO::Serializer
+#include "../../types/io/Stream.h"
 
 using UI::Element;
 
@@ -171,6 +173,12 @@ struct ElemCounts {
     }
 };
 ElemCounts g_elemCounts;
+
+// UserInterface::_toolTipDialog (+0x40), a UI::ToolTipDialog, read as the
+// DialogInstance it is. LEFT: the field is void* (UserInterface.h, R-UI-b).
+inline UI::DialogInstance* ToolTipDialogOf(const UI::UserInterface* u) {
+    return static_cast<UI::DialogInstance*>(u->_toolTipDialog);
+}
 
 }  // namespace
 
@@ -299,28 +307,11 @@ bool Element::Contains(int32_t x, int32_t y, UserInterface* ui) const {
 // (reference_encoding_vtable_offsets_differ_between_builds.md).
 void Element::Persist(void* stream) {
     ++g_elemCounts.persist;
-    struct Scope { void* stream; void* node; };
-    Scope scope;
-    scope.stream = stream;
-    scope.node   = nullptr;
-
-    uint8_t* const s = static_cast<uint8_t*>(stream);
-    void* const enc = *reinterpret_cast<void**>(s + 0x10);
-    void* const* const encVt = *reinterpret_cast<void* const* const*>(enc);
-    const int32_t mode = *reinterpret_cast<const int32_t*>(s + 0x08);
-
-    using ScopeFn = void* (*)(void*, void*, int32_t);
-    ScopeFn open = reinterpret_cast<ScopeFn>(
-        encVt[(mode == 0 ? 0x18 : 0x20) / sizeof(void*)]);
-    void* const node = open(enc, &scope, 0);
-
-    scope.node = node;
-    if (node) {
-        // slot 0 (node, 1) — the scalar deleting destructor with the delete
-        // flag, exactly as 0x1801168b4 spells it. The node is the
-        // IO::ReaderWriter the encoding factory returned, not a UI class.
-        delete reinterpret_cast<IO::ReaderWriter*>(node);        // B.3.x bridge
-    }
+    // The scope above IS an IO::Serializer: {stream, readerWriter}, built by
+    // ??0Serializer (0x1800b9960: the encoding's CreateReader / CreateWriter
+    // chosen by _direction, version 0) and closed by ??1Serializer
+    // (0x1800b99b0: `if (rw) rw->vt[0](rw, 1)`), both of which retail inlines.
+    IO::Serializer scope(*static_cast<IO::Stream*>(stream), 0);   // 180116889
 }
 
 // ---- slot 7  ?Update@Element@UI@@UEAA…  0x180116270 ------------------------
@@ -396,8 +387,8 @@ void Element::Update(const System::Time& time, UserInterface* ui,
     if ((f & kElementFlagToolTip16) == 0) return;               // BT 0x10 / JNC exit
 
     if ((f & kElementFlagToolTipValid) != 0) {                  // BT 0x13
-        void* const dlg = dialog->Get();
-        if (hovering && dlg && *(reinterpret_cast<const uint8_t*>(dlg) + 0x98) != 0) {
+        DialogInstance* const dlg = dialog->Get();
+        if (hovering && dlg && dlg->_hovering != 0) {           // +0x98
             EventRecord rec;
             rec.dialog    = dlg;
             rec.element   = this;
@@ -409,24 +400,19 @@ void Element::Update(const System::Time& time, UserInterface* ui,
             if ((f & 0x00100000u) == 0) {                       // BT 0x14 clear
                 rec.eventId = 0xf;                              // tooltip BEGIN
                 rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
-                void* dlgLocal  = dialog->Get();
-                void* elemLocal = this;
-                u->BeginToolTip(                                        // 0x180120860
-                    reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&dlgLocal),   // B.3.x bridge
-                    reinterpret_cast<Object::InternalPtr<Element>*>(&elemLocal), mx, my);
+                Object::InternalPtr<DialogInstance> dlgLocal(dialog->Get());
+                Object::InternalPtr<Element> elemLocal(this);
+                u->BeginToolTip(&dlgLocal, &elemLocal, mx, my);         // 0x180120860
             } else {
                 rec.eventId = 0x10;                             // tooltip MOVE
                 rtcoll::RtColl_ArraySetSizeFill_180033690(&u->_events, u->_events._size + 1, &rec);
-                void* const tip = u->_toolTipDialog;
+                DialogInstance* const tip = ToolTipDialogOf(u);
                 if (tip) {
                     // y is offset by the tooltip ROOT ELEMENT's layout height
                     // (dlg+0x50 is the root, element+0x64 is _layoutHeight), so
                     // the tip sits ABOVE the cursor.
-                    void* const root = *reinterpret_cast<void* const*>(
-                        reinterpret_cast<const uint8_t*>(tip) + 0x50);
-                    const int32_t h = *reinterpret_cast<const int32_t*>(
-                        reinterpret_cast<const uint8_t*>(root) + 0x64);
-                    static_cast<DialogInstance*>(tip)->SetUpperLeft(mx, my - h, false);   // 0x180114a60
+                    const int32_t h = tip->_root->_layoutHeight;
+                    tip->SetUpperLeft(mx, my - h, false);               // 0x180114a60
                 }
             }
             const uint32_t o = _flags;
@@ -436,18 +422,16 @@ void Element::Update(const System::Time& time, UserInterface* ui,
 
         } else if ((f & 0x00100000u) != 0) {
             dialog->Get()->EndHover(u);                                 // 0x180113d10
-            void* const tip = u->_toolTipDialog;
+            DialogInstance* const tip = ToolTipDialogOf(u);
             bool clear = false;
             if (!tip) {
                 clear = true;
-            } else if (this == *reinterpret_cast<Element* const*>(
-                                   reinterpret_cast<const uint8_t*>(tip) + 0x30)) {
+            } else if (this == tip->_dataSource) {                     // +0x30
                 // Retail re-tests `tip` here after already branching on it
                 // (0x1801164fc). Kept: it is the body.
                 if (tip) {
-                    void* local = tip;
-                    u->CloseDialog(                                     // 0x180120f20
-                        reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&local));   // B.3.x bridge
+                    Object::InternalPtr<DialogInstance> local(tip);
+                    u->CloseDialog(&local);                             // 0x180120f20
                 }
                 clear = true;
             }

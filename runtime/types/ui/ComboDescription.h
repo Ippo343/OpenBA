@@ -50,6 +50,11 @@
 
 namespace UI {
 
+class SpriteSheet;
+class StringTable;
+class Font;
+class ElementDescription;
+
 class ComboDescription : public ButtonDescription {
 public:
     // The REAL constructor, the stores Construct / Reconstruct inline
@@ -97,9 +102,9 @@ public:
     // `ElementDescription::_stringTable` (+0x58). Every body in this class
     // means the combo's own item table; spell the base's
     // `ElementDescription::_stringTable` if it is ever needed.
-    void* _listDesc;               // +0xa0  ExternalPtr<ElementDescription> (0x180038f90 @ 0x180112a0f)
-    void* _itemDesc;               // +0xa8  ExternalPtr<ElementDescription> (0x180038f90 @ 0x180112a20)
-    void* _stringTable;            // +0xb0  ExternalPtr<StringTable>        (0x1800042a0 @ 0x180112a31)
+    ElementDescription* _listDesc; // +0xa0 (B4 H4: typed)  ExternalPtr<ElementDescription> (0x180038f90 @ 0x180112a0f)
+    ElementDescription* _itemDesc; // +0xa8 (B4 H4: typed)  ExternalPtr<ElementDescription> (0x180038f90 @ 0x180112a20)
+    StringTable* _stringTable;     // +0xb0 (B4 H4: typed)  ExternalPtr<StringTable>        (0x1800042a0 @ 0x180112a31)
 };
 
 static_assert(sizeof(ComboDescription) == 0xb8,

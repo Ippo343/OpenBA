@@ -69,41 +69,30 @@ using namespace rtuielem;
 
 namespace {
 
-// UI::ClipRegionElement's own fields (see clipregionelement.cpp for the
-// derivation) — block C1's header owns them; raw here until the fragment pass.
-constexpr int kClipReqW   = 0xc0;
-constexpr int kClipReqH   = 0xc4;
-constexpr int kClipInnerW = 0xc8;
-constexpr int kClipInnerH = 0xcc;
-constexpr int kClipOffX   = 0xd0;
-constexpr int kClipOffY   = 0xd4;
-
-const uint8_t* VideoDevice() {
+const ::Video::Device* VideoDevice() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
-    return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
+    return ::Video::Device::_singleton;
 }
 
 
 // `CMOVNZ`: the child on a passed type test, NULL on a failed one — and retail
 // then dereferences the NULL (see ComputeSize).
-UI::Element* AsClipRegion(UI::Element* p) {
-    return reinterpret_cast<const Object::Base*>(p)->IsDerivedFrom(UI::ClipRegionElement::TypeId()) ? p : nullptr;
+UI::ClipRegionElement* AsClipRegion(UI::Element* p) {
+    return p->IsDerivedFrom(UI::ClipRegionElement::TypeId())
+               ? static_cast<UI::ClipRegionElement*>(p) : nullptr;
 }
 UI::ScrollElement* AsScroll(UI::Element* p) {
-    return reinterpret_cast<const Object::Base*>(p)->IsDerivedFrom(UI::ScrollElement::TypeId())
-               ? reinterpret_cast<UI::ScrollElement*>(p)             // B.3.6 bridge
-               : nullptr;
+    return p->IsDerivedFrom(UI::ScrollElement::TypeId())
+               ? static_cast<UI::ScrollElement*>(p) : nullptr;
 }
-
-int32_t& ClipI32(UI::Element* clip, int off) { return I32(clip, off); }
 
 // The screen-size override half of the inlined GetPaddedSize. Retail's copies
 // in this file are ONE-AXIS or TWO-AXIS depending on the child, so the walk is
 // factored out and the two conversions are done at the call site.
-const uint8_t* ScaleOwnerOf(const UI::Element* e) {
+const UI::UserInterface* ScaleOwnerOf(const UI::Element* e) {
     const UI::Element* root = e;
     while (root->_parent != nullptr) root = root->_parent;
-    return static_cast<const uint8_t*>(Pc(root->_dialogParent, 0x10));
+    return root->_dialogParent->_ui;
 }
 
 }  // namespace
@@ -138,11 +127,11 @@ namespace UI {
 void ContainerElement::ComputeSize() {
     if ((_flags & kFlagNeedsSizeCalc) == 0) return;
 
-    Element* clip = AsClipRegion(_children[0]);
+    ClipRegionElement* clip = AsClipRegion(_children[0]);
     clip->ComputeSize();                                     // faithful: may be null
 
-    const int32_t snapW = ClipI32(clip, kClipInnerW);
-    const int32_t snapH = ClipI32(clip, kClipInnerH);
+    const int32_t snapW = clip->_innerWidth;
+    const int32_t snapH = clip->_innerHeight;
     _layoutWidth  = snapW;
     _layoutHeight = snapH;
 
@@ -156,11 +145,11 @@ void ContainerElement::ComputeSize() {
         if (w < barA->_minWidth) w = barA->_minWidth;
         const uint32_t f = barA->_flags;
         if ((f & (kFlagScreenH | kFlagScreenW)) != 0) {
-            const uint8_t* owner = ScaleOwnerOf(barA);
+            const UI::UserInterface* owner = ScaleOwnerOf(barA);
             if (f & kFlagScreenW) {
-                const uint8_t* dev = VideoDevice();
-                w = static_cast<int>(static_cast<float>(*reinterpret_cast<const int32_t*>(dev + 0x04)) *
-                                     *reinterpret_cast<const float*>(owner + 0xdc));
+                const ::Video::Device* dev = VideoDevice();
+                w = static_cast<int>(static_cast<float>(dev->backBufferWidth) *
+                                     owner->_uiScale);
             }
         }
         barAW = w;
@@ -178,14 +167,14 @@ void ContainerElement::ComputeSize() {
         if (h < barB->_minHeight) h = barB->_minHeight;
         const uint32_t f = barB->_flags;
         if ((f & (kFlagScreenH | kFlagScreenW)) != 0) {
-            const uint8_t* owner = ScaleOwnerOf(barB);
-            const uint8_t* dev = VideoDevice();
+            const UI::UserInterface* owner = ScaleOwnerOf(barB);
+            const ::Video::Device* dev = VideoDevice();
             if (f & kFlagScreenW)
-                w = static_cast<int>(static_cast<float>(*reinterpret_cast<const int32_t*>(dev + 0x04)) *
-                                     *reinterpret_cast<const float*>(owner + 0xdc));
+                w = static_cast<int>(static_cast<float>(dev->backBufferWidth) *
+                                     owner->_uiScale);
             if (f & kFlagScreenH)
-                h = static_cast<int>(static_cast<float>(*reinterpret_cast<const int32_t*>(dev + 0x08)) *
-                                     *reinterpret_cast<const float*>(owner + 0xdc));
+                h = static_cast<int>(static_cast<float>(dev->backBufferHeight) *
+                                     owner->_uiScale);
         }
         barBW = w;
         barBH = h;
@@ -206,9 +195,9 @@ void ContainerElement::ComputeSize() {
     _layoutWidth  = (reqW > 0) ? clampedW : _layoutWidth  + barAGap + barAW;
     _layoutHeight = (reqH > 0) ? clampedH : _layoutHeight + barBGap + barBW;
 
-    if (ClipI32(clip, kClipReqW) != clipW || ClipI32(clip, kClipReqH) != clipH) {
-        ClipI32(clip, kClipReqW) = clipW;
-        ClipI32(clip, kClipReqH) = clipH;
+    if (clip->_reqWidth != clipW || clip->_reqHeight != clipH) {
+        clip->_reqWidth = clipW;
+        clip->_reqHeight = clipH;
         clip->SetNeedsSizeCalc();
     }
 
@@ -230,26 +219,26 @@ void ContainerElement::ComputeSize() {
 void ContainerElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
     ElementComputeAlignedRect(this, x, y, w, h);
 
-    Element* clip = AsClipRegion(_children[0]);
+    ClipRegionElement* clip = AsClipRegion(_children[0]);
 
     Element* raw = _children[0];
     const int l = _layoutLeft;
     const int t = _layoutTop;
-    raw->ComputeLayout(l, t, ClipI32(clip, kClipReqW) + l, ClipI32(clip, kClipReqH) + t);
+    raw->ComputeLayout(l, t, clip->_reqWidth + l, clip->_reqHeight + t);
 
     Element* barA = _children[1];
     if (barA != nullptr) {
-        barA->ComputeLayout(_barSize + _layoutLeft + ClipI32(clip, kClipReqW),
+        barA->ComputeLayout(_barSize + _layoutLeft + clip->_reqWidth,
                             _layoutTop,
                             _layoutRight,
-                            ClipI32(clip, kClipReqH) + _layoutTop);
+                            clip->_reqHeight + _layoutTop);
     }
 
     Element* barB = _children[2];
     if (barB != nullptr) {
         barB->ComputeLayout(_layoutLeft,
-                            _barSize + ClipI32(clip, kClipReqH) + _layoutTop,
-                            ClipI32(clip, kClipReqW) + _layoutLeft,
+                            _barSize + clip->_reqHeight + _layoutTop,
+                            clip->_reqWidth + _layoutLeft,
                             _layoutBottom);
     }
 }
@@ -295,23 +284,23 @@ void ContainerElement::Draw(SpriteContext& context, uint8_t alpha) const {
 void ContainerElement::Update(const System::Time& time, UserInterface* ui,
                               Object::InternalPtr<DialogInstance>* dialog,
                               const UpdateState& state) {
-    Element* clip = AsClipRegion(_children[0]);
+    ClipRegionElement* clip = AsClipRegion(_children[0]);
     clip->ComputeSize();                                     // faithful: may be null
 
-    const int32_t innerW = ClipI32(clip, kClipInnerW);
-    const int32_t innerH = ClipI32(clip, kClipInnerH);
+    const int32_t innerW = clip->_innerWidth;
+    const int32_t innerH = clip->_innerHeight;
 
     int posB = 0;   // R12D — _children[2]'s position, published into offset X
     int posA = 0;   // R13D — _children[1]'s position, published into offset Y
 
     if (_children[1] != nullptr) {
         ScrollElement* bar = AsScroll(_children[1]);
-        const int32_t visible = ClipI32(clip, kClipReqH);
+        const int32_t visible = clip->_reqHeight;
         posA = static_cast<int>(bar->_currentValue);
         const float frac = static_cast<float>(visible) / static_cast<float>(innerH);
         bar->_displayPercent = frac;
         if (frac > 1.0f) bar->_displayPercent = 1.0f;
-        const float range = static_cast<float>(innerH - ClipI32(clip, kClipReqH));
+        const float range = static_cast<float>(innerH - clip->_reqHeight);
         bar->_maxValue = range;
         if (range < 0.0f) bar->_maxValue = 0.0f;
     }
@@ -319,10 +308,10 @@ void ContainerElement::Update(const System::Time& time, UserInterface* ui,
     if (_children[2] != nullptr) {
         ScrollElement* bar = AsScroll(_children[2]);
         posB = static_cast<int>(bar->_currentValue);
-        const float frac = static_cast<float>(ClipI32(clip, kClipReqW)) / static_cast<float>(innerW);
+        const float frac = static_cast<float>(clip->_reqWidth) / static_cast<float>(innerW);
         bar->_displayPercent = frac;
         if (frac > 1.0f) bar->_displayPercent = 1.0f;
-        const float range = static_cast<float>(innerW - ClipI32(clip, kClipReqW));
+        const float range = static_cast<float>(innerW - clip->_reqWidth);
         bar->_maxValue = range;
         if (range < 0.0f) bar->_maxValue = 0.0f;
     }
@@ -334,10 +323,10 @@ void ContainerElement::Update(const System::Time& time, UserInterface* ui,
 
     if (_wheelImpulse != 0 && _children[1] != nullptr) {
         ScrollElement* bar = AsScroll(_children[1]);
-        const float range = static_cast<float>(innerH - ClipI32(clip, kClipReqH));
+        const float range = static_cast<float>(innerH - clip->_reqHeight);
         if (range > 0.0f) {
             int32_t acc = _wheelImpulse;
-            float step = ((range / (range / static_cast<float>(ClipI32(clip, kClipReqH)))) / 7.0f)
+            float step = ((range / (range / static_cast<float>(clip->_reqHeight))) / 7.0f)
                          * 0.33f;
             if (acc < 0) { step = -step; acc += 1; } else { acc -= 1; }
             _wheelImpulse = acc;
@@ -348,8 +337,8 @@ void ContainerElement::Update(const System::Time& time, UserInterface* ui,
         }
     }
 
-    ClipI32(clip, kClipOffX) = posB;
-    ClipI32(clip, kClipOffY) = posA;
+    clip->_offsetX = posB;
+    clip->_offsetY = posA;
 
     // Retail copies the caller's handle into its own frame and passes THAT
     // address on (slot 7's pointer-to-temporary ABI, Element.h banner).

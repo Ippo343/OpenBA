@@ -42,6 +42,7 @@
 namespace UI {
 
 class ComboElement;   // block C1
+class ListElement;
 
 class ComboDialog : public DialogInstance {
 public:
@@ -96,11 +97,11 @@ public:
 
 public:
     // ---- the 0x18 bytes ComboDialog adds ------------------------------------
-    void* _list;                                        // +0xb8  InternalPtr<UI::ListElement>
+    ListElement* _list;                                 // +0xb8  InternalPtr<UI::ListElement> (B4 H4)
     // NOT the base's `_parent`: the ctor hands the base a zeroed parent and
     // keeps the real one here (POD banner).
     Object::InternalPtr<DialogInstance> _parentDialog;  // +0xc0
-    void* _combo;                                       // +0xc8  InternalPtr<UI::ComboElement>
+    ComboElement* _combo;                               // +0xc8  InternalPtr<UI::ComboElement> (B4 H4)
 };
 
 static_assert(sizeof(ComboDialog) == 0xd0,

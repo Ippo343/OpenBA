@@ -102,7 +102,7 @@ public:
     int32_t _i74;        // +0x74  ctor 6
     int32_t _i78;        // +0x78  ctor 0xffff8001
     int32_t _i7c;        // +0x7c  ctor 0x7fff
-    uint8_t _b80;        // +0x80  ctor 1
+    bool    _b80;        // +0x80  ctor 1 (B4: kScalarBool, retail's type)
     uint8_t _pad81[7];   // +0x81  never written
 };
 

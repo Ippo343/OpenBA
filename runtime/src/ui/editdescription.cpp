@@ -43,20 +43,8 @@ void FreeStringBlock(void* p) {
 }
 
 // The refcounted System::String RELEASE (retail's asymmetry: the freeing
-// branch leaves the field at `data - 8`, the sharing branch nulls it), through
-// the atomic MemFree slot so a member body keeps no first-call static.
-void ReleaseStringFieldAtomic(uint8_t* p, size_t off) {
-    char*& s = *reinterpret_cast<char**>(p + off);
-    if (s != nullptr) {
-        --*reinterpret_cast<int32_t*>(s - 4);
-        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {
-            s = s - 8;
-            FreeStringBlock(s);
-        } else {
-            s = nullptr;
-        }
-    }
-}
+// branch leaves the field at `data - 8`, the sharing branch nulls it) is
+// rtdesc::ReleaseStringField (description_common.h).
 
 // The refcounted System::String ASSIGNMENT retail open-codes twice in
 // CreateInstance (0x1800d102a and 0x1800d1082). Not a release: the old value is
@@ -67,8 +55,8 @@ void ReleaseStringFieldAtomic(uint8_t* p, size_t off) {
 void AssignStringField(char*& d, char* const s) {
     if (d == s) return;                                      // 1800d1035
     if (d != nullptr) {                                      // 1800d103a
-        --*reinterpret_cast<int32_t*>(d - 4);
-        if (*reinterpret_cast<int32_t*>(d - 4) == 0) {
+        --RtSystem::StringRefCount(d);
+        if (RtSystem::StringRefCount(d) == 0) {
             d = d - 8;                                       // 1800d1045
             FreeStringBlock(d);
         } else {
@@ -76,7 +64,7 @@ void AssignStringField(char*& d, char* const s) {
         }
     }
     d = s;                                                   // 1800d106a
-    if (d != nullptr) ++*reinterpret_cast<int32_t*>(d - 4);  // 1800d1076
+    if (d != nullptr) ++RtSystem::StringRefCount(d);         // 1800d1076
 }
 
 }  // namespace
@@ -102,22 +90,22 @@ void EditDescription::Destruct() { this->~EditDescription(); }
 // two this batch otherwise uses — which is how its pointee type (UI::Font) is
 // distinguished.
 bool EditDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::ElementDescription::Serialize(stream);               // 1800d112a
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_Font(ExtField(&_ptr68), IoSer(&ser));       // 1800d1168
     StringSerialize(&_string70, &ser);    // 1800d1176
 
     rw->SerializeInt(_word78, nullptr);                      // 1800d118a
-    rw->SerializeBool(reinterpret_cast<bool&>(_flag7c), nullptr); // 1800d119f
+    rw->SerializeBool(_flag7c, nullptr);                     // 1800d119f
 
     StringSerialize(&_string80, &ser);    // 1800d11ae
 
-    if (rw != nullptr) delete rw;                  // 1800d11c6
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                  // 1800d11c6
     return true;
 }
 
@@ -142,9 +130,9 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
     if (raw != nullptr)                                      // 1800d0ffc
         elem = ::new (raw) EditElement();                    // 1800d1001 ??0EditElement
 
-    void* slot = elem;                                       // 1800d100d
+    Object::InternalPtr<Element> slot(elem);                                       // 1800d100d
     UI::ElementDescription::CreateInstance(                   // 1800d101a
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     elem->_font = _ptr68;                                    // 1800d1023 QWORD
     AssignStringField(elem->_text, _string70);               // 1800d102a
@@ -152,7 +140,7 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
     AssignStringField(elem->_filter, _string80);             // 1800d1082
     elem->_password = _flag7c;                               // 1800d10d7 BYTE
 
-    *reinterpret_cast<void**>(ret) = elem;                   // 1800d10e1
+    *ret = Object::InternalPtr<Element>(elem);                   // 1800d10e1
     return ret;
 }
 
@@ -168,9 +156,8 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
 // released.
 namespace UI {
 EditDescription::~EditDescription() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    ReleaseStringFieldAtomic(p, offsetof(EditDescription, _string80));   // 1800d1210
-    ReleaseStringFieldAtomic(p, offsetof(EditDescription, _string70));   // 1800d1246
+    ReleaseStringField(_string80);                           // 1800d1210  +0x80
+    ReleaseStringField(_string70);                           // 1800d1246  +0x70
 }
 
 // ?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ  0x18003f7c0

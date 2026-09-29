@@ -42,6 +42,10 @@
 // helpers below dispatch slots 4/5 as member calls instead of raw slot reads.
 #include "../../types/ui/Element.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/ui/DialogInstance.h"   // B4: Element::_dialogParent->_ui
+#include "../../types/ui/UserInterface.h"    // B4: UserInterface::_uiScale
+#include "../../types/ui/Sprite.h"           // B4: SpriteW / SpriteH
+#include "../../types/ui/SpriteSheet.h"      // B4: SpriteSheet::m_sprites
 #include "../../types/system/MemoryAllocator.h"   // B3R RT-UI: MemAlloc / MemFree, direct
 
 namespace rtuielem {
@@ -49,30 +53,8 @@ namespace rtuielem {
 // (B3X W0: `VTableOf`, `VSlot<Fn>(o, INDEX)`, the `kSlot*` Element slot
 // indices and the four slot typedefs are gone -- every UI::Element slot is
 // dispatched by name, `static_cast<UI::Element*>(e)->ComputeSize()`.)
-
-// ---- UI::Element field offsets, all proven in runtime/types/ui/Element.h ---
-constexpr int kElemName          = 0x10;
-constexpr int kElemLeftPad       = 0x18;
-constexpr int kElemRightPad      = 0x1c;
-constexpr int kElemTopPad        = 0x20;
-constexpr int kElemBottomPad     = 0x24;
-constexpr int kElemMinWidth      = 0x28;
-constexpr int kElemMinHeight     = 0x2c;
-constexpr int kElemAlignment     = 0x30;
-constexpr int kElemFlags         = 0x34;
-constexpr int kElemColor         = 0x38;
-constexpr int kElemLayoutWidth   = 0x60;
-constexpr int kElemLayoutHeight  = 0x64;
-constexpr int kElemLayoutLeft    = 0x68;
-constexpr int kElemLayoutTop     = 0x6c;
-constexpr int kElemLayoutRight   = 0x70;
-constexpr int kElemLayoutBottom  = 0x74;
-constexpr int kElemElementId     = 0x88;
-constexpr int kElemDialogParent  = 0x90;
-constexpr int kElemParent        = 0x98;
-constexpr int kElemChildData     = 0xa0;
-constexpr int kElemChildCount    = 0xa8;
-constexpr int kElemBorder        = 0xb0;
+// (B4: the `kElem*` offsets and the I32 / U32 / P / Pc / Child byte accessors
+// are gone -- every UI::Element field is read by name.)
 
 constexpr uint32_t kFlagHidden        = 0x00000001;
 constexpr uint32_t kFlagAlignArg1     = 0x00000004;
@@ -83,26 +65,16 @@ constexpr uint32_t kFlagDimColor      = 0x00040000;
 constexpr uint32_t kFlagDisabledMask  = 0x01800000;   // bits 23|24
 constexpr uint32_t kFlagNeedsSizeCalc = 0x08000000;
 
-inline int32_t&  I32(void* p, int off) { return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) + off); }
-inline uint32_t& U32(void* p, int off) { return *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(p) + off); }
-inline int32_t   I32c(const void* p, int off) { return *reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(p) + off); }
-inline uint32_t  U32c(const void* p, int off) { return *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(p) + off); }
-inline void*&    P(void* p, int off) { return *reinterpret_cast<void**>(static_cast<uint8_t*>(p) + off); }
-inline void*     Pc(const void* p, int off) { return *reinterpret_cast<void* const*>(static_cast<const uint8_t*>(p) + off); }
-inline void*     Child(const void* self, int index) {
-    return reinterpret_cast<void* const*>(Pc(self, kElemChildData))[index];
-}
-
 // ---------------------------------------------------------------------------
 // `?SetNeedsSizeCalc@Element@UI@@` (0x180035470), inlined everywhere.
 // `OR dword [RCX+0x34],0x8000000 ; RCX = [RCX+0x98]` until the chain ends.
 // It is a DO-WHILE: `this` is always marked, even when `this` has no parent.
 // ---------------------------------------------------------------------------
-inline void SetNeedsSizeCalc(void* self) {
-    void* n = self;
+inline void SetNeedsSizeCalc(UI::Element* self) {
+    UI::Element* n = self;
     do {
-        U32(n, kElemFlags) |= kFlagNeedsSizeCalc;
-        n = P(n, kElemParent);
+        n->_flags |= kFlagNeedsSizeCalc;
+        n = n->_parent;
     } while (n != nullptr);
 }
 
@@ -113,47 +85,34 @@ inline void SetNeedsSizeCalc(void* self) {
 // (walking unconditionally) is invisible in a screenshot and costs a parent
 // walk per element per frame.
 // ---------------------------------------------------------------------------
-inline void StoreFlags(void* self, uint32_t newFlags) {
-    const uint32_t old = U32(self, kElemFlags);
-    U32(self, kElemFlags) = newFlags;
+inline void StoreFlags(UI::Element* self, uint32_t newFlags) {
+    const uint32_t old = self->_flags;
+    self->_flags = newFlags;
     if (((old ^ newFlags) & 1u) != 0) SetNeedsSizeCalc(self);
 }
 
 // ---------------------------------------------------------------------------
-// `Video::Device::_singleton` (exported data, retail 0x1801fe7a8). The screen
-// size lives at +0x04 / +0x08 of the pointed-to Device.
-// ---------------------------------------------------------------------------
-// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh every
-// call -- InlineGetPaddedSize reaches this from member bodies that run on the
-// LOADER THREAD (B9-10: no lazy cache).
-inline void* VideoDeviceSingleton() {
-    return ::Video::Device::_singleton;
-}
-
-// ---------------------------------------------------------------------------
-// UI::Sprite (runtime/types/ui/ImageElement.h): {SpriteSheet* +0x00,
-// int index +0x08, int pad +0x0c}. A sprite's pixel size is read out of the
-// sheet's frame table: `sheet->[+0x20] + index*0x38`, width at +0x1c and
-// height at +0x20 of the entry.
+// UI::Sprite (runtime/types/ui/Sprite.h): {SpriteSheet* +0x00, int index
+// +0x08, int pad +0x0c}. A sprite's pixel size is read out of the sheet's frame
+// table: `SpriteSheet::m_sprites[index]`, width at +0x1c and height at +0x20.
 //
 // Read from `?ComputeSize@ImageElement@UI@@` 0x180118650:
 //     iVar2 = *(int*)(idx*0x38 + 0x1c + *(longlong*)(*(longlong*)(this+0xc0)+0x20))
 // A NEGATIVE index yields 0 AND DOES NOT TOUCH THE SHEET POINTER — retail
 // tests the index first, so a sprite with index -1 and a null sheet is legal.
+// LEFT: UI::Sprite::spriteSheet is `void*` (Sprite.h, block R-UI-b).
 // ---------------------------------------------------------------------------
-inline int SpriteW(const void* sprite) {
-    const int32_t idx = I32c(sprite, 0x08);
+inline int SpriteW(const UI::Sprite& sprite) {
+    const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;
-    const uint8_t* sheet = static_cast<const uint8_t*>(Pc(sprite, 0x00));
-    const uint8_t* frames = static_cast<const uint8_t*>(Pc(sheet, 0x20));
-    return *reinterpret_cast<const int32_t*>(frames + static_cast<int64_t>(idx) * 0x38 + 0x1c);
+    const UI::SpriteSheet* sheet = static_cast<const UI::SpriteSheet*>(sprite.spriteSheet);
+    return sheet->m_sprites[idx].width;
 }
-inline int SpriteH(const void* sprite) {
-    const int32_t idx = I32c(sprite, 0x08);
+inline int SpriteH(const UI::Sprite& sprite) {
+    const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;
-    const uint8_t* sheet = static_cast<const uint8_t*>(Pc(sprite, 0x00));
-    const uint8_t* frames = static_cast<const uint8_t*>(Pc(sheet, 0x20));
-    return *reinterpret_cast<const int32_t*>(frames + static_cast<int64_t>(idx) * 0x38 + 0x20);
+    const UI::SpriteSheet* sheet = static_cast<const UI::SpriteSheet*>(sprite.spriteSheet);
+    return sheet->m_sprites[idx].height;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,37 +140,37 @@ inline uint32_t ComputeColor(uint32_t color, uint8_t alpha) {
 }
 
 // The `TEST [this+0x34],0x40000 / SHR alpha,1` prologue every Draw runs.
-inline uint8_t DimAlpha(const void* self, uint8_t alpha) {
-    return (U32c(self, kElemFlags) & kFlagDimColor) ? static_cast<uint8_t>(alpha >> 1) : alpha;
+inline uint8_t DimAlpha(const UI::Element* self, uint8_t alpha) {
+    return (self->_flags & kFlagDimColor) ? static_cast<uint8_t>(alpha >> 1) : alpha;
 }
 
 // ---------------------------------------------------------------------------
 // `?GetPaddedSize@Element@UI@@` (0x180115f10), inlined.
 // Transcribed from `?ComputeSize@ButtonElement@UI@@` 0x180110d5a..0x180110e0a;
 // identical to the already-ported out-of-line body in runtime/src/ui/element.cpp.
+// Element::_dialogParent -> DialogInstance::_ui -> UserInterface::_uiScale;
+// Video::Device's back-buffer width / height.
 // ---------------------------------------------------------------------------
-inline void PaddedSizeInline(void* e, int* outW, int* outH) {
-    reinterpret_cast<UI::Element*>(e)->ComputeSize();   // B.3.6 bridge — slot 4, virtual
+inline void PaddedSizeInline(UI::Element* e, int* outW, int* outH) {
+    e->ComputeSize();                                   // slot 4, virtual
 
-    *outW = I32(e, kElemLayoutWidth)  + I32(e, kElemRightPad)  + I32(e, kElemLeftPad);
-    *outH = I32(e, kElemLayoutHeight) + I32(e, kElemBottomPad) + I32(e, kElemTopPad);
-    if (*outW < I32(e, kElemMinWidth))  *outW = I32(e, kElemMinWidth);
-    if (*outH < I32(e, kElemMinHeight)) *outH = I32(e, kElemMinHeight);
+    *outW = e->_layoutWidth  + e->_rightPad  + e->_leftPad;
+    *outH = e->_layoutHeight + e->_bottomPad + e->_topPad;
+    if (*outW < e->_minWidth)  *outW = e->_minWidth;
+    if (*outH < e->_minHeight) *outH = e->_minHeight;
 
-    const uint32_t f = U32(e, kElemFlags);
+    const uint32_t f = e->_flags;
     if ((f & (kFlagScreenH | kFlagScreenW)) != 0) {
-        void* root = e;
-        while (P(root, kElemParent) != nullptr) root = P(root, kElemParent);
-        const uint8_t* dev = static_cast<const uint8_t*>(VideoDeviceSingleton());
+        UI::Element* root = e;
+        while (root->_parent != nullptr) root = root->_parent;
+        const ::Video::Device* dev = ::Video::Device::_singleton;
         if (f & kFlagScreenW) {
-            const uint8_t* owner = static_cast<const uint8_t*>(Pc(P(root, kElemDialogParent), 0x10));
-            *outW = static_cast<int>(static_cast<float>(*reinterpret_cast<const int32_t*>(dev + 0x04)) *
-                                     *reinterpret_cast<const float*>(owner + 0xdc));
+            const UI::UserInterface* owner = root->_dialogParent->_ui;
+            *outW = static_cast<int>(static_cast<float>(dev->backBufferWidth) * owner->_uiScale);
         }
         if (f & kFlagScreenH) {
-            const uint8_t* owner = static_cast<const uint8_t*>(Pc(P(root, kElemDialogParent), 0x10));
-            *outH = static_cast<int>(static_cast<float>(*reinterpret_cast<const int32_t*>(dev + 0x08)) *
-                                     *reinterpret_cast<const float*>(owner + 0xdc));
+            const UI::UserInterface* owner = root->_dialogParent->_ui;
+            *outH = static_cast<int>(static_cast<float>(dev->backBufferHeight) * owner->_uiScale);
         }
     }
 }
@@ -238,61 +197,50 @@ inline void PaddedSizeInline(void* e, int* outW, int* outH) {
 // The border call forwards the ORIGINAL x/y/w/h (EDX/R8D/R9D are untouched at
 // 0x18011872a and h is re-spilled to the outgoing slot), not the clamped ones.
 // ---------------------------------------------------------------------------
-inline void ElementComputeAlignedRect(void* self, int x, int y, int w, int h) {
-    void* border = P(self, kElemBorder);
+inline void ElementComputeAlignedRect(UI::Element* self, int x, int y, int w, int h) {
+    // LEFT: Element::_border stays void* (tests/unit/ui_element_abi_test.cpp:394).
+    void* border = self->_border;
     if (border != nullptr)
-        reinterpret_cast<UI::Element*>(border)->ComputeLayout(x, y, w, h);   // B.3.6 bridge — slot 5
+        static_cast<UI::Element*>(border)->ComputeLayout(x, y, w, h);   // slot 5
 
-    reinterpret_cast<UI::Element*>(self)->ComputeSize();   // B.3.6 bridge — slot 4
+    self->ComputeSize();                                // slot 4
 
-    int sw = I32(self, kElemLayoutWidth);
-    int sh = I32(self, kElemLayoutHeight);
-    const int align = I32(self, kElemAlignment);
+    int sw = self->_layoutWidth;
+    int sh = self->_layoutHeight;
+    const int align = self->_alignment;
 
     if (w < sw + x) x = w - sw;
     if (h < sh + y) y = h - sh;
 
-    int cx = x + I32(self, kElemLeftPad);
-    int cy = y + I32(self, kElemTopPad);
-    const int availW = (w - I32(self, kElemRightPad))  - cx;
-    const int availH = (h - I32(self, kElemBottomPad)) - cy;
+    int cx = x + self->_leftPad;
+    int cy = y + self->_topPad;
+    const int availW = (w - self->_rightPad)  - cx;
+    const int availH = (h - self->_bottomPad) - cy;
 
-    const uint32_t flags = U32(self, kElemFlags);
+    const uint32_t flags = self->_flags;
     if ((flags & kFlagAlignArg1) != 0) sw = availW;
     if ((flags & kFlagAlignArg2) != 0) sh = availH;
 
     switch (align) {
     case 1: case 4: case 7: cx = ((availW >> 1) - (sw >> 1)) + cx;      break;
-    case 2: case 5: case 8: cx = (w - I32(self, kElemRightPad)) - sw;   break;
+    case 2: case 5: case 8: cx = (w - self->_rightPad) - sw;            break;
     default: break;
     }
     if (align > 2) {
         if (align < 6)      cy = ((availH >> 1) - (sh >> 1)) + cy;
-        else if (align < 9) cy = (h - I32(self, kElemBottomPad)) - sh;
+        else if (align < 9) cy = (h - self->_bottomPad) - sh;
     }
 
-    I32(self, kElemLayoutLeft)   = cx;
-    I32(self, kElemLayoutTop)    = cy;
-    I32(self, kElemLayoutRight)  = cx + sw;
-    I32(self, kElemLayoutBottom) = cy + sh;
+    self->_layoutLeft   = cx;
+    self->_layoutTop    = cy;
+    self->_layoutRight  = cx + sw;
+    self->_layoutBottom = cy + sh;
 }
 
-// ---------------------------------------------------------------------------
-// `?Type@<Class>@UI@@` / `?TypeName@<Class>@UI@@`: the FIRST DWORD of the
-// class's `Object::BaseTypeInfo` static and the `const char*` at its +0x08.
-// Retail loads them as two separate globals (`?_typeInfo@ImageElement@UI@@` at
-// 0x1801fac48 and the label Ghidra prints as `PTR_s_ImageElement_1801fac50`,
-// which is that static + 8) — the same two fields runtime/types/object/TypeInfo.h
-// pins, and the same shape runtime/src/ui/groupdescription.cpp documents.
-// ---------------------------------------------------------------------------
-inline uint32_t TypeIdOf(const uint8_t* typeInfo) {
-    uint32_t v = 0; __builtin_memcpy(&v, typeInfo, sizeof v); return v;
-}
-inline const char* TypeNameOf(const uint8_t* typeInfo) {
-    const char* v = nullptr; __builtin_memcpy(&v, typeInfo + 8, sizeof v); return v;
-}
+// (B4: TypeIdOf / TypeNameOf had no caller left; deleted.)
 
 }  // namespace rtuielem
+
 
 // (ENDGAME B.3.9 TI-UI: RTELEM_TYPE_SLOTS / RTELEM_TYPE_BODIES, the by-name
 // `?_typeInfo@<NAME>@UI@@` / `??_7<NAME>@UI@@` accessors and the Type/TypeName

@@ -122,23 +122,23 @@ void GroupDescription::Destruct() { this->~GroupDescription(); }
 // 0x180117d6c..0x180117d71, one deref deeper than the first test at
 // 0x180117d3c. Transcribed rather than folded.
 bool GroupDescription::Serialize(void* streamv) {
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ElementDescription::Serialize(stream);                     // 180117d1a
 
-    rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 180117d4a
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined              // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* rw = ser._readerWriter; // 180117d4a
 
     int32_t n = _children._size;                               // 180117d4f
     rw->SerializeInt(n, nullptr);                              // 180117d66
 
-    if (ser.stream->mode == 0) {                               // 180117d6c (re-read)
+    if (ser._stream->_direction == 0) {                               // 180117d6c (re-read)
         rtcoll::RtColl_ArraySetSize_1800492d0(&_children, n);   // 180117d7f
     }
 
     RtObject_ExternalPtrArraySerialize_ElementDescription(IoSer(&ser), n, ExtArray(_children._data));
 
-    if (rw != nullptr) delete rw;                    // 180117d9c
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                    // 180117d9c
     return true;                                               // MOV AL,1
 }
 
@@ -175,17 +175,19 @@ Object::InternalPtr<Element>* GroupDescription::CreateInstance(
     if (raw != nullptr)                                        // 180117e32
         elem = ::new (raw) GroupElement();                     // 180117e3a..180117e47 inlined ctor
 
-    void* slot = elem;                                         // 180117e4f [RSP+0x50]
+    Object::InternalPtr<Element> slot(elem);                                         // 180117e4f [RSP+0x50]
     UI::ElementDescription::CreateInstance(                   // 180117e5c
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 180117e61 / 180117ec9
-        void* desc = _children._data[i];                       // 180117e77
+        ElementDescription* desc = _children._data[i];         // 180117e77
 
-        void** made = rtdesc::DialogCreateElement(dialog, &slot, desc);
+        // ?CreateElement@Dialog@UI@@ (0x180112ed0), its RETSLOT the same local.
+        Object::InternalPtr<Element>* made = &slot;
+        *made = dialog->CreateElement(Object::ExternalPtr<ElementDescription>(desc));
 
-        Element* child = *reinterpret_cast<Element**>(made);   // 180117e88
+        Element* child = made->Get();                          // 180117e88
         if (child != nullptr)
             child->_parent = elem;                             // 180117e90  Element::_parent
 

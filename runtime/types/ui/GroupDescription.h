@@ -129,7 +129,7 @@ public:
     // ---- the 0x10 bytes after ElementDescription --------------------------
     // Array<ExternalPtr<ElementDescription>>; every element is one raw pointer
     // (External.h), so `void*` is the same bytes.
-    Collection::Array<void*> _children;        // +0x68 .. +0x77
+    Collection::Array<ElementDescription*> _children;   // +0x68 .. +0x77 (B4 H4: element typed)
 };
 
 static_assert(sizeof(GroupDescription) == 0x78,

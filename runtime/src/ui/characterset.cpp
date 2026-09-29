@@ -34,29 +34,16 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../../types/system/String.h"
 #include "../../types/ui/CharacterSet.h"
 #include <new>
 
 namespace {
 
-// IO::Stream / IO::Serializer, the two-field pair every Serialize in this
-// family builds on its stack. Same shape as animatedimagedescription.cpp's.
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
+// Serialize builds the real IO::Serializer (??0Serializer 0x1800b9960 /
+// ??1Serializer 0x1800b99b0), which retail inlines.
 
 }  // namespace
 
@@ -112,22 +99,14 @@ Object::Base* CharacterSet::CreateInPlaceObject(void* place) {
 // else in this family: factory vtable +0x18 for the reader, +0x20 for the
 // writer (0x1800cb7e5 / 0x1800cb7ea).
 bool CharacterSet::Serialize(void* streamv) {
-    Stream*  stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);  // LEFT: the External slot takes void* (External.h, R-IO)
 
-    Serializer ser = { stream, nullptr };                    // [RSP+0x28], [RSP+0x30]
+    // [RSP+0x28], [RSP+0x30]; 1800cb7d0..1800cb7ed the factory by _direction.
+    IO::Serializer ser(*stream, 0);
 
-    void*  factory = stream->encodingFactory;                // 1800cb7d0
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;     // 1800cb7da CMP / JNZ
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int zero);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                   // 1800cb7ed
+    reinterpret_cast<System::String*>(&_string20)->Serialize(&ser);      // 1800cb7fb  LEFT (H5)
 
-    reinterpret_cast<System::String*>(&_string20)->Serialize(&ser);      // 1800cb7fb
-
-    if (rw != nullptr) {                                     // 1800cb806
-        delete rw;                                 // 1800cb813
-    }
+    // 1800cb806..1800cb813: ~Serializer, `if (rw) delete rw`.
     return true;                                             // 1800cb815 MOV AL,1
 }
 

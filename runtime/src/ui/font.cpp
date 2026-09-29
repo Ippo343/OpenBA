@@ -70,6 +70,7 @@
 
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Font.h"
+#include "../../types/ui/SpriteSheet.h"   // B4: the glyph sheet's sprite count / records
 #include "../../types/system/String.h"
 #include "../../types/io/Stream.h"
 #include "../../types/object/External.h"
@@ -79,25 +80,6 @@
 
 namespace {
 
-// IO::Stream / IO::Serializer, the two-field pair every Serialize in this
-// family builds on its stack. Same shape as characterset.cpp's and
-// animatedimagedescription.cpp's.
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
-
 // ---- the dependencies these bodies call -------------------------------------
 //
 // B3R RT-UI: every one by name -- System::String::Serialize (0x1800c9930), the
@@ -105,8 +87,10 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 // DecodeOne (0x1800c9fc0), the rtcoll Array bodies (Collection.h) and
 // MemoryAllocator::MemFree (0x1800c7ad0).
 
-void StringSerialize(void* str, Serializer* ser) {
-    reinterpret_cast<System::String*>(str)->Serialize(ser);
+// LEFT (H5): the four Strings are held as RtSystem::String raw storage, so
+// System::String's member is reached through a view of that storage.
+void StringSerialize(RtSystem::String& str, IO::Serializer* ser) {
+    reinterpret_cast<System::String*>(&str)->Serialize(ser);
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z — 0x1800c7ad0. Retail inlines the
@@ -138,15 +122,15 @@ const char kEllipsisText[] = "...";
 const char kSpaceText[]    = " ";
 
 // ---- the reader/writer's scalar slot (+0xa0), by name -----------------------
-void ScalarInt(IO::ReaderWriter* rw, void* value) {
-    rw->SerializeInt(*static_cast<int32_t*>(value), nullptr);
+void ScalarInt(IO::ReaderWriter* rw, int32_t& value) {
+    rw->SerializeInt(value, nullptr);
 }
 
 // The per-codepoint advance walk, shared by both of Serialize's measuring
 // loops (0x180117a20..0x180117a93 and 0x180117ab0..0x180117b22 — the two are
 // instruction for instruction the same, over different literals and bounds).
 // It is written once here because retail's two copies are one inlined helper.
-int32_t MeasureLiteral(const uint8_t* self, const char* text, int32_t bytes) {
+int32_t MeasureLiteral(const UI::Font& font, const char* text, int32_t bytes) {
     int32_t total = 0;   // R15D / EDI
     int32_t kern  = 0;   // R13D / R15D
     int32_t idx   = 0;   // EBX
@@ -155,18 +139,14 @@ int32_t MeasureLiteral(const uint8_t* self, const char* text, int32_t bytes) {
         int32_t cp = 0;
         idx += DecodeUtf8(text + idx, text + bytes, &cp);            // 180117a3e
 
-        if (cp >= 0 && cp < *reinterpret_cast<const int32_t*>(self + 0x38)) {
-            const int32_t glyph =
-                reinterpret_cast<const int32_t*>(
-                    *reinterpret_cast<void* const*>(self + 0x30))[cp];
+        if (cp >= 0 && cp < font._charToGlyph._size) {
+            const int32_t glyph = font._charToGlyph._data[cp];
             if (glyph != 0xffff && glyph != -1 && glyph >= 0) {      // 180117a5c..a6f
-                const uint8_t* sheet = *reinterpret_cast<const uint8_t* const*>(self + 0x60);
-                if (glyph < *reinterpret_cast<const int32_t*>(sheet + 0x28)) {
-                    const uint8_t* e = *reinterpret_cast<const uint8_t* const*>(self + 0x40) +
-                                       static_cast<size_t>(glyph) * 0x10;
-                    total += *reinterpret_cast<const int32_t*>(e + 8) +
-                             *reinterpret_cast<const int32_t*>(e) + kern;   // 180117a81..a89
-                    kern = *reinterpret_cast<const int32_t*>(e + 4);        // 180117a8c
+                const UI::SpriteSheet* sheet = font._spriteSheet.Get();
+                if (glyph < sheet->m_spriteCount) {
+                    const UI::Font::Kerning& e = font._glyphs._data[glyph];
+                    total += e._postAdvance + e._preAdvance + kern;  // 180117a81..a89
+                    kern = e._postKern;                              // 180117a8c
                 }
             }
         }
@@ -176,6 +156,7 @@ int32_t MeasureLiteral(const uint8_t* self, const char* text, int32_t bytes) {
 }
 
 }  // namespace
+
 
 // ============================================================================
 // The four one-liners
@@ -279,30 +260,30 @@ namespace UI {
 // +0x80 ...) through `p`, in FORMAT order, which is not declaration order;
 // every offset is asserted against a named member in Font.h.
 bool Font::Serialize(void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(this);
-    Stream*  stream = static_cast<Stream*>(streamv);
+    // LEFT: the Serialize slot's parameter is `void*` in Object::External
+    // (block R-IO); retail's is IO::Stream&.
+    IO::Stream* const stream = static_cast<IO::Stream*>(streamv);
 
-    Serializer ser = { stream, nullptr };                            // [RBP-0x28], [RBP-0x20]
+    // 0x180117704..0x180117720: `??0Serializer@IO@@` (0x1800b9960) INLINED —
+    // the stream, a null reader/writer, then the encoding's CreateReader /
+    // CreateWriter slot with THIRD ARGUMENT 2 (`LEA R8D,[RDI+0x2]` at
+    // 0x180117708), stored back. Every other Serialize in this family passes 0.
+    IO::Serializer ser(*stream, 2);                                  // [RBP-0x28], [RBP-0x20]
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
-    void*  factory = stream->encodingFactory;                        // 180117704
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? rt::io::encoding_vtbl::kCreateReader
-                                          : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int two);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 2);
-    ser.readerWriter = rw;                                           // 180117720
+    StringSerialize(_string20, &ser);                                // 18011772c
+    ScalarInt(rw, _lineHeight);                                      // 18011773f
+    StringSerialize(_string80, &ser);                                // 180117750
+    ScalarInt(rw, _field70);                                         // 180117763
+    ScalarInt(rw, _field74);                                         // 180117777
+    StringSerialize(_string88, &ser);                                // 180117788
+    StringSerialize(_string78, &ser);                                // 180117795
 
-    StringSerialize(p + 0x20, &ser);                                 // 18011772c
-    ScalarInt(rw, p + 0x50);                                         // 18011773f
-    StringSerialize(p + 0x80, &ser);                                 // 180117750
-    ScalarInt(rw, p + 0x70);                                         // 180117763
-    ScalarInt(rw, p + 0x74);                                         // 180117777
-    StringSerialize(p + 0x88, &ser);                                 // 180117788
-    StringSerialize(p + 0x78, &ser);                                 // 180117795
-
-    RtObject_ExternalPtrSerialize_CharacterSet(reinterpret_cast<RtObject::External**>(p + 0x28), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177a2
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(p + 0x60), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177af  ExternalPtr<SpriteSheet>
-    RtObject_ExternalPtrSerialize_MaterialInstance(reinterpret_cast<RtObject::External**>(p + 0x68), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177bc  ExternalPtr<MaterialInstance>
+    // LEFT: the ExternalPtr<T>::Serialize thunks take RtObject::External** and
+    // the rt::io::Serializer POD (External.h, block R-IO).
+    RtObject_ExternalPtrSerialize_CharacterSet(reinterpret_cast<RtObject::External**>(&_field28), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177a2
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177af  ExternalPtr<SpriteSheet>
+    RtObject_ExternalPtrSerialize_MaterialInstance(reinterpret_cast<RtObject::External**>(&_material), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177bc  ExternalPtr<MaterialInstance>
 
     const int32_t version = rw->GetVersion();                        // 1801177c8
 
@@ -312,21 +293,20 @@ bool Font::Serialize(void* streamv) {
             { nullptr, 0, 0 };                                       // [RBP-0x18]
         int32_t n = 0;                                               // [RBP+0x30]
 
-        ScalarInt(rw, &n);                                           // 1801177f4
+        ScalarInt(rw, n);                                            // 1801177f4
 
-        if (ser.stream->mode == 0) {                                 // 1801177fe (re-read)
+        if (ser._stream->_direction == 0) {                          // 1801177fe (re-read)
             rtcoll::RtColl_ArraySetSize_1800774d0(&tmp, n);           // 18011780b
         }
 
         rw->SerializeUShortArray(n, tmp._data, nullptr);             // 180117827 (+0x50)
 
-        rtcoll::RtColl_ArraySetSize_18002fea0(p + 0x30, tmp._size);   // 180117833
+        rtcoll::RtColl_ArraySetSize_18002fea0(&_charToGlyph, tmp._size);   // 180117833
 
         for (int32_t i = 0; i < tmp._size; ++i) {                    // 180117850
             // `MOV RAX,qword ptr [R14]` sits INSIDE the loop: the destination
             // pointer is re-read every iteration, not hoisted.
-            int32_t* dst = *reinterpret_cast<int32_t**>(p + 0x30);
-            dst[i] = tmp._data[i];
+            _charToGlyph._data[i] = tmp._data[i];
         }
 
         if (tmp._data != nullptr) MemFree(tmp._data);                // 180117867
@@ -335,64 +315,55 @@ bool Font::Serialize(void* streamv) {
         tmp._capacity = 0;                                           // 1801178a5, one qword
     } else {
         // ---- int32 codepoint table -------------------------------
-        int32_t n = *reinterpret_cast<int32_t*>(p + 0x38);           // 1801178af
-        ScalarInt(rw, &n);                                           // 1801178c4
+        int32_t n = _charToGlyph._size;                              // 1801178af
+        ScalarInt(rw, n);                                            // 1801178c4
 
-        if (ser.stream->mode == 0) {                                 // 1801178ce
-            rtcoll::RtColl_ArraySetSize_18002fea0(p + 0x30, n);       // 1801178da
+        if (ser._stream->_direction == 0) {                          // 1801178ce
+            rtcoll::RtColl_ArraySetSize_18002fea0(&_charToGlyph, n);  // 1801178da
         }
 
-        rw->SerializeIntArray(n, *reinterpret_cast<int32_t**>(p + 0x30),
-                              nullptr);                              // 1801178ef (+0x48)
+        rw->SerializeIntArray(n, _charToGlyph._data, nullptr);       // 1801178ef (+0x48)
     }
 
     // ---- the glyph table: four separate int32 scalars per row ----
     // NOT one kArrayInt call over 4*n ints — retail emits four kScalarInt
     // calls per glyph, which is what a NAMED text encoding needs even though
     // every name here is null.
-    int32_t glyphs = *reinterpret_cast<int32_t*>(p + 0x48);          // 1801178f2
-    ScalarInt(rw, &glyphs);                                          // 180117906
+    int32_t glyphs = _glyphs._size;                                  // 1801178f2
+    ScalarInt(rw, glyphs);                                           // 180117906
 
-    if (ser.stream->mode == 0) {                                     // 180117910
-        rtcoll::RtColl_ArraySetSize_180077330(p + 0x40, glyphs);    // 18011791d
+    if (ser._stream->_direction == 0) {                              // 180117910
+        rtcoll::RtColl_ArraySetSize_180077330(&_glyphs, glyphs);    // 18011791d
     }
 
-    uint8_t* row = *reinterpret_cast<uint8_t**>(p + 0x40);           // 180117922
-    if (glyphs > 0) {
-        row += 8;                                                    // 18011792d
-        for (int32_t i = 0; i < glyphs; ++i) {                       // 180117940
-            ScalarInt(rw, row - 8);
-            ScalarInt(rw, row - 4);
-            ScalarInt(rw, row);
-            ScalarInt(rw, row + 4);
-            row += 0x10;                                             // 18011798f
-        }
+    Kerning* row = _glyphs._data;                                    // 180117922
+    for (int32_t i = 0; i < glyphs; ++i) {                           // 180117940
+        ScalarInt(rw, row->_preAdvance);
+        ScalarInt(rw, row->_postKern);
+        ScalarInt(rw, row->_postAdvance);
+        ScalarInt(rw, row->_offsetY);
+        ++row;                                                       // 18011798f
     }
 
-    ScalarInt(rw, p + 0x54);                                         // 1801179a6
+    ScalarInt(rw, _baseLine);                                        // 1801179a6
 
     const int32_t version2 = rw->GetVersion();                       // 1801179b3
 
     if (version2 >= 1) {                                             // 1801179b6
-        ScalarInt(rw, p + 0x58);                                     // 1801179c9
-        ScalarInt(rw, p + 0x5c);                                     // 1801179dd
-    } else if (ser.stream->mode == 0) {                              // 1801179ec
-        // The encoding factory's slot 0 is a bool: only when it says yes are
-        // the two widths recomputed. (`MOV RCX,[RCX+0x10] ; MOV RAX,[RCX] ;
+        ScalarInt(rw, _ellipsisWidth);                               // 1801179c9
+        ScalarInt(rw, _spaceWidth);                                  // 1801179dd
+    } else if (ser._stream->_direction == 0) {                       // 1801179ec
+        // The encoding's slot 0 (IsBinary) is a bool: only when it says yes
+        // are the two widths recomputed. (`MOV RCX,[RCX+0x10] ; MOV RAX,[RCX] ;
         // CALL [RAX] ; TEST AL,AL`.)
-        void* f = ser.stream->encodingFactory;                       // 1801179f6
-        using FactoryFlagFn = bool (*)(void*);
-        if (reinterpret_cast<FactoryFlagFn>(VTableOf(f)[0])(f)) {    // 1801179fd
-            *reinterpret_cast<int32_t*>(p + 0x58) =
-                MeasureLiteral(p, kEllipsisText, 3);                 // 180117a99
-            *reinterpret_cast<int32_t*>(p + 0x5c) =
-                MeasureLiteral(p, kSpaceText, 1);                    // 180117b28
+        if (ser._stream->_encoding->IsBinary()) {                    // 1801179fd
+            _ellipsisWidth = MeasureLiteral(*this, kEllipsisText, 3); // 180117a99
+            _spaceWidth    = MeasureLiteral(*this, kSpaceText, 1);   // 180117b28
         }
     }
 
-    if (rw != nullptr) {                                             // 180117b32
-        delete rw;                                         // slot 0, flag 1
-    }
+    // 180117b32: `??1Serializer@IO@@` (0x1800b99b0) INLINED — the reader/writer's
+    // scalar deleting destructor when it is non-null — at the end of `ser`'s scope.
     return true;                                                     // 180117b3e MOV AL,1
 }
 
@@ -423,12 +394,8 @@ namespace UI {
 
 int32_t Font::ComputeLineLayout(const char* text, int32_t count, int32_t startX,
                                 int32_t baseY, int32_t maxWidth, int32_t line,
-                                Layout* layoutArg) const {
+                                Layout* layout) const {
     if (count == 0) return 0;                                        // 180116c8f
-
-    // The Layout is written through its raw offsets (+0x08 entries, +0x10 its
-    // size), as retail's append does; RtUI::FontLayout asserts both.
-    uint8_t*       layout = reinterpret_cast<uint8_t*>(layoutArg);
 
     int32_t       penX       = startX;   // EDI
     int32_t       kern       = 0;        // ESI
@@ -442,61 +409,53 @@ int32_t Font::ComputeLineLayout(const char* text, int32_t count, int32_t startX,
             byteIdx += DecodeUtf8(text + byteIdx, end, &cp);         // 180116ceb
 
             if (cp >= 0 && cp < _charToGlyph._size) {
-                const int32_t glyph =
-                    reinterpret_cast<const int32_t*>(
-                        _charToGlyph._data)[cp];
+                const int32_t glyph = _charToGlyph._data[cp];
                 if (glyph != 0xffff && glyph != -1 && glyph >= 0) {  // 180116d1e..d35
-                    const uint8_t* sheet =
-                        reinterpret_cast<const uint8_t*>(_spriteSheet.Get());
-                    if (glyph < *reinterpret_cast<const int32_t*>(sheet + 0x28)) {
-                        const uint8_t* sprites =
-                            *reinterpret_cast<const uint8_t* const*>(sheet + 0x20);
-                        const uint8_t* e =
-                            reinterpret_cast<const uint8_t*>(_glyphs._data) +
-                            static_cast<size_t>(glyph) * 0x10;       // 180116d52
-                        const int32_t spriteTop = *reinterpret_cast<const int32_t*>(
-                            sprites + static_cast<size_t>(glyph) * 0x38 + 0x20);
+                    const SpriteSheet* sheet = _spriteSheet.Get();
+                    if (glyph < sheet->m_spriteCount) {
+                        const SpriteInfo* sprites = sheet->m_sprites;
+                        const Kerning& e = _glyphs._data[glyph];     // 180116d52
+                        // The sprite record's +0x20 (SpriteInfo::height).
+                        const int32_t spriteTop = sprites[glyph].height;
 
                         if (maxWidth > 0) {                          // 180116d6c
                             const int32_t reach =
                                 _ellipsisWidth -
-                                startSaved + *reinterpret_cast<const int32_t*>(e) +
+                                startSaved + e._preAdvance +
                                 kern + penX;                         // 180116d6e..d79
                             if (reach >= maxWidth) {                 // 180116d7d
                                 // 180116df0 — elide: lay out "..." from here.
                                 ComputeLineLayout(kEllipsisText, 3,
-                                                            kern + penX, baseY, -1,
-                                                            line, reinterpret_cast<Layout*>(layout));
+                                                  kern + penX, baseY, -1,
+                                                  line, layout);
                                 return _ellipsisWidth -
                                        startSaved + kern + penX;     // 180116e34
                             }
                         }
 
-                        penX += *reinterpret_cast<const int32_t*>(e) + kern;  // 180116d8b
+                        penX += e._preAdvance + kern;                // 180116d8b
 
                         if (layout != nullptr) {                     // 180116d8d
-                            int32_t entry[4];                        // [RSP+0x58]
+                            RtUI::FontLayoutEntry entry;             // [RSP+0x58]
                             // GLYPH index, not the codepoint: EDX still holds
                             // the MOVSXD from the codepoint table (0x180116d1a)
                             // and nothing rewrites it before this store. This
                             // is what SpriteContext::AddFont draws by, and the
                             // sheet has only as many sprites as there are
                             // glyphs (storing `cp` here drew "n" for "New").
-                            entry[0] = glyph;                        // 180116d99
-                            entry[1] = penX;                         // 180116db1
-                            entry[2] = baseY -
-                                       *reinterpret_cast<const int32_t*>(e + 0xc) -
-                                       spriteTop;                    // 180116da0..daf
-                            entry[3] = line;                         // 180116dc0
+                            entry._glyph = glyph;                    // 180116d99
+                            entry._x     = penX;                     // 180116db1
+                            entry._y     = baseY - e._offsetY - spriteTop;  // 180116da0..daf
+                            entry._line  = line;                     // 180116dc0
 
                             rtcoll::RtColl_ArraySetSizeFill_180076d10(
-                                layout + 0x08,
-                                *reinterpret_cast<int32_t*>(layout + 0x10) + 1,
-                                entry);                              // 180116dc4
+                                &layout->_entries,
+                                layout->_entries._size + 1,
+                                &entry);                             // 180116dc4
                         }
 
-                        penX += *reinterpret_cast<const int32_t*>(e + 8);  // 180116dce
-                        kern  = *reinterpret_cast<const int32_t*>(e + 4);  // 180116dd1
+                        penX += e._postAdvance;                      // 180116dce
+                        kern  = e._postKern;                         // 180116dd1
                     }
                 }
             }
@@ -539,19 +498,13 @@ int32_t Font::ComputeCharacterPosition(const System::String& text, int32_t count
             byteIdx += DecodeUtf8(data + byteIdx, end, &cp);         // 180116f4b
 
             if (cp >= 0 && cp < _charToGlyph._size) {
-                const int32_t glyph =
-                    reinterpret_cast<const int32_t*>(
-                        _charToGlyph._data)[cp];
+                const int32_t glyph = _charToGlyph._data[cp];
                 if (glyph != 0xffff && glyph != -1 && glyph >= 0) {  // 180116f6b..f79
-                    const uint8_t* sheet =
-                        reinterpret_cast<const uint8_t*>(_spriteSheet.Get());
-                    if (glyph < *reinterpret_cast<const int32_t*>(sheet + 0x28)) {
-                        const uint8_t* e =
-                            reinterpret_cast<const uint8_t*>(_glyphs._data) +
-                            static_cast<size_t>(glyph) * 0x10;       // 180116f87
-                        total += *reinterpret_cast<const int32_t*>(e + 8) +
-                                 *reinterpret_cast<const int32_t*>(e) + kern;
-                        kern = *reinterpret_cast<const int32_t*>(e + 4);
+                    const SpriteSheet* sheet = _spriteSheet.Get();
+                    if (glyph < sheet->m_spriteCount) {
+                        const Kerning& e = _glyphs._data[glyph];     // 180116f87
+                        total += e._postAdvance + e._preAdvance + kern;
+                        kern = e._postKern;
                     }
                 }
             }
@@ -595,19 +548,19 @@ namespace UI {
 void Font::ComputeStringLayout(const System::String& text, bool multiline,
                                int32_t wrapWidth, int32_t maxWidth, Justify justify,
                                int32_t& outWidthRef, int32_t& outHeightRef,
-                               Layout* layoutArg) const {
+                               Layout* layout) const {
     // Retail keeps the String's data pointer's HOME and re-reads it every
     // iteration (0x1801170f0); `strRef` is that home. The two out-references
-    // and the Layout are written through pointers exactly as retail does.
+    // are written through pointers exactly as retail does.
     const char* const* strRef = &text._data;
     int32_t* outWidth  = &outWidthRef;
     int32_t* outHeight = &outHeightRef;
-    uint8_t* layout = reinterpret_cast<uint8_t*>(layoutArg);
 
     if (layout != nullptr) {                                         // 180117003
-        rtcoll::RtColl_ArraySetSize_18002fea0(layout + 0x18, 0);      // 18011700b
-        rtcoll::RtColl_ArraySetSize_180076a40(layout + 0x08);              // 180117014
-        *reinterpret_cast<void**>(layout) = nullptr;                 // 180117021, one qword
+        rtcoll::RtColl_ArraySetSize_18002fea0(&layout->_lineWidths, 0);   // 18011700b
+        rtcoll::RtColl_ArraySetSize_180076a40(&layout->_entries);          // 180117014
+        layout->_width  = 0;                                         // 180117021, one qword
+        layout->_height = 0;
     }
 
     *outWidth  = 0;                                                  // 180117034
@@ -615,19 +568,17 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
 
     if (!multiline) {                                                // 18011703d
         const char* data = *strRef;                                  // 18011703f
-        const int32_t len =
-            (data != nullptr) ? *reinterpret_cast<const int32_t*>(data - 8) : 0;
+        const int32_t len = (data != nullptr) ? RtSystem::StringLength(data) : 0;
         *outWidth = ComputeLineLayout(data, len, /*startX*/ 0,
-                                                /*baseY*/ 0, maxWidth,
-                                                /*line*/ 0, reinterpret_cast<Layout*>(layout));  // 18011706e
+                                      /*baseY*/ 0, maxWidth,
+                                      /*line*/ 0, layout);           // 18011706e
         *outHeight = _lineHeight;  // 180117076
         return;
     }
 
     // ---- multiline ------------------------------------------------
     const char* data0 = *strRef;                                     // 18011708c
-    const int32_t len =
-        (data0 != nullptr) ? *reinterpret_cast<const int32_t*>(data0 - 8) : 0;
+    const int32_t len = (data0 != nullptr) ? RtSystem::StringLength(data0) : 0;
     const int32_t lineHeight = _lineHeight;
 
     int32_t pendingKern = 0;    // [RSP+0xf0]
@@ -643,7 +594,7 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
         if (layout == nullptr) return;                               // 180117188
         int32_t v = w;
         rtcoll::RtColl_ArraySetSizeFill_180023830(
-            layout + 0x18, *reinterpret_cast<int32_t*>(layout + 0x20) + 1, &v);
+            &layout->_lineWidths, layout->_lineWidths._size + 1, &v);
     };
 
     while (byteIdx < len) {                                          // 1801170e1 / 18011740d
@@ -658,7 +609,7 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
 
         if (cp == 0x0a) {                                            // 18011712d  '\n'
             const int32_t w = ComputeLineLayout(*strRef + lineStart, byteIdx - lineStart, tabX,
-                y, -1, lineIndex, reinterpret_cast<Layout*>(layout));                           // 180117171
+                y, -1, lineIndex, layout);                           // 180117171
             if (w > *outWidth) *outWidth = w;                        // 18011717d
             appendLineWidth(w);                                      // 18011719b
 
@@ -670,7 +621,7 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
             ++lineIndex;                                             // 1801171c7
         } else if (cp == 0x09) {                                     // 1801171d3  '\t'
             const int32_t w = ComputeLineLayout(*strRef + lineStart, byteIdx - lineStart, tabX,
-                y, -1, lineIndex, reinterpret_cast<Layout*>(layout));                           // 180117217
+                y, -1, lineIndex, layout);                           // 180117217
             if (w > *outWidth) *outWidth = w;                        // 180117223
             appendLineWidth(w);                                      // 180117241
 
@@ -699,20 +650,14 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
         // A newline or a tab runs it too; they simply have no glyph, so the
         // codepoint table lookup normally falls through. Faithful.
         if (cp < _charToGlyph._size) {   // 1801172d1
-            const int32_t glyph =
-                reinterpret_cast<const int32_t*>(
-                    _charToGlyph._data)[cp];
+            const int32_t glyph = _charToGlyph._data[cp];
             if (glyph != 0xffff && glyph != -1 && glyph >= 0) {      // 1801172e3..fa
-                const uint8_t* sheet =
-                    reinterpret_cast<const uint8_t*>(_spriteSheet.Get());
-                if (glyph < *reinterpret_cast<const int32_t*>(sheet + 0x28)) {
-                    const uint8_t* e =
-                        reinterpret_cast<const uint8_t*>(_glyphs._data) +
-                        static_cast<size_t>(glyph) * 0x10;           // 180117310
+                const SpriteSheet* sheet = _spriteSheet.Get();
+                if (glyph < sheet->m_spriteCount) {
+                    const Kerning& e = _glyphs._data[glyph];         // 180117310
                     const int32_t advance =
-                        *reinterpret_cast<const int32_t*>(e + 8) +
-                        *reinterpret_cast<const int32_t*>(e) + pendingKern;
-                    const int32_t nextKern = *reinterpret_cast<const int32_t*>(e + 4);
+                        e._postAdvance + e._preAdvance + pendingKern;
+                    const int32_t nextKern = e._postKern;
 
                     pendingKern = nextKern;                          // 180117323
                     curX       += advance;                           // 18011732a
@@ -722,12 +667,12 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
                         int32_t w;
                         if (lastSpace >= 0) {                        // 180117379
                             w = ComputeLineLayout(*strRef + lineStart, lastSpace - lineStart,
-                                tabX, y, -1, lineIndex, reinterpret_cast<Layout*>(layout));     // 180117381
+                                tabX, y, -1, lineIndex, layout);     // 180117381
                             byteIdx   = lastSpace + 1;               // 180117386
                             lineStart = byteIdx;                     // 18011738b
                         } else {
                             w = ComputeLineLayout(*strRef + lineStart, byteIdx - lineStart - 1,
-                                tabX, y, -1, lineIndex, reinterpret_cast<Layout*>(layout));     // 18011739d
+                                tabX, y, -1, lineIndex, layout);     // 18011739d
                             lineStart = byteIdx - 1;                 // 1801173a8
                             byteIdx   = byteIdx - 2;                 // 1801173a5
                         }
@@ -752,7 +697,7 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
     // ---- the trailing partial line, 180117425 ---------------------
     if (len - lineStart > 0) {                                       // 18011742d
         const int32_t w = ComputeLineLayout(*strRef + lineStart, len - lineStart, /*startX*/ 0,
-            y, -1, lineIndex, reinterpret_cast<Layout*>(layout));                               // 180117455
+            y, -1, lineIndex, layout);                               // 180117455
         if (w > *outWidth) *outWidth = w;                            // 180117461
         appendLineWidth(w);                                          // 18011747f
         y += lineHeight;                                             // 180117484
@@ -765,21 +710,20 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
     // ---- justify, 18011749e --------------------------------------
     // The loop bound is RE-READ every iteration (`CMP EBX,[RDI+0x10]`), and
     // `*outWidth` is the widest line, so `d` is this line's slack.
-    for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(layout + 0x10); ++i) {
-        uint8_t* e = *reinterpret_cast<uint8_t**>(layout + 0x08) +
-                     static_cast<size_t>(i) * 0x10;                  // 1801174b0
-        const int32_t* widths = *reinterpret_cast<int32_t**>(layout + 0x18);
-        const int32_t d = *outWidth - widths[*reinterpret_cast<int32_t*>(e + 0xc)];
+    for (int32_t i = 0; i < layout->_entries._size; ++i) {
+        RtUI::FontLayoutEntry& e = layout->_entries._data[i];        // 1801174b0
+        const int32_t* widths = layout->_lineWidths._data;
+        const int32_t d = *outWidth - widths[e._line];
 
         if (justify == 1) {                                          // 1801174c5
-            *reinterpret_cast<int32_t*>(e + 4) += d / 2;             // 1801174cb, trunc
+            e._x += d / 2;                                           // 1801174cb, trunc
         } else if (justify == 2) {                                   // 1801174dc
-            *reinterpret_cast<int32_t*>(e + 4) += d;                 // 1801174de
+            e._x += d;                                               // 1801174de
         }
     }
 
-    *reinterpret_cast<int32_t*>(layout + 0x00) = *outWidth;          // 1801174f0
-    *reinterpret_cast<int32_t*>(layout + 0x04) = *outHeight;         // 1801174f5
+    layout->_width  = *outWidth;                                     // 1801174f0
+    layout->_height = *outHeight;                                    // 1801174f5
 }
 
 }  // namespace UI

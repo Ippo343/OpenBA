@@ -102,17 +102,18 @@ void AnimatedImageDescription::Destruct() { this->~AnimatedImageDescription(); }
 // array.cpp's kSpec_StringRefZ and 0x180029bb0 the text-codec string-array
 // walker (runtime/src/io/text_codec.cpp).
 bool AnimatedImageDescription::Serialize(void* streamv) {
-    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
+    // LEFT: the External Serialize slot's parameter is void* (External.h, R-IO).
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
 
     ImageDescription::Serialize(stream);                       // 1800cb5da
 
-    rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 1800cb60a
+    IO::Serializer ser(*stream, 0);                            // [RSP+0x28], [RSP+0x30]
+    IO::ReaderWriter* rw = ser._readerWriter;                  // 1800cb60a
 
     int32_t n = _frameNames._size;                             // 1800cb60f
     rw->SerializeInt(n, nullptr);
 
-    if (ser.stream->mode == 0) {                               // 1800cb62f (re-read)
+    if (ser._stream->_direction == 0) {                        // 1800cb62f (re-read)
         rtcoll::RtColl_ArraySetSize_180029a80(&_frameNames, n);    // 1800cb645
     }
 
@@ -121,8 +122,7 @@ bool AnimatedImageDescription::Serialize(void* streamv) {
 
     rw->SerializeInt(_framesPerSecond, nullptr);
 
-    if (rw != nullptr) delete rw;                    // 1800cb67d
-    return true;
+    return true;                                   // 1800cb67d: ~Serializer (rw's scalar delete)
 }
 
 // ============================================================================
@@ -164,22 +164,10 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
     rtcoll::RtColl_ArraySetSize_1800370c0(&elem->_frames, frames);   // 1800cb51f
 
     for (int32_t i = 0; i < frames; ++i) {                     // 1800cb524 / 1800cb578
-        void* const sheet = _spriteSheet;                      // 1800cb530, re-read
-
-        uint64_t idxSlot;                                      // [RSP+0x30], see the note
-        if (sheet != nullptr) {                                // 1800cb534
-            const int32_t idx = static_cast<const SpriteSheet*>(sheet)->GetSpriteIndexFromName(
-                *reinterpret_cast<const System::String*>(&_frameNames._data[i]));   // B.3.6 bridge — String's one pointer
-            __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // 1800cb54f  DWORD store
-        } else {
-            const int32_t minusOne = -1;
-            __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);   // 1800cb555
-        }
-
-        Sprite& entry = elem->_frames._data[i];                // 1800cb55d
-        entry.spriteSheet = sheet;                             // 1800cb564
-        __builtin_memcpy(reinterpret_cast<uint8_t*>(&entry) + offsetof(Sprite, spriteIndex),
-                         &idxSlot, sizeof idxSlot);            // 1800cb56d  QWORD store
+        // 1800cb530 sheet re-read; 1800cb534..1800cb555 the index (or -1) into
+        // a DWORD stack slot; 1800cb564 / 1800cb56d the sheet and a QWORD
+        // store of that slot (see rtdesc::SpriteFromName).
+        elem->_frames._data[i] = rtdesc::SpriteFromName(_spriteSheet, &_frameNames._data[i]);
     }
 
     elem->_framesPerSecond = _framesPerSecond;                 // 1800cb586

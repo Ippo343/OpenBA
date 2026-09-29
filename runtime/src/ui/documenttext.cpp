@@ -105,16 +105,6 @@ using UI::DocumentItem;
 
 namespace {
 
-// ---- field accessors -------------------------------------------------------
-inline uint8_t* B(void* p, int off) { return reinterpret_cast<uint8_t*>(p) + off; }
-inline const uint8_t* B(const void* p, int off) {
-    return reinterpret_cast<const uint8_t*>(p) + off;
-}
-inline int32_t&  I32(void* p, int off) { return *reinterpret_cast<int32_t*>(B(p, off)); }
-inline int32_t   I32(const void* p, int off) { return *reinterpret_cast<const int32_t*>(B(p, off)); }
-inline void*&    PTR(void* p, int off) { return *reinterpret_cast<void**>(B(p, off)); }
-inline void*     PTR(const void* p, int off) { return *reinterpret_cast<void* const*>(B(p, off)); }
-
 // Retail writes several ADJACENT FIELDS with ONE wide store — a qword covering
 // two ints, a word covering two bytes. The width is the faithful part, so it is
 // reproduced; memcpy rather than a punned pointer because the destinations are
@@ -125,8 +115,8 @@ inline void Store16(void* dst, uint16_t v) { __builtin_memcpy(dst, &v, sizeof v)
 // ---- System::String, the refcounted char* the whole DLL passes around -------
 // The allocation is `[len:int32][refs:int32][chars...]`, so the refcount sits at
 // data-4 and the length at data-8, and freeing means handing data-8 back.
-inline int32_t& RefCount(char* s) { return *reinterpret_cast<int32_t*>(s - 4); }
-inline int32_t  Length(const char* s) { return *reinterpret_cast<const int32_t*>(s - 8); }
+inline int32_t& RefCount(char* s) { return RtSystem::StringRefCount(s); }
+inline int32_t  Length(const char* s) { return RtSystem::StringLength(s); }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0), called directly.
 void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
@@ -224,7 +214,7 @@ int32_t DocumentTextElement::FindNextWhiteSpace() {
     const int32_t len = _textLength;             // 1800cefd7
     if (pos >= len) return pos;                                // 1800cefe4
 
-    const char* text = static_cast<const char*>(_sourceText);  // 1800cefe6
+    const char* text = _sourceText;                            // 1800cefe6
     for (;;) {
         const uint8_t c = static_cast<uint8_t>(text[pos]);     // 1800cf000
         if (IsWhitespace(c)) break;                            // 1800cf005..1800cf00f
@@ -256,9 +246,8 @@ void DocumentTextElement::EndLink() {
     const int32_t items = _itemsCount;            // 1800cde1c
     _openLink.lastItem = items;                       // 1800cde22
     if (first < items) {                                       // 1800cde28
-        void* array = &_linksData;
         rtcoll::RtColl_ArraySetSizeFill_18003e1a0(
-            array, I32(array, 0x08) + 1, &_openLink); // 1800cde3f
+            &_linksData, _linksCount + 1, &_openLink); // 1800cde3f
     }
 
     // The empty Link: {char* = 0, int = -1, int = -1, bool = false}. Retail
@@ -285,11 +274,11 @@ void DocumentTextElement::EndLink() {
 // The -1 is stored BEFORE the start index (0x1800cdf18 then 0x1800cdf22), and
 // the two are separate dwords rather than one qword because the values differ.
 void DocumentTextElement::BeginLink(const System::String& target) {
-    char* const* name = reinterpret_cast<char* const*>(&target);   // one char*, retail's layout
+    char* const name = target._data;                  // one char*, retail's layout
 
     EndLink();                    // 1800cdec0
 
-    AssignString(&_openLink.text, *name);             // 1800cdec5..1800cdf0f
+    AssignString(&_openLink.text, name);              // 1800cdec5..1800cdf0f
 
     const int32_t items = _itemsCount;            // 1800cdf12
     _openLink.lastItem  = -1;                         // 1800cdf18
@@ -325,14 +314,13 @@ int32_t DocumentTextElement::LayoutRow() {
     int32_t rowHeight = 0;                                     // 1800cdbd7
 
     if (i == _itemsCount) {                       // 1800cdbda
-        void* font = reinterpret_cast<void* const*>(_fontsData)
-                         [_fontIndex];
-        rowHeight = I32(font, O::kFontLineHeight);             // 1800cdbf4
+        const Font* font = _fontsData[_fontIndex];
+        rowHeight = font->_lineHeight;                         // 1800cdbf4
     }
 
     {
         const int32_t count = _itemsCount;        // 1800cdbf8
-        DocumentItem* items = static_cast<DocumentItem*>(_itemsData);
+        DocumentItem* items = _itemsData;
         for (int32_t k = i; k < count; ++k) {                  // 1800cdbff / 1800cdc32
             rowWidth += items[k].width;                        // 1800cdc20
             if (items[k].height > rowHeight)                   // 1800cdc24
@@ -353,44 +341,38 @@ int32_t DocumentTextElement::LayoutRow() {
     }
 
     while (i < _itemsCount) {                     // 1800cdc73 / 1800cdd85
-        const size_t off = static_cast<size_t>(i) * O::kItemStride;
-
-        DocumentItem* item =
-            reinterpret_cast<DocumentItem*>(B(_itemsData, 0) + off);
+        DocumentItem* item = &_itemsData[i];
         item->x = penX;                                        // 1800cdc97
 
         // The array pointer is loaded a SECOND time here (0x1800cdc9b) before
         // the width is read. Same value today; transcribed, not folded.
-        item = reinterpret_cast<DocumentItem*>(B(_itemsData, 0) + off);
+        item = &_itemsData[i];
         penX += item->width;                                   // 1800cdca9
 
         const int32_t vAlign = _vAlign;          // 1800cdca2
         const int32_t penY   = _penY;
         if (vAlign == 2) {                                     // 1800cdcae  baseline
             if (item->kind == 0) {                             // 1800cdcb3
-                void* font = reinterpret_cast<void* const*>(_fontsData)
-                                 [item->index];
-                item->y = penY - I32(font, O::kFontBaseline) + rowHeight;   // 1800cdcd8
+                const Font* font = _fontsData[item->index];
+                item->y = penY - font->_baseLine + rowHeight;  // 1800cdcd8
             } else {
                 item->y = penY - item->height + rowHeight;     // 1800cdcf1
             }
         } else if (vAlign == 0) {                              // 1800cdcfb  top
             if (item->kind == 0) {                             // 1800cdcff
-                void* font = reinterpret_cast<void* const*>(_fontsData)
-                                 [item->index];
-                item->y = I32(font, O::kFontLineHeight)
-                        - I32(font, O::kFontBaseline) + penY;  // 1800cdd25
+                const Font* font = _fontsData[item->index];
+                item->y = font->_lineHeight
+                        - font->_baseLine + penY;              // 1800cdd25
             } else {
                 item->y = penY;                                // 1800cdd33
             }
         } else {                                               // centre
             int32_t dy;
             if (item->kind == 0) {                             // 1800cdd3a
-                void* font = reinterpret_cast<void* const*>(_fontsData)
-                                 [item->index];
+                const Font* font = _fontsData[item->index];
                 // BARE arithmetic shift, not a division — see the banner.
-                dy = (I32(font, O::kFontLineHeight)
-                      - 2 * I32(font, O::kFontBaseline) + rowHeight) >> 1;  // 1800cdd61
+                dy = (font->_lineHeight
+                      - 2 * font->_baseLine + rowHeight) >> 1;  // 1800cdd61
             } else {
                 dy = (rowHeight >> 1) - (item->height >> 1);    // 1800cdd6d
             }
@@ -475,19 +457,17 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
             new (static_cast<void*>(&measured)) System::String(Str(&word) + " ");   // 1800ceeb7
             ReleaseString(&word);                              // 1800ceebd..1800ceeea
 
-            void* font = reinterpret_cast<void* const*>(_fontsData)
-                             [_fontIndex];       // 1800ceeea
+            const Font* font = _fontsData[_fontIndex];         // 1800ceeea
 
             Store64(&out->width, 0);                           // 1800cef02  ONE QWORD
 
             const int32_t measuredLen = measured ? Length(measured) : 0;   // 1800cef0b
-            out->width = static_cast<const UI::Font*>(font)->ComputeLineLayout(   // 1800cef34
+            out->width = font->ComputeLineLayout(              // 1800cef34
                 measured, measuredLen, 0, 0, -1, 0, nullptr);
-            out->height = I32(font, O::kFontLineHeight);       // 1800cef40
+            out->height = font->_lineHeight;                   // 1800cef40
             out->first  = _textPos;              // 1800cef46
             out->last   = end - 1;                             // 1800cef4f
-            out->color  = reinterpret_cast<const int32_t*>(_colorsData)
-                              [_colorIndex];     // 1800cef63
+            out->color  = _colorsData[_colorIndex];            // 1800cef63
             out->index  = _fontIndex;            // 1800cef6f
             Store16(&out->kind, 0);                            // 1800cef72  ONE WORD
 
@@ -634,34 +614,29 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                         FlushRow(this);                        // 1800cec49..1800cec78
                     ++_textPos;                  // 1800cec7e
 
-                    const uint8_t* entry =
-                        B(_frameTableData, 0)
-                        + static_cast<size_t>(_fontIndex) * 0x10;  // 1800cec84
-                    const int32_t sprite = I32(entry, 0x08);
+                    const UI::Sprite& entry = _frameTableData[_fontIndex];   // 1800cec84
+                    const int32_t sprite = entry.spriteIndex;
 
                     int32_t w = 0, h = 0;
                     if (sprite >= 0) {                         // 1800cec9a / 1800cecba
-                        const uint8_t* data = static_cast<const uint8_t*>(
-                            PTR(PTR(entry, 0), O::kSheetSpriteData));
-                        const uint8_t* s = data + static_cast<size_t>(sprite) * O::kSpriteStride;
-                        w = I32(s, O::kSpriteWidth);           // 1800cecb1
-                        h = I32(s, O::kSpriteHeight);          // 1800cecd0
+                        // LEFT: UI::Sprite::spriteSheet is void* (Sprite.h, R-UI-b).
+                        const SpriteInfo& s = static_cast<const SpriteSheet*>(
+                            entry.spriteSheet)->m_sprites[sprite];
+                        w = s.width;                           // 1800cecb1
+                        h = s.height;                          // 1800cecd0
                     }
 
                     _hangIndent = w;             // 1800cecd4
                     _penX -= w;                  // 1800cecdb
 
-                    out->color  = reinterpret_cast<const int32_t*>(_colorsData)
-                                      [_colorIndex];   // 1800cecf7
+                    out->color  = _colorsData[_colorIndex];    // 1800cecf7
                     out->height = h;                           // 1800cecfb
                     out->width  = w;                           // 1800cecff
                     out->index  = 0;                           // 1800ced03
                     out->kind   = 1;                           // 1800ced07
                     // The sprite index is re-read from the table rather than
                     // reused from `sprite` above (0x1800ced0c).
-                    out->first  = *reinterpret_cast<const int32_t*>(
-                        B(_frameTableData, 0)
-                        + static_cast<size_t>(_fontIndex) * 0x10 + 8);
+                    out->first  = _frameTableData[_fontIndex].spriteIndex;
                     return true;                               // 1800ced25
                 } else if (m == 'o') {
                     // ========================================================
@@ -675,11 +650,10 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     if (_rowFirstItem != _itemsCount)
                         FlushRow(this);                        // 1800ce5f0..1800ce61f
 
-                    void* font = reinterpret_cast<void* const*>(_fontsData)
-                                     [_fontIndex];
+                    const Font* font = _fontsData[_fontIndex];
                     // A QUARTER of the line height, truncating toward zero:
                     // `CDQ ; AND EDX,3 ; ADD ; SAR 2`, which is C's `/ 4`.
-                    _penY += I32(font, O::kFontLineHeight) / 4;  // 1800ce643
+                    _penY += font->_lineHeight / 4;              // 1800ce643
 
                     const int32_t savedY     = _penY;            // 1800ce649
                     ++_textPos;                                  // 1800ce652
@@ -749,7 +723,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     char* target = nullptr;
                     SubString(textSlot, &target, first, ws - 1);    // 1800ce87c
                     _textPos = ws;                // 1800ce882
-                    BeginLink(*reinterpret_cast<const System::String*>(&target));   // B.3.6 bridge  // 1800ce890
+                    BeginLink(Str(&target));                    // 1800ce890
                     ReleaseString(&target);
                 } else if (m == 'e') {                          // 1800ce8cc  link end
                     EndLink();     // 1800ce8d9
@@ -786,27 +760,26 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 _textPos = ws;                    // 1800ce97f
 
                 int32_t index = 0;                              // 1800ce985
-                void*   found = nullptr;
+                UI::SpriteCapture* found = nullptr;
                 bool    match = false;
-                const void* list = _resourceList;
-                if (I32(list, 0x28) > 0) {                      // 1800ce98e
-                    size_t off = 0;                             // 1800ce99a
+                const Object::ExternalList* list = _resourceList;
+                if (list->_count > 0) {                         // 1800ce98e
+                    // 1800ce99a: retail steps a byte offset (+8) beside the index.
                     for (;;) {
                         // The list pointer is RE-READ every iteration.
-                        void* obj = *reinterpret_cast<void* const*>(
-                            B(PTR(_resourceList, 0x20), 0) + off);   // 1800ce9ab
+                        Object::External* obj = _resourceList->_resources[index];   // 1800ce9ab
 
-                        const bool isCapture = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(UI::SpriteCapture::TypeId());        // 1800ce9b8
+                        const bool isCapture = obj->IsDerivedFrom(UI::SpriteCapture::TypeId());        // 1800ce9b8
                         // Retail NULLS the pointer when the type does not match
                         // and then calls GetPath on it anyway (0x1800ce9ce
                         // takes RCX unchanged). Not a guard we get to add: the
                         // list only ever holds captures in practice, and a null
                         // here faults in retail exactly as it would here.
-                        found = isCapture ? obj : nullptr;      // 1800ce9c1  CMOVNZ
+                        found = isCapture ? static_cast<UI::SpriteCapture*>(obj) : nullptr;   // 1800ce9c1  CMOVNZ
 
                         char* path = nullptr;
                         new (static_cast<void*>(&path)) System::Filename(       // 1800ce9ce
-                            static_cast<const Object::External*>(found)->GetPath());
+                            found->GetPath());
                         char* base = nullptr;
                         new (static_cast<void*>(&base)) System::Filename(       // 1800ce9de
                             Path(&path).GetPathFilename(true));
@@ -823,17 +796,15 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                         ReleaseString(&path);                   // 1800cea47..1800cea78
 
                         if (match) break;                       // 1800cea78
-                        ++index;                                // 1800cea7c
-                        off += 8;                               // 1800cea82
-                        if (index >= I32(_resourceList, 0x28)) break;  // 1800cea91
+                        ++index;                                // 1800cea7c / 1800cea82
+                        if (index >= _resourceList->_count) break;     // 1800cea91
                     }
                 }
 
                 if (match) {                                    // 1800cea9c (index >= 0 always)
-                    out->color  = reinterpret_cast<const int32_t*>(_colorsData)
-                                      [_colorIndex];   // 1800ced3f
-                    out->height = I32(found, O::kCaptureHeight);     // 1800ced49
-                    out->width  = I32(found, O::kCaptureWidth);      // 1800ced4f
+                    out->color  = _colorsData[_colorIndex];          // 1800ced3f
+                    out->height = found->_height;                    // 1800ced49
+                    out->width  = found->_width;                     // 1800ced4f
                     out->index  = index;                             // 1800ced52
                     out->kind   = 2;                                 // 1800ced55
                     ReleaseString(&wanted);                          // 1800ced59..
@@ -863,19 +834,16 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 SubString(textSlot, &name, first, ws - 1);      // 1800ceb4c
                 _textPos = ws;                    // 1800ceb55
 
-                void* sheet = reinterpret_cast<void* const*>(_sheetsData)[slot];
+                const SpriteSheet* sheet = _sheetsData[slot];
                 int32_t sprite = -1;
                 if (sheet != nullptr) {                         // 1800ceb69
-                    sprite = static_cast<const UI::SpriteSheet*>(sheet)->GetSpriteIndexFromName(Str(&name));
+                    sprite = sheet->GetSpriteIndexFromName(Str(&name));
                 }
                 if (sheet != nullptr && sprite >= 0) {          // 1800ceb80
-                    const uint8_t* data = static_cast<const uint8_t*>(
-                        PTR(sheet, O::kSheetSpriteData));       // 1800cedb6
-                    const uint8_t* s = data + static_cast<size_t>(sprite) * O::kSpriteStride;
-                    out->color  = reinterpret_cast<const int32_t*>(_colorsData)
-                                      [_colorIndex];   // 1800cedab
-                    out->height = I32(s, O::kSpriteHeight);     // 1800cedbe
-                    out->width  = I32(s, O::kSpriteWidth);      // 1800cedca
+                    const SpriteInfo& s = sheet->m_sprites[sprite];   // 1800cedb6
+                    out->color  = _colorsData[_colorIndex];     // 1800cedab
+                    out->height = s.height;                     // 1800cedbe
+                    out->width  = s.width;                      // 1800cedca
                     out->index  = slot;                         // 1800cedce
                     out->kind   = 1;                            // 1800cedd2
                     out->first  = sprite;                       // 1800cedd7
@@ -921,12 +889,11 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
 // divergence in allocator traffic, and it is one call, so it stays.
 void DocumentTextElement::GenerateItems() {
 
-    if (*reinterpret_cast<void* const*>(&_text) != nullptr &&  // 1800cf087  table
-        *reinterpret_cast<const int32_t*>(
-            reinterpret_cast<const uint8_t*>(&_text) + 8) >= 0) {   // 1800cf090  index
+    if (_text.table != nullptr &&                               // 1800cf087  table
+        _text.index >= 0) {                                     // 1800cf090  index
         char* resolved = nullptr;
         new (static_cast<void*>(&resolved)) System::String(      // 0x180035020, retslot
-            reinterpret_cast<const UI::String*>(&_text)->operator System::String());   // B.3.x bridge
+            _text.operator System::String());
         AssignString(&_sourceText, resolved);  // 1800cf0a4..1800cf0f7
         ReleaseString(&resolved);                               // 1800cf0fa..1800cf133
     }

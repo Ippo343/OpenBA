@@ -42,10 +42,6 @@ namespace {
 // (block E's class, reached at raw offsets). Proven by this class: Update and
 // Contains save it, overwrite it with their own layout rect, run the base body,
 // and put the old one back.
-constexpr int kUiClipLeft   = 0xfc;
-constexpr int kUiClipTop    = 0x100;
-constexpr int kUiClipRight  = 0x104;
-constexpr int kUiClipBottom = 0x108;
 
 // UI::SpriteContext::SetScissor(ctx, Viewport& out, const Viewport& in) —
 // returns the PREVIOUS scissor by value through the hidden slot in RDX.
@@ -160,56 +156,54 @@ void ClipRegionElement::Draw(SpriteContext& context, uint8_t alpha) const {
 void ClipRegionElement::Update(const System::Time& time, UserInterface* ui,
                                Object::InternalPtr<DialogInstance>* dialog,
                                const UpdateState& state) {
-    uint8_t* u = reinterpret_cast<uint8_t*>(ui);
 
     const int32_t l = _layoutLeft;
     const int32_t t = _layoutTop;
     const int32_t r = _layoutRight;
     const int32_t b = _layoutBottom;
 
-    const int32_t sl  = I32(u, kUiClipLeft);
-    const int32_t st_ = I32(u, kUiClipTop);
-    const int32_t sr  = I32(u, kUiClipRight);
-    const int32_t sb  = I32(u, kUiClipBottom);
+    const int32_t sl  = ui->_clipRegion.left;
+    const int32_t st_ = ui->_clipRegion.top;
+    const int32_t sr  = ui->_clipRegion.right;
+    const int32_t sb  = ui->_clipRegion.bottom;
 
-    I32(u, kUiClipLeft)   = l;
-    I32(u, kUiClipTop)    = t;
-    I32(u, kUiClipRight)  = r;
-    I32(u, kUiClipBottom) = b;
+    ui->_clipRegion.left   = l;
+    ui->_clipRegion.top    = t;
+    ui->_clipRegion.right  = r;
+    ui->_clipRegion.bottom = b;
 
     Object::InternalPtr<DialogInstance> dlgCopy = *dialog;
     Element::Update(time, ui, &dlgCopy, state);
 
-    I32(u, kUiClipLeft)   = sl;
-    I32(u, kUiClipTop)    = st_;
-    I32(u, kUiClipRight)  = sr;
-    I32(u, kUiClipBottom) = sb;
+    ui->_clipRegion.left   = sl;
+    ui->_clipRegion.top    = st_;
+    ui->_clipRegion.right  = sr;
+    ui->_clipRegion.bottom = sb;
 }
 
 bool ClipRegionElement::Contains(int32_t x, int32_t y, UserInterface* ui) const {
-    uint8_t* u = reinterpret_cast<uint8_t*>(ui);
 
     const int32_t l = _layoutLeft;
     const int32_t t = _layoutTop;
     const int32_t r = _layoutRight;
     const int32_t b = _layoutBottom;
 
-    const int32_t sl  = I32(u, kUiClipLeft);
-    const int32_t st_ = I32(u, kUiClipTop);
-    const int32_t sr  = I32(u, kUiClipRight);
-    const int32_t sb  = I32(u, kUiClipBottom);
+    const int32_t sl  = ui->_clipRegion.left;
+    const int32_t st_ = ui->_clipRegion.top;
+    const int32_t sr  = ui->_clipRegion.right;
+    const int32_t sb  = ui->_clipRegion.bottom;
 
-    I32(u, kUiClipLeft)   = l;
-    I32(u, kUiClipTop)    = t;
-    I32(u, kUiClipRight)  = r;
-    I32(u, kUiClipBottom) = b;
+    ui->_clipRegion.left   = l;
+    ui->_clipRegion.top    = t;
+    ui->_clipRegion.right  = r;
+    ui->_clipRegion.bottom = b;
 
     const bool inside = Element::Contains(x, y, ui);
 
-    I32(u, kUiClipLeft)   = sl;
-    I32(u, kUiClipTop)    = st_;
-    I32(u, kUiClipRight)  = sr;
-    I32(u, kUiClipBottom) = sb;
+    ui->_clipRegion.left   = sl;
+    ui->_clipRegion.top    = st_;
+    ui->_clipRegion.right  = sr;
+    ui->_clipRegion.bottom = sb;
     return inside;
 }
 

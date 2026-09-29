@@ -144,6 +144,7 @@
 #include "../object/Internal.h"
 #include "../object/External.h"
 #include "DialogController.h"
+#include "Element.h"   // B4: Element::UpdateState (Update's parameter), _root's fields
 
 namespace RtUI {
 
@@ -209,9 +210,12 @@ enum : int {
 // non-namespaced global `Time` struct.
 // ============================================================
 struct DialogTimer {
-    int64_t _remaining;   // +0x00  System::Time
-    int64_t _period;      // +0x08  System::Time — StartTimer writes the same
-                          //        value into both, so this is the reload
+    int64_t _duration;    // +0x00  System::Time — StartTimer writes the same
+                          //        value into both; nothing else reads it
+    int64_t _remaining;   // +0x08  System::Time — the LIVE countdown: ?Update@
+                          //        (0x180113980) subtracts the frame time here
+                          //        and fires event 0x13 at <= 0 (B4 H3: the
+                          //        tree had +0x00 / +0x08 named the other way)
     int32_t _id;          // +0x10
     int32_t _pad14;       // +0x14  never read or written by either method
 };
@@ -385,6 +389,7 @@ class ElementDescription;       // block A
 class Element;                  // block A
 class UserInterface;            // block E
 class SpriteContext;            // block D
+class SpriteSheet;
 
 class DialogInstance : public Object::Internal {
 public:
@@ -432,10 +437,12 @@ public:
     int32_t GetMouseCursorIndex(Object::InternalPtr<Element> element,
                                 int32_t x, int32_t y) const;                   // 0x180114010
     void ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h);            // 0x180113d90
-    // `Element::UpdateState&` in retail — block A's nested value type, spelled
-    // as the address it is until that type exists.
+    // `Element::UpdateState&` in retail.
     void Update(const System::Time& time, UserInterface* ui,
-                uint8_t* updateState);                                         // 0x180113980
+                Element::UpdateState& state);                                  // 0x180113980
+    // B4 FORWARD: 1 outside caller(s) (userinterface_frame.cpp) pass the address.
+    void Update(const System::Time& time, UserInterface* ui,
+                uint8_t* updateState);
     void SetUpperLeft(int32_t x, int32_t y, bool scaled);                      // 0x180114a60
     void AddController(uint32_t typeId, Object::Base* dataSource,
                        Object::ExternalPtr<DialogControllerConfig> config,
@@ -558,15 +565,15 @@ protected:
 public:
     // ---- the 0xa8 bytes DialogInstance adds, in retail order ---------------
     // Evidence per field: the RtUI POD's banner at the top of this file.
-    void*          _ui;            // +0x10  UI::UserInterface* (block E's class)
+    UserInterface* _ui;            // +0x10  (B4 H4: typed)
     const Dialog*  _dialog;        // +0x18
     uint32_t       _flags;         // +0x20  SetFlagsOnOff 0x180114690
     int32_t        _result;        // +0x24  GetResult / SetDialogResult
     Object::InternalPtr<DialogInstance> _parent;                  // +0x28
     Object::Base*  _dataSource;    // +0x30  ctor param 4
     Collection::LinkedList<Object::InternalPtr<DialogInstance> > _children;  // +0x38..+0x4f
-    void*          _root;          // +0x50  InternalPtr<UI::Element> (block A's class)
-    void*          _spriteSheet;   // +0x58  UI::SpriteSheet* (block D's class)
+    Element*       _root;          // +0x50  InternalPtr<UI::Element> (B4 H4: typed)
+    SpriteSheet*   _spriteSheet;   // +0x58  (B4 H4: typed)
     int32_t        _spriteIndex;   // +0x60
     int32_t        _hole64;        // +0x64  NOT written by the ctor
     Collection::Array<RtUI::DialogTimer> _timers;                 // +0x68..+0x77

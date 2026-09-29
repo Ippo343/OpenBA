@@ -25,11 +25,9 @@ static void PrintSprite(const char* label, void* sheet, int32_t index, uint32_t 
            label, sheet, index, (uint32_t)index, flags);
 }
 
-static void PrintSpriteFromPtr(const char* label, const uint8_t* spriteData) {
-    void*    sheet = *(void**)spriteData;
-    int32_t  index = *(int32_t*)(spriteData + 8);
-    uint32_t flags = *(uint32_t*)(spriteData + 12);
-    PrintSprite(label, sheet, index, flags);
+static void PrintSpriteValue(const char* label, const UI::Sprite& sprite) {
+    PrintSprite(label, sprite.spriteSheet, sprite.spriteIndex,
+                static_cast<uint32_t>(sprite.pad0C));
 }
 #endif
 
@@ -40,28 +38,25 @@ static void PrintSpriteFromPtr(const char* label, const uint8_t* spriteData) {
 // Debug wrapper: log before/after ImageElement::SetSprite
 // Call this instead of fn_ImageElement_SetSprite to get logging.
 // spriteData points to a 0x10-byte Sprite struct passed by value (on stack).
+// The void* receivers stay: code/Game declares these two with local externs.
 void Debug_ImageElement_SetSprite(void* self, void* spriteData) {
+    UI::ImageElement* elem = reinterpret_cast<UI::ImageElement*>(self);            // B.3.6 bridge
+    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: code/Game's void* extern
 #ifdef _DEBUG
-    // B.3.6 block C2: the bare `ImageElement` struct is now the class
-    // `UI::ImageElement`, whose UI::Sprite member carries these three fields.
-    UI::ImageElement* elem = reinterpret_cast<UI::ImageElement*>(self);   // B.3.6 bridge
-    const uint8_t* newSprite = reinterpret_cast<const uint8_t*>(spriteData);
-
     printf("[ImageElement::SetSprite] this=%p\n", self);
-    PrintSprite("  OLD", elem->_sprite.spriteSheet, elem->_sprite.spriteIndex,
-                static_cast<uint32_t>(elem->_sprite.pad0C));
-    PrintSpriteFromPtr("  NEW", newSprite);
+    PrintSpriteValue("  OLD", elem->_sprite);
+    PrintSpriteValue("  NEW", *sprite);
 
     // Check dirty flag state before call
-    uint32_t flagsBefore = *(uint32_t*)((uint8_t*)self + 0x34);
+    uint32_t flagsBefore = elem->_flags;                                           // +0x34
     printf("  flags@+0x34 before: 0x%08X\n", flagsBefore);
 #endif
 
     // Call the real member (ENDGAME B.3.6 closing pass: was the engine_funcs door)
-    reinterpret_cast<UI::ImageElement*>(self)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteData));  // B.3.6 bridge
+    elem->SetSprite(sprite);
 
 #ifdef _DEBUG
-    uint32_t flagsAfter = *(uint32_t*)((uint8_t*)self + 0x34);
+    uint32_t flagsAfter = elem->_flags;
     printf("  flags@+0x34 after:  0x%08X", flagsAfter);
     if (flagsAfter != flagsBefore) {
         printf(" (CHANGED: dirty flag 0x8000000 %s)",
@@ -78,22 +73,21 @@ void Debug_ImageElement_SetSprite(void* self, void* spriteData) {
 // Debug wrapper: log before/after LabelElement::SetSprite
 // spriteData points to a 0x10-byte Sprite struct passed by value.
 void Debug_LabelElement_SetSprite(void* self, void* spriteData) {
+    UI::LabelElement* elem = reinterpret_cast<UI::LabelElement*>(self);            // B.3.6 bridge
+    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: code/Game's void* extern
 #ifdef _DEBUG
-    RtUI::LabelElement* elem = reinterpret_cast<RtUI::LabelElement*>(self);
-    const uint8_t* newSprite = reinterpret_cast<const uint8_t*>(spriteData);
-
     printf("[LabelElement::SetSprite] this=%p\n", self);
-    PrintSprite("  OLD", elem->spriteSheet, elem->spriteIndex, elem->spriteFlags);
-    PrintSpriteFromPtr("  NEW", newSprite);
+    PrintSpriteValue("  OLD", elem->_sprite);
+    PrintSpriteValue("  NEW", *sprite);
 
-    uint32_t flagsBefore = *(uint32_t*)((uint8_t*)self + 0x34);
+    uint32_t flagsBefore = elem->_flags;                                           // +0x34
     printf("  flags@+0x34 before: 0x%08X\n", flagsBefore);
 #endif
 
-    reinterpret_cast<UI::LabelElement*>(self)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteData));  // B.3.6 bridge
+    elem->SetSprite(sprite);
 
 #ifdef _DEBUG
-    uint32_t flagsAfter = *(uint32_t*)((uint8_t*)self + 0x34);
+    uint32_t flagsAfter = elem->_flags;
     printf("  flags@+0x34 after:  0x%08X", flagsAfter);
     if (flagsAfter != flagsBefore) {
         printf(" (CHANGED: dirty flag 0x8000000 %s)",
