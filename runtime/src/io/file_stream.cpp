@@ -312,12 +312,6 @@ extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
 // qualified `T::~T()` at the position the door call had.
 
 
-// Two callees this file does not otherwise use, declared rather than included:
-// both are PORTED and registered by address in their own translation units, and
-// calling them directly (not through a door) is the choice the rest of this file
-// already makes -- a door would resolve to the same body and add a resolve site
-// the cutover census has to carry (reference_count_the_doors_not_the_calls.md).
-extern "C" void RtIo_CompressedStream_Commit(RtIo::CompressedStream* self);
 // ============================================================================
 // ??0BinaryFileStream@IO@@QEAA@XZ                        retail 0x1800a8200
 // ============================================================================
@@ -901,16 +895,16 @@ TextFileStream::~TextFileStream() {
 // class's inline DeletingDtor is slot 0, and External::Load (the one
 // construction site) ends its stack instance through it.
 IO::CompressedFileStream::~CompressedFileStream() {
-    auto* const self = reinterpret_cast<RtIo::CompressedFileStream*>(this);
 
-    if (self->base.headerSize > 0 &&                                   // 1800a9355
-        self->base.base.direction == 1) {                               // 1800a935b
-        RtIO::RtIo_CompressedStream_Commit(&self->base);                      // 1800a9361
+    if (_headerSize > 0 &&                                              // 1800a9355
+        _direction == 1) {                                              // 1800a935b
+        Commit();                                                       // 1800a9361
     }
 
-    RtIO::FileStream* const inner = &self->file.base;                         // 1800a9366
-    if (inner->file.handle != -1) {                                     // 1800a936e
-        RtIO::RtIo_FileSystem_CloseFile(RtIO::Fs(), &inner->file);                  // 1800a937a
+    // The member BinaryFileStream's FileInfo (this + 0x68 + 0x20).
+    RtIO::FileInfo* const inner = &_file._file;                         // 1800a9366
+    if (inner->handle != -1) {                                          // 1800a936e
+        ::IO::FileSystem::_singleton->CloseFile(*inner);                // 1800a937a
     }
 }                                                                       // 1800a9388 / 1800a939b
 

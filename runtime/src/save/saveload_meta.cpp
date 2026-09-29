@@ -336,26 +336,26 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // never-initialised), so a `= {}` here would be a behavioural difference,
     // not tidiness.
     // ENDGAME B.3.9 IO (W2, foreign site): the REAL class on the same raw
-    // storage -- base ctor, vptr, member ctor, the same three steps; the body
-    // keeps reading it through the RtIo POD view.
+    // storage -- base ctor, vptr, member ctor, the same three steps.
     alignas(16) unsigned char csStorage[sizeof(IO::CompressedMemoryStream)];
     IO::CompressedMemoryStream* const csObj =
         ::new (static_cast<void*>(csStorage)) IO::CompressedMemoryStream();
-    RtIo::CompressedMemoryStream& cs = *reinterpret_cast<RtIo::CompressedMemoryStream*>(csObj);
+    IO::CompressedMemoryStream& cs = *csObj;
 
-    cs.base.base.direction = 1;                 // 1 == writing
-    cs.base.source         = &cs.memoryStream.base;
+    // ---- inlined ?Create(memoryStream, 2) ----------------------------------
+    cs._direction = 1;                          // 1 == writing
+    cs._source    = &cs._memoryStream;
 
     // `Allocate(8, 4)` under the allocator lock, then System::Compression's
     // ctor on it — which is exactly the inlined body of MemAlloc(8, 4).
     // Retail stores the CTOR'S RETURN (`this`), or zero when the allocation
     // failed; transcribed, including the failure arm.
     void* compression = MemAlloc(8, 4);
-    cs.base.compression = (compression != nullptr)
-        ? static_cast<void*>(::new (compression) System::Compression())   // ??0Compression 0x1800c41a0
+    cs._compression = (compression != nullptr)
+        ? ::new (compression) System::Compression()      // ??0Compression 0x1800c41a0
         : nullptr;
 
-    RtIo::RtIo_CompressedStream_SetWindowCount(&cs.base, 2);   // 0x1800aa020
+    cs.SetWindowCount(2);                       // 0x1800aa020
 
     // ---- inlined ??0Serializer@IO@@(stream, 3) ----------------------------
     // The stream's own Encoding decides which ReaderWriter gets built; the
@@ -364,8 +364,8 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     ser.stream       = reinterpret_cast<rt::io::Stream*>(&cs);
     ser.readerWriter = nullptr;
     {
-        void* encoding = cs.base.base.encoding;
-        const int slot = (cs.base.base.direction == 0)
+        void* encoding = cs._encoding;
+        const int slot = (cs._direction == 0)
             ? rt::io::encoding_vtbl::kCreateReader
             : rt::io::encoding_vtbl::kCreateWriter;
         ser.readerWriter = reinterpret_cast<MakeCodecFn>(ReadVtableSlot(encoding, slot))(
@@ -495,9 +495,9 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // ---- inlined ?Close@CompressedMemoryStream, then the handoff ----------
     // `_headers._size > 0` is "has anything been written yet"; the direction
     // test keeps a read-mode stream from committing.
-    if (cs.base.headerSize > 0 && cs.base.base.direction == 1)
-        RtIo::RtIo_CompressedStream_Commit(&cs.base);           // 0x1800a9ee0
-    reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream)->Close();   // slot 7 +0x38 (B.3.x bridge)
+    if (cs._headerSize > 0 && cs._direction == 1)
+        cs.Commit();                                            // 0x1800a9ee0
+    cs._memoryStream.Close();                   // slot 7 +0x38, the member's own vtable
 
     // THE ONE SIDE EFFECT THAT LEAVES THIS FUNCTION: the finished record is
     // copied into the EMBEDDED SavedState at SaveLoad+0x28, which is what
@@ -507,7 +507,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     //
     // ENDGAME B.3.7 B2: `SavedState::Store` is a member of this block's class
     // now, called directly (it was an RT_EXPORT_ONCE door onto our own port).
-    _embeddedState.Store(*reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream));   // B.3.7 bridge
+    _embeddedState.Store(cs._memoryStream);
 
     // ---- ~CompressedMemoryStream (retail inlines it here) ------------------
     // ENDGAME B.3.9 IO (W2, foreign site): the class's own destructor chain at

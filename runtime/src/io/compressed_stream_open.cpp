@@ -26,27 +26,16 @@
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"
 
-namespace RtIo {
-
-extern "C" int RtIo_CompressedStream_GetAvailableWindow(CompressedStream*);
-
-namespace {
-
 // B3R RT-IO: the two by-address helpers that stood here are direct calls:
 // ?MemAlloc@MemoryAllocator@System@@ 0x1800c7a50 -> System::MemoryAllocator::
 // MemAlloc (retail INLINES its three steps -- Enter, Allocate, Leave -- and the
 // static member IS those three steps), and Array<Window>::SetSize 0x180024c10 /
 // Array<Header>::SetSize 0x180024d70 -> rtcoll::RtColl_ArraySetSize_*.
-
+//
 // The source's Stream virtuals are called through the OBJECT's vtable exactly
 // as retail does -- by name on `IO::Stream` (B3X W0). Not shortcut to our
-// MemoryStream bodies: the source is a Stream* and its dynamic type is the
-// caller's business, not ours. `Stream` here is the RtIo POD view.
-inline ::IO::Stream* AsStream(Stream* s) {
-    return reinterpret_cast<::IO::Stream*>(s);   // B.3.x bridge
-}
-
-}  // namespace
+// MemoryStream bodies: the source is a Stream& and its dynamic type is the
+// caller's business, not ours.
 
 // ============================================================================
 // ?SetWindowCount@CompressedStream@IO@@                      retail 0x1800aa020
@@ -69,21 +58,20 @@ inline ::IO::Stream* AsStream(Stream* s) {
 // runtime/types/io/Stream.h — a useful independent check on rung 2's layout
 // rather than a restatement of it, since that header was pinned from the
 // CONSTRUCTOR and this is a different function.
-extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int32_t n) {
+void IO::CompressedStream::SetWindowCount(int n) {
 
-    rtcoll::RtColl_ArraySetSize_180024c10(&self->windowData, n);  // 1800aa04e
+    // Array<Window>::SetSize, handed the {data, size, capacity} header.
+    rtcoll::RtColl_ArraySetSize_180024c10(&_windowData, n);   // 1800aa04e
 
     for (int32_t i = 0; i < n; ++i) {                     // 1800aa056/aa0c6
-        void* const buf = ::System::MemoryAllocator::MemAlloc(kCompressedStreamWindowSize, 4);   // 1800aa08f
-        uint8_t* windows = static_cast<uint8_t*>(self->windowData);   // 1800aa0a0
-        *reinterpret_cast<void**>(windows + i * 0x18 + 0x10) = buf;   // 1800aa0a4
-        windows = static_cast<uint8_t*>(self->windowData);            // 1800aa0a9
-        void* const reloaded =
-            *reinterpret_cast<void**>(windows + i * 0x18 + 0x10);     // 1800aa0b5
-        std::memset(reloaded, 0, kCompressedStreamWindowSize);        // 1800aa0ba
+        uint8_t* const buf = static_cast<uint8_t*>(::System::MemoryAllocator::MemAlloc(
+            RtIo::kCompressedStreamWindowSize, 4));       // 1800aa08f
+        _windowData[i].buffer = buf;                      // 1800aa0a0 / 1800aa0a4
+        void* const reloaded = _windowData[i].buffer;     // 1800aa0a9 / 1800aa0b5
+        std::memset(reloaded, 0, RtIo::kCompressedStreamWindowSize);  // 1800aa0ba
     }
 
-    self->activeWindow = RtIo_CompressedStream_GetAvailableWindow(self);  // 1800aa0cb/0d0
+    _activeWindow = GetAvailableWindow();                 // 1800aa0cb/0d0
 
 }
 
@@ -108,45 +96,46 @@ extern "C" void RtIo_CompressedStream_SetWindowCount(CompressedStream* self, int
 // is a 16-bit field read at +0x04 of each 8-byte header with a fallback to the
 // one at +0x06 when it is zero — a compressed-size / raw-size pair, where zero
 // in the first means "stored uncompressed".
-extern "C" bool RtIo_CompressedStream_Open(CompressedStream* self, Stream* src,
-                                           int32_t windowCount) {
+bool IO::CompressedStream::Open(Stream& srcRef, int windowCount) {
+    Stream* const src = &srcRef;
 
-    self->source     = src;                               // 1800aa572
-    self->base.direction = 0;                             // 1800aa57c  (+0x08)
+    _source    = src;                                     // 1800aa572
+    _direction = 0;                                       // 1800aa57c  (+0x08)
 
-    RtIo_CompressedStream_SetWindowCount(self, windowCount);   // 1800aa583
+    SetWindowCount(windowCount);                          // 1800aa583
 
     const int64_t len = static_cast<int32_t>(
-        AsStream(self->source)->GetSize());                // 1800aa588..58f slot 6, MOVSXD
+        _source->GetSize());                              // 1800aa588..58f slot 6, MOVSXD
 
     if (static_cast<uint64_t>(len) < 4u) {                 // 1800aa595 CMP/JNC (UNSIGNED)
         return false;                                      // 1800aa59b
     }
 
     int32_t blockCount = 0;
-    AsStream(src)->Read(4, &blockCount);                   // 1800aa5bd slot 3
+    src->Read(4, &blockCount);                             // 1800aa5bd slot 3
 
     if (static_cast<int32_t>(blockCount * 8) >
         static_cast<int32_t>(len)) {                       // 1800aa5cb CMP/JG (SIGNED, 32-bit)
         return false;
     }
 
-    rtcoll::RtColl_ArraySetSize_180024d70(&self->headerData, blockCount);   // 1800aa5d8
+    // Array<Header>::SetSize, handed the {data, size, capacity} header.
+    rtcoll::RtColl_ArraySetSize_180024d70(&_headerData, blockCount);   // 1800aa5d8
 
-    AsStream(src)->Read(self->headerSize * 8, self->headerData);   // 1800aa5ed slot 3
+    src->Read(_headerSize * 8, _headerData);               // 1800aa5ed slot 3
 
+    // Each 8-byte header's compressedSize (+0x04), falling back to its
+    // uncompressedSize (+0x06) when it is zero -- Stream.h's StoredLength rule.
     int32_t total = 4 + blockCount * 8;                    // 1800aa5f7 LEA
-    const uint8_t* e = static_cast<const uint8_t*>(self->headerData) + 4;  // 1800aa609
-    for (int32_t i = 0; i < self->headerSize; ++i) {       // 1800aa5fe..aa628
-        uint16_t w = *reinterpret_cast<const uint16_t*>(e);        // 1800aa610
-        if (w == 0) w = *reinterpret_cast<const uint16_t*>(e + 2); // 1800aa618
+    const RtIo::CompressedStreamHeader* e = _headerData;   // 1800aa609
+    for (int32_t i = 0; i < _headerSize; ++i) {            // 1800aa5fe..aa628
+        uint16_t w = e->compressedSize;                    // 1800aa610
+        if (w == 0) w = e->uncompressedSize;               // 1800aa618
         total += w;                                        // 1800aa623
-        e += 8;                                            // 1800aa61f
+        ++e;                                               // 1800aa61f
     }
 
     const bool ok = (total == static_cast<int32_t>(len));  // 1800aa634 SETZ
     return ok;
 }
-
-}  // namespace RtIo
 

@@ -232,10 +232,6 @@ extern "C" bool      RtIo_FileSystem_ReadFile(FileSystem*, FileInfo*,
 extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo*, const FileInfo*);      // 0x18000c200
 }  // namespace RtIO
 
-namespace RtIo {
-extern "C" bool RtIo_CompressedStream_Open(CompressedStream*, Stream*, int32_t); // 0x1800aa560
-extern "C" bool RtIo_CompressedStream_Read(CompressedStream*, int32_t, void*);   // 0x1800aa780
-}  // namespace RtIo
 
 namespace RtIO {
 
@@ -246,10 +242,6 @@ using RtSystem::RtString_ReleaseInline;
 using RtSystem::RtString_SetLength;
 using RtSystem::RtSystem_Filename_AdjustDelimiters;
 
-using RtIo::CompressedStream;
-using RtIo::CompressedMemoryStream;
-using RtIo::MemoryStream;
-using RtIo::Stream;
 
 namespace {
 
@@ -270,12 +262,6 @@ FileSystem** FileSystemSingletonCell() {
 // that stood here are direct calls: System::MemoryAllocator::MemAlloc /
 // MemFree and the rtcoll bodies by name.
 
-// A Stream virtual through the OBJECT's vtable, exactly as retail dispatches it
-// at 0x1800b603e (`MOV RAX,[RBP-0x58] ; CALL qword ptr [RAX+0x38]`). B3X W0:
-// the virtual call by name.
-void CallStreamClose(MemoryStream* ms) {
-    reinterpret_cast<IO::MemoryStream*>(ms)->Close();   // slot 7 +0x38 (B.3.x bridge)
-}
 
 // ---- §94: the two jump-table bodies ---------------------------------------
 
@@ -381,12 +367,14 @@ bool RawTerminatorInRead(const uint8_t* buf, int32_t len) {
 // Read a length, read that many BYTES, then decode `2 * len` of them as
 // UTF-16LE and re-encode to UTF-8 into the overlapping output buffer.
 // Returns whether the result is deterministic (§95).
-bool ReadStringUtf16(CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
+// `cs->IO::CompressedStream::Read` is retail's direct CALL 0x1800aa780 (a
+// qualified, non-virtual call, as the door that stood here was).
+bool ReadStringUtf16(IO::CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
                      String* tmp) {
     int32_t len = 0;                                       // 1800b4e22
-    RtIo::RtIo_CompressedStream_Read(cs, 4, &len);         // 1800b4e2e group
+    cs->IO::CompressedStream::Read(4, &len);               // 1800b4e2e group
     if (len > 0)                                           // 1800b4eba  TEST/JLE
-        RtIo::RtIo_CompressedStream_Read(cs, len, buf860); // 1800b4eb3 group
+        cs->IO::CompressedStream::Read(len, buf860);       // 1800b4eb3 group
 
     const bool deterministic = (len <= 0) || Utf16TerminatorInRead(buf860, len);
 
@@ -420,11 +408,11 @@ bool ReadStringUtf16(CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
 // ---- PATH B's string group (0x1800b559f and its two clones) ----------------
 // Read a length, read that many bytes STRAIGHT into the output buffer. No
 // transcode, and — note — no terminator is written either.
-bool ReadStringRaw(CompressedStream* cs, uint8_t* buf60, String* tmp) {
+bool ReadStringRaw(IO::CompressedStream* cs, uint8_t* buf60, String* tmp) {
     int32_t len = 0;                                       // 1800b55a2
-    RtIo::RtIo_CompressedStream_Read(cs, 4, &len);         // 1800b55ae group
+    cs->IO::CompressedStream::Read(4, &len);               // 1800b55ae group
     if (len > 0)                                           // 1800b5633  TEST/JLE
-        RtIo::RtIo_CompressedStream_Read(cs, len, buf60);  // 1800b562f group
+        cs->IO::CompressedStream::Read(len, buf60);        // 1800b562f group
 
     const bool deterministic = (len > 0) && RawTerminatorInRead(buf60, len);
     BuildStringFrom(buf60, tmp);
@@ -537,21 +525,18 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // Not two objects: the CompressedStream base ctor, then the class's own
     // vtable stamped over it, then the EMBEDDED MemoryStream's ctor at +0x68,
     // then four raw field stores, then Open with the embedded stream as source.
-    // ENDGAME B.3.9 IO (W2): the REAL class, built on the frame's raw storage
-    // -- base ctor, vptr, member ctor, the same three steps (1800b482a..4840);
-    // the body below keeps reading it through the RtIo POD view.
-    alignas(16) unsigned char cmsStorage[sizeof(IO::CompressedMemoryStream)];
-    IO::CompressedMemoryStream* const cmsObj =
-        ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
-    RtIo::CompressedMemoryStream& cms =
-        *reinterpret_cast<RtIo::CompressedMemoryStream*>(cmsObj);
-    cms.memoryStream.data           = blob;                    // 1800b4846
-    cms.memoryStream.size   = static_cast<uint32_t>(blobLen);  // 1800b484d
-    cms.memoryStream.cursor         = 0;                       // 1800b4850
-    cms.memoryStream.base.direction = 0;                       // 1800b4854
-    RtIo::RtIo_CompressedStream_Open(&cms.base, &cms.memoryStream.base, 1);  // 1800b4864
+    // ENDGAME B.3.9 IO (W2) / B.4 R-IO: the REAL class, a frame local -- base
+    // ctor, vptr, member ctor, the same three steps (1800b482a..4840). Its
+    // destructor at the function's end is retail's ~CompressedMemoryStream at
+    // 1800b604f, after the blob's MemFree.
+    IO::CompressedMemoryStream cms;
+    cms._memoryStream._data      = blob;                       // 1800b4846
+    cms._memoryStream._size      = static_cast<uint32_t>(blobLen);  // 1800b484d
+    cms._memoryStream._cursor    = 0;                          // 1800b4850
+    cms._memoryStream._direction = 0;                          // 1800b4854
+    cms.IO::CompressedStream::Open(cms._memoryStream, 1);      // 1800b4864
 
-    RtIo::CompressedStream* const cs = &cms.base;
+    IO::CompressedStream* const cs = &cms;
 
     // The frame's one buffer region, §93.
     uint8_t  frameBuf[kFrameBufBytes];
@@ -559,22 +544,22 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     uint8_t* const buf860 = frameBuf + kOutCap;                // [RBP+0x860]
 
     int32_t fileCount = 0;
-    RtIo::RtIo_CompressedStream_Read(cs, 4, &fileCount);       // 1800b4869 group
+    cs->IO::CompressedStream::Read(4, &fileCount);             // 1800b4869 group
 
     int32_t formatVersion = 0;                                 // 1800b48e9
 
     if (compressed >= 1) {                                     // 1800b48f0  CMP/JL
 
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &formatVersion);      // 1800b48fa
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_version);      // 1800b4979  +0x68
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_userVersion);  // 1800b49eb  +0x6c
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_priority);     // 1800b4a5d  +0x70
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_platform);     // 1800b4ad9  +0x74
+        cs->IO::CompressedStream::Read(4, &formatVersion);     // 1800b48fa
+        cs->IO::CompressedStream::Read(4, &_version);          // 1800b4979  +0x68
+        cs->IO::CompressedStream::Read(4, &_userVersion);      // 1800b49eb  +0x6c
+        cs->IO::CompressedStream::Read(4, &_priority);         // 1800b4a5d  +0x70
+        cs->IO::CompressedStream::Read(4, &_platform);         // 1800b4ad9  +0x74
         // ONE BYTE — §92(a). `MOV ESI,0x1` at 0x1800b4b4b.
-        RtIo::RtIo_CompressedStream_Read(cs, 1, &_overridable);  // 1800b4b4b  +0xac
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_crc);   // 1800b4bc9  +0xa8
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_iconWidth);    // 1800b4c49  +0x78
-        RtIo::RtIo_CompressedStream_Read(cs, 4, &_iconHeight);   // 1800b4cc0  +0x7c
+        cs->IO::CompressedStream::Read(1, &_overridable);      // 1800b4b4b  +0xac
+        cs->IO::CompressedStream::Read(4, &_crc);              // 1800b4bc9  +0xa8
+        cs->IO::CompressedStream::Read(4, &_iconWidth);        // 1800b4c49  +0x78
+        cs->IO::CompressedStream::Read(4, &_iconHeight);       // 1800b4cc0  +0x7c
 
         // The icon pixel array. Retail sizes it from height*width and then
         // reads `array._size * 4` bytes — the array's OWN size, not the product
@@ -583,17 +568,17 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         uint8_t* const iconArr = reinterpret_cast<uint8_t*>(this) + 0x80;
         rtcoll::RtColl_ArraySetSize_180029510(iconArr,
                      _iconHeight * _iconWidth);      // 1800b4d27/d37
-        RtIo::RtIo_CompressedStream_Read(
-            cs, ArrSize(this, 0x88) * 4, ArrData(this, 0x80)); // 1800b4d56  REAL CALL
+        cs->IO::CompressedStream::Read(
+            ArrSize(this, 0x88) * 4, ArrData(this, 0x80));     // 1800b4d56  REAL CALL
 
         if (formatVersion >= 2) {                              // 1800b4d62  CMP 2 / JL
             int32_t* const n90 =
                 &_previewByteCount;   /* +0x90 -- see PackageFile.h */
-            RtIo::RtIo_CompressedStream_Read(cs, 4, n90);      // 1800b4d6c  +0x90
+            cs->IO::CompressedStream::Read(4, n90);            // 1800b4d6c  +0x90
             uint8_t* const flagArr = reinterpret_cast<uint8_t*>(this) + 0x98;
             rtcoll::RtColl_ArraySetSize_180029630(flagArr, *n90);   // 1800b4dea/df1
             // NOTE the bound: retail reads `*n90` bytes, not the ARRAY's size.
-            RtIo::RtIo_CompressedStream_Read(cs, *n90, ArrData(this, 0x98));  // 1800b4e09
+            cs->IO::CompressedStream::Read(*n90, ArrData(this, 0x98));  // 1800b4e09
         }
 
         String tmp;
@@ -649,18 +634,18 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
         for (int32_t i = fileCount; i != 0; --i) {             // 1800b5b99 / 601a
 
             int32_t nameLen = 0;
-            RtIo::RtIo_CompressedStream_Read(cs, 4, &nameLen); // 1800b5ba0 group
+            cs->IO::CompressedStream::Read(4, &nameLen);       // 1800b5ba0 group
 
             // THE SAME SELECTOR AS THE METADATA BLOCK, WITH THE ARMS IN THE
             // OPPOSITE ORDER — raw first at 0x1800b5c1f, jumping over the
             // UTF-16 arm at 0x1800b5c9d. §86.
             if (formatVersion > 2) {                           // 1800b5c19  CMP 2 / JLE
                 if (nameLen > 0)                               // 1800b5c29
-                    RtIo::RtIo_CompressedStream_Read(cs, nameLen, buf60);  // 1800b5c25
+                    cs->IO::CompressedStream::Read(nameLen, buf60);  // 1800b5c25
                 // 1800b5c98  JMP 0x1800b5de3 — NO terminator is written here.
             } else {
                 if (nameLen > 0)                               // 1800b5cae
-                    RtIo::RtIo_CompressedStream_Read(cs, nameLen, buf860); // 1800b5ca7
+                    cs->IO::CompressedStream::Read(nameLen, buf860); // 1800b5ca7
                 const uint8_t* src       = buf860;             // 1800b5d22
                 const uint8_t* const end =
                     buf860 + 2 * static_cast<int64_t>(nameLen);// 1800b5d1c/d32
@@ -688,8 +673,8 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
             }
 
             int32_t entryOffset = 0, entrySize = 0;
-            RtIo::RtIo_CompressedStream_Read(cs, 4, &entryOffset);  // 1800b5de3  -> +0x08
-            RtIo::RtIo_CompressedStream_Read(cs, 4, &entrySize);    // 1800b5e59  -> +0x0c
+            cs->IO::CompressedStream::Read(4, &entryOffset);   // 1800b5de3  -> +0x08
+            cs->IO::CompressedStream::Read(4, &entrySize);     // 1800b5e59  -> +0x0c
 
             String tmp;
             BuildStringFrom(buf60, &tmp);                      // 1800b5ec6..5f3d
@@ -723,12 +708,12 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // direction = 0 and only direction == 1 gets here. The GUARD is
     // transcribed and the arm is COUNTED, so "provably dead" is measured on
     // every run rather than asserted once.
-    if (cs->headerSize > 0 && cs->base.direction == 1) {       // 1800b6023/29
-        RtIo::RtIo_CompressedStream_Commit(cs);                // 1800b6035
+    if (cs->_headerSize > 0 && cs->_direction == 1) {          // 1800b6023/29
+        cs->Commit();                                          // 1800b6035
     }
-    CallStreamClose(&cms.memoryStream);                        // 1800b603a  slot 7
+    cms._memoryStream.Close();                                 // 1800b603a  slot 7, the member's vtable
     ::System::MemoryAllocator::MemFree(blob);                  // 1800b6045
-    cmsObj->IO::CompressedMemoryStream::~CompressedMemoryStream();       // 1800b604f  ~CompressedMemoryStream
+    // ~cms at the return: 1800b604f  ~CompressedMemoryStream
     const bool ours = true;                                    // 1800b6059  MOV AL,1
 
     return ours;

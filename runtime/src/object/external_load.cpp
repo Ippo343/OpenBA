@@ -266,8 +266,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     if (!static_cast<::IO::FileStream&>(cfsObj->_file).Open(
             *reinterpret_cast<const ::System::Filename*>(path))) {   // B.3.x bridge
         ++g_lc.openFileFailed;
-    } else if (!RtIo::RtIo_CompressedStream_Open(                   // 0x1800aa560
-                   &cfs.base, &cfs.file.base.base, 1)) {
+    } else if (!cfsObj->IO::CompressedStream::Open(cfsObj->_file, 1)) {   // 0x1800aa560
         ++g_lc.openCompFailed;
     } else {
         // ---- 1800bc69b..1800bc6ca ---------------------------------------
@@ -409,9 +408,9 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     // the bad-magic / bad-type / bad-version exits jump PAST it, which is
     // exactly why they return null and an Open failure returns `existing`.
     if (keep) {
-        if (cfs.base.headerSize > 0 && cfs.base.base.direction == 1) {   // 1800bc85b/861
+        if (cfsObj->_headerSize > 0 && cfsObj->_direction == 1) {        // 1800bc85b/861
             ++g_lc.committed;
-            RtIo::RtIo_CompressedStream_Commit(&cfs.base);                 // 0x1800a9ee0
+            cfsObj->Commit();                                              // 0x1800a9ee0
         }
         CloseIfOpen(&cfs.file.base.file);                                // 1800bc872
     }
