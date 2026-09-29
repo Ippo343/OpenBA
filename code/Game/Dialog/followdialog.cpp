@@ -285,9 +285,8 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
     // Matches the exe (0x140069250: MOV RAX,[retbuf] then MOVSS [RAX+0x158]).
     // Only update the camera when the ModelComponent resolved (guard the null).
     if (model) {
-        // LEFT: ModelComponent::transform is raw Math::Transform storage (H5, W0-H1).
-        float posX = *(float*)(model->transform + 0x10);
-        float posZ = *(float*)(model->transform + 0x14);
+        float posX = model->transform.translation.x;
+        float posZ = model->transform.translation.y;
 
         // The camera's look-at target
         GameUpdateLoop* world = GameUpdateLoop::_singleton;
