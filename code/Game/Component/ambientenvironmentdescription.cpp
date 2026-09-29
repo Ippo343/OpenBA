@@ -145,11 +145,10 @@ bool AmbientEnvironmentDescription::Serialize(void* stream) {
         }
     }
 
-    // +0x30 / +0x34: floats written through the 4-byte INT door (the tree's
-    // choice; same four bytes either way). LEFT: which overload retail calls is
-    // not read here (an H8 question).
-    ser.Serialize(*reinterpret_cast<int*>(&_f30), nullptr);
-    ser.Serialize(*reinterpret_cast<int*>(&_f34), nullptr);
+    // +0x30 / +0x34: retail's float overload (import 0x140152a60 at 0x140043a25
+    // and 0x140043a37).
+    ser.Serialize(_f30, nullptr);
+    ser.Serialize(_f34, nullptr);
     return true;
 }
 
