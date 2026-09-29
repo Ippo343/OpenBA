@@ -44,6 +44,10 @@
 #include <cstdint>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
+#include "../../types/graphics/Material.h"      // the Draw chain
+#include "../../types/video/VideoProgram.h"
+#include "../../types/video/RenderState.h"
 #include "../../types/ui/SpriteCapture.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
@@ -53,26 +57,6 @@
 #include "../../types/object/External.h"
 #include "../../types/collection/Collection.h"
 #include <new>
-
-namespace {
-
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
-
-}  // namespace
 
 // 0x18003c7f0 / 0x18003c810: the class's own BaseTypeInfo node at +0 and +8.
 // ############################################################################
@@ -116,10 +100,9 @@ Object::Base* SpriteCapture::CreateInPlaceObject(void* place) {
 // order. ENDGAME B.3.9 UI-D: the retired `RtUi_SpriteCapture_Dtor` door ran
 // this same body by hand.
 SpriteCapture::~SpriteCapture() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    rtcoll::RtColl_ArrayDtor_180037310(p + 0x40);           // 1800d91d4  ~Array<Sprite>
-    rtcoll::RtColl_ArrayDtorElem_18003e4a0(p + 0x30);           // 1800d91de  ~Array<CaptureEntry>
-    rtcoll::RtColl_ArrayDtor_18003da00(p + 0x20);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>
+    rtcoll::RtColl_ArrayDtor_180037310(&_sprites);          // 1800d91d4  ~Array<Sprite>, +0x40
+    rtcoll::RtColl_ArrayDtorElem_18003e4a0(&_entries);      // 1800d91de  ~Array<CaptureEntry>, +0x30
+    rtcoll::RtColl_ArrayDtor_18003da00(&_sheets);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>, +0x20
 }
 
 }  // namespace UI
@@ -162,22 +145,18 @@ SpriteCapture::~SpriteCapture() {
 namespace UI {
 
 bool SpriteCapture::Serialize(void* streamv) {
-    Stream*  stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
 
-    Serializer ser = { stream, nullptr };                    // [RBP-0x38], [RBP-0x30]
-
-    void*  factory = stream->encodingFactory;                // 1800d9567
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;     // 1800d9571 CMP / JNZ
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int zero);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                   // 1800d9582
+    // The inlined ??0Serializer (1800d9567..1800d9582): CreateReader /
+    // CreateWriter of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);                          // [RBP-0x38], [RBP-0x30]
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     int32_t n = _sheets.size;       // 1800d9586  _sheets._size
     rw->SerializeInt(n, nullptr);                            // 1800d959b
 
 
-    if (ser.stream->mode == 0) {                             // 1800d95a5 (re-read)
+    if (ser._stream->_direction == 0) {                      // 1800d95a5 (re-read)
         rtcoll::RtColl_ArraySetSize_18003ea50(&_sheets, n);      // 1800d95b2
     }
     RtObject_ExternalPtrArraySerialize_SpriteSheet(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_sheets.data));
@@ -188,53 +167,51 @@ bool SpriteCapture::Serialize(void* streamv) {
     n = _entries.size;               // 1800d95ef  _entries._size
     rw->SerializeInt(n, nullptr);                            // 1800d9604
 
-    if (ser.stream->mode == 0) {                             // 1800d960e (re-read)
+    if (ser._stream->_direction == 0) {                      // 1800d960e (re-read)
         rtcoll::RtColl_ArraySetSize_18004ba90(&_entries, n);      // 1800d961b
     }
     RtUi_SpriteCapture_SerializeEntries(&ser, n, _entries.data);   // 0x18004c0d0
 
-    if (stream->mode == 0) {                                 // 1800d9630  the ORIGINAL stream
+    if (stream->_direction == 0) {                           // 1800d9630  the ORIGINAL stream
         rtcoll::RtColl_ArraySetSize_1800370c0(
             &_sprites, _entries.size);         // 1800d9642
 
         for (int32_t i = 0; i < _sprites.size; ++i) {
-            uint8_t* entries = static_cast<uint8_t*>(_entries.data);   // 1800d9660
-            const int32_t sheetIndex =
-                *reinterpret_cast<int32_t*>(entries + static_cast<size_t>(i) * 0x28);
+            const CaptureEntry* entries = _entries.data;                 // 1800d9660
+            const int32_t sheetIndex = entries[i].sheetIndex;
 
             uint64_t idxSlot;                                // see the banner
-            void*    sheet;
-            uint8_t* sprites;
+            SpriteSheet* sheet;
+            Sprite*      sprites;
             if (sheetIndex < 0) {                            // 1800d9664 CMP/JGE
                 const int32_t minusOne = -1;
                 __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);  // 1800d966b
-                sprites = static_cast<uint8_t*>(_sprites.data);        // 1800d9672
+                sprites = _sprites.data;                                 // 1800d9672
                 sheet   = nullptr;                                       // 1800d9676 (RDI==0)
             } else {
-                sheet = reinterpret_cast<void* const*>(
-                    static_cast<uint8_t*>(_sheets.data))[sheetIndex]; // 1800d968f
+                sheet = _sheets.data[sheetIndex];                        // 1800d968f
                 if (sheet != nullptr) {                                  // 1800d9693
                     // ENDGAME B.3.6 block D: was an RT_EXPORT_ONCE door;
-                    // now the member. The entry's +0x08 IS a System::String.
-                    const int32_t idx = static_cast<const SpriteSheet*>(sheet)
-                        ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(  // B.3.6 bridge
-                            entries + static_cast<size_t>(i) * 0x28 + 8));  // 1800d96a3
+                    // now the member. The entry's `name` IS a System::String
+                    // (B.4 LEFT: spelt `char*`, H5).
+                    const int32_t idx = sheet->GetSpriteIndexFromName(
+                        *reinterpret_cast<const System::String*>(&entries[i].name));   // 1800d96a3
                     __builtin_memcpy(&idxSlot, &idx, sizeof idx);         // 1800d96a8
                 } else {
                     const int32_t minusOne = -1;
                     __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne); // 1800d96ad
                 }
-                sprites = static_cast<uint8_t*>(_sprites.data);         // 1800d96b4
+                sprites = _sprites.data;                                 // 1800d96b4
             }
-            uint8_t* slot = sprites + static_cast<size_t>(i) * 0x10;
-            *reinterpret_cast<void**>(slot)        = sheet;   // 1800d9676 / 1800d96b8
-            *reinterpret_cast<uint64_t*>(slot + 8) = idxSlot; // 1800d96c0  QWORD store
+            // One QWORD store over `spriteIndex` and `pad0C` (1800d96c0).
+            Sprite& slot = sprites[i];
+            slot.spriteSheet = sheet;                                    // 1800d9676 / 1800d96b8
+            slot.spriteIndex = static_cast<int32_t>(idxSlot);
+            slot.pad0C       = static_cast<int32_t>(idxSlot >> 32);
         }
     }
 
-    if (rw != nullptr) {                                     // 1800d96da
-        delete rw;                                 // slot 0, flag 1
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (1800d96da).
     return true;                                             // 1800d96e9 MOV AL,1
 }
 
@@ -285,7 +262,7 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
 
     // `_entries.size` and `.data` are re-read every iteration, as retail does.
     for (int32_t i = 0; i < _entries.size; ++i) {
-        const CaptureEntry& e = static_cast<const CaptureEntry*>(_entries.data)[i];  // 1800d92e3
+        const CaptureEntry& e = _entries.data[i];                     // 1800d92e3
 
         if (e.sheetIndex == -1) {                                     // 1800d92eb
             int32_t x1 = e.x1 + ox;
@@ -328,8 +305,8 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
         }
 
         // A recorded sprite. The Sprite the scissor entries do NOT have.
-        const Sprite& sprite = static_cast<const Sprite*>(_sprites.data)[i];
-        void* const   sheet  = sprite.spriteSheet;
+        const Sprite& sprite = _sprites.data[i];
+        const SpriteSheet* const sheet = static_cast<const SpriteSheet*>(sprite.spriteSheet);
 
         const int32_t x1 = e.x1 + ox;
         const int32_t y1 = e.y1 + oy;
@@ -337,18 +314,21 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
         const int32_t y2 = e.y2 + oy;
         const uint32_t color = e.color;
 
-        // The chain retail walks from the sheet to the thing whose +0x6c
-        // selects sprite-vs-line. It is five unguarded loads, transcribed as
-        // five loads and NOT named: no body in this batch says what any of the
-        // intermediate objects is, and a name invented here would be believed.
-        const uint8_t* q = *reinterpret_cast<const uint8_t* const*>(
-                               reinterpret_cast<const uint8_t*>(sheet) + 0x30);  // 1800d93fb
-        q = *reinterpret_cast<const uint8_t* const*>(q + 0x28);                  // 1800d9406
-        q = *reinterpret_cast<const uint8_t* const*>(q + 0x28);                  // 1800d9410
-        q = *reinterpret_cast<const uint8_t* const*>(q);                         // 1800d9417
-        q = *reinterpret_cast<const uint8_t* const*>(q + 0x38);                  // 1800d941a
+        // The chain retail walks from the sheet to the render state that
+        // selects sprite-vs-line, five unguarded loads: the sheet's
+        // MaterialInstance (+0x30), its Material (+0x28), the Material's pass
+        // array (+0x28) and pass 0, that VideoProgram's RenderState (+0x38) —
+        // `?GetRenderState@Material@Graphics@@` (0x180102980) with pass 0,
+        // inlined — then `?IsWireframe@RenderState@Video@@` (0x18004b730,
+        // `CMP dword [RCX+0x6c],1`), inlined. `m_field30` is spelt uint64_t
+        // (saveload_draw.cpp stores it as an integer).
+        const Graphics::MaterialInstance* const instance =
+            reinterpret_cast<const Graphics::MaterialInstance*>(sheet->m_field30);  // 1800d93fb
+        const Graphics::Material* const material = instance->_material.Get();       // 1800d9406
+        const Video::VideoProgram* const pass0 = material->_passes.GetData()[0].Get();  // 1800d9410 / 1800d9417
+        const Video::RenderState* const state = pass0->_renderState.Get();          // 1800d941a
 
-        if (*reinterpret_cast<const int32_t*>(q + 0x6c) != 1) {                  // 1800d9423
+        if (!state->IsWireframe()) {                                             // 1800d9423
             ctx.AddSprite(sprite, x1, y1, x2, y2, color, e.rotation);            // 1800d9468
         } else {
             ctx.AddLine(sprite, x1, y1, x2, y2, color);                          // 1800d9441
@@ -389,26 +369,24 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
 // (`MOV RCX,[RDI+8]` each time). That is not redundancy to tidy away: a
 // ReaderWriter is free to replace itself on the Serializer, and the visitor
 // pass does exactly that.
-extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void* basev) {
+extern "C" void RtUi_SpriteCapture_SerializeEntries(IO::Serializer* ser, int count,
+                                                    UI::CaptureEntry* e) {
     if (count <= 0) return;                                   // 18004c0d0 TEST/JLE
-    Serializer* ser = static_cast<Serializer*>(serv);
-    uint8_t*    e   = static_cast<uint8_t*>(basev);
 
-    // Re-read before every call (see above), then dispatched by name.
-    auto rw = [ser]() { return reinterpret_cast<IO::ReaderWriter*>(ser->readerWriter); };  // B.3.x bridge
-    auto i32 = [](uint8_t* p) -> int32_t& { return *reinterpret_cast<int32_t*>(p); };
+    // IO::Serializer::Serialize re-reads `_readerWriter` before every call
+    // (see above).
+    for (int i = 0; i < count; ++i, ++e) {                    // stride 0x28
+        ser->Serialize(e->sheetIndex, nullptr);               // +0x00
 
-    for (int i = 0; i < count; ++i, e += 0x28) {
-        rw()->SerializeInt(i32(e + 0x00), nullptr);
+        // B.4 LEFT: `name` is a System::String spelt `char*` (H5).
+        reinterpret_cast<System::String*>(&e->name)->Serialize(ser);   // 18004c10b 0x1800c9930, +0x08
 
-        reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);   // 18004c10b 0x1800c9930
-
-        rw()->SerializeInt(i32(e + 0x10), nullptr);
-        rw()->SerializeInt(i32(e + 0x14), nullptr);
-        rw()->SerializeInt(i32(e + 0x18), nullptr);
-        rw()->SerializeInt(i32(e + 0x1c), nullptr);
-        rw()->SerializeFloat(*reinterpret_cast<float*>(e + 0x20), nullptr);
-        rw()->SerializeUInt(*reinterpret_cast<uint32_t*>(e + 0x24), nullptr);
+        ser->Serialize(e->x1, nullptr);                       // +0x10
+        ser->Serialize(e->y1, nullptr);                       // +0x14
+        ser->Serialize(e->x2, nullptr);                       // +0x18
+        ser->Serialize(e->y2, nullptr);                       // +0x1c
+        ser->Serialize(e->rotation, nullptr);                 // +0x20
+        ser->Serialize(e->color, nullptr);                    // +0x24
     }
 }
 

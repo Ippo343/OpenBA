@@ -98,6 +98,7 @@
 // door caches.
 #include "element_common.h"
 #include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/ToolTipDialog.h"   // B4: UserInterface::_toolTipDialog is typed
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"   // B4: Persist's scope is IO::Serializer
 #include "../../types/io/Stream.h"
@@ -175,9 +176,9 @@ struct ElemCounts {
 ElemCounts g_elemCounts;
 
 // UserInterface::_toolTipDialog (+0x40), a UI::ToolTipDialog, read as the
-// DialogInstance it is. LEFT: the field is void* (UserInterface.h, R-UI-b).
+// DialogInstance it is (an upcast: the field is typed since R-UI-b).
 inline UI::DialogInstance* ToolTipDialogOf(const UI::UserInterface* u) {
-    return static_cast<UI::DialogInstance*>(u->_toolTipDialog);
+    return u->_toolTipDialog;
 }
 
 }  // namespace

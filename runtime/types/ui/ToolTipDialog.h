@@ -55,11 +55,11 @@ public:
     // DialogInstance ctor) with RDX/R8/R9 passed through, dataSource = the
     // element the 5th argument's InternalPtr holds, userData = 0, flags = 0;
     // then the stamp. The InternalPtrs arrive by hidden reference in retail.
+    // Defined in tooltipdialog.cpp, where `Element` is complete (the element
+    // is handed on as its `Object::Base`).
     ToolTipDialog(UserInterface* ui, const Dialog* dialog,
                   Object::InternalPtr<DialogInstance> parent,
-                  Object::InternalPtr<Element> element)
-        : DialogInstance(ui, dialog, parent,
-                         reinterpret_cast<Object::Base*>(element.Get()), nullptr, 0) {}
+                  Object::InternalPtr<Element> element);
 
     // [0] 0x18004d270 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xc0`, the element size).

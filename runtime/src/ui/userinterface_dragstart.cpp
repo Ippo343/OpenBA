@@ -201,30 +201,23 @@ void UI::UserInterface::BeginDragDrop(Object::InternalPtr<DialogInstance>* dialo
                                       Object::InternalPtr<Element>* element,
                                       int32_t x, int32_t y, uint32_t id, void* data) {
     ++g_beginDragEntries;
-    void** const dlgPtr  = reinterpret_cast<void**>(dialog);
-    void** const elemPtr = reinterpret_cast<void**>(element);
-
     // Retail's order: the three plain fields commit BEFORE the element is
     // touched. See note 1 above -- this order is what a null element observes.
-    _dragDropDialog = *dlgPtr;                                         // 0x18011f5f0 / 0x18011f5f7
+    _dragDropDialog = dialog->Get();                                   // 0x18011f5f0 / 0x18011f5f7
     _dragDropId     = id;                                              // 0x18011f5fb / 0x18011f5ff
     _dragDropData   = data;                                            // 0x18011f602 / 0x18011f607
 
-    // +0x80 / +0x84 as a pair of int32 grab offsets -- note 4 above. The field
-    // keeps its `void*` declaration for the two sites that CLEAR it; this is
-    // the writer, and it writes the two halves retail writes.
-    int32_t* const grab = reinterpret_cast<int32_t*>(&_dragDropUserData);
-
+    // +0x80 / +0x84, the pair of int32 grab offsets -- note 4 above.
     // Unguarded on purpose. Retail faults here on a null element and the crash
     // is load-bearing (CLAUDE.md; lane MOUSE recovered the whole field map from
     // exactly this fault). If this ever fires, the null came from upstream.
-    const Element* e1 = static_cast<const Element*>(*elemPtr);         // 0x18011f60b
+    const Element* e1 = element->Get();                                // 0x18011f60b
     const int32_t  gx = x - e1->_layoutLeft;                           // 0x18011f60e  32-bit SUB
-    grab[0] = gx;                                                      // 0x18011f612
+    _dragDropGrabX = gx;                                               // 0x18011f612
 
-    const Element* e2 = static_cast<const Element*>(*elemPtr);         // 0x18011f619  reloaded
+    const Element* e2 = element->Get();                                // 0x18011f619  reloaded
     const int32_t  gy = y - e2->_layoutTop;                            // 0x18011f61c  32-bit SUB
-    grab[1] = gy;                                                      // 0x18011f61f
+    _dragDropGrabY = gy;                                               // 0x18011f61f
 
     if (gx != x || gy != y) ++g_beginDragGrabOffset;   // effectiveness control only
 
