@@ -61,3 +61,11 @@ function declaration for a body the block converts. By-name sites in other block
 compiling get the minimal value-identical fix and are listed. Anything more (a field's width, a
 rename, a split of raw storage) is asked of the coordinator. A header of a block that is RUNNING
 is never edited: LEAVE and list.
+
+## Differences from retail you find and leave (added 2026-09-29)
+Your hand-in is read once; `docs/known_port_issues.md` is what the next session reads. For every
+difference from retail that you find and do NOT fix, add ONE ROW to the tables of entry 14 of
+`docs/known_port_issues.md` on your branch (where, what the tree does, what retail does with its
+address, `CONFIRMED` if you read retail, `SUSPECTED` if not), in the commit that leaves it. Rows
+are appended at the end of their table, never reordered, so parallel blocks merge cleanly. A guard
+you drop, a guard you keep that retail lacks, and a misleading name go in 14d / 14f the same way.
