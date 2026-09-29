@@ -94,7 +94,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId);  // 0x140102b60 
 extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param);  // 0x140101a80 B4 FORWARD: 2 outside caller files -> PlayerToolManager::ToggleUtilityDialog
 // toolController = the tool manager; parentDialogPtr = InternalPtr<DialogInstance>*
 // (may hold null); entityPtr = InternalPtr<ComponentEntity>*.
-void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 6 outside caller files -> PlayerToolManager::CenterOnEntity
+void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 5 outside caller files -> PlayerToolManager::CenterOnEntity
 
 // ---- toolui.cpp
 // FUN_14012e100: UIDescription_AddControllers — REIMPLEMENTED in code/Game/Dialog/toolui.cpp
