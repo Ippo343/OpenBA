@@ -32,6 +32,8 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;   // Component/ComponentDescription.h
+
 struct CropFieldCtrlTag {};
 
 class CropFieldComponent final : public ControllerComponent {
@@ -57,7 +59,8 @@ public:
     StateController _controller;   // +0x28 the embedded controller (D6)
     uint16_t cropFlags;            // +0x48 byte 0 = work enabled, byte 1 (+0x49) = 1
     uint8_t  _pad4A[6];            // +0x4a
-    void*    field50;              // +0x50 the crop description list (Startup clears it)
+    ComponentDescription* cropDescription; // +0x50 ExternalPtr<ComponentDescription> (Persist 0x140002340):
+                                   //       the crop the field is set to grow (Startup clears it)
     void*    field58;              // +0x58 the slot grid (stride 0x20)
     void*    field60;              // +0x60 its count (dword) / capacity
 };
@@ -69,6 +72,6 @@ static_assert(offsetof(CropFieldComponent, _controller) == 0x28,
 static_assert(offsetof(CropFieldComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x14011b02c)");
 static_assert(offsetof(CropFieldComponent, cropFlags) == 0x48, "CropFieldComponent +0x48 (ctor 0x14011b030)");
-static_assert(offsetof(CropFieldComponent, field50) == 0x50, "CropFieldComponent +0x50");
+static_assert(offsetof(CropFieldComponent, cropDescription) == 0x50, "CropFieldComponent +0x50");
 static_assert(offsetof(CropFieldComponent, field58) == 0x58, "CropFieldComponent +0x58");
 static_assert(offsetof(CropFieldComponent, field60) == 0x60, "CropFieldComponent +0x60");

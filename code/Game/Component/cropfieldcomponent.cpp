@@ -210,7 +210,7 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
 // `MOV word [RBX+0x48],0x100`: +0x48 (work enabled) = 0, +0x49 ("a crop type is
 // set") = 1; the tree's factory zero-filled both.
 CropFieldComponent::CropFieldComponent()
-    : _controller(this), cropFlags(0x100), _pad4A{}, field50(nullptr), field58(nullptr),
+    : _controller(this), cropFlags(0x100), _pad4A{}, cropDescription(nullptr), field58(nullptr),
       field60(nullptr) {
     OrFlagsInCtor(0x80);
 }
@@ -286,7 +286,7 @@ void CropFieldComponent::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // [4] 0x14011ae60: `MOV qword [RCX+0x50],0` — one store, nothing else.
-void CropFieldComponent::Startup() { field50 = nullptr; }
+void CropFieldComponent::Startup() { cropDescription = nullptr; }
 // [13] 0x14011ada0 / [14] 0x14011acc0 / [15] 0x14011ab50 — the bodies above. The
 // OnMessage body takes the slot index from the base's third register (R9 = arg0).
 // ── slot 13 — CanCommand — retail 0x14011ada0 ─────────────────────────────────────
