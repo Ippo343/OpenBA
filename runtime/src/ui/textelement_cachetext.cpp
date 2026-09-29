@@ -193,14 +193,3 @@ void TextElement::CacheText() {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// The registered doors — one QUALIFIED delegation each.
-// ============================================================================
-extern "C" void RtUi_TextElement_SetParameterCount(void* self) {
-    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::SetParameterCount();   // B.3.6 bridge
-}
-
-extern "C" void RtUi_TextElement_CacheText(void* self) {
-    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::CacheText();   // B.3.6 bridge
-}

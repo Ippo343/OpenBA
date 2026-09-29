@@ -233,15 +233,3 @@ void UI::UserInterface::BeginDragDrop(Object::InternalPtr<DialogInstance>* dialo
     // now, so the named door the note above describes became a direct call.
     Play(2);
 }
-
-extern "C" void RtUi_UserInterface_BeginDragDrop(UserInterface* self,
-                                                 void**   dlgPtr,   // InternalPtr<DialogInstance>&
-                                                 void**   elemPtr,  // InternalPtr<Element>&
-                                                 int32_t  x,
-                                                 int32_t  y,
-                                                 uint32_t id,
-                                                 void*    data) {
-    self->UI::UserInterface::BeginDragDrop(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr), x, y, id, data);
-}

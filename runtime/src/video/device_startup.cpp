@@ -530,10 +530,6 @@ bool Video::Device::ValidateConfiguration() {
     return true;
 }
 
-extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
-    return self->Video::Device::ValidateConfiguration();
-}
-
 // ============================================================================
 // ?CreateVideoInterface@Device@Video@@QEAA_NH@Z   retail 0x1800f7930, ord 2140
 // ============================================================================
@@ -587,10 +583,6 @@ bool Video::Device::CreateVideoInterface(int index) {
     using CreateFn = void* (*)(Device*);
     deviceData = reinterpret_cast<CreateFn>(slot->createDeviceData)(this);
     return true;                                             // 0x1800f79b7
-}
-
-extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index) {
-    return self->Video::Device::CreateVideoInterface(index);
 }
 
 // ============================================================================
@@ -699,14 +691,6 @@ bool Video::Device::Startup() {
     return Video::Device::PlatformStartup();
 }
 
-extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
-    return self->Video::Device::PlatformStartup();
-}
-
-extern "C" bool RtVideo_Device_Startup(Device* self) {
-    return self->Video::Device::Startup();
-}
-
 // ============================================================================
 // ?PlatformShutdown@Device@Video@@AEAAXXZ   retail 0x1800f83f0, ord 3396
 // ?Shutdown@Device@Video@@QEAAXXZ           retail 0x1800f7280, ord 4044 (thunk)
@@ -772,14 +756,6 @@ void Video::Device::PlatformShutdown() {
 void Video::Device::Shutdown() {
     // 0x1800f7280: JMP 0x1800f83f0.
     Video::Device::PlatformShutdown();
-}
-
-extern "C" void RtVideo_Device_PlatformShutdown(Device* self) {
-    self->Video::Device::PlatformShutdown();
-}
-
-extern "C" void RtVideo_Device_Shutdown(Device* self) {
-    self->Video::Device::Shutdown();
 }
 
 // ============================================================================

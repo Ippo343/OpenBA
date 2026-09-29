@@ -254,8 +254,3 @@ void GoalList::Initialize(GoalArray* src) {
 }
 
 }  // namespace Achievement
-
-// ---- The registered door — a QUALIFIED delegation --------------------------
-extern "C" void RtAch_GoalList_Initialize(Achievement::GoalList* self, Achievement::GoalArray* src) {
-    self->Achievement::GoalList::Initialize(src);
-}

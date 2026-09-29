@@ -279,20 +279,6 @@ PointList::~PointList() {
 }  // namespace Pathfinding
 
 // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -----------------
-// The three `Collection::Array<Pathfinding::PointList::Point>` bodies this file
-// has always had. Retail's signatures exactly, so they can stand at their
-// addresses for any caller.
-extern "C" void RtPathfinding_PointArray_SetSize(void* a, int32_t n) {
-    PointArraySetSize(static_cast<Collection::Array<Point>*>(a), n);
-}
-extern "C" void RtPathfinding_PointArray_ReleaseRange(void* ignoredThis, void* data, int count) {
-    (void)ignoredThis;   // retail spills RCX to the shadow space and never reads it
-    ReleasePointsRange(static_cast<Point*>(data), count);
-}
-extern "C" void* RtPathfinding_PointArray_Dtor(void* a) {
-    PointArrayDtor(static_cast<Collection::Array<Point>*>(a));
-    return nullptr;
-}
 
 // ============================================================================
 // ENDGAME B.3.9 ENG: the eight slot doors (`RtPathfinding_PointList_Type` ..

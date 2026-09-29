@@ -119,7 +119,6 @@ void Attend(const char* what, unsigned long long& n) {
         printf("[GFXBODY] %s calls=%llu\n", what, n);
 }
 
-unsigned long long g_setupCalls   = 0;
 unsigned long long g_fcibNewCalls = 0;
 unsigned long long g_matNewCalls  = 0;
 
@@ -239,17 +238,6 @@ extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
 // same shape one step further on). Its verification tier is stated honestly in
 // the lane doc and is not VERIFIED.
 // ============================================================================
-// ENDGAME B.3.5 block GC: THE BODY MOVED to `Graphics::MaterialInstance::Setup`
-// at the bottom of this file. The door keeps its name, its registration and its
-// attendance counter and delegates with a QUALIFIED non-virtual call.
-extern "C" void RtGraphics_MaterialInstance_Setup(const MaterialInstance* self,
-                                                  Context* ctx,
-                                                  int32_t shader) {
-    Attend("MaterialInstance::Setup", g_setupCalls);
-    reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
-        ->Graphics::MaterialInstance::Setup(
-            *reinterpret_cast<Video::Context*>(ctx), shader);      // B.3.5 bridge
-}
 
 // ============================================================================
 // Registration.

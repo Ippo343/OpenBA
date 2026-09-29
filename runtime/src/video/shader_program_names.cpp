@@ -212,28 +212,6 @@ inline char* NameAt(const Collection::Array<Video::ShaderProgram::Parameter>& ar
 
 }  // namespace
 
-// ---- the two registered DOORS, one line each over the member --------------
-//
-// ?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z  0x18004e4b0
-extern "C" String* RtVideo_ShaderProgram_GetConstantName(const void* self,
-                                                         String* ret,
-                                                         int32_t index) {
-    new (ret) System::String(                                     // B.3.5 bridge
-        reinterpret_cast<const Video::ShaderProgram*>(self)
-            ->Video::ShaderProgram::GetConstantName(index));
-    return ret;                                 // MOV RAX,RDX
-}
-
-// ?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z   0x18004e420
-extern "C" String* RtVideo_ShaderProgram_GetTextureName(const void* self,
-                                                        String* ret,
-                                                        int32_t index) {
-    new (ret) System::String(                                     // B.3.5 bridge
-        reinterpret_cast<const Video::ShaderProgram*>(self)
-            ->Video::ShaderProgram::GetTextureName(index));
-    return ret;
-}
-
 // ============================================================================
 // THE SWEEP
 // ============================================================================

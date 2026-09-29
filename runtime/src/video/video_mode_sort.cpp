@@ -429,14 +429,3 @@ extern "C" void RtVideo_SortDisplayModes(DisplayMode* first, int32_t count) {
 extern "C" void RtVideo_SortRefreshRates(RefreshRate* first, int32_t count) {
     IntroSort<RefreshRate, LessRate, SwapRate, SmallSortRate>(first, count, &g_rate);
 }
-
-// The two small-range passes and the swap, also reachable by address.
-extern "C" void RtVideo_SmallSortDisplayModes(DisplayMode* lo, DisplayMode* hi) {
-    SmallSortMode(lo, hi);
-}
-extern "C" void RtVideo_SmallSortRefreshRates(RefreshRate* lo, RefreshRate* hi) {
-    SmallSortRate(lo, hi);
-}
-extern "C" void RtVideo_SwapDisplayMode(DisplayMode* a, DisplayMode* b) {
-    SwapMode(a, b);
-}

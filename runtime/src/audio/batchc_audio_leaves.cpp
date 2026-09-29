@@ -112,11 +112,6 @@ void Device::OnSoundBufferDeleted(const SoundBuffer* buffer) {
 
 }  // namespace Audio
 
-extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buffer) {
-    reinterpret_cast<Audio::Device*>(selfv)->Audio::Device::OnSoundBufferDeleted(          // B.3.7 bridge
-        static_cast<const Audio::SoundBuffer*>(buffer));
-}
-
 // ############################################################################
 // Audio::SoundBuffer::~SoundBuffer
 // ??1SoundBuffer@Audio@@UEAA@XZ                 retail 0x1800e03b0, ordinal 679

@@ -637,12 +637,6 @@ void MeshInstance::Serialize(IO::Serializer& serializer) {
 
 }  // namespace Graphics
 
-extern "C" void RtGraphics_MeshInstance_Serialize(void* selfv, void* serv) {
-    reinterpret_cast<Graphics::MeshInstance*>(selfv)                   // B.3.5 bridge
-        ->Graphics::MeshInstance::Serialize(
-            *reinterpret_cast<IO::Serializer*>(serv));                 // B.3.5 bridge
-}
-
 // ---------------------------------------------------------------------------
 // ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z
 // retail 0x1800fc190, ordinal 3623. 165 bytes.
@@ -703,12 +697,6 @@ void AnimationManager::Serialize(IO::Serializer& s) {
 }
 
 }  // namespace Graphics
-
-extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
-    reinterpret_cast<Graphics::AnimationManager*>(selfv)                // B.3.5 bridge
-        ->Graphics::AnimationManager::Serialize(
-            *reinterpret_cast<IO::Serializer*>(serv));                  // B.3.5 bridge
-}
 
 // A run that entered none of these says so rather than staying silent, and the
 // oracle line is separate from the attendance line so a reader cannot mistake

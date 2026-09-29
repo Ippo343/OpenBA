@@ -272,11 +272,6 @@ void KeyMap::Save() {
 
 }  // namespace Input
 
-// The registered door (ENDGAME B.3.7 B5): name and address, one QUALIFIED call.
-void RtInput_KeyMap_Save(void* selfPtr) {
-    reinterpret_cast<Input::KeyMap*>(selfPtr)->Input::KeyMap::Save();
-}
-
 // ============================================================================
 // The KeyMap deleting destructor — retail 0x180053440, unexported.
 //

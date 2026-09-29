@@ -188,24 +188,6 @@ DialogController::~DialogController() {}
 
 }  // namespace UI
 
-namespace {
-inline UI::DialogController* AsController(void* self) {
-    return reinterpret_cast<UI::DialogController*>(self);   // B.3.6 bridge
-}
-inline const UI::DialogController* AsController(const void* self) {
-    return reinterpret_cast<const UI::DialogController*>(self);   // B.3.6 bridge
-}
-}  // namespace
-
-extern "C" void RtUiDialogController_OnOpened(void* self) {
-    AsController(self)->UI::DialogController::OnOpened();
-}
-extern "C" void RtUiDialogController_OnClosed(void* self) {
-    AsController(self)->UI::DialogController::OnClosed();
-}
-extern "C" void RtUiDialogController_OnSerializeSettings(void* self, void* stream) {
-    AsController(self)->UI::DialogController::OnSerializeSettings(stream);
-}
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::DialogController's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

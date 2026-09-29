@@ -216,46 +216,6 @@ void SerializeLegacyV0(Serializer* ser) {
 
 }  // namespace
 
-// ---------------------------------------------------------------------------
-// The registered doors. Each is one line over the member of the same name.
-// ---------------------------------------------------------------------------
-extern "C" uint32_t RtVideo_VertexProgram_TypeId() {
-    return Video::VertexProgram::TypeId();
-}
-// .rdata literals at 0x180157a40 / 0x180157a28 / 0x180157a38. RULE B5-15: each
-// is the EXACT retail literal, copied, never derived from the C++ base name.
-// ENDGAME B.3.9 TI-REST: `_TypeName` / `_ParentTypeName` are DECLARE_TYPE's
-// private statics (retail's `CA`); the two doors repeat the literals --
-// renderstate.cpp's precedent -- rather than widen the access.
-extern "C" const char* RtVideo_VertexProgram_StaticTypeName() { return "VertexProgram"; }
-extern "C" const char* RtVideo_VertexProgram_ParentTypeName() { return "ShaderProgram"; }
-extern "C" const char* RtVideo_VertexProgram_FileExtension()  { return Video::VertexProgram::_FileExtension(); }
-extern "C" const void* RtVideo_VertexProgram_GetData(const void* selfv) {
-    return reinterpret_cast<const VertexProgram*>(selfv)
-               ->Video::VertexProgram::GetData();                     // B.3.5 bridge
-}
-extern "C" void RtVideo_VertexProgram_Bind(const void* selfv, void* context, int index) {
-    reinterpret_cast<const VertexProgram*>(selfv)
-        ->Video::VertexProgram::Bind(context, index);                 // B.3.5 bridge
-}
-
-// The three Platform* halves. `AEAA` means PRIVATE, not unexported — the DLL
-// exports its private members (reference_aeaa_is_private_not_unexported.md) —
-// so they keep registrations of their own even though the ctor door and the
-// destructor reach the members directly.
-extern "C" void RtVideo_VertexProgram_PlatformConstructExport(void* selfv) {
-    reinterpret_cast<VertexProgram*>(selfv)
-        ->Video::VertexProgram::PlatformConstruct();                  // B.3.5 bridge
-}
-extern "C" bool RtVideo_VertexProgram_PlatformCreateExport(void* selfv) {
-    return reinterpret_cast<VertexProgram*>(selfv)
-               ->Video::VertexProgram::PlatformCreate();              // B.3.5 bridge
-}
-extern "C" void RtVideo_VertexProgram_PlatformDestructExport(void* selfv) {
-    reinterpret_cast<VertexProgram*>(selfv)
-        ->Video::VertexProgram::PlatformDestruct();                   // B.3.5 bridge
-}
-
 // ============================================================================
 // THE MEMBER BODIES — `Video::VertexProgram::*`. At `namespace Video` scope and
 // AFTER the anonymous namespace (B34_BRIEFS A.2); the helpers above stay

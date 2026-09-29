@@ -106,7 +106,3 @@ Scene* Scene::InitGrid(float cellSize) {
 }
 
 }  // namespace Picking
-
-extern "C" Picking::Scene* RtPicking_Scene_InitGrid(void* selfv, float cellSize) {
-    return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(cellSize);   // B.3.7 bridge
-}

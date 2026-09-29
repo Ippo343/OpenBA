@@ -613,10 +613,6 @@ Graphics::Geometry::~Geometry() {
 // checked is the whole contract: the child is unlinked, the count dropped by
 // one, and the child no longer appears anywhere in the parent's array.
 // ============================================================================
-extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
-    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
-        ->::Graphics::Geometry::Detach(reinterpret_cast<::Graphics::Geometry*>(child));
-}
 
 // ============================================================================
 // Graphics::Geometry::SetTransform(const Transform&)
@@ -630,10 +626,6 @@ extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
 // and the `!=` is a float compare, so a NaN in either always counts as changed.
 //
 // ============================================================================
-extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform* xf) {
-    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
-        ->::Graphics::Geometry::SetTransform(*xf);
-}
 
 // ============================================================================
 // Graphics::Geometry::Attach(Geometry*, int)
@@ -654,10 +646,6 @@ extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform
 //
 // ORACLE: post-state.
 // ============================================================================
-extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int node) {
-    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
-        ->::Graphics::Geometry::Attach(reinterpret_cast<::Graphics::Geometry*>(child), node);
-}
 
 // ============================================================================
 // Graphics::Geometry::UpdateAttached()   [VIRTUAL, slot 4]
@@ -678,16 +666,6 @@ extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int 
 // ORACLE: post-state. Every child's transform must now equal the parent's
 // sub-transform for its node.
 // ============================================================================
-// ENDGAME B.3.5 block F: THE DELEGATION IS NOW THE NORMAL WAY ROUND. Block E's
-// `closure_batch2b.cpp` defined `Graphics::Geometry::UpdateAttached()` as a
-// reverse delegation INTO this door, because the body lived in this file and this
-// file was not block E's. It is block F's; the body has moved onto the member and
-// the door is the one-line qualified call it should always have been. Same for
-// slots 5, 6, 7 and 8 below.
-extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
-    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
-        ->::Graphics::Geometry::UpdateAttached();
-}
 
 // ============================================================================
 // Graphics::Geometry::Clean()   [VIRTUAL, slot 8]
@@ -719,10 +697,6 @@ extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
 // its only callee (the box transform) is pure, so ours and theirs can both run
 // from the same snapshot and be compared byte for byte, return value included.
 // ============================================================================
-extern "C" bool RtGraphics_Geometry_Clean(Geometry* self) {
-    return reinterpret_cast<::Graphics::Geometry*>(self)                    // B.3.5 bridge
-        ->::Graphics::Geometry::Clean();
-}
 
 // ============================================================================
 // Graphics::Geometry::SetBounds(const Volume::Box&)
@@ -735,10 +709,6 @@ extern "C" bool RtGraphics_Geometry_Clean(Geometry* self) {
 //
 // ORACLE: FULL REPLAY. Self-contained, no callees, no allocation.
 // ============================================================================
-extern "C" void RtGraphics_Geometry_SetBounds(Geometry* self, const Box* box) {
-    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
-        ->::Graphics::Geometry::SetBounds(*box);
-}
 
 // ============================================================================
 // Graphics::Geometry::GetTransform() const
@@ -752,14 +722,6 @@ extern "C" void RtGraphics_Geometry_SetBounds(Geometry* self, const Box* box) {
 // ORACLE: FULL. Pure read; both run into private buffers and the 0x1c bytes are
 // compared.
 // ============================================================================
-// NON-VIRTUAL, so the member returns BY VALUE and the door placement-news the
-// prvalue into the caller's slot (Geometry.h's B5-12 block: a virtual would have
-// to spell the out-parameter in retail order, a non-virtual must not).
-extern "C" Transform* RtGraphics_Geometry_GetTransform(const Geometry* self, Transform* ret) {
-    new (ret) Transform(reinterpret_cast<const ::Graphics::Geometry*>(self)  // B.3.5 bridge
-                            ->::Graphics::Geometry::GetTransform());
-    return ret;   // retail returns the hidden slot in RAX
-}
 
 // ============================================================================
 // Graphics::Geometry::GetSubTransform(int) const   [VIRTUAL, slot 5]
@@ -775,13 +737,6 @@ extern "C" Transform* RtGraphics_Geometry_GetTransform(const Geometry* self, Tra
 //
 // ORACLE: FULL. Pure read.
 // ============================================================================
-// VIRTUAL (slot 5), so the MEMBER carries the out-parameter in retail's order and
-// the door is a straight pass-through — RULE B5-12 as corrected by block E.
-extern "C" Transform* RtGraphics_Geometry_GetSubTransform(const Geometry* self,
-                                                          Transform* ret, int node) {
-    return reinterpret_cast<const ::Graphics::Geometry*>(self)               // B.3.5 bridge
-        ->::Graphics::Geometry::GetSubTransform(ret, node);
-}
 
 // ============================================================================
 // Graphics::Geometry::GetInstanceTransform(int, float) const  [VIRTUAL, slot 6]
@@ -800,11 +755,6 @@ extern "C" Transform* RtGraphics_Geometry_GetSubTransform(const Geometry* self,
 // transcription of the same instructions, and both sides call the same
 // Quaternion::Lerp and AsMatrix bodies in the DLL.
 // ============================================================================
-extern "C" Matrix* RtGraphics_Geometry_GetInstanceTransform(const Geometry* self, Matrix* ret,
-                                                            int node, float t) {
-    return reinterpret_cast<const ::Graphics::Geometry*>(self)               // B.3.5 bridge
-        ->::Graphics::Geometry::GetInstanceTransform(ret, node, t);
-}
 
 // ============================================================================
 // Graphics::Geometry::SetSharedInstanceData(Video::Context&, int, float) const
@@ -819,17 +769,6 @@ extern "C" Matrix* RtGraphics_Geometry_GetInstanceTransform(const Geometry* self
 //
 // ORACLE: FULL. Pure, no side effects, so both run and the ints are compared.
 // ============================================================================
-extern "C" int RtGraphics_Geometry_SetSharedInstanceData(const Geometry* self, void* context,
-                                                         int node, float t) {
-    // The retail base body is `return 0;` and it touches nothing, including the
-    // Context — which is why handing the door's `void*` straight through as the
-    // reference the member declares costs nothing here. `Video::Context` is
-    // block D's class; this is the only bridge in the file that crosses a
-    // namespace block F does not own.
-    return reinterpret_cast<const ::Graphics::Geometry*>(self)               // B.3.5 bridge
-        ->::Graphics::Geometry::SetSharedInstanceData(
-            *reinterpret_cast<::Video::Context*>(context), node, t);
-}
 
 // ============================================================================
 // Graphics::Scene::Scene()
@@ -909,10 +848,6 @@ extern "C" void RtGraphics_Scene_Dtor(Scene* self) {
 // ORACLE: post-state. The insert allocates and rethreads a live grid, so it
 // cannot be replayed; what is checked is the node the returned id names.
 // ============================================================================
-extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) {
-    return reinterpret_cast<::Graphics::Scene*>(self)                        // B.3.5 bridge
-        ->::Graphics::Scene::AddObject(reinterpret_cast<::Graphics::Geometry*>(geo));
-}
 
 // ============================================================================
 // Graphics::Scene::RemoveObject(unsigned int)
@@ -935,10 +870,6 @@ extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) 
 //
 // ORACLE: post-state.
 // ============================================================================
-extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
-    reinterpret_cast<::Graphics::Scene*>(self)                               // B.3.5 bridge
-        ->::Graphics::Scene::RemoveObject(id);
-}
 
 // ============================================================================
 // Graphics::Scene::AddGlobalObject(Geometry*)
@@ -963,10 +894,6 @@ extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
 //
 // ORACLE: post-state.
 // ============================================================================
-extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
-    reinterpret_cast<::Graphics::Scene*>(self)                               // B.3.5 bridge
-        ->::Graphics::Scene::AddGlobalObject(reinterpret_cast<::Graphics::Geometry*>(geo));
-}
 
 // ============================================================================
 // Graphics::Scene::RemoveGlobalObject(Geometry*)
@@ -980,10 +907,6 @@ extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
 //
 // ORACLE: post-state.
 // ============================================================================
-extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) {
-    reinterpret_cast<::Graphics::Scene*>(self)                               // B.3.5 bridge
-        ->::Graphics::Scene::RemoveGlobalObject(reinterpret_cast<::Graphics::Geometry*>(geo));
-}
 
 // ============================================================================
 // Graphics::Scene::Clean()
@@ -1007,9 +930,6 @@ extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) 
 // dirty; the grid re-indexing itself is checked by the AddObject/RemoveObject
 // sites and by the scene watch, not here.
 // ============================================================================
-extern "C" void RtGraphics_Scene_Clean(Scene* self) {
-    reinterpret_cast<::Graphics::Scene*>(self)->::Graphics::Scene::Clean();  // B.3.5 bridge
-}
 
 // ============================================================================
 // Graphics::Scene::AddDrawItems(Renderer&) const
@@ -1037,10 +957,6 @@ extern "C" void RtGraphics_Scene_Clean(Scene* self) {
 // its `calls=` is 0 by construction rather than by accident
 // (reference_uncalled_port_is_not_verified.md).
 // ============================================================================
-extern "C" void RtGraphics_Scene_AddDrawItems(const Scene* self, void* renderer) {
-    reinterpret_cast<const ::Graphics::Scene*>(self)                         // B.3.5 bridge
-        ->::Graphics::Scene::AddDrawItems(*reinterpret_cast<::Graphics::Renderer*>(renderer));
-}
 
 // ############################################################################
 // ENDGAME B.3 step 5 (block F) — THE BODIES ABOVE, MOVED ONTO THE MEMBERS

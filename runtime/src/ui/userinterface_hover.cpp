@@ -194,11 +194,6 @@ bool UI::UserInterface::IsInsideClipRegion(int32_t x, int32_t y) const {
     return true;
 }
 
-extern "C" bool RtUi_UserInterface_IsInsideClipRegion(const UserInterface* self,
-                                                     int32_t x, int32_t y) {
-    return self->UI::UserInterface::IsInsideClipRegion(x, y);
-}
-
 // ============================================================================
 // ?EndDragDrop@UserInterface@UI@@QEAAXXZ                    retail 0x180120af0
 // ============================================================================
@@ -253,10 +248,6 @@ void UI::UserInterface::EndDragDrop() {
     // +0x88 _dragDropActive is NOT cleared by retail. Left alone.
 }
 
-extern "C" void RtUi_UserInterface_EndDragDrop(UserInterface* self) {
-    self->UI::UserInterface::EndDragDrop();
-}
-
 // ============================================================================
 // ?EndHover@DialogInstance@UI@@QEAAXPEAVUserInterface@2@@Z  retail 0x180113d10
 // ============================================================================
@@ -306,10 +297,6 @@ void UI::DialogInstance::EndHover(UserInterface* ui) {
     _hoverTime = static_cast<int64_t>(0.0 / ::System::Timer::_secondsPerTick);   // 0x180113d6f
 }
 
-extern "C" void RtUi_DialogInstance_EndHover(UI::DialogInstance* self, UserInterface* ui) {
-    self->UI::DialogInstance::EndHover(ui);
-}
-
 // ============================================================================
 // ?BeginToolTip@UserInterface@UI@@QEAAX...                  retail 0x180120860
 // ============================================================================
@@ -341,13 +328,6 @@ extern "C" void RtUi_DialogInstance_EndHover(UI::DialogInstance* self, UserInter
 // ToolTipDialog::SetText. Per CLAUDE.md, a faithful crash there is retail's
 // contract with its own allocator, not a bug for this port to paper over.
 // ============================================================================
-extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
-                                               void** dlgPtr, void** elemPtr,
-                                               int32_t x, int32_t y) {
-    self->UI::UserInterface::BeginToolTip(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr), x, y);
-}
 
 // ENDGAME B.3.6 block E: the body is the member. Both InternalPtr arguments are
 // the ADDRESSES of the caller's temporaries (RULE B6-11, see above), spelled

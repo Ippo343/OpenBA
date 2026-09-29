@@ -247,50 +247,7 @@ void PlatformSerializeArm(Video::ShaderProgram* self, Serializer* outer, int32_t
 
 }  // namespace
 
-// ---------------------------------------------------------------------------
-// The registered doors. Each is one line over the member of the same name.
-// ---------------------------------------------------------------------------
-extern "C" uint32_t RtVideo_ShaderProgram_TypeId() {
-    return Video::ShaderProgram::TypeId();
-}
-// ?_TypeName@ / ?_ParentTypeName@ return string literals out of .rdata
-// (0x180157a28 and 0x180154930); the bytes were read from the shipped file.
-// RULE B5-15: the literal is COPIED, never derived from the C++ base name.
-// ENDGAME B.3.9 TI-REST: the members are DECLARE_TYPE's private statics
-// (retail's `CA`); the doors repeat the literals -- renderstate.cpp's
-// precedent -- rather than widen the access.
-extern "C" const char* RtVideo_ShaderProgram_StaticTypeName()   { return "ShaderProgram"; }
-extern "C" const char* RtVideo_ShaderProgram_ParentTypeName()   { return "Object::CompiledExternal"; }
-
 // ---- the nine non-virtual accessors ---------------------------------------
-extern "C" bool RtVideo_ShaderProgram_IsValid(const void* selfv) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::IsValid();                    // B.3.5 bridge
-}
-extern "C" const void* RtVideo_ShaderProgram_GetByteCode(const void* selfv, int index) {
-    return &reinterpret_cast<const Video::ShaderProgram*>(selfv)
-                ->Video::ShaderProgram::GetByteCode(index);          // B.3.5 bridge
-}
-extern "C" int32_t RtVideo_ShaderProgram_GetTextureCount(const void* selfv) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::GetTextureCount();            // B.3.5 bridge
-}
-extern "C" int32_t RtVideo_ShaderProgram_GetConstantCount(const void* selfv) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::GetConstantCount();           // B.3.5 bridge
-}
-extern "C" int32_t RtVideo_ShaderProgram_GetTextureDest(const void* selfv, int index) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::GetTextureDest(index);        // B.3.5 bridge
-}
-extern "C" int32_t RtVideo_ShaderProgram_GetConstantDest(const void* selfv, int index) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::GetConstantDest(index);       // B.3.5 bridge
-}
-extern "C" bool RtVideo_ShaderProgram_IsTextureInternal(const void* selfv, int index) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::IsTextureInternal(index);     // B.3.5 bridge
-}
 
 // ?GetTextureName@ / ?GetConstantName@ are NOT here. Both return System::String
 // BY VALUE through a hidden RDX return slot, and both were already ported —
@@ -299,12 +256,6 @@ extern "C" bool RtVideo_ShaderProgram_IsTextureInternal(const void* selfv, int i
 // bodies now live. Writing a second copy here would have been the duplicate-body
 // drift this tree keeps warning about, and the linker caught it. Read that file
 // for the hidden-slot analysis (reference_hidden_retslot_wild_write.md).
-
-// ?PlatformSerialize@ShaderProgram@Video@@QEAAXAEAVSerializer@IO@@@Z (0x1800f52b0)
-extern "C" void RtVideo_ShaderProgram_PlatformSerialize(void* selfv, void* serv) {
-    reinterpret_cast<Video::ShaderProgram*>(selfv)
-        ->Video::ShaderProgram::PlatformSerialize(serv);             // B.3.5 bridge
-}
 
 // ============================================================================
 // THE MEMBER BODIES — `Video::ShaderProgram::*`.

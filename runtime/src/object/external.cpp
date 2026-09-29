@@ -422,12 +422,6 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
 // Object::ExternalList
 // ============================================================
 
-// ?GetResourceCount@ExternalList@Object@@QEBAHXZ  retail 0x180007650  — DIFFED
-int RtObject_ExternalList_GetResourceCount(const ExternalList* self) {
-    int ours = self->_count;
-    return ours;
-}
-
 // ?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z
 //   retail 0x1800bf700                                             — DIFFED
 //

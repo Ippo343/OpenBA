@@ -289,8 +289,3 @@ void KeyMap::Load() {
 }
 
 }  // namespace Input
-
-// The registered door (ENDGAME B.3.7 B5): name and address, one QUALIFIED call.
-void RtInput_KeyMap_Load(void* selfPtr) {
-    reinterpret_cast<Input::KeyMap*>(selfPtr)->Input::KeyMap::Load();
-}

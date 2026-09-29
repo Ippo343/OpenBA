@@ -359,20 +359,6 @@ void Device::Stop(AudioChannel* channelPtr) {
 // ============================================================================
 // THE DOORS — one-line qualified delegations.
 // ============================================================================
-void RtAudio_Device_FreeChannelPlatform(void* selfPtr, int index) {
-    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::FreeChannelPlatform(index);        // B.3.7 bridge
-}
-void RtAudio_Device_Update(void* selfPtr, const void* time) {
-    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::Update(                         // B.3.7 bridge
-        *static_cast<const System::Time*>(time));
-}
-void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
-    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::StopPlatform(index);             // B.3.7 bridge
-}
-void RtAudio_Device_Stop(void* selfPtr, void* channelPtr) {
-    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::Stop(                           // B.3.7 bridge
-        static_cast<Audio::Device::AudioChannel*>(channelPtr));
-}
 
 // ?_singleton@Device@Audio@@0PEAV12@EA (0x1801fe760) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
 // RtAudioPortInit redirects the minted storage row onto it.

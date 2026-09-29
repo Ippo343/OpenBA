@@ -682,8 +682,7 @@ void     Free(MemoryAllocator* self, void* p)                      { self->Free(
 }  // namespace rtalloc
 
 // ============================================================================
-// SHADOW ORACLE  (PLAN.md §4.3 risk 2)
-// ============================================================================
+=====================================================================
 //
 // An allocator cannot be diffed the Wave 1 way: running both implementations
 // mutates the heap twice. Shadow mode's contract is "ours computes into a
@@ -1095,6 +1094,7 @@ extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped) {
 }
 
 // ============================================================================
+=======
 // ARMING -- RtSystemAllocatorArm(), called once at boot (standalone/runtime_init.cpp)
 // ============================================================================
 

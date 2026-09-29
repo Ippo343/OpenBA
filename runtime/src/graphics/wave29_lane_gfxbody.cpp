@@ -201,7 +201,6 @@ uint64_t g_addGlobalEmitted = 0;   // nodes that passed BOTH tests and dispatche
 uint64_t g_addLight         = 0;   // Renderer::AddLight entries
 uint64_t g_endDrawGroup     = 0;   // Renderer::EndDrawGroup entries
 uint64_t g_endDrawSorted    = 0;   // per-pass lists that actually reached the sort
-uint64_t g_rootPose         = 0;   // Animation::GetRootPoseAtTime entries
 uint64_t g_rootPoseLerped   = 0;   // took the TWO-KEY interpolation arm
 uint64_t g_rootPoseSingle   = 0;   // took the SINGLE-KEY arm
 
@@ -320,13 +319,6 @@ inline void DrawItemSort(void* data, int count, void* scratch) {
 // reference_only_a_writer_names_a_field.md they are left UNNAMED here rather
 // than guessed, and they are read through a byte offset for that reason.
 // ============================================================================
-// ENDGAME B.3.5 block F: the BODY MOVED to the `Graphics::Scene` member at the
-// bottom of this file. The door keeps its name and its registration.
-void RtGraphics_Scene_AddGlobalDrawItems(const Scene* self, Renderer* renderer) {
-    reinterpret_cast<const ::Graphics::Scene*>(self)                     // B.3.5 bridge
-        ->::Graphics::Scene::AddGlobalDrawItems(
-            *reinterpret_cast<::Graphics::Renderer*>(renderer));
-}
 
 // ============================================================================
 // ?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z              0x1801051d0
@@ -383,12 +375,6 @@ void RtGraphics_Scene_AddGlobalDrawItems(const Scene* self, Renderer* renderer) 
 // per-frame or per-group tag, and is NOT enough to settle the name. Left as
 // `field_38`.
 // ============================================================================
-// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::AddLight` at the
-// bottom of this file. The door keeps its name and its registration.
-void RtGraphics_Renderer_AddLight(Renderer* self, const void* light) {
-    reinterpret_cast<::Graphics::Renderer*>(self)->::Graphics::Renderer::AddLight(  // B.3.5 bridge
-        reinterpret_cast<const ::Graphics::Light*>(light));
-}
 
 // ============================================================================
 // ?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z                     0x180104f50
@@ -439,12 +425,6 @@ void RtGraphics_Renderer_AddLight(Renderer* self, const void* light) {
 // (`LEA R8,[RSP+0x38]`, which is the RDX home of this frame) used as scratch.
 // It is NOT an output anyone reads. A `uint64_t` local serves.
 // ============================================================================
-// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::EndDrawGroup` at
-// the bottom of this file. The door keeps its name and its registration.
-void RtGraphics_Renderer_EndDrawGroup(Renderer* self, int group) {
-    reinterpret_cast<::Graphics::Renderer*>(self)                        // B.3.5 bridge
-        ->::Graphics::Renderer::EndDrawGroup(group);
-}
 
 // ============================================================================
 // ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@AEBVTime@System@@0@Z
@@ -530,26 +510,6 @@ void RtGraphics_Renderer_EndDrawGroup(Renderer* self, int group) {
 // so the ordinary spelling below reproduces both arms without a special case —
 // stated because it looks like an omission.
 // ============================================================================
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::Animation::GetRootPoseAtTime` (block H1's class; this file is not
-// block H1's, which is why block F left it). The door keeps its name, its
-// registration and its counter, and it is a HIDDEN-RETSLOT door: retail returns
-// `Math::Transform` BY VALUE, the caller's storage arrives in the second
-// argument, and RAX must carry it back at every exit (RULE B5-12). The member is
-// NON-VIRTUAL, so it returns by value in C++ and the door places the prvalue into
-// the caller's slot -- which is exactly B5-12's shape for a non-slot retslot
-// export, and the amendment's register-order hazard does not apply.
-Transform* RtGraphics_Animation_GetRootPoseAtTime(const void* self,
-                                                  Transform* ret,
-                                                  const int64_t* t0,
-                                                  const int64_t* t1) {
-    ++g_rootPose;
-    *ret = reinterpret_cast<const Graphics::Animation*>(self)            // B.3.5 bridge
-               ->Graphics::Animation::GetRootPoseAtTime(
-                   *reinterpret_cast<const System::Time*>(t0),
-                   *reinterpret_cast<const System::Time*>(t1));
-    return ret;                                   // RAX carries the slot back
-}
 
 }  // namespace rtgfxbody29
 
@@ -841,8 +801,7 @@ void RtGraphicsWave29GfxbodySummary() {
                 (unsigned long long)rtgfxbody29::g_addLight,
                 (unsigned long long)rtgfxbody29::g_endDrawGroup,
                 (unsigned long long)rtgfxbody29::g_endDrawSorted);
-    printf("[GFXBODY29] Animation::GetRootPoseAtTime calls=%llu lerped=%llu single=%llu\n",
-                (unsigned long long)rtgfxbody29::g_rootPose,
+    printf("[GFXBODY29] Animation::GetRootPoseAtTime lerped=%llu single=%llu\n",
                 (unsigned long long)rtgfxbody29::g_rootPoseLerped,
                 (unsigned long long)rtgfxbody29::g_rootPoseSingle);
 }

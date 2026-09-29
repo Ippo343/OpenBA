@@ -361,18 +361,6 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
 // was never attached, retail crashes, and so does this port. Neither guard
 // is added.
 // ============================================================================
-// ENDGAME B.3.5 block H2: BODY MOVED onto the member at the bottom of this file
-// (`Graphics::ParticleInstance::Update`, the NON-VIRTUAL `bool Update()` block E
-// declared in `ParticleInstance.h`). The door keeps its mangled name, its
-// address and its registration and delegates with a QUALIFIED non-virtual call
-// — the qualification stops it re-entering itself through the minted table
-// (B34_BRIEFS section A.1), and it also picks the right one of retail's TWO
-// members called `Update` on this class (the other is the PURE slot-1
-// `Update(const System::Time&)`; see ParticleInstance.h's name-hiding note).
-extern "C" bool RtGraphics_ParticleInstance_Update(ParticleInstance* self) {
-    return reinterpret_cast<::Graphics::ParticleInstance*>(self)     // B.3.5 bridge
-               ->::Graphics::ParticleInstance::Update();
-}
 
 // ============================================================================
 // Graphics::ParticleInstance::IncrementInstanceIndex()
@@ -391,12 +379,6 @@ extern "C" bool RtGraphics_ParticleInstance_Update(ParticleInstance* self) {
 // from independent snapshots restored around the calls so neither call's
 // result depends on the other having run first.
 // ============================================================================
-// ENDGAME B.3.5 block H2: BODY MOVED onto the member at the bottom of this file.
-// It is a CLASS STATIC (`SAXXZ`), so the door has no receiver to cast and the
-// delegation is a plain qualified call on the class.
-extern "C" void RtGraphics_ParticleInstance_IncrementInstanceIndex() {
-    ::Graphics::ParticleInstance::IncrementInstanceIndex();
-}
 
 // ============================================================================
 // Graphics::ParticleSystemInstance::ParticleSystemInstance()

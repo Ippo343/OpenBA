@@ -479,13 +479,6 @@ Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other) {
     return self;
 }
 
-Filename* RtSystem_Filename_Assign(Filename* self, const Filename* rhs) {
-    *AsSys(self) = *AsSys(rhs);
-    return self;
-}
-bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
-    return *AsSys(self) < *AsSys(other);
-}
 void RtSystem_Filename_AdjustDelimiters(Filename* self) {
     System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(self));
 }

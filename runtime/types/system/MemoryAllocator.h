@@ -451,29 +451,3 @@ void RtSystemAllocatorArm();
 // six exported Platform* bodies. The portable half calls this once, under
 // #if defined(_WIN32); a _posix/_sdl twin provides the same symbol.
 extern "C" void RtSystemAllocatorInstallPlatform();
-
-// Shadow oracle (see the long comment in runtime/src/system/allocator.cpp).
-extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB);
-extern "C" void RtAllocShadowAlloc(uint64_t size, int align, void* theirs,
-                                   const rt::system::MemoryAllocator* theirSelf);
-extern "C" void RtAllocShadowFree(void* theirs,
-                                  const rt::system::MemoryAllocator* theirSelf);
-extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences);
-// Harness health, NOT port correctness: replay-map overflow and frees that had
-// no mapped replica pointer. Either one non-zero invalidates the run.
-extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped);
-extern "C" void RtAllocShadowCoverage(int* ranges, uint64_t* reserved);
-// Arena-growth effectiveness control: how many times the growth path actually
-// ran, how many of those took ExpandMemoryRangeTable's copy-and-release branch,
-// and how many comparisons landed outside range 0. See WAVE9_LANE_E3.md.
-extern "C" void RtAllocShadowGrowth(uint64_t* grow, uint64_t* tableCopy,
-                                    uint64_t* crossRange);
-// Wave 10 lane SHADOWBISECT — unobserved-mutation ("gap") detector. Pre/post-op
-// hooks called from the allocator-lock wrappers inside the critical section;
-// a non-zero gap count means the real arena was mutated by a route that does
-// not pass through the patched Allocate/Free entry.
-extern "C" void RtAllocShadowPreOp(const rt::system::MemoryAllocator* theirSelf);
-extern "C" void RtAllocShadowPostOp(const rt::system::MemoryAllocator* theirSelf);
-extern "C" void RtAllocShadowGaps(uint64_t* checks, uint64_t* gaps, int64_t* dAlloc,
-                                  int64_t* dFreeTag, int64_t* dBytes,
-                                  uint64_t* ctlInjected);

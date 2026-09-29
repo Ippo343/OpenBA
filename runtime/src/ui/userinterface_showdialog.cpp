@@ -258,14 +258,6 @@ void DefectNoop(void*, void*) {}
 // Zero in every shipping configuration; nothing but the self-test writes it.
 extern "C" { int g_RtShowDialogDefect = 0; }
 
-// `InternalPtr<DialogInstance>` is passed BY VALUE, which for a class with a
-// non-trivial copy ctor means MSVC x64 passes its ADDRESS (WAVE7.md). So the
-// second parameter is `DialogInstance**`.
-extern "C" int RtUi_UserInterface_ShowDialog(void* self, void** dialogPtr) {
-    return static_cast<UI::UserInterface*>(self)->UI::UserInterface::ShowDialog(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
-}
-
 // ENDGAME B.3.6 block E: the body is the member. `dialog` is the ADDRESS of the
 // caller's InternalPtr (RULE B6-11: 0x18011fd32 `MOV R14,RDX`, then
 // `MOV RAX,[R14]`), spelled `dialogPtr` below as the port always spelled it.

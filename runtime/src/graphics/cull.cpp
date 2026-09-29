@@ -308,14 +308,6 @@ extern "C" void RtGraphics_Scene_CullStackPushChildren(void* selfv, uint32_t mas
 // ============================================================================
 // ?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z — retail 0x1801017a0
 // ============================================================================
-// ENDGAME B.3.5 block F: the BODY MOVED to the private member
-// `Graphics::Scene::AddCulledDrawItems(Renderer&) const` at the bottom of this
-// file. The door keeps its name, both registrations and retail's ABI.
-extern "C" void RtGraphics_Scene_AddCulledDrawItems(const void* selfv, void* rendererv) {
-    reinterpret_cast<const ::Graphics::Scene*>(selfv)                       // B.3.5 bridge
-        ->::Graphics::Scene::AddCulledDrawItems(
-            *reinterpret_cast<::Graphics::Renderer*>(rendererv));
-}
 
 // ############################################################################
 // ENDGAME B.3 step 5 (block F) — THE BODY, MOVED ONTO THE MEMBER

@@ -150,30 +150,6 @@ static void DumpVideoRegistry(const char* tag) {
 // An automated run (make sa-run / sa-run-menu) would then block forever on a
 // modal Win32 dialog nobody is there to click.
 //
-// ---------------------------------------------------------------------------
-// HarnessMemoryIsReadable — the readable-memory probe the diff oracle's
-// released-pointer detector needs (Wave 9 lane M; installed in Init below).
-//
-// The detector reads a System::String's {length, refcount} header at [-8] to
-// decide whether the block a replay scratch still points at has been released.
-// It must never fault doing so: a diagnostic that crashes the process turns a
-// harness defect into a crash report about the wrong thing. Same VirtualQuery
-// shape as entity_comp_validator.cpp / work_ser_probe.cpp already use.
-// ---------------------------------------------------------------------------
-static bool HarnessMemoryIsReadable(const void* p, size_t n) {
-    if (!p || n == 0) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    const DWORD noRead = PAGE_NOACCESS | PAGE_GUARD;
-    if (mbi.Protect == 0 || (mbi.Protect & noRead)) return false;
-    // The whole span must sit inside this one region; a span crossing into an
-    // unmapped neighbour is exactly the case that would fault.
-    const uintptr_t base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
-    const uintptr_t addr = reinterpret_cast<uintptr_t>(p);
-    return addr >= base && (addr + n) <= (base + mbi.RegionSize);
-}
-
 // So when — and only when — a harness env var says this run is unattended, we
 // assert what we already know ("the previous run was ended deliberately") by
 // clearing that one bit through the same registry key retail uses. No byte

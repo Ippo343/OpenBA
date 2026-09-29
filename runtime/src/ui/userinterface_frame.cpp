@@ -492,7 +492,3 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
 
     return GetMouseCursorIndex(mx, my);
 }
-
-extern "C" int32_t RtUi_UserInterface_Update(UserInterface* self, const void* time) {
-    return self->UI::UserInterface::Update(*static_cast<const System::Time*>(time));
-}

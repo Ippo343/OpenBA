@@ -381,102 +381,19 @@ extern "C" void RtGraphics_SerializeAnimInstances(Serializer* ser, int count, vo
 // ============================================================================
 // ?Serialize@AnimationState@Graphics@@QEAAXAEAVSerializer@IO@@@Z  (0x1800fe250)
 // ============================================================================
-//
-// *** IT SERIALIZES ONLY THE LAYERS AND THE BOOL. *** The pose, node and root
-// offset members that the ARRAY element serializer above writes are NOT written
-// here. That is retail's and it is consistent: those three are derived state —
-// AnimationState::Update recomputes them from the layers on the next tick — and
-// this entry point is the one a MeshInstance's own Serialize reaches. The array
-// form is the AnimationManager's instance CACHE, which has to come back whole
-// because nothing rebuilds it.
-//
-// The last call is a TAIL JUMP through the ReaderWriter vtable in retail
-// (Ghidra prints "Could not recover jumptable ... Treating indirect jump as
-// call" at 0x1800fe2c3); a call is the same thing without the tail merge.
-// ENDGAME B.3.5 block H1: THE BODY MOVED INTO `Graphics::AnimationState::
-// Serialize` (this file's `namespace Graphics` block). The door keeps its
-// mangled name and its retail address and is a one-line qualified call.
-extern "C" void RtGraphics_AnimationState_Serialize(void* selfv, Serializer* ser) {
-    reinterpret_cast<Graphics::AnimationState*>(selfv)                      // B.3.5 bridge
-        ->Graphics::AnimationState::Serialize(*reinterpret_cast<IO::Serializer*>(ser));
-}
 
 // ============================================================================
 // ?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ  (0x1800fd930)
 // ============================================================================
-//
-// Drop every layer's reference on the shared instance it was using, then free
-// the layer array outright. The free is the J1 `~Array` body inlined — retail
-// does the Enter/Free/Leave itself here rather than calling 0x18001c480 — so
-// this is written out rather than routed through the Collection port, which is
-// what makes it byte-faithful and not merely equivalent.
-//
-// A REFERENCE THAT REACHES ZERO DOES NOT FREE THE INSTANCE RECORD. It blanks
-// it in place (group = null, clip index = -1, both arrays resized to 0) and
-// leaves it in the table, which is what lets GetInstanceId reuse the slot: its
-// first pass looks for `group == 0` and remembers the first such index.
-// ENDGAME B.3.5 block H1: THE BODY MOVED INTO
-// `Graphics::AnimationState::ResetAnimationState`.
-extern "C" void RtGraphics_AnimationState_Reset(void* selfv) {
-    reinterpret_cast<Graphics::AnimationState*>(selfv)                       // B.3.5 bridge
-        ->Graphics::AnimationState::ResetAnimationState();
-}
 
 // ============================================================================
 // ?GetPose@AnimationManager@Graphics@@QEBAXHPEAVTransform@Math@@H@Z (0x1800fb8e0)
 // ============================================================================
-//
-// Copy `count` baked Math::Transforms out of the cached instance the packed
-// handle names. Unguarded on every step — a bad handle indexes off the end of
-// the instance table — and that is retail's, so it stays that way.
-// ENDGAME B.3.5 block H1: THE BODY MOVED INTO
-// `Graphics::AnimationManager::GetPose(int, Math::Transform*, int) const`.
-extern "C" void RtGraphics_AnimationManager_GetPose(const void* selfv, int handle,
-                                                    void* outv, int count) {
-    reinterpret_cast<const Graphics::AnimationManager*>(selfv)                // B.3.5 bridge
-        ->Graphics::AnimationManager::GetPose(
-            handle, static_cast<Math::Transform*>(outv), count);
-}
 
 // ============================================================================
 // ?GetPoseAtTime@Animation@Graphics@@QEBAXAEBVTime@System@@0PEAVTransform@Math@@H@Z
 // (0x1800faca0)
 // ============================================================================
-//
-// Sample the clip at `time`, writing one Math::Transform per bone into `out`,
-// then overwrite bone 0 with an identity rotation and a translation scaled by
-// `delta`. That last step is root-motion extraction: the caller wants bone 0 to
-// carry how far the root moved over `delta` and no rotation at all.
-//
-// THE FOURTH ARGUMENT (`int`) IS NEVER READ. The bone count comes from the
-// clip's own +0x4c, not from the caller. It is kept in the signature because
-// retail's callers pass it and the registered entry point must have retail's
-// arity, not a tidied one.
-//
-// THE NaN CASE IS NOT AN ACCIDENT. Retail's test is
-// `UCOMISS XMM9,XMM10 / JP taken / JZ` — the parity jump sends an unordered
-// compare to the INTERPOLATING arm, so `frac != frac` takes the lerp. Written
-// as `f0 == f1 || frac == 0.0f` in C, which has exactly that behaviour.
-// ENDGAME B.3.5 block H1: THE BODY MOVED INTO `Graphics::Animation::
-// GetPoseAtTime` (below, in this file's `namespace Graphics` block). The
-// registered door keeps its mangled name AND its retail address and is now a
-// one-line QUALIFIED, non-virtual call. `Graphics::Animation` has no vtable at
-// all, so the qualification is not load-bearing the way it is on a polymorphic
-// receiver (B34_BRIEFS A.1) — it is spelled anyway so the shape is uniform.
-//
-// The two `System::Time` parameters arrive as `const int64_t*` here because
-// that is retail's ABI for a `const System::Time&` (one tick count, 8 bytes),
-// and `System::Time` is layout-identical to it (`Value.h`, `_ticks` @ +0x00).
-extern "C" void RtGraphics_Animation_GetPoseAtTime(const void* selfv,
-                                                   const int64_t* time,
-                                                   const int64_t* delta,
-                                                   void* outv, int unused) {
-    // B.3.5 bridge
-    reinterpret_cast<const Graphics::Animation*>(selfv)->Graphics::Animation::GetPoseAtTime(
-        *reinterpret_cast<const System::Time*>(time),
-        *reinterpret_cast<const System::Time*>(delta),
-        static_cast<Math::Transform*>(outv), unused);
-}
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block H1 — the member bodies.

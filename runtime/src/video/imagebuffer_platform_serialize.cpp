@@ -357,15 +357,3 @@ void ImageBuffer::PlatformSerialize(IO::Serializer& ser) {
 }
 
 }  // namespace Video
-
-// ============================================================================
-// The registered door — a QUALIFIED non-virtual delegation through the friend
-// helper, because `PlatformSerialize` is `protected` (retail's `AEAA`, private).
-// Name and address are UNCHANGED.
-// ============================================================================
-extern "C" void Video_ImageBuffer_PlatformSerialize(Video::ImageBuffer* self,
-                                                    void* serializer) {
-    ImageBufferDoorAccess::PlatformSerialize(
-        self, *reinterpret_cast<IO::Serializer*>(serializer));   // B.3.5 bridge
-}
-

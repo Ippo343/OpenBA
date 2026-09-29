@@ -259,10 +259,6 @@ bool Engine::MainLoop::Update(const System::Time& time) {
     return true;
 }
 
-extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time) {
-    return self->Engine::MainLoop::Update(*static_cast<const System::Time*>(time));
-}
-
 // ?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z   retail 0x1800dd3c0  ord 3601
 void Engine::MainLoop::Run(UpdateLoop* loop) {
 
@@ -330,8 +326,4 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
 
     // No oracle is possible here (§4); the site is registered so that its call
     // count is still visible in the diff report.
-}
-
-extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
-    self->Engine::MainLoop::Run(static_cast<Engine::UpdateLoop*>(loop));
 }

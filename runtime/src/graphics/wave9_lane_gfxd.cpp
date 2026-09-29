@@ -398,10 +398,6 @@ extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill) {
     rtcoll::AsArray<&kSpec_SceneEntry>(a)->SetSizeFill(n, fill);
 }
 
-extern "C" void RtGfxd_SceneEntryDestroyRange(void* ignoredThis, uint8_t* base, int count) {
-    SceneEntryDestroyRange(ignoredThis, base, count);
-}
-
 // Retail 0x1800626a0 — clear one DrawGroup's three per-pass item arrays, then
 // zero the group's first qword (`MOV qword ptr [R12],R13` at 0x180062819, with
 // R13 still the zero it was XOR'd to at entry). The three arrays sit at
@@ -432,11 +428,6 @@ extern "C" void RtGfxd_DrawGroupClearPasses(void* group) {
 // its buffer, so the next frame's BeginDrawGroup reuses them. Only `_scenes` and
 // `_drawables` are emptied, and even they keep their capacity.
 // ============================================================================
-// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::Reset()` at the
-// bottom of this file. The door keeps its name and both registrations.
-extern "C" void RtGraphics_Renderer_Reset(Renderer* self) {
-    reinterpret_cast<::Graphics::Renderer*>(self)->::Graphics::Renderer::Reset();  // B.3.5 bridge
-}
 
 // ============================================================================
 // ?AddScene@Renderer@Graphics@@QEAAXPEBVScene@2@PEBVRenderBuffer@Video@@
@@ -467,22 +458,6 @@ extern "C" void RtGraphics_Renderer_Reset(Renderer* self) {
 // element, so the record's own buffer — allocated by the Array's operator= at
 // 0x18001cdf0 — has to be released before the record leaves scope.
 // ============================================================================
-// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::AddScene` at the
-// bottom of this file, where the four out-of-order stack arguments land on NAMED
-// members of `Graphics::RendererSceneEntry` instead of on byte offsets. The door
-// keeps its name, both registrations and retail's argument order.
-extern "C" void RtGraphics_Renderer_AddScene(Renderer* self,
-                                             const void* scene,
-                                             const void* renderBuffer,
-                                             const Camera* camera,
-                                             int32_t arg5, int32_t arg6,
-                                             int32_t arg7, uint32_t arg8) {
-    reinterpret_cast<::Graphics::Renderer*>(self)->::Graphics::Renderer::AddScene(  // B.3.5 bridge
-        reinterpret_cast<const ::Graphics::Scene*>(scene),
-        reinterpret_cast<const ::Video::RenderBuffer*>(renderBuffer),
-        *reinterpret_cast<const ::Graphics::Camera*>(camera),
-        arg5, arg6, arg7, arg8);
-}
 
 }  // namespace rtgfxd
 

@@ -188,26 +188,6 @@ void RecArrayUInt(ReaderWriter* rw, int32_t n, void* data) {
     Rw(rw)->SerializeUIntArray(n, static_cast<uint32_t*>(data), nullptr);   // +0x40
 }
 
-// The five unnamed offsets this body touches. PackageFileView (FileSystem.h)
-// models +0x20..+0x38 and +0x80..+0x88 as `_unknown` padding, and this lane does
-// NOT rename them in the shared header: a Serialize pins a field's TYPE and its
-// POSITION IN THE RECORD STREAM and says nothing about its meaning, and
-// runtime/types/io/FileSystem.h:101 already refuses to invent names on exactly
-// that argument for +0x58/+0x60. So they are reached by explicit offset here,
-// where the disagreement is visible at the point of use.
-inline void*   ArrayAt(void* self, int off) {
-    return static_cast<uint8_t*>(self) + off;
-}
-inline int32_t CountAt(const void* self, int off) {
-    return *reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(self) + off);
-}
-inline void*   DataAt(void* self, int off) {
-    return *reinterpret_cast<void**>(static_cast<uint8_t*>(self) + off);
-}
-inline void*   FieldAt(void* self, int off) {
-    return static_cast<uint8_t*>(self) + off;
-}
-
 }  // namespace
 
 // ENDGAME B.3.9 IO: the ?Serialize@PackageFile slot door and its registration

@@ -106,16 +106,6 @@ void RtSystem_CriticalSection_Dtor(CriticalSection* self) {
     DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self));
 }
 
-// 0x18000c700  ?Lock@CriticalSection@System@@QEAAXXZ
-void RtSystem_CriticalSection_Lock(System::CriticalSection* self) {
-    self->Lock();
-}
-
-// 0x18000c6f0  ?Unlock@CriticalSection@System@@QEAAXXZ
-void RtSystem_CriticalSection_Unlock(System::CriticalSection* self) {
-    self->Unlock();
-}
-
 // ---- System::Thread ---------------------------------------------------------
 
 // ENDGAME B.3.9 VS (SYS W3, row 140): the minted `??_7Thread@System@@6B@` is
@@ -130,18 +120,6 @@ void RtSystem_CriticalSection_Unlock(System::CriticalSection* self) {
 // import slot registered). Retail's `ThreadFunc` handoff (`LEA R8,[0x1800ca440]`)
 // is `Thread::ThreadFunc` named directly in `InitFields`, with no first-use
 // cache (B9-10).
-
-// 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
-// The parameter is the CLASS, unchanged from the spelling
-// `runtime/src/engine/loops.cpp:124` already forward-declares.
-void RtSystem_Thread_Start(System::Thread* self) {
-    self->Start();
-}
-
-// 0x1800ca5f0  ?WaitForFinish@Thread@System@@QEAAXXZ
-void RtSystem_Thread_WaitForFinish(System::Thread* self) {
-    self->WaitForFinish();
-}
 
 // ============================================================================
 // unsigned int System::Thread::ThreadFunc(void*)      retail 0x1800ca440
@@ -193,34 +171,11 @@ void RtSystem_Thread_WaitForFinish(System::Thread* self) {
 // reload is reproduced faithfully below, because a port that cached the vtable
 // would call the wrong OnCompleted if it ever changed.
 // ============================================================================
-unsigned int __stdcall RtSystem_Thread_ThreadFunc(void* param) {
-    return System::Thread::ThreadFunc(param);
-}
 
 // ============================================================================
 // System::Thread::OnCompleted()   retail 0x18000c590   (Wave 9 lane B3)
 // ?OnCompleted@Thread@System@@UEAAXXZ
 // ----------------------------------------------------------------------------
-// `RET`. One instruction: the base class's do-nothing hook, called from
-// ThreadFunc's slot 1 above once the work function returns. Derived classes
-// that care override it; `Engine::Loader` does not.
-//
-// WHY A ONE-INSTRUCTION PORT IS WORTH LANDING. It fills a trapped slot in TWO
-// minted vtables at once, which is the only reason it was picked up here:
-//   ??_7Thread@System@@6B@  0x180155f20 = [ _purecall, OnCompleted ]
-//   ??_7Loader@Engine@@6B@  0x180157a08 inherits OnCompleted in slot 1
-// `Run` is pure in Thread and Loader overrides it, so slot 0 differs between
-// the two while slot 1 is the same function. Lane C2's mint picks this up with
-// no regeneration.
-//
-// ENDGAME B.3.4b: the QUALIFIED call is load-bearing here and nowhere else in
-// this file. A live Thread wears the MINTED table 0x180155f20, whose slot 1
-// resolves back to THIS door; an unqualified `self->OnCompleted()` would
-// dispatch through that table straight back into this function (B34_BRIEFS
-// §A.1). `Start`/`WaitForFinish` are non-virtual, so their doors need none.
-void RtSystem_Thread_OnCompleted(System::Thread* self) {
-    self->System::Thread::OnCompleted();
-}
 
 // ============================================================================
 // ENDGAME B.3.4b — the member BODIES.

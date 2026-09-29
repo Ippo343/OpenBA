@@ -162,17 +162,6 @@ extern "C" void* RtUi_SpriteSheet_OperatorNew(uint64_t bytes) {
 // all reuse that one cache rather than each keeping their own, since it is
 // the SAME shipped body (0x1800c7ad0) underneath every one of them.
 
-// `??3SpriteSheet@UI@@SAXPEAX@Z` (retail 0x180002ee0, 93 bytes) — decompiled:
-// `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }`, i.e. exactly
-// MemFree with the null test open-coded rather than delegated. Byte-identical
-// in shape to the ten other per-TU copies runtime/src/object/deleting_dtor.cpp
-// already catalogued.
-extern "C" void RtUi_SpriteSheet_OperatorDelete(void* p) { MemFree(p); }
-// `??3ToolTipDialog@UI@@SAXPEAX@Z` (retail 0x18004d050, 93 bytes). Same body.
-extern "C" void RtUi_ToolTipDialog_OperatorDelete(void* p) { MemFree(p); }
-// `??3DialogInstance@UI@@SAXPEAX@Z` (retail 0x180045490, 93 bytes). Same body.
-extern "C" void RtUi_DialogInstance_OperatorDelete(void* p) { MemFree(p); }
-
 // ============================================================================
 // `??1SpriteSheet@UI@@UEAA@XZ` — retail 0x18011d670, ord 686. The REAL
 // destructor (ENDGAME B.3.9 UI-D: the registered door is retired).

@@ -531,13 +531,6 @@ void Video::Device::Adapter::FindOrAddMode(const DisplayMode& mode,
     }
 }
 
-extern "C" void RtVideo_Adapter_FindOrAddMode(void* selfv, const void* modev,
-                                              const void* ratev) {
-    static_cast<Adapter*>(selfv)->Video::Device::Adapter::FindOrAddMode(
-        *static_cast<const DisplayMode*>(modev),
-        *static_cast<const RefreshRate*>(ratev));
-}
-
 // ============================================================================
 // ?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z   retail 0x18000d3e0
 //
@@ -569,11 +562,6 @@ Video::Device::DisplayMode Video::Device::GetDisplayMode(int index) const {
     *reinterpret_cast<uint64_t*>(&out.refreshCount) = 0;
     RtVideo_ArrayRefreshAssign(&out.refreshData, &m->refreshData);
     return out;
-}
-
-extern "C" void* RtVideo_Device_GetDisplayMode(const void* selfv, void* retv, int32_t index) {
-    const Device* self = static_cast<const Device*>(selfv);
-    return new (retv) DisplayMode(self->Video::Device::GetDisplayMode(index));
 }
 
 // ENDGAME B.3.5 block D2: `AdjustDisplay`'s body is `EnumDisplaySettingsW` and

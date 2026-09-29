@@ -205,39 +205,6 @@ struct LinkState {
     void* headAtEntry;
 };
 
-LinkState CaptureLinks(void* self, void** first, ListLinks L) {
-    LinkState s{};
-    s.first       = *first;
-    s.selfNext    = *LinkField(self, L.next);
-    s.selfPrev    = *LinkField(self, L.prev);
-    s.headAtEntry = *first;
-    s.prevAtEntry = (s.headAtEntry != nullptr) ? *LinkField(s.headAtEntry, L.prev) : nullptr;
-    s.neighbourA  = (s.prevAtEntry != nullptr) ? *LinkField(s.prevAtEntry, L.next) : nullptr;
-    s.neighbourB  = (s.headAtEntry != nullptr) ? *LinkField(s.headAtEntry, L.prev) : nullptr;
-    return s;
-}
-
-// Re-read the same five words the capture named, using the ENTRY-TIME
-// neighbours (not the current ones), so ours and theirs are read from the same
-// addresses even though the body moved the head.
-LinkState ReadLinksAt(void* self, void** first, ListLinks L, const LinkState& at) {
-    LinkState s = at;
-    s.first    = *first;
-    s.selfNext = *LinkField(self, L.next);
-    s.selfPrev = *LinkField(self, L.prev);
-    s.neighbourA = (at.prevAtEntry != nullptr) ? *LinkField(at.prevAtEntry, L.next) : nullptr;
-    s.neighbourB = (at.headAtEntry != nullptr) ? *LinkField(at.headAtEntry, L.prev) : nullptr;
-    return s;
-}
-
-void RestoreLinks(void* self, void** first, ListLinks L, const LinkState& s) {
-    *first = s.first;
-    *LinkField(self, L.next) = s.selfNext;
-    *LinkField(self, L.prev) = s.selfPrev;
-    if (s.prevAtEntry != nullptr) *LinkField(s.prevAtEntry, L.next) = s.neighbourA;
-    if (s.headAtEntry != nullptr) *LinkField(s.headAtEntry, L.prev) = s.neighbourB;
-}
-
 bool LinksEqual(const LinkState& a, const LinkState& b) {
     return a.first == b.first && a.selfNext == b.selfNext && a.selfPrev == b.selfPrev &&
            a.neighbourA == b.neighbourA && a.neighbourB == b.neighbourB;
@@ -275,25 +242,6 @@ void* MakeCompanion(void* self, size_t vtSlot) {
 
 }  // namespace
 
-// ----------------------------------------------------------------------------
-// Wave 9 lane W ports, defined further down. Forward-declared so the three
-// ctors and ~ImageBuffer above reach OUR bodies rather than the DLL's: they
-// used to call ImageBufferPlatformConstruct() &co, which is the raw DLL door
-// and therefore a call through null the moment Runtime-x64.dll is gone. Those
-// four resolvers survive as the diff oracle's door and nothing else.
-//
-// ENDGAME B.3.5 block VC: `Video::ImageBuffer::Platform{Construct,Destruct}` are
-// MEMBERS now, so the two ImageBuffer rows below are the registered DOORS over
-// them rather than the bodies, and the two forward declarations are only needed
-// because the doors are registered from `RtVideoBuffersRegister` at the bottom.
-// ----------------------------------------------------------------------------
-void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self);
-void Video_ImageBuffer_PlatformDestruct(ImageBuffer* self);
-void Video_IndexBuffer_PlatformConstruct(IndexBuffer* self);
-void Video_IndexBuffer_PlatformDestruct(IndexBuffer* self);
-void Video_VertexBuffer_PlatformConstruct(VertexBuffer* self);
-void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self);
-
 // ============================================================================
 // ??0ImageBuffer@Video@@QEAA@XZ (0x1800f2580) / ??1ImageBuffer@Video@@UEAA@XZ
 // (0x1800f2610) -- ENDGAME B.3.9 VS: BOTH DOORS ARE GONE.
@@ -306,58 +254,6 @@ void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self);
 // retired, and nothing reaches either door by name or by address. The bodies
 // are the members at `namespace Video` scope below.
 // ============================================================================
-
-// ============================================================================
-// Video::ImageBuffer accessors — pure reads. Bodies are the MEMBERS below; each
-// door is a one-line QUALIFIED non-virtual delegation through a bridge cast.
-// (The `using Fn = …` typedefs that used to sit unused at the bottom of each
-// door were the retired differential oracle's, and went with the bodies.)
-// ============================================================================
-
-int Video_ImageBuffer_Width(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::Width();                    // B.3.5 bridge
-}
-
-int Video_ImageBuffer_Height(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::Height();                   // B.3.5 bridge
-}
-
-int Video_ImageBuffer_GetLevelCount(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::GetLevelCount();            // B.3.5 bridge
-}
-
-bool Video_ImageBuffer_IsCompressed(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::IsCompressed();             // B.3.5 bridge
-}
-
-bool Video_ImageBuffer_IsDepthBuffer(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::IsDepthBuffer();            // B.3.5 bridge
-}
-
-bool Video_ImageBuffer_IsDynamic(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::IsDynamic();                // B.3.5 bridge
-}
-
-bool Video_ImageBuffer_IsGenerated(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::IsGenerated();              // B.3.5 bridge
-}
-
-bool Video_ImageBuffer_IsRenderBuffer(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::IsRenderBuffer();           // B.3.5 bridge
-}
-
-bool Video_ImageBuffer_IsRendered(ImageBuffer* self) {
-    return reinterpret_cast<const Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::IsRendered();               // B.3.5 bridge
-}
 
 // ============================================================================
 // Video::ImageBuffer::CopyToTexture / CopyFromTexture — 0x1800f3380 (slot 5,
@@ -373,20 +269,6 @@ bool Video_ImageBuffer_IsRendered(ImageBuffer* self) {
 // and the diff summary) without invoking the original a second time, which
 // would upload/download the texture twice.
 // ============================================================================
-// ENDGAME B.3.5 block VC: the two hand-inlined `pd->vtable + 0x28` / `+ 0x30`
-// dispatches are VIRTUAL CALLS on block A's real `Video::ImageBufferData` now,
-// whose slots 5 and 6 that header names `Update` and `Read` — the same two byte
-// offsets (0x28/8 == 5, 0x30/8 == 6), spelled as the slots they are, with the
-// index checked by the compiler instead of by a comment.
-bool Video_ImageBuffer_CopyToTexture(ImageBuffer* self, void* data, int width, int height) {
-    return reinterpret_cast<Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::CopyToTexture(data, width, height);   // B.3.5 bridge
-}
-
-bool Video_ImageBuffer_CopyFromTexture(ImageBuffer* self, void* data, int width, int height) {
-    return reinterpret_cast<Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::CopyFromTexture(data, width, height); // B.3.5 bridge
-}
 
 // ============================================================================
 // Video::ImageBuffer::Create — 0x1800f2680, ordinal 1877. Stamps the ten
@@ -404,21 +286,6 @@ bool Video_ImageBuffer_CopyFromTexture(ImageBuffer* self, void* data, int width,
 // int32_t so this file does not need to invent enumerator names Runtime
 // never exports.
 // ============================================================================
-// ENDGAME B.3.5 block VC — SLOT 9 IS A MEMBER, so `ImageBuffer.h`'s `= 0` came
-// off this declaration (block C's banner said exactly this would happen once the
-// body moved). The local `struct ImageLevelArray` view is gone: the parameter is
-// `Video::ImageBuffer::LevelArray*`, i.e. the real
-// `Collection::Array<Collection::Array<uint8_t>>` the retail mangling spells, and
-// the `pd->vtable + 0x18` dispatch is `Video::ImageBufferData` slot 3, `Create`.
-bool Video_ImageBuffer_Create(ImageBuffer* self, int32_t imageType, int32_t usage, int32_t format,
-                               uint32_t flags, int width, int height, int32_t filter,
-                               int32_t addressU, int32_t addressV, int32_t addressW,
-                               Video::ImageBuffer::LevelArray* levels) {
-    return reinterpret_cast<Video::ImageBuffer*>(self)
-               ->Video::ImageBuffer::Create(imageType, usage, format, flags, width, height,
-                                            filter, addressU, addressV, addressW,
-                                            levels);                        // B.3.5 bridge
-}
 
 // (The `??1ImageBufferData@Video@@UEAA@XZ` door, retail 0x1800f8e10, is GONE:
 // ENDGAME B.3.9 VID retired it with the RT_DELDTOR row that was its one caller.
@@ -789,16 +656,6 @@ void ImageBuffer::PlatformDestruct() {
 
 }  // namespace Video
 
-void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self) {
-    reinterpret_cast<Video::ImageBuffer*>(self)
-        ->Video::ImageBuffer::PlatformConstruct();                // B.3.5 bridge
-}
-
-void Video_ImageBuffer_PlatformDestruct(ImageBuffer* self) {
-    reinterpret_cast<Video::ImageBuffer*>(self)
-        ->Video::ImageBuffer::PlatformDestruct();                 // B.3.5 bridge
-}
-
 // ENDGAME B.3.5 block D2 — the four buffer `Platform*` bodies are members of the
 // real `Video::IndexBuffer` / `Video::VertexBuffer` now. The shared
 // `PlatformConstructBody`/`PlatformDestructBody` pair stays exactly as it is: it
@@ -824,22 +681,6 @@ void Video::VertexBuffer::PlatformDestruct() {
     void** first = VertexBufferFirstBuffer();
     (void)PlatformDestructBody(this, offsetof(VertexBuffer, platformData),
                                /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
-}
-
-void Video_IndexBuffer_PlatformConstruct(IndexBuffer* self) {
-    self->Video::IndexBuffer::PlatformConstruct();
-}
-
-void Video_IndexBuffer_PlatformDestruct(IndexBuffer* self) {
-    self->Video::IndexBuffer::PlatformDestruct();
-}
-
-void Video_VertexBuffer_PlatformConstruct(VertexBuffer* self) {
-    self->Video::VertexBuffer::PlatformConstruct();
-}
-
-void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self) {
-    self->Video::VertexBuffer::PlatformDestruct();
 }
 
 // ============================================================================
@@ -881,14 +722,6 @@ void Video::RenderBuffer::PlatformDestruct() {
     void** first = RenderBufferFirstRenderBuffer();
     (void)PlatformDestructBody(this, offsetof(Video::RenderBuffer, platformData),
                                /*nullCompanionAfterRelease=*/false, first, kRenderLinks);
-}
-
-void Video_RenderBuffer_PlatformConstruct(RtVideo::RenderBuffer* self) {
-    self->Video::RenderBuffer::PlatformConstruct();
-}
-
-void Video_RenderBuffer_PlatformDestruct(RtVideo::RenderBuffer* self) {
-    self->Video::RenderBuffer::PlatformDestruct();
 }
 
 // ============================================================================
@@ -952,22 +785,6 @@ bool Video::VertexBuffer::Set(int sizeBytes, int offsetBytes, void* data) {
     // B.3.5 bridge — platformData is a pinned void* field.
     return reinterpret_cast<Video::VertexBufferData*>(platformData)
                ->SetData(sizeBytes, offsetBytes, data);
-}
-
-bool Video_IndexBuffer_Create(IndexBuffer* self, int count, bool dynamic, void* data) {
-    return self->Video::IndexBuffer::Create(count, dynamic, data);
-}
-
-bool Video_IndexBuffer_Set(IndexBuffer* self, int sizeBytes, int offsetBytes, void* data) {
-    return self->Video::IndexBuffer::Set(sizeBytes, offsetBytes, data);
-}
-
-bool Video_VertexBuffer_Create(VertexBuffer* self, int count, bool dynamic, void* data) {
-    return self->Video::VertexBuffer::Create(count, dynamic, data);
-}
-
-bool Video_VertexBuffer_Set(VertexBuffer* self, int sizeBytes, int offsetBytes, void* data) {
-    return self->Video::VertexBuffer::Set(sizeBytes, offsetBytes, data);
 }
 
 // ============================================================================

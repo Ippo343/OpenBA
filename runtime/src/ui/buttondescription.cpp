@@ -227,21 +227,6 @@ Object::Base* ButtonDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// The shared applier's door (a non-slot member, kept). ENDGAME B.3.9 UI-A: the
-// slot doors and the ??1 door, read only by the retired minted table and
-// RT_DELDTOR row, are gone.
-// ============================================================================
-// 0x1801108d0: RCX = this, RDX = &caller's InternalPtr<ButtonElement>, R8 = Dialog*.
-extern "C" void RtUi_ButtonDescription_ApplyToElement(const void* selfv,
-                                                      void** elemPtr,
-                                                      const void* dialog) {
-    reinterpret_cast<const UI::ButtonDescription*>(selfv)                // B.3.6 bridge
-        ->UI::ButtonDescription::CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::ButtonElement>*>(elemPtr),
-            static_cast<const UI::Dialog*>(dialog));
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ButtonDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ButtonDescription@UI@@ (0x1801fa900): name "ButtonDescription", parent

@@ -295,18 +295,6 @@ const float kBoundsMin = BitsToFloat(0xc9742400u);   // DAT_180161778
 // would be between two different objects. That call is counted on its own site
 // so a refusal is visible instead of silently inflating `calls=`.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto `Graphics::SunLight::Set` below. The
-// door keeps its name, its address and its registration. Its `const float*`
-// parameters are the retail ABI — `const Math::Vector3&` and two
-// `const Math::Vector4&` arrive as pointers — and the member spells them as the
-// references the mangled name says they are.
-void Graphics_SunLight_Set(SunLight* self, const float* dir,
-                           const float* sun, const float* ambient) {
-    reinterpret_cast<::Graphics::SunLight*>(self)
-        ->::Graphics::SunLight::Set(*reinterpret_cast<const Math::Vector3*>(dir),
-                                    *reinterpret_cast<const Math::Vector4*>(sun),
-                                    *reinterpret_cast<const Math::Vector4*>(ambient));
-}
 
 namespace Graphics {
 

@@ -155,54 +155,9 @@ inline const ::Object::InternalBasePtr* AsClass(const InternalBasePtr* p) {
 // TIER 1 — no shared state
 // ============================================================================
 
-// ??0InternalBasePtr@Object@@QEAA@XZ   retail 0x1800062c0, profile 0x180023900
-// One instruction: `mov qword ptr [rcx], 0`.
-// B.3.1: the body is `Object::InternalBasePtr::InternalBasePtr()`; this is the
-// registered shim.
-void* RtObject_InternalBasePtr_Ctor(InternalBasePtr* self) {
-    new (AsClass(self)) ::Object::InternalBasePtr();
-    return self;   // MSVC constructors return `this` in RAX.
-}
-
-// ??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z
-//                                      retail 0x1800062a0, profile 0x1800238e0
-// One instruction: `mov qword ptr [rcx], rdx`.
-void* RtObject_InternalBasePtr_CtorPtr(InternalBasePtr* self, Internal* p) {
-    new (AsClass(self)) ::Object::InternalBasePtr(p);
-    return self;
-}
-
-// ?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z
-//                                      retail 0x1800062b0, profile 0x1800257d0
-// One instruction pair: `mov rax,[rdx]; mov [rcx],rax`. NOT refcounted — this
-// really is a raw 8-byte copy, and the two InternalBasePtrs are then aliases.
-void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr* other) {
-    // `Copy` is PROTECTED in retail (`IEAA`), so the shim goes through the
-    // class's one-line static forwarder rather than widening its access.
-    ::Object::InternalBasePtr::Shim_Copy(AsClass(self), AsClass(other));
-}
-
 // ?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z (0x1800bfda0, slot 3):
 // ENDGAME B.3.9 OBJ -- the slot door went with the minted table, its only
 // reader; the body is `Object::Internal::Persist` (internal_class.cpp).
-
-// ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ
-//                                      retail 0x1800c0150, profile 0x18008c5a0
-//
-//     p = this->_ptr;
-//     if (p) { p->vtbl[0](p, 1); this->_ptr = 0; }
-//
-// Slot 0 with flag 1 is the scalar deleting destructor: it runs ~Internal (and
-// therefore the swap-remove) and then frees the block. The dispatch is virtual,
-// so it lands in whatever vtable the object carries — which, because our ctor
-// stamps the DLL's, is the same code either way.
-//
-// NOT DIFFABLE: running the original as an oracle would destroy the object
-// twice. The evidence for this one is code inspection of five instructions, not
-// a measurement, and the write-up says so.
-void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
-    AsClass(self)->DeletePtr();
-}
 
 // ============================================================================
 // TIER 2 — the table mutators.  NO-GO by default; see the file header.
@@ -230,49 +185,6 @@ void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
 // door's caller) and import slot 0x140152768 (the ??0 door's). The bodies are
 // `Object::Internal::Internal()` / `~Internal()` (internal_class.cpp); the
 // [RtInternalTable] / [RtInternalVtbl] instruments went with them (D9).
-
-// ?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z
-//                                      retail 0x1800c0180, profile 0x18008c460
-//
-//     bool present = (_ptr != 0);
-//     enc->Serialize(present);                     // enc vtbl +0x78
-//     if (!present) { _ptr = 0; return; }
-//     index = _ptr ? _ptr->_factoryIndex : 0;
-//     type  = _ptr ? _ptr->Type() : 0xffffffff;    // Internal vtbl slot 2
-//     gen   = _ptr ? _ptr->_generation : 0;
-//     enc->Serialize(index);                       // +0xa0, int
-//     enc->Serialize(gen);                         // +0x98, uint
-//     enc->Serialize(type);                        // +0x98, uint
-//     _ptr = InternalFactory::PersistObject(_singleton, ser.stream, gen, index, type);
-//
-// The redundant `_ptr ? … : …` guards are retail's: `present` already proved
-// the pointer non-null, and the compiler kept the tests anyway.
-//
-// *** THE ENCODING VTABLE OFFSETS ARE BUILD-SPECIFIC. *** These are the RETAIL
-// numbers (0x78 / 0x98 / 0xa0, agreeing with the forwarder table in
-// runtime/src/io/serializer.cpp). The PROFILE build uses 0x90 / 0xb0 / 0xb8 for
-// the same three calls. Transcribing the profile numbers writes the right
-// values through the wrong slots and desyncs every save.
-//
-// NOT DIFFABLE and NOT SHADOWED by the byte oracle: the call advances a stream,
-// so a second run would consume or emit the record twice.
-//
-// The last two sentences of this block used to read "It is registered only
-// under the old DLL-era switch and is UNVERIFIED." BOTH halves are stale
-// and are corrected here rather than left to mislead (PLAN §6 step 8): Wave 9
-// lane S UNGATED the registration (see the registration function below) and
-// VERIFIED it with the emission-sequence oracle — 4 emissions on the non-null
-// branch and 1 on the null branch, identical to the shipped body.
-// B.3.1: the body moved to `Object::InternalBasePtr::Serialize`, whose
-// out-of-line half (`Object::InternalBasePtrSerializeBody`) sits at the bottom
-// of this file, next to `Factory()` and the `PersistObject` name door it needs.
-// This is the registered shim.
-// B.3.4 block 3: the parameter is the REAL `IO::Serializer` now — it was
-// `RtObject::SerializerLite`, a fourth declaration of the same 16 bytes, which
-// died with this block. Same bytes, same ABI, one spelling.
-void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, ::IO::Serializer* ser) {
-    AsClass(self)->Serialize(*ser);
-}
 
 }  // namespace RtObject
 

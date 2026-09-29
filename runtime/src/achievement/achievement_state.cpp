@@ -229,29 +229,3 @@ Object::InternalPtr<AchievementInstance> Achievement::CreateInstance() const {
 }
 
 }  // namespace Achievement
-
-// ============================================================================
-// The registered doors — QUALIFIED delegations.
-// ============================================================================
-void RtAch_AchievementManager_Dtor(Achievement::AchievementManager* self) {
-    self->Achievement::AchievementManager::~AchievementManager();
-}
-
-void RtAch_AchievementManager_RemoveAll(Achievement::AchievementManager* self) {
-    self->Achievement::AchievementManager::RemoveAll();
-}
-
-void RtAch_AchievementManager_ReadAchievements(Achievement::AchievementManager* self) {
-    self->Achievement::AchievementManager::ReadAchievements();
-}
-
-bool RtAch_AchievementManager_SetAchievementMet(Achievement::AchievementManager* self, int index) {
-    return self->Achievement::AchievementManager::SetAchievementMet(index);
-}
-
-// HIDDEN RETURN SLOT: (this, ret) — the member's prvalue is placement-new'd.
-void* RtAch_Achievement_CreateInstance(const Achievement::Achievement* self, void* retval) {
-    new (retval) Object::InternalPtr<Achievement::AchievementInstance>(
-        self->Achievement::Achievement::CreateInstance());
-    return retval;   // retail's `MOV RAX,RSI`
-}

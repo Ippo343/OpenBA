@@ -220,12 +220,3 @@ void AchievementManager::Persist(IO::Stream& streamRef) {
 }
 
 }  // namespace Achievement
-
-// ---- The registered doors — QUALIFIED delegations --------------------------
-// (ENDGAME B.3.9 ENG: the `?Serialize@Achievement@1@` slot door is gone with
-// the minted `??_7Achievement@0@6B@` row, its only reader; Scenario calls the
-// member QUALIFIED.)
-
-void RtAch_AchievementManager_Persist(Achievement::AchievementManager* self, IO::Stream* stream) {
-    self->Achievement::AchievementManager::Persist(*stream);
-}

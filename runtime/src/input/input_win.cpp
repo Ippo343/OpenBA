@@ -157,8 +157,3 @@ void Device::EnableMouseClipping(uint8_t enable) {
 }
 
 }  // namespace Input
-
-// ---- the registered DOORS (ENDGAME B.3.7 B5): one QUALIFIED call each ------
-void RtInput_Device_EnableMouseClipping(void* selfPtr, uint8_t enable) {
-    reinterpret_cast<Input::Device*>(selfPtr)->Input::Device::EnableMouseClipping(enable);
-}

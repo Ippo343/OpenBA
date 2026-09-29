@@ -303,24 +303,7 @@ PickingMesh::~PickingMesh() {
 
 }  // namespace Picking
 
-// ============================================================================
-// ENDGAME B.3.9 PILOT: the eight slot doors (`RtPicking_PickingMesh_Type` ..
-// `_Serialize`) and the `??1PickingMesh` door are gone. Their only reader was
-// the minted `??_7PickingMesh@Picking@@6B@` (and, for the ??1 door, its
-// RT_DELDTOR row): every live PickingMesh now wears the compiler's table.
-// ============================================================================
-
 // ---- CUTOVER CLOSURE BATCH D2: the two registered Serialize halves --------
-// Retail's own signatures, so these can stand at their addresses for any
-// caller. Note the argument ORDER differs between them: 0x18007a350 takes the
-// Array first, 0x18007ac20 the Serializer.
-extern "C" void RtPicking_PickingMesh_SerializeTriangles(void* arr, void* ser) {
-    SerializeTrianglesBody(static_cast<Collection::Array<Triangle>*>(arr),
-                           static_cast<Serializer*>(ser));
-}
-extern "C" void RtPicking_PickingMesh_SerializeSubMeshes(void* ser, int32_t count, void* base) {
-    SerializeSubMeshesBody(static_cast<Serializer*>(ser), count, static_cast<SubMesh*>(base));
-}
 
 // B3R (registry teardown, W1 RT-Core): every row this function registered had
 // no reader by name or by address, so they went. It registers nothing and

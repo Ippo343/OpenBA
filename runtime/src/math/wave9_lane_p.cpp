@@ -185,8 +185,3 @@ Math::Transform3 Math::Transform::AsTransform3() const {
 
     return out;
 }
-
-Transform3* RtMath_Transform_AsTransform3(const Transform* self, Transform3* ret) {
-    *ret = self->AsTransform3();
-    return ret;
-}

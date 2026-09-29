@@ -578,22 +578,6 @@ void Video::Context::BindResources() {
 }
 
 // ============================================================================
-// THE TWO DOORS
-// ============================================================================
-// Unchanged names, unchanged registrations (see the bottom of this file), now
-// one-line QUALIFIED non-virtual delegations. The parameter stays `void*`
-// because `dx11/` reaches both through `Dx11ResolveRuntimeImport`, which hands
-// back a `void(*)(void*)`, and because the probe below drives them through a
-// `BindFn` of that shape over a raw `uint8_t[kContextSize]` subject.
-extern "C" void RtVideo_Context_BindTextures(void* self) {
-    static_cast<Video::Context*>(self)->Video::Context::BindTextures();
-}
-
-extern "C" void RtVideo_Context_BindResources(void* self) {
-    static_cast<Video::Context*>(self)->Video::Context::BindResources();
-}
-
-// ============================================================================
 // THE PROBE
 // ============================================================================
 namespace {

@@ -243,9 +243,6 @@ RunSummary g_summary;
 template <typename T> inline T Load(const void* p, int off) {
     T v; std::memcpy(&v, static_cast<const uint8_t*>(p) + off, sizeof(T)); return v;
 }
-template <typename T> inline void Store(void* p, int off, T v) {
-    std::memcpy(static_cast<uint8_t*>(p) + off, &v, sizeof(T));
-}
 
 void* AudioDeviceSingleton() {
     // The export address IS the pointer slot, so this is ONE deref — retail's

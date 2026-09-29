@@ -69,8 +69,3 @@ GoalList::~GoalList() {
 }
 
 }  // namespace Achievement
-
-// ---- The registered door — a QUALIFIED delegation --------------------------
-extern "C" void RtAch_GoalList_Dtor(Achievement::GoalList* self) {
-    self->Achievement::GoalList::~GoalList();
-}

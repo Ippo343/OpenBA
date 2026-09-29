@@ -303,15 +303,6 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
     reinterpret_cast<IO::FileSystem*>(self)->CloseFile(*info);
 }
 
-// `??1FileSystem@IO@@QEAA@XZ` — the door for a REAL C++ destructor now. The
-// explicit `->~FileSystem()` is the whole delegation; nothing else destroys an
-// `IO::FileSystem`, because nothing in the tree ever holds one by value (the
-// live object is the one the singleton data symbol points at, constructed by
-// retail's still-unported 0x1800ac7c0).
-void RtIo_FileSystem_Dtor(FileSystem* self) {
-    reinterpret_cast<IO::FileSystem*>(self)->~FileSystem();
-}
-
 // Read by file_stream_cutover_probe.cpp, which prints attendance beside the
 // door verdicts so a reader cannot see one without the other.
 void RtIoFileSystemCreateFileCounters(unsigned long long* out) {

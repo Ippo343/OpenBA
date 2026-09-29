@@ -368,22 +368,6 @@ void Scene::OnSoundEnded(Device::AudioChannel* audioChannel, void* userData, uin
 // ============================================================================
 // THE DOORS — one-line qualified delegations.
 // ============================================================================
-extern "C" float RtAudio_Scene_GetVolumeForPosition(const void* self, const void* srcPos,
-                                                    float maxDist, float minDist,
-                                                    const void* listenerPos) {
-    return reinterpret_cast<const Audio::Scene*>(self)->Audio::Scene::GetVolumeForPosition(   // B.3.7 bridge
-        *static_cast<const Vector3*>(srcPos), maxDist, minDist,
-        *static_cast<const Vector3*>(listenerPos));
-}
-extern "C" float RtAudio_Scene_GetAttenuatedVolume(const void* self, const void* effectPtr,
-                                                   const void* listenerPos, float radiusBias) {
-    return reinterpret_cast<const Audio::Scene*>(self)->Audio::Scene::GetAttenuatedVolume(    // B.3.7 bridge
-        *static_cast<const Audio::Scene::AttenutedEffect*>(effectPtr),
-        *static_cast<const Vector3*>(listenerPos), radiusBias);
-}
-extern "C" void RtAudio_Scene_OnSoundEnded(void* audioChannel, void* userData, uint32_t tag) {
-    Audio::Scene::OnSoundEnded(static_cast<Audio::Device::AudioChannel*>(audioChannel), userData, tag);
-}
 
 namespace rtavbody29 {
 

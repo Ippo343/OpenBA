@@ -210,15 +210,6 @@ Object::Base* NumberElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// The CacheText door (a non-slot member, kept) — one QUALIFIED delegation.
-// ENDGAME B.3.9 UI-A: the five slot doors and the ??0 / ??1 doors, read only
-// by the retired minted table / RT_DELDTOR row / FACTUI2 row, are gone.
-// ============================================================================
-extern "C" void RtUi_NumberElement_CacheText(void* self) {
-    reinterpret_cast<UI::NumberElement*>(self)->UI::NumberElement::CacheText();   // B.3.6 bridge
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@NumberElement@UI@@ (0x1801facb8): name "NumberElement", parent

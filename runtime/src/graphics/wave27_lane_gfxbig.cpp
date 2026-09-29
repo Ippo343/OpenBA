@@ -375,15 +375,6 @@ inline uint8_t* PassObject(const Graphics::MaterialInstance* m, int32_t pass) {
 
 }  // namespace
 
-// ENDGAME B.3.5 block GC: THE BODY MOVED to
-// `Graphics::MaterialInstance::BuildParameters`, at the bottom of this file. The
-// door keeps its name, its registration and both counters.
-extern "C" void RtGraphics_MaterialInstance_BuildParameters(void* self) {
-    Attend("MaterialInstance::BuildParameters", g_buildParamCalls);
-    reinterpret_cast<Graphics::MaterialInstance*>(self)            // B.3.5 bridge
-        ->Graphics::MaterialInstance::BuildParameters();
-}
-
 // The BODY is at the bottom of this file, as `Graphics::MaterialInstance::BuildParameters`.
 // ============================================================================
 // §3.  ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z
@@ -551,22 +542,6 @@ extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void
                       [](RendererDrawItem* lo, RendererDrawItem* hi) {
                           RtGraphics_Renderer_DrawItemSortSmall(lo, hi);
                       });
-}
-
-// ENDGAME B.3.5 block GC: THE BODY MOVED onto `Graphics::Renderer::Draw`, in
-// this file's trailing `namespace Graphics` block (everything here is inside
-// `namespace rtgfxbig`, which is `Graphics`'s SIBLING -- B34_BRIEFS A.2). The
-// door keeps its name, its registration and all three counters; the two BRANCH
-// counters stay in the loops, inside the member.
-extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
-                                         const void* scene, const void* camera) {
-    Attend("Renderer::Draw", g_drawCalls);
-    reinterpret_cast<Graphics::Renderer*>(self)                          // B.3.5 bridge
-        ->Graphics::Renderer::Draw(
-            *reinterpret_cast<Video::Context*>(context),                 // B.3.5 bridge
-            alpha,
-            *reinterpret_cast<const Graphics::Scene*>(scene),            // B.3.5 bridge
-            *reinterpret_cast<const Graphics::Camera*>(camera));         // B.3.5 bridge
 }
 
 // ============================================================================

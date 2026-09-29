@@ -232,14 +232,6 @@ using UpdateHierarchyFn = void (*)(void* self);
 // vtable slot 4 (`+0x20` = `UpdateAttached`); then walk `Geometry::_attached`
 // (+0x18 data, +0x20 count) and call each child's vtable slot 1 (`+0x8`).
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto `Graphics::MeshInstance::Update` below.
-// The door keeps its name and its registration and delegates with a QUALIFIED
-// non-virtual call, which is what stops it re-entering itself through the minted
-// table's slot 1 (B34_BRIEFS §A.1).
-extern "C" void RtGraphics_MeshInstance_Update(void* self, const void* time) {
-    reinterpret_cast<::Graphics::MeshInstance*>(self)
-        ->::Graphics::MeshInstance::Update(*reinterpret_cast<const System::Time*>(time));
-}
 
 namespace Graphics {
 
@@ -477,18 +469,6 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
 }
 
 }  // namespace Graphics
-
-// ENDGAME B.3.5 block E: the slot-7 door, delegating to the member above.
-// `?GetBones@MeshInstance@Graphics@@` is declared on the real class but is NOT
-// PORTED anywhere in the tree, so the member body above still reaches it — and
-// `?SetBones@Context@Video@@`, which is block D's — through `ResolveExport`.
-// Those two doors convert with their own owners, not here.
-extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
-        const void* self, void* ctx, int32_t packed, float t) {
-    return reinterpret_cast<const ::Graphics::MeshInstance*>(self)
-               ->::Graphics::MeshInstance::SetSharedInstanceData(
-                     *reinterpret_cast<Video::Context*>(ctx), packed, t);
-}
 
 // Kickoff warning 10: a `*Summary()` nothing calls reports a zero that means
 // "never printed", not "never called". This one IS wired: RuntimeInit()

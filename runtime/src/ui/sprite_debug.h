@@ -10,8 +10,5 @@ void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteNa
 // Wraps UI::Sprite() — logs creation of invalid sprite
 void* Debug_Sprite_DefaultCtor(void* retval);
 
-// Wraps UI::Sprite(sheet, index) — logs sheet + direct index
-void* Debug_Sprite_CtorByIndex(void* retval, void* spriteSheet, int index);
-
 // Wraps UI::Sprite::IsValid — logs validity check result
 bool Debug_Sprite_IsValid(void* sprite);

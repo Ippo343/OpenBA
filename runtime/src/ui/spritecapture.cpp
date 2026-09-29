@@ -427,25 +427,3 @@ void SpriteCapture::BeginAddingSprites() {
 }
 
 }  // namespace UI
-
-// ============================================================================
-// THE DOORS — keep name and address, delegate with a qualified call.
-// ============================================================================
-extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
-                                              int right, int bottom, bool fullScreen) {
-    reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
-        ->UI::SpriteCapture::AddScissor(x, y, right, bottom, fullScreen);
-}
-
-extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRaw,
-                                             int x1, int y1, int x2, int y2,
-                                             float rotation, uint32_t color) {
-    reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
-        ->UI::SpriteCapture::AddSprite(*static_cast<const UI::Sprite*>(spriteRaw),
-                                       x1, y1, x2, y2, rotation, color);
-}
-
-extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
-    reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
-        ->UI::SpriteCapture::EndAddingSprites();
-}

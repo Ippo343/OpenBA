@@ -104,10 +104,11 @@ public:
     StringTable& operator=(const StringTable& src);     // 0x1800026b0  not ported
     // 0x180002180 — the minted record's type id (stringtable_factory.cpp).
     // Placement is spelt `::new (p) StringTable()` (B9-5): these stay undefined;
-    // `??3` keeps its registered door in stringtable_lifecycle.cpp.
+    // `??3` is the inline member below (its C door and stringtable_lifecycle.cpp
+    // went in B.4 R0: unreferenced).
     static void* operator new(std::size_t bytes);              // 0x1800021a0
     static void* operator new(std::size_t bytes, void* place); // 0x180002210
-    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x180002220  (door)
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x180002220
     // Retail's factory pair (B39_RULES D2), defined and registered in
     // stringtable_factory.cpp.
 

@@ -531,11 +531,6 @@ void SpriteContext::Flush() {
 
 }  // namespace UI
 
-// The door: keeps its registered address and delegates.
-void RtUi_SpriteContext_Flush(void* selfRaw) {
-    reinterpret_cast<UI::SpriteContext*>(selfRaw)->UI::SpriteContext::Flush();  // B.3.6 bridge
-}
-
 // ============================================================================
 // The per-run counters.
 // ============================================================================

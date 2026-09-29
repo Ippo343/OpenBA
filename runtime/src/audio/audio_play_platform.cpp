@@ -255,9 +255,6 @@ PlayPlatformSummary g_summary;
 template <typename T> inline T Load(const void* p, int off) {
     T v; std::memcpy(&v, static_cast<const uint8_t*>(p) + off, sizeof(T)); return v;
 }
-template <typename T> inline void Store(void* p, int off, T v) {
-    std::memcpy(static_cast<uint8_t*>(p) + off, &v, sizeof(T));
-}
 
 double SecondsPerTick() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
@@ -462,13 +459,3 @@ bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
 }
 
 }  // namespace Audio
-
-// The door: `bufferRef` arrives as the bare register pointer (B7-5) and
-// `startTime` as a pointer to the caller's Time.
-extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bufferRef,
-                                            const int64_t* startTime, float vol,
-                                            float pitch, float third) {
-    return reinterpret_cast<Audio::Device*>(device)->Audio::Device::PlayPlatform(          // B.3.7 bridge
-        slot, Object::ExternalPtr<Audio::SoundBuffer>(static_cast<Audio::SoundBuffer*>(bufferRef)),
-        *reinterpret_cast<const System::Time*>(startTime), vol, pitch, third);           // B.3.7 bridge
-}

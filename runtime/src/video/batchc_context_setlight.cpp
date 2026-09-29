@@ -187,14 +187,3 @@ void Video::Context::SetLight(const void* directionRaw, const void* attenuationR
 
     *reinterpret_cast<uint32_t*>(At(self, 0x10)) |= kDirtyBits;
 }
-
-// ---- the door, unchanged name and unchanged registration --------------------
-extern "C" void RtVideo_Context_SetLight(void* self,
-                                         const void* direction, const void* attenuation,
-                                         const void* colour, const void* position,
-                                         float nearPlane, float farPlane,
-                                         int32_t shadowResolution) {
-    static_cast<Video::Context*>(self)->Video::Context::SetLight(
-        direction, attenuation, colour, position,
-        nearPlane, farPlane, shadowResolution);
-}

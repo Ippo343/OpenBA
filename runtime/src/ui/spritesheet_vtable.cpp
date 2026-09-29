@@ -158,10 +158,6 @@ Object::Base* SpriteSheet::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ---- the doors that stay ----------------------------------------------------
-// ?TypeId@SpriteSheet@UI@@SAIXZ is a STATIC export (no vtable slot).
-extern "C" uint32_t RtUi_SpriteSheet_TypeId() {
-    return UI::SpriteSheet::TypeId();
-}
 // ============================================================================
 // slot 5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z   0x18011d730
 // ============================================================================

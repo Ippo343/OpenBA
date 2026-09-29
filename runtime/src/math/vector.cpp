@@ -32,7 +32,6 @@
 #include "../../types/math/Math.h"
 #include "../../funcs/rt_libm.h"
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
-#include "vector.h"
 
 namespace {
 // Deg->rad already lives in RtMathConst; rad->deg is only needed here.
@@ -230,51 +229,3 @@ void Vector4::Serialize(void* serializer) {
 }
 
 }  // namespace Math
-
-// ============================================================================
-// TRANSITIONAL SHIMS — ENDGAME B.3.1 step 1
-// ----------------------------------------------------------------------------
-// One line each, onto the members above. They keep every existing caller and
-// every `RegisterRuntimeExport` row in rt_math_port.cpp working without any
-// caller moving in this commit. STEP 2 DELETES THEM: as each directory's call
-// sites become member calls, the shim and its registry row go with the last
-// caller (B31_RULES, "step 2 — the callers").
-// ============================================================================
-
-Scalar* RtMath_Scalar_Abs(const Scalar* self, Scalar* ret) { *ret = self->Abs(); return ret; }
-Scalar* RtMath_Scalar_Lerp(const Scalar* self, Scalar* ret, const Scalar* to, const Scalar* t) {
-    *ret = const_cast<Scalar*>(self)->Lerp(*to, *t); return ret;
-}
-Scalar* RtMath_Scalar_Max(const Scalar* self, Scalar* ret, const Scalar* other) { *ret = self->Max(*other); return ret; }
-
-Vector2* RtMath_Vector2_Ctor(Vector2* self) { *self = Vector2(); return self; }
-Vector2* RtMath_Vector2_Ctor_ss(Vector2* self, const Scalar* x, const Scalar* y) { *self = Vector2(*x, *y); return self; }
-void     RtMath_Vector2_MulAssign(Vector2* self, const Vector2* rhs) { *self *= *rhs; }
-Scalar*  RtMath_Vector2_Dot(const Vector2* self, Scalar* ret, const Vector2* rhs) { *ret = self->Dot(*rhs); return ret; }
-Vector2* RtMath_Vector2_Max(const Vector2* self, Vector2* ret, const Vector2* rhs) { *ret = self->Max(*rhs); return ret; }
-Vector2* RtMath_Vector2_Min(const Vector2* self, Vector2* ret, const Vector2* rhs) { *ret = self->Min(*rhs); return ret; }
-Scalar*  RtMath_Vector2_Length(const Vector2* self, Scalar* ret) { *ret = self->Length(); return ret; }
-Scalar*  RtMath_Vector2_LengthSquared(const Vector2* self, Scalar* ret) { *ret = self->LengthSquared(); return ret; }
-Vector2* RtMath_Vector2_Normalize(const Vector2* self, Vector2* ret) { *ret = self->Normalize(); return ret; }
-Vector2* RtMath_Vector2_NormalizeWithMag(const Vector2* self, Vector2* ret, Scalar* mag) { *ret = self->Normalize(*mag); return ret; }
-void     RtMath_Vector2_Serialize(Vector2* self, void* serializer) { self->Serialize(serializer); }
-
-Vector3* RtMath_Vector3_Ctor(Vector3* self) { *self = Vector3(); return self; }
-Vector3* RtMath_Vector3_Ctor_fff(Vector3* self, float x, float y, float z) { *self = Vector3(x, y, z); return self; }
-Vector3* RtMath_Vector3_Ctor_sss(Vector3* self, const Scalar* x, const Scalar* y, const Scalar* z) { *self = Vector3(*x, *y, *z); return self; }
-Vector3* RtMath_Vector3_Ctor_s(Vector3* self, const Scalar* s) { *self = Vector3(*s); return self; }
-Vector3* RtMath_Vector3_Cross(const Vector3* self, Vector3* ret, const Vector3* rhs) { *ret = self->Cross(*rhs); return ret; }
-Scalar*  RtMath_Vector3_Dot(const Vector3* self, Scalar* ret, const Vector3* rhs) { *ret = self->Dot(*rhs); return ret; }
-Vector3* RtMath_Vector3_FromYawPitch(Vector3* ret, const Scalar* yaw, const Scalar* pitch) { *ret = Vector3::FromYawPitch(*yaw, *pitch); return ret; }
-float    RtMath_Vector3_Heading(const Vector3* self) { return self->Heading(); }
-Scalar*  RtMath_Vector3_Length(const Vector3* self, Scalar* ret) { *ret = self->Length(); return ret; }
-Vector3* RtMath_Vector3_Lerp(const Vector3* self, Vector3* ret, const Vector3* to, const Scalar* t) { *ret = self->Lerp(*to, *t); return ret; }
-Vector3* RtMath_Vector3_Min(const Vector3* self, Vector3* ret, const Vector3* rhs) { *ret = self->Min(*rhs); return ret; }
-Vector3* RtMath_Vector3_NormalizeWithMag(const Vector3* self, Vector3* ret, Scalar* mag) { *ret = self->Normalize(*mag); return ret; }
-Vector3* RtMath_Vector3_Normalize(const Vector3* self, Vector3* ret) { *ret = self->Normalize(); return ret; }
-bool     RtMath_Vector3_Equals(const Vector3* self, const Vector3* rhs) { return *self == *rhs; }
-void     RtMath_Vector3_Serialize(Vector3* self, void* serializer) { self->Serialize(serializer); }
-
-Vector4* RtMath_Vector4_Ctor_s(Vector4* self, const Scalar* s) { *self = Vector4(*s); return self; }
-Vector4* RtMath_Vector4_Ctor_v3s(Vector4* self, const Vector3* xyz, const Scalar* w) { *self = Vector4(*xyz, *w); return self; }
-void     RtMath_Vector4_Serialize(Vector4* self, void* serializer) { self->Serialize(serializer); }

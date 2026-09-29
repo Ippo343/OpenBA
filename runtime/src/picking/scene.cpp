@@ -595,11 +595,6 @@ extern "C" Picking::Scene* RtPicking_Scene_Ctor(void* selfv) {
     return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(kCellSize);   // B.3.7 bridge
 }
 
-// ?GetUserData@Scene@Picking@@QEBAPEAXI@Z  0x1800722d0
-extern "C" void* RtPicking_Scene_GetUserData(const void* selfv, uint32_t id) {
-    return reinterpret_cast<const Picking::Scene*>(selfv)->Picking::Scene::GetUserData(id);   // B.3.7 bridge
-}
-
 // ?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z
 // 0x180071e10 — returns a REFERENCE, so there is NO hidden return slot: the
 // caller's second register is the sub-mesh index
@@ -608,41 +603,4 @@ extern "C" const Collection::Array<Vector3>*
 RtPicking_PickingMesh_Vertices(const void* selfv, int subMesh) {
     return &reinterpret_cast<const Picking::PickingMesh*>(selfv)                 // B.3.7 bridge
                 ->Picking::PickingMesh::Vertices(subMesh);
-}
-
-// ?SetMeshUserData@Scene@Picking@@...  0x180125240
-extern "C" void RtPicking_Scene_SetMeshUserData(void* selfv, uint32_t id, void* userData,
-                                                int userValue, int userValue2,
-                                                Picking::Scene::HitCallback callback) {
-    reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::SetMeshUserData(   // B.3.7 bridge
-        id, userData, userValue, userValue2, callback);
-}
-
-// ?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z  0x1800721b0
-extern "C" void RtPicking_Scene_SetTransform(void* selfv, uint32_t id, const ::Transform* xform) {
-    reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::SetTransform(id, *xform);   // B.3.7 bridge
-}
-
-// ?AddMesh@Scene@Picking@@...  0x1801252e0 — RDX is the ExternalPtr's bare
-// pointer (B7-5).
-extern "C" uint32_t RtPicking_Scene_AddMesh(void* selfv, void* mesh,
-                                            const ::Transform* rootXform, void* userData,
-                                            int userValue, int userValue2,
-                                            Picking::Scene::HitCallback callback) {
-    return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::AddMesh(   // B.3.7 bridge
-        Object::ExternalPtr<Picking::PickingMesh>(static_cast<Picking::PickingMesh*>(mesh)),
-        *rootXform, userData, userValue, userValue2, callback);
-}
-
-// ?RemoveMesh@Scene@Picking@@QEAAXI@Z  0x180125290
-extern "C" void RtPicking_Scene_RemoveMesh(void* selfv, uint32_t id) {
-    reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::RemoveMesh(id);   // B.3.7 bridge
-}
-
-// ?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z  0x1801246c0
-extern "C" int RtPicking_Scene_Intersect(const void* selfv, const Vector3* start,
-                                         const Vector3* dir, const Scalar* maxDist,
-                                         Vector3* outPos, Vector3* outNormal) {
-    return reinterpret_cast<const Picking::Scene*>(selfv)->Picking::Scene::Intersect(   // B.3.7 bridge
-        *start, *dir, *maxDist, *outPos, *outNormal);
 }

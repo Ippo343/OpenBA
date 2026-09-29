@@ -344,14 +344,6 @@ bool PlatformFileExists(const System::Filename* path) {
 // ============================================================================
 // ?SetupFileSystem@Modification@IO@@QEAAXXZ                 retail 0x1800aebb0
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 2: the body is now
-// `IO::Modification::SetupFileSystem()`, at the bottom of this file. The door
-// keeps its name, its by-name AND by-address registration, and delegates. No
-// qualified `IO::` call: `IO::Modification` has no vtable at all, so
-// B34_BRIEFS section A.1's re-entry hazard cannot arise.
-void RtIo_Modification_SetupFileSystem(Modification* self) {
-    reinterpret_cast<IO::Modification*>(self)->SetupFileSystem();
-}
 
 }  // namespace RtIO
 

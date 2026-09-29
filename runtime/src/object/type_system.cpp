@@ -84,14 +84,6 @@ namespace {
 // ONE body. The name is kept here because six sites below read better with it.
 inline uint32_t TypeNameCRC(const char* name) { return ::Object::TypeNameCRC(name); }
 
-// The live factory, viewed as the real class. The two describe the same 0x10
-// bytes (`Object::Factory` asserts `sizeof == 0x10` and `offsetof(_types) == 0`
-// against `??0Factory@Object@@`'s two stores), so this is the B.3.3 bridge from
-// a caller that still hands us a `void*`/`RtObject::Factory*`.
-inline ::Object::Factory* AsFactory(const void* factory) {
-    return reinterpret_cast<::Object::Factory*>(const_cast<void*>(factory));
-}
-
 // The object, viewed as the real class (ENDGAME B.3.3 step 4). The B.3.3 bridge
 // from a caller that still hands us a `void*`.
 //
@@ -139,9 +131,6 @@ uint32_t TypeIdFromName(const char* name) { return TypeNameCRC(name); }
 // is `MOV EAX,[rip+global]; RET` (see TypeInfo.h). If a future subclass gives
 // slot 2 a side effect, this site becomes unsound; nothing does today.
 // ============================================================================
-bool RtObject_Base_IsA(const void* self, uint32_t typeId) {
-    return AsBase(self)->IsA(typeId);
-}
 
 // ============================================================================
 // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  retail 0x1800c0390 / profile 0x18008c670

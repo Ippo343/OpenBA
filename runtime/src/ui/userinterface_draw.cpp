@@ -654,7 +654,3 @@ void UI::UserInterface::Draw(Video::Context& context) {
         *reinterpret_cast<uint64_t*>(slot + 8) = 0;
     }
 }
-
-extern "C" void RtUi_UserInterface_Draw(UserInterface* self, void* ctx) {
-    self->UI::UserInterface::Draw(*static_cast<Video::Context*>(ctx));
-}

@@ -234,17 +234,6 @@ extern "C" void* RtUi_ToolTipDialog_OperatorNew(uint64_t bytes) {
 // caller must release. `BeginToolTip` calls it TWICE and releases both
 // (userinterface_hover.cpp:424 / :436).
 // ============================================================================
-//
-// ENDGAME B.3.6 fragment pass F2: the body MOVED into UI::Element::
-// GetToolTipString (member section below). The door keeps retail's
-// `(this, ret)` RETSLOT shape and placement-news the member's prvalue into the
-// caller's uninitialised slot (B5-12 as amended).
-extern "C" System::String* RtUi_Element_GetToolTipString(const Element* self,
-                                                         System::String* ret) {
-    ++g_getTipEntries;
-    new (ret) System::String(self->UI::Element::GetToolTipString());
-    return ret;                                                // 0x1800356d0
-}
 
 // ============================================================================
 // ?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z      retail 0x1800dab00
@@ -305,11 +294,6 @@ extern "C" System::String* RtUi_Element_GetToolTipString(const Element* self,
 // is a use-after-free risk on a shared, refcounted String. The instrument here
 // is the attendance counter, which reports what actually ran.
 // ============================================================================
-extern "C" void RtUi_ToolTipDialog_SetText(void* self, const System::String* text) {
-    ++g_setTextEntries;
-    // B.3.6: the body is UI::ToolTipDialog::SetText (below).
-    reinterpret_cast<UI::ToolTipDialog*>(self)->UI::ToolTipDialog::SetText(*text);   // B.3.6 bridge
-}
 
 // ============================================================================
 namespace {

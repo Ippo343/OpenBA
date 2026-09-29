@@ -149,7 +149,3 @@ void Stream::Play(int32_t channel, int32_t bytePosition) {
 }
 
 }  // namespace Audio
-
-extern "C" void RtAudio_Stream_Play(void* selfPtr, int32_t a, int32_t b) {
-    reinterpret_cast<Audio::Stream*>(selfPtr)->Audio::Stream::Play(a, b);   // B.3.7 bridge
-}

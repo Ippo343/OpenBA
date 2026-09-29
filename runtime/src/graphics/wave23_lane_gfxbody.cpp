@@ -63,8 +63,10 @@
 // It is deleted with the body's move onto `Graphics::AnimationManager::Update`,
 // which is the block brief's "may be deleted if and only if nothing references
 // it" arm; the seven sites are now their live arms, written plainly. THE
-// ATTENDANCE COUNTERS ARE A DIFFERENT THING AND THEY STAY: `g_animUpdCalls` and
-// `g_animUpdStates` have a live reader in `RtGraphicsWave23GfxbodySummary()`.
+// ATTENDANCE COUNTERS ARE A DIFFERENT THING: `g_animUpdStates` has a live
+// reader in `RtGraphicsWave23GfxbodySummary()`. (`g_animUpdCalls` was the
+// entry count of the unreferenced `RtGraphics_AnimationManager_Update` door and
+// went with it in B.4 R0: it could only ever print 0.)
 // ---------------------------------------------------------------------------
 
 using RtGraphics::FrameCopyImageBuffer;
@@ -94,7 +96,6 @@ unsigned long long g_dtorCalls      = 0;
 unsigned long long g_createCalls    = 0;
 unsigned long long g_generateCalls  = 0;
 unsigned long long g_generateCopies = 0;   // the BRANCH, not the door
-unsigned long long g_animUpdCalls   = 0;
 unsigned long long g_animUpdStates  = 0;   // inner-loop iterations; 0 == "ran, did nothing"
 
 // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z, retail 0x1800c7a50.
@@ -453,25 +454,13 @@ static_assert(sizeof(AnimTransform) == 0x1c, "Math::Transform is 28 bytes");
 
 }  // namespace
 
-// ENDGAME B.3.5 block GC: THE BODY MOVED to
-// `Graphics::AnimationManager::Update`, in this file's `namespace Graphics` block
-// at the bottom. The door keeps its name, its registration and BOTH counters --
-// the entry count here and the per-state count inside the loop, which the file's
-// summary line prints and which measure different things.
-extern "C" void RtGraphics_AnimationManager_Update(void* self, const void* time, bool rootOnly) {
-    Attend("AnimationManager::Update", g_animUpdCalls);
-    reinterpret_cast<Graphics::AnimationManager*>(self)                 // B.3.5 bridge
-        ->Graphics::AnimationManager::Update(
-            *reinterpret_cast<const System::Time*>(time), rootOnly);    // B.3.5 bridge
-}
-
 // One line beside the other wave summaries, so a run that entered none of these
 // says so rather than staying silent.
 void RtGraphicsWave23GfxbodySummary() {
     printf("[GFXBODY23] ctor=%llu dtor=%llu Create=%llu Generate=%llu (blits=%llu) "
-           "AnimUpdate=%llu (states=%llu)\n",
+           "AnimUpdate states=%llu\n",
            g_ctorCalls, g_dtorCalls, g_createCalls, g_generateCalls, g_generateCopies,
-           g_animUpdCalls, g_animUpdStates);
+           g_animUpdStates);
 }
 
 // ############################################################################

@@ -283,11 +283,6 @@ void Engine::UpdateLoop::LoadResources() {
     }
 }
 
-extern "C" void RtEngine_UpdateLoop_LoadResources(RtEngine::UpdateLoop* self) {
-    reinterpret_cast<Engine::UpdateLoop*>(self)                       // B.3.7 bridge
-        ->Engine::UpdateLoop::LoadResources();
-}
-
 extern "C" void RtEngineLoadResourcesSummary() {
     printf("[RtPort]   Engine::UpdateLoop::LoadResources: calls=%u ownList=%u "
            "modsEnabled=%u modsWithResources=%u refOverride=%u\n",

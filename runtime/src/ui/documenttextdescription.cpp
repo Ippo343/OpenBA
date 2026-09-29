@@ -348,21 +348,6 @@ Object::Base* DocumentTextDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door
-// and the FACTUI1 ??0 door are gone (their only readers were the minted
-// `??_7DocumentTextDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1
-// row). The applier door stays: it is a non-virtual member, registered by
-// address, not mint scaffolding.
-// ============================================================================
-extern "C" void RtUi_DocumentTextDescription_ApplyToElement(const void* self, void** elemPtr,
-                                                            const void* dialog) {
-    reinterpret_cast<const UI::DocumentTextDescription*>(self)
-        ->UI::DocumentTextDescription::CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::DocumentTextElement>*>(elemPtr),  // B.3.6 bridge
-            static_cast<const UI::Dialog*>(dialog));
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::DocumentTextDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@DocumentTextDescription@UI@@ (0x1801f9eb8): name "DocumentTextDescription", parent

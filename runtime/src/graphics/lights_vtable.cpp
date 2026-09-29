@@ -832,13 +832,6 @@ void SpotLight::DrawLight(Video::Context& context, Renderer& rendererRef,
 // The tail is `DrawItemList(renderer, ctx, arg4, arg6, arg7)` — arg4 here,
 // where SpotLight used arg5 + 1, and arg5 is used only as the group index.
 // ============================================================================
-extern "C" void RtGraphics_SunLight_Draw(void* self, void* ctx, void* renderer,
-                                         int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
-    reinterpret_cast<const ::Graphics::SunLight*>(self)
-        ->::Graphics::SunLight::DrawLight(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5, a6, a7);
-}
 
 namespace Graphics {
 
@@ -910,13 +903,6 @@ void SunLight::DrawLight(Video::Context& context, Renderer& rendererRef,
 // JZ`) — with no shadow-casting items queued there is nothing to draw and even
 // the Context is left untouched.
 // ============================================================================
-extern "C" void RtGraphics_SunLight_DrawShadowMap(void* self, void* ctx, void* renderer,
-                                                  int32_t a4, int32_t a5) {
-    reinterpret_cast<const ::Graphics::SunLight*>(self)
-        ->::Graphics::SunLight::DrawShadowMap(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5);
-}
 
 namespace Graphics {
 

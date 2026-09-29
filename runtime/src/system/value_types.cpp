@@ -248,22 +248,6 @@ System::Time* RtSystem_Time_Ctor(System::Time* self, float seconds) {
     return self;
 }
 
-// ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800ca740
-// Slot +0x90 serializes the 8-byte `ticks`. Not diffed (I/O side effect, see
-// Random::Serialize above).
-//
-// ENDGAME B.3.4 callers batch H left this byte-identical and REPORTED the gap:
-// +0x90 is `rw_vtbl::kScalarInt64` and `IO::Serializer` declared no int64
-// scalar overload, so there was no member to call and the four-byte `int&` door
-// was not a substitute. B.3.4b SYSTEM (5) closes it: the overload is declared
-// (runtime/types/io/Serializer.h), its body is a scalar slot call like the
-// other seventeen (runtime/src/io/serializer_class.cpp) and its door is
-// registered by name and by address (runtime/src/io/serializer.cpp). This site
-// is the call site that justified it, and the member below is now one line.
-void RtSystem_Time_Serialize(System::Time* self, void* serializer) {
-    self->Serialize(*reinterpret_cast<::IO::Serializer*>(serializer));
-}
-
 // ============================================================================
 // ENDGAME B.3.4b — the `System::Time` member BODIES.
 // ============================================================================
@@ -309,26 +293,6 @@ void System::Color::Serialize(::IO::Serializer& s) {
 
 // ENDGAME B.3.1 step 2: `struct StrSlot { void* p; };` is gone — the four
 // bodies below hold `System::String` itself.
-
-// ?AsString@DateTime@System@@QEBA?AVString@2@XZ  retail 0x1800c54d0
-// retail: Format(ret, "%s %s", DateAsString(this), TimeAsString(this)), then
-// releases both temporaries. DateAsString/TimeAsString are themselves
-// exported (0x1800c56a0 / 0x1800c55b0), so `this` (DateTime) never needs a
-// layout here — it is only ever handed straight through to them.
-// WAVE 9 LANE V2, 2026-09-07: every raw door in the three functions below is
-// RT_EXPORT_ONCE. `?Release@String@System@@AEAAXXZ`, DateAsString and
-// TimeAsString are all ported and registered below, so these lines reach our
-// own bodies through the registry.
-// ENDGAME B.3.4b: the DOOR keeps retail's two-argument hidden-retslot shape
-// `String* f(const DateTime* this, String* ret)` and placement-news the member's
-// prvalue into the caller's slot. The MEMBER returns by value, which is what
-// retail's source said. Registering the member directly, or reaching one from a
-// raw slot caller, is `reference_hidden_retslot_wild_write.md`.
-System::String* RtSystem_DateTime_AsString(const void* self, System::String* ret) {
-    new (ret) System::String(
-        reinterpret_cast<const System::DateTime*>(self)->AsString());
-    return ret;
-}
 
 System::String System::DateTime::AsString() const {
     // Retail's own AsString CALLs the two exported siblings; B3R calls the
@@ -570,19 +534,6 @@ System::String* RtSystem_Configuration_CurrentBuildId(System::String* ret) {
 // Both doors below are HIDDEN-RETSLOT doors: `ret` is the caller's RAW BYTES,
 // so the member's prvalue is placement-CONSTRUCTED into it and the door returns
 // that slot, which is retail's `MOV RAX,R14`.
-
-// ?CurrentVersion@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4f40
-System::String* RtSystem_Configuration_CurrentVersion(System::String* ret) {
-    new (ret) System::String(System::Configuration::CurrentVersion());
-    return ret;
-}
-
-// ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z  retail 0x1800c4f90
-System::String* RtSystem_Configuration_GetVersionString(System::String* ret, uint32_t version,
-                                                        bool detailed) {
-    new (ret) System::String(System::Configuration::GetVersionString(version, detailed));
-    return ret;
-}
 
 // ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z  retail 0x1800c4f90
 // version is packed major<<24 | minor<<16 | patch<<8 | suffix. suffix in

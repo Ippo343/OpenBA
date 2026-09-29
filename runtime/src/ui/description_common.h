@@ -170,16 +170,6 @@ inline void AttachAndPushChild(uint8_t* parent, void** made) {
 }
 
 // ---- the base-class entry point every CreateInstance goes through ---------
-// ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
-// (0x180115ad0). Fragment pass F2 defined the member (dialog.cpp): a direct
-// QUALIFIED call instead of the by-address door. Kept for the callers whose
-// receiver is still a `void*`; a leaf member body calls
-// `UI::ElementDescription::CreateInstance(&slot)` itself.
-inline void ElementDescriptionApply(const void* self, void** elemPtr) {
-    reinterpret_cast<const UI::ElementDescription*>(self)                  // B.3.6 bridge
-        ->UI::ElementDescription::CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr)); // B.3.6 bridge
-}
 // ?CreateElement@Dialog@UI@@ (0x180112ed0). Fragment pass F2: block B defined
 // the member; the RETSLOT is kept for the callers (placement-new of the
 // member's prvalue, exactly the door's shape in dialog.cpp).
@@ -189,14 +179,6 @@ inline void** DialogCreateElement(const void* dialog, void** retSlot, void* desc
             ->UI::Dialog::CreateElement(Object::ExternalPtr<UI::ElementDescription>(
                 static_cast<UI::ElementDescription*>(desc))));
     return retSlot;
-}
-// `?Serialize@ElementDescription@UI@@` (0x180116b00), the base half every
-// leaf's Serialize runs first. ENDGAME B.3.6 block A: a direct QUALIFIED member
-// call instead of the by-address door — qualified because the receiver wears
-// the LEAF's table, whose slot 5 is the leaf's own Serialize (the caller).
-inline void ElementDescriptionSerialize(void* self, Stream* stream) {
-    reinterpret_cast<UI::ElementDescription*>(self)                        // B.3.6 bridge
-        ->UI::ElementDescription::Serialize(stream);
 }
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z, reached
 // by rel32 from every one of these appliers. Fragment pass F2: block D's

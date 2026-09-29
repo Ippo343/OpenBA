@@ -314,22 +314,6 @@ void IssueDraw(void* ctx, const uint8_t* rec, int32_t last) {
 // `+0x50`), re-read from the object EVERY time — four separate reloads in
 // retail, kept literal.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto the member at the bottom of this file.
-// The door keeps its name, its address and its registration and delegates with a
-// QUALIFIED non-virtual call — the qualification is load-bearing, because a live
-// MeshInstance wears the MINTED table whose slot 2 resolves back to this door.
-extern "C" void RtGraphics_MeshInstance_Draw(const void* self, void* ctx,
-                                             const void* camera, void* material,
-                                             float t, int32_t flags,
-                                             int32_t mode, int32_t pass) {
-    RtGraphics::ExternalPtr mat;
-    mat.p = material;
-    reinterpret_cast<const ::Graphics::MeshInstance*>(self)
-        ->::Graphics::MeshInstance::Draw(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<const ::Graphics::Camera*>(camera),
-              mat, t, flags, mode, pass);
-}
 
 namespace Graphics {
 
@@ -461,19 +445,6 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
 //
 // The bone buffer's 48 matrices and the 0x18 record stride are the same.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED onto the member below; the door delegates.
-extern "C" void RtGraphics_EdgeMeshInstance_Draw(const void* self, void* ctx,
-                                                 const void* camera, void* material,
-                                                 float t, int32_t flags,
-                                                 int32_t mode, int32_t pass) {
-    RtGraphics::ExternalPtr mat;
-    mat.p = material;
-    reinterpret_cast<const ::Graphics::EdgeMeshInstance*>(self)
-        ->::Graphics::EdgeMeshInstance::Draw(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<const ::Graphics::Camera*>(camera),
-              mat, t, flags, mode, pass);
-}
 
 namespace Graphics {
 

@@ -180,12 +180,3 @@ bool Configuration::Startup() {
 }
 
 }  // namespace Input
-
-// ---- the registered doors ---------------------------------------------------
-extern "C" void RtInput_Configuration_Load(Input::Configuration* self) {
-    self->Input::Configuration::Load();
-}
-
-extern "C" bool RtInput_Configuration_Startup(Input::Configuration* self) {
-    return self->Input::Configuration::Startup();
-}

@@ -1305,12 +1305,6 @@ void RtLerpTransformPair(const uint8_t* pair, float t, Transform* out) {
 // wave24_lane_gfxmat.cpp makes for the Serialize pair, for the same structural
 // reason. Attendance is recorded; no comparison is emitted.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED to `Graphics::EdgeMeshInstance::Update`.
-extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time) {
-    reinterpret_cast<::Graphics::EdgeMeshInstance*>(selfv)
-        ->::Graphics::EdgeMeshInstance::Update(
-              *reinterpret_cast<const System::Time*>(time));
-}
 
 // ============================================================================
 // Graphics::MeshInstance::GetSubTransform(int) const        [VIRTUAL, slot 5]
@@ -1344,16 +1338,6 @@ extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time
 // the comparison that body already makes, and doing it twice would report one
 // divergence as two.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED to
-// `Graphics::MeshInstance::GetSubTransform`. The door keeps retail's
-// `(this, ret, node)` order and `return ret;` — RULE B5-12, as corrected in
-// Geometry.h's banner.
-extern "C" void* RtGraphics_MeshInstance_GetSubTransform(const void* selfv, void* ret,
-                                                        int node) {
-    return reinterpret_cast<const ::Graphics::MeshInstance*>(selfv)
-               ->::Graphics::MeshInstance::GetSubTransform(
-                     reinterpret_cast<Math::Transform*>(ret), node);
-}
 
 // ============================================================================
 // Graphics::EdgeMeshInstance::GetInstanceTransform(int, float) const
@@ -1408,16 +1392,6 @@ extern "C" void* RtGraphics_MeshInstance_GetSubTransform(const void* selfv, void
 // ORACLE: FULL. Pure read on both arms; both sides write private Matrix buffers
 // and all 64 bytes are compared.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED to
-// `Graphics::EdgeMeshInstance::GetInstanceTransform`. Retail's `(this, ret, …)`
-// order is kept in the door; RULE B5-12 as corrected in Geometry.h.
-extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* selfv,
-                                                                 void* ret,
-                                                                 int packed, float t) {
-    return reinterpret_cast<const ::Graphics::EdgeMeshInstance*>(selfv)
-               ->::Graphics::EdgeMeshInstance::GetInstanceTransform(
-                     reinterpret_cast<Math::Matrix*>(ret), packed, t);
-}
 
 // ============================================================================
 // Graphics::MeshInstance::GetInstanceTransform(int, float) const
@@ -1497,16 +1471,6 @@ extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* se
 // bytes are compared, the colour column included — it is the half of the result
 // a geometric check cannot see.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED to
-// `Graphics::MeshInstance::GetInstanceTransform`, the colour column included.
-// Retail's `(this, ret, packed, t)` order is kept in the door; RULE B5-12 as
-// corrected in Geometry.h.
-extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv, void* ret,
-                                                             int packed, float t) {
-    return reinterpret_cast<const ::Graphics::MeshInstance*>(selfv)
-               ->::Graphics::MeshInstance::GetInstanceTransform(
-                     reinterpret_cast<Math::Matrix*>(ret), packed, t);
-}
 
 // ============================================================================
 // Graphics::MeshInstance::GetNodeToWorld(int, float) const -> Math::Transform
@@ -1575,17 +1539,6 @@ extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv,
 // caller's real slot, theirs writes a private 0x1c buffer, and all seven dwords
 // are compared. Never let the original write into live state.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED to
-// `Graphics::MeshInstance::GetNodeToWorld(int, float)` -- the INTERPOLATED
-// overload. Non-virtual, so the member returns by value and the door keeps
-// retail's `(this, ret, node, t)` order.
-extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, void* ret,
-                                                             int node, float t) {
-    *reinterpret_cast<Math::Transform*>(ret) =
-        reinterpret_cast<const ::Graphics::MeshInstance*>(self)
-            ->::Graphics::MeshInstance::GetNodeToWorld(node, t);
-    return ret;
-}
 
 // ============================================================================
 // ============================================================================
@@ -1806,43 +1759,6 @@ extern "C" void RtGraphics_MeshInstance_AddDrawItems(const void* self,
 // THE MIDDLE TWO CROSSED; this body reads them in slot order and inherits that
 // note without re-deriving it.
 // ============================================================================
-// ENDGAME B.3.5 block E: BODY MOVED to
-// `Graphics::EdgeMeshInstance::AddDrawItems`.
-extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const void* self,
-                                                         const void* scene,
-                                                         void* renderer) {
-    reinterpret_cast<const ::Graphics::EdgeMeshInstance*>(self)
-        ->::Graphics::EdgeMeshInstance::AddDrawItems(
-              *reinterpret_cast<const ::Graphics::Scene*>(scene),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer));
-}
-
-// ============================================================================
-// WAVE 28 LANE SLOTS — attendance, AND A CALLER FOR IT
-// ============================================================================
-// The integrator's standing finding for this wave: **every lane's `*Summary()`
-// is written and NOTHING CALLS IT**, so a zero can mean "never printed" rather
-// than "never called". This one is therefore called from
-// `RtGraphicsMeshVtableRegister`'s own module teardown path — no, it is not:
-// there is no teardown hook in this file, and inventing one would be tooling.
-//
-// So the honest arrangement is the narrow one: the four counters below are
-// EXPORTED for a caller to read, and **this lane states plainly that NOTHING IN
-// THE TREE CALLS THIS FUNCTION TODAY.** No number from it is quoted anywhere in
-// WAVE28_LANE_SLOTS.md, and none may be quoted by a later reader without first
-// checking that something invokes it.
-//
-// > **[ADDRESSEE — wiring these four counters to a printer]** the Wave 29
-// > verification lane, which the Wave 28 kickoff §4 says is the wave that pays
-// > the "registered and never executed" debt. `the diff oracle` already records
-// > liveness for both bodies; these four separate CALLS ENTERED from ITEMS
-// > QUEUED, which is the distinction that tells a silent-drop apart from a
-// > no-op (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
-// ============================================================================
-extern "C" void RtGraphicsAddDrawItemsCounters(unsigned long long* out) {
-    out[0] = g_addDrawItemsMesh;   out[1] = g_addDrawItemsMeshQ;
-    out[2] = g_addDrawItemsEdge;   out[3] = g_addDrawItemsEdgeQ;
-}
 
 // ============================================================================
 // HELD BACK — the four names in this lane's scope that are NOT registered.

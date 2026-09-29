@@ -242,16 +242,6 @@ Object::Base* ImageDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// The applier's door -- 0x180118570, NON-VIRTUAL (not a slot of the retired
-// table), so it stays: RCX = this, RDX = &caller's InternalPtr<ImageElement>.
-// ============================================================================
-extern "C" void RtUi_ImageDescription_ApplyToElement(const void* selfv, void** elemPtr) {
-    reinterpret_cast<const UI::ImageDescription*>(selfv)                // B.3.6 bridge
-        ->UI::ImageDescription::CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::ImageElement>*>(elemPtr));
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ImageDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ImageDescription@UI@@ (0x1801fac10): name "ImageDescription", parent

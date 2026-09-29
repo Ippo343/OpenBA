@@ -294,7 +294,8 @@ public:
     //   tree defines, and the `tools/gfxbody23_probe` it named does not exist.
     //   (2) `standalone/scene_watch.cpp` does NOT read `Attend()` or
     //   `g_animUpdStates` — that was wrong. Their one reader is the lane's own
-    //   `RtGraphicsWave23GfxbodySummary()` printf, and both counters stay.
+    //   `RtGraphicsWave23GfxbodySummary()` printf. (`g_animUpdCalls`, the
+    //   unreferenced door's entry count, went with the door in B.4 R0.)
     void Update(const System::Time& time, bool rootOnly);
 
     // ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z 0x1800fc190

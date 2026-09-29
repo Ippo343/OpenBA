@@ -501,14 +501,6 @@ static void AppendFilename(FilenameArray* out, const System::Filename* value) {
 // ?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z  0x1800ab180
 // See §3. DIFF: full oracle — read-only on both sides.
 // ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 5b: the three IO::FileSystem bodies in this
-// file move onto the class VERBATIM; the doors keep their names, their
-// signatures and every registration line, and delegate in one line each. No
-// qualified `IO::` call is needed: IO::FileSystem has no vtable at all. This
-// file is bound by B34_BRIEFS section D — nothing added, removed or reordered.
-bool RtIo_FileSystem_ExistsInPackfile(const void* fsVoid, const Filename* path) {
-    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->ExistsInPackfile(*path);
-}
 
 }  // namespace RtIO
 

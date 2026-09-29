@@ -740,135 +740,10 @@ void ContainerElement::SetOffsets(int32_t x, int32_t y) {
 // and placement-new the member's prvalue into the caller's slot (B5-12).
 // ============================================================================
 
-void RtUi_Element_AddChild(Element* self, void** child) {
-    self->UI::Element::AddChild(reinterpret_cast<Object::InternalPtr<Element>*>(child));
-}
-
-void* RtUi_Element_Child(Element* self, void** ret, int index) {
-    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
-        self->UI::Element::Child(index));
-    return ret;
-}
-
-int RtUi_Element_ChildCount(const Element* self) {
-    return self->UI::Element::ChildCount();
-}
-
 // (ENDGAME B.3.9 UI-D: the ComputeLayout / Draw slot doors are retired with
 // the minted table.)
 
-void* RtUi_Element_FindElement(Element* self, void** ret, const char* const* name) {
-    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
-        self->UI::Element::FindElement(
-            *reinterpret_cast<const System::String*>(name)));   // B.3.6 bridge
-    return ret;
-}
-
-void* RtUi_Element_FindElementType(Element* self, void** ret, uint32_t typeId) {
-    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
-        self->UI::Element::FindElementType(typeId));
-    return ret;
-}
-
-void RtUi_Element_GetAlignedPositionStatic(
-        int alignment, int x, int y, int containerW, int containerH,
-        int offsetX, int offsetY,
-        int leftPad, int rightPad, int topPad, int bottomPad,
-        int* outX, int* outY, int* outW, int* outH,
-        bool stretchX, bool stretchY) {
-    UI::Element::GetAlignedPosition(
-        static_cast<UI::ElementDescription::Alignment>(alignment),
-        x, y, containerW, containerH, offsetX, offsetY,
-        leftPad, rightPad, topPad, bottomPad,
-        *outX, *outY, *outW, *outH, stretchX, stretchY);
-}
-
-void RtUi_Element_GetAlignedPosition(Element* self, int a, int b, int c, int d,
-                                     int e, int f, int* outX, int* outY,
-                                     int* outW, int* outH, bool stretchX, bool stretchY) {
-    self->UI::Element::GetAlignedPosition(a, b, c, d, e, f,
-                                          *outX, *outY, *outW, *outH,
-                                          stretchX, stretchY);
-}
-
-void RtUi_Element_GetPaddedSize(Element* self, int* outW, int* outH) {
-    self->UI::Element::GetPaddedSize(*outW, *outH);
-}
-
-void* RtUi_Element_GetUserData(Element* self) {
-    return self->UI::Element::GetUserData();
-}
-
-void RtUi_Element_Hide(Element* self, bool hide) {
-    self->UI::Element::Hide(hide);
-}
-
-void RtUi_Element_SetElementId(Element* self, int id) {
-    self->UI::Element::SetElementId(id);
-}
-
-void RtUi_Element_SetFlagsOnOff(Element* self, uint32_t on, uint32_t off) {
-    self->UI::Element::SetFlagsOnOff(on, off);
-}
-
-void RtUi_Element_SetName(Element* self, void* const* str) {
-    self->UI::Element::SetName(*reinterpret_cast<const System::String*>(str));   // B.3.6 bridge
-}
-
-void RtUi_Element_SetNeedsSizeCalc(Element* self) {
-    self->UI::Element::SetNeedsSizeCalc();
-}
-
-void RtUi_Element_SetPadding(Element* self, int left, int right, int top, int bottom) {
-    self->UI::Element::SetPadding(left, right, top, bottom);
-}
-
-// `tip` arrives as a pointer to the caller's 16-byte temporary (MSVC passes a
-// 16-byte class by address); the member takes the value.
-void RtUi_Element_SetToolTip(Element* self, const UIString* tip) {
-    self->UI::Element::SetToolTip(*tip);
-}
-
-void RtUi_Element_SetToolTipString(Element* self, void* const* str) {
-    self->UI::Element::SetToolTipString(*reinterpret_cast<const System::String*>(str));   // B.3.6 bridge
-}
-
-void RtUi_Element_SetUserData(Element* self, void* userData) {
-    self->UI::Element::SetUserData(static_cast<Object::Base*>(userData));
-}
-
 // ---- ?SetOffsets@ContainerElement@UI@@QEAAXHH@Z  0x1800cc1e0 ---------------
-// A ContainerElement built by `UI::ContainerDescription::CreateInstance`
-// (0x1800ccb90) has three children: a ClipRegionElement and up to two
-// ScrollElements. This pushes the scroll offsets into them.
-//
-// *** THE FIRST WRITE IS UNGUARDED AND RETAIL MEANS IT. *** Retail does not
-// null-check `children[0]` before calling IsDerivedFrom on it, and it does not
-// null-check the RESULT before storing through it: when child 0 is not a
-// ClipRegionElement, `R9` is 0 and `MOV [R9+0xd0],EDX` writes to 0xd0. That is
-// exactly the fault standalone/main.cpp:518's crash handler recognises as
-// "IsDerivedFrom null-this at Runtime+0xC0390". CLAUDE.md's rule applies: the
-// deref is load-bearing (it asserts the invariant that a ContainerElement's
-// first child IS its clip region), and a guard would skip the behaviour rather
-// than restore it. Reproduced.
-//
-// Retail re-loads `_children._data` before EACH of the three child reads rather
-// than caching it. Reproduced, because the loads are in the shipped code.
-//
-// SHADOW ORACLE. Ours writes at most four locations, all of them inside objects
-// SOMEBODY ELSE owns, so a replay onto a scratch `this` would still walk the
-// real children and write to them a second time. The predicate below runs the
-// original against the real object AFTER ours and asserts that every location
-// ours wrote still holds the value ours put there. That catches a swapped x/y,
-// a wrong constant and a wrong target object; it does NOT catch a write theirs
-// makes at an offset ours never touched. Stated as a limitation in
-// WAVE7_LANE_A.md §7 rather than dressed up.
-//
-// ENDGAME B.3.6 fragment pass F2: the body MOVED into UI::ContainerElement::
-// SetOffsets (member section above); the door delegates QUALIFIED.
-void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
-    static_cast<UI::ContainerElement*>(self)->UI::ContainerElement::SetOffsets(x, y);
-}
 
 // ============================================================================
 // Registration
@@ -1047,7 +922,3 @@ void Element::AdjustUpperLeft(int32_t dx, int32_t dy) {
 // ?CreateNewObject@Element@UI@@SAPEAVBase@Object@@XZ  0x180035450
 // `xor eax,eax; ret`: the class is abstract, so its factory makes nothing.
 Object::Base* UI::Element::CreateNewObject() { return nullptr; }
-
-void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
-    self->UI::Element::AdjustUpperLeft(dx, dy);
-}

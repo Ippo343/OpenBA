@@ -37,15 +37,6 @@
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
 
-// application_win.cpp / platform_startup_win.cpp — already-ported siblings.
-// PlatformUpdate has ordinary C++ linkage (application_win.cpp:79); only
-// PlatformStartup is declared extern "C" at its definition
-// (platform_startup_win.cpp:317) — match each exactly or the linker cannot
-// find them.
-bool RtApp_PlatformUpdate(App* self);
-extern "C" bool RtApp_PlatformStartup(App* self);
-extern "C" void RtApp_PlatformShutdown(App* self);
-
 // ============================================================================
 // Application::Application::Update()    retail 0x18009f4f0   jmp -> PlatformUpdate
 // ?Update@Application@1@QEAA_NXZ
@@ -57,10 +48,6 @@ extern "C" void RtApp_PlatformShutdown(App* self);
 // ============================================================================
 bool Application::Application::Update() {
     return PlatformUpdate();
-}
-
-bool RtApp_Update(App* self) {
-    return self->Application::Update();
 }
 
 // ============================================================================
@@ -77,10 +64,6 @@ void Application::Application::Shutdown() {
     PlatformShutdown();
 }
 
-void RtApp_Shutdown(App* self) {
-    self->Application::Shutdown();
-}
-
 // ============================================================================
 // Application::Application::Startup()    retail 0x18009f510   jmp -> PlatformStartup
 // ?Startup@Application@1@QEAA_NXZ
@@ -90,8 +73,4 @@ void RtApp_Shutdown(App* self) {
 // ============================================================================
 bool Application::Application::Startup() {
     return PlatformStartup();
-}
-
-bool RtApp_Startup(App* self) {
-    return self->Application::Startup();
 }

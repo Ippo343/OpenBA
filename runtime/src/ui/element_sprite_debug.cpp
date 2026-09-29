@@ -71,21 +71,6 @@ void Debug_ImageElement_SetSprite(void* self, void* spriteData) {
 #endif
 }
 
-// Debug wrapper: log ImageElement::GetSprite result
-// retval points to a 0x10-byte buffer that receives the Sprite.
-// Uses hidden return pointer ABI: RCX=this, RDX=retval.
-void Debug_ImageElement_GetSprite(void* self, void* retval) {
-#ifdef _DEBUG
-    printf("[ImageElement::GetSprite] this=%p\n", self);
-#endif
-
-    new (retval) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(self)->GetSprite());  // B.3.6 bridge
-
-#ifdef _DEBUG
-    PrintSpriteFromPtr("  RESULT", reinterpret_cast<const uint8_t*>(retval));
-#endif
-}
-
 // ============================================================
 // LabelElement debug wrappers
 // ============================================================
@@ -115,20 +100,5 @@ void Debug_LabelElement_SetSprite(void* self, void* spriteData) {
                (flagsAfter & 0x8000000) ? "SET" : "CLEARED");
     }
     printf("\n");
-#endif
-}
-
-// Debug wrapper: log LabelElement::GetSprite result
-// ENDGAME B.3.6 closing pass: the real member; the old "door unresolved -> read
-// the struct" fallback arm described a state that cannot occur and is gone.
-void Debug_LabelElement_GetSprite(void* self, void* retval) {
-#ifdef _DEBUG
-    printf("[LabelElement::GetSprite] this=%p\n", self);
-#endif
-
-    new (retval) UI::Sprite(reinterpret_cast<const UI::LabelElement*>(self)->GetSprite());  // B.3.6 bridge
-
-#ifdef _DEBUG
-    PrintSpriteFromPtr("  RESULT", reinterpret_cast<const uint8_t*>(retval));
 #endif
 }
