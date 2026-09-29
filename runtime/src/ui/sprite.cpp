@@ -507,7 +507,7 @@ void SpriteSheet::Set(int32_t p1, int32_t p2, const System::String& p3,
 
     // The three scalars, in retail's store order: +0x4C, then +0x50, then +0x48.
     m_field4C = p2;
-    m_field50 = static_cast<uint8_t>(p5);
+    m_field50 = p5;
     m_field48 = p1;
 }
 
