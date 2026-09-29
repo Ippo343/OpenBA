@@ -17,7 +17,9 @@
 #include <cstdint>
 
 // ---- build_actions.cpp
-extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t priority, int64_t* buildingIBPptr, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
+class CitizenComponent;
+class ComponentEntity;
+extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, uint32_t priority, ComponentEntity** building, float* position, uint32_t taskParam, uint32_t altAnim);  // 0x1400c0690
 
 // ---- buildstructure.cpp
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim);  // 0x1400e59c0 (local extern in buildcomponent_state8.cpp, destroycomponent_states.cpp)

@@ -493,7 +493,7 @@ int BuildStructure::Execute(void* citizenPtrArg, void* /*context*/) {
                     BuildStructure_SetupBuildActions(
                         &citizenEntityVal,
                         field_20,
-                        reinterpret_cast<int64_t*>(&field_10),
+                        &field_10,
                         bestPos,
                         chosenIndex,
                         (uint8_t)field_48
