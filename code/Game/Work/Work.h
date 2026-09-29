@@ -42,11 +42,29 @@
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 #include "system/Value.h"      // System::Time (+0x30 / +0x38; trivial, 8 bytes)
+#include "collection/Collection.h"   // Collection::Set<T>::Node (the leaves' worker sets)
 
 class ComponentEntity;   // B4 WORK-a: field_10 typed (H4)
 class WorkComponent;     // B4 WORK-c: field_18 typed (H4)
 class CitizenComponent;
 class CompleteTask;
+
+// The AVL sets the Work leaves keep their workers in are Collection::Set
+// instantiations the exe inlines (insert / erase / serialize: work_base_bst.cpp
+// and work_base_cellbst.cpp). Two element shapes:
+//   the citizens working the job, keyed on the citizen (0x28-byte node; 0x1400296b0
+//   validates each key against CitizenComponent);
+using WorkCitizenSetNode = Collection::Set<CitizenComponent*>::Node;
+//   the map cell -> citizen of the area works (0x30-byte node, int key; the insert
+//   0x140029a40 copies the 0x10-byte element).
+struct WorkCellAssignment {
+    int32_t           cell;      // +0x00 the key: the index into the work's cell list
+    uint32_t          _pad04;    // +0x04 copied with the element, never read
+    CitizenComponent* citizen;   // +0x08 InternalPtr<CitizenComponent>
+};
+using WorkCellSetNode = Collection::Set<WorkCellAssignment>::Node;
+static_assert(sizeof(WorkCitizenSetNode) == 0x28, "citizen set node: MemAlloc(0x28) in 0x140021b40");
+static_assert(sizeof(WorkCellSetNode) == 0x30, "cell set node: MemAlloc(0x30)");
 
 
 class Work : public Object::Internal {

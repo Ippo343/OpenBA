@@ -36,6 +36,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 D5: ComponentEntity::TypeId()
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Component/CropFieldComponent.h"
+#include "Component/StateMachineComponent.h"
 
 // 0x140003ea0 — entity-resolve behind an action IBP: PlayerPath_FindComponent_3ea0
 // (Player/exe_bodies.h), called by name (B3R).
@@ -49,26 +51,24 @@
 // ============================================================
 // 0x14011b390 — PlantArea_helper_b390
 // ============================================================
-// Resolves the entity behind the action IBP at self+0x10 (FUN_140003ea0), reads its
-// "consume" state byte (+0x52, or +0x50 if +0x52 has its high bit set). If state == 0x09
-// AND the work-list count at self+0x60 > 0, walk the 0x20-stride array at self+0x58 and,
-// for any entry whose +0x04 int == 0, set it to 2 (mark the plant slot pending).
-// ABI: void fn(longlong self).
-// Closure: 0x140003ea0 (reg) + InternalBasePtr CheckPtr (engine). SAFE.
-void WorkLeaf_PlantArea_b390(uintptr_t self) {
-    uintptr_t ent = 0;
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
+// RCX is the field's CropFieldComponent (its +0x10 entity, +0x58 slot grid; the
+// address sits among CropFieldComponent's bodies): a member of that class, whose
+// header is COMP-c's, so it stays a free function taking the typed component.
+// Reads the entity's StateMachineComponent state byte (the pending state, or the
+// input when none is pending). If state == 0x09 AND the field has slots, every slot
+// whose state is 0 (empty) becomes 2 (mark the plant slot pending).
+// Closure: 0x140003ea0 (FindComponent<StateMachineComponent>). SAFE.
+void WorkLeaf_PlantArea_b390(CropFieldComponent* crop) {
+    StateMachineComponent* machine = crop->_entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
 
-    char state = *reinterpret_cast<char*>(ent + 0x52);
-    if (state < 0) state = *reinterpret_cast<char*>(ent + 0x50);
+    char state = machine->stateMachine.pendingState;
+    if (state < 0) state = machine->stateMachine.currentInput;
 
-    int count = *reinterpret_cast<int*>(self + 0x60);
+    int count = crop->slots.count;
     if (state == '\t' && count > 0) {
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(self + 0x58);
-        int64_t off = 0;
-        for (int i = 0; i < count; i++, off += 0x20) {
-            int* field = reinterpret_cast<int*>(arr + 4 + off);
-            if (*field == 0) *field = 2;
+        CropSlot* slots = crop->slots.data;
+        for (int i = 0; i < count; i++) {
+            if (slots[i].state == 0) slots[i].state = 2;
         }
     }
 }
