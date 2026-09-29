@@ -106,8 +106,8 @@
 // userData) shape MainLoop calls — and what ResolveExport returned for them,
 // since both are always registered).
 extern "C" void  RtUi_UserInterface_Dtor(UI::UserInterface* self);
-extern "C" void  RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui);
-extern "C" void  RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui);
+extern "C" void  RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, void* ui);
+extern "C" void  RtUi_UserInterface_DrawStandAloneUI(Video::Context* videoContext, void* ui);
 
 namespace {
 

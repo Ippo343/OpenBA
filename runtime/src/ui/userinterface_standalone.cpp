@@ -145,8 +145,8 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     }
 }
 
-extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui) {
-    UI::UserInterface::UpdateStandAloneUI(*static_cast<const System::Time*>(time), ui);
+extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, void* ui) {
+    UI::UserInterface::UpdateStandAloneUI(*time, ui);
 }
 
 // ============================================================================
@@ -175,8 +175,8 @@ void UI::UserInterface::DrawStandAloneUI(Video::Context& context, void* ui) {
     static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP
 }
 
-extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui) {
-    UI::UserInterface::DrawStandAloneUI(*static_cast<Video::Context*>(videoContext), ui);
+extern "C" void RtUi_UserInterface_DrawStandAloneUI(Video::Context* videoContext, void* ui) {
+    UI::UserInterface::DrawStandAloneUI(*videoContext, ui);
 }
 
 // ============================================================================
