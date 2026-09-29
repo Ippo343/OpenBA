@@ -134,6 +134,17 @@ public:
     // never read (0x1400f7100 stores it, 0x1400f71a4 overwrites the slot).
     bool ValidateTask(void* unusedRdx, CitizenComponent** citizen, CompleteTask** out);
 
+    // 0x1400e3db0: the auto-pickup check the gatherer leaves run first in Execute:
+    // when the entity's AutoPickupComponent is enabled, offer the citizen each work id
+    // it lists (the scheduler's TryAssignWorkplace 0x1400f8620), dropping ids the
+    // scheduler no longer knows. Returns 2 when one took the citizen, else 0.
+    int TryAutoPickup(void* citizenRef);
+
+    // 0x1400f6ef0: the build-progress / time-budget step (reads and updates +0x30,
+    // +0x38 and +0x40). The low byte of the result is "keep going"; the tree's callers
+    // read the whole register, so the upper bytes are kept as retail leaves them.
+    uint64_t StepProgress(CitizenComponent** citizen, uint32_t cellA, uint32_t cellB, const System::Time* now);
+
 protected:
     // The default base init every retail leaf ctor inlines after `??0Internal`
     // and the 0x140161a80 stamp: +0x10/+0x18 = 0, +0x20 = -1, +0x24 = 0,

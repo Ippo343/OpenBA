@@ -106,7 +106,7 @@ void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer);  // 0x140029
 // ---- work_base_grid.cpp
 int WorkGrid_FindCell_9ccf0(int* mapGrid, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
 uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int cellId, char flag);  // 0x1400f8620
-int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef);  // 0x1400e3db0
+int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef);  // 0x1400e3db0 B4 FORWARD: 6 outside callers (Work::TryAutoPickup)
 
 // ---- work_base_impl2.cpp
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
@@ -127,7 +127,7 @@ uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t d
 // ---- work_base_walkpos.cpp
 bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2, float* param_3, float* param_4, int* param_5);  // 0x140122be0
 uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2, float* param_3, float* param_4, int* param_5);  // 0x140122b00
-uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP, uint32_t param_3, uint32_t param_4, void* param_5Time);  // 0x1400f6ef0
+uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP, uint32_t param_3, uint32_t param_4, void* param_5Time);  // 0x1400f6ef0 B4 FORWARD: 5 outside callers (Work::StepProgress)
 
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;

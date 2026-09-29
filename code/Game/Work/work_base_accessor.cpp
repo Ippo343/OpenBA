@@ -23,6 +23,8 @@
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
 #include "Component/AutoPickupComponent.h"      // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
+#include "Component/ComponentDescription.h"
+#include "Component/Description.h"
 
 // ============================================================
 // FindComponent instances: ComponentEntity::FindComponent<T>() (Entity/ComponentEntity.h).
@@ -59,20 +61,23 @@ void* WorkAcc_FindComponent_22520(uintptr_t entity, void* retIBP) {
 // NO InternalBasePtr_CheckPtr calls; the match is written straight into *retOut
 // (a plain undefined8* slot, not an IBP ctor). Type-ID global DWORD_1401c7cb8.
 // Caller signature: void* fn(uintptr_t compList, void* retOut)
+// RCX is a ComponentDescription: the list is its sub-descriptions (+0x28 / +0x30).
+// LEFT: the six outside callers hand it as an integer and the out slot as void*.
 void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
+    ComponentDescription* desc = reinterpret_cast<ComponentDescription*>(compList);
     const uint32_t typeId = RawMaterialDescription::TypeId();  // 0x1401c7cb8
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(compList + 0x30);
-    uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(compList + 0x28);
+    RawMaterialDescription* found = nullptr;
+    int n = desc->_subDescCount;
+    Description** arrBase = desc->_subDescs;
     for (int i = 0; i < n; i++) {
-        void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
+        Description* comp = arrBase[i];
+        uint32_t t = comp->Type();
         if (t == typeId) {
-            void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? c : nullptr;
+            Description* c = arrBase[i];
+            found = (Object::IsDerivedFromNullSafe(c, typeId)) ? static_cast<RawMaterialDescription*>(c) : nullptr;
             break;
         }
     }
-    *reinterpret_cast<void**>(retOut) = found;
+    *reinterpret_cast<RawMaterialDescription**>(retOut) = found;
     return retOut;
 }

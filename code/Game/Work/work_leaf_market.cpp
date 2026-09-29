@@ -27,6 +27,7 @@
 // Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 #include <cstdint>
 
 // ============================================================
@@ -40,14 +41,29 @@
 // (which fetches the singleton internally) — matches the exe's System::MemoryAllocator
 // ::MemFree, called via dispatch slot [0x140152b68] in the original.
 // Verified offset-by-offset against disassembly @0x14002af40.
+// The node is a Collection::Set node over MarketWork's demand record (0x18 bytes:
+// a key, then an inner Collection::Array {data, count, capacity}). LEFT: the
+// caller (MarketWork, WORK-b) hands the node as void*.
+namespace {
+struct MarketDemand {
+    void*    key;        // +0x00
+    void*    data;       // +0x08 the inner array's data (freed here)
+    int32_t  count;      // +0x10
+    int32_t  capacity;   // +0x14
+};
+using MarketDemandNode = Collection::Set<MarketDemand>::Node;
+static_assert(sizeof(MarketDemandNode) == 0x38, "left +0x20, right +0x28");
+}  // namespace
+
 void WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node) {
     (void)ctx;
     if (node == nullptr) return;
-    uintptr_t n = reinterpret_cast<uintptr_t>(node);
-    WorkLeaf_MarketTreeCleanup_2af40(ctx, *reinterpret_cast<void**>(n + 0x20)); // left
-    WorkLeaf_MarketTreeCleanup_2af40(ctx, *reinterpret_cast<void**>(n + 0x28)); // right
-    System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(n + 0x08)); // data buffer
-    *reinterpret_cast<void**>(n + 0x08) = nullptr;
-    *reinterpret_cast<void**>(n + 0x10) = nullptr;
+    MarketDemandNode* n = reinterpret_cast<MarketDemandNode*>(node);
+    WorkLeaf_MarketTreeCleanup_2af40(ctx, n->left);  // left
+    WorkLeaf_MarketTreeCleanup_2af40(ctx, n->right); // right
+    System::MemoryAllocator::MemFree(n->element.data); // data buffer
+    n->element.data = nullptr;
+    n->element.count = 0;      // retail: one qword store over count and capacity
+    n->element.capacity = 0;
     System::MemoryAllocator::MemFree(node); // node
 }
