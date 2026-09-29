@@ -26,6 +26,8 @@
 #include "Work/Work.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+
 
 class ClearArea final : public Work {
     DECLARE_EXE_TYPE(ClearArea)
@@ -55,7 +57,8 @@ public:
     void*    field_58;           // +0x58: BST root — cell indices to clear (int tree nodes)
     int32_t  field_60;           // +0x60: cell tree count
     uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: InternalBasePtr — map component entity
+    ComponentDescription* field_68; // +0x68: ExternalPtr<ComponentDescription> filter (Persist 0x1400e6740
+                                    //        serializes it by the ExternalPtr body; Execute compares entity +0x28)
     uint8_t  field_70;           // +0x70: bool — clear trees/resources
     uint8_t  field_71;           // +0x71: bool — clear ground (version >= 1)
     uint8_t  field_72;           // +0x72: bool — clear buildings (version >= 1)
