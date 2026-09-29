@@ -57,6 +57,7 @@ class WeatherSimulation;  // Game/WeatherSimulation.h (B4 GAME-a)
 class WorkScheduler;      // Game/WorkScheduler.h (B4 GAME-a)
 class EventLog;           // Game/EventLog.h (B4 GAME-a)
 class MusicPlayer;        // Game/MusicPlayer.h (B4 GAME-a)
+class Minimap;            // Game/Minimap.h (B4 GAME-a)
 
 class GameUpdateLoop final : public Engine::UpdateLoop {
 public:
@@ -171,7 +172,9 @@ public:
     WeatherSimulation* m_weather;   // +0x130 the weather simulation (0x78 bytes; not the Weather resource)
     EventLog* m_eventNotifier;      // +0x138 the event log (0x28 bytes)
     Save::SaveLoad* m_saveLoad;     // +0x140 MemAlloc(0x90) in Load
-    void*    m_imageCapture;        // +0x148 ImageCapture* (0x38 bytes)
+    // +0x148: the minimap image (0x38 bytes), not an image capture: the member
+    //   keeps the tree's name until the coordinator renames it.
+    Minimap* m_imageCapture;        // +0x148
 
     // Scenario/achievement
     Achievement::AchievementInstance* m_scenarioInstance; // +0x150 InternalBasePtr<AchievementInstance> (ctor: *p3)

@@ -45,6 +45,7 @@
 #include "WorkScheduler.h"           // m_tutorial's class (B.4 GAME-a)
 #include "EventLog.h"                // m_eventNotifier's class (B.4 GAME-a)
 #include "MusicPlayer.h"             // m_musicPlayer's class (B.4 GAME-a)
+#include "Minimap.h"                 // m_imageCapture's class (B.4 GAME-a)
 #include <type_traits>
 #include <new>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
@@ -569,6 +570,8 @@ static_assert(std::is_trivially_default_constructible<EventLog>::value,
               "placement new of EventLog runs no code");
 static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
+static_assert(std::is_trivially_default_constructible<Minimap>::value,
+              "placement new of Minimap runs no code");
 static void EntityList_Construct(EntityList* list) {
     memset(list, 0, sizeof(EntityList));      // zeroes header + the 5x16 array @+0x18 + two {ptr,count} @+0x68/+0x78
     list->processCount[0] = 0x32;             // +0xA8 50
@@ -1178,8 +1181,9 @@ void GameUpdateLoop::Load() {
     // Step 26 — KeyState/map-input struct (+0x148, 0x38) zero-init.
     {
         void* mem = AllocSub(0x38, 4);
-        if (mem) memset(mem, 0, 0x38);
-        m_imageCapture = mem;
+        Minimap* minimap = mem ? new (mem) Minimap : nullptr;
+        if (minimap) memset(minimap, 0, sizeof(Minimap));
+        m_imageCapture = minimap;
     }
 
     // Step 27 — MusicTracks struct (+0x80, 0x18): {idx=-1, res=null (Find deferred), 0}.
@@ -1361,13 +1365,13 @@ void GameUpdateLoop::Load() {
 
             // Gameplay tile-grid arrays at the map struct (+0x148): store dim,
             // allocate two dim*dim arrays (+0x18/+0x28), zero the +0x28 one.
-            void* mapStruct = m_imageCapture;
+            Minimap* mapStruct = m_imageCapture;
             if (mapStruct && dim > 0) {
-                *(uint32_t*)((uint8_t*)mapStruct + 4) = dim;
+                mapStruct->size = (int32_t)dim;
                 int n = (int)(dim * dim);
-                Reimpl_Array_Resize_Stride04((uint8_t*)mapStruct + 0x28, n);
-                Reimpl_Array_Resize_Stride04((uint8_t*)mapStruct + 0x18, n);
-                void* arr = *(void**)((uint8_t*)mapStruct + 0x28);
+                Reimpl_Array_Resize_Stride04(&mapStruct->overlayPixels, n);
+                Reimpl_Array_Resize_Stride04(&mapStruct->terrainPixels, n);
+                uint32_t* arr = mapStruct->overlayPixels;
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }
 

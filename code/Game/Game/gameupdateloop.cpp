@@ -43,6 +43,7 @@
 #include "object/TypeInfo.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Minimap.h"   // m_imageCapture's class (B.4 GAME-a)
 #include "Game/EventLog.h"   // m_eventNotifier's class (B.4 GAME-a)
 #include "Game/WorkScheduler.h"   // m_tutorial's class (B.4 GAME-a)
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
@@ -1240,18 +1241,18 @@ post_simulation:
 
     // Step 16: Image capture check
     {
-        uint8_t* imageCapture = (uint8_t*)m_imageCapture;
-        if (*(int64_t*)(imageCapture + 8) != 0 && *imageCapture != 0) {
+        Minimap* imageCapture = m_imageCapture;
+        if (imageCapture->terrainImage != nullptr && imageCapture->overlayDirty != 0) {
             TRACE("[GameUpdateLoop::Update] processing image capture...\n");
             ::Video::Device::_singleton
                 ->Lock();   // B.3.5 bridge
-            reinterpret_cast<Video::ImageBuffer*>(*(void**)(imageCapture + 0x10))
-                ->CopyToTexture(*(void**)(imageCapture + 0x28),
-                                *(int32_t*)(imageCapture + 4),
-                                *(int32_t*)(imageCapture + 4));   // B.3.5 bridge
+            imageCapture->overlayImage
+                ->CopyToTexture(imageCapture->overlayPixels,
+                                imageCapture->size,
+                                imageCapture->size);
             ::Video::Device::_singleton
                 ->Unlock();   // B.3.5 bridge
-            *imageCapture = 0;
+            imageCapture->overlayDirty = 0;
             TRACE("[GameUpdateLoop::Update] image capture done\n");
         }
     }
@@ -1362,14 +1363,14 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 3: Image capture terrain update check
     TRACE("[GameUpdateLoop::Draw] checking image capture terrain...\n");
     {
-        uint8_t* imageCapture = (uint8_t*)m_imageCapture;
+        Minimap* imageCapture = m_imageCapture;
         void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         // ImageCapture::DrawCheck (exe FUN_1400a5140) is our clean port
         // Minimap_PaintTerrain. It fires
         // once — when the minimap's terrain GPU buffer (imageCapture+0x08) is still
         // null — to render the terrain top-down into the minimap pixel arrays.
-        if (*(int64_t*)(imageCapture + 8) == 0) {
+        if (imageCapture->terrainImage == nullptr) {
             // Remove and re-add global objects for terrain update
             void* gameWorld = GameUpdateLoop::_singleton;
             void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
