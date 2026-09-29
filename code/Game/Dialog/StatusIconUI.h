@@ -18,6 +18,8 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 
+namespace UI { class Element; }
+
 class StatusIconUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(StatusIconUI)
 
@@ -34,10 +36,19 @@ public:
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
     void OnUpdate(const System::Time& time) override;
 
-    // ---- fields (the Panels.h POD's names, kept for the bodies) --------
-    uint64_t data30 = 0;           // +0x30: zeroed
-    uint64_t data38 = 0;           // +0x38: zeroed
+    // ---- fields ----------------------------------------------------------
+    // +0x30 the "icons" group's children: a Collection::Array<InternalPtr<UI::Element>>
+    // (OnCreated 0x14007b270 SetSize 0x1400032e0 + one Child() per slot; the dtor
+    // 0x140014370 MemFrees the data). B.4 H5: kept as raw storage of the Array's
+    // three words -- declaring the Array would make its dtor run, which the
+    // tree's never did (the leak above).
+    UI::Element** icons = nullptr;   // +0x30 Array data
+    int32_t iconCount = 0;           // +0x38 Array count
+    int32_t iconCapacity = 0;        // +0x3C Array capacity
 };
 
+static_assert(offsetof(StatusIconUI, icons) == 0x30, "StatusIconUI::icons @ +0x30 (0x14007b270)");
+static_assert(offsetof(StatusIconUI, iconCount) == 0x38, "StatusIconUI::iconCount @ +0x38 (0x14007b0a0)");
+static_assert(offsetof(StatusIconUI, iconCapacity) == 0x3C, "StatusIconUI::iconCapacity @ +0x3C");
 static_assert(sizeof(StatusIconUI) == 0x40, "StatusIconUI is 0x40 (create 0x140014180 MemAlloc(0x40))");
 static_assert(alignof(StatusIconUI) == 8, "qword-aligned (the vptr)");
