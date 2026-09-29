@@ -47,27 +47,15 @@
 #include <cstdint>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../../types/ui/Cursor.h"
 #include "../../types/object/External.h"
 #include <new>
 
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
+// Serialize builds the real IO::Serializer (??0Serializer 0x1800b9960 /
+// ??1Serializer 0x1800b99b0), which retail inlines.
 
 }  // namespace
 
@@ -121,25 +109,20 @@ Object::Base* Cursor::CreateInPlaceObject(void* place) {
 // the fields sit in. Sequence, not layout, is what a stream records, and this
 // is the one place the difference is visible.
 bool Cursor::Serialize(void* streamv) {
-    Stream*  stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);  // LEFT: the External slot takes void* (External.h, R-IO)
 
-    Serializer ser = { stream, nullptr };                 // [RSP+0x28], [RSP+0x30]
+    // [RSP+0x28], [RSP+0x30]; 1800cd130..1800cd14d the factory by _direction.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* rw = ser._readerWriter;
 
-    void*  factory = stream->encodingFactory;             // 1800cd130
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;  // 1800cd13a CMP / JNZ
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int zero);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                // 1800cd14d
-
+    // LEFT: the ExternalPtr<T>::Serialize thunk takes RtObject::External** and
+    // the rt::io::Serializer POD (External.h, block R-IO).
     RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800cd15b
 
     rw->SerializeInt(_hotSpotX, nullptr);
     rw->SerializeInt(_hotSpotY, nullptr);
 
-    if (rw != nullptr) {                                  // 1800cd190
-        delete rw;
-    }
+    // 1800cd190: ~Serializer, `if (rw) delete rw`.
     return true;                                          // 1800cd19f MOV AL,1
 }
 

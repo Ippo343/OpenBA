@@ -33,6 +33,8 @@
 // ui_factory_wave28.cpp), so this file adds none.
 // ============================================================================
 #include <new>
+
+#include "../../types/io/Stream.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -53,26 +55,11 @@
 
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 void ReleaseStringField(char** field) {
     char* s = *field;
     if (s == nullptr) return;
-    if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
+    if (--RtSystem::StringRefCount(s) == 0) {
         *field = s - 8;
         System::MemoryAllocator::MemFree(*field);
     } else {
@@ -104,32 +91,26 @@ void ScrollDescription::Destruct() { this->~ScrollDescription(); }
 
 // ?Serialize@ScrollDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x18011a940
 bool ScrollDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);
 
     UI::ElementDescription::Serialize(stream);                 // 18011a95a (qualified)
 
-    Serializer ser = { stream, nullptr };
-
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 18011a98a
+    // The inlined ??0Serializer (0x1800b9960): CreateReader / CreateWriter
+    // of the stream's encoding, version 0.
+    IO::Serializer ser(*stream, 0);
+    IO::ReaderWriter* const rw = ser._readerWriter;
 
     RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));   // 18011a998
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
         reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(&ser);
 
-    rw->SerializeBool(reinterpret_cast<bool&>(_vertical), nullptr);
+    rw->SerializeBool(_vertical, nullptr);
     rw->SerializeInt(_inset, nullptr);
     // BOTH of the last two are kScalarUInt (vt+0x98), not kScalarInt.
     rw->SerializeUInt(_barColor, nullptr);
     rw->SerializeUInt(_unknownC4, nullptr);
 
-    if (rw != nullptr) {                                       // 18011aa96
-        delete rw;
-    }
+    // The inlined ~Serializer deletes the ReaderWriter (18011aa96).
     return true;
 }
 
@@ -151,14 +132,13 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* /*dialog — never read*/) const {
     void* raw = System::MemoryAllocator::MemAlloc(0x178, 8);  // 18011ab00 (inlined)
 
-    void* obj = raw;
+    ScrollElement* elem = nullptr;
     if (raw != nullptr)                                        // 18011ab2a
-        obj = ::new (raw) ScrollElement();                     // 18011ab2f ??0 (out of line)
-    ScrollElement* elem = reinterpret_cast<ScrollElement*>(obj);   // B.3.6 bridge
+        elem = ::new (raw) ScrollElement();                    // 18011ab2f ??0 (out of line)
 
-    void* slot = elem;                                         // 18011ab37
+    Object::InternalPtr<Element> slot(elem);                                         // 18011ab37
     UI::ElementDescription::CreateInstance(                   // 18011ab42
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     ::Sprite* const sprites[9] = {
         &elem->_trackStart, &elem->_trackMiddle, &elem->_trackEnd,
@@ -167,9 +147,9 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
 
     uint64_t idxSlot;                                          // [RBP-0x10]
     for (int i = 0; i < 9; ++i) {
-        void* sheet = _spriteSheet;                            // RE-READ each time
+        SpriteSheet* sheet = _spriteSheet;                            // RE-READ each time
         if (sheet != nullptr) {
-            const int32_t idx = static_cast<const SpriteSheet*>(sheet)   // B.3.x bridge
+            const int32_t idx = sheet
                 ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteNames[i]));
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // DWORD store
         } else {
@@ -185,7 +165,7 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
     elem->_barColor   = _barColor;                             // 18011ad46
     elem->_unknown158 = _unknownC4;                            // 18011ad52
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 18011ad58
+    *ret = Object::InternalPtr<Element>(elem);                 // 18011ad58
     return ret;
 }
 

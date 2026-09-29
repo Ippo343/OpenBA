@@ -52,25 +52,14 @@
 #include "../../types/ui/NumberDescription.h"
 #include "../../types/ui/NumberElement.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
+#include "description_common.h"
 #include "../../types/system/MemoryAllocator.h"
 
 namespace {
 
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;
-    int32_t _pad0c;
-    void*   encodingFactory;
-};
-struct Serializer {
-    Stream* stream;
-    void*   readerWriter;
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
+// (B4: the file-local IO::Stream / IO::Serializer shadows are gone -- H10;
+// the Serialize body builds a real IO::Serializer.)
 
 }  // namespace
 
@@ -103,29 +92,22 @@ void NumberDescription::Destruct() { this->~NumberDescription(); }
 // FOUR DIFFERENT SCALAR SLOTS IN FOUR CONSECUTIVE CALLS. This is the body that
 // says what the four fields' types are; nothing else in the class does.
 bool NumberDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     UI::ElementDescription::Serialize(stream);                 // 180118e4a
 
-    Serializer ser = { stream, nullptr };
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
 
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
-    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 180118e7a
+    IO::ReaderWriter* rw = ser._readerWriter;                                     // 180118e7a
 
-    RtObject_ExternalPtrSerialize_Font(reinterpret_cast<RtObject::External**>(&_font), reinterpret_cast<rt::io::Serializer*>(&ser));          // 180118e88
+    RtObject_ExternalPtrSerialize_Font(rtdesc::ExtField(&_font), rtdesc::IoSer(&ser));          // 180118e88
 
     rw->SerializeUInt(_u70, nullptr);
     rw->SerializeInt(_i74, nullptr);
     rw->SerializeFloat(_f78, nullptr);
     rw->SerializeBool(reinterpret_cast<bool&>(_b7c), nullptr);
 
-    if (rw != nullptr) {                                       // 180118ee7
-        delete rw;
-    }
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                                       // 180118ee7
     return true;
 }
 
@@ -148,11 +130,11 @@ Object::InternalPtr<Element>* NumberDescription::CreateInstance(
     if (raw != nullptr)                                        // 180118f7c
         elem = ::new (raw) NumberElement();                    // 180118f81 ??0NumberElement
 
-    void* slot = elem;                                         // 180118f8d
+    Object::InternalPtr<Element> slot(elem);                                         // 180118f8d
     // The non-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0) — a QUALIFIED member call since fragment pass F2.
     UI::ElementDescription::CreateInstance(                   // 180118f9a
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     elem->_font = _font;                                       // 180118fa3
     elem->_mode = static_cast<int32_t>(_u70);                  // 180118fad
@@ -160,7 +142,7 @@ Object::InternalPtr<Element>* NumberDescription::CreateInstance(
     __builtin_memcpy(&elem->_floatValue, &_f78, 4);            // 180118fbf  4 raw bytes
     elem->_showSign = _b7c;                                    // 180118fc9
 
-    *reinterpret_cast<void**>(ret) = elem;                     // 180118fcf
+    *ret = Object::InternalPtr<Element>(elem);                     // 180118fcf
     return ret;
 }
 

@@ -181,20 +181,14 @@
 #include "../../types/io/Persistence.h"
 #include "../../types/io/Registry.h"
 #include "../../types/system/String.h"
-#include "../system/string.h"   // RtString_ReleaseInline, RtSystem::String
-#include "../system/pod_bridge.h"
 #include "../collection/avl_trees.h"          // rtavl::StringMapInsert
 #include "../../types/collection/Collection.h"   // rtsetclear::Clear
 #include "../../types/system/Configuration.h"    // RtSystem_ConfigMap_Find
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/WideString.h"
 
-using RtIo::Persistence;
-using RtIo::Registry;
 using RtIo::SettingsMapNode;
-using RtSystem::String;
 using RtSystem::StringRefCount;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
@@ -214,6 +208,11 @@ constexpr size_t kValueChars = kValueBytes / sizeof(wchar_t);
 constexpr REGSAM kSam = KEY_ALL_ACCESS;
 static_assert(kSam == 0xF003F, "retail passes 0xF003F as samDesired");
 
+// `IO::Registry::_key` is spelled `HKEY__*` against a forward declaration
+// (Registry.h); this is the check that it is the same type <windows.h> calls
+// HKEY, so every Reg* call below takes it with no conversion.
+static_assert(std::is_same<HKEY, HKEY__*>::value, "Registry.h's HKEY__* is <windows.h>'s HKEY");
+
 // ---------------------------------------------------------------------------
 // Dependencies
 // ---------------------------------------------------------------------------
@@ -225,104 +224,41 @@ static_assert(kSam == 0xF003F, "retail passes 0xF003F as samDesired");
 //   System::WideString ctor / Set / AsUTF8, System::String::Set / Format,
 //   IO::Registry's ctor, System::MemoryAllocator::MemAlloc / MemFree.
 
-// System::WideString is one pointer with String's exact allocation header —
-// every release of one in ReadSettings is `DEC [p-4] / SUB p,8 / MemFree`, byte
-// for byte the String idiom (String.h). `filesystem_win.cpp` already models it
-// this way and this file follows rather than inventing a second spelling.
-using WideStringHandle = String;
-
 // ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`
-// members, deliberately, and for the SAME reason persistence.cpp's
-// CallMapFind/CallMapInsert are not: `Persistence` (+0x00/+0x08/+0x0C) IS a
-// real `Collection::Set<SettingsMapNode>` header and 0x18000f7d0 IS
-// `Set<T>::Clear()` (set_clear.cpp's own banner names it), but `Clear()`
-// destroys each element with `n->element.~T()` and `SettingsMapNode`'s two
-// fields are the old `RtSystem::String` POD (trivially destructible) rather
-// than the real `System::String` class — so a generic `Clear()` would leak
-// both refcounts instead of releasing them. Retyping `SettingsMapNode` to fix
-// that is shared with persistence_startup.cpp / closure_batch2b_win.cpp /
-// engine/singleton_ctors.cpp, outside this batch. The members that would be
-// needed: `Collection::Set<SettingsMapNode, AVLCompare, DefaultAllocator,
-// System::String>::Clear()` here and `::Insert(element)` for MapInsert below.
+// members: `Persistence` (+0x00/+0x08/+0x0C) IS a `Set<Pair<String,String>>`
+// header and 0x18000f7d0 IS `Set<T>::Clear()` (set_clear.cpp's own banner
+// names it), but `IO::Persistence` holds that header as three loose fields
+// (it has no constructor -- engine/singleton_ctors.cpp builds it), so the
+// collection bodies are handed `this` as the untyped Set they are.
 void MapClear(void* self) {
-    rtsetclear::Clear(static_cast<rtsetavl::Set*>(self));            // 0x18000f7d0
+    rtsetclear::Clear(static_cast<rtsetavl::Set*>(self));            // 0x18000f7d0  LEFT: see above
 }
 
-void MapInsert(void* map, void** outNode, const String* key, const String* value) {
-    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  B.3.x bridge
-                           reinterpret_cast<rtsetavl::Node**>(outNode),
-                           &key->data, &value->data);
+// Map_Insert hands back the collection's opaque-element node; the settings
+// map's node IS `RtIo::SettingsMapNode` (Persistence.h).
+SettingsMapNode* MapInsert(void* map, const System::String& key, const System::String& value) {
+    rtsetavl::Node* node = nullptr;
+    rtavl::StringMapInsert(static_cast<rtsetavl::Set*>(map),         // 0x18002a090  LEFT: see above
+                           &node, &key._data, &value._data);
+    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: set_avl.h's node keeps its element opaque
 }
 
 // Convert one NUL-terminated UTF-16 buffer to a System::String, exactly the
 // six-call sequence retail inlines twice per loop iteration (0x1800b85b2 ..
 // 0x1800b8649 for the name, 0x1800b86a5 .. 0x1800b879b for the value).
-void AssignFromWide(String* dst, const wchar_t* src) {
-    WideStringHandle w;
-    w.data = nullptr;                                   // MOV [RBP+0x1010],R12
-    reinterpret_cast<System::WideString*>(&w)->Set(src);          // B.3.x bridge
+void AssignFromWide(System::String& dst, const wchar_t* src) {
+    System::WideString w(src);                          // zero, then Set(src)
 
     // AsUTF8 returns System::String BY VALUE into the hidden return slot
     // `utf8`, CONSTRUCTED, not assigned.
-    String utf8;
-    utf8.data = nullptr;
-    ::new (&Sys(utf8)) System::String(                                // B.3.x bridge
-        reinterpret_cast<const System::WideString*>(&w)->AsUTF8());
+    System::String utf8 = w.AsUTF8();
 
     // MOV RDX,[RAX] — retail reads the char* back out of the returned String
     // and hands THAT to String::Set, which copies the bytes. It does not adopt
     // the temporary's buffer.
-    Sys(*dst).Set(utf8.data);
+    dst.Set(utf8._data);
 
-    RtSystem::RtString_ReleaseInline(&utf8);
-    RtSystem::RtString_ReleaseInline(&w);
-}
-
-// ---------------------------------------------------------------------------
-// The oracle's tree walk
-// ---------------------------------------------------------------------------
-// Node layout: { String key @+0x00; String value @+0x08; parent @+0x10;
-// left @+0x18; right @+0x20 }. The two this walk uses — left and right — are
-// pinned by `Map_Clear` itself (0x18000f7f4 recurses on [node+0x18], 0x18000f7fd
-// on [node+0x20]); `parent` is WAVE3_LANE_A.md's general formula and is NOT
-// read here. `runtime/types/io/Persistence.h`'s `SettingsMapNode` deliberately
-// models only the first 0x10 bytes, so the two child pointers are reached by
-// byte offset rather than by extending that shared type from a decompile.
-constexpr size_t kNodeLeft  = 0x18;
-constexpr size_t kNodeRight = 0x20;
-
-void* NodeChild(const void* node, size_t off) {
-    return *reinterpret_cast<void* const*>(static_cast<const uint8_t*>(node) + off);
-}
-
-void FnvBytes(uint64_t& h, const void* p, size_t n) {
-    const uint8_t* b = static_cast<const uint8_t*>(p);
-    for (size_t i = 0; i < n; ++i) { h ^= b[i]; h *= 1099511628211ull; }
-}
-
-void FnvCStr(uint64_t& h, const char* s) {
-    if (s == nullptr) { FnvBytes(h, "\x01<null>", 7); return; }
-    size_t n = 0;
-    while (s[n] != '\0') ++n;
-    FnvBytes(h, s, n);
-    FnvBytes(h, "\x00", 1);
-}
-
-// In-order walk. `count` counts nodes so the caller can print an effectiveness
-// figure; `depthLeft` is a hard recursion bound so a corrupted or cyclic tree
-// makes the oracle report a difference instead of blowing the stack.
-void DigestTree(const void* node, uint64_t& h, uint32_t& count,
-                const char*& firstKey, int depthLeft) {
-    if (node == nullptr || depthLeft <= 0) return;
-    DigestTree(NodeChild(node, kNodeLeft), h, count, firstKey, depthLeft - 1);
-
-    const SettingsMapNode* n = static_cast<const SettingsMapNode*>(node);
-    if (firstKey == nullptr) firstKey = n->key.data;
-    FnvCStr(h, n->key.data);
-    FnvCStr(h, n->value.data);
-    ++count;
-
-    DigestTree(NodeChild(node, kNodeRight), h, count, firstKey, depthLeft - 1);
+    // ~utf8 then ~w: retail's two releases, in its order.
 }
 
 }  // namespace
@@ -340,29 +276,21 @@ namespace IO {
 //
 // Inside this block a bare `Registry` binds to the REAL CLASS, never to the POD
 // (B34_RULES §7.2, THE GREP HAZARD). The POD is spelled `RtIo::Registry` here.
-Registry::Registry(const char* subKey) {
+Registry::Registry(const char* subKey) : _path(), _key(nullptr), _enumIndex(0), _enumGroupIndex(0) {
 
-    // 0x1800b9520-0x1800b952a. The qword store at +0x10 clears BOTH dword
-    // cursors; see runtime/types/io/Registry.h. Written as retail's four
-    // stores rather than as a member-init list so the ORDER stays visible and
-    // so `_path` keeps its POD spelling (no String constructor runs).
-    _path.data      = nullptr;
-    _key            = nullptr;
-    _enumIndex      = 0;
-    _enumGroupIndex = 0;
+    // 0x1800b9520-0x1800b952a: retail's four stores, the member initialisers
+    // above (the qword store at +0x10 clears BOTH dword cursors; see
+    // runtime/types/io/Registry.h).
 
     // 0x1800b954b: String::Format(&tmp, "Software\\%s\\%s", company, product),
     // then String::operator= inlined at 0x1800b9553. B3R RT-IO: Format by name
-    // (System::String::Format, retail 0x1800c9730).
+    // (System::String::Format, retail 0x1800c9730). The leading equality test
+    // of `String::operator=` (retail 0x1800c9810) is retail's self-assignment
+    // guard (see persistence_startup.cpp's banner for why it must not be
+    // tidied away).
     System::String tmp = System::String::Format(RtIo::kRegistryPathFormat,
            RtIo::kRegistryCompanyName, RtIo::kRegistryProductName);
-    // The leading equality test is retail's self-assignment guard (see
-    // persistence_startup.cpp's banner for why it must not be tidied away) --
-    // this IS `String::operator=` (retail 0x1800c9810). `_path` is still the
-    // `RtSystem::String` POD spelling (Registry.h's banner says why: three
-    // hand-written inlined `~Registry`s, one of them in a body left as C), so
-    // it is reached through the transitional bridge.
-    Sys(_path) = tmp;
+    _path = tmp;
     // ~tmp is retail's release.
 
     // 0x1800b95c0: `subKey != nullptr && subKey[0] != '\0'`. Retail then walks
@@ -371,14 +299,9 @@ Registry::Registry(const char* subKey) {
     // length >= 1. The walk is not reproduced; it computes a value retail then
     // uses for nothing but that dead comparison.
     if (subKey != nullptr && subKey[0] != '\0') {
-        // `operator+` and `operator=` are already-ported class members, so
-        // the two exported doors this ctor used to resolve by name
-        // (??HSystem@@... and ??4String@System@@...) are spelled as
-        // themselves rather than through RT_EXPORT_ONCE — table entries
-        // `ConcatCStr` -> `a + p` and `Assign` -> `s = o`.
-        System::String withSep = Sys(_path) + RtIo::kRegistryPathSeparator;     // 0x1800b9605
+        System::String withSep = _path + RtIo::kRegistryPathSeparator;         // 0x1800b9605
         System::String full    = withSep + subKey;                              // 0x1800b9619
-        Sys(_path) = full;                                                      // 0x1800b9625
+        _path = full;                                                           // 0x1800b9625
         // ~full, ~withSep are retail's two releases at
         // 0x1800b962b/0x1800b9664.
     }
@@ -386,21 +309,25 @@ Registry::Registry(const char* subKey) {
     // 0x1800b969d onward.
     DWORD disposition = 0;
 
-    WideStringHandle wpath;
-    wpath.data = nullptr;
-    ::new (static_cast<void*>(&wpath)) System::WideString(Sys(_path));   // B.3.x bridge
+    System::WideString wpath(_path);                    // ??0WideString(const String&)
+    const wchar_t* w = wpath._data;
 
-    HKEY* phKey = reinterpret_cast<HKEY*>(&_key);
-    const wchar_t* w = reinterpret_cast<const wchar_t*>(wpath.data);
-
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, w, 0, kSam, phKey) != ERROR_SUCCESS) {
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, w, 0, kSam, &_key) != ERROR_SUCCESS) {
         if (RegCreateKeyExW(HKEY_CURRENT_USER, w, 0, nullptr, 0, kSam,
-                            nullptr, phKey, &disposition) != ERROR_SUCCESS) {
+                            nullptr, &_key, &disposition) != ERROR_SUCCESS) {
             _key = nullptr;    // 0x1800b971c
         }
     }
 
-    RtSystem::RtString_ReleaseInline(&wpath);
+    // ~wpath is retail's release.
+}
+
+// Retail's inlined `~Registry` (0x1800b887d / 0x1800b8ae5 / 0x1800b8fa8):
+// close the key if open, null it, then release `_path` -- the member
+// destructor, which runs after this body.
+Registry::~Registry() {
+    if (_key != nullptr) RegCloseKey(_key);
+    _key = nullptr;
 }
 
 }  // namespace IO
@@ -419,35 +346,22 @@ Registry::Registry(const char* subKey) {
 //
 // NOTHING ELSE CHANGED: same callees in the same order, the same dead
 // `if (reg._key)` retained, the same ignored RegQueryValueExW return, the same
-// self-assignment guard on the BUFFER, and the same by-hand teardown of `name`,
-// `value` and the `IO::Registry` local at retail's own positions -- `reg` is
-// still a local of a class with NO destructor (Registry.h's banner), so nothing
-// implicit runs at scope exit and nothing can run twice.
+// self-assignment guard on the BUFFER. B.4 R-IO: the teardown of `value`,
+// `name` and `reg` is their destructors, at the end of the function -- reverse
+// declaration order, which is retail's order.
 namespace IO {
 
 void Persistence::ReadSettings() {
 
-    ::MapClear(reinterpret_cast<RtIo::Persistence*>(this));    // 0x1800b84db
+    ::MapClear(this);                                          // 0x1800b84db
 
-    // 0x1800b84e7 `Registry reg(nullptr)`. B.3.4 PACKAGE+FS commit 1: the local
-    // is the REAL class now, constructed directly instead of through
-    // `RT_EXPORT_ONCE("??0Registry@IO@@QEAA@PEBD@Z")`. That name resolves to
-    // `RtIo_Registry_Ctor`, which since this commit does nothing but
-    // placement-new the same constructor into the same bytes — so this is the
-    // identical body reached one indirection earlier, not a different one.
-    //
-    // `IO::Registry` has NO destructor (Registry.h's banner), so this local is
-    // still torn down BY HAND at the bottom of this function, at retail's own
-    // position. Nothing implicit runs at scope exit and nothing can run twice.
+    // 0x1800b84e7 `Registry reg(nullptr)`. Its destructor is retail's inlined
+    // ~Registry at 0x1800b887d (Registry.h's banner), the last of the three
+    // at the close of this function.
     IO::Registry reg(nullptr);
 
-    // `name`/`value` stay `RtSystem::String` (not `System::String`) because
-    // `AssignFromWide` and `MapInsert` below are external-door signatures
-    // shared with `WriteSettingsBody` (left in C shape -- see its own
-    // comment); ownership is still proven and expressed through the
-    // transitional bridge at each use.
-    RtSystem::String name{nullptr};                            // 0x1800b84f4
-    RtSystem::String value{nullptr};                           // 0x1800b84fc
+    System::String name;                                       // 0x1800b84f4
+    System::String value;                                      // 0x1800b84fc
 
     // Deliberately uninitialised — see banner point 4.
     wchar_t nameBuf[::kNameChars];
@@ -457,7 +371,7 @@ void Persistence::ReadSettings() {
         DWORD cchName = ::kNameChars;                          // 0x1800b8510
         const DWORD index = reg._enumIndex++;                   // 0x1800b851a
 
-        if (RegEnumValueW(static_cast<HKEY>(reg._key), index, nameBuf, &cchName,
+        if (RegEnumValueW(reg._key, index, nameBuf, &cchName,
                           nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
             break;                                             // 0x1800b8552
         if (cchName > ::kNameChars)
@@ -467,44 +381,29 @@ void Persistence::ReadSettings() {
             DWORD type    = REG_SZ;                            // 0x1800b8572, = 1
             DWORD cbData  = ::kValueBytes;                     // 0x1800b857c
             // Return value IGNORED, exactly as at 0x1800b85b2.
-            RegQueryValueExW(static_cast<HKEY>(reg._key), nameBuf, nullptr, &type,
-                             reinterpret_cast<BYTE*>(valueBuf), &cbData);
+            RegQueryValueExW(reg._key, nameBuf, nullptr, &type,
+                             reinterpret_cast<BYTE*>(valueBuf), &cbData);  // CAST-OK: win32
         }
 
-        ::AssignFromWide(&name, nameBuf);                      // 0x1800b85b2..
-        ::AssignFromWide(&value, valueBuf);                    // 0x1800b86a5..
+        ::AssignFromWide(name, nameBuf);                       // 0x1800b85b2..
+        ::AssignFromWide(value, valueBuf);                     // 0x1800b86a5..
 
-        void* node = nullptr;
-        ::MapInsert(reinterpret_cast<RtIo::Persistence*>(this),
-                    &node, &name, &value);                     // 0x1800b87ad
+        SettingsMapNode* const n = ::MapInsert(this, name, value);   // 0x1800b87ad
 
         // 0x1800b87b2-0x1800b882d. Map_Insert leaves an ALREADY-PRESENT key's
         // value untouched, so retail re-seats it by hand. The `!=` is the
         // self-assignment guard; see banner points 1 and 2.
-        if (node != nullptr) {
-            RtIo::SettingsMapNode* n = static_cast<RtIo::SettingsMapNode*>(node);
-            // `String::operator=` (retail 0x1800c9810), through the
-            // transitional bridge on both not-yet-converted PODs.
-            if (n->value.data != value.data) {
-                ::Sys(n->value) = ::Sys(value);
+        if (n != nullptr) {
+            // `String::operator=` (retail 0x1800c9810).
+            if (n->value._data != value._data) {
+                n->value = value;
             }
         }
     }
 
     reg._enumIndex = 0;                                         // 0x1800b8832
-    // `name`/`value` are plain locals of a type that keeps its POD shape
-    // here (see the declaration comment), so there is no outer RAII to run
-    // this for us; retail's two releases are spelled as the destructors
-    // themselves, through the bridge, in retail's own order.
-    ::Sys(value).~String();                                    // 0x1800b8837
-    ::Sys(name).~String();                                     // 0x1800b8859
-
-    // ~Registry, inlined at 0x1800b887d. `reg` is a plain local (`Registry`
-    // is not yet converted), so `path`'s release is spelled as the
-    // destructor itself through the bridge.
-    if (reg._key != nullptr) RegCloseKey(static_cast<HKEY>(reg._key));
-    reg._key = nullptr;
-    ::Sys(reg._path).~String();                                 // 0x1800b8892
+    // ~value (0x1800b8837), ~name (0x1800b8859), ~reg (0x1800b887d..0x1800b8892)
+    // run here, in that order.
 }
 
 }  // namespace IO
@@ -666,30 +565,20 @@ void Persistence::ReadSettings() {
 namespace {
 
 // ---- dependencies this half adds -------------------------------------------
-// Node parent, +0x10. Pinned by this very function: 0x1800b8a9c reads
-// [node+0x10] as the parent in the in-order successor, and 0x1800b8aa5 compares
-// [parent+0x18] against the node. That is the same layout WAVE3_LANE_A.md
-// derived generally and the same one Map_Clear pins for left/right.
-constexpr size_t kNodeParent = 0x10;
-
 // 0x18002ace0 -- `RtSystem_ConfigMap_Find` (runtime/src/system/configuration.cpp),
-// by name (B3R RT-IO). There is no export name at that RVA at all.
-void* MapFind(const void* map, const String* key) {
-    return RtSystem_ConfigMap_Find(const_cast<void*>(map), key);
+// by name (B3R RT-IO). There is no export name at that RVA at all. Its
+// signature (system/Configuration.h, R-CORE's) takes a non-const map and the
+// RtSystem::String POD, and returns the node untyped.
+const SettingsMapNode* MapFind(const IO::Persistence* map, const System::String& key) {
+    return static_cast<const SettingsMapNode*>(                  // LEFT: R-CORE's void* result
+        RtSystem_ConfigMap_Find(const_cast<IO::Persistence*>(map),   // LEFT: R-CORE's non-const map
+                                reinterpret_cast<const RtSystem::String*>(&key)));   // LEFT: R-CORE's POD key
 }
 
-// The allocator boundary for phase 2's array. Retail open-codes
-// `Lock(alloc+0x640); Allocate/Free(_singleton, ...); Unlock()` at
-// 0x1800b8d69 and 0x1800b8e29 -- which is exactly what the two static exports
-// below ARE (0x1800c7a50 / 0x1800c7ad0, confirmed by RVA in the export table).
-// A composition identity, not a substitution; `runtime/src/collection/array.cpp`
-// makes the same argument for the same pair.
-void* MemAllocRaw(uint64_t bytes, int align) {
-    return ::System::MemoryAllocator::MemAlloc(bytes, align);
-}
-void MemFreeRaw(void* p) {
-    ::System::MemoryAllocator::MemFree(p);
-}
+// The allocator boundary for phase 2's array: retail open-codes
+// `Lock(alloc+0x640); Allocate/Free(_singleton, ...); Unlock()` at 0x1800b8d69
+// and 0x1800b8e29 -- which is exactly what `System::MemoryAllocator::MemAlloc`
+// / `MemFree` ARE (0x1800c7a50 / 0x1800c7ad0), called by name below.
 
 // ---- the two mutating calls -----------------------------------------------
 //
@@ -702,7 +591,7 @@ void EmitSet(HKEY key, const wchar_t* name, DWORD type,
              const wchar_t* data, DWORD cb) {
     ++g_wsSetCalls;
     RegSetValueExW(key, name, 0, type,
-                   reinterpret_cast<const BYTE*>(data), cb);
+                   reinterpret_cast<const BYTE*>(data), cb);   // CAST-OK: win32
 }
 
 void EmitDelete(HKEY key, const wchar_t* name) {
@@ -713,49 +602,54 @@ void EmitDelete(HKEY key, const wchar_t* name) {
 }
 
 // ---- the tree walk phase 1 uses -------------------------------------------
-void* Leftmost(void* node) {
+// The links are SettingsMapNode's own (Persistence.h): parent +0x10 (pinned by
+// this very function, 0x1800b8a9c / 0x1800b8aa5), left +0x18, right +0x20.
+const SettingsMapNode* Leftmost(const SettingsMapNode* node) {
     if (!node) return nullptr;
     for (;;) {
-        void* l = NodeChild(node, kNodeLeft);
+        const SettingsMapNode* l = node->left;
         if (!l) return node;
         node = l;
     }
 }
 
 // 0x1800b8a80..0x1800b8acb, transcribed branch for branch.
-void* InorderSuccessor(void* node) {
+const SettingsMapNode* InorderSuccessor(const SettingsMapNode* node) {
     if (!node) return nullptr;
-    void* r = NodeChild(node, kNodeRight);
+    const SettingsMapNode* r = node->right;
     if (r) {                                    // 0x1800b8a89
         for (;;) {                              // 0x1800b8a8e
             node = r;
-            r = NodeChild(node, kNodeLeft);
+            r = node->left;
             if (!r) return node;                // 0x1800b8a98
         }
     }
-    void* p = NodeChild(node, kNodeParent);     // 0x1800b8a9c
-    if (!p) return NodeChild(node, kNodeParent);
-    if (NodeChild(p, kNodeLeft) == node) return p;          // 0x1800b8aa5
-    while (p && NodeChild(p, kNodeRight) == node) {         // 0x1800b8ab5
+    const SettingsMapNode* p = node->parent;    // 0x1800b8a9c
+    if (!p) return node->parent;
+    if (p->left == node) return p;              // 0x1800b8aa5
+    while (p && p->right == node) {             // 0x1800b8ab5
         node = p;
-        p = NodeChild(node, kNodeParent);
+        p = node->parent;
     }
-    return NodeChild(node, kNodeParent);        // 0x1800b8ac7
+    return node->parent;                        // 0x1800b8ac7
 }
 
 // ---- phase 2's inlined Array<WideString> -----------------------------------
+// The elements are `System::WideString`s in a raw MemAlloc buffer: each slot
+// is written by hand (the refcount copy below) and released by its
+// destructor, exactly the two halves retail inlines.
 struct WideArray {
-    WideStringHandle* data = nullptr;   // R12  / [RSP+0x60]
-    int32_t           size = 0;         // R13D / [RSP+0x68]
-    int32_t           capacity = 0;     //        [RSP+0x6c]
+    System::WideString* data = nullptr; // R12  / [RSP+0x60]
+    int32_t             size = 0;       // R13D / [RSP+0x68]
+    int32_t             capacity = 0;   //        [RSP+0x6c]
 };
 
 // 0x1800b8cfb-0x1800b8dd4 plus the two teardown loops that follow it.
 // The `fill` is COPIED BY REFCOUNT (`INC dword [RCX-4]`), not by value.
-void ArrayAppend(WideArray* a, const WideStringHandle* fill) {
+void ArrayAppend(WideArray* a, const System::WideString& fill) {
     const int32_t oldSize = a->size;
     const int32_t newSize = oldSize + 1;
-    WideStringHandle* oldData = a->data;
+    System::WideString* oldData = a->data;
 
     a->size = newSize;
     if (newSize > a->capacity) {                       // 0x1800b8d18
@@ -763,27 +657,28 @@ void ArrayAppend(WideArray* a, const WideStringHandle* fill) {
         if (newSize == oldSize + 1 && oldSize != 0)    // 0x1800b8d24
             cap = newSize * 3;                         // LEA EDX,[RSI+RSI*2]
         a->capacity = cap;
-        a->data = static_cast<WideStringHandle*>(
-            MemAllocRaw(static_cast<uint64_t>(cap) * 8, 8));
+        a->data = static_cast<System::WideString*>(
+            ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cap) * 8, 8));
     }
 
     // 0x1800b8d81: start at oldSize when nothing was reallocated, else at 0.
     int32_t i = (oldData == a->data) ? oldSize : 0;
     for (; i < newSize; ++i) {
-        WideStringHandle* dst = &a->data[i];
+        System::WideString* dst = &a->data[i];
         if (!dst) break;                                // retail's TEST RDX,RDX
-        const WideStringHandle* src = (i < oldSize) ? &oldData[i] : fill;
-        dst->data = nullptr;                            // MOV [RDX],RBX
-        if (src->data) {
-            dst->data = src->data;
-            ++StringRefCount(src->data);                // INC dword [RCX-4]
+        const System::WideString* src = (i < oldSize) ? &oldData[i] : &fill;
+        dst->_data = nullptr;                           // MOV [RDX],RBX
+        if (src->_data) {
+            dst->_data = src->_data;
+            // The WideString block carries String's {length, refCount} header.
+            ++StringRefCount(reinterpret_cast<char*>(src->_data));   // CAST-OK: string_header
         }
     }
 
     if (oldData != a->data) {                           // 0x1800b8dd4
         for (int32_t j = 0; j < oldSize; ++j)
-            RtSystem::RtString_ReleaseInline(&oldData[j]);
-        if (oldData) MemFreeRaw(oldData);
+            oldData[j].~WideString();
+        if (oldData) ::System::MemoryAllocator::MemFree(oldData);
     }
     // The `else` arm at 0x1800b8e88 releases elements [newSize, oldSize) — the
     // SHRINK case. Unreachable from an append (newSize > oldSize always), and
@@ -792,123 +687,102 @@ void ArrayAppend(WideArray* a, const WideStringHandle* fill) {
 
 void ArrayDestroy(WideArray* a) {                       // 0x1800b9027-0x1800b90dc
     for (int32_t i = 0; i < a->size; ++i)
-        RtSystem::RtString_ReleaseInline(&a->data[i]);
-    if (a->data) MemFreeRaw(a->data);
+        a->data[i].~WideString();
+    if (a->data) ::System::MemoryAllocator::MemFree(a->data);
     a->data = nullptr;
     a->size = 0;
-}
-
-// ---- the transcription itself, separated from the probe --------------------
-//
-// LEFT AS C (ENDGAME B.3.1 step 2, conv-io batch): this body interleaves two
-// tree walks, a hand-inlined growing `Array<WideString>` with a non-obvious
-// capacity rule, an IAT-swapping emission oracle, and `AssignFromWide`/
-// `MapFind`/`MapInsert` calls shared with `ReadSettings` above -- retyping any
-// one of `key`, `wValue`, `wName`, `w`, or the array's elements would either
-// require changing those shared file-local doors' signatures (risking
-// ReadSettings, which IS converted) or a second parallel spelling of each
-// door. Proving "exactly one release on every path" here means proving it
-// across the growth rule's realloc-vs-no-realloc split AND the shrink-arm
-// comment AND two enumeration loops with early `continue`/`break`; the
-// combination is exactly the "retail unwind bitmask across ten locals" case
-// B31_RULES calls out as a left-alone body being the fine outcome. Every
-// `String`/`WideStringHandle` local here keeps the manual
-// Ctor/Set/ReleaseInline shape it already had; nothing in this function
-// changed.
-void WriteSettingsBody(const Persistence* self) {
-
-    // ---- phase 1 -----------------------------------------------------------
-    {
-        Registry reg;
-        ::new (static_cast<void*>(&reg)) IO::Registry(nullptr); // 0x1800b8912  B.3.x bridge
-
-        void* node = Leftmost(self->settingsMapRoot);           // 0x1800b8918
-        while (node != nullptr) {
-            const SettingsMapNode* n = static_cast<const SettingsMapNode*>(node);
-
-            WideStringHandle wValue; wValue.data = nullptr;
-            ::new (static_cast<void*>(&wValue))                // 0x1800b894b  B.3.x bridge
-                System::WideString(Sys(n->value));
-            WideStringHandle wName;  wName.data = nullptr;
-            ::new (static_cast<void*>(&wName))                 // 0x1800b895d  B.3.x bridge
-                System::WideString(Sys(n->key));
-
-            if (reg.key != nullptr) {                           // 0x1800b896e
-                const wchar_t* data =
-                    reinterpret_cast<const wchar_t*>(wValue.data);
-                DWORD len = 0;
-                if (data) { while (data[len]) ++len; }          // 0x1800b8976 loop
-                EmitSet(static_cast<HKEY>(reg.key),
-                        reinterpret_cast<const wchar_t*>(wName.data),
-                        REG_SZ, data,
-                        static_cast<DWORD>(2 + 2 * len));       // LEA EAX,[2+R8*2]
-            }
-
-            RtSystem::RtString_ReleaseInline(&wName);           // 0x1800b89ae
-            RtSystem::RtString_ReleaseInline(&wValue);          // 0x1800b8a18
-
-            node = InorderSuccessor(node);
-        }
-
-        if (reg.key != nullptr) RegCloseKey(static_cast<HKEY>(reg.key));
-        reg.key = nullptr;
-        RtSystem::RtString_ReleaseInline(&reg.path);            // 0x1800b8af2
-    }
-
-    // ---- phase 2 -----------------------------------------------------------
-    {
-        WideArray stale;
-        Registry reg;
-        ::new (static_cast<void*>(&reg)) IO::Registry(nullptr); // 0x1800b8b70  B.3.x bridge
-
-        // Deliberately uninitialised, exactly as retail leaves it: the only
-        // path that reads it is one RegEnumValueW has just filled.
-        wchar_t nameBuf[kNameChars];
-
-        for (;;) {
-            DWORD cch = kNameChars;                             // 0x1800b8b7e
-            const DWORD index = reg.enumIndex++;                // 0x1800b8b88
-
-            if (RegEnumValueW(static_cast<HKEY>(reg.key), index, nameBuf, &cch,
-                              nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
-                break;                                          // 0x1800b8bc0
-            if (cch > kNameChars) break;                        // 0x1800b8bd0
-
-            String key; key.data = nullptr;
-            AssignFromWide(&key, nameBuf);                      // 0x1800b8be8..
-
-            void* found = MapFind(self, &key);                  // 0x18002ace0
-            RtSystem::RtString_ReleaseInline(&key);
-            if (found != nullptr) continue;                     // 0x1800b8cd3
-
-            ++g_wsStaleFound;
-            WideStringHandle w; w.data = nullptr;               // 0x1800b8ce3
-            reinterpret_cast<System::WideString*>(&w)->Set(   // 0x1800b8cf5  B.3.x bridge
-                nameBuf);
-            ArrayAppend(&stale, &w);
-            RtSystem::RtString_ReleaseInline(&w);               // 0x1800b8efe
-        }
-
-        reg.enumIndex = 0;                                      // 0x1800b8f7a
-        for (int32_t i = 0; i < stale.size; ++i) {              // 0x1800b8f90
-            if (reg.key == nullptr) break;
-            EmitDelete(static_cast<HKEY>(reg.key),
-                       reinterpret_cast<const wchar_t*>(stale.data[i].data));
-        }
-
-        if (reg.key != nullptr) RegCloseKey(static_cast<HKEY>(reg.key));
-        reg.key = nullptr;
-        RtSystem::RtString_ReleaseInline(&reg.path);            // 0x1800b8fc3
-        ArrayDestroy(&stale);                                   // 0x1800b9027
-    }
 }
 
 }  // namespace
 
 namespace IO {
 
+// ---- the transcription itself ----------------------------------------------
+//
+// B.4 R-IO: the member body (it was a C body, `WriteSettingsBody`, taking the
+// RtIo POD view). Every String / WideString / Registry local is the real class
+// and each release is its destructor, placed by scope where retail's inlined
+// release sits: the two WideStrings at the end of each phase-1 iteration
+// (wName, then wValue -- LIFO), `key` before the found-test in phase 2, `w`
+// after the append, and each `reg` at the close of its phase.
 void Persistence::WriteSettings() const {
-    ::WriteSettingsBody(reinterpret_cast<const RtIo::Persistence*>(this));
+
+    // ---- phase 1 -----------------------------------------------------------
+    {
+        IO::Registry reg(nullptr);                              // 0x1800b8912
+
+        const SettingsMapNode* node = Leftmost(_settingsMapRoot);   // 0x1800b8918
+        while (node != nullptr) {
+            {
+                System::WideString wValue(node->value);         // 0x1800b894b
+                System::WideString wName(node->key);            // 0x1800b895d
+
+                if (reg._key != nullptr) {                      // 0x1800b896e
+                    const wchar_t* data = wValue._data;
+                    DWORD len = 0;
+                    if (data) { while (data[len]) ++len; }      // 0x1800b8976 loop
+                    EmitSet(reg._key, wName._data, REG_SZ, data,
+                            static_cast<DWORD>(2 + 2 * len));   // LEA EAX,[2+R8*2]
+                }
+
+                // ~wName (0x1800b89ae), ~wValue (0x1800b8a18).
+            }
+
+            node = InorderSuccessor(node);
+        }
+
+        // ~reg: 0x1800b8ae5 / 0x1800b8af2.
+    }
+
+    // ---- phase 2 -----------------------------------------------------------
+    // Retail closes the key and releases its path (~reg, 0x1800b8fa8 /
+    // 0x1800b8fc3) BEFORE it tears the array down (0x1800b9027), so `reg`
+    // lives in an inner scope that closes first.
+    {
+        WideArray stale;
+        {
+            IO::Registry reg(nullptr);                              // 0x1800b8b70
+
+            // Deliberately uninitialised, exactly as retail leaves it: the only
+            // path that reads it is one RegEnumValueW has just filled.
+            wchar_t nameBuf[kNameChars];
+
+            for (;;) {
+                DWORD cch = kNameChars;                             // 0x1800b8b7e
+                const DWORD index = reg._enumIndex++;               // 0x1800b8b88
+
+                if (RegEnumValueW(reg._key, index, nameBuf, &cch,
+                                  nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
+                    break;                                          // 0x1800b8bc0
+                if (cch > kNameChars) break;                        // 0x1800b8bd0
+
+                const SettingsMapNode* found;
+                {
+                    System::String key;
+                    AssignFromWide(key, nameBuf);                   // 0x1800b8be8..
+                    found = MapFind(this, key);                     // 0x18002ace0
+                    // ~key
+                }
+                if (found != nullptr) continue;                     // 0x1800b8cd3
+
+                ++g_wsStaleFound;
+                {
+                    System::WideString w(nameBuf);                  // 0x1800b8ce3 / 0x1800b8cf5
+                    ArrayAppend(&stale, w);
+                    // ~w: 0x1800b8efe
+                }
+            }
+
+            reg._enumIndex = 0;                                     // 0x1800b8f7a
+            for (int32_t i = 0; i < stale.size; ++i) {              // 0x1800b8f90
+                if (reg._key == nullptr) break;
+                EmitDelete(reg._key, stale.data[i]._data);
+            }
+
+            // ~reg: 0x1800b8fa8 / 0x1800b8fc3.
+        }
+        ArrayDestroy(&stale);                                   // 0x1800b9027
+    }
 }
 
 }  // namespace IO

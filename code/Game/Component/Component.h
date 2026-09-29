@@ -39,6 +39,8 @@
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
+class ComponentEntity;   // Entity/ComponentEntity.h (the +0x10 owner)
+
 class Component : public Object::Internal {
     DECLARE_EXE_TYPE(Component)
 
@@ -66,7 +68,8 @@ public:
 
     // ---- the 0x18 bytes Component adds, retail order ------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
-    void*    _entity;        // +0x10 owning ComponentEntity (InternalPtr in retail)
+    ComponentEntity* _entity; // +0x10 owning ComponentEntity (InternalPtr<ComponentEntity> in
+                              //       retail: Persist nulls it unless IsDerivedFrom ComponentEntity)
     void*    _description;   // +0x18 serialized by 0x140031d10 (the tree's "description ref")
     uint32_t _flags;         // +0x20 capability flags; the ctor sets 0x80
     uint32_t _pad24;         // +0x24 never written by the ctor

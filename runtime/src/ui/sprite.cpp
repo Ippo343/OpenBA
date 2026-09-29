@@ -482,7 +482,7 @@ inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
     char* old = slot;
     if (old == *src) return;                 // pointer identity short-circuit
     if (old) {
-        if (--*reinterpret_cast<int32_t*>(old - 4) == 0) {
+        if (--RtSystem::StringRefCount(old) == 0) {
             slot -= 8;                       // the member is adjusted...
             // ...and then freed THROUGH the member, by
             // ?MemFree@MemoryAllocator@System@@ (0x1800c7ad0).
@@ -492,7 +492,7 @@ inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
         }
     }
     slot = *src;
-    if (slot) ++*reinterpret_cast<int32_t*>(slot - 4);
+    if (slot) ++RtSystem::StringRefCount(slot);
 }
 
 }  // namespace
@@ -507,7 +507,7 @@ void SpriteSheet::Set(int32_t p1, int32_t p2, const System::String& p3,
 
     // The three scalars, in retail's store order: +0x4C, then +0x50, then +0x48.
     m_field4C = p2;
-    m_field50 = static_cast<uint8_t>(p5);
+    m_field50 = p5;
     m_field48 = p1;
 }
 

@@ -121,47 +121,13 @@
 
 #include "../../types/io/Stream.h"
 
-using RtIo::CompressedMemoryStream;
-using RtIo::CompressedStream;
-using RtIo::MemoryStream;
-using RtIo::Stream;
-
-namespace {
-
-// ---- The entry points these shims forward to -------------------------------
-// Every one is looked up ONCE per call site. the raw export door/ResolveExport is
-// GetProcAddress / a registry probe (rt_port.h): a bare the raw DLL door in a body
-// cost Wave 2 five points of sim time. These are cold paths — a save happens
-// once every few minutes — but the rule is the rule.
-//
-// WAVE 9 LANE V2, 2026-09-07: the ORACLE sites (the scratch-object ctor/dtor
-// at 235/263, both inside `if (the diff oracle)`) stay on the raw DLL door — that
-// is the whole point of them. The sites the LIVE bodies execute — the base and
-// member constructors, the two base destructors, and Commit — are REAL
-// DEPENDENCIES and moved to RT_EXPORT_ONCE. None of them names the symbol its
-// own enclosing port registers (CompressedMemoryStream's ctor/dtor call
-// CompressedStream's and MemoryStream's), so there is no self-recursion.
-// The Create / Open pair below were NOT among rawdoor_audit's findings and are
-// converted anyway: the resolve and its argument list are on separate SOURCE
-// LINES, and the checker's immediate-call regex is per-line. They are the same
-// live-body real dependency as the rest, found by reading the file rather than
-// by the checker — a clean run is a floor, not a ceiling.
-// Raw here would be a NULL call the instant Runtime-x64.dll is absent; through
-// the registry it is instead a named unresolved import if the neighbour is
-// still unported at cutover, which is a work-list row rather than a crash.
-
 // ENDGAME B.3.9 IO (W2): the by-name vtable reads (CompressedMemoryStream,
 // CompressedStream, Stream) went with the ??0 doors that stamped them.
-
-// The embedded MemoryStream's Close(), dispatched through its own vtable at
-// +0x38 exactly as retail does (`MOV RAX,[RDI]; CALL [RAX+0x38]`). Deliberately
-// NOT a qualified call to ?Close@MemoryStream: retail dispatches virtually and a
-// subclass could in principle sit there. B3X W0: the virtual call by name.
-void CallStreamCloseVirtual(MemoryStream* ms) {
-    reinterpret_cast<IO::MemoryStream*>(ms)->Close();   // slot 7 +0x38 (B.3.x bridge)
-}
-
-}  // namespace
+//
+// B.4 R-IO: the embedded MemoryStream's Close() is called on the member itself,
+// `_memoryStream.Close()` -- a virtual call on an object whose dynamic type is
+// MemoryStream (retail: `MOV RAX,[RDI]; CALL [RAX+0x38]` on the member's own
+// vptr, which is MemoryStream's table).
 
 // ============================================================================
 // IO::CompressedMemoryStream -- ENDGAME B.3.9 IO (W2)
@@ -173,11 +139,6 @@ void CallStreamCloseVirtual(MemoryStream* ms) {
 // the exe's GameUpdateLoop::SaveRestoreOut and its roundtrip check) spells
 // `::new (p) IO::CompressedMemoryStream()` and ends the object with a
 // qualified `T::~T()` at the position the door call had.
-namespace RtIo {
-extern "C" bool RtIo_CompressedStream_Open(CompressedStream*, Stream*, int32_t);    // 0x1800aa560
-extern "C" bool RtIo_CompressedStream_Create(CompressedStream*, Stream*, int32_t);  // 0x1800aa4b0
-extern "C" void RtIo_CompressedStream_Commit(CompressedStream*);                   // 0x1800a9ee0
-}  // namespace RtIo
 
 namespace IO {
 
@@ -186,9 +147,7 @@ namespace IO {
 // sets _direction = 0 (reading), stores _source, SetWindowCount(1), then parses
 // the window header table out of the source; false when the totals disagree.
 bool CompressedMemoryStream::Open() {
-    return RtIo::RtIo_CompressedStream_Open(
-        reinterpret_cast<RtIo::CompressedStream*>(this),
-        reinterpret_cast<RtIo::Stream*>(&_memoryStream), 1);
+    return CompressedStream::Open(_memoryStream, 1);
 }
 
 // ?Create@CompressedMemoryStream@IO@@QEAA_NXZ    retail 0x1800a9600
@@ -197,9 +156,7 @@ bool CompressedMemoryStream::Open() {
 // SetWindowCount(2). Writing uses two windows, reading one: both literals are
 // read off the two call sites.
 bool CompressedMemoryStream::Create() {
-    return RtIo::RtIo_CompressedStream_Create(
-        reinterpret_cast<RtIo::CompressedStream*>(this),
-        reinterpret_cast<RtIo::Stream*>(&_memoryStream), 2);
+    return CompressedStream::Create(_memoryStream, 2);
 }
 
 // ??1CompressedMemoryStream@IO@@UEAA@XZ          retail 0x1800a9560
@@ -212,8 +169,8 @@ bool CompressedMemoryStream::Create() {
 // +0x68), exactly as retail's `CALL [RAX+0x38]`. No guard added.
 CompressedMemoryStream::~CompressedMemoryStream() {
     if (_headerSize > 0 && _direction == 1)
-        RtIo::RtIo_CompressedStream_Commit(reinterpret_cast<RtIo::CompressedStream*>(this));
-    ::CallStreamCloseVirtual(reinterpret_cast<RtIo::MemoryStream*>(&_memoryStream));
+        Commit();
+    _memoryStream.Close();   // slot 7 +0x38, through the member's own vtable
 }
 
 }  // namespace IO
@@ -526,11 +483,9 @@ void CompressedMemoryStream::Close() {
 
     const bool committed = _headerSize > 0 && _direction == 1;
     if (committed)
-        RtIo::RtIo_CompressedStream_Commit(                        // B.3.x bridge
-            reinterpret_cast<RtIo::CompressedStream*>(static_cast<CompressedStream*>(this)));
+        Commit();
 
-    ::CallStreamCloseVirtual(
-        reinterpret_cast<RtIo::MemoryStream*>(&_memoryStream));
+    _memoryStream.Close();   // slot 7 +0x38, through the member's own vtable
 
     // ---- PARTIAL (presence only) -------------------------------------------
     // Be honest about this one: it proves nothing about equivalence. Calling the

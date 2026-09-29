@@ -160,6 +160,9 @@ constexpr int kCaptureHeight   = 0x54;
 
 namespace UI {
 
+class Font;
+class SpriteSheet;
+
 class DocumentTextElement : public Element {
 public:
     // ---- the nested value types -------------------------------------------
@@ -272,7 +275,7 @@ public:
     // +0xe8 Array<UI::Sprite>, one per font slot (^li's bullet). Raw header:
     // copy/destroy/resize are addressed helpers (0x180037020 / 0x180037310 /
     // 0x1800370c0), like every array below.
-    void*    _frameTableData;     // +0xe8
+    ::Sprite* _frameTableData;    // +0xe8   (B4 H4: typed)
     int32_t  _frameTableCount;    // +0xf0
     int32_t  _frameTableCapacity; // +0xf4
     uint32_t _linkColor;          // +0xf8   ctor 0xffeeee00
@@ -281,20 +284,20 @@ public:
     int32_t  _tabWidth;           // +0x104  ctor 4; ^t advance, ^lb/^le indent step
     int32_t  _wrapWidth;          // +0x108  ctor 300; the default right edge
     uint32_t _pad10c;             // +0x10c  written by nothing
-    void*    _fontsData;          // +0x110  Array<UI::Font*>; Font +0x50 line height, +0x54 baseline
+    Font**   _fontsData;          // +0x110  (B4 H4: typed)  Array<UI::Font*>; Font +0x50 line height, +0x54 baseline
     int32_t  _fontsCount;         // +0x118
     int32_t  _fontsCapacity;      // +0x11c
-    void*    _sheetsData;         // +0x120  Array<UI::SpriteSheet*> (^i<digit>, sprite items)
+    SpriteSheet** _sheetsData;    // +0x120  (B4 H4: typed)  Array<UI::SpriteSheet*> (^i<digit>, sprite items)
     int32_t  _sheetsCount;        // +0x128
     int32_t  _sheetsCapacity;     // +0x12c
-    void*    _colorsData;         // +0x130  Array<int32> (^c<digit>)
+    int32_t* _colorsData;         // +0x130  (B4 H4: typed)  Array<int32> (^c<digit>)
     int32_t  _colorsCount;        // +0x138
     int32_t  _colorsCapacity;     // +0x13c
-    void*    _resourceList;       // +0x140  object whose +0x20/+0x28 array ^d searches
-    void*    _itemsData;          // +0x148  Array<DocumentItem>, stride 0x24
+    Object::ExternalList* _resourceList; // +0x140 ExternalPtr<Object::ExternalList> (B4 H4)  object whose +0x20/+0x28 array ^d searches
+    DocumentItem* _itemsData;     // +0x148  (B4 H4: typed)  Array<DocumentItem>, stride 0x24
     int32_t  _itemsCount;         // +0x150
     int32_t  _itemsCapacity;      // +0x154
-    void*    _linksData;          // +0x158  Array<Link>, stride 0x18
+    Link*    _linksData;          // +0x158  (B4 H4: typed)  Array<Link>, stride 0x18
     int32_t  _linksCount;         // +0x160
     int32_t  _linksCapacity;      // +0x164
     char*    _sourceText;         // +0x168  System::String, the flat text parsed

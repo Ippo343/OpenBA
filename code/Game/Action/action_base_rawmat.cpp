@@ -45,6 +45,7 @@
 #include "Component/RawMaterialComponent.h"   // ENDGAME B.3.8 CB3: RawMaterialComponent::TypeId()
 #include "Component/RawMaterialDescription.h"
 #include "Component/TrackerComponent.h"
+#include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 // Exe sub-helpers / engine constants used by the PositionEntity port below, called by
 // name (B3R):
@@ -287,24 +288,8 @@ int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
 // match re-CheckPtr + IsDerivedFrom, then construct retIBP from the found object (or
 // null). Returns retIBP. Leaf (engine_funcs only).
 void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
-    uint32_t typeId = RawMaterialComponent::TypeId();
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(entity + 0x38);
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    for (int idx = 0; idx < n; idx++) {
-        void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-        void* obj = *ibp;
-        uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)
-        if (t == typeId) {
-            void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-            void* o = *ibp2;
-            if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
-            break;
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+    return new (retIBP) ::Object::InternalPtr<RawMaterialComponent>(
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<RawMaterialComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================
@@ -316,24 +301,8 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
 // (vtable+0x10) vs the target, on first match re-CheckPtr + IsDerivedFrom, construct
 // retIBP from the found object (or null). Returns retIBP. Leaf (engine_funcs only).
 void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
-    uint32_t typeId = TrackerComponent::TypeId();
-    void* found = nullptr;
-    int n = *reinterpret_cast<int*>(self + 0x38);
-    uintptr_t base = *reinterpret_cast<uintptr_t*>(self + 0x30);
-    for (int idx = 0; idx < n; idx++) {
-        void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-        void* obj = *ibp;
-        uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)
-        if (t == typeId) {
-            void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-            void* o = *ibp2;
-            if (::Object::IsDerivedFromNullSafe(o, typeId)) found = o;
-            break;
-        }
-    }
-    new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
+    return new (retIBP) ::Object::InternalPtr<TrackerComponent>(
+        reinterpret_cast<ComponentEntity*>(self)->FindComponent<TrackerComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
 }
 
 // ============================================================

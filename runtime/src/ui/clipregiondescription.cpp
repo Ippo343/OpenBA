@@ -70,19 +70,19 @@ void ClipRegionDescription::Destruct() { this->~ClipRegionDescription(); }
 // The base half is QUALIFIED; then the two extents through the INT slot and
 // the one child description. No array arm (unlike its siblings).
 bool ClipRegionDescription::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamv);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     ElementDescription::Serialize(stream);                  // 1800cc02a
 
-    Serializer ser = { stream, nullptr };
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
+    IO::ReaderWriter* rw = ser._readerWriter;
 
     rw->SerializeInt(_width, nullptr);                      // 1800cc06e
     rw->SerializeInt(_height, nullptr);                     // 1800cc083
 
     RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_childDesc), IoSer(&ser));  // 1800cc092
 
-    if (rw != nullptr) delete rw;                 // 1800cc0aa
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 1800cc0aa
     return true;
 }
 
@@ -112,17 +112,18 @@ Object::InternalPtr<Element>* ClipRegionDescription::CreateInstance(
     if (raw != nullptr)                                     // 1800cbf2d
         elem = ::new (raw) ClipRegionElement();             // 1800cbf32 .. 1800cbf60 (inlined ctor)
 
-    void* slot = static_cast<Element*>(elem);               // 1800cbf6c
+    Object::InternalPtr<Element> slot(elem);                // 1800cbf6c
     UI::ElementDescription::CreateInstance(                   // 1800cbf79
-        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
+        &slot);
 
     // The two extents are copied AFTER the base applier, so they win over
     // anything it wrote.
     elem->_reqWidth  = _width;                              // 1800cbf81
     elem->_reqHeight = _height;                             // 1800cbf8a
 
-    void** made = DialogCreateElement(dialog, &slot, _childDesc);   // 1800cbf9c
-    AttachAndPushChild(reinterpret_cast<uint8_t*>(elem), made);     // 1800cbfa9 .. 1800cbfe4
+    // ?CreateElement@Dialog@UI@@ (0x180112ed0), its RETSLOT the same local.
+    slot = dialog->CreateElement(Object::ExternalPtr<ElementDescription>(_childDesc));   // 1800cbf9c
+    AttachAndPushChild(elem, &slot);                        // 1800cbfa9 .. 1800cbfe4
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800cbfe6
     return ret;

@@ -131,38 +131,6 @@
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Shared field offsets. Element's come from runtime/types/ui/Element.h (the
-// layout authority); the rest are this file's own, each cited by the
-// instruction that proves it.
-// ---------------------------------------------------------------------------
-constexpr size_t kElemFlags   = offsetof(UI::Element, _flags);        // +0x34
-constexpr size_t kElemParent  = offsetof(UI::Element, _parent);       // +0x98
-constexpr size_t kElemChildren= offsetof(UI::Element, _children);     // +0xa0
-constexpr size_t kElemLeftPad = offsetof(UI::Element, _leftPad);      // +0x18
-constexpr size_t kElemRightPad= offsetof(UI::Element, _rightPad);     // +0x1c
-constexpr size_t kElemTopPad  = offsetof(UI::Element, _topPad);       // +0x20
-constexpr size_t kElemBotPad  = offsetof(UI::Element, _bottomPad);    // +0x24
-constexpr size_t kElemMinW    = offsetof(UI::Element, _minWidth);     // +0x28
-constexpr size_t kElemMinH    = offsetof(UI::Element, _minHeight);    // +0x2c
-constexpr size_t kElemLayoutW = offsetof(UI::Element, _layoutWidth);  // +0x60
-constexpr size_t kElemLayoutH = offsetof(UI::Element, _layoutHeight); // +0x64
-constexpr size_t kElemLeft    = offsetof(UI::Element, _layoutLeft);   // +0x68
-constexpr size_t kElemTop     = offsetof(UI::Element, _layoutTop);    // +0x6c
-constexpr size_t kElemRight   = offsetof(UI::Element, _layoutRight);  // +0x70
-constexpr size_t kElemBottom  = offsetof(UI::Element, _layoutBottom); // +0x74
-constexpr size_t kElemDialog  = offsetof(UI::Element, _dialogParent); // +0x90
-
-inline int32_t  I32(const void* p, size_t off) {
-    int32_t v; __builtin_memcpy(&v, static_cast<const uint8_t*>(p) + off, sizeof v); return v;
-}
-inline void SetI32(void* p, size_t off, int32_t v) {
-    __builtin_memcpy(static_cast<uint8_t*>(p) + off, &v, sizeof v);
-}
-inline void* Ptr(const void* p, size_t off) {
-    void* v; __builtin_memcpy(&v, static_cast<const uint8_t*>(p) + off, sizeof v); return v;
-}
-
 // `?SetNeedsSizeCalc@Element@UI@@` (0x180035470) INLINED. Every mutator in this
 // file carries its own copy, exactly as retail does:
 //
@@ -172,24 +140,18 @@ inline void* Ptr(const void* p, size_t off) {
 // Note the shape: the flag is set on the element FIRST and the parent is read
 // AFTER, so a chain of length one still gets the bit. It is a `do`, not a
 // `while`, and passing a null here would fault in retail too.
-void SetNeedsSizeCalcChain(void* elem) {
-    uint8_t* e = static_cast<uint8_t*>(elem);
+void SetNeedsSizeCalcChain(UI::Element* elem) {
+    UI::Element* e = elem;
     do {
-        SetI32(e, kElemFlags, I32(e, kElemFlags) | (int32_t)UI::kElementFlagNeedsSizeCalc);
-        e = static_cast<uint8_t*>(Ptr(e, kElemParent));
+        e->_flags |= UI::kElementFlagNeedsSizeCalc;                // +0x34
+        e = e->_parent;                                            // +0x98
     } while (e != nullptr);
 }
 
 // ---- the DLL singletons these bodies read ---------------------------------
-// RULE B6-5: member bodies read them, so the slot caches are namespace-scope
-// atomics (a miss is retried), not RT_DATA_SLOT's function-local statics.
-// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
-void* VideoDeviceSingleton() {            // 0x1801fe7a8
-    return ::Video::Device::_singleton;
-}
-void* InputDeviceSingleton() {            // 0x1801fe770
-    return ::Input::Device::_singleton;
-}
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics, read fresh:
+// ::Video::Device::_singleton (0x1801fe7a8), ::Input::Device::_singleton
+// (0x1801fe770).
 // 0x1801facb8 — the FIRST DWORD of NumberElement's `_typeInfo`, i.e. its
 // typeId, which is what retail loads with a `MOV EDX,dword ptr [0x1801facb8]`:
 // `UI::NumberElement::TypeId()` (ENDGAME B.3.9 TI-UI; no cache).
@@ -256,31 +218,30 @@ void ArrayGrow8 (void* a, int32_t n, const void* v) { rtcoll::RtColl_ArraySetSiz
 // which is 0x20/8 = 4. It takes `this` and nothing else.
 namespace {
 
-int32_t TablePaddedExtent(UI::Element* cellElem,
-                          size_t   extentOff, size_t nearPadOff, size_t farPadOff,
-                          size_t   minOff,    uint32_t screenBit, size_t deviceOff) {
-    // slot 4 first: the extent it reads below is what this call computes.
-    cellElem->ComputeSize();                                       // 18011e0f8 / 18011e1fe  VIRTUAL
-    // B.3.6 bridge: the axis selector picks the fields by offset.
-    uint8_t* cell = reinterpret_cast<uint8_t*>(cellElem);
+// The axis selector picks the fields by pointer-to-member.
+using ElemField   = int32_t UI::Element::*;
+using DeviceField = int32_t ::Video::Device::*;
 
-    const uint32_t flags = (uint32_t)I32(cell, kElemFlags);        // 18011e0fe / 18011e204
-    int32_t v = I32(cell, extentOff) + I32(cell, farPadOff) + I32(cell, nearPadOff);
-    const int32_t floorV = I32(cell, minOff);
+int32_t TablePaddedExtent(UI::Element* cell,
+                          ElemField extent, ElemField nearPad, ElemField farPad,
+                          ElemField minField, uint32_t screenBit, DeviceField screen) {
+    // slot 4 first: the extent it reads below is what this call computes.
+    cell->ComputeSize();                                           // 18011e0f8 / 18011e1fe  VIRTUAL
+
+    const uint32_t flags = cell->_flags;                           // 18011e0fe / 18011e204
+    int32_t v = cell->*extent + cell->*farPad + cell->*nearPad;
+    const int32_t floorV = cell->*minField;
     if (v < floorV) v = floorV;                                    // CMOVL
 
     if ((flags & 0x30u) != 0) {                                    // 18011e10e / 18011e214
-        uint8_t* root = cell;
-        while (Ptr(root, kElemParent) != nullptr) {                 // 18011e120 / 18011e223
-            root = static_cast<uint8_t*>(Ptr(root, kElemParent));
+        const UI::Element* root = cell;
+        while (root->_parent != nullptr) {                         // 18011e120 / 18011e223
+            root = root->_parent;
         }
         if ((flags & screenBit) != 0) {                            // 18011e134 / 18011e237
-            void*  dlg    = Ptr(root, kElemDialog);                // root->_dialogParent
-            void*  inner  = Ptr(dlg, 0x10);
-            void*  device = VideoDeviceSingleton();
-            const float scale = *reinterpret_cast<const float*>(
-                static_cast<const uint8_t*>(inner) + 0xdc);
-            const float px = (float)I32(device, deviceOff);
+            // root->_dialogParent (+0x90) -> _ui (+0x10) -> _uiScale (+0xdc)
+            const float scale = root->_dialogParent->_ui->_uiScale;
+            const float px = (float)(::Video::Device::_singleton->*screen);
             v = (int32_t)(px * scale);                             // CVTTSS2SI: truncate
         }
     }
@@ -301,8 +262,9 @@ int32_t TableElement::GetRowHeight(int32_t row) {
         if (cell == nullptr) continue;                             // 18011e0e6
         if ((cell->_flags & kElementFlagHidden) != 0) continue;   // 18011e0f0
 
-        const int32_t h = TablePaddedExtent(cell, kElemLayoutH, kElemTopPad, kElemBotPad,
-                                            kElemMinH, 0x10u, 0x08);
+        const int32_t h = TablePaddedExtent(cell, &Element::_layoutHeight, &Element::_topPad,
+                                            &Element::_bottomPad, &Element::_minHeight, 0x10u,
+                                            &::Video::Device::backBufferHeight);   // Device +0x08
         if (h > best) best = h;                                    // 18011e161 CMOVG
     }
     return best;
@@ -318,8 +280,9 @@ int32_t TableElement::GetColumnWidth(int32_t column) {
         if (cell == nullptr) continue;                             // 18011e1ec
         if ((cell->_flags & kElementFlagHidden) != 0) continue;   // 18011e1f6
 
-        const int32_t w = TablePaddedExtent(cell, kElemLayoutW, kElemLeftPad, kElemRightPad,
-                                            kElemMinW, 0x20u, 0x04);
+        const int32_t w = TablePaddedExtent(cell, &Element::_layoutWidth, &Element::_leftPad,
+                                            &Element::_rightPad, &Element::_minWidth, 0x20u,
+                                            &::Video::Device::backBufferWidth);    // Device +0x04
         if (w > best) best = w;                                    // 18011e264 CMOVG
     }
     return best;
@@ -475,8 +438,6 @@ void ListElement::DrawHighlight(SpriteContext& context, int32_t index,
     if (index < 0) return;                                         // 1800d3f73  JS
 
     const RibbonElement* ribbonElem = static_cast<const RibbonElement*>(_ribbon);
-    // B.3.6 bridge: the Element-level layout reads below keep their offsets.
-    const uint8_t* ribbon = reinterpret_cast<const uint8_t*>(ribbonElem);
 
     const int32_t  spacing = ribbonElem->_spacing;                 // +0xc4
     const int32_t* sizes   = ribbonElem->_extentsData;             // +0xc8
@@ -487,25 +448,25 @@ void ListElement::DrawHighlight(SpriteContext& context, int32_t index,
     }
 
     const bool vertical = ribbonElem->_vertical != 0;              // 1800d4042  (+0xc0)
-    int32_t left   = I32(ribbon, kElemLeft);                       // 1800d4049
-    int32_t top    = I32(ribbon, kElemTop);                        // 1800d404d
+    int32_t left   = ribbonElem->_layoutLeft;                      // 1800d4049
+    int32_t top    = ribbonElem->_layoutTop;                       // 1800d404d
     int32_t right;
     int32_t bottom;
     if (vertical) {
-        right  = I32(ribbon, kElemRight);                          // 1800d4065
+        right  = ribbonElem->_layoutRight;                         // 1800d4065
         top    = top + offset;                                     // 1800d4068
         bottom = sizes[index] + top;                               // 1800d4062/6b
     } else {
-        bottom = I32(ribbon, kElemBottom);                         // 1800d4073
+        bottom = ribbonElem->_layoutBottom;                        // 1800d4073
         left   = left + offset;                                    // 1800d4076
         right  = sizes[index] + left;                              // 1800d4070/79
     }
 
-    const uint8_t* clip = reinterpret_cast<const uint8_t*>(_clip);   // +0xf8  B.3.6 bridge
-    const int32_t clipLeft   = I32(clip, kElemLeft);               // 1800d4083
-    const int32_t clipRight  = I32(clip, kElemRight);              // 1800d4087
-    const int32_t clipTop    = I32(clip, kElemTop);                // 1800d408a
-    const int32_t clipBottom = I32(clip, kElemBottom);             // 1800d408e
+    const Element* clip = _clip;                                   // +0xf8
+    const int32_t clipLeft   = clip->_layoutLeft;                  // 1800d4083
+    const int32_t clipRight  = clip->_layoutRight;                 // 1800d4087
+    const int32_t clipTop    = clip->_layoutTop;                   // 1800d408a
+    const int32_t clipBottom = clip->_layoutBottom;                // 1800d408e
 
     if (right  <  clipLeft)   return;                              // 1800d4094
     if (left   >  clipRight)  return;                              // 1800d4099
@@ -573,13 +534,13 @@ namespace {
 int32_t ScrollSpriteExtent(const ::Sprite& sprite, bool vertical) {
     const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;                                         // 18011a3a8 JNS / else 0
-    const void* sheet = sprite.spriteSheet;
-    const uint8_t* infos = static_cast<const uint8_t*>(Ptr(sheet, 0x20));
+    // LEFT: UI::Sprite::spriteSheet is void* (Sprite.h, R-UI-b).
+    const UI::SpriteSheet* sheet = static_cast<const UI::SpriteSheet*>(sprite.spriteSheet);
     // `SpriteInfo` lives at GLOBAL scope in runtime/types/ui/SpriteSheet.h, not
     // in namespace UI, and its sizeof is static_asserted there to be 0x38 —
     // which is the stride retail's `IMUL RDX,RDX,0x38` uses.
-    const uint8_t* info  = infos + (size_t)(uint32_t)idx * sizeof(::SpriteInfo);
-    return I32(info, vertical ? 0x20 : 0x1c);
+    const ::SpriteInfo& info = sheet->m_sprites[(uint32_t)idx];   // m_sprites +0x20
+    return vertical ? info.height : info.width;                    // +0x20 / +0x1c
 }
 
 }  // namespace
@@ -885,16 +846,14 @@ static_assert(sizeof(kKeyChars) / sizeof(kKeyChars[0]) == 0x5B,
 namespace UI {
 
 char EditElement::SelectCharacter(int32_t key) const {   // `this` is never read
-    const uint8_t* input = static_cast<const uint8_t*>(InputDeviceSingleton());
+    const ::Input::Device* input = ::Input::Device::_singleton;
 
+    // The WORD compares read State::value (+0x04) of _keyboard[61], [62] and
+    // [66] (+0x6c0 + k*0x18): +0xc7c, +0xc94, +0xcf4.
     bool shift = true;                                             // 1800cfd6c MOV DL,1
-    uint16_t s = 0;
-    __builtin_memcpy(&s, input + 0xc7c, sizeof s);                 // 1800cfd4a
-    if (s == 0) {
-        __builtin_memcpy(&s, input + 0xc94, sizeof s);             // 1800cfd54
-        if (s == 0) {
-            __builtin_memcpy(&s, input + 0xcf4, sizeof s);         // 1800cfd5e
-            if (s == 0) shift = false;                             // 1800cfd68 XOR DL,DL
+    if (input->_keyboard[61].value == 0) {                         // 1800cfd4a
+        if (input->_keyboard[62].value == 0) {                     // 1800cfd54
+            if (input->_keyboard[66].value == 0) shift = false;    // 1800cfd5e / 1800cfd68 XOR DL,DL
         }
     }
 

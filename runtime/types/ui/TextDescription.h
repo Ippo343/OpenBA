@@ -81,8 +81,8 @@ public:
         _stringTable2 = nullptr;
         _name         = nullptr;
         _u80 = 0;
-        _b84 = 0;
-        _b85 = 0;
+        _b84 = false;
+        _b85 = false;
         _i88 = 0xc8;
         _i8c = -1;
     }
@@ -139,8 +139,8 @@ public:
     StringTable* _stringTable2;  // +0x70  ExternalPtr<UI::StringTable> (the base's +0x58 is another)
     char*        _name;          // +0x78  System::String (refcounted char*)
     uint32_t     _u80;           // +0x80  kScalarUInt
-    uint8_t      _b84;           // +0x84  kScalarBool
-    uint8_t      _b85;           // +0x85  kScalarBool
+    bool         _b84;           // +0x84  kScalarBool
+    bool         _b85;           // +0x85  kScalarBool
     uint8_t      _pad86[2];      // +0x86  never written
     int32_t      _i88;           // +0x88  kScalarInt, ctor 0xc8
     int32_t      _i8c;           // +0x8c  kScalarInt, ctor -1, conditional

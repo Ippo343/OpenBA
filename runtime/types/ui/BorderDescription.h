@@ -45,6 +45,11 @@
 
 namespace UI {
 
+class SpriteSheet;
+class StringTable;
+class Font;
+class ElementDescription;
+
 class BorderDescription : public ElementDescription {
 public:
     // ??0BorderDescription@UI@@QEAA@XZ 0x18010fa50 — the REAL constructor. The
@@ -91,7 +96,7 @@ public:
     // RtUI::BorderDescription's names, unchanged: one ExternalPtr<SpriteSheet>
     // and NINE System::String sprite names, the pieces of a nine-slice border,
     // in BorderElement's row-major order.
-    void* _spriteSheet;            // +0x68  LEA RCX,[RDI+0x68] @ 0x18010fe6f
+    SpriteSheet* _spriteSheet;     // +0x68 (B4 H4: typed)  LEA RCX,[RDI+0x68] @ 0x18010fe6f
     char* _spriteName[9];          // +0x70 .. +0xb0  @ 0x18010fe7d .. 0x18010feff
 };
 

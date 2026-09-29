@@ -355,7 +355,7 @@ void FileSystem::SetupDirectories() {
             // immediately after the OpenFile call (0x1800abe6a), which is what
             // this inner scope is.
             System::Filename f(cmdPath);
-            OpenFile(&fi, *reinterpret_cast<const RtSystem::Filename*>(&f));   // B.3.x bridge
+            OpenFile(&fi, f);
         }
 
         if (fi.handle != -1) {

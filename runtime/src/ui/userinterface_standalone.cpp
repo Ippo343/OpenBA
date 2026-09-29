@@ -84,8 +84,6 @@ struct StandAloneSummary {
 };
 StandAloneSummary g_standAloneSummary;
 
-constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
-
 }  // namespace
 
 // ============================================================================
@@ -120,33 +118,35 @@ constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
 // ============================================================================
 void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui) {
     ++g_updEntries;
-    const void* const time = &timeRef;                                 // one int64 tick count
 
     // 0x180120329 -- note the argument SWAP: retail is a static taking
-    // (time, ui) and Update is a member taking (this=ui, time).
-    static_cast<UserInterface*>(ui)->Update(timeRef);
+    // (time, ui) and Update is a member taking (this=ui, time). `ui` is the
+    // callback's `void*` user data (retail's `PEAX`).
+    UserInterface* const self = static_cast<UserInterface*>(ui);
+    self->Update(timeRef);
 
     // 0x180120336..0x180120386 -- the inlined System::Random default ctor.
-    ::Random rng;   // runtime/types/system/Value.h -- global namespace, unlike RtSystem::String
-    RtSystem_Random_Ctor(reinterpret_cast<System::Random*>(&rng));   // 0x1800c7f20
+    // `System::Random` declares no constructor, so the object below is
+    // storage until the ctor body runs on it.
+    System::Random rng;
+    RtSystem_Random_Ctor(&rng);                                        // 0x1800c7f20
 
-    void* const scene = *reinterpret_cast<void* const*>(
-        reinterpret_cast<const uint8_t*>(ui) + kUI_AudioScene);       // 0x180120388
+    void* const scene = self->_audioScene;                             // 0x180120388, +0x90
     if (scene) {                                                       // 0x18012038f
         ++g_updWithScene;
-        const float listener[3] = { 0.0f, 0.0f, 0.0f };                // 0x1801203a7
+        const Vector3 listener(0.0f, 0.0f, 0.0f);                      // 0x1801203a7
         // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
         const int64_t elapsed = static_cast<int64_t>(0.0 / ::System::Timer::_secondsPerTick);      // 0x1801203b0
-        System::Time now;     now._ticks     = *reinterpret_cast<const int64_t*>(time);
+        System::Time now;     now._ticks     = timeRef._ticks;
         System::Time elapsedT; elapsedT._ticks = elapsed;
+        // B.4 LEFT: `_audioScene` stays `void*` (code/Game assigns it a `void*`).
         reinterpret_cast<Audio::Scene*>(scene)->Update(
-            now, elapsedT, *reinterpret_cast<System::Random*>(&rng),
-            *reinterpret_cast<const Vector3*>(listener), 0.0f);           // 0x1801203d0  B.3.7 bridge
+            now, elapsedT, rng, listener, 0.0f);                       // 0x1801203d0
     }
 }
 
-extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui) {
-    UI::UserInterface::UpdateStandAloneUI(*static_cast<const System::Time*>(time), ui);
+extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const System::Time* time, void* ui) {
+    UI::UserInterface::UpdateStandAloneUI(*time, ui);
 }
 
 // ============================================================================
@@ -175,8 +175,8 @@ void UI::UserInterface::DrawStandAloneUI(Video::Context& context, void* ui) {
     static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP
 }
 
-extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui) {
-    UI::UserInterface::DrawStandAloneUI(*static_cast<Video::Context*>(videoContext), ui);
+extern "C" void RtUi_UserInterface_DrawStandAloneUI(Video::Context* videoContext, void* ui) {
+    UI::UserInterface::DrawStandAloneUI(*videoContext, ui);
 }
 
 // ============================================================================

@@ -206,6 +206,7 @@
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/Element.h"       // B3X W0: the root's slots by name
+#include "../../types/ui/UserInterface.h" // B4: UserInterface::_uiScale / _events
 #include "../../types/object/VSlot.h"     // B3X W0 audit: the left Contains call's slot
 #include "../../types/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
 #include "../../types/system/Timer.h"     // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
@@ -269,14 +270,8 @@ void ReleaseStringLocal(char*& p) {
     }
 }
 
-// `?_singleton@Device@Video@@0PEAV12@EA` — a MINTED data slot
-// (standalone/rt_data_mint_tables.inc:1565), reached through the same
-// RT_DATA_SLOT door runtime/src/ui/userinterface.cpp uses rather than by a raw
-// address read, so it is satisfied at cutover and never caches a null.
-inline void** VideoDeviceSingleton() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
-}
+// `?_singleton@Device@Video@@0PEAV12@EA`: read as the class static
+// `Video::Device::_singleton` at each use (B4: its accessor is gone).
 
 // ---- slots 1/2 of DialogInstance and ElementDescription --------------------
 // Retail reads ONE `Object::BaseTypeInfo` per class, +0x00 the id and +0x08 the
@@ -794,8 +789,6 @@ namespace {
 // GetIndexFromName (0x180002470) and Element::AdjustUpperLeft (0x180115840) are
 // called by name in the bodies below.
 
-inline const uint8_t* Bytes(const void* p) { return static_cast<const uint8_t*>(p); }
-inline uint8_t*       Bytes(void* p)       { return static_cast<uint8_t*>(p); }
 
 }  // namespace
 
@@ -829,7 +822,7 @@ void DialogInstance::ReleaseFields() {
     // --- the root Element, through its scalar deleting destructor ------------
     // Retail calls slot 0 with EDX = 1: destruct AND free.
     if (_root) {
-        delete static_cast<Element*>(_root);
+        delete _root;
         _root = nullptr;
     }
 
@@ -857,7 +850,7 @@ void DialogInstance::ReleaseFields() {
 
 // ---- accessors -------------------------------------------------------------
 Object::InternalPtr<Element> DialogInstance::GetRoot() {       // 0x180045580
-    return Object::InternalPtr<Element>(static_cast<Element*>(_root));
+    return Object::InternalPtr<Element>(_root);
 }
 
 // THE PARAMETER IS A TYPE ID, NOT AN INDEX (see the door). No null check on
@@ -879,12 +872,12 @@ DialogInstance::GetController(uint32_t typeId) const {         // 0x180113320
 // _root — retail has none.
 Object::InternalPtr<Element>
 DialogInstance::FindElement(const System::String& name) {      // 0x180114c70
-    return static_cast<Element*>(_root)->FindElement(name);     // B.3.x bridge
+    return _root->FindElement(name);
 }
 
 Object::InternalPtr<Element>
 DialogInstance::FindElementType(uint32_t typeId) {             // 0x1801140c0
-    return static_cast<Element*>(_root)->FindElementType(typeId);   // B.3.x bridge
+    return _root->FindElementType(typeId);
 }
 
 // ---- self-contained mutators ------------------------------------------------
@@ -897,26 +890,23 @@ void DialogInstance::SetFlagsOnOff(uint32_t on, uint32_t off) { // 0x180114690
 void DialogInstance::StopTimer(int32_t id) {                   // 0x180113730
     const int64_t count64 = static_cast<int64_t>(_timers._size);
     if (count64 > 0) {
-        uint8_t* base = reinterpret_cast<uint8_t*>(_timers._data);
+        DialogTimer* const base = _timers._data;
         int32_t  i = 0;
         int64_t  walked = 0;
         for (;;) {
-            if (*reinterpret_cast<const int32_t*>(base + walked * 0x18 + 0x10) == id) break;
+            if (base[walked]._id == id) break;
             ++walked;
             ++i;
             if (walked >= _timers._size) return;   // retail: plain RET
         }
         if (i < _timers._size) {
-            int64_t off = static_cast<int64_t>(i) * 0x18;
+            int64_t k = i;
             do {
                 ++i;
-                uint8_t* p = base + off;
-                if (i < _timers._size && p != nullptr) {
-                    std::memcpy(p + 0x00, p + 0x18, 8);
-                    std::memcpy(p + 0x08, p + 0x20, 8);
-                    std::memcpy(p + 0x10, p + 0x28, 8);
-                }
-                off += 0x18;
+                DialogTimer* p = base + k;
+                if (i < _timers._size && p != nullptr)
+                    *p = p[1];                      // retail: three qword moves
+                ++k;
             } while (i < _timers._size);
         }
         _timers._size -= 1;
@@ -953,36 +943,27 @@ void DialogInstance::OnElementEvent(Object::InternalPtr<Element>* element,
 // them). Element vtable slots: 4 ComputeSize, 5 ComputeLayout, 7 Update,
 // 9 Contains.
 bool DialogInstance::Contains(int32_t x, int32_t y) const {    // 0x180114820
-    const uint8_t* root = Bytes(_root);
+    const Element* const root = _root;
     if ((_flags >> 2) & 1) return false;
     if ((_flags >> 3) & 1)
-        return static_cast<const Element*>(_root)->Contains(       // Element slot 9
-            x, y, static_cast<UserInterface*>(_ui));
-    const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
-    const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
-    const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
-    const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
-    return left <= x && x <= right && top <= y && y <= bottom;
+        return root->Contains(x, y, _ui);                      // Element slot 9
+    return root->_layoutLeft <= x && x <= root->_layoutRight &&
+           root->_layoutTop <= y && y <= root->_layoutBottom;
 }
 
 int32_t DialogInstance::GetMouseCursorIndex(Object::InternalPtr<Element> element,
                                             int32_t x, int32_t y) const {  // 0x180114010
-    const uint8_t* elem = Bytes(static_cast<const void*>(element.Get()));
-    int32_t result = *reinterpret_cast<const int32_t*>(elem + 0x3c);
-    const int32_t count = *reinterpret_cast<const int32_t*>(elem + 0xa8);
-    void* const* const children = *reinterpret_cast<void* const* const*>(elem + 0xa0);
+    const Element* const elem = element.Get();
+    int32_t result = elem->_mouseCursorIndex;
+    const int32_t count = elem->_children._size;
+    Element* const* const children = elem->_children._data;
     for (int32_t i = 0; i < count; ++i) {
-        void* child = children ? children[i] : nullptr;
+        Element* child = children ? children[i] : nullptr;
         if (!child) continue;
-        const uint8_t* c = Bytes(child);
-        if ((*reinterpret_cast<const uint8_t*>(c + 0x34) & 3) != 0) continue;
-        const int32_t left   = *reinterpret_cast<const int32_t*>(c + 0x68);
-        const int32_t top    = *reinterpret_cast<const int32_t*>(c + 0x6c);
-        const int32_t right  = *reinterpret_cast<const int32_t*>(c + 0x70);
-        const int32_t bottom = *reinterpret_cast<const int32_t*>(c + 0x74);
-        if (left <= x && x < right && top <= y && y < bottom)
-            result = GetMouseCursorIndex(
-                Object::InternalPtr<Element>(static_cast<Element*>(child)), x, y);
+        if ((child->_flags & 3) != 0) continue;                // the low byte of +0x34
+        if (child->_layoutLeft <= x && x < child->_layoutRight &&
+            child->_layoutTop <= y && y < child->_layoutBottom)
+            result = GetMouseCursorIndex(Object::InternalPtr<Element>(child), x, y);
     }
     return result;
 }
@@ -990,20 +971,20 @@ int32_t DialogInstance::GetMouseCursorIndex(Object::InternalPtr<Element> element
 void DialogInstance::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {  // 0x180113d90
     OnUpdateLayout();                                          // own slot 6 — VIRTUAL
 
-    uint8_t* root = Bytes(_root);
+    Element* const root = _root;
     auto ComputeSize = [&]() {
-        reinterpret_cast<Element*>(root)->ComputeSize();       // Element slot 4
+        root->ComputeSize();                                   // Element slot 4
     };
     ComputeSize();
 
-    int32_t layoutW = *reinterpret_cast<int32_t*>(root + 0x60);
-    int32_t layoutH = *reinterpret_cast<int32_t*>(root + 0x64);
-    const int32_t alignment = *reinterpret_cast<int32_t*>(root + 0x30);
-    const uint8_t elemFlags = *reinterpret_cast<uint8_t*>(root + 0x34);
-    const int32_t leftPad   = *reinterpret_cast<int32_t*>(root + 0x18);
-    const int32_t rightPad  = *reinterpret_cast<int32_t*>(root + 0x1c);
-    const int32_t topPad    = *reinterpret_cast<int32_t*>(root + 0x20);
-    const int32_t bottomPad = *reinterpret_cast<int32_t*>(root + 0x24);
+    int32_t layoutW = root->_layoutWidth;
+    int32_t layoutH = root->_layoutHeight;
+    const int32_t alignment = root->_alignment;
+    const uint8_t elemFlags = static_cast<uint8_t>(root->_flags);   // the low byte of +0x34
+    const int32_t leftPad   = root->_leftPad;
+    const int32_t rightPad  = root->_rightPad;
+    const int32_t topPad    = root->_topPad;
+    const int32_t bottomPad = root->_bottomPad;
 
     int32_t posX = _upperLeftX + x;
     int32_t posY = _upperLeftY + y;
@@ -1030,61 +1011,60 @@ void DialogInstance::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
     }
 
     ComputeSize();   // retail calls it a second time; reproduced as-is.
-    int32_t totalW = *reinterpret_cast<int32_t*>(root + 0x60) + rightPad + leftPad;
-    int32_t totalH = *reinterpret_cast<int32_t*>(root + 0x64) + bottomPad + topPad;
-    const int32_t minW = *reinterpret_cast<int32_t*>(root + 0x28);
-    const int32_t minH = *reinterpret_cast<int32_t*>(root + 0x2c);
+    int32_t totalW = root->_layoutWidth + rightPad + leftPad;
+    int32_t totalH = root->_layoutHeight + bottomPad + topPad;
+    const int32_t minW = root->_minWidth;
+    const int32_t minH = root->_minHeight;
     if (totalW < minW) totalW = minW;
     if (totalH < minH) totalH = minH;
 
-    const uint32_t rootFlags = *reinterpret_cast<uint32_t*>(root + 0x34);
+    const uint32_t rootFlags = root->_flags;
     if (rootFlags & 0x30) {
-        uint8_t* ancestor = root;
-        while (*reinterpret_cast<uint8_t**>(ancestor + 0x98) != nullptr)
-            ancestor = *reinterpret_cast<uint8_t**>(ancestor + 0x98);
-        // ancestor+0x90 is Element::_dialogParent; its +0x10 is
-        // DialogInstance::_ui, whose +0xdc is UserInterface::_uiScale.
-        uint8_t* dlgParent = *reinterpret_cast<uint8_t**>(ancestor + 0x90);
-        const float uiScale = dlgParent
-            ? *reinterpret_cast<float*>(*reinterpret_cast<uint8_t**>(dlgParent + 0x10) + 0xdc)
-            : 1.0f;
-        void** deviceSlot = VideoDeviceSingleton();
-        const uint8_t* device = deviceSlot ? static_cast<uint8_t*>(*deviceSlot) : nullptr;
+        Element* ancestor = root;
+        while (ancestor->_parent != nullptr)
+            ancestor = ancestor->_parent;
+        // Element::_dialogParent -> DialogInstance::_ui -> UserInterface::_uiScale.
+        const DialogInstance* dlgParent = ancestor->_dialogParent;
+        const float uiScale = dlgParent ? dlgParent->_ui->_uiScale : 1.0f;
+        const ::Video::Device* device = ::Video::Device::_singleton;
         if (device) {
             if (rootFlags & 0x20)
-                totalW = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * uiScale);
+                totalW = static_cast<int32_t>(static_cast<float>(device->backBufferWidth) * uiScale);
             if (rootFlags & 0x10)
-                totalH = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * uiScale);
+                totalH = static_cast<int32_t>(static_cast<float>(device->backBufferHeight) * uiScale);
         }
     }
 
-    reinterpret_cast<Element*>(root)->ComputeLayout(           // Element slot 5
+    root->ComputeLayout(                                       // Element slot 5
         posX, posY, posX + totalW, posY + totalH);
 }
 
 void DialogInstance::Update(const System::Time& time, UserInterface* ui,
-                            uint8_t* updateState) {            // 0x180113980
-    // The 0x30-byte UI event record (see the door's banner).
+                            Element::UpdateState& state) {     // 0x180113980
+    // The 0x30-byte UI event record (see the door's banner). +0x18 is the
+    // mouse pair, written as one qword by retail (the UpdateState's +0x18).
     struct EventRecord {
         void*    dialog;
         uint64_t _unused08;
         int32_t  type;
         int32_t  data;
-        uint64_t payload;
+        int32_t  mouseX;
+        int32_t  mouseY;
         uint64_t _unused20_28[2];
     };
     static_assert(sizeof(EventRecord) == 0x30, "UI::UserInterface::Event stride");
+    static_assert(offsetof(EventRecord, mouseX) == 0x18, "the event's mouse pair");
     // UserInterface::_events (+0x48) through the hand-derived kSpec_Event30
     // row, which leaves bytes [0x24,0x28) of every element UNWRITTEN — see
     // the door's banner for why the trait-derived member is not used.
-    auto PushEvent = [&](int32_t type, int32_t data, uint64_t payload) {
+    auto PushEvent = [&](int32_t type, int32_t data, int32_t mouseX, int32_t mouseY) {
         EventRecord rec{};
         rec.dialog = this;
         rec.type = type;
         rec.data = data;
-        rec.payload = payload;
-        uint8_t* eventsHdr = reinterpret_cast<uint8_t*>(ui) + 0x48;  // UserInterface::_events
-        auto* events = rtcoll::AsArray<&rtcoll::kSpec_Event30>(eventsHdr);
+        rec.mouseX = mouseX;
+        rec.mouseY = mouseY;
+        auto* events = rtcoll::AsArray<&rtcoll::kSpec_Event30>(&ui->_events);
         events->SetSizeFill(events->GetSize() + 1, &rec);          // retail 0x180033690
     };
 
@@ -1097,18 +1077,17 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
     if (!anyChildBit1) {
         OnUpdate(time);                                        // own slot 7 — VIRTUAL
 
-        const uint8_t* us = updateState;
-        const int64_t timeTicks = *reinterpret_cast<const int64_t*>(&time);  // System::Time: one int64
+        const int64_t timeTicks = time._ticks;
         // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
         const double secondsPerTick = ::System::Timer::_secondsPerTick;
         // DAT_1801616b8: a double, read directly out of the shipped DLL
         // (0.25 seconds) — no export names it, so it is a literal here.
         constexpr double kTooltipDelaySeconds = 0.25;
 
-        if (us[8] == 0 && us[9] == 0 && us[7] == 0) {
-            const int32_t mx = *reinterpret_cast<const int32_t*>(us + 0x18);
-            const int32_t my = *reinterpret_cast<const int32_t*>(us + 0x1c);
-            if (us[0x20] == 0 && Contains(mx, my)) {
+        if (state.b08 == 0 && state.b09 == 0 && state.leftDown == 0) {
+            const int32_t mx = state.mouseX;
+            const int32_t my = state.mouseY;
+            if (state.mouseCaptured == 0 && Contains(mx, my)) {
                 // +0x90/+0x94, NOT the upper-left pair at +0x88 (see the door).
                 if (_hoverMouseX == mx && _hoverMouseY == my) {
                     _hoverTime += timeTicks;
@@ -1120,24 +1099,21 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
             }
         } else if (_hovering != 0) {
             _hovering = 0;
-            PushEvent(0x11, 0, 0);
+            PushEvent(0x11, 0, 0, 0);
             _hoverTime = 0;
         }
 
         // ---- timers: +0x08 is the LIVE countdown (see the door) -----------
         if (_timers._size > 0) {
-            uint8_t* data = reinterpret_cast<uint8_t*>(_timers._data);
+            RtUI::DialogTimer* data = _timers._data;
             int32_t i = 0;
             while (i < _timers._size) {
-                uint8_t* t = data + static_cast<size_t>(i) * 0x18;
-                int64_t* remaining = reinterpret_cast<int64_t*>(t + 0x08);
-                *remaining -= timeTicks;
-                if (*remaining <= 0) {
-                    const int32_t timerId = *reinterpret_cast<int32_t*>(t + 0x10);
-                    PushEvent(0x13, timerId, 0);
+                RtUI::DialogTimer& t = data[i];
+                t._remaining -= timeTicks;
+                if (t._remaining <= 0) {
+                    PushEvent(0x13, t._id, 0, 0);
                     for (int32_t k = i; k + 1 < _timers._size; ++k)
-                        std::memcpy(data + static_cast<size_t>(k) * 0x18,
-                                    data + static_cast<size_t>(k + 1) * 0x18, 0x18);
+                        data[k] = data[k + 1];                 // the 0x18-byte record
                     --_timers._size;
                     continue;   // retail does NOT re-visit the slot just filled
                 }
@@ -1145,19 +1121,16 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
             }
         }
 
-        // ---- root Element::Update (block A's slot 7, five arguments) -------
-        uint8_t* root = Bytes(_root);
-        DialogInstance* topDialog = this;
+        // ---- root Element::Update (slot 7, five arguments) -----------------
+        Element* const root = _root;
         // Slot 7 takes the InternalPtr<DialogInstance> by the ADDRESS of the
         // caller's 8-byte handle and the UpdateState by reference (Element.h's
-        // banner): the same two pointers the raw call passed.
-        reinterpret_cast<Element*>(root)->Update(
-            time, ui,
-            reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&topDialog),
-            *reinterpret_cast<const Element::UpdateState*>(updateState));
+        // banner).
+        Object::InternalPtr<DialogInstance> topDialog(this);
+        root->Update(time, ui, &topDialog, state);
 
-        const int32_t mx2 = *reinterpret_cast<const int32_t*>(updateState + 0x18);
-        const int32_t my2 = *reinterpret_cast<const int32_t*>(updateState + 0x1c);
+        const int32_t mx2 = state.mouseX;
+        const int32_t my2 = state.mouseY;
         // bit2 is mouse-passthrough: it SKIPS the hit block (see the door).
         bool hit;
         if ((_flags >> 2) & 1) {
@@ -1167,81 +1140,77 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
             // x/y, R9 = [RBX+0x10] (_ui), CALL [RAX+0x48] = Element slot 9,
             // Contains(x, y, UserInterface*). B3R owed 1 (behaviour): this used
             // to pass `_dialog` (+0x18) as the fourth argument.
-            hit = reinterpret_cast<Element*>(root)->Contains(
-                mx2, my2, static_cast<UserInterface*>(_ui));
+            hit = root->Contains(mx2, my2, _ui);
         } else {
-            const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
-            const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
-            const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
-            const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
-            hit = left <= mx2 && mx2 <= right && top <= my2 && my2 <= bottom;
+            hit = root->_layoutLeft <= mx2 && mx2 <= root->_layoutRight &&
+                  root->_layoutTop <= my2 && my2 <= root->_layoutBottom;
         }
         if (hit) {
-            const uint64_t mousePos = *reinterpret_cast<const uint64_t*>(updateState + 0x18);
-            if (updateState[1] != 0) PushEvent(8,  0, mousePos);
-            if (updateState[3] != 0) PushEvent(9,  0, mousePos);
-            if (updateState[2] != 0) PushEvent(0xa, 0, mousePos);
-            *reinterpret_cast<uint16_t*>(updateState + 7) = 0;
-            *reinterpret_cast<uint16_t*>(updateState + 1) = 0;
-            *reinterpret_cast<uint16_t*>(updateState + 4) = 0;
-            updateState[9] = 0;
-            updateState[3] = 0;
-            updateState[6] = 0;
-            updateState[0x20] = 1;
+            const int32_t px = state.mouseX;
+            const int32_t py = state.mouseY;
+            if (state.buttonPressed != 0) PushEvent(8,  0, px, py);
+            if (state.b03 != 0)           PushEvent(9,  0, px, py);
+            if (state.b02 != 0)           PushEvent(0xa, 0, px, py);
+            state.leftDown = 0;          state.b08 = 0;        // retail: one WORD store at +0x07
+            state.buttonPressed = 0;     state.b02 = 0;        // one WORD store at +0x01
+            state.b04 = 0;               state.b05 = 0;        // one WORD store at +0x04
+            state.b09 = 0;
+            state.b03 = 0;
+            state.b06 = 0;
+            state.mouseCaptured = 1;
         }
     }
 
     for (auto it = _children.GetFirst(); it; ++it)
-        it->Get()->Update(time, ui, updateState);
+        it->Get()->Update(time, ui, state);
+}
+
+// B4 FORWARD: 1 outside caller(s) (runtime/src/ui/userinterface_frame.cpp,
+// block R-UI-b) still hand the UpdateState as its address.
+void DialogInstance::Update(const System::Time& time, UserInterface* ui,
+                            uint8_t* updateState) {
+    Update(time, ui, *reinterpret_cast<Element::UpdateState*>(updateState));
 }
 
 void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180114a60
-    const float scale = *reinterpret_cast<const float*>(Bytes(_ui) + 0xdc);
+    const float scale = _ui->_uiScale;
 
-    const uint8_t* device = static_cast<const uint8_t*>(*VideoDeviceSingleton());
+    const ::Video::Device* const device = ::Video::Device::_singleton;
     const int32_t screenW = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * scale);
+        static_cast<float>(device->backBufferWidth) * scale);
     const int32_t screenH = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * scale);
+        static_cast<float>(device->backBufferHeight) * scale);
 
     if (scaled) {
         x = static_cast<int32_t>(static_cast<float>(x) * scale);
         y = static_cast<int32_t>(static_cast<float>(y) * scale);
     }
 
-    uint8_t* root = Bytes(_root);
+    Element* const root = _root;
 
     // Element vtable slot 4 — ComputeSize. Pure virtual on the base.
-    reinterpret_cast<Element*>(root)->ComputeSize();
+    root->ComputeSize();
 
-    int32_t w = *reinterpret_cast<const int32_t*>(root + 0x60) +
-                *reinterpret_cast<const int32_t*>(root + 0x1c) +
-                *reinterpret_cast<const int32_t*>(root + 0x18);
-    int32_t h = *reinterpret_cast<const int32_t*>(root + 0x64) +
-                *reinterpret_cast<const int32_t*>(root + 0x24) +
-                *reinterpret_cast<const int32_t*>(root + 0x20);
-    const uint32_t flags = *reinterpret_cast<const uint32_t*>(root + 0x34);
-    if (w < *reinterpret_cast<const int32_t*>(root + 0x28))
-        w = *reinterpret_cast<const int32_t*>(root + 0x28);
-    if (h < *reinterpret_cast<const int32_t*>(root + 0x2c))
-        h = *reinterpret_cast<const int32_t*>(root + 0x2c);
+    int32_t w = root->_layoutWidth + root->_rightPad + root->_leftPad;
+    int32_t h = root->_layoutHeight + root->_bottomPad + root->_topPad;
+    const uint32_t flags = root->_flags;
+    if (w < root->_minWidth)
+        w = root->_minWidth;
+    if (h < root->_minHeight)
+        h = root->_minHeight;
 
     if ((flags & 0x30u) != 0) {
-        const uint8_t* e = root;
-        while (*reinterpret_cast<void* const*>(e + 0x98) != nullptr)
-            e = *reinterpret_cast<const uint8_t* const*>(e + 0x98);   // _parent
-        const uint8_t* dlg = *reinterpret_cast<const uint8_t* const*>(e + 0x90);
+        const Element* e = root;
+        while (e->_parent != nullptr)
+            e = e->_parent;
+        const DialogInstance* dlg = e->_dialogParent;
         if ((flags & 0x20u) != 0) {
-            const float s = *reinterpret_cast<const float*>(
-                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
-            w = static_cast<int32_t>(
-                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * s);
+            const float s = dlg->_ui->_uiScale;
+            w = static_cast<int32_t>(static_cast<float>(device->backBufferWidth) * s);
         }
         if ((flags & 0x10u) != 0) {
-            const float s = *reinterpret_cast<const float*>(
-                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
-            h = static_cast<int32_t>(
-                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * s);
+            const float s = dlg->_ui->_uiScale;
+            h = static_cast<int32_t>(static_cast<float>(device->backBufferHeight) * s);
         }
     }
 
@@ -1255,18 +1224,20 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
     const int32_t dy = y - _upperLeftY;
 
     if (dx != 0 || dy != 0) {
-        uint8_t* r = Bytes(_root);
-        *reinterpret_cast<int32_t*>(r + 0x68) += dx;
-        *reinterpret_cast<int32_t*>(r + 0x70) += dx;
-        *reinterpret_cast<int32_t*>(r + 0x6c) += dy;
-        *reinterpret_cast<int32_t*>(r + 0x74) += dy;
+        Element* const r = _root;
+        r->_layoutLeft   += dx;
+        r->_layoutRight  += dx;
+        r->_layoutTop    += dy;
+        r->_layoutBottom += dy;
 
-        const int32_t n = *reinterpret_cast<const int32_t*>(r + 0xa8);
+        const int32_t n = r->_children._size;
         for (int32_t i = 0; i < n; ++i) {
-            void* child = (*reinterpret_cast<void** const*>(r + 0xa0))[i];
-            if (child) static_cast<Element*>(child)->AdjustUpperLeft(dx, dy);   // 0x180115840
+            Element* child = r->_children._data[i];
+            if (child) child->AdjustUpperLeft(dx, dy);          // 0x180115840
         }
-        if (void* border = *reinterpret_cast<void* const*>(r + 0xb0))
+        // LEFT: Element::_border stays void* (tests/unit/ui_element_abi_test.cpp:394
+        // assigns a void* to it).
+        if (void* border = r->_border)
             static_cast<Element*>(border)->AdjustUpperLeft(dx, dy);
 
         _upperLeftX = x;
@@ -1282,8 +1253,7 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
 // the array, faithfully.
 Object::ExternalPtr<ElementDescription>
 Dialog::GetTemplate(int32_t index) const {                     // 0x1800388b0
-    return Object::ExternalPtr<ElementDescription>(
-        static_cast<ElementDescription*>(_templates[static_cast<int64_t>(index)]));
+    return Object::ExternalPtr<ElementDescription>(_templates[static_cast<int64_t>(index)]);
 }
 
 // "Make an element from this description, unless a NAMED TEMPLATE overrides
@@ -1291,27 +1261,26 @@ Dialog::GetTemplate(int32_t index) const {                     // 0x1800388b0
 // order) at the door above.
 Object::InternalPtr<Element>
 Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const {  // 0x180112ed0
-    void* const desc = description.Get();
+    ElementDescription* const desc = description.Get();
     Object::InternalPtr<Element> result;
     if (!desc) return result;
 
     char* name = nullptr;
     {
         // identTmp's destructor runs before pathTmp's — retail's order.
-        System::Filename pathTmp =                                  // 0x180006250
-            static_cast<const Object::External*>(desc)->GetPath();
+        System::Filename pathTmp = desc->GetPath();                 // 0x180006250
         const System::Filename identTmp = pathTmp.GetPathIdentifer();
         name = identTmp._data;
         if (name) { ++RtSystem::StringRefCount(name); }   // 0x180112f3e INC [RCX-4]
     }
 
-    void* target  = desc;          // the no-match answer: the argument itself
+    const ElementDescription* target = desc;   // the no-match answer: the argument itself
     bool  matched = false;
     const int32_t count = _namedTemplateCount;
     for (int32_t i = 0; i < count; ++i) {
         const RtUI::DialogNamedTemplate& e = _namedTemplates[i];
-        const int32_t lenOurs   = name    ? *reinterpret_cast<const int32_t*>(name    - 8) : 0;
-        const int32_t lenTheirs = e._name ? *reinterpret_cast<const int32_t*>(e._name - 8) : 0;
+        const int32_t lenOurs   = name    ? RtSystem::StringLength(name)    : 0;
+        const int32_t lenTheirs = e._name ? RtSystem::StringLength(e._name) : 0;
         if (lenOurs != lenTheirs) continue;
 
         if (!name)             { matched = true; }            // 0x180112fd5
@@ -1344,7 +1313,7 @@ Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const
         // The description's slot 8 (CreateInstance, RETSLOT, B6-2) — a
         // virtual on UI::ElementDescription, dispatched through the leaf's
         // own table (fragment pass F2: was a hand-inlined vtbl[8]).
-        static_cast<const ElementDescription*>(target)->CreateInstance(&result, this);
+        target->CreateInstance(&result, this);
     }
 
     if (name) ReleaseStringLocal(name);   // 0x180113061..0x180113087
@@ -1355,7 +1324,7 @@ Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const
 // UI::DialogController
 // ============================================================================
 Object::InternalPtr<Element> DialogController::GetContainer() {  // 0x18003b700
-    return Object::InternalPtr<Element>(static_cast<Element*>(_container));
+    return Object::InternalPtr<Element>(_container);
 }
 
 // ============================================================================
@@ -1394,7 +1363,7 @@ void ElementDescription::InitFields() {
     _id = -1;                                 // +0x3c
     _elementType = 3;    _flags = 0;          // +0x40 (QWORD 3)
     _childDesc = nullptr;                     // +0x48
-    _userData = 0;                            // +0x50
+    _toolTipDialog = nullptr;                 // +0x50
     _stringTable = nullptr;                   // +0x58
     _textName = nullptr;                      // +0x60
 }
@@ -1426,7 +1395,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     // ---- 1. elem->_name = this->GetPath().GetPathIdentifer() --------------
     // Object::External::GetPath (0x180006250) and System::Filename::
     // GetPathIdentifer, both members.
-    uint8_t* elem = reinterpret_cast<uint8_t*>(element->Get());
+    Element* elem = element->Get();
 
     // The inner scope ends the two temporaries' lives where retail's two
     // inlined releases are, in retail's order (identTmp, then pathTmp).
@@ -1436,20 +1405,20 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
         identTmp = pathTmp.GetPathIdentifer();
 
         char*    want = identTmp._data;
-        // B.3.1 bridge: Element::_name at +0x10, retail's inlined assign stays.
-        char*    old  = *reinterpret_cast<char**>(elem + 0x10);
+        // Element::_name at +0x10: retail's inlined assign stays.
+        char*    old  = elem->_name;
         if (old != want) {
             if (old) {
                 if (--RtSystem::StringRefCount(old) == 0) {
                     // Retail's asymmetry: the FREEING branch leaves the FIELD
                     // holding `data - 8` and frees that; sharing nulls it.
-                    *reinterpret_cast<char**>(elem + 0x10) = old - 8;
-                    MemFreeStatic(*reinterpret_cast<char**>(elem + 0x10));
+                    elem->_name = old - 8;
+                    MemFreeStatic(elem->_name);
                 } else {
-                    *reinterpret_cast<char**>(elem + 0x10) = nullptr;
+                    elem->_name = nullptr;
                 }
             }
-            *reinterpret_cast<char**>(elem + 0x10) = want;
+            elem->_name = want;
             if (want) ++RtSystem::StringRefCount(want);
         }
     }
@@ -1457,35 +1426,39 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     // ---- 2. the eleven scalar copies --------------------------------------
     // The handle is RE-READ before every store, exactly as retail does. Nothing
     // in between can change it, but the re-read is what the shipped bytes do
-    // and transcribing it costs nothing.
-    #define ED_ELEM  (reinterpret_cast<uint8_t*>(element->Get()))
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x30) = static_cast<int32_t>(_elementType); // -> _alignment
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x18) = _x;
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x1c) = _y;
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x20) = _width;
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x24) = _height;
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x28) = _minWidth;
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x2c) = _minHeight;
-    *reinterpret_cast<uint32_t*>(ED_ELEM + 0x34) |= _flags;      // OR, never assign
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x38) = _id;           // _id      -> +0x38
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x3c) = _tabOrder;     // _tabOrder-> +0x3c
-    *reinterpret_cast<uint64_t*>(ED_ELEM + 0x40) = _userData;
+    // and transcribing it costs nothing. The description's +0x20..+0x2c land
+    // on the element's four PADS, its +0x3c on the COLOUR and its +0x38 on the
+    // mouse-cursor index (retail's crossing; the description's names are the
+    // tree's guesses).
+    #define ED_ELEM  (element->Get())
+    ED_ELEM->_alignment        = static_cast<int32_t>(_elementType);   // +0x30
+    ED_ELEM->_leftPad          = _x;                                   // +0x18
+    ED_ELEM->_rightPad         = _y;                                   // +0x1c
+    ED_ELEM->_topPad           = _width;                               // +0x20
+    ED_ELEM->_bottomPad        = _height;                              // +0x24
+    ED_ELEM->_minWidth         = _minWidth;                            // +0x28
+    ED_ELEM->_minHeight        = _minHeight;                           // +0x2c
+    ED_ELEM->_flags           |= _flags;                               // +0x34  OR, never assign
+    ED_ELEM->_color            = static_cast<uint32_t>(_id);           // +0x38  _id -> +0x38
+    ED_ELEM->_mouseCursorIndex = _tabOrder;                            // +0x3c  _tabOrder -> +0x3c
+    ED_ELEM->_toolTipDialog    = _toolTipDialog;                       // +0x40
 
     // ---- 3. the tool-tip UIString -----------------------------------------
-    void*   table = _stringTable;
+    StringTable* const table = _stringTable;
     int32_t index = -1;
     if (table) {
-        index = static_cast<const StringTable*>(table)                   // 0x180002470
-                    ->GetIndexFromName(*reinterpret_cast<const System::String*>(&_textName));
+        // LEFT (H5): _textName is a System::String held as raw char* storage.
+        index = table->GetIndexFromName(                               // 0x180002470
+            *reinterpret_cast<const System::String*>(&_textName));
     }
     elem = ED_ELEM;
-    *reinterpret_cast<void**>(elem + 0x48)  = table;
+    elem->_toolTip.table = table;                                      // +0x48
     // Fact (b): retail writes a QWORD here whose upper half is uninitialised
     // stack. The port writes the DWORD only.
-    *reinterpret_cast<int32_t*>(elem + 0x50) = index;
+    elem->_toolTip.index = index;                                      // +0x50
 
     // ---- 4. elem->_description = this -------------------------------------
-    *reinterpret_cast<const void**>(ED_ELEM + 0xb8) = this;
+    ED_ELEM->_description = this;                                      // +0xb8
 
     // ---- 5. the UI::Dialog temporary and the one virtual call -------------
     alignas(16) uint8_t tempDialog[kDialogTempSize];
@@ -1495,30 +1468,28 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     Object::InternalPtr<Element>* ret = &slot;
     if (_childDesc != nullptr) {
         // The child description's slot 8 (CreateInstance, RETSLOT, B6-2) — a
-        // virtual on this class, dispatched through the child's own table
-        // (was a hand-inlined vtable +0x40 call).
-        ret = static_cast<const ElementDescription*>(_childDesc)->CreateInstance(
-            &slot, tempDlg);
+        // virtual on this class, dispatched through the child's own table.
+        ret = _childDesc->CreateInstance(&slot, tempDlg);
     } else {
         slot = Object::InternalPtr<Element>();
         ret  = &slot;
     }
-    *reinterpret_cast<void**>(ED_ELEM + 0xb0) = ret->Get();
+    ED_ELEM->_border = ret->Get();                                     // +0xb0
 
     // ---- 6. the flags cascade (fact (c): the inner walk is unreachable) ---
     elem = ED_ELEM;
-    if (*reinterpret_cast<void* const*>(elem + 0x40) != nullptr &&
-        *reinterpret_cast<void* const*>(elem + 0x48) != nullptr &&
-        *reinterpret_cast<const int32_t*>(elem + 0x50) >= 0 &&
-        (*reinterpret_cast<const uint32_t*>(elem + 0x34) & 0x800000u) == 0) {
-        const uint32_t before = *reinterpret_cast<uint32_t*>(elem + 0x34);
+    if (elem->_toolTipDialog != nullptr &&
+        elem->_toolTip.table != nullptr &&
+        elem->_toolTip.index >= 0 &&
+        (elem->_flags & 0x800000u) == 0) {
+        const uint32_t before = elem->_flags;
         const uint32_t after  = before | 0x90000u;
-        *reinterpret_cast<uint32_t*>(elem + 0x34) = after;
+        elem->_flags = after;
         if ((static_cast<uint8_t>(before ^ after) & 1u) != 0) {
-            uint8_t* w = elem;
+            Element* w = elem;
             do {
-                *reinterpret_cast<uint32_t*>(w + 0x34) |= 0x8000000u;
-                w = *reinterpret_cast<uint8_t**>(w + 0x98);
+                w->_flags |= 0x8000000u;
+                w = w->_parent;
             } while (w != nullptr);
         }
     }

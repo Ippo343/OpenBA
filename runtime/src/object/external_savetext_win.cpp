@@ -295,7 +295,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
             // count is added to FileInfo::cursor by hand.
             ++g_st.bomWritten;
             DWORD written = 0;
-            ::WriteFile(reinterpret_cast<HANDLE>(ts->_file.winHandle),
+            ::WriteFile(ts->_file.winHandle,
                         bom, static_cast<DWORD>(bomLen), &written, nullptr);
             ts->_file.cursor += static_cast<int32_t>(written);
         }

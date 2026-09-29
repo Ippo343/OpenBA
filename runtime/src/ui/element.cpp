@@ -181,7 +181,7 @@ constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in t
 // Video::Device::_singleton (exported, 0x1801fe7a8). GetPaddedSize reads the
 // screen size out of the pointed-to Device at +0x04 / +0x08. ENDGAME B.3.9
 // SS1 (B39_RULES D7): the class static now, read fresh (B9-10).
-void* VideoDeviceSingleton() {
+const ::Video::Device* VideoDeviceSingleton() {
     return ::Video::Device::_singleton;
 }
 
@@ -298,7 +298,7 @@ void Element::Draw(SpriteContext& context, uint8_t alpha) const {
 Object::InternalPtr<Element> Element::FindElement(const System::String& name) {
     const char* q = name._data;
     if (q && RtSystem::StringLength(q) != 0) {
-        const char* mine = static_cast<const char*>(_name);
+        const char* mine = _name;
         const int32_t lm = mine ? RtSystem::StringLength(mine) : 0;
         if (lm == RtSystem::StringLength(q)) {
             bool equal;
@@ -469,22 +469,18 @@ void Element::GetPaddedSize(int32_t& outW, int32_t& outH) {
     if (flags & (kElementFlagSizeToScreenH | kElementFlagSizeToScreenW)) {
         Element* root = this;
         while (root->_parent != nullptr) root = root->_parent;
-        void* dialogParent = root->_dialogParent;
-        const uint8_t* device = static_cast<const uint8_t*>(VideoDeviceSingleton());
+        const DialogInstance* dialogParent = root->_dialogParent;
+        const ::Video::Device* device = VideoDeviceSingleton();
 
         if (flags & kElementFlagSizeToScreenW) {
-            const int32_t screenW = *reinterpret_cast<const int32_t*>(device + 0x04);
-            const uint8_t* scaleOwner = *reinterpret_cast<const uint8_t* const*>(
-                static_cast<const uint8_t*>(dialogParent) + 0x10);
-            const float scale = *reinterpret_cast<const float*>(scaleOwner + 0xdc);
+            const int32_t screenW = device->backBufferWidth;            // Device +0x04
+            const float scale = dialogParent->_ui->_uiScale;            // +0x10, UI +0xdc
             outW = static_cast<int>(static_cast<float>(screenW) * scale);
         }
         // RE-READ, not the cached `flags` — see the note above.
         if (_flags & kElementFlagSizeToScreenH) {
-            const int32_t screenH = *reinterpret_cast<const int32_t*>(device + 0x08);
-            const uint8_t* scaleOwner = *reinterpret_cast<const uint8_t* const*>(
-                static_cast<const uint8_t*>(dialogParent) + 0x10);
-            const float scale = *reinterpret_cast<const float*>(scaleOwner + 0xdc);
+            const int32_t screenH = device->backBufferHeight;           // Device +0x08
+            const float scale = dialogParent->_ui->_uiScale;            // +0x10, UI +0xdc
             outH = static_cast<int>(static_cast<float>(screenH) * scale);
         }
     }
@@ -492,7 +488,7 @@ void Element::GetPaddedSize(int32_t& outW, int32_t& outH) {
 
 // ---- ?GetUserData@  0x180115550 --------------------------------------------
 Object::Base* Element::GetUserData() {
-    return static_cast<Object::Base*>(_userData);
+    return _userData;
 }
 
 // ---- ?Hide@  0x180035830 ---------------------------------------------------
@@ -532,8 +528,8 @@ namespace {
 // that the FIELD is used as the scratch for the pointer arithmetic:
 // `field -= 8` and then `MemFree(field)`, which leaves a freed pointer in the
 // field for the two instructions before it is overwritten. Reproduced.
-void AssignStringField(void*& field, char* incoming) {
-    char* const previous = static_cast<char*>(field);
+void AssignStringField(char*& field, char* incoming) {
+    char* const previous = field;
     if (previous != incoming) {
         if (previous) {
             if (--RtSystem::StringRefCount(previous) == 0) {
@@ -679,7 +675,7 @@ void Element::ReleaseFields() {
     // `data - 8`, a dangling pointer; only the SHARING branch nulls it. Both
     // reproduced — see runtime/types/system/String.h, "RETAIL'S RELEASE IDIOM,
     // AND WHY IT MUST BE COPIED EXACTLY".
-    if (char* p = reinterpret_cast<char*>(_toolTipString)) {
+    if (char* p = _toolTipString) {
         if (--RtSystem::StringRefCount(p) == 0) {
             _toolTipString = p - 8;
             System::MemoryAllocator::MemFree(_toolTipString);
@@ -687,7 +683,7 @@ void Element::ReleaseFields() {
             _toolTipString = nullptr;
         }
     }
-    if (char* p = reinterpret_cast<char*>(_name)) {
+    if (char* p = _name) {
         if (--RtSystem::StringRefCount(p) == 0) {
             _name = p - 8;
             System::MemoryAllocator::MemFree(_name);
@@ -705,29 +701,26 @@ void Element::ReleaseFields() {
 void ContainerElement::SetOffsets(int32_t x, int32_t y) {
 
     Element* child0 = _children.GetData()[0];
-    Element* clip = reinterpret_cast<const Object::Base*>(child0)          // B.3.x bridge
-                        ->IsDerivedFrom(UI::ClipRegionElement::TypeId()) ? child0 : nullptr;
-    uint8_t* clipBytes = reinterpret_cast<uint8_t*>(clip);
-    *reinterpret_cast<int32_t*>(clipBytes + 0xd0) = x;
-    *reinterpret_cast<int32_t*>(clipBytes + 0xd4) = y;
+    ClipRegionElement* clip = child0->IsDerivedFrom(UI::ClipRegionElement::TypeId())
+                                  ? static_cast<ClipRegionElement*>(child0) : nullptr;
+    clip->_offsetX = x;                                     // +0xd0
+    clip->_offsetY = y;                                     // +0xd4
 
     Element* child1 = _children.GetData()[1];
-    Element* vscroll = nullptr;
-    if (child1 && reinterpret_cast<const Object::Base*>(child1)->IsDerivedFrom(UI::ScrollElement::TypeId()))
-        vscroll = child1;
+    ScrollElement* vscroll = nullptr;
+    if (child1 && child1->IsDerivedFrom(UI::ScrollElement::TypeId()))
+        vscroll = static_cast<ScrollElement*>(child1);
 
     Element* child2 = _children.GetData()[2];
-    Element* hscroll = nullptr;
-    if (child2 && reinterpret_cast<const Object::Base*>(child2)->IsDerivedFrom(UI::ScrollElement::TypeId()))
-        hscroll = child2;
+    ScrollElement* hscroll = nullptr;
+    if (child2 && child2->IsDerivedFrom(UI::ScrollElement::TypeId()))
+        hscroll = static_cast<ScrollElement*>(child2);
 
     if (vscroll) {
-        *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(vscroll) + 0x160) =
-            static_cast<float>(y);
+        vscroll->_currentValue = static_cast<float>(y);     // +0x160
     }
     if (hscroll) {
-        *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(hscroll) + 0x160) =
-            static_cast<float>(x);
+        hscroll->_currentValue = static_cast<float>(x);     // +0x160
     }
 
 }

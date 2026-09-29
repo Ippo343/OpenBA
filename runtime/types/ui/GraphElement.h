@@ -103,8 +103,20 @@ constexpr int kSeriesPointsArray = 0x08;
 #include <cstddef>
 #include "Element.h"
 #include "Sprite.h"
+#include "../collection/Collection.h"
 
 namespace UI {
+
+// One series record of `_seriesData` (stride 0x18), named from the layout
+// GraphElementOffsets documents above (B4).
+struct GraphSeries {
+    uint32_t colour;                        // +0x00  AddGraph's argument
+    uint32_t hole04;                        // +0x04  NEVER WRITTEN BY ANY ARM
+    Collection::Array<int32_t> points;      // +0x08  data / +0x10 size / +0x14 capacity
+};
+static_assert(sizeof(GraphSeries) == GraphElementOffsets::kSeriesStride, "");
+static_assert(offsetof(GraphSeries, colour) == GraphElementOffsets::kSeriesColour, "");
+static_assert(offsetof(GraphSeries, points) == GraphElementOffsets::kSeriesPointsArray, "");
 
 class GraphElement : public Element {
 public:

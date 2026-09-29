@@ -91,12 +91,6 @@
 // below exists. Retail's own parameter reads as `stripExt`; that name is what
 // sent Wave 11 lane OBJEXT to re-derive this from the disassembly.
 
-namespace RtIO {
-// runtime/src/io/filesystem.cpp:185. Takes the FileSystem as void* there.
-RtSystem::Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid,
-                                                     RtSystem::Filename* ret);
-}  // namespace RtIO
-
 namespace RtObject {
 
 using RtSystem::Filename;
@@ -126,8 +120,8 @@ namespace {
 // `MOV R14,qword ptr [0x1801fc6a8]` at 0x1800bd5e3 loads. The class static now
 // (ENDGAME B.3.9 SS1, B39_RULES D7): read fresh, exactly as
 // runtime/src/io/filesystem_packages.cpp does.
-inline RtIO::FileSystem* FileSystemSingleton() {
-    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);
+inline const ::IO::FileSystem* FileSystemSingleton() {
+    return ::IO::FileSystem::_singleton;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +407,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     }
 
     // ---- 0x1800bd5e3: R14 = IO::FileSystem::_singleton ---------------------
-    const RtIO::FileSystem* const fs = FileSystemSingleton();
+    const ::IO::FileSystem* const fs = FileSystemSingleton();
 
     System::Filename stackDir;                                   // [RBP+0x0f]
     RtObject_ExternalFactory_GetPathStackDirectory(
@@ -423,9 +417,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     //      <dataDir><stackDir><dir><fname>_<ident>.crs
     System::Filename candidate;                                  // [RBP-0x01]
     {
-        System::Filename dataDir;                                // [RBP-0x39]
-        RtIO::RtIo_FileSystem_GetDataDirectory(
-            fs, reinterpret_cast<Filename*>(&dataDir));
+        System::Filename dataDir = fs->GetDataDirectory();       // [RBP-0x39]
 
         System::String t1 = dataDir.AsString() + stackDir.AsString();  // -0x19
         System::String t2 = t1 + dir.AsString();                       // -0x11
@@ -448,13 +440,13 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     bool decided = false;
 
     // MSVC's inlined FileSystem::Exists(candidate), gate and all.
-    if (fs->existsInPackfileGate != 0 &&
-        reinterpret_cast<const ::IO::FileSystem*>(fs)->ExistsInPackfile(   // 0x1800ab180
+    if (fs->_existsInPackfileGate != 0 &&
+        fs->ExistsInPackfile(                                    // 0x1800ab180
             *reinterpret_cast<const Filename*>(&candidate))) {
         found = true; decided = true;                            // 0x1800bd7c8
         ++g_pc.hitPackfile;
     }
-    if (!decided && fs->platformExistsGate != 0) {
+    if (!decided && fs->_platformExistsGate != 0) {
         ++g_pc.attrProbeEntered;
         // `System::WideString` has no class yet, so this one stays as C: the
         // ctor takes the POD String and the release is the POD release.
@@ -471,9 +463,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
     }
     if (!decided) {
         // 0x1800bd825: the SAME string, built again, probed UNGATED. See note 1.
-        System::Filename dataDir2;                               // [RBP-0x49]
-        RtIO::RtIo_FileSystem_GetDataDirectory(
-            fs, reinterpret_cast<Filename*>(&dataDir2));
+        System::Filename dataDir2 = fs->GetDataDirectory();     // [RBP-0x49]
 
         System::String u1 = dataDir2.AsString() + stackDir.AsString();  // -0x51
         System::String u2 = u1 + dir.AsString();                        // -0x31
@@ -492,7 +482,7 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
         // 0x1800bd8cf adopt + 0x1800bd8e2 normalise, onto a null object.
         candidate2 = u6;
 
-        found = reinterpret_cast<const ::IO::FileSystem*>(fs)->ExistsInPackfile(   // 0x1800bd8fb
+        found = fs->ExistsInPackfile(                            // 0x1800bd8fb
             *reinterpret_cast<const Filename*>(&candidate2));
         if (found) ++g_pc.hitPackfileRetry; else ++g_pc.notFound;
     }

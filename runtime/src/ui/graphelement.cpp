@@ -105,7 +105,7 @@ void GraphElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // before the loop, and each point is `bottom - (int)(value * scale)`.
 void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
     if (_border != nullptr)
-        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
+        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6 (LEFT: _border void*, unit test)
 
     const uint32_t base = _color;
     alpha = DimAlpha(this, alpha);
@@ -158,21 +158,20 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
 
     const int32_t seriesCount = _seriesCount;
     for (int32_t s = 0; s < seriesCount; ++s) {
-        const uint8_t* rec = static_cast<const uint8_t*>(_seriesData) +
-                             static_cast<int64_t>(s) * GraphElementOffsets::kSeriesStride;
+        // LEFT: _seriesData stays void* (widgets_layout.cpp, R-UI-b, views it as bytes).
+        const GraphSeries* rec = static_cast<const GraphSeries*>(_seriesData) + s;   // stride 0x18
         const int width = _layoutWidth;
-        const int segments = *reinterpret_cast<const int32_t*>(rec + 0x10) - 1;
+        const int segments = rec->points._size - 1;                  // rec+0x10
         float xf = static_cast<float>(L);
         for (int64_t p = 0; p < segments; ++p) {
-            const int32_t* pts = static_cast<const int32_t*>(*reinterpret_cast<void* const*>(
-                rec + GraphElementOffsets::kSeriesPointsArray));
+            const int32_t* pts = rec->points._data;                  // rec+0x08, re-read
             const float xn = xf + static_cast<float>(width) / static_cast<float>(segments);
             context.AddLine(sprite,
                  static_cast<int>(xf),
                  B - static_cast<int>(static_cast<float>(pts[p]) * scale),
                  static_cast<int>(xn),
                  B - static_cast<int>(static_cast<float>(pts[p + 1]) * scale),
-                 *reinterpret_cast<const uint32_t*>(rec + GraphElementOffsets::kSeriesColour));
+                 rec->colour);                                        // rec+0x00
             xf = xn;
         }
     }
@@ -183,7 +182,7 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
 // the same helper `?RemoveGraphs@` tail-calls). The entry restamp and the
 // tail into ~Element are the compiler's.
 GraphElement::~GraphElement() {
-    rtcoll::RtColl_ArrayDtorElem_1800416d0(reinterpret_cast<uint8_t*>(this) + kSeries);
+    rtcoll::RtColl_ArrayDtorElem_1800416d0(&_seriesData);           // +0xf0
 }
 
 // ?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ 0x180040550 --

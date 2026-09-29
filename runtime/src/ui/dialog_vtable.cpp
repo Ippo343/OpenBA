@@ -385,7 +385,7 @@ void DestroyCodec(ReaderWriter* rw) {
 }
 
 void RecUInt(ReaderWriter* rw, uint32_t* v) {
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeUInt(*reinterpret_cast<uint32_t*>(v), nullptr);   // B.3.x bridge
+    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeUInt(*v, nullptr);   // B.3.x bridge
 }
 
 void RecInt(ReaderWriter* rw, int32_t* v) {
@@ -444,10 +444,10 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
             rtcoll::AsArray<&rtcoll::kSpec_ExtStr10at08>(&_namedTemplates)
                 ->SetSize(count);          // retail 0x180075d20
         // RE-READ after SetSize: it reallocates.
-        uint8_t* e = reinterpret_cast<uint8_t*>(_namedTemplates);
-        for (int32_t i = 0; i < count; ++i, e += 0x10) {
-            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(e), &ser);             // entry+0x00
-            StringSerialize(e + 8, &ser);                 // entry+0x08
+        RtUI::DialogNamedTemplate* e = _namedTemplates;                 // stride 0x10
+        for (int32_t i = 0; i < count; ++i, ++e) {
+            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&e->_description), &ser);   // entry+0x00
+            StringSerialize(&e->_name, &ser);             // entry+0x08
         }
     }
 
@@ -469,12 +469,12 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_CfgEntry20>(&_controllerConfigs)
                 ->SetSize(count);          // retail 0x180075b20
-        uint8_t* e = reinterpret_cast<uint8_t*>(_controllerConfigs);
-        for (int32_t i = 0; i < count; ++i, e += 0x20) {
-            RecUInt(rw, reinterpret_cast<uint32_t*>(e));    // entry+0x00 _typeId
-            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(e + 0x08), &ser);      // entry+0x08 _elementDesc
-            RtObject_ExternalPtrSerialize_DialogControllerConfig(ExtField(e + 0x10), &ser);           // entry+0x10 _config
-            StringSerialize(e + 0x18, &ser);              // entry+0x18 _name
+        ElementController* e = _controllerConfigs;                      // stride 0x20
+        for (int32_t i = 0; i < count; ++i, ++e) {
+            RecUInt(rw, &e->_typeId);                     // entry+0x00 _typeId
+            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&e->_elementDesc), &ser);   // entry+0x08 _elementDesc
+            RtObject_ExternalPtrSerialize_DialogControllerConfig(ExtField(&e->_config), &ser);    // entry+0x10 _config
+            StringSerialize(&e->_name, &ser);             // entry+0x18 _name
         }
     }
 

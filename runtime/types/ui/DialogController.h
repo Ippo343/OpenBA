@@ -137,7 +137,7 @@ public:
     // (0x1801133b0) after the factory built the derived object.
     Object::ExternalPtr<DialogControllerConfig> _config;   // +0x10
     DialogInstance* _dialog;       // +0x18  the owning dialog (AddController's `this`)
-    void*           _container;    // +0x20  InternalPtr<UI::Element> (block A's class)
+    Element*        _container;    // +0x20  InternalPtr<UI::Element> (B4 H4: typed)
     Object::Base*   _dataSource;   // +0x28
 };
 

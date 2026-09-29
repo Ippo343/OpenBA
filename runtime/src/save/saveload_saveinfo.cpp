@@ -76,10 +76,8 @@ void* SaveInfoMemAlloc(uint64_t bytes, int align) {
 }
 
 // ??0ImageBuffer@Video@@QEAA@XZ, 0x1800f2580. ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
-// (the by-address door lookup and its atomic slot went with it).
-void ImageBufferCtor(void* self) {
-    ::new (self) Video::ImageBuffer();
-}
+// (the by-address door lookup and its atomic slot went with it). Called
+// inline in SetThumbnail below.
 
 // ?_singleton@Device@Video@@0PEAV12@EA, 0x1801fe7a8 — the SLOT, not the Device.
 // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static's address IS this cell.
@@ -126,14 +124,15 @@ void** DeviceSingletonSlot() {
 //     `b vs a` and not `a vs b`.
 // ---------------------------------------------------------------------------
 int SaveInfoCompareImpl(const void* a, const void* b) {
-    const uint8_t* pa = static_cast<const uint8_t*>(a);
-    const uint8_t* pb = static_cast<const uint8_t*>(b);
+    // qsort hands the comparator its elements as `const void*`.
+    const SaveInfo* pa = static_cast<const SaveInfo*>(a);  // CAST-OK: crt
+    const SaveInfo* pb = static_cast<const SaveInfo*>(b);  // CAST-OK: crt
 
-    if (*reinterpret_cast<const int32_t*>(pa + 0x40) < 0) return 1;
-    if (*reinterpret_cast<const int32_t*>(pb + 0x40) < 0) return 1;
+    if (pa->saveIndex < 0) return 1;
+    if (pb->saveIndex < 0) return 1;
 
-    const uint64_t ka = *reinterpret_cast<const uint64_t*>(pa + 0x30);
-    const uint64_t kb = *reinterpret_cast<const uint64_t*>(pb + 0x30);
+    const uint64_t ka = pa->sortKey;
+    const uint64_t kb = pb->sortKey;
     if (kb > ka) return 1;     // JA  — UNSIGNED
     if (kb < ka) return -1;    // SBB EAX,EAX with CF set
     return 0;                  // SBB EAX,EAX with CF clear
@@ -190,8 +189,9 @@ int Save::SaveLoad::SaveInfo::Compare(const void* a, const void* b) {
 // ============================================================================
 void Save::SaveLoad::SaveInfo::SetThumbnail(void* pixels, int32_t w, int32_t h) {
     void* mem = SaveInfoMemAlloc(0x68, 8);
-    if (mem != nullptr) ImageBufferCtor(mem);
-    ImageBuffer* img = static_cast<ImageBuffer*>(mem);   // == RAX; see the banner
+    // `if (RDI) { ctor; RDI = RAX; }`: the constructed object, or the null the
+    // allocator returned.
+    Video::ImageBuffer* img = (mem != nullptr) ? ::new (mem) Video::ImageBuffer() : nullptr;
 
     imageBuffer = img;
 
@@ -210,8 +210,7 @@ void Save::SaveLoad::SaveInfo::SetThumbnail(void* pixels, int32_t w, int32_t h) 
     // holds the registered `Video_ImageBuffer_Create` body; `Create` is `= 0` on
     // the class for the reason ImageBuffer.h's slot-9 banner gives, and that
     // changes nothing at a call site.
-    reinterpret_cast<Video::ImageBuffer*>(img)->Create(
-        0, 2, 5, 0u, w, h, 0, 1, 1, 1, nullptr);         // B.3.5 bridge
+    img->Create(0, 2, 5, 0u, w, h, 0, 1, 1, 1, nullptr);
 
     // ---- the VIDEO DEVICE lock, open-coded in retail ----------------------
     // 0x1800c3eb4..0x1800c3eca is EnterCriticalSection(dev+0x60) /
@@ -232,8 +231,7 @@ void Save::SaveLoad::SaveInfo::SetThumbnail(void* pixels, int32_t w, int32_t h) 
     // (CompanionData.h); retail ignores the result and so does this. The
     // CONCRETE `*Data` subclass and the dx11 seam are a declared leave for step 5
     // (B35_RULES 1.1 item 4 / section 11) — only the call converts.
-    void* data = img->platformData;                    // +0x60
-    reinterpret_cast<Video::ImageBufferData*>(data)->Update(pixels, w, h);  // B.3.5 bridge
+    img->_data->Update(pixels, w, h);                  // +0x60
 
     thumbPixels = pixels;   // +0x28
     thumbWidth  = w;        // +0x20
@@ -287,20 +285,5 @@ void Save::SaveLoad::SaveInfo::SetThumbnail(void* pixels, int32_t w, int32_t h) 
 // game-directory lock; the intended driver is lane DIFF's armed sweep, which
 // sets nothing else this file needs.
 // ============================================================================
-namespace {
-
-struct SweepRow {   // a 0x58-byte SaveInfo stand-in; only +0x30 and +0x40 matter
-    uint8_t bytes[0x58];
-};
-
-void MakeRow(SweepRow* r, uint64_t sortKey, int32_t saveIndex) {
-    // A varying non-zero pattern everywhere else: an all-zero subject is the
-    // one seed under which a wrong offset is invisible, because both sides
-    // read zero there and agree by accident.
-    for (size_t i = 0; i < sizeof(r->bytes); ++i)
-        r->bytes[i] = static_cast<uint8_t>(0x5A + (i & 0x1f));
-    *reinterpret_cast<uint64_t*>(r->bytes + 0x30) = sortKey;
-    *reinterpret_cast<int32_t*>(r->bytes + 0x40) = saveIndex;
-}
-
-}  // namespace
+// (B.4 R-IO: `SweepRow` / `MakeRow`, the retired sweep's row builder, had no
+// caller and are deleted.)

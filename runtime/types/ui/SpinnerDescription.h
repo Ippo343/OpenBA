@@ -85,9 +85,9 @@ public:
 private:
 
 public:
-    void*    _editDescription;   // +0x68  ExternalPtr<UI::ElementDescription> -> children[0]
-    void*    _upDescription;     // +0x70  ExternalPtr<UI::ElementDescription> -> children[1]
-    void*    _downDescription;   // +0x78  ExternalPtr<UI::ElementDescription> -> children[2]
+    ElementDescription*    _editDescription;   // +0x68  ExternalPtr<UI::ElementDescription> -> children[0]
+    ElementDescription*    _upDescription;     // +0x70  ExternalPtr<UI::ElementDescription> -> children[1]
+    ElementDescription*    _downDescription;   // +0x78  ExternalPtr<UI::ElementDescription> -> children[2]
     int32_t  _increment;         // +0x80  ctor 1 -> SpinnerElement::_increment; kScalarInt
     uint32_t _pad84;             // +0x84  written by nothing
 };

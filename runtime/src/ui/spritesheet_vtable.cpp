@@ -86,6 +86,7 @@
 #include <new>
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 #include "../../types/ui/SpriteSheet.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
@@ -273,76 +274,20 @@ Object::Base* SpriteSheet::CreateInPlaceObject(void* place) {
 
 namespace {
 
-using rt::io::ReaderWriter;
-using rt::io::Serializer;
-using rt::io::Stream;
-
-// ?Serialize@String@System@@ (0x1800c9930), called by name (B3R RT-UI).
-void StringSerialize(void* field, Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge
+// ?Serialize@String@System@@ (0x1800c9930), called by name. The two String
+// members are spelt `char*` (H5: a System::String member would run a ctor/dtor
+// the retail class does not), so each is viewed as the String it is.
+void StringSerialize(char** field, IO::Serializer* ser) {
+    reinterpret_cast<System::String*>(field)->Serialize(ser);
 }
-// ENDGAME B.3.2 step 2 — the 0x180078950 forwarder that used to sit here is
-// GONE. `m_sprites` + `m_spriteCount` + `m_spriteCapacity` (SpriteSheet.h,
-// +0x20/+0x28/+0x2C) are the {data,size,capacity} triple
-// `Collection::Array<SpriteInfo>` would use, contiguous and asserted at those
-// offsets (same situation sprite.cpp's `AddSpriteInfo` bridges), and
-// `kSpec_Sprite38Z` is NON-TRIVIAL, so the call site below bridges through the
-// hand-derived row.
-// ExternalPtr<MaterialInstance>::Serialize (0x180014520), by name.
-void MaterialPtrSerialize(void* field, Serializer* ser) {
+
+// ExternalPtr<MaterialInstance>::Serialize (0x180014520), by name. `m_field30`
+// is spelt uint64_t (saveload_draw.cpp stores it as an integer), and the body
+// takes the rt::io POD view of the Serializer (cursor.cpp does the same).
+void MaterialPtrSerialize(uint64_t* field, IO::Serializer* ser) {
     RtObject_ExternalPtrSerialize_MaterialInstance(
-        reinterpret_cast<RtObject::External**>(field), ser);               // B.3.x bridge
-}
-
-// The inlined ctor at 0x18011d747..0x18011d772, and the inlined dtor at
-// 0x18011d825. Deliberately spelled out here rather than shared with
-// elementdescription_serialize.cpp's identical pair: they are two separate
-// INLINED copies in the DLL, and keeping them two means a correction to one
-// cannot silently change the other's meaning — the same argument this file's
-// ConstructInPlace already makes.
-ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
-    ser->stream = stream;
-    ser->readerWriter = nullptr;
-
-    rt::io::Encoding* enc = stream->encoding;
-    const int slot = (stream->direction == rt::io::kDirectionReading)
-                         ? rt::io::encoding_vtbl::kCreateReader
-                         : rt::io::encoding_vtbl::kCreateWriter;
-    using FactoryFn = ReaderWriter* (*)(rt::io::Encoding*, Serializer*, int);
-    ReaderWriter* rw =
-        reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc, ser, 0);
-    ser->readerWriter = rw;
-    return rw;
-}
-
-void DestroyCodec(ReaderWriter* rw) {
-    if (!rw) return;
-    delete reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
-}
-
-void RecInt(ReaderWriter* rw, int32_t* v) {
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(*v, nullptr);   // B.3.x bridge
-}
-
-void RecBool(ReaderWriter* rw, uint8_t* v) {
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeBool(*reinterpret_cast<bool*>(v), nullptr);   // B.3.x bridge
-}
-
-// WAVE 29 LANE WALL — the `…Via` pair reload `ser->readerWriter` AND its
-// vtable pointer on EVERY call, which is what 0x180078ad0 does and is NOT what
-// `RecInt`/`RecBool` above do (those take an already-loaded `rw` because their
-// caller holds one across a straight run of calls with nothing in between).
-// The difference is deliberate and is argued in the banner on
-// RtUi_SpriteSheet_SerializeEntries: in that loop `String::Serialize` runs
-// between the reload and the scalar calls.
-void RecIntVia(Serializer* ser, int32_t* v) {
-    ReaderWriter* rw = ser->readerWriter;
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(*v, nullptr);   // B.3.x bridge
-}
-
-void RecFloatVia(Serializer* ser, float* v) {
-    ReaderWriter* rw = ser->readerWriter;
-    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeFloat(*v, nullptr);   // B.3.x bridge
+        reinterpret_cast<RtObject::External**>(field),
+        reinterpret_cast<rt::io::Serializer*>(ser));
 }
 
 }  // namespace
@@ -419,12 +364,12 @@ void RecFloatVia(Serializer* ser, float* v) {
 //
 // RETAIL RELOADS `ser->readerWriter` AND ITS VTABLE POINTER BEFORE EVERY ONE
 // of the nine scalar calls (`MOV RCX,[RDI+8] ; MOV RAX,[RCX]`), rather than
-// hoisting either out of the loop. Reproduced through `RecIntVia`/
-// `RecFloatVia`, because `String::Serialize` runs between the reload and the
-// first scalar call and a hoist would be a silent behavioural change if it
-// ever replaced the codec.
+// hoisting either out of the loop. `IO::Serializer::Serialize` is exactly that
+// reload, because `String::Serialize` runs between the reload and the first
+// scalar call and a hoist would be a silent behavioural change if it ever
+// replaced the codec.
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_SpriteSheet_SerializeEntries(Serializer* ser,
+extern "C" void RtUi_SpriteSheet_SerializeEntries(IO::Serializer* ser,
                                                   int32_t     count,
                                                   SpriteInfo* entries) {
     if (count <= 0) return;                 // 0x180078ad0  TEST EDX,EDX ; JLE
@@ -434,16 +379,16 @@ extern "C" void RtUi_SpriteSheet_SerializeEntries(Serializer* ser,
         StringSerialize(&e->name,  ser);  // +0x00  CALL 0x1800c9930
         StringSerialize(&e->group, ser);  // +0x08  CALL 0x1800c9930
 
-        RecIntVia(ser, &e->x);              // +0x10
-        RecIntVia(ser, &e->y);              // +0x14
-        RecIntVia(ser, &e->width);          // +0x1c
-        RecIntVia(ser, &e->height);         // +0x20
-        RecIntVia(ser, &e->_reserved18);    // +0x18  FIFTH — see the banner
+        ser->Serialize(e->x, nullptr);            // +0x10
+        ser->Serialize(e->y, nullptr);            // +0x14
+        ser->Serialize(e->width, nullptr);        // +0x1c
+        ser->Serialize(e->height, nullptr);       // +0x20
+        ser->Serialize(e->_reserved18, nullptr);  // +0x18  FIFTH — see the banner
 
-        RecFloatVia(ser, &e->u0);           // +0x24
-        RecFloatVia(ser, &e->v0);           // +0x28
-        RecFloatVia(ser, &e->u1);           // +0x2c
-        RecFloatVia(ser, &e->v1);           // +0x30
+        ser->Serialize(e->u0, nullptr);           // +0x24
+        ser->Serialize(e->v0, nullptr);           // +0x28
+        ser->Serialize(e->u1, nullptr);           // +0x2c
+        ser->Serialize(e->v1, nullptr);           // +0x30
 
         ++e;                                // ADD RBX,0x38
     } while (--count != 0);                 // DEC RSI ; JNE
@@ -452,21 +397,21 @@ extern "C" void RtUi_SpriteSheet_SerializeEntries(Serializer* ser,
 namespace UI {
 
 bool SpriteSheet::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
-    Serializer ser;
-    ReaderWriter* rw = MakeCodec(stream, &ser);
+    // The inlined ??0Serializer (0x18011d747..0x18011d772): the stream, then
+    // CreateReader / CreateWriter of its encoding, version 0.
+    IO::Serializer ser(*static_cast<IO::Stream*>(streamv), 0);
 
     StringSerialize(&m_groupName,   &ser);   // +0x40 FIRST — see banner
     StringSerialize(&m_textureName, &ser);   // +0x38 second
 
-    RecInt (rw, &m_field48);   // +0x48
-    RecInt (rw, &m_field4C);   // +0x4c
-    RecBool(rw, &m_field50);   // +0x50
+    ser.Serialize(m_field48, nullptr);       // +0x48
+    ser.Serialize(m_field4C, nullptr);       // +0x4c
+    ser.Serialize(m_field50, nullptr);       // +0x50, Serialize(bool&)
 
     int32_t count = m_spriteCount;   // +0x28, into the RSP+0x50 temporary
-    RecInt(rw, &count);
+    ser.Serialize(count, nullptr);
 
-    if (ser.stream->direction == rt::io::kDirectionReading)
+    if (ser._stream->_direction == 0)
         rtcoll::AsArray<&rtcoll::kSpec_Sprite38Z>(&m_sprites)
             ->SetSize(static_cast<int>(count));            // retail 0x180078950
 
@@ -475,7 +420,7 @@ bool SpriteSheet::Serialize(void* streamv) {
 
     MaterialPtrSerialize(&m_field30, &ser);  // +0x30
 
-    DestroyCodec(rw);
+    // The inlined ~Serializer (0x18011d825) deletes the ReaderWriter.
     return true;
 }
 

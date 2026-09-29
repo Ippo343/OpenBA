@@ -45,6 +45,7 @@
 #include "../../types/ui/SpinnerElement.h"
 #include "../../types/ui/ButtonElement.h"       // B.3.9 TI-UI: X::TypeId()
 #include "../../types/ui/NumberEditElement.h"
+#include "../../types/ui/UserInterface.h"
 
 using namespace rtui;
 
@@ -52,28 +53,6 @@ namespace {
 
 constexpr int kIncrement = 0xC0;
 static_assert(kIncrement == offsetof(UI::SpinnerElement, _increment), "");
-
-// NumberEditElement's own fields, reached through children[0]. That class is
-// block C3's; its offsets stay file-local raw reads here.
-constexpr int kNeText = 0xC8;
-constexpr int kNeMin  = 0xF8;
-constexpr int kNeMax  = 0xFC;
-
-constexpr int kUiEvents     = 0x48;
-constexpr int kUiEventCount = 0x50;
-
-struct WidgetEvent {
-    void*    dialog;
-    void*    element;
-    int32_t  kind;
-    int32_t  elementId;
-    int32_t  mouseX;
-    int32_t  mouseY;
-    int32_t  value;
-    int32_t  pad24;
-    int64_t  tail;
-};
-static_assert(sizeof(WidgetEvent) == 0x30, "");
 
 
 }  // namespace
@@ -178,30 +157,30 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     const uint32_t kNumberEditTypeId = UI::NumberEditElement::TypeId();   // retail [0x1801fa190]
     const uint32_t kButtonTypeId     = UI::ButtonElement::TypeId();       // retail [0x1801fa938]
 
-    void* edit = _children.GetData()[0];
-    if (!reinterpret_cast<const Object::Base*>(edit)->IsDerivedFrom(kNumberEditTypeId)) return;
+    Element* const editRaw = _children.GetData()[0];
+    if (!editRaw->IsDerivedFrom(kNumberEditTypeId)) return;
+    // Checked just above: children[0] is a NumberEditElement (B10).
+    NumberEditElement* const edit = static_cast<NumberEditElement*>(editRaw);
     if (edit == nullptr) return;
 
     // The "up" button is enabled only while the value is below the maximum.
     // `up` may be null (a failed IsDerivedFrom) and is dereferenced anyway —
     // retail's unguarded deref (`XOR EDI,EDI; CMOVNZ RDI,RBX`), kept.
     Element* upRaw = _children.GetData()[1];
-    Element* up = reinterpret_cast<const Object::Base*>(upRaw)->IsDerivedFrom(kButtonTypeId)
+    Element* up = upRaw->IsDerivedFrom(kButtonTypeId)
                   ? upRaw : nullptr;
     {
-        const int32_t v = System::String::ToInteger(
-            static_cast<const char*>(PTR(edit, kNeText)));
-        up->Enable(v < I32(edit, kNeMax));                          // slot 8
+        const int32_t v = System::String::ToInteger(edit->_text);
+        up->Enable(v < edit->_max);                          // slot 8
     }
 
     // ... and the "down" button only while it is above the minimum.
     Element* downRaw = _children.GetData()[2];
-    Element* down = reinterpret_cast<const Object::Base*>(downRaw)->IsDerivedFrom(kButtonTypeId)
+    Element* down = downRaw->IsDerivedFrom(kButtonTypeId)
                     ? downRaw : nullptr;
     {
-        const int32_t v = System::String::ToInteger(
-            static_cast<const char*>(PTR(edit, kNeText)));
-        down->Enable(I32(edit, kNeMin) < v);                        // slot 8
+        const int32_t v = System::String::ToInteger(edit->_text);
+        down->Enable(edit->_min < v);                        // slot 8
     }
 
     int32_t step;
@@ -214,23 +193,20 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
     }
     if (step == 0) return;
 
-    const int32_t v = System::String::ToInteger(
-        static_cast<const char*>(PTR(edit, kNeText)));
+    const int32_t v = System::String::ToInteger(edit->_text);
     // ?SetValue@NumberEditElement@UI@@ (0x1800d4bb0).
-    static_cast<NumberEditElement*>(edit)->SetValue(step + v);
+    edit->SetValue(step + v);
 
-    WidgetEvent ev;
-    ev.dialog    = dialog->Get();
-    ev.element   = this;
-    ev.kind      = 0x15;
-    ev.elementId = _elementId;
-    ev.mouseX    = state.mouseX;
-    ev.mouseY    = state.mouseY;
-    ev.value     = 0;
-    ev.tail      = 0;
-    // UserInterface's event array (block E's class): raw offsets, by address.
-    rtcoll::RtColl_ArraySetSizeFill_180033690(
-        B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
+    UserInterface::Event ev;
+    ev.dialog   = dialog->Get();
+    ev.element  = this;
+    ev.eventId  = 0x15;
+    ev.arg14    = _elementId;
+    ev.arg18    = state.mouseX;
+    ev.arg1C    = state.mouseY;
+    ev.arg20    = 0;
+    ev.userData = nullptr;
+    rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events, ui->_events._size + 1, &ev);
 }
 
 // ??1SpinnerElement@UI@@UEAA@XZ   0x1800d8640 — retail's body is the restamp

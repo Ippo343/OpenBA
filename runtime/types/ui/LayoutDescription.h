@@ -71,7 +71,7 @@ public:
 
     // One child entry, `Array<Entry>` stride 0x38 (0x180043d80's spec).
     struct Entry {
-        void*            desc;         // +0x00  ExternalPtr<UI::ElementDescription>
+        ElementDescription* desc;      // +0x00  ExternalPtr<UI::ElementDescription> (B4 H4)
         char*            name;         // +0x08  System::String — what siblings look up
         char*            relativeToX;  // +0x10  System::String — gated by `horizontal`
         char*            relativeToY;  // +0x18  System::String — gated by `vertical`
@@ -79,7 +79,7 @@ public:
         LayoutVertical   vertical;     // +0x24  kScalarUInt; -> record +0x04
         int32_t          offsetX;      // +0x28  kScalarInt;  -> record +0x10
         int32_t          offsetY;      // +0x2c  kScalarInt;  -> record +0x14
-        uint8_t          force;        // +0x30  kScalarBool; -> record +0x18 (laid out even when hidden)
+        bool             force;        // +0x30  kScalarBool (B4: retail's type); -> record +0x18 (laid out even when hidden)
         uint8_t          _pad31[7];    // +0x31  written by nothing
     };
 
@@ -146,5 +146,6 @@ static_assert(offsetof(LayoutDescription, _entries) == 0x68, "");
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- ui/layoutdescription.cpp
-extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t count, UI::LayoutDescription::Entry* e);  // 0x180043f50
+namespace IO { class Serializer; }
+extern "C" void RtUi_LayoutDescription_SerializeEntries(IO::Serializer* ser, int32_t count, UI::LayoutDescription::Entry* e);  // 0x180043f50
 // ==== end B3R W0-P0c ====

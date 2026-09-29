@@ -83,7 +83,7 @@
 // ----------------------------------------------------------------------------
 // VERIFICATION — TWO SCREENS, SCORED SEPARATELY
 // ----------------------------------------------------------------------------
-// The body below is written against the live sink (runtime/funcs/rt_sink.h).
+// The body below was written against the live sink (retired, B.4 R-IO).
 // Ghidra lists three callers (UpdateList 0x1800c2227, UpdateLoadFromFile
 // 0x1800c25d4, UpdateLoad 0x1800c29a6); our own ported copies of those three
 // reach us by name through RT_EXPORT_ONCE.
@@ -95,7 +95,6 @@
 #include <cstring>
 #include <new>
 
-#include "../../funcs/rt_sink.h"
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
 
@@ -115,15 +114,8 @@ using MemFreeFn  = void  (*)(void*);
 // cannot end up with two spellings of an ABI whose drift mode is a wild write.
 using RtSaveDetail::SetupLoadFn;
 
-// The 12-byte row SetupLoad walks at Persistence+0x60, count at +0x68.
-// Named for what THIS function uses it for; +0x4 is never read here and is not
-// claimed to be padding.
-struct SlotRow {
-    int32_t  id;       // +0x00  matched against SavedState::_id
-    int32_t  unread4;  // +0x04  NOT read by SetupLoad
-    uint32_t size;     // +0x08  the byte count handed to MemAlloc
-};
-static_assert(sizeof(SlotRow) == 12, "Persistence slot row is 12 bytes (ADD RCX,0xc)");
+// The 12-byte row SetupLoad walks at Persistence+0x60, count at +0x68, is
+// `RtIo::BlockDesc` (Persistence.h); +0x4 is never read here.
 
 // ---------------------------------------------------------------------------
 // Step 2 on its own, because both the body and screen A's driver need it and a
@@ -133,14 +125,13 @@ static_assert(sizeof(SlotRow) == 12, "Persistence slot row is 12 bytes (ADD RCX,
 // 0 and a missing row both yield 0, and the driver has to be able to tell them
 // apart to choose its absent-id probes.
 // ---------------------------------------------------------------------------
-uint32_t LookupSlotSize(const uint8_t* persistence, int32_t id, bool* found) {
+uint32_t LookupSlotSize(const ::IO::Persistence* persistence, uint32_t id, bool* found) {
     if (found) *found = false;
     if (persistence == nullptr) return 0;
-    if ((persistence[0x18] & 1) != 0) return 0;                 // 0x1800c0c9b
-    const int32_t count = *reinterpret_cast<const int32_t*>(persistence + 0x68);
+    if ((persistence->_flags & 1) != 0) return 0;               // 0x1800c0c9b
+    const int32_t count = persistence->_blockDescCount;
     if (count <= 0) return 0;                                    // 0x1800c0ca8
-    const SlotRow* table =
-        *reinterpret_cast<const SlotRow* const*>(persistence + 0x60);
+    const RtIo::BlockDesc* table = persistence->_blockDescData;
     for (int32_t i = 0; i < count; ++i) {                        // 0x1800c0cb7
         if (table[i].id == id) {
             if (found) *found = true;
@@ -153,40 +144,35 @@ uint32_t LookupSlotSize(const uint8_t* persistence, int32_t id, bool* found) {
 }  // namespace
 
 // ============================================================================
-// The body, written against the live sink (rt_sink.h).
+// The body (plain stores: the live sink is retired, B.4 R-IO).
 // ============================================================================
 // ENDGAME B.3.7 B2: the body is the member. `ret` is the member's own return
 // value (NRVO), so the five stores into the SaveBlock land where retail's do:
 // in the caller's hidden slot, via the door below.
 SaveBlock Save::SavedState::SetupLoad() {
-    RtSink out;                                                 // the live sink
     SaveBlock result;
-    SaveBlock* const ret = &result;
 
     // ---- 1. free the previous buffer ---------------------------------------
-    void* old = out.ReadPtr(&_data);
+    void* old = _data;
     if (old != nullptr) MemFree(old);
 
     // ---- 2. the slot-table lookup ------------------------------------------
-    const uint8_t* persistence = PersistenceSingleton();
-    const uint32_t size = LookupSlotSize(persistence,
-                                         static_cast<int32_t>(out.ReadU32(&_id)),
-                                         nullptr);
+    const ::IO::Persistence* persistence = PersistenceSingleton();
+    const uint32_t size = LookupSlotSize(persistence, _id, nullptr);
 
-    // ---- 3. publish the size ------------------------------------------------
-    out.U32(&_size, size,
-            "SavedState::_size = Persistence slot-table size (0 when absent)");
+    // ---- 3. publish the size (0 when the id is absent) ---------------------
+    _size = size;
 
     // ---- 4. the fresh buffer ------------------------------------------------
     void* buf = MemAlloc(size, 4);
-    out.Ptr(&_data, buf, "SavedState::_data = MemAlloc(_size, 4)");
+    _data = buf;
 
     // ---- 5. fill the return slot -------------------------------------------
     // Retail re-reads _size and _id from `this` here rather than reusing the
-    // registers it already has, so these go through the sink's read-back.
-    out.Ptr(&ret->data, buf, "SaveBlock::data = this->_data");
-    out.U32(&ret->size, out.ReadU32(&_size), "SaveBlock::size = this->_size");
-    out.U32(&ret->id,   out.ReadU32(&_id),   "SaveBlock::id = this->_id");
+    // registers it already has.
+    result.data = buf;
+    result.size = _size;
+    result.id   = _id;
     return result;
 }
 

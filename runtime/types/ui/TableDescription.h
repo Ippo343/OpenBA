@@ -64,7 +64,7 @@ public:
     struct Cell {
         int32_t column;          // +0x00  kScalarInt
         int32_t row;             // +0x04  kScalarInt
-        void*   desc;            // +0x08  ExternalPtr<UI::ElementDescription>
+        ElementDescription* desc; // +0x08  ExternalPtr<UI::ElementDescription>
     };
 
     // ---- the ten slots, in measured order ----------------------------------

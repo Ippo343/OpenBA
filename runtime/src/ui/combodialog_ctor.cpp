@@ -146,7 +146,9 @@
 #include "../../types/ui/ClipRegionElement.h"   // B.3.9 TI-UI: X::TypeId()
 #include "../../types/ui/ContainerElement.h"
 #include "../../types/ui/ListElement.h"
+#include "../../types/ui/ComboElement.h"   // B4: _combo is typed
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/ui/UserInterface.h"   // B4: UserInterface::_uiScale
 #include "../../types/system/MemoryAllocator.h"
 #include <new>
 
@@ -155,34 +157,6 @@ using RtUI::DialogInstance;
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Foreign offsets. Every one carries the instruction that pins it.
-//
-// `runtime/types/ui/Element.h` owns the UI::Element numbers and asserts all of
-// them; they are re-spelled as named constants rather than included because
-// Element.h pulls in the UI::String value type and this file has no other use
-// for it. That is the convention runtime/types/ui/UserInterface.h states for
-// foreign offsets and the one runtime/src/ui/dialog_create.cpp follows.
-// ---------------------------------------------------------------------------
-namespace EL {
-enum : size_t {
-    kLeftPad      = 0x18,   // ?GetLeftPad@    0x1800355e0
-    kRightPad     = 0x1c,   // ?GetRightPad@   0x180035600
-    kTopPad       = 0x20,   // ?GetTopPad@     0x1800355f0
-    kBottomPad    = 0x24,   // ?GetBottomPad@  0x180035610
-    kMinWidth     = 0x28,   // ?SetMinSize@    0x1801154a0 (arg 1)
-    kMinHeight    = 0x2c,   // ?SetMinSize@    0x1801154a0 (arg 2)
-    kFlags        = 0x34,   // ?GetElementFlags@ 0x1800354d0
-    kLayoutWidth  = 0x60,   // ?GetLayoutWidth@  0x1800355c0
-    kLayoutHeight = 0x64,   // ?GetLayoutHeight@ 0x1800355d0
-    kElementId    = 0x88,   // ?SetElementId@  0x180115820
-    kDialogParent = 0x90,   // InternalPtr<DialogInstance>
-    kParent       = 0x98,   // ?SetParent@     0x1801154d0
-    kChildrenData = 0xa0,   // ?Child@         0x180035540
-    kChildrenSize = 0xa8,   // ?ChildCount@    0x180035530
-};
-}  // namespace EL
-
 // UI::Element::_flags bits, named by runtime/types/ui/Element.h.
 constexpr uint32_t kElementFlagSizeToScreenH = 0x00000010u;  // bit 4
 constexpr uint32_t kElementFlagSizeToScreenW = 0x00000020u;  // bit 5
@@ -190,33 +164,6 @@ constexpr uint32_t kElementFlagSizeToScreen  = 0x00000030u;  // the mask
 constexpr uint32_t kElementFlagHidden        = 0x00000001u;  // bit 0
 constexpr uint32_t kElementFlagToolTip16     = 0x00010000u;  // bit 16
 constexpr uint32_t kElementFlagNeedsSizeCalc = 0x08000000u;  // bit 27
-
-// UI::ContainerElement, pinned by its own one-line exported accessors:
-//   ?GetWidth@ContainerElement@UI@@QEBAHXZ  0x180039ee0 = `MOV EAX,[RCX+0xc0]`
-//   ?GetHeight@ContainerElement@UI@@QEBAHXZ 0x180039ef0
-constexpr size_t kContainerWidth  = 0xc0;
-constexpr size_t kContainerHeight = 0xc4;
-
-// UI::ClipRegionElement, pinned by ?GetContentSize@ (0x1800381e0), which reads
-// exactly these two after calling ComputeSize.
-constexpr size_t kClipContentWidth  = 0xc8;
-constexpr size_t kClipContentHeight = 0xcc;
-
-// UI::DialogInstance::_ui (+0x10) and the UI scale float the screen-size flags
-// multiply by. `[dialog+0x10][+0xdc]`, per Element.h's own note on +0x90.
-constexpr size_t kDialogInstanceUi = 0x10;
-constexpr size_t kUserInterfaceScale = 0xdc;
-
-// Video::Device's screen width / height, the two dwords GetPaddedSize reads out
-// of `?_singleton@Device@Video@@0PEAV12@EA` (0x1801fe7a8).
-constexpr size_t kDeviceScreenWidth  = 0x04;
-constexpr size_t kDeviceScreenHeight = 0x08;
-
-// ---- Byte cursor -----------------------------------------------------------
-inline uint8_t* B(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
-template <class T> inline T& F(void* p, size_t off) {
-    return *reinterpret_cast<T*>(B(p, off));
-}
 
 // ---------------------------------------------------------------------------
 // ATTENDANCE — entries, and NOT a verification of anything. A zero here means
@@ -246,39 +193,11 @@ void* MemAlloc(uint64_t bytes, int align) {
     return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
-// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390.
-bool IsDerivedFrom(const void* obj, uint32_t typeId) {
-    return reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(typeId);   // B.3.x bridge
-}
-
-// ?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z
-// 0x180115760. HIDDEN RETURN SLOT in RDX, returns that same pointer in RAX
-// (reference_hidden_retslot_wild_write.md — an fn_* typedef that omits the slot
-// is a wild write that still returns the right answer). The type id is a DWORD
-// in R8D.
-//
-// ENDGAME B.3.6 closing pass: the real member, placement-new'd into the slot
-// as the door does (was a function-local lazy ResolveExport cache, RULE B6-5).
-void** FindElementType(void* self, void** out, uint32_t typeId) {
-    ::new (static_cast<void*>(out)) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::Element*>(self)->FindElementType(typeId));  // B.3.6 bridge
-    return out;
-}
-
 // The three type ids the ComboDialog ctor loads. Retail reads the FIRST DWORD
 // of each class's `_typeInfo` static (`MOV R12D,dword ptr [0x1801fa120]` for
 // ListElement; 0x1801f9d68 ClipRegionElement, 0x1801f9dd8 ContainerElement),
 // which is `X::TypeId()`. ENDGAME B.3.9 TI-UI: read at each use, as retail
 // does (the by-name lookup and its first-use cache are gone, B9-10).
-
-// `?_singleton@Device@Video@@0PEAV12@EA` (0x1801fe7a8) — an exported DATA
-// symbol, the CELL rather than the Device. Read through the port-aware data
-// door so a minted run and a DLL run both land on whatever storage the Device
-// actually published into.
-void* DeviceSingleton() {
-    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    return ::Video::Device::_singleton;
-}
 
 // (B3X W0: the VCallType / VCallComputeSize byte-offset helpers are gone; the
 // three call sites below dispatch Type() / ComputeSize() by name.)
@@ -288,20 +207,19 @@ void* DeviceSingleton() {
 // inlines it.
 // ===========================================================================
 
-// Inlined at 0x180111d91-0x180111df8 and again at 0x180111e56-0x180111ec5:
+/// Inlined at 0x180111d91-0x180111df8 and again at 0x180111e56-0x180111ec5:
 // "is the root itself this type, and if not, does any DIRECT child contain one".
 // The recursion lives in ?FindElementType@ (0x180115760); this wrapper is the
 // one level retail open-coded. Both the children POINTER and the child COUNT
 // are re-read every iteration, exactly as 0x180111dc0 / 0x180111df0 do.
-void* FindSelfOrUnderChildren(void* root, uint32_t typeId) {
-    if (static_cast<const UI::Element*>(root)->Type() == typeId) return root;      // 0x180111da4 CMP / JZ
+UI::Element* FindSelfOrUnderChildren(UI::Element* root, uint32_t typeId) {
+    if (root->Type() == typeId) return root;         // 0x180111da4 CMP / JZ
 
     int32_t i = 0;
-    while (i < F<int32_t>(root, EL::kChildrenSize)) {
-        void* const child = F<void**>(root, EL::kChildrenData)[i];
+    while (i < root->_children._size) {
+        UI::Element* const child = root->_children._data[i];
         if (child) {
-            void* out = nullptr;
-            FindElementType(child, &out, typeId);
+            UI::Element* const out = child->FindElementType(typeId).Get();   // 0x180115760
             if (out) return out;                     // 0x180111de8 JNZ
         }
         ++i;
@@ -312,32 +230,32 @@ void* FindSelfOrUnderChildren(void* root, uint32_t typeId) {
 // ?SetFlagsOnOff@Element@UI@@QEAAXII@Z  0x180116160, inlined at 0x180111e24
 // with `off` folded to 0 and the OR turned into `BTS EDX,0x10`. The dirty walk
 // is dead at this call site — see the banner — and is kept.
-void SetFlagsOnOff(void* el, uint32_t on, uint32_t off) {
-    const uint32_t old = F<uint32_t>(el, EL::kFlags);
+void SetFlagsOnOff(UI::Element* el, uint32_t on, uint32_t off) {
+    const uint32_t old = el->_flags;
     const uint32_t now = (old | on) & ~off;
-    F<uint32_t>(el, EL::kFlags) = now;
+    el->_flags = now;
     if ((now ^ old) & kElementFlagHidden) {
-        for (void* p = el; p; p = F<void*>(p, EL::kParent))
-            F<uint32_t>(p, EL::kFlags) |= kElementFlagNeedsSizeCalc;
+        for (UI::Element* p = el; p; p = p->_parent)
+            p->_flags |= kElementFlagNeedsSizeCalc;
     }
 }
 
 // ?SetSize@ContainerElement@UI@@QEAAXHH@Z  0x180039eb0, inlined at 0x1801120e1.
 // The walk here is UNCONDITIONAL — it is ?SetNeedsSizeCalc@ (0x180035470), not
 // the guarded walk above.
-void ContainerSetSize(void* el, int32_t w, int32_t h) {
-    F<int32_t>(el, kContainerWidth)  = w;
-    F<int32_t>(el, kContainerHeight) = h;
-    for (void* p = el; p; p = F<void*>(p, EL::kParent))
-        F<uint32_t>(p, EL::kFlags) |= kElementFlagNeedsSizeCalc;
+void ContainerSetSize(UI::ContainerElement* el, int32_t w, int32_t h) {
+    el->_requestedWidth  = w;
+    el->_requestedHeight = h;
+    for (UI::Element* p = el; p; p = p->_parent)
+        p->_flags |= kElementFlagNeedsSizeCalc;
 }
 
 // ?GetContentSize@ClipRegionElement@UI@@QEAAXAEAH0@Z  0x1800381e0, inlined at
 // 0x180111f3e: ComputeSize() first, then the two dwords.
-void ClipGetContentSize(void* el, int32_t* outW, int32_t* outH) {
-    static_cast<UI::Element*>(el)->ComputeSize();
-    *outW = F<int32_t>(el, kClipContentWidth);
-    *outH = F<int32_t>(el, kClipContentHeight);
+void ClipGetContentSize(UI::ClipRegionElement* el, int32_t* outW, int32_t* outH) {
+    el->ComputeSize();
+    *outW = el->_innerWidth;
+    *outH = el->_innerHeight;
 }
 
 // ?GetPaddedSize@Element@UI@@  0x180115f10, inlined at 0x180111f61-0x180112010.
@@ -345,37 +263,31 @@ void ClipGetContentSize(void* el, int32_t* outW, int32_t* outH) {
 // size-to-screen bit is set — replaced outright by the Video::Device screen
 // dimension scaled by the ROOT dialog's UI scale. `flags` is captured ONCE,
 // before the walk to the root, which is what both the export and the inline do.
-void GetPaddedSize(void* el, int32_t* outW, int32_t* outH) {
-    static_cast<UI::Element*>(el)->ComputeSize();
+void GetPaddedSize(UI::Element* el, int32_t* outW, int32_t* outH) {
+    el->ComputeSize();
 
-    int32_t w = F<int32_t>(el, EL::kLayoutWidth)
-              + F<int32_t>(el, EL::kRightPad)
-              + F<int32_t>(el, EL::kLeftPad);
-    int32_t h = F<int32_t>(el, EL::kLayoutHeight)
-              + F<int32_t>(el, EL::kBottomPad)
-              + F<int32_t>(el, EL::kTopPad);
-    if (w < F<int32_t>(el, EL::kMinWidth))  w = F<int32_t>(el, EL::kMinWidth);
-    if (h < F<int32_t>(el, EL::kMinHeight)) h = F<int32_t>(el, EL::kMinHeight);
+    int32_t w = el->_layoutWidth + el->_rightPad + el->_leftPad;
+    int32_t h = el->_layoutHeight + el->_bottomPad + el->_topPad;
+    if (w < el->_minWidth)  w = el->_minWidth;
+    if (h < el->_minHeight) h = el->_minHeight;
 
-    const uint32_t flags = F<uint32_t>(el, EL::kFlags);
+    const uint32_t flags = el->_flags;
     if (flags & kElementFlagSizeToScreen) {
-        void* root = el;
-        while (F<void*>(root, EL::kParent)) root = F<void*>(root, EL::kParent);
+        UI::Element* root = el;
+        while (root->_parent) root = root->_parent;
 
-        void* const dialog = F<void*>(root, EL::kDialogParent);
-        void* const device = DeviceSingleton();
+        UI::DialogInstance* const dialog = root->_dialogParent;
+        const ::Video::Device* const device = ::Video::Device::_singleton;
 
         if (flags & kElementFlagSizeToScreenW) {
-            void* const ui = F<void*>(dialog, kDialogInstanceUi);
+            UI::UserInterface* const ui = dialog->_ui;
             w = static_cast<int32_t>(
-                static_cast<float>(F<int32_t>(device, kDeviceScreenWidth))
-                * F<float>(ui, kUserInterfaceScale));
+                static_cast<float>(device->backBufferWidth) * ui->_uiScale);
         }
         if (flags & kElementFlagSizeToScreenH) {
-            void* const ui = F<void*>(dialog, kDialogInstanceUi);
+            UI::UserInterface* const ui = dialog->_ui;
             h = static_cast<int32_t>(
-                static_cast<float>(F<int32_t>(device, kDeviceScreenHeight))
-                * F<float>(ui, kUserInterfaceScale));
+                static_cast<float>(device->backBufferHeight) * ui->_uiScale);
         }
     }
 
@@ -443,40 +355,37 @@ UI::DialogInstance::DialogInstance(UserInterface* ui, Object::InternalPtr<Elemen
                                    Object::InternalPtr<DialogInstance> parent,
                                    Object::Base* dataSource, void* userData,
                                    int32_t userFlags) {
-    UI::DialogInstance* const d = this;
-    void* const self = this;
-
-    d->_ui         = ui;                           // +0x10
-    d->_dialog     = nullptr;                      // +0x18  no Dialog resource
-    d->_flags      = 0;                            // +0x20  \ one qword store
-    d->_result     = 0;                            // +0x24  /
-    d->_parent     = Object::InternalPtr<UI::DialogInstance>();   // +0x28  written 0 then...
-    d->_parent     = parent;                       // +0x28  ...the real value
-    d->_dataSource = dataSource;                   // +0x30
+    _ui         = ui;                           // +0x10
+    _dialog     = nullptr;                      // +0x18  no Dialog resource
+    _flags      = 0;                            // +0x20  \ one qword store
+    _result     = 0;                            // +0x24  /
+    _parent     = Object::InternalPtr<UI::DialogInstance>();   // +0x28  written 0 then...
+    _parent     = parent;                       // +0x28  ...the real value
+    _dataSource = dataSource;                   // +0x30
     // ENDGAME B.3.2 step 2 — these three stay raw field writes, deliberately:
     // `Collection::LinkedList<T>` has NO user-provided default constructor on
     // purpose (Collection.h's banner), so there is no member call this could
     // become; it is the ctor's own explicit zeroing, exactly like retail's.
-    d->_children._head  = nullptr;                 // +0x38
-    d->_children._tail  = nullptr;                 // +0x40
-    d->_children._count = 0;                       // +0x48   (+0x4c left alone)
-    d->_root       = nullptr;                      // +0x50  written 0 then...
-    d->_root       = root.Get();                   // +0x50  ...the real value
-    d->_spriteSheet = nullptr;                     // +0x58
-    d->_spriteIndex = -1;                          // +0x60   (+0x64 left alone)
+    _children._head  = nullptr;                 // +0x38
+    _children._tail  = nullptr;                 // +0x40
+    _children._count = 0;                       // +0x48   (+0x4c left alone)
+    _root       = nullptr;                      // +0x50  written 0 then...
+    _root       = root.Get();                   // +0x50  ...the real value
+    _spriteSheet = nullptr;                     // +0x58
+    _spriteIndex = -1;                          // +0x60   (+0x64 left alone)
     // +0x68..+0x87: the two Array headers, zeroed by their own ctors.
-    d->_upperLeftX = 0;                            // +0x88  \ one qword store
-    d->_upperLeftY = 0;                            // +0x8c  /
-    d->_hoverMouseX = -1;                          // +0x90  a QWORD -1 --
-    d->_hoverMouseY = -1;                          // +0x94  both hover ints
-    d->_hovering    = 0;                           // +0x98  a single BYTE
-    d->_hoverTime   = 0;                           // +0xa0   (+0x99.. left alone)
-    d->_userData    = userData;                    // +0xa8
-    d->_userFlags   = userFlags;                   // +0xb0   (+0xb4 left alone)
+    _upperLeftX = 0;                            // +0x88  \ one qword store
+    _upperLeftY = 0;                            // +0x8c  /
+    _hoverMouseX = -1;                          // +0x90  a QWORD -1 --
+    _hoverMouseY = -1;                          // +0x94  both hover ints
+    _hovering    = 0;                           // +0x98  a single BYTE
+    _hoverTime   = 0;                           // +0xa0   (+0x99.. left alone)
+    _userData    = userData;                    // +0xa8
+    _userFlags   = userFlags;                   // +0xb0   (+0xb4 left alone)
 
     // 0x18011477e: the root Element points back at us. UNGUARDED in retail — if
     // the caller handed us a null InternalPtr this faults. Faithful.
-    F<void*>(d->_root, EL::kDialogParent) = self;
+    _root->_dialogParent = this;
 
     // ---- link into the parent's child list -------------------------------
     // A PREPEND: head at +0x38, tail at +0x40, node = {element, prev, next}
@@ -485,37 +394,30 @@ UI::DialogInstance::DialogInstance(UserInterface* ui, Object::InternalPtr<Elemen
     // FIRST element from the list's +0x00) and warns that reading a ctor alone
     // gets this backwards.
     //
-    // ENDGAME B.3.2 step 2 — NOT converted, deliberately. `Collection.h`'s
-    // `LinkedList<T>::Add()` appends at the TAIL (its own banner: "append at
-    // the TAIL... `_head` is the BACKMOST... `_tail` the FRONTMOST"); this body
-    // inserts at the HEAD, which is the opposite end and not a member the
-    // class has today. A hypothetical `AddFront()` — NewNode, then link at
-    // `_head` with the old head's `prev` pointed back at the new node, mirror
-    // image of `Add()` — would be the conversion, but retail ships exactly one
-    // `LinkedList<T=8>` instantiation and this is its only head-insert site,
-    // so there is no second caller to justify adding a class member for it
-    // yet. Left as the raw field manipulation, including the guard-free
-    // linking through a possibly-null `node` on OOM (retail's own asymmetry).
-    if (UI::DialogInstance* const parentDlg = d->_parent.Get()) {
+    // ENDGAME B.3.2 step 2 — NOT converted to a LinkedList member, deliberately:
+    // `LinkedList<T>::Add()` appends at the TAIL; this body inserts at the HEAD,
+    // retail's only head-insert site of the `LinkedList<T=8>` instantiation.
+    // Left as the node manipulation, including the guard-free linking through a
+    // possibly-null `node` on OOM (retail's own asymmetry).
+    using ChildNode = Collection::LinkedList<Object::InternalPtr<DialogInstance> >::Node;
+    if (UI::DialogInstance* const parentDlg = _parent.Get()) {
         // 0x1801147af: `LEA EDX,[RBP+0x18] / LEA R8D,[RBP+0x8]` with RBP == 0,
         // wrapped in Enter/Allocate/Leave — i.e. exactly ?MemAlloc@…(0x18, 8).
-        uint8_t* node = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(0x18, 8));
+        ChildNode* node = static_cast<ChildNode*>(Object::detail::InternalMemAlloc(0x18, 8));
         if (node) {
-            F<void*>(node, 0x00) = self;      // element
-            F<void*>(node, 0x08) = nullptr;   // prev
-            F<void*>(node, 0x10) = nullptr;   // next
+            node->element = Object::InternalPtr<DialogInstance>(this);
+            node->prev    = nullptr;
+            node->next    = nullptr;
         }
         // 0x1801147e1: on an OOM `node` is null (RBP stayed 0) and retail links
         // the null in anyway. Reproduced, guard-free.
-        if (void* head = parentDlg->_children._head) {
-            F<void*>(head, 0x08) = node;                         // old head->prev
-            F<void*>(node, 0x10) = parentDlg->_children._head;   // node->next
+        if (ChildNode* head = parentDlg->_children._head) {
+            head->prev = node;                              // old head->prev
+            node->next = parentDlg->_children._head;        // node->next
         } else {
-            parentDlg->_children._tail =
-                reinterpret_cast<decltype(parentDlg->_children._tail)>(node);
+            parentDlg->_children._tail = node;
         }
-        parentDlg->_children._head =
-            reinterpret_cast<decltype(parentDlg->_children._head)>(node);
+        parentDlg->_children._head = node;
         parentDlg->_children._count++;
     }
     // 0x180114803 `MOV RAX,R14`: a ctor returns `this`.
@@ -554,37 +456,35 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
                              Object::InternalPtr<ComboElement> combo)
     : UI::DialogInstance(ui, root, Object::InternalPtr<UI::DialogInstance>(),
                          nullptr, nullptr, 0) {
-    UI::ComboDialog* const cd = this;
-    void* const* const rootPtr = reinterpret_cast<void* const*>(&root);
-
-    cd->_list         = nullptr;      // +0xb8
-    cd->_parentDialog = Object::InternalPtr<UI::DialogInstance>();   // +0xc0  written 0 then...
-    cd->_parentDialog = parent;       // +0xc0  ...the real value
-    cd->_combo        = nullptr;      // +0xc8  written 0 then...
-    cd->_combo        = combo.Get();  // +0xc8  ...the real value
+    _list         = nullptr;      // +0xb8
+    _parentDialog = Object::InternalPtr<UI::DialogInstance>();   // +0xc0  written 0 then...
+    _parentDialog = parent;       // +0xc0  ...the real value
+    _combo        = nullptr;      // +0xc8  written 0 then...
+    _combo        = combo.Get();  // +0xc8  ...the real value
 
     // ---- 0x180111d91-0x180111e1e: find the ListElement --------------------
     // Re-reads the INCOMING InternalPtr (`MOV RDI,[R15]`, R15 == the R8 spilled
     // at entry), not the local copy handed to the base ctor.
     const uint32_t tidList = UI::ListElement::TypeId();
     {
-        void* const found = FindSelfOrUnderChildren(*rootPtr, tidList);
+        UI::Element* const found = FindSelfOrUnderChildren(root.Get(), tidList);
         // 0x180111e0e: CMOVNZ — null unless it really is a ListElement.
-        cd->_list = ::IsDerivedFrom(found, tidList) ? found : nullptr;
+        _list = found->IsDerivedFrom(tidList) ? static_cast<UI::ListElement*>(found) : nullptr;
     }
 
     // 0x180111e1e / 0x180111e24: ?SetElementId@(0) then
     // ?SetFlagsOnOff@(kElementFlagToolTip16, 0), both on the list.
     // UNGUARDED derefs of a pointer the CMOV above may have just nulled.
-    F<int32_t>(cd->_list, EL::kElementId) = 0;
-    ::SetFlagsOnOff(cd->_list, kElementFlagToolTip16, 0);
+    _list->_elementId = 0;
+    ::SetFlagsOnOff(_list, kElementFlagToolTip16, 0);
 
     // ---- 0x180111e56-0x180111edb: find the ClipRegionElement --------------
     const uint32_t tidClip = UI::ClipRegionElement::TypeId();
-    void* clipRegion = nullptr;
+    UI::ClipRegionElement* clipRegion = nullptr;
     {
-        void* const found = FindSelfOrUnderChildren(*rootPtr, tidClip);
-        clipRegion = ::IsDerivedFrom(found, tidClip) ? found : nullptr;
+        UI::Element* const found = FindSelfOrUnderChildren(root.Get(), tidClip);
+        clipRegion = found->IsDerivedFrom(tidClip)
+            ? static_cast<UI::ClipRegionElement*>(found) : nullptr;
     }
 
     // ---- 0x180111edf-0x180111f38: the list's second child, as a container --
@@ -594,17 +494,19 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
     // different instruction count for the same answer only if nothing in
     // between can change the tree, which is not something this port can claim.
     const uint32_t tidContainer = UI::ContainerElement::TypeId();
+    auto AsContainer = [&](UI::Element* kid) -> UI::ContainerElement* {
+        return kid->IsDerivedFrom(tidContainer) ? static_cast<UI::ContainerElement*>(kid)
+                                                : nullptr;
+    };
     int32_t targetWidth = 0;
     int32_t targetHeight = 0;
     {
-        void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
-        targetWidth = F<int32_t>(c, kContainerWidth);
+        UI::ContainerElement* const c = AsContainer(_list->_children._data[1]);
+        targetWidth = c->_requestedWidth;
     }
     {
-        void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
-        targetHeight = F<int32_t>(c, kContainerHeight);
+        UI::ContainerElement* const c = AsContainer(_list->_children._data[1]);
+        targetHeight = c->_requestedHeight;
     }
 
     // ---- 0x180111f3e-0x180111f5a: the clip region's content size ----------
@@ -615,30 +517,28 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
     // ---- 0x180111f61-0x18011200e: the combo box's padded size -------------
     int32_t paddedWidth = 0;
     int32_t paddedHeight = 0;
-    GetPaddedSize(cd->_combo, &paddedWidth, &paddedHeight);
+    GetPaddedSize(_combo, &paddedWidth, &paddedHeight);
 
     // ---- 0x180112010-0x1801120b9: grow to the combo when nothing forces a
     //      size and the clip region does not already need more ---------------
     // `container` here is the RAW second child — retail keeps the untyped
     // pointer in RDI for the pads and uses the type-checked one only for the
     // +0xc0 / +0xc4 tests.
-    void* const container = F<void**>(cd->_list, EL::kChildrenData)[1];
+    UI::Element* const container = _list->_children._data[1];
     {
-        void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
-        if (F<int32_t>(c, kContainerWidth) <= 0) {
-            const int32_t left  = F<int32_t>(container, EL::kLeftPad);
-            const int32_t right = F<int32_t>(container, EL::kRightPad);
+        UI::ContainerElement* const c = AsContainer(_list->_children._data[1]);
+        if (c->_requestedWidth <= 0) {
+            const int32_t left  = container->_leftPad;
+            const int32_t right = container->_rightPad;
             if (contentWidth < paddedWidth - right - left)
                 targetWidth = paddedWidth - left - right;
         }
     }
     {
-        void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
-        if (F<int32_t>(c, kContainerHeight) <= 0) {
-            const int32_t top    = F<int32_t>(container, EL::kTopPad);
-            const int32_t bottom = F<int32_t>(container, EL::kBottomPad);
+        UI::ContainerElement* const c = AsContainer(_list->_children._data[1]);
+        if (c->_requestedHeight <= 0) {
+            const int32_t top    = container->_topPad;
+            const int32_t bottom = container->_bottomPad;
             if (contentHeight < paddedHeight - bottom - top)
                 targetHeight = paddedHeight - top - bottom;
         }
@@ -646,8 +546,7 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
 
     // ---- 0x1801120bb-0x180112104: ?SetSize@ContainerElement@ --------------
     {
-        void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
+        UI::ContainerElement* const c = AsContainer(_list->_children._data[1]);
         ContainerSetSize(c, targetWidth, targetHeight);
     }
     // 0x180112106 `MOV RAX,R14`: a ctor returns `this`.

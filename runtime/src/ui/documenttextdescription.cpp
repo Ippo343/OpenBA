@@ -98,13 +98,13 @@ void DocumentTextDescription::Destruct() { this->~DocumentTextDescription(); }
 // The FOURTH array has no Array::Serialize at all: its ints are pushed one at a
 // time through the kScalarUInt slot in a hand-rolled loop (0x1800cfac2).
 bool DocumentTextDescription::Serialize(void* streamArg) {
-    Stream* stream = static_cast<Stream*>(streamArg);
+    IO::Stream* stream = static_cast<IO::Stream*>(streamArg);   // LEFT: the External slot takes void* (External.h, R-IO)
 
     // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
     ElementDescription::Serialize(stream);                  // 1800cf8c6
 
-    Serializer ser = { stream, nullptr };                   // [RBP-0x18], [RBP-0x10]
-    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
+    IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined                   // [RBP-0x18], [RBP-0x10]
+    IO::ReaderWriter* rw = ser._readerWriter;
 
 
     RtObject_ExternalPtrSerialize_StringTable(ExtField(&_documentStringTable), IoSer(&ser));   // 1800cf8ff ExternalPtr<StringTable>
@@ -115,7 +115,7 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
 
     n = _frameNamesCount;                                   // 1800cf91e
     rw->SerializeInt(n, nullptr);                           // 1800cf935
-    if (ser.stream->mode == 0)                              // 1800cf93b re-read
+    if (ser._stream->_direction == 0)                              // 1800cf93b re-read
         rtcoll::RtColl_ArraySetSize_180029a80(&_frameNamesData, n);        // 1800cf94f
     RtIo_SerializeStringArray(&ser, n, _frameNamesData, nullptr);   // 0x180029bb0 (4th: unused)
 
@@ -129,33 +129,33 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
 
     n = _fontsCount;                                        // 1800cf9ea
     rw->SerializeInt(n, nullptr);                           // 1800cfa01
-    if (ser.stream->mode == 0)                              // 1800cfa07
+    if (ser._stream->_direction == 0)                              // 1800cfa07
         rtcoll::RtColl_ArraySetSize_18003e600(&_fontsData, n);  // 1800cfa1b
     RtObject_ExternalPtrArraySerialize_Font(IoSer(&ser), n, ExtArray(_fontsData));
 
     n = _sheetsCount;                                       // 1800cfa33
     rw->SerializeInt(n, nullptr);                           // 1800cfa4a
-    if (ser.stream->mode == 0)                              // 1800cfa50
+    if (ser._stream->_direction == 0)                              // 1800cfa50
         rtcoll::RtColl_ArraySetSize_18003ea50(&_sheetsData, n); // 1800cfa64
     RtObject_ExternalPtrArraySerialize_SpriteSheet(IoSer(&ser), n, ExtArray(_sheetsData));
 
     n = _colorsCount;                                       // 1800cfa7c
     rw->SerializeInt(n, nullptr);                           // 1800cfa93
-    if (ser.stream->mode == 0)                              // 1800cfa99
+    if (ser._stream->_direction == 0)                              // 1800cfa99
         rtcoll::RtColl_ArraySetSize_18003eea0(&_colorsData, n); // 1800cfaad
     {
         // The hand-rolled int loop, walking the array's data pointer read
         // AFTER the SetSize call (`MOV RBX,[RSI+0xd0]` at 0x1800cfab2).
-        int32_t* q = _colorsData;                              // 1800cfab2
+        uint32_t* q = _colorsData;                             // 1800cfab2
         for (int32_t k = n; k > 0; --k) {                      // 1800cfabc / 1800cfadc
-            rw->SerializeUInt(*reinterpret_cast<uint32_t*>(q), nullptr);  // 1800cfacf (+0x98)
+            rw->SerializeUInt(*q, nullptr);                    // 1800cfacf (+0x98)
             ++q;                                               // 1800cfad5
         }
     }
 
     RtObject_ExternalPtrSerialize_ExternalList(ExtField(&_resourceList), IoSer(&ser));   // 1800cfae9
 
-    if (rw != nullptr) delete rw;                 // 1800cfb00
+    // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 1800cfb00
     return true;
 }
 
@@ -201,27 +201,24 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
 // i is 0 — a dead branch that costs one instruction and is still in the bytes.
 void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextElement>* element,
                                              const Dialog* /*dialog*/) const {
-    void* local = element->Get();                           // 1800cf548
+    Object::InternalPtr<Element> local(element->Get());     // 1800cf548
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
     // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
-    UI::ElementDescription::CreateInstance(                   // 1800cf550
-        reinterpret_cast<Object::InternalPtr<Element>*>(&local));  // B.3.6 bridge
+    UI::ElementDescription::CreateInstance(&local);        // 1800cf550
 
     {
-        void* table = _documentStringTable;                 // 1800cf555
-        uint64_t idxSlot;                                   // [RSP+0x30], see below
-        if (table != nullptr) {                             // 1800cf559
-            const int32_t idx = static_cast<const StringTable*>(table)       // B.3.x bridge
-                ->GetIndexFromName(*reinterpret_cast<const System::String*>(&_documentTextName));
-            __builtin_memcpy(&idxSlot, &idx, sizeof idx);   // 1800cf56a DWORD store
-        } else {
-            const int32_t minusOne = -1;
-            __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);   // 1800cf570
-        }
+        StringTable* table = _documentStringTable;          // 1800cf555
+        // [RSP+0x30]: the index (or -1) as a DWORD, then read back as a QWORD
+        // over UI::String's index AND its unwritten pad (1800cf587) -- the
+        // same width fact as rtdesc::SpriteFromName.
+        UI::String text;
+        text.table = table;
+        text.index = (table != nullptr)                     // 1800cf559
+            ? table->GetIndexFromName(                      // 1800cf56a
+                  *reinterpret_cast<const System::String*>(&_documentTextName))   // LEFT (H5)
+            : -1;                                           // 1800cf570
         DocumentTextElement* e = element->Get();            // 1800cf578
-        e->_text.table = table;                             // 1800cf57b
-        // 1800cf587: a QWORD store over index AND its pad.
-        __builtin_memcpy(reinterpret_cast<uint8_t*>(&e->_text) + 8, &idxSlot, sizeof idxSlot);
+        e->_text = text;                                    // 1800cf57b / 1800cf587
     }
 
     element->Get()->_spriteSheet = _spriteSheet;            // 1800cf58e / 1800cf595
@@ -233,21 +230,14 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
     // The bound is RE-READ from _frameNamesCount at the bottom of every
     // iteration (0x1800cf60b), not hoisted. Transcribed that way.
     for (int32_t i = 0; i < _frameNamesCount; ++i) {        // 1800cf5b5 / 1800cf60b
-        const uint8_t* names = static_cast<const uint8_t*>(_frameNamesData);
-        void* sheet = _spriteSheet;                         // 1800cf5ce
-        const uint64_t idxSlot = SpriteIndexSlot(sheet, names + i * 8);   // 1800cf5da
-        uint8_t* row = static_cast<uint8_t*>(element->Get()->_frameTableData) + i * 0x10;  // 1800cf5ed
-        *reinterpret_cast<void**>(row)        = sheet;      // 1800cf5f7
-        *reinterpret_cast<uint64_t*>(row + 8) = idxSlot;    // 1800cf600 QWORD store
+        // 1800cf5ce sheet, 1800cf5da the index slot, 1800cf5ed the row
+        // (re-read), 1800cf5f7 / 1800cf600 the sheet and a QWORD slot store.
+        const UI::Sprite s = SpriteFromName(_spriteSheet, &_frameNamesData[i]);
+        element->Get()->_frameTableData[i] = s;
     }
 
-    {
-        void* sheet = _spriteSheet;                                     // 1800cf613
-        const uint64_t idxSlot = SpriteIndexSlot(sheet, &_underlineSpriteName);  // 1800cf626
-        uint8_t* sprite = reinterpret_cast<uint8_t*>(&element->Get()->_underlineSprite);  // 1800cf639
-        *reinterpret_cast<void**>(sprite)        = sheet;   // 1800cf63c
-        *reinterpret_cast<uint64_t*>(sprite + 8) = idxSlot; // 1800cf648 QWORD store
-    }
+    // 1800cf613..1800cf648, the same shape.
+    element->Get()->_underlineSprite = SpriteFromName(_spriteSheet, &_underlineSpriteName);
 
     element->Get()->_linkColor        = _linkColor;         // 1800cf64f .. 1800cf694
     element->Get()->_linkHoverColor   = _linkHoverColor;
@@ -274,11 +264,11 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
             e->_colorsCount = n;                            // 1800cf72a
             if (n > 0) {                                    // 1800cf730
                 e->_colorsCapacity = n;                     // 1800cf732 capacity
-                e->_colorsData = MemAlloc(static_cast<uint64_t>(n) * 4, 4);   // 1800cf76a
+                e->_colorsData = static_cast<int32_t*>(MemAlloc(static_cast<uint64_t>(n) * 4, 4));   // 1800cf76a
             }
             if (e->_colorsCount > 0) {                      // 1800cf77e
                 for (int32_t i = 0; i < e->_colorsCount; ++i) {
-                    int32_t* out = static_cast<int32_t*>(e->_colorsData) + i;   // 1800cf788
+                    int32_t* out = e->_colorsData + i;          // 1800cf788
                     if (out != nullptr)                     // 1800cf78e
                         *out = _colorsData[i];              // 1800cf797
                 }
@@ -322,13 +312,12 @@ namespace UI {
 // ExternalPtr<SpriteSheet> are NOT released — the same asymmetry
 // ~ImageDescription has.
 DocumentTextDescription::~DocumentTextDescription() {
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
-    rtcoll::RtColl_ArrayDtor_18003db40(p + 0xd0);          // 1800cfb57
-    rtcoll::RtColl_ArrayDtor_18003da00(p + 0xc0);          // 1800cfb64
-    rtcoll::RtColl_ArrayDtor_18003d8c0(p + 0xb0);          // 1800cfb71
-    rtcoll::RtColl_ArrayDtorElem_180010ab0(p + 0x88);          // 1800cfb7e  element-destroying
-    ReleaseStringField(p, 0x80);                            // 1800cfb84
-    ReleaseStringField(p, 0x70);                            // 1800cfbba
+    rtcoll::RtColl_ArrayDtor_18003db40(&_colorsData);      // 1800cfb57  +0xd0
+    rtcoll::RtColl_ArrayDtor_18003da00(&_sheetsData);      // 1800cfb64  +0xc0
+    rtcoll::RtColl_ArrayDtor_18003d8c0(&_fontsData);       // 1800cfb71  +0xb0
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_frameNamesData);  // 1800cfb7e  +0x88, element-destroying
+    ReleaseStringField(_underlineSpriteName);              // 1800cfb84  +0x80
+    ReleaseStringField(_documentTextName);                 // 1800cfbba  +0x70
 }
 
 // ?CreateNewObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@XZ 0x18003b9f0 --

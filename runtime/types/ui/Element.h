@@ -502,7 +502,7 @@ public:
     // them at these offsets. Names and TYPES are RtUI::Element's, unchanged, so
     // every includer of this header compiles untouched; the per-field evidence
     // is on the POD above.
-    void*    _name;              // +0x10  System::String body
+    char*    _name;              // +0x10  System::String body (H5: raw char* storage)
     int32_t  _leftPad;           // +0x18
     int32_t  _rightPad;          // +0x1c
     int32_t  _topPad;            // +0x20
@@ -513,9 +513,9 @@ public:
     uint32_t _flags;             // +0x34  ElementFlag
     uint32_t _color;             // +0x38
     int32_t  _mouseCursorIndex;  // +0x3c
-    void*    _toolTipDialog;     // +0x40  ExternalPtr<UI::Dialog>
+    Dialog*  _toolTipDialog;     // +0x40  ExternalPtr<UI::Dialog> (B4 H4: typed)
     ::UIString _toolTip;         // +0x48
-    void*    _toolTipString;     // +0x58  System::String body
+    char*    _toolTipString;     // +0x58  System::String body (H5: raw char* storage)
     int32_t  _layoutWidth;       // +0x60  NOT written by the ctor
     int32_t  _layoutHeight;      // +0x64  NOT written by the ctor
     int32_t  _layoutLeft;        // +0x68
@@ -524,14 +524,14 @@ public:
     int32_t  _layoutBottom;      // +0x74
     int32_t  _unknown78;         // +0x78  ctor -1
     uint32_t _pad7c;             // +0x7c  never written
-    void*    _userData;          // +0x80  Object::Base*
+    Object::Base* _userData;     // +0x80  ?GetUserData@ 0x180115550 (B4 H4: typed)
     int32_t  _elementId;         // +0x88  ctor -1
     uint32_t _pad8c;             // +0x8c  never written
-    void*    _dialogParent;      // +0x90  InternalPtr<UI::DialogInstance>
+    DialogInstance* _dialogParent; // +0x90  InternalPtr<UI::DialogInstance> (B4 H4: typed)
     Element* _parent;            // +0x98
     Collection::Array<Element*> _children;   // +0xa0
     void*    _border;            // +0xb0  InternalPtr<UI::Element>
-    void*    _description;       // +0xb8  ExternalPtr<UI::ElementDescription>
+    const ElementDescription* _description; // +0xb8  ExternalPtr<UI::ElementDescription>; CreateInstance 0x180115ad0 stores its const `this` (B4 H4)
 };
 
 static_assert(sizeof(Element) == 0xC0,

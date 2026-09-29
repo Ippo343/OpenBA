@@ -153,6 +153,7 @@
 
 #include "../../funcs/rt_libm.h"
 #include "../../types/ui/SpriteContext.h"
+#include "../../types/ui/SpriteSheet.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 close: Video::Device::_singleton
@@ -265,28 +266,11 @@ inline float TransformY(const FlushTransform2& m, float x, float y) {
 // same row spritecontext.cpp's AddSpriteDraw/FlushDeferred bridge through),
 // so both call sites below call it directly.
 
-// ---------------------------------------------------------------------------
-// Field access on the two objects this file does not own a header for.
-// ---------------------------------------------------------------------------
-template <typename T>
-inline T& Field(void* p, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
-
-enum : size_t {
-    // Video::Context (runtime/types/video/Context.h names all five).
-    kCtxDirtyMask     = 0x0010,
-    kCtxScissor       = 0x01e0,   // four ints, x/y/w/h
-    kCtxVertexCursor  = 0x20e0,
-    kCtxVertexStride  = 0x20e8,
-    kCtxContextData   = 0x2160,
-    // UI::SpriteSheet — only two fields are read by Flush.
-    kSheetSprites     = 0x0020,   // the sprite array; stride 0x38
-    kSheetMaterial    = 0x0030,   // Graphics::MaterialInstance*
-    // The UI::Sprite entry inside that array.
-    kSpriteUv         = 0x0024,   // u0, v0, u1, v1 at +0x24/+0x28/+0x2c/+0x30
-    kSpriteStride     = 0x0038,
-};
+// The fields read here, by name: Video::Context `_dirty` (+0x10), `_scissor`
+// (+0x1e0), `_dynamicVertexCursor` (+0x20e0), `_dynamicVertexStride`
+// (+0x20e8), `_contextData` (+0x2160); UI::SpriteSheet `m_sprites` (+0x20,
+// stride 0x38, u0/v0/u1/v1 at +0x24..+0x30) and `m_field30` (+0x30, the
+// Graphics::MaterialInstance).
 
 // ENDGAME B.3.5: the two ContextData byte offsets are gone. +0x70 and +0x78 are
 // slots 14 (`BeginVertices(int,int)`) and 15 (`EndVertices(int)`) of the real
@@ -308,9 +292,9 @@ const uint32_t kDirtyScissor = 0x400;
 // cell is the class static; the by-address door and its cached slot are gone.
 // ---------------------------------------------------------------------------
 inline void* VideoDeviceData() {
-    void* device = ::Video::Device::_singleton;
+    ::Video::Device* device = ::Video::Device::_singleton;
     if (!device) return nullptr;
-    return Field<void*>(device, 0x100);
+    return device->deviceData;                                   // +0x100
 }
 
 // ENDGAME B.3.5: slot 5 of the real abstract `Video::DeviceData`. The retail
@@ -325,11 +309,11 @@ inline float DeviceHalfPixel(void* deviceData) {
 // `_context` is re-read for EVERY vertex and so are both fields, exactly as
 // retail does (six `MOV RBX,[R13+0x30]` in the shared tail, 0x18011c46e..).
 inline void Emit(SpriteContext* self, const FlushVertex& v) {
-    void*         ctx    = self->_context;
-    uint8_t*      cursor = Field<uint8_t*>(ctx, kCtxVertexCursor);
-    const int32_t stride = Field<int32_t>(ctx, kCtxVertexStride);
+    Video::Context* ctx    = self->_context;
+    uint8_t*        cursor = ctx->_dynamicVertexCursor;
+    const int32_t   stride = ctx->_dynamicVertexStride;
     std::memcpy(cursor, &v, static_cast<size_t>(stride));
-    Field<uint8_t*>(ctx, kCtxVertexCursor) = cursor + stride;
+    ctx->_dynamicVertexCursor = cursor + stride;
 }
 
 // ---- effectiveness counters, printed by the report hook --------------------
@@ -360,19 +344,20 @@ void SpriteContext::Flush() {
         return;
     }
 
-    void* ctx = _context;
+    Video::Context* const ctx = _context;
+    const SpriteSheet* const current = static_cast<const SpriteSheet*>(_currentSheet);
 
     // --- the scissor push, 0x18011bab3..0x18011bb08 -------------------------
     // Four independent compares that all fall through to the SAME store block:
     // one difference rewrites all four fields and sets the bit.
-    int32_t* ctxScissor = &Field<int32_t>(ctx, kCtxScissor);
-    if (ctxScissor[0] != _scissorX || ctxScissor[1] != _scissorY ||
-        ctxScissor[2] != _scissorW || ctxScissor[3] != _scissorH) {
-        Field<uint32_t>(ctx, kCtxDirtyMask) |= kDirtyScissor;
-        ctxScissor[0] = _scissorX;
-        ctxScissor[1] = _scissorY;
-        ctxScissor[2] = _scissorW;
-        ctxScissor[3] = _scissorH;
+    Video::Viewport& ctxScissor = ctx->_scissor;
+    if (ctxScissor.x != _scissorX || ctxScissor.y != _scissorY ||
+        ctxScissor.width != _scissorW || ctxScissor.height != _scissorH) {
+        ctx->_dirty |= kDirtyScissor;
+        ctxScissor.x      = _scissorX;
+        ctxScissor.y      = _scissorY;
+        ctxScissor.width  = _scissorW;
+        ctxScissor.height = _scissorH;
     }
 
     // --- the batch type, 0x18011bb0e..0x18011bb20 ---------------------------
@@ -381,9 +366,9 @@ void SpriteContext::Flush() {
     const uint8_t isLine = (count > 0) ? _draws._data[0].isLine : 0;
 
     // --- 0x18011bb37 -------------------------------------------------------
-    reinterpret_cast<const Graphics::MaterialInstance*>(
-        Field<void*>(_currentSheet, kSheetMaterial))
-        ->Setup(*reinterpret_cast<Video::Context*>(ctx), 0);   // B.3.5 bridge
+    // `m_field30` is spelt uint64_t (saveload_draw.cpp stores it as an integer).
+    reinterpret_cast<const Graphics::MaterialInstance*>(current->m_field30)
+        ->Setup(*ctx, 0);
 
     // --- the chunked walk, 0x18011bb3c..0x18011c5ef ------------------------
     const int32_t vertsPer = isLine ? 2 : 6;
@@ -395,7 +380,7 @@ void SpriteContext::Flush() {
         count -= n;
 
         Video::ContextData* cd = reinterpret_cast<Video::ContextData*>(
-            Field<void*>(_context, kCtxContextData));
+            _context->_contextData);
         const bool ok = cd->BeginVertices(n * vertsPer, 0x20);   // B.3.5 bridge
 
         if (!ok) {
@@ -407,9 +392,10 @@ void SpriteContext::Flush() {
         }
 
         for (int32_t i = 0; i < n; ++i) {
-            // Both are re-read every iteration (0x18011bc40 / 0x18011bc44).
+            // Both are re-read every iteration (0x18011bc40 / 0x18011bc44);
+            // `_currentSheet` does not change inside the walk.
             const SpriteDraw* d = &_draws._data[base + i];
-            void* sheet = _currentSheet;
+            const SpriteSheet* sheet = current;
 
             // --- the sheet UV, 0x18011bc4b..0x18011bc89 --------------------
             // `MOVSXD RAX,[rec+8]` then `TEST EAX,EAX / JNS`: a SIGNED test on
@@ -417,10 +403,8 @@ void SpriteContext::Flush() {
             float u0 = kZero, v0 = kZero, u1 = kZero, v1 = kZero;
             const int32_t idx = d->spriteIndex;
             if (idx >= 0) {
-                const uint8_t* sprites = Field<uint8_t*>(sheet, kSheetSprites);
-                const float* uv = reinterpret_cast<const float*>(
-                    sprites + static_cast<int64_t>(idx) * kSpriteStride + kSpriteUv);
-                u0 = uv[0]; v0 = uv[1]; u1 = uv[2]; v1 = uv[3];
+                const SpriteInfo& info = sheet->m_sprites[idx];
+                u0 = info.u0; v0 = info.v0; u1 = info.u1; v1 = info.v1;
             }
 
             const uint32_t color = d->color;
@@ -519,7 +503,7 @@ void SpriteContext::Flush() {
 
         // 0x18011c5c5..0x18011c5e3. `_context` and `+0x2160` are re-read.
         Video::ContextData* cd2 = reinterpret_cast<Video::ContextData*>(
-            Field<void*>(_context, kCtxContextData));
+            _context->_contextData);
         const int32_t prim = isLine ? 2 : 0;
         cd2->EndVertices(prim);                                  // B.3.5 bridge
     }

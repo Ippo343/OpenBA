@@ -55,35 +55,25 @@ using namespace rtuielem;
 
 namespace {
 
-// Input::Device — the per-key "pressed this frame" byte table. The keyboard
-// block starts at +0x6c6 with a stride of 0x18 and 0x69 entries, which is the
-// loop bound at 0x1800d07f6. Two bytes per key (+0x00 and +0x02) are tested
-// together everywhere: press and repeat.
-constexpr int kKeyBase   = 0x6c6;
-constexpr int kKeyStride = 0x18;
-constexpr int kKeyCount  = 0x69;
-constexpr int kKeyEscape = 0xc66;
-constexpr int kKeyEnter  = 0xf7e;
-constexpr int kKeyLeft   = 0xea6;
-constexpr int kKeyRight  = 0xed6;
-constexpr int kKeyHome   = 0xe16;
-constexpr int kKeyEnd    = 0xe5e;
-constexpr int kKeyBack   = 0xba6;
-constexpr int kKeyDelete = 0xe46;
-
-// UI::UserInterface
-constexpr int kUiEvents     = 0x48;
-constexpr int kUiEventCount = 0x50;
+// Input::Device::_keyboard — the per-key State records (+0x6c0, stride 0x18,
+// 0x69 entries: the loop bound at 0x1800d07f6). Two bytes per key are tested
+// together everywhere: `pressed` (+0x06) and `repeat` (+0x08). The retail
+// displacements are +0x6c6 + key * 0x18 (and +2): Escape 0xc66, Enter 0xf7e,
+// Left 0xea6, Right 0xed6, Home 0xe16, End 0xe5e, Back 0xba6, Delete 0xe46.
+constexpr int kKeyCount  = ::Input::Device::kKeyboardInputCount;
+constexpr int kKeyEscape = 60;
+constexpr int kKeyEnter  = 93;
+constexpr int kKeyLeft   = 84;
+constexpr int kKeyRight  = 86;
+constexpr int kKeyHome   = 78;
+constexpr int kKeyEnd    = 81;
+constexpr int kKeyBack   = 52;
+constexpr int kKeyDelete = 80;
 
 constexpr int32_t kEventEditFinished = 0x15;
 
-// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
-void** InputDeviceSlot() {
-    return reinterpret_cast<void**>(&::Input::Device::_singleton);
-}
-void** InputConfigSlot() {
-    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
-}
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics, read at each use.
+// The text-input latch is `Configuration::_singleton->_keyMap->_suspendCount`.
 double SecondsPerTick() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
     return ::System::Timer::_secondsPerTick;
@@ -92,8 +82,9 @@ double SecondsPerTick() {
 
 void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
-// A System::String held in a raw slot, as the member calls below need it.
-System::String& Str(void* slot) { return *static_cast<System::String*>(slot); }   // B.3.x bridge
+// A System::String held in a raw char* slot, as the member calls below need
+// it. LEFT (H5): the Strings of this class are raw char* storage.
+System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge
 
 struct Event {
     void*    dialog;
@@ -110,22 +101,19 @@ static_assert(sizeof(Event) == 0x30, "UI event record stride");
 
 // `System::String`'s length, the way every body in this file reads it: the
 // dword at [data - 8], and ZERO when the handle is null.
-int StrLen(const void* s) {
+int StrLen(const char* s) {
     if (s == nullptr) return 0;
-    return *reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(s) - 8);
+    return RtSystem::StringLength(s);
 }
 
-const System::String& AsString(void* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);
-}
 const System::String& AsString(char* const& field) {
     return *reinterpret_cast<const System::String*>(&field);
 }
 
-void ReleaseString(void** slot) {
-    char* s = static_cast<char*>(*slot);
+void ReleaseString(char** slot) {
+    char* s = *slot;
     if (s == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(s - 4);
+    int32_t* rc = &RtSystem::StringRefCount(s);
     --*rc;
     if (*rc == 0) {
         *slot = s - 8;
@@ -138,30 +126,30 @@ void ReleaseString(void** slot) {
 // The inlined `System::String::operator=` the three edit paths share:
 // `if (dst != src) { release dst; dst = src; addref }`. The pointer COMPARE
 // comes first, so assigning a String to itself does not touch the refcount.
-void AssignStringInline(void** dst, void* const* src) {
+void AssignStringInline(char** dst, char* const* src) {
     if (*dst == *src) return;
     if (*dst != nullptr) {
-        int32_t* rc = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*dst) - 4);
+        int32_t* rc = &RtSystem::StringRefCount(*dst);
         --*rc;
         if (*rc == 0) {
-            *dst = static_cast<uint8_t*>(*dst) - 8;
+            *dst = *dst - 8;
             MemFree(*dst);
         } else {
             *dst = nullptr;
         }
     }
     *dst = *src;
-    if (*dst != nullptr) ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(*dst) - 4);
+    if (*dst != nullptr) ++RtSystem::StringRefCount(*dst);
 }
 
 // Retail's password mask: append '*' to a fresh String once per character of
 // the real text. `System::String::operator+=` (0x1800c89e0) takes a HIDDEN
 // TEMPORARY SLOT as its second argument and leaves a String in it that the
 // caller must release — which is why the loop has a release in its body.
-void* BuildMask(int length) {
-    void* masked = nullptr;
+char* BuildMask(int length) {
+    char* masked = nullptr;
     for (int i = 0; i < length; ++i) {
-        void* tmp = nullptr;
+        char* tmp = nullptr;
         new (static_cast<void*>(&tmp)) System::String(Str(&masked) += '*');   // 0x1800c89e0, retslot = &tmp
         ReleaseString(&tmp);
     }
@@ -180,11 +168,10 @@ namespace UI {
 // it deafens the game.
 EditElement::~EditElement() {
     if (_active != 0) {
-        void** cfg = InputConfigSlot();
-        --**reinterpret_cast<int32_t**>(*cfg);
+        --::Input::Configuration::_singleton->_keyMap->_suspendCount;
     }
-    ReleaseString(reinterpret_cast<void**>(&_filter));
-    ReleaseString(reinterpret_cast<void**>(&_text));
+    ReleaseString(&_filter);
+    ReleaseString(&_text);
 }
 
 // ============================================================================
@@ -207,9 +194,9 @@ void EditElement::ComputeSize() {
         _layoutWidth  = font->ComputeLineLayout(text, StrLen(text), 0, 0, -1, 0, nullptr);
         _layoutHeight = font->_lineHeight;
     } else {
-        void* masked = BuildMask(StrLen(_text));
+        char* masked = BuildMask(StrLen(_text));
         _layoutWidth = 0; _layoutHeight = 0;                 // one qword store
-        _layoutWidth  = font->ComputeLineLayout(static_cast<const char*>(masked),
+        _layoutWidth  = font->ComputeLineLayout(masked,
                                                 StrLen(masked), 0, 0, -1, 0, nullptr);
         _layoutHeight = font->_lineHeight;
         ReleaseString(&masked);
@@ -239,7 +226,7 @@ void EditElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
 // `top - font.baseline + font.lineHeight`, and the caret — a literal "|" —
 // one pixel LEFT of the character position the caret index resolves to.
 void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
-    if (Element* border = static_cast<Element*>(_border))
+    if (Element* border = static_cast<Element*>(_border))   // LEFT: _border is void*
         border->Draw(ctx, alpha);                            // virtual, slot 6
 
     const uint32_t flags = _flags;
@@ -252,12 +239,12 @@ void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
     // The string actually drawn: the mask in password mode, otherwise a
     // REFERENCE to the real text (retail bumps its refcount and releases it at
     // the end, so the field itself is untouched).
-    void* shown = nullptr;
+    char* shown = nullptr;
     if (_password != 0) {
         shown = BuildMask(StrLen(_text));
     } else if (_text != nullptr) {
         shown = _text;
-        ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(shown) - 4);
+        ++RtSystem::StringRefCount(shown);
     }
 
     Font* font = _font;
@@ -271,7 +258,7 @@ void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
         // THE CARET'S STRING IS BUILT FROM A C LITERAL. Retail passes the DLL's
         // own `"|"` at 0x180156804; our own literal is the same bytes and
         // `System::String::Set` copies them either way.
-        void* caret = nullptr;
+        char* caret = nullptr;
         static const char kCaretText[] = "|";
         Str(&caret).Set(kCaretText);                                    // 0x1800c95d0
 
@@ -309,16 +296,17 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         UI::Element::Update(time, ui, &dlgCopy, st);
     }
 
-    void** devSlot = InputDeviceSlot();
-    const uint8_t* dev = devSlot ? static_cast<const uint8_t*>(*devSlot) : nullptr;
+    const ::Input::Device* dev = ::Input::Device::_singleton;
+    auto Down = [dev](int key) {                               // pressed or repeat
+        return dev->_keyboard[key].pressed != 0 || dev->_keyboard[key].repeat != 0;
+    };
 
     if ((_flags & kFlagDisabledMask) != 0) return;
 
     // ---- take focus -------------------------------------------------------
     if (st.buttonPressed != 0 && ((_flags >> 17) & 1u) != 0) {
         if (_active == 0) {
-            void** cfg = InputConfigSlot();
-            ++**reinterpret_cast<int32_t**>(*cfg);
+            ++::Input::Configuration::_singleton->_keyMap->_suspendCount;
         }
         _active = 1;
         _blinkOn = 1;
@@ -336,16 +324,16 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
 
     // ---- drop focus -------------------------------------------------------
     const bool clickedAway = st.buttonPressed != 0 && (_flags & 0x20000u) == 0;
-    if (clickedAway || dev[kKeyBase] != 0 || dev[kKeyEscape] != 0 || dev[kKeyEnter] != 0) {
+    if (clickedAway || dev->_keyboard[0].pressed != 0 ||
+        dev->_keyboard[kKeyEscape].pressed != 0 || dev->_keyboard[kKeyEnter].pressed != 0) {
         _active = 0;
-        void** cfg = InputConfigSlot();
-        --**reinterpret_cast<int32_t**>(*cfg);
+        --::Input::Configuration::_singleton->_keyMap->_suspendCount;
 
         FinalizeText();                                      // virtual, slot 12
         SetNeedsSizeCalc();
 
-        Event ev;
-        ev.dialog    = *reinterpret_cast<void* const*>(dlg);
+        ::Event ev;
+        ev.dialog    = dlg->Get();
         ev.element   = this;
         ev.kind      = kEventEditFinished;
         ev.elementId = _elementId;
@@ -353,36 +341,35 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         ev.y         = st.mouseY;
         ev.index     = 0;
         ev.tail      = 0;
-        rtcoll::RtColl_ArraySetSizeFill_180033690(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
-                                            I32(ui, kUiEventCount) + 1, &ev);
+        rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events, ui->_events._size + 1, &ev);
     }
 
     if (_active == 0) return;
 
     // ---- blink ------------------------------------------------------------
-    _blinkAccumulator += *reinterpret_cast<const int64_t*>(&time);
+    _blinkAccumulator += time._ticks;
     if (_blinkAccumulator > static_cast<int64_t>(0.5 / SecondsPerTick())) {
         _blinkOn = (_blinkOn == 0) ? 1 : 0;
         _blinkAccumulator = 0;
     }
 
     // ---- caret movement ---------------------------------------------------
-    if (dev[kKeyLeft] != 0 || dev[kKeyLeft + 2] != 0) {
+    if (Down(kKeyLeft)) {
         _caret -= 1;
         if (_caret < 0) _caret = 0;
     }
-    if (dev[kKeyRight] != 0 || dev[kKeyRight + 2] != 0) {
+    if (Down(kKeyRight)) {
         _caret += 1;
         const int len = StrLen(_text);
         if (_caret > len) _caret = len;
     }
-    if (dev[kKeyHome] != 0) _caret = 0;
-    if (dev[kKeyEnd]  != 0) _caret = StrLen(_text);
+    if (dev->_keyboard[kKeyHome].pressed != 0) _caret = 0;
+    if (dev->_keyboard[kKeyEnd].pressed  != 0) _caret = StrLen(_text);
 
     // ---- backspace / delete ----------------------------------------------
     // System::String::RemoveAt (0x1800c86b0, retslot) and operator= (0x1800c9810).
-    if ((dev[kKeyBack] != 0 || dev[kKeyBack + 2] != 0) && _caret > 0) {
-        void* tmp = nullptr;
+    if (Down(kKeyBack) && _caret > 0) {
+        char* tmp = nullptr;
         new (static_cast<void*>(&tmp)) System::String(Str(&_text).RemoveAt(_caret - 1));
         Str(&_text) = Str(&tmp);
         ReleaseString(&tmp);
@@ -390,9 +377,9 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         SetNeedsSizeCalc();
     }
 
-    if (dev[kKeyDelete] != 0 || dev[kKeyDelete + 2] != 0) {
+    if (Down(kKeyDelete)) {
         if (_caret < StrLen(_text)) {
-            void* tmp = nullptr;
+            char* tmp = nullptr;
             new (static_cast<void*>(&tmp)) System::String(Str(&_text).RemoveAt(_caret));
             Str(&_text) = Str(&tmp);
             ReleaseString(&tmp);
@@ -404,8 +391,7 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
     // `?SelectCharacter@` (0x1800cfd40) maps a key index to the character it
     // produces under the current modifiers, or 0 for "not a character key".
     for (int k = 0; k < kKeyCount; ++k) {
-        const int off = kKeyBase + k * kKeyStride;
-        if (dev[off] == 0 && dev[off + 2] == 0) continue;
+        if (dev->_keyboard[k].pressed == 0 && dev->_keyboard[k].repeat == 0) continue;
 
         const uint8_t ch = static_cast<uint8_t>(SelectCharacter(k));
         if (ch == 0) continue;
@@ -438,7 +424,7 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         int64_t idx = 0;
         do { ++n; ++idx; } while (buf[idx] != 0);
 
-        void* one = nullptr;
+        char* one = nullptr;
         System::StringPrivateAccess::SetLength(Str(&one), n);         // 0x1800c8220
 
         const int cap = n + 1;
@@ -450,13 +436,13 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         ++srcLen;
         const int copy = (cap < srcLen) ? cap : srcLen;
         std::memmove(one, buf, static_cast<size_t>(copy));           // 0x18008a290 is memmove
-        if (srcLen > cap) static_cast<char*>(one)[idx] = 0;
+        if (srcLen > cap) one[idx] = 0;
 
-        void* ins = nullptr;
+        char* ins = nullptr;
         new (static_cast<void*>(&ins)) System::String(                // 0x1800c8510, retslot = &ins
             Str(&_text).InsertAt(_caret, Str(&one)));
-        void** ret = &ins;
-        AssignStringInline(reinterpret_cast<void**>(&_text), ret);
+        char** ret = &ins;
+        AssignStringInline(&_text, ret);
         ReleaseString(&ins);
         ReleaseString(&one);
 

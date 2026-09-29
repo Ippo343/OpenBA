@@ -86,9 +86,6 @@ namespace {
 
 using Str = System::String;
 
-inline int32_t& RefCount(void* data) {
-    return *reinterpret_cast<int32_t*>(static_cast<char*>(data) - 4);
-}
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) — PORTED, Wave 2.
 // Called by name (B3R RT-UI).
@@ -124,13 +121,13 @@ void TextElement::SetParameterCount() {
     Str tmp = _text;                                          // 0x18011e903 operator System::String
 
     char* held = nullptr;                                     // RBX
-    if (tmp._data) { held = tmp._data; ++RefCount(tmp._data); }  // 0x18011e91a
+    if (tmp._data) { held = tmp._data; ++RtSystem::StringRefCount(tmp._data); }  // 0x18011e91a
 
     const int n = System::String::FormatParamCount(held);     // 0x18011e928
     ArrayStringSetSize(&_params, n);                          // 0x18011e936
 
     if (held) {                                               // 0x18011e93c
-        if (--RefCount(held) == 0) MemFree(held - 8);
+        if (--RtSystem::StringRefCount(held) == 0) MemFree(held - 8);
     }
     // 0x18011e962 — `tmp`'s destructor, at the end of the body, is retail's
     // release of the same slot.
@@ -158,7 +155,7 @@ void TextElement::CacheText() {
     if (_params._size == 0) {
         newData = tmp._data;
     } else {
-        if (tmp._data) { param0._data = tmp._data; ++RefCount(tmp._data); }  // 0x18011ecb3
+        if (tmp._data) { param0._data = tmp._data; ++RtSystem::StringRefCount(tmp._data); }  // 0x18011ecb3
         // The params pointer is the parameter Array's DATA pointer, not the
         // Array header — Ghidra's decompiled C drops this third argument
         // (reference_ghidra_c_output_vs_disassembly.md).
@@ -170,7 +167,7 @@ void TextElement::CacheText() {
     char* cur = _cachedText;
     if (cur != newData) {                                     // 0x18011ec55 / ecdb
         if (cur) {
-            if (--RefCount(cur) == 0) {
+            if (--RtSystem::StringRefCount(cur) == 0) {
                 // Retail stores the decremented pointer back into the
                 // MEMBER before freeing (`ADD qword ptr [RDI+0xf8],-0x8;
                 // MOV RCX,[RDI+0xf8]`), so MemFree's argument comes out of
@@ -184,7 +181,7 @@ void TextElement::CacheText() {
 
         _cachedText = newData;
 
-        if (newData) ++RefCount(newData);
+        if (newData) ++RtSystem::StringRefCount(newData);
     }
 
     // Retail releases `result` and `param0` here (0x18011ed1d, 0x18011ed46) and
