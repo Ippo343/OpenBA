@@ -180,7 +180,7 @@ int MarketWork::Validate() {
         CitizenComponent* entityIBP = node->element.citizen;
 
         // Validate this entity
-        bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
+        bool stillValid = ValidateTask(nullptr, &entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list -- grow array if needed
@@ -572,11 +572,10 @@ int MarketWork::Execute(void* citizenHolder, void* ctx) {
     // EDI = MarketWork+0x50, the claim count = citizens already claimed by this
     // market. self+0x18 is the market's WorkComponent; its +0x30 is a lazily-filled
     // cache of "how many haulers may work here at once", computed by CalcMaxWorkers
-    // (0x14012e5c0). Full -> 1 = examined but declined. (Work::field_18 is void* in
-    // Work.h: LEFT. The tree has two ports of 0x14012e5c0 that differ; the one
+    // (0x14012e5c0). Full -> 1 = examined but declined. (The tree has two ports of 0x14012e5c0 that differ; the one
     // called here takes the component as an integer: LEFT.)
     const int claimed = _field50;
-    WorkComponent* workComp = (WorkComponent*)field_18;
+    WorkComponent* workComp = field_18;
     if (workComp->workState == 0) {
         workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));
     }

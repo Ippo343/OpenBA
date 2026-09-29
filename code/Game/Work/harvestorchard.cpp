@@ -61,7 +61,7 @@ extern "C" void OrchardDiag_NoteHarvestExecuted();
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component/Tutorial/Game headers)
 // ============================================================
-//   AutoPickupWork::CheckAssignments (0x1400e3db0)  WorkGrid_AutoPickup_e3db0
+//   AutoPickupWork::CheckAssignments (0x1400e3db0)  Work::TryAutoPickup
 //   0x140003050 FindComponent MaterialDesc          WorkBase_FindComponent_3050
 //   0x140002f90 FindComponent MeshInstance          WorkBase_FindComponent_2f90
 //   0x140005440 FindComponent OrchardDescription    WorkAcc_FindComponent_5440
@@ -77,7 +77,7 @@ extern "C" void OrchardDiag_NoteHarvestExecuted();
 //   0x1400bb7b0 orchard harvest action ctor         WorkAct_GatherWorkCtor_bb7b0
 //   0x140029a40 / 0x14001ca60 / 0x140029de0 cell BST insert / remove / serialize
 //                                                   WorkCellBST_Insert_9a40 / _Remove_ca60 / _Serialize_9de0
-//   0x1400f7100 ValidateTask                        WorkBase_ValidateTask_f7100
+//   0x1400f7100 ValidateTask                        Work::ValidateTask
 //   0x1400c5400 cancel work                         WorkBase_TaskListCleanup_c5400
 //   0x140002e10 FindPositionComponent               AttendanceComponent_GetJobHostComponent
 //   0x14000e320 BST recursive free                  WorkBase_TreeNodeFree_e320
@@ -122,9 +122,9 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/) {
 
     CitizenComponent* citizenRef = *citizenIBP;
 
-    // Step 1: Check auto-pickup (0x1400e3db0 takes the work as an integer: LEFT)
+    // Step 1: Check auto-pickup (0x1400e3db0, Work::TryAutoPickup)
     CitizenComponent* checkRef = citizenRef;
-    int checkResult = WorkGrid_AutoPickup_e3db0(reinterpret_cast<uintptr_t>(this), &checkRef);
+    int checkResult = TryAutoPickup(&checkRef);
     if (checkResult == 2) {
         return 2;
     }
@@ -479,7 +479,7 @@ int HarvestOrchard::Validate() {
     while (node != nullptr) {
         CitizenComponent* ibpData = node->element.citizen;
 
-        uint8_t valid = WorkBase_ValidateTask_f7100(this, nullptr, &ibpData, nullptr);
+        uint8_t valid = ValidateTask(nullptr, &ibpData, nullptr);
 
         if (valid == 0) {
             uint32_t newCount = collectCount + 1;

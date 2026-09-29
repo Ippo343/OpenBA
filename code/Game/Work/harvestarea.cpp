@@ -60,7 +60,7 @@
 // ============================================================
 // Sub-functions, called by name (B3R; Work/Action/Component/Tutorial/Game headers)
 // ============================================================
-//   AutoPickupWork::CheckAssignments (0x1400e3db0)  WorkGrid_AutoPickup_e3db0
+//   AutoPickupWork::CheckAssignments (0x1400e3db0)  Work::TryAutoPickup
 //   0x140003050 FindComponent WorkComponent         ComponentEntity::FindComponent<WorkComponent>
 //   0x140002f90 FindComponent StatusIconComponent   ComponentEntity::FindComponent<StatusIconComponent>
 //   0x140005380 FindComponent CropFieldComponent    ComponentEntity::FindComponent<CropFieldComponent>
@@ -74,7 +74,7 @@
 //   0x1400c1530 harvest action chain ctor           WorkAct_HarvestAreaCtor_c1530
 //   0x140029a40 / 0x14001ca60 / 0x140029de0 cell BST insert / remove / serialize
 //                                                   WorkCellBST_Insert_9a40 / _Remove_ca60 / _Serialize_9de0
-//   0x1400f7100 ValidateTask                        WorkBase_ValidateTask_f7100
+//   0x1400f7100 ValidateTask                        Work::ValidateTask
 //   0x1400c5400 cancel work                         WorkBase_TaskListCleanup_c5400
 //   0x140002e10 FindComponent WorkPlaceComponent    ComponentEntity::FindComponent<WorkPlaceComponent>
 //   0x14000e320 BST recursive free                  WorkBase_TreeNodeFree_e320
@@ -136,8 +136,8 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/) {
 
     CitizenComponent* citizenRef = *citizenIBP;
 
-    // Step 1: Check auto-pickup (0x1400e3db0 takes the work as an integer: LEFT)
-    int checkResult = WorkGrid_AutoPickup_e3db0(reinterpret_cast<uintptr_t>(this), &citizenRef);
+    // Step 1: Check auto-pickup (0x1400e3db0, Work::TryAutoPickup)
+    int checkResult = TryAutoPickup(&citizenRef);
     if (checkResult == 2) {
         ++g_ha_auto;
         return 2;
@@ -528,7 +528,7 @@ int HarvestArea::Validate() {
     while (node != nullptr) {
         CitizenComponent* ibpData = node->element.citizen;
 
-        uint8_t valid = WorkBase_ValidateTask_f7100(this, nullptr, &ibpData, nullptr);
+        uint8_t valid = ValidateTask(nullptr, &ibpData, nullptr);
 
         if (valid == 0) {
             // Invalid -- add to collect list

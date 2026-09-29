@@ -50,7 +50,7 @@
 
 // ============================================================
 // Sub-functions, called by name (B3R): 0x140018020 Reimpl_ExternalPtr_Serialize_StringTable,
-// 0x1400f7100 WorkBase_ValidateTask_f7100, 0x1400c5400 WorkBase_TaskListCleanup_c5400.
+// 0x1400f7100 Work::ValidateTask, 0x1400c5400 WorkBase_TaskListCleanup_c5400.
 // ============================================================
 
 
@@ -600,7 +600,7 @@ int Pickup::Validate() {
 
     // Validate entity via FUN_1400f7100
     CitizenComponent* entityIBP[1] = { citizenRef };
-    bool valid = WorkBase_ValidateTask_f7100(this, nullptr, entityIBP, nullptr);
+    bool valid = ValidateTask(nullptr, entityIBP, nullptr);
 
     if (!valid) {
         // Entity no longer valid -- reset

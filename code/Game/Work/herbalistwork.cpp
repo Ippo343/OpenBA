@@ -53,7 +53,7 @@
 // ============================================================
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
-//   0x1400e3db0  WorkGrid_AutoPickup_e3db0
+//   0x1400e3db0  Work::TryAutoPickup
 //   0x140003050  WorkBase_FindComponent_3050
 //   0x140002f90  WorkBase_FindComponent_2f90
 //   0x14012c3f0  CitizenComp_FUN_14012c3f0
@@ -72,7 +72,7 @@
 //   0x140006270  WorkBase_FindComponent_6270
 //   0x14012cf10  CitizenComp_StorageComponent_QueryCount
 //   0x1400296b0  WorkBST_BST_Serialize_296b0
-//   0x1400f7100  WorkBase_ValidateTask_f7100
+//   0x1400f7100  Work::ValidateTask
 //   0x14001a6e0  WorkBST_BSTRemove_a6e0
 //   0x140025520  WorkBST_BSTFindRemove_25520
 //   0x1400c5400  WorkBase_TaskListCleanup_c5400
@@ -172,10 +172,10 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/) {
     CitizenComponent* citizenRef = *citizenIBP;
 
     // -------------------------------------------------------
-    // Step 1: Check auto-pickup assignments (0x1400e3db0 takes the work as an integer:
-    // LEFT)
+    // Step 1: Check auto-pickup assignments (0x1400e3db0,
+    // Work::TryAutoPickup)
     // -------------------------------------------------------
-    int checkResult = WorkGrid_AutoPickup_e3db0(reinterpret_cast<uintptr_t>(this), &citizenRef);
+    int checkResult = TryAutoPickup(&citizenRef);
     if (checkResult == 2) {
         return 2;
     }
@@ -524,7 +524,7 @@ int HerbalistWork::Validate() {
         CitizenComponent* entityIBP = node->element;
 
         // Validate this entity
-        bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
+        bool stillValid = ValidateTask(nullptr, &entityIBP, nullptr);
 
         if (!stillValid) {
             // Add to removal list — grow array if needed

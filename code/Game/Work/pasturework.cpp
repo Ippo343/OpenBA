@@ -62,7 +62,7 @@
 // ============================================================
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
 // ============================================================
-//   0x1400e3db0  WorkGrid_AutoPickup_e3db0
+//   0x1400e3db0  Work::TryAutoPickup
 //   0x140003050  WorkBase_FindComponent_3050
 //   0x140002f90  WorkBase_FindComponent_2f90
 //   0x14012c3f0  CitizenComp_FUN_14012c3f0
@@ -82,7 +82,7 @@
 //   0x1400223c0  ActRm_FindComponent_223c0
 //   0x1400012d0  ActMv_FindComponentFamily_12d0
 //   0x1400296b0  WorkBST_BST_Serialize_296b0
-//   0x1400f7100  WorkBase_ValidateTask_f7100
+//   0x1400f7100  Work::ValidateTask
 //   0x14001a6e0  WorkBST_BSTRemove_a6e0
 //   0x140025520  WorkBST_BSTFindRemove_25520
 //   0x1400c5400  WorkBase_TaskListCleanup_c5400
@@ -129,10 +129,9 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/) {
     CitizenComponent* local_res20 = *citizenIBP;
 
     // -------------------------------------------------------
-    // Step 1: Check auto-pickup assignments (FUN_1400e3db0; it takes the work as an
-    // integer: LEFT)
+    // Step 1: Check auto-pickup assignments (0x1400e3db0, Work::TryAutoPickup)
     // -------------------------------------------------------
-    int checkResult = WorkGrid_AutoPickup_e3db0(reinterpret_cast<uintptr_t>(this), &local_res20);
+    int checkResult = TryAutoPickup(&local_res20);
     if (checkResult == 2) {
         return 2;
     }
@@ -556,7 +555,7 @@ int PastureWork::Validate() {
     while (node != nullptr) {
         CitizenComponent* entityIBP = node->element;
 
-        bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &entityIBP, nullptr);
+        bool stillValid = ValidateTask(nullptr, &entityIBP, nullptr);
 
         if (!stillValid) {
             uint32_t newCount = removeCount + 1;
@@ -731,7 +730,7 @@ PastureWork::PastureWork(void* entityIBP) : AutoPickupWork(), _field48(nullptr),
                 ((int)a->tileX1 >> 1) +
                  (int)a->tileX0;
         }
-        // 0x140003050 = the WorkComponent finder (Work::field_18 is void* in Work.h)
+        // 0x140003050 = the WorkComponent finder
         field_18 = field_10->FindComponent<WorkComponent>();
     }
 }

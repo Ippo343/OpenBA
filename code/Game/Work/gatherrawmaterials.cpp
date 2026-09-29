@@ -62,7 +62,7 @@
 //               (0x140024f30, used earlier, is MID-FUNCTION inside Toolbar_vslot14;
 //                GatherRawMaterials_Update@0x1400ebd24 CALLs 0x14001a6e0)
 //   0x1400c5400 state machine release                       WorkBase_TaskListCleanup_c5400
-//   0x1400f7100 Work::CanStartWork                          WorkBase_ValidateTask_f7100
+//   0x1400f7100 Work::CanStartWork                          Work::ValidateTask
 //   0x140002ed0 Entity_FindComponent_Position               WorkBase_FindComponent_2ed0
 //   0x14000d6c0 FindComponent (BuildComponent)              Dialog_FindComponent_d6c0
 //   0x140002e10 FindComponent_WorkplaceExt                  AttendanceComponent_GetJobHostComponent
@@ -535,7 +535,7 @@ int GatherRawMaterials::Validate() {
             CitizenComponent* taskIBP[1];
             taskIBP[0] = node->element;
 
-            char valid = WorkBase_ValidateTask_f7100(this, nullptr, taskIBP, nullptr);
+            char valid = ValidateTask(nullptr, taskIBP, nullptr);
 
             if (valid == '\0') {
                 // Invalid -- add to removal list

@@ -45,7 +45,7 @@
 //     ⚠ This read 0x1400f8620 until 2026-08-15 — a DIFFERENT function entirely
 //     (WorkGrid_TryAssignWorkplace). It never fired before because nothing had ever
 //     CONSTRUCTED a LocationWork (see reference_registered_but_never_executed).
-//   0x1400f7100 ValidateEntity                     WorkBase_ValidateTask_f7100
+//   0x1400f7100 ValidateEntity                     Work::ValidateTask
 //   0x1400c5400 CancelAllWork                      WorkBase_TaskListCleanup_c5400
 //   0x140002e10 FindWorkPlace                      ComponentEntity::FindComponent<WorkPlaceComponent>
 //   0x14017214c g_fUVScale (.rdata, 1.0f)          kRdata_14017214c
@@ -247,7 +247,7 @@ int LocationWork::Validate() {
     }
 
     // Validate the entity
-    bool stillValid = WorkBase_ValidateTask_f7100(this, nullptr, &targetIBP, nullptr);
+    bool stillValid = ValidateTask(nullptr, &targetIBP, nullptr);
 
     if (!stillValid) {
         // Clear the target (a null InternalBasePtr)
