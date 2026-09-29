@@ -9,9 +9,9 @@
 // factory in the exe; they are not Runtime-self-registered.
 //
 // Field layout (from Ctor 0x14012dc30 + Serialize 0x14012da30 + dtor 0x14012db70):
-//   +0x20: void*   _descRef       ExternalPtr (Description)         (default 0)
+//   +0x20: SpriteSheet* _spriteSheet ExternalPtr<UI::SpriteSheet>  (default 0)
 //   +0x28: String  _name                                           (default empty)
-//   +0x30: void*   _iconRef       ExternalPtr (StringTable variant) (default 0)
+//   +0x30: StringTable* _stringTable ExternalPtr<UI::StringTable> (default 0)
 //   +0x38: String  _str1                                           (default empty)
 //   +0x40: String  _str2                                           (default empty)
 //   +0x48: String  _str3                                           (default empty)
@@ -108,8 +108,8 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 // the defaults.
 ToolbarDescription::ToolbarDescription()
     : Description(),
-      _descRef(nullptr),
-      _iconRef(nullptr),
+      _spriteSheet(nullptr),
+      _stringTable(nullptr),
       _entries(nullptr),
       _entryCount(0),
       _entryCap(0),
@@ -120,10 +120,10 @@ ToolbarDescription::ToolbarDescription()
 // The compiler then chains ~Description -> ~External.
 ToolbarDescription::~ToolbarDescription() {
     {
-        uint8_t* buf = static_cast<uint8_t*>(_entries);
+        System::String* buf = _entries;
         int n = _entryCount;
         if (buf) {
-            for (int i = 0; i < n; ++i) reinterpret_cast<System::String*>(buf + (size_t)i * 8)->~String();  // B.3.1 bridge
+            for (int i = 0; i < n; ++i) buf[i].~String();
         }
     }
     System::MemoryAllocator::MemFree(_entries);
@@ -135,12 +135,13 @@ ToolbarDescription::~ToolbarDescription() {
 // [5] 0x14012da30: stream order as retail.
 bool ToolbarDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
-    // +0x20 in the exe uses FUN_14000bd30; +0x30 uses FUN_14000bf40. Both have
-    // a byte-identical stream layout (only the validated typeId differs, trusted
-    // in standalone). Use the registered Serialize2 for both.
-    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);   // 1. _descRef
+    // +0x20 in the exe uses FUN_14000bd30 (ExternalPtr<UI::SpriteSheet>); +0x30 uses
+    // FUN_14000bf40 (ExternalPtr<UI::StringTable>). Both have a byte-identical stream
+    // layout (only the validated typeId differs, trusted in standalone). Use the
+    // registered Serialize2 for both.
+    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // 1. _spriteSheet
     _name.Serialize(&ser);                        // 2. _name
-    Reimpl_ExternalPtr_Serialize_StringTable(&_iconRef, &ser);   // 3. _iconRef (StringTable)
+    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);   // 3. _stringTable
     _str1.Serialize(&ser);                        // 4.
     _str2.Serialize(&ser);                        // 5.
     _str3.Serialize(&ser);                        // 6.
@@ -178,10 +179,10 @@ bool ToolbarDescription::Serialize(void* stream) {
     }
     
     // 9. per-element String::Serialize (stride 8)
-    uint8_t* buf = static_cast<uint8_t*>(_entries);
+    System::String* buf = _entries;
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            reinterpret_cast<System::String*>(buf + (size_t)i * 8)->Serialize(&ser);  // B.3.1 bridge
+            buf[i].Serialize(&ser);
         }
     }
     

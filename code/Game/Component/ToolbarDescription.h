@@ -21,6 +21,7 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 #include "system/String.h"
+namespace UI { class SpriteSheet; class StringTable; }
 
 class ToolbarDescription final : public Description {
     DECLARE_EXE_TYPE(ToolbarDescription)
@@ -37,13 +38,13 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x1400394d0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    void* _descRef;                             // +0x20 ExternalPtr (Description)
+    UI::SpriteSheet* _spriteSheet;              // +0x20 ExternalPtr<UI::SpriteSheet> (Serialize 0x14000bd30, typeInfo 0x140151480)
     System::String _name;                       // +0x28 String
-    void* _iconRef;                             // +0x30 ExternalPtr (StringTable variant)
+    UI::StringTable* _stringTable;              // +0x30 ExternalPtr<UI::StringTable> (Serialize 0x14000bf40, typeInfo 0x140151488)
     System::String _str1;                       // +0x38 String
     System::String _str2;                       // +0x40 String
     System::String _str3;                       // +0x48 String
-    void* _entries;                             // +0x50 System::String array data
+    System::String* _entries;                   // +0x50 Array<System::String> data (H5: the raw triple)
     int32_t _entryCount;                        // +0x58
     int32_t _entryCap;                          // +0x5c
     int32_t _val0;                              // +0x60
@@ -52,9 +53,9 @@ public:
 
 static_assert(sizeof(ToolbarDescription) == 0x68, "ToolbarDescription is 0x68 (create 0x140039490 MemAlloc(0x68))");
 static_assert(alignof(ToolbarDescription) == 8, "ToolbarDescription alignment");
-static_assert(offsetof(ToolbarDescription, _descRef) == 0x20, "ToolbarDescription::_descRef @ +0x20");
+static_assert(offsetof(ToolbarDescription, _spriteSheet) == 0x20, "ToolbarDescription::_spriteSheet @ +0x20");
 static_assert(offsetof(ToolbarDescription, _name) == 0x28, "ToolbarDescription::_name @ +0x28");
-static_assert(offsetof(ToolbarDescription, _iconRef) == 0x30, "ToolbarDescription::_iconRef @ +0x30");
+static_assert(offsetof(ToolbarDescription, _stringTable) == 0x30, "ToolbarDescription::_stringTable @ +0x30");
 static_assert(offsetof(ToolbarDescription, _str1) == 0x38, "ToolbarDescription::_str1 @ +0x38");
 static_assert(offsetof(ToolbarDescription, _str2) == 0x40, "ToolbarDescription::_str2 @ +0x40");
 static_assert(offsetof(ToolbarDescription, _str3) == 0x48, "ToolbarDescription::_str3 @ +0x48");
