@@ -1642,7 +1642,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         int toAdd = desired - current;
         for (int i = 0; i < toAdd; i++) {
             void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = *(uint64_t*)((uintptr_t)GameUpdateLoop::_singleton->m_professionList + 0x20 + (uintptr_t)index * 8);   // LEFT: ProfessionList (GAME-b)
+            uint64_t profId = reinterpret_cast<uint64_t*>(GameUpdateLoop::_singleton->m_professionList->arrayData)[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
 
             uint64_t retBuf[2] = {0, 0};
             FindAvailableBuilding(reinterpret_cast<int64_t>(citizenList), retBuf, profId);   // 0x14008d100 (door misnamed fn_CitizenList_RequestWorker)
@@ -1680,7 +1680,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         int toRemove = current - desired;
         for (int i = 0; i < toRemove; i++) {
             void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = *(uint64_t*)((uintptr_t)GameUpdateLoop::_singleton->m_professionList + 0x20 + (uintptr_t)index * 8);   // LEFT: ProfessionList (GAME-b)
+            uint64_t profId = reinterpret_cast<uint64_t*>(GameUpdateLoop::_singleton->m_professionList->arrayData)[index];   // LEFT: ProfessionList::arrayData is void* (GAME-b)
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
         }
     }
