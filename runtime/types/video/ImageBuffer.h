@@ -542,3 +542,9 @@ RT_VIDEO_IMAGEBUFFER_PIN(_data,       platformData, 0x60);
 #undef RT_VIDEO_IMAGEBUFFER_PIN
 
 }  // namespace Video
+
+// runtime/src/video/closure_batch2b.cpp — 0x180054080, the shared
+// `Array<Array<uint8>>` blob serializer (unexported; three retail callers, one
+// of them ImageBuffer::PlatformSerialize). B.4 (R-VIDEO): typed.
+void RtVideo_SerializeBlobArray(IO::Serializer& ser, int count,
+                                Collection::Array<uint8_t>* data);

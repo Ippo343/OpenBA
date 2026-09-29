@@ -137,7 +137,7 @@ public:
     // are named here rather than in code. Nothing in the tree calls them.
     // ========================================================
     struct Parameter {
-        void*   name;      // +0x00  System::String (refcounted, str[-4] is the count)
+        char*   name;      // +0x00  System::String data (refcounted, str[-4] is the count); B.4 R-VIDEO: char*, H4
         int32_t dest;      // +0x08  the register/sampler index this binds to
         bool    internal;  // +0x0c  only serialized when GetVersion() >= 1 (B.4 R-VIDEO: bool, H4)
         uint8_t _pad0d[3]; // +0x0d  never written by any arm
