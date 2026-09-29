@@ -62,15 +62,11 @@ extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* a
 extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008c3d0
 
 // ---- citizen_lifeevent.cpp
-extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int severity, const char* strParam);  // 0x140113af0
 
 // ---- citizen_lifeevent_handler.cpp
 extern "C" uint64_t CitizenComponent_HandleLifeEvent(void* selfV, int eventType, const char* strParam);  // 0x140116dd0
 
 // ---- citizen_needsupdate.cpp
-void CitizenComp_helper_fde0(int64_t selfV, int param);  // 0x14010fde0
-void CitizenComp_helper_17a0(int64_t selfV);  // 0x1401117a0
-void CitizenComp_helper_1540(int64_t selfV);  // 0x140111540
 
 // ---- citizen_reassign_workers.cpp
 extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
@@ -78,7 +74,6 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 // ---- citizen_updatehealth.cpp
 extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float* radius, int typeId, void* outArr);  // 0x140092990
 extern "C" void CitizenComp_Infect(void* self, void* disease);  // 0x140116b90
-extern "C" char CitizenComp_UpdateHealth(void* self, int64_t* dt);  // 0x1401127d0
 
 // ---- citizenai_actionctors.cpp
 void CitizenAI_PerformWorkCtor4_c1070(void* param_1, int64_t* param_2, float* param_3, int param_4, uint8_t param_5, uint32_t param_6);  // 0x1400c1070
@@ -144,9 +139,6 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
 extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId, uint64_t oldKey, uint64_t newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
-void CitizenComponent_SetupYoung_Reimpl(void* citizen);  // 0x140115110
-void CitizenComponent_SetupAdult_Reimpl(void* citizen);  // 0x1401151a0
-void CitizenComponent_SetupElder_Reimpl(void* citizen);  // 0x140115230
 void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);  // 0x140008090
 int CitizenComp_StorageComponent_QueryCount(int64_t self);  // 0x14012cf10
 int CitizenComp_Storage_GetResourceCount(int64_t self);  // 0x14012a9d0
@@ -155,28 +147,20 @@ void CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV);  // 0x14010f7
 void CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV);  // 0x14010f890
 
 // ---- citizencomponent.cpp
-void* CitizenComp_helper_fe40(int64_t self, void* outIBP);  // 0x14010fe40
 void CitizenComp_sub_1fa0(int64_t selfV, void* param2);  // 0x140111fa0
 bool CitizenComp_helper_a4f0(int64_t self, int param2);  // 0x14012a4f0
 int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2);  // 0x14010ffc0
 int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2);  // 0x140110470
-void* CitizenComp_helper_ff80(int64_t self, void* outIBP);  // 0x14010ff80
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value);  // 0x14012c3f0
 char CitizenComp_CanFindHousing(int64_t selfV);  // 0x140115be0
 void CitizenComp_helper_1b90(int64_t selfV);  // 0x140111b90
 void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2);  // 0x1401152e0
-void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, char param_4);  // 0x140110e70
 char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2);  // 0x1401158d0
 int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4);  // 0x14008ef40
-void CitizenComp_ConsumeFood(CitizenComponent* param_1);  // 0x140112990
-void CitizenComp_ConsumeFuel(CitizenComponent* param_1);  // 0x140112ae0
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2);  // 0x140111ee0
-char CitizenComp_FindCareBuilding(CitizenComponent* param_1);  // 0x140111590
-void CitizenComp_FindStorage(CitizenComponent* param_1);  // 0x1401116f0
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2);  // 0x140111840
 
 // ---- citizencomponent_lifecycle.cpp
-void CitizenComp_LeaveRoster_2040(int64_t selfV, void* param2V);  // 0x140112040
 void CitizenComp_JoinRoster_68a0(void* selfV, void* param2V);  // 0x1401168a0
 void CitizenComp_SortByProfession_02a0(void* arrV, int n, void* );  // 0x1400302a0
 void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080

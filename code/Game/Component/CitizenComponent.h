@@ -78,6 +78,8 @@ class ComponentEntity;
 class CharacterComponent;
 class StatusIconComponent;
 class CitizenDescription;
+class WorkPlaceComponent;
+namespace System { class Time; }
 
 class CitizenComponent final : public Component {
     DECLARE_EXE_TYPE(CitizenComponent)
@@ -97,6 +99,55 @@ public:
     void Slot11() override;                                       // [11] 0x1401140f0
     void OnMessage(int message, void* data,
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x140112260
+
+    // ---- non-virtual members (B.4 W1 COMP-b). Retail has no symbols for them:
+    // each is a member because its body reads this class's fields through RCX
+    // (B4_RULES B1); the names say what retail does (correction 3: 0x1401163d0
+    // sets the HOME, 0x140111ee0 the WORKPLACE). A retail InternalPtr returned
+    // through the RDX slot is returned as the typed pointer it holds (the
+    // FindComponent<T> precedent, B10); an InternalPtr passed by address is
+    // passed as the pointer it holds (every caller hands over a local copy).
+    bool  ShouldSwitchWorkplace();                                // 0x1401109e0
+    CitizenComponent* FindSpouse();                               // 0x14010fe40
+    void  SetParent(CitizenComponent* parent);                    // 0x140111fa0
+    void  RemoveChild(CitizenComponent* child);                   // 0x140112040
+    void  AddChild(CitizenComponent* child);                      // 0x1401168a0
+    ComponentEntity* FindWorkplace();                             // 0x14010ffc0 (profession not ranked)
+    ComponentEntity* FindRankedWorkplace();                       // 0x140110470 (profession field4C set)
+    ComponentEntity* FindNewWorkplace();                          // 0x14010ff80
+    char  CanFindHousing();                                       // 0x140115be0
+    void  GiveBirth();                                            // 0x140111b90
+    void  EatFrom(ComponentEntity* target);                       // 0x1401152e0 (tree: "ReleaseWorkplace")
+    ComponentEntity* FindHome(int32_t* slot, bool anyHousehold);  // 0x140110e70
+    char  CanReach(ComponentEntity* target);                      // 0x1401158d0 (tree: "CheckWorkplaceValid")
+    void  UpdateHealth();                                         // 0x140112990 (tree: "ConsumeFood")
+    void  UpdateHappiness();                                      // 0x140112ae0 (tree: "ConsumeFuel")
+    void  SetHome(ComponentEntity* home, int32_t slot);           // 0x1401163d0 (tree: "AssignWorkplace")
+    void  SetWorkplace(ComponentEntity* workplace);               // 0x140111ee0 (tree: "AssignHousing")
+    AttendanceComponent* FindAttendance(AttendanceComponent* exclude,
+                                        Profession* key);         // 0x140111930
+    char  FindCareBuilding();                                     // 0x140111590
+    void  FindStorage();                                          // 0x1401116f0
+    char  TryEnrolInSchool(AttendanceComponent* exclude);         // 0x140111840
+    void  PostLifeEvent(int eventType, int severity,
+                        const char* text);                        // 0x140113af0
+    uint64_t HandleLifeEvent(int eventType, const char* text);    // 0x140116dd0
+    void  OrFamilyFlags(uint32_t flags);                          // 0x140113a70
+    char  UpdateDisease(const System::Time* dt);                  // 0x1401127d0 (tree: "UpdateHealth")
+    char  RecoverOrDie();                                         // 0x1401123b0
+    void  SpreadDisease();                                        // 0x140112470
+    void  CatchDisease();                                         // 0x140112620
+    void  Infect(Disease* disease);                               // 0x140116b90
+    void  AddHappiness(int amount);                               // 0x14010fde0 (message 1)
+    void  AdvanceSchooling();                                     // 0x1401117a0 (message 4)
+    void  ShortenDisease();                                       // 0x140111540 (message 5)
+    void  WarmAt(ComponentEntity* target);                        // 0x1401121e0 (message 0)
+    void  Initialize(const float* pos, uint32_t gender, char isElder, float age,
+                     char forceEmploy, CitizenComponent* parent,
+                     Profession* profession);                     // 0x140117080
+    void  SetupYoung();                                           // 0x140115110
+    void  SetupAdult();                                           // 0x1401151a0
+    void  SetupElder();                                           // 0x140115230
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     uint64_t name;                 // +0x28 System::String (H5 raw storage): the citizen's name;

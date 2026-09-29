@@ -46,6 +46,9 @@
 #include <cstring>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/CitizenComponent.h"
+#include "Component/CitizenDescription.h"    // B.4 W1 COMP-b: description fields by name
+#include "Component/ResidenceComponent.h"
+#include "Entity/ComponentEntity.h"           // FindComponent<T>
 #include "Component/exe_bodies.h"
 #include "Game/exe_constants.h"
 
@@ -57,165 +60,145 @@ static inline float RdataF(uint32_t bits) {
 }
 
 // ============================================================
-// CitizenComp_helper_fde0 (0x14010fde0) — msg 1: happiness credit.
+// CitizenComponent::AddHappiness (0x14010fde0) — msg 1: happiness credit.
 // Refresh the citizen's StatusIconComponent (+0x280, mode 4 = happiness icon) then
 // accumulate the credit: +0xac is the running happiness total, +0xa8 the last delta.
 // (Retail derefs +0x280 unconditionally; the != 0 guard is a standalone-only safety
 // for a citizen whose StatusIconComponent is not yet live — a no-op in practice.)
+// CitizenComp_FUN_14012c3f0 is StatusIconComponent's body (LEFT free, int64_t* receiver).
 // ============================================================
-void CitizenComp_helper_fde0(int64_t selfV, int param) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-    if (*reinterpret_cast<void**>(p + 0x280)) {
-        CitizenComp_FUN_14012c3f0(*reinterpret_cast<int64_t**>(p + 0x280), 4, 0);
+void CitizenComponent::AddHappiness(int param) {
+    if (statusIcon) {
+        CitizenComp_FUN_14012c3f0(reinterpret_cast<int64_t*>(statusIcon), 4, 0);
     }
-    *reinterpret_cast<int32_t*>(p + 0xac) += param;
-    *reinterpret_cast<int32_t*>(p + 0xa8)  = param;
+    field_0xAC += param;
+    field_0xA8  = param;
 }
 
 // ============================================================
-// CitizenComp_helper_17a0 (0x1401117a0) — msg 4: attendance/schedule budget check.
-// +0x210 is a tick counter, bumped every call. If it is still under the descriptor's
-// threshold (desc+0x118) AND the elapsed embedded Time (+0x218, AsSeconds) is still
-// within budget (desc+0x11c × 3600s/year), do nothing. On overrun: reset the counter
-// to the threshold, set flag +0x88 |= 0x400, release the partner slot (no reroll),
-// and post life-event 9 via PostLifeEvent. (Retail derefs +0x288 unguarded.)
+// CitizenComponent::AdvanceSchooling (0x1401117a0) — msg 4: a school lesson.
+// +0x210 (education) is bumped every call. If it is still under the descriptor's
+// maximum (desc+0x118) AND the time spent in school (+0x218, AsSeconds) is still
+// within budget (desc+0x11c × 3600s/year), do nothing. On overrun: education = the
+// maximum, flag +0x88 |= 0x400, leave the school (no reroll), and post life-event 9
+// via PostLifeEvent. (Retail derefs +0x288 unguarded.)
 // ============================================================
-void CitizenComp_helper_17a0(int64_t selfV) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-    int32_t* counter = reinterpret_cast<int32_t*>(p + 0x210);
+void CitizenComponent::AdvanceSchooling() {
+    int32_t* counter = &education;
     *counter += 1;
-    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
-    int32_t threshold  = desc ? *reinterpret_cast<int32_t*>(desc + 0x118) : 0;
-    float   perUnitSec = desc ? *reinterpret_cast<float*>(desc + 0x11c)   : 0.0f;
+    CitizenDescription* desc = description;
+    int32_t threshold  = desc ? desc->maxEducation : 0;
+    float   perUnitSec = desc ? desc->_f11c : 0.0f;
     float budgetSecs = perUnitSec * RdataF(kRdata_14017225c);   // 3600.0f
-    float elapsed = reinterpret_cast<const System::Time*>(p + 0x218)->AsSeconds();   // B.3.4b bridge
+    // schoolTime is a System::Time held as its int64 ticks (CitizenComponent.h).
+    float elapsed = reinterpret_cast<const System::Time*>(&schoolTime)->AsSeconds();
     if (*counter < threshold && elapsed <= budgetSecs) return;
 
     *counter = threshold;
-    *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x400;
-    AttendanceComponent_ReleasePartnerSlot(reinterpret_cast<void*>(selfV), 0);
-    CitizenComponent_PostLifeEvent(reinterpret_cast<void*>(selfV), 9, 0, nullptr);
+    happinessFlags |= 0x400;
+    AttendanceComponent_ReleasePartnerSlot(this, 0);
+    PostLifeEvent(9, 0, nullptr);
 }
 
 // ============================================================
-// CitizenComp_helper_1540 (0x140111540) — msg 5: countdown decay.
-// Gated on +0x68 (an active link/target). When set, build a Time of
-// desc+0x12c × 300s and subtract its raw 8-byte tick value from the +0x70
-// accumulator (same "Time as raw uint64" representation the msg-6/7 tail uses).
+// CitizenComponent::ShortenDisease (0x140111540) — msg 5: countdown decay.
+// Gated on the disease (+0x68). When set, build a Time of desc+0x12c × 300s and
+// subtract its tick value from the +0x70 disease timer.
 // ============================================================
-void CitizenComp_helper_1540(int64_t selfV) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-    if (*reinterpret_cast<int64_t*>(p + 0x68) == 0) return;
-    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);   // retail: unguarded
-    float base = desc ? *reinterpret_cast<float*>(desc + 0x12c) : 0.0f;
-    uint64_t t = 0;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), base * kRdata_140172234);
-    *reinterpret_cast<int64_t*>(p + 0x70) -= static_cast<int64_t>(t);
+void CitizenComponent::ShortenDisease() {
+    if (disease == nullptr) return;
+    CitizenDescription* desc = description;   // retail: unguarded
+    float base = desc ? desc->_f12c : 0.0f;
+    System::Time t{};
+    RtSystem_Time_Ctor(&t, base * kRdata_140172234);
+    field_0x70 -= t._ticks;
 }
 
 // ============================================================
-// CitizenComponent_helper_21e0 (0x1401121e0) — msg 0 (warm house).
-// If the target entity (via *param_2) has a ResidenceComponent (finder
-// 0x140008090) whose storage passes FUN_14012ac30 (warm-house check), zero the
-// citizen's thirst/warmth need at +0x48. Faithful: the finder is called TWICE
-// (retail re-runs it after the first null-check), each preceded by CheckPtr.
+// CitizenComponent::WarmAt (0x1401121e0) — msg 0 (warm house).
+// If the target entity has a ResidenceComponent (finder 0x140008090) whose heat
+// passes FUN_14012ac30 (warm-house check), zero the citizen's coldness (+0x48).
+// Faithful: the finder is called TWICE (retail re-runs it after the first
+// null-check). ResidenceCheck_2ac30 is ResidenceComponent's body (LEFT free).
 // ============================================================
-void CitizenComp_helper_21e0(int64_t selfV, void* param_2) {
-    if (*reinterpret_cast<int64_t*>(param_2) == 0) return;
+void CitizenComponent::WarmAt(ComponentEntity* target) {
+    if (target == nullptr) return;
 
-    int64_t out1 = 0;
-    void* r1 = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(param_2), &out1);
-    if (*reinterpret_cast<int64_t*>(r1) == 0) return;
+    ResidenceComponent* r1 = target->FindComponent<ResidenceComponent>();
+    if (r1 == nullptr) return;
 
-    int64_t out2 = 0;
-    void* r2 = CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(param_2), &out2);
-    if (ResidenceCheck_2ac30(*reinterpret_cast<int64_t*>(r2))) {
-        *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(selfV) + 0x48) = 0;
+    ResidenceComponent* r2 = target->FindComponent<ResidenceComponent>();
+    if (ResidenceCheck_2ac30(reinterpret_cast<int64_t>(r2))) {
+        coldness = 0.0f;
     }
 }
 
 // ============================================================
-// CitizenComp_EatFromStorage — named alias for 0x1401152e0.
-// The retail Ghidra label "CitizenComponent::ReleaseWorkplace" is a MISNOMER
-// (profile-build source line attribution); the body is the EAT loop: while
-// hunger(+0x44) > 0, pick a stocked edible from the target's StorageComponent
-// (0x140006270 + Entity_impl_ef40), SubtractItem (FUN_14012d150), bump the town
-// per-category consumed counter (townMgr+0x170[cat*0x20+0xC]), OR the material's
-// diet bits into +0x54, hunger -= g_fUVScale.
-// ============================================================
-void CitizenComp_EatFromStorage(int64_t selfV, void* targetIBP) {
-    CitizenComp_ReleaseWorkplace(selfV, targetIBP);
-}
-
-// ============================================================
-// CitizenComponent_NeedsUpdate (0x140112260) — the component message handler
+// CitizenComponent::OnMessage (0x140112260) — the component message handler
 // dispatched by SendComponentMessage::AbstractImpl via vtable+0x78.
-//   self, msg, param_3 = ptr to the target-entity IBP value,
-//   param_4 = int extra (+0x38 of the action), param_5 = +0x3c (unused in retail).
+//   this, msg, data = ptr to the target-entity IBP value,
+//   arg0 = int extra (+0x38 of the action), arg1 = +0x3c (unused in retail).
 // ============================================================
 
 // [15] 0x140112260 — the component message handler SendComponentMessage
 // (0x1400caef0) dispatches: EDX = message id, R8 = &target entity IBP, R9D =
 // extra (read from the retail body's jump table).
 void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t /*arg1*/) {
-    uint64_t* param_3 = static_cast<uint64_t*>(data);
+    ComponentEntity* const* param_3 = static_cast<ComponentEntity* const*>(data);
     int param_4 = static_cast<int>(arg0);
     if (static_cast<unsigned>(message) > 8) return;   // retail: CMP EDX,8 / JA ret
-    uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
     switch (message) {
-    case 0: {   // warm-house: zero thirst if target residence passes 2ac30
-        uint64_t local = *param_3;
-        CitizenComp_helper_21e0(reinterpret_cast<int64_t>(this), &local);
+    case 0: {   // warm-house: zero coldness if the target residence passes 2ac30
+        WarmAt(*param_3);
         return;
     }
-    case 1: {   // happiness credit — helper_fde0 (0x14010fde0), now ported + registered
-        CitizenComp_helper_fde0(reinterpret_cast<int64_t>(this), param_4);
+    case 1: {   // happiness credit (0x14010fde0)
+        AddHappiness(param_4);
         return;
     }
-    case 2: {   // EAT — drain hunger against the target's storage
-        uint64_t local = *param_3;
-        CitizenComp_EatFromStorage(reinterpret_cast<int64_t>(this), &local);
+    case 2: {   // EAT — drain hunger against the target's storage (0x1401152e0)
+        EatFrom(*param_3);
         return;
     }
     case 3: {   // +0x54 |= 0x200 ; +0x50 += DAT_140172114 (0.5f)
-        *reinterpret_cast<uint32_t*>(p + 0x54) |= 0x200;
-        *reinterpret_cast<float*>(p + 0x50) += kRdata_140172114;   // 0.5f
+        statusFlags |= 0x200;
+        health += kRdata_140172114;   // 0.5f
         return;
     }
-    case 4: {   // helper_17a0(self)
-        CitizenComp_helper_17a0(reinterpret_cast<int64_t>(this));
+    case 4: {   // 0x1401117a0
+        AdvanceSchooling();
         return;
     }
-    case 5: {   // helper_1540(self)
-        CitizenComp_helper_1540(reinterpret_cast<int64_t>(this));
+    case 5: {   // 0x140111540
+        ShortenDisease();
         return;
     }
     case 6:
-        *reinterpret_cast<int32_t*>(p + 0x1e0) = 1;
-        *reinterpret_cast<int32_t*>(p + 0x1e4) = 1;
+        field_0x1E0 = 1;
+        clothingLevel = 1;
         break;      // falls through to the shared Time tail
     case 7:
-        *reinterpret_cast<int32_t*>(p + 0x1e0) = 2;
-        *reinterpret_cast<int32_t*>(p + 0x1e4) = 2;
+        field_0x1E0 = 2;
+        clothingLevel = 2;
         break;      // falls through to the shared Time tail
     case 8:
-        *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x40000;
+        happinessFlags |= 0x40000;
         return;
     default:
         return;
     }
 
-    // Shared tail for message 6/7:
+    // Shared tail for message 6/7 (new clothing):
     //   Time t(desc(+0x288)->+0x130 * DAT_140172234 [300.0f]); +0x88 |= 0x800;
-    //   *(Time*)(+0x1e8) = t.
+    //   clothingTimer (+0x1e8) = t.
     // Retail derefs +0x288 unguarded; guarded here only against a not-yet-BodyInit'd
     // standalone component (base contributes 0 seconds — flags/store still happen,
     // matching the retail side effects).
-    uint64_t t = 0;
-    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
-    float base = desc ? *reinterpret_cast<float*>(desc + 0x130) : 0.0f;
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&t), base * kRdata_140172234);
-    *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x800;
-    *reinterpret_cast<uint64_t*>(p + 0x1e8) = t;
+    System::Time t{};
+    CitizenDescription* desc = description;
+    float base = desc ? desc->_f130 : 0.0f;
+    RtSystem_Time_Ctor(&t, base * kRdata_140172234);
+    happinessFlags |= 0x800;
+    clothingTimer = t._ticks;
 }

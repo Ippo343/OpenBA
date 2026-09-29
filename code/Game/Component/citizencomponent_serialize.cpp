@@ -103,10 +103,6 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
 
 namespace {
 
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
-}
-
 // FUN_140001bb0 — resize an 8-byte-element array given a {ptr@0, count@8(int),
 // capacity@0xc(int)} header, preserving existing elements and zero-filling new
 // ones. Byte-faithful port (retail grows by 3x on a +1 append, matching the
@@ -161,65 +157,68 @@ void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
 } // namespace
 
 // [3] 0x140114160.
+// The System::Time fields are held as their int64 ticks and the System::String /
+// Collection::Array members are H5 raw storage (CitizenComponent.h): each is handed
+// to its serializer as the class it holds.
 void CitizenComponent::Persist(void* stream) {
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+    IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
-    reinterpret_cast<System::String*>(At(this, 0x28))->Serialize(ser);   // B.3.1 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x3c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x40)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x44)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x4c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x50)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(this, 0x54)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(this, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(At(this, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::String*>(&name)->Serialize(ser);   // B.3.1 bridge
+    s->Serialize(gender, nullptr);
+    s->Serialize(age, nullptr);
+    s->Serialize(maxAge, nullptr);
+    s->Serialize(hunger, nullptr);
+    s->Serialize(coldness, nullptr);
+    s->Serialize(pregnancyTimer, nullptr);
+    s->Serialize(health, nullptr);
+    s->Serialize(statusFlags, nullptr);
+    reinterpret_cast<System::Time*>(&foodTimer)->Serialize(*s);   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&field_0x60)->Serialize(*s);   // B.3.4b bridge
 
     {
         // ENDGAME B.3.9 C1 (D5): 0x1401c5948 is Disease's registered type-id cell
         // (INVENTORY_C Table 1).
         const uint32_t tid = Disease::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x68)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&disease), ser,
                                     &tid, "CitizenDisease");
     }
 
-    reinterpret_cast<System::Time*>(At(this, 0x70))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(At(this, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x80)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(this, 0x88)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(this, 0x90))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&field_0x70)->Serialize(*s);   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&field_0x78)->Serialize(*s);   // B.3.4b bridge
+    s->Serialize(happiness, nullptr);
+    s->Serialize(happinessFlags, nullptr);
+    reinterpret_cast<System::Time*>(&happinessTimer)->Serialize(*s);   // B.3.4b bridge
 
-    int arrCount = *reinterpret_cast<int*>(At(this, 0xa0));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(arrCount, nullptr);   // B.3.4 bridge
+    int arrCount = consumedTypeCount;
+    s->Serialize(arrCount, nullptr);
     if (Loading(stream))
-        ResizeCitizenExternalArray(reinterpret_cast<int64_t*>(At(this, 0x98)), arrCount);
+        ResizeCitizenExternalArray(reinterpret_cast<int64_t*>(&consumedTypes), arrCount);
     Reimpl_ExternalPtrArray_Serialize(ser, arrCount,
-        *reinterpret_cast<int64_t*>(At(this, 0x98)), nullptr);
+        reinterpret_cast<int64_t>(consumedTypes), nullptr);
 
     {
         // ENDGAME B.3.9 C1 (D5): 0x1401c5a98 is Profession's registered type-id cell
         // (INVENTORY_C Table 1).
         const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x1f0)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&profession), ser,
                                     &tidProf, "Profession");
     }
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0xac)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x1d8)), nullptr);   // B.3.4 bridge
+    s->Serialize(field_0xAC, nullptr);
+    s->Serialize(toolId, nullptr);
     {
-        int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (v > 0) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0xa8)), nullptr);   // B.3.4 bridge
+        int v = s->GetVersion();
+        if (v > 0) s->Serialize(field_0xA8, nullptr);
     }
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x1e4)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(this, 0x1e8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    s->Serialize(clothingLevel, nullptr);
+    reinterpret_cast<System::Time*>(&clothingTimer)->Serialize(*s);   // B.3.4b bridge
     {
-        int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (v > 1) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x1e0)), nullptr);   // B.3.4 bridge
+        int v = s->GetVersion();
+        if (v > 1) s->Serialize(field_0x1E0, nullptr);
     }
 
     // +0xb0 is a PLAIN UINT, not a MeshInstance (save/load wave 2026-08-28).
@@ -229,47 +228,47 @@ void CitizenComponent::Persist(void* stream) {
     // it. The previous MeshInstance-dispatch call fed a raw uint's address as
     // a MeshInstance "this" and corrupted the round-trip from +0xb0 onward
     // (wrong citizen clothing after load was the visible symptom).
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(this, 0xb0)), nullptr);   // B.3.4 bridge
+    s->Serialize(field_0xB0, nullptr);
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
+    s->Serialize(field_0x30, nullptr);
 
-    SerializeValidatedIBP(At(this, 0x238), ser, ComponentEntity::TypeId());
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x240)), nullptr);   // B.3.4 bridge
-    SerializeValidatedIBP(At(this, 0x250), ser, CitizenComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x258), ser, CitizenComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x260), ser, CitizenComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x268), ser, CitizenComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x270), ser, CitizenComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x248), ser, ComponentEntity::TypeId());
+    SerializeValidatedIBP(&home, ser, ComponentEntity::TypeId());
+    s->Serialize(homeSlot, nullptr);
+    SerializeValidatedIBP(&spouse, ser, CitizenComponent::TypeId());
+    SerializeValidatedIBP(&_parent, ser, CitizenComponent::TypeId());
+    SerializeValidatedIBP(&_firstChild, ser, CitizenComponent::TypeId());
+    SerializeValidatedIBP(&_nextSibling, ser, CitizenComponent::TypeId());
+    SerializeValidatedIBP(&_prevSibling, ser, CitizenComponent::TypeId());
+    SerializeValidatedIBP(&workplace, ser, ComponentEntity::TypeId());
 
     {
         const uint32_t tidProf = Profession::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x1f8)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&pendingProfession), ser,
                                     &tidProf, "Profession");
     }
 
-    SerializeValidatedIBP(At(this, 0x208), ser, AttendanceComponent::TypeId());
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x210)), nullptr);   // B.3.4 bridge
+    SerializeValidatedIBP(&school, ser, AttendanceComponent::TypeId());
+    s->Serialize(education, nullptr);
     {
-        int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (v > 2) reinterpret_cast<System::Time*>(At(this, 0x218))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        int v = s->GetVersion();
+        if (v > 2) reinterpret_cast<System::Time*>(&schoolTime)->Serialize(*s);   // B.3.4b bridge
     }
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x220)), nullptr);   // B.3.4 bridge
-    SerializeValidatedIBP(At(this, 0x228), ser, AttendanceComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x230), ser, AttendanceComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x278), ser, CharacterComponent::TypeId());
-    SerializeValidatedIBP(At(this, 0x280), ser, StatusIconComponent::TypeId());
+    s->Serialize(field_0x220, nullptr);
+    SerializeValidatedIBP(&careBuilding, ser, AttendanceComponent::TypeId());
+    SerializeValidatedIBP(&field_0x230, ser, AttendanceComponent::TypeId());
+    SerializeValidatedIBP(&character, ser, CharacterComponent::TypeId());
+    SerializeValidatedIBP(&statusIcon, ser, StatusIconComponent::TypeId());
 
     {
         // ENDGAME B.3.9 C1 (D5): 0x1401c7190 is CitizenDescription's registered
         // type-id cell (INVENTORY_C Table 1).
         const uint32_t tidDesc = CitizenDescription::TypeId();
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x288)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&description), ser,
                                     &tidDesc, "CitizenDescription");
     }
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x34)), nullptr);   // B.3.4 bridge
+    s->Serialize(field_0x34, nullptr);
 
 
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    s->~Serializer();   // B.3.4 bridge
 }

@@ -22,6 +22,9 @@
 #include "Component/citizenaicomponent_funcs.h"
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
+#include "Component/CitizenDescription.h" // B.4 W1 COMP-b: description fields by name
+#include "Component/CharacterComponent.h"
+#include "Component/AttendanceComponent.h"
 #include "Component/ResidenceComponent.h" // B.3.8 CB1a (TypeId)
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "options.h"
@@ -322,13 +325,14 @@ static constexpr float kScaleYoung = 1.0f;   // grown / adult full-size
 static constexpr float kScaleAdult = 0.83f;  // intermediate life-state
 static constexpr float kScaleElder = 0.66f;  // child / small render
 
-static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
-    uint8_t* citizen = reinterpret_cast<uint8_t*>(citizenP);
-    int idx = *reinterpret_cast<int*>(citizen + 0x34);
-    int64_t meshIBP = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    if (meshIBP == 0) return;                                  // no CharacterComponent
-    int64_t mesh = *reinterpret_cast<int64_t*>(meshIBP + 0x68);
-    if (mesh == 0) return;                                     // ModelComponent not live yet
+static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
+    int idx = citizen->field_0x34;
+    CharacterComponent* meshIBP = citizen->character;
+    if (meshIBP == nullptr) return;                            // no CharacterComponent
+    // The ModelComponent's MeshInstance is raw storage (its owner's H5 member): the
+    // colour-tint fields inside it are written raw.
+    uint8_t* mesh = reinterpret_cast<uint8_t*>(meshIBP->modelComponent);
+    if (mesh == nullptr) return;                               // ModelComponent not live yet
     *reinterpret_cast<float*>(mesh + 0x134) = scale;
     *reinterpret_cast<float*>(mesh + 0x138) = scale;
     *reinterpret_cast<float*>(mesh + 0x13c) = scale;
@@ -337,26 +341,26 @@ static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
     static int s_setupLog = 0;
     if (s_setupLog < 24) {
         ++s_setupLog;
-        int64_t desc = *reinterpret_cast<int64_t*>(citizen + 0x288);
-        float thresh = desc ? *reinterpret_cast<float*>(desc + 0x44) : -1.0f;
-        float age = *reinterpret_cast<float*>(citizen + 0x3c);
-        int64_t state208 = *reinterpret_cast<int64_t*>(citizen + 0x208);
+        CitizenDescription* desc = citizen->description;
+        float thresh = desc ? desc->adultAge : -1.0f;
+        float age = citizen->age;
+        AttendanceComponent* state208 = citizen->school;
         fprintf(stderr, "[SetupAgeMesh] citizen=%p scale=%.2f colour=%d age=%.2f "
-                "thresh=%.2f state208=%lld\n",
-                (void*)citizen, scale, idx, age, thresh, (long long)state208);
+                "thresh=%.2f state208=%p\n",
+                (void*)citizen, scale, idx, age, thresh, (void*)state208);
         fflush(stderr);
     }
 #endif
 }
 
-void CitizenComponent_SetupYoung_Reimpl(void* citizen) {
-    CitizenComp_SetupAgeMesh(citizen, kScaleYoung);
+void CitizenComponent::SetupYoung() {
+    CitizenComp_SetupAgeMesh(this, kScaleYoung);
 }
-void CitizenComponent_SetupAdult_Reimpl(void* citizen) {
-    CitizenComp_SetupAgeMesh(citizen, kScaleAdult);
+void CitizenComponent::SetupAdult() {
+    CitizenComp_SetupAgeMesh(this, kScaleAdult);
 }
-void CitizenComponent_SetupElder_Reimpl(void* citizen) {
-    CitizenComp_SetupAgeMesh(citizen, kScaleElder);
+void CitizenComponent::SetupElder() {
+    CitizenComp_SetupAgeMesh(this, kScaleElder);
 }
 
 // Reimpl of Entity_FindComponent_Storage (0x140008090):
@@ -523,14 +527,14 @@ void CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV) {
     float ageThresh = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(d + 0x288) + 0x44);
     float age = *reinterpret_cast<float*>(d + 0x3c);
     if (ageThresh <= age && *reinterpret_cast<int64_t*>(d + 0x208) == 0) {
-        CitizenComponent_SetupYoung_Reimpl(*reinterpret_cast<void**>(dataPtr));
+        (*reinterpret_cast<CitizenComponent**>(dataPtr))->SetupYoung();
         return;
     }
     if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x208) != 0) {
-        CitizenComponent_SetupAdult_Reimpl(*reinterpret_cast<void**>(dataPtr));
+        (*reinterpret_cast<CitizenComponent**>(dataPtr))->SetupAdult();
         return;
     }
-    CitizenComponent_SetupElder_Reimpl(*reinterpret_cast<void**>(dataPtr));
+    (*reinterpret_cast<CitizenComponent**>(dataPtr))->SetupElder();
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
