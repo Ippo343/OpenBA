@@ -11,6 +11,7 @@
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ProgressElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ButtonElement.h"     // B4 DLG-a: buttonOk's key index
 #include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -37,348 +38,208 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // ============================================================
-// AchievementDialog::Slot4 (vtable +0x20) — Setup/populate achievement table
+// AchievementDialog::OnOpened (vtable +0x20) — Setup/populate achievement table
 // ============================================================
 // Finds "buttonOk" (ID 100), "tableAchievement", clones template rows
 // for each achievement, finds child elements (imageIcon, imageStar,
 // textTitle, textDescription), sets sprite/text, pushes 4-ptr entries
-// to dynamic array at +0xC0. Finally finds "textComplete" and stores at +0xB8.
+// to the entry array at +0xC0. Finally finds "textComplete" and stores at +0xB8.
 //
 // Original: 0x14005D490.
 
 void AchievementDialog::OnOpened() {
-    uintptr_t s = (uintptr_t)this;
-
-    // Find "buttonOk" element, set ID 100, set +0xC0 flags = 8
-    uint64_t btnResult = 0;
+    // Find "buttonOk" element, set ID 100, its shortcut key (+0xC0) = 8
+    UI::Element* buttonOk;
     {
         System::String nameStr("buttonOk");
-        ::new (&btnResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)s)->FindElement(nameStr));  // B.3.6 bridge
+        buttonOk = FindElement(nameStr).Get();
     }
-    void* buttonOk = (void*)btnResult;
-    reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(100);  // B.3.6 bridge
-    *(uint32_t*)((uintptr_t)buttonOk + 0xC0) = 8;
+    buttonOk->SetElementId(100);
+    // Retail stores the found element unchecked; +0xC0 is the button's key index.
+    static_cast<UI::ButtonElement*>(buttonOk)->_keyIndex = 8;
 
     // Get AchievementManager singleton
-    void* manager = ::Achievement::AchievementManager::_singleton;
+    Achievement::AchievementManager* manager = ::Achievement::AchievementManager::_singleton;
 
-    // Find "tableAchievement" element
-    uint64_t tableResult = 0;
+    // Find "tableAchievement" element (a TableElement: SetChild below)
+    UI::TableElement* tableElem;
     {
         System::String nameStr("tableAchievement");
-        ::new (&tableResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)s)->FindElement(nameStr));  // B.3.6 bridge
+        tableElem = static_cast<UI::TableElement*>(FindElement(nameStr).Get());
     }
-    void* tableElem = (void*)tableResult;
 
     // Get achievement count
-    int achievementCount = reinterpret_cast<const Achievement::AchievementManager*>(manager)->GetAchievementCount();  // B.3.7 bridge
+    int achievementCount = manager->GetAchievementCount();
 
-    // Get dialog template for cloning rows
-    void* dialog = *(void**)(s + 0x18);
+    // The dialog resource, whose template 0 is the row
+    const UI::Dialog* dialog = _dialog;
 
     // For each achievement: clone template, populate elements, push to array
     for (int i = 0; i < achievementCount; i++) {
         // Clone template element from dialog
-        uint8_t templateBuf[16] = {0};
-        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(0));  // B.3.6 bridge
-        void* elemDesc = *(void**)templateBuf;
+        const UI::ElementDescription* elemDesc = dialog->GetTemplate(0).Get();
 
-        uint8_t newElemBuf[16] = {0};
+        Object::InternalPtr<UI::Element> newElem;
         if (elemDesc) {
-            reinterpret_cast<const UI::ElementDescription*>(elemDesc)->CreateInstance(  // B.3.6 bridge
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf),
-                reinterpret_cast<const UI::Dialog*>(dialog));
+            elemDesc->CreateInstance(&newElem, dialog);
         }
-        void* rowElem = *(void**)newElemBuf;
+        UI::Element* rowElem = newElem.Get();
 
         // Set as table child at index i
-        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf), i);  // B.3.6 bridge
+        tableElem->SetChild(&newElem, i);
 
-        // Find child elements in the cloned row
-        // imageIcon
-        uint64_t iconResult = 0;
+        // Find child elements in the cloned row (each stored unchecked)
+        UI::ImageElement* imageIcon;
         {
             System::String nameStr("imageIcon");
-            ::new (&iconResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
+            imageIcon = static_cast<UI::ImageElement*>(rowElem->FindElement(nameStr).Get());
         }
-        void* imageIcon = (void*)iconResult;
 
-        // imageStar
-        uint64_t starResult = 0;
+        UI::Element* imageStar;
         {
             System::String nameStr("imageStar");
-            ::new (&starResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
+            imageStar = rowElem->FindElement(nameStr).Get();
         }
-        void* imageStar = (void*)starResult;
 
-        // textTitle
-        uint64_t titleResult = 0;
+        UI::TextElement* textTitle;
         {
             System::String nameStr("textTitle");
-            ::new (&titleResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
+            textTitle = static_cast<UI::TextElement*>(rowElem->FindElement(nameStr).Get());
         }
-        void* textTitle = (void*)titleResult;
 
-        // textDescription
-        uint64_t descResult = 0;
+        UI::TextElement* textDesc;
         {
             System::String nameStr("textDescription");
-            ::new (&descResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
+            textDesc = static_cast<UI::TextElement*>(rowElem->FindElement(nameStr).Get());
         }
-        void* textDesc = (void*)descResult;
 
         // Get achievement object at index i
-        uint8_t achievBuf[8] = {0};
-        ::new (achievBuf) Object::ExternalPtr<Achievement::Achievement>(reinterpret_cast<const Achievement::AchievementManager*>(manager)->GetAchievement(i));  // B.3.7 bridge
-        void* achievement = *(void**)achievBuf;
+        Achievement::Achievement* achievement = manager->GetAchievement(i).Get();
 
         // Set sprite on imageIcon from achievement sprite sheet + sprite name
-        System::String spriteName;
-        ::new (&spriteName) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetSpriteName());  // B.3.7 bridge
-        uint64_t spriteSheet = *(uint64_t*)((uintptr_t)achievement + 0x38);
-        uint8_t spriteBuf[16];
-        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), spriteName);  // B.3.6 bridge
-        reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+        System::String spriteName = achievement->GetSpriteName();
+        UI::Sprite sprite(achievement->_spriteSheet, spriteName);
+        imageIcon->SetSprite(&sprite);
 
-        // Hide imageStar initially (Slot6 will show it if awarded)
-        reinterpret_cast<UI::Element*>(imageStar)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        // Hide imageStar initially (OnUpdateLayout shows it if awarded)
+        imageStar->SetFlagsOnOff(1, 0);
 
         // Set title text
-        System::String titleText;
-        ::new (&titleText) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());  // B.3.7 bridge
-        uint8_t titleStrBuf[16];
-        ::new (titleStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), titleText);  // B.3.6 bridge
-        reinterpret_cast<UI::TextElement*>(textTitle)->SetText(reinterpret_cast<const UI::String*>(titleStrBuf));  // B.3.6 bridge
+        System::String titleText = achievement->GetTitle();
+        UI::String titleStr(achievement->_stringTable, titleText);
+        textTitle->SetText(&titleStr);
 
         // Set description text
-        uint8_t descStrBuf[16];
-        System::String descText;
-        ::new (&descText) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetDescription());  // B.3.7 bridge
-        ::new (descStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), descText);  // B.3.6 bridge
-        reinterpret_cast<UI::TextElement*>(textDesc)->SetText(reinterpret_cast<const UI::String*>(descStrBuf));  // B.3.6 bridge
+        System::String descText = achievement->GetDescription();
+        UI::String descStr(achievement->_stringTable, descText);
+        textDesc->SetText(&descStr);
 
-        // Push 4-pointer entry (stride 0x20) to dynamic array at +0xC0.
-        // B.3.2 bridge: <AchievementDialog>+0xC0 is Collection::Array<{imageIcon,
-        // imageStar, textTitle, textDesc}> (stride 0x20, count +0xC8, capacity +0xCC)
-        // inside a struct §B.2 has not converted, so it is reached at its offset.
-        // The old hand-rolled copy guarded with `if (newCount != count)` — that is
-        // retail's `if (newSize == oldSize) return;` early return, which
+        // Push the 4-pointer entry (stride 0x20) to the entry array at +0xC0.
+        // B.3.2 bridge: the Array is its three raw members in the class, reached
+        // as one. The old hand-rolled copy guarded with `if (newCount != count)` —
+        // that is retail's `if (newSize == oldSize) return;` early return, which
         // rtcoll::SetSizeCore already performs, so it is not carried forward.
-        auto& entries = GameColl::ArrayAt<GameColl::Bytes<0x20, 8>>(s, 0xC0);
-        entries.SetSize(entries.GetSize() + 1,
-                         GameColl::Bytes<0x20, 8>((uint64_t)imageIcon, (uint64_t)imageStar,
-                                        (uint64_t)textTitle, (uint64_t)textDesc));
+        auto& entries = GameColl::ArrayAt<Entry>(&entryData, 0);
+        entries.SetSize(entries.GetSize() + 1, Entry{imageIcon, imageStar, textTitle, textDesc});
     }
 
     // Find "textComplete" element, store at +0xB8
-    uint64_t completeResult = 0;
     {
         System::String nameStr("textComplete");
-        ::new (&completeResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)s)->FindElement(nameStr));  // B.3.6 bridge
+        textComplete = static_cast<UI::TextElement*>(FindElement(nameStr).Get());
     }
-    *(uint64_t*)(s + 0xB8) = completeResult;
 }
 
 // ============================================================
-// AchievementDialog::Slot7 (vtable +0x38, exe 0x14005D480): RET 0 (3 bytes)
+// AchievementDialog::OnUpdate (vtable +0x38, exe 0x14005D480): RET 0 (3 bytes)
 // ============================================================
 // No-op handler; returns 0.
 void AchievementDialog::OnUpdate(const System::Time& /*time*/) {
 }
 
 // ============================================================
-// AchievementDialog::Slot6 (vtable +0x30) — Update achievement display
+// AchievementDialog::OnUpdateLayout (vtable +0x30) — Update achievement display
 // ============================================================
-// Iterates achievement entries at +0xC0 (stride 0x20), count at +0xC8.
-// For each: checks IsAchievementAwarded, sets entry colors and check visibility.
+// Iterates the entries at +0xC0 (stride 0x20), count at +0xC8.
+// For each: checks IsAchievementAwarded, sets entry colors and star visibility.
 // Calculates award percentage, formats as text on +0xB8.
-//
-// Entry layout (stride 0x20):
-//   +0x00: Element* titleElement (set primary color)
-//   +0x08: Element* checkElement (show/hide via SetFlagsOnOff)
-//   +0x10: Element* descElement (set secondary color)
-//   +0x18: Element* extraElement (set secondary color)
 //
 // Original: 0x14005D240.
 
 void AchievementDialog::OnUpdateLayout() {
-    uintptr_t s = (uintptr_t)this;
+    // Get AchievementManager singleton
+    Achievement::AchievementManager* manager = ::Achievement::AchievementManager::_singleton;
 
-    // Get AchievementManager singleton (double-indirect via .rdata dispatch)
-    void* manager = ::Achievement::AchievementManager::_singleton;
-
-    int count = *(int*)(s + 0xC8);
-    uintptr_t entryArray = *(uintptr_t*)(s + 0xC0);
+    int count = entryCount;
+    Entry* entryArray = entryData;
 
     int awardedCount = 0;
 
     for (int i = 0; i < count; i++) {
-        uintptr_t entryOff = (uintptr_t)i * 0x20;
-
-        bool awarded = reinterpret_cast<const Achievement::AchievementManager*>(manager)->IsAchievementAwarded(i);  // B.3.7 bridge
+        bool awarded = manager->IsAchievementAwarded(i);
         if (awarded) awardedCount++;
 
         uint32_t primaryColor   = awarded ? 0xFFE0E0E0u : 0xFF303030u;
         uint32_t secondaryColor = awarded ? 0xFFC0C0C0u : 0xFFB0B0B0u;
 
-        // Check element at entry+0x08: show if awarded, hide if not
-        void* checkElem = *(void**)(entryArray + entryOff + 0x08);
-        reinterpret_cast<UI::Element*>(checkElem)->SetFlagsOnOff(0, awarded ? 1 : 0);  // B.3.6 bridge
+        // The star: show if awarded, hide if not
+        entryArray[i].star->SetFlagsOnOff(0, awarded ? 1 : 0);
 
-        // Title element at entry+0x00: set primary color via vtable[10]
-        void* titleElem = *(void**)(entryArray + entryOff);
-        reinterpret_cast<UI::Element*>(titleElem)->SetColor(primaryColor);  // B.3.6 bridge
+        // The icon: primary color (Element slot 10)
+        entryArray[i].icon->SetColor(primaryColor);
 
-        // Desc element at entry+0x10: set secondary color via vtable[10]
-        void* descElem = *(void**)(entryArray + entryOff + 0x10);
-        reinterpret_cast<UI::Element*>(descElem)->SetColor(secondaryColor);  // B.3.6 bridge
+        // The title: secondary color
+        entryArray[i].title->SetColor(secondaryColor);
 
-        // Extra element at entry+0x18: set secondary color via vtable[10]
-        void* extraElem = *(void**)(entryArray + entryOff + 0x18);
-        reinterpret_cast<UI::Element*>(extraElem)->SetColor(secondaryColor);  // B.3.6 bridge
+        // The description: secondary color
+        entryArray[i].description->SetColor(secondaryColor);
     }
 
     // Format percentage: (awarded / total) * 100 + 0.5 (rounding)
     float pct = ((float)awardedCount / (float)count) * 100.0f + 0.5f;
     System::String pctStr = System::String::Format("%i", (uint64_t)(uint32_t)(int)pct);
 
-    void* pctText = (void*)*(uint64_t*)(s + 0xB8);
-    reinterpret_cast<UI::TextElement*>(pctText)->SetParameter(0, pctStr);  // B.3.6 bridge
+    textComplete->SetParameter(0, pctStr);
 }
 
 // ============================================================
-// AchievementDialog::Slot14 (vtable +0x70) — Initialize progress element
-// ============================================================
-// Finds a ProgressElement by type in the parent element at +0x20,
-// stores at +0x30. Then gets entity → AttendanceComponent → sub-object
-// at comp+0x18, reads capacity at sub+0x20, sets as progress max value.
-//
-// Original: 0x14005DD40.
-
-void AchievementDialog_Slot14(AchievementDialog* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Find ProgressElement by type in parent element at +0x20
-    void* parentElem = (void*)*(uint64_t*)(s + 0x20);
-    uint64_t findResult = 0;
-    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElementType(UI::ProgressElement::TypeId()));  // B.3.6 bridge
-
-    // Store at +0x30 (skip IsDerivedFrom, null check only)
-    void* rawElem = (void*)findResult;
-    void* checked = rawElem ? rawElem : nullptr;
-    uint64_t basePtrVal = 0;
-    new (&basePtrVal) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    *(uint64_t*)(s + 0x30) = basePtrVal;
-
-    // Get entity at +0x28, check ComponentEntity
-    void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = ComponentEntity::TypeId();
-    void* checkedEntity = nullptr;
-    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
-        checkedEntity = entity;
-    }
-    uint64_t entityBasePtr = 0;
-    new (&entityBasePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
-
-    // Find AttendanceComponent on entity
-    uint64_t attComp = 0;
-    fn_FindComponent_Attendance((void*)entityBasePtr, &attComp);
-
-    // Get sub-object at comp+0x18 (attendance capacity sub-component)
-    void* subObj = *(void**)(attComp + 0x18);
-
-    // Set progress max value: element+0x124 = (float)sub+0x20
-    void* progressElem = (void*)*(uint64_t*)(s + 0x30);
-    *(float*)((uintptr_t)progressElem + 0x124) = (float)*(int32_t*)((uintptr_t)subObj + 0x20);
-}
-
-// ============================================================
-// AchievementDialog::Slot17 (vtable +0x88) — Update progress display
-// ============================================================
-// Gets entity → AttendanceComponent, reads current count at comp+0x30,
-// sets progress bar value at element+0x128, formats percentage text.
-//
-// Original: 0x14005DC50.
-
-void AchievementDialog_Slot17(AchievementDialog* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Get entity at +0x28, check ComponentEntity
-    void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = ComponentEntity::TypeId();
-    void* checkedEntity = nullptr;
-    if (::Object::IsDerivedFromNullSafe(entity, entityTypeId)) {
-        checkedEntity = entity;
-    }
-    uint64_t entityBasePtr = 0;
-    new (&entityBasePtr) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(checkedEntity));   // B.3.3 bridge
-
-    // Find AttendanceComponent on entity
-    uint64_t attComp = 0;
-    fn_FindComponent_Attendance((void*)entityBasePtr, &attComp);
-
-    // Read current attendance count
-    int count = *(int32_t*)(attComp + 0x30);
-
-    // Set progress bar value at element+0x128
-    void* progressElem = (void*)*(uint64_t*)(s + 0x30);
-    *(float*)((uintptr_t)progressElem + 0x128) = (float)count;
-
-    // Format count text and set as progress parameter
-    System::String countStr = System::String::Format("%i", (uint64_t)(uint32_t)count);
-    reinterpret_cast<UI::ProgressElement*>(progressElem)->SetProgressTextParameter(0, countStr);  // B.3.6 bridge
-}
-
-// ============================================================
-// AchievementDialog::Slot8 (vtable +0x40, exe 0x14005D440) -- OnCommand
+// AchievementDialog::OnElementEvent (vtable +0x40, exe 0x14005D440)
 // ============================================================
 // Byte-identical to GoalDialog::Slot8 (0x1400697C0): on a button click (msg 0x12)
 // from buttonOk (id 100), wrap self in an InternalBasePtr and ask the UserInterface
-// at self+0x10 to close this dialog. Without it the Achievements panel had no way to
-// dismiss itself -- the Setup body sets buttonOk id 100 and nothing consumed it.
+// at +0x10 to close this dialog.
 void AchievementDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 == 0x12 && param4 == 100) {
-        uint8_t selfIBP[16];
-        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)this + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
+        Object::InternalPtr<UI::DialogInstance> self(this);
+        _ui->CloseDialog(&self);
     }
 }
 
-// ============================================================
-// WARNING -- AchievementDialog_Slot14 / _Slot17 above are MISATTRIBUTED
-// ============================================================
-// Their retail addresses (0x14005DD40 / 0x14005DC50) are .rdata entries 14 and 17
-// counting from 0x14015b020, but AchievementDialog's own vtable ENDS at index 9.
-// Those two are slots 4 and 7 of the NEXT table, which starts at 0x14015b070 and is
-// AttendanceUI's (its name string sits right after it in .rdata). Both bodies read
-// +0x20/+0x28/+0x30 and an AttendanceComponent -- DialogController layout, not
-// DialogInstance layout -- so on a real AchievementDialog they would read the wrong
-// fields. The SAME two retail functions are already ported under their correct names
-// as AttendanceUI_Slot4 / AttendanceUI_Slot7 (attendanceui.cpp), and it is those
-// copies that are wired. Neither of the two below is installed anywhere; they are
-// kept only so the addresses stay searchable. Do not wire them into the
-// AchievementDialog vtable (menu_dialog_standalone_vtables.cpp).
+// (AchievementDialog_Slot14 / _Slot17, two unreferenced second copies of
+// AttendanceUI::OnCreated 0x14005dd40 / OnUpdateLayout 0x14005dc50 kept here
+// "so the addresses stay searchable", are gone: B4 DLG-a.)
 
 // ============================================================
 // Construction, destruction, reflection (ENDGAME B.3.8 block DLG)
 // ============================================================
 
-AchievementDialog::AchievementDialog() : dataB8(0), dataC0(0), dataC8(0) {}
+AchievementDialog::AchievementDialog()
+    : textComplete(nullptr), entryData(nullptr), entryCount(0), entryCapacity(0) {}
 
 // MainMenuDialog's opener inlines this ctor: DialogInstance(ui, dialog,
 // nullParent, 0, 0, 0), then the fields zeroed.
 AchievementDialog::AchievementDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
              Object::InternalPtr<UI::DialogInstance> parent)
-    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0), dataC8(0) {}
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      textComplete(nullptr), entryData(nullptr), entryCount(0), entryCapacity(0) {}
 
 // Retail's dtor (inside [0] 0x1400103f0): MemFree the entry array at +0xc0 and
 // zero its header (+0xc0 data, +0xc8 count/capacity), then ~DialogInstance.
 AchievementDialog::~AchievementDialog() {
-    System::MemoryAllocator::MemFree(reinterpret_cast<void*>(dataC0));
-    dataC0 = 0;
-    dataC8 = 0;
+    System::MemoryAllocator::MemFree(entryData);
+    entryData = nullptr;
+    entryCount = 0;
+    entryCapacity = 0;
 }
 
 // create 0x140010320: MemAlloc(0xd0, 8), then the ctor.
