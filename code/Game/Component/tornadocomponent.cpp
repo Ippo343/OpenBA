@@ -211,11 +211,6 @@ static void Tornado_ReportArmsOnce() {
                   "live");
 }
 
-// 0x140058b80 door: registered by address (standalone/reg_tornado.cpp).
-void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
-    self->TornadoComponent::Persist(stream);
-}
-
 
 // ============================================================
 // Tornado_PathFractal — 0x140058980
@@ -582,17 +577,6 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
                   *reinterpret_cast<int32_t*>(d + 0x30), *reinterpret_cast<int32_t*>(d + 0x34),
                   hitTree, hitTreeNoKnock, hitBuilding, hitBuildingNoFire, hitAnimal,
                   hitCitizen, queryState, found.count);
-}
-
-// 0x1400585a0 door: registered by address (standalone/reg_tornado.cpp).
-void TornadoComponent_Serialize(TornadoComponent* self) {
-    self->TornadoComponent::Startup();
-}
-
-
-// 0x140057cd0 door: registered by address (standalone/reg_tornado.cpp).
-void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
-    self->TornadoComponent::Tick(time);
 }
 
 

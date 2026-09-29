@@ -20,7 +20,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/wildanimalcomponent_funcs.h"
+#include "Component/WildAnimalComponent.h"
 #include "Component/HerdComponent.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -38,12 +38,6 @@
 // FUN_140002cc0 CemeteryListErase_Reimpl -- DynArray8_EraseByValue: remove an
 //   InternalBasePtr from the 8-byte-element list at entity+0x38. (Append is
 //   FUN_140003110, a different fn.)
-
-// 0x14012e300 door: registered by address (standalone/reg_animal_serialize.cpp).
-void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
-    self->WildAnimalComponent::Persist(stream);
-}
-
 
 // ============================================================
 // WildAnimalComponent::OnRemove (vtable slot [7], 0x14012e2b0)

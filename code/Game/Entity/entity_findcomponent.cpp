@@ -163,11 +163,6 @@ void fn_FindComponent_Storage(void* entity, void* retval) {
     FindByTypeId(entity, retval, StorageComponent::TypeId());
 }
 
-// fn_FindComponent_Residence -- StorageComponent (cell 0x1401c7e78), retail FUN_140006270. same function as fn_FindComponent_Storage.
-void fn_FindComponent_Residence(void* entity, void* retval) {
-    FindByTypeId(entity, retval, StorageComponent::TypeId());
-}
-
 // fn_FindComponent_Cemetery -- CemeteryComponent (cell 0x1401c4090), retail FUN_140010a00.
 void fn_FindComponent_Cemetery(void* entity, void* retval) {
     FindByTypeId(entity, retval, CemeteryComponent::TypeId());
