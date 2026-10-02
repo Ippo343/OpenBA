@@ -251,7 +251,7 @@ void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32
 // Work/work_base_actionctor.cpp).
 PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int64_t time,
                          uint8_t param_6, int param_7)
-    : PerformWork(static_cast<CitizenComponent* const*>(entity), animIndex, actionType, time,
+    : PerformWork(reinterpret_cast<CitizenComponent* const*>(entity), animIndex, actionType, time,
                   param_6 != 0, param_7) {}
 
 // 0x1400c9720 — the ctor body: after Action() the retail stores, in retail order.

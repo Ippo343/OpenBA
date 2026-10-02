@@ -322,7 +322,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         if (remove != nullptr) {
             // ENDGAME B.3.8 ACT: the real ctor (RemoveAnimal.h) — retail inlines it here.
             // LEFT: RemoveAnimal's ctor (block ACT-b's header) takes the entity as an integer.
-            new (remove) RemoveAnimal(reinterpret_cast<uint64_t>((*animal)->_entity));
+            new (remove) RemoveAnimal((*animal)->_entity);
         }
         ::Object::InternalPtr<Action> pushed(remove);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0
