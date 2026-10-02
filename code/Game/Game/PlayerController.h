@@ -12,7 +12,8 @@
 // FIELDS (retail ctor 0x1400985b0, helper 0x1400983f0):
 //   +0x00 Math::Transform  Transform::Transform(+0); 0x1400983f0 writes it from
 //                          Transform::FromLookAt(target - dir(yaw,pitch) * distance)
-//                          — raw storage (B.4 H5: the member's ctor would run)
+//                          — a Math::Transform member (B.4 GAME-b: both ctors
+//                          ran Transform::Transform on it by hand before)
 //   +0x1C float[3] target  the look-at point (ctor 0; Load's start-town step
 //                          writes the spawn tile's position here)
 //   +0x28 float yaw        Vector3::FromYawPitch(+0x28, +0x2C) in 0x1400983f0
@@ -28,6 +29,7 @@
 #include <type_traits>
 
 struct Frustum;   // ::Frustum (volume/Volume.h)
+namespace IO { class Stream; }
 
 class PlayerController {
 public:
@@ -35,6 +37,13 @@ public:
     // the transform and the camera in the raw storage below (bodies in
     // gameupdateloop_load.cpp).
     PlayerController(const ::Frustum& frustum, float yaw, float pitch, float distance);
+    // 0x140098800 — the default ctor (MenuScene +0x88, the menu loop's +0xbb8):
+    // Transform(), the target zeroed, the camera built over the 1 / 100 / 90 / 90
+    // perspective frustum and the identity transform (menuscene.cpp, GAME-b).
+    PlayerController();
+    // 0x1400988c0 — Serializer(stream, 0): the transform, the target, yaw, pitch,
+    // distance (serialize_arrays.cpp, GAME-b).
+    void Serialize(IO::Stream& stream);
 
     // 0x1400983f0 — the look-at transform from (target, yaw, pitch, distance):
     // stored into +0x00 and returned (retail's hidden return slot).
@@ -43,7 +52,7 @@ public:
     // buffer's aspect (Load step 33, Draw).
     void UpdateCamera(float fovY, float nearZ, float farZ);
 
-    uint8_t transform[0x1C];     // +0x00 Math::Transform (raw, H5)
+    Math::Transform transform;   // +0x00 (both ctors run Transform::Transform first, as retail's do)
     float   targetX;             // +0x1C look-at target
     float   targetY;             // +0x20
     float   targetZ;             // +0x24

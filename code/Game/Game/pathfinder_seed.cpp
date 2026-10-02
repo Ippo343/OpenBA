@@ -27,6 +27,8 @@
 // `g_pf_vtable` and its no-op OnCompleted stub (the same RET body).
 
 #include "Game/PathfinderThread.h"
+#include "Game/Map.h"
+#include "Action/PathSearch.h"
 #include <windows.h>
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"   // Pf_WorkerApplyCmd_a6430, Pf_EnqueueCmd1_a6a30, Pf_ArrayResize18_d830
@@ -66,107 +68,111 @@
 // engine free-list. Queue: tail@+0x60, head@+0x68, count@+0x70; node qwords [0]=cmd{type,arg1}
 // [1]=cmd{arg2,arg3} [2]=next(+0x10) [3]=prev(+0x18).
 void PathfinderThread::Run() {
-    uint8_t* p   = reinterpret_cast<uint8_t*>(this);   // bridge: the body reads offsets
-    int64_t  self = reinterpret_cast<int64_t>(this);
-    int count = *reinterpret_cast<int*>(p + 0x70);
+    int count = queueCount;
     while (count > 0) {
-        reinterpret_cast<System::CriticalSection*>(p + 0x30)->Lock();   // B.3.4b bridge
-        uint64_t* node  = *reinterpret_cast<uint64_t**>(p + 0x68);    // head
-        uint64_t  cmdLo = node[0];                                    // cmd {type, arg1}
-        uint64_t  cmdHi = node[1];                                    // cmd {arg2, arg3}
-        if (node == *reinterpret_cast<uint64_t**>(p + 0x60))          // head == tail?
-            *reinterpret_cast<uint64_t*>(p + 0x60) = node[3];         // tail = node->prev
-        *reinterpret_cast<uint64_t*>(p + 0x68) = node[2];            // head = node->next
-        if (node[2] != 0) *reinterpret_cast<uint64_t*>(node[2] + 0x18) = node[3];  // next->prev
-        if (node[3] != 0) *reinterpret_cast<uint64_t*>(node[3] + 0x10) = node[2];  // prev->next
-        node[2] = 0;
-        node[3] = 0;
-        *reinterpret_cast<int*>(p + 0x70) = *reinterpret_cast<int*>(p + 0x70) - 1;
+        lock.Lock();
+        PathCommand* node = queueHead;
+        PathCommandArgs cmd = node->args;                  // cmd {type, arg1, arg2, arg3}
+        if (node == queueTail)                             // head == tail?
+            queueTail = node->prev;                        // tail = node->prev
+        queueHead = node->next;                            // head = node->next
+        if (node->next != nullptr) node->next->prev = node->prev;
+        if (node->prev != nullptr) node->prev->next = node->next;
+        node->next = nullptr;
+        node->prev = nullptr;
+        queueCount = queueCount - 1;
         System::MemoryAllocator::MemFree(node);
-        uint64_t cmd[2] = { cmdLo, cmdHi };
-        reinterpret_cast<System::CriticalSection*>(p + 0x30)->Unlock();   // B.3.4b bridge
-        Pf_WorkerApplyCmd_a6430(self, reinterpret_cast<uint32_t*>(cmd));
-        count = *reinterpret_cast<int*>(p + 0x70);
+        lock.Unlock();
+        ApplyCommand(cmd);                                 // 0x1400a6430
+        count = queueCount;
     }
 }
 
 namespace {
-// FUN_1400a6110 — pathfinder cell-grid ctor (grid = pf+0x78). dim = map width.
-static void GridCtor(uint8_t* g, int dim) {
-    *reinterpret_cast<int*>(g + 0x00)       = 1;
-    *reinterpret_cast<uint64_t*>(g + 0x08)  = 0;   // node-array {ptr,count,cap} header
-    *reinterpret_cast<uint64_t*>(g + 0x10)  = 0;
-    *reinterpret_cast<uint64_t*>(g + 0x18)  = 0;
-    *reinterpret_cast<int*>(g + 0x20)       = 0;
-    *reinterpret_cast<uint64_t*>(g + 0x28)  = 0;
-    *reinterpret_cast<uint64_t*>(g + 0x30)  = 0;
-    *reinterpret_cast<uint64_t*>(g + 0x38)  = 8;   // node block size
-    *reinterpret_cast<uint64_t*>(g + 0x40)  = 0;
-    *reinterpret_cast<int*>(g + 0x48)       = 0;
-    Pf_ArrayResize18_d830(reinterpret_cast<int64_t*>(g + 0x08), dim * dim);   // reserve dim*dim A* nodes
-    *reinterpret_cast<int*>(g + 0xd0)       = 0;
-    *reinterpret_cast<uint16_t*>(g + 0xd4)  = 0;
-    *reinterpret_cast<uint8_t*>(g + 0xd6)   = 0;
-    void* flags = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(dim) * static_cast<uint64_t>(dim), 4);
-    *reinterpret_cast<void**>(g + 0xe0)     = flags;   // per-cell terrain-flag byte array
-    *reinterpret_cast<int*>(g + 0xd8)       = dim;     // grid width
-    for (int i = 0; i < 0x20; ++i)                     // grid cost array (all = 1)
-        *reinterpret_cast<int*>(g + 0x50 + i * 4) = 1;
+// FUN_1400a6110 — the pathfinder's cell-grid ctor (PathfinderThread::grid). dim = map width.
+static void GridCtor(GridPathSearch& g, int dim) {
+    g.search.generation = 1;
+    g.search.nodes.data = nullptr;          // node-array {ptr, count, cap} header
+    g.search.nodes.size = 0;
+    g.search.nodes.capacity = 0;
+    g.search.open.root = nullptr;
+    g.search.open.count = 0;
+    g.search.open.pool.chunks = nullptr;
+    g.search.open.pool.freeList = nullptr;
+    g.search.open.pool.growCount = 8;       // node block size (one qword: 8, stride 0; H7)
+    g.search.open.pool.stride = 0;
+    g.search.open.pool.total = 0;
+    g.search.open.pool.inUse = 0;
+    g.search.open.pool.available = 0;
+    SearchNodesResize(&g.search.nodes, dim * dim);   // 0x14001d830: reserve dim*dim A* nodes
+    g.passableTypes = 0;
+    g.allowDiagonal = 0;                    // +0xd4 one word (H7)
+    g.manhattan = 0;
+    g.respectBlocked = 0;
+    g.cellFlags = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(
+        static_cast<uint64_t>(dim) * static_cast<uint64_t>(dim), 4));   // per-cell terrain-flag bytes
+    g.width = dim;                          // grid width
+    for (int i = 0; i < 0x20; ++i)          // grid cost array (all = 1)
+        g.stepCost[i] = 1;
 }
 } // namespace
 
-// Build + link the pathfinder. gameObj = *(g_pGameWorldSingleton+0xf8); dim = map width.
+// Build + link the pathfinder. gameObj = the Map (GameUpdateLoop::m_game); dim = map width.
 extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     if (!gameObjV || dim <= 0) return;
-    uint8_t* game = reinterpret_cast<uint8_t*>(gameObjV);
-    if (*reinterpret_cast<void**>(game + 0x68) != nullptr) return;   // already seeded
+    // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*`
+    // map and holds it as `void*` at one of its two calls.
+    Map* game = reinterpret_cast<Map*>(gameObjV);
+    if (game->pathfinder != nullptr) return;   // already seeded
 
     void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);
     if (!pfV) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(pfV);
 
     // --- FUN_1400a67f0 ctor (inline) ---
     // ENDGAME B.3.9 ENG W2: the REAL class ctor on System::Thread(0x10000) --
     // creates + parks the worker thread; the 0x14015ef18 stamp is the compiler's.
-    ::new (pfV) PathfinderThread(0x10000);
-    RtSystem_CriticalSection_Ctor(reinterpret_cast<RtSystem::CriticalSection*>(p + 0x30));   // System::CriticalSection::CriticalSection(self+0x30)
-    *reinterpret_cast<int*>(p + 0x58)       = 1;         // next result-slot generation id
-    p[0x5c]                                 = 1;         // priming runs SYNC (a6a30/a6430 apply inline); flipped to 0 (async) after priming
-    *reinterpret_cast<uint64_t*>(p + 0x60)  = 0;         // queue tail
-    *reinterpret_cast<uint64_t*>(p + 0x68)  = 0;         // queue head
-    *reinterpret_cast<int*>(p + 0x70)       = 0;         // queue count
-    GridCtor(p + 0x78, dim);                             // FUN_1400a6110
-    *reinterpret_cast<uint64_t*>(p + 0x160) = 0;         // result-slot array base
-    *reinterpret_cast<uint64_t*>(p + 0x168) = 0;         // result-slot count
-    *reinterpret_cast<int*>(p + 0x1f0)      = 0;
-    *reinterpret_cast<uint16_t*>(p + 0x1f4) = 0;
-    p[0x1f6]                                = 0;
+    PathfinderThread* pf = ::new (pfV) PathfinderThread(0x10000);
+    // LEFT: the CriticalSection ctor is a door on the POD mirror (System::
+    // CriticalSection is trivially constructible by design, Thread.h).
+    RtSystem_CriticalSection_Ctor(reinterpret_cast<RtSystem::CriticalSection*>(&pf->lock));
+    pf->nextToken  = 1;          // next result-slot generation id
+    pf->runInline  = 1;          // priming runs SYNC (commands apply inline); flipped to 0 (async) after priming
+    pf->queueTail  = nullptr;    // queue tail
+    pf->queueHead  = nullptr;    // queue head
+    pf->queueCount = 0;          // queue count
+    GridCtor(pf->grid, dim);     // FUN_1400a6110
+    pf->results.data = nullptr;  // result-slot array base
+    pf->results.size = 0;        // +0x168: one qword over size and capacity (H7)
+    pf->results.capacity = 0;
+    pf->stagedPassableTypes = 0;
+    pf->stagedDiagonal = 0;      // +0x1f4 one word (H7)
+    pf->stagedManhattan = 0;
+    pf->stagedRespectBlocked = 0;
     for (int i = 0; i < 0x20; ++i)                       // staged terrain-cost array (all = 1)
-        *reinterpret_cast<int*>(p + 0x170 + i * 4) = 1;
+        pf->stagedStepCost[i] = 1;
 
-    // Link into the game object.
-    *reinterpret_cast<void**>(game + 0x68) = pfV;
-    int64_t pf = reinterpret_cast<int64_t>(pfV);
+    // Link into the map.
+    game->pathfinder = pf;
 
     // --- e8c0 priming (synchronous: every cmd applies inline via a6430) ---
     // cmd type 4 — walkability sub-flags {arg0=1, arg1=0, arg2=0}.
-    uint32_t cmd4[4] = { 4, 1, 0, 0 };
-    Pf_WorkerApplyCmd_a6430(pf, cmd4);
+    const PathCommandArgs cmd4 = { 4, 1, 0, 0 };
+    pf->ApplyCommand(cmd4);
 
-    // terrain step-cost table (idx 0..10) — a6a30 applies inline (+0x5c != 0).
+    // terrain step-cost table (idx 0..10) — a6a30 applies inline (runInline != 0).
     static const int kCosts[11] = { 3, 3, 4, 8, 0x10, 0x10, 0x10, 0x10, 0x10, 3, 4 };
     for (int i = 0; i < 11; ++i)
-        Pf_EnqueueCmd1_a6a30(pf, i, kCosts[i]);
+        pf->SetStepCost(i, kCosts[i]);
 
-    // per-cell terrain flags: low 7 bits = cell terrain type (mapCell+0x29),
-    // bit 7 = blocked (mapCell+0x00 first qword != 0). mapCell grid @ game+0x80, stride 0x30.
-    uint8_t* flags    = *reinterpret_cast<uint8_t**>(p + 0x158);
-    uint8_t* cellGrid = *reinterpret_cast<uint8_t**>(game + 0x80);
-    int      cellN    = *reinterpret_cast<int*>(game + 0x88);
+    // per-cell terrain flags: low 7 bits = the cell's terrainType (+0x29),
+    // bit 7 = blocked (the cell's blocker, +0x00, set). The map's cells, stride 0x30.
+    uint8_t* flags    = pf->grid.cellFlags;
+    MapCell* cellGrid = game->cells;
+    int      cellN    = game->cellCount;
     if (flags && cellGrid) {
         for (int i = 0; i < cellN; ++i) {
-            uint8_t  type    = cellGrid[i * 0x30 + 0x29];
-            bool     blocked = *reinterpret_cast<int64_t*>(cellGrid + i * 0x30) != 0;
+            uint8_t  type    = cellGrid[i].terrainType;
+            bool     blocked = cellGrid[i].blocker != nullptr;
             flags[i] = static_cast<uint8_t>((flags[i] & 0x80) | type);
             flags[i] = static_cast<uint8_t>((blocked ? 0x80 : 0) | (flags[i] & 0x7f));
         }
@@ -176,7 +182,7 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     // wake the worker thread instead of running the A* inline on the main thread. Requires the
     // worker's MemFree, which is System::MemoryAllocator::MemFree: always ASYNC.
     bool async = true;
-    if (async) p[0x5c] = 0;
+    if (async) pf->runInline = 0;
 
     fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, %s mode)\n",
             pfV, dim, cellN, async ? "ASYNC worker-thread" : "sync");

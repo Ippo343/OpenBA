@@ -31,7 +31,10 @@
 #include "engine/UpdateLoop.h"   // -Iruntime/types: Engine::DialogLoopT
 #include "system/Value.h"        // -Iruntime/types: System::Random (by value at +0x168)
 
-namespace Audio { class Scene; }
+namespace Audio { class Scene; class SoundEffect; }
+namespace Graphics { class Renderer; class Scene; class Geometry; }
+class MenuScene;
+class PlayerController;
 
 class MenuDialogLoopT final : public Engine::DialogLoopT {
 public:
@@ -69,14 +72,14 @@ public:
     float          _scrollX;             // +0xb7c  transform[+0x28] cached at load
     float          _scrollY;             // +0xb80  transform[+0x2c] cached at load
     uint8_t        _pad0b84[4];          // +0xb84
-    void*          _music;               // +0xb88  External* Audio/Music/Menu.rsc
-    void*          _menuScene;           // +0xb90  External* Game/MenuScene/SceneN.rsc
-    void*          _renderer;            // +0xb98  Graphics::Renderer*
-    void*          _scene;               // +0xba0  Graphics::Scene*
+    Audio::SoundEffect* _music;          // +0xb88  ExternalPtr<SoundEffect> Audio/Music/Menu.rsc
+    MenuScene*     _menuScene;           // +0xb90  ExternalPtr<MenuScene> Game/MenuScene/SceneN.rsc
+    Graphics::Renderer* _renderer;       // +0xb98
+    Graphics::Scene* _scene;             // +0xba0
     void*          _mainMesh;            // +0xba8  Graphics::MeshInstance*
     void*          _sunLight;            // +0xbb0  Graphics::SunLight*
-    void*          _transform;           // +0xbb8  the camera Transform block
-    void*          _sceneGeometry;       // +0xbc0  MenuScene's first Geometry (not owned)
+    PlayerController* _transform;        // +0xbb8  the camera controller (MemAlloc(0x10c, 4) + 0x140098800)
+    Graphics::Geometry* _sceneGeometry;  // +0xbc0  MenuScene::geometry (not owned)
     void*          _dlcShip;             // +0xbc8  TradeWork* (DLC)
     uint8_t        _particleArray[0x10]; // +0xbd0  Array<ParticleSystemInstance*> {data,count,cap}
     uint8_t        _instanceArray[0x10]; // +0xbe0  Array<Geometry*>

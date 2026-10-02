@@ -36,6 +36,7 @@
 // runtime/types/volume/Volume.h, but the house rule (a runtime type header ahead of
 // resolve.h's <windows.h>, whose <wingdi.h> `Rectangle()` hides Volume.h's global
 // `struct Rectangle`) is kept so a later include change cannot break it silently.
+#include "Game/Minimap.h"
 #include "video/ImageBuffer.h"
 #include "video/Device.h"
 #include <new>
@@ -47,53 +48,44 @@
 
 namespace {
 
-// ENDGAME B.3.5 batch K1: the `fn_ImageBuffer_Create_t` slot typedef and the
-// `kCreateSlot` (+0x48) offset went with the hand-inlined slot read below, which is a
-// virtual call on `Video::ImageBuffer` now.
 constexpr int kImageBufferSize  = 0x68;
 constexpr int kImageBufferAlign = 8;
 
-// Allocate + Create one ImageBuffer, store it at mapObj+dstOff, then upload the
-// raw pixel array at mapObj+srcOff into it. Returns the buffer (or null).
-void* CreateAndUploadOne(uint8_t* map, int dstOff, int srcOff, int width,
-                         const char* tag, bool trace) {
-    void* img = System::MemoryAllocator::MemAlloc(kImageBufferSize, kImageBufferAlign);
-    if (!img) { if (trace) printf("[Minimap] %s: MemAlloc(0x68) failed\n", tag); return nullptr; }
+// Allocate + Create one ImageBuffer, store it in *dst, then upload the raw pixel
+// array into it. Returns the buffer (or null).
+Video::ImageBuffer* CreateAndUploadOne(Video::ImageBuffer** dst, uint32_t* pixels, int width,
+                                       [[maybe_unused]] const char* tag, bool trace) {
+    void* mem = System::MemoryAllocator::MemAlloc(kImageBufferSize, kImageBufferAlign);
+    if (!mem) { if (trace) printf("[Minimap] %s: MemAlloc(0x68) failed\n", tag); return nullptr; }
 
-    ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
-    *reinterpret_cast<void**>(map + dstOff) = img;
+    Video::ImageBuffer* img = ::new (mem) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
+    *dst = img;
 
-    bool ok = reinterpret_cast<Video::ImageBuffer*>(img)->Create(
+    [[maybe_unused]] bool ok = img->Create(
         /*imageType*/0, /*usage*/2, /*format*/5, /*mip*/0u,
-        width, width, /*filterMode*/1, 1, 1, 1, nullptr);   // B.3.5 bridge
+        width, width, /*filterMode*/1, 1, 1, 1, nullptr);
 
-    // Upload the raw pixel array (mapObj+srcOff) into the texture.
-    void* pixels = *reinterpret_cast<void**>(map + srcOff);
-    void* device = ::Video::Device::_singleton;
-    reinterpret_cast<Video::Device*>(device)->Lock();   // B.3.5 bridge
+    // Upload the raw pixel array into the texture.
+    ::Video::Device::_singleton->Lock();
     if (pixels)
-        reinterpret_cast<Video::ImageBuffer*>(img)
-            ->CopyToTexture(pixels, width, width);     // B.3.5 bridge
-    ::Video::Device::_singleton
-        ->Unlock();                                    // B.3.5 bridge
+        img->CopyToTexture(pixels, width, width);
+    ::Video::Device::_singleton->Unlock();
 
     if (trace)
         printf("[Minimap] %s: img=%p createOk=%d pixels=%p w=%d uploaded\n",
-               tag, img, (int)ok, pixels, width);
+               tag, (void*)img, (int)ok, (void*)pixels, width);
     return img;
 }
 
 }  // namespace
 
 // ============================================================
-// Public entry — create + upload both minimap ImageBuffers.
+// Minimap::CreateAndUpload — create + upload both minimap ImageBuffers.
 // ============================================================
-// mapObj = gameWorld+0x148. Idempotent: if a buffer already exists it re-uploads
-// (matches the retail Serialize which re-creates on every load). Safe no-op if
-// primitives are unresolved or width is invalid.
-extern "C" void Minimap_CreateAndUpload(void* mapObj) {
-    if (!mapObj) return;
-
+// Idempotent: if a buffer already exists it re-uploads (matches the retail
+// Serialize which re-creates on every load). Safe no-op if the allocator or the
+// device is missing or the size is invalid.
+void Minimap::CreateAndUpload() {
     static bool s_trace = Opt().mapTrace != nullptr;
 
     // ENDGAME B.3.5 batch K1: the CopyToTexture / Device::Lock / Device::Unlock terms
@@ -106,21 +98,27 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj) {
             printf("[Minimap] primitives unresolved — skipping upload "
                    "(alloc=%p dev=%p)\n",
                    (void*)System::MemoryAllocator::_singleton,
-                   ::Video::Device::_singleton);
+                   (void*)::Video::Device::_singleton);
             fflush(stdout);
             warned = true;
         }
         return;
     }
 
-    uint8_t* map = reinterpret_cast<uint8_t*>(mapObj);
-    int width = *reinterpret_cast<int*>(map + 0x04);
+    int width = size;
     if (width <= 0) {
         if (s_trace) printf("[Minimap] width<=0 (%d) — skipping\n", width);
         return;
     }
 
-    // Terrain: array +0x18 -> buffer +0x08. Overlay: array +0x28 -> buffer +0x10.
-    CreateAndUploadOne(map, 0x08, 0x18, width, "terrain", s_trace);
-    CreateAndUploadOne(map, 0x10, 0x28, width, "overlay", s_trace);
+    // Terrain: terrainPixels -> terrainImage. Overlay: overlayPixels -> overlayImage.
+    CreateAndUploadOne(&terrainImage, terrainPixels, width, "terrain", s_trace);
+    CreateAndUploadOne(&overlayImage, overlayPixels, width, "overlay", s_trace);
+}
+
+// B4 FORWARD: 1 outside caller (standalone/tool_harness.cpp, a local extern
+// holding the minimap as void*).
+extern "C" void Minimap_CreateAndUpload(void* mapObj) {
+    if (!mapObj) return;
+    reinterpret_cast<Minimap*>(mapObj)->CreateAndUpload();   // LEFT: tool_harness.cpp (STANDALONE) holds void*
 }

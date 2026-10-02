@@ -26,7 +26,8 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace Video { class ImageBuffer; }
+namespace Video { class ImageBuffer; class Context; }
+namespace Graphics { class Geometry; }
 namespace IO { class Stream; }
 
 class Minimap {
@@ -45,6 +46,10 @@ public:
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x1400a57f0
+    // B4 GAME-b (minimap_paint.cpp / minimap_upload.cpp):
+    void PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeom,
+                      Graphics::Geometry* sunLight);   // 0x1400a5140 (ImageCapture::DrawCheck)
+    void CreateAndUpload();   // 0x1400a4e80's two ImageBuffers, then both CopyToTexture uploads
 };
 
 static_assert(sizeof(Minimap) == 0x38, "Minimap is 0x38 (Load MemAlloc(0x38, 4))");

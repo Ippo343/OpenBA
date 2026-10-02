@@ -19,6 +19,7 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "system/String.h"
 
 namespace UI { class StringTable; class SpriteSheet; }
 
@@ -43,16 +44,17 @@ public:
     // latter is the type GameContainer_Init 0x14009a7a3 validates
     // "Dialog/SpriteSheet.rsc" with); 0x140151238 String; 0x140152ac8 int;
     // 0x140152a58 bool; 0x140152a60 float). The serializer passes no names.
-    // The three String fields are H5 raw storage: the tree's dtor runs ~String
-    // on them by hand; declaring System::String would run it twice.
+    // The three String fields are System::String: retail's ctor stores 0 in each
+    // (String() is `_data = nullptr`) and its dtor 0x14001e6f0 runs ~String on
+    // +0x40, +0x38, +0x30, which is the compiler's member order (B.4 GAME-b).
     UI::StringTable* stringTable;  // +0x20: ExternalPtr<UI::StringTable> (0x14000bf40); the table the
                                    //        profession's text keys are looked up in (PostLifeEvent,
                                    //        CitizenComponent::Update)
     UI::SpriteSheet* spriteSheet;  // +0x28: ExternalPtr<UI::SpriteSheet> (0x14000bd30)
-    uint64_t stringName;           // +0x30: System::String (H5 raw): the title key; PostLifeEvent builds
+    System::String stringName;     // +0x30: the title key; PostLifeEvent builds
                                    //        UI::String(stringTable, +0x30) as the citizen's title
-    uint64_t stringDesc;           // +0x38: System::String (H5 raw); name NOT confirmed from retail
-    uint64_t stringTool;           // +0x40: System::String (H5 raw); name NOT confirmed from retail:
+    System::String stringDesc;     // +0x38: name NOT confirmed from retail
+    System::String stringTool;     // +0x40: name NOT confirmed from retail:
                                    //        CitizenComponent::Update builds UI::String(stringTable,
                                    //        +0x40) for HandleLifeEvent(7) (a profession change)
     int32_t  field48;              // +0x48: int (serialized)

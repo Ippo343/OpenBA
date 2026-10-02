@@ -298,6 +298,7 @@ in the code carries a comment.
 | 49 | `RegionPairCache::Store` (`action_pf_region.cpp`) | writes 0 to `RegionPairEntry::field_0x0C` | 0x1400a5b30 stores a stale stack dword there (never read) | CONFIRMED (ACT-a) |
 | 51 | `PerformWork` ctor, tool-less time scaling (`performwork.cpp`) | reads the low dword of `requiredTime` (+0x30) and of `Time(desc->_f114)` as float bits and multiplies them | 0x1400c9720 calls `Time::AsSeconds` (IAT 0x140151318) on both (0x1400c9808 / 0x1400c9814), multiplies, and rebuilds with `Time(float)` (0x140152b00) | CONFIRMED (ACT-b; the two puns are LEFT at the site) |
 | 52 | `RemoveAnimal::Persist` (`removeanimal.cpp`) | validates the loaded +0x20 against `FireDescription::TypeId()` (cell 0x1401c4218), so a loaded RemoveAnimal always loses its entity | 0x1400ca870 tests ComponentEntity (`MOV EDX,[0x1401c5d70]` at 0x1400ca8e1) | CONFIRMED (ACT-b) |
+| 60 | the main menu's camera frustum (`MenuScene_Helper_8660`, `menudialogloopt.cpp`) | a second port of 0x140098660 next to `PlayerController::UpdateCamera`: takes the width / height from `Video::Configuration` +0x04 / +0x08, which are `interfaceIndex` / `adapterIndex` (so the aspect is 1 / 0 -> the 16:9 fallback, or interface / adapter), and has no ultrawide clamp | 0x140098660 reads `Video::Device`'s back-buffer width / height (+0x04 / +0x08) and clamps fovX past 16:9 (the member's body, `gameupdateloop_load.cpp`) | CONFIRMED from the two bodies and the header (GAME-b); retail not re-read for the menu's call |
 
 ### 14b. The save format (each fix re-cuts the resave golden)
 
@@ -423,6 +424,11 @@ stated condition.
   `ShowTool_ShowCarried`, a second guarded port of 0x1401173b0's toolId < 0 branch beside
   `ShowCitizenTool` (row 45 is the other copy's difference); `Pf_RegionPairCacheTick_5d10`'s null
   tests. SUSPECTED unless an address range is quoted.
+- KEPT (GAME-b): `ProfessionList::Startup` returns on a null `ExternalFactory::_singleton` and a 0
+  Profession type id, and skips an external that is not a Profession; 0x1400a90a0 calls FindNext
+  on the singleton unguarded and reads +0x4e of the null it substitutes for a non-Profession.
+  CONFIRMED. DROPPED (GAME-b): the old body's null test of the list itself (its one caller,
+  `GameUpdateLoop::Startup`, tests `m_professionList` first; retail has none).
 
 ### 14e. Stores that may normalise where retail copies
 

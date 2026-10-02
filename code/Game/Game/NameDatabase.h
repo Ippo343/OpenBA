@@ -21,6 +21,19 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"
+
+// One element of the +0x20 array (stride 0xc): Serialize 0x1400a45e0 writes it
+// as four raw bytes, a uchar and a uint. No field has a retail name.
+struct NameDatabaseEntry {
+    uint8_t  field_0x00[4];  // +0x00 SerializeBytes(4)
+    uint8_t  field_0x04;     // +0x04 uchar
+    uint8_t  _pad05[3];      // +0x05
+    uint32_t field_0x08;     // +0x08 uint
+};
+static_assert(sizeof(NameDatabaseEntry) == 0xC, "stride 0xc (0x14001c7c0)");
+static_assert(offsetof(NameDatabaseEntry, field_0x04) == 0x04, "+0x04");
+static_assert(offsetof(NameDatabaseEntry, field_0x08) == 0x08, "+0x08");
 
 class NameDatabase final : public Object::External {
     DECLARE_EXE_TYPE(NameDatabase)
@@ -38,28 +51,17 @@ public:
     virtual Object::External* Construct();                        // [8] 0x14001c6d0
 
 public:
-    // Four {data,count,cap} arrays.
-    void*    _array1;            // +0x20: stride 0xc (4 bytes + uchar + uint)
-    int32_t  _array1Count;       // +0x28
-    int32_t  _array1Capacity;    // +0x2C
-    void*    _array2;            // +0x30: stride 0x2 (uint16)
-    int32_t  _array2Count;       // +0x38
-    int32_t  _array2Capacity;    // +0x3C
-    void*    _array3;            // +0x40: stride 0x1 (byte buffer)
-    int32_t  _array3Count;       // +0x48
-    int32_t  _array3Capacity;    // +0x4C
-    void*    _array4;            // +0x50: stride 0x4 (int)
-    int32_t  _array4Count;       // +0x58
-    int32_t  _array4Capacity;    // +0x5C
+    // Four Collection::Arrays (B.4 GAME-b: the factory's ctor zeroed the four
+    // headers, Array()'s stores; the dtor 0x1400a4790 is four trivial-element
+    // ~Arrays back to front, the compiler's member order).
+    Collection::Array<NameDatabaseEntry> _array1;   // +0x20: stride 0xc
+    Collection::Array<uint16_t>          _array2;   // +0x30: stride 0x2
+    Collection::Array<uint8_t>           _array3;   // +0x40: stride 0x1 (byte buffer)
+    Collection::Array<int32_t>           _array4;   // +0x50: stride 0x4
 };
 
 static_assert(sizeof(NameDatabase) == 0x60, "NameDatabase is 0x60");
 static_assert(offsetof(NameDatabase, _array1) == 0x20, "+0x20");
-static_assert(offsetof(NameDatabase, _array1Count) == 0x28, "+0x28");
 static_assert(offsetof(NameDatabase, _array2) == 0x30, "+0x30");
-static_assert(offsetof(NameDatabase, _array2Count) == 0x38, "+0x38");
 static_assert(offsetof(NameDatabase, _array3) == 0x40, "+0x40");
-static_assert(offsetof(NameDatabase, _array3Count) == 0x48, "+0x48");
 static_assert(offsetof(NameDatabase, _array4) == 0x50, "+0x50");
-static_assert(offsetof(NameDatabase, _array4Count) == 0x58, "+0x58");
-static_assert(offsetof(NameDatabase, _array4Capacity) == 0x5C, "+0x5C");

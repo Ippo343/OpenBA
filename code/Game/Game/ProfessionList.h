@@ -19,6 +19,7 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"
 
 class Profession;
 
@@ -36,18 +37,18 @@ public:
     void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001e630
 
+    void Startup();   // 0x1400a90a0: builds and sorts `professions` (GameUpdateLoop::Startup)
+
 public:
     // B.4 W0-H1: the ctor (inline in the factory 0x14001e5c0) zeroes +0x20..+0x4F
     // with six qword stores; the serializer 0x1400a8e30 writes only the four
     // ExternalPtr<Profession> at +0x30..+0x48 (0x140018020); the array at +0x20 is
-    // built at Startup (ProfessionList_Startup_Impl) and freed by the dtor
-    // 0x14001e760 (H5: kept as raw fields, the tree's dtor runs ~Array on them by
-    // hand). +0x40 / +0x48 are named from PostLifeEvent, which titles a child
-    // with +0x40's name and a student with +0x48's; +0x30 / +0x38 keep typed
-    // guess names.
-    Profession** arrayData;      // +0x20: Collection::Array<Profession*> data (H5 raw; B4 H4: typed, DLG-c)
-    int32_t  arrayCount;         // +0x28: Array count
-    int32_t  arrayCapacity;      // +0x2C: Array capacity
+    // built at Startup (0x1400a90a0) and freed by the dtor 0x14001e760 (MemFree
+    // of +0x20, then +0x20 and +0x28 zeroed: Collection::Array's dtor; Array()
+    // is the ctor's three zero stores). +0x40 / +0x48 are named from
+    // PostLifeEvent, which titles a child with +0x40's name and a student with
+    // +0x48's; +0x30 / +0x38 keep typed guess names.
+    Collection::Array<Profession*> professions;   // +0x20: the player-selectable professions, sorted
     Profession* field_0x30;      // +0x30: ExternalPtr<Profession>
     Profession* field_0x38;      // +0x38: ExternalPtr<Profession>
     Profession* childProfession;   // +0x40: ExternalPtr<Profession>: a child's title (PostLifeEvent)
@@ -55,9 +56,8 @@ public:
 };
 
 static_assert(sizeof(ProfessionList) == 0x50, "ProfessionList is 0x50");
-static_assert(offsetof(ProfessionList, arrayData) == 0x20, "+0x20");
-static_assert(offsetof(ProfessionList, arrayCount) == 0x28, "+0x28");
-static_assert(offsetof(ProfessionList, arrayCapacity) == 0x2C, "+0x2C");
+static_assert(offsetof(ProfessionList, professions) == 0x20, "+0x20");
+static_assert(sizeof(Collection::Array<Profession*>) == 0x10, "Array header is 0x10");
 static_assert(offsetof(ProfessionList, field_0x30) == 0x30, "+0x30");
 static_assert(offsetof(ProfessionList, field_0x38) == 0x38, "+0x38");
 static_assert(offsetof(ProfessionList, childProfession) == 0x40, "+0x40");

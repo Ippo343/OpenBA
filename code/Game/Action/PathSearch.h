@@ -117,6 +117,10 @@ struct PathCellQueue {
     // (specialised below): 0x14001a9b0 (Map's cell queue), 0x14001df40 (the region
     // graph's (x, y) queue). Null when the pop found no node.
     Node* NewNode(const T* value);
+    // 0x14001a5f0 (GAME-b, keystone_a_gamedtor.cpp): every queued node back onto
+    // the pool's free list (walking from the tail), tail / head / count zeroed,
+    // then the pool's chunks freed. The teardown of both instances.
+    void Release();
 };
 
 // The (x, y) pair 0x1400a7ad0 queues: x in the low dword, y in the high dword.
@@ -195,6 +199,7 @@ struct PathOpenSet {
     void           FreeSubtree(PathOpenNode* node);                         // 0x14001d400
     PathOpenNode** Insert(PathOpenNode** out, const PathOpenKey* key);      // 0x14001d450
     void           Delete(PathOpenNode* node);                              // 0x14001d550
+    void           Clear();   // 0x14001ced0 (GAME-b, keystone_a_gamedtor.cpp): the tree back onto the free list, the chunks freed
 };
 static_assert(sizeof(PathOpenSet) == 0x38, "PathOpenSet is 0x38");
 static_assert(offsetof(PathOpenSet, root) == 0x00, "PathOpenSet::root @ +0x00");
@@ -406,6 +411,10 @@ struct RegionGraph {
     // region_graph_build.cpp (B.4 ACT-b): the body of the ctor 0x1400a8670 (map, the
     // block counts; retail's R8 / R9 are not read).
     void     Init(Map* map, uint32_t blocksWide, int blocksHigh);   // 0x1400a8670
+    // 0x1400a8570 (GAME-b, keystone_a_gamedtor.cpp): retail's destructor body,
+    // run by Map's 0x14009ed60 before it MemFrees the graph (the tree never runs
+    // a C++ destructor on it, so the body is a named member).
+    void ReleaseStorage();
 };
 static_assert(sizeof(RegionGraph) == 0x108, "RegionGraph is MemAlloc(0x108)");
 static_assert(offsetof(RegionGraph, search) == 0x00, "RegionGraph::search @ +0x00");
