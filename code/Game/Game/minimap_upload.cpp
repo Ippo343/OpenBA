@@ -54,14 +54,14 @@ constexpr int kImageBufferAlign = 8;
 // Allocate + Create one ImageBuffer, store it in *dst, then upload the raw pixel
 // array into it. Returns the buffer (or null).
 Video::ImageBuffer* CreateAndUploadOne(Video::ImageBuffer** dst, uint32_t* pixels, int width,
-                                       const char* tag, bool trace) {
+                                       [[maybe_unused]] const char* tag, bool trace) {
     void* mem = System::MemoryAllocator::MemAlloc(kImageBufferSize, kImageBufferAlign);
     if (!mem) { if (trace) printf("[Minimap] %s: MemAlloc(0x68) failed\n", tag); return nullptr; }
 
     Video::ImageBuffer* img = ::new (mem) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
     *dst = img;
 
-    bool ok = img->Create(
+    [[maybe_unused]] bool ok = img->Create(
         /*imageType*/0, /*usage*/2, /*format*/5, /*mip*/0u,
         width, width, /*filterMode*/1, 1, 1, 1, nullptr);
 

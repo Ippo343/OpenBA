@@ -821,7 +821,7 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(MenuDialogLoopT* self, float deltaSecon
     // is non-identity (the underlying bug we're fixing).
     static int logCount = 0;
     if (logCount++ < 5) {
-        const Math::Vector3& pos = transform->transform.translation;
+        [[maybe_unused]] const Math::Vector3& pos = transform->transform.translation;
         printf("[MenuDLT::UpdateCamera] frame=%d animYaw=%.3f yaw=%.3f pitch=%.3f "
                "dist=%.3f target=(%.2f,%.2f,%.2f) "
                "camPos=(%.2f,%.2f,%.2f)\n",
@@ -936,7 +936,7 @@ void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self) {
     }
     System::Time timeZero;  // System::Time(0) — 8-byte zero ticks, passed by const ref.
     timeZero._ticks = 0;
-    uint32_t handle = audioScene->PlayEffect(music, static_cast<Audio::Scene::SoundType>(2), timeZero);
+    [[maybe_unused]] uint32_t handle = audioScene->PlayEffect(music, static_cast<Audio::Scene::SoundType>(2), timeZero);
     printf("[MenuDLT::StartMusic] PlayEffect(scene=%p music=%p chan=2) -> handle=%u\n",
            (void*)audioScene, (void*)music, handle);
     fflush(stdout);

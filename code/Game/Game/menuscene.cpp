@@ -272,7 +272,7 @@ bool MenuScene::Serialize(void* stream) {
     // the menu camera is stuck at world origin.
     transform.Serialize(io);
     if (!s_cameraLogged.exchange(true)) {
-        const Math::Transform& xf = transform.transform;
+        [[maybe_unused]] const Math::Transform& xf = transform.transform;
         printf("[MenuScene::Slot5_Serialize] camera Transform "
                "deserialized: pos=(%.2f, %.2f, %.2f) "
                "qrot=(%.3f, %.3f, %.3f, %.3f) +0x1c=(%.2f,%.2f,%.2f) "
@@ -395,7 +395,7 @@ bool MenuScene::Serialize(void* stream) {
     }
 
     if (!s_atmosLogged.exchange(true)) {
-        const Math::Vector4& v4 = field_0x1B4;
+        [[maybe_unused]] const Math::Vector4& v4 = field_0x1B4;
         printf("[MenuScene::Slot5_Serialize] atmosphere deserialized: "
                "amb=0x%08x sun=0x%08x sky=0x%08x "
                "fogStart=%.2f fogEnd=%.2f fogDensity=%.3f "
