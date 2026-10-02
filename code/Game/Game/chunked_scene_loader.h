@@ -27,6 +27,8 @@
 #pragma once
 
 
+class MenuDialogLoopT;
+
 namespace ChunkedSceneLoader {
 
 // Run LoadSceneA1 (small allocs + MenuScene.rsc load + 3 AddGlobalObject
@@ -34,7 +36,7 @@ namespace ChunkedSceneLoader {
 // chunked PhaseB state. After this returns, IsBusy() is true; Tick() drives
 // the rest. Safe to call multiple times — early-exits if already initialized
 // for the same loop.
-void Init(void* menuDltSelf);
+void Init(MenuDialogLoopT* menuDltSelf);
 
 // Record which loop Init should run for, WITHOUT paying its cost yet.
 //
@@ -46,7 +48,7 @@ void Init(void* menuDltSelf);
 //
 // Arm() at boot, then RunArmedInit() from the splash's Update once the splash
 // has actually revealed. Cost is unchanged; it just lands behind a drawn frame.
-void Arm(void* menuDltSelf);
+void Arm(MenuDialogLoopT* menuDltSelf);
 
 // True between Arm() and RunArmedInit(). Callers that gate a loop transition
 // on IsBusy() must ALSO check this — armed-but-not-started is still work

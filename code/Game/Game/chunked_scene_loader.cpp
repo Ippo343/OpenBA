@@ -4,6 +4,7 @@
 #include "chunked_scene_loader.h"
 #include "stall_debug.h"
 #include "Game/menudialogloopt_funcs.h"
+#include "Game/MenuDialogLoopT.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -11,8 +12,8 @@ namespace ChunkedSceneLoader {
 
 namespace {
 
-void* g_menuDltSelf = nullptr;
-void* g_armedSelf = nullptr;
+MenuDialogLoopT* g_menuDltSelf = nullptr;
+MenuDialogLoopT* g_armedSelf = nullptr;
 MenuDialogLoopT_PhaseBState g_state{};
 bool   g_busy = false;
 int    g_tickCount = 0;
@@ -22,7 +23,7 @@ double g_chunkMaxMs = 0.0;
 
 }  // namespace
 
-void Init(void* menuDltSelf) {
+void Init(MenuDialogLoopT* menuDltSelf) {
     if (!menuDltSelf) {
         printf("[ChunkedSceneLoader] Init: null menuDltSelf — skipping\n");
         std::fflush(stdout);
@@ -35,7 +36,7 @@ void Init(void* menuDltSelf) {
     if (g_busy) {
         printf("[ChunkedSceneLoader] Init: WARN: prior load still busy "
                     "(self=%p, new=%p) — overwriting\n",
-                    g_menuDltSelf, menuDltSelf);
+                    (void*)g_menuDltSelf, (void*)menuDltSelf);
     }
 
     g_menuDltSelf  = menuDltSelf;
@@ -46,7 +47,7 @@ void Init(void* menuDltSelf) {
     g_initStartMs  = StallDebug::NowMs();
 
     printf("[ChunkedSceneLoader] Init: self=%p — running LoadSceneA1 (small "
-                "allocs + MenuScene.rsc load)\n", menuDltSelf);
+                "allocs + MenuScene.rsc load)\n", (void*)menuDltSelf);
     std::fflush(stdout);
 
     bool a1Ok;
@@ -63,10 +64,8 @@ void Init(void* menuDltSelf) {
     }
 
     // Re-read menuScene/scene from MenuDLT struct fields (set by LoadSceneA1).
-    void* menuScene = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(menuDltSelf) + 0xb90);
-    void* scene = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(menuDltSelf) + 0xba0);
+    void* menuScene = menuDltSelf->_menuScene;   // +0xb90
+    void* scene = menuDltSelf->_scene;           // +0xba0
 
     MenuDialogLoopT_PhaseB_InitState(&g_state, menuDltSelf, menuScene, scene);
     if (g_state.totalCount <= 0) {
@@ -86,10 +85,10 @@ void Init(void* menuDltSelf) {
     std::fflush(stdout);
 }
 
-void Arm(void* menuDltSelf) {
+void Arm(MenuDialogLoopT* menuDltSelf) {
     g_armedSelf = menuDltSelf;
     printf("[ChunkedSceneLoader] Arm: self=%p — LoadSceneA1 deferred until the "
-                "splash is on screen\n", menuDltSelf);
+                "splash is on screen\n", (void*)menuDltSelf);
     std::fflush(stdout);
 }
 
@@ -99,7 +98,7 @@ bool IsArmed() {
 
 void RunArmedInit() {
     if (!g_armedSelf) return;
-    void* self = g_armedSelf;
+    MenuDialogLoopT* self = g_armedSelf;
     g_armedSelf = nullptr;   // clear FIRST so a failing Init can't re-enter
     Init(self);
 }
