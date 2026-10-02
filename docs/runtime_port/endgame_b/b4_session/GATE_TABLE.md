@@ -195,3 +195,7 @@ Metric at `266bd17f`: **12575** to remove.
 | 37 | W1-GAME-c (first part) | `bd70c96f` | Game c: weather, worldgen.cpp, the water mesh, the erosion and river stages by name; `WorldGeometry::BuildTerrain` 0x1400b0230, `BuildFromHeightfield` 0x1400ac4b0, `BuildWaterMesh` 0x1400ab260, `WeatherSimulation::Update`, `WeatherParticleGeometry::Configure` members; `TerrainHeightfield.h`; the first agent's rewritten water weld restored to the original: 1497 -> 1057 in 29 files (starttown and 13 files still to do) | exit 0 · 918 / 0 · 0 | ok | 5/5 | `sa-stress` exit 0, update 2.07 ms/frame, p95 2.97 (agents building) | 0 |
 
 Metric at `bd70c96f`: **12135** to remove.
+
+| 38 | W1-R-CORE | `06c62180` | runtime core: Array element operations by name through `AssignAs` / `InitAs` / `DestroyAs` (about 35 element types), the picking scene grid on typed arrays, Thread and RtSink typed: 941 -> 329 in 108 files; floor ceilings raised (FLOOR.md) | exit 0 · 918 / 0 · 0 | ok | 5/5 | see row 39 for tools / stress | 0 |
+
+Metric at `06c62180`: **11,523** to remove.
