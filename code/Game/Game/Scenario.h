@@ -28,6 +28,11 @@
 #include <cstdint>
 #include "achievement/AchievementManager.h"
 #include "Object/exe_type.h"
+#include "system/String.h"
+
+class MapGenerator;
+class TerrainGenerator;
+class ClimateGenerator;
 
 class Scenario final : public Achievement::Achievement {
     DECLARE_EXE_TYPE(Scenario)
@@ -43,16 +48,16 @@ public:
     Object::External* Construct() override;                        // [8] 0x14001ea70
 
 public:
-    void*    scenarioName;       // +0x58: System::String (COW refcounted)
+    System::String scenarioName; // +0x58 (ctor 0x1400a9480 stores 0 = String(); dtor 0x14001eb40 runs ~String on +0x88 then +0x58, the compiler's order)
     int32_t  _field60;           // +0x60: int, serialized
     int32_t  _field64;           // +0x64: int, serialized
     bool     _field68;           // +0x68: bool, serialized (default true)
     bool     _field69;           // +0x69: bool, serialized (default false)
     uint8_t  _pad6A[6];          // +0x6A: padding
-    void*    mapGenerator;       // +0x70: ExternalPtr<MapGenerator>, serialized
-    void*    terrainGenerator;   // +0x78: ExternalPtr<TerrainGenerator>, serialized
-    void*    climateGenerator;   // +0x80: ExternalPtr<ClimateGenerator>, serialized
-    void*    _field88;           // +0x88: System::String (the save name)
+    MapGenerator*     mapGenerator;      // +0x70: ExternalPtr<MapGenerator>, serialized
+    TerrainGenerator* terrainGenerator;  // +0x78: ExternalPtr<TerrainGenerator>, serialized
+    ClimateGenerator* climateGenerator;  // +0x80: ExternalPtr<ClimateGenerator>, serialized
+    System::String _field88;     // +0x88: the save name
 };
 
 static_assert(offsetof(Scenario, scenarioName) == 0x58, "Scenario +0x58 name");

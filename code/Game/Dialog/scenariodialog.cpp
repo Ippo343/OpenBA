@@ -62,11 +62,10 @@
 // Assertion: "table->ChildCount() >= scenarioCount"
 // Source: Dialog\ScenarioDialog.cpp, line 0x3B
 
-// LEFT: Scenario's two Strings (+0x58 the name, +0x88 the save name) are
-// `void*` in Scenario.h (GAME-b's header; a String member would add a ctor /
-// dtor that Scenario's own 0x1400a9480 / 0x14001eb40 do not run).
-static const System::String& ScenarioString(void* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);
+// Scenario's two Strings (+0x58 the name, +0x88 the save name): System::String
+// members since B.4 GAME-b (the tree's ctor / dtor already zeroed / released them).
+static const System::String& ScenarioString(const System::String& field) {
+    return field;   // GAME-b: Scenario's two Strings are System::String members
 }
 
 // The element of that name under `root` (the tree does not narrow it)

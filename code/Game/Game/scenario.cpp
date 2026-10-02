@@ -39,16 +39,14 @@ extern "C" void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, vo
 //   *(uint64*)(+0x58)=0, *(uint64*)(+0x60)=0, *(uint16*)(+0x68)=1,
 //   *(uint64*)(+0x70)=0, *(uint64*)(+0x78)=0, *(uint64*)(+0x80)=0, *(uint64*)(+0x88)=0
 Scenario::Scenario()
-    : scenarioName(nullptr), _field60(0), _field64(0), _field68(true), _field69(false),
+    : _field60(0), _field64(0), _field68(true), _field69(false),
       _pad6A{}, mapGenerator(nullptr), terrainGenerator(nullptr), climateGenerator(nullptr),
-      _field88(nullptr) {}
+      _field88() {}
 
-// The dtor inside [0] 0x14001eb40: the two Strings (+0x88 then +0x58); the
-// compiler then runs ~Achievement (0x18009e180, retail's CALL).
-Scenario::~Scenario() {
-    reinterpret_cast<System::String*>(&_field88)->~String();       // B.3.1 bridge
-    reinterpret_cast<System::String*>(&scenarioName)->~String();   // B.3.1 bridge
-}
+// The dtor inside [0] 0x14001eb40: the two Strings (+0x88 then +0x58), the
+// compiler's member destruction; the compiler then runs ~Achievement
+// (0x18009e180, retail's CALL).
+Scenario::~Scenario() {}
 
 // ============================================================
 // Scenario::GetFileVersion (vtable +0x18, 0x1400a9460)
@@ -71,27 +69,24 @@ bool Scenario::Serialize(void* stream) {
     // Achievement::Achievement::Serialize (slot 5, 0x18009e070) — QUALIFIED (B7-3).
     ::Achievement::Achievement::Serialize(stream);
 
-    // Create serializer on stack (24 bytes), version 0
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer, version 0
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
     // Serialize Scenario-specific fields
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_field60, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_field64, nullptr);   // B.3.4 bridge
+    serializer.Serialize(_field60, nullptr);   // B.3.4 bridge
+    serializer.Serialize(_field64, nullptr);   // B.3.4 bridge
 
-    reinterpret_cast<System::String*>(&scenarioName)->Serialize(serializer);      // B.3.1 bridge
+    scenarioName.Serialize(&serializer);
 
-    Reimpl_ExternalPtr_Serialize_MapGenerator(&mapGenerator, serializer);
-    Reimpl_ExternalPtr_Serialize_TerrainGenerator(&terrainGenerator, serializer);
-    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climateGenerator, serializer);
+    Reimpl_ExternalPtr_Serialize_MapGenerator(&mapGenerator, &serializer);
+    Reimpl_ExternalPtr_Serialize_TerrainGenerator(&terrainGenerator, &serializer);
+    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climateGenerator, &serializer);
 
-    reinterpret_cast<System::String*>(&_field88)->Serialize(serializer);          // B.3.1 bridge
+    _field88.Serialize(&serializer);
 
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_field68, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_field69, nullptr);   // B.3.4 bridge
+    serializer.Serialize(_field68, nullptr);   // B.3.4 bridge
+    serializer.Serialize(_field69, nullptr);   // B.3.4 bridge
 
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return true;
 }
 

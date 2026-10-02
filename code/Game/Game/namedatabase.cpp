@@ -54,80 +54,64 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  
 // ============================================================
 // External() and the 0x14015eea0 stamp are the compiler's; the four
 // {data,count,cap} array headers at +0x20..+0x5F are zeroed.
-NameDatabase::NameDatabase() {
-    _array1 = nullptr; _array1Count = 0; _array1Capacity = 0;
-    _array2 = nullptr; _array2Count = 0; _array2Capacity = 0;
-    _array3 = nullptr; _array3Count = 0; _array3Capacity = 0;
-    _array4 = nullptr; _array4Count = 0; _array4Capacity = 0;
-}
+// The four Collection::Array members' ctors are the zero stores.
+NameDatabase::NameDatabase() {}
 
 // ============================================================
 // NameDatabase::Serialize (vtable +0x28) — faithful port of 0x1400a45e0
 // ============================================================
 bool NameDatabase::Serialize(void* stream) {
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
-    // Loading when the serializer's stream mode field (stream+8) == 0.
+    // Loading when the serializer's stream direction is 0 (IO::Serializer::
+    // GetDirection, retail 0x180006210). (The old test of the serializer's
+    // stream pointer for null is gone: it holds the stream reference above.)
     auto isLoading = [&]() -> bool {
-        void* s0 = *(void**)ser;
-        return s0 && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        return static_cast<int>(ser.GetDirection()) == 0;
     };
 
     // --- array1: stride 0xc (3 fields/elem) ---
-    int c1 = _array1Count;
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c1, nullptr);   // B.3.4 bridge
+    int c1 = _array1.GetSize();
+    ser.Serialize(c1, nullptr);
     if (isLoading()) Reimpl_Array_Resize_Stride0C(&_array1, c1);
     if (c1 > 0) {
-        uint8_t* p = reinterpret_cast<uint8_t*>(_array1);   // element0
+        NameDatabaseEntry* p = _array1.GetData();   // element0
         for (int i = 0; i < c1; ++i) {
-            // field0: 4 raw bytes
-            reinterpret_cast<IO::Serializer*>(ser)->SerializeBytes(4, p + 0x0, nullptr);   // B.3.4 bridge
-            // field1: uchar
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned char*>(p + 0x4), nullptr);   // B.3.4 bridge
-            // field2: uint
-            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(p + 0x8), nullptr);   // B.3.4 bridge
-            p += 0xc;
+            ser.SerializeBytes(4, p[i].field_0x00, nullptr);   // field0: 4 raw bytes
+            ser.Serialize(p[i].field_0x04, nullptr);           // field1: uchar
+            ser.Serialize(p[i].field_0x08, nullptr);           // field2: uint
         }
     }
 
     // --- array2: stride 0x2 (uint16) — bulk ---
-    int c2 = _array2Count;
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, nullptr);   // B.3.4 bridge
+    int c2 = _array2.GetSize();
+    ser.Serialize(c2, nullptr);
     if (isLoading()) Reimpl_Array_Resize_Stride02(&_array2, c2);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, reinterpret_cast<unsigned short*>(_array2), nullptr);   // B.3.4 bridge
+    ser.Serialize(c2, _array2.GetData(), nullptr);
 
     // --- array3: stride 0x1 (byte buffer) — bulk ---
-    int c3 = _array3Count;
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, nullptr);   // B.3.4 bridge
+    int c3 = _array3.GetSize();
+    ser.Serialize(c3, nullptr);
     if (isLoading()) Reimpl_Array_Resize_Byte(&_array3, c3);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, reinterpret_cast<unsigned char*>(_array3), nullptr);   // B.3.4 bridge
+    ser.Serialize(c3, _array3.GetData(), nullptr);
 
     // --- array4: stride 0x4 (int) — bulk ---
-    int c4 = _array4Count;
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, nullptr);   // B.3.4 bridge
+    int c4 = _array4.GetSize();
+    ser.Serialize(c4, nullptr);
     if (isLoading()) Reimpl_Array_Resize_Stride04(&_array4, c4);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, reinterpret_cast<int*>(_array4), nullptr);   // B.3.4 bridge
+    ser.Serialize(c4, _array4.GetData(), nullptr);
 
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
     return true;
 }
 
 // ============================================================
 // NameDatabase::~NameDatabase / DeletingDtor (vtable +0x00)
 // ============================================================
-// Mirrors 0x14001c790 -> FUN_1400a4790.
-// ENDGAME B.3.2 step 2: four trivial-element `Collection::Array::~Array`s,
-// back to front (+0x50 int32, +0x40 byte, +0x30, +0x20). Each was
-// MemFree(data); data = 0; one qword over size+capacity = 0 —
-// `rtcoll::ArrayDtorImpl` exactly, with no element step. The header alias is
-// used for all four. External::~External is the compiler's chain.
-NameDatabase::~NameDatabase() {
-    reinterpret_cast<rtcoll::ArrayHdr*>(&_array4)->~Array();   // B.3.2 bridge
-    reinterpret_cast<rtcoll::ArrayHdr*>(&_array3)->~Array();
-    reinterpret_cast<rtcoll::ArrayHdr*>(&_array2)->~Array();
-    reinterpret_cast<rtcoll::ArrayHdr*>(&_array1)->~Array();
-}
+// Mirrors 0x14001c790 -> FUN_1400a4790: four trivial-element
+// `Collection::Array::~Array`s, back to front (+0x50 int32, +0x40 byte, +0x30,
+// +0x20) — the compiler's member destruction. External::~External is the
+// compiler's chain.
+NameDatabase::~NameDatabase() {}
 
 // NameDatabase::Reconstruct (vtable +0x30, 0x14001c730): dtor(self,0) then re-init.
 Object::External* NameDatabase::Reconstruct() {

@@ -20,6 +20,24 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"
+
+// One track (stride 0x18). Serialize 0x1400a3e90 writes +0x08, +0x0c, +0x10,
+// +0x14, then the +0x00 reference (0x1400019a0, ExternalPtr serialize); the
+// resize 0x14001c3c0 seeds a new one with {null, 0.0f, 1.0f, 0, 11}. No field
+// has a retail name.
+struct MusicListTrack {
+    Object::External* sound;      // +0x00 ExternalPtr: the track's audio resource
+    float             field_0x08; // +0x08
+    float             field_0x0C; // +0x0C (new track: 1.0f)
+    int32_t           field_0x10; // +0x10
+    int32_t           field_0x14; // +0x14 (new track: 11)
+};
+static_assert(sizeof(MusicListTrack) == 0x18, "stride 0x18 (0x14001c3c0)");
+static_assert(offsetof(MusicListTrack, field_0x08) == 0x08, "+0x08");
+static_assert(offsetof(MusicListTrack, field_0x0C) == 0x0C, "+0x0C");
+static_assert(offsetof(MusicListTrack, field_0x10) == 0x10, "+0x10");
+static_assert(offsetof(MusicListTrack, field_0x14) == 0x14, "+0x14");
 
 class MusicList final : public Object::External {
     DECLARE_EXE_TYPE(MusicList)
@@ -36,15 +54,10 @@ public:
     virtual Object::External* Construct();                        // [8] 0x14001c2c0
 
 public:
-    // Track entries: a {data,count,cap} array of 0x18-byte entries
-    //   +0x00 ExternalPtr (the track's audio resource)
-    //   +0x08 float   +0x0c float   +0x10 int   +0x14 int
-    void*    _entries;           // +0x20: data
-    int32_t  _entryCount;        // +0x28: count
-    int32_t  _entryCapacity;     // +0x2C: capacity
+    // The tracks (B.4 GAME-b: a Collection::Array; the factory's ctor zeroed its
+    // header and the dtor 0x14001c360 is its trivial-element ~Array).
+    Collection::Array<MusicListTrack> _entries;   // +0x20
 };
 
 static_assert(sizeof(MusicList) == 0x30, "MusicList is 0x30");
 static_assert(offsetof(MusicList, _entries) == 0x20, "+0x20");
-static_assert(offsetof(MusicList, _entryCount) == 0x28, "+0x28");
-static_assert(offsetof(MusicList, _entryCapacity) == 0x2C, "+0x2C");
