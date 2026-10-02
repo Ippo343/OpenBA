@@ -123,7 +123,10 @@ extern "C" void Game_Dtor_9ed60(Map* map);  // 0x14009ed60  // B4 FORWARD: 1 out
 extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inXY2, char flag, void* outTri);  // 0x14009f3e0
 
 // ---- minimap_paint.cpp
-extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom, void* sunLight);  // 0x1400a5140
+class WorldGeometry;
+namespace Video { class Context; }
+namespace Graphics { class SunLight; }
+extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context, WorldGeometry* worldGeom, Graphics::SunLight* sunLight);  // 0x1400a5140  // B4 FORWARD: 1 outside caller(s)
 
 // ---- professionlist.cpp
 class ProfessionList;

@@ -102,7 +102,6 @@ extern "C" int  EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t tim
 extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFlag);
 // Minimap terrain painter (code/Game/Game/minimap_paint.cpp) — standalone fallback for
 // the exe FUN_1400a5140 (ImageCapture::DrawCheck), wired into fn_ImageCapture_DrawCheck.
-extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom, void* sunLight);
 // In-app RenderDoc capture driver — ticked once per in-game rendered frame so a
 // delayed capture armed by OptionsDialog::ApplyVideoSettings (after an MSAA/res
 // apply) actually fires. No-op unless the exe was launched via RenderDoc's UI.
