@@ -72,35 +72,34 @@ std::atomic<bool> s_itemDrawLogged{false};
 // ============================================================
 // The nine _arrays headers by element type
 // ============================================================
-// LEFT (owner GAME-c): WorldGeometry::_arrays is nine untyped {data, size|cap}
-// headers; each accessor's cast is the one place a header is read as its
-// element type (WorldGeometryElements.h). Every caller reads them by name.
+// B.4 GAME-c: the nine headers are named, typed fields of WorldGeometry
+// (element types: WorldGeometryElements.h); the accessors return them.
 RawArray<TerrainVertex>& WorldGeometry::ContourVertices() {
-    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);
+    return contourVertices;
 }
 RawArray<uint16_t>& WorldGeometry::ContourIndices() {
-    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);
+    return contourIndices;
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesA() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);
+    return contourRangesA;
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesB() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);
+    return contourRangesB;
 }
 RawArray<RawArray<Math::Vector2>>& WorldGeometry::ContourOutlines() {
-    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);
+    return contourOutlines;
 }
 RawArray<GeometryBatch>& WorldGeometry::Decals() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);
+    return decals;
 }
 RawArray<GeometryBatch>& WorldGeometry::RoadBatches() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);
+    return roadBatches;
 }
 RawArray<Object::External*>& WorldGeometry::BatchMaterials() {
-    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);
+    return batchMaterials;
 }
 RawArray<int32_t>& WorldGeometry::BatchCounters() {
-    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);
+    return batchCounters;
 }
 
 // ============================================================
