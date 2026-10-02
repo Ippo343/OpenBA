@@ -69,7 +69,7 @@ bool EnsureFadeSprite(void* userInterface) {
     ui->SetFullscreenFadeSprite(&spriteBlob);
 
     void* installedSheet = ui->_fadeSpriteSheet;
-    int32_t installedIdx = ui->_fadeSpriteIndex;
+    [[maybe_unused]] int32_t installedIdx = ui->_fadeSpriteIndex;   // log-only (the perf build strips the printf)
     // (the log's second source value is the sprite's second qword: index | pad << 32)
     printf("[UIFade::EnsureFadeSprite] ui=%p sheet=%p idx=%d "
            "(KeyMap+0x%02x src=%p,%lld)\n",
@@ -109,12 +109,12 @@ void TriggerFadeIn(void* userInterface, uint32_t color) {
            userInterface, color, GetCurrentAlpha(userInterface), GetCurrentRate(userInterface));
 }
 
-void LogState(const char* tag, const void* userInterface) {
+void LogState([[maybe_unused]] const char* tag, const void* userInterface) {
     if (!userInterface) return;
-    float alpha = GetCurrentAlpha(userInterface);
-    float rate  = GetCurrentRate(userInterface);
-    void* sheet = UiOf(userInterface)->_fadeSpriteSheet;
-    int32_t idx = UiOf(userInterface)->_fadeSpriteIndex;
+    [[maybe_unused]] float alpha = GetCurrentAlpha(userInterface);
+    [[maybe_unused]] float rate  = GetCurrentRate(userInterface);
+    [[maybe_unused]] void* sheet = UiOf(userInterface)->_fadeSpriteSheet;
+    [[maybe_unused]] int32_t idx = UiOf(userInterface)->_fadeSpriteIndex;
     printf("[UIFade::%s] ui=%p alpha=%.3f rate=%.3f sheet=%p idx=%d\n",
            (tag ? tag : ""), userInterface, alpha, rate, sheet, idx);
 }
