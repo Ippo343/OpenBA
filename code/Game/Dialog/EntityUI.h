@@ -47,6 +47,10 @@ public:
     // is a behaviour decision (B4 DLG-a hand-in).
     void UpdateInput();
 
+    // B4 PLAYER (bodies in Player/tool_base_trade.cpp): the pin check box.
+    void SyncPin();     // 0x1400666b0 copy the box into the ToolUI, add / remove the entity in the tool manager's +0x60 set
+    void SetPinned();   // 0x140066800 check the box, then SyncPin
+
     // ---- fields (B.4 W0-H2; retail create 0x140011270 zeroes all three,
     // OnCreated 0x1400670d0 fills them). Retail's types are InternalPtr<T>;
     // declared as plain T* (layout-identical, trivial; B.4 H5).

@@ -34,257 +34,200 @@
 #include "Game/Map.h"
 #include "Game/WorldGeometry.h"
 
-// Shared AVL rotations from tool_base_trade.cpp (0x140015000 / 0x140014ed0, registered).
-extern "C" int64_t PlayerTrade_Rot_15000(int64_t* root, int64_t node);
-extern "C" int64_t PlayerTrade_Rot_14ed0(int64_t* root, int64_t node);
-
 // The radius tessellation 0x1400ace40 (TradeWork_impl_ace40, tool_base_highlight_tess.cpp)
 // and the tile-entry array grow 0x14001fa80 (Pf_VectorResize60_fa80, Action/exe_bodies.h)
 // are called by name; so is the static MemAlloc/MemFree pair (slots 0x140152b60 /
-// 0x140152b68) -> System::MemoryAllocator.
-namespace {
-
-// AVL node field accessors (offsets verified against decompile/disasm).
-inline int64_t&  NodeParent(int64_t n) { return *reinterpret_cast<int64_t*>(n + 0x18); }
-inline int64_t&  NodeLeft(int64_t n)   { return *reinterpret_cast<int64_t*>(n + 0x20); }
-inline int64_t&  NodeRight(int64_t n)  { return *reinterpret_cast<int64_t*>(n + 0x28); }
-
-
-} // namespace
+// 0x140152b68) -> System::MemoryAllocator. The vertex-dedup set's nodes are
+// DecalVertexNode (Player/exe_bodies.h); its rotations / retrace are the shared
+// Avl38 templates (0x140015000 / 0x140014ed0 / 0x140014b40).
 
 // ============================================================
 // 0x140014b00 — recursive BST free: free left (+0x20), right (+0x28), then self.
 // 1:1 port of FUN_140014b00.
 // ============================================================
-extern "C" void TradeWork_helper_14b00(int64_t /*ctx*/ param_1, void* node) {
+template <class Node>
+void Avl38FreeSubtree(const void* context, Node* node) {
     if (node != nullptr) {
-        TradeWork_helper_14b00(param_1, *reinterpret_cast<void**>((int64_t)node + 0x20));
-        TradeWork_helper_14b00(param_1, *reinterpret_cast<void**>((int64_t)node + 0x28));
+        Avl38FreeSubtree(context, node->left);
+        Avl38FreeSubtree(context, node->right);
         System::MemoryAllocator::MemFree(node);
     }
 }
+template void Avl38FreeSubtree<DecalVertexNode>(const void*, DecalVertexNode*);
 
-// ============================================================
-// 0x14001f850 — AVL node allocator. MemAlloc(0x38), copy the 6-int (0x18-byte) key
-// from param_2[0..5], set parent (+0x18)=param_3, null children/balance. 1:1 port.
-// Returns the new node (or null on OOM).
-// ============================================================
-extern "C" int64_t TradeWork_impl_1f850(int64_t /*ctx*/ param_1, const void* keySrc,
-                                        int64_t parent) {
-    (void)param_1;
-    uint32_t* p = reinterpret_cast<uint32_t*>(System::MemoryAllocator::MemAlloc(0x38, 8));
-    if (p == nullptr) return 0;
-    const uint32_t* src = reinterpret_cast<const uint32_t*>(keySrc);
-    p[0] = src[0];           // +0x00
-    p[1] = src[1];           // +0x04
-    p[2] = src[2];           // +0x08
-    p[3] = src[3];           // +0x0c
-    p[4] = src[4];           // +0x10
-    p[5] = src[5];           // +0x14
-    *reinterpret_cast<int64_t*>(p + 6)  = parent;  // +0x18 parent
-    *reinterpret_cast<int64_t*>(p + 8)  = 0;       // +0x20 left
-    *reinterpret_cast<int64_t*>(p + 10) = 0;       // +0x28 right
-    p[12] = 0;                                      // +0x30 balance/height
-    return reinterpret_cast<int64_t>(p);
+// B4 FORWARD: outside callers (Game/gameupdateloop_teardown.cpp, Work/marketwork.cpp,
+// Work/tradework.cpp) hold their sets as integers / void*.
+extern "C" void TradeWork_helper_14b00(int64_t param_1, void* node) {
+    Avl38FreeSubtree(reinterpret_cast<const void*>(param_1), reinterpret_cast<Avl38Node*>(node));   // LEFT: B4 FORWARD
 }
 
+namespace {
+
 // ============================================================
-// 0x140014b40 — AVL retrace + rebalance, walking up via parent (+0x18) from the start
-// node (*param_2). Recomputes height (+0x32) / balance (+0x30) and rotates via the
-// shared 0x140015000 (pivot-left) / 0x140014ed0 (pivot-right). 1:1 port of
-// TradeWork_impl_4b40.
+// 0x14001f850 — AVL node allocator. MemAlloc(0x38), copy the six dwords of the
+// key, set parent (+0x18), null children / balance / height. 1:1 port (RCX, the
+// caller's loop counter, is never read). Returns the new node (or null on OOM).
 // ============================================================
+DecalVertexNode* DecalVertexNodeAlloc(const DecalVertexKey* key, DecalVertexNode* parent) {
+    DecalVertexNode* p = static_cast<DecalVertexNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+    if (p == nullptr) return nullptr;
+    p->key     = *key;        // +0x00..+0x17 (six dword moves in the tree)
+    p->parent  = parent;      // +0x18
+    p->left    = nullptr;     // +0x20
+    p->right   = nullptr;     // +0x28
+    p->balance = 0;           // +0x30 balance / height (one dword store in the tree)
+    p->height  = 0;
+    return p;
+}
+
+}  // namespace
+
+// B4 FORWARD: outside callers (Component/citizenai_work_scheduler.cpp,
+// Component/keystone_a_restree.cpp, Dialog/toolbar_utility_helpers.cpp,
+// Game/citizenlist_serialize.cpp, Game/goals_serialize.cpp, Work/marketwork.cpp)
+// hold their sets as integers. 0x140014b40 is 0x140025920's algorithm.
 extern "C" void TradeWork_impl_4b40(int64_t* param_1, int64_t* param_2) {
-    int64_t lVar1 = *param_2;
-    while (lVar1 != 0) {
-        int64_t node = *param_2;
-        lVar1 = *reinterpret_cast<int64_t*>(node + 0x18);          // parent (next)
-
-        int64_t left  = *reinterpret_cast<int64_t*>(node + 0x20);
-        int64_t right = *reinterpret_cast<int64_t*>(node + 0x28);
-        int16_t sVar6 = (left  == 0) ? 0 : (int16_t)(*reinterpret_cast<int16_t*>(left  + 0x32) + 1);
-        int16_t sVar4 = (right == 0) ? 0 : (int16_t)(*reinterpret_cast<int16_t*>(right + 0x32) + 1);
-        int16_t sVar3 = (sVar4 < sVar6) ? sVar6 : sVar4;
-        *reinterpret_cast<int16_t*>(node + 0x32) = sVar3;
-        *reinterpret_cast<int16_t*>(node + 0x30) = (int16_t)(sVar4 - sVar6);
-
-        node = *param_2;
-        int16_t bal = *reinterpret_cast<int16_t*>(node + 0x30);
-        int64_t r2 = *reinterpret_cast<int64_t*>(node + 0x28);
-        if (1 < bal && r2 != 0) {
-            int16_t rbal = *reinterpret_cast<int16_t*>(r2 + 0x30);
-            if (rbal < 1 && rbal < 0) {           // right child left-heavy
-                PlayerTrade_Rot_15000(param_1, r2);
-                node = *param_2;
-            }
-            PlayerTrade_Rot_14ed0(param_1, node);
-        }
-
-        node = *param_2;
-        bal = *reinterpret_cast<int16_t*>(node + 0x30);
-        int64_t l2 = *reinterpret_cast<int64_t*>(node + 0x20);
-        if (bal < -1 && l2 != 0) {
-            int16_t lbal = *reinterpret_cast<int16_t*>(l2 + 0x30);
-            if (-1 < lbal && 0 < lbal) {          // left child right-heavy
-                PlayerTrade_Rot_14ed0(param_1, l2);
-                node = *param_2;
-            }
-            PlayerTrade_Rot_15000(param_1, node);
-        }
-
-        *param_2 = lVar1;                         // ascend to parent
-    }
+    Avl38Retrace(reinterpret_cast<Avl38Node**>(param_1), reinterpret_cast<Avl38Node**>(param_2));   // LEFT: B4 FORWARD
 }
 
 // ============================================================
-// 0x14001f6b0 — AVL insert keyed by the 6-int tile descriptor. Returns (in *param_2)
-// the matching/created node. 1:1 port of FUN_14001f6b0 (param_1 = {root, count} holder,
-// param_3 = key src). param_1[0] = root, param_1[1] (low 32) = count.
+// 0x14001f6b0 — AVL insert keyed by the vertex record. Returns (in *out) the
+// matching / created node. 1:1 port of FUN_14001f6b0 (set = {root, count},
+// key = the 0x18-byte element).
 // ============================================================
-extern "C" int64_t* TradeWork_impl_1f6b0(int64_t* param_1, int64_t* param_2, uint32_t* param_3) {
-    int64_t node = *param_1;
-    if (node == 0) {
-        int64_t n = TradeWork_impl_1f850(reinterpret_cast<int64_t>(param_1), param_3, 0);
-        *reinterpret_cast<int*>(param_1 + 1) = (int)param_1[1] + 1;
-        *param_1 = n;
-        *param_2 = n;
-        return param_2;
+DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalVertexNode** out,
+                                       const DecalVertexKey* key) {
+    DecalVertexNode* node = set->root;
+    if (node == nullptr) {
+        DecalVertexNode* n = DecalVertexNodeAlloc(key, nullptr);
+        set->count = set->count + 1;
+        set->root = n;
+        *out = n;
+        return out;
     }
     for (;;) {                                    // LAB_14001f710
-        int64_t cur   = node;
-        int64_t lVar11 = cur - reinterpret_cast<int64_t>(param_3);
-        // orig (short*)(param_3 + 2) where param_3 is undefined4* -> +8 bytes
-        int16_t* p = reinterpret_cast<int16_t*>(param_3 + 2);
-        int  iVar10 = 0;
-        int64_t lVar8 = 0;
+        DecalVertexNode* cur = node;
+        int  i = 0;
         bool descend = false;     // took a child pointer this pass
         bool inserted = false;
-        int64_t newNode = 0;
-        int64_t lVar5 = cur;
+        DecalVertexNode* newNode = nullptr;
         // ---- first comparison loop: descend-left / break(equal-or-greater) ----
         for (;;) {
-            int16_t sVar3 = *reinterpret_cast<int16_t*>(lVar11 - 8 + reinterpret_cast<int64_t>(p));
-            if (p[-4] < sVar3) {                  // LAB_14001f7dd: go right or insert-right
-                int64_t r = *reinterpret_cast<int64_t*>(cur + 0x20);
-                if (r != 0) { node = r; descend = true; break; }
-                newNode = TradeWork_impl_1f850(lVar8, param_3, cur);
-                *reinterpret_cast<int64_t*>(lVar5 + 0x20) = newNode;
+            int16_t sVar3 = cur->key.column0[i];
+            if (key->column0[i] < sVar3) {        // LAB_14001f7dd: go left or insert-left
+                DecalVertexNode* l = cur->left;
+                if (l != nullptr) { node = l; descend = true; break; }
+                newNode = DecalVertexNodeAlloc(key, cur);
+                cur->left = newNode;
                 inserted = true; break;           // LAB_14001f813
             }
-            if (sVar3 < p[-4]) break;
-            if (*p < *reinterpret_cast<int16_t*>(lVar11 + reinterpret_cast<int64_t>(p))) {
-                int64_t r = *reinterpret_cast<int64_t*>(cur + 0x20);
-                if (r != 0) { node = r; descend = true; break; }
-                newNode = TradeWork_impl_1f850(lVar8, param_3, cur);
-                *reinterpret_cast<int64_t*>(lVar5 + 0x20) = newNode;
+            if (sVar3 < key->column0[i]) break;
+            if (key->column8[i] < cur->key.column8[i]) {
+                DecalVertexNode* l = cur->left;
+                if (l != nullptr) { node = l; descend = true; break; }
+                newNode = DecalVertexNodeAlloc(key, cur);
+                cur->left = newNode;
                 inserted = true; break;
             }
-            if (*reinterpret_cast<int16_t*>(lVar11 + reinterpret_cast<int64_t>(p)) < *p) break;
+            if (cur->key.column8[i] < key->column8[i]) break;
             {
-                uint8_t b1 = *reinterpret_cast<uint8_t*>(lVar8 + 0x10 + reinterpret_cast<int64_t>(param_3));
-                uint8_t b2 = *reinterpret_cast<uint8_t*>(lVar8 + 0x10 + cur);
+                uint8_t b1 = key->column10[i];
+                uint8_t b2 = cur->key.column10[i];
                 if (b1 < b2) {
-                    int64_t r = *reinterpret_cast<int64_t*>(cur + 0x20);
-                    if (r != 0) { node = r; descend = true; break; }
-                    newNode = TradeWork_impl_1f850(lVar8, param_3, cur);
-                    *reinterpret_cast<int64_t*>(lVar5 + 0x20) = newNode;
+                    DecalVertexNode* l = cur->left;
+                    if (l != nullptr) { node = l; descend = true; break; }
+                    newNode = DecalVertexNodeAlloc(key, cur);
+                    cur->left = newNode;
                     inserted = true; break;
                 }
                 if (b1 != b2) break;
             }
-            iVar10++; lVar8++; p++;
-            if (iVar10 >= 4) break;
+            i++;
+            if (i >= 4) break;
         }
         if (descend) continue;                    // goto LAB_14001f710
         if (inserted) {
-            TradeWork_impl_4b40(param_1, &cur);
-            *reinterpret_cast<int*>(param_1 + 1) = (int)param_1[1] + 1;
-            *param_2 = newNode;
-            return param_2;
+            Avl38Retrace(&set->root, &cur);
+            set->count = set->count + 1;
+            *out = newNode;
+            return out;
         }
         // ---- second comparison loop: exact-match(return) / descend-right / insert-right ----
-        iVar10 = 0;
-        p = reinterpret_cast<int16_t*>(param_3 + 2);   // orig (short*)(param_3 + 2)
-        lVar8 = 0;
+        i = 0;
         bool found = false;
         for (;;) {
-            int16_t sVar3 = *reinterpret_cast<int16_t*>(reinterpret_cast<int64_t>(p) + lVar11 - 8);
-            if (sVar3 < p[-4]) break;
-            if (p[-4] < sVar3) { found = true; break; }   // LAB_14001f7c2
-            int16_t nodeS = *reinterpret_cast<int16_t*>(reinterpret_cast<int64_t>(p) + lVar11);
-            if (nodeS < *p) break;
-            if (*p < nodeS) { found = true; break; }
-            uint8_t b1 = *reinterpret_cast<uint8_t*>(lVar8 + 0x10 + cur);
-            uint8_t b2 = *reinterpret_cast<uint8_t*>(lVar8 + 0x10 + reinterpret_cast<int64_t>(param_3));
+            int16_t sVar3 = cur->key.column0[i];
+            if (sVar3 < key->column0[i]) break;
+            if (key->column0[i] < sVar3) { found = true; break; }   // LAB_14001f7c2
+            int16_t nodeS = cur->key.column8[i];
+            if (nodeS < key->column8[i]) break;
+            if (key->column8[i] < nodeS) { found = true; break; }
+            uint8_t b1 = cur->key.column10[i];
+            uint8_t b2 = key->column10[i];
             if (b1 < b2) break;
             if (b1 != b2) { found = true; break; }
-            iVar10++; lVar8++; p++;
-            if (3 < iVar10) { found = true; break; }
+            i++;
+            if (3 < i) { found = true; break; }
         }
-        if (found) { *param_2 = cur; return param_2; }
+        if (found) { *out = cur; return out; }
         // descend right, or insert as right child
-        int64_t r = *reinterpret_cast<int64_t*>(cur + 0x28);
-        if (r == 0) {
-            newNode = TradeWork_impl_1f850(0, param_3, cur);
-            *reinterpret_cast<int64_t*>(lVar5 + 0x28) = newNode;
-            TradeWork_impl_4b40(param_1, &cur);
-            *reinterpret_cast<int*>(param_1 + 1) = (int)param_1[1] + 1;
-            *param_2 = newNode;
-            return param_2;
+        DecalVertexNode* r = cur->right;
+        if (r == nullptr) {
+            newNode = DecalVertexNodeAlloc(key, cur);
+            cur->right = newNode;
+            Avl38Retrace(&set->root, &cur);
+            set->count = set->count + 1;
+            *out = newNode;
+            return out;
         }
         node = r;                                 // continue outer loop with right child
     }
 }
 
 // ============================================================
-// 0x14001fc00 — AVL find keyed by the 6-int tile descriptor. Returns the matching node
-// or 0. 1:1 port of FUN_14001fc00 (param_1 = root holder, param_2 = key src).
+// 0x14001fc00 — AVL find keyed by the vertex record. Returns the matching node
+// or null. 1:1 port of FUN_14001fc00.
 // ============================================================
-extern "C" int64_t TradeWork_impl_1fc00(int64_t* param_1, int64_t param_2) {
-    int64_t node = *param_1;
+DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const DecalVertexKey* key) {
+    DecalVertexNode* node = set->root;
     for (;;) {
-        if (node == 0) return 0;
-        int  iVar7 = 0;
-        int64_t lVar6 = 0;
-        int64_t lVar8 = node - param_2;
-        int16_t* p = reinterpret_cast<int16_t*>(param_2 + 8);
+        if (node == nullptr) return nullptr;
+        int  i = 0;
         bool descendedLeft = false;
         for (;;) {                                 // first loop
-            int16_t sVar3 = *reinterpret_cast<int16_t*>(lVar8 - 8 + reinterpret_cast<int64_t>(p));
-            if (p[-4] < sVar3) { node = *reinterpret_cast<int64_t*>(node + 0x20); descendedLeft = true; break; }
-            if (sVar3 < p[-4]) break;
-            if (*p < *reinterpret_cast<int16_t*>(lVar8 + reinterpret_cast<int64_t>(p))) {
-                node = *reinterpret_cast<int64_t*>(node + 0x20); descendedLeft = true; break;
+            int16_t sVar3 = node->key.column0[i];
+            if (key->column0[i] < sVar3) { node = node->left; descendedLeft = true; break; }
+            if (sVar3 < key->column0[i]) break;
+            if (key->column8[i] < node->key.column8[i]) {
+                node = node->left; descendedLeft = true; break;
             }
-            if (*reinterpret_cast<int16_t*>(lVar8 + reinterpret_cast<int64_t>(p)) < *p) break;
+            if (node->key.column8[i] < key->column8[i]) break;
             {
-                uint8_t b1 = *reinterpret_cast<uint8_t*>(lVar6 + 0x10 + param_2);
-                uint8_t b2 = *reinterpret_cast<uint8_t*>(lVar6 + 0x10 + node);
-                if (b1 < b2) { node = *reinterpret_cast<int64_t*>(node + 0x20); descendedLeft = true; break; }
+                uint8_t b1 = key->column10[i];
+                uint8_t b2 = node->key.column10[i];
+                if (b1 < b2) { node = node->left; descendedLeft = true; break; }
                 if (b1 != b2) break;
             }
-            iVar7++; lVar6++; p++;
-            if (iVar7 >= 4) break;
+            i++;
+            if (i >= 4) break;
         }
         if (descendedLeft) continue;
-        iVar7 = 0;
-        p = reinterpret_cast<int16_t*>(param_2 + 8);
-        lVar6 = 0;
+        i = 0;
         for (;;) {                                 // second loop
-            int16_t sVar3 = *reinterpret_cast<int16_t*>(reinterpret_cast<int64_t>(p) + lVar8 - 8);
-            if (sVar3 < p[-4]) break;
-            if (p[-4] < sVar3) return node;
-            int16_t nodeS = *reinterpret_cast<int16_t*>(reinterpret_cast<int64_t>(p) + lVar8);
-            if (nodeS < *p) break;
-            if (*p < nodeS) return node;
-            uint8_t b1 = *reinterpret_cast<uint8_t*>(lVar6 + 0x10 + node);
-            uint8_t b2 = *reinterpret_cast<uint8_t*>(lVar6 + 0x10 + param_2);
+            int16_t sVar3 = node->key.column0[i];
+            if (sVar3 < key->column0[i]) break;
+            if (key->column0[i] < sVar3) return node;
+            int16_t nodeS = node->key.column8[i];
+            if (nodeS < key->column8[i]) break;
+            if (key->column8[i] < nodeS) return node;
+            uint8_t b1 = node->key.column10[i];
+            uint8_t b2 = key->column10[i];
             if (b1 < b2) break;
             if (b1 != b2) return node;
-            iVar7++; lVar6++; p++;
-            if (3 < iVar7) return node;
+            i++;
+            if (3 < i) return node;
         }
-        node = *reinterpret_cast<int64_t*>(node + 0x28);   // descend right
+        node = node->right;   // descend right
     }
 }
 
