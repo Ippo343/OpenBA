@@ -89,6 +89,7 @@
 #include "video/Buffers.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/WorldGeometry.h"
+#include "Game/WorldGeometryElements.h"
 #include "Game/TerrainHeightfield.h"
 #include <vector>
 #include <cstdint>
@@ -564,9 +565,9 @@ void fb00_BuildBody_Faithful(const TerrainHeightfield* hf, int bodyIdx, RawArray
 // b260 PHASE 1 — contour water bodies.
 // ============================================================
 void WorldGeometry::BuildWaterBodies(const TerrainHeightfield* hf) {
-    RawArray<GeometryDrawRange>* rangeA = &contourRangesA;
-    RawArray<TerrainVertex>*    vtxAcc = &contourVertices;   // 16-byte GPU verts
-    RawArray<uint16_t>*       idxAcc = &contourIndices;    // uint16 indices
+    RawArray<GeometryDrawRange>* rangeA = &ContourRangesA();
+    RawArray<TerrainVertex>*    vtxAcc = &ContourVertices();   // 16-byte GPU verts
+    RawArray<uint16_t>*       idxAcc = &ContourIndices();    // uint16 indices
 
     int bodyCount = hf->paths._size;
     RangeResize(rangeA, bodyCount);       // sub_efd0; sets rangeA.count (geom+0x1c8)
@@ -627,9 +628,9 @@ void WorldGeometry::BuildWaterBodies(const TerrainHeightfield* hf) {
 // planar UV (= pos.xy * 48) and an AO byte (= weight * 255). Welded via f3e0.
 // ============================================================
 void WorldGeometry::BuildWaterShores(const TerrainHeightfield* hf) {
-    RawArray<GeometryDrawRange>* rangeB = &contourRangesB;
-    RawArray<TerrainVertex>*    vtxAcc = &contourVertices;
-    RawArray<uint16_t>*       idxAcc = &contourIndices;
+    RawArray<GeometryDrawRange>* rangeB = &ContourRangesB();
+    RawArray<TerrainVertex>*    vtxAcc = &ContourVertices();
+    RawArray<uint16_t>*       idxAcc = &ContourIndices();
 
     int featureCount = hf->waterFeatures._size;
     RangeResize(rangeB, featureCount);
@@ -762,13 +763,13 @@ void WorldGeometry::BuildWaterMesh(TerrainHeightfield* hf) {
     BuildWaterShores(hf);   // shore rings around the hf->waterFeatures
 
     // Finalize the GPU buffers (b260 tail). IndexBuffer first, then VertexBuffer.
-    _waterIndexBuffer.Create(contourIndices.size * 2, false, contourIndices.data);
-    _waterVertexBuffer.Create(contourVertices.size << 4, false, contourVertices.data);
+    _waterIndexBuffer.Create(ContourIndices().size * 2, false, ContourIndices().data);
+    _waterVertexBuffer.Create(ContourVertices().size << 4, false, ContourVertices().data);
 
     fprintf(stderr, "[water_contour] built: bodies(+0x1c8)=%d featRanges(+0x1d8)=%d "
             "verts(+0x1a8)=%d idx(+0x1b8)=%d VB=%p IB=%p\n",
-            contourRangesA.size, contourRangesB.size,
-            contourVertices.size, contourIndices.size,
+            ContourRangesA().size, ContourRangesB().size,
+            ContourVertices().size, ContourIndices().size,
             static_cast<void*>(_waterVertexBuffer.platformData),
             static_cast<void*>(_waterIndexBuffer.platformData));
     fflush(stderr);

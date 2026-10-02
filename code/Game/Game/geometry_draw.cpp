@@ -72,34 +72,35 @@ std::atomic<bool> s_itemDrawLogged{false};
 // ============================================================
 // The nine _arrays headers by element type
 // ============================================================
-// B.4 GAME-c: the nine headers are named, typed fields of WorldGeometry
-// (element types: WorldGeometryElements.h); the accessors return them.
+// LEFT (owner GAME-c): WorldGeometry::_arrays is nine untyped {data, size|cap}
+// headers; each accessor's cast is the one place a header is read as its
+// element type (WorldGeometryElements.h). Every caller reads them by name.
 RawArray<TerrainVertex>& WorldGeometry::ContourVertices() {
-    return contourVertices;
+    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);
 }
 RawArray<uint16_t>& WorldGeometry::ContourIndices() {
-    return contourIndices;
+    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesA() {
-    return contourRangesA;
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);
 }
 RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesB() {
-    return contourRangesB;
+    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);
 }
 RawArray<RawArray<Math::Vector2>>& WorldGeometry::ContourOutlines() {
-    return contourOutlines;
+    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);
 }
 RawArray<GeometryBatch>& WorldGeometry::Decals() {
-    return decals;
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);
 }
 RawArray<GeometryBatch>& WorldGeometry::RoadBatches() {
-    return roadBatches;
+    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);
 }
 RawArray<Object::External*>& WorldGeometry::BatchMaterials() {
-    return batchMaterials;
+    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);
 }
 RawArray<int32_t>& WorldGeometry::BatchCounters() {
-    return batchCounters;
+    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);
 }
 
 // ============================================================
