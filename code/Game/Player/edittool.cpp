@@ -85,7 +85,7 @@ bool EditTool::IsSelected(uint64_t* ref) {
 //   0x140100380 PlayerScreenRect_Entity_0380 -- entity screen bounding rectangle
 //   0x140098210 PlayerScreenRect_WorldToScreen_098210 -- project a world Vector3
 //               through the camera (citizen fallback, TryProjectEntityModelPos)
-//   0x140066800 PlayerTrade_EditTool_66800 -- toggle page setup
+//   0x140066800 EntityUI::SetPinned -- check the pin box, sync the pin
 //   0x1401005a0 PlayerRay_GetMouseRay_1005a0 -- camera ray from the mouse position
 //   0x1400aa530 PlayerRay_TerrainMarch_aa530 -- map hit test (was a dropped-page
 //               typo 0x14010a530 once; the CALL at 0x1400fd12a in EditTool_Draw)
