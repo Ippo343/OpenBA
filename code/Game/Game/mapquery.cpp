@@ -39,25 +39,25 @@
 #include <cstdlib>
 #include <cmath>
 #include "Game/exe_bodies.h"
+#include "Game/Map.h"
+#include "Game/WorldGeometry.h"
 
-// WorldGeometry offsets (mirror worldgen.cpp WG_*).
-static constexpr int WG_DIMX2      = 0xc0;   // int dim*2 (== heightfield gridSize, e.g. 512)
-static constexpr int WG_HEIGHTEDGE = 0xd0;   // int N = dim*2+1 (int16 heightmap row stride, 513)
-static constexpr int WG_HM16       = 0xd8;   // {short* data, int, int} int16 heightmap (N×N)
+// WorldGeometry fields (worldgen.cpp writes them): _gridSize (+0xc0, dim*2 == the
+// heightfield grid size, e.g. 512), _fieldD0 (+0xd0, N = dim*2+1, the int16
+// heightmap's row stride, 513), _arrayD8 (+0xd8, the int16 heightmap, N x N).
 
 static constexpr float kHeightScale = 1.0f / 256.0f;   // DAT_1401720bc (reverses worldgen ×256)
 
 // Sample interpolated terrain height at a world (x, z) — the net effect of aa20+a810.
 // worldX/worldZ are in logical world units; the heightmap is indexed at fx = worldX + center,
 // center = (WorldGeom+0xc0)>>1, exactly as 08c0_sub_0f90 forms the tile coords.
-float MapQuery_SampleHeight(void* worldGeomVoid, float worldX, float worldZ) {
-    uint8_t* wg = (uint8_t*)worldGeomVoid;
+static float MapQuery_SampleHeight(const WorldGeometry* wg, float worldX, float worldZ) {
     if (!wg) return 0.0f;
-    const int N = *(int32_t*)(wg + WG_HEIGHTEDGE);
-    const short* hm = *(const short**)(wg + WG_HM16);
+    const int N = wg->_fieldD0;
+    const short* hm = wg->_arrayD8;
     if (!hm || N <= 0) return 0.0f;
 
-    const float center = (float)(*(int32_t*)(wg + WG_DIMX2) >> 1);
+    const float center = (float)(wg->_gridSize >> 1);
     const float fx = worldX + center;
     const float fz = worldZ + center;
 
@@ -93,15 +93,14 @@ float MapQuery_SampleHeight(void* worldGeomVoid, float worldX, float worldZ) {
 // (uv = g_fUVScale = 1.0, 0x14017214c) — exactly one of the two triangles a810
 // evaluates: normal = normalize(-dhx*uv, -dhz*uv, uv^2), giving
 // out3[2] = uv / sqrt(dhx^2 + dhz^2 + uv^2) (1.0 on flat ground).
-void MapQuery_SampleNormal(void* worldGeomVoid, float worldX, float worldZ, float out3[3]) {
+static void MapQuery_SampleNormal(const WorldGeometry* wg, float worldX, float worldZ, float out3[3]) {
     out3[0] = 0.0f; out3[1] = 0.0f; out3[2] = 1.0f;   // default = flat / up
-    uint8_t* wg = (uint8_t*)worldGeomVoid;
     if (!wg) return;
-    const int N = *(int32_t*)(wg + WG_HEIGHTEDGE);
-    const short* hm = *(const short**)(wg + WG_HM16);
+    const int N = wg->_fieldD0;
+    const short* hm = wg->_arrayD8;
     if (!hm || N <= 0) return;
 
-    const float center = (float)(*(int32_t*)(wg + WG_DIMX2) >> 1);
+    const float center = (float)(wg->_gridSize >> 1);
     const float fx = worldX + center, fz = worldZ + center;
     int ix = (int)fx; if ((float)ix > fx) --ix;
     int iz = (int)fz; if ((float)iz > fz) --iz;
@@ -147,9 +146,9 @@ static constexpr float kRayMaxDist = 100.0f;   // DAT_140172208
 // site passes *(gw+0xf8); our ported call sites are not all provably doing so, and a wrong
 // param_1 would read a bogus dim and a bogus cell-array pointer. So resolve the canonical
 // grid from the singleton and only refine when param_1 agrees (or is null).
-static int* CanonicalMapGrid(void* game) {
+static Map* CanonicalMapGrid(void* game) {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
-    int* canonical = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);
+    Map* canonical = GameUpdateLoop::_singleton->m_game;
     if (!canonical) return nullptr;
     if (game && game != (void*)canonical) {
         static bool warned = false;
@@ -170,7 +169,7 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
     const float inX = inXY2[0];
     const float inZ = inXY2[1];
 
-    void* worldGeom = nullptr;
+    const WorldGeometry* worldGeom = nullptr;
     if (GameUpdateLoop::_singleton != nullptr)
         worldGeom = GameUpdateLoop::_singleton->m_worldGeometry;
 
@@ -178,13 +177,15 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 
     // outTri (param_5) receives the surface normal — only [2] (slope/flatness) is
     // consumed downstream (the tile classifier), but we fill a true unit normal.
-    if (outTri)
-        MapQuery_SampleNormal(worldGeom, inX, inZ, (float*)outTri);
+    // LEFT: outTri is `void*` in the C declaration ~150 callers hold.
+    float* tri = (float*)outTri;
+    if (tri)
+        MapQuery_SampleNormal(worldGeom, inX, inZ, tri);
 
     if (flag == 0) {
-        int* mapGrid = CanonicalMapGrid(game);
-        const uintptr_t cells = mapGrid ? *(uintptr_t*)((uintptr_t)mapGrid + 0x80) : 0;
-        const int dim = mapGrid ? mapGrid[0] : 0;
+        Map* mapGrid = CanonicalMapGrid(game);
+        const MapCell* cells = mapGrid ? mapGrid->cells : nullptr;
+        const int dim = mapGrid ? mapGrid->size : 0;
         if (cells && dim > 0) {
             int ix = (int)(inX + (float)(dim >> 1));
             int iy = (int)(inZ + (float)(dim >> 1));
@@ -193,31 +194,28 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
             if (iy < 0)    iy = 0;
             if (iy >= dim) iy = dim - 1;
             // Signed byte compared > 0, exactly as 0x14009f4e9 (CMP .. ; JLE).
-            const int8_t floorCount =
-                *(int8_t*)(cells + 0x2d + (int64_t)((int64_t)dim * iy + ix) * 0x30);
+            const int8_t floorCount = cells[(int64_t)dim * iy + ix].floorCount;
             if (floorCount > 0) {
                 {
-                    const float rayStart[3] = { inX, inZ, kRayStartZ };
-                    const float rayDir[3]   = { 0.0f, 0.0f, kRayDirZ };
-                    const float maxDist     = kRayMaxDist;
-                    float hitPos[3]    = { 0.0f, 0.0f, 0.0f };
-                    float hitNormal[3] = { 0.0f, 0.0f, 0.0f };
+                    const Math::Vector3 rayStart(inX, inZ, kRayStartZ);
+                    const Math::Vector3 rayDir(0.0f, 0.0f, kRayDirZ);
+                    const Math::Scalar  maxDist(kRayMaxDist);
+                    Math::Vector3 hitPos(0.0f, 0.0f, 0.0f);
+                    Math::Vector3 hitNormal(0.0f, 0.0f, 0.0f);
                     // Picking::Scene::Intersect (import slot 0x140152428); the Scene is
-                    // embedded at mapGrid+8.
-                    const int hit = reinterpret_cast<const Picking::Scene*>(   // B.3.7 bridge
-                        (uintptr_t)mapGrid + 8)->Intersect(
-                        *reinterpret_cast<const Vector3*>(rayStart), *reinterpret_cast<const Vector3*>(rayDir),
-                        *reinterpret_cast<const Math::Scalar*>(&maxDist),
-                        *reinterpret_cast<Vector3*>(hitPos), *reinterpret_cast<Vector3*>(hitNormal));
-                    if (hit >= 0 && hitPos[2] > height) {
-                        if (outTri) {
-                            ((float*)outTri)[0] = hitNormal[0];
-                            ((float*)outTri)[1] = hitNormal[1];
-                            ((float*)outTri)[2] = hitNormal[2];
+                    // embedded at Map +0x08.
+                    // LEFT: Map::pickingScene is raw storage (H5).
+                    const int hit = reinterpret_cast<const Picking::Scene*>(mapGrid->pickingScene)->Intersect(
+                        rayStart, rayDir, maxDist, hitPos, hitNormal);
+                    if (hit >= 0 && hitPos.z > height) {
+                        if (tri) {
+                            tri[0] = hitNormal.x;
+                            tri[1] = hitNormal.y;
+                            tri[2] = hitNormal.z;
                         }
-                        outPos3[0] = hitPos[0];
-                        outPos3[1] = hitPos[1];
-                        outPos3[2] = hitPos[2];
+                        outPos3[0] = hitPos.x;
+                        outPos3[1] = hitPos.y;
+                        outPos3[2] = hitPos.z;
                         return outPos3;
                     }
                 }
