@@ -18,13 +18,15 @@
 namespace rtpickgrid {
 
 // ENDGAME B.3.7 block B6: the Wave 5 POD rows are the real class's nested
-// types now (runtime/types/picking/Scene.h); these spellings keep the
-// nineteen raw-byte bodies unchanged.
+// types now (runtime/types/picking/Scene.h); B.4 (R-CORE): the nineteen
+// bodies read them by name.
 using Scene   = Picking::Scene;
 using Entry   = Picking::Scene::Entry;
 using Cell    = Picking::Scene::Cell;
 using Link    = Picking::Scene::Link;
 using AddDesc = Picking::Scene::AddDesc;
+using PickingMesh    = Picking::PickingMesh;
+using TransformArray = Collection::Array<Math::Transform>;
 
 // ---------------------------------------------------------------------------
 // The cell-rectangle iterator `Picking::Scene::Intersect` drives.
@@ -39,7 +41,7 @@ struct CellIter {
     int32_t curX, curY;   // +0x10 +0x14
     int32_t stamp;        // +0x18
     int32_t link;         // +0x1c
-    Scene*  scene;        // +0x20
+    const Scene* scene;   // +0x20  read only by CellIterAdvance
 };
 static_assert(sizeof(CellIter) == 0x28, "Picking cell iterator must be 0x28 bytes");
 static_assert(offsetof(CellIter, scene) == 0x20, "CellIter::scene @ +0x20");
@@ -60,23 +62,25 @@ static_assert(offsetof(CellIter, scene) == 0x20, "CellIter::scene @ +0x20");
 // ---------------------------------------------------------------------------
 
 // 0x18001c100  Array<T>::~Array for trivially-destructible T (the J1 body).
-void  ArrayDtorTransform(void* arrayHdr);
+void  ArrayDtorTransform(TransformArray* a);
 // 0x18001b360  Array<Math::Transform>::operator=
-void* TransformArrayAssign(void* dst, const void* src);
+TransformArray* TransformArrayAssign(TransformArray* dst, const TransformArray* src);
 // 0x180074100  destroy `count` Entries' inner Array<Transform>, in place
-void  DestroyEntryTransforms(void* ignored, void* base, int count);
+void  DestroyEntryTransforms(void* ignored, Entry* base, int count);
 // 0x1800735c0  Entry copy-CONSTRUCT (used by the Array<Entry> grower)
-void* EntryCopyConstruct(void* dst, const void* src);
+Entry* EntryCopyConstruct(Entry* dst, const Entry* src);
 // 0x18007b590  Entry::operator=
-void* EntryAssign(void* dst, const void* src);
-// 0x18001f470  Volume::Box transformed by a Math::Transform -> AABB
-void* BoxTransform(void* outBox, const void* transform, const void* inBox);
-// 0x180125bc0  project a mesh's node AABBs through their transforms, XY only
-void* MeshBoundsXY(const void* addDescTail, void* outRect);
+Entry* EntryAssign(Entry* dst, const Entry* src);
+// 0x18001f470  Volume::Box transformed by a Math::Transform -> AABB; both
+// boxes are the six floats {min.xyz, max.xyz}
+float* BoxTransform(float* outBox, const Math::Transform* transform, const float* inBox);
+// 0x180125bc0  project a mesh's node AABBs through their transforms, XY only:
+// a file-local template over the two {_mesh, _transforms} holders (AddDesc and
+// Entry), scene_grid.cpp
 // 0x1800738c0  Array<Cell>::SetSize(n, fill)
-void  CellArraySetSize(void* arrayHdr, int newSize, const void* fill);
+void  CellArraySetSize(Collection::Array<Cell>* a, int newSize, const Cell* fill);
 // 0x18007bc30  Array<Entry>::SetSize(n, fill)
-void  EntryArraySetSize(void* arrayHdr, int newSize, const void* fill);
+void  EntryArraySetSize(Collection::Array<Entry>* a, int newSize, const Entry* fill);
 // 0x180072e70  unlink a now-empty Cell from its bucket, push on the free list
 void  FreeEmptyCell(Scene* scene, Cell* cell);
 // 0x180072d10  unlink one entry's Link from one Cell's list

@@ -126,6 +126,33 @@
 #include "../../types/graphics/Scene.h"       // RtGraphics_DrawGroup_CopyCtor 0x18001be60
 #include "../../types/graphics/Animation.h"   // RtGraphics_Animation_CopyCtor / _Dtor
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
+// B.4 (R-CORE): the element types the hand-derived rows below read by name.
+#include "../../types/system/String.h"            // RtSystem::StringRefCount
+#include "../../types/math/Math.h"                // Math::Transform
+#include "../../types/ui/SpriteContext.h"         // UI::SpriteDraw
+#include "../../types/ui/SpriteCapture.h"         // UI::CaptureEntry
+#include "../../types/ui/UserInterface.h"         // UI::Event
+#include "../../types/ui/Sprite.h"                // UI::Sprite
+#include "../../types/ui/SpriteSheet.h"           // UI::SpriteInfo
+#include "../../types/ui/Dialog.h"                // RtUI::DialogNamedTemplate / DialogControllerConfigEntry
+#include "../../types/ui/StringTable.h"           // UI::StringTable::TextEntry
+#include "../../types/ui/GraphElement.h"          // UI::GraphSeries
+#include "../../types/ui/TableDescription.h"      // UI::TableDescription::Cell
+#include "../../types/ui/LayoutDescription.h"     // UI::LayoutDescription::Entry
+#include "../../types/video/VertexLayout.h"       // Video::VertexLayout::Element
+#include "../../types/video/ShaderProgram.h"      // Video::ShaderProgram::Parameter
+#include "../../types/io/Persistence.h"           // IO::Persistence::SaveGameInfo (RtIo::) / BlockDesc
+#include "../../types/ui/DocumentTextElement.h"   // UI::DocumentTextElement::Link
+#include "../../types/io/Stream.h"                // RtIo::CompressedStreamWindow
+#include "../../types/io/FileSystem.h"            // RtIO::PackageFileEntry
+#include "../../types/object/External.h"          // RtObject::ExternalArrayElement
+#include "../../types/graphics/Material.h"        // RtGraphics::MaterialTexture
+#include "../../types/audio/Audio.h"              // Audio::Scene::Channel / AttenutedEffect
+#include "../../types/audio/SoundEffect.h"        // Audio::SoundEffect::Sample / Variant
+#include "../../types/collision2d/CollisionMesh.h" // Collision2D::CollisionMesh::Face / Triple3
+#include "../../types/picking/PickingMesh.h"      // Picking::PickingMesh::SubMesh / Triangle
+#include "../../types/graphics/Particle.h"        // RtGraphics::ParticleExtra
+#include "../../types/graphics/ParticleInstance.h" // RtGraphics::ParticleRecord
 
 namespace rtcoll {
 
@@ -297,64 +324,61 @@ void* ArrayDtorImpl(ArrayHdr* a) {
 // `TEST R8D,R8D / JLE ret / MOV [RSP+8],RCX` — and the only caller of
 // 0x1800059e0 (inside 0x180004e30) does not set RCX at all before the call.
 
+// ---- the String adopt every refcounted row shares ---------------------------
+// Retail's inlined `System::String` copy: the slot is zeroed FIRST, then, if the
+// source holds a string, it is taken and its refcount (`INC [str-4]`) bumped.
+// The unconditional zero is why a null source leaves the slot null rather than
+// untouched (AssignStringRef's banner below).
+static inline void AdoptString(char*& slot, char* src) {
+    slot = nullptr;
+    if (src) {
+        slot = src;
+        ++RtSystem::StringRefCount(src);
+    }
+}
+
+// The shared word ops (B13: one body serving several element types).
+static void ZeroThenCopy8(uint64_t* d, const uint64_t* s) { *d = 0; *d = *s; }
+template <class W, int N>
+static void ZeroWords(W* d) { for (int k = 0; k < N; ++k) d[k] = 0; }
+static void NegOne32(int32_t* d) { *d = -1; }
+
 // ---- trivially-copyable element operations ---------------------------------
 
 void Assign1 (uint8_t* d, const uint8_t* s) { *d = *s; }
-void Assign4 (uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d) = *reinterpret_cast<const uint32_t*>(s);
-}
-void Assign8 (uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
-}
+void Assign4 (uint8_t* d, const uint8_t* s) { AssignAs<uint32_t, &CopyWords<uint32_t, 1>>(d, s); }
+void Assign8 (uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 1>>(d, s); }
 // 0x180008d60 / 0x1800764c0 / 0x180076900 / 0x18007a0d0 store a ZERO first and
 // then the value, into the same eight bytes. That is the smart-pointer element
 // type's `operator=` inlined (null the slot, then take the new referent), and
 // it is reproduced rather than folded: the final state is identical, but a
 // hardware write watchpoint or a concurrent reader would see the difference,
 // and BANISHED_REDZONE=watch is one of this lane's instruments.
-void Assign8Z(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d) = 0;
-    *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
-}
-void Assign16(uint8_t* d, const uint8_t* s) {
-    reinterpret_cast<uint64_t*>(d)[0] = reinterpret_cast<const uint64_t*>(s)[0];
-    reinterpret_cast<uint64_t*>(d)[1] = reinterpret_cast<const uint64_t*>(s)[1];
-}
+void Assign8Z(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &ZeroThenCopy8>(d, s); }
+void Assign16(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 2>>(d, s); }
 // 0x180059140, Math::Transform: seven dwords at +0,+4,...,+0x18.
-void Assign1c(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 7; ++k)
-        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
-}
+void Assign1c(uint8_t* d, const uint8_t* s) { AssignAs<uint32_t, &CopyWords<uint32_t, 7>>(d, s); }
 
 // WAVE 9 LANE PKG2 rung 4b-ii — 0x180024c10, Array<CompressedStream::Window>.
 // The copy is three plain qword moves at +0x00, +0x08 and +0x10.
-void Assign18(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 3; ++k)
-        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
-}
+void Assign18(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 3>>(d, s); }
 
 // WAVE 9 LANE UIF — 0x180078520 / 0x1800783d0, Array<UI::SpriteDraw>, stride
 // 0x28. The copy at 0x1800785c2..0x1800785e4 is FIVE plain qword moves at
 // +0x00, +0x08, +0x10, +0x18 and +0x20: no zero-first store, no refcount, so
 // the assign arm is a pure byte copy covering the whole 0x28-byte element.
-void Assign28(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 5; ++k)
-        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
-}
+void Assign28(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 5>>(d, s); }
 
 // WAVE 25 LANE INTERNAL42 — 0x18002a810, the Persistence block directory.
 // The copy at 0x18002a89d..0x18002a8b2 is THREE plain dword moves at +0x00,
 // +0x04 and +0x08, written out longhand by MSVC rather than looped. Stride is
 // `LEA RCX,[RAX+RAX*2]; SHL RCX,2` = 0xc, so the element is exactly the three
 // dwords and there is no tail padding for a fourth store to hide in.
-void Assign12(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 3; ++k)
-        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
-}
+void Assign12(uint8_t* d, const uint8_t* s) { AssignAs<uint32_t, &CopyWords<uint32_t, 3>>(d, s); }
 
-void InitZero8(uint8_t* d) { *reinterpret_cast<uint64_t*>(d) = 0; }
+void InitZero8(uint8_t* d) { InitAs<uint64_t, &ZeroWords<uint64_t, 1>>(d); }
 // 0x18007b960's `else` arm is `MOV dword ptr [RDX],0xffffffff`.
-void InitNeg1 (uint8_t* d) { *reinterpret_cast<int32_t*>(d) = -1; }
+void InitNeg1 (uint8_t* d) { InitAs<int32_t, &NegOne32>(d); }
 // WAVE 9 LANE UIF — the default (no-fill) arm of Array<UI::SpriteDraw>, read
 // out of 0x1800783d0 at 0x18007847b..0x180078494. SIX stores, and what they
 // DO NOT cover is the load-bearing part:
@@ -367,14 +391,17 @@ void InitNeg1 (uint8_t* d) { *reinterpret_cast<int32_t*>(d) = -1; }
 // so +0x1c..+0x1f (`rotation`) and +0x24+1..+0x27 (the tail padding) are
 // NEVER WRITTEN by this arm. That is the retail default-constructed
 // UI::SpriteDraw: every member zeroed except a float that has no initialiser.
-void InitSpriteDraw(uint8_t* d) {
-    reinterpret_cast<uint64_t*>(d)[0] = 0;   // +0x00
-    reinterpret_cast<uint64_t*>(d)[1] = 0;   // +0x08
-    reinterpret_cast<uint64_t*>(d)[2] = 0;   // +0x10
-    *reinterpret_cast<uint32_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x20) = 0;
-    d[0x24] = 0;
+static void SpriteDrawInit(UI::SpriteDraw* d) {
+    d->sheet       = nullptr;  // +0x00 qword
+    d->spriteIndex = 0;        // +0x08 qword (spriteIndex, x1)
+    d->x1          = 0;
+    d->y1          = 0;        // +0x10 qword (y1, x2)
+    d->x2          = 0;
+    d->y2          = 0;        // +0x18 dword
+    d->color       = 0;        // +0x20 dword
+    d->isLine      = 0;        // +0x24 byte
 }
+void InitSpriteDraw(uint8_t* d) { InitAs<UI::SpriteDraw, &SpriteDrawInit>(d); }
 // 0x180059140's `else` arm, the identity Math::Transform:
 //   [d+0x00] = 0 (qword)  [d+0x08] = 0 (dword)
 //   [d+0x0c] = 0x3f800000 (qword: 1.0f at +0x0c, 0 at +0x10)
@@ -392,18 +419,24 @@ void InitSpriteDraw(uint8_t* d) {
 // (reference_oracle_must_not_compare_unwritten_bytes). The unaligned 8-byte -1
 // is retail's, not a transcription convenience — the same shape as
 // InitIdentityTransform's qword at +0x0c below.
-void InitWindow(uint8_t* d) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;
-    *reinterpret_cast<int64_t*> (d + 0x04) = -1;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+static void WindowInit(RtIo::CompressedStreamWindow* d) {
+    d->useCount = 0;             // DWORD
+    d->start    = -1;            // the UNALIGNED qword of -1 over +0x04..+0x0b:
+    d->end      = -1;            //   start and end both -1 (H7)
+    d->buffer   = nullptr;       // +0x10 qword
 }
+void InitWindow(uint8_t* d) { InitAs<RtIo::CompressedStreamWindow, &WindowInit>(d); }
 
-void InitIdentityTransform(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x0c) = 0x3f800000ull;
-    *reinterpret_cast<uint64_t*>(d + 0x14) = 0;
+static void IdentityTransformInit(Math::Transform* d) {
+    d->rotation.x    = 0.0f;   // +0x00 qword (x, y)
+    d->rotation.y    = 0.0f;
+    d->rotation.z    = 0.0f;   // +0x08 dword
+    d->rotation.w    = 1.0f;   // +0x0c qword 0x3f800000 (w = 1.0f, translation.x = 0)
+    d->translation.x = 0.0f;
+    d->translation.y = 0.0f;   // +0x14 qword (translation.y, .z)
+    d->translation.z = 0.0f;
 }
+void InitIdentityTransform(uint8_t* d) { InitAs<Math::Transform, &IdentityTransformInit>(d); }
 
 // ---------------------------------------------------------------------------
 // UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — three more
@@ -427,31 +460,35 @@ void InitIdentityTransform(uint8_t* d) {
 // 0x18004ba90's own copy loop, which is instruction-for-instruction the same
 // shape at a different source pointer (the OLD element during a realloc move,
 // rather than the caller's `fill`).
-void AssignCaptureEntry(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<int32_t*>(d) = *reinterpret_cast<const int32_t*>(s);  // +0x00 sheetIndex
+static void CaptureEntryAssign(UI::CaptureEntry* d, const UI::CaptureEntry* s) {
+    d->sheetIndex = s->sheetIndex;          // +0x00
     // +0x04 pad -- neither instantiation writes it.
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    const uint64_t str = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    if (str) {
-        *reinterpret_cast<uint64_t*>(d + 0x08) = str;
-        ++*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(str) - 4);  // INC [str-4]
-    }
-    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
-    *reinterpret_cast<uint32_t*>(d + 0x14) = *reinterpret_cast<const uint32_t*>(s + 0x14);
-    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
-    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
-    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
-    *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
+    AdoptString(d->name, s->name);          // +0x08, INC [str-4]
+    d->x1       = s->x1;
+    d->y1       = s->y1;
+    d->x2       = s->x2;
+    d->y2       = s->y2;
+    d->rotation = s->rotation;
+    d->color    = s->color;
+}
+void AssignCaptureEntry(uint8_t* d, const uint8_t* s) {
+    AssignAs<UI::CaptureEntry, &CaptureEntryAssign>(d, s);
 }
 // 0x18004ba90's `else` (init) arm, the two-argument form's default-constructed
 // tail: FOUR qword zero stores at +0x08, +0x10, +0x18, +0x20. +0x00 (sheetIndex)
 // and +0x04 (pad) are NEVER written by this arm -- a real gap, not an omission
 // here: the disassembly's else-branch starts at `lVar5+8`, never `lVar5`.
+static void CaptureEntryInitTail(UI::CaptureEntry* d) {
+    d->name     = nullptr;                  // +0x08 qword
+    d->x1       = 0;                        // +0x10 qword (x1, y1)
+    d->y1       = 0;
+    d->x2       = 0;                        // +0x18 qword (x2, y2)
+    d->y2       = 0;
+    d->rotation = 0.0f;                     // +0x20 qword (rotation, color)
+    d->color    = 0;
+}
 void InitCaptureEntryTail(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+    InitAs<UI::CaptureEntry, &CaptureEntryInitTail>(d);
 }
 
 // `UI::UserInterface::Event` (0x30 bytes), the array UserInterface.h left
@@ -462,29 +499,31 @@ void InitCaptureEntryTail(uint8_t* d) {
 // +0x20 are five plain dword copies, and +0x28 is a plain qword copy. That
 // leaves **+0x24..+0x27 (4 bytes) NEVER WRITTEN** -- the one gap in an
 // otherwise fully-covered 0x30-byte element.
-void AssignEvent30(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
-    *reinterpret_cast<uint32_t*>(d + 0x14) = *reinterpret_cast<const uint32_t*>(s + 0x14);
-    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
-    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
-    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
+static void EventAssign(UI::Event* d, const UI::Event* s) {
+    d->dialog   = nullptr;
+    d->dialog   = s->dialog;
+    d->element  = nullptr;
+    d->element  = s->element;
+    d->eventId  = s->eventId;
+    d->arg14    = s->arg14;
+    d->arg18    = s->arg18;
+    d->arg1C    = s->arg1C;
+    d->arg20    = s->arg20;
     // +0x24..+0x27 deliberately untouched -- retail does not write it either.
-    *reinterpret_cast<uint64_t*>(d + 0x28) = *reinterpret_cast<const uint64_t*>(s + 0x28);
+    d->userData = s->userData;
 }
+void AssignEvent30(uint8_t* d, const uint8_t* s) { AssignAs<UI::Event, &EventAssign>(d, s); }
 
 // 0x1800370c0's `else` (init) arm, the two-argument UI::Sprite clear: the
 // ExternalPtr<SpriteSheet> qword at +0x00 goes to null and the index dword at
 // +0x08 goes to -1 (`MOV [d],0; MOV dword[d+8],0xffffffff`), matching
 // UI::Sprite's documented default (UserInterface.h: "index = -1 is the
 // engine's empty-sprite value"). +0x0c (pad) is never written.
-void InitSpriteIndexNeg1(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<int32_t*>(d + 0x08) = -1;
+static void SpriteInitEmpty(UI::Sprite* d) {
+    d->spriteSheet = nullptr;
+    d->spriteIndex = -1;
 }
+void InitSpriteIndexNeg1(uint8_t* d) { InitAs<UI::Sprite, &SpriteInitEmpty>(d); }
 
 // ============================================================================
 // The three NON-TRIVIAL element types (0x180004e30, 0x180051390, 0x180061480)
@@ -546,16 +585,21 @@ void Assign38Call(uint8_t* d, const uint8_t* s) {
 }
 // 0x180078950's `else` (init) arm — see kSpec_Sprite38Z for the transcription
 // and for why this arm exists here and not on kSpec_Sprite38.
-void InitSprite38Z(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x28) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x30) = 0;   // DWORD, not a qword
+static void SpriteInfoInit(UI::SpriteInfo* d) {
+    d->name        = nullptr;   // +0x00
+    d->group       = nullptr;   // +0x08
+    d->x           = 0;         // +0x10 qword (x, y)
+    d->y           = 0;
+    d->_reserved18 = 0;         // +0x18 qword (_reserved18, width)
+    d->width       = 0;
+    d->height      = 0;         // +0x20 qword (height, u0)
+    d->u0          = 0.0f;
+    d->v0          = 0.0f;      // +0x28 qword (v0, u1)
+    d->u1          = 0.0f;
+    d->v1          = 0.0f;      // +0x30 DWORD, not a qword
     /* +0x34..+0x37 deliberately untouched — retail does not write them */
 }
+void InitSprite38Z(uint8_t* d) { InitAs<UI::SpriteInfo, &SpriteInfoInit>(d); }
 void Destroy38(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_1800059e0(ignoredThis, base, count);
 }
@@ -587,17 +631,22 @@ void Destroy40(void* ignoredThis, uint8_t* base, int count) {
 // catastrophic port defect — that is exactly the Wave 6 failure recorded in
 // reference_oracle_must_not_compare_unwritten_bytes.md, four times over. The
 // probe excludes that window explicitly; see array_probe.cpp.
-void InitEffectSlot(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x28) = 0x3f800000u;   // 1.0f
+static void EffectSlotInit(Audio::Scene::AttenutedEffect* d) {
+    d->pos.x               = 0.0f;   // +0x00 qword
+    d->pos.y               = 0.0f;
+    d->pos.z               = 0.0f;   // +0x08 qword (pos.z, soundType)
+    d->soundType           = 0;
+    d->soundEffectRef      = nullptr;            // +0x10
+    d->startTime._ticks    = 0;                  // +0x18
+    d->channelHandle       = 0;                  // +0x20 qword (channelHandle, idTag)
+    d->idTag               = 0;
+    d->baseVolume          = 1.0f;               // +0x28 DWORD 0x3f800000
     /* +0x2c .. +0x2f deliberately untouched — retail does not write them */
-    *reinterpret_cast<uint64_t*>(d + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x38) = 0;
+    d->positions._data     = nullptr;            // +0x30
+    d->positions._size     = 0;                  // +0x38 qword (size, capacity)
+    d->positions._capacity = 0;
 }
+void InitEffectSlot(uint8_t* d) { InitAs<Audio::Scene::AttenutedEffect, &EffectSlotInit>(d); }
 
 // 0x180061480's copy, INLINED in retail rather than called. The element is
 // {System::String* str; ExternalPtr ext} and the assignment is:
@@ -609,16 +658,13 @@ void InitEffectSlot(uint8_t* d) {
 // (runtime/src/system/string.cpp names the same convention). Getting this wrong
 // leaks or double-frees strings far from here, so it is written out literally
 // rather than as a 16-byte copy.
+static void MaterialTextureAssign(RtGraphics::MaterialTexture* d,
+                                  const RtGraphics::MaterialTexture* s) {
+    AdoptString(d->name, s->name);           // REFCOUNT
+    d->image = s->image;
+}
 void AssignStringExt(uint8_t* d, const uint8_t* s) {
-    void** dp = reinterpret_cast<void**>(d);
-    void* const* sp = reinterpret_cast<void* const*>(s);
-    dp[0] = nullptr;
-    void* str = sp[0];
-    if (str) {
-        dp[0] = str;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
-    }
-    dp[1] = sp[1];
+    AssignAs<RtGraphics::MaterialTexture, &MaterialTextureAssign>(d, s);
 }
 void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_180005930(ignoredThis, base, count);
@@ -667,23 +713,26 @@ void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
 // The unconditional zero store at +0x08 BEFORE the test is why this arm covers
 // the whole 0x10 stride even when the source String is null, and why the assign
 // window is 0/0 rather than +0x08..+0x10.
+static void NamedTemplateAssign(RtUI::DialogNamedTemplate* d, const RtUI::DialogNamedTemplate* s) {
+    d->_description = s->_description;      // verbatim, and first
+    AdoptString(d->_name, s->_name);
+}
 void AssignExtStringAt08(uint8_t* d, const uint8_t* s) {
-    void** dp = reinterpret_cast<void**>(d);
-    void* const* sp = reinterpret_cast<void* const*>(s);
-    dp[0] = sp[0];                       // verbatim, and first
-    dp[1] = nullptr;
-    void* str = sp[1];
-    if (str) {
-        dp[1] = str;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
-    }
+    AssignAs<RtUI::DialogNamedTemplate, &NamedTemplateAssign>(d, s);
+}
+// 0x18002ae20's assign is the same instructions over IO::Persistence::
+// SaveGameInfo {sortKey, name}: the row below names its own element.
+static void SaveGameInfoAssign(RtIo::SaveGameInfo* d,
+                               const RtIo::SaveGameInfo* s) {
+    d->sortKey = s->sortKey;                // verbatim, and first
+    AdoptString(d->name._data, s->name._data);
+}
+void AssignSaveGameInfo(uint8_t* d, const uint8_t* s) {
+    AssignAs<RtIo::SaveGameInfo, &SaveGameInfoAssign>(d, s);
 }
 // 0x180075d20's `else` (init) arm, 0x180075dee..0x180075df1: two qword zero
 // stores, so the whole 0x10 stride is written and there is no init window.
-void InitZero10(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-}
+void InitZero10(uint8_t* d) { InitAs<uint64_t, &ZeroWords<uint64_t, 2>>(d); }
 // 0x180075d20's shrink/realloc destroy: `CALL 0x180039640`, Body B with
 // kD_Str_10at08. Ported AND registered in array_destroy.cpp in the same commit
 // (it was one of "the eight ported but unregistered", and this is the caller
@@ -712,26 +761,25 @@ void DestroyExtStringAt08(void* ignoredThis, uint8_t* base, int count) {
 // BOTH arms, and each was read separately rather than one assumed from the
 // other (reference_never_written_needs_by_whom.md: the extent belongs to the
 // ARM). An oracle that compared those four bytes would fail 100% of calls.
-void AssignCfgEntry20(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+static void CfgEntryAssign(RtUI::DialogControllerConfigEntry* d,
+                           const RtUI::DialogControllerConfigEntry* s) {
+    d->_typeId      = s->_typeId;           // +0x00 DWORD
     /* +0x04..+0x07 deliberately not copied */
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
-    void** dstr = reinterpret_cast<void**>(d + 0x18);
-    *dstr = nullptr;
-    void* str = *reinterpret_cast<void* const*>(s + 0x18);
-    if (str) {
-        *dstr = str;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
-    }
+    d->_elementDesc = s->_elementDesc;      // +0x08
+    d->_config      = s->_config;           // +0x10
+    AdoptString(d->_name, s->_name);        // +0x18 zeroed first
 }
-void InitCfgEntry20(uint8_t* d) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;   // DWORD, not a qword
+void AssignCfgEntry20(uint8_t* d, const uint8_t* s) {
+    AssignAs<RtUI::DialogControllerConfigEntry, &CfgEntryAssign>(d, s);
+}
+static void CfgEntryInit(RtUI::DialogControllerConfigEntry* d) {
+    d->_typeId      = 0;                    // DWORD, not a qword
     /* +0x04..+0x07 deliberately untouched */
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    d->_elementDesc = nullptr;
+    d->_config      = nullptr;
+    d->_name        = nullptr;
 }
+void InitCfgEntry20(uint8_t* d) { InitAs<RtUI::DialogControllerConfigEntry, &CfgEntryInit>(d); }
 // CALL 0x180039580 — Body B with kD_Str_20at18, ported and registered by
 // array_destroy.cpp in this same commit for the same reason as 0x180039640.
 void DestroyCfgEntry20(void* ignoredThis, uint8_t* base, int count) {
@@ -781,19 +829,12 @@ void DestroyCfgEntry20(void* ignoredThis, uint8_t* base, int count) {
 // is worth stating because it looks like one: the assign walks +0x00 then
 // +0x08, the destroy (0x180005570) walks +0x08 then +0x00. Each was read from
 // its own body; neither was inferred from the other.
+static void TextEntryAssign(UI::StringTable::TextEntry* d, const UI::StringTable::TextEntry* s) {
+    AdoptString(d->name, s->name);          // 180078d33
+    AdoptString(d->text, s->text);          // 180078d44
+}
 void AssignStringPair10(uint8_t* d, const uint8_t* s) {
-    void**       dp = reinterpret_cast<void**>(d);
-    void* const* sp = reinterpret_cast<void* const*>(s);
-    dp[0] = nullptr;                                        // 180078d33
-    if (void* a0 = sp[0]) {                                 // 180078d36
-        dp[0] = a0;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(a0) - 4));
-    }
-    dp[1] = nullptr;                                        // 180078d44
-    if (void* a1 = sp[1]) {                                 // 180078d48
-        dp[1] = a1;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(a1) - 4));
-    }
+    AssignAs<UI::StringTable::TextEntry, &TextEntryAssign>(d, s);
 }
 
 // The range destroy 0x180078c90 calls on BOTH arms - realloc (0x180078d82,
@@ -806,11 +847,14 @@ void DestroyStringPair10Range(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_180005570(ignoredThis, base, count);
 }
 
+static void ExtArrayElemAssign(RtObject::ExternalArrayElement* d,
+                               const RtObject::ExternalArrayElement* s) {
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->owned),        // 18002c773  // LEFT: ExternalArrayElement::owned is char* (External.h), retail's Filename
+                                         reinterpret_cast<const RtSystem::Filename*>(&s->owned));  // LEFT: as above
+    d->opaque = s->opaque;                   // 18002c779
+}
 void AssignExtArrayElem(uint8_t* d, const uint8_t* s) {
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d),     // 18002c773
-                                         reinterpret_cast<const RtSystem::Filename*>(s));
-    *reinterpret_cast<uint64_t*>(d + 0x8) =
-        *reinterpret_cast<const uint64_t*>(s + 0x8);               // 18002c779
+    AssignAs<RtObject::ExternalArrayElement, &ExtArrayElemAssign>(d, s);
 }
 
 // The range destroy 0x180006ac0 calls on BOTH arms. PORTED AND REGISTERED in
@@ -827,16 +871,8 @@ void DestroyExtArrayElemRange(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_180006ac0(ignoredThis, base, count);
 }
 
-void AssignStringRef(uint8_t* d, const uint8_t* s) {
-    void** dp = reinterpret_cast<void**>(d);
-    void* const* sp = reinterpret_cast<void* const*>(s);
-    dp[0] = nullptr;
-    void* str = sp[0];
-    if (str) {
-        dp[0] = str;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
-    }
-}
+static void StringAssign(char** d, char* const* s) { AdoptString(*d, *s); }
+void AssignStringRef(uint8_t* d, const uint8_t* s) { AssignAs<char*, &StringAssign>(d, s); }
 
 // The destroy-range 0x180034860 calls on both its realloc arm (0x18003492e) and
 // its SHRINK arm (0x18003497d) — the second is why this element type needs a
@@ -928,9 +964,8 @@ void DestroyStringRange(void* ignoredThis, uint8_t* base, int count) {
 // The `~Array` goes through ResolveAddr rather than calling ArrayDtorImpl
 // directly, so the 0x18001c750 site's own `calls=` counts it and so the door is
 // the same one every other by-address caller of that address uses.
-void* RtColl_I32ArrayAssign(uint8_t* dstRaw, const uint8_t* srcRaw) {
-    ArrayHdr* dst = reinterpret_cast<ArrayHdr*>(dstRaw);
-    const ArrayHdr* src = reinterpret_cast<const ArrayHdr*>(srcRaw);
+void* RtColl_I32ArrayAssign(Collection::Array<int32_t>* dst,
+                            const Collection::Array<int32_t>* src) {
     if (dst == src) return dst;
 
     RtColl_ArrayDtor_18001c750(dst);
@@ -942,23 +977,23 @@ void* RtColl_I32ArrayAssign(uint8_t* dstRaw, const uint8_t* srcRaw) {
         dst->_capacity = n;
         if (n == static_cast<int32_t>(old + 1) && old != 0)
             dst->_capacity = static_cast<int32_t>(n * 3);
-        dst->_data = static_cast<uint8_t*>(
+        dst->_data = static_cast<int32_t*>(
             MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * 4, 4));
     }
     for (int32_t i = 0; i < dst->_size; ++i) {
-        uint8_t* p = dst->_data + static_cast<int64_t>(i) * 4;
+        int32_t* p = dst->_data + i;
         if (p == nullptr) continue;
-        *reinterpret_cast<int32_t*>(p) =
-            *reinterpret_cast<const int32_t*>(src->_data + static_cast<int64_t>(i) * 4);
+        *p = src->_data[i];
     }
     return dst;
 }
 
-void AssignGraphSeries(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d) = *reinterpret_cast<const uint32_t*>(s);
+static void GraphSeriesAssign(UI::GraphSeries* d, const UI::GraphSeries* s) {
+    d->colour = s->colour;
     /* +0x04 .. +0x07 deliberately untouched — retail does not write them */
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    d->points._data     = nullptr;          // +0x08 = 0
+    d->points._size     = 0;                // +0x10 = 0 (one qword in retail, H7)
+    d->points._capacity = 0;
     // BY ADDRESS, not as a direct C++ call to the body two functions up — the
     // same convention `Assign38Call` and `DestroyStringExt` above already
     // follow for an element operation that is a CALL in retail. It is not
@@ -967,7 +1002,10 @@ void AssignGraphSeries(uint8_t* d, const uint8_t* s) {
     // `0x18001cdf0`'s diff site never fired and the run reported no coverage
     // for a whole ported body. Retail's 0x1800418b1 is a CALL to that address;
     // going through the registry is both faithful and instrumented.
-    RtColl_I32ArrayAssign_18001cdf0(d + 8, s + 8);
+    RtColl_I32ArrayAssign_18001cdf0(&d->points, &s->points);
+}
+void AssignGraphSeries(uint8_t* d, const uint8_t* s) {
+    AssignAs<UI::GraphSeries, &GraphSeriesAssign>(d, s);
 }
 
 // 0x1800419b0, the destroy-range for the same element — and, exactly like
@@ -1044,13 +1082,14 @@ const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
 // first where the difference was not an immediate but a TRAILING CALL. The
 // assign below therefore delegates to the ported copy ctor rather than
 // reimplementing its String half.
+static void PkgEntryAssign(RtIO::PackageFileEntry* d, const RtIO::PackageFileEntry* s) {
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->name),        // 1800299bd  // LEFT: PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
+                                         reinterpret_cast<const RtSystem::Filename*>(&s->name));  // LEFT: as above
+    d->offset = s->offset;                   // 1800299c3
+    d->size   = s->size;                     // 1800299c9
+}
 void AssignPkgEntry(uint8_t* d, const uint8_t* s) {
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d),     // 1800299bd
-                                         reinterpret_cast<const RtSystem::Filename*>(s));
-    *reinterpret_cast<uint32_t*>(d + 0x8) =
-        *reinterpret_cast<const uint32_t*>(s + 0x8);               // 1800299c3
-    *reinterpret_cast<uint32_t*>(d + 0xc) =
-        *reinterpret_cast<const uint32_t*>(s + 0xc);               // 1800299c9
+    AssignAs<RtIO::PackageFileEntry, &PkgEntryAssign>(d, s);
 }
 
 // The range destructor 0x1800298f0 calls on BOTH arms -- after a realloc
@@ -1379,20 +1418,27 @@ const ArraySpec kSpec_EffectSlot = {              // 0x180051390
 //   init         three qwords + one dword zeroed: +0x00..+0x1b; +0x1c NOT written
 //   destroy      0x18004fe20, the String release loop at stride 0x20
 //                (array_destroy.cpp kD_Str_20)
+static void VertexElementAssign(Video::VertexLayout::Element* d,
+                                const Video::VertexLayout::Element* s) {
+    AdoptString(d->name, s->name);          // +0x00
+    d->stream     = s->stream;              // +0x08..+0x1b, five dwords
+    d->offset     = s->offset;
+    d->usage      = s->usage;
+    d->usageIndex = s->usageIndex;
+    d->format     = s->format;
+}
 void AssignVertexElement(uint8_t* d, const uint8_t* s) {
-    void** dp = reinterpret_cast<void**>(d);
-    void* const* sp = reinterpret_cast<void* const*>(s);
-    dp[0] = nullptr;
-    void* str = sp[0];
-    if (str) {
-        dp[0] = str;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
-    }
-    std::memcpy(d + 0x08, s + 0x08, 0x14);
+    AssignAs<Video::VertexLayout::Element, &VertexElementAssign>(d, s);
 }
-void InitVertexElement(uint8_t* d) {
-    std::memset(d, 0, 0x1c);
+static void VertexElementInit(Video::VertexLayout::Element* d) {
+    d->name       = nullptr;                // +0x00..+0x1b zeroed
+    d->stream     = 0;
+    d->offset     = 0;
+    d->usage      = Video::VertexLayout::Usage();
+    d->usageIndex = 0;
+    d->format     = Video::VertexLayout::Format();
 }
+void InitVertexElement(uint8_t* d) { InitAs<Video::VertexLayout::Element, &VertexElementInit>(d); }
 void DestroyVertexElement(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_18004fe20(ignoredThis, base, count);
 }
@@ -1438,7 +1484,7 @@ const ArraySpec kSpec_StringRef = {               // 0x180034860
 // MemAlloc's align argument is 8 (`MOV EDX,8` at 0x1800617d9).
 void AssignStringPlus16(uint8_t* d, const uint8_t* s) {
     AssignStringRef(d, s);                        // +0x00: String* ref
-    std::memcpy(d + 0x08, s + 0x08, 0x10);         // +0x08..+0x17: raw copy
+    std::memcpy(d + 0x08, s + 0x08, 0x10);         // +0x08..+0x17: raw copy  // LEFT: the element is R-GFX MaterialConstant, whose +0x00 String is raw `_head[8]` (Material.h)
 }
 void InitZero18(uint8_t* d) {
     std::memset(d, 0, 0x18);
@@ -1628,10 +1674,12 @@ const ArraySpec kSpec_ExtPtrPair10 = {            // 0x18004cdf0
 // a new cell starts at col = -1, row = -1 - exactly the "wildcard" value
 // TableDescription::CreateInstance's fallback search tests for. A zeroed tail
 // would make every grown cell claim column 0, row 0.
-void InitCellNeg1Ptr0(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d)     = 0xffffffffffffffffull;
-    *reinterpret_cast<uint64_t*>(d + 8) = 0;
+static void TableCellInit(UI::TableDescription::Cell* d) {
+    d->column = -1;                         // ONE qword of -1 in retail (H7)
+    d->row    = -1;
+    d->desc   = nullptr;
 }
+void InitCellNeg1Ptr0(uint8_t* d) { InitAs<UI::TableDescription::Cell, &TableCellInit>(d); }
 const ArraySpec kSpec_TableCell10 = {             // 0x1800799a0
     "Array<UI::TableDescription::Cell>", 0x10, 8, &Assign16, &InitCellNeg1Ptr0,
     nullptr, true, 0, 0, 0, 0, 0, 0 };
@@ -1651,17 +1699,18 @@ void AssignLayoutEntry(uint8_t* d, const uint8_t* s) {
 // 0x180043d80's `else` (new-tail) arm, transcribed. Note the UNALIGNED QWORD of
 // 1 at +0x24, which sets +0x24 to 1 AND +0x28 to 0 in one store, and that
 // +0x31..+0x37 are NEVER WRITTEN.
-void InitLayoutEntry(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x20) = 2;          // DWORD
-    const uint64_t one = 1;
-    std::memcpy(d + 0x24, &one, 8);                      // UNALIGNED QWORD
-    *reinterpret_cast<uint32_t*>(d + 0x2c) = 0;          // DWORD
-    d[0x30] = 0;                                         // BYTE
+static void LayoutEntryInit(UI::LayoutDescription::Entry* d) {
+    d->desc        = nullptr;
+    d->name        = nullptr;
+    d->relativeToX = nullptr;
+    d->relativeToY = nullptr;
+    d->horizontal  = UI::LayoutDescription::LayoutHorizontal{2};   // DWORD
+    d->vertical    = UI::LayoutDescription::LayoutVertical{1};     // UNALIGNED QWORD of 1:
+    d->offsetX     = 0;                                            //   vertical = 1, offsetX = 0
+    d->offsetY     = 0;                                            // DWORD
+    d->force       = false;                                        // BYTE
 }
+void InitLayoutEntry(uint8_t* d) { InitAs<UI::LayoutDescription::Entry, &LayoutEntryInit>(d); }
 // Retail has NO range helper for this element: 0x180044050 destroys ONE entry
 // and both callers (this SetSize's shrink arm and ~Array at 0x180043a00) loop
 // around it. The loop IS the range form.
@@ -1745,21 +1794,21 @@ const ArraySpec kSpec_GraphSeries = {             // 0x1800417d0
 //           (array_destroy.cpp kD_Str_10 — the SAME spec 0x180026b50 uses, and
 //           for the same reason: that row is (stride 0x10, offs {0x00}) and
 //           this body computes exactly those two numbers itself).
+static void ShaderParamAssign(Video::ShaderProgram::Parameter* d,
+                              const Video::ShaderProgram::Parameter* s) {
+    AdoptString(d->name, s->name);
+    d->dest     = s->dest;                  // Parameter::dest
+    d->internal = s->internal;              // Parameter::internal (a BYTE)
+}
 void AssignShaderParam(uint8_t* d, const uint8_t* s) {
-    void** dp = reinterpret_cast<void**>(d);
-    void* const* sp = reinterpret_cast<void* const*>(s);
-    dp[0] = nullptr;
-    void* str = sp[0];
-    if (str) {
-        dp[0] = str;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
-    }
-    std::memcpy(d + 0x08, s + 0x08, 4);   // Parameter::dest
-    d[0x0c] = s[0x0c];                    // Parameter::internal (a BYTE)
+    AssignAs<Video::ShaderProgram::Parameter, &ShaderParamAssign>(d, s);
 }
-void InitShaderParam(uint8_t* d) {
-    std::memset(d, 0, 0x0d);
+static void ShaderParamInit(Video::ShaderProgram::Parameter* d) {
+    d->name     = nullptr;                  // +0x00..+0x0c zeroed
+    d->dest     = 0;
+    d->internal = false;
 }
+void InitShaderParam(uint8_t* d) { InitAs<Video::ShaderProgram::Parameter, &ShaderParamInit>(d); }
 void DestroyShaderParamRange(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_18004fed0(ignoredThis, base, count);
 }
@@ -1782,12 +1831,15 @@ const ArraySpec kSpec_ShaderParam = {             // 0x180055db0
 //   init    the same two zero stores, no operator= — whole stride written.
 //   destroy 0x18004ff80, the inner-array free loop at stride 0x10 offset 0
 //           (array_destroy.cpp kD_InnerArr_10).
-void AssignInnerArrayU8(uint8_t* d, const uint8_t* s) {
-    void** dp = reinterpret_cast<void**>(d);
-    dp[0] = nullptr;
-    dp[1] = nullptr;
+static void InnerArrayU8Assign(ArrayHdr* d, const ArrayHdr* s) {
+    d->_data     = nullptr;
+    d->_size     = 0;                    // one qword in retail (H7)
+    d->_capacity = 0;
     if (d == s) return;                   // retail's `CMP RCX,RSI; JE` skip
     RtIO::RtColl_ArrayU8Assign_180011220(d, s);
+}
+void AssignInnerArrayU8(uint8_t* d, const uint8_t* s) {
+    AssignAs<ArrayHdr, &InnerArrayU8Assign>(d, s);
 }
 void InitInnerArrayU8(uint8_t* d) {
     std::memset(d, 0, 0x10);
@@ -1827,10 +1879,7 @@ const ArraySpec kSpec_InnerArrayU8 = {            // 0x180053f00
 // `if (i < oldSize)` with nothing after it, so a grow past the old size leaves
 // the new tail UNINITIALISED (this is why it cannot reuse kSpec_Node18, which
 // also differs on align: 4 here, 8 there).
-void Assign18d(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 6; ++k)
-        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
-}
+void Assign18d(uint8_t* d, const uint8_t* s) { AssignAs<uint32_t, &CopyWords<uint32_t, 6>>(d, s); }
 const ArraySpec kSpec_Tri18A4 = {                 // 0x1800136f0
     "Array<EdgeMesh::Triangle>", 0x18, 4, &Assign18d,
     nullptr,   // NEW TAIL LEFT UNINITIALISED — retail's loop has no else arm
@@ -1856,10 +1905,7 @@ const ArraySpec kSpec_Fill1 = {                   // 0x180053da0
 // --- 0x180063680  Array<{7 qwords}>, stride 0x38, align 8, three-argument ----
 // Seven plain qword moves at +0x00..+0x30; no refcount, no zero-first store,
 // no else arm (every caller passes a fill).
-void Assign38(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 7; ++k)
-        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
-}
+void Assign38(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 7>>(d, s); }
 const ArraySpec kSpec_Fill38 = {                  // 0x180063680
     "Array<blk56>", 0x38, 8, &Assign38, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
@@ -1895,27 +1941,20 @@ const ArraySpec kSpec_StringExtZ = {              // 0x180061880
 // so the init window is +0x10..+0x20, wider than the assign's.
 // Destroy: CALL 0x1800341e0 on both the realloc arm and the shrink tail
 // (array_destroy.cpp's `kD_Str2_20`, ported in this same commit).
-void AssignMetaEntry20(uint8_t* d, const uint8_t* s) {
-    void** dp = reinterpret_cast<void**>(d);
-    void* const* sp = reinterpret_cast<void* const*>(s);
-    dp[0] = nullptr;
-    if (void* a = sp[0]) {
-        dp[0] = a;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(a) - 4));
-    }
-    dp[1] = nullptr;
-    if (void* b = sp[1]) {
-        dp[1] = b;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(b) - 4));
-    }
-    *reinterpret_cast<int32_t*>(d + 0x10) = *reinterpret_cast<const int32_t*>(s + 0x10);
-    *reinterpret_cast<int32_t*>(d + 0x14) = *reinterpret_cast<const int32_t*>(s + 0x14);
-    *reinterpret_cast<int32_t*>(d + 0x18) = *reinterpret_cast<const int32_t*>(s + 0x18);
+using SaveModInfo = Save::SaveLoad::ModInfo;
+static void ModInfoAssign(SaveModInfo* d, const SaveModInfo* s) {
+    AdoptString(d->name._data, s->name._data);
+    AdoptString(d->path._data, s->path._data);
+    d->versionMajor = s->versionMajor;
+    d->gameVersion  = s->gameVersion;
+    d->versionMinor = s->versionMinor;
 }
-void InitMetaEntry20(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+void AssignMetaEntry20(uint8_t* d, const uint8_t* s) { AssignAs<SaveModInfo, &ModInfoAssign>(d, s); }
+static void ModInfoInit(SaveModInfo* d) {
+    d->name._data = nullptr;
+    d->path._data = nullptr;
 }
+void InitMetaEntry20(uint8_t* d) { InitAs<SaveModInfo, &ModInfoInit>(d); }
 void DestroyMetaEntry20Range(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_1800341e0(ignoredThis, base, count);
 }
@@ -1932,12 +1971,13 @@ const ArraySpec kSpec_MetaEntry20 = {             // 0x180034010, 0x180033080
 // CALL to 0x1800c3f40 IN A LOOP — retail has no range helper here, it writes the
 // loop out at both arms. The wrapper below is that loop; the order is ascending
 // at both arms, read from the two `ADD R..,0x58` walks.
-void DestroyMetaData58Range(void* ignoredThis, uint8_t* base, int count) {
-    (void)ignoredThis;
+static void MetaData58Destroy(Save::SaveLoad::SaveInfo* base, int count) {
     for (int i = 0; i < count; ++i) {                     // ~SaveInfo, 0x1800c3f40
-        reinterpret_cast<Save::SaveLoad::SaveInfo*>(base + static_cast<int64_t>(i) * 0x58)
-            ->Save::SaveLoad::SaveInfo::~SaveInfo();
+        base[i].Save::SaveLoad::SaveInfo::~SaveInfo();
     }
+}
+void DestroyMetaData58Range(void* ignoredThis, uint8_t* base, int count) {
+    DestroyAs<Save::SaveLoad::SaveInfo, &MetaData58Destroy>(ignoredThis, base, count);
 }
 void AssignMetaData58(uint8_t* d, const uint8_t* s) {
     RtSave_MetaData_CopyCtor(d, s);
@@ -1961,9 +2001,9 @@ void DestroyDrawGroup1f0Range(void* ignoredThis, uint8_t* base, int count) {
     (void)ignoredThis;
     for (int i = 0; i < count; ++i) {
         uint8_t* e = base + static_cast<int64_t>(i) * 0x1f0;
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1e0));   // reverse order,
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1d0));   // as the CRT
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1c0));   // iterator does
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1e0));   // reverse order,  // LEFT: type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1d0));   // as the CRT  // LEFT: as above
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1c0));   // iterator does  // LEFT: as above
     }
 }
 void AssignDrawGroup1f0(uint8_t* d, const uint8_t* s) {
@@ -1984,21 +2024,21 @@ const ArraySpec kSpec_DrawGroup1f0 = {            // 0x1800638e0
 //     +0x00 q=0   +0x08 d=0   +0x10 q=0   +0x18 d=1.0f  +0x1c d=1.0f
 //     +0x68 d=0   +0x6c b=0   +0x20..+0x67 q=0 (nine qwords)
 // Transcribed in retail's own store order.
-void Assign70(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 14; ++k)
-        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
+void Assign70(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 14>>(d, s); }
+static void AudioChannelInit(Audio::Scene::Channel* d) {
+    d->soundEffectRef    = nullptr;     // +0x00 q=0
+    d->soundType         = 0;           // +0x08 d=0
+    d->startTime._ticks  = 0;           // +0x10 q=0
+    d->volume            = 1.0f;        // +0x18 d=1.0f
+    d->sampleVolume      = 1.0f;        // +0x1c d=1.0f
+    d->handleTag         = 0;           // +0x68 d=0
+    d->started           = 0;           // +0x6c b=0
+    for (int k = 0; k < 8; ++k)         // +0x20..+0x5f q=0 (eight qwords)
+        d->platformChannel[k] = nullptr;
+    for (int k = 0; k < 8; ++k)         // +0x60..+0x67 (the ninth qword)
+        d->channelFlags[k] = 0;
 }
-void InitAudioChannel70(uint8_t* d) {
-    uint64_t* q = reinterpret_cast<uint64_t*>(d);
-    q[0] = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x08) = 0;
-    q[2] = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x18) = 0x3f800000u;   // 1.0f
-    *reinterpret_cast<uint32_t*>(d + 0x1c) = 0x3f800000u;   // 1.0f
-    *reinterpret_cast<uint32_t*>(d + 0x68) = 0;
-    *(d + 0x6c) = 0;
-    for (int k = 4; k <= 12; ++k) q[k] = 0;                 // +0x20..+0x67
-}
+void InitAudioChannel70(uint8_t* d) { InitAs<Audio::Scene::Channel, &AudioChannelInit>(d); }
 const ArraySpec kSpec_AudioChannel70 = {          // 0x180051020
     "Array<Audio::Channel>", 0x70, 8, &Assign70, &InitAudioChannel70, nullptr,
     true,
@@ -2042,24 +2082,30 @@ const ArraySpec kSpec_AudioChannel70 = {          // 0x180051020
 void AssignAnimClip70(uint8_t* d, const uint8_t* s) {
     RtGraphics_Animation_CopyCtor(d, s);
 }
-void InitAnimClip70(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;   // 180059f2d  inner event array
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;   // 180059f30
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;   // 180059f38  three String slots
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;   // 180059f3c
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;   // 180059f40
-    *reinterpret_cast<int32_t* >(d + 0x28) = 1;   // 180059f44  NOT zero
-    *reinterpret_cast<uint8_t* >(d + 0x2c) = 0;   // 180059f4b  byte, not dword
-    *reinterpret_cast<uint64_t*>(d + 0x30) = 0;   // 180059f4f
-    *reinterpret_cast<int32_t* >(d + 0x38) = 0;   // 180059f57
-    *reinterpret_cast<uint8_t* >(d + 0x3c) = 0;   // 180059f5b  byte, not dword
-    *reinterpret_cast<uint64_t*>(d + 0x40) = 0;   // 180059f5f
-    *reinterpret_cast<uint64_t*>(d + 0x48) = 0;   // 180059f67
-    *reinterpret_cast<int32_t* >(d + 0x50) = 0;   // 180059f6f
-    *reinterpret_cast<uint64_t*>(d + 0x58) = 0;   // 180059f73
-    *reinterpret_cast<uint64_t*>(d + 0x60) = 0;   // 180059f77  pose array header
-    *reinterpret_cast<uint64_t*>(d + 0x68) = 0;   // 180059f7b
+static void AnimClipInit(Graphics::Animation* d) {
+    d->_events._data     = nullptr;  // 180059f2d  inner event array
+    d->_events._size     = 0;        // 180059f30  (one qword, H7)
+    d->_events._capacity = 0;
+    d->_name             = nullptr;  // 180059f38  three String slots
+    d->_meshName         = nullptr;  // 180059f3c
+    d->_sourceName       = nullptr;  // 180059f40
+    d->_instanceCount    = 1;        // 180059f44  NOT zero
+    d->_instanced        = false;    // 180059f4b  byte, not dword
+    d->_startFrame       = 0;        // 180059f4f  (one qword, H7)
+    d->_endFrame         = 0;
+    d->_rate             = 0.0f;     // 180059f57
+    d->_looping          = false;    // 180059f5b  byte, not dword
+    d->_loopFrame        = 0;        // 180059f5f  (one qword, H7)
+    d->_frameRate        = 0.0f;
+    d->_loopScale        = 0.0f;     // 180059f67  (one qword, H7)
+    d->_boneCount        = 0;
+    d->_frameCount       = 0;        // 180059f6f
+    d->_duration         = 0;        // 180059f73
+    d->_keys._data       = nullptr;  // 180059f77  pose array header
+    d->_keys._size       = 0;        // 180059f7b  (one qword, H7)
+    d->_keys._capacity   = 0;
 }
+void InitAnimClip70(uint8_t* d) { InitAs<Graphics::Animation, &AnimClipInit>(d); }
 void DestroyAnimClip70(void* /*ignoredThis*/, uint8_t* base, int count) {
     for (int i = 0; i < count; ++i) RtGraphics_Animation_Dtor(base + static_cast<int64_t>(i) * 0x70);
 }
@@ -2086,13 +2132,13 @@ const ArraySpec kSpec_AnimClip70 = {              // 0x180059e70
 // arms (0x18005a328 realloc, 0x18005a37b shrink).
 void AssignTagStrStrF18(uint8_t* d, const uint8_t* s) {
     AssignStringPair10(d, s);                                       // +0x00/+0x08
-    *reinterpret_cast<uint32_t*>(d + 0x10) =
-        *reinterpret_cast<const uint32_t*>(s + 0x10);               // 18005a2ed
+    *reinterpret_cast<uint32_t*>(d + 0x10) =  // LEFT: AnimationGroup::_tags is raw Array<uint8_t> (R-GFX AnimationGroup.h), no element type
+        *reinterpret_cast<const uint32_t*>(s + 0x10);               // 18005a2ed  // LEFT: as above
 }
 void InitTagStrStrF18(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;                     // 18005a303
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;                     // 18005a306
-    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x3dcccccdu;           // 18005a30a
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;                     // 18005a303  // LEFT: as above
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;                     // 18005a306  // LEFT: as above
+    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x3dcccccdu;           // 18005a30a  // LEFT: as above
 }
 void DestroyTagStrStrF18(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_18001cbf0(ignoredThis, base, count);
@@ -2110,10 +2156,11 @@ const ArraySpec kSpec_TagStrStrF18 = {            // 0x18005a220
 // only a DWORD at +0x00 and a QWORD at +0x08 (0x1800599d4/0x1800599d7), so
 // +0x04..+0x07 is left holding whatever the allocation contained. No destroy
 // call anywhere in the body — the ExternalPtr is not released on a shrink.
-void InitIdExtPtr10(uint8_t* d) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+static void AnimEventInit(Graphics::Animation::Event* d) {
+    d->_frame = 0;                   // DWORD
+    d->_event = nullptr;             // QWORD at +0x08
 }
+void InitIdExtPtr10(uint8_t* d) { InitAs<Graphics::Animation::Event, &AnimEventInit>(d); }
 const ArraySpec kSpec_IdExtPtr10 = {              // 0x180059930
     "Array<{int32,ExternalPtr<AnimationEvent>}>", 0x10, 8,
     &Assign16, &InitIdExtPtr10, nullptr, true,
@@ -2127,14 +2174,13 @@ const ArraySpec kSpec_IdExtPtr10 = {              // 0x180059930
 // writes a QWORD then a DWORD — 12 of the 20 bytes — leaving +0x0c..+0x13
 // uninitialised. Align is 4 (`MOV EDX,R14D` with R14D seeded 4 at 0x180020ece),
 // NOT 8, which is why it cannot borrow any stride-0x14-adjacent row.
-void Assign14(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 5; ++k)
-        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
+void Assign14(uint8_t* d, const uint8_t* s) { AssignAs<uint32_t, &CopyWords<uint32_t, 5>>(d, s); }
+static void ParticleExtraInit(RtGraphics::ParticleExtra* d) {
+    d->_velX = 0.0f;                 // 180020f9a  (one qword, H7)
+    d->_velY = 0.0f;
+    d->_velZ = 0.0f;                 // 180020f9d
 }
-void InitZero14Lo12(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;   // 180020f9a
-    *reinterpret_cast<uint32_t*>(d + 0x08) = 0;   // 180020f9d
-}
+void InitZero14Lo12(uint8_t* d) { InitAs<RtGraphics::ParticleExtra, &ParticleExtraInit>(d); }
 const ArraySpec kSpec_Rec14 = {                   // 0x180020e90
     "Array<{Array,int32}:0x14>", 0x14, 4,
     &Assign14, &InitZero14Lo12, nullptr, true,
@@ -2254,7 +2300,7 @@ namespace rtcoll {
 
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));              \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: void* door, outside callers hold void* */ \
         return nullptr;                                                       \
     }
 
@@ -2407,8 +2453,8 @@ J1_ENTRY(180043cb0)   // UI:          LayoutElement::_rows       (+0xC0)
 
 // 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
 void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
-    void* r = RtColl_I32ArrayAssign(static_cast<uint8_t*>(dst),
-                                    static_cast<const uint8_t*>(src));
+    void* r = RtColl_I32ArrayAssign(static_cast<Collection::Array<int32_t>*>(dst),  // LEFT: void* door (R-GFX's RtArrayAssignI32 holds void*)
+                                    static_cast<const Collection::Array<int32_t>*>(src));  // LEFT: as above
     return r;
 }
 
@@ -2808,7 +2854,7 @@ void RtColl_ArraySetSize_18000c300(void* a) {
 // away). SetSizeCore keeps one, and it is unobservable: the only state that
 // path would skip is `_size = 0x4000`, which the restore below undoes.
 void RtColl_ArrayReserve_18005f980(void* a) {
-    ArrayHdr* h = static_cast<ArrayHdr*>(a);
+    ArrayHdr* h = static_cast<ArrayHdr*>(a);  // LEFT: void* door (outside callers hold void*)
     const int32_t oldSize = h->_size;
     SetSizeCore(h, 0x4000, nullptr, &kSpec_Fill8);
     h->_size = oldSize;
@@ -2870,12 +2916,12 @@ void RtColl_ArrayReserve_18005f980(void* a) {
 // the door every other caller of it uses (runtime/src/io/modification.cpp and
 // runtime/src/collection/avl_trees.cpp both reach 0x1800067d0 the same way).
 void AssignModExternal18(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
     /* +0x04..+0x07 deliberately not copied — retail's first store is a DWORD */
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);  // LEFT: as above
 
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d + 0x10),   // 0x1800067d0
-                                         reinterpret_cast<const RtSystem::Filename*>(s + 0x10));
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d + 0x10),   // 0x1800067d0  // LEFT: as above
+                                         reinterpret_cast<const RtSystem::Filename*>(s + 0x10));  // LEFT: as above
 }
 
 // The two destroy ranges. Both are ported AND registered in array_destroy.cpp
@@ -2898,7 +2944,7 @@ void DestroyModExternal18Range(void* ignoredThis, uint8_t* base, int count) {
 // through the wrong instantiation's helper.
 const ArraySpec kSpec_SaveGameInfo = {           // 0x18002ae20, 0x18002aae0
     "Array<IO::Persistence::SaveGameInfo>", 0x10, 8,
-    &AssignExtStringAt08, nullptr, &DestroySaveGameInfoRange, false,
+    &AssignSaveGameInfo, nullptr, &DestroySaveGameInfoRange, false,
     /*assign unwritten*/ 0,    0,
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x08, 0x10 };   // only the String slot is dereferenced
@@ -2983,7 +3029,7 @@ const ArraySpec kSpec_EmitterInstance = {        // 0x180052330
 // one dword move, and the else arm is `MOV dword [RDX],R10D` with R10D zeroed
 // at 0x18003ef04 — so this is NOT kSpec_I32 (whose else arm is EMPTY) and not
 // kSpec_Fill4 (no else arm either). One dword of difference, one new row.
-void InitZero4(uint8_t* d) { *reinterpret_cast<uint32_t*>(d) = 0; }
+void InitZero4(uint8_t* d) { InitAs<uint32_t, &ZeroWords<uint32_t, 1>>(d); }
 const ArraySpec kSpec_I32Z = {                    // 0x18003eea0
     "Array<int32>(zero tail)", 4, 4, &Assign4, &InitZero4, nullptr, true,
     0, 0, 0, 0, 0, 0 };
@@ -2997,10 +3043,7 @@ const ArraySpec kSpec_I32Z = {                    // 0x18003eea0
 // one-argument sibling never reaches the loop anyway.
 // NO DESTROY: a DocumentItem holds no refcounted field; both bodies free the
 // old buffer and destroy nothing.
-void Assign24d(uint8_t* d, const uint8_t* s) {
-    for (int k = 0; k < 9; ++k)
-        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
-}
+void Assign24d(uint8_t* d, const uint8_t* s) { AssignAs<uint32_t, &CopyWords<uint32_t, 9>>(d, s); }
 const ArraySpec kSpec_DocItem24 = {               // 0x18003df80, 0x18003d1c0
     "Array<UI::DocumentText::DocumentItem>", 0x24, 4, &Assign24d,
     nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
@@ -3019,17 +3062,23 @@ const ArraySpec kSpec_DocItem24 = {               // 0x18003df80, 0x18003d1c0
 //   destroy       0x18003e3e0 (Body B, `kD_Str_18at00`) on BOTH the realloc arm
 //                 (0x18003e296) and the shrink-tail arm (0x18003e2e9)
 // +0x11..+0x17 is written by NEITHER arm.
+static void DocLinkAssign(UI::DocumentTextElement::Link* d,
+                          const UI::DocumentTextElement::Link* s) {
+    AdoptString(d->text, s->text);          // +0x00, zero-then-adopt
+    d->firstItem = s->firstItem;
+    d->lastItem  = s->lastItem;
+    d->armed     = s->armed;
+}
 void AssignLink18(uint8_t* d, const uint8_t* s) {
-    AssignStringRef(d, s);                                   // +0x00, zero-then-adopt
-    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);
-    *reinterpret_cast<int32_t*>(d + 0x0c) = *reinterpret_cast<const int32_t*>(s + 0x0c);
-    d[0x10] = s[0x10];
+    AssignAs<UI::DocumentTextElement::Link, &DocLinkAssign>(d, s);
 }
-void InitLink18(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<int64_t*>(d + 0x08)  = -1;             // ONE qword, both int32
-    d[0x10] = 0;
+static void DocLinkInit(UI::DocumentTextElement::Link* d) {
+    d->text      = nullptr;
+    d->firstItem = -1;                      // ONE qword of -1 in retail (H7)
+    d->lastItem  = -1;
+    d->armed     = 0;
 }
+void InitLink18(uint8_t* d) { InitAs<UI::DocumentTextElement::Link, &DocLinkInit>(d); }
 // By ADDRESS, registry-first: 0x18003e3e0 is registered by array_destroy.cpp in
 // this same commit (`B_ENTRY(18003e3e0, kD_Str_18at00)`), so this lands on our
 // body rather than opening a door onto an unported callee.
@@ -3070,7 +3119,7 @@ const ArraySpec kSpec_StringRefZ_PP = {           // 0x1800547e0
 //   destroy       0x180054ba0 (Body B, `kD_Str_10`), both arms
 void AssignPpSampler10(uint8_t* d, const uint8_t* s) {
     AssignStringRef(d, s);                                   // +0x00
-    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);
+    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);  // LEFT: Video PixelProgram::Sampler has no type in any header (R-VIDEO)
     d[0x0c] = s[0x0c];
     d[0x0d] = s[0x0d];
     d[0x0e] = s[0x0e];
@@ -3096,13 +3145,10 @@ const ArraySpec kSpec_PpSampler10 = {             // 0x180054a20
 void AssignVtxElement18(uint8_t* d, const uint8_t* s) {
     AssignStringRef(d + 0x00, s + 0x00);
     AssignStringRef(d + 0x08, s + 0x08);
-    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
-    *reinterpret_cast<int32_t*>(d + 0x14)  = *reinterpret_cast<const int32_t*>(s + 0x14);
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);  // LEFT: Video VertexProgram::Element has no type in any header (R-VIDEO)
+    *reinterpret_cast<int32_t*>(d + 0x14)  = *reinterpret_cast<const int32_t*>(s + 0x14);  // LEFT: as above
 }
-void InitZero16(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-}
+void InitZero16(uint8_t* d) { InitAs<uint64_t, &ZeroWords<uint64_t, 2>>(d); }
 void DestroyVtxElementRange(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_180056960(ignoredThis, base, count);
 }
@@ -3124,8 +3170,8 @@ const ArraySpec kSpec_VtxElement18 = {            // 0x1800567d0
 // registry-first means the day it is ported this call lands on that body with
 // no edit here.
 void AssignVtxStream18(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;              // 180056bb3
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;              // 180056bb6
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;              // 180056bb3  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;              // 180056bb6  // LEFT: as above
     {
         RtColl_ArrayAssign_1800571b0(d + 0x00, s + 0x00);                              // 180056bc5
     }
@@ -3150,19 +3196,25 @@ const ArraySpec kSpec_VtxStream18 = {             // 0x180056af0
 //           `operator=` (0x180052700)              0x180053232..0x18005324e
 //   init    dword 0 at +0x00, qword 0 at +0x08, qword 0 at +0x10
 //           0x180053262..0x180053268 — +0x04..+0x07 stays uninitialised
-void AssignSfxBuffer18(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+static void SfxSampleAssign(Audio::SoundEffect::Sample* d, const Audio::SoundEffect::Sample* s) {
+    d->startSeconds        = s->startSeconds;     // DWORD at +0x00
+    d->variants._data      = nullptr;             // +0x08 = 0
+    d->variants._size      = 0;                   // +0x10 = 0 (one qword, H7)
+    d->variants._capacity  = 0;
     {
-        RtColl_ArrayAssign_180052700(d + 0x08, s + 0x08);
+        RtColl_ArrayAssign_180052700(&d->variants, &s->variants);
     }
 }
-void InitSfxBuffer18(uint8_t* d) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+void AssignSfxBuffer18(uint8_t* d, const uint8_t* s) {
+    AssignAs<Audio::SoundEffect::Sample, &SfxSampleAssign>(d, s);
 }
+static void SfxSampleInit(Audio::SoundEffect::Sample* d) {
+    d->startSeconds       = 0.0f;                 // DWORD at +0x00
+    d->variants._data     = nullptr;              // +0x08
+    d->variants._size     = 0;                    // +0x10 (one qword, H7)
+    d->variants._capacity = 0;
+}
+void InitSfxBuffer18(uint8_t* d) { InitAs<Audio::SoundEffect::Sample, &SfxSampleInit>(d); }
 void DestroySfxBufferRange(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyInner_180052220(ignoredThis, base, count);
 }
@@ -3182,11 +3234,13 @@ const ArraySpec kSpec_SfxBuffer18 = {             // 0x180053190
 //           (0x180052f5f..0x180052f66); +0x14..+0x17 stays uninitialised
 //   destroy NONE — the ExternalPtr is not released on a shrink, and the only
 //           thing either arm does with the old buffer is free it
-void InitSfxSample18(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x3f800000u;     // 1.0f
+static void SfxVariantInit(Audio::SoundEffect::Variant* d) {
+    d->buffer    = nullptr;                       // +0x00 qword
+    d->pitchLow  = 0.0f;                          // +0x08 qword (pitchLow, pitchHigh)
+    d->pitchHigh = 0.0f;
+    d->volume    = 1.0f;                          // +0x10 DWORD 0x3f800000
 }
+void InitSfxSample18(uint8_t* d) { InitAs<Audio::SoundEffect::Variant, &SfxVariantInit>(d); }
 const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
     "Array<Audio::SoundEffect::Sample>", 0x18, 8, &Assign18, &InitSfxSample18,
     nullptr, true,
@@ -3196,7 +3250,7 @@ const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
 
 #define D1_J1_ENTRY(ADDR)                                                     \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));              \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: void* door, outside callers hold void* */ \
         return nullptr;                                                       \
     }
 
@@ -3312,7 +3366,7 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 // unchanged and one body still serves them all.
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));              \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: void* door, outside callers hold void* */ \
         return nullptr;                                                       \
     }
 
@@ -3326,41 +3380,55 @@ J1_ENTRY(180065e80)   // Collision2D: CollisionMesh::_surfaces (+0x60)
 // ---------------------------------------------------------------------------
 
 // 0x1800774d0 (UI::Font's uint16 array). `MOV AX,[..]; MOV [..],AX`.
-void AssignD2_2(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint16_t*>(d) = *reinterpret_cast<const uint16_t*>(s);
-}
+void AssignD2_2(uint8_t* d, const uint8_t* s) { AssignAs<uint16_t, &CopyWords<uint16_t, 1>>(d, s); }
 
 // 0x180066e80 / 0x180066de0 (Collision2D::Face::triples, stride SIX -- the
 // element is three uint16). The copy is a DWORD at +0x00 and a WORD at +0x04,
 // which is how MSVC moves six bytes; it is written with those two widths and
 // not as a memcpy because a hardware write watchpoint sees the difference.
-void AssignD2_6(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d + 0) = *reinterpret_cast<const uint32_t*>(s + 0);
-    *reinterpret_cast<uint16_t*>(d + 4) = *reinterpret_cast<const uint16_t*>(s + 4);
+using CollisionTriple = Collision2D::CollisionMesh::Triple3;
+static void TripleAssign(CollisionTriple* d, const CollisionTriple* s) {
+    d->a = s->a;                         // one DWORD at +0x00 (a, b) in retail
+    d->b = s->b;
+    d->c = s->c;                         // one WORD at +0x04
 }
+void AssignD2_6(uint8_t* d, const uint8_t* s) { AssignAs<CollisionTriple, &TripleAssign>(d, s); }
 // 0x180066e80's `else` arm, in RETAIL'S OWN ORDER: the DWORD at +0x02 is
 // stored FIRST and the WORD at +0x00 second (`MOV [RCX+2],0` then
 // `MOV [RCX],0`). The two overlap at +0x02..+0x03; the final state is the same
 // either way, but the order is what the allocator and a watchpoint see.
-void InitZeroD2_6(uint8_t* d) {
-    *reinterpret_cast<uint32_t*>(d + 2) = 0;
-    *reinterpret_cast<uint16_t*>(d + 0) = 0;
+static void TripleInit(CollisionTriple* d) {
+    d->b = 0;                            // the DWORD at +0x02 (b, c) FIRST
+    d->c = 0;
+    d->a = 0;                            // then the WORD at +0x00
 }
+void InitZeroD2_6(uint8_t* d) { InitAs<CollisionTriple, &TripleInit>(d); }
 
 // 0x18007a790 / 0x180073dc0 (Picking::SubMesh::_triangles, stride 0xc): a QWORD
 // at +0x00 and a DWORD at +0x08. NOT `Assign12` (three dwords) -- same twelve
 // bytes, different store widths, and the two rows are kept apart for that
 // reason alone.
-void AssignD2_12q(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint64_t*>(d + 0) = *reinterpret_cast<const uint64_t*>(s + 0);
-    *reinterpret_cast<uint32_t*>(d + 8) = *reinterpret_cast<const uint32_t*>(s + 8);
+using PickingTriangle = Picking::PickingMesh::Triangle;
+static void TriangleAssign(PickingTriangle* d, const PickingTriangle* s) {
+    d->i0 = s->i0;                       // one QWORD at +0x00 (i0, i1, i2, j0)
+    d->i1 = s->i1;
+    d->i2 = s->i2;
+    d->j0 = s->j0;
+    d->j1 = s->j1;                       // one DWORD at +0x08 (j1, j2)
+    d->j2 = s->j2;
 }
+void AssignD2_12q(uint8_t* d, const uint8_t* s) { AssignAs<PickingTriangle, &TriangleAssign>(d, s); }
 // 0x18007a4d0's `else` arm: one zero QWORD at +0x00 and one zero DWORD at
 // +0x08, so the whole 0xc stride is written.
-void InitZeroD2_12q(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0) = 0;
-    *reinterpret_cast<uint32_t*>(d + 8) = 0;
+static void TriangleInit(PickingTriangle* d) {
+    d->i0 = 0;                           // one zero QWORD at +0x00
+    d->i1 = 0;
+    d->i2 = 0;
+    d->j0 = 0;
+    d->j1 = 0;                           // one zero DWORD at +0x08
+    d->j2 = 0;
 }
+void InitZeroD2_12q(uint8_t* d) { InitAs<PickingTriangle, &TriangleInit>(d); }
 
 // 0x180061bb0 (the live-particle slot array INSIDE a Graphics::Particle pool
 // record -- the record ctor 0x180103bf0 sizes it from the Particle's +0x28;
@@ -3369,19 +3437,14 @@ void InitZeroD2_12q(uint8_t* d) {
 // qwords at +0x40/+0x48/+0x50 -- 0x58 bytes with no hole, so this is a pure
 // byte copy and `byteCopy` is true. The widths are transcribed rather than
 // folded into a memcpy for the reason AssignD2_6 gives.
+static void ParticleRecordAssign(RtGraphics::ParticleRecord* d, const RtGraphics::ParticleRecord* s) {
+    *d = *s;      // two qwords, twelve dwords, three qwords in retail: all 0x58 bytes
+}
 void AssignD2_58(uint8_t* d, const uint8_t* s) {
-    reinterpret_cast<uint64_t*>(d)[0] = reinterpret_cast<const uint64_t*>(s)[0];
-    reinterpret_cast<uint64_t*>(d)[1] = reinterpret_cast<const uint64_t*>(s)[1];
-    for (int k = 4; k < 16; ++k)
-        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
-    reinterpret_cast<uint64_t*>(d)[8]  = reinterpret_cast<const uint64_t*>(s)[8];
-    reinterpret_cast<uint64_t*>(d)[9]  = reinterpret_cast<const uint64_t*>(s)[9];
-    reinterpret_cast<uint64_t*>(d)[10] = reinterpret_cast<const uint64_t*>(s)[10];
+    AssignAs<RtGraphics::ParticleRecord, &ParticleRecordAssign>(d, s);
 }
 // 0x180061bb0's `else` arm: ELEVEN zero qwords, +0x00..+0x57, no hole.
-void InitZeroD2_58(uint8_t* d) {
-    for (int k = 0; k < 11; ++k) reinterpret_cast<uint64_t*>(d)[k] = 0;
-}
+void InitZeroD2_58(uint8_t* d) { InitAs<uint64_t, &ZeroWords<uint64_t, 11>>(d); }
 
 // ---- the two NON-TRIVIAL elements -----------------------------------------
 //
@@ -3417,14 +3480,20 @@ void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count);
 // is the assign window below. The pre-zeroing is load-bearing and not tidying:
 // each `operator=` opens by destroying the DESTINATION, so a non-zero header
 // there would be freed as a live buffer.
+using CollisionFace = Collision2D::CollisionMesh::Face;
+static void FaceAssign(CollisionFace* d, const CollisionFace* s) {
+    d->field0 = s->field0;
+    d->triples._data     = nullptr;
+    d->triples._size     = 0;            // one qword in retail (H7)
+    d->triples._capacity = 0;
+    RtColl_ArrayAssign_180066de0(&d->triples, &s->triples);
+    d->quads._data     = nullptr;
+    d->quads._size     = 0;
+    d->quads._capacity = 0;
+    RtColl_ArrayAssign_180066b30(&d->quads, &s->quads);
+}
 void* AssignFace28Impl(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    RtColl_ArrayAssign_180066de0(d + 0x08, s + 0x08);
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
-    RtColl_ArrayAssign_180066b30(d + 0x18, s + 0x18);
+    AssignAs<CollisionFace, &FaceAssign>(d, s);
     return d;
 }
 void AssignFace28(uint8_t* d, const uint8_t* s) { AssignFace28Impl(d, s); }
@@ -3432,12 +3501,15 @@ void AssignFace28(uint8_t* d, const uint8_t* s) { AssignFace28Impl(d, s); }
 // +0x20 -- and NOTHING at +0x00..+0x07. A fresh Face's `field0` and its padding
 // are left holding whatever the allocation contained, which is why the init
 // window below is +0x00..+0x08 and not empty.
-void InitFace28(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+static void FaceInit(CollisionFace* d) {
+    d->triples._data     = nullptr;      // +0x08
+    d->triples._size     = 0;            // +0x10 (one qword, H7)
+    d->triples._capacity = 0;
+    d->quads._data       = nullptr;      // +0x18
+    d->quads._size       = 0;            // +0x20 (one qword, H7)
+    d->quads._capacity   = 0;
 }
+void InitFace28(uint8_t* d) { InitAs<CollisionFace, &FaceInit>(d); }
 void DestroyFace28Range(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyInner_1800664c0(ignoredThis, base, count);
 }
@@ -3451,27 +3523,25 @@ void DestroyFace28Range(void* ignoredThis, uint8_t* base, int count) {
 //     +0x60  inner Array header zeroed, then CALL 0x180073dc0  (_triangles)
 //     +0x70  inner Array header zeroed, then CALL 0x1800742d0  (_uvs)
 // Every one of the 0x80 bytes is written, so there is no assign window.
-void* AssignSubMesh80Impl(uint8_t* d, const uint8_t* s) {
+using PickingSubMesh = Picking::PickingMesh::SubMesh;
+static void SubMeshAssign(PickingSubMesh* d, const PickingSubMesh* s) {
     // the String at +0x00: null the slot, adopt, bump the shared refcount
-    *reinterpret_cast<void**>(d) = nullptr;
-    if (void* p = *reinterpret_cast<void* const*>(s)) {
-        *reinterpret_cast<void**>(d) = p;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) - 4));
-    }
-    for (int k = 2; k < 16; ++k)
-        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
-    *reinterpret_cast<uint64_t*>(d + 0x40) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x48) = 0;
-    RtColl_ArrayAssign_1800741b0(d + 0x40, s + 0x40);
-    *reinterpret_cast<uint64_t*>(d + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x58) = 0;
-    RtColl_ArrayAssign_1800741b0(d + 0x50, s + 0x50);
-    *reinterpret_cast<uint64_t*>(d + 0x60) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x68) = 0;
-    RtColl_ArrayAssign_180073dc0(d + 0x60, s + 0x60);
-    *reinterpret_cast<uint64_t*>(d + 0x70) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x78) = 0;
-    RtColl_ArrayAssign_1800742d0(d + 0x70, s + 0x70);
+    AdoptString(d->_name, s->_name);
+    // +0x08..+0x3f: fourteen plain DWORD moves in retail
+    d->_parent = s->_parent;
+    d->_local  = s->_local;
+    d->_aabb   = s->_aabb;
+    d->_vertices._data = nullptr;  d->_vertices._size = 0;  d->_vertices._capacity = 0;
+    RtColl_ArrayAssign_1800741b0(&d->_vertices, &s->_vertices);
+    d->_normals._data = nullptr;   d->_normals._size = 0;   d->_normals._capacity = 0;
+    RtColl_ArrayAssign_1800741b0(&d->_normals, &s->_normals);
+    d->_triangles._data = nullptr; d->_triangles._size = 0; d->_triangles._capacity = 0;
+    RtColl_ArrayAssign_180073dc0(&d->_triangles, &s->_triangles);
+    d->_uvs._data = nullptr;       d->_uvs._size = 0;       d->_uvs._capacity = 0;
+    RtColl_ArrayAssign_1800742d0(&d->_uvs, &s->_uvs);
+}
+void* AssignSubMesh80Impl(uint8_t* d, const uint8_t* s) {
+    AssignAs<PickingSubMesh, &SubMeshAssign>(d, s);
     return d;
 }
 void AssignSubMesh80(uint8_t* d, const uint8_t* s) { AssignSubMesh80Impl(d, s); }
@@ -3479,21 +3549,28 @@ void AssignSubMesh80(uint8_t* d, const uint8_t* s) { AssignSubMesh80Impl(d, s); 
 // parent -1, identity rotation (1.0f at +0x18), an INVERTED AABB (+1e8 min,
 // -1e8 max -- 0x4cbebc20 / 0xccbebc20) and four empty inner Arrays. All 0x80
 // bytes are written; there is no init window.
-void InitSubMesh80(uint8_t* d) {
-    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x08) = 0xffffffffu;
-    *reinterpret_cast<uint64_t*>(d + 0x0c) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x14) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x18) = 0x3f800000ull;
-    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0x28) = 0x4cbebc20u;
-    *reinterpret_cast<uint32_t*>(d + 0x2c) = 0x4cbebc20u;
-    *reinterpret_cast<uint32_t*>(d + 0x30) = 0x4cbebc20u;
-    *reinterpret_cast<uint32_t*>(d + 0x34) = 0xccbebc20u;
-    *reinterpret_cast<uint32_t*>(d + 0x38) = 0xccbebc20u;
-    *reinterpret_cast<uint32_t*>(d + 0x3c) = 0xccbebc20u;
-    for (int k = 8; k < 16; ++k) reinterpret_cast<uint64_t*>(d)[k] = 0;
+static void SubMeshInit(PickingSubMesh* d) {
+    d->_name                   = nullptr;   // +0x00
+    d->_parent                 = -1;        // +0x08 0xffffffff
+    d->_local.rotation.x       = 0.0f;      // +0x0c qword
+    d->_local.rotation.y       = 0.0f;
+    d->_local.rotation.z       = 0.0f;      // +0x14
+    d->_local.rotation.w       = 1.0f;      // +0x18 qword 0x3f800000 (w, translation.x)
+    d->_local.translation.x    = 0.0f;
+    d->_local.translation.y    = 0.0f;      // +0x20 qword
+    d->_local.translation.z    = 0.0f;
+    d->_aabb.min.x             = 1.0e8f;    // 0x4cbebc20
+    d->_aabb.min.y             = 1.0e8f;
+    d->_aabb.min.z             = 1.0e8f;
+    d->_aabb.max.x             = -1.0e8f;   // 0xccbebc20
+    d->_aabb.max.y             = -1.0e8f;
+    d->_aabb.max.z             = -1.0e8f;
+    d->_vertices._data  = nullptr; d->_vertices._size  = 0; d->_vertices._capacity  = 0;
+    d->_normals._data   = nullptr; d->_normals._size   = 0; d->_normals._capacity   = 0;
+    d->_triangles._data = nullptr; d->_triangles._size = 0; d->_triangles._capacity = 0;
+    d->_uvs._data       = nullptr; d->_uvs._size       = 0; d->_uvs._capacity       = 0;
 }
+void InitSubMesh80(uint8_t* d) { InitAs<PickingSubMesh, &SubMeshInit>(d); }
 void DestroySubMesh80Range(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroySubMesh_180073ee0(ignoredThis, base, count);
 }

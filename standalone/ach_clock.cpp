@@ -37,6 +37,7 @@
 //   BANISHED_ACH_YEAR_MAX=<n>     stop boosting at n years (default 250)
 
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Calendar.h"         // B4: GameUpdateLoop::m_dayCounter
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -90,13 +91,12 @@ extern "C" void AchClock_Tick(int frameNum) {
     if (s_yearBoost <= 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    void* dateObj = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0x128);
+    Calendar* dateObj = GameUpdateLoop::_singleton->m_dayCounter;   // +0x128
     if (!dateObj) return;
 
-    uint32_t* year = reinterpret_cast<uint32_t*>(dateObj);
+    int32_t* year = &dateObj->year;                                   // +0x00
     if ((int)*year >= s_yearMax) return;
-    *year += (uint32_t)s_yearBoost;
+    *year = (int32_t)((uint32_t)*year + (uint32_t)s_yearBoost);
 
     // One line per decade: enough to see the counter move in the log without
     // drowning the achievement census it exists to serve.

@@ -138,7 +138,7 @@ UNIT_TEST(tool_leaf_sizes_match_retail_create) {
     CHECK_EQ(offsetof(FencedTool, sceneObjectId),        (size_t)0x58);
     CHECK_EQ(offsetof(FencedTool, meshInstance),         (size_t)0x68);
     CHECK_EQ(offsetof(PathTool, selectedEntity),         (size_t)0x28);
-    CHECK_EQ(offsetof(PathTool, _field58),               (size_t)0x58);
+    CHECK_EQ(offsetof(PathTool, segments._size),          (size_t)0x58);   // B4 PLAYER: +0x50 is Collection::Array segments
     CHECK_EQ(offsetof(PlacementTool, sceneObjectIdx),    (size_t)0x60);
     CHECK_EQ(offsetof(PlacementTool, meshInstance),      (size_t)0x68);
     CHECK_EQ(offsetof(RemovalTool, removalDesc),         (size_t)0x38);

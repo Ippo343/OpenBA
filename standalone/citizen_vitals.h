@@ -3,4 +3,5 @@
 // BANISHED_VITALS=0 disables.
 #pragma once
 
-void CitizenVitals_Tick(void* gameWorld);
+class GameUpdateLoop;
+void CitizenVitals_Tick(GameUpdateLoop* gameWorld);

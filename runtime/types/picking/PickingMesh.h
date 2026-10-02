@@ -132,7 +132,7 @@ public:
     // be a second owner the compiler thinks it controls.
     // ========================================================================
     struct SubMesh {
-        void*                        _name;           // +0x00  System::String
+        char*                        _name;           // +0x00  System::String (B4 R-CORE: char*, H4)
         int32_t                      _parent;         // +0x08
         ::Transform                  _local;          // +0x0c  (0x1c bytes)
         ::Box                        _aabb;           // +0x28

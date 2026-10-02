@@ -173,11 +173,43 @@
 #include "array_internal.h"
 #include "array_destroy_internal.h"
 #include "../../types/graphics/Animation.h"   // B3R: RtGraphics_Animation_Dtor (0x1800fb290)
+// B.4 (R-CORE): the element types the written-out bodies below read by name.
+#include "../../types/system/String.h"              // RtSystem::StringRefCount
+#include "../../types/ui/SpriteSheet.h"             // UI::SpriteInfo
+#include "../../types/ui/LayoutDescription.h"       // UI::LayoutDescription::Entry
+#include "../../types/graphics/AnimationManager.h"  // AnimationManager::Instance
+#include "../../types/picking/PickingMesh.h"        // Picking::PickingMesh::SubMesh
 
 namespace rtcoll {
 
 // `DestroySpec` and the two body signatures are in array_destroy_internal.h,
 // shared with the probe so it drives THESE bodies and not a copy of them.
+
+// ---- one String slot, by name --------------------------------------------
+// The adopt half of retail's inlined System::String copy (slot zeroed FIRST)
+// and Body B's release of ONE slot (the freeing arm leaves `str - 8`, the
+// sharing arm null). The written-out element bodies below use these on their
+// named String fields; Body B itself still walks its offset table.
+static inline void AdoptStringSlot(char*& slot, char* src) {
+    slot = nullptr;
+    if (src) {
+        slot = src;
+        ++RtSystem::StringRefCount(src);
+    }
+}
+static inline void ReleaseStringSlot(char*& slot) {
+    char* str = slot;
+    if (!str) return;
+    int32_t& rc = RtSystem::StringRefCount(str);
+    --rc;                                         // DEC dword [RAX-4]
+    if (rc != 0) {                                // CMP / JNZ — still shared
+        slot = nullptr;
+        return;
+    }
+    char* blk = str - 8;                          // ADD qword [slot],-8
+    slot = blk;                                   // ... and the slot KEEPS it
+    if (blk != nullptr) MemFree(blk);             // JZ on the ADD's result
+}
 
 // ---- BODY A ---------------------------------------------------------------
 // Free the inner Array<T>'s buffer and clear its 16-byte header, per element.
@@ -192,10 +224,10 @@ void FreeInnerArraysCore(uint8_t* base, int count, const DestroySpec* s) {
         uint8_t* e = base + i * s->stride;
         for (int k = 0; k < s->nOffs; ++k) {
             uint8_t* slot = e + s->offs[k];
-            void* p = *reinterpret_cast<void**>(slot);
+            void* p = *reinterpret_cast<void**>(slot);  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
             if (p) MemFree(p);                    // Enter; Free(_singleton,p); Leave
-            *reinterpret_cast<uint64_t*>(slot + 0) = 0;
-            *reinterpret_cast<uint64_t*>(slot + 8) = 0;
+            *reinterpret_cast<uint64_t*>(slot + 0) = 0;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
+            *reinterpret_cast<uint64_t*>(slot + 8) = 0;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
         }
     }
 }
@@ -209,10 +241,10 @@ void ReleaseStringsCore(uint8_t* base, int count, const DestroySpec* s) {
     for (int64_t i = 0; i < n; ++i) {
         uint8_t* e = base + i * s->stride;
         for (int k = 0; k < s->nOffs; ++k) {
-            uint8_t** slot = reinterpret_cast<uint8_t**>(e + s->offs[k]);
+            uint8_t** slot = reinterpret_cast<uint8_t**>(e + s->offs[k]);  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
             uint8_t* str = *slot;
             if (!str) continue;
-            int32_t* rc = reinterpret_cast<int32_t*>(str - 4);
+            int32_t* rc = reinterpret_cast<int32_t*>(str - 4);  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
             --*rc;                                // DEC dword [RAX-4]
             if (*rc != 0) {                       // CMP / JNZ — still shared
                 *slot = nullptr;
@@ -403,7 +435,7 @@ static int FreeInnerArraysCounted(uint8_t* base, int count, const DestroySpec* s
         const int64_t n = static_cast<int64_t>(count);
         for (int64_t i = 0; i < n; ++i)
             for (int k = 0; k < s->nOffs; ++k)
-                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++freed;
+                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++freed;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
     }
     FreeInnerArraysCore(base, count, s);
     return freed;
@@ -415,7 +447,7 @@ static int ReleaseStringsCounted(uint8_t* base, int count, const DestroySpec* s)
         const int64_t n = static_cast<int64_t>(count);
         for (int64_t i = 0; i < n; ++i)
             for (int k = 0; k < s->nOffs; ++k)
-                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++nonNull;
+                if (*reinterpret_cast<void**>(base + i * s->stride + s->offs[k])) ++nonNull;  // LEFT: the (stride, offset-table) Body A / Body B core: one typed body per element type is the closing wave's
     }
     ReleaseStringsCore(base, count, s);
     return nonNull;
@@ -438,7 +470,7 @@ namespace rtcoll {
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int freed = FreeInnerArraysCounted(                             \
-            static_cast<uint8_t*>(base), count, &SPEC);                       \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
     }
 
 // ONLY THE HELPERS OUR TREE ACTUALLY RESOLVES GET AN ENTRY POINT.
@@ -500,7 +532,7 @@ A_ENTRY(18004ff80, kD_InnerArr_10)    // Video: ShaderProgram::_byteCode inner A
     void RtColl_DestroyStrings_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int n = ReleaseStringsCounted(                                  \
-            static_cast<uint8_t*>(base), count, &SPEC);                       \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
     }
 
 B_ENTRY(180005930, kD_Str_10)         // {String*, ExternalPtr} — lane Q's kSpec_StringExt
@@ -688,7 +720,7 @@ B_ENTRY(1800341e0, kD_Str2_20)        // Save: Persistence metadata entry
 
 #define J2_ENTRY(ADDR, CORE, SPEC)                                            \
     void* RtColl_ArrayDtorElem_##ADDR(void* self) {                           \
-        ArrayHdr* a = static_cast<ArrayHdr*>(self);                           \
+        ArrayHdr* a = static_cast<ArrayHdr*>(self);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
         /* retail: R8D=[RCX+8], RDX=[RCX], RCX unchanged, then CALL helper */  \
         const int freed = CORE(a->_data, a->_size, &SPEC);                    \
         void* r = ArrayDtorImpl(a);                                           \
@@ -713,7 +745,7 @@ J2_ENTRY(18004fa30, ReleaseStringsCounted,  kD_Str_20)       // CALL 0x18004fe20
 // not use A_ENTRY/B_ENTRY: those are (this, base, count) because retail's
 // helpers are.
 void RtColl_DestroyElem_180044050(void* elem) {
-    const int n = ReleaseStringsCounted(static_cast<uint8_t*>(elem), 1, &kD_Str3_38at08);
+    const int n = ReleaseStringsCounted(static_cast<uint8_t*>(elem), 1, &kD_Str3_38at08);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
 }
 J2_ENTRY(180043a00, ReleaseStringsCounted,  kD_Str3_38at08)  // UI: ~LayoutDescription's entry array
 
@@ -867,31 +899,32 @@ J2_ENTRY(180004d60, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180005930
 // ORDER IS LOAD-BEARING HERE in a way it is not elsewhere in this file: the
 // +0x20 array is destroyed and freed BEFORE the +0x10 one is even read, and the
 // two frees reach the allocator in that order.
-static int DestroyNestedPair(uint8_t* base, int count) {
-    int freed = 0;
-    if (count <= 0) return 0;
+using AnimInstance = Graphics::AnimationManager::Instance;
+static void DestroyNestedPair(AnimInstance* base, int count) {
+    if (count <= 0) return;
     const int64_t n = static_cast<int64_t>(count);
     for (int64_t i = 0; i < n; ++i) {
-        uint8_t* e = base + i * 0x30;
+        AnimInstance* e = base + i;
 
-        uint8_t* inner = *reinterpret_cast<uint8_t**>(e + 0x20);
-        FreeInnerArraysCore(inner, *reinterpret_cast<int32_t*>(e + 0x28), &kD_InnerArr3_48);
-        if (inner) { MemFree(inner); ++freed; }
-        *reinterpret_cast<uint64_t*>(e + 0x20) = 0;
-        *reinterpret_cast<uint64_t*>(e + 0x28) = 0;
+        Collection::Array<Graphics::AnimationState>& states = e->_states;   // +0x20
+        FreeInnerArraysCore(reinterpret_cast<uint8_t*>(states._data), states._size, &kD_InnerArr3_48);  // CAST-OK: elem_stride
+        if (states._data) MemFree(states._data);
+        states._data = nullptr;
+        states._size = 0;                         // one qword (H7)
+        states._capacity = 0;
 
-        uint8_t* strs = *reinterpret_cast<uint8_t**>(e + 0x10);
-        ReleaseStringsCore(strs, *reinterpret_cast<int32_t*>(e + 0x18), &kD_Str_48);
-        if (strs) { MemFree(strs); ++freed; }
-        *reinterpret_cast<uint64_t*>(e + 0x10) = 0;
-        *reinterpret_cast<uint64_t*>(e + 0x18) = 0;
+        Collection::Array<Graphics::GraphicsMesh::Node>& nodes = e->_nodes; // +0x10
+        ReleaseStringsCore(reinterpret_cast<uint8_t*>(nodes._data), nodes._size, &kD_Str_48);  // CAST-OK: elem_stride
+        if (nodes._data) MemFree(nodes._data);
+        nodes._data = nullptr;
+        nodes._size = 0;                          // one qword (H7)
+        nodes._capacity = 0;
     }
-    return freed;
 }
 
 void* RtColl_ArrayDtorElem_18005bf60(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
-    const int freed = DestroyNestedPair(a->_data, a->_size);   // CALL 0x18005c550
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    DestroyAs<AnimInstance, &DestroyNestedPair>(nullptr, a->_data, a->_size);   // CALL 0x18005c550
     void* r = ArrayDtorImpl(a);
     return r;
 }
@@ -939,22 +972,22 @@ void* RtColl_ArrayDtorElem_18005bf60(void* self) {
 // lane, with no ability to run lane Q's probe, would be the change that looks
 // harmless and silently stops comparing bytes that should be compared. The
 // finding is filed in docs/runtime_port/WAVE9_LANE_D2.md as lane Q's to make.
-void* RtColl_SpriteEntryAssign_180004220(void* dst, const void* src) {
-    uint8_t* d = static_cast<uint8_t*>(dst);
-    const uint8_t* s = static_cast<const uint8_t*>(src);
-
-    for (uint32_t off = 0x00; off <= 0x08; off += 8) {
-        *reinterpret_cast<void**>(d + off) = nullptr;
-        void* str = *reinterpret_cast<void* const*>(s + off);
-        if (str) {
-            *reinterpret_cast<void**>(d + off) = str;
-            ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4);
-        }
-    }
-    for (uint32_t off = 0x10; off <= 0x30; off += 4)
-        *reinterpret_cast<uint32_t*>(d + off) = *reinterpret_cast<const uint32_t*>(s + off);
+static void SpriteInfoCopy(UI::SpriteInfo* d, const UI::SpriteInfo* s) {
+    AdoptStringSlot(d->name,  s->name);           // +0x00
+    AdoptStringSlot(d->group, s->group);          // +0x08
+    d->x           = s->x;                        // nine dwords, +0x10 .. +0x30
+    d->y           = s->y;
+    d->_reserved18 = s->_reserved18;
+    d->width       = s->width;
+    d->height      = s->height;
+    d->u0          = s->u0;
+    d->v0          = s->v0;
+    d->u1          = s->u1;
+    d->v1          = s->v1;
     /* +0x34 .. +0x37 deliberately untouched — retail does not write them */
-
+}
+void* RtColl_SpriteEntryAssign_180004220(uint8_t* dst, const uint8_t* src) {
+    AssignAs<UI::SpriteInfo, &SpriteInfoCopy>(dst, src);
     return dst;
 }
 
@@ -972,25 +1005,21 @@ void* RtColl_SpriteEntryAssign_180004220(void* dst, const void* src) {
 // byte later: an oracle that memcmps 0x38 bytes after this runs compares seven
 // bytes of allocator fill. array.cpp's kSpec_LayoutEntry38 carries that exact
 // window as `assignUnwritten = [0x31, 0x38)` so its probe does not.
-void* RtColl_LayoutEntryAssign_180043980(void* dst, const void* src) {
-    uint8_t* d = static_cast<uint8_t*>(dst);
-    const uint8_t* s = static_cast<const uint8_t*>(src);
-
-    *reinterpret_cast<const void**>(d) = *reinterpret_cast<void* const*>(s);
-
-    for (uint32_t off = 0x08; off <= 0x18; off += 8) {
-        *reinterpret_cast<void**>(d + off) = nullptr;
-        void* str = *reinterpret_cast<void* const*>(s + off);
-        if (str) {
-            *reinterpret_cast<void**>(d + off) = str;
-            ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4);
-        }
-    }
-    for (uint32_t off = 0x20; off <= 0x2c; off += 4)
-        *reinterpret_cast<uint32_t*>(d + off) = *reinterpret_cast<const uint32_t*>(s + off);
-    d[0x30] = s[0x30];
+using LayoutEntry = UI::LayoutDescription::Entry;
+static void LayoutEntryCopy(LayoutEntry* d, const LayoutEntry* s) {
+    d->desc = s->desc;                            // +0x00, no refcount touch
+    AdoptStringSlot(d->name,        s->name);     // +0x08
+    AdoptStringSlot(d->relativeToX, s->relativeToX);  // +0x10
+    AdoptStringSlot(d->relativeToY, s->relativeToY);  // +0x18
+    d->horizontal = s->horizontal;                // four dwords
+    d->vertical   = s->vertical;
+    d->offsetX    = s->offsetX;
+    d->offsetY    = s->offsetY;
+    d->force      = s->force;                     // one byte
     /* +0x31 .. +0x37 deliberately untouched -- retail does not write them */
-
+}
+void* RtColl_LayoutEntryAssign_180043980(uint8_t* dst, const uint8_t* src) {
+    AssignAs<LayoutEntry, &LayoutEntryCopy>(dst, src);
     return dst;
 }
 
@@ -1037,8 +1066,8 @@ void* RtColl_LayoutEntryAssign_180043980(void* dst, const void* src) {
 // and reaches ExpandRelativePath / FindOrLoad / BinaryFileStream. Porting it
 // would create a J9 row, which is the trade J9 exists to avoid taking piecemeal.
 void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
-    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
     if (a == s) return a;
 
     ArrayDtorImpl(a);                      // CALL 0x180004890 — lane Q's J1 body
@@ -1061,8 +1090,7 @@ void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
     for (int32_t i = 0; i < a->_size; ++i) {
         uint8_t* p = a->_data + static_cast<int64_t>(i) * 8;
         if (p == nullptr) continue;        // retail tests the COMPUTED address
-        *reinterpret_cast<void**>(p) =
-            *reinterpret_cast<void* const*>(s->_data + static_cast<int64_t>(i) * 8);
+        AssignAs<void*, &CopyWords<void*, 1>>(p, s->_data + static_cast<int64_t>(i) * 8);
         ++copied;
     }
 
@@ -1183,8 +1211,8 @@ const ArraySpec kAsgn_MetaEntry20 = {
 
 #define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
-        return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
-                               static_cast<const ArrayHdr*>(src),             \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+                               static_cast<const ArrayHdr*>(src),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
                                &SPEC, &CLEAR);                  \
     }
 
@@ -1211,20 +1239,17 @@ J4_ENTRY(180033f30, kAsgn_MetaEntry20, ArrayClearMetaEntry20)   // clear 0x18003
 // 0x18001bece (Graphics::DrawGroup's inner arrays, graphics/closure_batch2b.cpp
 // reaches it BY ADDRESS through InnerArrayCopyCtor), which is how the closure
 // found all three.
-void Assign56(uint8_t* d, const uint8_t* s) {
-    for (int i = 0; i < 7; ++i)
-        reinterpret_cast<uint64_t*>(d)[i] = reinterpret_cast<const uint64_t*>(s)[i];
-}
+void Assign56(uint8_t* d, const uint8_t* s) { AssignAs<uint64_t, &CopyWords<uint64_t, 7>>(d, s); }
 const ArraySpec kAsgn_Blob38 = {
     "Array<blob0x38>", 0x38, 8, &Assign56, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 void* RtColl_ArrayAssign_18001cd30(void* self, const void* src) {
-    return ArrayAssignCore(static_cast<ArrayHdr*>(self),
-                           static_cast<const ArrayHdr*>(src),
+    return ArrayAssignCore(static_cast<ArrayHdr*>(self),  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+                           static_cast<const ArrayHdr*>(src),  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
                            &kAsgn_Blob38, &ArrayClearTrivial);
 }
 void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
-    ArrayHdr* h = static_cast<ArrayHdr*>(self);
+    ArrayHdr* h = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
     h->_data = nullptr;                                       // 18001c624
     h->_size = 0;                                             // 18001c62b (qword:
     h->_capacity = 0;                                         //   size + capacity)
@@ -1241,8 +1266,8 @@ void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
 // body, not a new one — its own Site so the diff registry attributes
 // divergences to the right retail address.
 void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
-    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
     if (a == s) return a;
 
     ArrayDtorImpl(a);                      // CALL 0x18001bf50 — a J1 body
@@ -1265,8 +1290,7 @@ void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
     for (int32_t i = 0; i < a->_size; ++i) {
         uint8_t* p = a->_data + static_cast<int64_t>(i) * 8;
         if (p == nullptr) continue;
-        *reinterpret_cast<void**>(p) =
-            *reinterpret_cast<void* const*>(s->_data + static_cast<int64_t>(i) * 8);
+        AssignAs<void*, &CopyWords<void*, 1>>(p, s->_data + static_cast<int64_t>(i) * 8);
         ++copied;
     }
 
@@ -1302,7 +1326,7 @@ static_assert(kD_Str2_18.offs[0] > kD_Str2_18.offs[1],
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int freed = FreeInnerArraysCounted(                             \
-            static_cast<uint8_t*>(base), count, &SPEC);                       \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
     }
 
 // 0x180052220: `LEA RBX,[RDX+0x8]` at 0x18005224c, the two zero stores at
@@ -1317,7 +1341,7 @@ D1_A_ENTRY(180052220, kD_InnerArr_18)  // Audio: SoundEffect::Buffer's nested Ar
     void RtColl_DestroyStrings_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int n = ReleaseStringsCounted(                                  \
-            static_cast<uint8_t*>(base), count, &SPEC);                       \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
     }
 
 // 0x18003e3e0: `MOV RBX,RDX` (no +off seed) and `ADD RBX,0x18` at 0x18003e46c
@@ -1336,7 +1360,7 @@ D1_B_ENTRY(180056960, kD_Str2_18)     // Video: VertexProgram::Element
 
 #define D1_J2_ENTRY(ADDR, CORE, SPEC)                                         \
     void* RtColl_ArrayDtorElem_##ADDR(void* self) {                           \
-        ArrayHdr* a = static_cast<ArrayHdr*>(self);                           \
+        ArrayHdr* a = static_cast<ArrayHdr*>(self);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
         const int freed = CORE(a->_data, a->_size, &SPEC);                    \
         void* r = ArrayDtorImpl(a);                                           \
         return r;                                                             \
@@ -1365,18 +1389,18 @@ D1_J2_ENTRY(180056610, ReleaseStringsCounted,  kD_Str2_18)     // CALL 0x1800569
 void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count) {
     (void)ignoredThis;
     if (count <= 0) return;                       // TEST R8D,R8D / JLE
-    uint8_t* base = static_cast<uint8_t*>(basev);
+    uint8_t* base = static_cast<uint8_t*>(basev);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
     const int64_t n = static_cast<int64_t>(count);   // MOVSXD
     int freed = 0;
     for (int64_t i = 0; i < n; ++i) {
         uint8_t* e = base + i * 0x18;
         ReleaseStringsCore(e, 1, &kD_Str_18);      // the String at +0x10 (kD_Str_18)
-        uint8_t* inner = *reinterpret_cast<uint8_t**>(e + 0x00);
-        const int32_t innerN = *reinterpret_cast<int32_t*>(e + 0x08);
+        uint8_t* inner = *reinterpret_cast<uint8_t**>(e + 0x00);  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
+        const int32_t innerN = *reinterpret_cast<int32_t*>(e + 0x08);  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
         freed += ReleaseStringsCounted(inner, innerN, &kD_Str2_18);
         if (inner) MemFree(inner);                 // 0x180056d53..0x180056d83
-        *reinterpret_cast<uint64_t*>(e + 0x00) = 0; // 0x180056d89
-        *reinterpret_cast<uint64_t*>(e + 0x08) = 0; // 0x180056d8c
+        *reinterpret_cast<uint64_t*>(e + 0x00) = 0; // 0x180056d89  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
+        *reinterpret_cast<uint64_t*>(e + 0x08) = 0; // 0x180056d8c  // LEFT: Video VertexProgram::Stream has no type in any header (R-VIDEO)
     }
 }
 
@@ -1390,7 +1414,7 @@ void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count
 // therefore reached BY ADDRESS — registry-first, so the day it lands this call
 // goes to our body with no edit here.
 void* RtColl_ArrayDtorAnim_18001c1e0(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
     const int32_t n = a->_size;
     uint8_t* p = a->_data;
     if (n > 0) {                                   // TEST EAX,EAX / JLE
@@ -1435,8 +1459,8 @@ const ArraySpec kAsgn_Blk18A8 = {
 
 #define D1_J4_ENTRY(ADDR, SPEC, CLEAR)                                        \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
-        return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
-                               static_cast<const ArrayHdr*>(src),             \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+                               static_cast<const ArrayHdr*>(src),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
                                &SPEC, &CLEAR);                  \
     }
 
@@ -1487,7 +1511,7 @@ static_assert(kD_InnerArr2_28.offs[0] > kD_InnerArr2_28.offs[1], "descending");
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
         const int freed = FreeInnerArraysCounted(                             \
-            static_cast<uint8_t*>(base), count, &SPEC);                       \
+            static_cast<uint8_t*>(base), count, &SPEC);  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
     }
 
 A_ENTRY(1800664c0, kD_InnerArr2_28)   // Collision2D: ~Face's two inner arrays
@@ -1511,43 +1535,44 @@ A_ENTRY(1800664c0, kD_InnerArr2_28)   // Collision2D: ~Face's two inner arrays
 //
 // DESCENDING through the arrays and the String LAST -- the same shape as
 // 0x1800109d0's compound helper, and the reason that one is written out too.
-static int DestroySubMesh80Counted(uint8_t* base, int count) {
-    if (count <= 0) return 0;                       // TEST R8D,R8D / JLE
-    int touched = 0;
+using SubMesh = Picking::PickingMesh::SubMesh;
+template <class T>
+static inline void FreeArrayField(Collection::Array<T>& a) {
+    if (a._data) MemFree(a._data);
+    a._data     = nullptr;
+    a._size     = 0;                              // one qword (H7)
+    a._capacity = 0;
+}
+static void DestroySubMesh80(SubMesh* base, int count) {
+    if (count <= 0) return;                       // TEST R8D,R8D / JLE
     const int64_t n = static_cast<int64_t>(count);  // MOVSXD
     for (int64_t i = 0; i < n; ++i) {
-        uint8_t* e = base + i * 0x80;
-        static const uint32_t kOffs[4] = { 0x70u, 0x60u, 0x50u, 0x40u };
-        for (int k = 0; k < 4; ++k) {
-            uint8_t* slot = e + kOffs[k];
-            void* p = *reinterpret_cast<void**>(slot);
-            if (p) { MemFree(p); ++touched; }
-            *reinterpret_cast<uint64_t*>(slot + 0) = 0;
-            *reinterpret_cast<uint64_t*>(slot + 8) = 0;
-        }
-        ReleaseStringsCore(e, 1, &kD_Str_18at00);   // the String at +0x00
-        if (*reinterpret_cast<void**>(e)) ++touched;
+        SubMesh* e = base + i;
+        FreeArrayField(e->_uvs);                  // +0x70
+        FreeArrayField(e->_triangles);            // +0x60
+        FreeArrayField(e->_normals);              // +0x50
+        FreeArrayField(e->_vertices);             // +0x40
+        ReleaseStringSlot(e->_name);              // +0x00, LAST
     }
-    return touched;
 }
 void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count) {
     (void)ignoredThis;
-    const int touched = DestroySubMesh80Counted(static_cast<uint8_t*>(base), count);
+    DestroyAs<SubMesh, &DestroySubMesh80>(ignoredThis, static_cast<uint8_t*>(base), count);  // LEFT: void* door (Collection.h declaration)
 }
 
 // ---- the two J2 entry points ----------------------------------------------
 // Shape is J2 exactly (`R8D=[RCX+8]; RDX=[RCX]; CALL helper`, then the J1
 // body); only the helper differs.
 void* RtColl_ArrayDtorElem_180065d40(void* self) {          // ~Array<Face>
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
     const int freed = FreeInnerArraysCounted(a->_data, a->_size, &kD_InnerArr2_28);
     void* r = ArrayDtorImpl(a);
     return r;
 }
 
 void* RtColl_ArrayDtorElem_180073720(void* self) {          // ~Array<SubMesh>
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);
-    const int touched = DestroySubMesh80Counted(a->_data, a->_size);
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: void* door (Collection.h declarations; outside callers hold void*)
+    DestroyAs<SubMesh, &DestroySubMesh80>(nullptr, a->_data, a->_size);
     void* r = ArrayDtorImpl(a);
     return r;
 }
@@ -1612,8 +1637,8 @@ const ArraySpec kAsgnD2_VPParam18 = {
 
 #define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
-        return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
-                               static_cast<const ArrayHdr*>(src),             \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
+                               static_cast<const ArrayHdr*>(src),  /* LEFT: void* door (Collection.h declarations; outside callers hold void*) */ \
                                &SPEC, &CLEAR);                  \
     }
 

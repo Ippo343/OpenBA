@@ -79,6 +79,10 @@
 #include "Component/HighlightComponent.h"
 #include "Component/HighlightDescription.h"
 #include "Component/ModelComponent.h"
+#include "Component/MapComponent.h"
+#include "Component/MultiObjectComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Player/EditTool.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
@@ -167,56 +171,9 @@ using EdgeVtxArray = Collection::Array<EdgeVertex16>;
 //   Find the HighlightComponent (type DAT_1401c4410) in the component list at
 //   entity+0x30 (array) / +0x38 (count). Writes it (or null) into *outIBP.
 // ===========================================================================
-void Sub7080(int64_t container, void* outIBP) {
-    const uint32_t tid = HighlightComponent::TypeId();
-    void* found = nullptr;
-    int count = *reinterpret_cast<int32_t*>(container + 0x38);
-    for (int i = 0; i < count; i++) {
-        uint64_t* slot = reinterpret_cast<uint64_t*>(
-            *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
-        void* comp = *reinterpret_cast<void**>(slot);
-        uint32_t ct = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if (ct == tid) {
-            uint64_t* slot2 = reinterpret_cast<uint64_t*>(
-                *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
-            void* comp2 = *reinterpret_cast<void**>(slot2);
-            if (Object::IsDerivedFromNullSafe(comp2, tid)) found = comp2;
-            break;
-        }
-    }
-    new (outIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-}
-
-// ===========================================================================
-// FindComponent(ModelComponent) — the lookup Entity_ClearPathQueue (0x140003f60)
-//   performs inside c4a0 to fetch the entity's model-variant indices (+0x164 /
-//   +0x166). Ported inline here (mirrors Sub7080) instead of calling the shared
-//   registered 3f60 (reg_action_cnr.cpp), because that reads the ModelComponent
-//   type-id straight from .rdata (DWORD_1401c7a50), which is NULL in the
-//   standalone image -> the shared helper always returns null there. With the
-//   GetTypeIdByName fallback the citizen's ModelComponent is actually found, so
-//   c4a0 can take the per-variant prebuilt-mesh path (how retail outlines
-//   citizens / other model-variant entities that have no terrain footprint).
-// ===========================================================================
-void FindModelComp(int64_t container, void* outIBP) {
-    const uint32_t tid = ModelComponent::TypeId();
-    void* found = nullptr;
-    int count = *reinterpret_cast<int32_t*>(container + 0x38);
-    for (int i = 0; i < count; i++) {
-        uint64_t* slot = reinterpret_cast<uint64_t*>(
-            *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
-        void* comp = *reinterpret_cast<void**>(slot);
-        uint32_t ct = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if (ct == tid) {
-            void* comp2 = *reinterpret_cast<void**>(slot);
-            if (Object::IsDerivedFromNullSafe(comp2, tid)) found = comp2;
-            break;
-        }
-    }
-    new (outIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-}
+// B4 PLAYER: Sub7080 (0x140007080, FindComponent<HighlightComponent>) and the
+// inline ModelComponent finder are ComponentEntity::FindComponent<T>() now (the
+// class static TypeId() is what both read).
 
 // ===========================================================================
 // FUN_1400b10e0 (0x1400b10e0)
@@ -499,9 +456,11 @@ void Impl_b930(int64_t self) {
 //   between the built EdgeMesh (self+0xf8, when no per-cell mesh applies) and a
 //   per-cell prebuilt mesh from the description table. self = HighlightComponent*.
 // ===========================================================================
-void Impl_c4a0(int64_t self) {
-    int64_t gw = reinterpret_cast<int64_t>(GameUpdateLoop::_singleton);
-    void* scene = *reinterpret_cast<void**>(gw + 0x60);
+void Impl_c4a0(HighlightComponent* hc) {
+    // LEFT: edgeMeshInstance (+0x28) and transform (+0x100) are raw storage in
+    // block COMP's HighlightComponent (B.4 H5); they are reached from this integer.
+    const int64_t self = reinterpret_cast<int64_t>(hc);
+    Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
 
     // Standalone: the HighlightComponent is created via COMPONENT_INERT_FACTORY
     // (all zeroed), so its embedded EdgeMeshInstance at +0x28 is unconstructed AND
@@ -511,78 +470,74 @@ void Impl_c4a0(int64_t self) {
     // object id 0 — e.g. the storage barn — and corrupt the scene / freeze.)
     if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {
         ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor
-        *reinterpret_cast<int32_t*>(self + 0x120) = -1;
+        hc->highlightId = -1;
     }
 
     // If we already have a scene object, remove it and clear the "in-scene" flag.
-    if ((int)*reinterpret_cast<uint32_t*>(self + 0x120) >= 0) {
-        reinterpret_cast<Graphics::Scene*>(scene)
-            ->RemoveObject(*reinterpret_cast<uint32_t*>(self + 0x120));   // B.3.5 bridge
-        uint32_t f0 = *reinterpret_cast<uint32_t*>(self + 0x20);
+    if (hc->highlightId >= 0) {
+        scene->RemoveObject(static_cast<uint32_t>(hc->highlightId));
+        uint32_t f0 = hc->_flags;
         uint32_t f1 = f0 & 0xfffffffb;
-        *reinterpret_cast<uint32_t*>(self + 0x20) = f1;
-        if (((f1 ^ f0) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(self + 0x10) != 0) {
-            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(self + 0x10));
+        hc->_flags = f1;
+        if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
+            NotifyEntityChanged(hc->_entity);   // 0x1400c3470
         }
     }
     // Release the built EdgeMesh (vtable slot 0).
     {
-        void** m = *reinterpret_cast<void***>(self + 0xf8);
-        *reinterpret_cast<uint32_t*>(self + 0x120) = 0xffffffff;
+        void* m = hc->fieldF8;
+        hc->highlightId = -1;
         if (m) {
+            // LEFT: HighlightComponent::fieldF8 is `void*` (block COMP).
             delete reinterpret_cast<Graphics::EdgeMesh*>(m);   // B.3.x bridge (slot 0, free)
-            *reinterpret_cast<void**>(self + 0xf8) = nullptr;
+            hc->fieldF8 = nullptr;
         }
     }
-    if (*reinterpret_cast<char*>(self + 0x11c) == 0) return;   // highlight not active
+    if (hc->highlightFlag == 0) return;   // highlight not active
 
     // Look up per-cell prebuilt mesh indices (charComp +0x164/+0x166) + the
     // "any neighbour already highlighting" test over sibling components.
-    uint64_t charIBP = 0, compIBP = 0;
-    FindModelComp(*reinterpret_cast<int64_t*>(self + 0x10), &charIBP);   // was 0x140003f60 (null tid in SA)
-    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x10), &compIBP);
+    ModelComponent* charComp = hc->_entity->FindComponent<ModelComponent>();              // 0x140003f60
+    MultiObjectComponent* siblings = hc->_entity->FindComponent<MultiObjectComponent>();  // 0x140004740
 
-    void* ownerObj = *reinterpret_cast<void**>(self + 0x18);
+    Description* ownerObj = hc->_description;
     const uint32_t tidDesc = HighlightDescription::TypeId();
-    void* desc = Object::IsDerivedFromNullSafe(ownerObj, tidDesc) ? ownerObj : nullptr;
+    HighlightDescription* desc = Object::IsDerivedFromNullSafe(ownerObj, tidDesc)
+        ? static_cast<HighlightDescription*>(ownerObj) : nullptr;
 
     int iVar10 = -1, iVar11 = -1;
-    if (charIBP != 0) {
-        iVar10 = (int)*reinterpret_cast<int16_t*>(charIBP + 0x164);
-        iVar11 = (int)*reinterpret_cast<int16_t*>(charIBP + 0x166);
+    if (charComp != nullptr) {
+        iVar10 = (int)charComp->meshGroup;
+        iVar11 = (int)charComp->meshIndex;
     }
 
     bool neighbourActive = false;
-    if (compIBP != 0) {
-        int cnt = *reinterpret_cast<int32_t*>(compIBP + 0x50);
+    if (siblings != nullptr) {
+        int cnt = siblings->childCount;
         if (cnt > 0) {
-            int64_t off = 0;
             int i = 0;
             do {
-                int64_t sib = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(compIBP + 0x48));
-                uint64_t sibHi = 0;
-                Sub7080(sib, &sibHi);
-                if (sibHi != 0) {
-                    bool active = !(*reinterpret_cast<char*>(sibHi + 0x11c) == 0 ||
-                                    *reinterpret_cast<int32_t*>(sibHi + 0x120) < 0 ||
-                                    *reinterpret_cast<int64_t*>(sibHi + 0xf8) != 0);
+                ComponentEntity* sib = siblings->children[i].Get();
+                HighlightComponent* sibHi = sib->FindComponent<HighlightComponent>();   // 0x140007080
+                if (sibHi != nullptr) {
+                    bool active = !(sibHi->highlightFlag == 0 ||
+                                    sibHi->highlightId < 0 ||
+                                    sibHi->fieldF8 != nullptr);
                     neighbourActive = neighbourActive || active;
                 }
-                i++; off += 8;
-            } while (i < *reinterpret_cast<int32_t*>(compIBP + 0x50));
+                i++;
+            } while (i < siblings->childCount);
             if (neighbourActive) goto add_prebuilt;
         }
     }
 
     // No per-cell mesh (both indices < 0) -> build+submit our own EdgeMesh.
     if (iVar10 < 0 || iVar11 < 0) {
-        uint64_t footprintIBP = 0;
-        void* r = FloorComponent_FindResData(*reinterpret_cast<void**>(self + 0x10), &footprintIBP);
-        if (r && *reinterpret_cast<int64_t*>(r) != 0 &&
-            desc && *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(desc) + 0x30) != 0) {
+        MapComponent* r = hc->_entity->FindComponent<MapComponent>();   // 0x140004680
+        if (r && desc && desc->_ref0 != nullptr) {
             Impl_b930(self);
             reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)
-                ->SetMesh(Graphics::ExternalPtrHandle{*reinterpret_cast<void**>(self + 0xf8)},
+                ->SetMesh(Graphics::ExternalPtrHandle{hc->fieldF8},
                           nullptr);   // B.3.5 bridge
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)
                 ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x100));   // B.3.5 bridge
@@ -591,9 +546,8 @@ void Impl_c4a0(int64_t self) {
             void* inst = reinterpret_cast<void*>(self + 0x28);
             reinterpret_cast<Graphics::Geometry*>(inst)->Update(
                 *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
-            *reinterpret_cast<uint32_t*>(self + 0x120) =
-                reinterpret_cast<Graphics::Scene*>(scene)
-                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
+            hc->highlightId = static_cast<int32_t>(
+                scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge
             return;
         }
     }
@@ -603,13 +557,13 @@ add_prebuilt:
     // entities): mesh = descTable[variantIdx][modelVariant], transform from the
     // ModelComponent (charIBP+0x28). descTable = HighlightDescription+0x20.
     if (iVar10 >= 0 && iVar11 >= 0 && desc) {
-        int64_t table = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(desc) + 0x20);
+        HighlightGroup* table = desc->_groups;
         // Standalone guard: if the HighlightDescription's prebuilt-mesh table (or the
         // selected row/entry) never loaded, bail instead of dereferencing null / OOB.
         // Retail guarantees the table is populated + consistent with the model's
         // variant range; a fresh/inert description in SA may leave it empty.
-        int64_t row = table ? *reinterpret_cast<int64_t*>(table + (int64_t)iVar10 * 0x10) : 0;
-        void* cellMesh = row ? *reinterpret_cast<void**>(row + (int64_t)iVar11 * 8) : nullptr;
+        Object::External** row = table ? table[iVar10].refs : nullptr;
+        void* cellMesh = row ? row[iVar11] : nullptr;
         if (cellMesh == nullptr) return;   // nothing loaded to draw
 
         // The third SetMesh argument is a SOURCE MeshInstance (mangled name:
@@ -644,14 +598,12 @@ add_prebuilt:
         // segments and stamps them build-controlled, but never calls SetMesh — measured
         // 3/3 bridge segments still at +0xf0 == null after it runs. See
         // notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md, "the slot-6 verification pass".
-        void* srcInst = reinterpret_cast<void*>(charIBP + 0x28);
-        void* srcNodes = *reinterpret_cast<void**>(charIBP + 0x28 + 0xf0);
-        if (srcNodes == nullptr) {
+        Graphics::MeshInstance* srcInst = &charComp->meshInstance;
+        if (srcInst->_nodes._data == nullptr) {
             srcInst = nullptr;
         }
         reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)
-            ->SetMesh(Graphics::ExternalPtrHandle{cellMesh},
-                      reinterpret_cast<Graphics::MeshInstance*>(srcInst));   // B.3.5 bridge
+            ->SetMesh(Graphics::ExternalPtrHandle{cellMesh}, srcInst);   // B.3.5 bridge
 
         // The source instance is not only what the outline FOLLOWS, it is what POSITIONS
         // it: retail's PREBUILT branch sets no transform of its own because
@@ -666,21 +618,20 @@ add_prebuilt:
         // call the BUILD branch above makes with the HighlightComponent's +0x100.
         if (srcInst == nullptr) {
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)
-                ->SetTransform(*reinterpret_cast<const Math::Transform*>(charIBP + 0x148));   // B.3.5 bridge
+                ->SetTransform(charComp->transform);
         }
         uint8_t time[8];
         RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(time), 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
         reinterpret_cast<Graphics::Geometry*>(inst)->Update(
             *reinterpret_cast<const System::Time*>(time));   // B.3.x bridge (slot 1)
-        uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
-            ->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
-        uint32_t f0 = *reinterpret_cast<uint32_t*>(self + 0x20);
-        *reinterpret_cast<uint32_t*>(self + 0x120) = id;
+        uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
+        uint32_t f0 = hc->_flags;
+        hc->highlightId = static_cast<int32_t>(id);
         uint32_t f1 = f0 | 4;
-        *reinterpret_cast<uint32_t*>(self + 0x20) = f1;
-        if (((f1 ^ f0) & 0xffff) != 0 && *reinterpret_cast<int64_t*>(self + 0x10) != 0) {
-            ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(self + 0x10));
+        hc->_flags = f1;
+        if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
+            NotifyEntityChanged(hc->_entity);   // 0x1400c3470
         }
     }
 }
@@ -754,51 +705,57 @@ void ReportDeadSelectedEntity(int64_t self, uint64_t ent, uint64_t arr, int32_t 
     std::fflush(stderr);
 }
 
-void Impl_cb40(int64_t self) {
-    if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;
+// Set every HighlightComponent of the selected entity and of its MultiObject
+// children to `flag`, repainting the ones that change (the shared body of cb40 /
+// c9e0 after their own preamble).
+void SetSelectionHighlight(ComponentEntity* selected, uint8_t flag) {
+    MultiObjectComponent* cont = selected->FindComponent<MultiObjectComponent>();   // 0x140004740
+    if (cont != nullptr) {
+        int cnt = cont->childCount;
+        for (int i = 0; i < cnt; i++) {
+            ComponentEntity* sib = cont->children[i].Get();
+            HighlightComponent* hi = sib->FindComponent<HighlightComponent>();   // 0x140007080
+            if (hi != nullptr) {
+                if (hi->highlightFlag != flag) {
+                    hi->highlightFlag = flag;
+                    Impl_c4a0(hi);
+                }
+            }
+            cnt = cont->childCount;
+        }
+    }
+    HighlightComponent* hi2 = selected->FindComponent<HighlightComponent>();   // 0x140007080
+    if (hi2 != nullptr) {
+        if (hi2->highlightFlag != flag) {
+            hi2->highlightFlag = flag;
+            Impl_c4a0(hi2);
+        }
+    }
+}
+
+// EditTool::lastEntityRef (+0x30) holds the entity as an integer (read so by
+// Dialog/edittool_select.cpp, Dialog/toolui.cpp, standalone/orchard_force_start.cpp):
+// the casts from it below are LEFT.
+
+void Impl_cb40(EditTool* self) {
+    if (self->lastEntityRef == 0) return;
     {
-        const uint64_t ref = *reinterpret_cast<uint64_t*>(self + 0x30);
+        const uint64_t ref = self->lastEntityRef;
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
-            ReportBadSelectionRef(self, (int64_t)ref);
+            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);
         } else {
             // The pointer itself can look fine while the ENTITY behind it is freed and
             // its allocation recycled — that is the other shape the reported crash can
             // take, since the finder faults on entity+0x30 (component array) rather
             // than on the entity pointer. Screen the two fields the finder reads.
-            const uint64_t arr = *reinterpret_cast<uint64_t*>(ref + 0x30);
-            const int32_t  cnt = *reinterpret_cast<int32_t*>(ref + 0x38);
+            const ComponentEntity* e = reinterpret_cast<ComponentEntity*>(self->lastEntityRef);
+            const uint64_t arr = reinterpret_cast<uint64_t>(e->_components);   // CAST-OK: ptr_int
+            const int32_t  cnt = e->_componentCount;
             const bool badArr = (cnt != 0) && (arr < 0x10000 || arr > 0x00007FFFFFFFFFFFULL);
-            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(self, ref, arr, cnt);
+            if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(reinterpret_cast<int64_t>(self), ref, arr, cnt);
         }
     }
-
-    uint64_t contIBP = 0;
-    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x30), &contIBP);
-    if (contIBP != 0) {
-        int cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
-        int64_t off = 0;
-        for (int i = 0; i < cnt; i++) {
-            int64_t sib = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(contIBP + 0x48));
-            uint64_t hi = 0;
-            Sub7080(sib, &hi);
-            if (hi != 0) {
-                if (*reinterpret_cast<char*>(hi + 0x11c) != 0) {
-                    *reinterpret_cast<char*>(hi + 0x11c) = 0;
-                    Impl_c4a0((int64_t)hi);
-                }
-            }
-            off += 8;
-            cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
-        }
-    }
-    uint64_t hi2 = 0;
-    Sub7080(*reinterpret_cast<int64_t*>(self + 0x30), &hi2);
-    if (hi2 != 0) {
-        if (*reinterpret_cast<char*>(hi2 + 0x11c) != 0) {
-            *reinterpret_cast<char*>(hi2 + 0x11c) = 0;
-            Impl_c4a0((int64_t)hi2);
-        }
-    }
+    SetSelectionHighlight(reinterpret_cast<ComponentEntity*>(self->lastEntityRef), 0);
 }
 
 // ===========================================================================
@@ -806,37 +763,10 @@ void Impl_cb40(int64_t self) {
 //   highlight (+0x11c = 1) on the entity's HighlightComponents and repaint.
 //   self = EditTool*.
 // ===========================================================================
-void Impl_c9e0(int64_t self) {
+void Impl_c9e0(EditTool* self) {
     Impl_cb40(self);
-    if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;
-
-    uint64_t contIBP = 0;
-    InteractComponent_FindWorkplaceComponent(*reinterpret_cast<uintptr_t*>(self + 0x30), &contIBP);
-    if (contIBP != 0) {
-        int cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
-        int64_t off = 0;
-        for (int i = 0; i < cnt; i++) {
-            int64_t sib = *reinterpret_cast<int64_t*>(off + *reinterpret_cast<int64_t*>(contIBP + 0x48));
-            uint64_t hi = 0;
-            Sub7080(sib, &hi);
-            if (hi != 0) {
-                if (*reinterpret_cast<char*>(hi + 0x11c) != 1) {
-                    *reinterpret_cast<char*>(hi + 0x11c) = 1;
-                    Impl_c4a0((int64_t)hi);
-                }
-            }
-            off += 8;
-            cnt = *reinterpret_cast<int32_t*>(contIBP + 0x50);
-        }
-    }
-    uint64_t hi2 = 0;
-    Sub7080(*reinterpret_cast<int64_t*>(self + 0x30), &hi2);
-    if (hi2 != 0) {
-        if (*reinterpret_cast<char*>(hi2 + 0x11c) != 1) {
-            *reinterpret_cast<char*>(hi2 + 0x11c) = 1;
-            Impl_c4a0((int64_t)hi2);
-        }
-    }
+    if (self->lastEntityRef == 0) return;
+    SetSelectionHighlight(reinterpret_cast<ComponentEntity*>(self->lastEntityRef), 1);
 }
 
 // ===========================================================================
@@ -865,7 +795,7 @@ void Impl_c9e0(int64_t self) {
 // the registered 0x1400fcc90 under BANISHED_SELECTION_OUTLINE; the original exe cc90
 // runs the full teardown unmodified.)
 // ===========================================================================
-void Impl_cc90(int64_t self) {
+void Impl_cc90(EditTool* self) {
     Impl_cb40(self);   // clear the previous entity's outline; leave dialog/refs alone
 }
 
@@ -894,19 +824,18 @@ void Impl_cc90(int64_t self) {
 // EdgeMeshInstance::Update early-outs; buildings don't move, so this is a
 // harmless no-op for them.
 // ===========================================================================
-void Impl_HighlightFollow(int64_t self) {
-    if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;      // nothing selected
-    int64_t entity = *reinterpret_cast<int64_t*>(self + 0x30);
-    // Dead / non-canonical ref (a torn-down entity leaves the -1 sentinel) — Sub7080
-    // would deref it. Treat as "nothing to follow" (mirrors edittool.cpp:328).
-    if (static_cast<uint64_t>(entity) < 0x10000 ||
-        static_cast<uint64_t>(entity) > 0x00007FFFFFFFFFFFULL) return;
+void Impl_HighlightFollow(EditTool* self) {
+    if (self->lastEntityRef == 0) return;      // nothing selected
+    const uint64_t entityBits = self->lastEntityRef;
+    // Dead / non-canonical ref (a torn-down entity leaves the -1 sentinel) — the
+    // finder would deref it. Treat as "nothing to follow" (mirrors edittool.cpp:328).
+    if (entityBits < 0x10000 || entityBits > 0x00007FFFFFFFFFFFULL) return;
+    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(self->lastEntityRef);
 
-    uint64_t hi = 0;
-    Sub7080(entity, &hi);                                           // find HighlightComponent
-    if (hi == 0) return;
-    if (*reinterpret_cast<char*>(hi + 0x11c) == 0) return;          // highlight not active
-    if (*reinterpret_cast<int32_t*>(hi + 0x120) < 0) return;        // not currently in the scene
+    HighlightComponent* hc = entity->FindComponent<HighlightComponent>();   // find HighlightComponent
+    if (hc == nullptr) return;
+    if (hc->highlightFlag == 0) return;          // highlight not active
+    if (hc->highlightId < 0) return;             // not currently in the scene
 
     // --- Rebuild the outline when the selected model's MESH VARIANT changes ---------
     // The building branch of c4a0 bakes an EdgeMesh from the ModelComponent's variant
@@ -920,27 +849,28 @@ void Impl_HighlightFollow(int64_t self) {
     // NOT a retail concern: retail's Graphics::Scene rebuilds highlight geometry as part
     // of its own tick; our scene is a passive render container (see the note above).
     {
-        uint64_t mdl = 0;
-        FindModelComp(entity, &mdl);
+        ModelComponent* mdl = entity->FindComponent<ModelComponent>();
         if (mdl) {
             uint32_t key =
-                (static_cast<uint32_t>(*reinterpret_cast<uint16_t*>(mdl + 0x164)) << 16) |
-                 static_cast<uint32_t>(*reinterpret_cast<uint16_t*>(mdl + 0x166));
+                (static_cast<uint32_t>(static_cast<uint16_t>(mdl->meshGroup)) << 16) |
+                 static_cast<uint32_t>(static_cast<uint16_t>(mdl->meshIndex));
             // One selection is active at a time (EditTool+0x30), so a single-slot
             // cache keyed on the HighlightComponent is enough; re-arm on a new one.
-            static uint64_t s_lastHi  = 0;
+            static const HighlightComponent* s_lastHi = nullptr;
             static uint32_t s_lastKey = 0;
-            if (hi != s_lastHi) {
-                s_lastHi = hi;
+            if (hc != s_lastHi) {
+                s_lastHi = hc;
                 s_lastKey = key;
             } else if (key != s_lastKey) {
                 s_lastKey = key;
-                Impl_c4a0(static_cast<int64_t>(hi));
+                Impl_c4a0(hc);
                 return;   // rebuilt this frame; Update re-syncs on the next one
             }
         }
     }
 
+    // LEFT: the embedded EdgeMeshInstance (+0x28) is raw storage (block COMP, H5).
+    const int64_t hi = reinterpret_cast<int64_t>(hc);
     void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance
     if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip
 
@@ -961,12 +891,14 @@ void Impl_HighlightFollow(int64_t self) {
 // resolves: c9e0 sets+paints the outline on the newly-selected entity, cc90
 // clears the previous entity's outline and closes its dialog (deselect).
 // ===========================================================================
-extern "C" void HighlightSelect_Impl(void* self)   { Impl_c9e0(reinterpret_cast<int64_t>(self)); }  // 0x1400fc9e0
-extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<int64_t>(self)); }  // 0x1400fcb40
-extern "C" void HighlightRepaint_Impl(void* self)   { Impl_c4a0(reinterpret_cast<int64_t>(self)); }  // 0x14004c4a0
-extern "C" void HighlightDeselect_Impl(void* self)  { Impl_cc90(reinterpret_cast<int64_t>(self)); }  // 0x1400fcc90
+// B4 FORWARD: their callers (Dialog/edittool_select.cpp, Player/edittool.cpp,
+// Player/pathtool_setselected.cpp, ...) hand the tool / component over as void*.
+extern "C" void HighlightSelect_Impl(void* self)   { Impl_c9e0(reinterpret_cast<EditTool*>(self)); }  // 0x1400fc9e0
+extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcb40
+extern "C" void HighlightRepaint_Impl(void* self)   { Impl_c4a0(reinterpret_cast<HighlightComponent*>(self)); }  // 0x14004c4a0
+extern "C" void HighlightDeselect_Impl(void* self)  { Impl_cc90(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcc90
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from
 // EditTool::Update (edittool.cpp) every frame; self-gates on
 // BANISHED_SELECTION_OUTLINE so it is a no-op unless the outline is enabled.
-extern "C" void HighlightFollow_Impl(void* self)    { Impl_HighlightFollow(reinterpret_cast<int64_t>(self)); }
+extern "C" void HighlightFollow_Impl(void* self)    { Impl_HighlightFollow(reinterpret_cast<EditTool*>(self)); }

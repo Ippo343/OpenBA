@@ -146,8 +146,8 @@ struct Options {
     bool        unattendedBoot       = false;  // standalone/main.cpp — any of AUTOSTART/AUTOQUIT/AUTOLOAD/
                                                //   AUTOTUTORIAL/AUTOMENU_BUTTON/PAUSEMENU_BUTTON says nobody is watching
     bool        deferWindowShow      = true;   // standalone/boot_window.cpp — default ON, "0"/"false" shows the window early
-    bool        skipEngineLoader     = false;  // standalone/loader_loop_stubs.cpp [no tool reader]
-    bool        syncEngineLoader     = true;   // standalone/loader_loop_stubs.cpp — default ON, "0"/"f" goes async
+    bool        skipEngineLoader     = false;  // code/Game/Game/loader_loop_stubs.cpp [no tool reader]
+    bool        syncEngineLoader     = true;   // code/Game/Game/loader_loop_stubs.cpp — default ON, "0"/"f" goes async
     bool        noFolLock            = false;  // standalone/res_load_lock.cpp — kill switch for the resource-load lock
 
     // ── opt-in LIVE_* gates deliberately NOT in the default-on table ──────────────

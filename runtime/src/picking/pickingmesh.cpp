@@ -83,7 +83,7 @@ using UV16     = Picking::PickingMesh::UV16;
 // The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
 // POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
 IO::ReaderWriter* AsRw(ReaderWriter* rw) {
-    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
+    return reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
 }
 
 // ENDGAME B.3.9 PILOT: `InlineCtorStores` (Base / External / PickingMesh vptr
@@ -172,24 +172,24 @@ void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
     for (int32_t i = 0; i < count; ++i) {
         SubMesh* s = &base[i];
         // B.3.1 bridge: SubMesh::_name is a raw slot (PickingMesh.h says why).
-        reinterpret_cast<System::String&>(s->_name).Serialize(ser);
+        reinterpret_cast<System::String&>(s->_name).Serialize(ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
         rw->SerializeInt(s->_parent, nullptr);
-        rw->SerializeFloatArray(4, reinterpret_cast<float*>(&s->_local.rotation), nullptr);
-        rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_local.translation), nullptr);
-        rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_aabb.min), nullptr);
-        rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_aabb.max), nullptr);
+        rw->SerializeFloatArray(4, &s->_local.rotation.x, nullptr);
+        rw->SerializeFloatArray(3, &s->_local.translation.x, nullptr);
+        rw->SerializeFloatArray(3, &s->_aabb.min.x, nullptr);
+        rw->SerializeFloatArray(3, &s->_aabb.max.x, nullptr);
 
         int32_t vCount = s->_vertices._size;
         rw->SerializeInt(vCount, nullptr);
         if (reading) VecArraySetSize(&s->_vertices, vCount);
         for (int32_t v = 0; v < vCount; ++v)
-            rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_vertices._data[v]), nullptr);
+            rw->SerializeFloatArray(3, &s->_vertices._data[v].x, nullptr);
 
         int32_t nCount = s->_normals._size;
         rw->SerializeInt(nCount, nullptr);
         if (reading) VecArraySetSize(&s->_normals, nCount);
         for (int32_t v = 0; v < nCount; ++v)
-            rw->SerializeFloatArray(3, reinterpret_cast<float*>(&s->_normals._data[v]), nullptr);
+            rw->SerializeFloatArray(3, &s->_normals._data[v].x, nullptr);
 
         SerializeTrianglesBody(&s->_triangles, ser);
 
@@ -253,19 +253,19 @@ Object::Base* PickingMesh::CreateInPlaceObject(void* place) {
 // Order: _string20, _string28, _flag30 (kScalarBool), then the SubMesh array
 // (count @ +0x40, resize 0x18007aa40, walk 0x18007ac20).
 bool PickingMesh::Serialize(void* streamv) {
-    Stream* stream = static_cast<Stream*>(streamv);
+    Stream* stream = static_cast<Stream*>(streamv);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
 
     Serializer ser = { stream, nullptr };
-    void** encVt = *reinterpret_cast<void***>(stream->encoding);
+    void** encVt = *reinterpret_cast<void***>(stream->encoding);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     const int slot = (stream->direction == 0) ? rt::io::encoding_vtbl::kCreateReader
                                               : rt::io::encoding_vtbl::kCreateWriter;
     using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
-    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
+    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);  // LEFT: Serialize's void* stream and the encoding's reader-writer slot (reserved for the closing wave)
     ser.readerWriter = rw;
 
     // B.3.1 bridge: the two Strings are the POD spelling (PickingMesh.h).
-    reinterpret_cast<System::String&>(_string20).Serialize(&ser);
-    reinterpret_cast<System::String&>(_string28).Serialize(&ser);
+    reinterpret_cast<System::String&>(_string20).Serialize(&ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
+    reinterpret_cast<System::String&>(_string28).Serialize(&ser);  // LEFT: POD String / Filename slot read as the class (H10 bridge)
 
     IO::ReaderWriter* rwc = AsRw(rw);
     const bool reading = (stream->direction == 0);

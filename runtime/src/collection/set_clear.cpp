@@ -142,12 +142,12 @@ void DestroyElement(void* node) {
     // (refcount did not reach zero), a non-null `p - 8` means it was freed.
     // Reading it here is how the arm counts come from INSIDE the body rather
     // than from a guess about the corpus.
-    uint8_t* e = static_cast<uint8_t*>(node);
-    void* const before8 = *reinterpret_cast<void**>(e + 0x08);
-    void* const before0 = *reinterpret_cast<void**>(e + 0x00);
+    uint8_t* e = static_cast<uint8_t*>(node);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    void* const before8 = *reinterpret_cast<void**>(e + 0x08);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    void* const before0 = *reinterpret_cast<void**>(e + 0x00);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
     rtcoll::ReleaseStringsCore(e, 1, &kD_PairStrStr);
-    if (before8) (*reinterpret_cast<void**>(e + 0x08) ? ++g_strFreed : ++g_strShared);
-    if (before0) (*reinterpret_cast<void**>(e + 0x00) ? ++g_strFreed : ++g_strShared);
+    if (before8) (*reinterpret_cast<void**>(e + 0x08) ? ++g_strFreed : ++g_strShared);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
+    if (before0) (*reinterpret_cast<void**>(e + 0x00) ? ++g_strFreed : ++g_strShared);  // LEFT: a node's element read through the type-erased Set core (element bytes at +0x00; Filename / String / pair keys)
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ void DestroySubtree(void* /*ignored — retail passes junk here*/, Node* n) {
     // `~PairStrStr`), then the node free through 0x180009c30 — both children
     // loaded BEFORE the free, because the allocator writes a boundary tag into
     // the block it takes back.
-    PairSet::DestroySubtree(reinterpret_cast<PairSet::Node*>(n));
+    PairSet::DestroySubtree(reinterpret_cast<PairSet::Node*>(n));  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +204,7 @@ void Clear(Set* set) {
     // post-order, then the root's element, then the root's node, then the two
     // zero stores — which retail performs even when the tree was already empty
     // (it branches to a second copy of them rather than skipping).
-    reinterpret_cast<PairSet*>(set)->Clear();
+    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: the type-erased AVL Set core: node / set receivers held as void* across set_avl / set_core (one typed node per family is owed)
 }
 
 }  // namespace rtsetclear

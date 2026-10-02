@@ -69,6 +69,8 @@
 #include "Game/PlayerToolManager.h"
 #include "Action/PathAvl.h"
 #include "Work/Work.h"
+#include "Game/WorkScheduler.h"
+#include "Game/WorkSchedulerNodes.h"
 
 // (The removal-eligibility checks are RemovalTool members: tool_base_path.cpp.)
 
@@ -131,209 +133,176 @@ extern "C" void* RemovalCalc_helper_d960(const ComponentDescription* param_1, vo
 }
 
 // ============================================================
-// 0x1400f8d50  RemovalTool_helper_8d50
-// AVL-tree in-order search keyed by the int at node->payload(+8)+0x28 == param_3.
-// Tree layout: node+0x08 payload(IBP), node+0x10 left, node+0x18 right,
-// node+0x20 parent. param_1+0x30 = tree root. The walk goes to the minimum node,
-// then iterates the in-order successor chain until payload key == param_3 (writes
-// the payload into *param_2) or exhausts (writes 0). Faithful to the decompile.
+// 0x1400f8d50  WorkScheduler::FindWorkAtCell
+// In-order walk of the work-id tree trees[0] (WorkSchedulerIdNode: parent +0x10,
+// left +0x18, right +0x20) for the Work whose target cell (+0x28) == cell;
+// null when none. Faithful to the decompile: starts at the minimum node, then
+// steps to the in-order successor.
 // ============================================================
-extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3) {
+Work* WorkScheduler::FindWorkAtCell(int cell) {
     InitTypeIds();
     // Descend to leftmost node (min) starting from root.
-    int64_t cur = *reinterpret_cast<int64_t*>(param_1 + 0x30);
-    int64_t lo  = *reinterpret_cast<int64_t*>(param_1 + 0x30);
-    while (cur != 0) {
+    WorkSchedulerIdNode* cur = trees[0].root;
+    WorkSchedulerIdNode* lo  = trees[0].root;
+    while (cur != nullptr) {
         lo = cur;
-        cur = *reinterpret_cast<int64_t*>(cur + 0x18);  // node+0x18 (decompile: +0x18)
+        cur = cur->left;
     }
-    // NOTE: the decompile descends via node+0x18 first then successor via +0x20 /
-    // +0x10. We reproduce it byte-for-byte.
-    int64_t node = lo;
+    WorkSchedulerIdNode* node = lo;
     for (;;) {
-        if (node == 0) {
-            // FIX(lead-verify): disasm calls InternalBasePtr_Ctor(param_2, 0), not a
-            // bare null store — callers expect a fully-constructed 16-byte IBP.
-            new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            return param_2;
+        if (node == nullptr) {
+            // The disasm calls InternalBasePtr_Ctor(ret, 0): a null result.
+            return nullptr;
         }
-        int64_t payload = *reinterpret_cast<int64_t*>(node + 8);
-        if (*reinterpret_cast<int*>(payload + 0x28) == param_3) {
-            *param_2 = nullptr;
-            *param_2 = *reinterpret_cast<void**>(node + 8);
-            return param_2;
+        if (node->work->field_28 == cell) {
+            return node->work.Get();
         }
         // in-order successor
-        int64_t right = *reinterpret_cast<int64_t*>(node + 0x20);
-        if (right != 0) {
-            int64_t s = right;
+        WorkSchedulerIdNode* right = node->right;
+        if (right != nullptr) {
+            WorkSchedulerIdNode* s = right;
             do {
                 lo = s;
-                s = *reinterpret_cast<int64_t*>(lo + 0x18);
-            } while (s != 0);
+                s = lo->left;
+            } while (s != nullptr);
             node = lo;
             continue;
         }
         // climb up while node is the right child of its parent
-        int64_t parent = *reinterpret_cast<int64_t*>(node + 0x10);
-        if (parent != 0 && *reinterpret_cast<int64_t*>(parent + 0x18) != node) {
-            int64_t p = parent;
-            while (p != 0 && *reinterpret_cast<int64_t*>(p + 0x20) == node) {
+        WorkSchedulerIdNode* parent = node->parent;
+        if (parent != nullptr && parent->left != node) {
+            WorkSchedulerIdNode* p = parent;
+            while (p != nullptr && p->right == node) {
                 node = p;
-                p = *reinterpret_cast<int64_t*>(p + 0x10);
+                p = p->parent;
             }
         }
-        node = *reinterpret_cast<int64_t*>(node + 0x10);
+        node = node->parent;
     }
 }
 
+// B4 FORWARD: 2 outside callers (Action/action_base_cnr.cpp,
+// Component/destroycomponent_states.cpp) hold the scheduler as an integer.
+extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3) {
+    *param_2 = reinterpret_cast<WorkScheduler*>(param_1)->FindWorkAtCell(param_3);   // LEFT: B4 FORWARD
+    return param_2;
+}
+
 // ============================================================
-// 0x14011e4d0  DestroyUI_helper_e4d0
-// CheckPtr(param_1+0x10), FUN_140003ea0 on param_1+0x10 -> state, then dispatch
-// the state's action-stack head (state+0x48) vtable+0x10 with
-// (stackHead, &state+0x48, (int)state[+0x51], 1).
+// 0x14011e4d0  DestroyComponent::PostDestroyEvent
+// FindComponent<StateMachineComponent> (0x140003ea0) on the entity, then post
+// event 1 on the current node: PostEvent(&machine, active state, 1).
 // ============================================================
-extern "C" void RemovalCalc_helper_e4d0(int64_t param_1) {
+void DestroyComponent::PostDestroyEvent() {
     InitTypeIds();
-    int64_t resIBP[4] = {0};
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), resIBP);
-    int64_t state = resIBP[0];
-    if (!state) return;  // SA-guard: entity has no StateMachineComponent
-    int64_t* stackHead = *reinterpret_cast<int64_t**>(state + 0x48);
-    (*reinterpret_cast<void(**)(int64_t*, void*, int, int)>(*stackHead + 0x10))(
-        stackHead, reinterpret_cast<void*>(state + 0x48),
-        (int)*reinterpret_cast<char*>(state + 0x51), 1);
+    StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();
+    if (!machine) return;  // SA-guard: entity has no StateMachineComponent
+    StateMachine& sm = machine->stateMachine;
+    sm.current->PostEvent(&sm, sm.activeState, 1);
 }
 
 // ============================================================
 // StateMachine action-stack tick helper. The driver runs two near-identical
-// phases over the action stack at state+0x48; this reproduces one phase pass
-// exactly as the decompile (LAB_14011e0..LAB_14011e181 and the +0x48
-// LAB_14011e2..LAB_14011e351 copies are structurally identical with the only
-// difference being which transition slot (+0x30) signature is used).
-//
-// `stackPtrField` points at state+0x48 (a longlong* holding the current node).
-// `state` is the state object base. `useExtraArg` chooses the +0x30 call form
-// (phase 1 = no extra; phase 2 = passes &outState). Faithful to disasm.
+// phases over the state machine; this reproduces one phase pass exactly as the
+// decompile (LAB_14011e0..LAB_14011e181 and the LAB_14011e2..LAB_14011e351 copies
+// are structurally identical).
+// The node slots (ControllerComponent::Controller): [0] FindState, [3] Enter,
+// [4] Update, [5] OnTransition, [6] Tick; +0x08 the parent, +0x10 the child.
 // ============================================================
-static void SM_RunPhase(int64_t state, int64_t* stackPtrField, int32_t* outState) {
+static void SM_RunPhase(StateMachine* sm, int32_t* outState) {
+    using Controller = ControllerComponent::Controller;
     bool first = true;
-    if (*reinterpret_cast<char*>(state + 0x52) < 0)
+    if (sm->pendingState < 0)
         goto skipInner;
     do {
         do {
-            if (-1 < *reinterpret_cast<char*>(state + 0x50)) {
-                int it = (int)*reinterpret_cast<char*>(state + 0x51);
-                int64_t* p = reinterpret_cast<int64_t*>(*stackPtrField);
+            if (-1 < sm->currentInput) {
+                int it = sm->activeState;
+                Controller* p = sm->current;
                 // FIX(lead 2026-07-20, bug-class #6): the node ABI carries the
                 // state index in R8D (Ghidra drops it) — slot +0x20 is
                 // Update(node, sm, idx). Without `it` the ControllerLive
                 // dispatcher read garbage and bounds-rejected every dispatch.
-                while (((it < 0) ||
-                        ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int)>(*p + 0x20))(p, stackPtrField, it) == 0)) &&
-                       ((p = reinterpret_cast<int64_t*>(p[1])) != nullptr)) {
-                    it = (*reinterpret_cast<int(**)(int64_t*, int)>(*p))(
-                        p, (int)*reinterpret_cast<char*>(state + 0x50));
+                while (((it < 0) || (p->Update(sm, it) == 0)) &&
+                       ((p = p->_data08) != nullptr)) {
+                    it = p->FindState(sm->currentInput);
                 }
-                if (-1 < *reinterpret_cast<char*>(state + 0x53)) {
-                    // FIX(lead-verify vs disasm 0x14011e0d7): this = N (*stackPtrField),
-                    // func = *(*N + 0x28), arg2 = stackPtrField (the state+0x48 field
-                    // address). The prior draft double-derefed (this=*N, func=*(*(*N)),
-                    // arg2=N) — a crash-level pointer-level error.
-                    int64_t* node = reinterpret_cast<int64_t*>(*stackPtrField);
-                    (*reinterpret_cast<void(**)(int64_t*, int64_t*, int, int)>(*node + 0x28))(
-                        node, stackPtrField,
-                        (int)*reinterpret_cast<char*>(state + 0x51),
-                        (int)*reinterpret_cast<char*>(state + 0x53));
+                if (-1 < sm->transitionState) {
+                    // FIX(lead-verify vs disasm 0x14011e0d7): this = the current
+                    // node, arg2 = the state machine.
+                    Controller* node = sm->current;
+                    node->OnTransition(sm, sm->activeState, sm->transitionState);
                 }
             }
-            char cur52 = *reinterpret_cast<char*>(state + 0x52);
-            // FIX(lead-verify vs disasm 0x14011e0f0 MOV RCX,[RBX]): head = N
-            // (*stackPtrField), NOT *N. The prior draft derefed one level too far.
-            int64_t head = *stackPtrField;
-            *reinterpret_cast<char*>(state + 0x50) = cur52;
-            // descend to the deepest child via node[2] chain
-            int64_t deepest = head;
-            for (int64_t c = *reinterpret_cast<int64_t*>(head + 0x10); c != 0;
-                 c = *reinterpret_cast<int64_t*>(c + 0x10)) {
+            int8_t cur52 = sm->pendingState;
+            // FIX(lead-verify vs disasm 0x14011e0f0 MOV RCX,[RBX]): head = the
+            // current node.
+            Controller* head = sm->current;
+            sm->currentInput = cur52;
+            // descend to the deepest child via the +0x10 chain
+            Controller* deepest = head;
+            for (Controller* c = head->_data10; c != nullptr; c = c->_data10) {
                 deepest = c;
             }
-            *stackPtrField = deepest;
-            char st = (*reinterpret_cast<char(**)(int64_t, int)>(*reinterpret_cast<int64_t*>(deepest)))(
-                deepest, (int)cur52);
-            *reinterpret_cast<char*>(state + 0x51) = st;
+            sm->current = deepest;
+            int8_t st = static_cast<int8_t>(deepest->FindState(cur52));
+            sm->activeState = st;
             while (st < 0) {
-                int64_t* nxt = *reinterpret_cast<int64_t**>(*stackPtrField + 8);
-                *stackPtrField = reinterpret_cast<int64_t>(nxt);
-                st = (*reinterpret_cast<char(**)(int64_t*, int)>(*nxt))(
-                    nxt, (int)*reinterpret_cast<char*>(state + 0x50));
-                *reinterpret_cast<char*>(state + 0x51) = st;
+                Controller* nxt = sm->current->_data08;
+                sm->current = nxt;
+                st = static_cast<int8_t>(nxt->FindState(sm->currentInput));
+                sm->activeState = st;
             }
-            int it = (int)*reinterpret_cast<char*>(state + 0x51);
-            int64_t* p = reinterpret_cast<int64_t*>(*stackPtrField);
-            *reinterpret_cast<int16_t*>(state + 0x52) = (int16_t)0xffff;
+            int it = sm->activeState;
+            Controller* p = sm->current;
+            sm->pendingState = -1;      // one 0xffff word store in retail (H7)
+            sm->transitionState = -1;
             // FIX(lead 2026-07-20, bug-class #6): slot +0x18 is
             // Enter(node, sm, idx) — idx rides R8D, dropped by the decompile.
-            while (((it < 0) ||
-                    ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int)>(*p + 0x18))(p, stackPtrField, it) == 0)) &&
-                   ((p = reinterpret_cast<int64_t*>(p[1])) != nullptr)) {
-                it = (*reinterpret_cast<int(**)(int64_t*, int)>(*p))(
-                    p, (int)*reinterpret_cast<char*>(state + 0x50));
+            while (((it < 0) || (p->Enter(sm, it) == 0)) &&
+                   ((p = p->_data08) != nullptr)) {
+                it = p->FindState(sm->currentInput);
             }
-        } while (-1 < *reinterpret_cast<char*>(state + 0x52));
+        } while (-1 < sm->pendingState);
     skipInner:
-        if (first && (-1 < *reinterpret_cast<char*>(state + 0x50))) {
-            int it = (int)*reinterpret_cast<char*>(state + 0x51);
-            int64_t* p = reinterpret_cast<int64_t*>(*stackPtrField);
+        if (first && (-1 < sm->currentInput)) {
+            int it = sm->activeState;
+            Controller* p = sm->current;
             // FIX(lead-verify vs disasm 0x14011e199 / 0x14011e369): BOTH phases' +0x30
-            // call pass &outState (LEA R8,[RBP+0x20] in each). The prior "phase 1 =
-            // 2-arg" form was a decompiler artifact that left R8 uninitialized.
+            // call pass &outState (LEA R8,[RBP+0x20] in each).
             // FIX(lead 2026-07-20, bug-class #6): slot +0x30 is
-            // Transition(node, sm, time/out, idx) — idx rides R9D, also dropped.
-            while (((it < 0) ||
-                    ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int32_t*, int)>(*p + 0x30))(
-                        p, stackPtrField, outState, it) == 0)) &&
-                   ((p = reinterpret_cast<int64_t*>(p[1])) != nullptr)) {
-                it = (*reinterpret_cast<int(**)(int64_t*, int)>(*p))(
-                    p, (int)*reinterpret_cast<char*>(state + 0x50));
+            // Tick(node, sm, time/out, idx) — idx rides R9D, also dropped.
+            while (((it < 0) || (p->Tick(sm, outState, it) == 0)) &&
+                   ((p = p->_data08) != nullptr)) {
+                it = p->FindState(sm->currentInput);
             }
             first = false;
         }
-    } while (-1 < *reinterpret_cast<char*>(state + 0x52));
+    } while (-1 < sm->pendingState);
 }
 
 // ============================================================
-// 0x14011dfa0  StateMachine_impl_dfa0
-// State machine action driver. Reads the state object (FUN_140003ea0 on
-// self+0x10), short-circuits when its top state byte (+0x52/+0x50 fallback) is 6
-// (first two checks) or 7. The FIRST ==6 returns with no cleanup (JZ 0x14011e3b9);
-// the SECOND ==6 and the ==7 exits jump to 0x14011e3b1 which calls
-// DestroyUI_helper_e4d0(param_1) first. Otherwise runs the two-phase action tick.
+// 0x14011dfa0  DestroyComponent::RunStateMachine
+// State machine action driver. Reads the StateMachineComponent
+// (FindComponent<StateMachineComponent> 0x140003ea0 on the entity),
+// short-circuits when its top state byte (pending, else input) is 6 (first two
+// checks) or 7. The FIRST ==6 returns with no cleanup (JZ 0x14011e3b9); the
+// SECOND ==6 and the ==7 exits jump to 0x14011e3b1 which calls
+// PostDestroyEvent (0x14011e4d0) first. Otherwise runs the two-phase action tick.
 // Faithful to the decompile control flow.
 // ============================================================
-extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
+void DestroyComponent::RunStateMachine() {
     InitTypeIds();
-    int32_t local_res8 = 0;   // CONCAT44(uStackX_c,local_res8) -> state ptr (8 bytes)
-    int32_t uStackX_c = 0;
-    int64_t local_res10 = 0;
     // Retail reuses ONE 8-byte stack slot as both the Time(0.0) buffer and the 4-byte
     // outState the transition handlers write. The port previously modeled that slot as
-    // the int32 local_res8 — and System::Time::Time writes 8 bytes, clobbering whatever
-    // the compiler placed in the adjacent 4 bytes. Observed live 2026-07-26 (debug
-    // build): the adjacent local was local_res10 (the SMC pointer), its low dword was
-    // zeroed to 0x2b900000000, and SM_RunPhase faulted reading +0x52 off it on the
-    // first upgrade-click pump. An explicit 8-byte slot with the outState aliased to
-    // its low dword reproduces the retail frame exactly and is layout-proof.
+    // an int32 — and System::Time::Time writes 8 bytes, clobbering whatever the
+    // compiler placed in the adjacent 4 bytes (observed live 2026-07-26, debug build:
+    // SM_RunPhase faulted on the first upgrade-click pump). An explicit 8-byte slot
+    // with the outState aliased to its low dword reproduces the retail frame exactly.
     int64_t timeOutSlot = 0;
-    int32_t* outState = reinterpret_cast<int32_t*>(&timeOutSlot);
+    int32_t* outState = reinterpret_cast<int32_t*>(&timeOutSlot);   // LEFT: retail's one slot is the Time and the int out
 
-    {
-        int64_t buf = 0;
-        PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &buf);
-        local_res8  = (int32_t)(uint64_t)buf;
-        uStackX_c   = (int32_t)((uint64_t)buf >> 32);
-    }
-    int64_t st0 = ((int64_t)(uint32_t)local_res8) | ((int64_t)uStackX_c << 32);
+    StateMachineComponent* st0 = _entity->FindComponent<StateMachineComponent>();
     if (!st0) {  // SA-guard: no StateMachineComponent on the entity (crashed
                  // live 2026-07-20 on the first upgrade click, pre-7d98 fill)
         static bool warned = false;
@@ -345,63 +314,56 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
         }
         return;
     }
-    char cVar5 = *reinterpret_cast<char*>(st0 + 0x52);
-    if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st0 + 0x50);
+    int8_t cVar5 = st0->stateMachine.pendingState;
+    if (cVar5 < 0) cVar5 = st0->stateMachine.currentInput;
     if (cVar5 == 6) return;
 
-    {
-        int64_t buf = 0;
-        PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &buf);
-        local_res8  = (int32_t)(uint64_t)buf;
-        uStackX_c   = (int32_t)((uint64_t)buf >> 32);
-    }
-    int64_t st1 = ((int64_t)(uint32_t)local_res8) | ((int64_t)uStackX_c << 32);
-    cVar5 = *reinterpret_cast<char*>(st1 + 0x52);
-    if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st1 + 0x50);
+    StateMachineComponent* st1 = _entity->FindComponent<StateMachineComponent>();
+    cVar5 = st1->stateMachine.pendingState;
+    if (cVar5 < 0) cVar5 = st1->stateMachine.currentInput;
     // FIX(lead-verify vs disasm 0x14011e01a JZ 0x14011e3b1): the 2nd ==6 exit calls e4d0.
-    if (cVar5 == 6) { RemovalCalc_helper_e4d0(param_1); return; }
+    if (cVar5 == 6) { PostDestroyEvent(); return; }
 
-    cVar5 = *reinterpret_cast<char*>(st1 + 0x52);
-    if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st1 + 0x50);
+    cVar5 = st1->stateMachine.pendingState;
+    if (cVar5 < 0) cVar5 = st1->stateMachine.currentInput;
     // FIX(lead-verify vs disasm 0x14011e03c JZ 0x14011e3b1): the ==7 exit calls e4d0.
-    if (cVar5 == 7) { RemovalCalc_helper_e4d0(param_1); return; }
+    if (cVar5 == 7) { PostDestroyEvent(); return; }
 
     // ---- main tick path ----
-    PlayerPath_FindComponent_3ea0(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &local_res10);
+    StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();
     // Time(0.0) into the shared 8-byte slot (see timeOutSlot note above).
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeOutSlot), 0.0f);
-    int64_t state = local_res10;
-    int64_t* stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeOutSlot), 0.0f);   // LEFT: as above
+    StateMachine* sm = &machine->stateMachine;
 
     // Phase 1 (transition slot +0x30 passes the shared slot, same as phase 2)
-    SM_RunPhase(state, stackPtrField, outState);
+    SM_RunPhase(sm, outState);
 
     // ---- between-phase: choose transition + kick Tick ----
-    state = local_res10;
     *outState = 3;  // outState seed
-    if (*reinterpret_cast<char*>(state + 0x51) < 0) {
+    if (sm->activeState < 0) {
         int64_t timeBuf[1] = {0};
-        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeBuf), 0.0f);   // LEFT: as above
         // The door passed the Time buffer's ADDRESS where the body takes the time
         // VALUE (int64_t); the bits the door passed are kept.
-        StateMachine_TickReimpl(reinterpret_cast<void*>(state + 0x48),
-                                reinterpret_cast<int64_t>(timeBuf), 0, 0);
+        StateMachine_TickReimpl(sm, reinterpret_cast<int64_t>(timeBuf), 0, 0);   // LEFT: COMP's C body takes the time as an integer
     }
     {
-        int64_t* head = *reinterpret_cast<int64_t**>(state + 0x48);
-        int iVar8 = (*reinterpret_cast<int(**)(int64_t*, int, int32_t*)>(*head + 8))(
-            head, (int)*reinterpret_cast<char*>(state + 0x51), outState);
+        ControllerComponent::Controller* head = sm->current;
+        int iVar8 = head->FindTransition(sm->activeState, outState);
         if (-1 < iVar8) {
-            *reinterpret_cast<char*>(state + 0x53) = (char)iVar8;
-            *reinterpret_cast<char*>(state + 0x52) = (char)(uint32_t)*outState;
+            sm->transitionState = static_cast<int8_t>(iVar8);
+            sm->pendingState = static_cast<int8_t>(*outState);
         }
     }
-    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeOutSlot), 0.0f);
-    state = local_res10;
-    stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&timeOutSlot), 0.0f);   // LEFT: as above
 
     // Phase 2 (transition slot +0x30 passes the shared slot)
-    SM_RunPhase(state, stackPtrField, outState);
+    SM_RunPhase(sm, outState);
+}
+
+// B4 FORWARD: 1 outside caller (Dialog/upgradeui.cpp) holds the component as an integer.
+extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
+    reinterpret_cast<DestroyComponent*>(param_1)->RunStateMachine();   // LEFT: B4 FORWARD
 }
 
 // ============================================================
@@ -424,7 +386,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
     uint8_t r7 = 0;          // uVar7 byte
     bool found = false;      // bVar5
     uint8_t r13 = 1;         // bVar10 (subtract amount); EBP/R13 start = 1
-    void* res18 = nullptr;   // local_res18 (InternalBasePtr)
+    Work* res18 = nullptr;   // local_res18 (InternalPtr<Work>)
 
     const AvlNode28* node = root;
     while (node != nullptr) {
@@ -434,16 +396,13 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
             node = node->right;
         } else {
             // exact match — node found (key == param_2)
-            // RemovalTool_helper_8d50(the work scheduler, &res18, param_2)
-            // LEFT: 0x1400f8d50 (below) still takes the scheduler as an integer.
-            RemovalCalc_helper_8d50(reinterpret_cast<int64_t>(GameUpdateLoop::_singleton->m_tutorial),
-                                    &res18, param_2);
+            // WorkScheduler::FindWorkAtCell 0x1400f8d50 (the work scheduler, &res18, param_2)
+            res18 = GameUpdateLoop::_singleton->m_tutorial->FindWorkAtCell(param_2);
             r13 = 1;  // bVar10 = true by default
             BuildRoad* road = nullptr;
             if (res18 != nullptr) {
-                // LEFT: 0x1400f8d50 hands the work back untyped (the scheduler's
-                // node payload); IsA / IsDerivedFrom prove it a BuildRoad.
-                Object::Base* work = reinterpret_cast<Object::Base*>(res18);
+                // IsA / IsDerivedFrom prove the scheduler's work a BuildRoad.
+                Work* work = res18;
                 bool isRoad = s_tid_6860 ? work->IsA(*s_tid_6860) : false;
                 if (isRoad) {
                     road = (s_tid_6860 && Object::IsDerivedFromNullSafe(work, *s_tid_6860))
@@ -452,7 +411,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
                     ebx = (uint8_t)road->field_64;   // ptr = *(uint*)(bp+100)
                     res10 = road->field_68;
                     ActCt_TaskCleanup_8e30(GameUpdateLoop::_singleton->m_tutorial,
-                                           static_cast<Work*>(work)->field_20);
+                                           work->field_20);
                     r13 = (removeKind == 0xff) ? 1 : 0;  // bVar10 = (removeKind==0xff)
                 } else {
                     ebx = 0;   // the low byte of the still-null IBP
@@ -524,124 +483,134 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
 }
 
 // ============================================================
-// 0x1400f9ad0  CitizenAI_impl_9ad0
-// Per-entity citizen-AI AVL update. param_1 = CitizenAI subsystem, param_2 = cell
-// id. Finds the entity node in the BST at param_1+0x30 (key == *node, left=+0x18
-// i.e. piVar4+6, right=+0x20 i.e. piVar4+8 — NOTE this tree uses the opposite
-// child convention from c700). Then re-keys an id AVL at param_1+0x10 by the
-// found entity's id (+0x24), inserting/erasing as needed; bumps count at +0x18.
-// Faithful to the decompile (int*-arith: piVar+6==+0x18, piVar+8==+0x20,
-// piVar+4==+0x10, piVar+2==+0x08; *self == node payload at +0x08).
+// 0x1400f9ad0  WorkScheduler::PrioritizeWork
+// Finds the work's node in the work-id tree trees[0] (key == workId; left +0x18,
+// right +0x20). Then re-keys the count tree at +0x10 (WorkSchedulerCountNode:
+// left +0x10, right +0x18) by the work's +0x24 key: erases the node keyed by the
+// old value, stores (tree minimum - 1) into the work's +0x24 and inserts
+// {that key, the work id +0x20}; bumps the count at +0x18.
+// Faithful to the decompile.
 // ============================================================
-extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2) {
+void WorkScheduler::PrioritizeWork(int workId) {
     InitTypeIds();
-    int* piVar4 = *reinterpret_cast<int**>(param_1 + 0x30);
+    WorkSchedulerIdNode* piVar4 = trees[0].root;
     if (piVar4 == nullptr) return;
 
     for (;;) {
-        if (param_2 < *piVar4) {
-            piVar4 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(piVar4) + 0x18);  // piVar4+6
-        } else if (*piVar4 < param_2) {
-            piVar4 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(piVar4) + 0x20);  // piVar4+8
+        if (workId < piVar4->key) {
+            piVar4 = piVar4->left;
+        } else if (piVar4->key < workId) {
+            piVar4 = piVar4->right;
         } else {
             // exact match
             if (piVar4 == nullptr) return;
-            int64_t* self = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(piVar4) + 8); // piVar4+2
-            int64_t* puVar7 = nullptr;
+            Object::InternalPtr<Work>& self = piVar4->work;
+            WorkSchedulerCountNode* puVar7 = nullptr;
             int iVar6 = 0;
-            if (*reinterpret_cast<int*>(param_1 + 0x18) != 0) {
-                int* p3 = *reinterpret_cast<int**>(param_1 + 0x10);
-                int* p4 = *reinterpret_cast<int**>(param_1 + 0x10);
+            if (field_0x18 != 0) {
+                WorkSchedulerCountNode* p3 = field_0x10;
+                WorkSchedulerCountNode* p4 = field_0x10;
                 while (p3 != nullptr) {
-                    int* p2 = p3;
+                    WorkSchedulerCountNode* p2 = p3;
                     p4 = p2;
-                    p3 = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(p2) + 0x10);  // piVar2+4
+                    p3 = p2->left;
                 }
-                iVar6 = *p4 + -1;
+                iVar6 = p4->key + -1;
             }
-            // erase any node already keyed by the entity id (+0x24)
-            int* pk = *reinterpret_cast<int**>(param_1 + 0x10);
-            int64_t* plVar8 = reinterpret_cast<int64_t*>(param_1 + 0x10);
+            // erase any node already keyed by the work's +0x24
+            WorkSchedulerCountNode* pk = field_0x10;
             while (pk != nullptr) {
-                int entId = *reinterpret_cast<int*>(*self + 0x24);
-                if (entId < *pk) {
-                    pk = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(pk) + 0x10);  // pk+4
-                } else if (*pk < entId) {
-                    pk = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(pk) + 0x18);  // pk+6
+                int entId = self->field_24;
+                if (entId < pk->key) {
+                    pk = pk->left;
+                } else if (pk->key < entId) {
+                    pk = pk->right;
                 } else {
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(plVar8), pk);
+                    // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
+                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0x10), pk);
                     break;
                 }
             }
-            *reinterpret_cast<int*>(*self + 0x24) = iVar6;
-            uint32_t uVar1 = *reinterpret_cast<uint32_t*>(*self + 0x20);
+            self->field_24 = iVar6;
+            uint32_t uVar1 = static_cast<uint32_t>(self->field_20);
 
-            int* cur = reinterpret_cast<int*>(*plVar8);
+            WorkSchedulerCountNode* cur = field_0x10;
             if (cur == nullptr) {
-                int64_t* nodeMem = reinterpret_cast<int64_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+                WorkSchedulerCountNode* nodeMem = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                 if (nodeMem != nullptr) {
-                    nodeMem[1] = 0; nodeMem[2] = 0; nodeMem[3] = 0;
-                    *reinterpret_cast<int32_t*>(nodeMem + 4) = 0;
-                    nodeMem[0] = ((int64_t)(uint32_t)iVar6) | ((int64_t)uVar1 << 32);
+                    nodeMem->parent = nullptr; nodeMem->left = nullptr; nodeMem->right = nullptr;
+                    nodeMem->balance = 0;   // balance + height: one dword store in the tree
+                    nodeMem->height = 0;
+                    nodeMem->key = iVar6;   // key + workId: one qword store in the tree
+                    nodeMem->workId = uVar1;
                     puVar7 = nodeMem;
                 }
-                *plVar8 = reinterpret_cast<int64_t>(puVar7);
+                field_0x10 = puVar7;
             } else {
-                int* localRes18 = cur;
-                int* prev;
+                WorkSchedulerCountNode* localRes18 = cur;
+                WorkSchedulerCountNode* prev;
                 for (;;) {
-                    bool inserted = false;
                     do {
                         localRes18 = cur;
                         prev = localRes18;
-                        if (iVar6 < *localRes18) {
-                            cur = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(localRes18) + 0x10); // +4
+                        if (iVar6 < localRes18->key) {
+                            cur = localRes18->left;
                             if (cur == nullptr) {
-                                int64_t* nodeMem = reinterpret_cast<int64_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+                                WorkSchedulerCountNode* nodeMem = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                                 if (nodeMem != nullptr) {
-                                    nodeMem[2] = 0; nodeMem[3] = 0;
-                                    *reinterpret_cast<int32_t*>(nodeMem + 4) = 0;
-                                    nodeMem[1] = reinterpret_cast<int64_t>(prev);
-                                    nodeMem[0] = ((int64_t)(uint32_t)iVar6) | ((int64_t)uVar1 << 32);
+                                    nodeMem->left = nullptr; nodeMem->right = nullptr;
+                                    nodeMem->balance = 0;
+                                    nodeMem->height = 0;
+                                    nodeMem->parent = prev;
+                                    nodeMem->key = iVar6;
+                                    nodeMem->workId = uVar1;
                                     puVar7 = nodeMem;
                                 }
-                                *reinterpret_cast<int64_t**>(reinterpret_cast<uintptr_t>(prev) + 0x10) = puVar7; // prev+4
-                                inserted = true;
+                                prev->left = puVar7;
                                 goto balance;
                             }
                         } else {
                             break;
                         }
                     } while (true);
-                    if (iVar6 <= *localRes18) {
+                    if (iVar6 <= localRes18->key) {
                         return;  // already present
                     }
-                    cur = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(localRes18) + 0x18); // +6
+                    cur = localRes18->right;
                     if (cur == nullptr) {
-                        int64_t* nodeMem = reinterpret_cast<int64_t*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+                        WorkSchedulerCountNode* nodeMem = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                         if (nodeMem != nullptr) {
-                            nodeMem[2] = 0; nodeMem[3] = 0;
-                            *reinterpret_cast<int32_t*>(nodeMem + 4) = 0;
-                            nodeMem[1] = reinterpret_cast<int64_t>(prev);
-                            nodeMem[0] = ((int64_t)(uint32_t)iVar6) | ((int64_t)uVar1 << 32);
+                            nodeMem->left = nullptr; nodeMem->right = nullptr;
+                            nodeMem->balance = 0;
+                            nodeMem->height = 0;
+                            nodeMem->parent = prev;
+                            nodeMem->key = iVar6;
+                            nodeMem->workId = uVar1;
                             puVar7 = nodeMem;
                         }
-                        *reinterpret_cast<int64_t**>(reinterpret_cast<uintptr_t>(prev) + 0x18) = puVar7; // prev+6
+                        prev->right = puVar7;
                         goto balance;
                     }
-                    (void)inserted;
                 }
             balance:
                 {
+                    // LEFT: 0x14001a8c0 is a C door in block ACT-b's Action/exe_bodies.h
+                    // taking the root slot and the cursor as integers.
                     int64_t res18local = reinterpret_cast<int64_t>(prev);
-                    Pf_AvlRebalanceA_a8c0(plVar8, &res18local);
+                    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&field_0x10), &res18local);
                 }
             }
-            *reinterpret_cast<int*>(param_1 + 0x18) = *reinterpret_cast<int*>(param_1 + 0x18) + 1;
+            field_0x18 = field_0x18 + 1;
             return;
         }
         if (piVar4 == nullptr) return;
     }
+}
+
+// B4 FORWARD: 1 outside caller (Component/firecomponent_ignite.cpp) holds the
+// scheduler as an integer.
+extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2) {
+    reinterpret_cast<WorkScheduler*>(param_1)->PrioritizeWork(param_2);   // LEFT: B4 FORWARD
 }
 
 // ============================================================
@@ -806,14 +775,10 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                                     DestroyComponent* lr = local_e8->FindComponent<DestroyComponent>();
                                     StateMachineComponent* machine =
                                         lr->_entity->FindComponent<StateMachineComponent>();
-                                    // the current node's slot 2 (+0x10): (node, &machine, active, 0)
-                                    // LEFT: the state-node slots are dispatched by offset here
-                                    // (ControllerComponent::Controller's slot names are block
-                                    // COMP's; this site keeps the tree's call form).
-                                    int64_t* head = reinterpret_cast<int64_t*>(machine->stateMachine.current);
-                                    (*reinterpret_cast<void(**)(int64_t*, void*, int, int)>(*head + 0x10))(
-                                        head, &machine->stateMachine,
-                                        (int)machine->stateMachine.activeState, 0);
+                                    // the current node's slot 2 (+0x10): PostEvent(&machine, active, 0)
+                                    ControllerComponent::Controller* head = machine->stateMachine.current;
+                                    head->PostEvent(&machine->stateMachine,
+                                                    machine->stateMachine.activeState, 0);
                                 }
                             }
                         }
@@ -823,9 +788,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                     ComponentEntity* local_b8 = local_e8;
                     if ((char)CanRemoveBuilding(&local_b8) != 0) {
                         DestroyComponent* comp = local_e8->FindComponent<DestroyComponent>();
-                        // LEFT: 0x14011dfa0 (below) still takes the component as an integer;
-                        // three outside callers bind that C signature.
-                        RemovalCalc_StateMachine_dfa0(reinterpret_cast<int64_t>(comp));
+                        comp->RunStateMachine();   // 0x14011dfa0
                     }
 
                     // ---- citizen-AI notify (flag desc+0x43) ----
@@ -836,25 +799,24 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                             if (comp->IsWorkPosted()) {   // 0x14012ead0
                                 WorkComponent* comp2 = local_e8->FindComponent<WorkComponent>();
                                 if (comp2 != nullptr) {
-                                    // LEFT: the scheduler's +0x30 work BST (WorkScheduler,
-                                    // block GAME-a) and 0x1400f9ad0's receiver are read as
-                                    // the tree's raw node walk.
+                                    // The scheduler's work-id tree trees[0] (key, work +0x08,
+                                    // left +0x18, right +0x20).
                                     WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
-                                    int* bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(sched) + 0x30);
-                                    int64_t local_c8 = 0;
+                                    WorkSchedulerIdNode* bn = sched->trees[0].root;
+                                    Work* local_c8 = nullptr;
                                     int key = comp2->workId;
                                     while (bn != nullptr) {
-                                        if (key < *bn) {
-                                            bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(bn) + 0x18); // +6
-                                        } else if (*bn < key) {
-                                            bn = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(bn) + 0x20); // +8
+                                        if (key < bn->key) {
+                                            bn = bn->left;
+                                        } else if (bn->key < key) {
+                                            bn = bn->right;
                                         } else {
-                                            local_c8 = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(bn) + 8); // bn+2
+                                            local_c8 = bn->work.Get();
                                             break;
                                         }
                                     }
-                                    if (local_c8 != 0) {
-                                        RemovalCalc_CitizenAI_9ad0(reinterpret_cast<int64_t>(sched), comp2->workId);
+                                    if (local_c8 != nullptr) {
+                                        sched->PrioritizeWork(comp2->workId);   // 0x1400f9ad0
                                     }
                                 }
                             }

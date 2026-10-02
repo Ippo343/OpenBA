@@ -96,7 +96,7 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
         fprintf(stderr, "[SaveTest] armed (trigger frame %d)\n", trigger);
         fflush(stderr);
     }
-    void* saveLoad = ::Save::SaveLoad::_singleton;
+    const Save::SaveLoad* saveLoad = ::Save::SaveLoad::_singleton;
     if (!saveLoad) return;
 
     if (s_state == 0) {
@@ -106,13 +106,13 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
         // Dialog_AutoSaveHandler only reads self+0x10 (UserInterface*).
         // GameUpdateLoop keeps it at +0x98.
         struct { uint8_t pad[0x10]; void* ui; } fake = {};
-        fake.ui = *(void**)((uintptr_t)gul + 0x98);
+        fake.ui = *(void**)((uintptr_t)gul + 0x98);   // LEFT: gameupdateloop.cpp (GAME) declares this entry with void* gul
         fprintf(stderr, "[SaveTest] frame %d: invoking retail autosave handler "
                         "(SetOperation(4,-4))\n", frameNum);
         fflush(stderr);
         Dialog_AutoSaveHandler(&fake, nullptr, 0x13, 0);
 
-        int op = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
+        int op = saveLoad->GetOperation();
         fprintf(stderr, "[SaveTest] handler returned; GetOperation()=%d "
                         "(4=save expected; 0=trigger was refused)\n", op);
         fflush(stderr);
@@ -122,7 +122,7 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
         return;
     }
 
-    int op = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
+    int op = saveLoad->GetOperation();
     if (op != s_lastOp) {
         fprintf(stderr, "[SaveTest] frame %d: operation %d -> %d\n",
                 frameNum, s_lastOp, op);

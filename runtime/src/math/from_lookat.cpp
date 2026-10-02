@@ -177,8 +177,9 @@ Math::Transform3 Math::Transform3::FromLookAt(const Vector3& position, const Vec
     ret->axisZ.z = uz;
     // Retail copies the position through GP registers (`MOV EAX,[RDI]` ...),
     // i.e. a bit copy, so a signalling NaN in the argument survives unquieted.
-    std::memcpy(&ret->translation.x, &position.x, 4);
-    std::memcpy(&ret->translation.y, &position.y, 4);
-    std::memcpy(&ret->translation.z, &position.z, 4);
+    // (A float assignment is a MOVSS pair on x64: a bit copy as well.)
+    ret->translation.x = position.x;
+    ret->translation.y = position.y;
+    ret->translation.z = position.z;
     return out;
 }

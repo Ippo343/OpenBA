@@ -212,17 +212,17 @@ constexpr uint64_t kDead = 0x44454144ull;   // 'DEAD'
 
 void* ListNodeAlloc(uint64_t bytes, int align) {
     (void)align;                     // malloc is already 16-aligned on x64
-    uint8_t* base = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(bytes) + 16));
+    uint8_t* base = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(bytes) + 16));  // LEFT: the unit-test node allocator's malloc result (tier-I shape names MemAlloc)
     if (!base) { return nullptr; }
-    *reinterpret_cast<uint64_t*>(base) = kLive;
+    *reinterpret_cast<uint64_t*>(base) = kLive;  // CAST-OK: alloc_header
     ++g_listNodeAllocs;
     return base + 16;
 }
 
 void ListNodeFree(void* p) {
     if (!p) { return; }              // retail's own `TEST RDX,RDX / JZ ret`
-    uint8_t*  base  = static_cast<uint8_t*>(p) - 16;
-    uint64_t& state = *reinterpret_cast<uint64_t*>(base);
+    uint8_t*  base  = static_cast<uint8_t*>(p) - 16;  // CAST-OK: alloc_header
+    uint64_t& state = *reinterpret_cast<uint64_t*>(base);  // CAST-OK: alloc_header
     if (state != kLive) { ++g_listNodeDoubleFrees; return; }
     state = kDead;
     ++g_listNodeFrees;

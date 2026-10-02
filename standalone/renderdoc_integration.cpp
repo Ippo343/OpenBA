@@ -124,7 +124,7 @@ bool Init() {
         return false;
     }
 
-    auto getAPI = reinterpret_cast<pRENDERDOC_GetAPI>(
+    auto getAPI = reinterpret_cast<pRENDERDOC_GetAPI>(  // CAST-OK: win32
         GetProcAddress(rdoc, "RENDERDOC_GetAPI"));
     if (!getAPI) {
         printf("[RenderDoc] renderdoc.dll loaded but RENDERDOC_GetAPI "
@@ -142,7 +142,7 @@ bool Init() {
         return false;
     }
 
-    g_api = static_cast<RENDERDOC_API_1_4_0*>(api);
+    g_api = static_cast<RENDERDOC_API_1_4_0*>(api);  // CAST-OK: win32
 
     int major = 0, minor = 0, patch = 0;
     if (g_api->GetAPIVersion) {

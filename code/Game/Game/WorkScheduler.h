@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "system/Value.h"   // System::Time (8 bytes, trivial)
+class Work;
 struct WorkSchedulerIdNode; struct WorkSchedulerCountNode; struct WorkSchedulerBucketNode;   // Game/WorkSchedulerNodes.h
 namespace IO { class Stream; }
 
@@ -68,6 +69,8 @@ public:
 
     void Serialize(IO::Stream& stream);   // 0x1400f9240 (goals_serialize.cpp, GAME-b)
     void ValidateAll();                   // 0x1400f8270: slot 9 on every Work of trees[0] (GAME-b)
+    Work* FindWorkAtCell(int cell);       // 0x1400f8d50: the trees[0] Work whose target cell (+0x28) is `cell` (B4 PLAYER; Player/keystone_a_removalcalcpath.cpp)
+    void  PrioritizeWork(int workId);     // 0x1400f9ad0: re-key the work in the +0x10 tree below its minimum (B4 PLAYER; same file)
 };
 
 static_assert(sizeof(WorkScheduler) == 0x138, "WorkScheduler is 0x138 (Load MemAlloc(0x138, 4))");
