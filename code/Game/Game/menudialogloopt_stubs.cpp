@@ -643,7 +643,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Wave 10D lane MOUSE: the menu half of the cursor route. The menu UI is
     // MenuDLT+0x38 (DialogInstance) -> +0x10 (UserInterface), the same walk
     // ModalDriver::RunSelfTest uses above. No-op unless BANISHED_MOUSE_INJECT.
-    void* menuUI = nullptr;
+    UI::UserInterface* menuUI = nullptr;
     if (MouseInject::Enabled()) {
         UI::DialogInstance* menuDlg = _dialogInstance;
         if (menuDlg)

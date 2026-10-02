@@ -120,18 +120,11 @@ namespace {
 // (UpdateStandAloneUI 0x180120310 is appended to MainLoop+0x90 and DrawStandAloneUI
 // 0x1801203f0 to MainLoop+0x80 by ShowDialog 0x18011fd10.)
 
-constexpr uintptr_t kML_DrawArray   = 0x80;   // {void(*fn)(...); void* ctx;}[]
-constexpr uintptr_t kML_DrawCount   = 0x88;   // int32
-constexpr uintptr_t kML_DrawCap     = 0x8c;   // int32
-constexpr uintptr_t kML_UpdArray    = 0x90;
-constexpr uintptr_t kML_UpdCount    = 0x98;
-constexpr uintptr_t kML_UpdCap      = 0x9c;
-
-constexpr uintptr_t kDlg_Ui      = 0x10;  // DialogInstance::_ui
-constexpr uintptr_t kDlg_Flags   = 0x20;  // bit 0x20 => !DeleteOnClose
-constexpr uintptr_t kDlg_Result  = 0x24;  // ?GetResult@ / ?SetDialogResult@
-
-struct Entry { void* fn; void* ctx; };   // 16 bytes; the array element type
+// MainLoop::_postDraw (+0x80) and ::_postUpdate (+0x90): Array<MainLoopCallback>
+// {data, count, cap}; DialogInstance::_ui (+0x10), ::_flags (+0x20, bit 0x20 =>
+// !DeleteOnClose), ::_result (+0x24, ?GetResult@ / ?SetDialogResult@).
+using Entry = RtEngine::MainLoopCallback;   // 16 bytes {_func, _context}; the array element type
+using EntryArray = Collection::Array<RtEngine::MainLoopCallback>;
 
 // --- Configuration ---------------------------------------------------------
 bool s_parsed      = false;
@@ -160,29 +153,28 @@ void ParseEnv() {
         "with result %d after %d nested tick(s)\n", Opt().modalDriverRaw, s_answer, s_ticks);
 }
 
-void* MainLoopSingleton() {
+::Engine::MainLoop* MainLoopSingleton() {
     return ::Engine::MainLoop::_singleton;   // the class static (ENDGAME B.3.9 SS2)
 }
 
 // Append `e` to the (array,count,cap) triple at `base+arrOff`. Reallocates
 // through the shipped allocator, the same one ShowDialog's inlined push uses,
 // and sets capacity == count so retail's own next push takes its grow path.
-bool AppendEntry(uintptr_t base, uintptr_t arrOff, uintptr_t cntOff, uintptr_t capOff,
-                 const Entry& e) {
-    Entry* old   = *reinterpret_cast<Entry**>(base + arrOff);
-    int    count = *reinterpret_cast<int*>(base + cntOff);
+bool AppendEntry(EntryArray& arr, const Entry& e) {
+    Entry* old   = arr._data;
+    int    count = arr._size;
     if (count < 0) return false;
 
-    Entry* fresh = reinterpret_cast<Entry*>(
+    Entry* fresh = static_cast<Entry*>(
         System::MemoryAllocator::MemAlloc((uint64_t)(count + 1) * sizeof(Entry), 8));
     if (!fresh) return false;
 
     for (int i = 0; i < count; ++i) fresh[i] = old[i];
     fresh[count] = e;
 
-    *reinterpret_cast<Entry**>(base + arrOff) = fresh;
-    *reinterpret_cast<int*>(base + cntOff)    = count + 1;
-    *reinterpret_cast<int*>(base + capOff)    = count + 1;
+    arr._data     = fresh;
+    arr._size     = count + 1;
+    arr._capacity = count + 1;
 
     if (old) System::MemoryAllocator::MemFree(old);
     return true;
@@ -202,12 +194,11 @@ void NoopDraw(void*, void*) {}
 // ShowDialog that registered it was the shipped DLL's or ours, which is the
 // property the twin-subject differential depends on.
 void* FindModalDialog() {
-    void* ml = MainLoopSingleton();
+    ::Engine::MainLoop* ml = MainLoopSingleton();
     if (!ml) return nullptr;
-    uintptr_t base = reinterpret_cast<uintptr_t>(ml);
 
-    Entry* arr   = *reinterpret_cast<Entry**>(base + kML_UpdArray);
-    int    count = *reinterpret_cast<int*>(base + kML_UpdCount);
+    Entry* arr   = ml->_postUpdate._data;
+    int    count = ml->_postUpdate._size;
     if (!arr || count <= 0) return nullptr;
 
     // MATCH EITHER POINTER, and note WHY there are two.
@@ -227,17 +218,19 @@ void* FindModalDialog() {
     // B3R: OUR ShowDialog port (userinterface_showdialog.cpp) installs
     // RtUi_UserInterface_UpdateStandAloneUI, the body registered at 0x180120310;
     // it is compared by name.
+    // LEFT: MainLoopCallback::_func / ::_context are void* (engine/MainLoop.h, R-ENG).
     void* const wantedPort = reinterpret_cast<void*>(&RtUi_UserInterface_UpdateStandAloneUI);
 
     for (int i = 0; i < count; ++i) {
-        void* const fn = arr[i].fn;
+        void* const fn = arr[i]._func;
         if (fn != wantedPort) continue;
-        void* nestedUi = arr[i].ctx;
-        if (!nestedUi) continue;
+        void* nestedUiCtx = arr[i]._context;
+        if (!nestedUiCtx) continue;
+        UI::UserInterface* nestedUi = reinterpret_cast<UI::UserInterface*>(nestedUiCtx);
         // nestedUI->_dialogs head at +0x00; node->dialog at +0x00.
-        void* head = *reinterpret_cast<void**>(nestedUi);
+        auto* head = nestedUi->_dialogs._head;
         if (!head) continue;
-        return *reinterpret_cast<void**>(head);
+        return head->element;
     }
     return nullptr;
 }
@@ -251,21 +244,21 @@ void Tick(void*, void*) {
     if (dialog != s_seenDialog) { s_seenDialog = dialog; s_seenTicks = 0; }
     if (++s_seenTicks < s_ticks) return;
 
-    uintptr_t d  = reinterpret_cast<uintptr_t>(dialog);
-    void*     ui = *reinterpret_cast<void**>(d + kDlg_Ui);
-    uint32_t  flags = *reinterpret_cast<uint32_t*>(d + kDlg_Flags);
+    // LEFT: the UI's dialog-list element is void* (ui/UserInterface.h
+    // DialogInstancePtr, R-UI): the one cast that names the dialog.
+    UI::DialogInstance* d = reinterpret_cast<UI::DialogInstance*>(dialog);
+    UI::UserInterface*  ui = d->_ui;
+    uint32_t  flags = d->_flags;
 
     std::fprintf(stderr,
         "[ModalDriver] dismissing modal dialog=%p nestedUi=%p flags=0x%x "
         "(DeleteOnClose=%d) with result %d\n",
-        dialog, ui, flags, (flags & 0x20) ? 0 : 1, s_answer);
+        dialog, (void*)ui, flags, (flags & 0x20) ? 0 : 1, s_answer);
 
     // Exactly what MessageDialog::Slot10..13 do (see the header comment).
-    *reinterpret_cast<uint32_t*>(d + kDlg_Result) = (uint32_t)s_answer;
-    uint8_t ibp[16] = {};
-    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialog));   // B.3.3 bridge
-    reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));
+    d->_result = s_answer;
+    Object::InternalPtr<UI::DialogInstance> ibp(d);
+    ui->CloseDialog(&ibp);
 
     ++s_dismissed;
     s_seenDialog = nullptr;
@@ -282,23 +275,22 @@ bool Poll() {
     if (!s_enabled) return false;
     if (s_armed)    return true;
 
-    void* ml = MainLoopSingleton();
+    ::Engine::MainLoop* ml = MainLoopSingleton();
     if (!ml) return false;                 // Engine::Startup has not built it yet
     if (!System::MemoryAllocator::_singleton) return false;   // B3R: read live (was the g_pMemAllocSingleton snapshot)
-
-    uintptr_t base = reinterpret_cast<uintptr_t>(ml);
 
     // Order matters only for readability -- both must succeed, and the DRAW
     // append must not be left dangling if the UPDATE one fails, or we would
     // have made the arrays UNEVEN in the direction quirk (b) tolerates (draw
     // longer than update is harmless; update longer than draw is the fault).
+    // LEFT: MainLoopCallback::_func is void* (engine/MainLoop.h, R-ENG).
     Entry draw{ reinterpret_cast<void*>(&NoopDraw), ml };
-    if (!AppendEntry(base, kML_DrawArray, kML_DrawCount, kML_DrawCap, draw)) {
+    if (!AppendEntry(ml->_postDraw, draw)) {
         std::fprintf(stderr, "[ModalDriver] ARM FAILED: could not grow MainLoop+0x80\n");
         return false;
     }
     Entry upd{ reinterpret_cast<void*>(&Tick), ml };
-    if (!AppendEntry(base, kML_UpdArray, kML_UpdCount, kML_UpdCap, upd)) {
+    if (!AppendEntry(ml->_postUpdate, upd)) {
         std::fprintf(stderr, "[ModalDriver] ARM FAILED: could not grow MainLoop+0x90 "
                              "(the +0x80 no-op stays; draw-longer-than-update is safe)\n");
         return false;
@@ -308,8 +300,8 @@ bool Poll() {
     std::fprintf(stderr,
         "[ModalDriver] armed on MainLoop=%p  draw[%d] update[%d]  "
         "(callback %p paired with no-op %p)\n",
-        ml, *reinterpret_cast<int*>(base + kML_DrawCount),
-        *reinterpret_cast<int*>(base + kML_UpdCount),
+        (void*)ml, ml->_postDraw._size,
+        ml->_postUpdate._size,
         (void*)&Tick, (void*)&NoopDraw);
     return true;
 }

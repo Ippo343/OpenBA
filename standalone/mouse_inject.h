@@ -15,12 +15,14 @@
 //     MouseInject::PostUpdate(ui);    // did it agree?
 //
 // Both are no-ops — a single cached-getenv test — when the switch is unset.
+namespace UI { class UserInterface; }
+
 namespace MouseInject {
 
 // True once BANISHED_MOUSE_INJECT names a script. Cheap; safe to call per frame.
 bool Enabled();
 
-void PreUpdate(void* ui);
-void PostUpdate(void* ui);
+void PreUpdate(UI::UserInterface* ui);
+void PostUpdate(UI::UserInterface* ui);
 
 }  // namespace MouseInject
