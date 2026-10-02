@@ -45,9 +45,7 @@ MapGenerator::MapGenerator() {
     // ExternalPtr at +0x20
     _field20 = nullptr;
 
-    // Strings at +0x28, +0x30 (zeroed = empty string)
-    _field28 = nullptr;
-    _field30 = nullptr;
+    // Strings at +0x28, +0x30: the members' String() (null = empty string)
 
     // Generation parameters
     enabled = 1;          // bool, default true
@@ -140,10 +138,8 @@ MapGenerator::~MapGenerator() {
     boolIntArray = nullptr;
     boolIntCount = 0;
 
-    // templateRef / _field30 / _field28.
+    // templateRef; then the compiler destroys _field30 and _field28 (members).
     reinterpret_cast<System::String*>(&templateRef.strPtr)->~String();
-    reinterpret_cast<System::String*>(&_field30)->~String();
-    reinterpret_cast<System::String*>(&_field28)->~String();
 }
 
 // ============================================================
@@ -211,9 +207,10 @@ void MapGenerator::Destruct() { this->~MapGenerator(); }
 namespace {
 // True on the LOAD leg. The Serializer's FIRST qword is the Stream, and Stream+8
 // is its mode — 0 means loading. NOT serializer+8, which is the encoding.
-bool MG_IsLoading(void* serializer) {
-    void* stream = *(void**)serializer;
-    return stream && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+// (B.4 GAME-b: the old null test of that first qword is gone; the serializer
+// holds the stream reference it was built from.)
+bool MG_IsLoading(IO::Serializer& serializer) {
+    return static_cast<int>(serializer.GetDirection()) == 0;   // IO::Serializer::GetDirection, retail 0x180006210
 }
 
 // Faithful port of the exe's three array-resize helpers: FUN_14001b270 (stride 8,
@@ -333,100 +330,100 @@ void MG_Resize(void* header, int newCount, int stride) {
 
 // Serialize a count the way retail does: through a LOCAL seeded from the struct,
 // resizing only on the load leg. Returns the count to iterate.
-int MG_SerializeCount(void* serializer, void* header, void* countField, int stride) {
-    int n = *(int32_t*)countField;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(n, nullptr);   // B.3.4 bridge (cast dropped: n is int)
+int MG_SerializeCount(IO::Serializer& serializer, void* header, int32_t count, int stride) {
+    int n = count;
+    serializer.Serialize(n, nullptr);
     if (MG_IsLoading(serializer)) MG_Resize(header, n, stride);
     return n;
 }
 
-// A pool of ExternalRef entries (stride 0x18). header/countField are the array
-// header and its count int in the struct.
-void MG_ReadRefPool(void* serializer, void* header, void* countField) {
-    const int n = MG_SerializeCount(serializer, header, countField, 0x18);
-    uint8_t* e = *(uint8_t**)header;
+// A pool of ExternalRef entries (stride 0x18).
+void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::DynArrayHeader& pool) {
+    const int n = MG_SerializeCount(serializer, &pool, pool.count, 0x18);
+    MapGenerator::ExternalRef* e = static_cast<MapGenerator::ExternalRef*>(pool.data);
     if (!e) return;
-    for (int i = 0; i < n; ++i, e += 0x18) {
-        reinterpret_cast<System::String*>(e)->Serialize(serializer);  // in place
+    for (int i = 0; i < n; ++i) {
+        // LEFT: ExternalRef::strPtr is the String's raw storage (H5).
+        reinterpret_cast<System::String*>(&e[i].strPtr)->Serialize(&serializer);  // in place
     }
 }
 } // namespace
 
 bool MapGenerator::Serialize(void* stream) {
-    // Caller batch CB6: the fields are read by name (was `s + off` over `this`).
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);   // +0x20 _stringTable ref
-    reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);       // +0x28 _name
-    reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);       // +0x30 _description
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&enabled), nullptr);   // B.3.4 bridge  +0x38 _exposed
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(subdivisions, nullptr);   // B.3.4 bridge  +0x3c _startAreaSize (townSize)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(scale, nullptr);   // B.3.4 bridge (cast dropped: scale is float)  +0x40 _citizenRadius
-    reinterpret_cast<System::String*>(&templateRef.strPtr)->Serialize(serializer);       // +0x48 _citizen template ref
+    Reimpl_ExternalPtr_Serialize_StringTable(&_field20, &serializer);   // +0x20 _stringTable ref
+    _field28.Serialize(&serializer);       // +0x28 _name
+    _field30.Serialize(&serializer);       // +0x30 _description
+    serializer.Serialize(enabled, nullptr);        // +0x38 _exposed
+    serializer.Serialize(subdivisions, nullptr);   // +0x3c _startAreaSize (townSize)
+    serializer.Serialize(scale, nullptr);          // +0x40 _citizenRadius
+    // LEFT: ExternalRef::strPtr is the String's raw storage (H5: the dtor's order).
+    reinterpret_cast<System::String*>(&templateRef.strPtr)->Serialize(&serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
-        const int n = MG_SerializeCount(serializer, &boolIntArray, &boolIntCount, 8);
-        uint8_t* e = static_cast<uint8_t*>(boolIntArray);
-        for (int i = 0; e && i < n; ++i, e += 8) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(e), nullptr);        // B.3.4 bridge  _educated
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 4), nullptr);     // B.3.4 bridge  _maxChildCount
+        const int n = MG_SerializeCount(serializer, &boolIntArray, static_cast<int32_t>(boolIntCount), 8);
+        InitialFamily* e = boolIntArray;
+        for (int i = 0; e && i < n; ++i) {
+            serializer.Serialize(e[i].educated, nullptr);        // _educated
+            serializer.Serialize(e[i].maxChildCount, nullptr);   // _maxChildCount
         }
     }
 
     // --- refArray1 (+0x70): ExternalRef pool ---
-    MG_ReadRefPool(serializer, &refArray1, &refArray1.count);
+    MG_ReadRefPool(serializer, refArray1);
 
-    // --- _structures: InitialStructure[] (stride 0x30: String@0, gen@8, ptr@0x10,
+    // --- _structures: InitialStructure[] (stride 0x30: ExternalRef@0,
     //     int _offsetX@0x18, _offsetY@0x1c, _width@0x20, _height@0x24, _rotation@0x28) ---
     {
-        const int n = MG_SerializeCount(serializer, &refArray2, &refArray2.count, 0x30);
-        uint8_t* e = static_cast<uint8_t*>(refArray2.data);
-        for (int i = 0; e && i < n; ++i, e += 0x30) {   // FUN_14001b6c0, in place
-            reinterpret_cast<System::String*>(e)->Serialize(serializer);            // _structure ref name
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x18), nullptr);  // B.3.4 bridge  _offsetX
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x1c), nullptr);  // B.3.4 bridge  _offsetY
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x20), nullptr);  // B.3.4 bridge  _width
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x24), nullptr);  // B.3.4 bridge  _height
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x28), nullptr);  // B.3.4 bridge  _rotation
+        const int n = MG_SerializeCount(serializer, &refArray2, refArray2.count, 0x30);
+        InitialStructure* e = static_cast<InitialStructure*>(refArray2.data);
+        for (int i = 0; e && i < n; ++i) {   // FUN_14001b6c0, in place
+            // LEFT: ExternalRef::strPtr is the String's raw storage (H5).
+            reinterpret_cast<System::String*>(&e[i].structure.strPtr)->Serialize(&serializer);   // _structure ref name
+            serializer.Serialize(e[i].offsetX, nullptr);    // _offsetX
+            serializer.Serialize(e[i].offsetY, nullptr);    // _offsetY
+            serializer.Serialize(e[i].width, nullptr);      // _width
+            serializer.Serialize(e[i].height, nullptr);     // _height
+            serializer.Serialize(e[i].rotation, nullptr);   // _rotation
         }
     }
 
     // --- refArray3..refArray7 (+0x90,+0xA0,+0xB0,+0xC0,+0xD0): ExternalRef pools ---
-    MG_ReadRefPool(serializer, &refArray3, &refArray3.count);
-    MG_ReadRefPool(serializer, &refArray4, &refArray4.count);
-    MG_ReadRefPool(serializer, &refArray5, &refArray5.count);
-    MG_ReadRefPool(serializer, &refArray6, &refArray6.count);
-    MG_ReadRefPool(serializer, &refArray7, &refArray7.count);
+    MG_ReadRefPool(serializer, refArray3);
+    MG_ReadRefPool(serializer, refArray4);
+    MG_ReadRefPool(serializer, refArray5);
+    MG_ReadRefPool(serializer, refArray6);
+    MG_ReadRefPool(serializer, refArray7);
 
     // --- scalar tail (cull counts, initial resource counts, livestock params) ---
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramE0, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramE4, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramE8, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramEC, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramF0, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramF4, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramF8, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramFC, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param100, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param104, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param108, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param10C, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param110, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param114, nullptr);   // B.3.4 bridge
+    serializer.Serialize(paramE0, nullptr);
+    serializer.Serialize(paramE4, nullptr);
+    serializer.Serialize(paramE8, nullptr);
+    serializer.Serialize(paramEC, nullptr);
+    serializer.Serialize(paramF0, nullptr);
+    serializer.Serialize(paramF4, nullptr);
+    serializer.Serialize(paramF8, nullptr);
+    serializer.Serialize(paramFC, nullptr);
+    serializer.Serialize(param100, nullptr);
+    serializer.Serialize(param104, nullptr);
+    serializer.Serialize(param108, nullptr);
+    serializer.Serialize(param10C, nullptr);
+    serializer.Serialize(param110, nullptr);
+    serializer.Serialize(param114, nullptr);
 
     // --- env template refs + interleaved scalars (EXACT stream order) ---
-    reinterpret_cast<System::String*>(&descRef1.strPtr)->Serialize(serializer);       // descRef1 (terrain)
-    reinterpret_cast<System::String*>(&descRef2.strPtr)->Serialize(serializer);       // descRef2 (climate)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(terrainAmplitude, nullptr);   // B.3.4 bridge  terrainAmplitude
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(chunkSize, nullptr);   // B.3.4 bridge  chunkSize
-    reinterpret_cast<System::String*>(&descRef3.strPtr)->Serialize(serializer);       // descRef3 (vegetation)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param170, nullptr);   // B.3.4 bridge
+    // LEFT: ExternalRef::strPtr is the String's raw storage (H5: the dtor's order).
+    reinterpret_cast<System::String*>(&descRef1.strPtr)->Serialize(&serializer);       // descRef1 (terrain)
+    reinterpret_cast<System::String*>(&descRef2.strPtr)->Serialize(&serializer);       // descRef2 (climate)
+    serializer.Serialize(terrainAmplitude, nullptr);   // terrainAmplitude
+    serializer.Serialize(chunkSize, nullptr);          // chunkSize
+    reinterpret_cast<System::String*>(&descRef3.strPtr)->Serialize(&serializer);       // descRef3 (vegetation)
+    serializer.Serialize(param170, nullptr);
 
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return true;   // retail returns AL=1
 }
 

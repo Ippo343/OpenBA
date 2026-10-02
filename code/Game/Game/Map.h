@@ -102,6 +102,7 @@ static_assert(offsetof(MapCell, _pad2E) == 0x2E, "MapCell +0x2E");
 class Map {
 public:
     Map();                       // 0x14009ee70 (defined in gameupdateloop_load.cpp)
+    ~Map();                      // 0x14009ed60 (keystone_a_gamedtor.cpp); Shutdown MemFrees the map after it
     void Serialize(IO::Stream& stream);   // 0x14009f100 (gamegrid_serialize.cpp)
 
     int32_t  size;               // +0x00 map edge in cells (Serialize int&)

@@ -349,7 +349,7 @@ void ProfessionUI::OnOpened() {
 
     // Get profession count from the game's profession list
     ProfessionList* profListPtr = GameUpdateLoop::_singleton->m_professionList;
-    int profCount = profListPtr->arrayCount;
+    int profCount = profListPtr->professions.GetSize();
 
 
     // Get template factory: the first child's description (Element::_description)
@@ -388,7 +388,7 @@ void ProfessionUI::OnOpened() {
     int tableCol = 0;
     int tableRow = 0;
     int idBase = 300;
-    Profession** profArray = profListPtr->arrayData;
+    Profession** profArray = profListPtr->professions.GetData();
 
     for (int i = 0; i < profCount; i++) {
         // Re-read the flat-index stride from the table each iteration.
@@ -593,7 +593,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
     uintptr_t citizenMgr = (uintptr_t)worldSingleton->m_citizenList;   // LEFT: void* (GAME-a)
     ProfessionList* profListPtr = worldSingleton->m_professionList;
-    int profCount = profListPtr->arrayCount;
+    int profCount = profListPtr->professions.GetSize();
 
     // Zero out counts array
     int* countsNow = counts._data;
@@ -657,7 +657,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
     }
 
     // Update number elements with actual worker counts per profession
-    Profession** profArrayPtr = worldSingleton->m_professionList->arrayData;
+    Profession** profArrayPtr = worldSingleton->m_professionList->professions.GetData();
 
     for (int p = 0; p < profCount; p++) {
         uintptr_t profKey = (uintptr_t)profArrayPtr[p];   // LEFT: compared with the tree's raw keys
@@ -809,7 +809,7 @@ void ProfessionUI::HandleSpinner(int profIndex) {
         uint64_t toAdd = (uint64_t)(uint32_t)(desired - current);
         do {
             void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->arrayData[idx]);
+            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);
 
             // Request a worker slot
             uint64_t retBuf[2] = {0, 0};
@@ -852,7 +852,7 @@ next_iter:
         uint64_t toRemove = (uint64_t)(uint32_t)(current - desired);
         do {
             void* citizenList = GameUpdateLoop::_singleton->m_citizenList;
-            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->arrayData[idx]);
+            uint64_t profId = reinterpret_cast<uint64_t>(GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx]);
             TownHall_RemoveWorker(citizenList, profId);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
@@ -886,7 +886,7 @@ void ProfessionUI::HandleButton(int profIndex) {
     uintptr_t citizenArray = *(uintptr_t*)(citizenMgr + 0xA0);
 
     // Get the profession ID for this index (compared with the citizens' raw field)
-    uint64_t profId = reinterpret_cast<uint64_t>(game->m_professionList->arrayData[profIndex]);
+    uint64_t profId = reinterpret_cast<uint64_t>(game->m_professionList->professions.GetData()[profIndex]);
 
     // Count eligible (adult, non-student) citizens
     int eligible = 0;
@@ -985,7 +985,7 @@ void ProfessionUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
     if (!professionui_sa::IsSetUp(this)) return;
     professionui_sa::Trace("Slot9", this);
     ProfessionList* profListPtr = GameUpdateLoop::_singleton->m_professionList;
-    int profCount = profListPtr->arrayCount;
+    int profCount = profListPtr->professions.GetSize();
 
 
     // Original logic: msg 0x15 handles BOTH spinner (300-range) and button (500-range).

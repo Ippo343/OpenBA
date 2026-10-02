@@ -23,6 +23,7 @@
 // surface normal (fn_MapGetTerrainPos's outTri[2]); see mapquery.cpp.
 
 #include "Game/exe_bodies.h"
+#include "Game/Map.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "perf_terrain.h"
 #include <cstdint>
@@ -35,14 +36,6 @@ static constexpr float kSlopeMin     = 0.9f;    // DAT_140172134
 static constexpr float kMountainMax  = 2.0f;    // DAT_140172174
 static constexpr float kShoreMax     = -0.25f;  // DAT_140172274
 static constexpr float kDeepWaterMax = -1.4f;   // DAT_140172284
-
-// --- cell / Game-object layout ----------------------------------------------
-static constexpr int kCellStride = 0x30;
-static constexpr int CELL_TYPE   = 0x29;   // byte terrain type
-static constexpr int CELL_DW18   = 0x18;   // dword default 0xffffffff
-static constexpr int CELL_B2A    = 0x2a;   // byte  default 0xff
-static constexpr int GAME_DIM    = 0x00;   // int dim
-static constexpr int GAME_CELLS  = 0x80;   // {void* data, int count, int capacity}
 
 // Terrain tile types.
 enum TileType { TILE_BUILDABLE = 2, TILE_MOUNTAIN_HI = 6, TILE_SHORE = 7,
@@ -63,33 +56,33 @@ static int MapTileGrid_Classify(void* game, int dim, int idx) {
     return (h < kMountainMax) ? TILE_MOUNTAIN_LO : TILE_MOUNTAIN_HI;
 }
 
-// Build the dim*dim tile grid at Game+0x80 (front-half of CreateNaturalResource).
+// Build the dim*dim tile grid at Map::cells (front-half of CreateNaturalResource).
 extern "C" void MapTileGrid_Build(void* gameVoid, int dim) {
     if (!gameVoid || dim <= 0) return;
-    uint8_t* game = (uint8_t*)gameVoid;
-    *(int32_t*)(game + GAME_DIM) = dim;
+    // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map.
+    Map* game = (Map*)gameVoid;
+    game->size = dim;
 
     const int    count = dim * dim;
-    const size_t bytes = (size_t)count * kCellStride;
-    uint8_t* cells = (uint8_t*)System::MemoryAllocator::MemAlloc(bytes, 8);
+    const size_t bytes = (size_t)count * sizeof(MapCell);
+    MapCell* cells = static_cast<MapCell*>(System::MemoryAllocator::MemAlloc(bytes, 8));
     if (!cells) return;
 
     // Fresh-cell init (sub_aa90 new-element branch): zeroed except +0x18/+0x2a.
     memset(cells, 0, bytes);
     for (int i = 0; i < count; ++i) {
-        uint8_t* c = cells + (size_t)i * kCellStride;
-        *(uint32_t*)(c + CELL_DW18) = 0xffffffffu;
-        c[CELL_B2A] = 0xff;
+        cells[i].regionId   = -1;     // +0x18 dword 0xffffffff
+        cells[i].field_0x2A = 0xff;   // +0x2a
     }
 
-    // Publish the vector header {data, count, capacity} at Game+0x80 before the
+    // Publish the array header {data, count, capacity} at Map +0x80 before the
     // classify pass (classify uses flag=1 and never reads the cell array).
-    *(void**)  (game + GAME_CELLS)        = cells;
-    *(int32_t*)(game + GAME_CELLS + 0x08) = count;
-    *(int32_t*)(game + GAME_CELLS + 0x0c) = count;
+    game->cells        = cells;
+    game->cellCount    = count;
+    game->cellCapacity = count;
 
-    // Classify pass — write the type byte (+0x29) for every cell.
+    // Classify pass — write the terrain type (+0x29) for every cell.
     for (int i = 0; i < count; ++i)
-        cells[(size_t)i * kCellStride + CELL_TYPE] = (uint8_t)MapTileGrid_Classify(gameVoid, dim, i);
+        cells[i].terrainType = (uint8_t)MapTileGrid_Classify(gameVoid, dim, i);
     PerfX::TerrainInvalidate();   // [PerfX] fresh grid: mirror rebuilds on first read
 }

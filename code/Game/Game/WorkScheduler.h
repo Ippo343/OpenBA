@@ -32,11 +32,13 @@
 #include <cstdint>
 #include <cstddef>
 #include "system/Value.h"   // System::Time (8 bytes, trivial)
+struct WorkSchedulerIdNode; struct WorkSchedulerCountNode; struct WorkSchedulerBucketNode;   // Game/WorkSchedulerNodes.h
+namespace IO { class Stream; }
 
 // One {root, count} tree header of the +0x30 array (the vector ctor's element,
 // 0x10 bytes).
 struct WorkSchedulerTree {
-    void*   root;          // +0x00 tree root (nodes: int key at +0x00)
+    WorkSchedulerIdNode* root;   // +0x00 tree root (nodes: int key at +0x00; Game/WorkSchedulerNodes.h)
     int32_t count;         // +0x08
     uint8_t _pad0C[4];     // +0x0C
 };
@@ -52,17 +54,20 @@ public:
     int32_t           field_0x04;       // +0x04 (Serialize int)
     uint32_t          stepCount;        // +0x08 ctor 1 (Serialize uint); +1 per simulation step
     uint8_t           _pad0C[4];        // +0x0C
-    void*             field_0x10;       // +0x10 tree root (int key; rebuilt on load)
+    WorkSchedulerCountNode* field_0x10; // +0x10 tree root (int key; rebuilt on load)
     int32_t           field_0x18;       // +0x18 tree count
     uint8_t           _pad1C[4];        // +0x1C
     void*             field_0x20;       // +0x20 ctor 0
     int32_t           field_0x28;       // +0x28 ctor 0
     uint8_t           _pad2C[4];        // +0x2C
     WorkSchedulerTree trees[15];        // +0x30 (TradeDescription_impl_d060: 14 before version 3)
-    void*             field_0x120;      // +0x120 tree root (TradeWork_impl_d5f0)
+    WorkSchedulerBucketNode* field_0x120; // +0x120 tree root (TradeWork_impl_d5f0)
     int32_t           field_0x128;      // +0x128 tree count
     uint8_t           _pad12C[4];       // +0x12C
     System::Time      time;             // +0x130 the scheduler clock (+= dt per step)
+
+    void Serialize(IO::Stream& stream);   // 0x1400f9240 (goals_serialize.cpp, GAME-b)
+    void ValidateAll();                   // 0x1400f8270: slot 9 on every Work of trees[0] (GAME-b)
 };
 
 static_assert(sizeof(WorkScheduler) == 0x138, "WorkScheduler is 0x138 (Load MemAlloc(0x138, 4))");

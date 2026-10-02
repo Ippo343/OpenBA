@@ -408,13 +408,13 @@ void PathGraph::BuildPathGraph() {
         reinterpret_cast<uint8_t*>(mapGrid) + 0x80);
 
     // Building list at citizenBehavior+0xb0 (via game world +0xb0)
-    int profGroupCount = buildingList->arrayCount;
+    int profGroupCount = buildingList->professions.GetSize();
 
 
     for (int gi = 0; gi < profGroupCount; gi++) {
         // Get profession key from building list
         // (ProfessionList keeps its Array as raw storage, H5: LEFT)
-        uint64_t profKey = reinterpret_cast<uint64_t*>(buildingList->arrayData)[gi];
+        uint64_t profKey = reinterpret_cast<uint64_t*>(buildingList->professions.GetData())[gi];
 
         // Look up profession BST at citizenBehavior+0x100
         uint64_t* profNode = *reinterpret_cast<uint64_t**>(citizenBehavior + 0x100);

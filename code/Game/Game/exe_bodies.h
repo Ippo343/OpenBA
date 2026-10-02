@@ -111,22 +111,30 @@ extern "C" void Tutorial_Dtor_f8ff0(void* selfV);  // 0x1400f8ff0
 extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream);  // 0x1400b04d0
 
 // ---- goals_serialize.cpp
-extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* , int32_t* outParam);  // 0x1400f9240
+class WorkScheduler;
+namespace IO { class Stream; }
+extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, void* , int32_t* outParam);  // 0x1400f9240  // B4 FORWARD: 1 outside caller(s)
 
 // ---- keystone_a_gamedtor.cpp
-extern "C" void Game_Dtor_9ed60(int64_t param_1);  // 0x14009ed60
+class Map;
+extern "C" void Game_Dtor_9ed60(Map* map);  // 0x14009ed60  // B4 FORWARD: 1 outside caller(s)
 
 // ---- mapquery.cpp
 extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inXY2, char flag, void* outTri);  // 0x14009f3e0
 
 // ---- minimap_paint.cpp
-extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom, void* sunLight);  // 0x1400a5140
+class WorldGeometry;
+namespace Video { class Context; }
+namespace Graphics { class SunLight; }
+extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context, WorldGeometry* worldGeom, Graphics::SunLight* sunLight);  // 0x1400a5140  // B4 FORWARD: 1 outside caller(s)
 
 // ---- professionlist.cpp
-extern "C" void ProfessionList_Startup_Impl(void* profList);  // 0x1400a90a0
+class ProfessionList;
+extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList);  // 0x1400a90a0  // B4 FORWARD: 1 outside caller(s)
 
 // ---- serialize_arrays.cpp
-extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream);  // 0x1400988c0
+class PlayerController;
+extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
 extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);  // 0x14001baf0
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);  // 0x14001bf10

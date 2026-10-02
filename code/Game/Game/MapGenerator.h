@@ -22,6 +22,7 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "system/String.h"
 
 class MapGenerator final : public Object::External {
     DECLARE_EXE_TYPE(MapGenerator)
@@ -41,6 +42,23 @@ public:
         int32_t  capacity;      // +0x0C: allocated capacity
     };
 
+    // One _citizens entry (stride 8, 0x14001b270; Serialize: bool, int).
+    struct InitialFamily {
+        bool     educated;        // +0x00 _educated
+        uint8_t  _pad01[3];       // +0x01 never written by the resize's init
+        int32_t  maxChildCount;   // +0x04 _maxChildCount
+    };
+    // One _structures entry (stride 0x30, 0x14001b4e0).
+    struct InitialStructure {
+        ExternalRef structure;    // +0x00 _structure
+        int32_t  offsetX;         // +0x18 _offsetX
+        int32_t  offsetY;         // +0x1C _offsetY
+        int32_t  width;           // +0x20 _width (init -1)
+        int32_t  height;          // +0x24 _height (init -1)
+        int32_t  rotation;        // +0x28 _rotation
+        uint8_t  _pad2C[4];       // +0x2C
+    };
+
     MapGenerator();                                               // 0x1400a3030
 
     // body 0x14001aea0
@@ -54,8 +72,8 @@ public:
 
 public:
     void*    _field20;           // +0x20: ExternalPtr (_stringTable)
-    void*    _field28;           // +0x28: System::String (_name)
-    void*    _field30;           // +0x30: System::String (_description)
+    System::String _field28;     // +0x28: _name (B.4 GAME-b: the ctor stored 0, the dtor ran ~String last)
+    System::String _field30;     // +0x30: _description
     uint8_t  enabled;            // +0x38: bool, default 1 (_exposed)
     uint8_t  _pad39[3];          // +0x39: padding
     int32_t  subdivisions;       // +0x3C: default 8 (_startAreaSize)
@@ -65,7 +83,7 @@ public:
     ExternalRef templateRef;     // +0x48: _citizen template ref
 
     // +0x60: InitialFamily array (8-byte elements, raw MemAlloc/MemFree)
-    void*    boolIntArray;       // +0x60: data
+    InitialFamily* boolIntArray; // +0x60: data
     uint64_t boolIntCount;       // +0x68: count (serialized as int32)
 
     DynArrayHeader refArray1;    // +0x70: ExternalRef (0x18) pool
@@ -108,6 +126,13 @@ static_assert(sizeof(MapGenerator::DynArrayHeader) == 0x10, "DynArrayHeader is 0
 static_assert(sizeof(MapGenerator) == 0x178, "MapGenerator is 0x178");
 static_assert(alignof(MapGenerator) == 8, "qword-aligned");
 static_assert(offsetof(MapGenerator, _field20) == 0x20, "+0x20");
+static_assert(offsetof(MapGenerator, _field28) == 0x28, "+0x28");
+static_assert(offsetof(MapGenerator, _field30) == 0x30, "+0x30");
+static_assert(sizeof(MapGenerator::InitialFamily) == 8, "InitialFamily stride 8 (0x14001b270)");
+static_assert(offsetof(MapGenerator::InitialFamily, maxChildCount) == 4, "InitialFamily +0x04");
+static_assert(sizeof(MapGenerator::InitialStructure) == 0x30, "InitialStructure stride 0x30 (0x14001b4e0)");
+static_assert(offsetof(MapGenerator::InitialStructure, offsetX) == 0x18, "InitialStructure +0x18");
+static_assert(offsetof(MapGenerator::InitialStructure, rotation) == 0x28, "InitialStructure +0x28");
 static_assert(offsetof(MapGenerator, enabled) == 0x38, "+0x38");
 static_assert(offsetof(MapGenerator, subdivisions) == 0x3C, "+0x3C");
 static_assert(offsetof(MapGenerator, scale) == 0x40, "+0x40");
