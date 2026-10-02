@@ -540,16 +540,16 @@ Math::Transform PlayerController::CalcTransform() {
                       pos.z - dir.z * distance);
     // ?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z  retail 0x18007dbb0
     Math::Transform lookAt = Math::Transform::FromLookAt(eye, pos);
-    // LEFT: +0x00 is raw storage (H5: Math::Transform's ctor would run).
-    *reinterpret_cast<Math::Transform*>(transform) = lookAt;   // self[+0x00..+0x1b]
+    // +0x00 is the Math::Transform member (GAME-b).
+    transform = lookAt;   // self[+0x00..+0x1b]
     return lookAt;
 }
 
 // 0x1400985b0 — the PlayerController ctor (+0xE0, 0x10c).
 PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float pitch_, float distance_) {
     // ??0Transform@Math@@QEAA@XZ  retail 0x180015080
-    // LEFT: +0x00 is raw storage (H5).
-    *reinterpret_cast<Math::Transform*>(transform) = Math::Transform();
+    // +0x00 is the Math::Transform member (GAME-b): constructed, then this store.
+    transform = Math::Transform();
     targetX = 0.0f;                           // +0x1c / +0x20: retail's qword 0 (H7: two stores)
     targetY = 0.0f;
     targetZ = 0.0f;                           // +0x24: dword 0

@@ -27,6 +27,7 @@
 // drops it entirely.
 
 #include "Game/WorldGeometry.h"
+#include "Game/PlayerController.h"
 #include "math/Math.h"
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
@@ -116,24 +117,25 @@ WorldGeometry::WorldGeometry() {
 //
 // All four callees are Runtime exports, so a null here means engine_funcs never
 // resolved — report that loudly rather than silently dropping the read.
-extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream) {
-    if (!transform || !stream) return;
-
-    // ENDGAME B.3.4a closing: the ctor/float/dtor readiness guard and its
-    // "a callee is NULL, the stream is DESYNCED" report are gone with the doors
-    // — the serializer below is a real IO::Serializer and its members cannot be
-    // null.
-    const uintptr_t t = (uintptr_t)transform;
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+void PlayerController::Serialize(IO::Stream& stream) {
+    IO::Serializer ser(stream, 0);
     // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x180059b90
-    reinterpret_cast<Math::Transform*>(transform)->Serialize(ser);   // +0x00 Math::Transform
+    transform.Serialize(&ser);                                         // +0x00 Math::Transform
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    retail 0x1800150e0
-    reinterpret_cast<Math::Vector3*>(t + 0x1c)->Serialize(ser);      // +0x1c Math::Vector3
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(t + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(t + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(t + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    // LEFT: the target is three named floats (GAME-a's readers spell
+    // targetX / targetY / targetZ); retail serializes them as one Math::Vector3.
+    reinterpret_cast<Math::Vector3*>(&targetX)->Serialize(&ser);      // +0x1c Math::Vector3
+    ser.Serialize(yaw, nullptr);        // +0x28
+    ser.Serialize(pitch, nullptr);      // +0x2c
+    ser.Serialize(distance, nullptr);   // +0x30
+}
+
+// B4 FORWARD: 1 outside caller (gameupdateloop_serialize.cpp, GAME-a). The null
+// tests are the old body's (retail 0x1400988c0 has none; its caller passes the
+// live controller and stream).
+extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream) {
+    if (!controller || !stream) return;
+    controller->Serialize(*stream);
 }
 
 // ============================================================

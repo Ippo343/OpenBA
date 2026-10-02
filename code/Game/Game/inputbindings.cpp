@@ -22,6 +22,7 @@
 #include <cstdio>
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
+#include "ui/StringTable.h"
 #include "Game/exe_bodies.h"
 
 namespace Game {
@@ -116,13 +117,8 @@ void RegisterDefaultInputBindings() {
         return;
     }
 
-    void* level2 = Input::Configuration::_singleton;
-    if (!level2) {
-        printf("[InputBindings] FATAL: KeyMap exref level-2 ptr is NULL\n");
-        return;
-    }
-
-    void* keyMap = *(void**)level2;
+    // Input::Configuration::_keyMap (+0x00) is the KeyMap.
+    Input::KeyMap* keyMap = Input::Configuration::_singleton->_keyMap;
     if (!keyMap) {
         printf("[InputBindings] FATAL: KeyMap exref level-3 (object) ptr is NULL\n");
         return;
@@ -130,18 +126,17 @@ void RegisterDefaultInputBindings() {
 
 
     printf("[InputBindings] Populating KeyMap %p with %zu default bindings...\n",
-           keyMap, kBindingCount);
+           (void*)keyMap, kBindingCount);
 
-    reinterpret_cast<Input::KeyMap*>(keyMap)->ClearAll();  // B.3.7 bridge
+    keyMap->ClearAll();
 
     for (const Binding& b : kDefaultBindings) {
-        reinterpret_cast<Input::KeyMap*>(keyMap)->RegisterInput(b.id, b.deviceType, b.keyCode,  // B.3.7 bridge
-                                                                 b.name, b.flag);
+        keyMap->RegisterInput(b.id, b.deviceType, b.keyCode, b.name, b.flag);
     }
 
     // Load saved overrides from Persistence (HKCU\...\Banished\Input...).
     // No-op on a fresh install.
-    reinterpret_cast<Input::KeyMap*>(keyMap)->Load();  // B.3.7 bridge
+    keyMap->Load();
 
     printf("[InputBindings] Done — %zu bindings + Load applied.\n",
            kBindingCount);
@@ -175,24 +170,19 @@ void LoadInputNameTables() {
     // (Factory::Startup has already run by this point).
     static uint32_t s_stringTableTypeId = 0;
     if (s_stringTableTypeId == 0) {
-        void* factoryObj = ::Object::Factory::_singleton;
+        const ::Object::Factory* factoryObj = ::Object::Factory::_singleton;
         if (factoryObj) {
-            s_stringTableTypeId =
-                reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                    "StringTable", true);   // B.3.3 bridge
+            s_stringTableTypeId = factoryObj->GetTypeIdFromName("StringTable", true);
             printf("[InputBindings] StringTable typeId = %u\n",
                    s_stringTableTypeId);
         }
     }
 
-    auto loadOne = [&](const char* path) -> void* {
+    auto loadOne = [&](const char* path) -> UI::StringTable* {
         // Retail builds a String and then runs Filename::AdjustDelimiters on it;
         // Filename(const char*) is exactly Set + AdjustDelimiters.
         System::Filename fnameBuf(path);
-        // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-        void* ext = const_cast<::Object::External*>(
-            ::Object::ExternalFactory::_singleton
-                ->FindOrLoad(fnameBuf));                                    // B.3.3 bridge
+        const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(fnameBuf);
         if (!ext) {
             printf("[InputBindings]   '%s' -> NOT FOUND\n", path);
             return nullptr;
@@ -201,25 +191,23 @@ void LoadInputNameTables() {
             printf("[InputBindings]   '%s' -> WRONG TYPE\n", path);
             return nullptr;
         }
-        printf("[InputBindings]   '%s' -> %p\n", path, ext);
-        return ext;
+        printf("[InputBindings]   '%s' -> %p\n", path, (const void*)ext);
+        // LEFT: FindOrLoad returns a const External*; the container holds StringTable*.
+        return const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext));
     };
 
-    char* container = reinterpret_cast<char*>(g_gameContainer);
+    GameContainer* container = g_gameContainer;
 
     // Slot indexing: param_1[0x19] = byte offset 0x19 * 8 = 0xC8.
-    *reinterpret_cast<void**>(container + 0xC8) =
-        loadOne("Dialog/StringTable.rsc:gameKeys");
-    *reinterpret_cast<void**>(container + 0xD0) =
-        loadOne("Dialog/StringTable.rsc:keyNames");
-    *reinterpret_cast<void**>(container + 0xD8) =
-        loadOne("Dialog/StringTable.rsc:globalNames");
+    container->gameKeys    = loadOne("Dialog/StringTable.rsc:gameKeys");
+    container->keyNames    = loadOne("Dialog/StringTable.rsc:keyNames");
+    container->globalNames = loadOne("Dialog/StringTable.rsc:globalNames");
 
     printf("[InputBindings] Game container input tables: gameKeys=%p "
            "keyNames=%p globalNames=%p\n",
-           *reinterpret_cast<void**>(container + 0xC8),
-           *reinterpret_cast<void**>(container + 0xD0),
-           *reinterpret_cast<void**>(container + 0xD8));
+           (void*)container->gameKeys.Get(),
+           (void*)container->keyNames.Get(),
+           (void*)container->globalNames.Get());
 }
 
 } // namespace Game

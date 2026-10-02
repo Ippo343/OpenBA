@@ -29,6 +29,8 @@
 // a no-op and Map+0x70/+0x78 stay 0 (zeroed by the Game ctor), preserving the euclidean
 // fallback exactly as before.
 
+#include "Game/Map.h"
+#include "Action/PathSearch.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"   // Pf_RegionGraphCtor_8670, Pf_RegionPairCache_Build, Pf_FlushDirtyChunks_8a90
 #include <cstdint>
@@ -42,8 +44,9 @@
 extern "C" void Region_Seed(void* gameObjV, int dim) {
     if (!gameObjV || dim <= 0) return;
 
-    uint8_t* map = reinterpret_cast<uint8_t*>(gameObjV);   // the Map/Game object (gameWorld+0xf8)
-    if (*reinterpret_cast<void**>(map + 0x70) != nullptr) return;   // already built
+    // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map.
+    Map* map = reinterpret_cast<Map*>(gameObjV);   // the Map (GameUpdateLoop::m_game)
+    if (map->regionGraph != nullptr) return;       // already built
 
     // coarse-grid dims = ceil(dim/8) via the exe's signed-rounding idiom (e8c0):
     //   (int)(dim + ((dim >> 0x1f) & 7)) >> 3
@@ -51,24 +54,27 @@ extern "C" void Region_Seed(void* gameObjV, int dim) {
     if (coarseDim <= 0) return;
 
     // 1) allocate + construct the region graph (e8c0: MemAlloc(0x108,4) -> 8670).
-    void* graphV = System::MemoryAllocator::MemAlloc(0x108, 4);
-    if (!graphV) return;
-    Pf_RegionGraphCtor_8670(reinterpret_cast<int*>(graphV), reinterpret_cast<int64_t>(map),
+    RegionGraph* graph = static_cast<RegionGraph*>(System::MemoryAllocator::MemAlloc(0x108, 4));
+    if (!graph) return;
+    // LEFT: 0x1400a8670's C declaration (Action/exe_bodies.h) takes the graph as int*
+    // and the map as an integer.
+    Pf_RegionGraphCtor_8670(reinterpret_cast<int*>(graph), reinterpret_cast<int64_t>(map),
                             /*worker*/0, /*ctx*/0, static_cast<uint32_t>(coarseDim), coarseDim);
 
-    // 2) link the graph (Map+0x70) BEFORE flushing — 8a90 stamps regionId via graph+0x50=Map.
-    *reinterpret_cast<void**>(map + 0x70) = graphV;
+    // 2) link the graph (Map::regionGraph) BEFORE flushing — Flush stamps regionId via graph->map.
+    map->regionGraph = graph;
 
     // 3) flush all (8670 marked every coarse cell dirty in both lists) -> flood-fill each
     //    8x8 block, compute centroids/edges, and STAMP regionId into the Map cell array.
-    Pf_FlushDirtyChunks_8a90(reinterpret_cast<int64_t>(graphV));
+    graph->Flush();   // 0x1400a8a90
 
-    // 4) region-pair length cache (Map+0x78) — needed by f810's cross-region path (a8ba0).
+    // 4) region-pair length cache (Map::regionPairCache) — needed by f810's cross-region path (a8ba0).
     void* pcV = Pf_RegionPairCache_Build();
-    *reinterpret_cast<void**>(map + 0x78) = pcV;
+    // LEFT: Map::regionPairCache is int64_t* (gameupdateloop.cpp hands it to 0x1400a5d10's int64_t*).
+    map->regionPairCache = reinterpret_cast<int64_t*>(pcV);
 
-    int regionCount = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(graphV) + 0x70);
+    int regionCount = graph->regions.size;
     fprintf(stderr, "[RegionSeed] region map built: graph@%p coarseDim=%d regionNodes=%d pairCache=%p\n",
-            graphV, coarseDim, regionCount, pcV);
+            (void*)graph, coarseDim, regionCount, pcV);
     fflush(stderr);
 }

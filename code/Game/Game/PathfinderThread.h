@@ -64,6 +64,9 @@ public:
     // PUBLIC and non-virtual: retail's Game::~Game (0x14009ed60) calls it by
     // name on the Game+0x68 pointer, then MemFrees it.
     ~PathfinderThread();
+    // 0x1400a6690 (GAME-b, keystone_a_gamedtor.cpp): start the worker while work is
+    // queued, yield until the queue is empty, then WaitForFinish.
+    void DrainQueue();
 
     // ---- the command API (B.4 ACT-a; bodies in code/Game/Action/action_pf_astar.cpp
     // unless noted). Each enqueuer compares against its staged copy, stores the new
