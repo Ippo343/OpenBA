@@ -51,7 +51,11 @@
 #include "Component/MarketDescription.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/StorageComponent.h"
-#include "Action/exe_bodies.h"   // ActRm_StorageAdd_d000 (0x14012d000)
+#include "Action/exe_bodies.h"   // StorageAdd (0x14012d000)
+#include "Component/ComponentDescription.h"   // B4: the template's sub-descriptions
+#include "Entity/CitizenBehavior.h"           // B4: the town's material templates
+#include "Entity/ComponentEntity.h"           // B4: the component array by name
+#include "Entity/EntityList.h"                // B4: GameUpdateLoop::m_entityList
 #include "object/TypeInfo.h"     // Object::IsDerivedFromNullSafe
 #include <cstdint>
 #include <cstdio>
@@ -90,82 +94,77 @@ static int OverstockPeriod() {
 // the .rdata cells 0x1401c44f0 / 0x1401c4528 / 0x1401c7e78 / 0x1401c7cb8 are filled with.
 // Every object scanned below is an entity's component or a template's description
 // (Object::Base), so slot 2 is Type().
-static inline uint32_t GetTypeIdOf(void* obj) {
-    return reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge
-}
-
 // Component scan over a LIVE entity (+0x30 IBP array / +0x38 count).
-static void* FindComponent(int64_t entity, uint32_t tid) {
+static Component* FindComponent(ComponentEntity* entity, uint32_t tid) {
     if (!entity || !tid) return nullptr;
-    const int count = *reinterpret_cast<int*>(entity + 0x38);
+    const int count = entity->_componentCount;                   // +0x38
     for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(
-            *reinterpret_cast<int64_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
-        void* comp = *slot;
+        Component* comp = entity->_components[i].Get();          // +0x30
         if (!comp) continue;
-        if (GetTypeIdOf(comp) == tid)
+        if (comp->Type() == tid)
             return Object::IsDerivedFromNullSafe(comp, tid) ? comp : nullptr;
     }
     return nullptr;
 }
 
 // Description scan over a TEMPLATE entity (+0x28 raw array / +0x30 count).
-static void* FindDescOnTemplate(int64_t tmpl, uint32_t tid) {
+static Description* FindDescOnTemplate(const ComponentDescription* tmpl, uint32_t tid) {
     if (!tmpl || !tid) return nullptr;
-    const int count = *reinterpret_cast<int*>(tmpl + 0x30);
-    const int64_t arr = *reinterpret_cast<int64_t*>(tmpl + 0x28);
+    const int count = tmpl->_subDescCount;                       // +0x30
+    Description** arr = tmpl->_subDescs;                         // +0x28
     for (int i = 0; i < count; ++i) {
-        void* d = *reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
-        if (d && GetTypeIdOf(d) == tid)
+        Description* d = arr[i];
+        if (d && d->Type() == tid)
             return Object::IsDerivedFromNullSafe(d, tid) ? d : nullptr;
     }
     return nullptr;
 }
 
 // StorageComponent::QueryCount (0x14012cf10) — volume-weighted total.
-static int QueryCount(int64_t sc, uint32_t tidRawMat) {
+static int QueryCount(StorageComponent* sc, uint32_t tidRawMat) {
     int total = 0;
-    const int slots = *reinterpret_cast<int*>(sc + 0x30);
-    const int64_t arr = *reinterpret_cast<int64_t*>(sc + 0x28);
+    const int slots = sc->slotCount;                             // +0x30
+    const StorageComponent::Item* arr = sc->storageSlots;        // +0x28 (stride 0x10)
     for (int i = 0; i < slots; ++i) {
-        const int64_t slot = arr + static_cast<int64_t>(i) * 0x10;
-        void* d = FindDescOnTemplate(*reinterpret_cast<int64_t*>(slot), tidRawMat);
-        const int unitVol = d ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(d) + 0x48) : 0;
-        total += unitVol * *reinterpret_cast<int*>(slot + 0x08);
+        const StorageComponent::Item& slot = arr[i];
+        // Found by IsDerivedFrom(RawMaterialDescription).
+        RawMaterialDescription* d = static_cast<RawMaterialDescription*>(
+            FindDescOnTemplate(slot._resource, tidRawMat));
+        const int unitVol = d ? d->_weight : 0;                  // +0x48
+        total += unitVol * slot._count;                          // +0x08
     }
     return total;
 }
 
 // The same accumulation stage 2's LOOP A performs for one record mask:
 // sum of unitSize * (slot total - slot reserved) over the market's own slots.
-static int InMarketVolumeForMask(int64_t sc, uint32_t mask, uint32_t tidRawMat) {
+static int InMarketVolumeForMask(StorageComponent* sc, uint32_t mask, uint32_t tidRawMat) {
     int total = 0;
-    const int slots = *reinterpret_cast<int*>(sc + 0x30);
-    const int64_t arr = *reinterpret_cast<int64_t*>(sc + 0x28);
+    const int slots = sc->slotCount;                             // +0x30
+    const StorageComponent::Item* arr = sc->storageSlots;        // +0x28 (stride 0x10)
     for (int i = 0; i < slots; ++i) {
-        const int64_t slot = arr + static_cast<int64_t>(i) * 0x10;
-        void* d = FindDescOnTemplate(*reinterpret_cast<int64_t*>(slot), tidRawMat);
+        const StorageComponent::Item& slot = arr[i];
+        // Found by IsDerivedFrom(RawMaterialDescription).
+        RawMaterialDescription* d = static_cast<RawMaterialDescription*>(
+            FindDescOnTemplate(slot._resource, tidRawMat));
         if (!d) continue;
-        const uintptr_t dp = reinterpret_cast<uintptr_t>(d);
-        if ((*reinterpret_cast<uint32_t*>(dp + 0x5c) & mask) == 0) continue;
-        const int available = *reinterpret_cast<int*>(slot + 0x08) -
-                              *reinterpret_cast<int*>(slot + 0x0c);
-        total += *reinterpret_cast<int*>(dp + 0x48) * available;
+        if ((d->_flags & mask) == 0) continue;                   // +0x5c
+        const int available = slot._count - slot._reserve;       // +0x08 - +0x0c
+        total += d->_weight * available;                         // +0x48
     }
     return total;
 }
 
-static inline void* TownMgr() {
+static inline CitizenBehavior* TownMgr() {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
-    return *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton) + 0xf0);
+    return GameUpdateLoop::_singleton->m_citizenList;            // +0xf0
 }
 
 // ============================================================
 // The injection
 // ============================================================
 static void DoOverstock(int frameNum) {
-    uintptr_t town = reinterpret_cast<uintptr_t>(TownMgr());
+    CitizenBehavior* town = TownMgr();
     if (!town) { MO_LOG("no town manager yet (frame %d)", frameNum); return; }
 
     const uint32_t tidMarketComp   = MarketComponent::TypeId();
@@ -184,43 +183,46 @@ static void DoOverstock(int frameNum) {
     // town_storage_seed.cpp); a market is not in it, which is exactly why the
     // first cut of this harness reported "no MarketComponent in town" while the
     // MarketBST trace showed slot 4 servicing that very market on the same frame.
-    int64_t marketEntity = 0;
-    void* marketComp = nullptr;
+    ComponentEntity* marketEntity = nullptr;
+    Component* marketComp = nullptr;
     {
-        const uintptr_t gw = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-        const uintptr_t el = *reinterpret_cast<uintptr_t*>(gw + 0xe8);
-        const uintptr_t arr = el ? *reinterpret_cast<uintptr_t*>(el + 0x08) : 0;
-        const int entCount = el ? *reinterpret_cast<int*>(el + 0x10) : 0;
+        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+        EntityList* el = gw->m_entityList;                                // +0xe8
+        ComponentEntity** arr = el ? el->masterArray.data : nullptr;      // +0x08
+        const int entCount = el ? el->masterArray.count : 0;              // +0x10
         for (int e = 0; e < entCount && arr; ++e) {
-            void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(e) * 8);
-            int64_t ent = reinterpret_cast<int64_t>(*slot);
+            ComponentEntity* ent = arr[e];
             if (!ent) continue;
-            void* mc = FindComponent(ent, tidMarketComp);
+            Component* mc = FindComponent(ent, tidMarketComp);
             if (mc) { marketEntity = ent; marketComp = mc; break; }
         }
     }
     if (!marketComp) { MO_LOG("no MarketComponent in the world entity list (frame %d)", frameNum); return; }
 
-    void* descRaw = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(marketComp) + 0x18);
-    void* marketDesc = (descRaw &&
-                        Object::IsDerivedFromNullSafe(descRaw, tidMarketDesc)) ? descRaw : nullptr;
-    void* storageComp = FindComponent(marketEntity, tidStorageComp);
+    Description* descRaw = marketComp->_description;                      // +0x18
+    MarketDescription* marketDesc = (descRaw &&
+                        Object::IsDerivedFromNullSafe(descRaw, tidMarketDesc))
+                        ? static_cast<MarketDescription*>(descRaw) : nullptr;
+    // FindComponent checked IsDerivedFrom(StorageComponent).
+    StorageComponent* storageComp =
+        static_cast<StorageComponent*>(FindComponent(marketEntity, tidStorageComp));
     if (!marketDesc || !storageComp) {
         MO_LOG("market %p incomplete (desc=%p storage=%p)",
-               reinterpret_cast<void*>(marketEntity), marketDesc, storageComp);
+               static_cast<void*>(marketEntity), static_cast<void*>(marketDesc),
+               static_cast<void*>(storageComp));
         return;
     }
-    const uintptr_t dp = reinterpret_cast<uintptr_t>(marketDesc);
-    const int64_t   sc = reinterpret_cast<int64_t>(storageComp);
+    const MarketDescription* dp = marketDesc;
+    StorageComponent*        sc = storageComp;
 
-    const int   capacity  = *reinterpret_cast<int*>(sc + 0x38);
-    const float threshold = *reinterpret_cast<float*>(dp + 0x20);   // stage 1's STOCKED gate
-    const uint32_t acceptMask = *reinterpret_cast<uint32_t*>(sc + 0x3c);
-    const int   entryCount = *reinterpret_cast<int*>(dp + 0x30);
-    const uintptr_t entries = *reinterpret_cast<uintptr_t*>(dp + 0x28);
+    const int   capacity  = sc->capacity;                                 // +0x38
+    const float threshold = dp->_fillRatio;   // stage 1's STOCKED gate      +0x20
+    const uint32_t acceptMask = sc->rawMaterialFlags;                     // +0x3c
+    const int   entryCount = dp->_ratioCount;                             // +0x30
+    const MarketRatio* entries = dp->_ratios;                             // +0x28 (stride 8)
     if (capacity <= 0 || entryCount <= 0) {
         MO_LOG("market %p capacity=%d entries=%d — cannot overstock",
-               reinterpret_cast<void*>(marketEntity), capacity, entryCount);
+               static_cast<void*>(marketEntity), capacity, entryCount);
         return;
     }
 
@@ -233,7 +235,7 @@ static void DoOverstock(int frameNum) {
 
     MO_LOG("frame %d market=%p storage=%p capacity=%d filled=%d fillThreshold=%.3f "
            "headroom=%d acceptMask=0x%08x entries=%d targetSat=%.2f",
-           frameNum, reinterpret_cast<void*>(marketEntity), storageComp,
+           frameNum, static_cast<void*>(marketEntity), static_cast<void*>(storageComp),
            capacity, currentTotal, threshold, headroom, acceptMask, entryCount, targetSat);
     if (headroom <= 0) {
         MO_LOG("market already at/over stage 1's STOCKED gate — slot 4 returns 1 before "
@@ -246,8 +248,8 @@ static void DoOverstock(int frameNum) {
     float bestWant  = 0.0f;
     int   bestNeed  = 0;      // volume still to add
     for (int r = 0; r < entryCount; ++r) {
-        const uint32_t mask = *reinterpret_cast<uint32_t*>(entries + static_cast<int64_t>(r) * 8);
-        const float    want = *reinterpret_cast<float*>(entries + static_cast<int64_t>(r) * 8 + 4);
+        const uint32_t mask = entries[r].resourceMask;                    // +0x00
+        const float    want = entries[r].ratio;                           // +0x04
         if (!(want > 0.0f)) continue;
         if ((mask & acceptMask) == 0) continue;   // the market would refuse the goods
         const int have = InMarketVolumeForMask(sc, mask, tidRawMat);
@@ -261,22 +263,22 @@ static void DoOverstock(int frameNum) {
                "of headroom — raise BANISHED_MARKET_OVERSTOCK? nothing injected", targetSat, headroom);
         return;
     }
-    const uint32_t mask = *reinterpret_cast<uint32_t*>(
-        entries + static_cast<int64_t>(bestEntry) * 8);
+    const uint32_t mask = entries[bestEntry].resourceMask;
 
     // ---- pick a material template carrying that mask (town+0x110 / +0x118) ----
-    int64_t tmpl = 0;
+    ComponentDescription* tmpl = nullptr;
     int unitSize = 0;
     {
-        const int tc = *reinterpret_cast<int*>(town + 0x118);
-        const int64_t ta = *reinterpret_cast<int64_t*>(town + 0x110);
+        const int tc = town->field_0x118;                                  // +0x118
+        ComponentDescription** ta = town->field_0x110;                     // +0x110
         for (int t = 0; t < tc; ++t) {
-            const int64_t cand = *reinterpret_cast<int64_t*>(ta + static_cast<int64_t>(t) * 8);
-            void* d = FindDescOnTemplate(cand, tidRawMat);
-            if (!d) continue;
-            const uintptr_t dd = reinterpret_cast<uintptr_t>(d);
-            if ((*reinterpret_cast<uint32_t*>(dd + 0x5c) & mask) == 0) continue;
-            const int us = *reinterpret_cast<int*>(dd + 0x48);
+            ComponentDescription* cand = ta[t];
+            // Found by IsDerivedFrom(RawMaterialDescription).
+            RawMaterialDescription* dd = static_cast<RawMaterialDescription*>(
+                FindDescOnTemplate(cand, tidRawMat));
+            if (!dd) continue;
+            if ((dd->_flags & mask) == 0) continue;                        // +0x5c
+            const int us = dd->_weight;                                    // +0x48
             if (us <= 0) continue;
             tmpl = cand; unitSize = us; break;
         }
@@ -288,7 +290,7 @@ static void DoOverstock(int frameNum) {
     }
 
     const int units = (bestNeed + unitSize - 1) / unitSize;   // round UP past the trigger
-    ActRm_StorageAdd_d000(reinterpret_cast<uintptr_t>(storageComp), tmpl, units);   // 0x14012d000
+    StorageAdd(storageComp, tmpl, units);   // 0x14012d000
 
     const int afterTotal = QueryCount(sc, tidRawMat);
     const int afterMask  = InMarketVolumeForMask(sc, mask, tidRawMat);
