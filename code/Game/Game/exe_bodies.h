@@ -182,7 +182,8 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey);  // 0x14008d100
 
 // ---- unreg_lane5_musicplayer.cpp
-extern "C" void MusicPlayer_Update(void* musicPlayer);  // 0x1400a40e0
+class MusicPlayer;   // Game/MusicPlayer.h
+extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B4 FORWARD -> MusicPlayer::Update (1 outside caller: gameupdateloop.cpp)
 
 // ---- w2_takescreenshot.cpp
 extern "C" void GameUpdateLoop_TakeScreenshot(void* self);  // 0x140095da0
