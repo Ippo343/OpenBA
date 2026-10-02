@@ -108,7 +108,7 @@ void FUN_140014c70(void** root, long long node);  // AVL rotate-left
 void FUN_140014da0(void** root, long long node);  // AVL rotate-right
 void FUN_140014c30(void** root, void* node);      // recursive subtree free
 }
-extern "C" void TradeComponent_helper_f9e0(void* dst, void* src);  // deep-copy of a {data,count,cap} bucket
+extern "C" void TradeComponent_helper_f9e0(RawArray<int32_t>* dst, const RawArray<int32_t>* src);  // deep-copy of a {data,count,cap} bucket
 
 // ============================================================
 // FUN_1400245d0  @0x1400245d0 — push one {float x, float y, float w} (0xC bytes)

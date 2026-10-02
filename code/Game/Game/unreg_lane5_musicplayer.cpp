@@ -101,6 +101,12 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 #include "Game/exe_bodies.h"
+#include "Game/MusicPlayer.h"
+#include "Game/MusicList.h"
+#include "Game/Calendar.h"
+#include "Entity/CitizenBehavior.h"
+#include "Component/CitizenComponent.h"
+#include "audio/SoundEffect.h"
 
 namespace {
 
@@ -123,8 +129,8 @@ uint32_t CitizenDescriptionTypeId() {
 
 // See the DEVIATION note in the file header. Retail's GameUpdateLoop::Load
 // fills musicPlayer+0x08; ours defers it, so fill it here on first use.
-void EnsureTrackList(uint8_t* mp) {
-    if (*reinterpret_cast<void**>(mp + 0x08)) return;
+void EnsureTrackList(MusicPlayer* mp) {
+    if (mp->trackList) return;
     static bool attempted = false;
     if (attempted) return;              // one shot — never re-hit the loader
     attempted = true;
@@ -138,13 +144,14 @@ void EnsureTrackList(uint8_t* mp) {
 
     System::Filename fname("Game/MusicTracks.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    void* list = const_cast<::Object::External*>(
+    // FindOrLoad answers `const External*`; the resource is the MusicList.
+    MusicList* list = static_cast<MusicList*>(const_cast<::Object::External*>(
         ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                            // B.3.3 bridge
-    *reinterpret_cast<void**>(mp + 0x08) = list;
+            ->FindOrLoad(fname)));                                           // B.3.3 bridge
+    mp->trackList = list;
 
-    fprintf(stderr, "[MusicPlayer] MusicTracks.rsc -> %p tracks=%d\n", list,
-            list ? *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(list) + 0x28) : -1);
+    fprintf(stderr, "[MusicPlayer] MusicTracks.rsc -> %p tracks=%d\n", static_cast<void*>(list),
+            list ? list->_entries._size : -1);
     fflush(stderr);
 }
 
@@ -153,74 +160,77 @@ void EnsureTrackList(uint8_t* mp) {
 // ============================================================
 // MusicPlayer::Update — faithful port of exe 0x1400a40e0
 // ============================================================
-extern "C" void MusicPlayer_Update(void* musicPlayer) {
+// B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a: `MusicPlayer_Update(m_musicPlayer)`).
+extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer) {
     if (!musicPlayer) return;
+    musicPlayer->Update();
+}
+
+void MusicPlayer::Update() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    uint8_t* mp = reinterpret_cast<uint8_t*>(musicPlayer);
-    uint8_t* gw = reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton);
-    void*    audioScene = reinterpret_cast<GameUpdateLoop*>(gw)->m_audioScene;   // B.3.8 bridge
+    MusicPlayer* mp = this;
+    GameUpdateLoop* gw = GameUpdateLoop::_singleton;
+    Audio::Scene*   audioScene = gw->m_audioScene;
 
     // --- Early-out: a track is still playing on our handle. -----------------
     if (!audioScene) return;
-    if (reinterpret_cast<Audio::Scene*>(audioScene)->IsEffectPlaying(
-            *reinterpret_cast<uint32_t*>(mp + 0x00))) return;   // B.3.7 bridge
+    if (audioScene->IsEffectPlaying(mp->effect)) return;
 
     EnsureTrackList(mp);
-    uint8_t* trackList = *reinterpret_cast<uint8_t**>(mp + 0x08);
+    MusicList* trackList = mp->trackList;
     if (!trackList) return;   // deviation-only guard: retail's Load guaranteed it
 
     // --- Town mood: average health and happiness over the citizen list, -----
     // each normalised by the corresponding max on citizen[0]'s description.
-    uint8_t* citizens   = reinterpret_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
+    CitizenBehavior* citizens = gw->m_citizenList;
     float    moodA = 0.0f, moodB = 0.0f;
     if (citizens) {
-        int      count = *reinterpret_cast<int32_t*>(citizens + 0xa8);
-        int64_t* arr   = *reinterpret_cast<int64_t**>(citizens + 0xa0);
+        int                count = citizens->citizenCount;
+        CitizenComponent** arr   = citizens->citizens;
         if (count > 0 && arr) {
             for (int i = 0; i < count; ++i) {
-                uint64_t ibp = static_cast<uint64_t>(arr[i]);
-                uint8_t* c = reinterpret_cast<uint8_t*>(ibp);
-                moodA += *reinterpret_cast<float*>(c + 0x50);
-                moodB += *reinterpret_cast<float*>(c + 0x80);
+                CitizenComponent* c = arr[i];
+                moodA += c->health;
+                moodB += c->happiness;
             }
             // Retail re-reads count and citizen[0] twice (once per normaliser);
             // both reads are identical, so hoist the description lookup.
-            uint64_t ibp0 = static_cast<uint64_t>(arr[0]);
-            void* desc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ibp0) + 0x18);
+            CitizenComponent* c0 = arr[0];
+            Description* descObj = c0->_description;
             uint32_t tid = CitizenDescriptionTypeId();
-            if (!(tid && ::Object::IsDerivedFromNullSafe(desc, tid))) desc = nullptr;
+            CitizenDescription* desc = static_cast<CitizenDescription*>(descObj);
+            if (!(tid && ::Object::IsDerivedFromNullSafe(descObj, tid))) desc = nullptr;
             // Faithful: retail derefs `desc` here with no null test (ASSERT path).
-            uint8_t* d = reinterpret_cast<uint8_t*>(desc);
-            moodA = (moodA / static_cast<float>(count)) / *reinterpret_cast<float*>(d + 0x70);
-            moodB = (moodB / static_cast<float>(count)) / *reinterpret_cast<float*>(d + 0xa4);
+            moodA = (moodA / static_cast<float>(count)) / desc->maxHealth;
+            moodB = (moodB / static_cast<float>(count)) / desc->maxHappiness;
         }
     }
     const float mood = (moodB + moodA) * kMoodAverageWeight;
 
     // --- Current month from the accumulated day-counter time. ---------------
     int month = 0;
-    if (void* dayCounter = reinterpret_cast<GameUpdateLoop*>(gw)->m_dayCounter) {   // B.3.8 bridge
-        float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(dayCounter) + 8)->AsSeconds();   // B.3.4b bridge
+    if (Calendar* dayCounter = gw->m_dayCounter) {
+        float secs = dayCounter->yearTime.AsSeconds();
         int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
         month = (m > 11) ? 0 : m;   // faithful: >11 wraps to 0, not to 11
     }
 
     // --- Collect every track whose month AND mood windows contain us. -------
-    const int      trackCount = *reinterpret_cast<int32_t*>(trackList + 0x28);
-    uint8_t* const tracks     = *reinterpret_cast<uint8_t**>(trackList + 0x20);
+    const int             trackCount = trackList->_entries._size;
+    MusicListTrack* const tracks     = trackList->_entries._data;
     if (trackCount < 1 || !tracks) return;
 
-    std::vector<uint64_t> matches;   // retail hand-rolls a MemAlloc'd grow array
+    std::vector<Object::External*> matches;   // retail hand-rolls a MemAlloc'd grow array
     matches.reserve(4);
     for (int i = 0; i < trackCount; ++i) {
-        const uint8_t* e = tracks + static_cast<size_t>(i) * 0x18;
-        const int   monthLo = *reinterpret_cast<const int32_t*>(e + 0x10);
-        const int   monthHi = *reinterpret_cast<const int32_t*>(e + 0x14);
-        const float moodLo  = *reinterpret_cast<const float*>(e + 0x08);
-        const float moodHi  = *reinterpret_cast<const float*>(e + 0x0c);
+        const MusicListTrack* e = &tracks[i];
+        const int   monthLo = e->field_0x10;
+        const int   monthHi = e->field_0x14;
+        const float moodLo  = e->field_0x08;
+        const float moodHi  = e->field_0x0C;
         if (monthLo <= month && month <= monthHi && moodLo <= mood && mood <= moodHi) {
-            matches.push_back(*reinterpret_cast<const uint64_t*>(e + 0x00));
+            matches.push_back(e->sound);
         }
     }
 
@@ -231,11 +241,11 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
     } else if (n < 2) {
         return;                       // nothing eligible this month/mood
     } else {
-        void* rng = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
+        System::Random* rng = gw->m_random;
         if (!rng) return;
-        pick = static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n)));   // B.3.4b bridge
+        pick = static_cast<int>(rng->Rand(static_cast<uint32_t>(n)));
         // Don't immediately repeat the last track: step one past it, wrapping.
-        if (matches[static_cast<size_t>(pick)] == *reinterpret_cast<uint64_t*>(mp + 0x10)) {
+        if (matches[static_cast<size_t>(pick)] == mp->field_0x10) {
             ++pick;
         }
         if (pick >= n) pick = 0;
@@ -243,18 +253,19 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
     }
 
     // Retail passes a zero-initialised System::Time by reference (SoundType 2).
-    uint64_t zeroTime = 0;
-    uint32_t handle = reinterpret_cast<Audio::Scene*>(audioScene)->PlayEffect(
-        reinterpret_cast<Audio::SoundEffect*>(matches[static_cast<size_t>(pick)]),
+    // The track's ExternalPtr is a SoundEffect (MusicListTrack::sound, typed External* by GAME-b).
+    System::Time zeroTime{0};
+    uint32_t handle = audioScene->PlayEffect(
+        static_cast<Audio::SoundEffect*>(matches[static_cast<size_t>(pick)]),
         static_cast<Audio::Scene::SoundType>(2),
-        *reinterpret_cast<const System::Time*>(&zeroTime));   // B.3.7 bridge
+        zeroTime);
     // PROOF-OF-PLAY (lane D): the one line that says the music channel was actually
     // handed a track. Every track change logs; a run that never prints this has not
     // played music, whatever the rest of the trace says.
-    fprintf(stderr, "[MusicPlayer] PLAY track=%d/%d ext=%llx scene=%p -> handle=%u\n",
-            pick, n, (unsigned long long)matches[static_cast<size_t>(pick)],
-            audioScene, handle);
+    fprintf(stderr, "[MusicPlayer] PLAY track=%d/%d ext=%p scene=%p -> handle=%u\n",
+            pick, n, static_cast<void*>(matches[static_cast<size_t>(pick)]),
+            static_cast<void*>(audioScene), handle);
     fflush(stderr);
-    *reinterpret_cast<uint32_t*>(mp + 0x00) = handle;
-    *reinterpret_cast<uint64_t*>(mp + 0x10) = matches[static_cast<size_t>(pick)];
+    mp->effect = handle;
+    mp->field_0x10 = matches[static_cast<size_t>(pick)];
 }

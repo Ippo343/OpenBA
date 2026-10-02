@@ -197,6 +197,8 @@ public:
     bool     m_scenarioCompleted;   // +0x158 set to 1 when scenario met/failed (Serialize bool, 0x140095a90)
     uint8_t  _pad159[3];            // +0x159
     int32_t  m_scenarioIndex;       // +0x15C index into scenario list (-1 = none)
+
+    void TakeScreenshot();          // 0x140095da0 (body: w2_takescreenshot.cpp, B4 GAME-c)
 };
 
 static_assert(sizeof(GameUpdateLoop) == 0x160, "GameUpdateLoop is 0x160 (MemAlloc(0x160, 8))");

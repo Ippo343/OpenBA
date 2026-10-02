@@ -39,6 +39,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Game/TerrainGenerator.h"
+#include "Game/TerrainHeightfield.h"   // TerrainSizeRow
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "object/External.h"
 #include "object/TypeInfo.h"
@@ -95,35 +96,51 @@ const rtcoll::ArraySpec kSpec_TerrainSizeRow = {     // exe 0x1400206b0
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
-using TerrainSizeRowArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
+using TerrainSizeRowArray = Collection::Array<TerrainSizeRow, Collection::DefaultAllocator,
                                               Collection::ExplicitSpec<&kSpec_TerrainSizeRow>>;
 }  // namespace
 
-static void Reimpl_TerrainDataResize(void* arrayField, int newCount) {
+// The {data +0x80, count +0x88, capacity +0x8C} triple is raw storage in
+// TerrainGenerator.h (H5: an Array member would make its ctor / dtor run where
+// the tree runs them by hand), so the two Array operations take one view of it.
+static void Reimpl_TerrainDataResize(TerrainSizeRow** arrayField, int newCount) {
     if (!arrayField) return;
-    // B.3.2 bridge: TerrainGenerator+0x80 is still a pair of void* fields.
-    reinterpret_cast<TerrainSizeRowArray*>(arrayField)->SetSize(newCount);
+    reinterpret_cast<TerrainSizeRowArray*>(arrayField)->SetSize(newCount);   // LEFT: H5 raw Array triple (+0x80)
 }
 
-// FUN_140020870 -- serialize `count` rows of 17 ints each. NOTE row[9] is
-// serialized LAST (after row[16]) -- this field order must match the .rsc write
-// order exactly or the stream misaligns.
-static void Reimpl_TerrainDataSerialize(void* serializer, uint32_t count, void* arrayPtr) {
-    if (static_cast<int>(count) <= 0 || !arrayPtr) return;
-    static const int kOrder[17] = { 0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,9 };
-    int32_t* row = reinterpret_cast<int32_t*>(arrayPtr);
+// FUN_140020870 -- serialize `count` rows of 17 ints each. NOTE row[9]
+// (+0x24, erosionIterations) is serialized LAST (after row[16]) -- this field
+// order must match the .rsc write order exactly or the stream misaligns.
+static void Reimpl_TerrainDataSerialize(IO::Serializer* serializer, uint32_t count, TerrainSizeRow* rows) {
+    if (static_cast<int>(count) <= 0 || !rows) return;
+    TerrainSizeRow* row = rows;
     for (uint32_t r = 0; r < count; ++r) {
-        for (int k = 0; k < 17; ++k)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(row[kOrder[k]], nullptr);   // B.3.4 bridge (cast dropped: row[] is int32_t)
-        row += 17;
+        serializer->Serialize(row->mapSize, nullptr);             // [0]
+        serializer->Serialize(row->riverCount2, nullptr);         // [1]
+        serializer->Serialize(row->riverMinEdge2, nullptr);       // [2]
+        serializer->Serialize(row->riverMaxEdge2, nullptr);       // [3]
+        serializer->Serialize(row->riverCount1, nullptr);         // [4]
+        serializer->Serialize(row->riverMinEdge1, nullptr);       // [5]
+        serializer->Serialize(row->riverMaxEdge1, nullptr);       // [6]
+        serializer->Serialize(row->field_0x1C, nullptr);          // [7]
+        serializer->Serialize(row->secondaryPathCount, nullptr);  // [8]
+        serializer->Serialize(row->minRangeCount, nullptr);       // [10]
+        serializer->Serialize(row->maxRangeCount, nullptr);       // [11]
+        serializer->Serialize(row->minRangeBand, nullptr);        // [12]
+        serializer->Serialize(row->maxRangeBand, nullptr);        // [13]
+        serializer->Serialize(row->basinsPerRange, nullptr);      // [14]
+        serializer->Serialize(row->basinRadiusMax, nullptr);      // [15]
+        serializer->Serialize(row->basinRadiusMin, nullptr);      // [16]
+        serializer->Serialize(row->erosionIterations, nullptr);   // [9]
+        row += 1;
     }
 }
 
 // ============================================================
 // Helper: Get serializer version
 // ============================================================
-static inline int GetSerializerVersion(void* serializer) {
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+static inline int GetSerializerVersion(IO::Serializer* serializer) {
+    return static_cast<int>(serializer->GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
 }
 
 // ============================================================
@@ -131,11 +148,11 @@ static inline int GetSerializerVersion(void* serializer) {
 // ============================================================
 // Pattern from TerrainGenerator Slot5: Filename ctor, String::Serialize,
 // if version==0 resolve filename (FUN_14001fd10), Filename dtor.
-static void SerializeFilenameString(void* self_offset, void* serializer) {
+static void SerializeFilenameString(void* self_offset, IO::Serializer* serializer) {
     System::Filename filenameObj;   // retail's scope temp; only ctor + dtor
     (void)filenameObj;
 
-    reinterpret_cast<System::String*>(self_offset)->Serialize(serializer);
+    reinterpret_cast<System::String*>(self_offset)->Serialize(serializer);   // LEFT: H5 raw String storage
 
     if (GetSerializerVersion(serializer) == 0) {
         Game_TerrainResolveMaterial(self_offset);
@@ -164,9 +181,10 @@ TerrainGenerator::TerrainGenerator() {
     _field70 = -1;
     _field78 = nullptr;
 
-    // Terrain data array at +0x80, count/info at +0x88
+    // Terrain data array at +0x80, count +0x88, capacity +0x8C (retail: one qword zero; H7)
     _field80 = nullptr;
-    _field88 = nullptr;
+    _sizeRowCount = 0;
+    _sizeRowCapacity = 0;
 }
 
 // ============================================================
@@ -179,13 +197,13 @@ TerrainGenerator::~TerrainGenerator() {
     // ENDGAME B.3.2 step 2: `~Array` for the +0x80 SizeRow array — MemFree the
     // block, then zero data and the count/capacity qword (trivial element, so
     // no destroy step). B.3.2 bridge: +0x80/+0x88 are still two void* fields.
-    reinterpret_cast<TerrainSizeRowArray*>(&_field80)->~Array();
+    reinterpret_cast<TerrainSizeRowArray*>(&_field80)->~Array();   // LEFT: H5 raw Array triple (+0x80)
 
     // Destroy strings in reverse order: +0x68, +0x50, +0x38, +0x28
-    reinterpret_cast<System::String*>(&_field68)->~String();   // B.3.1 bridge: the COW pointers
-    reinterpret_cast<System::String*>(&_field50)->~String();
-    reinterpret_cast<System::String*>(&_field38)->~String();
-    reinterpret_cast<System::String*>(&_field28)->~String();
+    reinterpret_cast<System::String*>(&_field68)->~String();   // LEFT: H5 raw String storage (the COW pointers)
+    reinterpret_cast<System::String*>(&_field50)->~String();   // LEFT: H5 raw String storage
+    reinterpret_cast<System::String*>(&_field38)->~String();   // LEFT: H5 raw String storage
+    reinterpret_cast<System::String*>(&_field28)->~String();   // LEFT: H5 raw String storage
 }
 
 // ============================================================
@@ -208,18 +226,17 @@ void TerrainGenerator::Destruct() { this->~TerrainGenerator(); }
 // Original: 0x1400b1690. ExternalPtr, String, bool, 3 filename strings with
 // version-0 resolution, and the dynamic terrain data array. Returns AL=1.
 bool TerrainGenerator::Serialize(void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
+    IO::Serializer s(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge  // LEFT: slot 5's void* stream
+    IO::Serializer* serializer = &s;   // destroyed at the return (retail's order)
 
     // Serialize ExternalPtr at +0x20
     Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
 
     // Serialize String at +0x28
-    reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);
+    reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);   // LEFT: H5 raw String storage
 
     // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
-    s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);
+    s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);   // LEFT: H8 (a bool field would normalise the byte)
 
     // 3 filename strings with the version-0 resolution: +0x38, +0x50, +0x68
     SerializeFilenameString(&_field38, serializer);
@@ -228,16 +245,15 @@ bool TerrainGenerator::Serialize(void* stream) {
 
     // Terrain data array count: read the current count from +0x88, serialize
     // it, resize when reading (FUN_1400206b0), then the rows (FUN_140020870).
-    uint32_t count = *reinterpret_cast<uint32_t*>(&_field88);
-    s.Serialize(*reinterpret_cast<int*>(&count), nullptr);   // cast kept: count is uint32_t, not int
+    int32_t count = _sizeRowCount;
+    s.Serialize(count, nullptr);   // the int overload
 
     if (GetSerializerVersion(serializer) == 0)
         Reimpl_TerrainDataResize(&_field80, count);
 
-    Reimpl_TerrainDataSerialize(serializer, count, _field80);
+    Reimpl_TerrainDataSerialize(serializer, static_cast<uint32_t>(count), _field80);
 
-    s.~Serializer();
-    return true;
+    return true;   // ~Serializer
 }
 
 // ============================================================

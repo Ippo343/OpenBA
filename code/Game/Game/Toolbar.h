@@ -48,11 +48,11 @@ public:
     UI::SpriteSheet* _field28;   // +0x28: ExternalPtr<UI::SpriteSheet> (serialized via fn_ExternalPtr_Serialize; B4 H4: typed, DLG-d -- the button sprite sheet)
     void*    _field30;           // +0x30: System::String (serialized)
     void*    _field38;           // +0x38: System::String (serialized)
-    int32_t  _field40;           // +0x40: 8 (serialized as uint)
+    uint32_t _field40;           // +0x40: 8 (serialized through the uint door 0x98: retail type uint)
     bool     _field44;           // +0x44: bool (serialized, default 1)
     bool     _field45;           // +0x45: bool (serialized, default 1)
     uint8_t  _pad46[2];          // +0x46: padding
-    int32_t  _field48;           // +0x48: int (serialized as uint)
+    uint32_t _field48;           // +0x48: (serialized through the uint door 0x98: retail type uint)
     int32_t  selectedIndex;      // +0x4C: -1 sentinel (serialized as int)
     int32_t  _field50;           // +0x50: int (serialized as int; the ctor leaves it)
     uint8_t  _pad54[4];          // +0x54: padding

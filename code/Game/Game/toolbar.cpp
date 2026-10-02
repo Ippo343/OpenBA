@@ -62,8 +62,10 @@ Toolbar::Toolbar() {
 // Destroys two String fields (+0x38, +0x30) in reverse order; External::
 // ~External is the compiler's chain; MemFree if flags & 1.
 Toolbar::~Toolbar() {
-    reinterpret_cast<System::String*>(&_field38)->~String();
-    reinterpret_cast<System::String*>(&_field30)->~String();
+    // LEFT (H5): the two Strings are raw storage in Toolbar.h until a behaviour
+    // commit declares them System::String (their ctor would then run).
+    reinterpret_cast<System::String*>(&_field38)->~String();   // LEFT: H5 raw String storage
+    reinterpret_cast<System::String*>(&_field30)->~String();   // LEFT: H5 raw String storage
 }
 
 // ============================================================
@@ -71,21 +73,20 @@ Toolbar::~Toolbar() {
 // ============================================================
 // Original: 0x1400d2010
 bool Toolbar::Serialize(void* stream) {
-    // Create serializer on stack (24 bytes), version 0
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    // The serializer on the stack, version 0; destroyed at the return (retail's order).
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge  // LEFT: slot 5's void* stream
+    IO::Serializer* serializer = &ser;
 
     // ExternalPtr fields
     Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
     Reimpl_ExternalPtr_Serialize_StringTable(&_field28, serializer);
 
     // String fields
-    reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);
-    reinterpret_cast<System::String*>(&_field38)->Serialize(serializer);
+    reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);   // LEFT: H5 raw String storage
+    reinterpret_cast<System::String*>(&_field38)->Serialize(serializer);   // LEFT: H5 raw String storage
 
-    // Encoding vcall 0x98 for int at +0x48
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
-        *reinterpret_cast<unsigned int*>(&_field48), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    // Encoding vcall 0x98 (the uint door) for +0x48
+    serializer->Serialize(_field48, nullptr);
 
     // Typed ExternalPtr serialize for Toolbar at +0x60
     Reimpl_ExternalPtr_Serialize_Toolbar(&_field60, serializer);
@@ -93,21 +94,18 @@ bool Toolbar::Serialize(void* stream) {
     // ExternalPtr<BuildingDescription> at +0x58
     Reimpl_ExternalPtr_Serialize_StringTable(&_field58, serializer);
 
-    // Encoding vcall 0x98 for int at +0x40
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
-        *reinterpret_cast<unsigned int*>(&_field40), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    // Encoding vcall 0x98 (the uint door) for +0x40
+    serializer->Serialize(_field40, nullptr);
 
     // Bool fields
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_field45, nullptr);   // B.3.4 bridge (cast dropped: _field45 is bool)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_field44, nullptr);   // B.3.4 bridge (cast dropped: _field44 is bool)
+    serializer->Serialize(_field45, nullptr);
+    serializer->Serialize(_field44, nullptr);
 
     // Int fields
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(selectedIndex, nullptr);   // B.3.4 bridge (cast dropped: selectedIndex is int32_t)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(_field50, nullptr);   // B.3.4 bridge (cast dropped: _field50 is int32_t)
+    serializer->Serialize(selectedIndex, nullptr);
+    serializer->Serialize(_field50, nullptr);
 
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    return true;
+    return true;   // ~Serializer
 }
 
 // ============================================================

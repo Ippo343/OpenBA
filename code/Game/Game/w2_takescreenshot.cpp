@@ -79,6 +79,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Game/exe_bodies.h"
+#include "Game/GameUpdateLoop.h"
 
 namespace {
 
@@ -99,31 +100,29 @@ namespace {
 // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z is a class
 // static of the real `Video::ImageBuffer` and the call site below spells it so.
 
-// System::String and System::Filename are both 8-byte handles (a pointer to
-// refcounted character data). Confirmed two ways: engine_funcs.h:1939 documents
-// "Filename, 8 bytes", and retail's four locals here sit at [RSP+0xa0], +0xa8,
-// +0xb0, +0xb8 — exactly 8 apart.
-struct alignas(8) StringHandle { void* p; };
-
 }  // namespace
 
 // ============================================================================
-// GameUpdateLoop::TakeScreenshot(self) — exe 0x140095da0.
-// Signature matches fn_QuickSave_t in gameupdateloop.cpp: void(void*).
+// GameUpdateLoop::TakeScreenshot — exe 0x140095da0.
+// B4 FORWARD: 2 outside calls (gameupdateloop.cpp, GAME-a: `GameUpdateLoop_TakeScreenshot((void*)this)`).
 // ============================================================================
 extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
+    reinterpret_cast<GameUpdateLoop*>(self)->TakeScreenshot();   // LEFT: the void* its outside caller passes
+}
 
-    void* device   = ::Video::Device::_singleton;                   // Video::Device*
-    void* mainLoop = ::Engine::MainLoop::_singleton;                 // Engine::MainLoop*
-    void* videoCtx = mainLoop ? *reinterpret_cast<void**>(
-                         reinterpret_cast<uintptr_t>(mainLoop) + 0x10) : nullptr;
-    void* fileSys  = ::IO::FileSystem::_singleton;
+void GameUpdateLoop::TakeScreenshot() {
 
-    const int width  = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(device) + 4);
-    const int height = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(device) + 8);
+    ::Video::Device*    device   = ::Video::Device::_singleton;
+    ::Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton;
+    void* videoCtx = mainLoop ? mainLoop->_context : nullptr;      // MainLoop +0x10
+    const IO::FileSystem* fileSys = ::IO::FileSystem::_singleton;
+
+    const int width  = device->backBufferWidth;    // Device +0x04
+    const int height = device->backBufferHeight;   // Device +0x08
 
     // --- Grab the back buffer into a FrameCopyImageBuffer ---------------------
-    void* frameCopy = System::MemoryAllocator::MemAlloc(0x88, 8);
+    Graphics::FrameCopyImageBuffer* frameCopy =
+        static_cast<Graphics::FrameCopyImageBuffer*>(System::MemoryAllocator::MemAlloc(0x88, 8));
     if (frameCopy) {
         // ENDGAME B.3.9 GFX (B9-13): the real class's ctor, not the ??0 door.
         // Retail's exe-side table copy 0x14015e370 is what the object then
@@ -134,81 +133,51 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
 
     // Retail's literal arg list: (imageType=0, usage=4, format=5, mip=0x100,
     // width, height, filterMode=1, addressMode 1,1,1, initialData=nullptr).
-    // B.3.5 bridge — both are MEMBERS of `Graphics::FrameCopyImageBuffer` now
-    // (block GC moved the bodies into wave23_lane_gfxbody.cpp's `namespace Graphics`
-    // block; FrameCopyImageBuffer.h:151/156 declare them). They are VIRTUALS the class
-    // overrides ([9] 0x1800a3b70 and [10] 0x1800a3b20), and the receiver wears the
-    // Runtime vptr the ctor door installed — departure (1) above is exactly why — so
-    // the virtual call lands on the same two bodies the exported names did.
-    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)->Create(
-        0, 4, 5, 0x100u, width, height, 1, 1, 1, 1, nullptr);   // B.3.5 bridge
-    reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(frameCopy)
-        ->Generate(videoCtx, 1);   // B.3.5 bridge
+    // Both are VIRTUALS the class overrides ([9] 0x1800a3b70 and [10] 0x1800a3b20);
+    // the receiver wears the Runtime vptr the ctor installed (departure (1)).
+    frameCopy->Create(0, 4, 5, 0x100u, width, height, 1, 1, 1, 1, nullptr);
+    static_cast<const Graphics::FrameCopyImageBuffer*>(frameCopy)->Generate(videoCtx, 1);
 
     // --- <saveDir>\Screenshots\Screenshot<N>.bmp, first N that does not exist --
-    StringHandle saveDir{};   // Filename, from GetSaveDirectory
-    StringHandle joined{};    // String temp
-    StringHandle base{};      // Filename: saveDir + "\Screenshots\Screenshot"
-    StringHandle path{};      // Filename: the candidate being tested
+    // The construction / release order is retail's: saveDir, joined, base, then
+    // ~joined, ~saveDir (the lambda's scope); path; per probe suffix, full, then
+    // ~full, ~suffix; at the end ~path, ~base.
+    System::Filename base = [fileSys]() {
+        System::Filename saveDir(fileSys->GetSaveDirectory());
+        System::String joined(saveDir.AsString() + "\\Screenshots\\Screenshot");   // exe 0x14015e520
+        return System::Filename(joined);
+    }();
 
-    // ENDGAME B.3.4a closing: onto IO::FileSystem::GetSaveDirectory, which
-    // became a member in this same commit. `saveDir` stays a raw StringHandle
-    // and is still released by `~Filename` below, because that is what
-    // the door did: it filled the 8 raw bytes of a hidden return slot. The
-    // member's by-value return fills the same slot through the same ABI, so
-    // the construction/release pairing and its ORDER are unchanged.
-    ::new (&saveDir) System::Filename(
-        reinterpret_cast<const IO::FileSystem*>(fileSys)->GetSaveDirectory());   // B.3.4 bridge
-    ::new (&joined) System::String(
-        *reinterpret_cast<const System::String*>(&saveDir) + "\\Screenshots\\Screenshot");   // exe 0x14015e520
-    ::new (&base) System::Filename(*reinterpret_cast<const System::String*>(&joined));
-    reinterpret_cast<System::String*>(&joined)->~String();
-    reinterpret_cast<System::Filename*>(&saveDir)->~Filename();
-
-    ::new (&path) System::Filename();
+    System::Filename path;
 
     int index = 0;
     do {
-        StringHandle suffix{};   // "<N>.bmp"
-        StringHandle full{};
         // exe 0x14015e238 = "%i.%s", exe 0x14015e518 = "bmp" (62 6d 70 00) —
         // BMP, not PNG.
-        ::new (&suffix) System::String(System::String::Format("%i.%s", index, "bmp"));
-        ::new (&full) System::String(*reinterpret_cast<const System::String*>(&base) +
-                                     *reinterpret_cast<const System::String*>(&suffix));
-        *reinterpret_cast<System::Filename*>(&path) = *reinterpret_cast<const System::String*>(&full);
+        System::String suffix(System::String::Format("%i.%s", index, "bmp"));
+        System::String full(base.AsString() + suffix);
+        path = full;
         ++index;
-        reinterpret_cast<System::String*>(&full)->~String();
-        reinterpret_cast<System::String*>(&suffix)->~String();
-    } while (reinterpret_cast<const IO::FileSystem*>(fileSys)->Exists(
-                 *reinterpret_cast<const RtSystem::Filename*>(&path)));   // B.3.4 bridge
+    } while (fileSys->Exists(
+                 *reinterpret_cast<const RtSystem::Filename*>(&path)));   // LEFT: Exists takes the RtSystem::Filename mirror (R-IO's signature)
 
     // --- Read the pixels back and write the file -----------------------------
-    unsigned int* pixels = reinterpret_cast<unsigned int*>(
+    unsigned int* pixels = static_cast<unsigned int*>(
         System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(height * width)) << 2, 4));
-    // B.3.5 bridge — ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z.
-    // `frameCopy` is a FrameCopyImageBuffer, which derives from Video::ImageBuffer
-    // at offset 0 (GeneratedImageBuffer.h's chain), so the base member applies.
-    reinterpret_cast<Video::ImageBuffer*>(frameCopy)->CopyFromTexture(
-        pixels, width, height);   // B.3.5 bridge
-    // B.3.5 bridge — ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z
-    // is STATIC (`SA_N`), so there is no receiver: the door's first argument was
-    // the Filename, not a `this`. `s_SaveImageToFile`, its typedef, its resolve, its
-    // `s_ok` term and its `save=%p` all went in the closing pass.
-    Video::ImageBuffer::SaveImageToFile(
-        *reinterpret_cast<const System::Filename*>(&path),
-        width, height, pixels);   // B.3.5 bridge
+    // ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z: FrameCopyImageBuffer
+    // derives from Video::ImageBuffer (GeneratedImageBuffer.h's chain).
+    frameCopy->CopyFromTexture(pixels, width, height);
+    // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z is STATIC.
+    Video::ImageBuffer::SaveImageToFile(path, width, height, pixels);
     System::MemoryAllocator::MemFree(pixels);
 
 
     // --- Teardown: exactly what the exe vtable's slot 0 (0x140019d50) does ----
     // ENDGAME B.3.9 GFX: that slot 0 IS ~FrameCopyImageBuffer then MemFree.
-    delete reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy);
+    delete frameCopy;
 
     // The ONLY clearer of m_quickSavePressed / m_quickLoadPressed. Retail stores
-    // a single 16-bit zero over both bytes at self+0xC0.
-    *reinterpret_cast<uint16_t*>(reinterpret_cast<uintptr_t>(self) + 0xC0) = 0;
-
-    reinterpret_cast<System::Filename*>(&path)->~Filename();
-    reinterpret_cast<System::Filename*>(&base)->~Filename();
-}
+    // a single 16-bit zero over both bytes at +0xC0 (H7: the two named stores).
+    m_quickSavePressed = 0;
+    m_quickLoadPressed = 0;
+}   // ~path, ~base
