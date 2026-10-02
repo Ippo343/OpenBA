@@ -34,6 +34,10 @@
 #include "object/TypeInfo.h"
 #include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/ComponentEntity.h"   // B4: the component array by name
+#include "Entity/EntityList.h"        // B4: GameUpdateLoop::m_entityList
+#include "Entity/CitizenBehavior.h"   // B4: m_citizenList fields
+#include "Component/ComponentDescription.h"
 #include "options.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -83,15 +87,14 @@ void Init() {
     std::fflush(stderr);
 }
 
-void* FindCompOnEntity(void* ent, uint32_t tid) {
+Component* FindCompOnEntity(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
-    const uintptr_t a = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+    const int n = ent->_componentCount;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
     for (int i = 0; i < n && a; ++i) {
-        void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
-        void* c = *cs;
+        Component* c = a[i].Get();
         if (!c) continue;
-        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
+        if (c->Type() == tid) return c;
     }
     return nullptr;
 }
@@ -113,16 +116,16 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     const bool actTick  = (s_openedAtFrame >= 0 && frameNum - s_openedAtFrame >= kSettleFrames);
     if (!openTick && !actTick) return;
 
-    void* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
+    GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
-    uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xf0);
+    CitizenBehavior* townMgr = gw->m_citizenList;   // +0xf0
     if (!townMgr) return;
 
     // Scan the entity list for a trading post (an entity carrying a TradeComponent).
     const uint32_t tidTrade = TradeComponent::TypeId();
-    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
-    uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
-    const int n   = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+    EntityList* entityList = gw->m_entityList;   // +0xe8
+    ComponentEntity** arr = entityList ? entityList->masterArray.data : nullptr;   // +0x08
+    const int n = entityList ? entityList->masterArray.count : 0;   // +0x10
     if (!arr || n <= 0 || !tidTrade) {
         std::fprintf(stderr, "[TradeSell] f=%d cannot scan (arr=%p n=%d tid=%u)\n",
                      frameNum, reinterpret_cast<void*>(arr), n, tidTrade);
@@ -130,10 +133,9 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         return;
     }
 
-    void* postEnt = nullptr;
+    ComponentEntity* postEnt = nullptr;
     for (int i = 0; i < n && !postEnt; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        void* ent = *slot;
+        ComponentEntity* ent = arr[i];
         if (ent && FindCompOnEntity(ent, tidTrade)) postEnt = ent;
     }
     if (!postEnt) {
@@ -171,7 +173,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     }
 
     const uintptr_t s = reinterpret_cast<uintptr_t>(tui);
-    const int creditBefore = *reinterpret_cast<int*>(townMgr + 0x1ac);
+    const int creditBefore = townMgr->field_0x1AC;   // +0x1ac
 
     // Fill the SELL rows. self+0x30 array, count +0x38, stride 0x20, pending qty at
     // entry+0x18 — the same layout the checkout consumes. entry+0x10 is the row's
@@ -218,8 +220,8 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
             // successful-looking AddItem every tick, sellRows stuck at 0, and finally a
             // fault walking a field that was never a tree.
             void* tradeComp = FindCompOnEntity(postEnt, tidTrade);
-            void** tmpls = *reinterpret_cast<void***>(townMgr + 0x110);
-            const int tmplN = *reinterpret_cast<int*>(townMgr + 0x118);
+            ComponentDescription** tmpls = townMgr->field_0x110;   // +0x110
+            const int tmplN = townMgr->field_0x118;                 // +0x118
             if (tradeComp && tmpls && tmplN > 0) {
                 for (int i = 0; i < tmplN; ++i) {
                     if (!tmpls[i]) continue;
@@ -272,7 +274,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
 
     TradeUI_OnTradeButton(reinterpret_cast<TradeUI*>(tui), nullptr, nullptr, 0);
 
-    const int creditAfter = *reinterpret_cast<int*>(townMgr + 0x1ac);
+    const int creditAfter = townMgr->field_0x1AC;    // +0x1ac
     s_totalSold += (creditAfter - creditBefore);
     ++s_visits;
     std::fprintf(stderr, "[TradeSell] f=%d visit=%d rows=%d/%d queued=%d units -> credit "

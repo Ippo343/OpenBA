@@ -32,7 +32,9 @@
 #include "system/Value.h"        // -Iruntime/types: System::Random (by value at +0x168)
 
 namespace Audio { class Scene; class SoundEffect; }
-namespace Graphics { class Renderer; class Scene; class Geometry; }
+namespace Graphics { class Renderer; class Scene; class Geometry; class MeshInstance; class SunLight; }
+namespace Save { class SaveLoad; }
+namespace Engine { class UpdateLoop; }
 class MenuScene;
 class PlayerController;
 
@@ -66,8 +68,8 @@ public:
     System::Random _random;              // +0x168  ??0Random@System@@
     uint8_t        _pad0b2c[4];          // +0xb2c
     alignas(8) uint8_t _audioScene[0x38];// +0xb30  Audio::Scene (by value)
-    void*          _pendingLoop;         // +0xb68  queued loader chain (SetDialogLoaderNextLoop)
-    void*          _saveLoad;            // +0xb70  Save::SaveLoad* (the menu's own)
+    Engine::UpdateLoop* _pendingLoop;    // +0xb68  queued loader chain (SetDialogLoaderNextLoop)
+    Save::SaveLoad* _saveLoad;           // +0xb70  the menu's own (B4 STANDALONE: H4)
     float          _animYaw;             // +0xb78  live yaw of the orbit
     float          _scrollX;             // +0xb7c  transform[+0x28] cached at load
     float          _scrollY;             // +0xb80  transform[+0x2c] cached at load
@@ -76,8 +78,8 @@ public:
     MenuScene*     _menuScene;           // +0xb90  ExternalPtr<MenuScene> Game/MenuScene/SceneN.rsc
     Graphics::Renderer* _renderer;       // +0xb98
     Graphics::Scene* _scene;             // +0xba0
-    void*          _mainMesh;            // +0xba8  Graphics::MeshInstance*
-    void*          _sunLight;            // +0xbb0  Graphics::SunLight*
+    Graphics::MeshInstance* _mainMesh;   // +0xba8  (B4 STANDALONE: H4)
+    Graphics::SunLight* _sunLight;       // +0xbb0  (B4 STANDALONE: H4)
     PlayerController* _transform;        // +0xbb8  the camera controller (MemAlloc(0x10c, 4) + 0x140098800)
     Graphics::Geometry* _sceneGeometry;  // +0xbc0  MenuScene::geometry (not owned)
     void*          _dlcShip;             // +0xbc8  TradeWork* (DLC)

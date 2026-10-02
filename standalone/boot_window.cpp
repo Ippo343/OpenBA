@@ -3,6 +3,7 @@
 #include "boot_window.h"
 #include "stall_debug.h"
 #include "options.h"
+#include "video/Device.h"   // B4: Video::Configuration::field42
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -44,8 +45,8 @@ bool ArmDeferredShow(void* videoConfig, HWND hwnd) {
     }
     if (g_armed || g_shown) return g_armed;   // only the first device creation arms
 
-    *reinterpret_cast<uint8_t*>(
-        static_cast<uint8_t*>(videoConfig) + kCfgSkipShow) = 1;
+    // LEFT: dx11/src/devicedata.cpp (dx11 seam) hands the configuration as void*.
+    static_cast< ::Video::Configuration*>(videoConfig)->field42 = 1;   // +0x42 (kCfgSkipShow)
 
     g_hwnd      = hwnd;
     g_armed     = true;

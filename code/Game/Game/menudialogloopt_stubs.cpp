@@ -1,4 +1,4 @@
-// standalone/menudialogloopt_stubs.cpp
+// code/Game/Game/menudialogloopt_stubs.cpp
 // Standalone-only stub vtable for MenuDialogLoopT (exe vtable @ 0x14015ed00).
 //
 // MenuDialogLoopT is the exe-internal subclass of Engine::DialogLoopT that drives
@@ -58,6 +58,11 @@
 #include "audio/Audio.h"        // ENDGAME B.3.8 LOOP: ~MenuDialogLoopT runs ~Audio::Scene
 #include "graphics/Camera.h"    // B3R: RtGraphics_Renderer_Dtor
 #include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree
+#include "ui/Cursor.h"          // B4: GameContainer cursor slots
+#include "ui/SpriteSheet.h"     // B4: GameContainer::spriteSheet
+#include "audio/SoundEffect.h"  // B4: GameContainer UI sound slots
+#include "graphics/SunLight.h"  // B4: _sunLight (Geometry)
+#include "graphics/Mesh.h"      // B4: _mainMesh (Geometry)
 #include <new>
 #include <cstring>
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
@@ -87,30 +92,31 @@ static void EnsureCursorsLoaded() {
         return;
     }
 
-    void* keyMap = g_gameContainer;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
+    GameContainer* keyMap = g_gameContainer;
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
 
     // Skip if Arrow already loaded (this fn may be called multiple times).
-    if (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)) {
+    if (keyMap->cursorArrow) {
         return;
     }
 
-    auto loadAndStore = [&](uintptr_t offset, const char* name) {
+    auto loadAndStore = [&](Object::ExternalPtr<UI::Cursor>& slot, [[maybe_unused]] size_t offset,
+                            const char* name) {
         const System::Filename fn(name);
-        void* ext = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fn)));
-        *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + offset) = ext;
+        // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
+        UI::Cursor* ext = const_cast<UI::Cursor*>(
+            static_cast<const UI::Cursor*>(efactory->FindOrLoad(fn)));
+        slot = ext;
         printf("[CursorLoad] %-32s -> %p (KeyMap+0x%02llx)\n",
-               name, ext, (unsigned long long)offset);
+               name, (void*)ext, (unsigned long long)offset);
     };
 
-    loadAndStore(0x28, "Cursor/Arrow.rsc:cursor");
-    loadAndStore(0x30, "Cursor/Hand.rsc:cursor");
-    loadAndStore(0x38, "Cursor/Hourglass.rsc:cursor");
-    loadAndStore(0x40, "Cursor/Move.rsc:cursor");
-    loadAndStore(0x48, "Cursor/Query.rsc:cursor");
-    loadAndStore(0x50, "Cursor/Place.rsc:cursor");
+    loadAndStore(keyMap->cursorArrow,     offsetof(GameContainer, cursorArrow),     "Cursor/Arrow.rsc:cursor");
+    loadAndStore(keyMap->cursorHand,      offsetof(GameContainer, cursorHand),      "Cursor/Hand.rsc:cursor");
+    loadAndStore(keyMap->cursorHourglass, offsetof(GameContainer, cursorHourglass), "Cursor/Hourglass.rsc:cursor");
+    loadAndStore(keyMap->cursorMove,      offsetof(GameContainer, cursorMove),      "Cursor/Move.rsc:cursor");
+    loadAndStore(keyMap->cursorQuery,     offsetof(GameContainer, cursorQuery),     "Cursor/Query.rsc:cursor");
+    loadAndStore(keyMap->cursorPlace,     offsetof(GameContainer, cursorPlace),     "Cursor/Place.rsc:cursor");
 }
 
 // Mirror the UI-sound block of PlacementTool_Ctor (exe 0x140099db0), which
@@ -140,34 +146,34 @@ static void EnsureUISoundsLoaded() {
         return;
     }
 
-    void* keyMap = g_gameContainer;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-    uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
+    GameContainer* keyMap = g_gameContainer;
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
 
     // Skip if AlertEffect (first sound slot) already loaded.
-    if (*reinterpret_cast<void**>(kmBase + 0x58)) {
+    if (keyMap->alertEffect) {
         return;
     }
 
-    auto loadAndStore = [&](uintptr_t offset, const char* name) {
+    auto loadAndStore = [&](Object::ExternalPtr<Audio::SoundEffect>& slot, [[maybe_unused]] size_t offset,
+                            const char* name) {
         const System::Filename fn(name);
-        void* ext = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fn)));
-        *reinterpret_cast<void**>(kmBase + offset) = ext;
+        // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
+        Audio::SoundEffect* ext = const_cast<Audio::SoundEffect*>(
+            static_cast<const Audio::SoundEffect*>(efactory->FindOrLoad(fn)));
+        slot = ext;
         printf("[UISoundLoad] %-34s -> %p (KeyMap+0x%02llx)\n",
-               name, ext, (unsigned long long)offset);
+               name, (void*)ext, (unsigned long long)offset);
     };
 
-    loadAndStore(0x58, "Audio/UI/AlertEffect.rsc");
-    loadAndStore(0x60, "Audio/UI/ButtonDownEffect.rsc");
-    loadAndStore(0x68, "Audio/UI/ButtonUpEffect.rsc");
-    loadAndStore(0x70, "Audio/UI/BeginDragEffect.rsc");
-    loadAndStore(0x78, "Audio/UI/EndDragEffect.rsc");
-    loadAndStore(0x80, "Audio/UI/PlacementMoveEffect.rsc");
-    loadAndStore(0x88, "Audio/UI/PlacementThunkEffect.rsc");
-    loadAndStore(0x90, "Audio/UI/PlacementErrorEffect.rsc");
-    loadAndStore(0x98, "Audio/UI/WarningEffect.rsc");
+    loadAndStore(keyMap->alertEffect,          offsetof(GameContainer, alertEffect),          "Audio/UI/AlertEffect.rsc");
+    loadAndStore(keyMap->buttonDownEffect,     offsetof(GameContainer, buttonDownEffect),     "Audio/UI/ButtonDownEffect.rsc");
+    loadAndStore(keyMap->buttonUpEffect,       offsetof(GameContainer, buttonUpEffect),       "Audio/UI/ButtonUpEffect.rsc");
+    loadAndStore(keyMap->beginDragEffect,      offsetof(GameContainer, beginDragEffect),      "Audio/UI/BeginDragEffect.rsc");
+    loadAndStore(keyMap->endDragEffect,        offsetof(GameContainer, endDragEffect),        "Audio/UI/EndDragEffect.rsc");
+    loadAndStore(keyMap->placementMoveEffect,  offsetof(GameContainer, placementMoveEffect),  "Audio/UI/PlacementMoveEffect.rsc");
+    loadAndStore(keyMap->placementThunkEffect, offsetof(GameContainer, placementThunkEffect), "Audio/UI/PlacementThunkEffect.rsc");
+    loadAndStore(keyMap->placementErrorEffect, offsetof(GameContainer, placementErrorEffect), "Audio/UI/PlacementErrorEffect.rsc");
+    loadAndStore(keyMap->warningEffect,        offsetof(GameContainer, warningEffect),        "Audio/UI/WarningEffect.rsc");
 }
 
 }  // namespace
@@ -190,48 +196,42 @@ static void EnsureUISoundsLoaded() {
 extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     if (g_gameContainer == nullptr) return;
     if (!::Object::ExternalFactory::_singleton) return;
-    void* keyMap = g_gameContainer;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-    uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
+    GameContainer* keyMap = g_gameContainer;
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
 
     // Skip if SpriteSheet already loaded.
-    if (*reinterpret_cast<void**>(kmBase + 0xa0)) return;
+    if (keyMap->spriteSheet) return;
 
     // Step 1: load Dialog/SpriteSheet.rsc into KeyMap+0xa0.
     const System::Filename sheetPath("Dialog/SpriteSheet.rsc");
-    void* spriteSheet = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(sheetPath)));
-    *reinterpret_cast<void**>(kmBase + 0xa0) = spriteSheet;
+    // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
+    UI::SpriteSheet* spriteSheet = const_cast<UI::SpriteSheet*>(
+        static_cast<const UI::SpriteSheet*>(efactory->FindOrLoad(sheetPath)));
+    keyMap->spriteSheet = spriteSheet;
     printf("[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> %p (KeyMap+0xa0)\n",
-           spriteSheet);
+           (void*)spriteSheet);
     if (!spriteSheet) return;
 
     // Step 2: construct named Sprites and store at KeyMap+0xa8/+0xb0 ("White")
-    // and +0xb8/+0xc0 ("SaveLoadEmpty"). fn_Sprite_Ctor signature is
-    // (retval, spriteSheetExt, name) — non-trivial-return ABI but the helper
-    // typedef already returns void* (the retbuf). We pass a 16-byte stack
-    // buffer as retval and copy it into KeyMap.
-    auto buildSprite = [&](uintptr_t kmOffset, const char* name) {
-        uint8_t spriteBuf[16] = {};
+    // and +0xb8/+0xc0 ("SaveLoadEmpty"). The Sprite is built in a stack copy
+    // whose pad0C is zeroed (as the old zeroed byte buffer's was) and copied
+    // into the container whole (16 bytes).
+    auto buildSprite = [&](UI::Sprite& slot, [[maybe_unused]] size_t kmOffset, const char* name) {
+        UI::Sprite spriteBuf;
+        spriteBuf.pad0C = 0;
         const System::String nameStr(name);
-        ::new (spriteBuf) UI::Sprite(
-            Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
-            nameStr);
-        *reinterpret_cast<uint64_t*>(kmBase + kmOffset)       =
-            *reinterpret_cast<uint64_t*>(&spriteBuf[0]);
-        *reinterpret_cast<uint64_t*>(kmBase + kmOffset + 8)   =
-            *reinterpret_cast<uint64_t*>(&spriteBuf[8]);
+        ::new (&spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(spriteSheet), nameStr);
+        slot = spriteBuf;
         printf("[SpriteSheetLoad] Sprite(\"%s\") -> sheet=%p idx=%d "
                "(KeyMap+0x%02llx)\n",
                name,
-               *reinterpret_cast<void**>(&spriteBuf[0]),
-               *reinterpret_cast<int32_t*>(&spriteBuf[8]),
+               spriteBuf.spriteSheet,
+               spriteBuf.spriteIndex,
                (unsigned long long)kmOffset);
     };
 
-    buildSprite(0xa8, "White");           // fullscreen-fade overlay sprite
-    buildSprite(0xb8, "SaveLoadEmpty");   // save/load placeholder sprite
+    buildSprite(keyMap->spriteWhite,         offsetof(GameContainer, spriteWhite),         "White");           // fullscreen-fade overlay sprite
+    buildSprite(keyMap->spriteSaveLoadEmpty, offsetof(GameContainer, spriteSaveLoadEmpty), "SaveLoadEmpty");   // save/load placeholder sprite
 }
 
 // ============================================================================
@@ -263,6 +263,8 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // Retail 0x14001a2e0 (slot 0) calls this, then MemFree on &1 (UpdateLoop's
     // operator delete); the log line the old slot-0 body carried.
     printf("[MenuDLT::Destroy] self=%p\n", (void*)this);
+    // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing
+    // them as Collection::Array makes their dtor run; asked of the coordinator).
     for (uint8_t* arr : {_sceneIdArray, _instanceArray, _particleArray}) {
         System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(arr));   // MemFree(null) returns
         *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data
@@ -300,11 +302,11 @@ void MenuDialogLoopT::Startup() {
     // autosave path read. (Save/load wave 2026-08-27.)
     {
         if (_saveLoad == nullptr) {
-            void* mem = System::MemoryAllocator::MemAlloc(0x90, 4);
+            Save::SaveLoad* mem = static_cast<Save::SaveLoad*>(System::MemoryAllocator::MemAlloc(0x90, 4));
             if (mem) {
-                RtSave_SaveLoad_Ctor(static_cast<Save::SaveLoad*>(mem));   // ??0SaveLoad@Save@@ 0x1800c3d30
+                RtSave_SaveLoad_Ctor(mem);   // ??0SaveLoad@Save@@ 0x1800c3d30
                 _saveLoad = mem;
-                printf("[MenuDLT::Startup] menu SaveLoad created at +0xb70 = %p\n", mem);
+                printf("[MenuDLT::Startup] menu SaveLoad created at +0xb70 = %p\n", (void*)mem);
             }
         }
     }
@@ -373,15 +375,15 @@ void MenuDialogLoopT::Startup() {
     EnsureUISoundsLoaded();
 
     void* ui = &_ui;
-    void* keyMap = (g_gameContainer);
-    void* arrowCursor = keyMap
-        ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)
+    GameContainer* keyMap = (g_gameContainer);
+    UI::Cursor* arrowCursor = keyMap
+        ? keyMap->cursorArrow.Get()
         : nullptr;
     if (arrowCursor) {
-        _ui.SetCursor(Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(arrowCursor)));  // B.3.6 bridge
-        printf("[MenuDLT::Startup] UI::SetCursor(ui=%p, arrow=%p)\n", ui, arrowCursor);
+        _ui.SetCursor(Object::ExternalPtr<UI::Cursor>(arrowCursor));
+        printf("[MenuDLT::Startup] UI::SetCursor(ui=%p, arrow=%p)\n", ui, (void*)arrowCursor);
     } else {
-        printf("[MenuDLT::Startup] WARN: skipping SetCursor (arrow=%p)\n", arrowCursor);
+        printf("[MenuDLT::Startup] WARN: skipping SetCursor (arrow=%p)\n", (void*)arrowCursor);
     }
     _ui.EnableCursor(true);
     printf("[MenuDLT::Startup] UI::EnableCursor(true) called on ui=%p\n", ui);
@@ -434,33 +436,43 @@ void MenuDialogLoopT::Shutdown() {
     // Every object deleted here (SunLight, the MeshInstances, the DLC ship, the
     // scene-grid instances) is a Graphics::Geometry, which is its OWN hierarchy
     // root -- not an Object::Base. Slot 0 through the object's own root.
-    auto deleteObject = [](void* o) {                // MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]
-        delete static_cast<Graphics::Geometry*>(o);
+    auto deleteGeometry = [](Graphics::Geometry* o) {  // MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]
+        delete o;
     };
     // 1. +0xbc0: the menu scene's first Geometry -- REMOVED, not owned (no delete).
     if (_sceneGeometry)
         scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(_sceneGeometry));
     // 2-4. +0xbb0 (SunLight), +0xba8 (main mesh), +0xbc8 (DLC ship): removed
     //      from the scene's global list, then deleted through slot 0.
-    for (void* MenuDialogLoopT::* field : {&MenuDialogLoopT::_sunLight,
-                                           &MenuDialogLoopT::_mainMesh,
-                                           &MenuDialogLoopT::_dlcShip}) {
-        if (this->*field) {
-            scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(this->*field));
-            if (void* o = this->*field) deleteObject(o);
-        }
+    if (_sunLight) {
+        scene()->RemoveGlobalObject(_sunLight);
+        if (Graphics::Geometry* o = _sunLight) deleteGeometry(o);
+    }
+    if (_mainMesh) {
+        scene()->RemoveGlobalObject(_mainMesh);
+        if (Graphics::Geometry* o = _mainMesh) deleteGeometry(o);
+    }
+    // LEFT: +0xbc8 stays void*: retail builds it with MemAlloc(0xf0) + the exe
+    // ctor 0x1400d3f10 (0x14009ac9a) and adds it as a scene global; its class
+    // is not settled from retail (the header's "TradeWork" comment is unverified).
+    if (_dlcShip) {
+        Graphics::Geometry* ship = static_cast<Graphics::Geometry*>(_dlcShip);
+        scene()->RemoveGlobalObject(ship);
+        if (ship) deleteGeometry(ship);
     }
     // 5. every scene-grid instance: RemoveObject(id[i]) then delete object[i].
     //    Count from +0xbe8, ids from +0xbf0 (uint32), objects from +0xbe0: the
     //    {data, count|cap} headers _instanceArray (+0xbe0) and _sceneIdArray (+0xbf0).
+    //    LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
     for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(_instanceArray + 8); ++i) {
         const uint32_t id = (*reinterpret_cast<const uint32_t* const*>(_sceneIdArray))[i];
         scene()->RemoveObject(id);
-        if (void* o = (*reinterpret_cast<void* const* const*>(_instanceArray))[i]) deleteObject(o);
+        if (Graphics::Geometry* o = (*reinterpret_cast<Graphics::Geometry* const* const*>(_instanceArray))[i]) deleteGeometry(o);
     }
     // 6. +0xbb8 (the Transform block): freed.
     if (void* t = _transform) System::MemoryAllocator::MemFree(t);
     // 7. +0xba0 Graphics::Scene: ~Scene (??1Scene@Graphics@@ 0x1801026c0) then freed.
+    // LEFT (R-GFX): the ~Scene / ~Renderer doors take the RtGraphics POD mirrors.
     if (void* g = _scene) {
         RtGraphics_Scene_Dtor(static_cast<RtGraphics::Scene*>(g));   // B.3.x bridge
         System::MemoryAllocator::MemFree(g);
@@ -471,8 +483,8 @@ void MenuDialogLoopT::Shutdown() {
         System::MemoryAllocator::MemFree(r);
     }
     // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad (??1SaveLoad@Save@@ 0x1800c3c90) then freed.
-    if (void* sl = _saveLoad) {
-        RtSave_SaveLoad_Dtor(static_cast<Save::SaveLoad*>(sl));   // B.3.x bridge
+    if (Save::SaveLoad* sl = _saveLoad) {
+        RtSave_SaveLoad_Dtor(sl);
         System::MemoryAllocator::MemFree(sl);
     }
     // 10. `CALL [0x1401523a0]` -- Engine::DialogLoopT::Shutdown, QUALIFIED.
@@ -489,7 +501,9 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     StallDebug::Tick("MenuDLT::Update");
     // The first-tick clamp below writes the caller's Time and restores it
     // before returning (MainLoop owns it); retail's slot takes it by const&.
-    void* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
+    // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
+    // const& of retail's slot signature (our divergence, not retail's).
+    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.
@@ -508,7 +522,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     ++tick;
     if (tick <= 4 || (tick % 300) == 0) {
         printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update\n",
-               (void*)this, time, tick);
+               (void*)this, (void*)time, tick);
     }
 
     // Retail step 1 also ticks the menu-side Save::SaveLoad (+0xb70, created in
@@ -516,10 +530,9 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // at 0x14009b71f. Without this the menu Load button's list-scan and load
     // operations never progress. (Save/load wave 2026-08-27.)
     {
-        void* menuSaveLoad = _saveLoad;
+        Save::SaveLoad* menuSaveLoad = _saveLoad;
         if (menuSaveLoad)
-            reinterpret_cast<Save::SaveLoad*>(menuSaveLoad)->Update(  // B.3.7 bridge
-                *reinterpret_cast<const System::Time*>(time));
+            menuSaveLoad->Update(*time);
     }
 
     // Auto-start driver (env-var gated): once the menu has settled, inject the
@@ -551,11 +564,11 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     int64_t origTicks = 0;
     bool clamped = false;
     if (tick <= 1 && time && ::System::Timer::_ticksPerSecond > 0) {
-        Time* tm = reinterpret_cast<Time*>(time);
-        origTicks = tm->ticks;
+        System::Time* tm = time;
+        origTicks = tm->_ticks;
         int64_t maxTicks = ::System::Timer::_ticksPerSecond / 60;  // ~16.67ms
         if (origTicks > maxTicks) {
-            tm->ticks = maxTicks;
+            tm->_ticks = maxTicks;
             clamped = true;
             printf("[MenuDLT::Update] tick=%d dt clamped from %lld to %lld "
                    "(%.2fms) — was post-LoadScene_PhaseA stall accumulator\n",
@@ -566,7 +579,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
 
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
     if (time) {
-        float dt = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
+        float dt = time->AsSeconds();
         MenuDialogLoopT_UpdateCamera_PhaseA(this, dt);
     }
 
@@ -610,19 +623,18 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // DialogLoopT::Update tail-call, matching retail ordering (reads the fade
     // state the prior tick's UI::Update settled).
     {
-        void* pendingLoop = _pendingLoop;
+        Engine::UpdateLoop* pendingLoop = _pendingLoop;
         float fadeRate    = _ui._fadeVelocity;   // +0x130 = UI (+0x40) + 0xF0
         if (pendingLoop && fadeRate == 0.0f) {
-            void* mainLoop = ::Engine::MainLoop::_singleton;
+            Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton;
             fprintf(stderr, "[MenuDLT::Update] STAGE C entry: pendingLoop=%p "
-                    "fade settled (rate=0) -> MainLoop::SetNextLoop\n", pendingLoop);
+                    "fade settled (rate=0) -> MainLoop::SetNextLoop\n", (void*)pendingLoop);
             fflush(stderr);
             if (mainLoop) {
-                reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(  // B.3.7 bridge
-                    reinterpret_cast<Engine::UpdateLoop*>(pendingLoop));
+                mainLoop->SetNextLoop(pendingLoop);
             } else {
                 fprintf(stderr, "[MenuDLT::Update] WARN: cannot advance "
-                        "(mainLoop=%p)\n", mainLoop);
+                        "(mainLoop=%p)\n", (void*)mainLoop);
                 fflush(stderr);
             }
         }
@@ -631,21 +643,20 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Wave 10D lane MOUSE: the menu half of the cursor route. The menu UI is
     // MenuDLT+0x38 (DialogInstance) -> +0x10 (UserInterface), the same walk
     // ModalDriver::RunSelfTest uses above. No-op unless BANISHED_MOUSE_INJECT.
-    void* menuUI = nullptr;
+    UI::UserInterface* menuUI = nullptr;
     if (MouseInject::Enabled()) {
-        void* menuDlg = _dialogInstance;
+        UI::DialogInstance* menuDlg = _dialogInstance;
         if (menuDlg)
-            menuUI = *reinterpret_cast<void**>(
-                reinterpret_cast<uintptr_t>(menuDlg) + 0x10);
+            menuUI = menuDlg->_ui;
         MouseInject::PreUpdate(menuUI);
     }
     // QUALIFIED (slot 3 is VIRTUAL on the base; this is the class's own Update).
-    bool result = Engine::DialogLoopT::Update(*reinterpret_cast<const System::Time*>(time));
+    bool result = Engine::DialogLoopT::Update(*time);
     if (menuUI) MouseInject::PostUpdate(menuUI);
 
     // Restore the original dt so MainLoop's frame accounting stays correct.
     if (clamped) {
-        reinterpret_cast<Time*>(time)->ticks = origTicks;
+        time->_ticks = origTicks;
     }
     return result;
 }
@@ -673,16 +684,16 @@ void MenuDialogLoopT::Draw(float alpha) {
 
     // Use MainLoop singleton's m_context — populated by MainLoop ctor and
     // unchanged for the run.
-    void* mainLoop = ::Engine::MainLoop::_singleton;
-    void* context = mainLoop
-        ? reinterpret_cast< ::Engine::MainLoop*>(mainLoop)->_context   // B.3.8 bridge
+    ::Engine::MainLoop* mainLoop = ::Engine::MainLoop::_singleton;
+    Video::Context* context = mainLoop
+        ? mainLoop->_context
         : nullptr;
     void* ui = &_ui;
 
     if (trace) {
         void* menuScene = _menuScene;
         printf("[MenuDLT::Draw] self=%p frameAlpha=%f mainLoop=%p ctx=%p ui=%p menuScene=%p\n",
-               (void*)this, alpha, mainLoop, context, ui, menuScene);
+               (void*)this, alpha, (void*)mainLoop, (void*)context, ui, menuScene);
         printf("[MenuDLT::Draw] fps=%.1f (cap=%.1f)\n",
                FrameLimiter::GetFps(), FrameLimiter::GetCapFps());
     }
@@ -704,9 +715,9 @@ void MenuDialogLoopT::Draw(float alpha) {
     }
 
     if (context) {
-        _ui.Draw(*reinterpret_cast<Video::Context*>(context));  // B.3.6 bridge
+        _ui.Draw(*context);
     } else if (trace) {
-        printf("[MenuDLT::Draw] WARN: skipping UI::Draw (ctx=%p)\n", context);
+        printf("[MenuDLT::Draw] WARN: skipping UI::Draw (ctx=%p)\n", (void*)context);
     }
 
     // Auto-trigger a RenderDoc capture on draw 10 if RenderDoc is attached.
@@ -782,8 +793,10 @@ Object::InternalPtr<UI::DialogInstance>* MenuDialogLoopT::CreateLoopDialog(
     // MainMenuDialog factory which mirrors the exe ctor at 0x14009BA30:
     // builds the DialogInstance + patches our 20-slot vtable + writes the
     // resulting IBP into retPtr.
-    return static_cast<Object::InternalPtr<UI::DialogInstance>*>(
-        MainMenuDialog_FromMenuDLT(this, retPtr));
+    // The body (mainmenudialog.cpp, B4 FORWARD) returns its second argument on
+    // every path; the slot returns that same pointer.
+    MainMenuDialog_FromMenuDLT(this, retPtr);
+    return retPtr;
 }
 
 // B38_RULES D5: `Vtable()` is the COMPILER's table. ENDGAME B.3.9 EXA: the
